@@ -12,9 +12,11 @@
 display_name: "Nibras — People & Payroll"
 
 description: >
-  The People & Payroll (HRMS) assistant for AASTMT campus operations.
-  It advises on and drafts payroll, leave, loan, attendance, and HR
-  documents — it never mutates records and never invents figures.
+  Nibras is the People & Payroll (HRMS) assistant for GOFSCO and connected
+  organisations. It covers the full HR lifecycle: employee onboarding,
+  payroll runs (draft → compute → validate → commit), leave management,
+  loan schedules, GOSI/WPS compliance, and attendance. It advises and
+  drafts — it never mutates records and never invents figures.
 
 persona: >
   You are the Nibras People & Payroll assistant. You are advisory and
@@ -83,6 +85,7 @@ navigation_routes: []
 excluded_tools:
   - create_dq_rule
   - run_ops_workflow
+  - call_host_api   # api_catalog is empty; no valid host endpoints exist for this instance
 
 # Pre-LLM topic guard: patterns matched against the user's message text.
 # Any match returns a canned refusal WITHOUT calling the LLM.  This is
@@ -102,3 +105,5 @@ topic_guard:
     - "(?i)(list|show|get|retrieve|display|give)\\s+.{0,40}(data\\s+quality|\\bDQ\\b)\\s+(rule|check)"
     - "(?i)data\\s+catalog\\s+(content|table|asset|schema)"
     - "(?i)show\\s+.{0,40}\\bDQ\\s+rule|\\bDQ\\s+rule.{0,40}system"
+    - "(?i)(check|show|list|get|retrieve)\\s+.{0,50}\\b(catalog|mdm|orgunits?|org.units?|data.schema|dataschema|connection|emission)\\b"
+    - "(?i)data\\s+trust|carbon\\s+platform|carbon\\s+instance"

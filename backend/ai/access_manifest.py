@@ -168,19 +168,26 @@ _WORK_AREAS: list[dict[str, Any]] = _WORK_AREAS_CARBON
 
 
 def _active_work_areas() -> list[dict[str, Any]]:
-    """Return the work-area list for the active brand."""
+    """Return work areas for the active brand, driven by BRAND_WORK_AREA_KEYS settings."""
     try:
+        from django.conf import settings as _s
         from ai.instance_registry import active_brand
         brand = active_brand()
+        brand_keys: dict = getattr(_s, "BRAND_WORK_AREA_KEYS", {})
+        allowed_keys: list | None = brand_keys.get(brand)
     except Exception:
-        brand = "aastmt"
-    if brand == "nibras":
-        return _WORK_AREAS_PEOPLE
-    if brand == "tectona":
-        return [wa for wa in _WORK_AREAS_CARBON if wa["key"] in ("healthy", "ai")]
-    if brand == "medos":
-        return [wa for wa in _WORK_AREAS_CARBON if wa["key"] == "ai"]
-    return _WORK_AREAS_CARBON
+        allowed_keys = None
+    if allowed_keys is None:
+        return _WORK_AREAS_CARBON
+    # People-domain keys come from _WORK_AREAS_PEOPLE; carbon keys from _WORK_AREAS_CARBON.
+    all_areas = _WORK_AREAS_CARBON + _WORK_AREAS_PEOPLE
+    seen: set[str] = set()
+    result: list[dict[str, Any]] = []
+    for wa in all_areas:
+        if wa["key"] in allowed_keys and wa["key"] not in seen:
+            result.append(wa)
+            seen.add(wa["key"])
+    return result
 
 
 _OPERATE_CAPABILITIES: frozenset[str] = frozenset({

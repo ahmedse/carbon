@@ -1399,14 +1399,15 @@ class TurnPipelineRunner:
         )
 
         # ── Pulse v2 Phase 6: inject Carbon business context ──────────────
-        # Fetch the platform's actual reporting period, emission factors, and
-        # DQ-rule count and append them so the LLM answers with real values
-        # rather than generic world knowledge. Never fails the turn.
-        # Scope-isolation gate: this is Carbon-platform business context, so it
-        # is injected ONLY for the Carbon instance. A Nibras (People & Payroll)
-        # turn must never receive reporting-period / emission-factor / DQ-rule
-        # context — that would leak another domain's data into the answer.
-        if settings.PULSE_CARBON_CONTEXT_ENABLED and instance_id == "carbon":
+        # Only injected when the instance declares carbon_context_enabled: true
+        # (instance.yaml). Falls back to the legacy PULSE_CARBON_CONTEXT_ENABLED
+        # setting for the default carbon instance.
+        _carbon_ctx_enabled = (
+            config.get("carbon_context_enabled", None)
+            if config.get("carbon_context_enabled") is not None
+            else settings.PULSE_CARBON_CONTEXT_ENABLED
+        )
+        if _carbon_ctx_enabled:
             try:
                 from ai.context.carbon_context import CarbonContextAssembler
                 _carbon_context = await CarbonContextAssembler().assemble(

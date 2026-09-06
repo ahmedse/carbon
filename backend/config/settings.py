@@ -204,6 +204,7 @@ INSTALLED_APPS = [
     'evidence',
     'healthy',
     'people',
+    'correspondence',
     'rest_framework_simplejwt.token_blacklist',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -518,6 +519,16 @@ BRAND_APP_PRESETS = {
     "tectona": {
         "healthy": True,   # + future first-party AI apps (open set)
     },
+}
+
+# Keys of work areas (from ai.access_manifest._WORK_AREAS_CARBON) that the
+# AI assistant may show to users on each brand. None = show all (aastmt).
+# Pulse core reads this instead of hard-coding brand names in access_manifest.
+BRAND_WORK_AREA_KEYS: dict[str, list[str] | None] = {
+    "aastmt": None,                    # all work areas
+    "nibras": ["people", "ai"],
+    "tectona": ["healthy", "ai"],
+    "medos": ["ai"],
 }
 
 # ── Django admin exposure (ADR-0015 multi-instance) ──────────────────────

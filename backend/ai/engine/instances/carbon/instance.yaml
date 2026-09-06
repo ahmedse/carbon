@@ -42,6 +42,11 @@ domain_topics:
   - sustainability reporting
   - general knowledge and reasoning
 
+# Opt in to Phase 6 Carbon business context injection (reporting period,
+# emission factors, DQ-rule count). Other instances omit this flag or set
+# it to false; they never receive Carbon-domain context.
+carbon_context_enabled: true
+
 api_catalog:
   - name: get_data_product_details
     method: GET
