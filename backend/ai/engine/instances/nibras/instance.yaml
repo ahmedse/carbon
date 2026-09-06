@@ -51,15 +51,22 @@ persona: >
   is what the commit stage does and what you need to verify before running
   it" — not as a refusal.
 
-  ## Net-pay queries without data
-  When asked for someone's salary or net pay and you do not have access to
-  the payroll run output, state clearly that you would need the payroll
-  run results to give an accurate figure, and describe what the calculation
-  would look like (gross − GOSI − loan_installment = net). Never invent
-  a number.
+  ## Net-pay queries
+  When asked for someone's salary or net pay, fetch the payroll run output
+  first using list_payslip_lines (filter by payroll_run). Ground your
+  answer in those numbers. If no committed run exists yet, state that and
+  describe what the calculation will look like (gross − GOSI −
+  loan_installment = net). Never state a figure you did not read from a
+  tool result.
 
-  ## Scope
-  Stay within People, Payroll, HR, GOSI, WPS, and general knowledge.
+  ## Using live data
+  You have full read access to People & Payroll data. For any question
+  about headcount, payroll runs, payslips, leave balances, or loans —
+  call the relevant endpoint first, then answer from the tool result.
+  Never estimate or invent a number you could look up. Mutations (running
+  payroll stages, recording leave, creating loans) go through a
+  confirmation step — explain what will happen, then let the user confirm
+  before the action executes.
   Questions about carbon emissions, greenhouse gases, data quality rules,
   the data catalog, or other platform domains are outside your scope —
   redirect politely to your areas.
@@ -107,19 +114,203 @@ domain_topics:
   - GOFSCO organisational structure
   - general knowledge
 
-# The People domain is advisory-only and owns no data tools, so the LLM-facing
-# catalog is intentionally empty — the assistant cannot call any Carbon or
-# other-domain host endpoint.
-api_catalog: []
+# ── Live data access ──────────────────────────────────────────────────────
+# All GET endpoints execute without confirmation.
+# POST/PATCH endpoints require user confirmation before execution.
+api_catalog:
 
-navigation_routes: []
+  # ── Employees ──
 
-# Tools excluded from the system-prompt tool list for this instance.
-# The LLM will not be aware of or offer these capabilities.
+  - name: list_employees
+    method: GET
+    path: /carbon-api/people/employees/
+    description: >
+      List employees visible to the current user (org-scoped). Returns
+      {count, results[]} with fields: id, employee_no, name_en_given,
+      name_en_family, name_ar, position, org_unit, is_active, basic_salary.
+      Use to answer headcount questions or find an employee's id.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: get_employee
+    method: GET
+    path: /carbon-api/people/employees/{id}/
+    description: >
+      Get full details for one employee: personal data, position, org unit,
+      basic salary, join date, contract type, is_active. Path param {id}
+      is the employee numeric id (resolve via list_employees if you only
+      have a name or employee number).
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_positions
+    method: GET
+    path: /carbon-api/people/positions/
+    description: >
+      List all positions (job titles / grades) visible to the user.
+      Returns {count, results[]} with id, title, grade, and org_unit.
+    requires_auth: true
+    requires_confirmation: false
+
+  # ── Payroll ──
+
+  - name: list_payroll_runs
+    method: GET
+    path: /carbon-api/people/payroll-runs/
+    description: >
+      List payroll runs for the user's visible org units. Returns
+      {count, results[]} with id, org_unit, period_start, period_end,
+      status (draft | computed | validated | committed), created_at.
+      Use to find the current/latest run or check its status.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: get_payroll_run
+    method: GET
+    path: /carbon-api/people/payroll-runs/{id}/
+    description: >
+      Get full details of one payroll run including status, period, and
+      summary totals. Path param {id} is the run numeric id.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_payslip_lines
+    method: GET
+    path: /carbon-api/people/payslip-lines/
+    description: >
+      List payslip lines. Filter by query param payroll_run=<run_id> to get
+      all lines for a specific run. Fields: id, employee, line_type
+      (gross | gosi | loan_installment | net), amount, payroll_run.
+      Use to answer net-pay or payslip-breakdown questions.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: compute_payroll_run
+    method: POST
+    path: /carbon-api/people/payroll-runs/{id}/compute/
+    description: >
+      Advance a DRAFT payroll run to COMPUTED status — applies tax and
+      deduction rules to produce payslip lines. Path param {id} is the
+      run id. No body required. Irreversible step in the lifecycle.
+    requires_auth: true
+    requires_confirmation: true
+
+  - name: validate_payroll_run
+    method: POST
+    path: /carbon-api/people/payroll-runs/{id}/validate/
+    description: >
+      Advance a COMPUTED payroll run to VALIDATED status — runs variance
+      checks and approval gates. Path param {id} is the run id. No body.
+    requires_auth: true
+    requires_confirmation: true
+
+  - name: commit_payroll_run
+    method: POST
+    path: /carbon-api/people/payroll-runs/{id}/commit/
+    description: >
+      Commit a VALIDATED payroll run — final, irreversible. Triggers WPS
+      SIF file generation. Path param {id} is the run id. No body.
+    requires_auth: true
+    requires_confirmation: true
+
+  # ── Leave ──
+
+  - name: list_leave_entitlements
+    method: GET
+    path: /carbon-api/people/leave-entitlements/
+    description: >
+      List leave entitlements for employees visible to the user. Fields:
+      id, employee, leave_type, days_entitled, days_used, days_remaining.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_leave_records
+    method: GET
+    path: /carbon-api/people/leave-records/
+    description: >
+      List leave records (approved, pending, rejected). Fields: id,
+      employee, leave_type, start_date, end_date, status, days.
+      Filter by query param employee=<id> or status=<value>.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: create_leave_record
+    method: POST
+    path: /carbon-api/people/leave-records/
+    description: >
+      Record a leave request. Body: {employee: id, leave_type: str,
+      start_date: YYYY-MM-DD, end_date: YYYY-MM-DD, notes: str}.
+    requires_auth: true
+    requires_confirmation: true
+
+  # ── Loans ──
+
+  - name: list_loans
+    method: GET
+    path: /carbon-api/people/loans/
+    description: >
+      List loans for employees visible to the user. Fields: id, employee,
+      principal, monthly_installment, remaining_balance, status.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_loan_installments
+    method: GET
+    path: /carbon-api/people/loan-installments/
+    description: >
+      List loan installment schedule lines. Filter by query param
+      loan=<id>. Fields: id, loan, due_date, amount, status (paid | due).
+    requires_auth: true
+    requires_confirmation: false
+
+  # ── Attendance ──
+
+  - name: list_attendance
+    method: GET
+    path: /carbon-api/people/attendance/
+    description: >
+      List attendance records. Filter by query param employee=<id> or
+      date_from / date_to (YYYY-MM-DD). Fields: id, employee, date,
+      check_in, check_out, status.
+    requires_auth: true
+    requires_confirmation: false
+
+navigation_routes:
+  - name: employees
+    path: /people/employees
+    description: Employees list page.
+
+  - name: employee_detail
+    path: /people/employees/{id}
+    description: Employee detail page.
+
+  - name: payroll
+    path: /people/payroll
+    description: Payroll runs list page.
+
+  - name: leave
+    path: /people/leave
+    description: Leave records and entitlements page.
+
+  - name: loans
+    path: /people/loans
+    description: Loans list page.
+
+  - name: attendance
+    path: /people/attendance
+    description: Attendance records page.
+
+# Tools excluded for this instance — Carbon-domain tools not relevant here.
 excluded_tools:
   - create_dq_rule
   - run_ops_workflow
-  - call_host_api   # api_catalog is empty; no valid host endpoints exist for this instance
+
+# Slug resolution: lets the LLM find an employee by name rather than numeric id.
+tools:
+  slug_resolution:
+    - detail_endpoint: get_employee
+      list_endpoint: list_employees
+      match_fields: [employee_no, name_en_given, name_en_family]
 
 # Pre-LLM topic guard: patterns matched against the user's message text.
 # Any match returns a canned refusal WITHOUT calling the LLM.  This is

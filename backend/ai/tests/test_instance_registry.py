@@ -68,9 +68,16 @@ def test_nibras_instance_config_is_people_scoped_and_has_no_api_catalog():
     assert config["instance_id"] == "nibras"
     assert config["app_identifier"] == "people"
     assert "Nibras" in config["display_name"]
-    # Advisory-only: the People domain owns no host data tools, so the
-    # LLM-facing catalog must be empty (no Carbon/other-domain endpoints).
-    assert config["api_catalog"] == []
+    # Grounded-reads: People domain exposes read-only host endpoints.
+    catalog_names = {e["name"] for e in config["api_catalog"]}
+    assert "list_employees" in catalog_names
+    assert "list_payroll_runs" in catalog_names
+    assert "list_payslip_lines" in catalog_names
+    # Mutations are present but gated behind confirmation.
+    mutations = {e["name"] for e in config["api_catalog"] if e.get("requires_confirmation")}
+    assert "commit_payroll_run" in mutations
+    # No Carbon-domain endpoints must leak into this catalog.
+    assert not any("emission" in n or "dq_rule" in n or "chairman" in n for n in catalog_names)
     # domain_topics should cover payroll and people domain keywords.
     topics_str = " ".join(config["domain_topics"]).lower()
     assert "payroll" in topics_str
