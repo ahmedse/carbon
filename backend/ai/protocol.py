@@ -503,6 +503,8 @@ class ChatResponse:
     external_sources: list[dict] = field(default_factory=list)
     # Wave I2-F — code-sandbox result ({"stdout","error","image_b64","table_rows","result"}).
     code_result: dict | None = None
+    # PAQ-2A — typed AnswerEnvelope (None when disabled or unavailable).
+    envelope: dict | None = None
 
 
 # ── AIProvider ABC ──────────────────────────────────────────────────────

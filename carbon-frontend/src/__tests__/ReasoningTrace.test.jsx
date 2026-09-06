@@ -58,4 +58,23 @@ describe('ReasoningTrace panel', () => {
     expect(screen.queryByText('Tools used')).not.toBeInTheDocument();
     expect(screen.getByText('Org units: 3')).toBeInTheDocument();
   });
+
+  it('surfaces provenance source facts (tool, rows, truncation, resolved-at)', () => {
+    openTrace({
+      sources: [
+        {
+          tool: 'people_query',
+          rows_returned: 1200,
+          truncated: true,
+          resolved_at: '2026-09-14T10:30:00Z',
+        },
+      ],
+    });
+
+    expect(screen.getByText('Sources')).toBeInTheDocument();
+    expect(screen.getByText(/people_query/)).toBeInTheDocument();
+    expect(screen.getByText(/1200 rows/)).toBeInTheDocument();
+    expect(screen.getByText(/Truncated/)).toBeInTheDocument();
+    expect(screen.getByText(/2026/)).toBeInTheDocument();
+  });
 });

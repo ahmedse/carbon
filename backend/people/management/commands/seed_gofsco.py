@@ -363,6 +363,24 @@ class Command(BaseCommand):
                     notes=f'Joined {d["org_unit"].name} — seeded from GOFSCO HR records',
                 )
 
+        # ── Reporting managers (position.reports_to → incumbent) ─────────
+        # The leave/correspondence workflow routes approval to the requester's
+        # Employee.manager. Derive the manager idempotently from the position
+        # hierarchy: a position's incumbent reports to the incumbent of its
+        # position.reports_to. Idempotent — only sets the FK when it changes.
+        for emp in emp_map.values():
+            pos = emp.position
+            if not pos or not pos.reports_to_id:
+                continue
+            manager_emp = (
+                Employee.objects.filter(position_id=pos.reports_to_id)
+                .exclude(pk=emp.pk)
+                .first()
+            )
+            if manager_emp and emp.manager_id != manager_emp.id:
+                emp.manager = manager_emp
+                emp.save(update_fields=['manager'])
+
         # ── Leave Entitlements (current + prior year) ─────────────────────
         # Kuwait Labour Law: expats = 30 days after 1yr, Kuwaitization (KWT) = 42 days
         CURRENT = timezone.localdate().year

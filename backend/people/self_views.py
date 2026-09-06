@@ -30,7 +30,7 @@ from correspondence.policies import PolicyNotFound
 from correspondence.serializers import CorrespondenceDetailSerializer
 from mdm.models import ReferenceValue
 
-from .models import LeaveEntitlement, LeaveRecord
+from .models import LeaveEntitlement, LeaveRecord, Loan
 from .permissions import IsActiveEmployee
 from .self_serializers import (
     EmployeeSummarySerializer,
@@ -38,16 +38,17 @@ from .self_serializers import (
     LeaveRecordDetailSerializer,
     LeaveRecordSerializer,
 )
+from .serializers import LoanSerializer
 
 SUBJECT_TYPE = 'people.LeaveRecord'
 
 
 # ── helpers ────────────────────────────────────────────────────────────────
 
-def _corr_type_value():
-    """The governed ``leave_request`` corr_type ReferenceValue."""
+def _corr_type_value(code='leave_request'):
+    """The governed ``<code>`` corr_type ReferenceValue."""
     return ReferenceValue.objects.get(
-        reference_set__name='correspondence_type', code='leave_request',
+        reference_set__name='correspondence_type', code=code,
     )
 
 
@@ -70,10 +71,17 @@ def _record_blocks_overlap(record) -> bool:
 
 
 def _compute_balance(profile, code, year):
-    """Return ``(entitled, used, pending, remaining)`` Decimals for one code."""
-    entitled = LeaveEntitlement.objects.filter(
+    """Return ``(entitled, carried_forward, used, pending, remaining)`` Decimals."""
+    agg = LeaveEntitlement.objects.filter(
         employee=profile, year=year, leave_type__code=code,
-    ).aggregate(total=Sum('entitled_days'))['total'] or Decimal('0')
+    ).aggregate(
+        total_entitled=Sum('entitled_days'),
+        total_carried=Sum('carried_forward'),
+    )
+    entitled = agg['total_entitled'] or Decimal('0')
+    carried_forward = agg['total_carried'] or Decimal('0')
+    # Opening balance is the entitlement plus whatever carried forward from last year.
+    opening_balance = entitled + carried_forward
 
     used = LeaveRecord.objects.filter(
         employee=profile, leave_type__code=code, status='approved',
@@ -85,8 +93,8 @@ def _compute_balance(profile, code, year):
         if _linked_actionable_corr(record):
             pending += record.days
 
-    remaining = max(Decimal('0'), entitled - used - pending)
-    return entitled, used, pending, remaining
+    remaining = max(Decimal('0'), opening_balance - used - pending)
+    return entitled, carried_forward, used, pending, remaining
 
 
 # ── views ──────────────────────────────────────────────────────────────────
@@ -113,12 +121,14 @@ class LeaveBalanceView(APIView):
         )
         balances = []
         for code in codes:
-            entitled, used, pending, remaining = _compute_balance(
+            entitled, carried_forward, used, pending, remaining = _compute_balance(
                 profile, code, year,
             )
             balances.append({
                 'leave_type': code,
                 'entitled': entitled,
+                'carried_forward': carried_forward,
+                'opening_balance': entitled + carried_forward,
                 'used': used,
                 'pending': pending,
                 'remaining': remaining,
@@ -185,7 +195,7 @@ class LeaveSelfCollectionView(APIView):
             )
 
         year = timezone.now().year
-        _, _, _, remaining = _compute_balance(profile, leave_type, year)
+        _, _, _, _, remaining = _compute_balance(profile, leave_type, year)
         if days > remaining:
             return Response(
                 {'detail': 'Insufficient leave balance', 'remaining': remaining},
@@ -263,3 +273,195 @@ class LeaveSelfDetailView(APIView):
         profile = request.user.employee_profile
         record = get_object_or_404(LeaveRecord, pk=pk, employee=profile)
         return Response(LeaveRecordDetailSerializer(record).data)
+
+
+class LoanSelfCollectionView(APIView):
+    """GET lists my loans; POST submits a new loan request (governed)."""
+
+    permission_classes = [IsAuthenticated, IsActiveEmployee]
+
+    def get(self, request):
+        profile = request.user.employee_profile
+        qs = Loan.objects.filter(employee=profile)
+        return Response(LoanSerializer(qs, many=True).data)
+
+    def post(self, request):
+        profile = request.user.employee_profile
+        data = request.data or {}
+
+        loan_type = data.get('loan_type')
+        if not isinstance(loan_type, str) or not loan_type.strip():
+            return Response(
+                {'detail': 'loan_type is required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            principal = Decimal(str(data.get('principal')))
+        except (InvalidOperation, ValueError, TypeError):
+            return Response(
+                {'detail': 'principal must be a positive number'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if principal <= 0:
+            return Response(
+                {'detail': 'principal must be a positive number'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            interest_rate = Decimal(str(data.get('interest_rate', '0')))
+        except (InvalidOperation, ValueError, TypeError):
+            return Response(
+                {'detail': 'interest_rate must be a non-negative number'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if interest_rate < 0:
+            return Response(
+                {'detail': 'interest_rate must be a non-negative number'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            term_months = int(data.get('term_months'))
+        except (ValueError, TypeError):
+            return Response(
+                {'detail': 'term_months must be a positive integer'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if term_months <= 0:
+            return Response(
+                {'detail': 'term_months must be a positive integer'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            start_date = date.fromisoformat(str(data.get('start_date', '')))
+        except (ValueError, TypeError):
+            return Response(
+                {'detail': 'Invalid start_date (expected ISO date)'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        notes = data.get('notes', '') or ''
+
+        try:
+            with transaction.atomic():
+                loan = Loan.objects.create(
+                    employee=profile,
+                    loan_type=loan_type.strip(),
+                    principal=principal,
+                    interest_rate=interest_rate,
+                    term_months=term_months,
+                    start_date=start_date,
+                    notes=notes,
+                    status='draft',
+                )
+                corr = Correspondence.objects.create(
+                    corr_type=_corr_type_value('loan_request'),
+                    subject_type='people.Loan',
+                    subject_id=loan.pk,
+                    org_unit=profile.org_unit,
+                    requester=request.user,
+                    title=f'Loan request {loan_type} {principal}',
+                    payload={
+                        'loan_type': loan_type,
+                        'principal': str(principal),
+                        'interest_rate': str(interest_rate),
+                        'term_months': term_months,
+                        'start_date': str(start_date),
+                        'notes': notes,
+                    },
+                    status='draft',
+                    reference_no=f'DRAFT-{uuid.uuid4().hex[:12]}',
+                )
+                corr = fsm.submit_correspondence(
+                    corr=corr, by=request.user, subject=loan,
+                    subject_label='people.Loan',
+                )
+        except SubmissionBlocked as exc:
+            return Response(
+                {'detail': 'Submission blocked by DQ gate', 'failures': exc.failures},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except PolicyNotFound:
+            return Response(
+                {'detail': 'No workflow policy configured'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except InvalidTransition as exc:
+            return Response(
+                {'detail': f'Invalid transition: {exc}'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response(
+            CorrespondenceDetailSerializer(corr).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class ProfileChangeSelfView(APIView):
+    """POST submits a profile-change request for the current employee.
+
+    No new model is created — the Correspondence is typed against the existing
+    ``people.Employee`` profile and carries a per-field ``{from, to}`` payload.
+    """
+
+    permission_classes = [IsAuthenticated, IsActiveEmployee]
+
+    def post(self, request):
+        profile = request.user.employee_profile
+        data = request.data or {}
+
+        changes = data.get('changes')
+        if not isinstance(changes, dict) or not changes:
+            return Response(
+                {'detail': 'changes must be a non-empty object of {field: {from, to}}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        for field, change in changes.items():
+            if not isinstance(change, dict) or 'to' not in change:
+                return Response(
+                    {'detail': f'change for {field!r} must be an object with a "to" value'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        try:
+            with transaction.atomic():
+                corr = Correspondence.objects.create(
+                    corr_type=_corr_type_value('profile_change'),
+                    subject_type='people.Employee',
+                    subject_id=profile.pk,
+                    org_unit=profile.org_unit,
+                    requester=request.user,
+                    title='Profile change request',
+                    payload={'changes': changes},
+                    status='draft',
+                    reference_no=f'DRAFT-{uuid.uuid4().hex[:12]}',
+                )
+                corr = fsm.submit_correspondence(
+                    corr=corr, by=request.user, subject=profile,
+                    subject_label='people.Employee',
+                )
+        except SubmissionBlocked as exc:
+            return Response(
+                {'detail': 'Submission blocked by DQ gate', 'failures': exc.failures},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except PolicyNotFound:
+            return Response(
+                {'detail': 'No workflow policy configured'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except InvalidTransition as exc:
+            return Response(
+                {'detail': f'Invalid transition: {exc}'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response(
+            CorrespondenceDetailSerializer(corr).data,
+            status=status.HTTP_201_CREATED,
+        )

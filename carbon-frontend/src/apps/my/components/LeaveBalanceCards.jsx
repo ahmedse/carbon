@@ -122,6 +122,13 @@ export default function LeaveBalanceCards({ balances, loading, error, onRetry })
                         {leaveTypeLabel(i18n, t, balance.leave_type)}
                       </Typography>
                       <Stack direction="row" spacing={1.5} useFlexGap flexWrap="wrap" rowGap={1}>
+                        {Number(balance.carried_forward ?? 0) > 0 && (
+                          <Metric
+                            label={t('leaveCarriedForward')}
+                            value={balance.carried_forward}
+                            tone="info.main"
+                          />
+                        )}
                         <Metric label={t('leaveBalanceEntitled')} value={balance.entitled} />
                         <Metric label={t('leaveBalanceUsed')} value={balance.used} />
                         <Metric

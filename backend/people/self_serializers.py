@@ -52,6 +52,8 @@ class LeaveBalanceSerializer(serializers.Serializer):
 
     leave_type = serializers.CharField()
     entitled = serializers.DecimalField(max_digits=8, decimal_places=2)
+    carried_forward = serializers.DecimalField(max_digits=8, decimal_places=2)
+    opening_balance = serializers.DecimalField(max_digits=8, decimal_places=2)
     used = serializers.DecimalField(max_digits=8, decimal_places=2)
     pending = serializers.DecimalField(max_digits=8, decimal_places=2)
     remaining = serializers.DecimalField(max_digits=8, decimal_places=2)

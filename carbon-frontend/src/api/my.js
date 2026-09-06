@@ -67,3 +67,29 @@ export async function fetchMyCorrespondence(token, { status, corrType } = {}) {
 export function fetchCorrespondenceDetail(token, id) {
   return apiFetch(`${CORRESPONDENCE_ROOT}${id}/`, { token });
 }
+
+/**
+ * Submit a loan request (POST people/me/loan/).
+ * On success returns the Correspondence detail object (NOT a loan record).
+ * On error, apiFetch propagates an Error carrying `.status` and `.data`.
+ */
+export function submitLoanRequest(token, payload) {
+  return apiFetch(`${PROFILE_ROOT}loan/`, { method: 'POST', body: payload, token });
+}
+
+/**
+ * Submit a profile-change request (POST people/me/profile-change/).
+ * Payload: { changes: { <field>: { from?, to } } }.
+ */
+export function submitProfileChange(token, payload) {
+  return apiFetch(`${PROFILE_ROOT}profile-change/`, { method: 'POST', body: payload, token });
+}
+
+/**
+ * Submit a generic payload-only correspondence (POST correspondence/).
+ * Payload: { corr_type, title, payload, org_unit? } for internal_memo,
+ * circular and decision types.
+ */
+export function submitGenericCorrespondence(token, payload) {
+  return apiFetch(`${CORRESPONDENCE_ROOT}`, { method: 'POST', body: payload, token });
+}

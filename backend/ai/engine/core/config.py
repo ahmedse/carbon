@@ -226,6 +226,12 @@ class Settings(BaseSettings):
     # ── Pulse v2 Phase 7 — post-result verification (opt-in) ──
     PULSE_VERIFY_ENABLED: bool = False
 
+    # ── Answer Envelope (PAQ-2A) — typed structured-output synthesis ──
+    # Off by default: when False the synthesis path is behaviourally identical
+    # to the pre-envelope pipeline. PAQ-2B flips this on and renders the typed
+    # blocks from the envelope instead of reflowing markdown.
+    PULSE_ENVELOPE_ENABLED: bool = False
+
     # ── Pulse v2 Phase 9 — model policy / turn profiles ──
     # Strong model for multi-hop investigation turns. Empty = use the instance
     # default model (profile "interactive").

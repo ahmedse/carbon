@@ -630,6 +630,15 @@ CORRESPONDENCE_ADMIN = Capability(
     category="admin",
 )
 
+CORRESPONDENCE_FINANCE = Capability(
+    key="correspondence:finance",
+    domain="correspondence",
+    action="finance",
+    label="Finance Approver",
+    description="Resolve finance workflow steps (e.g. loan requests) as a finance approver",
+    category="admin",
+)
+
 MY_ACCESS = Capability(
     key="my:access",
     domain="my",
@@ -732,6 +741,7 @@ ALL_CAPABILITIES: Dict[str, Capability] = {
     CORRESPONDENCE_SUBMIT.key: CORRESPONDENCE_SUBMIT,
     CORRESPONDENCE_ACT.key: CORRESPONDENCE_ACT,
     CORRESPONDENCE_ADMIN.key: CORRESPONDENCE_ADMIN,
+    CORRESPONDENCE_FINANCE.key: CORRESPONDENCE_FINANCE,
     MY_ACCESS.key: MY_ACCESS,
     TEAM_ACCESS.key: TEAM_ACCESS,
 }
@@ -902,6 +912,25 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         PEOPLE_VIEW.key,
         MY_ACCESS.key,
         TEAM_ACCESS.key,
+    },
+    # Every linked employee (global scope) → self-service "my" app baseline.
+    "employee_group": {
+        MY_ACCESS.key,
+        CORRESPONDENCE_SUBMIT.key,
+    },
+    # Managers (org-unit scoped) → team view + approval actions on top of
+    # the employee baseline.
+    "manager_group": {
+        MY_ACCESS.key,
+        CORRESPONDENCE_SUBMIT.key,
+        TEAM_ACCESS.key,
+        CORRESPONDENCE_ACT.key,
+    },
+    # Finance approvers → resolve loan-request finance workflow steps.
+    "finance_group": {
+        CORRESPONDENCE_FINANCE.key,
+        CORRESPONDENCE_SUBMIT.key,
+        MY_ACCESS.key,
     },
 
     # ── Data Owners (org-scoped write) ──

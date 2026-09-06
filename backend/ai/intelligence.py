@@ -654,6 +654,7 @@ class CarbonIntelligence:
                             intent_zone=res.get("intent_zone", ""),
                             external_sources=res.get("external_sources"),
                             code_result=res.get("code_result"),
+                            envelope=res.get("envelope"),
                         )
                         _finalize_generation("completed", usage)
                         done_frame = {
@@ -2428,6 +2429,7 @@ class CarbonIntelligence:
                             intent_zone=res.get("intent_zone", ""),
                             external_sources=res.get("external_sources"),
                             code_result=res.get("code_result"),
+                            envelope=res.get("envelope"),
                         )
                         _finalize_generation("completed", usage)
                         done_frame = {
@@ -3613,6 +3615,7 @@ class CarbonIntelligence:
             intent_zone=chat_response.intent_zone,
             external_sources=chat_response.external_sources,
             code_result=chat_response.code_result,
+            envelope=chat_response.envelope,
         )
 
     def _prepend_workspace_context(
@@ -3879,6 +3882,7 @@ class CarbonIntelligence:
         intent_zone: str = "",
         external_sources: list[dict] | None = None,
         code_result: dict | None = None,
+        envelope: dict | None = None,
     ) -> dict[str, Any]:
         """Save AI response message and update conversation status."""
         if status == "provider_unavailable":
@@ -3908,6 +3912,8 @@ class CarbonIntelligence:
             metadata["external_sources"] = external_sources
         if code_result:
             metadata["code_result"] = code_result
+        if envelope:
+            metadata["envelope"] = envelope
         # C2 — calibrated confidence (Faculty 7): outcome label + honest-
         # uncertainty flag (RULE_23 — outcome copy only, never raw internals).
         if confidence_label:

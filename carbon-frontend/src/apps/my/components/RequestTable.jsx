@@ -28,7 +28,8 @@ import {
   STATUS_COLOR,
   STATUS_SUFFIX,
   codeLabel,
-  subjectTypeLabel,
+  requestTypeLabel,
+  payloadSummary,
   formatDate,
 } from './myRequestsLabels';
 import { FONT } from '../../../theme/themeTokens';
@@ -94,6 +95,9 @@ export default function RequestTable({
                     {t('tableTitle')}
                   </TableCell>
                   <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
+                    {t('tableSummary')}
+                  </TableCell>
+                  <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
                     {t('tableStatus')}
                   </TableCell>
                   <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
@@ -120,10 +124,13 @@ export default function RequestTable({
                       {row.reference_no || '—'}
                     </TableCell>
                     <TableCell sx={{ ...FONT.body2 }}>
-                      {subjectTypeLabel(t, row.subject_type)}
+                      {requestTypeLabel(t, row)}
                     </TableCell>
                     <TableCell sx={{ ...FONT.body2 }}>
                       {row.title || '—'}
+                    </TableCell>
+                    <TableCell sx={{ ...FONT.body2 }}>
+                      {payloadSummary(t, row, i18n.language) || '—'}
                     </TableCell>
                     <TableCell>
                       <Chip

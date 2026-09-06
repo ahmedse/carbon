@@ -25,6 +25,8 @@ from .models import (
     EmployeeBenefit,
     EmployeeCompensation,
     LeaveEntitlement,
+    LeavePolicy,
+    LeavePolicyVersion,
     LeaveRecord,
     Loan,
     LoanInstallment,
@@ -204,6 +206,10 @@ class LeaveEntitlementSerializer(serializers.ModelSerializer):
     )
     leave_type_id = serializers.IntegerField(read_only=True)
     leave_type_label = serializers.SerializerMethodField()
+    policy = serializers.IntegerField(source='policy_id', read_only=True, allow_null=True)
+    policy_name = serializers.SerializerMethodField()
+    policy_version = serializers.IntegerField(source='policy_version_id', read_only=True, allow_null=True)
+    policy_version_number = serializers.SerializerMethodField()
 
     class Meta:
         model = LeaveEntitlement
@@ -211,11 +217,71 @@ class LeaveEntitlementSerializer(serializers.ModelSerializer):
             'id', 'employee', 'year', 'leave_type', 'leave_type_id',
             'leave_type_label', 'entitled_days',
             'used_days', 'carried_forward', 'notes',
+            'policy', 'policy_name', 'policy_version', 'policy_version_number',
         ]
-        read_only_fields = ['id', 'leave_type_id']
+        read_only_fields = [
+            'id', 'leave_type_id', 'policy', 'policy_name', 'policy_version',
+        ]
 
     def get_leave_type_label(self, obj):
         return obj.leave_type.label if obj.leave_type_id else None
+
+    def get_policy_name(self, obj):
+        return obj.policy.name if obj.policy_id else None
+
+    def get_policy_version_number(self, obj):
+        return obj.policy_version.version_number if obj.policy_version_id else None
+
+
+class LeavePolicySerializer(serializers.ModelSerializer):
+    leave_type = serializers.SlugRelatedField(
+        slug_field='code',
+        queryset=ReferenceValue.objects.filter(reference_set__name='leave_type'),
+    )
+    leave_type_label = serializers.SerializerMethodField()
+    employee_count = serializers.IntegerField(read_only=True, default=0)
+    latest_version = serializers.SerializerMethodField()
+    version_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LeavePolicy
+        fields = [
+            'id', 'name', 'description', 'status',
+            'effective_from', 'effective_to',
+            'leave_type', 'leave_type_label',
+            'default_entitled_days', 'max_carryover_days', 'is_carryover_allowed',
+            'accrual_method', 'gender_restriction', 'requires_approval',
+            'min_service_days', 'is_active', 'notes',
+            'applies_to_org_units', 'applies_to_contract_types',
+            'category', 'tags',
+            'employee_count', 'latest_version', 'version_count', 'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'updated_at', 'employee_count', 'latest_version', 'version_count',
+        ]
+
+    def get_leave_type_label(self, obj):
+        return obj.leave_type.label if obj.leave_type_id else None
+
+    def get_latest_version(self, obj):
+        newest = obj.versions.order_by('-version_number').first()
+        return newest.version_number if newest else None
+
+    def get_version_count(self, obj):
+        return obj.versions.count()
+
+
+class LeavePolicyVersionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LeavePolicyVersion
+        fields = [
+            'id', 'policy', 'version_number', 'effective_from', 'effective_to',
+            'change_summary', 'created_by', 'created_at', 'snapshot',
+        ]
+        read_only_fields = [
+            'id', 'policy', 'version_number', 'effective_from', 'effective_to',
+            'created_by', 'created_at', 'snapshot',
+        ]
 
 
 class LeaveRecordSerializer(serializers.ModelSerializer):

@@ -43,6 +43,24 @@ def get_env(name, default=None, required=False):
         raise Exception(f"Environment variable {name} is required!")
     return v
 
+# ── Brand switch (one var drives app-enablement preset + identity + DB) ──────
+# Frontend counterpart: VITE_BRAND → src/brands/*.js. Keep ids in sync.
+# Resolved at import time so DATABASES can derive the per-brand DB name.
+DJANGO_BRAND = get_env("DJANGO_BRAND", "aastmt")
+
+# Per-brand database name (dev isolation). Each brand gets its OWN database so
+# dev data for aastmt/nibras/medos/tectona never mingles. `DB_NAME` env var is
+# an explicit override (used by prod/staging where one DB serves the brand).
+BRAND_DB_NAMES = {
+    "aastmt": "carbon_dev",
+    "nibras": "nibras_dev",
+    "medos": "medos_dev",
+    "tectona": "tectona_dev",
+}
+DB_NAME = get_env("DB_NAME", None) or BRAND_DB_NAMES.get(
+    DJANGO_BRAND, f"{DJANGO_BRAND}_dev"
+)
+
 # Key settings
 SECRET_KEY = get_env("SECRET_KEY", required=True)
 DEBUG = get_env("DJANGO_DEBUG", get_env("DEBUG", "False")).lower() == "true"
@@ -324,14 +342,14 @@ APPEND_SLASH = False
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': get_env("DB_NAME", required=True),
+        'NAME': DB_NAME,
         'USER': get_env("DB_USER", required=True),
         'PASSWORD': get_env("DB_PASSWORD", required=True),
         'HOST': get_env("DB_HOST", "localhost"),
         'PORT': get_env("DB_PORT", "5432"),
         "ATOMIC_REQUESTS": True,
         'TEST': {
-            'NAME': 'test_carbon_dev',
+            'NAME': f'test_{DB_NAME}',
         },
     }
 }
@@ -510,9 +528,9 @@ PLATFORM_SHORT = get_env("DJANGO_PLATFORM_SHORT", "Data Trust")
 INSTANCE_NAME = get_env("DJANGO_INSTANCE_NAME", "AASTMT")
 PLATFORM_TITLE = f"{INSTANCE_NAME} · {PLATFORM_NAME}" if INSTANCE_NAME else PLATFORM_NAME
 
-# ── Brand switch (one var drives app-enablement preset + identity) ──────────
+# ── Brand switch (resolved near the top so DATABASES can derive per-brand DB) ─
 # Frontend counterpart: VITE_BRAND → src/brands/*.js. Keep ids in sync.
-DJANGO_BRAND = get_env("DJANGO_BRAND", "aastmt")
+# `DJANGO_BRAND` is set at import time — see the top of this file.
 
 # Per-brand domain-app preset. The KEYS of each brand's entry declare which
 # domain apps are INSTALLED for that brand (only these appear in the admin

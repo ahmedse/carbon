@@ -13,10 +13,11 @@ import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import { useTranslation } from 'react-i18next';
 import EmptyState from '../../../components/Page/EmptyState';
 import { formatDate, leaveBalanceByType, statusColor, statusLabelKey } from '../utils';
+import { FONT } from '../../../theme/themeTokens';
 
 // ── Leave balance bar ──────────────────────────────────────────
 
-function LeaveBar({ type, entitled, used, balance }) {
+function LeaveBar({ type, entitled, used, balance, policyLabel }) {
   const pct = entitled > 0 ? Math.min(100, (used / entitled) * 100) : 0;
   const isOver = used > entitled;
   const isLow = !isOver && balance < 3;
@@ -25,9 +26,14 @@ function LeaveBar({ type, entitled, used, balance }) {
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.25 }}>
-        <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'capitalize' }}>
-          {type.replace(/_/g, ' ')}
-        </Typography>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'capitalize' }}>
+            {type.replace(/_/g, ' ')}
+          </Typography>
+          <Typography sx={{ ...FONT.caption, color: 'text.secondary' }}>
+            {policyLabel}
+          </Typography>
+        </Box>
         <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary' }}>
           {used}d used / {entitled}d entitled
         </Typography>
@@ -100,6 +106,7 @@ export default function EmployeeLeaveTab({ entityData }) {
                 entitled={item.entitled}
                 used={item.used}
                 balance={item.balance}
+                policyLabel={item.policyNames.length ? item.policyNames.join(' · ') : t('entitlementManual')}
               />
             ))}
           </Stack>

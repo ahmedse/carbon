@@ -9,6 +9,19 @@ from rest_framework.permissions import BasePermission
 from accounts.capabilities import has_capability
 
 
+class CanSubmitCorrespondence(BasePermission):
+    """Only users holding ``correspondence:submit`` may create correspondence."""
+
+    message = "You do not have permission to submit correspondence."
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and has_capability(request.user, 'correspondence:submit')
+        )
+
+
 class CanActOnCorrespondence(BasePermission):
     """Only the current approver (or a ``correspondence:admin``) may act."""
 

@@ -23,6 +23,7 @@ from accounts.constants import (
     CARBON_ANALYSTS_GROUP, CARBON_LEAD_GROUP, CATALOG_LEAD_GROUP,
     MDM_LEAD_GROUP, DQ_LEAD_GROUP, DATAHUB_LEAD_GROUP, TURNKEY_LEAD_GROUP,
     PEOPLE_LEAD_GROUP, PEOPLE_DATA_OWNERS_GROUP, PEOPLE_ANALYSTS_GROUP,
+    FINANCE_GROUP,
     GROUP_BRAND_SCOPE,
     PROTECTED_GROUPS,
     DOMAIN_LEAD_GROUPS,
@@ -89,6 +90,11 @@ GROUP_DEFS = {
         "app",
         "People analysts — cross-org read-only visibility into HR and payroll data",
         False, False,
+    ),
+    FINANCE_GROUP: (
+        "app",
+        "Finance approvers — resolve loan-request finance workflow steps",
+        True, False,
     ),
 
     # ── Data roles ──

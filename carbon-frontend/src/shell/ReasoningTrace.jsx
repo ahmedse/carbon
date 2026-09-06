@@ -11,6 +11,8 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import PublicOutlinedIcon from '@mui/icons-material/PublicOutlined';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../i18n/useLanguage';
+import { formatDisplayDateTime } from '../utils/dateUtils';
+import { normalizeProvenanceSource } from '../utils/aiProvenance';
 
 // RULE_23 — drop any line that leaks engine internals before rendering.
 // Covers engine_turn_id ("Turn: …"), raw guard_results ("Guards: …"),
@@ -41,6 +43,15 @@ function formatFreshness(createdAt) {
   return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+// Per-source resolution timestamp (matches EnvelopeMessage's resolved_at format
+// so the envelope and non-envelope provenance paths stay visually consistent).
+function formatResolvedAt(resolvedAt) {
+  if (!resolvedAt) return null;
+  const date = new Date(resolvedAt);
+  if (Number.isNaN(date.getTime())) return null;
+  return formatDisplayDateTime(date);
+}
+
 // RULE_29 — external web citations: map a provider tag to its localized label.
 const PROVIDER_LABEL_KEYS = {
   wikipedia: 'source_wikipedia',
@@ -52,12 +63,22 @@ function providerLabel(source, t) {
   return t(PROVIDER_LABEL_KEYS[source] || 'source_external_web');
 }
 
-function ReasoningTrace({ lines = [], actions = [], pendingActions = [], createdAt = null, externalSources = [] }) {
+function ReasoningTrace({
+  lines = [],
+  actions = [],
+  pendingActions = [],
+  createdAt = null,
+  externalSources = [],
+  sources = [],
+}) {
   const { isRtl } = useLanguage();
   const { t } = useTranslation('ai');
   const [open, setOpen] = useState(false);
 
-  const sources = (Array.isArray(lines) ? lines : []).filter(isOutcomeLine);
+  const outcomeLines = (Array.isArray(lines) ? lines : []).filter(isOutcomeLine);
+  const sourceItems = (Array.isArray(sources) ? sources : [])
+    .map(normalizeProvenanceSource)
+    .filter(Boolean);
   const tools = [
     ...(Array.isArray(actions) ? actions : []).map(actionLabel),
     ...(Array.isArray(pendingActions) ? pendingActions : []).map(pendingLabel),
@@ -128,15 +149,38 @@ function ReasoningTrace({ lines = [], actions = [], pendingActions = [], created
           }}
         >
           <Stack spacing={1}>
-            {(sources.length > 0 || externalSourceItems.length > 0) && (
+            {(sourceItems.length > 0 || outcomeLines.length > 0 || externalSourceItems.length > 0) && (
               <Box>
                 <Typography
                   variant="caption"
                   sx={{ display: 'block', fontWeight: 600, color: 'text.secondary', mb: 0.25 }}
                 >
-                  Sources
+                  {t('provenance.sources')}
                 </Typography>
-                {sources.map((line) => (
+                {sourceItems.map((src, i) => {
+                  const parts = [];
+                  if (src.tool) parts.push(src.tool);
+                  if (src.rows_returned != null)
+                    parts.push(t('provenance.rows', { count: src.rows_returned }));
+                  if (src.truncated) parts.push(t('provenance.truncated'));
+                  const resolvedLabel = formatResolvedAt(src.resolved_at);
+                  return (
+                    <Box key={`${src.tool || 'source'}-${i}`}>
+                      <Typography variant="caption" sx={{ display: 'block' }}>
+                        {parts.join(' · ') || t('provenance.noData')}
+                      </Typography>
+                      {resolvedLabel && (
+                        <Typography
+                          variant="caption"
+                          sx={{ display: 'block', color: 'text.disabled' }}
+                        >
+                          {resolvedLabel}
+                        </Typography>
+                      )}
+                    </Box>
+                  );
+                })}
+                {outcomeLines.map((line) => (
                   <Typography key={line} variant="caption" sx={{ display: 'block' }}>
                     {line}
                   </Typography>
@@ -187,7 +231,7 @@ function ReasoningTrace({ lines = [], actions = [], pendingActions = [], created
                   variant="caption"
                   sx={{ display: 'block', fontWeight: 600, color: 'text.secondary', mb: 0.25 }}
                 >
-                  Tools used
+                  {t('provenance.toolsUsed')}
                 </Typography>
                 {tools.map((tool) => (
                   <Typography key={tool} variant="caption" sx={{ display: 'block' }}>
@@ -203,7 +247,7 @@ function ReasoningTrace({ lines = [], actions = [], pendingActions = [], created
                   variant="caption"
                   sx={{ display: 'block', fontWeight: 600, color: 'text.secondary', mb: 0.25 }}
                 >
-                  Data freshness
+                  {t('provenance.dataFreshness')}
                 </Typography>
                 <Typography variant="caption" sx={{ display: 'block' }}>
                   {freshness}
@@ -223,6 +267,7 @@ ReasoningTrace.propTypes = {
   pendingActions: PropTypes.array,
   createdAt: PropTypes.string,
   externalSources: PropTypes.array,
+  sources: PropTypes.array,
 };
 
 export default ReasoningTrace;

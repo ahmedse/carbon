@@ -278,6 +278,9 @@ async def _run_chat(
                 # for the frontend confidence indicator + honest-uncertainty state.
                 "confidence_label": confidence_label,
                 "honest_uncertainty": honest_uncertainty,
+                # PAQ-2A — typed AnswerEnvelope (None when disabled or unavailable).
+                # The frontend renders tables/charts/caveats/sources from this data.
+                "envelope": getattr(response, "envelope", None),
                 # Phase 5 — floor of the resolved tool inputs' confidence
                 # (None = no resolved numeric input, i.e. no constraint).
                 "min_input_confidence": min_input_conf,

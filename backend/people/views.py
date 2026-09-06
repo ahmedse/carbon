@@ -14,10 +14,12 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.db.models import ProtectedError, Q
+from django.db.models import Count, IntegerField, OuterRef, ProtectedError, Q, Subquery
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 
 from accounts.rbac_utils import get_visible_org_units
 from catalog.audit_utils import emit_governance_event
@@ -26,6 +28,7 @@ from core.feedback import AppFeedback
 from .calculation_engine import NonAuthoritativeRuleError
 from .chronicle import record_event, snapshot_employee, snapshot_position
 from .compensation_service import CompensationService
+from .leave_policy_service import fork_policy, get_version_history, propagate_policy
 from .services import CalculationService
 from .models import (
     AttendancePermission,
@@ -39,6 +42,8 @@ from .models import (
     EmployeeBenefit,
     EmployeeCompensation,
     LeaveEntitlement,
+    LeavePolicy,
+    LeavePolicyVersion,
     LeaveRecord,
     Loan,
     LoanInstallment,
@@ -68,6 +73,8 @@ from .serializers import (
     EmployeeCompensationSerializer,
     EmployeeSerializer,
     LeaveEntitlementSerializer,
+    LeavePolicySerializer,
+    LeavePolicyVersionSerializer,
     LeaveRecordSerializer,
     LoanInstallmentSerializer,
     LoanSerializer,
@@ -80,6 +87,14 @@ from .serializers import (
 )
 from .payroll_service import PayrollRunService, PayrollServiceError, _json_safe
 from .validation import persist_findings, validate_write
+
+# One-way layering: people → correspondence (HR employee correspondence list).
+# correspondence NEVER imports people.
+from correspondence.models import Correspondence
+from correspondence.serializers import (
+    CorrespondenceDetailSerializer,
+    CorrespondenceSerializer,
+)
 
 
 def _visible_org_unit_ids(user):
@@ -553,8 +568,11 @@ class _GatedListCreateView(APIView):
     org_lookup = None  # e.g. 'org_unit_id__in'; None → global reference data
     chronicle_event_kind = None  # set by subclasses that emit a PersonnelEvent on create
 
+    def get_queryset(self):
+        return self.model.objects.all()
+
     def get(self, request):
-        qs = self.model.objects.all()
+        qs = self.get_queryset()
         if self.org_lookup is not None:
             qs = _scoped(request.user, qs, self.org_lookup)
         return Response({
@@ -724,6 +742,176 @@ class PositionDetailView(_GatedDetailView):
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
         return None
+
+
+# LeavePolicy (platform-wide, HR-managed — not org-scoped per row)
+class LeavePolicyListCreateView(_GatedListCreateView):
+    model = LeavePolicy
+    serializer_class = LeavePolicySerializer
+    org_lookup = None  # global reference data, not per-org-unit
+
+    def get_queryset(self):
+        """Annotate the number of distinct employees covered in the current year.
+
+        ``LeaveEntitlement.leave_type`` uses ``related_name='+'`` (no reverse
+        accessor), so the count is computed via a correlated subquery keyed on
+        the policy's ``leave_type_id`` rather than a ``Count`` relation walk.
+        """
+        current_year = timezone.now().year
+        covered = (
+            LeaveEntitlement.objects
+            .filter(year=current_year, leave_type_id=OuterRef('leave_type_id'))
+            .order_by()
+            .values('leave_type_id')
+            .annotate(n=Count('employee', distinct=True))
+            .values('n')
+        )
+        return LeavePolicy.objects.annotate(
+            employee_count=Coalesce(
+                Subquery(covered, output_field=IntegerField()), 0,
+            ),
+        )
+
+    m2m_fields = ('applies_to_org_units',)
+
+    def post(self, request):
+        """Create a policy, handling the ``applies_to_org_units`` M2M safely.
+
+        The shared ``_GatedListCreateView.post`` builds a transient instance via
+        ``self.model(**validated_data)`` for the Tier-1 write gate; many-to-many
+        fields cannot be passed to a model constructor, so they are excluded
+        from the gate instance and applied by ``serializer.save()``.
+        """
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        gate_kwargs = {
+            k: v for k, v in serializer.validated_data.items()
+            if k not in self.m2m_fields
+        }
+        instance = self.model(**gate_kwargs)
+        blocked = _blocked_write_response(instance)
+        if blocked is not None:
+            return blocked
+        serializer.save(updated_by=self.request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class LeavePolicyDetailView(_GatedDetailView):
+    model = LeavePolicy
+    serializer_class = LeavePolicySerializer
+    org_lookup = None
+    m2m_fields = ('applies_to_org_units',)
+
+    def patch(self, request, pk):
+        """Update a policy, applying the M2M field post-save (see ListCreateView)."""
+        instance = get_object_or_404(self._get_queryset(request.user), pk=pk)
+        serializer = self.serializer_class(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        for field, value in serializer.validated_data.items():
+            if field not in self.m2m_fields:
+                setattr(instance, field, value)
+        blocked = _blocked_write_response(instance)
+        if blocked is not None:
+            return blocked
+        serializer.save(updated_by=self.request.user)
+        return Response(serializer.data)
+
+
+class LeavePolicyPropagateView(APIView):
+    """Propagate a policy's default entitlement to eligible employees.
+
+    Body: ``{"year": <int>}`` (defaults to the current year).
+    Query: ``?dry_run=true`` previews counts without writing.
+
+    Existing entitlements are never overwritten — only missing ones are created
+    with ``entitled_days = policy.default_entitled_days``.
+    """
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def post(self, request, pk):
+        policy = get_object_or_404(LeavePolicy, pk=pk)
+
+        raw_year = (request.data or {}).get('year')
+        if raw_year is None:
+            year = timezone.now().year
+        else:
+            try:
+                year = int(raw_year)
+            except (TypeError, ValueError):
+                return Response(
+                    {'detail': 'year must be an integer.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        dry_run = request.query_params.get('dry_run', '').lower() in ('true', '1', 'yes')
+
+        try:
+            payload = propagate_policy(policy, year, dry_run=dry_run)
+        except ValueError as exc:
+            return Response(
+                {'detail': str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(payload)
+
+
+class LeavePolicyVersionListView(APIView):
+    """Version ledger for a policy (LPR-3A).
+
+    ``GET`` lists the policy's version history (ascending), ``POST`` forks a new
+    version from the current live configuration. Both are thin wrappers over the
+    DRF-free ``leave_policy_service`` functions.
+    """
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def get(self, request, pk):
+        policy = get_object_or_404(LeavePolicy, pk=pk)
+        versions = get_version_history(policy)
+        return Response({
+            'count': len(versions),
+            'results': LeavePolicyVersionSerializer(versions, many=True).data,
+        })
+
+    def post(self, request, pk):
+        policy = get_object_or_404(LeavePolicy, pk=pk)
+
+        change_summary = (request.data or {}).get('change_summary', '') or ''
+        raw_effective_from = (request.data or {}).get('effective_from')
+        effective_from = None
+        if raw_effective_from not in (None, ''):
+            effective_from = parse_date(str(raw_effective_from))
+            if effective_from is None:
+                return Response(
+                    {'detail': 'effective_from must be a valid date (YYYY-MM-DD).'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        version = fork_policy(
+            policy,
+            effective_from=effective_from,
+            change_summary=change_summary,
+            user=request.user,
+        )
+        return Response(
+            LeavePolicyVersionSerializer(version).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class LeavePolicyVersionDetailView(APIView):
+    """Read a single policy version (LPR-3A)."""
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def get(self, request, pk, version_pk):
+        policy = get_object_or_404(LeavePolicy, pk=pk)
+        version = get_object_or_404(
+            LeavePolicyVersion, pk=version_pk, policy=policy,
+        )
+        return Response(LeavePolicyVersionSerializer(version).data)
 
 
 # LeaveEntitlement (employee-linked)
@@ -1048,6 +1236,80 @@ class EmployeeTimelineView(APIView):
             entity_type='Employee', entity_id=employee.pk,
         )
         return Response(PersonnelEventSerializer(events, many=True).data)
+
+
+class EmployeeCorrespondenceListView(APIView):
+    """GET people/employees/<pk>/correspondence/ — the employee's governed
+    correspondence (HR view).
+
+    Matches a Correspondence where the employee is either the requester
+    (``requester__employee_profile``) or the subject (``subject_id`` pointing
+    at the employee, e.g. a profile-change request). Gated by ``people:view``
+    (PeopleAccess) and RULE_12 org-scoped like EmployeeDetailView.
+    """
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def get(self, request, pk):
+        qs = (
+            Employee.objects.all()
+            if is_global_admin(request.user)
+            else Employee.objects.filter(
+                org_unit_id__in=_visible_org_unit_ids(request.user),
+            )
+        )
+        employee = get_object_or_404(qs, pk=pk)
+
+        corr_qs = (
+            Correspondence.objects
+            .filter(
+                Q(requester__employee_profile=employee)
+                | Q(subject_type='people.Employee', subject_id=employee.pk),
+            )
+            .select_related('requester', 'org_unit', 'corr_type')
+            .order_by('-created_at')
+        )
+        return Response({
+            'count': corr_qs.count(),
+            'results': CorrespondenceSerializer(corr_qs, many=True).data,
+        })
+
+
+class EmployeeCorrespondenceDetailView(APIView):
+    """GET people/employees/<pk>/correspondence/<corr_pk>/ — full detail (with
+    timeline ``events``) for a single piece of the employee's governed
+    correspondence (HR view).
+
+    Mirrors the org-scoping of EmployeeCorrespondenceListView (people:view via
+    PeopleAccess + RULE_12) and re-scopes the correspondence to this employee
+    (requester or subject) so an HR user cannot fetch another employee's
+    correspondence by id. Returns the detail serializer (includes the timeline)
+    that the global ``correspondence/<pk>/`` retrieve endpoint would otherwise
+    403 for HR users (CanViewCorrespondence is requester/approver/admin only).
+    """
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def get(self, request, pk, corr_pk):
+        qs = (
+            Employee.objects.all()
+            if is_global_admin(request.user)
+            else Employee.objects.filter(
+                org_unit_id__in=_visible_org_unit_ids(request.user),
+            )
+        )
+        employee = get_object_or_404(qs, pk=pk)
+
+        corr = get_object_or_404(
+            Correspondence.objects.filter(
+                Q(requester__employee_profile=employee)
+                | Q(subject_type='people.Employee', subject_id=employee.pk),
+            )
+            .select_related('requester', 'org_unit', 'corr_type')
+            .prefetch_related('events'),
+            pk=corr_pk,
+        )
+        return Response(CorrespondenceDetailSerializer(corr).data)
 
 
 class EmployeeEOSIView(APIView):

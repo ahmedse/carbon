@@ -26,6 +26,9 @@
   "successApproved": "Request approved",
   "successRejected": "Request rejected",
   "successSentBack": "Request sent back",
+  "viewToggleLabel": "View",
+  "workflowStepper": "Stepper",
+  "workflowGraph": "Graph",
   "status": {
     "draft": "Draft",
     "submitted": "Submitted",

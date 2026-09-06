@@ -6,7 +6,18 @@
 // a non-empty comment (client-side validation + localized inline error).
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Box, Button, Card, CardContent, Skeleton, Stack, TextField } from '@mui/material';
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Skeleton,
+  Stack,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+} from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
@@ -28,6 +39,7 @@ import {
 import { SectionTitle } from '../my/components/myRequestsCommon';
 import SummaryCard from '../my/components/SummaryCard';
 import ApproverChainStepper from '../my/components/ApproverChainStepper';
+import WorkflowGraph from '../my/components/WorkflowGraph';
 import RequestTimeline from '../my/components/RequestTimeline';
 
 /** Pull a human-readable message out of an apiFetch-thrown error. */
@@ -62,6 +74,7 @@ export default function TeamRequestDetail() {
   const [comment, setComment] = useState('');
   const [validation, setValidation] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [view, setView] = useState('stepper');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -170,7 +183,25 @@ export default function TeamRequestDetail() {
         ) : data ? (
           <Stack spacing={1}>
             <SummaryCard item={data} />
-            <ApproverChainStepper chain={data.approver_chain} currentStep={data.current_step} />
+            <Stack direction="row" justifyContent="flex-end">
+              <ToggleButtonGroup
+                value={view}
+                exclusive
+                size="small"
+                onChange={(event, next) => {
+                  if (next !== null) setView(next);
+                }}
+                aria-label={t('viewToggleLabel')}
+              >
+                <ToggleButton value="stepper">{t('workflowStepper')}</ToggleButton>
+                <ToggleButton value="graph">{t('workflowGraph')}</ToggleButton>
+              </ToggleButtonGroup>
+            </Stack>
+            {view === 'stepper' ? (
+              <ApproverChainStepper chain={data.approver_chain} currentStep={data.current_step} />
+            ) : (
+              <WorkflowGraph chain={data.approver_chain} currentStep={data.current_step} status={data.status} />
+            )}
             <RequestTimeline events={data.events} />
 
             {/* Manager act bar — approve / reject / send back */}

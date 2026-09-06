@@ -18,9 +18,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { fetchMyCorrespondence } from '../../api/my';
 import { FONT } from '../../theme/themeTokens';
 import RequestTable from './components/RequestTable';
-import { STATUS_CODES, STATUS_SUFFIX, codeLabel } from './components/myRequestsLabels';
-
-const LEAVE_REQUEST_TYPE = 'leave_request';
+import { STATUS_CODES, STATUS_SUFFIX, codeLabel, CORR_TYPES, corrTypeLabel } from './components/myRequestsLabels';
 
 function FilterChips({ label, options, value, onChange }) {
   return (
@@ -97,7 +95,7 @@ export default function MyRequests() {
 
   const typeOptions = [
     { value: '', label: t('filterAll') },
-    { value: LEAVE_REQUEST_TYPE, label: t('type.leaveRequest') },
+    ...CORR_TYPES.map((code) => ({ value: code, label: corrTypeLabel(t, code) })),
   ];
 
   return (

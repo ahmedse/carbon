@@ -65,6 +65,8 @@ export const INTENT_SUFFIX = {
 
 const SUBJECT_TYPE_KEY = {
   'people.LeaveRecord': 'type.leaveRequest',
+  'people.Loan': 'type.loanRequest',
+  'people.Employee': 'type.profileChange',
 };
 
 /**
@@ -83,6 +85,42 @@ export function subjectTypeLabel(t, subjectType) {
   if (!subjectType) return '—';
   const key = SUBJECT_TYPE_KEY[subjectType];
   return key ? t(key, { defaultValue: subjectType }) : subjectType;
+}
+
+/** The six governed correspondence types, in display order. */
+export const CORR_TYPES = [
+  'leave_request',
+  'internal_memo',
+  'circular',
+  'decision',
+  'loan_request',
+  'profile_change',
+];
+
+const CORR_TYPE_SUFFIX = {
+  leave_request: 'leaveRequest',
+  internal_memo: 'internalMemo',
+  circular: 'circular',
+  decision: 'decision',
+  loan_request: 'loanRequest',
+  profile_change: 'profileChange',
+};
+
+/** Localized label for a corr_type code (e.g. "loan_request"). */
+export function corrTypeLabel(t, code) {
+  if (!code) return '—';
+  const suffix = CORR_TYPE_SUFFIX[code];
+  return suffix ? t(`type.${suffix}`, { defaultValue: code }) : String(code);
+}
+
+/**
+ * Localized request type label. Prefers the authoritative `corr_type_code`
+ * (present on the list/detail serializers); falls back to `subject_type`.
+ */
+export function requestTypeLabel(t, item) {
+  const code = item?.corr_type_code;
+  if (code) return corrTypeLabel(t, code);
+  return subjectTypeLabel(t, item?.subject_type);
 }
 
 /** Localized label for a leave-type code. */
@@ -118,4 +156,88 @@ export function formatDateTime(value, lang) {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+/**
+ * Compact single-line payload summary for the list table. Returns null when
+ * there is no meaningful summary (callers render '—').
+ */
+export function payloadSummary(t, item, lang) {
+  const type = item?.corr_type_code || '';
+  const payload = item?.payload && typeof item.payload === 'object' ? item.payload : {};
+
+  switch (type) {
+    case 'leave_request': {
+      const start = formatDate(payload.start_date, lang);
+      const end = formatDate(payload.end_date, lang);
+      if (start === '—' && end === '—') return null;
+      return `${start} → ${end}`;
+    }
+    case 'loan_request':
+      return t('summaryLoanAmount', {
+        amount: payload.principal != null ? String(payload.principal) : '—',
+        months: payload.term_months != null ? String(payload.term_months) : '—',
+      });
+    case 'profile_change': {
+      const changes = payload.changes && typeof payload.changes === 'object' ? payload.changes : {};
+      const fields = Object.keys(changes);
+      if (fields.length === 0) return null;
+      return fields.join(', ');
+    }
+    case 'internal_memo':
+    case 'circular':
+    case 'decision': {
+      const body = typeof payload.body === 'string' ? payload.body : '';
+      if (!body) return null;
+      return body.length > 90 ? `${body.slice(0, 90)}…` : body;
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * Label/value rows for the detail summary card, per request type. Empty array
+ * means "no payload to render".
+ */
+export function payloadRows(t, item, lang) {
+  const type = item?.corr_type_code || '';
+  const payload = item?.payload && typeof item.payload === 'object' ? item.payload : {};
+  const changes = payload.changes && typeof payload.changes === 'object' ? payload.changes : {};
+
+  switch (type) {
+    case 'leave_request':
+      return [
+        { label: t('summaryLeaveType'), value: leaveTypeLabel(t, payload.leave_type) },
+        { label: t('summaryStart'), value: formatDate(payload.start_date, lang) },
+        { label: t('summaryEnd'), value: formatDate(payload.end_date, lang) },
+        { label: t('summaryDays'), value: payload.days != null ? String(payload.days) : '—' },
+        { label: t('summaryNote'), value: payload.note || '—' },
+      ];
+    case 'loan_request':
+      return [
+        { label: t('summaryLoanType'), value: payload.loan_type || '—' },
+        { label: t('summaryPrincipal'), value: payload.principal != null ? String(payload.principal) : '—' },
+        { label: t('summaryInterestRate'), value: payload.interest_rate != null ? String(payload.interest_rate) : '—' },
+        { label: t('summaryTermMonths'), value: payload.term_months != null ? String(payload.term_months) : '—' },
+        { label: t('summaryLoanStartDate'), value: formatDate(payload.start_date, lang) },
+        { label: t('summaryNotes'), value: payload.notes || '—' },
+      ];
+    case 'profile_change': {
+      const entries = Object.entries(changes);
+      if (entries.length === 0) {
+        return [{ label: t('summaryChanges'), value: '—' }];
+      }
+      return entries.map(([field, change]) => ({
+        label: field || '—',
+        value: `${change && typeof change === 'object' ? (change.from ?? '—') : '—'} → ${change && typeof change === 'object' ? (change.to ?? '—') : '—'}`,
+      }));
+    }
+    case 'internal_memo':
+    case 'circular':
+    case 'decision':
+      return [{ label: t('summaryBody'), value: payload.body || '—' }];
+    default:
+      return [];
+  }
 }

@@ -9,6 +9,7 @@ from rest_framework import serializers
 from .models import (
     Correspondence,
     CorrespondenceEvent,
+    Notification,
     WorkflowPolicy,
     WorkflowPolicyStep,
 )
@@ -98,3 +99,27 @@ class WorkflowPolicySerializer(serializers.ModelSerializer):
             'numbering_format', 'effective_from', 'effective_to',
             'created_at', 'updated_at', 'steps',
         ]
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    """In-app notification (read/read-all only — created by ``fsm.notify``).
+
+    Exposes the related correspondence's ``reference_no`` so managers/requesters
+    can jump straight to the request behind an "action needed" / "status
+    changed" notification."""
+
+    correspondence_id = serializers.IntegerField(read_only=True)
+    reference_no = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Notification
+        fields = [
+            'id', 'user', 'correspondence_id', 'reference_no',
+            'type', 'title', 'body', 'is_read', 'created_at',
+        ]
+        read_only_fields = fields
+
+    def get_reference_no(self, obj):
+        if obj.correspondence_id:
+            return obj.correspondence.reference_no
+        return None

@@ -513,6 +513,7 @@ class PulseProvider(AIProvider):
                 intent_zone=result.get("intent_zone") or "",
                 external_sources=result.get("external_sources") or [],
                 code_result=result.get("code_result"),
+                envelope=result.get("envelope"),
                 confidence_label=result.get("confidence_label", ""),
                 honest_uncertainty=bool(result.get("honest_uncertainty", False)),
             )

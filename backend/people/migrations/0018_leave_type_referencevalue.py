@@ -82,6 +82,15 @@ class Migration(migrations.Migration):
         ('people', '0017_employee_user'),
     ]
 
+    # Non-atomic: this migration seeds ReferenceValue rows (RunPython) and then
+    # ALTERs tables that share a DEFERRABLE INITIALLY DEFERRED FK with
+    # mdm_referencevalue. Running it in one transaction leaves deferred trigger
+    # events pending, so PostgreSQL rejects the follow-up `ALTER TABLE ...`
+    # with "cannot ALTER TABLE ... because it has pending trigger events" on a
+    # fresh (single-shot `migrate`) database. Committing between operations
+    # avoids this; each op is still individually safe.
+    atomic = False
+
     operations = [
         migrations.AlterUniqueTogether(
             name='leaveentitlement',

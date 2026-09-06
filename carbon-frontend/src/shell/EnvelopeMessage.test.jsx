@@ -1,0 +1,147 @@
+// src/shell/EnvelopeMessage.test.jsx
+// PAQ-2B — deterministic renderer for the typed AnswerEnvelope.
+import { describe, it, expect } from 'vitest';
+import { render, screen, within } from '@testing-library/react';
+import EnvelopeMessage from './EnvelopeMessage';
+
+const sampleEnvelope = {
+  headline: 'Male employees outnumber female employees 6 to 2.',
+  prose: ['Paragraph one with **bold**.', 'Paragraph two with *emphasis*.'],
+  tables: [
+    {
+      title: 'Gender breakdown',
+      columns: ['Gender', 'Employees'],
+      rows: [['male', 6], ['female', 2]],
+    },
+  ],
+  charts: [
+    {
+      chart_type: 'bar',
+      title: 'Employees by gender',
+      series: [{ name: 'Employees', data: [['male', 6], ['female', 2]] }],
+    },
+  ],
+  caveats: [{ level: 'info', text: '8% have no gender recorded.' }],
+  sources: [
+    { tool: 'analyze_employees', rows_returned: 2, truncated: false, resolved_at: '2026-09-14T10:30:00Z' },
+  ],
+};
+
+describe('EnvelopeMessage — full envelope', () => {
+  it('renders headline and prose (markdown still works)', () => {
+    render(<EnvelopeMessage envelope={sampleEnvelope} fallbackContent="" />);
+
+    expect(screen.getByText(/Male employees outnumber female employees 6 to 2\./)).toBeInTheDocument();
+    expect(screen.getByText(/Paragraph one with/)).toBeInTheDocument();
+    expect(screen.getByText('bold')).toBeInTheDocument();
+    expect(screen.getByText(/Paragraph two with/)).toBeInTheDocument();
+  });
+
+  it('renders table cells and column headers deterministically', () => {
+    render(<EnvelopeMessage envelope={sampleEnvelope} fallbackContent="" />);
+
+    const table = screen.getByTestId('envelope-table');
+    expect(within(table).getByText('Gender breakdown')).toBeInTheDocument();
+    expect(within(table).getByText('Gender')).toBeInTheDocument();
+    expect(within(table).getByText('Employees')).toBeInTheDocument();
+    expect(within(table).getByText('male')).toBeInTheDocument();
+    expect(within(table).getByText('6')).toBeInTheDocument();
+    expect(within(table).getByText('female')).toBeInTheDocument();
+    expect(within(table).getByText('2')).toBeInTheDocument();
+  });
+
+  it('renders caveats as a disclosure banner with the text', () => {
+    render(<EnvelopeMessage envelope={sampleEnvelope} fallbackContent="" />);
+
+    expect(screen.getByTestId('envelope-caveat')).toBeInTheDocument();
+    expect(screen.getByText('8% have no gender recorded.')).toBeInTheDocument();
+  });
+
+  it('renders source provenance chips', () => {
+    render(<EnvelopeMessage envelope={sampleEnvelope} fallbackContent="" />);
+
+    const source = screen.getByTestId('envelope-source');
+    expect(source).toHaveTextContent('analyze_employees');
+    expect(source).toHaveTextContent('2 rows');
+  });
+
+  it('renders all four provenance facts (tool, rows, truncation, resolved-at)', () => {
+    render(
+      <EnvelopeMessage
+        envelope={{
+          headline: 'Answer',
+          sources: [
+            {
+              tool: 'people_query',
+              rows_returned: 1200,
+              truncated: true,
+              resolved_at: '2026-09-14T10:30:00Z',
+            },
+          ],
+        }}
+        fallbackContent=""
+      />,
+    );
+
+    const source = screen.getByTestId('envelope-source');
+    expect(source).toHaveTextContent('people_query');
+    expect(source).toHaveTextContent('1200 rows');
+    expect(source).toHaveTextContent('Truncated');
+    expect(screen.getByText(/2026/)).toBeInTheDocument();
+  });
+
+  it('renders a deterministic SVG chart', () => {
+    render(<EnvelopeMessage envelope={sampleEnvelope} fallbackContent="" />);
+
+    const chart = screen.getByTestId('envelope-chart');
+    expect(screen.getByText('Employees by gender')).toBeInTheDocument();
+    expect(chart.querySelector('svg')).not.toBeNull();
+  });
+
+  it('renders pie and line chart types without crashing', () => {
+    render(
+      <EnvelopeMessage
+        envelope={{
+          charts: [
+            { chart_type: 'pie', title: 'Pie', series: [{ name: 's', data: [['a', 3], ['b', 1]] }] },
+            { chart_type: 'line', title: 'Line', series: [{ name: 's', data: [['a', 1], ['b', 2]] }] },
+          ],
+        }}
+        fallbackContent=""
+      />,
+    );
+
+    const charts = screen.getAllByTestId('envelope-chart');
+    expect(charts).toHaveLength(2);
+    expect(charts[0].querySelector('svg')).not.toBeNull();
+    expect(charts[1].querySelector('svg')).not.toBeNull();
+  });
+
+  it('renders "No data" for an empty table', () => {
+    render(
+      <EnvelopeMessage
+        envelope={{ tables: [{ title: 'Empty', columns: ['A', 'B'], rows: [] }] }}
+        fallbackContent=""
+      />,
+    );
+
+    expect(within(screen.getByTestId('envelope-table')).getByText('No data')).toBeInTheDocument();
+  });
+});
+
+describe('EnvelopeMessage — fallback (zero regression)', () => {
+  it('renders the markdown fallback when envelope is null', () => {
+    render(<EnvelopeMessage envelope={null} fallbackContent="Fallback **text**" />);
+
+    expect(screen.getByText(/Fallback/)).toBeInTheDocument();
+    expect(screen.queryByTestId('envelope-table')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('envelope-chart')).not.toBeInTheDocument();
+  });
+
+  it('renders the markdown fallback when envelope is not an object', () => {
+    render(<EnvelopeMessage envelope="not-an-object" fallbackContent="Plain fallback" />);
+
+    expect(screen.getByText('Plain fallback')).toBeInTheDocument();
+    expect(screen.queryByTestId('envelope-table')).not.toBeInTheDocument();
+  });
+});

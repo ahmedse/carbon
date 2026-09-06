@@ -121,17 +121,23 @@ export function totalLeaveBalance(entitlements) {
   );
 }
 
-/** Leave balance aggregated by leave_type, sorted by balance descending. */
+/** Leave balance aggregated by leave_type (plus policy provenance), sorted by balance descending. */
 export function leaveBalanceByType(entitlements) {
   const map = {};
   for (const e of entitlements) {
     const k = e.leave_type;
-    if (!map[k]) map[k] = { entitled: 0, used: 0, carried: 0 };
+    if (!map[k]) map[k] = { entitled: 0, used: 0, carried: 0, policyNames: new Set() };
     map[k].entitled += Number(e.entitled_days);
     map[k].used += Number(e.used_days);
     map[k].carried += Number(e.carried_forward || 0);
+    if (e.policy_name) map[k].policyNames.add(e.policy_name);
   }
   return Object.entries(map)
-    .map(([type, v]) => ({ type, ...v, balance: v.entitled - v.used + v.carried }))
+    .map(([type, v]) => ({
+      type,
+      ...v,
+      policyNames: [...v.policyNames],
+      balance: v.entitled - v.used + v.carried,
+    }))
     .sort((a, b) => b.balance - a.balance);
 }

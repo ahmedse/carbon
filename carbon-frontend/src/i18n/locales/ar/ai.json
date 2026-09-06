@@ -118,5 +118,20 @@
   "result": "النتيجة",
   "couldNotRefreshSubagent": "تعذر تحديث حالة الوكيل الفرعي.",
   "scopeRestrictionLabel": "تقييد النطاق",
-  "resultDetail": "التفاصيل"
+  "resultDetail": "التفاصيل",
+  "envelope": {
+    "sources": "المصادر",
+    "caveats": "تنبيهات",
+    "truncated": "مقتطع",
+    "rows": "{{count}} صف",
+    "noData": "لا توجد بيانات"
+  },
+  "provenance": {
+    "sources": "المصادر",
+    "toolsUsed": "الأدوات المستخدمة",
+    "dataFreshness": "حداثة البيانات",
+    "truncated": "مقتطع",
+    "rows": "{{count}} صف",
+    "noData": "لا توجد بيانات"
+  }
 }

@@ -37,7 +37,7 @@ def resolve_step_approvers(*, step, requester, org_unit=None) -> list[int]:
     - 'specific_user'  -> [step.specific_user_id] (skip None)
     - 'any_admin'      -> _users_with_capability('correspondence:admin')
     - 'hr'             -> _users_with_capability('people:manage')
-    - 'finance'        -> [] (unresolved until finance module; caller auto-skips)
+    - 'finance'        -> _users_with_capability('correspondence:finance')
     Apply skip_if_self (drop requester.id). Dedupe preserving order. Never import people.
     """
     role = step.role
@@ -58,7 +58,7 @@ def resolve_step_approvers(*, step, requester, org_unit=None) -> list[int]:
     elif role == 'hr':
         ids = _users_with_capability('people:manage')
     elif role == 'finance':
-        ids = []
+        ids = _users_with_capability('correspondence:finance')
     # skip_if_self + dedupe preserving order
     if step.skip_if_self and requester and requester.id in ids:
         ids = [i for i in ids if i != requester.id]

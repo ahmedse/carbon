@@ -1682,7 +1682,7 @@ npm run build
 **Date:** 2026-09-02
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash (RULE_24)
-**Status:** READY
+**Status:** DONE ✅ (2026-09-06 — 9/9 anomaly-watch tests; `pytest ai` 1518 passed / 2 unrelated-fail; `migrate --check` clean for ai)
 **Full spec (source of truth):** `docs/pulse/PULSE-0.3-ROADMAP.md` Wave H §H3 — read the CORRECTIONS in the Wave H header above.
 
 ### Context
@@ -1728,7 +1728,7 @@ cd /home/ahmed/aast/carbon/backend
 **Date:** 2026-09-02
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash (RULE_24)
-**Status:** READY (depends on H3-B)
+**Status:** DONE ✅ (2026-09-06 — 6/6 vitest; eslint 0 errors; build clean)
 **Full spec (source of truth):** `docs/pulse/PULSE-0.3-ROADMAP.md` Wave H §H3 step 4 — additive to H2, read the CORRECTIONS in the Wave H header above.
 
 ### Context
@@ -10909,3 +10909,838 @@ cd /home/ahmed/aast/carbon/backend
 /home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
 ```
 Report: full `people` suite green (no regressions in the self-service/correspondence journey); `makemigrations --check` reports "No changes detected" after migrations are applied.
+
+---
+
+# Pulse Answer Quality — PAQ series (answer-quality fixes)
+
+> **Canonical spec (source of truth):** `plans/PULSE-ANSWER-QUALITY-PLAN.md` — read it
+> FIRST. It has the full problem class, enterprise north-star, dependency order, and the
+> per-phase build lists below.
+> **Dependency order (do NOT reorder):** PAQ-1A (eval harness) → PAQ-2A (envelope backend)
+> → PAQ-2B (renderer) → PAQ-3A (provenance UI). PAQ-4A (gender hygiene) is independent.
+> **One phase = one worker session, one domain.** No phase spans backend and frontend.
+
+| Phase | Goal | Domain | Deps | Status |
+|-------|------|--------|------|--------|
+| PAQ-1A | Deterministic answer-quality eval harness (P5) | backend | — | DONE |
+| PAQ-2A | Answer Envelope contract + Structured Outputs (P1) | backend | PAQ-1A | DONE |
+| PAQ-2B | Deterministic envelope renderer (P1) | frontend | PAQ-2A | DONE |
+| PAQ-3A | Provenance UI (Sources chip) | frontend | PAQ-2B | DONE |
+| PAQ-4A | Normalize Nibras gender seed data (independent) | backend | — | DONE |
+
+## Phase PAQ-1A — Backend: deterministic answer-quality eval harness (P5)
+
+**Date:** 2026-09-06
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE ✅ (verified by Master — 9 eval tests + 20 grounding tests pass; `live` marker collected and excluded by `-m "not live"`)
+
+### Objective
+A CI-safe pytest gate that asserts Pulse's deterministic answer-quality invariants on a
+golden dataset — so future prompt/model/renderer changes cannot silently regress
+correctness (wrong totals over truncated results, raw PK labels, silent missing-data,
+dumb pie). Builds on the already-merged server-side `_people_analytics`.
+
+### Files to Read First
+- `backend/ai/host_executor.py` — `_people_analytics`, `_suggest_chart_type`, `_ANALYTICS_MAX_BUCKETS`, `_FIELD_SYNONYMS`
+- `backend/ai/tests/test_people_grounding.py` — existing `_make_org` / `_make_employee` helpers
+- `backend/pytest.ini` — existing markers (add `live`; do NOT add xdist)
+
+### What to Build
+1. `backend/ai/eval/__init__.py` + `backend/ai/eval/golden.py`
+   - `GOLDEN_QUERIES`: `{question, expected_tool, expected_dimension, invariants[]}` for
+     gender distribution, position distribution, headcount, "how many active employees",
+     and one out-of-scope question.
+   - `GOLDEN_DATASET`: a seed spec producing a **known** population (6 male, 2 female,
+     1 blank gender, mixed positions/orgs) so assertions are exact-count, not `≥ 1`.
+2. `backend/ai/eval/checks.py` — pure deterministic check functions (no LLM):
+   `assert_counts_match_db`, `assert_no_raw_pk_labels`, `assert_caveat_fires_for_blank`,
+   `assert_chart_type_rule`, `assert_truncation_collapsed_to_other`, `assert_synonym_merged`.
+3. `backend/ai/tests/test_answer_quality_eval.py` — golden dataset → `_people_analytics` → checks.
+   CI-safe (DB only, no network, no LLM).
+4. `backend/ai/tests/test_answer_quality_live.py` — `@pytest.mark.live`, runs the full
+   pipeline over `GOLDEN_QUERIES`; register the `live` marker in `backend/pytest.ini`.
+
+### DO NOT TOUCH
+- Frontend (`carbon-frontend/**`) · `_people_analytics` behavior (test it only — if a check
+  reveals a real bug, STOP and report, don't silently fix) · no docker · no full-suite pytest · no `-n auto`.
+
+### Verification Gate (Master runs — paste output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_answer_quality_eval.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_people_grounding.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+Report: both suites green; `pytest --collect-only -q` shows `live` tests collected but excluded by default.
+
+## Phase PAQ-2A — Backend: Answer Envelope contract + Structured Outputs (P1)
+
+**Date:** 2026-09-06
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE ✅ (verified by Master — 15 envelope tests + 12 synthesis tests + 5 reason-lane tests pass; envelope threaded through `AgentResponse` → `engine_runtime` result payload, flag `PULSE_ENVELOPE_ENABLED` defaults OFF)
+
+**Full spec:** `plans/PULSE-ANSWER-QUALITY-PLAN.md` §PAQ-2A. Typed `AnswerEnvelope`
+(`headline, prose[], tables[], charts[], caveats[], sources[]`) with pydantic validation;
+structured-output prompt path (OpenAI `response_format` json_schema) so synthesis returns
+data, not prose; persist envelope on the message artifact; markdown only in `prose[]`/`headline`.
+
+## Phase PAQ-2B — Frontend: deterministic envelope renderer (P1)
+
+**Date:** 2026-09-06
+**Worker Role:** frontend-worker
+**Status:** DONE
+
+**Full spec:** `plans/PULSE-ANSWER-QUALITY-PLAN.md` §PAQ-2B. Render envelope blocks from
+typed data; keep markdown fallback; compact-ui compliance (th 0.625rem / td 0.6875rem /
+thead #f4f4f5 / no raw inline fontSize/hex).
+
+**Delivered:**
+- `carbon-frontend/src/shell/EnvelopeMessage.jsx` (+ `.test.jsx`) — deterministic renderer
+  for `headline`/`prose` (markdown), typed `tables[]`, pure-SVG `charts[]` (bar/pie/line),
+  `caveats[]` disclosure banners, `sources[]` chips. Absent envelope → markdown fallback.
+- `AIMessageBubble.jsx` — reads `message.envelope || metadata?.envelope` and renders the
+  envelope instead of bare markdown.
+- i18n `ai` namespace (en + ar) — `envelope.{sources,caveats,truncated,rows,noData}`.
+
+**Backend propagation (closed by Master):** envelope now flows `engine_runtime` →
+`ChatResponse.envelope` → `providers/pulse.py` → `intelligence._build_ai_message` →
+`metadata_json.envelope` (mirrors `code_result`). +2 tests in `test_answer_envelope.py`.
+
+**Verification (Master):** vitest 9 passed · lint 0 errors · `npm run build` OK.
+
+## Phase PAQ-3A — Frontend: Provenance UI (Sources chip)
+
+**Date:** 2026-09-06
+**Worker Role:** frontend-worker
+**Status:** DONE
+
+**Full spec:** `plans/PULSE-ANSWER-QUALITY-PLAN.md` §PAQ-3A. Sources chip per data-bearing
+block: tool, rows returned, truncation status, resolved-at timestamp.
+
+**Delivered:**
+- `EnvelopeMessage.jsx` (PAQ-2B) already rendered `sources[]` chips with all four facts;
+  PAQ-3A closed the **non-envelope** gap: `ReasoningTrace.jsx` (the "Why this answer"
+  block) now surfaces the same four facts via a new `sources` prop.
+- `utils/aiProvenance.js` — `normalizeProvenanceSource(s)` defensively normalize
+  sources from metadata/provenancePayload/top-level into `{tool, rows_returned,
+  truncated, resolved_at}` (deduped, never fabricated).
+- `AIMessageBubble.jsx` computes `provenanceSources` and `showProvenance` now also fires
+  when sources exist.
+- i18n `provenance` namespace (en + ar) + compact-ui token fix in `EnvelopeMessage` table
+  cells (caption/body2 fontSize tokens, no raw fontSize).
+
+**Verification (Master):** vitest 22 passed · lint 0 errors · `npm run build` OK.
+
+## Phase PAQ-4A — Backend/Data: normalize Nibras gender seed data (independent)
+
+**Date:** 2026-09-06
+**Worker Role:** backend-worker
+**Status:** DONE
+
+**Full spec:** `plans/PULSE-ANSWER-QUALITY-PLAN.md` §PAQ-4A. Idempotent management command
+`normalize_employee_genders` backfilling `M`/`F` → `male`/`female`; blanks stay blank and
+remain disclosed.
+
+**Delivered:**
+- `people/management/commands/normalize_employee_genders.py` — `--dry-run` supported;
+  idempotent (`update_fields=["gender"]`); reports total/blank/canonical/normalized/
+  skipped-unknown counts. Blanks + unknown non-blank values are never invented.
+- `people/tests/test_normalize_genders.py` — 8 tests (variants, blank, whitespace-blank,
+  idempotency, unknown, dry-run, mixed run).
+- Live DB (verified): 535 employees → 0 to normalize, 530 blank, 5 already canonical
+  (no `M`/`F` dirty values present today; command is defensive/future-proof).
+
+**Verification (Master):** pytest 8 passed · `--dry-run` safe on live data (0 changes).
+
+---
+
+# e-Office Correspondence Expansion — OF-15 … OF-20 (requests journey + workflow graph)
+
+> **Driver:** the e-Office correspondence engine is generic and fully wired for the
+> *state machine* (draft → submitted → sent_back/rejected/approved, multi-step
+> `approver_chain`, per-event timeline), but only **`leave_request`** has a create
+> path today (`POST /people/me/leave/` → `people/self_views.py`). The other five
+> governed types (`loan_request`, `profile_change`, `internal_memo`, `circular`,
+> `decision`) are seeded `ReferenceValue`s with no submit endpoint or UI. The
+> "workflow graph" is currently a **vertical stepper** (`ApproverChainStepper`)
+> — not a DAG. HR can see the 6-tab employee 360 but has **no Requests tab** and
+> **no endpoint to list one employee's correspondence** (the `correspondence`
+> list is self-scoped to `requester=request.user`).
+>
+> **Canonical layering (NON-NEGOTIABLE):** `correspondence` NEVER imports `people`;
+> `people` reaches the engine only via `correspondence.fsm`/`services`/`models`.
+> Governed enums stay `mdm.ReferenceValue` FKs. Every transition emits a
+> `CorrespondenceEvent` + `emit_governance_event`.
+>
+> **Dependency order (do NOT reorder):** OF-15 → OF-16 (backend, can run in
+> parallel) → OF-17 (needs OF-15) · OF-18 (independent, needs neither) ·
+> OF-19 (needs OF-16) → OF-20 (QA, last). One phase = one worker session, one domain.
+
+| Phase | Goal | Domain | Deps | Status |
+|-------|------|--------|------|--------|
+| OF-15 | Generic submit endpoint + subject adapters for the 5 remaining types + acknowledge/review transitions | backend | OF-14 | DONE |
+| OF-16 | HR/admin correspondence scoping (list by employee/org/type) + correspondence notifications API (list + mark-read) | backend | — | DONE
+| OF-17 | "New Request" multi-type composer + extend MyRequests/RequestDetail | frontend | OF-15 | DONE |
+| OF-18 | Workflow DAG graph component + stepper↔graph toggle | frontend | — | DONE |
+| OF-19 | HR 360 "Requests" tab in EmployeeDetailPage (view all of an employee's correspondence) | frontend | OF-16 | DONE |
+| OF-20 | QA validation (4-layer) of the expanded e-office | qa | OF-17,18,19 | DONE |
+
+---
+
+### Phase OF-15 — Backend: generic submit + subject adapters + acknowledge/review transitions
+**Role:** backend-worker · **Depends on:** OF-14 · **Model:** DeepSeek V4-Flash
+
+#### Problem
+Only `leave_request` is creatable. The engine already supports `subject=None`
+(`submit_correspondence` skips the DQ gate) and the router already maps
+`manager`/`hr`/`finance`/`specific_user`/`any_admin` roles. Three gaps:
+(1) no generic create for payload-only types, (2) the `intent` field allows
+`acknowledge`/`review` but `fsm` has no transition for them (an `internal_memo`
+should be *acknowledged*, not "approved"), (3) the `finance` role resolves to
+`[]` in `routing.py` (auto-skip) — a loan policy with a finance step would be
+silently dropped, which is a thin/broken behaviour, not a real workflow.
+
+#### Change
+1. **Generic create endpoint (payload-only types)** — `backend/correspondence/views.py`:
+   `POST correspondence/` (a `create` action on the ViewSet, gated by
+   `correspondence:submit`). Accepts `{corr_type, title, payload, org_unit}` →
+   creates a `Correspondence` with `subject_type=''`, `subject_id=None`,
+   `requester=request.user`, `status='draft'`, then
+   `fsm.submit_correspondence(corr, by=user, subject=None)`. Reuse the
+   `CorrespondenceDetailSerializer` for the 201. Map the same engine exceptions
+   (`SubmissionBlocked`→400, `PolicyNotFound`→400, `InvalidTransition`→409) via
+   the existing `_transition`-style helper or an explicit try/except.
+2. **`acknowledge` + `review` transitions** — `backend/correspondence/fsm.py`:
+   add `acknowledge(corr, by, comment)` that marks the current step
+   `decision='acknowledged'` and advances (mirrors `approve` but emits
+   `event_type='acknowledged'`, no "approved" semantics), and `review(...)`
+   (`decision='reviewed'`). Add a generic `act(corr, by, intent, comment)`
+   dispatcher so `views.py` needs one action route, not three. Extend
+   `correspondence/urls.py` with `POST correspondence/{id}/acknowledge/`.
+3. **Subject adapters (typed types stay in `people`)** — `backend/people/`:
+   - `POST /people/me/loan/` (loan_request): create `people.Loan` + `Correspondence`
+     (`subject_type='people.Loan'`), submit via fsm. **`Loan.STATUS_CHOICES` is
+     `active/paid_off/cancelled` — add `'draft'` (migration) and create the Loan in
+     `draft` status (mirrors `LeaveRecord.status='draft'`).** Validate
+     principal/interest_rate/term_months/start_date/loan_type before submission.
+   - `POST /people/me/profile-change/` (profile_change): no new model — create a
+     `Correspondence` with `subject_type='people.Employee'`, `subject_id=profile.pk`,
+     `payload` = `{field: {from, to}, …}`; the HR approver applies the diff on approve.
+   Keep `leave_request` untouched (already works). Memo/circular/decision use the
+   generic OF-15.1 endpoint (no subject).
+4. **Seed default policies for the 5 new types** — extend
+   `backend/correspondence/management/commands/seed_correspondence.py`: add a
+   `WorkflowPolicy` per new `corr_type` (default single step): `internal_memo`
+   → `any_admin`/`acknowledge`, `circular` → `any_admin`/`acknowledge`,
+   `decision` → `manager`/`approve`, `loan_request` → `manager` then `finance`
+   (two steps), `profile_change` → `hr`/`approve`. Idempotent (`update_or_create`).
+5. **Finance approver resolution (fix `finance` → `[]` auto-skip)** — resolve the
+   finance step to a REAL pool, not an empty list:
+   - `backend/accounts/capabilities.py`: add `CORRESPONDENCE_FINANCE` (key
+     `correspondence:finance`, domain `correspondence`, action `finance`,
+     category `admin`) to the capability registry + `ALL_CAPABILITIES`; add
+     `finance_group` to `GROUP_CAPABILITIES` mapping `{correspondence:finance,
+     correspondence:submit, my:access}`.
+   - `backend/accounts/constants.py`: add `FINANCE_GROUP = "finance_group"` (wire
+     into `GROUP_BRAND_SCOPE`/`PROTECTED_GROUPS` exactly as the other people groups
+     are), then `backend/accounts/management/commands/bootstrap_platform.py`: add a
+     `finance_group` `GROUP_DEFS` entry so it is created on bootstrap.
+   - `backend/correspondence/routing.py`: `role == 'finance'` →
+     `_users_with_capability('correspondence:finance')` (delete the `[]` literal).
+   - Update `backend/accounts/tests/test_capability_rbac_extensive.py` expected-
+     groups assertion to include `finance_group`.
+   - Seed one finance approver in `seed_correspondence.py` (assign an existing
+     employee user to `finance_group` via `ScopedRole`), so the live loan
+     workflow has a real finance approver.
+
+#### Files to Change
+- `backend/correspondence/views.py` (+ `create`, `acknowledge` actions)
+- `backend/correspondence/fsm.py` (+ `acknowledge`/`review`/`act`)
+- `backend/correspondence/urls.py` (+ `acknowledge` route)
+- `backend/correspondence/routing.py` (finance → `correspondence:finance`)
+- `backend/accounts/capabilities.py` (+ `CORRESPONDENCE_FINANCE`, `finance_group`)
+- `backend/accounts/constants.py` (+ `FINANCE_GROUP`)
+- `backend/accounts/management/commands/bootstrap_platform.py` (+ finance group def)
+- `backend/accounts/tests/test_capability_rbac_extensive.py` (expected groups)
+- `backend/people/models.py` (+ `'draft'` in `Loan.STATUS_CHOICES`) + migration
+- `backend/people/self_views.py` (+ `LoanSelfCollectionView`, `ProfileChangeSelfView`)
+- `backend/people/urls.py` / `self_urls.py` (+ routes)
+- `backend/correspondence/management/commands/seed_correspondence.py` (+ 5 policies + finance approver)
+- `backend/correspondence/tests/test_api.py`, `test_fsm.py`, `backend/people/tests/` (new tests)
+
+#### DO NOT TOUCH
+- Frontend · `correspondence` importing `people` (never) · leave journey (regression).
+
+#### Verification Gate (Master runs — paste output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest correspondence people -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+```
+Report: `correspondence` + `people` suites green; new tests cover generic submit,
+acknowledge/review transitions, loan/profile-change subject creation, AND finance
+routing (finance step resolves to a real approver, never auto-skips); `makemigrations
+--check` confirms the Loan draft-status migration is applied; no migrations drift.
+
+---
+
+### Phase OF-16 — Backend: HR/admin scoping + correspondence notifications API
+**Role:** backend-worker · **Depends on:** — (independent; runs parallel to OF-15) · **Model:** DeepSeek V4-Flash
+
+#### Problem
+(1) The `correspondence` list is self-scoped — HR (`people:manage` /
+`correspondence:admin`) cannot list an employee's requests to answer "what is
+pending for this person?". (2) `fsm.notify()` writes
+`correspondence.models.Notification` rows but there is **no API** to read them —
+managers/requesters never see "action needed" / "status changed" in-app.
+
+#### Change
+1. **Employee-scoped correspondence list (HR)** — `backend/people/views.py`: add
+   `GET /people/employees/{id}/correspondence/` (permission `PeopleAccess`), returns
+   the employee's correspondence (`requester__employee_profile` OR `subject_id`
+   match) via `CorrespondenceSerializer`, paginated. `people` importing
+   `correspondence.serializers` is allowed (one-way).
+2. **Widen the admin list filter** — `backend/correspondence/views.py`: when the
+   caller holds `correspondence:admin`, allow `?requester=`, `?employee=`,
+   `?org_unit=`, `?corr_type=`, `?status=` on `GET correspondence/` (non-admin
+   stays self-scoped). Add a `correspondence:admin` object check.
+3. **Notifications API** — `backend/correspondence/views.py` + `urls.py`: add
+   `GET correspondence/notifications/` (self-scoped, `is_read` filter, unread
+   count) and `POST correspondence/notifications/{id}/read/` +
+   `POST correspondence/notifications/read-all/`. Serializer for
+   `correspondence.models.Notification` (id, title, body, type, is_read,
+   correspondence reference_no, created_at).
+
+#### Files to Change
+- `backend/people/views.py` + `urls.py` (+ employee correspondence list)
+- `backend/correspondence/views.py` + `urls.py` (+ admin filters, notification actions)
+- `backend/correspondence/serializers.py` (+ `NotificationSerializer`)
+- `backend/correspondence/tests/test_api.py`, `backend/people/tests/` (new tests)
+
+#### Verification Gate (Master runs — paste output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest correspondence people -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+Report: HR can list an employee's correspondence; admin filters work; notifications list/read/read-all return correct unread counts; non-admin list stays self-scoped.
+
+---
+
+### Phase OF-17 — Frontend: "New Request" multi-type composer + richer request list
+**Role:** frontend-worker · **Depends on:** OF-15 · **Model:** DeepSeek V4-Flash
+
+#### Objective
+Let an employee submit **any** governed type (not just leave) from `/my`, and
+render non-leave payloads correctly in the request list/detail.
+
+#### Deliverables
+1. `src/apps/my/components/NewRequestDialog.jsx` — type selector
+   (leave/memo/circular/decision/loan/profile-change) driving a dynamic form;
+   routes to the right API: leave → `POST people/me/leave/`, loan →
+   `POST people/me/loan/`, profile-change → `POST people/me/profile-change/`,
+   memo/circular/decision → `POST correspondence/` (generic). Show approver-chain
+   preview + confirm. i18n EN/AR.
+2. `src/api/my.js` — add `submitLoanRequest`, `submitProfileChange`,
+   `submitGenericCorrespondence`; keep `apiFetch` only.
+3. `src/apps/my/MyRequests.jsx` + `components/RequestTable.jsx` — render
+   non-leave payloads (memo title/body, circular, decision, loan amount, profile
+   change field diffs) as a small payload summary instead of leave dates. The
+   `corr_type` filter chips already exist — verify they show all 6 types.
+4. `src/apps/my/MyDashboard.jsx` — add a "New Request" quick action next to
+   "Request Leave".
+
+#### Screen Spec (RULE_29 — required before code)
+**Story:** As an employee, I want to submit any request type (leave, loan, memo,
+circular, decision, profile change) from one place, so I don't have to learn six
+different forms. **Acceptance:** given type X → form X shows only X's fields; submit
+→ 201 + success toast + list refreshes; invalid input → inline field errors; no
+policy for type → clear message; non-employee → 403 handled.
+**Journey:** `/my` → "New Request" → choose type → fill form → review approver
+preview → submit → success → `/my/requests`.
+**Composition:** `SystemDialog` (NOT raw Dialog) wrapping a type `<Select>` + a
+`RequestFormSwitch` (per-type field sets) + `ApproverChainPreview`; submit button
+`disabled` while `submitting`. Reuse `RequestTable`/`SummaryCard` for list/detail.
+**State Matrix:** page `idle/loading/empty/error/loaded`; dialog `open/closed`;
+submit `idle/submitting/error/success`; type selector `default/selected`.
+**Data Contract:** `GET /carbon-api/correspondence/` (self list, `corr_type`/
+`status` filters); `POST /carbon-api/people/me/leave/`, `/people/me/loan/`,
+`/people/me/profile-change/`, `POST /carbon-api/correspondence/` (generic) → 201 |
+400 field errors | 403. **A11y:** focus trap in dialog, `aria-live` on submit error,
+labels on all inputs. **Performance:** lazy-load dialog, memoize type→field map,
+debounce not needed (no search). **i18n/RTL:** every label via `t()`, keys in BOTH
+`en` + `ar`; type names in Arabic.
+
+#### Files to Change
+- `src/apps/my/components/NewRequestDialog.jsx` (new)
+- `src/api/my.js`
+- `src/apps/my/MyRequests.jsx`, `components/RequestTable.jsx`, `MyDashboard.jsx`
+- `src/i18n/locales/{en,ar}/my.json`
+
+#### DO NOT TOUCH
+- Backend · `src/apps/team/**` · raw fetch · inline hex/sx.
+
+#### Verification Gate (Master runs — paste output)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+node scripts/check-i18n-keys.js
+npm run lint
+npm run build
+```
+Report: i18n parity green; lint 0; build clean; smoke: submit a memo (generic) and a loan, both appear in My Requests with correct type labels.
+
+---
+
+### Phase OF-18 — Frontend: Workflow DAG graph + stepper↔graph toggle
+**Role:** frontend-worker · **Depends on:** — (approver_chain already in detail response)
+
+#### Objective
+Replace the *only-vertical-stepper* view with an optional **node-edge workflow
+graph** so the approval path is visualized as a DAG (steps as nodes colored by
+decision: pending/current/approved/rejected/skipped; edges = flow). Keep the
+stepper as the default and add a toggle.
+
+#### Deliverables
+1. `src/apps/my/components/WorkflowGraph.jsx` (new) — pure presentational DAG
+   from `approver_chain` (`order, role, intent, decision, user_ids, comment,
+   decided_at`) + `current_step`. Horizontal/SVG layout (or reuse
+   `components/graph/` primitives). Color = status, NOT color-only (label each
+   node with role/intent/decision text). RTL-safe.
+2. Add a Stepper ↔ Graph toggle to `src/apps/my/components/RequestDetail.jsx` and
+   `src/apps/team/TeamRequestDetail.jsx` (reuse `WorkflowGraph`). Default = stepper.
+3. i18n: `workflowGraph` / `workflowStepper` toggle labels + node legend.
+
+#### Screen Spec (RULE_29 — required before code)
+**Story:** As an employee or manager, I want to see the approval path as a graph,
+so I understand who is next and where it stalled. **Acceptance:** graph renders
+one node per `approver_chain` step + a terminal node; node shows role/intent/decision
+as TEXT (never color alone); `current_step` node highlighted; condition-skipped/
+auto-approve steps visibly distinct from approved/rejected; empty chain → graph
+empty state; RTL mirrors arrow direction.
+**Composition:** `WorkflowGraph` = SVG/Styled nodes + edges built from
+`approver_chain[]` + `current_step`; a `ToggleButtonGroup` (Stepper | Graph) in
+`RequestDetail` + `TeamRequestDetail`. Reuse `components/graph/` primitives if they
+exist — else one new presentational component (no data fetching inside).
+**State Matrix:** node `pending/current/approved/rejected/acknowledged/reviewed/
+skipped(auto|condition)/sent_back`; graph container `loading/empty/loaded` (reuses
+detail's fetched data — no separate fetch).
+**Data Contract:** consumed from the already-fetched `CorrespondenceDetailSerializer`
+(`approver_chain` = `[{order, role, intent, decision, decided_by, decided_at,
+comment, user_ids, auto_approve, can_skip, skip_if_self, skipped}]`, `current_step`
+int, `status` str). No new endpoint. **A11y:** nodes are buttons/`tabIndex=0` with
+`aria-label` (`role + intent + decision`); legend is text-based; not color-only.
+**Performance:** pure function of props, `React.memo`, no effects, SVG is light
+(< 50 nodes). **i18n/RTL:** legend + toggle labels via `t()` in BOTH catalogs; RTL
+flips edge direction.
+
+#### Files to Change
+- `src/apps/my/components/WorkflowGraph.jsx` (new)
+- `src/apps/my/components/RequestDetail.jsx`, `src/apps/team/TeamRequestDetail.jsx`
+- `src/i18n/locales/{en,ar}/{my,team}.json`
+
+#### DO NOT TOUCH
+- Backend · AI `PlanDagGraph` (unrelated) · raw fetch · inline hex/sx.
+
+#### Verification Gate (Master runs — paste output)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+node scripts/check-i18n-keys.js
+npm run lint
+npm run build
+```
+Report: i18n parity green; lint 0; build clean; smoke: open an approved request, toggle graph → nodes show approved/rejected/skipped correctly.
+
+---
+
+### Phase OF-19 — Frontend: HR 360 "Requests" tab (view all of an employee)
+**Role:** frontend-worker · **Depends on:** OF-16 · **Model:** DeepSeek V4-Flash
+
+#### Objective
+HR staff (holding `people:view`/`people:manage`) can open an employee's 360 and
+see **all their correspondence** (leave, loans, memos, …) in a new "Requests" tab,
+drill into each, and see the full timeline/chain — closing "HR can view all about
+an employee".
+
+#### Deliverables
+1. `src/apps/people/tabs/EmployeeRequestsTab.jsx` (new) — `GET
+   people/employees/{id}/correspondence/`; table (reference, type, title, status,
+   created, resolved) + row → detail dialog/drawer (reuse `SummaryCard` +
+   `ApproverChainStepper`/`WorkflowGraph` + `RequestTimeline` from `apps/my/`).
+2. `src/api/people.js` — add `fetchEmployeeCorrespondence(id)`.
+3. `src/apps/people/EmployeeDetailPage.jsx` — register the `Requests` tab in
+   `TAB_KEYS`/`TAB_COMPONENTS` (only render for users with `people:view`).
+4. i18n EN/AR for the new tab.
+
+#### Screen Spec (RULE_29 — required before code)
+**Story:** As HR, I want to see every request an employee has made (leave, loan,
+memo, …) in one tab, so I can answer "what is pending for this person?".
+**Acceptance:** tab lists all correspondence for the employee (reference, type,
+title, status, created, resolved); filter by status/type; click a row → detail
+(timeline + chain/graph); empty → "no requests yet"; 403 (no `people:view`) → tab
+hidden; loading → skeleton.
+**Composition:** `EmployeeRequestsTab` (inside `BaseDetailPage` tab) = `PageHeader`
+(mini) + `StandardDataGrid`/table (paginated) + detail `Dialog` reusing
+`SummaryCard` + `ApproverChainStepper`/`WorkflowGraph` + `RequestTimeline` from
+`apps/my/`. Register in `TAB_KEYS`/`TAB_COMPONENTS`; gate on `people:view` capability.
+**State Matrix:** `idle/loading/loading-empty/empty/loaded/partial/error/forbidden`;
+row `selected`; detail dialog `open/closed`; filter `default/active`.
+**Data Contract:** `GET /carbon-api/people/employees/{id}/correspondence/` →
+paginated `CorrespondenceSerializer` (`count/results`); 403 = hidden tab; 404 =
+unknown employee. **A11y:** table has row headers + focus-visible; dialog
+focus-trap; status = badge + label. **Performance:** paginate >50 rows; lazy-load
+detail dialog; memoize filter map. **i18n/RTL:** tab + column headers + status
+labels via `t()` in BOTH catalogs.
+
+#### Files to Change
+- `src/apps/people/tabs/EmployeeRequestsTab.jsx` (new)
+- `src/api/people.js`
+- `src/apps/people/EmployeeDetailPage.jsx`
+- `src/i18n/locales/{en,ar}/people.json`
+
+#### Verification Gate (Master runs — paste output)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+node scripts/check-i18n-keys.js
+npm run lint
+npm run build
+```
+Report: i18n parity green; lint 0; build clean; smoke: HR opens employee → Requests tab lists their correspondence; drill-in shows timeline.
+
+---
+
+### Phase OF-20 — QA validation (4-layer) of the expanded e-office
+**Role:** qa-validator · **Depends on:** OF-15…OF-19 · **Model:** DeepSeek V4-Flash
+
+#### Context
+Verify the expanded e-office end-to-end; no new features. Report deficiencies with file:line + repro.
+
+#### Layers
+1. **Static/contract:** grep for `GenericForeignKey`/`ContentType` in
+   `correspondence/`, hardcoded governed enums, `raw fetch(` in `src/apps/my/` +
+   `src/apps/team/`, naive `datetime.now()`, `print()` debug.
+2. **Unit:** one app at a time — `correspondence`, `people`, `accounts/tests/test_correspondence_caps.py`.
+3. **API integration:** DRF test client walk — submit memo (generic) → inbox →
+   acknowledge; submit loan → manager approve → finance approve; submit
+   profile-change → hr approve; HR lists employee correspondence; notifications
+   read/read-all. Confirm `correspondence` never imports `people`.
+4. **Frontend build + smoke:** `npm run build` + `check-i18n-keys.js`; Playwright
+   smoke of `/my` new request + `/team` + HR 360 Requests tab.
+
+#### Verification Gate (Worker runs + reports output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest correspondence people -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest accounts/tests/test_correspondence_caps.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run build && node scripts/check-i18n-keys.js
+```
+Report: 4-layer pass/fail matrix + deficiencies with file:line + repro.
+
+---
+
+# Leave Policy Registry — LPR series
+# Trigger: Nibras HR — the flat "one row per leave type" config tab in
+# PeopleConfigPage is not a real registry. Replace with a named, lifecycle-managed,
+# applicability-scoped policy registry + detail 360 + propagation + versioning.
+# Full spec: tasks/TASK-LPR-POLICY-REGISTRY.md
+
+## Phase LPR-1A — Backend: LeavePolicy registry model + API
+**Role:** backend-worker · **Depends on:** OF-14 (leave_type → ReferenceValue FK) · **Model:** DeepSeek V4-Flash
+**Status:** DONE — verified 2026-09-06 (migration 0021 applied, 182 people tests pass incl. 5 new LPR-1A tests)
+
+### Objective
+Evolve `LeavePolicy` from a one-row-per-leave-type config table into a named,
+lifecycle-managed, applicability-scoped registry. Non-destructive migration
+backfills existing rows. Add `employee_count` annotation + a basic `propagate`
+action so the LPR-1B registry grid has real data to display.
+
+### Files to Read First
+- `backend/people/models.py` — `LeavePolicy` (~296), `Employee` (~76), `LeaveEntitlement` (~365)
+- `backend/people/serializers.py` — `LeavePolicySerializer` (~222)
+- `backend/people/views.py` — `LeavePolicyListCreateView` (~732) + `LeavePolicyDetailView` (~741)
+- `backend/people/urls.py` — `leave-policies/` routes (~84-86)
+
+### What to Build
+1. **Model — add to `LeavePolicy`** (all null/blank-safe, non-breaking):
+   - `name` `CharField(max_length=200, blank=True)` — human-readable policy name (primary identity).
+   - `description` `TextField(blank=True)`.
+   - `status` `CharField(choices=[('draft','Draft'),('active','Active'),('deprecated','Deprecated')], default='active')`.
+   - `effective_from` `DateField(null=True, blank=True)`.
+   - `effective_to` `DateField(null=True, blank=True)`.
+   - `applies_to_org_units` `M2M('mdm.OrgUnit', blank=True, related_name='+')` — empty = all org units.
+   - `applies_to_contract_types` `JSONField(default=list, blank=True)` — list of contract_type codes; empty = all.
+   - Keep `is_active` (transition compat) but document `status` as the lifecycle source.
+   - `__str__` → `f"{self.name} ({self.leave_type.code})"`.
+2. **Migration** `0021_leave_policy_registry` (schema + data): backfill
+   `name = leave_type.code`, `status = 'active' if is_active else 'deprecated'`.
+3. **Serializer** — add the new fields; add read-only `employee_count`
+   (`IntegerField`), annotated in the view = distinct employees with a
+   `LeaveEntitlement` matching the policy's `leave_type` in the current year.
+   Keep `leave_type_label`.
+4. **View** — `LeavePolicyListCreateView.get_queryset()` annotates `employee_count`.
+   Add `propagate` action on `LeavePolicyDetailView`:
+   `POST /leave-policies/<id>/propagate/` (body `{ year }`, default current year;
+   query `?dry_run=true` → returns `{ eligible, will_create, skipped }` without writing).
+   Eligible = active employees matching `gender_restriction`, `min_service_days`,
+   `applies_to_org_units`, `applies_to_contract_types`.
+5. **URL** — `path('leave-policies/<int:pk>/propagate/', ...)` registered BEFORE `<int:pk>/`.
+
+### DO NOT TOUCH
+- `backend/correspondence/*`, `backend/ai/*`, `backend/accounts/*`, `backend/config/settings.py` (other master WIP).
+- `LeaveEntitlement` schema — policy↔employee stays indirect via `leave_type` for LPR-1 (proper `policy` FK is LPR-2).
+- `backend/people/management/commands/seed_gofsco.py` (other master WIP).
+
+### Verification Gate (Worker runs + reports output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations people --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python manage.py migrate people
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest people -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+Report: model diff, migration file name, test output, and a sample list showing `employee_count`.
+
+---
+
+## Phase LPR-1B — Frontend: Policy Registry grid + Policy Detail 360
+**Role:** frontend-worker · **Depends on:** LPR-1A · **Model:** DeepSeek V4-Flash
+**Status:** DONE — verified 2026-09-06 (build ✓, i18n 2965 keys parity ✓, PeoplePages vitest 7/7 ✓)
+
+### Objective
+Replace the flat LeavePolicy tab in `PeopleConfigPage` with a dedicated registry
+(`/people/policies`) + a 360 detail page (`/people/policies/:id`), matching the
+LPR-1A backend contract.
+
+### Files to Read First
+- `carbon-frontend/src/apps/people/PeopleConfigPage.jsx` (LeavePolicy tab to REMOVE)
+- `carbon-frontend/src/apps/people/manifest.js` (`navigation.items`)
+- `carbon-frontend/src/api/people.js` (`fetchLeavePolicies` + CRUD)
+- `carbon-frontend/src/App.jsx` (people routes ~300-311)
+- `carbon-frontend/src/shell/Breadcrumbs.jsx` (`/people/config` mapping ~461)
+- `carbon-frontend/src/i18n/locales/en/people.json` + `ar/people.json`
+
+### What to Build
+1. **Routes** — lazy imports + routes for `/people/policies` (PoliciesPage) and
+   `/people/policies/:id` (PolicyDetailPage). Add Breadcrumbs mappings.
+2. **`PoliciesPage.jsx`** — FilterBar (leave_type select, status select, search),
+   PolicyGrid (name, leave_type badge, status chip, default days, `employee_count`,
+   `effective_from`, actions), "New Policy" CTA → create dialog.
+   apiFetch-only (RULE_10), FONT theme tokens only (RULE_8).
+3. **`PolicyDetailPage.jsx`** — PageHeader + 6 tabs (General / Entitlement /
+   Carryover / Eligibility / Workflow / Employees); tab index persisted to
+   `localStorage` (RULE_17). Reuse `BaseDetailPage` pattern.
+4. **`api/people.js`** — add `propagateLeavePolicy(id, { year, dry_run }, token)`.
+5. **Remove** the LeavePolicy tab from `PeopleConfigPage` (TAB_KEYS, form, grid,
+   policy state, imports) — keep Overview/Reference/Compliance intact.
+6. **`manifest.js`** — add `{ label: 'Policies', path: '/people/policies', role: '*' }`
+   under the Configuration group.
+7. **i18n** — add `people.json` keys (en + ar) for all new labels.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run build && node scripts/check-i18n-keys.js
+npx vitest run src/__tests__/PeoplePages.test.jsx
+```
+
+---
+
+## Phase LPR-2A — Backend: propagation service + entitlement `policy` FK + scheduler
+**Role:** backend-worker · **Depends on:** LPR-1A · **Model:** DeepSeek V4-Flash
+**Status:** DONE — verified 2026-09-06 (migration 0022 applied, 187 people tests pass incl. 5 new service tests)
+
+### Objective
+Make propagation production-grade and auditable: give each `LeaveEntitlement` a
+nullable `policy` provenance link, extract the inline propagate logic from the view
+into a reusable service (DRF-free), and add a year-start management command.
+
+### Files to Read First
+- `backend/people/models.py` — `LeaveEntitlement` (~365), `LeavePolicy` (~296)
+- `backend/people/views.py` — `LeavePolicyPropagateView` (~807, inline logic to extract)
+- `backend/people/serializers.py` — `LeaveEntitlementSerializer`
+- `backend/people/services.py` — facade pattern (NO DRF imports)
+- `backend/people/management/commands/link_employee_users.py` — command style
+
+### What to Build
+1. **Model** — add to `LeaveEntitlement`:
+   `policy = models.ForeignKey('LeavePolicy', null=True, blank=True, on_delete=models.SET_NULL, related_name='+')`.
+   Migration `0022_leaveentitlement_policy`. Non-breaking (nullable).
+2. **Service** — new `backend/people/leave_policy_service.py` (DRF-free, no `rest_framework`/`Response`):
+   - `propagate_policy(policy, year=None, *, dry_run=False) -> dict` — move the eligibility filter + preview/create logic out of the view. On create, set `policy=policy` in `defaults` (record provenance). Never overwrite an existing entitlement's `entitled_days` or `policy`.
+   - `propagate_all_active(year=None, *, dry_run=False) -> dict` — iterate active policies, aggregate `{ eligible, will_create, will_update, skipped, created, updated, per_policy: [...] }`.
+3. **Serializer** — add read-only `policy` (id) and `policy_name` to `LeaveEntitlementSerializer` so provenance is visible in the API.
+4. **View** — `LeavePolicyPropagateView.post` becomes a thin wrapper calling `propagate_policy(policy, year, dry_run=dry_run)`; identical response shape as LPR-1A.
+5. **Management command** — `backend/people/management/commands/propagate_leave_policies.py`:
+   `--year` (default current), `--policy-id` (optional single), `--dry-run`. Calls `propagate_all_active`. Document cron usage in the docstring. Idempotent.
+6. **Tests** — `backend/people/tests/test_leave_policy_service.py` (or extend the registry test): service dry_run + create sets `policy` FK; propagate_all_active aggregates; command `--dry-run` runs without error; existing entitlement not overwritten.
+
+### DO NOT TOUCH
+- `backend/correspondence/*`, `backend/ai/*`, `backend/accounts/*`, `backend/config/settings.py`
+- Any frontend file.
+
+### Verification Gate (Worker runs + reports output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations people --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python manage.py migrate people
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest people -q --maxfail=5 --disable-warnings -p no:cacheprovider --create-db
+```
+
+---
+
+## Phase LPR-2B — Frontend: batch propagation + entitlement provenance
+**Role:** frontend-worker · **Depends on:** LPR-2A · **Model:** DeepSeek V4-Flash
+**Status:** DONE — verified 2026-09-06 (build ✓, i18n parity ✓ 3038 keys, vitest 7/7)
+
+### Objective
+Surface the new propagation engine in the UI: batch "Propagate All Active" on the
+registry page, and show policy provenance on per-employee entitlements.
+
+### Batch API decision (from LPR-2A — CONFIRMED)
+LPR-2A added **NO batch HTTP endpoint**. The only HTTP surface is the per-policy
+`POST /people/leave-policies/<id>/propagate/` (body `{"year": <int>}`, query
+`?dry_run=true`). `propagate_all_active` is callable ONLY via the management
+command. So the frontend "Propagate All Active" button MUST loop per active policy:
+1. `fetchLeavePolicies()` → filter `status === 'active'` (and legacy
+   `!status && is_active`).
+2. For each, `POST /people/leave-policies/<id>/propagate/` (the existing
+   `propagateLeavePolicy(id, payload, token)` helper from LPR-1B).
+3. Aggregate the returned `{eligible, will_create, will_update, skipped}` counts
+   and show a single summary (Snackbar). No new backend needed.
+
+### What to Build
+1. `PoliciesPage.jsx` — add a "Propagate All Active" toolbar button. On click,
+   loop active policies through the existing `propagateLeavePolicy` helper
+   (per the batch decision above), aggregate counts, and show a summary Snackbar
+   (e.g. "Propagated N policies: M entitlements created"). Disable during the run.
+2. `EmployeeLeaveTab.jsx` / `EmployeeDetailPage.jsx` — display the entitlement's
+   `policy_name` where the balance/entitlement rows are rendered (the serializer
+   already returns read-only `policy` + `policy_name` from LPR-2A).
+3. `api/people.js` — add any small helpers if needed (likely none beyond the
+   existing `propagateLeavePolicy`; the "all" loop lives in the page).
+4. i18n keys (en + ar) for new labels.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run build && node scripts/check-i18n-keys.js
+npx vitest run src/__tests__/PeoplePages.test.jsx
+```
+
+---
+
+## Phase LPR-3A — Backend: policy versioning (snapshot + fork semantics)
+**Role:** backend-worker · **Depends on:** LPR-2A · **Model:** DeepSeek V4-Flash
+**Status:** DONE — verified 2026-09-06 (migration 0023 applied, 193 people tests pass incl. 6 new versioning tests; fixed latent `policy`/`policy_version` IntegerField→source=_id serializer bug)
+
+### Objective
+Make policy edits auditable and non-destructive. Today a `PATCH /leave-policies/<id>/`
+mutates the live `LeavePolicy` in place with no history, so entitlements can never
+say *exactly* which configuration created them. Introduce a version ledger: each
+configuration change is a new `LeavePolicyVersion` snapshot, and every entitlement
+records both the `policy` (the live object) and the precise `policy_version` that
+created it. Effective-date transitions are derived from the version chain.
+
+### Files to Read First
+- `backend/people/models.py` — `LeavePolicy` (~296), `LeaveEntitlement` (~405, has `policy` FK)
+- `backend/people/leave_policy_service.py` — DRF-free service pattern (RULE_3) — extend, do NOT duplicate
+- `backend/people/serializers.py` — `LeavePolicySerializer` (~226), `LeaveEntitlementSerializer` (~201)
+- `backend/people/views.py` — `LeavePolicyListCreateView`/`LeavePolicyDetailView`/`LeavePolicyPropagateView` (~807)
+- `backend/people/urls.py` — leave-policies routes (~88)
+- `backend/people/management/commands/propagate_leave_policies.py` — command style
+
+### What to Build
+
+#### 1. Model — new `LeavePolicyVersion` (in `people/models.py`)
+```python
+class LeavePolicyVersion(models.Model):
+    policy = models.ForeignKey(LeavePolicy, on_delete=models.CASCADE, related_name='versions')
+    version_number = models.PositiveIntegerField()
+    effective_from = models.DateField()
+    effective_to = models.DateField(null=True, blank=True)
+    snapshot = models.JSONField(default=dict)   # full field capture at fork time
+    change_summary = models.TextField(blank=True)
+    created_by = models.ForeignKey('accounts.User', null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('policy', 'version_number')
+        ordering = ['policy', '-version_number']
+        verbose_name = 'Leave Policy Version'
+        verbose_name_plural = 'Leave Policy Versions'
+```
+- Add to `LeaveEntitlement`: `policy_version = FK('LeavePolicyVersion', null=True, blank=True, on_delete=SET_NULL, related_name='+')` (provenance at version granularity; nullable for legacy/manual rows). Migration `0023_leave_policy_versioning` (CreateModel + AddField + a RunPython backfill: for each existing entitlement with a `policy`, create version 1 from the current policy snapshot and link it — idempotent).
+
+#### 2. Service — extend `leave_policy_service.py` (DRF-free, no `rest_framework`)
+- `snapshot_policy(policy) -> dict` — serialize the policy's configurable fields (leave_type code, default_entitled_days, max_carryover_days, is_carryover_allowed, accrual_method, gender_restriction, requires_approval, min_service_days, name, description, status, applies_to_contract_types, applies_to_org_units ids) into a JSON-safe dict.
+- `fork_policy(policy, *, effective_from=None, change_summary='', user=None) -> LeavePolicyVersion`:
+  1. Determine `next_version = (existing max version_number) + 1` (or 1).
+  2. `effective_from` defaults to `timezone.localdate()`.
+  3. Close the previous version: set its `effective_to = effective_from - 1 day` (only if it was open-ended).
+  4. Create the new version with `snapshot = snapshot_policy(policy)` and `version_number = next_version`.
+  5. **Do NOT mutate the live `LeavePolicy` fields** (versioning records the snapshot; the live row remains the current config). Optionally align `LeavePolicy.effective_from/effective_to` to the newest version's window — your choice, but document it.
+  6. Return the new version.
+- `get_version_history(policy) -> list[LeavePolicyVersion]` — ordered ascending by `version_number`.
+- `latest_version(policy) -> LeavePolicyVersion | None`.
+
+#### 3. Serializer
+- New `LeavePolicyVersionSerializer` — fields: `id`, `policy`, `version_number`, `effective_from`, `effective_to`, `change_summary`, `created_by`, `created_at`, `snapshot` (read-only except `change_summary`).
+- `LeavePolicySerializer` — add read-only `latest_version` (int, the newest version_number or null) and `version_count` (int).
+- `LeaveEntitlementSerializer` — add read-only `policy_version` (int, nullable) + `policy_version_number` (SerializerMethodField → `obj.policy_version.version_number if obj.policy_version_id else None`).
+
+#### 4. Views + URLs (thin, service-backed)
+- `LeavePolicyVersionListView` (`GET` list + `POST` fork) at `leave-policies/<int:pk>/versions/`:
+  - `GET` → `{ count, results: [...] }` from `get_version_history`.
+  - `POST` → body `{ change_summary, effective_from? }` → calls `fork_policy(policy, user=request.user, ...)` → 201 with the new version. Requires PeopleAccess (write gate via existing `_GatedDetailView` pattern or explicit admin check — match `LeavePolicyPropagateView`'s permission style).
+- `LeavePolicyVersionDetailView` (`GET` only) at `leave-policies/<int:pk>/versions/<int:version_pk>/`.
+- Wire both into `backend/people/urls.py` next to the existing leave-policies routes.
+
+#### 5. Tests — new `backend/people/tests/test_leave_policy_versioning.py`
+Follow the fixture style in `test_leave_policy_service.py`. Cover:
+- (a) `snapshot_policy` captures configurable fields and is JSON-safe.
+- (b) `fork_policy` first version → `version_number == 1`, `effective_from` set, previous version (none) unaffected.
+- (c) `fork_policy` second fork → `version_number == 2`, and closes the prior open-ended version's `effective_to`.
+- (d) `get_version_history` returns ascending order; `latest_version` returns version 2.
+- (e) migration backfill: existing entitlement with `policy` gets `policy_version` linked to version 1 (simulate by asserting the FK is non-null after backfill — or, if hard to test in isolation, assert `LeaveEntitlement.policy_version` is writable and round-trips through the serializer).
+- (f) `GET /leave-policies/<id>/versions/` returns history; `POST` creates version 2.
+
+### DO NOT TOUCH
+- `backend/correspondence/*`, `backend/ai/*`, `backend/accounts/*`, `backend/config/settings.py`
+- Any frontend file.
+
+### Verification Gate (run + report literal output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations people --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python manage.py migrate people
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest people -q --maxfail=5 --disable-warnings -p no:cacheprovider --create-db
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+```
+NOTE: `--create-db` is required (new model/field + `--reuse-db --nomigrations` in pytest.ini).
+
+---
+
+## Phase LPR-3B — Frontend: version-history panel
+**Role:** frontend-worker · **Depends on:** LPR-3A · **Model:** DeepSeek V4-Flash
+**Status:** DONE — verified 2026-09-06 (build ✓, i18n parity ✓ 3075 keys, vitest 7/7)
+
+### Objective
+Surface the version ledger in the policy 360: a "Versions" tab showing the full
+history, plus a "New Version" fork action that captures a change summary.
+
+### What to Build
+1. `PolicyDetailPage.jsx` — add a 7th tab `Versions` to `TAB_KEYS` (persist via the
+   existing localStorage key). Render a timeline/table of versions: version number,
+   effective_from → effective_to, change_summary, created_by, created_at. Show the
+   `snapshot` fields in an expandable/details view (a Dialog or accordion).
+2. "New Version" button in the Versions tab → opens a Dialog with a `change_summary`
+   field (and optional effective_from date) → calls the fork endpoint → refreshes history.
+3. `api/people.js` — add `fetchLeavePolicyVersions(policyId, token)` + `forkLeavePolicy(policyId, payload, token)`.
+4. i18n keys (en + ar) for all new labels (version, version history, new version, change summary, effective from/to, etc.).
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run build && node scripts/check-i18n-keys.js
+npx vitest run src/__tests__/PeoplePages.test.jsx
+```

@@ -26,6 +26,9 @@
   "successApproved": "تم اعتماد الطلب",
   "successRejected": "تم رفض الطلب",
   "successSentBack": "تم إعادة الطلب",
+  "viewToggleLabel": "طريقة العرض",
+  "workflowStepper": "الخطوات",
+  "workflowGraph": "المخطط",
   "status": {
     "draft": "مسودة",
     "submitted": "مُقدَّم",

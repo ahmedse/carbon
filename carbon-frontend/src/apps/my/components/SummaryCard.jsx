@@ -12,8 +12,8 @@ import {
   STATUS_COLOR,
   STATUS_SUFFIX,
   codeLabel,
-  subjectTypeLabel,
-  leaveTypeLabel,
+  requestTypeLabel,
+  payloadRows,
   formatDate,
 } from './myRequestsLabels';
 import { FONT } from '../../../theme/themeTokens';
@@ -47,8 +47,8 @@ Field.defaultProps = {
 
 export default function SummaryCard({ item }) {
   const { t, i18n } = useTranslation('my');
-  const payload = item?.payload && typeof item.payload === 'object' ? item.payload : {};
   const hasSignature = Boolean(item?.signature_ref);
+  const rows = payloadRows(t, item, i18n.language);
 
   return (
     <Card variant="outlined">
@@ -73,19 +73,21 @@ export default function SummaryCard({ item }) {
         </Stack>
         <Stack direction="row" spacing={2} useFlexGap flexWrap="wrap" rowGap={1}>
           <Field label={t('summaryReferenceNo')} value={item?.reference_no || '—'} />
-          <Field label={t('summaryType')} value={subjectTypeLabel(t, item?.subject_type)} />
+          <Field label={t('summaryType')} value={requestTypeLabel(t, item)} />
           <Field label={t('summaryCreated')} value={formatDate(item?.created_at, i18n.language)} />
           <Field label={t('summaryUpdated')} value={formatDate(item?.updated_at, i18n.language)} />
           <Field label={t('summaryResolved')} value={formatDate(item?.resolved_at, i18n.language)} />
         </Stack>
-        <Divider sx={{ my: 1 }} />
-        <Stack direction="row" spacing={2} useFlexGap flexWrap="wrap" rowGap={1}>
-          <Field label={t('summaryLeaveType')} value={leaveTypeLabel(t, payload.leave_type)} />
-          <Field label={t('summaryStart')} value={formatDate(payload.start_date, i18n.language)} />
-          <Field label={t('summaryEnd')} value={formatDate(payload.end_date, i18n.language)} />
-          <Field label={t('summaryDays')} value={payload.days != null ? String(payload.days) : '—'} />
-          <Field label={t('summaryNote')} value={payload.note || '—'} />
-        </Stack>
+        {rows.length > 0 && (
+          <>
+            <Divider sx={{ my: 1 }} />
+            <Stack direction="row" spacing={2} useFlexGap flexWrap="wrap" rowGap={1}>
+              {rows.map((row, index) => (
+                <Field key={`${row.label}-${index}`} label={row.label} value={row.value} />
+              ))}
+            </Stack>
+          </>
+        )}
         <Divider sx={{ my: 1 }} />
         <Stack direction="row" alignItems="center" spacing={1}>
           <Typography sx={{ ...FONT.body, color: 'text.secondary' }}>

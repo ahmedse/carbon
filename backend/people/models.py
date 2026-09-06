@@ -293,6 +293,152 @@ class Position(models.Model):
         return f"{self.code} — {self.title}"
 
 
+class LeavePolicy(models.Model):
+    """Named, lifecycle-managed, applicability-scoped leave policy registry.
+
+    Multiple policies may exist per leave type (no unique constraint on
+    ``leave_type``). ``status`` is the lifecycle source of truth (draft →
+    active → deprecated); ``is_active`` is retained only for transition
+    compatibility. ``applies_to_org_units`` / ``applies_to_contract_types``
+    are empty meaning "applies to all". ``name`` is the primary identity.
+    """
+
+    ACCRUAL_UPFRONT = 'upfront'
+    ACCRUAL_MONTHLY = 'monthly'
+    ACCRUAL_CHOICES = [
+        (ACCRUAL_UPFRONT, 'Upfront — full allocation on 1 Jan'),
+        (ACCRUAL_MONTHLY, 'Monthly — entitled_days ÷ 12 per month'),
+    ]
+
+    GENDER_ANY = 'any'
+    GENDER_MALE = 'male'
+    GENDER_FEMALE = 'female'
+    GENDER_CHOICES = [
+        (GENDER_ANY, 'Any'),
+        (GENDER_MALE, 'Male only'),
+        (GENDER_FEMALE, 'Female only'),
+    ]
+
+    STATUS_DRAFT = 'draft'
+    STATUS_ACTIVE = 'active'
+    STATUS_DEPRECATED = 'deprecated'
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, 'Draft'),
+        (STATUS_ACTIVE, 'Active'),
+        (STATUS_DEPRECATED, 'Deprecated'),
+    ]
+
+    leave_type = models.ForeignKey(
+        'mdm.ReferenceValue', on_delete=models.PROTECT, related_name='+',
+        help_text="Leave type from ReferenceSet 'leave_type'",
+    )
+    default_entitled_days = models.DecimalField(
+        max_digits=6, decimal_places=2, default=0,
+        help_text='Days granted to every employee per year by default',
+    )
+    max_carryover_days = models.DecimalField(
+        max_digits=6, decimal_places=2, default=0,
+        help_text='Maximum unused days that may carry forward to next year (0 = no carryover)',
+    )
+    is_carryover_allowed = models.BooleanField(
+        default=False,
+        help_text='Allow unused balance to carry forward at year-end',
+    )
+    accrual_method = models.CharField(
+        max_length=10, choices=ACCRUAL_CHOICES, default=ACCRUAL_UPFRONT,
+    )
+    gender_restriction = models.CharField(
+        max_length=10, choices=GENDER_CHOICES, default=GENDER_ANY,
+    )
+    requires_approval = models.BooleanField(
+        default=True,
+        help_text='Leave requests of this type require manager approval',
+    )
+    min_service_days = models.PositiveIntegerField(
+        default=0,
+        help_text='Minimum days of service before the employee may request this leave (0 = no minimum)',
+    )
+    is_active = models.BooleanField(default=True)
+    # ── LPR-1A registry fields (additive; null/blank-safe) ──
+    name = models.CharField(
+        max_length=200, blank=True,
+        help_text="Human-readable policy name (primary identity)",
+    )
+    description = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE,
+        help_text="Lifecycle state (supersedes is_active)",
+    )
+    effective_from = models.DateField(null=True, blank=True)
+    effective_to = models.DateField(null=True, blank=True)
+    applies_to_org_units = models.ManyToManyField(
+        'mdm.OrgUnit', blank=True, related_name='+',
+        help_text="Scope to these org units; empty = all org units",
+    )
+    applies_to_contract_types = models.JSONField(
+        default=list, blank=True,
+        help_text="List of contract_type codes; empty = all contract types",
+    )
+    notes = models.TextField(blank=True)
+    # ── LPR-4 registry grouping + tagging (additive; null/blank-safe) ──
+    category = models.CharField(
+        max_length=100, blank=True,
+        help_text="Grouping bucket for the policy registry (e.g. Leave, Attendance, Travel, Benefits, Conduct)",
+    )
+    tags = models.JSONField(
+        default=list, blank=True,
+        help_text="List of free-form tags for discovery (e.g. ['remote', 'probation'])",
+    )
+    updated_by = models.ForeignKey(
+        'accounts.User', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='updated_leave_policies',
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Leave Policy'
+        verbose_name_plural = 'Leave Policies'
+        ordering = ['leave_type__sort_order', 'leave_type__code']
+
+    def __str__(self):
+        code = self.leave_type.code if self.leave_type_id else str(self.leave_type)
+        return f"{self.name} ({code})"
+
+
+class LeavePolicyVersion(models.Model):
+    """Immutable snapshot of a ``LeavePolicy`` at a point in time (LPR-3A).
+
+    Each configuration change is recorded as a new version. The live
+    ``LeavePolicy`` row remains the current config; versions capture the exact
+    field values that were in effect when a version was forked. ``effective_to``
+    is closed on the prior open version when the next one is forked, so the
+    version chain derives the policy's effective-date transitions.
+    """
+
+    policy = models.ForeignKey(
+        LeavePolicy, on_delete=models.CASCADE, related_name='versions',
+    )
+    version_number = models.PositiveIntegerField()
+    effective_from = models.DateField()
+    effective_to = models.DateField(null=True, blank=True)
+    snapshot = models.JSONField(default=dict)
+    change_summary = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        'accounts.User', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='+',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('policy', 'version_number')
+        ordering = ['policy', '-version_number']
+        verbose_name = 'Leave Policy Version'
+        verbose_name_plural = 'Leave Policy Versions'
+
+    def __str__(self):
+        return f"{self.policy} v{self.version_number}"
+
+
 class LeaveEntitlement(models.Model):
     """Annual leave entitlement for an employee (M3 — Leave)."""
 
@@ -305,6 +451,16 @@ class LeaveEntitlement(models.Model):
     used_days = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     carried_forward = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     notes = models.TextField(blank=True)
+    policy = models.ForeignKey(
+        'LeavePolicy', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='+',
+        help_text="Policy that created this entitlement (provenance; null = manual/legacy)",
+    )
+    policy_version = models.ForeignKey(
+        'LeavePolicyVersion', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='+',
+        help_text="Policy version that created this entitlement (provenance; null = legacy/manual)",
+    )
 
     class Meta:
         unique_together = ('employee', 'year', 'leave_type')
@@ -585,6 +741,7 @@ class Loan(models.Model):
     """A deduction loan for an employee."""
 
     STATUS_CHOICES = [
+        ('draft', 'Draft'),
         ('active', 'Active'),
         ('paid_off', 'Paid Off'),
         ('cancelled', 'Cancelled'),

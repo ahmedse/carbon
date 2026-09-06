@@ -55,6 +55,7 @@ import TimelineIcon from '@mui/icons-material/Timeline';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import SearchIcon from '@mui/icons-material/Search';
+import PolicyIcon from '@mui/icons-material/Policy';
 import { useAuth } from '../auth/AuthContext';
 import { APP_REGISTRY } from '../apps/registry';
 import { can, hasAppAccess } from '../authz';
@@ -100,6 +101,7 @@ const PEOPLE_ITEM_ICONS = {
   'Loans':       AccountBalanceWalletIcon,
   'Certifications': SchoolIcon,
   'Rotation':    AutorenewIcon,
+  'Policies':    PolicyIcon,
   'App Config':  SettingsIcon,
 };
 

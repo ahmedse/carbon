@@ -64,6 +64,7 @@ class AgentResponse:
     follow_ups: list[str] = field(default_factory=list)   # 3 suggested follow-up questions
     caveats: list[str] = field(default_factory=list)       # important warnings/disclaimers
     reasoning_steps: list[str] = field(default_factory=list)  # what agent did
+    envelope: dict | None = None   # PAQ-2A typed AnswerEnvelope (model_dump), None when disabled/unavailable
 
 
 class PulseAgent:

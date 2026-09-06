@@ -21,7 +21,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.ai_scoping import scope_ai_queryset
+from django.db.models import Q
 from accounts.capabilities import (
     AI_MANAGE_CONSOLE,
     AI_VIEW_CONSOLE,
@@ -60,6 +60,7 @@ class AIAnomalyWatchSerializer(serializers.ModelSerializer):
     recipients = serializers.PrimaryKeyRelatedField(
         many=True, queryset=User.objects.all(), required=False
     )
+    instance_id = serializers.CharField(required=False, default="carbon")
 
     class Meta:
         model = AIAnomalyWatch
@@ -86,10 +87,12 @@ class AIAnomalyWatchSerializer(serializers.ModelSerializer):
 
 
 def _scoped_queryset(user):
-    """List queryset: scoped for console viewers, else the caller's own rows."""
-    if has_capability(user, AI_VIEW_CONSOLE.key):
-        return scope_ai_queryset(AIAnomalyWatch.objects.all(), user)
-    return AIAnomalyWatch.objects.filter(user=user)
+    """List queryset: superuser sees all; others see own + recipient watches."""
+    if user.is_superuser:
+        return AIAnomalyWatch.objects.all()
+    return (
+        AIAnomalyWatch.objects.filter(Q(user=user) | Q(recipients=user)).distinct()
+    )
 
 
 class WatchesListView(APIView):
@@ -132,10 +135,11 @@ class WatchDetailView(APIView):
 
     def _get_object(self):
         pk = self.kwargs.get("pk")
-        if has_capability(self.request.user, AI_MANAGE_CONSOLE.key):
-            qs = scope_ai_queryset(AIAnomalyWatch.objects.all(), self.request.user)
+        user = self.request.user
+        if user.is_superuser:
+            qs = AIAnomalyWatch.objects.all()
         else:
-            qs = AIAnomalyWatch.objects.filter(user=self.request.user)
+            qs = AIAnomalyWatch.objects.filter(user=user)
         try:
             return qs.get(pk=pk)
         except AIAnomalyWatch.DoesNotExist:

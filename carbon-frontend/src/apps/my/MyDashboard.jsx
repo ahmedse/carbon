@@ -4,7 +4,7 @@
 // independent per-card loading / error / empty states. Semantic <main>.
 // All strings via useTranslation('my'); all colors via theme tokens.
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   Avatar,
@@ -30,14 +30,18 @@ import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import ArticleIcon from '@mui/icons-material/Article';
+import AddIcon from '@mui/icons-material/Add';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageContainer from '../../components/layout/PageContainer';
 import PageHeader from '../../components/Page/PageHeader';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
+import { useNotification } from '../../components/NotificationProvider';
 import { fetchMyProfile, fetchLeaveBalance, fetchInboxCount } from '../../api/my';
 import { FONT } from '../../theme/themeTokens';
+
+const NewRequestDialog = lazy(() => import('./components/NewRequestDialog'));
 
 // ── Small presentational helpers ──────────────────────────────────────
 
@@ -317,7 +321,7 @@ function LeaveBalanceCard({ balances, loading, error, onRetry }) {
 
 // ── Card: quick actions ───────────────────────────────────────────────
 
-function QuickActions() {
+function QuickActions({ onNewRequest }) {
   const { t } = useTranslation('my');
   const navigate = useNavigate();
 
@@ -329,6 +333,14 @@ function QuickActions() {
           <Button
             size="small"
             variant="contained"
+            startIcon={<AddIcon />}
+            onClick={onNewRequest}
+          >
+            {t('quickActionsNewRequest')}
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
             startIcon={<AssignmentIcon />}
             onClick={() => navigate('/my/leave')}
           >
@@ -353,7 +365,11 @@ function QuickActions() {
 export default function MyDashboard() {
   const { t } = useTranslation('my');
   const { token } = useAuth();
+  const navigate = useNavigate();
+  const { notify } = useNotification();
   useDocumentTitle(t('dashboardTitle'));
+
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   // Independent state per card → independent loading / error / empty states.
   const [profile, setProfile] = useState(null);
@@ -412,6 +428,12 @@ export default function MyDashboard() {
     loadInbox();
   }, [loadProfile, loadBalances, loadInbox]);
 
+  const handleNewRequestSubmitted = useCallback(() => {
+    setDialogOpen(false);
+    notify({ message: t('successRequestSubmitted'), type: 'success' });
+    navigate('/my/requests');
+  }, [notify, navigate, t]);
+
   return (
     <Box
       component="main"
@@ -442,9 +464,19 @@ export default function MyDashboard() {
             error={balancesError}
             onRetry={loadBalances}
           />
-          <QuickActions />
+          <QuickActions onNewRequest={() => setDialogOpen(true)} />
         </Stack>
       </PageContainer>
+
+      <Suspense fallback={null}>
+        <NewRequestDialog
+          open={dialogOpen}
+          onClose={() => setDialogOpen(false)}
+          profile={profile}
+          balances={balances}
+          onSubmitted={handleNewRequestSubmitted}
+        />
+      </Suspense>
     </Box>
   );
 }

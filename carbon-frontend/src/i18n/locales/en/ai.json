@@ -118,5 +118,20 @@
   "result": "Result",
   "couldNotRefreshSubagent": "Couldn't refresh subagent status.",
   "scopeRestrictionLabel": "Scope restriction",
-  "resultDetail": "Details"
+  "resultDetail": "Details",
+  "envelope": {
+    "sources": "Sources",
+    "caveats": "Caveats",
+    "truncated": "Truncated",
+    "rows": "{{count}} rows",
+    "noData": "No data"
+  },
+  "provenance": {
+    "sources": "Sources",
+    "toolsUsed": "Tools used",
+    "dataFreshness": "Data freshness",
+    "truncated": "Truncated",
+    "rows": "{{count}} rows",
+    "noData": "No data"
+  }
 }

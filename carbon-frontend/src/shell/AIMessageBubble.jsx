@@ -36,7 +36,7 @@ import ThumbUpAltOutlinedIcon from '@mui/icons-material/ThumbUpAltOutlined';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from '../utils/dateUtils';
-import { formatContextLines } from '../utils/aiProvenance';
+import { formatContextLines, normalizeProvenanceSources } from '../utils/aiProvenance';
 import { isSafeInternalRoute } from '../utils/navigation';
 import { resolveBackendUrl } from '../config';
 import {
@@ -52,6 +52,7 @@ import {
 import { buildMessageDocx, buildMessageHtml } from '../utils/exportDocuments';
 import { KeyValueOutput } from '../components/ai/StepOutputRenderer';
 import MarkdownMessage from './MarkdownMessage';
+import EnvelopeMessage from './EnvelopeMessage';
 import LongContent from './LongContent';
 import NLRuleTestCard from './NLRuleTestCard';
 import InvestigationCard from './InvestigationCard';
@@ -458,7 +459,12 @@ function AIMessageBubble({
   }
 
   const metadata = normalizeMetadata(message);
+  // PAQ-2B — typed AnswerEnvelope (flag-gated OFF by default in the backend).
+  // Read defensively from the top-level field or metadata_json, mirroring the
+  // code_result pattern. Absent → EnvelopeMessage falls back to raw markdown.
+  const envelope = message.envelope || metadata?.envelope || null;
 
+  // 
   // Wave F3-F — planning trace for multi-step assistant turns, surfaced in
   // outcome language (step_label + duration). Read top-level first, then
   // fall back to metadata_json (mirrors confidence/honest-uncertainty reads).
@@ -483,6 +489,14 @@ function AIMessageBubble({
   // back to a provenance block embedded in ``metadata_json``, then to scope/type
   // info from conversation props.
   const provenancePayload = message.provenance || metadata?.provenance;
+  // PAQ-3A — provenance sources for non-envelope answers: surface the same four
+  // facts the envelope chips render (tool, rows_returned, truncated, resolved_at),
+  // read defensively from metadata_json / the provenance payload / a top-level field.
+  const provenanceSources = normalizeProvenanceSources(
+    metadata,
+    provenancePayload,
+    message.sources,
+  );
   const provenanceLines = [];
   if (provenancePayload && typeof provenancePayload === 'object') {
     if (provenancePayload.model) provenanceLines.push(`Model: ${provenancePayload.model}`);
@@ -511,7 +525,7 @@ function AIMessageBubble({
   if (!provenanceLines.length) provenanceLines.push('Structured AI response');
   const hasStructured = !!metadata?.type;
   const hasScope = !!conversationType || !!appIdentifier || scopeJson?.org_unit_ids != null;
-  const showProvenance = !isUser && (hasStructured || hasScope);
+  const showProvenance = !isUser && (hasStructured || hasScope || provenanceSources.length > 0);
 
   // Honest-uncertainty turns get a distinct calm left accent (PULSE-UX §2.7) —
   // a quiet "here's my best read" marker, NOT an error treatment.
@@ -1135,6 +1149,7 @@ function AIMessageBubble({
           pendingActions={pendingActions}
           createdAt={message.created_at}
           externalSources={message.external_sources || provenancePayload?.external_sources || []}
+          sources={provenanceSources}
         />
       )}
 
@@ -1202,7 +1217,7 @@ function AIMessageBubble({
         ) : (
           <LongContent content={message.content}>
             <Box ref={contentRef} data-testid="message-content">
-              <MarkdownMessage content={message.content} />
+              <EnvelopeMessage envelope={envelope} fallbackContent={message.content} />
             </Box>
           </LongContent>
         )}

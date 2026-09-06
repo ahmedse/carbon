@@ -26,11 +26,11 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from django.conf import settings
+from django.utils.timezone import now
 
 from ai.engine.agent.plugins import ToolPlugin
 
@@ -123,7 +123,7 @@ class ExportDocument(ToolPlugin):
             return {"error": f"Could not create export folder: {exc}"}
 
         stem = _slugify(title)
-        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        stamp = now().strftime("%Y%m%d-%H%M%S")
         files: list[dict] = []
 
         if fmt in ("docx", "both"):

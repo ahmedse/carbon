@@ -501,6 +501,26 @@ async def _synthesize_tool_results(
     if not results_text.strip():
         return None
 
+    # [PAQ-2A] Typed Answer Envelope (additive, flag-gated). When enabled,
+    # synthesize the structured envelope FIRST; on success it rides alongside
+    # the markdown text (the markdown remains the primary/fallback render for
+    # the current UI). Flag-off guarantees zero behaviour change.
+    envelope = None
+    if get_settings().PULSE_ENVELOPE_ENABLED:
+        try:
+            from ai.envelope_service import synthesize_envelope
+
+            envelope = await synthesize_envelope(
+                instance_id=instance_id,
+                conversation_id=conversation_id,
+                user_message=user_message,
+                usable_tools=usable,
+                model=model,
+            )
+        except Exception:  # noqa: BLE001 - envelope must never break the turn
+            logger.warning("Envelope synthesis failed", exc_info=True)
+            envelope = None
+
     from ai.engine.llm.router import route_chat
 
     delivery_guide = _DELIVERY_SYNTHESIS.get(delivery or "explain", _DELIVERY_SYNTHESIS["explain"])
@@ -575,7 +595,10 @@ async def _synthesize_tool_results(
     synthesized = _append_evidence_footer(synthesized, usable)
 
     tokens = int(result.get("input_tokens", 0) or 0) + int(result.get("output_tokens", 0) or 0)
-    return {"text": synthesized, "tokens": tokens, "model": result.get("model", "")}
+    synthesized_result = {"text": synthesized, "tokens": tokens, "model": result.get("model", "")}
+    if envelope is not None:
+        synthesized_result["envelope"] = envelope.model_dump()
+    return synthesized_result
 
 
 class TurnPipelineRunner:
@@ -1998,6 +2021,7 @@ class TurnPipelineRunner:
             total_tokens=total_tokens,
             llm_calls=total_llm_calls,
             model=draft.model_used,
+            envelope=_synth.get("envelope") if _synth else None,
         )
         asyncio.ensure_future(AutoMemoryExtractor.try_extract(
             user_message=user_message,

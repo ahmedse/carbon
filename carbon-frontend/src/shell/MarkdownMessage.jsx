@@ -281,7 +281,7 @@ function reflowMarkdownStructure(content) {
  * the prose off, insert a blank line, and let the header row land alone.
  * Returns null when the heuristic doesn't apply so the caller falls through.
  */
-function splitProseFromInlineTableHeader(line, prevLines) {
+function splitProseFromInlineTableHeader(line, _prevLines) {
   // A table header row sits here when: there's a | somewhere after prose content.
   const pipeIdx = line.indexOf('|');
   if (pipeIdx <= 0) return null; // line starts with | or has no | → not this case

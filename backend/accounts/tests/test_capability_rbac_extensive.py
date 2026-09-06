@@ -323,6 +323,7 @@ class TestGroupCapabilityMappings:
             "carbon_lead", "catalog_lead", "mdm_lead", "dq_lead", "datahub_lead",
             "turnkey_lead",
             "people_lead", "people_data_owners_group", "people_analysts_group",
+            "employee_group", "manager_group", "finance_group",
             "dataowners_group", "analysts_group", "viewers_group", "auditors_group",
         }
         assert set(GROUP_CAPABILITIES.keys()) == expected_groups, \

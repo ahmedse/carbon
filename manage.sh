@@ -253,7 +253,13 @@ start_backend() {
     
     # Clear Python cache
     find "$BACKEND_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-    
+
+    # Dev isolation: backend/.env is the single source of truth for brand/DB.
+    # Unset any stale exported DB_NAME/DJANGO_BRAND so a lingering shell export
+    # can't override the brand-derived DB (e.g. DB_NAME=carbon_dev while the
+    # .env says DJANGO_BRAND=nibras → server would read the WRONG database).
+    unset DB_NAME DJANGO_BRAND 2>/dev/null || true
+
     # Start Django runserver
     cd "$BACKEND_DIR" || return 1
     nohup "$python" manage.py runserver 0.0.0.0:$BACKEND_PORT > "$BACKEND_LOG" 2>&1 &
@@ -490,7 +496,13 @@ cmd_status() {
     echo ""
     log_info "Infrastructure"
     echo ""
-    
+
+    local _brand
+    _brand=$(grep -E '^DJANGO_BRAND=' "$BACKEND_DIR/.env" 2>/dev/null | cut -d'=' -f2 | tr -d '[:space:]')
+    _brand=${_brand:-aastmt}
+    printf "  %-18s" "Brand:"
+    echo -e "${MAGENTA}${_brand}${NC}"
+
     printf "  %-18s" "PostgreSQL:"
     if pg_isready -h localhost -p 5432 &>/dev/null 2>&1; then
         echo -e "${GREEN}RUNNING${NC}"
@@ -566,6 +578,80 @@ cmd_health() {
         echo -e "${RED}UNHEALTHY${NC}"
     fi
     
+    echo ""
+}
+
+# ── Brand switch (multi-DB dev isolation) ─────────────────────────────────
+# Each brand has its OWN Postgres DB (aastmt→carbon_dev, nibras→nibras_dev,
+# medos→medos_dev, tectona→tectona_dev), derived in config/settings.py from
+# DJANGO_BRAND. The frontend has per-instance env files (.env.instance.<id>).
+cmd_brand() {
+    local brand="${1:-}"
+    local -a BRAND_IDS=(aastmt nibras medos tectona)
+
+    # Mirrors BRAND_DB_NAMES in backend/config/settings.py
+    local -A BRAND_DB=(
+        [aastmt]=carbon_dev
+        [nibras]=nibras_dev
+        [medos]=medos_dev
+        [tectona]=tectona_dev
+    )
+
+    local current
+    current=$(grep -E '^DJANGO_BRAND=' "$BACKEND_DIR/.env" 2>/dev/null | cut -d'=' -f2 | tr -d '[:space:]')
+    current=${current:-aastmt}
+
+    if [[ -z "$brand" ]]; then
+        print_header
+        log_info "Current brand: ${MAGENTA}${current}${NC}  (DB: ${BRAND_DB[$current]:-${current}_dev})"
+        echo ""
+        for b in "${BRAND_IDS[@]}"; do
+            if [[ "$b" == "$current" ]]; then
+                echo -e "  ${GREEN}✓${NC} ${MAGENTA}${b}${NC}  →  ${BRAND_DB[$b]:-${b}_dev}"
+            else
+                echo -e "    ${b}  →  ${BRAND_DB[$b]:-${b}_dev}"
+            fi
+        done
+        echo ""
+        log_info "Switch with: ./manage.sh brand <id>"
+        return 0
+    fi
+
+    local valid=""
+    for b in "${BRAND_IDS[@]}"; do
+        [[ "$b" == "$brand" ]] && valid=1
+    done
+    if [[ -z "$valid" ]]; then
+        log_error "Unknown brand '$brand'. Valid: ${BRAND_IDS[*]}"
+        return 1
+    fi
+
+    print_header
+    log_info "Switching brand → ${MAGENTA}${brand}${NC} (DB: ${BRAND_DB[$brand]:-${brand}_dev})"
+    echo ""
+
+    # 1) Backend: flip DJANGO_BRAND (DB name is derived from it in settings.py).
+    log_step "Updating backend/.env → DJANGO_BRAND=${brand}"
+    if grep -qE '^DJANGO_BRAND=' "$BACKEND_DIR/.env" 2>/dev/null; then
+        sed -i "s/^DJANGO_BRAND=.*/DJANGO_BRAND=${brand}/" "$BACKEND_DIR/.env"
+    else
+        echo "DJANGO_BRAND=${brand}" >> "$BACKEND_DIR/.env"
+    fi
+    log_success "backend/.env → DJANGO_BRAND=${brand}"
+
+    # 2) Frontend: apply the matching per-instance env file.
+    local fe="${FRONTEND_DIR}/.env.instance.${brand}"
+    if [[ -f "$fe" ]]; then
+        log_step "Applying frontend env (.env.instance.${brand})"
+        cp "$fe" "$FRONTEND_DIR/.env"
+        log_success "carbon-frontend/.env → VITE_BRAND=${brand}"
+    else
+        log_warn "No $fe — leaving carbon-frontend/.env unchanged"
+    fi
+
+    echo ""
+    log_success "Brand switched to '${brand}' (DB: ${BRAND_DB[$brand]:-${brand}_dev})."
+    log_info "Run './manage.sh restart' to apply. DB already provisioned if you ran the one-time setup."
     echo ""
 }
 
@@ -729,6 +815,7 @@ cmd_help() {
     echo "  health             Run health checks"
     echo "  migrate            Run Django migrations"
     echo "  shell              Open Django shell"
+    echo "  brand [id]         Show current brand, or switch (aastmt|nibras|medos|tectona)"
     echo "  test               Run backend tests (pytest)"
     echo "  schedules [--dry-run]  Materialize due plan schedules (W6-E F-29)"
     echo "  clean              Deep clean (stop, clear caches, archive logs)"
@@ -768,6 +855,7 @@ main() {
         health)     cmd_health ;;
         migrate)    cmd_migrate ;;
         shell)      cmd_shell ;;
+        brand)      cmd_brand "${2:-}" ;;
         test)       cmd_test "$@" ;;
         schedules)  cmd_schedules "${2:-}" ;;
         clean)      cmd_clean ;;

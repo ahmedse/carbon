@@ -43,13 +43,19 @@ const IDENTITY_FIELDS = [
   { key: 'apiPrefix', labelKey: 'colApiPrefix' },
 ];
 
+const TAB_STORAGE_KEY = 'carbon-people-config-tab';
 const TAB_KEYS = ['Overview', 'Reference', 'Compliance'];
 
 export default function PeopleConfigPage() {
   const { t } = useTranslation('people');
   useDocumentTitle(t('configTitle'));
   const { token } = useAuth();
-  const [tabIndex, setTabIndex] = useState(0);
+  const [tabIndex, setTabIndex] = useState(() => {
+    const saved = parseInt(localStorage.getItem(TAB_STORAGE_KEY) ?? '0', 10);
+    return Number.isFinite(saved) && saved < TAB_KEYS.length ? saved : 0;
+  });
+  const handleTabChange = (_, v) => { setTabIndex(v); localStorage.setItem(TAB_STORAGE_KEY, String(v)); };
+
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -58,7 +64,9 @@ export default function PeopleConfigPage() {
     setLoading(true);
     setError(null);
     fetchComplianceRules(token)
-      .then((data) => setRules(Array.isArray(data?.results) ? data.results : []))
+      .then((rulesData) => {
+        setRules(Array.isArray(rulesData?.results) ? rulesData.results : []);
+      })
       .catch((err) => setError(err?.message || t('configLoadError')))
       .finally(() => setLoading(false));
   }, [token, t]);
@@ -169,7 +177,7 @@ export default function PeopleConfigPage() {
     <PageContainer>
       <PageHeader icon={SettingsIcon} title={t('configTitle')} subtitle={t('configSubtitle')} />
 
-      <Tabs value={tabIndex} onChange={(_, v) => setTabIndex(v)} sx={{ mb: 1.5, borderBottom: 1, borderColor: 'divider' }}>
+      <Tabs value={tabIndex} onChange={handleTabChange} sx={{ mb: 1.5, borderBottom: 1, borderColor: 'divider' }}>
         {TAB_KEYS.map((k) => (
           <Tab
             key={k}

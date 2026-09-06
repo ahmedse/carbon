@@ -263,13 +263,16 @@ def submit_correspondence(*, corr, by, subject=None, subject_label=None,
         return corr
 
 
-def approve(corr, by, comment=None):
-    """submitted|in_review -> in_review|approved. The current approver marks the
-    step approved and the workflow advances to the next actionable step."""
+def _decide(corr, by, *, decision, event_type, governance_action, action_label,
+            verb, comment=None):
+    """Shared step-decision transition for approve/acknowledge/review. Marks the
+    current step with ``decision`` and advances to the next actionable step
+    exactly like ``approve`` — but never sets ``decision='approved'`` on the step
+    for non-approval intents (an internal memo is *acknowledged*, not approved)."""
     with transaction.atomic():
         if corr.status not in ACTIONABLE:
             raise InvalidTransition(
-                f'Cannot approve from status {corr.status!r}'
+                f'Cannot {action_label} from status {corr.status!r}'
             )
         if by.id not in corr.current_approver_ids:
             raise NotActorError(
@@ -280,7 +283,7 @@ def approve(corr, by, comment=None):
         now = timezone.now()
         chain = copy.deepcopy(corr.approver_chain or [])
         step = dict(chain[corr.current_step])
-        step['decision'] = 'approved'
+        step['decision'] = decision
         step['decided_by'] = by.id
         step['decided_at'] = now.isoformat()
         step['comment'] = comment or ''
@@ -300,15 +303,15 @@ def approve(corr, by, comment=None):
             corr.current_approver_ids = []
 
         corr.save()
-        _add_event(corr, by, 'approved', old_status, corr.status,
+        _add_event(corr, by, event_type, old_status, corr.status,
                    {'comment': comment or ''})
-        _governance(corr, by, 'approve', old_status=old_status)
+        _governance(corr, by, governance_action, old_status=old_status)
 
         notify(
             corr,
             user_ids=[corr.requester_id],
             type='status_changed',
-            title=f'Your request {corr.reference_no} was approved',
+            title=f'Your request {corr.reference_no} was {verb}',
             body=corr.title,
         )
         if corr.status == 'in_review':
@@ -320,6 +323,46 @@ def approve(corr, by, comment=None):
                 body=corr.title,
             )
         return corr
+
+
+def approve(corr, by, comment=None):
+    """submitted|in_review -> in_review|approved. The current approver marks the
+    step approved and the workflow advances to the next actionable step."""
+    return _decide(
+        corr, by, decision='approved', event_type='approved',
+        governance_action='approve', action_label='approve',
+        verb='approved', comment=comment,
+    )
+
+
+def acknowledge(corr, by, comment=None):
+    """Mark the current step acknowledged and advance (never "approved")."""
+    return _decide(
+        corr, by, decision='acknowledged', event_type='acknowledged',
+        governance_action='acknowledge', action_label='acknowledge',
+        verb='acknowledged', comment=comment,
+    )
+
+
+def review(corr, by, comment=None):
+    """Mark the current step reviewed and advance (never "approved")."""
+    return _decide(
+        corr, by, decision='reviewed', event_type='reviewed',
+        governance_action='review', action_label='review',
+        verb='reviewed', comment=comment,
+    )
+
+
+def act(corr, by, intent, comment=None):
+    """Generic action dispatcher for the approve/acknowledge/review family so the
+    API layer needs a single action route rather than one per intent."""
+    if intent == 'approve':
+        return approve(corr, by, comment)
+    if intent == 'acknowledge':
+        return acknowledge(corr, by, comment)
+    if intent == 'review':
+        return review(corr, by, comment)
+    raise InvalidTransition(f'Unsupported action intent {intent!r}')
 
 
 def reject(corr, by, comment):

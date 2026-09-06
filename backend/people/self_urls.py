@@ -7,6 +7,8 @@ from .self_views import (
     LeaveBalanceView,
     LeaveSelfCollectionView,
     LeaveSelfDetailView,
+    LoanSelfCollectionView,
+    ProfileChangeSelfView,
 )
 
 urlpatterns = [
@@ -14,4 +16,6 @@ urlpatterns = [
     path('leave-balance/', LeaveBalanceView.as_view(), name='people-me-leave-balance'),
     path('leave/', LeaveSelfCollectionView.as_view(), name='people-me-leave-collection'),
     path('leave/<int:pk>/', LeaveSelfDetailView.as_view(), name='people-me-leave-detail'),
+    path('loan/', LoanSelfCollectionView.as_view(), name='people-me-loan-collection'),
+    path('profile-change/', ProfileChangeSelfView.as_view(), name='people-me-profile-change'),
 ]

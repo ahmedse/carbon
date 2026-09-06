@@ -38,6 +38,7 @@ APP_ACCESS_MAP = {
     'connections': 'connections:view',
     'importexport': 'importexport:view',
     'dataschema': 'dataschema:view',
+    'people': 'people:view',
 }
 
 # Routes that require a specific capability to access
@@ -61,12 +62,16 @@ ROUTE_CAPABILITY_MAP = {
     '/admin/access': 'platform:manage_access',
     '/admin/audit': 'platform:view_audit',
     '/admin/apps': 'platform:manage_apps',
+    '/people/employees': 'people:view',
+    '/people/payroll': 'people:manage',
+    '/people/config': 'people:manage',
 }
 
 # Routes available to all authenticated users (no capability check)
 UNGATED_ROUTES = [
     '/', '/carbon/console', '/carbon/dashboard', '/carbon/my-data',
     '/settings', '/help', '/feedback', '/settings/profile',
+    '/people', '/my', '/team',
 ]
 
 
@@ -75,7 +80,11 @@ def _resolve_authz_manifest(user, is_global_admin: bool, capabilities: list) -> 
 
     Returns a compact manifest consumed by authz.js can() guard.
     """
-    has_wildcard = any(c['key'] == '*' for c in capabilities)
+    # capabilities is a list of dicts from get_capabilities_for_frontend;
+    # for superusers get_user_capabilities returns frozenset({'*'}) which
+    # get_capabilities_for_frontend expands to all concrete caps. The wildcard
+    # is also signalled by is_global_admin.
+    has_wildcard = is_global_admin or any(c['key'] == '*' for c in capabilities)
     cap_keys = {c['key'] for c in capabilities}
 
     # ── accessible apps ──

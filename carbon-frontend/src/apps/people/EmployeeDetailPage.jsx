@@ -34,6 +34,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import { useNotes } from '../../notes/NotesContext';
 import { registerEmployeeInspectorTabs } from '../../inspector/tabs/employeeTabs';
+import { PEOPLE_VIEW, hasCap, expandCapabilities } from '../../capabilities';
 import {
   fetchEmployee, fetchEmployees,
   fetchLeaveEntitlements, fetchLeaveRecords,
@@ -51,11 +52,12 @@ import EmployeeLeaveTab from './tabs/EmployeeLeaveTab';
 import EmployeePayTab from './tabs/EmployeePayTab';
 import EmployeeBenefitsTab from './tabs/EmployeeBenefitsTab';
 import EmployeeCertsTab from './tabs/EmployeeCertsTab';
+import EmployeeRequestsTab from './tabs/EmployeeRequestsTab';
 import { tenureLabel, totalLeaveBalance, expiryUrgency } from './utils';
 
 const STORAGE_KEY = 'carbonEmployee360';
-const TAB_KEYS = ['Profile', 'Timeline', 'Leave', 'Pay', 'Benefits', 'Certs'];
-const TAB_COMPONENTS = [EmployeeProfileTab, EmployeeTimelineTab, EmployeeLeaveTab, EmployeePayTab, EmployeeBenefitsTab, EmployeeCertsTab];
+const TAB_KEYS = ['Profile', 'Timeline', 'Leave', 'Pay', 'Benefits', 'Certs', 'Requests'];
+const TAB_COMPONENTS = [EmployeeProfileTab, EmployeeTimelineTab, EmployeeLeaveTab, EmployeePayTab, EmployeeBenefitsTab, EmployeeCertsTab, EmployeeRequestsTab];
 
 function getInitials(emp) {
   if (emp.name_en_given && emp.name_en_family) {
@@ -93,7 +95,7 @@ export default function EmployeeDetailPage() {
   const { t: tCommon } = useTranslation('common');
   const { employeeId } = useParams();
   const navigate = useNavigate();
-  const { token } = useAuth();
+  const { token, isGlobalAdminFlag, userCapabilities } = useAuth();
   const { notify } = useNotification();
   const theme = useTheme();
   useDocumentTitle(t('employeeDetailsTitle'));
@@ -105,6 +107,25 @@ export default function EmployeeDetailPage() {
     const n = parseInt(localStorage.getItem(`${STORAGE_KEY}:tab`) || '0', 10);
     return Number.isFinite(n) ? Math.min(n, TAB_KEYS.length - 1) : 0;
   });
+
+  // people:view gates the Requests tab (mirrors PeopleAccess on the backend).
+  // Global admins bypass; people:manage implies people:view via inheritance.
+  const canViewRequests = useMemo(() => {
+    if (isGlobalAdminFlag === true) return true;
+    const keys = (userCapabilities || []).map(
+      (c) => (typeof c === 'string' ? c : (c?.key || c?.capability)),
+    );
+    return hasCap(expandCapabilities(keys), PEOPLE_VIEW);
+  }, [isGlobalAdminFlag, userCapabilities]);
+
+  const tabKeys = useMemo(
+    () => (canViewRequests ? TAB_KEYS : TAB_KEYS.filter((k) => k !== 'Requests')),
+    [canViewRequests],
+  );
+  const tabComponents = useMemo(
+    () => (canViewRequests ? TAB_COMPONENTS : TAB_COMPONENTS.filter((_, i) => TAB_KEYS[i] !== 'Requests')),
+    [canViewRequests],
+  );
 
   const loadData = useCallback(async () => {
     if (!employeeId || !token) return;
@@ -278,7 +299,8 @@ export default function EmployeeDetailPage() {
     );
   }
 
-  const TabComponent = TAB_COMPONENTS[tabIndex];
+  const safeTabIndex = Math.min(tabIndex, tabKeys.length - 1);
+  const TabComponent = tabComponents[safeTabIndex];
   const arName = [data.name_ar_given, data.name_ar_family].filter(Boolean).join(' ');
 
   return (
@@ -380,12 +402,12 @@ export default function EmployeeDetailPage() {
 
       {/* ── Tab bar ── */}
       <Box sx={{ bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}>
-        <Tabs value={tabIndex} onChange={handleTabChange} variant="scrollable" scrollButtons="auto">
-          {TAB_KEYS.map((k, i) => (
+        <Tabs value={safeTabIndex} onChange={handleTabChange} variant="scrollable" scrollButtons="auto">
+          {tabKeys.map((k, i) => (
             <Tab
               key={k}
               label={t(`tab${k}`)}
-              sx={{ minHeight: 36, fontSize: '0.8125rem', fontWeight: tabIndex === i ? 600 : 400, textTransform: 'none', py: 0.75 }}
+              sx={{ fontWeight: safeTabIndex === i ? 600 : 400 }}
             />
           ))}
         </Tabs>

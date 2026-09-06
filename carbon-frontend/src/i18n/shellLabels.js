@@ -122,6 +122,7 @@ export const NAV_LABEL_KEYS = {
   'Base Years': 'nav.baseYears',
   People: 'nav.people',
   Positions: 'nav.positions',
+  Policies: 'nav.policies',
   Employees: 'nav.employees',
   Leave: 'nav.leave',
   Payroll: 'nav.payroll',

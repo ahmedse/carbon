@@ -58,6 +58,7 @@ export default {
       { label: 'Loans', path: '/people/loans', role: '*' },
       { type: 'divider' },
       { type: 'group', label: 'Configuration' },
+      { label: 'Policies', path: '/people/policies', role: '*' },
       { label: 'App Config', path: '/people/config', role: '*' },
     ],
   },

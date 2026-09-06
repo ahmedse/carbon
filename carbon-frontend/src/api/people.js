@@ -112,6 +112,59 @@ export function deleteLeaveEntitlement(id, token) {
   return apiFetch(`${ROOT}leave-entitlements/${encodeURIComponent(id)}/`, { method: 'DELETE', token });
 }
 
+/** List leave policies (HR config). */
+export function fetchLeavePolicies(token) {
+  return apiFetch(`${ROOT}leave-policies/`, { token });
+}
+
+/** Single leave policy (registry detail). */
+export function fetchLeavePolicy(id, token) {
+  return apiFetch(`${ROOT}leave-policies/${encodeURIComponent(id)}/`, { token });
+}
+
+/** Update a leave policy (partial). */
+export function updateLeavePolicy(id, data, token) {
+  return apiFetch(`${ROOT}leave-policies/${encodeURIComponent(id)}/`, { method: 'PATCH', body: data, token });
+}
+
+/** Create a leave policy. */
+export function createLeavePolicy(data, token) {
+  return apiFetch(`${ROOT}leave-policies/`, { method: 'POST', body: data, token });
+}
+
+/** Deprecate a leave policy (lifecycle transition — no hard delete). */
+export function deprecateLeavePolicy(id, token) {
+  return updateLeavePolicy(id, { status: 'deprecated' }, token);
+}
+
+/**
+ * Propagate a leave policy to employee entitlements for a given year.
+ * Pass `dry_run: true` to preview (eligible/will_create/will_update/skipped)
+ * without writing anything.
+ */
+export function propagateLeavePolicy(id, { year, dry_run = false }, token) {
+  const query = dry_run ? '?dry_run=true' : '';
+  return apiFetch(`${ROOT}leave-policies/${encodeURIComponent(id)}/propagate/${query}`, {
+    method: 'POST',
+    body: { year },
+    token,
+  });
+}
+
+/** List version history for a leave policy (LPR-3A). */
+export function fetchLeavePolicyVersions(policyId, token) {
+  return apiFetch(`${ROOT}leave-policies/${encodeURIComponent(policyId)}/versions/`, { token });
+}
+
+/** Fork a new version of a leave policy. `payload` = { change_summary?, effective_from? }. */
+export function forkLeavePolicy(policyId, payload, token) {
+  return apiFetch(`${ROOT}leave-policies/${encodeURIComponent(policyId)}/versions/`, {
+    method: 'POST',
+    body: payload,
+    token,
+  });
+}
+
 /** List benefit types. */
 export function fetchBenefitTypes(token) {
   return apiFetch(`${ROOT}benefit-types/`, { token });
@@ -284,6 +337,20 @@ export function fetchEmployee(id, token) {
 /** Chronicle events for one employee. */
 export function fetchEmployeeTimeline(id, token) {
   return apiFetch(`${ROOT}employees/${encodeURIComponent(id)}/timeline/`, { token });
+}
+
+/** Governed correspondence for one employee (HR 360 Requests tab). */
+export function fetchEmployeeCorrespondence(id, token) {
+  return apiFetch(`${ROOT}employees/${encodeURIComponent(id)}/correspondence/`, { token });
+}
+
+/** Single correspondence incl. timeline events (HR-scoped, GET
+ * people/employees/{id}/correspondence/{corrId}/). */
+export function fetchEmployeeCorrespondenceDetail(id, corrId, token) {
+  return apiFetch(
+    `${ROOT}employees/${encodeURIComponent(id)}/correspondence/${encodeURIComponent(corrId)}/`,
+    { token },
+  );
 }
 
 /** List employee loans. */

@@ -21,6 +21,8 @@ import PositionsPage from '../apps/people/PositionsPage';
 import LoansPage from '../apps/people/LoansPage';
 import CertificationsPage from '../apps/people/CertificationsPage';
 import RotationSchedulesPage from '../apps/people/RotationSchedulesPage';
+import PoliciesPage from '../apps/people/PoliciesPage';
+import PolicyDetailPage from '../apps/people/PolicyDetailPage';
 import { NAV_LABEL_KEYS } from '../i18n/shellLabels';
 
 const PEOPLE_PATHS = [
@@ -32,6 +34,7 @@ const PEOPLE_PATHS = [
   '/people/payslip',
   '/people/attendance',
   '/people/config',
+  '/people/policies',
   '/people/loans',
   '/people/certifications',
   '/people/rotation',
@@ -53,7 +56,7 @@ describe('People & Payroll pages (NIR-4A)', () => {
   });
 
   it('each page module default-exports a function', () => {
-    const pages = [EmployeesPage, LeavePage, PayrollRunsPage, PayslipPage, AttendancePage, PeopleConfigPage, PositionsPage, LoansPage, CertificationsPage, RotationSchedulesPage];
+    const pages = [EmployeesPage, LeavePage, PayrollRunsPage, PayslipPage, AttendancePage, PeopleConfigPage, PositionsPage, LoansPage, CertificationsPage, RotationSchedulesPage, PoliciesPage, PolicyDetailPage];
     for (const Page of pages) {
       expect(typeof Page).toBe('function');
     }
@@ -142,6 +145,12 @@ describe('People & Payroll pages (NIR-4A)', () => {
       'createRotationSchedule',
       'updateRotationSchedule',
       'deleteRotationSchedule',
+      'fetchLeavePolicies',
+      'fetchLeavePolicy',
+      'createLeavePolicy',
+      'updateLeavePolicy',
+      'deprecateLeavePolicy',
+      'propagateLeavePolicy',
     ];
     for (const name of helpers) {
       expect(typeof peopleApi[name]).toBe('function');

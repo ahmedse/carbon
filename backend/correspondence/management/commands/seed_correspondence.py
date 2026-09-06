@@ -2,9 +2,14 @@
 # Seeds the governed MDM reference sets for the e-Office Correspondence domain.
 # Idempotent — uses update_or_create; safe to run repeatedly.
 
+from django.apps import apps
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
+from accounts.constants import FINANCE_GROUP
+from accounts.models import ScopedRole
 from correspondence.models import WorkflowPolicy, WorkflowPolicyStep
 from mdm.models import ReferenceSet, ReferenceValue
 
@@ -58,6 +63,8 @@ class Command(BaseCommand):
             for name, description, values in REFERENCE_SETS:
                 self._seed_set(name, description, values)
             self._seed_default_leave_policy()
+            self._seed_additional_policies()
+            self._seed_finance_approver()
 
     def _seed_set(self, name, description, values):
         ref_set, created = ReferenceSet.objects.update_or_create(
@@ -119,4 +126,90 @@ class Command(BaseCommand):
         self.stdout.write(
             f'  WorkflowPolicyStep order=1 '
             f'{"created" if step_created else "unchanged"}'
+        )
+
+    def _seed_policy(self, corr_type_code, name, steps):
+        """Idempotently seed one policy with its ordered steps."""
+        corr_type = ReferenceValue.objects.get(
+            reference_set__name='correspondence_type', code=corr_type_code,
+        )
+        policy, policy_created = WorkflowPolicy.objects.update_or_create(
+            corr_type=corr_type, org_unit=None, version='1.0.0',
+            defaults={
+                'name': name,
+                'is_active': True,
+                'numbering_format': '{PREFIX}-{YEAR}-{SEQ:04d}',
+            },
+        )
+        self.stdout.write(
+            self.style.SUCCESS(
+                f'WorkflowPolicy {corr_type_code} v1.0.0 '
+                f'{"created" if policy_created else "unchanged"}'
+            )
+        )
+
+        for order, role, intent, skip_if_self in steps:
+            step, step_created = WorkflowPolicyStep.objects.update_or_create(
+                policy=policy, order=order,
+                defaults={
+                    'role': role,
+                    'intent': intent,
+                    'skip_if_self': skip_if_self,
+                    'is_active': True,
+                },
+            )
+            self.stdout.write(
+                f'  WorkflowPolicyStep order={order} '
+                f'{"created" if step_created else "unchanged"}'
+            )
+
+    def _seed_additional_policies(self):
+        """Seed the payload-only / people-domain governed policies (OF-15)."""
+        policies = [
+            ('internal_memo', 'Internal Memo Default', [
+                (1, 'any_admin', 'acknowledge', False),
+            ]),
+            ('circular', 'Circular Default', [
+                (1, 'any_admin', 'acknowledge', False),
+            ]),
+            ('decision', 'Decision Default', [
+                (1, 'manager', 'approve', False),
+            ]),
+            ('loan_request', 'Loan Request Default', [
+                (1, 'manager', 'approve', True),
+                (2, 'finance', 'approve', False),
+            ]),
+            ('profile_change', 'Profile Change Default', [
+                (1, 'hr', 'approve', False),
+            ]),
+        ]
+        for code, name, steps in policies:
+            self._seed_policy(code, name, steps)
+
+    def _seed_finance_approver(self):
+        """Assign one existing employee user to ``finance_group`` (global scope)."""
+        User = get_user_model()
+        Employee = apps.get_model('people', 'Employee')
+
+        group, _ = Group.objects.get_or_create(name=FINANCE_GROUP)
+
+        employee = Employee.objects.filter(
+            user__isnull=False, user__is_active=True,
+        ).order_by('pk').first()
+        if employee is None:
+            self.stdout.write(
+                self.style.WARNING('No employee user found to seed as finance approver')
+            )
+            return
+
+        role, created = ScopedRole.objects.get_or_create(
+            user=employee.user,
+            group=group,
+            org_unit=None,
+            module=None,
+            defaults={'is_active': True},
+        )
+        self.stdout.write(
+            f'  Finance approver {employee.user} '
+            f'{"assigned" if created else "already assigned"} to {FINANCE_GROUP}'
         )

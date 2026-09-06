@@ -5,7 +5,7 @@
 // full state matrix: loading / 404 / error / loaded.
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Box, Button, Skeleton, Stack } from '@mui/material';
+import { Alert, Box, Button, Skeleton, Stack, ToggleButton, ToggleButtonGroup } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -16,6 +16,7 @@ import { useAuth } from '../../../auth/AuthContext';
 import { fetchCorrespondenceDetail } from '../../../api/my';
 import SummaryCard from './SummaryCard';
 import ApproverChainStepper from './ApproverChainStepper';
+import WorkflowGraph from './WorkflowGraph';
 import RequestTimeline from './RequestTimeline';
 
 export default function RequestDetail() {
@@ -29,6 +30,7 @@ export default function RequestDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [notFound, setNotFound] = useState(false);
+  const [view, setView] = useState('stepper');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -102,7 +104,25 @@ export default function RequestDetail() {
         ) : data ? (
           <Stack spacing={1}>
             <SummaryCard item={data} />
-            <ApproverChainStepper chain={data.approver_chain} currentStep={data.current_step} />
+            <Stack direction="row" justifyContent="flex-end">
+              <ToggleButtonGroup
+                value={view}
+                exclusive
+                size="small"
+                onChange={(event, next) => {
+                  if (next !== null) setView(next);
+                }}
+                aria-label={t('viewToggleLabel')}
+              >
+                <ToggleButton value="stepper">{t('workflowStepper')}</ToggleButton>
+                <ToggleButton value="graph">{t('workflowGraph')}</ToggleButton>
+              </ToggleButtonGroup>
+            </Stack>
+            {view === 'stepper' ? (
+              <ApproverChainStepper chain={data.approver_chain} currentStep={data.current_step} />
+            ) : (
+              <WorkflowGraph chain={data.approver_chain} currentStep={data.current_step} status={data.status} />
+            )}
             <RequestTimeline events={data.events} />
           </Stack>
         ) : null}

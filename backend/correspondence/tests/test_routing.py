@@ -139,15 +139,26 @@ def test_hr_empty_without_people_manage(create_user):
     assert ids == []
 
 
-# ── 'finance' role (unresolved) ────────────────────────────────────────────
+# ── 'finance' role ────────────────────────────────────────────────────────
 
 @pytest.mark.django_db
-def test_finance_role_resolves_empty(create_user):
-    requester = create_user('of4_finance')
+def test_finance_role_empty_without_finance_group(create_user):
+    requester = create_user('of4_finance_none')
 
     ids = resolve_step_approvers(step=_step('finance'), requester=requester)
 
     assert ids == []
+
+
+@pytest.mark.django_db
+def test_finance_returns_finance_group_users(create_user, create_scoped_role):
+    finance_user = create_user('of4_finance')
+    create_scoped_role(finance_user, 'finance_group')  # grants correspondence:finance
+    other = create_user('of4_other')
+
+    ids = resolve_step_approvers(step=_step('finance'), requester=other)
+
+    assert ids == [finance_user.id]
 
 
 # ── skip_if_self ───────────────────────────────────────────────────────────

@@ -33,6 +33,7 @@ import AutorenewIcon from '@mui/icons-material/Autorenew';
 import BadgeIcon from '@mui/icons-material/Badge';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import GroupsIcon from '@mui/icons-material/Groups';
+import PolicyIcon from '@mui/icons-material/Policy';
 
 // Breadcrumb configuration based on routes
 const ROUTE_CONFIG = {
@@ -462,6 +463,16 @@ const ROUTE_CONFIG = {
     label: 'App Config',
     icon: SettingsIcon,
     parent: '/people',
+  },
+  '/people/policies': {
+    label: 'Policies',
+    icon: PolicyIcon,
+    parent: '/people',
+  },
+  '/people/policies/:policyId': {
+    label: 'Policy Detail',
+    icon: PolicyIcon,
+    parent: '/people/policies',
   },
 };
 

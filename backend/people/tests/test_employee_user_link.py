@@ -2,12 +2,15 @@
 # OF-1 — Employee <-> accounts.User OneToOne link + IsActiveEmployee permission.
 
 from datetime import date
+from io import StringIO
 from types import SimpleNamespace
 
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
+from django.core.management import call_command
 
+from accounts.models import ScopedRole
 from mdm.models import OrgUnit
 
 from people.models import Employee
@@ -84,3 +87,72 @@ def test_unlink_employee_raises_does_not_exist(create_user, org):
 
     with pytest.raises(Employee.DoesNotExist):
         _ = user.employee_profile
+
+
+# ── link_employee_users command ───────────────────────────────────────────────
+
+@pytest.mark.django_db
+def test_link_employee_users_links_and_assigns_groups(org):
+    emp = _make_employee(org, employee_no='GF-101')
+
+    call_command(
+        'link_employee_users', password='TestPa_132', stdout=StringIO(),
+    )
+
+    emp.refresh_from_db()
+    assert emp.user is not None
+    assert emp.user.username == 'emp_gf_101'
+    assert emp.user.check_password('TestPa_132') is True
+    assert emp.user.is_active is True
+
+    # Global employee_group (my app) + org-unit employee_group (emp → orgunit).
+    assert ScopedRole.objects.filter(
+        user=emp.user, group__name='employee_group', org_unit=None
+    ).exists()
+    assert ScopedRole.objects.filter(
+        user=emp.user, group__name='employee_group', org_unit=org
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_link_employee_users_assigns_manager_group(org):
+    mgr = _make_employee(org, employee_no='GF-MGR')
+    _make_employee(org, employee_no='GF-DIR', manager=mgr, user=None)
+
+    call_command('link_employee_users', password='TestPa_132', stdout=StringIO())
+
+    mgr.refresh_from_db()
+    assert mgr.user is not None
+    assert ScopedRole.objects.filter(
+        user=mgr.user, group__name='manager_group', org_unit=org
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_link_employee_users_idempotent(org):
+    emp = _make_employee(org, employee_no='GF-201')
+    call_command('link_employee_users', password='TestPa_132', stdout=StringIO())
+    emp.refresh_from_db()
+    first_user = emp.user_id
+
+    # Second run reuses the existing user and does not duplicate ScopedRoles.
+    call_command('link_employee_users', password='TestPa_132', stdout=StringIO())
+    emp.refresh_from_db()
+    assert emp.user_id == first_user
+    assert ScopedRole.objects.filter(
+        user=emp.user, group__name='employee_group', org_unit=None
+    ).count() == 1
+
+
+@pytest.mark.django_db
+def test_link_employee_users_dry_run_makes_no_changes(org):
+    _make_employee(org, employee_no='GF-301')
+
+    call_command(
+        'link_employee_users',
+        dry_run=True,
+        password='TestPa_132',
+        stdout=StringIO(),
+    )
+
+    assert Employee.objects.filter(user__isnull=False).count() == 0

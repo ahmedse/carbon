@@ -13,6 +13,7 @@ CARBON_DATA_OWNERS_GROUP = "carbon_data_owners_group"
 CARBON_ANALYSTS_GROUP = "carbon_analysts_group"
 PEOPLE_DATA_OWNERS_GROUP = "people_data_owners_group"
 PEOPLE_ANALYSTS_GROUP = "people_analysts_group"
+FINANCE_GROUP = "finance_group"
 
 # Alias for backward compatibility — "admin" is the bare Django group
 ADMIN_GROUP = "admin"
@@ -69,6 +70,7 @@ PROTECTED_GROUPS = {
     PEOPLE_LEAD_GROUP,
     PEOPLE_DATA_OWNERS_GROUP,
     PEOPLE_ANALYSTS_GROUP,
+    FINANCE_GROUP,
 }
 
 # ── Convenience: all canonical group names as a flat set ───────────
@@ -82,6 +84,7 @@ ALL_CANONICAL_GROUPS = {
     CARBON_ANALYSTS_GROUP,
     PEOPLE_DATA_OWNERS_GROUP,
     PEOPLE_ANALYSTS_GROUP,
+    FINANCE_GROUP,
     *DOMAIN_LEAD_GROUPS,
 }
 
@@ -98,4 +101,5 @@ GROUP_BRAND_SCOPE = {
     PEOPLE_LEAD_GROUP: {"nibras"},
     PEOPLE_DATA_OWNERS_GROUP: {"nibras"},
     PEOPLE_ANALYSTS_GROUP: {"nibras"},
+    FINANCE_GROUP: {"nibras"},
 }

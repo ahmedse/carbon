@@ -445,54 +445,54 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
 
           <SectionHeading icon={BadgeIcon} title={t('sectionIdentity')} />
           <Grid container spacing={1.5}>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth size="small" label={t('formNameEnGiven')} name="name_en_given" value={editAllDraft.name_en_given ?? ''} onChange={handleEditAllChange} />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth size="small" label={t('formNameEnFamily')} name="name_en_family" value={editAllDraft.name_en_family ?? ''} onChange={handleEditAllChange} />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth size="small" label={t('formNameArGiven')} name="name_ar_given" value={editAllDraft.name_ar_given ?? ''} onChange={handleEditAllChange} />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth size="small" label={t('formNameArFamily')} name="name_ar_family" value={editAllDraft.name_ar_family ?? ''} onChange={handleEditAllChange} />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth size="small" select label={t('formGender')} name="gender" value={editAllDraft.gender ?? ''} onChange={handleEditAllChange}>
                 <MenuItem value="">{t('fieldOptional')}</MenuItem>
                 <MenuItem value="male">{t('genderMale')}</MenuItem>
                 <MenuItem value="female">{t('genderFemale')}</MenuItem>
               </TextField>
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth size="small" label={t('formCivilId')} name="civil_id" value={editAllDraft.civil_id ?? ''} onChange={handleEditAllChange} />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth size="small" type="date" slotProps={{ inputLabel: { shrink: true } }} label={t('formDateOfBirth')} name="date_of_birth" value={editAllDraft.date_of_birth ?? ''} onChange={handleEditAllChange} />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth size="small" label={t('formNationality')} name="nationality" value={editAllDraft.nationality ?? ''} onChange={handleEditAllChange} />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth size="small" label={t('formNationalityCode')} name="nationality_code" value={editAllDraft.nationality_code ?? ''} onChange={handleEditAllChange} />
             </Grid>
           </Grid>
 
           <SectionHeading icon={WorkIcon} title={t('sectionEmployment')} />
           <Grid container spacing={1.5}>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth size="small" label={t('formEmploymentTypeCode')} name="employment_type_code" value={editAllDraft.employment_type_code ?? ''} onChange={handleEditAllChange} />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth size="small" label={t('formContractTypeCode')} name="contract_type_code" value={editAllDraft.contract_type_code ?? ''} onChange={handleEditAllChange} />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth size="small" type="date" slotProps={{ inputLabel: { shrink: true } }} label={t('formJoinDate')} name="join_date" value={editAllDraft.join_date ?? ''} onChange={handleEditAllChange} />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth size="small" label={t('formRotation')} name="rotation" value={editAllDraft.rotation ?? ''} onChange={handleEditAllChange} />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth size="small" select label={t('colPosition')} name="position" value={editAllDraft.position ?? ''} onChange={handleEditAllChange}>
                 <MenuItem value="">{t('managerUnassigned')}</MenuItem>
                 {positions.map((p) => (
@@ -500,7 +500,7 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
                 ))}
               </TextField>
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth size="small" select label={t('formKuwaitization')} name="kuwaitization" value={editAllDraft.kuwaitization ? 'true' : 'false'} onChange={(e) => setEditAllDraft((prev) => ({ ...prev, kuwaitization: e.target.value === 'true' }))}>
                 <MenuItem value="true">{t('yes')}</MenuItem>
                 <MenuItem value="false">{t('no')}</MenuItem>
@@ -510,7 +510,7 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
 
           <SectionHeading icon={BusinessIcon} title={t('sectionOrganization')} />
           <Grid container spacing={1.5}>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth size="small" select label={t('formOrgUnit')} name="org_unit" value={editAllDraft.org_unit ?? ''} onChange={handleEditAllChange}>
                 <MenuItem value="">{t('managerUnassigned')}</MenuItem>
                 {(emp.allOrgUnits || []).map((u) => (
@@ -518,7 +518,7 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
                 ))}
               </TextField>
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth size="small" select label={t('formManager')} name="manager" value={editAllDraft.manager ?? ''} onChange={handleEditAllChange}>
                 <MenuItem value="">{t('managerUnassigned')}</MenuItem>
                 {(emp.allEmployees || []).filter((e) => e.id !== emp.id).map((e) => (
@@ -532,7 +532,7 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
             <>
               <SectionHeading icon={PaidIcon} title={t('sectionCompensation')} />
               <Grid container spacing={1.5}>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField fullWidth size="small" type="number" inputProps={{ step: '0.001', min: '0' }} label={t('formBasicSalary')} name="basic_salary" value={editAllDraft.basic_salary ?? ''} onChange={handleEditAllChange} />
                 </Grid>
               </Grid>
@@ -571,35 +571,35 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
         {editing === 'identity' ? (
           <Stack spacing={1.5}>
             <Grid container spacing={1.5}>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField fullWidth size="small" label={t('formNameEnGiven')} name="name_en_given" value={draft.name_en_given ?? ''} onChange={handleChange} />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField fullWidth size="small" label={t('formNameEnFamily')} name="name_en_family" value={draft.name_en_family ?? ''} onChange={handleChange} />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField fullWidth size="small" label={t('formNameArGiven')} name="name_ar_given" value={draft.name_ar_given ?? ''} onChange={handleChange} />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField fullWidth size="small" label={t('formNameArFamily')} name="name_ar_family" value={draft.name_ar_family ?? ''} onChange={handleChange} />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField fullWidth size="small" select label={t('formGender')} name="gender" value={draft.gender ?? ''} onChange={handleChange}>
                   <MenuItem value="">{t('fieldOptional')}</MenuItem>
                   <MenuItem value="male">{t('genderMale')}</MenuItem>
                   <MenuItem value="female">{t('genderFemale')}</MenuItem>
                 </TextField>
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField fullWidth size="small" label={t('formCivilId')} name="civil_id" value={draft.civil_id ?? ''} onChange={handleChange} />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField fullWidth size="small" type="date" slotProps={{ inputLabel: { shrink: true } }} label={t('formDateOfBirth')} name="date_of_birth" value={draft.date_of_birth ?? ''} onChange={handleChange} />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField fullWidth size="small" label={t('formNationality')} name="nationality" value={draft.nationality ?? ''} onChange={handleChange} />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField fullWidth size="small" label={t('formNationalityCode')} name="nationality_code" value={draft.nationality_code ?? ''} onChange={handleChange} />
               </Grid>
             </Grid>
@@ -608,15 +608,15 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
         ) : (
           <Box>
             <Grid container spacing={1.5}>
-              <Grid item xs={6} sm={4}><ReadField label={t('formNameEnGiven')} value={emp.name_en_given} /></Grid>
-              <Grid item xs={6} sm={4}><ReadField label={t('formNameEnFamily')} value={emp.name_en_family} /></Grid>
-              <Grid item xs={6} sm={4}><ReadField label={t('formNameArGiven')} value={emp.name_ar_given} /></Grid>
-              <Grid item xs={6} sm={4}><ReadField label={t('formNameArFamily')} value={emp.name_ar_family} /></Grid>
-              <Grid item xs={6} sm={4}><ReadField label={t('formGender')} value={emp.gender} /></Grid>
-              <Grid item xs={6} sm={4}><ReadField label={t('formCivilId')} value={emp.civil_id} /></Grid>
-              <Grid item xs={6} sm={4}><ReadField label={t('formDateOfBirth')} value={formatDate(emp.date_of_birth)} /></Grid>
-              <Grid item xs={6} sm={4}><ReadField label={t('formNationality')} value={emp.nationality} /></Grid>
-              <Grid item xs={6} sm={4}><ReadField label={t('formNationalityCode')} value={emp.nationality_code} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formNameEnGiven')} value={emp.name_en_given} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formNameEnFamily')} value={emp.name_en_family} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formNameArGiven')} value={emp.name_ar_given} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formNameArFamily')} value={emp.name_ar_family} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formGender')} value={emp.gender} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formCivilId')} value={emp.civil_id} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formDateOfBirth')} value={formatDate(emp.date_of_birth)} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formNationality')} value={emp.nationality} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formNationalityCode')} value={emp.nationality_code} /></Grid>
             </Grid>
             <SectionActions onEdit={() => startEdit('identity')} />
           </Box>
@@ -634,19 +634,19 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
         {editing === 'employment' ? (
           <Stack spacing={1.5}>
             <Grid container spacing={1.5}>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField fullWidth size="small" label={t('formEmploymentTypeCode')} name="employment_type_code" value={draft.employment_type_code ?? ''} onChange={handleChange} />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField fullWidth size="small" label={t('formContractTypeCode')} name="contract_type_code" value={draft.contract_type_code ?? ''} onChange={handleChange} />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField fullWidth size="small" type="date" slotProps={{ inputLabel: { shrink: true } }} label={t('formJoinDate')} name="join_date" value={draft.join_date ?? ''} onChange={handleChange} />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField fullWidth size="small" label={t('formRotation')} name="rotation" value={draft.rotation ?? ''} onChange={handleChange} />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField fullWidth size="small" select label={t('colPosition')} name="position" value={draft.position ?? ''} onChange={handleChange}>
                   <MenuItem value="">{t('managerUnassigned')}</MenuItem>
                   {positions.map((p) => (
@@ -654,7 +654,7 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
                   ))}
                 </TextField>
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField fullWidth size="small" select label={t('formKuwaitization')} name="kuwaitization" value={draft.kuwaitization ? 'true' : 'false'} onChange={(e) => setDraft((prev) => ({ ...prev, kuwaitization: e.target.value === 'true' }))}>
                   <MenuItem value="true">{t('yes')}</MenuItem>
                   <MenuItem value="false">{t('no')}</MenuItem>
@@ -666,13 +666,13 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
         ) : (
           <Box>
             <Grid container spacing={1.5}>
-              <Grid item xs={6} sm={4}><ReadField label={t('colEmployeeNo')} value={emp.employee_no} /></Grid>
-              <Grid item xs={6} sm={4}><ReadField label={t('formEmploymentTypeCode')} value={emp.employment_type_code} /></Grid>
-              <Grid item xs={6} sm={4}><ReadField label={t('formContractTypeCode')} value={emp.contract_type_code} /></Grid>
-              <Grid item xs={6} sm={4}><ReadField label={t('formJoinDate')} value={formatDate(emp.join_date)} /></Grid>
-              <Grid item xs={6} sm={4}><ReadField label={t('formRotation')} value={emp.rotation} /></Grid>
-              <Grid item xs={6} sm={4}><ReadField label={t('colPosition')} value={positionTitle} /></Grid>
-              <Grid item xs={6} sm={4}><ReadField label={t('formKuwaitization')} value={emp.kuwaitization ? t('yes') : t('no')} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('colEmployeeNo')} value={emp.employee_no} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formEmploymentTypeCode')} value={emp.employment_type_code} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formContractTypeCode')} value={emp.contract_type_code} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formJoinDate')} value={formatDate(emp.join_date)} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formRotation')} value={emp.rotation} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('colPosition')} value={positionTitle} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formKuwaitization')} value={emp.kuwaitization ? t('yes') : t('no')} /></Grid>
             </Grid>
             <SectionActions onEdit={() => startEdit('employment')} />
           </Box>
@@ -706,8 +706,8 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
         ) : (
           <Box>
             <Grid container spacing={1.5}>
-              <Grid item xs={6} sm={4}><ReadField label={t('formOrgUnit')} value={emp.orgUnitName} /></Grid>
-              <Grid item xs={6} sm={4}><ReadField label={t('formManager')} value={managerLabel} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formOrgUnit')} value={emp.orgUnitName} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formManager')} value={managerLabel} /></Grid>
             </Grid>
             <SectionActions onEdit={() => startEdit('organization')} />
           </Box>

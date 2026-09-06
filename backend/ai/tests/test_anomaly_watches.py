@@ -15,8 +15,10 @@ from __future__ import annotations
 
 import asyncio
 import types
+import uuid
 
 import pytest
+from django.db import connections
 from django.urls import reverse
 from rest_framework.test import APIClient
 
@@ -192,10 +194,12 @@ def test_delete_superuser():
 def test_run_user_watches_fires_and_records(monkeypatch):
     from ai.engine.proactive.user_watches import run_user_watches
 
-    user = User.objects.create_user(username="watch-owner", password="secret123")
+    # Unique instance_id prevents cross-test contamination from other transaction=True tests.
+    instance_id = f"test-fires-{uuid.uuid4().hex[:8]}"
+    user = User.objects.create_user(username=f"watch-owner-{instance_id}", password="secret123")
     watch = AIAnomalyWatch.objects.create(
         user=user,
-        instance_id="carbon",
+        instance_id=instance_id,
         name="temp too high",
         kpi_expression="winding temperature",
         condition={
@@ -218,10 +222,11 @@ def test_run_user_watches_fires_and_records(monkeypatch):
     )
     monkeypatch.setattr("ai.engine.proactive.delivery.deliver_insight", fake_deliver)
 
-    instance = types.SimpleNamespace(id="carbon", host_db_url="postgresql://x")
+    instance = types.SimpleNamespace(id=instance_id, host_db_url="postgresql://x")
     result = asyncio.run(run_user_watches(None, instance))
+    connections.close_all()
 
-    assert result["instance_id"] == "carbon"
+    assert result["instance_id"] == instance_id
     assert result["watches_evaluated"] == 1
     assert result["watches_fired"] == 1
     assert result["errors"] == []
@@ -235,10 +240,11 @@ def test_run_user_watches_fires_and_records(monkeypatch):
 def test_run_user_watches_survives_invalid_condition():
     from ai.engine.proactive.user_watches import run_user_watches
 
-    user = User.objects.create_user(username="owner5", password="secret123")
+    instance_id = f"test-invalid-{uuid.uuid4().hex[:8]}"
+    user = User.objects.create_user(username=f"owner5-{instance_id}", password="secret123")
     AIAnomalyWatch.objects.create(
         user=user,
-        instance_id="carbon",
+        instance_id=instance_id,
         name="missing column",
         kpi_expression="k",
         condition={"table": "readings"},
@@ -246,15 +252,16 @@ def test_run_user_watches_survives_invalid_condition():
     )
     AIAnomalyWatch.objects.create(
         user=user,
-        instance_id="carbon",
+        instance_id=instance_id,
         name="no condition",
         kpi_expression="k",
         condition=None,
         threshold=1.0,
     )
 
-    instance = types.SimpleNamespace(id="carbon", host_db_url="postgresql://x")
+    instance = types.SimpleNamespace(id=instance_id, host_db_url="postgresql://x")
     result = asyncio.run(run_user_watches(None, instance))
+    connections.close_all()
 
     assert result["watches_evaluated"] == 2
     assert result["watches_fired"] == 0
