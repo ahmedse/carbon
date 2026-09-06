@@ -271,6 +271,29 @@ def _build_grounding_directive(api_catalog: list | None) -> str:
         "the user's specific question. Never invent values; if the data has no "
         "matching rows, say so plainly.",
         "",
+        "AGGREGATION RULES (non-negotiable):",
+        "1. For ANY distribution, breakdown, or 'how many X are Y' question, "
+        "   use an `analyze_*` endpoint (e.g. `analyze_employees`) — NEVER count "
+        "   rows from a `list_*` result. List endpoints are paginated and return "
+        "   at most 100 rows; counting them gives WRONG totals.",
+        "2. When a list endpoint returns `truncated: true`, you MUST say explicitly "
+        "   \"Showing first N of TOTAL\" — never present a partial page as the full set.",
+        "3. When `analyze_*` returns `caveats`, you MUST quote them verbatim in your "
+        "   answer before presenting any chart or table. Missing data is not an error "
+        "   to hide — it is a finding to surface.",
+        "4. Use FK-resolved `label` fields from `analyze_*` results for chart axes, "
+        "   not `raw_value` IDs. A chart labelled 'Supervisor' is correct; "
+        "   a chart labelled '182' is not.",
+        "5. CHART TYPE — use the `suggested_chart_type` field from `analyze_*` results "
+        "   to choose between pie and bar. NEVER default to pie — pie is only correct "
+        "   when the server returns `suggested_chart_type: 'pie'`. "
+        "   A 99% / 1% distribution MUST use a bar chart (the server will say 'bar').",
+        "6. NORMALIZATION — when `was_normalized: true`, you MUST explain what was merged "
+        "   in plain language (e.g. 'Note: \"M\" was merged into \"male\" — this appears "
+        "   to be a data-entry variant. Recommend standardising the source data.'). "
+        "   Quote each entry in `normalization_notes` verbatim. "
+        "   Never silently list merged values as if they were separate categories.",
+        "",
         "ANSWER WITH DEPTH, NOT A DUMP. After calling the endpoint, synthesise "
         "the result into a direct, insightful answer: name the material facts "
         "(the count, the highest/lowest, the specific item they asked about), "
@@ -343,7 +366,17 @@ RENDERING_CAPABILITIES = """## Rich content rendering
 Your replies are rendered as rich Markdown documents in the platform UI. Use the
 right construct instead of describing things in prose:
 
-- **Tables** — GFM Markdown tables render as styled, striped tables.
+- **Tables** — GFM Markdown tables render as styled, striped tables. **Table
+  line rules (critical):** leave a blank line before the table, put the header
+  row, the `|---|---|` delimiter row, and EVERY data row each on its OWN line.
+  NEVER glue a table onto a prose line (e.g. after a colon) and NEVER collapse
+  the rows onto one line — a single-line table renders as raw `|` text, not a
+  table. Correct form:
+
+  | Position | Employees |
+  |----------|-----------|
+  | Driver   | 52        |
+  | Floorman | 22        |
 - **Code** — fenced blocks (```python, ```sql, ```json, ...) render with syntax
   highlighting, a language badge, and a copy button. **Always format JSON with
   proper indentation** (2 spaces per level) and line breaks — never as a single

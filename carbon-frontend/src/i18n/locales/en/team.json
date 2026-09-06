@@ -1,0 +1,71 @@
+{
+  "inboxTitle": "Approvals Inbox",
+  "inboxSubtitle": "Review requests awaiting your decision and take action",
+  "tableReferenceNo": "Reference No.",
+  "tableTitle": "Title",
+  "tableRequester": "Requester",
+  "tableType": "Type",
+  "tableStatus": "Status",
+  "tableDate": "Date",
+  "inboxEmpty": "No requests awaiting your approval",
+  "loading": "Loading…",
+  "error": "Could not load data",
+  "retry": "Retry",
+  "openItem": "Open request {{ref}}",
+  "detailTitle": "Approval Details",
+  "detailSubtitle": "Review the request and take an action",
+  "detailNotFound": "Request not found",
+  "backToInbox": "Back to Inbox",
+  "actionsTitle": "Action",
+  "commentLabel": "Comment",
+  "commentPlaceholder": "Add a comment (optional for approval)",
+  "commentRequired": "A comment is required for this action",
+  "approve": "Approve",
+  "reject": "Reject",
+  "sendBack": "Send Back",
+  "successApproved": "Request approved",
+  "successRejected": "Request rejected",
+  "successSentBack": "Request sent back",
+  "status": {
+    "draft": "Draft",
+    "submitted": "Submitted",
+    "inReview": "In Review",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "cancelled": "Cancelled",
+    "sentBack": "Sent Back",
+    "expired": "Expired",
+    "archived": "Archived"
+  },
+  "event": {
+    "submitted": "Submitted",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "sentBack": "Sent Back",
+    "cancelled": "Cancelled",
+    "resubmitted": "Resubmitted"
+  },
+  "role": {
+    "manager": "Manager",
+    "hr": "HR",
+    "finance": "Finance",
+    "specificUser": "Specific User",
+    "anyAdmin": "Any Admin"
+  },
+  "intent": {
+    "approve": "Approve",
+    "acknowledge": "Acknowledge",
+    "review": "Review"
+  },
+  "type": {
+    "leaveRequest": "Leave Request"
+  },
+  "corrType": {
+    "leaveRequest": "Leave Request",
+    "loanRequest": "Loan Request",
+    "profileChange": "Profile Change",
+    "internalMemo": "Internal Memo",
+    "circular": "Circular",
+    "decision": "Decision"
+  }
+}

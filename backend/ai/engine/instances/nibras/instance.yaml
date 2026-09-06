@@ -121,14 +121,37 @@ api_catalog:
 
   # ── Employees ──
 
+  - name: analyze_employees
+    method: GET
+    path: /carbon-api/people/analytics/
+    description: >
+      SERVER-SIDE aggregation over the full employee population (no row truncation).
+      Required query param: dimension — one of: gender, is_active, nationality,
+      nationality_code, employment_type_code, contract_type_code, position,
+      org_unit, kuwaitization, rotation.
+      Returns {dimension, total, breakdown[{label, count, pct, merged_from?}],
+      caveats[], was_normalized, normalization_notes[], suggested_chart_type, label_resolved}.
+      FK dimensions (position, org_unit) resolve IDs to human labels automatically.
+      Text dimensions (gender etc.) are normalised: "M" merges into "male",
+      "F" into "female" — check normalization_notes for what was merged.
+      Long tails (>15 buckets) are collapsed into "Other".
+      suggested_chart_type is "pie" for balanced distributions, "bar" when one
+      bucket dominates (>70%) — ALWAYS use this hint, never default to pie.
+      USE THIS (not list_employees) for ANY distribution, breakdown, count-by,
+      or "how many employees are X" question.
+    requires_auth: true
+    requires_confirmation: false
+
   - name: list_employees
     method: GET
     path: /carbon-api/people/employees/
     description: >
-      List employees visible to the current user (org-scoped). Returns
-      {count, results[]} with fields: id, employee_no, name_en_given,
-      name_en_family, name_ar, position, org_unit, is_active, basic_salary.
-      Use to answer headcount questions or find an employee's id.
+      List employees (first 100 of total; check `total` and `truncated` fields).
+      Returns {total, count, truncated?, caveat?, results[]} with fields:
+      id, employee_no, name_en_given, name_en_family, position, org_unit,
+      is_active, basic_salary.
+      Use to LOOK UP a specific employee by name/number, or show a sample list.
+      Do NOT use for aggregation — use analyze_employees instead.
     requires_auth: true
     requires_confirmation: false
 

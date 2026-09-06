@@ -32,6 +32,10 @@ import enDataschema from './locales/en/dataschema.json';
 import arDataschema from './locales/ar/dataschema.json';
 import enPeople from './locales/en/people.json';
 import arPeople from './locales/ar/people.json';
+import enMy from './locales/en/my.json';
+import arMy from './locales/ar/my.json';
+import enTeam from './locales/en/team.json';
+import arTeam from './locales/ar/team.json';
 
 const STORAGE_KEY = 'carbon.lang';
 const SUPPORTED_LANGS = ['en', 'ar'];
@@ -48,13 +52,13 @@ function getInitialLanguage() {
 
 i18n.use(initReactI18next).init({
   resources: {
-    en: { common: enCommon, shell: enShell, auth: enAuth, errors: enErrors, ai: enAi, catalog: enCatalog, notes: enNotes, emissions: enEmissions, evidence: enEvidence, importexport: enImportExport, connections: enConnections, dq: enDq, dataschema: enDataschema, people: enPeople },
-    ar: { common: arCommon, shell: arShell, auth: arAuth, errors: arErrors, ai: arAi, catalog: arCatalog, notes: arNotes, emissions: arEmissions, evidence: arEvidence, importexport: arImportExport, connections: arConnections, dq: arDq, dataschema: arDataschema, people: arPeople },
+    en: { common: enCommon, shell: enShell, auth: enAuth, errors: enErrors, ai: enAi, catalog: enCatalog, notes: enNotes, emissions: enEmissions, evidence: enEvidence, importexport: enImportExport, connections: enConnections, dq: enDq, dataschema: enDataschema, people: enPeople, my: enMy, team: enTeam },
+    ar: { common: arCommon, shell: arShell, auth: arAuth, errors: arErrors, ai: arAi, catalog: arCatalog, notes: arNotes, emissions: arEmissions, evidence: arEvidence, importexport: arImportExport, connections: arConnections, dq: arDq, dataschema: arDataschema, people: arPeople, my: arMy, team: arTeam },
   },
   lng: getInitialLanguage(),
   fallbackLng: 'en',
   supportedLngs: SUPPORTED_LANGS,
-  ns: ['common', 'shell', 'auth', 'errors', 'ai', 'catalog', 'notes', 'emissions', 'evidence', 'importexport', 'connections', 'dq', 'dataschema', 'people'],
+  ns: ['common', 'shell', 'auth', 'errors', 'ai', 'catalog', 'notes', 'emissions', 'evidence', 'importexport', 'connections', 'dq', 'dataschema', 'people', 'my', 'team'],
   defaultNS: 'common',
   interpolation: {
     // React already escapes — no double escaping.

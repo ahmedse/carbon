@@ -1,5 +1,143 @@
 # TASK-RESULTS.md
 
+## [2026-09-06] Frontend Worker — Phase OF-9
+
+**Role:** Frontend Worker · **Kind:** `my` (employee self-service) app foundation + MyDashboard.
+
+### Files Created
+| File | What |
+|------|------|
+| `carbon-frontend/src/apps/my/manifest.js` | New. App manifest: id `my`, name `My`, version `1.0.0`, icon `Dashboard`, `routePrefix: '/my'`, `apiPrefix: '/people/me/'`, `roles: []`, navigation (Dashboard `/my`, My Leave `/my/leave`, My Requests `/my/requests`), `requires` auth/rbac/mdm/dq/audit, `aiSkills: []`, `hooks: {}`. Ontology omitted (optional). |
+| `carbon-frontend/src/apps/my/index.js` | New. Barrel: re-exports `MyDashboard` + `myManifest`. |
+| `carbon-frontend/src/apps/my/MyDashboard.jsx` | New. Landing surface: ProfileHeader (GET `people/me/`), ActionRequiredStrip (GET `correspondence/inbox/`), LeaveBalanceCard (GET `people/me/leave-balance/`), QuickActions (Request Leave → `/my/leave`, My Requests → `/my/requests`). Three fetches in parallel with independent per-card loading/error/empty states (Skeleton, Alert+Retry, empty). `useTranslation('my')`, semantic `<main>`, theme tokens only, pending/remaining carry text labels (color not sole indicator). |
+| `carbon-frontend/src/api/my.js` | New. `fetchMyProfile`, `fetchLeaveBalance`, `fetchInboxCount` (robust `Array.isArray(data) ? data.length : (data?.count ?? 0)`). All via `apiFetch`. |
+| `carbon-frontend/src/i18n/locales/en/my.json` + `ar/my.json` | New. Flat-key EN/AR parity (24 keys). |
+
+### Files Edited
+| File | What |
+|------|------|
+| `carbon-frontend/src/apps/registry.js` | Imported `myManifest` + added to `APP_REGISTRY`. |
+| `carbon-frontend/src/capabilities.js` | Added `CORRESPONDENCE_SUBMIT/ACT/ADMIN`, `MY_ACCESS`, `TEAM_ACCESS`; inheritance `CORRESPONDENCE_ADMIN → {ACT, SUBMIT, MY_ACCESS, TEAM_ACCESS}`; `ROUTE_CAPABILITIES` `/my`, `/my/leave`, `/my/requests` → `MY_ACCESS`. |
+| `carbon-frontend/src/authz.js` | Imported `MY_ACCESS`; added `my: MY_ACCESS` to `APP_VIEW_CAP`. |
+| `carbon-frontend/src/shell/Shell.jsx` | Added `my: '/my'` to `STUDIO_PATHS` + `studioFromPath` check alongside people. |
+| `carbon-frontend/src/shell/ShellSidebar.jsx` | Added `MY_ITEM_ICONS` + `case 'my':` block mirroring people. |
+| `carbon-frontend/src/App.jsx` | Lazy `MyDashboard` import + routes `/my`, `/my/leave`, `/my/requests` (placeholders for OF-10/11). |
+| `carbon-frontend/src/i18n/index.js` | Added `enMy`/`arMy` imports, `my` to resources + ns. |
+| `carbon-frontend/src/i18n/shellLabels.js` | `nav.myLeave`/`nav.myRequests` in NAV_LABEL_KEYS; `my: 'studio.my'` in STUDIO_LABEL_KEYS + STUDIO_TITLE_KEYS. |
+| `carbon-frontend/src/i18n/locales/en/shell.json` + `ar/shell.json` | `nav.myLeave`, `nav.myRequests`, `studio.my`. |
+
+### Gate outputs
+- `get_errors` (VSCode diagnostic scan) over all 16 created/edited files: **No errors found** for each.
+- i18n key parity verified manually (en/my.json ↔ ar/my.json identical key sets; shell.json en/ar symmetric additions).
+- `node scripts/check-i18n-keys.js`, `npm run lint`, `npm run build` were **NOT executed** — no terminal tool is available in this session. Commands provided for the user to run (see report).
+
+### Notes / Deviations
+- `/my/leave` and `/my/requests` are placeholder routes rendering `MyDashboard` until OF-10/OF-11 land (as instructed).
+- `MANIFEST_ICON_MAP` already maps `'Dashboard'` → `DashboardIcon`, so no `useShellState` change was needed (per spec).
+- The `my` studio only appears once the backend grants `my:access` (via `derive_employee_capabilities`, OF-6) — frontend gating wired per `APP_VIEW_CAP`.
+
+## [2026-09-06] Backend Worker — Phase OF-8
+
+**Role:** Backend Worker · **Kind:** Employee self-service surface (`/people/me/`) tying `LeaveRecord` to the correspondence engine (subject creation lives here).
+
+### Files Changed
+| File | What |
+|------|------|
+| `backend/people/self_serializers.py` | New. `EmployeeSummarySerializer` (`id`, `employee_no`, `full_name`, `job_title`, `is_active`, nested `org_unit` `{id,name}`, nested `manager` `{id,name}` — None-safe). `LeaveBalanceSerializer` (plain Serializer, DecimalField `leave_type`/`entitled`/`used`/`pending`/`remaining`). `LeaveRecordSerializer` (ModelSerializer with read-only `reference_no` + `correspondence_id` SerializerMethodFields resolving `Correspondence.objects.filter(subject_type='people.LeaveRecord', subject_id=obj.pk).first()`, cached per serializer instance). `LeaveRecordDetailSerializer` adds `events` (linked corr's `events` ordered by `seq`, via `correspondence.serializers.CorrespondenceEventSerializer`). |
+| `backend/people/self_views.py` | New. All views `[IsAuthenticated, IsActiveEmployee]`, resolve `profile = request.user.employee_profile`. `_corr_type_value()` (ReferenceValue `correspondence_type:leave_request`). `_compute_balance()` (entitled via `Sum(entitled_days)`, used via `Sum(days)` of approved year records, pending by iterating records with an actionable linked correspondence, `remaining = max(0, entitled-used-pending)`). `EmployeeMeView` (GET profile). `LeaveBalanceView` (GET one row per `leave_type` ReferenceSet code sorted by `sort_order`). `LeaveSelfCollectionView` — GET lists my records, POST submits (validate `leave_type`/ISO dates/`days>0`/`end>=start`, balance check → 400 `{"detail":"Insufficient leave balance","remaining":…}`, overlap check (approved/submitted OR actionable-linked, `start<=end AND end>=start`) → 400 `{"detail":"Overlaps existing leave request"}`, then `transaction.atomic()` create `LeaveRecord(status='draft')` + `Correspondence` with temp `DRAFT-<uuid>` reference, `fsm.submit_correspondence(subject=record, subject_label='people.LeaveRecord')`, return `CorrespondenceDetailSerializer` 201; maps `SubmissionBlocked`→400, `PolicyNotFound`→400, `InvalidTransition`→409). `LeaveSelfDetailView` (GET `get_object_or_404(LeaveRecord, pk, employee=profile)` → cross-user 404). |
+| `backend/people/self_urls.py` | New. `me/` routes: `''`→me, `'leave-balance/'`, `'leave/'` (collection GET+POST), `'leave/<int:pk>/'`. |
+| `backend/people/urls.py` | Added `include` to the import and `path('me/', include('people.self_urls'))` at the TOP of `urlpatterns` (before `employees/`). Existing routes untouched. |
+| `backend/people/tests/test_self_api.py` | New. `pytest.mark.django_db` (reuses `api_client`/`create_user`/`get_token_for_user`). Fixture builds `mdm.OrgUnit`, `ReferenceSet`/`ReferenceValue` for `correspondence_type:leave_request` + `leave_type` (annual/sick), manager+requester `Employee` (linked users, manager self-FK), single-step manager `WorkflowPolicy`. Covers: (1) `GET /people/me/` summary incl. `org_unit.name`/`manager.full_name`; (2) balance with `entitled==20`→`remaining==20`, empty entitlement→0 (no negatives); (3) submit happy path 201 (LeaveRecord + Correspondence `submitted|approved`, non-empty reference, `subject_id==record.pk`, `events>=1`); (4) insufficient balance 400; (5) overlap 400; (6) `days<=0` 400 + `end<start` 400; (7) cross-user isolation (B → 404 on A's record, empty list); (8) detail returns `reference_no` + `events`. Uses `date.today().year` / `date.today()+timedelta` to avoid year-boundary issues. |
+
+### Notes
+- Tests were **NOT run** by me (no terminal tool); Master runs `cd backend && /home/ahmed/aast/carbon/.venv/bin/python -m pytest people/tests/test_self_api.py -q`.
+- No migration files created. `correspondence` engine internals, `accounts/capabilities.py`, `config/settings.py`, frontend, and existing `people/views.py`/`people/urls.py` routes were left untouched (only the `me/` include + `include` import were added).
+- Deviations:
+  - **`Employee.job_title`** — the `Employee` model has no `job_title` column (verified: only `import_gofsco_employees.py` mentions it, mapping to `Position.title`). `EmployeeSummarySerializer.job_title` is therefore a `SerializerMethodField` deriving from `obj.position.title` (None-safe), so the field name is present in the output without a non-existent model field.
+  - **`LeaveSelfCollectionView`** — spec resolved the two-`path('leave/')` conflict into one class with `.get()` (list) + `.post()` (submit); implemented as a single `APIView` subclass (no `paginate_queryset`/`get_paginated_response`, which are `GenericAPIView` methods unavailable on plain `APIView`), returning a plain list (pagination is disabled in pytest anyway).
+  - **`leave_type` balance codes** — queried from `ReferenceValue` in ReferenceSet `name='leave_type'` ordered by `sort_order` (matches the seed command's `sort_order`).
+
+## [2026-09-06] Backend Worker — Phase OF-6
+
+**Role:** Backend Worker · **Kind:** Declare CBAC correspondence + self-service capabilities, auto-derive employee caps, tests.
+
+### Files Changed
+| File | What |
+|------|------|
+| `backend/accounts/capabilities.py` | Added 5 capability constants (`CORRESPONDENCE_SUBMIT`, `CORRESPONDENCE_ACT`, `CORRESPONDENCE_ADMIN`, `MY_ACCESS`, `TEAM_ACCESS`). Registered them in `ALL_CAPABILITIES` (new `# e-Office Correspondence + Self-Service` section). Added `IMPLIES` entry `CORRESPONDENCE_ADMIN → {CORRESPONDENCE_ACT, CORRESPONDENCE_SUBMIT, MY_ACCESS, TEAM_ACCESS}`. Added `CORRESPONDENCE_ADMIN.key` to `people_lead` and `people_data_owners_group`; added `MY_ACCESS`/`TEAM_ACCESS` to `people_analysts_group`. Added `derive_employee_capabilities(user)` (string-based `apps.get_model('people','Employee')` / `('correspondence','Correspondence')`, guarded by `LookupError`/`Exception`, no-op until installed). Unioned derived caps into `get_user_capabilities` before inheritance expansion/caching (`caps.update(derive_employee_capabilities(user))`). Superuser `"*"` early-return and global-wildcard path untouched. |
+| `backend/accounts/tests/test_correspondence_caps.py` | New. `pytest.mark.django_db` tests using `create_user`/`create_scoped_role` fixtures + lazy `apps.get_model` helpers: (1) active employee → `my:access` + `correspondence:submit` True; (2) manager (`direct_reports` non-empty) → `team:access` True; (3) plain non-employee → `my:access` False; (4) open approver (`Correspondence(status='submitted', current_approver_ids=[approver.id])`) → `correspondence:act` True; (5) `people_lead` → `correspondence:admin` + `correspondence:act` + `my:access` all True. |
+
+### Notes
+- Tests were **NOT run** by me (no terminal tool); Master runs `pytest accounts -q` (or `pytest accounts/tests/test_correspondence_caps.py -q`).
+- No migration files created.
+- Deviations:
+  - **Test 5** — `get_user_capabilities` resolves capabilities from `ScopedRole`, not Django `auth.Group` membership, so the `create_user(groups=['people_lead'])` alone yields an empty capability set. The test additionally creates a global `ScopedRole` via the repo `create_scoped_role` fixture so the `people_lead` grant actually resolves. The `groups=` param is still passed (per instruction) but is not the resolving mechanism.
+  - **Test 4** — `derive_employee_capabilities` returns early (empty set) when the user has no active `Employee` profile, so the approver user is given an active `Employee` row before the `Correspondence` is created; otherwise `correspondence:act` would never be reachable. `basic_salary` is set explicitly (non-null `DecimalField` with no default).
+
+## [2026-09-06] Backend Worker — Phase OF-5
+
+**Role:** Backend Worker · **Kind:** e-Office Correspondence state machine (FSM) + notifications + tests — the CORE of the engine.
+
+### Files Changed
+| File | What |
+|------|------|
+| `backend/correspondence/exceptions.py` | New. `CorrespondenceError` base + `InvalidTransition` (409), `NotActorError` (403), `CommentRequired` (400), `SubmissionBlocked(failures)` (DQ gate). |
+| `backend/correspondence/notifications.py` | New. `notify(corr, *, user_ids, type, title, body='')` — dedupes (`dict.fromkeys`) and `bulk_create`s one `Notification` per user. Best-effort, no raise. |
+| `backend/correspondence/fsm.py` | New. Full workflow state machine. `_condition_met` (JSON condition `{"days": {">": 5}}` with `> < >= <= == !=`, `==`/`!=` string-compare, missing field → False, empty → True). `_add_event` (next-`seq` `CorrespondenceEvent`), `_governance` (best-effort `emit_governance_event` with captured `old_status`). Chain construction helpers (`_step_fields`, `_resolve_user_ids`, `_build_chain`, `_advance`) shared by submit/resubmit. Transitions: `submit_correspondence` (draft→submitted|approved: freeze policy, allocate reference, DQ `check_instances` write-gate via `SubmissionBlocked`, build chain, hand off to first actionable step), `approve` (auto-pass trailing auto/empty steps → in_review|approved), `reject`/`send_back` (comment-required), `cancel` (requester-only), `resubmit` (sent_back-only, re-route from frozen `policy_snapshot`, no re-freeze/re-allocate). All notify requester/approvers and emit governance events. **Layering honored: no `import people`** — routing goes through `resolve_step_approvers`/`apps.get_model`, DQ through `check_instances(model_label, …)`. |
+| `backend/correspondence/tests/test_fsm.py` | New. pytest (`django_db`) coverage: (1) happy-path submit (status/reference/chain/current approver), (2) approve by manager → approved/resolved/empty approvers, (3) approve by non-approver → `NotActorError`, (4) reject without comment → `CommentRequired`; with comment → rejected, (5) send_back without comment → `CommentRequired`; with comment → sent_back; resubmit → submitted + reference preserved, (6) cancel by requester → cancelled; by outsider → `NotActorError`, (7) skip_if_self (self-manager) → auto-approved, (8) auto_approve step → auto-approved, (9) gap-free numbering `-0001`→`-0002`, (10) DQ block via monkeypatched `correspondence.fsm.check_instances` → `SubmissionBlocked`, (11) `GovernanceEvent` rows for `correspondence` with `submit`+`approve`, (12) `Notification` for manager with `awaiting_action`. Fixtures build `mdm.OrgUnit`/`ReferenceValue`, `people.Employee` (manager + requester with `manager=` self-FK and `user=` link), and a global `WorkflowPolicy`+`WorkflowPolicyStep` (manager). |
+
+### Notes
+- Tests were **NOT run** by me (no terminal tool); Master runs `pytest correspondence -q`.
+- No migration files created.
+- `correspondence` app code never imports `people`; only `tests` import `people.models.Employee` (permitted).
+- Deviations: `_governance(corr, by, action)` gained an optional `old_status=None` keyword (callers capture `old_status` before mutating); chain `decided_at` values are ISO-8601 strings (not raw `datetime`) so they serialize cleanly into the `approver_chain` JSONField; `approve`/`reject`/`send_back` event payloads carry `{'comment': …}` for a richer timeline.
+
+## [2026-09-06] Backend Worker — Phase OF-4
+
+**Role:** Backend Worker · **Kind:** e-Office Correspondence approver routing + delegation resolution + tests
+
+### Files Changed
+| File | What |
+|------|------|
+| `backend/correspondence/routing.py` | New. `_users_with_capability(cap_key)` — ordered active user ids holding a capability (superuser `"*"` counts). `resolve_step_approvers(step, requester, org_unit)` maps `WorkflowPolicyStep.role` → ordered user ids: `manager` (via `apps.get_model('people','Employee')` — **no** top-level `import people`), `specific_user`, `any_admin` (`correspondence:admin`), `hr` (`people:manage`), `finance` (unresolved → `[]`). Applies `skip_if_self` and dedupes preserving order. `apply_delegation(user_ids, corr_type, org_unit, now)` swaps each approver id for its active delegate honoring `corr_type`/`org_unit` null-scope (`Q(…=x) | Q(…__isnull=True)`) and the `from_date`/`to_date` window; delegators with no active delegation stay as-is. |
+| `backend/correspondence/tests/test_routing.py` | New. pytest-style coverage: `manager` (resolves manager's `user_id`; empty when no manager / no employee profile), `specific_user` (id; empty when None), `any_admin` (superuser included, normal excluded), `hr` (id of `people_lead` member; empty with no `people:manage`), `finance` (empty), `skip_if_self` (drops requester; keeps other approvers), `apply_delegation` (replaces; inactive/expired unchanged; no delegation unchanged; order preserved). Fixtures build `mdm.OrgUnit` + `people.Employee` with `user=` link (OF-1 idiom). |
+
+### Notes
+- Tests were **NOT run** by me (no terminal tool); Master runs `pytest correspondence`.
+- No migration files created.
+- Group granting `people:manage` (found in `accounts/capabilities.py` `GROUP_CAPABILITIES`): **`people_lead`** (also `people_data_owners_group`).
+
+## [2026-09-06] Backend Worker — Phase OF-3
+
+**Role:** Backend Worker · **Kind:** e-Office Correspondence pure services (reference-number registry + policy resolution) + tests + seed extension
+
+### Files Changed
+| File | What |
+|------|------|
+| `backend/correspondence/registry.py` | New. `allocate_reference_no()` — atomic, gap-free reference numbering. `select_for_update()` lock on the `(corr_type, org_unit, year)` `CorrespondenceRegistry` row (create-on-miss), increments `counter`, formats `numbering_format` with `PREFIX`/`YEAR`/`SEQ`. `unique_together` is the race backstop. |
+| `backend/correspondence/policies.py` | New. `PolicyNotFound` exception; `resolve_policy()` (org-specific first, then global `org_unit__isnull=True`, prefetch `steps`, raise `PolicyNotFound`); `freeze_policy()` snapshot dict (`policy_id`, `policy_version`, ordered active steps with role/intent/specific_user_id/skip_if_self/auto_approve/can_skip/condition). |
+| `backend/correspondence/services.py` | New. Thin re-export facade (`allocate_reference_no`, `PolicyNotFound`, `resolve_policy`, `freeze_policy`) with `__all__`. |
+| `backend/correspondence/management/commands/seed_correspondence.py` | Added `WorkflowPolicy`/`WorkflowPolicyStep` imports and `_seed_default_leave_policy()` (idempotent `update_or_create` of global `leave_request` v1.0.0 policy + step order=1 manager/approve). Wired into `handle()`. |
+| `backend/correspondence/tests/__init__.py` | New (empty). |
+| `backend/correspondence/tests/test_registry.py` | New. pytest-style: sequential allocations → `…-0001`/`…-0002` + unique strings; independent counters per corr_type and per year. Fixtures build `mdm.ReferenceSet`/`ReferenceValue` and `mdm.OrgUnit`. |
+| `backend/correspondence/tests/test_policies.py` | New. pytest-style: org-specific preferred over global; global fallback for a different org unit; `PolicyNotFound` when nothing active; `freeze_policy` snapshot shape (id/version/ordered active steps, inactive step excluded). |
+
+### Notes
+- Tests were **NOT run** by me (no terminal tool); Master runs `pytest correspondence` and `makemigrations`. No migration files were created.
+
+## [2026-09-06] Backend Worker — Phase OF-2
+
+**Role:** Backend Worker · **Kind:** Django e-Office Correspondence engine models + admin
+
+### Files Changed
+| File | What |
+|------|------|
+| `backend/correspondence/models.py` | Replaced placeholder with full engine: module constants (`STATUS_CHOICES`, `ACTIONABLE`, `TERMINAL`, `ROLE_CHOICES`, `INTENT_CHOICES`) and 8 models — `Correspondence`, `WorkflowPolicy`, `WorkflowPolicyStep`, `CorrespondenceEvent`, `CorrespondenceAttachment`, `CorrespondenceRegistry`, `Delegation`, `Notification`. Governed `corr_type` is an `mdm.ReferenceValue` FK (PROTECT); `org_unit` is `mdm.OrgUnit`; all `User` FKs use the `'accounts.User'` string-FK idiom. No `GenericForeignKey`/`ContentType`. Meta indexes/unique_together/ordering per spec. |
+| `backend/correspondence/admin.py` | Registered all 8 models with minimal `admin.ModelAdmin` (`list_display` 2–5 fields, `list_filter` for `status`/`corr_type`/`type`/`role`/`intent`/`is_active`/`scope` where present). |
+
+### Notes
+- Migration and grep checks were **NOT run** in this phase (Master Architect runs `makemigrations` and verification).
+
 ## [2026-09-03] Frontend Worker — Phase NIR-7B
 
 **Role:** Frontend Worker · **Kind:** React/MUI refactor + i18n + dead-code removal (People compensation pay tab)
@@ -4625,3 +4763,297 @@ cd backend && /home/ahmed/aast/carbon/.venv/bin/python -m pytest people -q
    serializer omits them from `validated_data` when absent (model `default` → `required=False`).
 
 **Verdict: IMPLEMENTED — PENDING RUNTIME GATE** (static checks clean; Master must run the 3 gate commands above to confirm).
+
+---
+
+## [2026-09-06] Backend Worker — Phase OF-0
+
+**Role:** backend-worker (DeepSeek V4-Pro) · **Kind:** backend (e-Office Correspondence thin vertical slice — skeleton + governed reference sets)
+
+### Summary
+Created the `correspondence` Django app skeleton (empty package, `AppConfig`, placeholder
+`models.py`/`admin.py`, empty migrations + management package tree) and registered it in
+`INSTALLED_APPS`. Added an idempotent `seed_correspondence` management command that seeds three
+governed `mdm.ReferenceSet`s (`correspondence_type` 6 values, `leave_type` 6 values, `memo_type`
+3 values) with `ReferenceValue` rows via `update_or_create` (safe to re-run; prints
+"created"/"unchanged" per set and per value).
+**Gate caveat:** no terminal-execution tool is available in this session, so the two seed runs and
+the shell count check **could NOT be run here** — the exact commands + expected output are listed
+below for the Master. Static validation (language server) reports **zero errors**.
+
+### Confirmed `mdm/models.py` schema (read verbatim, NOT guessed)
+`ReferenceSet` — `name`, `slug` (auto from `name` on `save()`), `description`, `domain` (FK,
+nullable), `steward` (FK, nullable), `is_active`, `version`, `lifecycle_state` (draft/active/
+deprecated/archived), `created_at`, `updated_at`. **No `metadata` field on `ReferenceSet`.**
+
+`ReferenceValue` — `reference_set` (FK, `related_name='values'`), `code`, **`label`** (single
+CharField — there is **no** `label_en`/`label_ar`), `description`, `is_active`, **`sort_order`**
+(PositiveIntegerField; `Meta.ordering = ['sort_order', 'code']`), `valid_from`, `valid_to`,
+**`metadata`** (JSONField `default=dict`), `created_at`, `updated_at`. Unique constraint:
+`(reference_set, code)` — `uniq_referencevalue_code`.
+
+### Field-name adaptation (task contract → actual schema)
+| Contract field | Actual field used |
+|----------------|-------------------|
+| `code` | `code` (unchanged) |
+| `label_en` | `label` (English human label) |
+| `label_ar` | `metadata['label_ar']` (no dedicated AR field) |
+| `is_active=True` | `is_active=True` (unchanged) |
+| `{"sort": n}` ordering hint | `sort_order` (dedicated ordering field) **and** `metadata['sort']` (requested hint preserved) |
+
+`ReferenceSet` has no `metadata`, so the `{"sort": n}` hint is carried on each `ReferenceValue`
+(as the task explicitly permits "or each value, whichever the model supports").
+
+### Files Created
+| File | What |
+|------|------|
+| `backend/correspondence/__init__.py` | empty |
+| `backend/correspondence/apps.py` | `CorrespondenceConfig(AppConfig)` — `name='correspondence'`, `default_auto_field='django.db.models.BigAutoField'` |
+| `backend/correspondence/models.py` | placeholder docstring `# Engine models land in Phase OF-2.` |
+| `backend/correspondence/admin.py` | placeholder docstring `# Admin registrations land in Phase OF-2.` |
+| `backend/correspondence/migrations/__init__.py` | empty |
+| `backend/correspondence/management/__init__.py` | empty |
+| `backend/correspondence/management/commands/__init__.py` | empty |
+| `backend/correspondence/management/commands/seed_correspondence.py` | idempotent seed command (see below) |
+
+### Files Changed
+| File | What |
+|------|------|
+| `backend/config/settings.py` | Added `'correspondence',` to `INSTALLED_APPS` (after `'people',`) |
+
+### Seeded reference data (value lists, in `sort_order`)
+- `correspondence_type` (6): `leave_request`, `loan_request`, `profile_change`, `internal_memo`, `circular`, `decision`
+- `leave_type` (6): `annual`, `sick`, `emergency`, `unpaid`, `maternity`, `paternity`
+- `memo_type` (3): `internal_note`, `directive`, `announcement`
+
+Each value: `code` = slug, `label` = English (e.g. "Leave Request"), `metadata = {'label_ar': <Arabic>, 'sort': n}`, `description = '<EN> (<AR>)'`, `is_active=True`, `sort_order=n`. Each set is seeded `is_active=True` + `lifecycle_state='active'` (governed/active).
+
+### Verification Output (static — language server)
+```
+get_errors on backend/correspondence/** + backend/config/settings.py → "No errors found"
+```
+
+Gate commands for Master Architect — **NOT RUN in this session** (no terminal-execution tool):
+```bash
+cd /home/ahmed/aast/carbon/backend
+DJANGO_BRAND=nibras /home/ahmed/aast/carbon/.venv/bin/python manage.py seed_correspondence
+DJANGO_BRAND=nibras /home/ahmed/aast/carbon/.venv/bin/python manage.py seed_correspondence
+DJANGO_BRAND=nibras /home/ahmed/aast/carbon/.venv/bin/python manage.py shell -c "
+from mdm.models import ReferenceSet
+s = ReferenceSet.objects.get(name='correspondence_type')
+print('correspondence_type count', s.values.count())
+assert s.values.count() >= 6
+print('leave_type count', ReferenceSet.objects.get(name='leave_type').values.count())
+print('memo_type count', ReferenceSet.objects.get(name='memo_type').values.count())
+"
+```
+
+Expected behavior: first run prints `created` for each set + value; second run is a **no-op**
+printing `unchanged` for every set + value; the shell check prints
+`correspondence_type count 6`, `leave_type count 6`, `memo_type count 3` with the `>= 6` assert passing.
+
+**Verdict: IMPLEMENTED — PENDING RUNTIME GATE** (static checks clean; Master must run the 4 commands above to capture live seed output + counts).
+
+---
+
+## [2026-09-06] Backend Worker — Phase OF-1
+
+**Role:** backend-worker (DeepSeek V4-Pro) · **Kind:** backend (e-Office Correspondence thin vertical slice — Employee↔User link + `IsActiveEmployee` permission)
+
+### Summary
+Added a nullable `OneToOne` link from `people.Employee` to `accounts.User` (self-service
+account linkage) and a DRF `IsActiveEmployee` permission class, plus pytest coverage.
+**Gate caveat:** no terminal-execution tool is available in this session, so **no migration was
+written and no tests/migrations were run here** — the Master will run `makemigrations people`
+and `pytest people/tests/test_employee_user_link.py`.
+
+### Files Changed
+| File | What |
+|------|------|
+| `backend/people/models.py` | Added `Employee.user = models.OneToOneField('accounts.User', null=True, blank=True, on_delete=models.SET_NULL, related_name='employee_profile', help_text='Linked platform account (self-service). Null until a user is linked.')`, placed immediately after `full_name`. Uses the string reference `'accounts.User'` (consistent with the file's existing string-FK idiom `'mdm.OrgUnit'` / `'self'` / `'Position'` — no new import added). |
+| `backend/people/permissions.py` | Added `IsActiveEmployee(BasePermission)` — `message = "Active employee profile required."`; `has_permission` returns `False` for anonymous/non-authenticated, then resolves `user.employee_profile` in a `try/except (Employee.DoesNotExist, AttributeError)` (local `from people.models import Employee` inside the method to avoid module-level circular imports) and returns `profile is not None and getattr(profile, 'is_active', False)`. |
+| `backend/people/tests/test_employee_user_link.py` | New test module (see below). |
+
+### Tests added (`backend/people/tests/test_employee_user_link.py`)
+1. `test_employee_user_one_to_one_roundtrip` — create `User` (via `create_user` fixture), `Employee` linked `user=user`, assert `employee.user == user` and `user.employee_profile == employee`.
+2. `test_is_active_employee_true_for_active_profile` — `is_active=True` profile → `has_permission` is `True`.
+3. `test_is_active_employee_false_without_profile` — user with no `Employee` → `False`.
+4. `test_is_active_employee_false_for_inactive_profile` — `is_active=False` → `False`.
+5. `test_is_active_employee_false_for_unauthenticated` — `AnonymousUser()` → `False`.
+6. `test_unlink_employee_raises_does_not_exist` — `employee.user = None; employee.save()` then `pytest.raises(Employee.DoesNotExist)` on `user.employee_profile`.
+
+Test style matches existing `people/tests/` (`mdm.models.OrgUnit` fixture `org` via
+`OrgUnit.objects.create(name=..., slug=...)`; `Employee` built with required
+`org_unit`, `employee_no`, `full_name`, `basic_salary`; `User` via the repo-level
+`create_user` fixture from `backend/conftest.py`).
+
+### NOT run here (Master will run)
+- `makemigrations people` (migration file was intentionally NOT hand-written).
+- `pytest people/tests/test_employee_user_link.py` (and full `pytest people`).
+
+**Verdict: IMPLEMENTED — PENDING RUNTIME GATE** (static checks clean via language server: no errors across the three touched files).
+
+---
+
+## 2026-09-06 Frontend Worker — Phase OF-9
+
+**Verdict: IMPLEMENTED — GATES GREEN (Master-verified).**
+
+### Files created
+- `carbon-frontend/src/apps/my/manifest.js` (id `my`, nav: Dashboard/My Leave/My Requests)
+- `carbon-frontend/src/apps/my/index.js`
+- `carbon-frontend/src/apps/my/MyDashboard.jsx` (ProfileHeader + ActionRequiredStrip + LeaveBalanceCard + QuickActions; 3 parallel fetches, per-card loading/error/empty)
+- `carbon-frontend/src/api/my.js` (`fetchMyProfile`, `fetchLeaveBalance`, `fetchInboxCount`)
+- `carbon-frontend/src/i18n/locales/{en,ar}/my.json` (24 flat keys, parity)
+
+### Files edited
+- `registry.js`, `capabilities.js` (CORRESPONDENCE_*, MY_ACCESS, TEAM_ACCESS + inheritance + ROUTE_CAPABILITIES), `authz.js` (APP_VIEW_CAP `my: MY_ACCESS`), `Shell.jsx` (STUDIO_PATHS + studioFromPath), `ShellSidebar.jsx` (case 'my'), `App.jsx` (routes /my, /my/leave, /my/requests), `i18n/index.js`, `shellLabels.js`, `shell.json` (en+ar).
+
+### Gates (run by Master)
+- `node scripts/check-i18n-keys.js` → OK — 2707 keys in parity.
+- `npm run lint` → 0 errors (37 pre-existing warnings, none in touched files).
+- `npm run build` → clean (✓ built in 25.56s; only pre-existing chunk-size warning).
+
+---
+
+## 2026-09-06 Frontend Worker — Phase OF-10
+
+**Verdict: IMPLEMENTED — GATES GREEN (Master-verified).**
+
+### Files created
+- `carbon-frontend/src/apps/my/MyLeave.jsx` (parallel fetch balance+profile+history; owns drawer + post-submit refetch + success toast)
+- `carbon-frontend/src/apps/my/components/LeaveBalanceCards.jsx`
+- `carbon-frontend/src/apps/my/components/LeaveHistoryTable.jsx` (status derived from `reference_no` presence: submitted vs draft)
+- `carbon-frontend/src/apps/my/components/RequestLeaveDrawer.jsx` (RTL-aware; working-days Mon–Fri min 1; single in-flight guard; mapped 400 errors)
+
+### Files edited
+- `carbon-frontend/src/api/my.js` — added `fetchMyLeave`, `submitLeaveRequest` (POST `people/me/leave/`).
+- `carbon-frontend/src/App.jsx` — `/my/leave` now renders `MyLeave`.
+- `carbon-frontend/src/i18n/locales/{en,ar}/my.json` — +47 flat keys (incl. nested `leaveType.{annual,sick,emergency,maternity,unpaid,paternity}`).
+
+### Gates (run by Master)
+- `node scripts/check-i18n-keys.js` → OK — 2754 keys in parity.
+- `npm run lint` → 0 errors; 0 warnings in `apps/my/**` or `api/my.js` (37 pre-existing warnings elsewhere).
+- `npm run build` → clean (✓ built in 30.28s).
+
+---
+
+## 2026-09-06 Frontend Worker — Phase OF-11
+
+**Verdict: IMPLEMENTED — GATES GREEN (Master-verified; 1 defect fixed by Master).**
+
+### Files created
+- `carbon-frontend/src/apps/my/MyRequests.jsx` (filter chips → refetch; clickable rows → detail)
+- `carbon-frontend/src/apps/my/components/RequestDetail.jsx` (SummaryCard + ApproverChainStepper + RequestTimeline; 404/error/loading matrix)
+- `carbon-frontend/src/apps/my/components/RequestTable.jsx` (a11y clickable rows; status/type chips text-labelled)
+- `carbon-frontend/src/apps/my/components/SummaryCard.jsx` (signature seam "pending signature" only)
+- `carbon-frontend/src/apps/my/components/ApproverChainStepper.jsx` (active/complete/pending/skipped from `approver_chain` + `current_step`)
+- `carbon-frontend/src/apps/my/components/RequestTimeline.jsx` (`<ol>` of `events` in `seq` order)
+- `carbon-frontend/src/apps/my/components/myRequestsCommon.jsx` + `myRequestsLabels.js` (shared helpers + pure code maps)
+
+### Files edited
+- `carbon-frontend/src/api/my.js` — `fetchMyCorrespondence` (normalizes paginated envelope → `{items,count}`), `fetchCorrespondenceDetail`.
+- `carbon-frontend/src/App.jsx` — `/my/requests` → `MyRequests`; new `/my/requests/:id` → `RequestDetail`.
+- `carbon-frontend/src/i18n/locales/{en,ar}/my.json` — +66 flat keys (status.*, type.leaveRequest, event.*, role.*, intent.*, plus 42 flat).
+
+### Defect fixed by Master
+- `RequestDetail.jsx` imported `../../components/Page/PageHeader` etc. (wrong depth for a `components/`-dir file) → build failed on unresolved module. Master corrected to `../../../` and rebuild passed. **`get_errors` did NOT catch this — only the build does.**
+
+### Gates (run by Master)
+- `node scripts/check-i18n-keys.js` → OK — 2820 keys in parity.
+- `npm run lint` → 0 errors; 0 warnings in `apps/my/**`/`api/my.js`.
+- `npm run build` → clean (✓ built in 31.25s; after import fix).
+
+---
+
+## 2026-09-06 QA Validator — Phase OF-12
+
+**Verdict: PASSED — 4-LAYER GATES GREEN (all runtime gates run by Master).**
+
+### Layer 1 — Static / contract: PASS (7/7)
+- Zero `GenericForeignKey`/`ContentType` in `correspondence/`.
+- `corr_type` is `mdm.ReferenceValue` FK (not a hardcoded enum); `status` plain `CharField(choices=STATUS_CHOICES)` (acceptable); `people` `leave_type` plain `CharField` (no `choices=`, no governed enum).
+- Zero raw `fetch(` in `apps/my/**` + `api/my.js` (only `apiFetch`).
+- Zero naive `datetime.now()`; all `timezone.now()`.
+- Zero `print(` / `console.log`.
+- Zero inline hex in `apps/my/**` `sx`/`style`.
+- Production layering clean: `correspondence` never imports `people` (`routing.py` uses `apps.get_model`). Test-only cross-app imports noted (P3, cosmetic).
+
+### Layer 2 — Unit coverage: CONFIRMED (all 4 suites re-run green)
+- `correspondence` → 45 passed (submit/approve/reject/send_back/resubmit/cancel, inbox, permissions, DQ gate, notifications).
+- `people` → 150 passed (146 prior + 4 new journey tests).
+- `accounts/tests/test_correspondence_caps.py` → 5 passed (cap derivation + admin implies act/submit/my).
+
+### Layer 3 — API integration: PASS (authored + run green)
+- New file `backend/people/tests/test_leave_journey_e2e.py` (4 tests): submit→governed correspondence, manager inbox→approve→approved, balance pending rises then falls (0→5→0), reject unblocks overlapping request.
+- Run: `pytest people/tests/test_leave_journey_e2e.py -q` → **4 passed in 3.02s**.
+
+### Layer 4 — Frontend + i18n: PASS
+- `apps/my/**` uses `apiFetch` only (no raw fetch); `en/my.json` ≡ `ar/my.json` key structure.
+- `node scripts/check-i18n-keys.js` → OK — 2820 keys in parity.
+- `npm run build` → clean (✓ built in 27.19s; pre-existing chunk-size warning only).
+
+### Thin-slice product note (expected, not a bug)
+- `LeaveRecord.status` stays `'draft'`; the governed `Correspondence` carries the real status. Balance `used` stays 0 post-approval (only `pending` rises/falls). Flag for full OF build-out (transition `LeaveRecord` on approve/reject).
+
+### Gates (run by Master)
+- `pytest people/tests/test_leave_journey_e2e.py` → 4 passed.
+- `pytest correspondence` → 45 passed.
+- `pytest people` → 150 passed.
+- `pytest accounts/tests/test_correspondence_caps.py` → 5 passed.
+- `node scripts/check-i18n-keys.js` → 2820 parity.
+- `npm run build` → clean (27.19s).
+
+---
+
+## VERTICAL SLICE COMPLETE — e-Office Correspondence & My self-service (thin slice, P0–P4 + P6 + P7, Leave only)
+
+All phases OF-0 → OF-12 verified green. The spine is proven end-to-end: governed `Correspondence` (mdm corr_type + WorkflowPolicy + FSM + events) ← one-way ← `people` self-service (submit/balance/inbox/approve/reject), surfaced in the frontend `my` app (Dashboard / My Leave / My Requests / Request Detail) with EN/AR parity.
+
+---
+
+## 2026-09-06 Master Architect — Phase OF-13a + OF-13b (P8 team app — MSS Approvals Inbox)
+
+**Verdict: DONE — closes the submit → inbox → approve/reject loop with an approver-side frontend.**
+
+### OF-13a — Backend (permission widening + readable payload)
+- `backend/correspondence/permissions.py` — `CanViewCorrespondence` widened from requester-or-admin to **requester, current approver, OR admin** (`obj.requester_id == uid or uid in (obj.current_approver_ids or [])`). `CanActOnCorrespondence` (admin or current approver) and `CorrespondenceAdminOnly` unchanged. This was the blocker: an approver could act but could not `GET` the detail to see it.
+- `backend/correspondence/serializers.py` — `CorrespondenceSerializer` gained three additive read-only fields so the inbox/team app renders names, not raw int PKs: `requester_name` (SerializerMethodField → `full_name || username`), `corr_type_code` (CharField source=`corr_type.code`), `corr_type_label` (CharField source=`corr_type.label`).
+- `backend/correspondence/tests/test_api.py` — new `test_current_approver_can_retrieve_but_not_cancel_or_resubmit`: manager GET detail 200 (widened view), manager cancel 403 (requester-only), **manager send-back 200** (approver action — fixed by Master; the worker had the requester call send-back, which 403s), manager resubmit 403, requester resubmit 200.
+
+### OF-13b — Frontend `team` app (MSS Approvals Inbox)
+- `carbon-frontend/src/api/team.js` — `fetchInbox` (normalizes array vs `{count,results}` → `{items,count}`), `fetchCorrespondenceDetail`, `approveCorrespondence`, `rejectCorrespondence`, `sendBackCorrespondence` — all via `apiFetch`.
+- `carbon-frontend/src/apps/team/manifest.js` — app id `team`, routePrefix `/team`, nav "Approvals Inbox" (mirrors `my/manifest.js`).
+- `carbon-frontend/src/apps/team/TeamInbox.jsx` — compact table (reference_no / title / requester / type / status / date) consuming `requester_name` + `corr_type_code`/`corr_type_label`.
+- `carbon-frontend/src/apps/team/TeamRequestDetail.jsx` — `/team/:id`; reuses `SummaryCard`/`ApproverChainStepper`/`RequestTimeline`/`SectionTitle` from `apps/my/components/`; act bar (comment TextField + Approve / Reject / Send back — comment required for reject/send-back) → notify + `navigate('/team')`.
+- `carbon-frontend/src/i18n/locales/{en,ar}/team.json` — 27 flat keys + nested status/event/role/intent/type/corrType blocks; full EN/AR parity.
+- Wiring (6 files, 22 matches): `registry.js` imports+registers `teamManifest`; `authz.js` `APP_VIEW_CAP.team = TEAM_ACCESS`; `capabilities.js` `ROUTE_CAPABILITIES['/team']`/`'/team/*' = TEAM_ACCESS`; `Shell.jsx` `STUDIO_PATHS.team = '/team'` + `studioFromPath` `startsWith('/team')`; `App.jsx` lazy routes `/team` → `TeamInbox`, `/team/:id` → `TeamRequestDetail`; `i18n/index.js` registers `enTeam`/`arTeam`. `ShellSidebar.jsx` needed NO change (default case resolves any manifest app dynamically).
+
+### Gates (run by Master)
+- `pytest correspondence` → **46 passed** (13.73s).
+- `pytest people` → **150 passed** (16.85s, post-serializer re-verify).
+- `pytest accounts/tests/test_correspondence_caps.py` → **5 passed** (1.60s).
+- `node scripts/check-i18n-keys.js` → OK — **2877 keys in parity** (en === ar).
+- `npm run lint` → **0 errors** (37 pre-existing warnings).
+- `npm run build` → clean (**✓ built in 35.90s**; pre-existing chunk-size warning only).
+
+### Remaining fan-out (NOT in this slice)
+- P5 (leave_type → governed FK), P9 (notification UI/i18n), P10 (PDF export seam), plus finance/procurement domains.
+
+### OF-14 — Backend: `leave_type` → governed FK (`ReferenceValue`) — ADR-0027
+**Verdict: DONE — closes the last denormalized governed lookup in the e-Office self-service; storage is now a protected FK, API keeps the code-string contract (backward compatible).**
+
+- `backend/people/models.py` — `LeaveEntitlement.leave_type` + `LeaveRecord.leave_type` → `ForeignKey('mdm.ReferenceValue', on_delete=PROTECT, related_name='+')`; `__str__` reads `.code` via `leave_type_id` guard.
+- `backend/people/migrations/0018_leave_type_referencevalue.py` **(new)** — rename → nullable-FK → `RunPython` seed set (`annual`/`sick`/`emergency`/`maternity`/`unpaid`) + map legacy strings (unknown→`annual`, never drop) → drop `*_char` → non-null FK → restore `unique_together`. Uses `apps.get_model` only.
+- `backend/people/serializers.py` — both serializers: `leave_type` = `SlugRelatedField(slug_field='code', queryset=ReferenceValue.objects.filter(reference_set__name='leave_type'))` (read/write as code string) + read-only `leave_type_id`/`leave_type_label`. (Master fixed redundant `source='leave_type_id'` → AssertionError.)
+- `backend/people/self_serializers.py` — self `LeaveRecordSerializer`: `leave_type`/`leave_type_label` as SerializerMethodField.
+- `backend/people/self_views.py` — `_compute_balance` filters now `leave_type__code=code` (3 sites); `post` resolves code→FK, 400 `{"detail":"Invalid leave_type"}` on miss.
+- `backend/people/management/commands/seed_gofsco.py` — `leave_type_map` resolves code→FK before `update_or_create` (ENT + LR).
+- Tests — `test_models.py` (fixture + `test_leave_record_serializer_emits_code_id_label`), `test_api.py`, `test_self_api.py` (`test_submit_unknown_leave_type_400`), `test_leave_journey_e2e.py` updated to FK.
+
+### Gates (run by Master)
+- `pytest people/tests/` → **152 passed** (full app suite, fresh test DB via `--create-db`).
+- `manage.py makemigrations --check --dry-run` → **No changes detected**.
+- `manage.py check` → **System check identified no issues (0 silenced)**.
+
+Note: stale `--reuse-db` test DB from the prior schema caused `UndefinedColumn: leave_type_id` on first run; resolved by re-running with `--create-db` (pytest.ini pins `--reuse-db --nomigrations`).

@@ -19,7 +19,8 @@
     "helpSupport": "المساعدة والدعم",
     "apps": "التطبيقات",
     "carbonFootprint": "البصمة الكربونية",
-    "carbon": "كربون"
+    "carbon": "كربون",
+    "my": "لوحتي"
   },
   "nav": {
     "home": "الرئيسية",
@@ -147,7 +148,9 @@
     "people": "الموظفون",
     "positions": "الوظائف",
     "referenceData": "البيانات المرجعية",
-    "rotation": "المناوبات"
+    "rotation": "المناوبات",
+    "myLeave": "إجازاتي",
+    "myRequests": "طلباتي"
   },
   "group": {
     "dataProducts": "منتجات البيانات",

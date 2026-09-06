@@ -11,6 +11,8 @@ from django.utils import timezone
 
 from rest_framework import serializers
 
+from mdm.models import ReferenceValue
+
 from .models import (
     AttendancePermission,
     AttendanceRecord,
@@ -196,23 +198,45 @@ class PositionSerializer(serializers.ModelSerializer):
 
 
 class LeaveEntitlementSerializer(serializers.ModelSerializer):
+    leave_type = serializers.SlugRelatedField(
+        slug_field='code',
+        queryset=ReferenceValue.objects.filter(reference_set__name='leave_type'),
+    )
+    leave_type_id = serializers.IntegerField(read_only=True)
+    leave_type_label = serializers.SerializerMethodField()
+
     class Meta:
         model = LeaveEntitlement
         fields = [
-            'id', 'employee', 'year', 'leave_type', 'entitled_days',
+            'id', 'employee', 'year', 'leave_type', 'leave_type_id',
+            'leave_type_label', 'entitled_days',
             'used_days', 'carried_forward', 'notes',
         ]
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'leave_type_id']
+
+    def get_leave_type_label(self, obj):
+        return obj.leave_type.label if obj.leave_type_id else None
 
 
 class LeaveRecordSerializer(serializers.ModelSerializer):
+    leave_type = serializers.SlugRelatedField(
+        slug_field='code',
+        queryset=ReferenceValue.objects.filter(reference_set__name='leave_type'),
+    )
+    leave_type_id = serializers.IntegerField(read_only=True)
+    leave_type_label = serializers.SerializerMethodField()
+
     class Meta:
         model = LeaveRecord
         fields = [
-            'id', 'employee', 'leave_type', 'start_date', 'end_date',
+            'id', 'employee', 'leave_type', 'leave_type_id', 'leave_type_label',
+            'start_date', 'end_date',
             'days', 'status', 'calendar_split', 'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'leave_type_id', 'created_at', 'updated_at']
+
+    def get_leave_type_label(self, obj):
+        return obj.leave_type.label if obj.leave_type_id else None
 
 
 class BenefitTypeSerializer(serializers.ModelSerializer):

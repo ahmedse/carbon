@@ -129,6 +129,12 @@ const PositionsPage = React.lazy(() => import("./apps/people/PositionsPage"));
 const LoansPage = React.lazy(() => import("./apps/people/LoansPage"));
 const CertificationsPage = React.lazy(() => import("./apps/people/CertificationsPage"));
 const RotationSchedulesPage = React.lazy(() => import("./apps/people/RotationSchedulesPage"));
+const MyDashboard = React.lazy(() => import("./apps/my/MyDashboard"));
+const MyLeave = React.lazy(() => import("./apps/my/MyLeave"));
+const MyRequests = React.lazy(() => import("./apps/my/MyRequests"));
+const RequestDetail = React.lazy(() => import("./apps/my/components/RequestDetail"));
+const TeamInbox = React.lazy(() => import("./apps/team/TeamInbox"));
+const TeamRequestDetail = React.lazy(() => import("./apps/team/TeamRequestDetail"));
 
 import PlatformHome from "./pages/PlatformHome";
 
@@ -303,6 +309,14 @@ export default function App() {
                 <Route path="/people/loans" element={<LoansPage />} />
                 <Route path="/people/certifications" element={<CertificationsPage />} />
                 <Route path="/people/rotation" element={<RotationSchedulesPage />} />
+                {/* My app — employee self-service. Bare namespace root resolves to MyDashboard. RULE_22. */}
+                <Route path="/my" element={<MyDashboard />} />
+                <Route path="/my/leave" element={<MyLeave />} />
+                <Route path="/my/requests" element={<MyRequests />} />
+                <Route path="/my/requests/:id" element={<RequestDetail />} />
+                {/* Team app — manager approvals inbox. Bare namespace root resolves to TeamInbox. RULE_22. */}
+                <Route path="/team" element={<TeamInbox />} />
+                <Route path="/team/:id" element={<TeamRequestDetail />} />
                 {/* Schema Manager decommissioned — schema authoring lives in Data Products (SchemaDetailPage). */}
                 {/* Namespace root redirect — bare /schema-admin root. RULE_22. */}
                 <Route path="/schema-admin" element={<Navigate to="/catalog/products" replace />} />

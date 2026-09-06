@@ -42,3 +42,20 @@ class PeopleAccess(BasePermission):
         if request.method in ('GET', 'HEAD', 'OPTIONS'):
             return _can(request.user, 'people:view')
         return _can(request.user, 'people:manage')
+
+
+class IsActiveEmployee(BasePermission):
+    """Allows access only to an authenticated user with an active employee profile."""
+
+    message = "Active employee profile required."
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        from people.models import Employee
+        try:
+            profile = user.employee_profile
+        except (Employee.DoesNotExist, AttributeError):
+            return False
+        return profile is not None and getattr(profile, 'is_active', False)

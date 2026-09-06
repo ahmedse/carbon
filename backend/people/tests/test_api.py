@@ -15,7 +15,7 @@ from datetime import date
 import pytest
 
 from dq.models import DQRule, ModelRuleAssignment
-from mdm.models import OrgUnit
+from mdm.models import OrgUnit, ReferenceSet, ReferenceValue
 
 from people.models import (
     BenefitType,
@@ -63,6 +63,14 @@ def employee_b(org_b):
         org_unit=org_b, employee_no='E-B', full_name='Bob',
         nationality='Kuwaiti', basic_salary='2000.000',
         join_date=date(2026, 1, 1),
+    )
+
+
+@pytest.fixture
+def leave_type_annual(db):
+    rs = ReferenceSet.objects.create(name='leave_type', slug='leave-type')
+    return ReferenceValue.objects.create(
+        reference_set=rs, code='annual', label='Annual Leave',
     )
 
 
@@ -438,11 +446,11 @@ class TestDeleteEndpoints:
         assert resp.status_code == 400
         assert BenefitType.objects.filter(pk=benefit_type.pk).exists()
 
-    def test_leave_record_hard_delete(self, auth, create_user, employee_a):
+    def test_leave_record_hard_delete(self, auth, create_user, employee_a, leave_type_annual):
         client = auth(create_user('people_del_lr', is_superuser=True))
         record = LeaveRecord.objects.create(
             employee=employee_a,
-            leave_type='annual',
+            leave_type=leave_type_annual,
             start_date=date(2026, 8, 1),
             end_date=date(2026, 8, 5),
             days='5.00',

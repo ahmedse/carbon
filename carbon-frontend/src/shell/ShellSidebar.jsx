@@ -103,6 +103,13 @@ const PEOPLE_ITEM_ICONS = {
   'App Config':  SettingsIcon,
 };
 
+// UI-driven icon mapping for My (employee self-service) sidebar items
+const MY_ITEM_ICONS = {
+  'Dashboard':   DashboardIcon,
+  'My Leave':    AssignmentIcon,
+  'My Requests': ArticleIcon,
+};
+
 // Define sidebar content per studio
 function getSidebarItems(studioId, helpApps = []) {
   switch (studioId) {
@@ -241,6 +248,18 @@ function getSidebarItems(studioId, helpApps = []) {
         return peopleApp.navigation.items.map(item => ({
           ...item,
           icon: PEOPLE_ITEM_ICONS[item.label] || PeopleIcon,
+        }));
+      }
+      return [];
+    }
+
+    case 'my': {
+      // My app (employee self-service) — read from manifest, resolve icons by label
+      const myApp = APP_REGISTRY.find(m => m.id === 'my');
+      if (myApp && myApp.navigation && myApp.navigation.items) {
+        return myApp.navigation.items.map(item => ({
+          ...item,
+          icon: MY_ITEM_ICONS[item.label] || DashboardIcon,
         }));
       }
       return [];

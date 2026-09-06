@@ -1,0 +1,71 @@
+{
+  "inboxTitle": "صندوق الاعتمادات",
+  "inboxSubtitle": "راجع الطلبات التي تنتظر قرارك واتخذ الإجراء المناسب",
+  "tableReferenceNo": "الرقم المرجعي",
+  "tableTitle": "العنوان",
+  "tableRequester": "مقدم الطلب",
+  "tableType": "النوع",
+  "tableStatus": "الحالة",
+  "tableDate": "التاريخ",
+  "inboxEmpty": "لا توجد طلبات بانتظار اعتمادك",
+  "loading": "جارٍ التحميل…",
+  "error": "تعذّر تحميل البيانات",
+  "retry": "إعادة المحاولة",
+  "openItem": "فتح الطلب {{ref}}",
+  "detailTitle": "تفاصيل الاعتماد",
+  "detailSubtitle": "راجع الطلب واتخذ إجراءً",
+  "detailNotFound": "لم يتم العثور على الطلب",
+  "backToInbox": "العودة إلى صندوق الاعتمادات",
+  "actionsTitle": "الإجراء",
+  "commentLabel": "التعليق",
+  "commentPlaceholder": "أضف تعليقًا (اختياري للاعتماد)",
+  "commentRequired": "التعليق مطلوب لهذا الإجراء",
+  "approve": "اعتماد",
+  "reject": "رفض",
+  "sendBack": "إعادة",
+  "successApproved": "تم اعتماد الطلب",
+  "successRejected": "تم رفض الطلب",
+  "successSentBack": "تم إعادة الطلب",
+  "status": {
+    "draft": "مسودة",
+    "submitted": "مُقدَّم",
+    "inReview": "قيد المراجعة",
+    "approved": "معتمد",
+    "rejected": "مرفوض",
+    "cancelled": "ملغى",
+    "sentBack": "مُعاد",
+    "expired": "منتهي",
+    "archived": "مؤرشف"
+  },
+  "event": {
+    "submitted": "إرسال",
+    "approved": "اعتماد",
+    "rejected": "رفض",
+    "sentBack": "إعادة",
+    "cancelled": "إلغاء",
+    "resubmitted": "إعادة إرسال"
+  },
+  "role": {
+    "manager": "المدير",
+    "hr": "الموارد البشرية",
+    "finance": "المالية",
+    "specificUser": "مستخدم محدد",
+    "anyAdmin": "أي مدير"
+  },
+  "intent": {
+    "approve": "اعتماد",
+    "acknowledge": "إشعار",
+    "review": "مراجعة"
+  },
+  "type": {
+    "leaveRequest": "طلب إجازة"
+  },
+  "corrType": {
+    "leaveRequest": "طلب إجازة",
+    "loanRequest": "طلب سلفة",
+    "profileChange": "تعديل بيانات",
+    "internalMemo": "مذكرة داخلية",
+    "circular": "تعميم",
+    "decision": "قرار"
+  }
+}

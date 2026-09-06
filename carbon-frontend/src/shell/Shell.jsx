@@ -39,6 +39,8 @@ const STUDIO_PATHS = {
   help:    '/help',
   apps:    '/apps/healthy',
   people:  '/people',
+  my:      '/my',
+  team:    '/team',
 };
 
 // Infer active studio from current URL
@@ -54,6 +56,10 @@ function studioFromPath(pathname) {
   if (pathname.startsWith('/scopes')) return 'carbon';
   // People app (Nibras HR & payroll)
   if (pathname.startsWith('/people')) return 'people';
+  // My app (employee self-service)
+  if (pathname.startsWith('/my')) return 'my';
+  // Team app (manager approvals inbox)
+  if (pathname.startsWith('/team')) return 'team';
   // Apps namespace (Healthy Foods Factory + future domain apps)
   if (pathname.startsWith('/apps')) return 'apps';
   // AI admin (Pulse console) — checked before generic /admin

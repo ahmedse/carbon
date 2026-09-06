@@ -1,0 +1,450 @@
+// src/apps/my/MyDashboard.jsx
+// My (employee self-service) landing surface.
+// Loads the profile, leave balance, and inbox count in PARALLEL with
+// independent per-card loading / error / empty states. Semantic <main>.
+// All strings via useTranslation('my'); all colors via theme tokens.
+
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  Alert,
+  Avatar,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  Divider,
+  Skeleton,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Typography,
+} from '@mui/material';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import ArticleIcon from '@mui/icons-material/Article';
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
+import PageContainer from '../../components/layout/PageContainer';
+import PageHeader from '../../components/Page/PageHeader';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+import { useAuth } from '../../auth/AuthContext';
+import { fetchMyProfile, fetchLeaveBalance, fetchInboxCount } from '../../api/my';
+import { FONT } from '../../theme/themeTokens';
+
+// ── Small presentational helpers ──────────────────────────────────────
+
+function SectionTitle({ icon: Icon, title }) {
+  return (
+    <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 1 }}>
+      {Icon && <Icon sx={{ fontSize: '1rem', color: 'primary.main' }} />}
+      <Typography
+        sx={{
+          ...FONT.cardTitle,
+          textTransform: 'uppercase',
+          letterSpacing: '0.04em',
+          color: 'text.secondary',
+        }}
+      >
+        {title}
+      </Typography>
+    </Stack>
+  );
+}
+
+function InlineError({ message, onRetry }) {
+  const { t } = useTranslation('my');
+  return (
+    <Alert
+      severity="error"
+      action={
+        onRetry ? (
+          <Button color="inherit" size="small" onClick={onRetry}>
+            {t('retry')}
+          </Button>
+        ) : null
+      }
+    >
+      {message}
+    </Alert>
+  );
+}
+
+function Field({ label, value }) {
+  const { t } = useTranslation('my');
+  return (
+    <Stack sx={{ minWidth: 120 }}>
+      <Typography
+        sx={{
+          ...FONT.bodySmall,
+          color: 'text.secondary',
+          textTransform: 'uppercase',
+          letterSpacing: '0.03em',
+        }}
+      >
+        {label}
+      </Typography>
+      <Typography sx={{ ...FONT.body2 }}>{value || t('profileNotAvailable')}</Typography>
+    </Stack>
+  );
+}
+
+// ── Card: identity strip (GET people/me/) ─────────────────────────────
+
+function ProfileHeader({ profile, loading, error, onRetry }) {
+  const { t } = useTranslation('my');
+
+  if (loading) {
+    return (
+      <Card variant="outlined">
+        <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }} aria-label={t('loading')}>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Skeleton variant="circular" width={40} height={40} />
+            <Stack spacing={0.5} sx={{ flex: 1 }}>
+              <Skeleton width="45%" />
+              <Skeleton width="30%" />
+            </Stack>
+          </Stack>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card variant="outlined">
+        <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+          <InlineError message={error} onRetry={onRetry} />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!profile) return null;
+
+  const initials = (profile.full_name || '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
+  return (
+    <Card variant="outlined">
+      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+        <SectionTitle icon={AccountCircleIcon} title={t('profileTitle')} />
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <Avatar sx={{ bgcolor: 'primary.main', width: 40, height: 40, fontSize: '0.875rem' }}>
+            {initials || '?'}
+          </Avatar>
+          <Stack spacing={0.25} sx={{ minWidth: 0 }}>
+            <Typography noWrap sx={{ ...FONT.heading }}>
+              {profile.full_name || t('profileNotAvailable')}
+            </Typography>
+            <Typography noWrap sx={{ ...FONT.body, color: 'text.secondary' }}>
+              {profile.job_title || t('profileNotAvailable')}
+            </Typography>
+          </Stack>
+        </Stack>
+        <Divider sx={{ my: 1 }} />
+        <Stack direction="row" spacing={2} useFlexGap flexWrap="wrap" rowGap={1}>
+          <Field label={t('profileEmployeeNo')} value={profile.employee_no} />
+          <Field label={t('profileJobTitle')} value={profile.job_title} />
+          <Field label={t('profileOrgUnit')} value={profile.org_unit?.name} />
+          <Field label={t('profileManager')} value={profile.manager?.name} />
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Card: action-required strip (pending inbox count) ─────────────────
+
+function ActionRequiredStrip({ count, loading, error, onRetry }) {
+  const { t } = useTranslation('my');
+
+  return (
+    <Card variant="outlined">
+      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+        <SectionTitle icon={NotificationsActiveIcon} title={t('actionRequiredTitle')} />
+        {loading ? (
+          <Skeleton width="40%" aria-label={t('loading')} />
+        ) : error ? (
+          <InlineError message={error} onRetry={onRetry} />
+        ) : count > 0 ? (
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <Chip size="small" color="warning" label={String(count)} />
+            <Typography sx={{ ...FONT.body2 }}>
+              {t('actionRequiredPending', { count })}
+            </Typography>
+          </Stack>
+        ) : (
+          <Typography sx={{ ...FONT.body2, color: 'text.secondary' }}>
+            {t('actionRequiredEmpty')}
+          </Typography>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Card: leave balance (GET people/me/leave-balance/) ────────────────
+
+function LeaveBalanceCard({ balances, loading, error, onRetry }) {
+  const { t } = useTranslation('my');
+
+  return (
+    <Card variant="outlined">
+      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+        <SectionTitle icon={EventAvailableIcon} title={t('leaveBalanceTitle')} />
+        {loading ? (
+          <Stack spacing={0.5} aria-label={t('loading')}>
+            <Skeleton />
+            <Skeleton width="70%" />
+            <Skeleton width="85%" />
+          </Stack>
+        ) : error ? (
+          <InlineError message={error} onRetry={onRetry} />
+        ) : balances.length === 0 ? (
+          <Typography sx={{ ...FONT.body2, color: 'text.secondary' }}>
+            {t('leaveBalanceEmpty')}
+          </Typography>
+        ) : (
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
+                    {t('leaveBalanceLeaveType')}
+                  </TableCell>
+                  <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
+                    {t('leaveBalanceEntitled')}
+                  </TableCell>
+                  <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
+                    {t('leaveBalanceUsed')}
+                  </TableCell>
+                  <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
+                    {t('leaveBalancePending')}
+                  </TableCell>
+                  <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
+                    {t('leaveBalanceRemaining')}
+                  </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {balances.map((balance, index) => {
+                  const pending = balance.pending ?? 0;
+                  const remaining = balance.remaining ?? 0;
+                  const hasPending = pending > 0;
+                  const hasRemaining = remaining > 0;
+                  return (
+                    <TableRow key={`${balance.leave_type}-${index}`} hover>
+                      <TableCell sx={{ ...FONT.body2 }}>
+                        {balance.leave_type || t('profileNotAvailable')}
+                      </TableCell>
+                      <TableCell align="right" sx={{ ...FONT.body2 }}>
+                        {balance.entitled ?? 0}
+                      </TableCell>
+                      <TableCell align="right" sx={{ ...FONT.body2 }}>
+                        {balance.used ?? 0}
+                      </TableCell>
+                      <TableCell align="right" sx={{ ...FONT.body2 }}>
+                        {/* Text label (value) + status color — color is NOT the sole indicator */}
+                        <Stack
+                          direction="row"
+                          alignItems="center"
+                          justifyContent="flex-end"
+                          spacing={0.5}
+                        >
+                          {hasPending && (
+                            <Box
+                              sx={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: '50%',
+                                bgcolor: 'warning.main',
+                                flexShrink: 0,
+                              }}
+                            />
+                          )}
+                          <Typography
+                            sx={{
+                              ...FONT.body2,
+                              color: hasPending ? 'warning.main' : 'text.secondary',
+                            }}
+                          >
+                            {pending}
+                          </Typography>
+                        </Stack>
+                      </TableCell>
+                      <TableCell align="right" sx={{ ...FONT.body2 }}>
+                        <Stack
+                          direction="row"
+                          alignItems="center"
+                          justifyContent="flex-end"
+                          spacing={0.5}
+                        >
+                          <Typography
+                            sx={{
+                              ...FONT.body2,
+                              fontWeight: 600,
+                              color: hasRemaining ? 'success.main' : 'text.primary',
+                            }}
+                          >
+                            {remaining}
+                          </Typography>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Card: quick actions ───────────────────────────────────────────────
+
+function QuickActions() {
+  const { t } = useTranslation('my');
+  const navigate = useNavigate();
+
+  return (
+    <Card variant="outlined">
+      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+        <SectionTitle icon={DashboardIcon} title={t('quickActionsTitle')} />
+        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+          <Button
+            size="small"
+            variant="contained"
+            startIcon={<AssignmentIcon />}
+            onClick={() => navigate('/my/leave')}
+          >
+            {t('quickActionsRequestLeave')}
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<ArticleIcon />}
+            onClick={() => navigate('/my/requests')}
+          >
+            {t('quickActionsMyRequests')}
+          </Button>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────
+
+export default function MyDashboard() {
+  const { t } = useTranslation('my');
+  const { token } = useAuth();
+  useDocumentTitle(t('dashboardTitle'));
+
+  // Independent state per card → independent loading / error / empty states.
+  const [profile, setProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileError, setProfileError] = useState(null);
+
+  const [balances, setBalances] = useState([]);
+  const [balancesLoading, setBalancesLoading] = useState(true);
+  const [balancesError, setBalancesError] = useState(null);
+
+  const [inboxCount, setInboxCount] = useState(0);
+  const [inboxLoading, setInboxLoading] = useState(true);
+  const [inboxError, setInboxError] = useState(null);
+
+  const loadProfile = useCallback(async () => {
+    setProfileLoading(true);
+    setProfileError(null);
+    try {
+      setProfile(await fetchMyProfile(token));
+    } catch (err) {
+      setProfileError(err?.message || t('error'));
+    } finally {
+      setProfileLoading(false);
+    }
+  }, [token, t]);
+
+  const loadBalances = useCallback(async () => {
+    setBalancesLoading(true);
+    setBalancesError(null);
+    try {
+      const data = await fetchLeaveBalance(token);
+      setBalances(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setBalancesError(err?.message || t('error'));
+    } finally {
+      setBalancesLoading(false);
+    }
+  }, [token, t]);
+
+  const loadInbox = useCallback(async () => {
+    setInboxLoading(true);
+    setInboxError(null);
+    try {
+      setInboxCount(await fetchInboxCount(token));
+    } catch (err) {
+      setInboxError(err?.message || t('error'));
+    } finally {
+      setInboxLoading(false);
+    }
+  }, [token, t]);
+
+  // Fire the three fetches in parallel.
+  useEffect(() => {
+    loadProfile();
+    loadBalances();
+    loadInbox();
+  }, [loadProfile, loadBalances, loadInbox]);
+
+  return (
+    <Box
+      component="main"
+      sx={{ width: '100%', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+    >
+      <PageContainer>
+        <PageHeader
+          icon={DashboardIcon}
+          title={t('dashboardTitle')}
+          subtitle={t('dashboardSubtitle')}
+        />
+        <Stack spacing={1}>
+          <ProfileHeader
+            profile={profile}
+            loading={profileLoading}
+            error={profileError}
+            onRetry={loadProfile}
+          />
+          <ActionRequiredStrip
+            count={inboxCount}
+            loading={inboxLoading}
+            error={inboxError}
+            onRetry={loadInbox}
+          />
+          <LeaveBalanceCard
+            balances={balances}
+            loading={balancesLoading}
+            error={balancesError}
+            onRetry={loadBalances}
+          />
+          <QuickActions />
+        </Stack>
+      </PageContainer>
+    </Box>
+  );
+}

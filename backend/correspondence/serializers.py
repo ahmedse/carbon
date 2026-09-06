@@ -1,0 +1,100 @@
+"""DRF serializers for the Correspondence engine API (Phase OF-7).
+
+Engine-managed fields are read-only; the API is read + action only (subject
+creation belongs to OF-8, so there is no generic create/update surface here).
+"""
+
+from rest_framework import serializers
+
+from .models import (
+    Correspondence,
+    CorrespondenceEvent,
+    WorkflowPolicy,
+    WorkflowPolicyStep,
+)
+
+
+class CorrespondenceEventSerializer(serializers.ModelSerializer):
+    """Append-only timeline entry (``events``)."""
+
+    actor_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CorrespondenceEvent
+        fields = [
+            'id', 'seq', 'actor', 'actor_name', 'event_type',
+            'from_status', 'to_status', 'payload', 'created_at',
+        ]
+        read_only_fields = fields
+
+    def get_actor_name(self, obj):
+        return obj.actor.username if obj.actor_id else None
+
+
+class CorrespondenceSerializer(serializers.ModelSerializer):
+    """Lean representation for list/inbox. ``subject`` is exposed via plain
+    ``subject_type``/``subject_id`` fields (NOT resolved — the domain app does
+    that). ``requester``/``corr_type`` remain read-only PKs, complemented by
+    human-readable ``requester_name`` / ``corr_type_code`` / ``corr_type_label``
+    for display surfaces (e.g. the approver inbox)."""
+
+    requester_name = serializers.SerializerMethodField()
+    corr_type_code = serializers.SerializerMethodField()
+    corr_type_label = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Correspondence
+        fields = [
+            'id', 'reference_no', 'corr_type', 'corr_type_code', 'corr_type_label',
+            'subject_type', 'subject_id', 'org_unit', 'requester', 'requester_name',
+            'title', 'payload', 'status', 'current_step', 'current_approver_ids',
+            'approver_chain', 'policy_version', 'policy_id', 'policy_snapshot',
+            'signature_ref', 'resolved_at', 'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'reference_no', 'policy_id', 'policy_version', 'policy_snapshot',
+            'approver_chain', 'current_step', 'current_approver_ids', 'status',
+            'resolved_at', 'created_at', 'updated_at',
+            'requester', 'org_unit', 'corr_type',
+        ]
+
+    def get_requester_name(self, obj):
+        if not obj.requester_id:
+            return None
+        return obj.requester.get_full_name() or obj.requester.username
+
+    def get_corr_type_code(self, obj):
+        return obj.corr_type.code if obj.corr_type_id else None
+
+    def get_corr_type_label(self, obj):
+        return obj.corr_type.label if obj.corr_type_id else None
+
+
+class CorrespondenceDetailSerializer(CorrespondenceSerializer):
+    """Full representation for detail/action responses (adds the timeline)."""
+
+    events = CorrespondenceEventSerializer(many=True, read_only=True)
+
+    class Meta(CorrespondenceSerializer.Meta):
+        fields = CorrespondenceSerializer.Meta.fields + ['events']
+
+
+class WorkflowPolicyStepSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WorkflowPolicyStep
+        fields = [
+            'id', 'order', 'role', 'intent', 'specific_user',
+            'skip_if_self', 'auto_approve', 'can_skip', 'condition', 'is_active',
+        ]
+
+
+class WorkflowPolicySerializer(serializers.ModelSerializer):
+    steps = WorkflowPolicyStepSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = WorkflowPolicy
+        fields = [
+            'id', 'name', 'corr_type', 'org_unit', 'version', 'is_active',
+            'numbering_format', 'effective_from', 'effective_to',
+            'created_at', 'updated_at', 'steps',
+        ]

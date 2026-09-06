@@ -2,7 +2,7 @@
 # People & Payroll API routes (NIR-1C). The ``/carbon-api/people/`` prefix is
 # applied by ``config/urls.py``; these paths are relative to that prefix.
 
-from django.urls import path
+from django.urls import path, include
 
 from .views import (
     AttendancePermissionDetailView,
@@ -53,6 +53,7 @@ from .views import (
 )
 
 urlpatterns = [
+    path('me/', include('people.self_urls')),
     path('compliance-rules/', ComplianceRuleListCreateView.as_view(),
          name='people-compliance-rules'),
     path('compliance-rules/<int:pk>/', ComplianceRuleDetailView.as_view(),

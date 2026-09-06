@@ -132,6 +132,8 @@ export const NAV_LABEL_KEYS = {
   Rotation: 'nav.rotation',
   Attendance: 'nav.attendance',
   'App Config': 'nav.appConfig',
+  'My Leave': 'nav.myLeave',
+  'My Requests': 'nav.myRequests',
   'Reference Data': 'nav.referenceData',
 };
 
@@ -166,6 +168,7 @@ export const STUDIO_LABEL_KEYS = {
   'ai-admin': 'studio.aiAdmin',
   settings: 'studio.settings',
   help: 'studio.help',
+  my: 'studio.my',
 };
 
 // Sidebar header titles -> shell.studio.* (keyed by studio id)
@@ -178,6 +181,7 @@ export const STUDIO_TITLE_KEYS = {
   settings: 'studio.settings',
   help: 'studio.helpSupport',
   apps: 'studio.apps',
+  my: 'studio.my',
 };
 
 // Translate a raw English nav/group label into the current language.

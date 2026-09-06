@@ -143,6 +143,8 @@ APP_DEFS = [
     {"app_id": "importexport", "domain": False, "display_order": 6},
     {"app_id": "dataschema", "domain": False, "display_order": 7},
     {"app_id": "people", "domain": True, "display_order": 20},
+    {"app_id": "my", "domain": True, "display_order": 21},
+    {"app_id": "team", "domain": True, "display_order": 22},
     {"app_id": "healthy", "domain": True, "display_order": 30},
 ]
 

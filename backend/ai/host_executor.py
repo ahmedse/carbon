@@ -48,6 +48,54 @@ def _canonical_endpoint(endpoint: str) -> str:
     return path.rstrip("/")
 
 
+#: Hard cap on serialised list rows sent to the LLM.  Above this, the response
+#: carries ``truncated=True`` and ``total=<full count>`` so the model can never
+#: mistake a partial page for the full population.
+_PEOPLE_LIST_PAGE_CAP = 100
+
+#: After normalization, collapse the tail into an "Other" bucket so the model
+#: never receives a 200-row breakdown it can't interpret.
+_ANALYTICS_MAX_BUCKETS = 15
+
+#: Synonym maps for free-text categorical fields.
+#: canonical_label → frozenset of raw string values that map to it (case-insensitive, stripped).
+_FIELD_SYNONYMS: dict[str, dict[str, frozenset]] = {
+    "gender": {
+        "male":   frozenset({"male", "m", "man", "boy", "males"}),
+        "female": frozenset({"female", "f", "woman", "girl", "females"}),
+    },
+}
+
+
+def _normalise_value(dimension: str, raw_val) -> str:
+    """Return the canonical label for a raw DB value (synonym merging + blank handling)."""
+    if raw_val is None or (isinstance(raw_val, str) and not raw_val.strip()):
+        return "(blank)"
+    synonyms = _FIELD_SYNONYMS.get(dimension, {})
+    low = str(raw_val).strip().lower()
+    for canonical, values in synonyms.items():
+        if low in values:
+            return canonical
+    return str(raw_val).strip()
+
+
+def _suggest_chart_type(breakdown: list[dict]) -> str:
+    """Return the most informative chart type given the breakdown shape.
+
+    Pie is only useful for balanced proportions (≤8 buckets, no dominant slice).
+    A 99% / 1% pie is meaningless — bar shows magnitude far better.
+    """
+    if not breakdown:
+        return "bar"
+    max_pct = max((r["pct"] for r in breakdown), default=0)
+    n = len(breakdown)
+    if max_pct >= 70:
+        # One dominant bucket — a single giant pie slice adds zero information
+        return "bar"
+    if n <= 8:
+        return "pie"
+    return "bar"
+
 #: Endpoints handled in-process instead of over HTTP.  Values are the names of
 #: private ``_<name>_in_process`` coroutines on :class:`CarbonHostExecutor`.
 _IN_PROCESS_ENDPOINTS: dict[str, str] = {
@@ -60,7 +108,445 @@ _IN_PROCESS_ENDPOINTS: dict[str, str] = {
     "carbon-api/carbon/periods": "reporting_periods",
     "carbon-api/carbon/calculations/summary": "calculation_summary",
     "carbon-api/carbon/chairman": "chairman_overview",
+    # Server-side analytics (aggregation, label resolution, DQ disclosure)
+    "carbon-api/people/analytics": "people_analytics",
 }
+
+
+def _people_route(key: str) -> tuple[str, str | None, str | None]:
+    """Split a canonical People endpoint into ``(resource, pk, action)``.
+
+    ``carbon-api/people/employees/5``            → ``("employees", "5", None)``
+    ``carbon-api/people/payroll-runs/5/compute`` → ``("payroll-runs", "5", "compute")``
+    ``carbon-api/people/employees``              → ``("employees", None, None)``
+    """
+    rest = (key or "")
+    prefix = "carbon-api/people"
+    if rest == prefix:
+        return "", None, None
+    if rest.startswith(prefix + "/"):
+        rest = rest[len(prefix) + 1:]
+    parts = [p for p in rest.split("/") if p]
+    resource = parts[0] if parts else ""
+    pk = parts[1] if len(parts) > 1 else None
+    action = parts[2] if len(parts) > 2 else None
+    return resource, pk, action
+
+
+def _people_can(user, capability_key: str) -> bool:
+    """CBAC gate mirroring ``PeopleAccess`` (global admins bypass)."""
+    from people.permissions import is_global_admin
+
+    if is_global_admin(user):
+        return True
+    from accounts.capabilities import has_capability
+
+    return has_capability(user, capability_key)
+
+
+def _people_scope(user, qs, org_lookup: str):
+    """RULE_12 org scoping — global admins see everything, else visible orgs."""
+    from people.permissions import is_global_admin
+
+    if is_global_admin(user):
+        return qs
+    from accounts.rbac_utils import get_visible_org_units
+
+    ids = [ou.id for ou in get_visible_org_units(user)]
+    if not ids:
+        return qs.none()
+    return qs.filter(**{org_lookup: ids})
+
+
+def _people_analytics(user, params: dict) -> dict:
+    """Server-side analytics: GROUP BY ``dimension`` over the scoped Employee set.
+
+    Returns a pre-computed, normalised breakdown the LLM can narrate directly:
+
+    .. code-block:: json
+
+        {
+          "dimension": "gender",
+          "total": 535,
+          "breakdown": [
+            {"label": "(blank)", "count": 529, "pct": 98.9},
+            {"label": "male",    "count": 5,   "pct": 0.9,
+             "merged_from": ["M"]}
+          ],
+          "caveats": ["98.9% have no gender recorded…"],
+          "was_normalized": true,
+          "normalization_notes": ["'M' was merged into 'male' (likely a data-entry variant)"],
+          "suggested_chart_type": "bar",
+          "label_resolved": false
+        }
+
+    ``suggested_chart_type`` is determined by data shape, not by the LLM:
+    ``"pie"`` for balanced proportions (≤8 buckets, no dominant slice),
+    ``"bar"`` otherwise (including any distribution with a >70 % dominant bucket).
+    """
+    from collections import defaultdict
+
+    from django.db.models import Count
+    from people.models import Employee
+
+    ALLOWED_DIMENSIONS = {
+        "gender", "is_active", "nationality", "nationality_code",
+        "employment_type_code", "contract_type_code",
+        "position", "org_unit", "kuwaitization", "rotation",
+    }
+    FK_LABEL_MAP = {
+        "position": ("people.models.Position", "title"),
+        "org_unit": ("mdm.models.OrgUnit",     "name"),
+    }
+    BLANK_CAVEAT_PCT = 50.0
+
+    dimension = (params.get("dimension") or "").strip().lower()
+    if dimension not in ALLOWED_DIMENSIONS:
+        return {
+            "status_code": 400,
+            "data": {
+                "detail": (
+                    f"Unknown dimension '{dimension}'. "
+                    f"Allowed: {', '.join(sorted(ALLOWED_DIMENSIONS))}"
+                )
+            },
+        }
+
+    qs = _people_scope(user, Employee.objects.all(), "org_unit_id__in")
+    total = qs.count()
+    if total == 0:
+        return {
+            "status_code": 200,
+            "data": {
+                "dimension": dimension,
+                "total": 0,
+                "breakdown": [],
+                "caveats": ["No employees visible to this user."],
+                "was_normalized": False,
+                "normalization_notes": [],
+                "suggested_chart_type": "bar",
+                "label_resolved": False,
+            },
+        }
+
+    raw_counts = (
+        qs.values(dimension)
+        .annotate(count=Count("id"))
+        .order_by("-count")
+    )
+
+    # ── Synonym normalisation (text fields only; FK fields skip this) ──────
+    # Merge raw DB values into canonical buckets so "M" and "male" become one row.
+    bucket_counts: dict[str, int] = defaultdict(int)
+    bucket_merged_from: dict[str, list[str]] = defaultdict(list)
+    label_resolved = False
+    pk_to_label: dict = {}
+    was_normalized = False
+
+    if dimension in FK_LABEL_MAP:
+        # FK dimensions: resolve PK → human label via a secondary query.
+        import importlib
+        module_path, label_field = FK_LABEL_MAP[dimension]
+        mod_name, cls_name = module_path.rsplit(".", 1)
+        mod = importlib.import_module(mod_name)
+        model_cls = getattr(mod, cls_name)
+        pk_ids = [r[dimension] for r in raw_counts if r[dimension] is not None]
+        for obj in model_cls.objects.filter(pk__in=pk_ids).values("pk", label_field):
+            pk_to_label[obj["pk"]] = obj[label_field]
+        label_resolved = True
+        for row in raw_counts:
+            raw_val = row[dimension]
+            canonical = pk_to_label.get(raw_val, "(blank)") if raw_val is not None else "(blank)"
+            bucket_counts[canonical] += row["count"]
+    else:
+        for row in raw_counts:
+            raw_val = row[dimension]
+            canonical = _normalise_value(dimension, raw_val)
+            bucket_counts[canonical] += row["count"]
+            # Track which raw strings were merged into this canonical bucket.
+            displayed = str(raw_val).strip() if raw_val is not None else ""
+            if displayed and displayed != canonical:
+                bucket_merged_from[canonical].append(displayed)
+                was_normalized = True
+
+    # ── Build sorted breakdown, collapse long tail into "Other" ────────────
+    sorted_buckets = sorted(bucket_counts.items(), key=lambda kv: -kv[1])
+    blank_count = bucket_counts.get("(blank)", 0)
+
+    breakdown: list[dict] = []
+    other_count = 0
+    other_labels: list[str] = []
+
+    for i, (label, count) in enumerate(sorted_buckets):
+        pct = round(count / total * 100, 1)
+        row: dict = {"label": label, "count": count, "pct": pct}
+        if bucket_merged_from.get(label):
+            row["merged_from"] = bucket_merged_from[label]
+        if i < _ANALYTICS_MAX_BUCKETS:
+            breakdown.append(row)
+        else:
+            other_count += count
+            other_labels.append(label)
+
+    if other_count:
+        breakdown.append({
+            "label": "Other",
+            "count": other_count,
+            "pct": round(other_count / total * 100, 1),
+            "collapsed_labels": other_labels[:20],  # sample for transparency
+        })
+
+    # ── Caveats ─────────────────────────────────────────────────────────────
+    caveats: list[str] = []
+    blank_pct = round(blank_count / total * 100, 1) if total else 0
+    if blank_pct >= BLANK_CAVEAT_PCT:
+        caveats.append(
+            f"{blank_pct}% of employees have no '{dimension}' recorded — "
+            f"this distribution is incomplete and should not be used for compliance reporting."
+        )
+    if not label_resolved and dimension in FK_LABEL_MAP:
+        caveats.append(f"'{dimension}' IDs could not be resolved to labels.")
+    if other_count:
+        caveats.append(
+            f"The breakdown has been truncated to the top {_ANALYTICS_MAX_BUCKETS} buckets; "
+            f"{len(other_labels)} additional values ({other_count} employees) are grouped as 'Other'."
+        )
+
+    # ── Normalization notes (explicit, machine-checkable) ───────────────────
+    normalization_notes: list[str] = []
+    for canonical, raw_list in bucket_merged_from.items():
+        if raw_list:
+            merged_str = ", ".join(f"'{v}'" for v in sorted(set(raw_list)))
+            normalization_notes.append(
+                f"{merged_str} → '{canonical}' (likely data-entry variants; "
+                f"recommend standardising the source data)"
+            )
+
+    return {
+        "status_code": 200,
+        "data": {
+            "dimension": dimension,
+            "total": total,
+            "breakdown": breakdown,
+            "caveats": caveats,
+            "was_normalized": was_normalized,
+            "normalization_notes": normalization_notes,
+            "suggested_chart_type": _suggest_chart_type(breakdown),
+            "label_resolved": label_resolved,
+        },
+    }
+
+
+def _people_execute(user, resource, pk, action, method, params, body) -> dict:
+    """Execute a single People & Payroll operation against the Django models.
+
+    Mirrors ``people/views.py``: CBAC (already gated by ``_people_can``),
+    RULE_12 org scoping, serializer output, and the Tier-1 DQ write gate for
+    mutations. Returns the same ``{"status_code": ..., "data": ...}`` shape
+    as the HTTP transport.
+    """
+    from people import serializers as S
+    from people.sensitivity import mask_employee, mask_employee_list
+
+    # ── Server-side analytics (aggregation + label resolution + DQ caveats) ────
+    if resource == "analytics":
+        if method == "GET":
+            return _people_analytics(user, params)
+        return {"status_code": 405, "data": {"detail": "Analytics endpoint is read-only"}}
+
+    # ── Employees ───────────────────────────────────────────────────────
+    if resource == "employees":
+        from people.models import Employee
+
+        if method == "GET":
+            qs = _people_scope(user, Employee.objects.all(), "org_unit_id__in")
+            if pk:
+                try:
+                    employee = qs.get(pk=pk)
+                except Employee.DoesNotExist:
+                    return {"status_code": 404, "data": {"detail": "Employee not found"}}
+                return {"status_code": 200, "data": mask_employee(S.EmployeeSerializer(employee).data, user)}
+            # Count the full population before slicing — partial pages must
+            # carry total+truncated so the LLM never mistakes 100 for 535.
+            total = qs.count()
+            page = qs[:_PEOPLE_LIST_PAGE_CAP]
+            results = mask_employee_list(S.EmployeeSerializer(page, many=True).data, user)
+            truncated = total > _PEOPLE_LIST_PAGE_CAP
+            data = {"total": total, "count": len(results), "results": results}
+            if truncated:
+                data["truncated"] = True
+                data["caveat"] = (
+                    f"Showing first {len(results)} of {total} employees. "
+                    "Use analyze_employees with a dimension for aggregate statistics "
+                    "over the full population."
+                )
+            return {"status_code": 200, "data": data}
+
+    # ── Positions ───────────────────────────────────────────────────────
+    if resource == "positions":
+        from people.models import Position
+
+        if method == "GET":
+            qs = _people_scope(user, Position.objects.all(), "org_unit_id__in")
+            total = qs.count()
+            page = qs[:_PEOPLE_LIST_PAGE_CAP]
+            results = S.PositionSerializer(page, many=True).data
+            data = {"total": total, "count": len(results), "results": results}
+            if total > _PEOPLE_LIST_PAGE_CAP:
+                data["truncated"] = True
+                data["caveat"] = f"Showing first {len(results)} of {total} positions."
+            return {"status_code": 200, "data": data}
+
+    # ── Payroll runs (list/detail + compute/validate/commit) ─────────────
+    if resource == "payroll-runs":
+        from people.models import PayrollRun
+
+        if method == "GET":
+            qs = _people_scope(user, PayrollRun.objects.all(), "org_unit_id__in")
+            if pk:
+                try:
+                    run = qs.get(pk=pk)
+                except PayrollRun.DoesNotExist:
+                    return {"status_code": 404, "data": {"detail": "Payroll run not found"}}
+                return {"status_code": 200, "data": S.PayrollRunSerializer(run).data}
+            results = S.PayrollRunSerializer(qs, many=True).data
+            return {"status_code": 200, "data": {"count": len(results), "results": results}}
+
+        if method == "POST" and action in ("compute", "validate", "commit"):
+            from people.payroll_service import PayrollRunService, PayrollServiceError
+            from people.validation import persist_findings
+
+            qs = _people_scope(user, PayrollRun.objects.all(), "org_unit_id__in")
+            try:
+                run = qs.get(pk=pk)
+            except PayrollRun.DoesNotExist:
+                return {"status_code": 404, "data": {"detail": "Payroll run not found"}}
+            service = PayrollRunService()
+            try:
+                result = getattr(service, action)(run)
+            except PayrollServiceError as exc:
+                return {"status_code": 409, "data": {"detail": str(exc)}}
+            if action in ("validate", "commit"):
+                persist_findings(run, result.get("findings", []))
+            return {"status_code": 200, "data": result}
+
+    # ── Payslip lines ───────────────────────────────────────────────────
+    if resource == "payslip-lines":
+        from people.models import PayslipLine
+
+        if method == "GET":
+            qs = PayslipLine.objects.all()
+            run_id = params.get("payroll_run")
+            if run_id:
+                qs = qs.filter(payroll_run_id=run_id)
+            total = qs.count()
+            page = qs[:_PEOPLE_LIST_PAGE_CAP]
+            results = S.PayslipLineSerializer(page, many=True).data
+            data = {"total": total, "count": len(results), "results": results}
+            if total > _PEOPLE_LIST_PAGE_CAP:
+                data["truncated"] = True
+                data["caveat"] = f"Showing first {len(results)} of {total} payslip lines."
+            return {"status_code": 200, "data": data}
+
+    # ── Leave entitlements ──────────────────────────────────────────────
+    if resource == "leave-entitlements":
+        from people.models import LeaveEntitlement
+
+        if method == "GET":
+            qs = _people_scope(user, LeaveEntitlement.objects.all(), "employee__org_unit_id__in")
+            total = qs.count()
+            page = qs[:_PEOPLE_LIST_PAGE_CAP]
+            results = S.LeaveEntitlementSerializer(page, many=True).data
+            data = {"total": total, "count": len(results), "results": results}
+            if total > _PEOPLE_LIST_PAGE_CAP:
+                data["truncated"] = True
+                data["caveat"] = f"Showing first {len(results)} of {total} leave entitlements."
+            return {"status_code": 200, "data": data}
+
+    # ── Leave records (list + create) ───────────────────────────────────
+    if resource == "leave-records":
+        from people.models import LeaveRecord
+
+        if method == "GET":
+            qs = _people_scope(user, LeaveRecord.objects.all(), "employee__org_unit_id__in")
+            total = qs.count()
+            page = qs[:_PEOPLE_LIST_PAGE_CAP]
+            results = S.LeaveRecordSerializer(page, many=True).data
+            data = {"total": total, "count": len(results), "results": results}
+            if total > _PEOPLE_LIST_PAGE_CAP:
+                data["truncated"] = True
+                data["caveat"] = f"Showing first {len(results)} of {total} leave records."
+            return {"status_code": 200, "data": data}
+        if method == "POST":
+            serializer = S.LeaveRecordSerializer(data=body)
+            if not serializer.is_valid():
+                return {
+                    "status_code": 400,
+                    "data": {
+                        "detail": "Validation failed",
+                        "errors": json.dumps(serializer.errors, default=str),
+                    },
+                }
+            from people.validation import validate_write
+
+            gate = validate_write(LeaveRecord(**serializer.validated_data))
+            if gate["blocked"]:
+                return {
+                    "status_code": 422,
+                    "data": {
+                        "detail": "DQ validation blocked this write",
+                        "sample_failures": gate["sample_failures"],
+                    },
+                }
+            serializer.save()
+            return {"status_code": 201, "data": serializer.data}
+
+    # ── Loans ───────────────────────────────────────────────────────────
+    if resource == "loans":
+        from people.models import Loan
+
+        if method == "GET":
+            qs = _people_scope(user, Loan.objects.all(), "employee__org_unit_id__in")
+            total = qs.count()
+            page = qs[:_PEOPLE_LIST_PAGE_CAP]
+            results = S.LoanSerializer(page, many=True).data
+            data = {"total": total, "count": len(results), "results": results}
+            if total > _PEOPLE_LIST_PAGE_CAP:
+                data["truncated"] = True
+                data["caveat"] = f"Showing first {len(results)} of {total} loans."
+            return {"status_code": 200, "data": data}
+
+    # ── Loan installments ───────────────────────────────────────────────
+    if resource == "loan-installments":
+        from people.models import LoanInstallment
+
+        if method == "GET":
+            qs = _people_scope(user, LoanInstallment.objects.all(), "loan__employee__org_unit_id__in")
+            total = qs.count()
+            page = qs[:_PEOPLE_LIST_PAGE_CAP]
+            results = S.LoanInstallmentSerializer(page, many=True).data
+            data = {"total": total, "count": len(results), "results": results}
+            if total > _PEOPLE_LIST_PAGE_CAP:
+                data["truncated"] = True
+                data["caveat"] = f"Showing first {len(results)} of {total} loan installments."
+            return {"status_code": 200, "data": data}
+
+    # ── Attendance ──────────────────────────────────────────────────────
+    if resource == "attendance":
+        from people.models import AttendanceRecord
+
+        if method == "GET":
+            qs = _people_scope(user, AttendanceRecord.objects.all(), "employee__org_unit_id__in")
+            total = qs.count()
+            page = qs[:_PEOPLE_LIST_PAGE_CAP]
+            results = S.AttendanceRecordSerializer(page, many=True).data
+            data = {"total": total, "count": len(results), "results": results}
+            if total > _PEOPLE_LIST_PAGE_CAP:
+                data["truncated"] = True
+                data["caveat"] = f"Showing first {len(results)} of {total} attendance records."
+            return {"status_code": 200, "data": data}
+
+    return {"status_code": 404, "data": {"detail": f"Unknown People endpoint: {resource}"}}
 
 
 class CarbonHostExecutor(HostAPIExecutor):
@@ -106,6 +592,21 @@ class CarbonHostExecutor(HostAPIExecutor):
             )
 
         key = _canonical_endpoint(endpoint)
+
+        # People & Payroll namespace — routed by resource/pk/action so the
+        # path-parameter detail/action endpoints (e.g. employees/5, payroll-runs/5/compute)
+        # resolve without a static per-route key.
+        if key == "carbon-api/people" or key.startswith("carbon-api/people/"):
+            merged = dict(params or {})
+            if "?" in (endpoint or ""):
+                from urllib.parse import parse_qs, urlsplit
+
+                for qk, qv in parse_qs(urlsplit(endpoint).query).items():
+                    merged.setdefault(qk, qv[0] if len(qv) == 1 else qv)
+            return await self._people_in_process(
+                method=method.upper(), params=merged, body=body or {}, endpoint=key
+            )
+
         handler_name = _IN_PROCESS_ENDPOINTS.get(key)
         if handler_name:
             handler = getattr(self, f"_{handler_name}_in_process", None)
@@ -687,6 +1188,78 @@ class CarbonHostExecutor(HostAPIExecutor):
             logger.exception("In-process chairman overview failed")
             raise ToolExecutionError(f"Chairman overview failed: {exc}") from exc
         return {"status_code": 200, "data": payload}
+
+    async def _people_analytics_in_process(
+        self,
+        method: str = "GET",
+        params: dict | None = None,
+        body: dict | None = None,
+    ) -> dict:
+        """GET /carbon-api/people/analytics/ — server-side aggregation.
+
+        Dispatches to :func:`_people_analytics` so the LLM never has to count
+        rows itself.  Requires ``people:view`` capability (same gate as list).
+        """
+        from asgiref.sync import sync_to_async
+
+        if (method or "GET").upper() != "GET":
+            return {"status_code": 405, "data": {"detail": "Method not allowed"}}
+
+        user = await self._resolve_user()
+        if user is None:
+            return {"status_code": 401, "data": {"detail": "Authentication required"}}
+
+        # Run capability check + aggregation together inside sync_to_async so
+        # Django DB access never happens from an async frame.
+        def _run() -> dict:
+            if not _people_can(user, "people:view"):
+                return {"status_code": 403, "data": {"detail": "people:view capability required"}}
+            return _people_analytics(user, params or {})
+
+        try:
+            return await sync_to_async(_run, thread_sensitive=True)()
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("In-process people analytics failed")
+            raise ToolExecutionError(f"People analytics failed: {exc}") from exc
+
+    async def _people_in_process(
+        self,
+        method: str = "GET",
+        params: dict | None = None,
+        body: dict | None = None,
+        endpoint: str = "",
+    ) -> dict:
+        """Execute a People & Payroll endpoint in-process (Nibras grounded reads
+        and confirmed writes).
+
+        Read endpoints (GET) run without confirmation; mutations
+        (compute/validate/commit/leave create) arrive here only after the user
+        confirms the staged ``ToolExecution``. All access is CBAC-gated
+        (``people:view`` / ``people:manage``) and org-scoped, mirroring the
+        DRF view layer.
+        """
+        from asgiref.sync import sync_to_async
+
+        user = await self._resolve_user()
+        if user is None:
+            return {"status_code": 401, "data": {"detail": "Authentication required"}}
+
+        method = (method or "GET").upper()
+        resource, pk, action = _people_route(endpoint)
+
+        def _dispatch() -> dict:
+            cap = "people:view" if method in ("GET", "HEAD", "OPTIONS") else "people:manage"
+            if not _people_can(user, cap):
+                return {"status_code": 403, "data": {"detail": f"{cap} capability required"}}
+            return _people_execute(user, resource, pk, action, method, params or {}, body or {})
+
+        try:
+            return await sync_to_async(_dispatch, thread_sensitive=True)()
+        except ToolExecutionError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - fail-visible
+            logger.exception("In-process People API call failed")
+            raise ToolExecutionError(f"People API call failed: {exc}") from exc
 
     async def _resolve_user(self):
         """Resolve the Django user for ``host_user_id`` (or ``None``)."""

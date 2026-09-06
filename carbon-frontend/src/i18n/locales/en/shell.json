@@ -19,7 +19,8 @@
     "helpSupport": "Help & Support",
     "apps": "Apps",
     "carbonFootprint": "Carbon Footprint",
-    "carbon": "Carbon"
+    "carbon": "Carbon",
+    "my": "My"
   },
   "nav": {
     "home": "Home",
@@ -147,7 +148,9 @@
     "people": "People",
     "positions": "Positions",
     "referenceData": "Reference Data",
-    "rotation": "Rotation"
+    "rotation": "Rotation",
+    "myLeave": "My Leave",
+    "myRequests": "My Requests"
   },
   "group": {
     "dataProducts": "Data Products",

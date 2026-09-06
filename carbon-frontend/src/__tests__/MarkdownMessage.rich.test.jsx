@@ -248,5 +248,59 @@ describe('MarkdownMessage rich renderer', () => {
       // The year must stay attached to "by" — not split onto its own line.
       expect(out).not.toContain('by\n2050.');
     });
+
+    it('splits prose from an inline table header when delimiter is on the next line', () => {
+      // This is what gpt-4o emits: bold sentence runs into the table header,
+      // rows are on separate lines but no blank before the table.
+      const input = [
+        'The breakdown is as follows. | Gender | Count |',
+        '|--------|-------|',
+        '| Male   | 4     |',
+        '| Female | 1     |',
+      ].join('\n');
+      const out = reflowMarkdownStructure(input);
+      // Prose must be on its own line, followed by a blank line, then the header.
+      expect(out).toContain('The breakdown is as follows.\n\n| Gender | Count |');
+    });
+
+    it('renders a prose+inline-table as a real MUI table (end to end)', () => {
+      renderRich(
+        'Results are: | Region | Total |\n|--------|-------|\n| North | 12 |\n| South | 8 |',
+      );
+      expect(document.querySelector('table')).not.toBeNull();
+      expect(screen.getByText('Region')).toBeInTheDocument();
+      expect(screen.getByText('North')).toBeInTheDocument();
+    });
+
+    it('reflows a table collapsed onto one line into proper GFM rows', () => {
+      const input =
+        'Below is the breakdown of employees per position: |Position|Employees| |--------------|-----------| | 182 | 4 | | 103 | 3 |';
+      const out = reflowMarkdownStructure(input);
+      const lines = out.split('\n');
+      // Leading prose kept on its own line, then a blank line before the table.
+      expect(lines).toContain('Below is the breakdown of employees per position:');
+      expect(out).toContain('per position:\n\n|Position|Employees|');
+      // Each row on its own line so the GFM parser recognises the table.
+      expect(lines).toContain('|Position|Employees|');
+      expect(lines).toContain('|--------------|-----------|');
+      expect(lines).toContain('| 182 | 4 |');
+      expect(lines).toContain('| 103 | 3 |');
+    });
+
+    it('renders a collapsed table as a real MUI table (end to end)', () => {
+      renderRich(
+        'Here is the split: |Region|Total| |------|-----| | North | 12 | | South | 8 |',
+      );
+      // A real <table> element must exist — not raw pipe text in a paragraph.
+      expect(document.querySelector('table')).not.toBeNull();
+      expect(screen.getByText('Region')).toBeInTheDocument();
+      expect(screen.getByText('North')).toBeInTheDocument();
+      expect(screen.getByText('South')).toBeInTheDocument();
+    });
+
+    it('leaves an already well-formed multi-line table untouched', () => {
+      const good = '| A | B |\n|---|---|\n| 1 | 2 |';
+      expect(reflowMarkdownStructure(good)).toBe(good);
+    });
   });
 });

@@ -603,6 +603,51 @@ PEOPLE_VIEW_COMPENSATION = Capability(
     category="data",
 )
 
+CORRESPONDENCE_SUBMIT = Capability(
+    key="correspondence:submit",
+    domain="correspondence",
+    action="submit",
+    label="Submit Correspondence",
+    description="Submit leave requests and other correspondence for approval",
+    category="general",
+)
+
+CORRESPONDENCE_ACT = Capability(
+    key="correspondence:act",
+    domain="correspondence",
+    action="act",
+    label="Act on Correspondence",
+    description="Approve, reject, or send back correspondence assigned to you",
+    category="general",
+)
+
+CORRESPONDENCE_ADMIN = Capability(
+    key="correspondence:admin",
+    domain="correspondence",
+    action="admin",
+    label="Manage Correspondence",
+    description="Manage correspondence workflow policies and registry",
+    category="admin",
+)
+
+MY_ACCESS = Capability(
+    key="my:access",
+    domain="my",
+    action="access",
+    label="My Workspace",
+    description="Access the employee self-service workspace",
+    category="general",
+)
+
+TEAM_ACCESS = Capability(
+    key="team:access",
+    domain="team",
+    action="access",
+    label="Team View",
+    description="View team members and team-level requests",
+    category="general",
+)
+
 
 # ═══════════════════════════════════════════════════════════════════
 # ALL CAPABILITIES — master registry
@@ -683,6 +728,12 @@ ALL_CAPABILITIES: Dict[str, Capability] = {
     PEOPLE_VIEW.key: PEOPLE_VIEW,
     PEOPLE_MANAGE.key: PEOPLE_MANAGE,
     PEOPLE_VIEW_COMPENSATION.key: PEOPLE_VIEW_COMPENSATION,
+    # e-Office Correspondence + Self-Service
+    CORRESPONDENCE_SUBMIT.key: CORRESPONDENCE_SUBMIT,
+    CORRESPONDENCE_ACT.key: CORRESPONDENCE_ACT,
+    CORRESPONDENCE_ADMIN.key: CORRESPONDENCE_ADMIN,
+    MY_ACCESS.key: MY_ACCESS,
+    TEAM_ACCESS.key: TEAM_ACCESS,
 }
 
 
@@ -768,6 +819,14 @@ IMPLIES: Dict[str, Set[str]] = {
     # ── People manage → view (+ compensation) ──
     PEOPLE_MANAGE.key: {PEOPLE_VIEW.key, PEOPLE_VIEW_COMPENSATION.key},
 
+    # ── Correspondence admin → act/submit + self-service ──
+    CORRESPONDENCE_ADMIN.key: {
+        CORRESPONDENCE_ACT.key,
+        CORRESPONDENCE_SUBMIT.key,
+        MY_ACCESS.key,
+        TEAM_ACCESS.key,
+    },
+
     # ── AI admin → view ──
     AI_MANAGE_CONSOLE.key: {AI_VIEW_CONSOLE.key, AI_CODE_EXECUTE.key, AI_WEB_SEARCH.key},
 }
@@ -833,12 +892,16 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
     # ── People & Payroll (Nibras) ──
     "people_lead": {
         PEOPLE_MANAGE.key,
+        CORRESPONDENCE_ADMIN.key,
     },
     "people_data_owners_group": {
         PEOPLE_MANAGE.key,
+        CORRESPONDENCE_ADMIN.key,
     },
     "people_analysts_group": {
         PEOPLE_VIEW.key,
+        MY_ACCESS.key,
+        TEAM_ACCESS.key,
     },
 
     # ── Data Owners (org-scoped write) ──
@@ -957,6 +1020,48 @@ def _expand_capabilities(caps: Set[str]) -> FrozenSet[str]:
     return frozenset(result)
 
 
+def derive_employee_capabilities(user) -> Set[str]:
+    """Auto-derive self-service / correspondence capabilities from the
+    user's employee profile and open approvals — WITHOUT importing the
+    hosted apps (RULE_3). String-based via apps.get_model, guarded so the
+    function is a no-op until people/correspondence are installed.
+    """
+    if user is None or not getattr(user, "is_authenticated", False):
+        return set()
+    try:
+        from django.apps import apps
+        Employee = apps.get_model('people', 'Employee')
+        Correspondence = apps.get_model('correspondence', 'Correspondence')
+    except LookupError:
+        return set()
+
+    try:
+        profile = Employee.objects.filter(user=user, is_active=True).first()
+        if not profile:
+            return set()
+    except Exception:
+        return set()
+
+    caps: Set[str] = {'my:access', 'correspondence:submit'}
+
+    try:
+        if profile.direct_reports.exists():
+            caps.add('team:access')
+    except Exception:
+        pass
+
+    try:
+        if Correspondence.objects.filter(
+            status__in=('submitted', 'in_review'),
+            current_approver_ids__contains=user.id,
+        ).exists():
+            caps.update({'correspondence:act', 'team:access'})
+    except Exception:
+        pass
+
+    return caps
+
+
 def get_user_capabilities(user) -> FrozenSet[str]:
     """Return the expanded set of capability keys for an authenticated user.
 
@@ -1009,6 +1114,9 @@ def get_user_capabilities(user) -> FrozenSet[str]:
                 )
                 continue
             caps.update(group_caps)
+
+    # Auto-derive employee self-service / correspondence capabilities.
+    caps.update(derive_employee_capabilities(user))
 
     # Expand inheritance
     expanded = _expand_capabilities(caps)

@@ -183,3 +183,6 @@ raw/GOFSCO app/*/_extracted/
 # Windows Mark-of-the-Web (downloaded-file) artifacts
 *Zone.Identifier
 ~
+
+# Office temp lock files
+~$*

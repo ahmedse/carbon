@@ -90,6 +90,14 @@ class Employee(models.Model):
     )
     employee_no = models.CharField(max_length=64, unique=True)
     full_name = models.CharField(max_length=200)
+    user = models.OneToOneField(
+        'accounts.User',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='employee_profile',
+        help_text='Linked platform account (self-service). Null until a user is linked.',
+    )
     # ── P3 profile enrichment (bilingual identity + Kuwait HR profile) ──
     # New fields are blank/null-safe so existing rows survive the migration.
     name_en_given = models.CharField(max_length=120, blank=True, default='')
@@ -290,7 +298,9 @@ class LeaveEntitlement(models.Model):
 
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='leave_entitlements')
     year = models.PositiveSmallIntegerField()
-    leave_type = models.CharField(max_length=40)
+    leave_type = models.ForeignKey(
+        'mdm.ReferenceValue', on_delete=models.PROTECT, related_name='+'
+    )
     entitled_days = models.DecimalField(max_digits=8, decimal_places=2)
     used_days = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     carried_forward = models.DecimalField(max_digits=8, decimal_places=2, default=0)
@@ -303,7 +313,8 @@ class LeaveEntitlement(models.Model):
         verbose_name_plural = "Leave Entitlements"
 
     def __str__(self):
-        return f"{self.employee} {self.year} {self.leave_type} ({self.entitled_days} days)"
+        code = self.leave_type.code if self.leave_type_id else self.leave_type
+        return f"{self.employee} {self.year} {code} ({self.entitled_days} days)"
 
 
 class LeaveRecord(models.Model):
@@ -318,7 +329,9 @@ class LeaveRecord(models.Model):
     ]
 
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='leave_records')
-    leave_type = models.CharField(max_length=40)
+    leave_type = models.ForeignKey(
+        'mdm.ReferenceValue', on_delete=models.PROTECT, related_name='+'
+    )
     start_date = models.DateField()
     end_date = models.DateField()
     days = models.DecimalField(max_digits=8, decimal_places=2)
@@ -333,7 +346,8 @@ class LeaveRecord(models.Model):
         verbose_name_plural = "Leave Records"
 
     def __str__(self):
-        return f"{self.employee} {self.leave_type} {self.start_date}→{self.end_date} ({self.status})"
+        code = self.leave_type.code if self.leave_type_id else self.leave_type
+        return f"{self.employee} {code} {self.start_date}→{self.end_date} ({self.status})"
 
 
 class BenefitType(models.Model):

@@ -246,10 +246,104 @@ function reflowMarkdownStructure(content) {
       continue;
     }
 
+    // A GFM table the model collapsed onto one line (header+delimiter+rows glued
+    // to trailing prose) never parses — reflow it to one row per line first.
+    const tableLines = reflowCollapsedTable(trimmed);
+    if (tableLines) {
+      out.push(...tableLines);
+      continue;
+    }
+
+    // A GFM table whose rows are already on separate lines but whose header row
+    // is glued to trailing prose (e.g. "sentence. | Header | …") has no blank
+    // separator — the parser won't start a table. Peel the prose off.
+    const proseAndTable = splitProseFromInlineTableHeader(trimmed, out);
+    if (proseAndTable) {
+      out.push(...proseAndTable);
+      continue;
+    }
+
     out.push(...reflowLine(trimmed));
   }
 
   return out.join('\n');
+}
+
+/**
+ * Handle the case where the model emits: "Prose sentence. | Header | Col2 |"
+ * followed by a delimiter row on the NEXT line (so the rows are already split
+ * but there's no blank line separating the prose from the table). The GFM
+ * parser won't recognise a table that starts mid-line — it needs the header on
+ * its own line preceded by a blank line.
+ *
+ * We only trigger when: (a) the NEXT output line starts with `|---`, and
+ * (b) the current line has a `|` that's preceded by non-pipe prose. We peel
+ * the prose off, insert a blank line, and let the header row land alone.
+ * Returns null when the heuristic doesn't apply so the caller falls through.
+ */
+function splitProseFromInlineTableHeader(line, prevLines) {
+  // A table header row sits here when: there's a | somewhere after prose content.
+  const pipeIdx = line.indexOf('|');
+  if (pipeIdx <= 0) return null; // line starts with | or has no | → not this case
+
+  // The NEXT line in `prevLines` is not available yet (we're building it), so
+  // we check whether the CURRENT line looks like "prose | col | col |" — the
+  // delimiter row will arrive on the next iteration and the GFM parser handles
+  // it from there if we just ensure a blank line precedes the header.
+  // Heuristic: prose before the first pipe, AND multiple pipe-separated segments
+  // after it (at least 2 `|`s total → a real table header, not an em-dash table).
+  const afterFirstPipe = line.slice(pipeIdx);
+  const pipeCount = (afterFirstPipe.match(/\|/g) || []).length;
+  if (pipeCount < 2) return null;
+
+  const prose = line.slice(0, pipeIdx).trim();
+  const header = line.slice(pipeIdx).trim();
+  if (!prose || !header) return null;
+
+  // Avoid double-splitting a line that reflowCollapsedTable already handles
+  // (that one has the delimiter on the same line; here it's on the next line).
+  const DELIMITER_CELL = /\|\s*:?-{2,}:?\s*(?=\|)/;
+  if (DELIMITER_CELL.test(line)) return null; // already handled by reflowCollapsedTable
+
+  const result = [];
+  result.push(prose);
+  result.push(''); // blank line so the GFM parser starts a fresh block
+  result.push(header);
+  return result;
+}
+
+
+/**
+ * Reflow a GFM table the model collapsed onto a single line back into the
+ * line-oriented form the parser requires: leading prose on its own line, a
+ * blank line, then one `|…|` row per line (header, delimiter, data rows).
+ *
+ * A collapsed table is detected by the co-occurrence of an inline delimiter
+ * cell (`|---|`) and a row boundary (`|` + whitespace + `|`) — a correctly
+ * formatted delimiter line on its own has neither. Returns `null` when the line
+ * is not a collapsed table, so the caller falls through to the prose reflow.
+ */
+function reflowCollapsedTable(line) {
+  const DELIMITER_CELL = /\|\s*:?-{2,}:?\s*(?=\|)/; // a |---| style delimiter cell
+  const ROW_BOUNDARY = /\|[ \t]+\|/; // one row's closing pipe glued to the next row's opening pipe
+  if (!DELIMITER_CELL.test(line) || !ROW_BOUNDARY.test(line)) return null;
+
+  // Split on every "|<ws>|" row boundary (a real cell keeps content between its
+  // pipes, so only true row seams — pipe directly followed by whitespace+pipe —
+  // are cut here).
+  const rows = line.replace(/\|[ \t]+\|/g, '|\u0001|').split('\u0001');
+  if (rows.length < 2) return null;
+
+  const out = [];
+  const firstPipe = rows[0].indexOf('|');
+  const prose = rows[0].slice(0, firstPipe).trim();
+  const header = rows[0].slice(firstPipe).trim();
+  if (prose) out.push(prose);
+  out.push(''); // blank line so the table starts its own block
+  out.push(header);
+  for (let i = 1; i < rows.length; i += 1) out.push(rows[i].trim());
+  out.push(''); // close the table block
+  return out;
 }
 
 /** Split one prose line's collapsed headings / list items onto their own lines. */
@@ -390,7 +484,8 @@ function remarkEntityChips() {
 const mermaidIdRef = { current: 0 };
 
 function MermaidBlock({ code }) {
-  const [svg, setSvg] = useState('');
+  // { html: svgWithoutStyle, css: extractedCSS } | null
+  const [diagram, setDiagram] = useState(null);
   const [error, setError] = useState('');
   const effectiveCode = repairXychart(reflowSingleLineMermaid(code));
 
@@ -408,7 +503,17 @@ function MermaidBlock({ code }) {
         mermaidIdRef.current += 1;
         const id = `mmd-${mermaidIdRef.current}-${Date.now()}`;
         const { svg: rendered } = await mermaid.render(id, effectiveCode);
-        if (!cancelled) setSvg(rendered);
+        if (!cancelled) {
+          // Hoist the mermaid <style> out of the SVG so it becomes a normal HTML
+          // <style> element (UA stylesheet: display:none) — prevents the raw CSS
+          // text from leaking as visible content inside the chat bubble.
+          let css = '';
+          const html = rendered.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (_, c) => {
+            css += c;
+            return '';
+          });
+          setDiagram({ html, css });
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err?.message ? String(err.message) : 'Diagram render failed');
@@ -437,7 +542,7 @@ function MermaidBlock({ code }) {
     );
   }
 
-  if (!svg) {
+  if (!diagram) {
     return (
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', my: 1 }}>
         Rendering diagram…
@@ -446,20 +551,24 @@ function MermaidBlock({ code }) {
   }
 
   return (
-    <Box
-      sx={{
-        my: 1.5,
-        overflowX: 'auto',
-        bgcolor: 'background.paper',
-        borderRadius: 1,
-        border: 1,
-        borderColor: 'divider',
-        p: 1.5,
-        '& svg': { maxWidth: '100%', height: 'auto' },
-        '& a': { color: 'primary.main' },
-      }}
-      dangerouslySetInnerHTML={{ __html: svg }}
-    />
+    <>
+      {/* Scoped mermaid CSS — outside SVG so it's treated as a real <style> (hidden by UA stylesheet) */}
+      {diagram.css && <style>{diagram.css}</style>}
+      <Box
+        sx={{
+          my: 1.5,
+          overflowX: 'auto',
+          bgcolor: 'background.paper',
+          borderRadius: 1,
+          border: 1,
+          borderColor: 'divider',
+          p: 1.5,
+          '& svg': { maxWidth: '100%', height: 'auto' },
+          '& a': { color: 'primary.main' },
+        }}
+        dangerouslySetInnerHTML={{ __html: diagram.html }}
+      />
+    </>
   );
 }
 
@@ -481,10 +590,10 @@ function CodeBlock({ children, className }) {
     return (
       <Typography
         component="code"
+        variant="caption"
         dir="ltr"
         sx={{
           fontFamily: 'monospace',
-          fontSize: '0.85em',
           bgcolor: 'action.hover',
           px: 0.5,
           py: 0.125,
@@ -515,7 +624,7 @@ function CodeBlock({ children, className }) {
           bgcolor: '#21252b',
         }}
       >
-        <Typography variant="caption" sx={{ color: '#9da5b4', fontFamily: 'monospace', fontSize: '0.75rem' }}>
+        <Typography variant="caption" sx={{ color: '#9da5b4', fontFamily: 'monospace' }}>
           {match[1]}
         </Typography>
         <Tooltip title={copied ? 'Copied!' : 'Copy code'}>
@@ -534,7 +643,7 @@ function CodeBlock({ children, className }) {
           bgcolor: '#282c34',
           overflowX: 'auto',
           fontFamily: 'monospace',
-          fontSize: '0.8125rem',
+          fontSize: '0.6875rem',
           lineHeight: 1.6,
           color: '#abb2bf',
           '& code': { fontFamily: 'inherit', fontSize: 'inherit', bgcolor: 'transparent', p: 0 },
@@ -565,13 +674,13 @@ const components = {
     </Typography>
   ),
 
-  // headings
-  h1: ({ children }) => <Typography variant="h6" sx={{ fontWeight: 700, mt: 2, mb: 0.5 }}>{children}</Typography>,
-  h2: ({ children }) => <Typography variant="subtitle1" sx={{ fontWeight: 700, mt: 1.5, mb: 0.5 }}>{children}</Typography>,
-  h3: ({ children }) => <Typography variant="subtitle2" sx={{ fontWeight: 700, mt: 1, mb: 0.5 }}>{children}</Typography>,
-  h4: ({ children }) => <Typography variant="body1" sx={{ fontWeight: 700, mt: 0.75, mb: 0.25 }}>{children}</Typography>,
-  h5: ({ children }) => <Typography variant="body2" sx={{ fontWeight: 700, mt: 0.5, mb: 0.25 }}>{children}</Typography>,
-  h6: ({ children }) => <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mt: 0.5, mb: 0.25 }}>{children}</Typography>,
+  // headings — mapped to compact-ui.md font scale (h1→h6 variant tier)
+  h1: ({ children }) => <Typography variant="h5" sx={{ mt: 2, mb: 0.5 }}>{children}</Typography>,
+  h2: ({ children }) => <Typography variant="h6" sx={{ mt: 1.5, mb: 0.5 }}>{children}</Typography>,
+  h3: ({ children }) => <Typography variant="subtitle1" sx={{ mt: 1, mb: 0.5 }}>{children}</Typography>,
+  h4: ({ children }) => <Typography variant="subtitle2" sx={{ mt: 0.75, mb: 0.25 }}>{children}</Typography>,
+  h5: ({ children }) => <Typography variant="body2" sx={{ fontWeight: 600, mt: 0.5, mb: 0.25 }}>{children}</Typography>,
+  h6: ({ children }) => <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mt: 0.5, mb: 0.25, color: 'text.secondary' }}>{children}</Typography>,
 
   // lists
   ul: ({ children }) => <Box component="ul" sx={{ pl: 2.5, my: 0.5, mb: 1 }}>{children}</Box>,
@@ -588,25 +697,37 @@ const components = {
     return <Typography component="li" variant="body2" sx={{ mb: 0.25 }}>{children}</Typography>;
   },
 
-  // tables — MUI Table
+  // tables — compact-ui.md: TableHead 0.625rem uppercase letterSpacing, TableCell 0.6875rem body2, padding 4px 8px
   table: ({ children }) => (
     <Box sx={{ overflowX: 'auto', my: 1.5, borderRadius: 1, border: 1, borderColor: 'divider' }}>
       <Table size="small" sx={{ minWidth: 300 }}>{children}</Table>
     </Box>
   ),
-  thead: ({ children }) => <TableHead sx={{ bgcolor: 'action.hover' }}>{children}</TableHead>,
+  thead: ({ children }) => <TableHead sx={{ bgcolor: 'background.dark' }}>{children}</TableHead>,
   tbody: ({ children }) => <TableBody>{children}</TableBody>,
-  tr: ({ children }) => <TableRow sx={{ '&:nth-of-type(even)': { bgcolor: 'action.hover' } }}>{children}</TableRow>,
+  tr: ({ children }) => <TableRow sx={{ '&:nth-of-type(even)': { bgcolor: 'action.hover' }, '&:last-child td': { borderBottom: 0 } }}>{children}</TableRow>,
   th: ({ children }) => (
-    <TableCell sx={{ fontWeight: 700, fontSize: '0.8125rem', whiteSpace: 'nowrap', py: 0.75 }}>
+    <TableCell
+      sx={{
+        py: 0.75, px: 1,
+        fontWeight: 600,
+        fontSize: '0.625rem',
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em',
+        whiteSpace: 'nowrap',
+        color: 'text.secondary',
+        borderBottom: 2,
+        borderColor: 'divider',
+      }}
+    >
       {children}
     </TableCell>
   ),
   td: ({ children }) => (
-    <TableCell sx={{ fontSize: '0.8125rem', py: 0.75 }}>{children}</TableCell>
+    <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.6875rem' }}>{children}</TableCell>
   ),
 
-  // blockquote
+  // blockquote — borderRadius uses theme token (borderRadius:0.5 = 4px per shape.borderRadius:8)
   blockquote: ({ children }) => (
     <Box
       sx={{
@@ -618,6 +739,7 @@ const components = {
         bgcolor: 'action.hover',
         borderRadius: '0 4px 4px 0',
         color: 'text.secondary',
+        fontSize: '0.6875rem',
       }}
     >
       {children}

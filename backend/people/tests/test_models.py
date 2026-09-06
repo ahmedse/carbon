@@ -6,7 +6,7 @@ from datetime import date
 import pytest
 from django.db import IntegrityError, transaction
 
-from mdm.models import OrgUnit
+from mdm.models import OrgUnit, ReferenceSet, ReferenceValue
 
 from people.models import (
     AttendancePermission,
@@ -40,6 +40,14 @@ def employee(org):
     )
 
 
+@pytest.fixture
+def leave_type_annual(db):
+    rs = ReferenceSet.objects.create(name='leave_type', slug='leave-type')
+    return ReferenceValue.objects.create(
+        reference_set=rs, code='annual', label='Annual Leave',
+    )
+
+
 # ── (a) instantiation + __str__ ─────────────────────────────────────────────
 
 @pytest.mark.django_db
@@ -49,17 +57,17 @@ def test_position_str(org):
 
 
 @pytest.mark.django_db
-def test_leave_entitlement_str(employee):
+def test_leave_entitlement_str(employee, leave_type_annual):
     ent = LeaveEntitlement.objects.create(
-        employee=employee, year=2026, leave_type='annual', entitled_days='30.00',
+        employee=employee, year=2026, leave_type=leave_type_annual, entitled_days='30.00',
     )
     assert str(ent) == 'E-TEST — Test Employee 2026 annual (30.00 days)'
 
 
 @pytest.mark.django_db
-def test_leave_record_str(employee):
+def test_leave_record_str(employee, leave_type_annual):
     rec = LeaveRecord.objects.create(
-        employee=employee, leave_type='annual',
+        employee=employee, leave_type=leave_type_annual,
         start_date=date(2026, 3, 1), end_date=date(2026, 3, 5), days='5.00',
     )
     assert str(rec) == 'E-TEST — Test Employee annual 2026-03-01→2026-03-05 (draft)'
@@ -138,14 +146,14 @@ def test_rotation_schedule_str(employee):
 # ── (b) unique_together constraints ─────────────────────────────────────────
 
 @pytest.mark.django_db
-def test_leave_entitlement_unique_together(employee):
+def test_leave_entitlement_unique_together(employee, leave_type_annual):
     LeaveEntitlement.objects.create(
-        employee=employee, year=2026, leave_type='annual', entitled_days='30.00',
+        employee=employee, year=2026, leave_type=leave_type_annual, entitled_days='30.00',
     )
     with pytest.raises(IntegrityError):
         with transaction.atomic():
             LeaveEntitlement.objects.create(
-                employee=employee, year=2026, leave_type='annual', entitled_days='31.00',
+                employee=employee, year=2026, leave_type=leave_type_annual, entitled_days='31.00',
             )
 
 
@@ -217,13 +225,29 @@ def test_loan_fk(employee):
 
 
 @pytest.mark.django_db
-def test_leave_record_fk(employee):
+def test_leave_record_fk(employee, leave_type_annual):
     rec = LeaveRecord.objects.create(
-        employee=employee, leave_type='annual',
+        employee=employee, leave_type=leave_type_annual,
         start_date=date(2026, 3, 1), end_date=date(2026, 3, 5), days='5.00',
     )
     assert rec.employee == employee
+    assert rec.leave_type == leave_type_annual
+    assert rec.leave_type.code == 'annual'
     assert list(employee.leave_records.all()) == [rec]
+
+
+@pytest.mark.django_db
+def test_leave_record_serializer_emits_code_id_label(employee, leave_type_annual):
+    from people.serializers import LeaveRecordSerializer
+
+    rec = LeaveRecord.objects.create(
+        employee=employee, leave_type=leave_type_annual,
+        start_date=date(2026, 3, 1), end_date=date(2026, 3, 5), days='5.00',
+    )
+    data = LeaveRecordSerializer(rec).data
+    assert data['leave_type'] == 'annual'
+    assert data['leave_type_id'] == leave_type_annual.id
+    assert data['leave_type_label'] == 'Annual Leave'
 
 
 # ── (e) RotationSchedule.config defaults to {} ─────────────────────────────

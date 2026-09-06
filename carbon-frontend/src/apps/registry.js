@@ -6,6 +6,8 @@
 import carbonManifest from './carbon/manifest.js';
 import healthyManifest from './healthy/manifest.js';
 import peopleManifest from './people/manifest.js';
+import myManifest from './my/manifest.js';
+import teamManifest from './team/manifest.js';
 import stubManifest from './stub/manifest.js';
 
 // Registration policy: REGISTER-ALL + ENABLE-PER-INSTANCE.
@@ -19,6 +21,8 @@ export const APP_REGISTRY = [
   carbonManifest,
   healthyManifest,
   peopleManifest,
+  myManifest,
+  teamManifest,
   stubManifest,
 ];
 

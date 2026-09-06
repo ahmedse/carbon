@@ -382,11 +382,16 @@ class Command(BaseCommand):
             ('GF-005', CURRENT, 'annual', 30, 8, 0),
             ('GF-005', CURRENT, 'sick', 15, 0, 0),
         ]
+        leave_type_map = {
+            rv.code: rv
+            for rv in ReferenceValue.objects.filter(reference_set__name='leave_type')
+        }
         for emp_no, yr, ltype, entitled, used, carried in ENT_DEFS:
             emp = emp_map.get(emp_no)
-            if emp:
+            ltype_value = leave_type_map.get(ltype)
+            if emp and ltype_value:
                 LeaveEntitlement.objects.update_or_create(
-                    employee=emp, year=yr, leave_type=ltype,
+                    employee=emp, year=yr, leave_type=ltype_value,
                     defaults={
                         'entitled_days': decimal.Decimal(str(entitled)),
                         'used_days': decimal.Decimal(str(used)),
@@ -682,9 +687,10 @@ class Command(BaseCommand):
         ]
         for emp_no, ltype, start, end, days, status in LR_DEFS:
             emp = emp_map.get(emp_no)
-            if emp:
+            ltype_value = leave_type_map.get(ltype)
+            if emp and ltype_value:
                 LeaveRecord.objects.update_or_create(
-                    employee=emp, leave_type=ltype, start_date=start,
+                    employee=emp, leave_type=ltype_value, start_date=start,
                     defaults={'end_date': end, 'days': days, 'status': status,
                               'calendar_split': days > 10},
                 )

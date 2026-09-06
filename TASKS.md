@@ -9868,3 +9868,1044 @@ npm run build
 Report: i18n parity clean (0 missing keys); lint 0 errors; build clean. Worker appends
 a `## [date] Frontend Worker — Phase NIR-7B` entry to `TASK-RESULTS.md` with terminal
 proof.
+
+---
+
+# e-Office Correspondence — Thin Vertical Slice (Leave only)
+
+Source of truth: `docs/DESIGN-EOFFICE-CORRESPONDENCE.md` + ADR-0030
+(`.ai-toolkit/decisions/0030-eoffice-correspondence-engine.md`). The locked
+refinements in the design doc §12 override §3–§6 where they differ.
+
+**Scope.** P0–P4 + P6 + P7, Leave only. Excluded: P5 (`leave_type`→governed FK),
+P8 (team app), P9 (notifications UI/i18n), P10 (PDF). Generic
+`POST /correspondence/` create is OUT of slice — leave submit lives in `people`.
+
+**Task map.** `OF-0…OF-8` = backend-worker, `OF-9…OF-11` = frontend-worker,
+`OF-12` = qa-validator. Dispatch strictly in order; each task is thick and
+self-contained with no stubs.
+
+**Layering invariants (never violate):**
+- `correspondence` is a CORE app: imports only `mdm`, `dq`, `catalog`, `accounts`,
+  `core`. It must **never** `import people`. It reaches `people` models only via
+  `apps.get_model('people', ...)` and receives subject instances as arguments.
+- `people` depends on `correspondence` (hosted), not the reverse.
+- No `GenericForeignKey` / `ContentType` (ADR-0025). Subject link =
+  `subject_type CharField` + `subject_id PositiveBigIntegerField`.
+- Governed enums (`corr_type`, `leave_type`, `memo_type`) are `mdm.ReferenceValue`
+  FKs (ADR-0027). No hardcoded choices for governed values.
+- `CorrespondenceEvent` is append-only; `emit_governance_event` on every
+  transition (best-effort, `catalog.audit_utils`).
+- Test partitioning MASTER DIRECTIVE: one app at a time, never full suite, never
+  xdist. Show live output (no `tail` pipes).
+
+**Brand/venv facts (do not re-derive):** venv = `/home/ahmed/aast/carbon/.venv`;
+runtime brand for seed/manage = `DJANGO_BRAND=nibras`; pytest auto-pins
+`DJANGO_BRAND=aastmt` via `conftest.py` + `_testbrand` (pytest.ini:
+`--reuse-db --nomigrations`). API prefix = `/carbon-api/`.
+
+---
+
+### Phase OF-0 — `correspondence` app skeleton + governed reference sets
+**Role:** backend-worker · **Depends on:** none
+
+#### Files to Read First
+- `backend/mdm/models.py` (`ReferenceSet`, `ReferenceValue` fields)
+- `backend/config/settings.py` (`INSTALLED_APPS` block)
+- `backend/dq/management/commands/` (any existing seed command for idempotency idiom)
+
+#### Context
+Create the `correspondence` app shell and seed the governed enum values that the
+slice depends on. No engine models yet (those arrive in OF-2); this phase is
+only the app registration + `ReferenceSet`/`ReferenceValue` seed.
+
+#### Files to Change
+- `backend/correspondence/__init__.py` (new)
+- `backend/correspondence/apps.py` (new; `AppConfig.name='correspondence'`,
+  `default_auto_field='django.db.models.BigAutoField'`)
+- `backend/correspondence/models.py` (new; empty `# engine models in OF-2`)
+- `backend/correspondence/admin.py` (new; empty)
+- `backend/correspondence/migrations/__init__.py` (new)
+- `backend/correspondence/management/__init__.py`,
+  `backend/correspondence/management/commands/__init__.py` (new)
+- `backend/correspondence/management/commands/seed_correspondence.py` (new)
+- `backend/config/settings.py` — add `'correspondence'` to `INSTALLED_APPS`
+
+#### Contract
+`seed_correspondence` command (idempotent — re-runnable, `update_or_create`):
+- `correspondence_type`: `leave_request`, `loan_request`, `profile_change`,
+  `internal_memo`, `circular`, `decision` (≥6 values)
+- `leave_type`: `annual`, `sick`, `emergency`, `unpaid`, `maternity`, `paternity`
+- `memo_type`: `internal_note`, `directive`, `announcement`
+Each `ReferenceValue` gets `code`, `label_en`, `label_ar`, `is_active=True`, and
+`metadata` (a `{"sort": n}` ordering hint) on the `ReferenceSet`.
+
+#### DO NOT TOUCH
+- Any engine models, `people`, `accounts/capabilities.py`, frontend.
+
+#### Verification Gate (Worker runs + reports output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+DJANGO_BRAND=nibras /home/ahmed/aast/carbon/.venv/bin/python manage.py seed_correspondence
+DJANGO_BRAND=nibras /home/ahmed/aast/carbon/.venv/bin/python manage.py shell -c "
+from mdm.models import ReferenceSet
+s = ReferenceSet.objects.get(name='correspondence_type')
+print('correspondence_type count', s.values.count())
+assert s.values.count() >= 6
+print('leave_type count', ReferenceSet.objects.get(name='leave_type').values.count())
+"
+```
+Report: command is re-runnable (run it twice, second run is a no-op with
+`... unchanged` output); `correspondence_type` count ≥ 6. Append
+`## [date] Backend Worker — Phase OF-0` to `TASK-RESULTS.md`.
+
+---
+
+### Phase OF-1 — `Employee.user` link + `IsActiveEmployee` permission
+**Role:** backend-worker · **Depends on:** none (parallel-safe)
+
+#### Files to Read First
+- `backend/people/models.py` (`Employee`)
+- `backend/people/permissions.py`
+- `backend/accounts/models.py` (`User`)
+
+#### Context
+The correspondence spine routes to/from users, so `Employee` must be linked to
+`accounts.User`. This phase only adds the FK + a reusable permission; no engine
+wiring.
+
+#### Files to Change
+- `backend/people/models.py` — add to `Employee`:
+  `user = models.OneToOneField('accounts.User', null=True, blank=True,
+  on_delete=models.SET_NULL, related_name='employee_profile')`
+- `backend/people/migrations/XXXX_employee_user.py` (generated)
+- `backend/people/permissions.py` — add `IsActiveEmployee` (DRF permission):
+  passes when `request.user` has an `employee_profile` whose `is_active` is True;
+  otherwise 403 with `{"detail":"Active employee profile required."}`.
+- `backend/people/tests/test_employee_user_link.py` (new)
+
+#### Contract
+- Reverse accessor is `user.employee_profile` (may raise `Employee.DoesNotExist`
+  or be `None` — callers must guard both).
+- `IsActiveEmployee` must be importable as `people.permissions.IsActiveEmployee`.
+
+#### DO NOT TOUCH
+- `accounts/capabilities.py`, `correspondence/**`, frontend.
+
+#### Verification Gate (Worker runs + reports output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations people
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest people -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+```
+Report: new migration applied; `people` tests green; `--check` clean (no missing
+migrations). Append `## [date] Backend Worker — Phase OF-1` to `TASK-RESULTS.md`.
+
+---
+
+### Phase OF-2 — Engine models + admin + migration (NO GenericFK)
+**Role:** backend-worker · **Depends on:** OF-0, OF-1
+
+#### Files to Read First
+- `backend/mdm/models.py` (`ReferenceValue`, `OrgUnit`)
+- `backend/accounts/models.py` (`User`)
+- `backend/catalog/audit_utils.py`
+- `backend/dq/models.py` (to confirm no per-row DQResult is added here)
+
+#### Context
+Author the 8 engine tables. This is the data-model backbone. Governed enums are
+`ReferenceValue` FKs; the subject link is `subject_type`/`subject_id` (NO
+`GenericForeignKey`/`ContentType`); `signature_ref` is a JSON seam left null.
+
+#### Files to Change
+- `backend/correspondence/models.py` (replace placeholder)
+- `backend/correspondence/admin.py` (register all models, minimal)
+- `backend/correspondence/migrations/0001_initial.py` (generated)
+
+#### Contract — exact models
+```python
+STATUS_CHOICES = [
+    ('draft','Draft'),('submitted','Submitted'),('in_review','In Review'),
+    ('approved','Approved'),('rejected','Rejected'),('cancelled','Cancelled'),
+    ('sent_back','Sent Back'),('expired','Expired'),('archived','Archived'),
+]
+ACTIONABLE = ('submitted','in_review')
+TERMINAL = ('approved','rejected','cancelled','expired','archived')
+```
+1. **Correspondence** — `reference_no CharField(40, unique, db_index)`,
+   `corr_type FK(mdm.ReferenceValue, PROTECT, related_name='+')`,
+   `subject_type CharField(120, blank=True, default='')`,
+   `subject_id PositiveBigIntegerField(null=True, blank=True)`,
+   `org_unit FK(mdm.OrgUnit, PROTECT)`, `requester FK(accounts.User, PROTECT)`,
+   `title CharField(200)`, `payload JSONField(default=dict, blank=True)`,
+   `status CharField(16, choices=STATUS_CHOICES, default='draft', db_index)`,
+   `current_step PositiveSmallIntegerField(default=0)`,
+   `current_approver_ids JSONField(default=list, blank=True)`,
+   `approver_chain JSONField(default=list, blank=True)`,
+   `policy_version CharField(40, blank=True)`, `policy_id PositiveBigIntegerField(null=True)`,
+   `policy_snapshot JSONField(default=dict, blank=True)`,
+   `signature_ref JSONField(null=True, blank=True)`,
+   `resolved_at DateTimeField(null=True, blank=True)`,
+   `created_at/updated_at` (auto). Indexes: `(status, requester)`, `(status,)`,
+   `(corr_type,)`.
+2. **WorkflowPolicy** — `name CharField(120)`, `corr_type FK(ReferenceValue, PROTECT)`,
+   `org_unit FK(OrgUnit, null=True, blank=True)` (null=global default),
+   `version CharField(40)`, `is_active Bool(default=True)`,
+   `numbering_format CharField(120, default='{PREFIX}-{YEAR}-{SEQ:04d}')`,
+   `effective_from/effective_to DateTimeField(null=True, blank=True)`,
+   `created_at/updated_at`. `unique_together=(corr_type, org_unit, version)`.
+3. **WorkflowPolicyStep** — `policy FK(WorkflowPolicy, CASCADE, related_name='steps')`,
+   `order PositiveSmallIntegerField`, `role CharField(24)` (one of
+   `manager|hr|finance|specific_user|any_admin`), `intent CharField(16)`
+   (`approve|acknowledge|review`), `specific_user FK(accounts.User, null=True, blank=True)`,
+   `skip_if_self Bool(default=False)`, `auto_approve Bool(default=False)`,
+   `can_skip Bool(default=False)`, `condition JSONField(null=True, blank=True)`,
+   `is_active Bool(default=True)`. `ordering=['order']`.
+4. **CorrespondenceEvent** — `correspondence FK(Correspondence, CASCADE,
+   related_name='events')`, `seq PositiveSmallIntegerField`,
+   `actor FK(accounts.User, null=True, SET_NULL)` (null=system),
+   `event_type CharField(24)`, `from_status CharField(16, null=True)`,
+   `to_status CharField(16, null=True)`, `payload JSONField(default=dict)`,
+   `created_at`. `unique_together=(correspondence, seq)`. `ordering=['seq']`.
+5. **CorrespondenceAttachment** — `correspondence FK(CASCADE,
+   related_name='attachments')`, `name CharField(200)`,
+   `file FileField(upload_to='correspondence/attachments/%Y/%m/', null=True, blank=True)`,
+   `mime_type CharField(80, blank=True)`, `size PositiveBigIntegerField(default=0)`,
+   `uploaded_by FK(accounts.User, null=True, SET_NULL)`, `created_at`.
+6. **CorrespondenceRegistry** — `corr_type FK(ReferenceValue, PROTECT)`,
+   `org_unit FK(OrgUnit, null=True, blank=True)`, `year PositiveSmallIntegerField`,
+   `counter PositiveIntegerField(default=0)`. `unique_together=(corr_type, org_unit, year)`.
+7. **Delegation** — `delegator FK(User, related_name='delegations_made')`,
+   `delegate FK(User, related_name='delegations_received')`,
+   `corr_type FK(ReferenceValue, null=True, blank=True)` (null=all),
+   `scope CharField(16, default='all')`, `org_unit FK(OrgUnit, null=True, blank=True)`,
+   `from_date/to_date DateTimeField(null=True, blank=True)`, `is_active Bool(default=True)`,
+   `note CharField(300, blank=True)`, `created_at`.
+8. **Notification** — `user FK(User, related_name='correspondence_notifications')`,
+   `correspondence FK(Correspondence, null=True, CASCADE)`,
+   `event FK(CorrespondenceEvent, null=True, CASCADE)`, `type CharField(24)`,
+   `title CharField(200)`, `body TextField(blank=True)`, `is_read Bool(default=False)`,
+   `created_at`. Index `(user, is_read)`.
+
+#### DO NOT TOUCH
+- `people/**`, `accounts/capabilities.py`, any service/API layer, frontend.
+- No `GenericForeignKey`, no `ContentType`, no per-row `DQResult` table.
+
+#### Verification Gate (Worker runs + reports output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations correspondence
+/home/ahmed/aast/carbon/.venv/bin/python manage.py migrate
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+grep -rn "GenericForeignKey\|ContentType" correspondence/ || echo "NO-GENERIC-FK-OK"
+```
+Report: migration applied; `check` clean; grep returns `NO-GENERIC-FK-OK`.
+Append `## [date] Backend Worker — Phase OF-2` to `TASK-RESULTS.md`.
+
+---
+
+### Phase OF-3 — Registry (reference numbers) + Policy resolution services
+**Role:** backend-worker · **Depends on:** OF-0, OF-2
+
+#### Files to Read First
+- `backend/correspondence/models.py` (from OF-2)
+- `backend/mdm/models.py`
+
+#### Context
+Two pure, independently-testable services: gap-free reference-number allocation
+and active-policy resolution. These are the foundation the FSM (OF-5) composes.
+
+#### Files to Change
+- `backend/correspondence/registry.py` (new)
+- `backend/correspondence/policies.py` (new)
+- `backend/correspondence/services.py` (new — thin `__all__` re-export)
+- `backend/correspondence/tests/__init__.py` (new)
+- `backend/correspondence/tests/test_registry.py` (new)
+- `backend/correspondence/tests/test_policies.py` (new)
+- Extend `seed_correspondence` to also seed the default `leave_request` policy
+  (idempotent): `WorkflowPolicy(name='Leave Request Default', corr_type=leave_request,
+  version='1.0.0', is_active=True)` with one `WorkflowPolicyStep(role='manager',
+  intent='approve', order=1, skip_if_self=True)`.
+
+#### Contract
+```python
+# registry.py — atomic, gap-free
+def allocate_reference_no(*, corr_type, org_unit, numbering_format) -> str:
+    """Lock a CorrespondenceRegistry row with select_for_update(),
+    increment counter, return formatted number. Gap-free; unique per
+    (corr_type, org_unit, year)."""
+# policies.py
+def resolve_policy(*, corr_type, org_unit=None) -> WorkflowPolicy:
+    """Most specific active policy: (corr_type, org_unit) > (corr_type, None).
+    Raise PolicyNotFound if none. Return policy with .steps prefetched,
+    ordered by order, filtered is_active=True."""
+def freeze_policy(policy) -> dict:
+    """Return {'policy_id':..,'policy_version':..,'policy_snapshot':{
+        'name':..,'numbering_format':..,'steps':[{order,role,intent,
+        specific_user_id,skip_if_self,auto_approve,can_skip,condition}]}}."""
+```
+`allocate_reference_no` must use `select_for_update()` and
+`transaction.atomic()` internally; formatting uses Python `str.format` on
+`numbering_format` with keys `PREFIX`, `YEAR`, `SEQ` (prefix from policy/brand).
+
+#### DO NOT TOUCH
+- FSM/routing (OF-4/OF-5), API/views, `people`, frontend.
+
+#### Verification Gate (Worker runs + reports output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+DJANGO_BRAND=nibras /home/ahmed/aast/carbon/.venv/bin/python manage.py seed_correspondence
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest correspondence -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+Report: `correspondence` tests green (registry + policies); seed idempotent and
+now includes the default `leave_request` policy. Append
+`## [date] Backend Worker — Phase OF-3` to `TASK-RESULTS.md`.
+
+---
+
+### Phase OF-4 — Routing (approver resolution) + Delegation hook
+**Role:** backend-worker · **Depends on:** OF-1, OF-2
+
+#### Files to Read First
+- `backend/correspondence/models.py` (OF-2)
+- `backend/people/models.py` (`Employee.manager`, `direct_reports`)
+- `backend/accounts/capabilities.py` (`has_capability`)
+
+#### Context
+Resolve a `WorkflowPolicyStep.role` into a concrete set of `user_id`s. This is
+the only place `people` is reached via `apps.get_model` (never an import).
+
+#### Files to Change
+- `backend/correspondence/routing.py` (new)
+- `backend/correspondence/tests/test_routing.py` (new)
+
+#### Contract
+```python
+def resolve_step_approvers(*, step, requester, org_unit) -> list[int]:
+    """Map step.role -> ordered user ids:
+    - 'manager'        -> requester's Employee.manager.user.id (via
+                          apps.get_model('people','Employee')); [] if no manager
+    - 'specific_user'  -> [step.specific_user_id]
+    - 'any_admin'      -> users with capability 'correspondence:admin'
+    - 'hr'             -> users with capability 'people:manage'
+    - 'finance'        -> [] (unresolved until finance module; caller auto-skips)
+    Apply skip_if_self: drop requester id. Dedupe preserving order."""
+def apply_delegation(user_ids, *, delegator) -> list[int]:
+    """Replace any id in user_ids where an active Delegation(delegator=id,
+    scope='all' or matching) exists with the delegate id, honoring
+    from_date/to_date. Return updated ordered list."""
+```
+`has_capability` must be imported lazily / via `accounts.capabilities` (allowed —
+`correspondence` may import `accounts`). `apps.get_model('people','Employee')`
+only, no `import people`.
+
+#### DO NOT TOUCH
+- FSM, views, `people` models, frontend.
+
+#### Verification Gate (Worker runs + reports output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest correspondence -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+Report: `test_routing.py` green (manager / specific_user / any_admin / skip_if_self
+/ delegation). Append `## [date] Backend Worker — Phase OF-4` to `TASK-RESULTS.md`.
+
+---
+
+### Phase OF-5 — FSM (state machine) composing registry + policies + routing + DQ gate
+**Role:** backend-worker · **Depends on:** OF-3, OF-4
+
+#### Files to Read First
+- `backend/correspondence/{registry,policies,routing}.py`
+- `backend/dq/typed_gate.py` (`check_instances` signature)
+- `backend/catalog/audit_utils.py` (`emit_governance_event` signature)
+- `backend/correspondence/models.py`
+
+#### Context
+The pure state machine. Every transition returns the list of `CorrespondenceEvent`
+rows to persist and calls `emit_governance_event` (best-effort). Submit allocates
+the reference number, freezes the policy, resolves the approver chain, runs the
+DQ gate, and emits notifications to the first approvers. No `import people` — the
+subject instance is passed in.
+
+#### Files to Change
+- `backend/correspondence/fsm.py` (new)
+- `backend/correspondence/notifications.py` (new — `emit_notifications(events)` →
+  `Notification` rows per step `notify_on`)
+- `backend/correspondence/tests/test_fsm.py` (new)
+
+#### Contract
+```python
+# fsm.py — pure; operates on a persisted Correspondence instance in a caller-owned
+# transaction.atomic(). Functions return (corr, events).
+def submit_correspondence(*, corr, by, subject=None, subject_label=None) -> tuple:
+    """draft -> submitted|approved. Allocate reference_no, resolve+freeze policy,
+    build approver_chain via routing, set current_approver_ids for step 0.
+    Run dq.typed_gate.check_instances(subject_label,[subject],mode='block') when
+    subject_label. If no actionable step remains (all auto_approve/skipped) ->
+    approved (resolved_at). Else status='submitted'. Notify first approvers."""
+def approve(corr, by, comment=None):
+    """submitted|in_review -> in_review|approved. Actor must be in
+    current_approver_ids. Mark current step decision='approved'; advance. If last
+    step -> approved + resolved_at; else set next current_approver_ids and
+    status='in_review', notify next. Emit events for each step decision."""
+def reject(corr, by, comment):       # comment REQUIRED -> rejected
+def send_back(corr, by, comment):    # comment REQUIRED -> sent_back (notify requester)
+def cancel(corr, by):                # requester only, from draft/submitted/in_review/sent_back -> cancelled
+def resubmit(corr, by):              # sent_back -> re-run submit routing/DQ -> submitted
+```
+`employee_cancel_when` from policy is honored by `cancel`. `condition` on a step
+(e.g. `{"days":{">":5}}`) is evaluated against `corr.payload`; `auto_approve`
+steps advance without human action; `can_skip` lets an approver skip. Every
+transition appends `CorrespondenceEvent(seq=next)` and calls
+`emit_governance_event(entity_type='correspondence', entity_id=corr.id,
+action=<verb>, before=<old status>, after=<new status>, user=by)`.
+`notifications.py` creates `Notification` rows for each `notify_on` target in the
+step (requester on approve/reject/send_back, next approvers on advance).
+
+#### DO NOT TOUCH
+- Views/serializers/URLs, `people` (except reading via passed-in subject),
+  frontend.
+
+#### Verification Gate (Worker runs + reports output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest correspondence -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+Report: `test_fsm.py` green — happy-path single-step approve, reject requires
+comment, send-back requires comment, skip_if_self, auto_approve, requester-only
+cancel, gap-free numbering, DQ block on invalid subject, governance events +
+notifications emitted. Append `## [date] Backend Worker — Phase OF-5` to
+`TASK-RESULTS.md`.
+
+---
+
+### Phase OF-6 — CBAC capabilities + auto-derivation (no hosted import)
+**Role:** backend-worker · **Depends on:** OF-1, OF-2
+
+#### Files to Read First
+- `backend/accounts/capabilities.py` (`ALL_CAPABILITIES`, `IMPLIES`,
+  `GROUP_CAPABILITIES`, `get_user_capabilities`, `get_capabilities_for_frontend`)
+- `backend/accounts/views.py` (`me_context`, `_resolve_authz_manifest`)
+
+#### Context
+Declare the 5 new capabilities and auto-derive employee caps. Derivation uses
+`apps.get_model` (string-based, lazy) — **never** `import people` or
+`import correspondence` into `accounts`. Merged into `get_user_capabilities` so
+server-side `has_capability` works, and flows to the frontend via
+`get_capabilities_for_frontend`/`me_context`.
+
+#### Files to Change
+- `backend/accounts/capabilities.py` — add 5 `Capability` defs + `IMPLIES` +
+  `derive_employee_capabilities(user)` + union in `get_user_capabilities`
+- `backend/accounts/tests/test_correspondence_caps.py` (new)
+
+#### Contract
+```python
+# Capability keys (domain='correspondence' or 'self-service'):
+#   correspondence:submit, correspondence:act, correspondence:admin,
+#   my:access, team:access
+IMPLIES['correspondence:admin'] = {'correspondence:act','correspondence:submit',
+                                   'my:access','team:access'}
+
+def derive_employee_capabilities(user) -> set[str]:
+    Employee = apps.get_model('people','Employee')       # guarded by LookupError
+    Correspondence = apps.get_model('correspondence','Correspondence')
+    profile = Employee.objects.filter(user=user, is_active=True).first()
+    if not profile: return set()
+    caps = {'my:access','correspondence:submit'}
+    if profile.direct_reports.exists(): caps.add('team:access')
+    if Correspondence.objects.filter(status__in=('submitted','in_review'),
+        current_approver_ids__contains=user.id).exists():
+        caps.update({'correspondence:act','team:access'})
+    return caps
+```
+`get_user_capabilities` unions `derive_employee_capabilities(user)` into its
+result (after group caps, before return). Guard the whole derivation with
+`try/except (LookupError, AttributeError): return set()` so it is a no-op until
+`correspondence`/`people` are installed.
+
+#### DO NOT TOUCH
+- `correspondence` service/API, `people` models, frontend.
+
+#### Verification Gate (Worker runs + reports output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest accounts/tests/test_correspondence_caps.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest people -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+Report: cap tests green (active employee → `my:access`+`correspondence:submit`;
+manager → `team:access`; approver → `correspondence:act`); `people` tests still
+green (no regression). Append `## [date] Backend Worker — Phase OF-6` to
+`TASK-RESULTS.md`.
+
+---
+
+### Phase OF-7 — Generic engine API (list/detail/inbox/act) + permissions
+**Role:** backend-worker · **Depends on:** OF-5, OF-6
+
+#### Files to Read First
+- `backend/correspondence/{models,fsm,routing}.py`
+- `shared/api-contract.md` (DRF paginated envelope, error shape)
+- `backend/config/urls.py` (where to mount the include)
+- `backend/accounts/permissions.py` (existing permission-class idiom)
+
+#### Context
+Expose the engine over REST. Read + action endpoints only (no generic create).
+The leave submit endpoint is in OF-8 (`people/me/`). Approve/reject/send-back are
+gated by "user is in `current_approver_ids`".
+
+#### Files to Change
+- `backend/correspondence/serializers.py` (new)
+- `backend/correspondence/views.py` (new)
+- `backend/correspondence/permissions.py` (new — `CanActOnCorrespondence`)
+- `backend/correspondence/urls.py` (new)
+- `backend/config/urls.py` — mount `correspondence/urls.py` under `api_prefix`
+- `backend/correspondence/tests/test_api.py` (new)
+
+#### Contract — endpoints (all under `/carbon-api/correspondence/`)
+- `GET  /` — list requester's own correspondence. Query: `status`, `corr_type`.
+  Paginated DRF envelope. Self-scoped (`requester=request.user`).
+- `GET  /inbox/` — items awaiting MY action (`status__in=ACTIONABLE` and
+  `current_approver_ids__contains=request.user.id`). Paginated.
+- `GET  /{id}/` — detail + `events` (ordered timeline) + `approver_chain` +
+  `policy_snapshot` + `signature_ref` + `payload`.
+- `POST /{id}/approve/`   body `{comment?}` → fsm.approve
+- `POST /{id}/reject/`    body `{comment}` (required) → fsm.reject
+- `POST /{id}/send-back/` body `{comment}` (required) → fsm.send_back
+- `POST /{id}/cancel/`    → fsm.cancel (requester only)
+- `POST /{id}/resubmit/`  → fsm.resubmit (requester only, from sent_back)
+- `GET  /policies/` + `GET /policies/{id}/` — read-only, gated
+  `correspondence:admin` (full CRUD deferred to P7 team app).
+Errors: `400` field-level for missing `comment`; `403` for non-actor;
+`409` for invalid transition (`{"detail":"Invalid transition: ..."}`).
+`CanActOnCorrespondence` passes when `request.user.id in obj.current_approver_ids`
+or `has_capability(user,'correspondence:admin')`. All state changes wrapped in
+`transaction.atomic()` and call `fsm.*` (single source of truth).
+
+#### DO NOT TOUCH
+- `people/**`, subject creation (OF-8), frontend.
+
+#### Verification Gate (Worker runs + reports output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest correspondence -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+Report: `test_api.py` green — self-scoped list, inbox returns only awaiting-mine,
+approve/reject/send-back/cancel/resubmit transitions + auth (403 for non-actor,
+400 for missing comment), paginated envelope. Append
+`## [date] Backend Worker — Phase OF-7` to `TASK-RESULTS.md`.
+
+---
+
+### Phase OF-8 — People self-service (`people/me/`) + leave submit
+**Role:** backend-worker · **Depends on:** OF-5, OF-7
+
+#### Files to Read First
+- `backend/people/models.py` (`LeaveEntitlement`, `LeaveRecord` fields/STATUS)
+- `backend/people/permissions.py` (`IsActiveEmployee`)
+- `backend/correspondence/fsm.py` (`submit_correspondence`)
+- `backend/people/urls.py` (existing URL module structure)
+- `shared/api-contract.md`
+
+#### Context
+The employee self-service surface that ties `LeaveRecord` to the engine. This is
+where subject creation happens (layering-safe: `people` imports `correspondence`).
+Balance/overlap pre-check is enforced here (cross-record rules).
+
+#### Files to Change
+- `backend/people/self_views.py` (new)
+- `backend/people/self_serializers.py` (new)
+- `backend/people/self_urls.py` (new)
+- `backend/people/urls.py` — include `self_urls.py` under `me/`
+- `backend/people/tests/test_self_api.py` (new)
+
+#### Contract — endpoints (all self-scoped, `IsActiveEmployee` + `my:access`)
+- `GET /people/me/` — employee summary: `id`, `employee_number`, `name`,
+  `org_unit {id,name}`, `manager {id,name}`, `job_title`, `is_active`.
+- `GET /people/me/leave-balance/` — per `leave_type` (string code):
+  `{"leave_type","entitled","used","pending","remaining"}`. `entitled` from
+  `LeaveEntitlement` (current period); `used` = approved leave days in period;
+  `pending` = days on submitted/in_review leave correspondence; `remaining =
+  max(0, entitled - used - pending)`.
+- `GET /people/me/leave/` — list own leave requests: `LeaveRecord` fields +
+  linked `reference_no`, `status`, `correspondence_id`. Paginated.
+- `GET /people/me/leave/{id}/` — detail + engine timeline (`events`).
+- `POST /people/me/leave/` — **submit**. Body
+  `{"leave_type","start_date","end_date","days","note"}`. Pre-check: `days>0`,
+  `end_date>=start_date`, `remaining>=days`, no overlap with existing
+  approved/pending leave in `[start,end]` (else 400 field error). On pass, in
+  `transaction.atomic()`: create `LeaveRecord(status='draft', leave_type=code)`,
+  create `Correspondence(corr_type=leave_request, subject_type='people.LeaveRecord',
+  subject_id=<pk>, payload={...}, requester=user, org_unit=profile.org_unit,
+  title="Leave request <type> <start>→<end>")`, then
+  `fsm.submit_correspondence(...)`. Return the correspondence detail.
+- Employee can never read another's balance/records (all queries
+  `.filter(user=request.user)`).
+
+#### DO NOT TOUCH
+- `correspondence` engine internals (reuse `fsm`/services only), frontend.
+
+#### Verification Gate (Worker runs + reports output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest people -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+Report: `test_self_api.py` green — balance math, overlap rejection (400),
+over-entitlement rejection (400), happy-path submit creates LeaveRecord +
+Correspondence + reference_no + timeline atomically, cross-user access 403.
+Append `## [date] Backend Worker — Phase OF-8` to `TASK-RESULTS.md`.
+
+---
+
+### Phase OF-9 — `my` app foundation + Dashboard (frontend)
+**Role:** frontend-worker · **Depends on:** OF-8 (needs `GET /people/me/` +
+`leave-balance/`)
+
+> RULE_29: the Screen Spec below is the required 9-artifact contract. Do not
+> diverge from it.
+
+#### Files to Read First
+- `carbon-frontend/src/apps/people/manifest.js` (canonical manifest shape)
+- `carbon-frontend/src/apps/registry.js` (`APP_REGISTRY`)
+- `carbon-frontend/src/App.jsx` (route registration)
+- `carbon-frontend/src/shell/ShellSidebar.jsx`
+- `carbon-frontend/src/capabilities.js`
+- `carbon-frontend/src/api/api.js` (`apiFetch`) + `src/api/people.js`
+- `carbon-frontend/src/i18n/locales/{en,ar}/people.json`
+- `shared/compact-ui.md`, `shared/design-patterns.md`
+
+#### Screen Spec — `MyDashboard`
+1. **Purpose:** landing surface for the logged-in employee: identity strip,
+   action-required strip (pending inbox via `GET /correspondence/inbox/` count),
+   leave balance snapshot (from `GET /people/me/leave-balance/`), quick actions.
+2. **Route/entry:** `/my` — sidebar item "My" (section) → "Dashboard"; gated
+   `my:access`.
+3. **Composition:** `MyDashboard` = `ProfileHeader` + `ActionRequiredStrip` +
+   `LeaveBalanceCard` + `QuickActions`. Leave-only slice: hide payslip/attendance/
+   loans/certifications quick actions (render only "Request Leave" + "My Requests").
+4. **Data contract:** `GET /people/me/` → summary; `GET /people/me/leave-balance/`
+   → `[{leave_type,entitled,used,pending,remaining}]`; `GET /correspondence/inbox/`
+   → `{count}` (paged). Load all three in parallel; partial failure degrades to
+   that card only.
+5. **State matrix:** loading=skeleton; error=`Alert`+Retry (per card); empty
+   balance=empty state; loaded=cards.
+6. **Interactions:** "Request Leave" → `MyLeave` (opens drawer); "My Requests" →
+   `/my/requests`; action-required item → request detail.
+7. **A11y:** semantic `<main>`, cards labelled, color not sole indicator (add
+   text label to pending/remaining).
+8. **i18n:** all strings via `t()`; new `my.json` (en+ar) keys; RTL-safe.
+9. **Perf/caching:** one parallel fetch per card; no duplicate `/me/` calls;
+   use `apiFetch` (JWT refresh) only.
+
+#### Files to Change
+- `carbon-frontend/src/apps/my/manifest.js` (new; id `my`, routePrefix `/my`,
+  apiPrefix `/people/me/` + `/correspondence/`, roles/requires `my:access`,
+  navigation `[Dashboard, My Leave, My Requests]`, aiSkills `[]`, hooks `[]`)
+- `carbon-frontend/src/apps/my/MyDashboard.jsx` (new)
+- `carbon-frontend/src/apps/my/index.js` (new)
+- `carbon-frontend/src/apps/registry.js` — add `my` manifest to `APP_REGISTRY`
+- `carbon-frontend/src/App.jsx` — add `/my` route (lazy)
+- `carbon-frontend/src/shell/ShellSidebar.jsx` — add "My" section (mirror existing)
+- `carbon-frontend/src/capabilities.js` — add `CORRESPONDENCE_SUBMIT/ACT/ADMIN`,
+  `MY_ACCESS`, `TEAM_ACCESS`
+- `carbon-frontend/src/api/my.js` (new — `fetchMyProfile`, `fetchLeaveBalance`,
+  `fetchInboxCount`)
+- `carbon-frontend/src/i18n/locales/en/my.json` + `ar/my.json` (new)
+
+#### DO NOT TOUCH
+- `backend/**`, other apps' manifests, theme tokens (use tokens, no raw hex).
+
+#### Verification Gate (Worker runs + reports output)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+node scripts/check-i18n-keys.js
+npm run lint
+npm run build
+```
+Report: i18n parity clean (0 missing keys); lint 0 errors; build clean; `/my`
+renders Dashboard with live balance + inbox count (manual smoke against running
+backend). Append `## [date] Frontend Worker — Phase OF-9` to `TASK-RESULTS.md`.
+
+---
+
+### Phase OF-10 — My Leave page + Request Leave drawer (frontend)
+**Role:** frontend-worker · **Depends on:** OF-9
+
+#### Files to Read First
+- `carbon-frontend/src/apps/my/MyDashboard.jsx` + `manifest.js` (OF-9)
+- `carbon-frontend/src/api/my.js`
+- `shared/compact-ui.md` (drawer/form density), `shared/design-patterns.md`
+
+#### Screen Spec — `MyLeave` + `RequestLeaveDrawer`
+1. **Purpose:** view leave balances + request history; submit a new leave request
+   with balance + approver-chain preview before confirm.
+2. **Route/entry:** `/my/leave`; drawer opens from Dashboard quick action or the
+   page "Request Leave" button.
+3. **Composition:** `MyLeave` = `LeaveBalanceCards` + `LeaveHistoryTable`.
+   `RequestLeaveDrawer` = `LeaveTypeSelect` + `DateRange` + `DaysSummary` +
+   `NoteField` + `ApproverChainPreview` + `ConfirmButton`.
+4. **Data contract:** `GET /people/me/leave-balance/`, `GET /people/me/leave/`;
+   `POST /people/me/leave/` `{leave_type,start_date,end_date,days,note}`. Days
+   auto-computed from range (working days); balance shown before submit;
+   approver chain previewed from the policy snapshot of a dry-run (reuse the
+   `resolve_step_approvers`-equivalent via `GET /correspondence/policies/` only
+   if admin; otherwise show "Your manager will approve" from `manager` field on
+   `/people/me/`).
+5. **State matrix:** loading=skeleton; submit=busy button + disable; error=inline
+   `Alert` (field-level for overlap/balance 400s); success=snackbar + refresh list.
+6. **Interactions:** type/date changes recompute `days`; Confirm → POST; 400
+   surfaces field errors; success closes drawer + refreshes balance+history.
+7. **A11y:** drawer focus trap, labelled fields, required indicators, error
+   announced via `role=alert`.
+8. **i18n:** full EN/AR; RTL-safe (dates/inputs flip).
+9. **Perf/caching:** no optimistic balance write — refetch balance after submit;
+   single submit in-flight guard.
+
+#### Files to Change
+- `carbon-frontend/src/apps/my/MyLeave.jsx` (new)
+- `carbon-frontend/src/apps/my/components/RequestLeaveDrawer.jsx` (new)
+- `carbon-frontend/src/apps/my/components/LeaveBalanceCards.jsx` (new)
+- `carbon-frontend/src/apps/my/components/LeaveHistoryTable.jsx` (new)
+- `carbon-frontend/src/api/my.js` — add `submitLeaveRequest`
+- `carbon-frontend/src/i18n/locales/{en,ar}/my.json` — add keys
+
+#### DO NOT TOUCH
+- `backend/**`, non-`my` frontend apps, raw `fetch` (use `apiFetch`), inline hex/sx.
+
+#### Verification Gate (Worker runs + reports output)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+node scripts/check-i18n-keys.js
+npm run lint
+npm run build
+```
+Report: i18n parity clean; lint 0 errors; build clean; manual smoke: submit a
+leave request, see it appear in history with reference number, balance updates.
+Append `## [date] Frontend Worker — Phase OF-10` to `TASK-RESULTS.md`.
+
+---
+
+### Phase OF-11 — My Requests list + detail timeline (frontend)
+**Role:** frontend-worker · **Depends on:** OF-10
+
+#### Files to Read First
+- `carbon-frontend/src/apps/my/MyLeave.jsx` (OF-10)
+- `carbon-frontend/src/api/my.js`
+- `shared/compact-ui.md`
+
+#### Screen Spec — `MyRequests` + `RequestDetail`
+1. **Purpose:** unified list of all my correspondence (leave in slice) with
+   filters; drill-in to a full approval timeline.
+2. **Route/entry:** `/my/requests`; `/my/requests/:id` detail.
+3. **Composition:** `MyRequests` = `StatusFilter` + `TypeFilter` +
+   `RequestTable` (reference, type, title, status chip, dates, updated). 
+   `RequestDetail` = `SummaryCard` + `ApproverChainStepper` + `Timeline`
+   (from `events`).
+4. **Data contract:** `GET /correspondence/` (self-scoped, `status`/`corr_type`
+   query); `GET /correspondence/{id}/` → `{events[], approver_chain[],
+   policy_snapshot, signature_ref, payload}`.
+5. **State matrix:** loading=skeleton; error=Alert+Retry; empty=empty state;
+   loaded=table/stepper.
+6. **Interactions:** filter chips update query params; row click → detail; timeline
+   renders `events` in `seq` order (actor, event_type, from→to, comment).
+7. **A11y:** table with `aria-sort` where sorted, status chips labelled
+   (not color-only), timeline is an ordered list.
+8. **i18n:** status/event labels localized; RTL-safe stepper.
+9. **Perf/caching:** list paged; detail fetched on demand; `signature_ref` shown
+   as "pending signature" seam only (no action).
+
+#### Files to Change
+- `carbon-frontend/src/apps/my/MyRequests.jsx` (new)
+- `carbon-frontend/src/apps/my/components/RequestDetail.jsx` (new)
+- `carbon-frontend/src/apps/my/components/RequestTimeline.jsx` (new)
+- `carbon-frontend/src/api/my.js` — add `fetchMyCorrespondence`,
+  `fetchCorrespondenceDetail`
+- `carbon-frontend/src/i18n/locales/{en,ar}/my.json` — add keys
+
+#### DO NOT TOUCH
+- `backend/**`, raw `fetch`, inline hex/sx.
+
+#### Verification Gate (Worker runs + reports output)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+node scripts/check-i18n-keys.js
+npm run lint
+npm run build
+```
+Report: i18n parity clean; lint 0 errors; build clean; manual smoke: list shows
+submitted request, detail shows timeline + approver chain. Append
+`## [date] Frontend Worker — Phase OF-11` to `TASK-RESULTS.md`.
+
+---
+
+### Phase OF-12 — QA validation (4-layer) of the full slice
+**Role:** qa-validator · **Depends on:** OF-0…OF-11
+
+#### Files to Read First
+- `.ai-toolkit/shared/definition-of-done.md`, `shared/qa-framework.md` (if present)
+- This phase block above (OF-0…OF-11 contracts + gates)
+
+#### Context
+Verify the slice end-to-end across 4 layers; do NOT write new features. Report
+deficiencies with exact file:line and a minimal repro.
+
+#### Layers
+1. **Static/contract:** grep for violations — `GenericForeignKey|ContentType` in
+   `correspondence/`, hardcoded governed enums, raw `fetch(` in `src/apps/my/`,
+   `datetime.now()` naive, `print()` debug.
+2. **Unit:** re-run each app's tests one app at a time (correspondence, people,
+   accounts caps file).
+3. **API integration:** DRF test client walk of the leave journey — seed →
+   link Employee→User → submit leave (POST /people/me/leave/) → inbox shows for
+   manager → approve → status approved → balance `pending` decreases.
+4. **Frontend build + smoke:** `npm run build` + `check-i18n-keys.js`; optional
+   Playwright smoke of `/my` → `/my/leave` → `/my/requests`.
+
+#### Verification Gate (Worker runs + reports output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest correspondence people -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest accounts/tests/test_correspondence_caps.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run build && node scripts/check-i18n-keys.js
+```
+Report: 4-layer pass/fail matrix + any deficiencies with file:line + repro.
+Append `## [date] QA Validator — Phase OF-12` to `TASK-RESULTS.md`.
+
+---
+
+### Cross-phase invariants (every worker re-verifies before finishing)
+- No `GenericForeignKey`/`ContentType`; governed enums are `ReferenceValue` FKs.
+- `correspondence` never imports `people`; `people` reaches the engine via
+  `correspondence.fsm`/`services`.
+- Every transition emits `CorrespondenceEvent` + `emit_governance_event`.
+- Frontend uses `apiFetch` only, theme tokens only, full EN/AR i18n parity.
+- One app at a time for pytest; live output (no `tail` pipes).
+
+---
+
+### Phase OF-13a — Backend: approver can view correspondence detail (unblocks team app)
+**Role:** backend-worker · **Depends on:** OF-0…OF-12 · **Model:** DeepSeek V4-Flash
+
+#### Problem
+`CanViewCorrespondence` (`backend/correspondence/permissions.py`) allows only
+**requester-or-admin** to `GET correspondence/{id}/`. The team app (OF-13b) needs
+the **current approver** to open a request's detail page before acting. Today that
+GET returns 403 for a manager. The `inbox` list action already returns full
+`CorrespondenceSerializer` fields, but `events` (the timeline) live only on the
+detail serializer.
+
+#### Change (single file)
+In `CanViewCorrespondence.has_object_permission`, allow **requester OR current
+approver OR admin**:
+```python
+def has_object_permission(self, request, view, obj):
+    if has_capability(request.user, 'correspondence:admin'):
+        return True
+    uid = request.user.id
+    return obj.requester_id == uid or uid in (obj.current_approver_ids or [])
+```
+Keep the `message` and `CanActOnCorrespondence` unchanged. This widening is SAFE:
+`cancel`/`resubmit` are still requester-only because the FSM (`fsm.py` `cancel`,
+`resubmit`) raises `NotActorError` (→ 403) for non-requesters even after they pass
+the permission check.
+
+#### Files to Change
+- `backend/correspondence/permissions.py` — widen `CanViewCorrespondence` as above.
+- `backend/correspondence/tests/test_api.py` (or the existing permissions test file)
+  — add a test: a **non-requester current approver** can `GET /correspondence/{id}/`
+  (200) AND is still denied `cancel`/`resubmit` (403).
+
+#### Verification Gate (Master runs — paste output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest correspondence -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+Report: full `correspondence` suite green; new test asserts 200 detail + 403 cancel for the approver.
+
+---
+
+### Phase OF-13b — Frontend: "team" app (MSS Approvals Inbox) — closes submit→approve loop
+**Role:** frontend-worker · **Depends on:** OF-13a · **Model:** DeepSeek V4-Flash
+
+#### Objective
+Build the approver-side UI that exercises the already-wired `approve` / `reject` /
+`send-back` endpoints. Manager opens `/team`, sees actionable requests, opens one,
+and acts. Requester submits in `/my`; manager approves/rejects in `/team`.
+
+#### Files to Read First
+- `carbon-frontend/src/apps/my/manifest.js` (template for the team manifest)
+- `carbon-frontend/src/apps/my/` pages + `components/` (`SummaryCard.jsx`,
+  `ApproverChainStepper.jsx`, `RequestTimeline.jsx`, `myRequestsCommon.jsx`,
+  `myRequestsLabels.js`) — REUSE these; do NOT fork their logic.
+- `carbon-frontend/src/api/my.js` (apiFetch patterns) and `src/api/api.js`
+- `carbon-frontend/src/apps/registry.js`, `src/authz.js`, `src/capabilities.js`,
+  `src/shell/Shell.jsx`, `src/App.jsx`, `src/i18n/index.js`, `src/i18n/locales/en/my.json`
+- `backend/correspondence/serializers.py` (exact response field names)
+
+#### Backend contract (already green)
+- `GET correspondence/inbox/` → actionable items (`status ∈ submitted/in_review`,
+  `current_approver_ids ∋ user.id`). Envelope `{count,next,previous,results}` at
+  runtime (plain list under pytest). Each item = `id, reference_no, corr_type,
+  subject_type, subject_id, org_unit, requester, title, payload, status,
+  current_step, current_approver_ids, approver_chain, policy_version, policy_id,
+  policy_snapshot, signature_ref, resolved_at, created_at, updated_at`.
+- `GET correspondence/{id}/` → above + `events` (`id, seq, actor, actor_name,
+  event_type, from_status, to_status, payload, created_at`). NOW 200 for approvers
+  (OF-13a).
+- `POST correspondence/{id}/approve/` body `{"comment": "…"}` (comment OPTIONAL) → 200 detail.
+- `POST correspondence/{id}/reject/` body `{"comment": "…"}` (comment REQUIRED; 400 if empty) → 200 detail.
+- `POST correspondence/{id}/send-back/` body `{"comment": "…"}` (comment REQUIRED) → 200 detail.
+- Errors: 400 CommentRequired / SubmissionBlocked, 403 NotActor, 409 InvalidTransition.
+  `apiFetch` THROWS on non-2xx — parse `err` for a `detail`/`message` string for the toast.
+
+#### Deliverables (all NEW unless noted)
+1. `src/api/team.js` — `fetchInbox()`, `fetchCorrespondenceDetail(id)`,
+   `approveCorrespondence(id, {comment})`, `rejectCorrespondence(id, {comment})`,
+   `sendBackCorrespondence(id, {comment})`. Normalize inbox envelope to
+   `{items, count}` (handle both array and `{results}`). Use `apiFetch` only.
+2. `src/apps/team/manifest.js` — id `team`, name `Team`, icon `'Diversity3'`
+   (already in `MANIFEST_ICON_MAP`), routePrefix `/team`, nav items = one item
+   `{ label: 'Approvals Inbox', path: '/team' }`.
+3. `src/apps/team/TeamInbox.jsx` — page at `/team`. `fetchInbox()`; MUI `Table`
+   with columns: reference_no, title, requester (name), corr_type code label,
+   status chip, created_at. Empty state. Loading + error (reuse `SectionTitle`/
+   `InlineError` pattern). Rows navigate to `/team/:id`.
+4. `src/apps/team/TeamRequestDetail.jsx` — page at `/team/:id`. `fetchCorrespondenceDetail(id)`.
+   Render `SummaryCard` + `ApproverChainStepper` + `RequestTimeline` (reuse from
+   `apps/my/components/`). Add an **act bar**: Approve (optional comment) /
+   Reject (comment REQUIRED) / Send back (comment REQUIRED). Validate: reject/send-back
+   disabled or error if comment empty. On success: `notify({message, type:'success'})`,
+   then `navigate('/team')`. On 4xx: `notify({message: err detail, type:'error'})`.
+5. Wire `team` namespace in `src/i18n/index.js` + `src/i18n/locales/{en,ar}/team.json`
+   (only team-specific strings: page titles, inbox columns, empty state, act-button
+   labels, comment label, comment-required error, success/error toasts, back button,
+   `a11y` labels). REUSE `my.json` status/event/role/intent keys via the pure helpers
+   in `myRequestsLabels.js` (pass `t` from `useTranslation('team')`).
+
+#### Wiring edits (exact)
+- `src/apps/registry.js` — import `teamManifest` + append to `APP_REGISTRY`.
+- `src/authz.js` — import `TEAM_ACCESS` + `APP_VIEW_CAP.team = TEAM_ACCESS`.
+- `src/capabilities.js` — `ROUTE_CAPABILITIES['/team'] = TEAM_ACCESS` (and `/team/*`).
+- `src/shell/Shell.jsx` — `STUDIO_PATHS.team = '/team'`; `studioFromPath`: return
+  `'team'` when `pathname.startsWith('/team')` (place with the `/my` check).
+- `src/App.jsx` — lazy-import `TeamInbox` + `TeamRequestDetail`; routes `/team` and
+  `/team/:id` next to the `/my` routes. Import `TEAM_ACCESS` is NOT needed in App.jsx
+  (route guard lives in `authz`/`capabilities`).
+- `ShellSidebar.jsx` — NO change required: the `default:` case already resolves any
+  manifest app (including `team`) to its nav items with `DashboardIcon` fallback.
+  Do NOT add a hardcoded `case 'team'` unless you also add a `TEAM_ITEM_ICONS` map.
+
+#### DO NOT TOUCH
+- Backend (OF-13a handles it) · `src/apps/my/**` (reuse only) · `src/api/my.js`.
+
+#### Verification Gate (Master runs — paste output)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+node scripts/check-i18n-keys.js
+npm run lint
+npm run build
+```
+Report: i18n parity green; lint 0 errors in team files; build clean (no unresolved imports).
+
+---
+
+### Phase OF-14 — Backend: `leave_type` → governed FK (`ReferenceValue`) — ADR-0027
+**Role:** backend-worker · **Depends on:** OF-0…OF-13b · **Model:** DeepSeek V4-Flash
+
+#### Problem
+`people.LeaveEntitlement.leave_type` and `people.LeaveRecord.leave_type` are still
+plain `CharField(max_length=40)` code strings, while ADR-0027 (accepted 2026-08-30)
+mandates every governed lookup be a **`ForeignKey` to `mdm.ReferenceValue`** with
+`on_delete=PROTECT`. The correspondence engine already models `corr_type` this way
+(`correspondence/models.py` line 30). A free-text string gives no referential
+integrity and silently accepts drift. This phase closes that gap for `leave_type`
+only (the smallest, highest-value remaining fan-out).
+
+#### Backward-compatible read/write contract (IMPORTANT)
+The existing `my`/`people` frontend reads and writes `leave_type` as the **code
+string** (`'annual'`, `'sick'`, …). To avoid a frontend regression, the API keeps
+`leave_type` as a **code string in both directions**, while storage becomes an FK:
+
+- **Read:** `leave_type` field serializes to `ReferenceValue.code` (a string), via
+  `serializers.SlugRelatedField(slug_field='code', …)`. Also emit
+  `leave_type_id` (int PK) and `leave_type_label` (human label) as read-only.
+- **Write:** `leave_type` accepts an existing code string and resolves it to the FK.
+  An unknown/empty code → 400 `{"detail": "Invalid leave_type"}` (governance: no
+  free-text drift). `leave_type_id` is NOT writable.
+
+#### Change (files + exact approach)
+1. `backend/people/models.py`
+   - `LeaveEntitlement.leave_type` → `models.ForeignKey('mdm.ReferenceValue', on_delete=models.PROTECT, related_name='+')`.
+   - `LeaveRecord.leave_type` → same.
+   - Keep `unique_together`/`ordering` on `LeaveEntitlement` (they now key on the FK id — still valid).
+   - `__str__` methods: use `self.leave_type.code if self.leave_type_id else self.leave_type` (None-safe), or just drop the leave_type from `__str__`.
+
+2. **Data migration** (new, in `backend/people/migrations/`)
+   - `RunPython` that: (a) ensures the `leave_type` `ReferenceSet` + its 5 values
+     (`annual`, `sick`, `emergency`, `maternity`, `unpaid`) exist (mirror
+     `seed_gofsco._ref_set('leave_type', …)`), then (b) `AddField`/`AlterField`
+     mapping each existing row's string → the matching `ReferenceValue` row. Any
+     legacy string with no matching value → map to `annual` (and do NOT silently drop rows).
+   - Use the two-migration split (schema `AlterField` + data `RunPython`) OR one
+     `migrations.AlterField` + separate `RunPython` — your call, but the data map
+     MUST run so `makemigrations --check` and the seed stay consistent.
+   - Ensure `people` migrations do NOT import `correspondence` (layering).
+
+3. `backend/people/serializers.py`
+   - `LeaveEntitlementSerializer`: add
+     `leave_type = serializers.SlugRelatedField(slug_field='code', queryset=ReferenceValue.objects.filter(reference_set__name='leave_type'))`
+     + `leave_type_id = serializers.IntegerField(source='leave_type_id', read_only=True)`
+     + `leave_type_label = serializers.SerializerMethodField()`. Add the new fields to `fields`.
+   - `LeaveRecordSerializer`: same treatment.
+   - Import `ReferenceValue` from `mdm.models` at top (people already depends on mdm — allowed).
+
+4. `backend/people/self_serializers.py`
+   - `LeaveRecordSerializer` (self-service, read-only): `leave_type` becomes an FK id
+     by default — override with `leave_type = serializers.SerializerMethodField()` →
+     `obj.leave_type.code if obj.leave_type_id else None`, and add
+     `leave_type_label` method field. `LeaveBalanceSerializer.leave_type` stays a
+     `CharField` (the view already emits codes) — no change needed there.
+
+5. `backend/people/self_views.py`
+   - `_compute_balance(profile, code, year)`: change filters from
+     `leave_type=code` to `leave_type__code=code` (join) — three call sites
+     (`LeaveEntitlement.objects.filter`, two `LeaveRecord.objects.filter`).
+   - `LeaveBalanceView`: already iterates `ReferenceValue.code` — unchanged.
+   - `LeaveSelfCollectionView.post`: after validating `leave_type` is a non-empty
+     string, resolve it: `ReferenceValue.objects.filter(reference_set__name='leave_type', code=leave_type).first()`.
+     If missing → 400 `{"detail": "Invalid leave_type"}`. Pass the resolved
+     `ReferenceValue` (or its PK) to `LeaveRecord.objects.create(leave_type=…)`.
+     Keep `payload['leave_type']` = the code string (timeline display).
+
+6. `backend/people/management/commands/seed_gofsco.py`
+   - `ENT_DEFS` (entitlements) and `LR_DEFS` (records) write `leave_type=ltype` as a
+     string. Resolve `ltype` → `ReferenceValue` (from the already-seeded `leave_type`
+     set) before `update_or_create`. Do NOT change the seed data codes themselves.
+   - `update_or_create(… leave_type=<ReferenceValue>)` so repeated seed stays idempotent.
+
+7. Tests (update existing + add)
+   - `backend/people/tests/test_api.py`, `test_models.py`, `test_self_api.py`,
+     `test_leave_journey_e2e.py`: wherever a `LeaveEntitlement`/`LeaveRecord` is
+     created with `leave_type='annual'`, first resolve the `ReferenceValue` (helper
+     fixture) and pass the FK. Assertions that read `leave_type` as a string code via
+     the serializer must use the new code-string contract (should be unchanged for
+     `leave_type`, but `test_models` may assert the model attribute directly — update
+     to `.code`).
+   - Add at least one NEW test asserting: writing an **unknown** `leave_type` code to
+     `POST /people/me/leave/` (and/or the people CRUD endpoint) → 400 `Invalid leave_type`;
+     and `leave_type_id`/`leave_type_label` are present on the serialized record.
+
+#### DO NOT TOUCH
+- `backend/correspondence/**` · frontend (`carbon-frontend/**`) · `backend/accounts/**`
+- Other denormalized people fields (gender/rotation_pattern/benefit_category) — out of scope (future phase).
+
+#### Verification Gate (Master runs — paste output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest people/tests/test_api.py people/tests/test_models.py people/tests/test_self_api.py people/tests/test_leave_journey_e2e.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+```
+Report: full `people` suite green (no regressions in the self-service/correspondence journey); `makemigrations --check` reports "No changes detected" after migrations are applied.

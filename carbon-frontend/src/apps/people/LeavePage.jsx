@@ -37,6 +37,7 @@ import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
 import ErrorAlert from '../../components/Page/ErrorAlert';
 import EmptyState from '../../components/Page/EmptyState';
 import SystemDialog from '../../components/SystemDialog';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
 import {
@@ -96,6 +97,8 @@ export default function LeavePage() {
 
   const [saving, setSaving] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  // Pending delete target (record or entitlement) — confirmed via ConfirmDialog (no window.confirm).
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -221,15 +224,8 @@ export default function LeavePage() {
     }
   };
 
-  const handleDeleteRecord = async (record) => {
-    if (!window.confirm(t('leaveRecordDeleteConfirm'))) return;
-    try {
-      await deleteLeaveRecord(record.id, token);
-      setSnackbar({ open: true, message: t('leaveRecordDeleted'), severity: 'success' });
-      await loadData();
-    } catch (err) {
-      showError(err);
-    }
+  const handleDeleteRecord = (record) => {
+    setDeleteTarget({ kind: 'record', item: record });
   };
 
   // ---- Leave Entitlements ----
@@ -304,11 +300,21 @@ export default function LeavePage() {
     }
   };
 
-  const handleDeleteEnt = async (entitlement) => {
-    if (!window.confirm(t('leaveEntitlementDeleteConfirm'))) return;
+  const handleDeleteEnt = (entitlement) => {
+    setDeleteTarget({ kind: 'ent', item: entitlement });
+  };
+
+  const confirmDelete = async () => {
+    const { kind, item } = deleteTarget;
+    setDeleteTarget(null);
     try {
-      await deleteLeaveEntitlement(entitlement.id, token);
-      setSnackbar({ open: true, message: t('leaveEntitlementDeleted'), severity: 'success' });
+      if (kind === 'ent') {
+        await deleteLeaveEntitlement(item.id, token);
+        setSnackbar({ open: true, message: t('leaveEntitlementDeleted'), severity: 'success' });
+      } else {
+        await deleteLeaveRecord(item.id, token);
+        setSnackbar({ open: true, message: t('leaveRecordDeleted'), severity: 'success' });
+      }
       await loadData();
     } catch (err) {
       showError(err);
@@ -484,6 +490,15 @@ export default function LeavePage() {
           />
         </Stack>
       </SystemDialog>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        message={deleteTarget?.kind === 'ent' ? t('leaveEntitlementDeleteConfirm') : t('leaveRecordDeleteConfirm')}
+        confirmLabel={tCommon('delete')}
+        destructive
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </>
   );
 

@@ -41,6 +41,15 @@ export const PEOPLE_VIEW   = 'people:view';
 export const PEOPLE_MANAGE = 'people:manage';
 export const PEOPLE_VIEW_COMPENSATION = 'people:view_compensation';
 
+// ── Correspondence ─────────────────────────────────────────────────
+export const CORRESPONDENCE_SUBMIT = 'correspondence:submit';
+export const CORRESPONDENCE_ACT    = 'correspondence:act';
+export const CORRESPONDENCE_ADMIN  = 'correspondence:admin';
+
+// ── My (Employee Self-Service) ─────────────────────────────────────
+export const MY_ACCESS   = 'my:access';
+export const TEAM_ACCESS = 'team:access';
+
 // ── Catalog ────────────────────────────────────────────────────────
 export const CATALOG_VIEW              = 'catalog:view';
 export const CATALOG_MANAGE_PRODUCTS   = 'catalog:manage_products';
@@ -125,6 +134,15 @@ export const ROUTE_CAPABILITIES = {
 
   // AI (Pulse) admin console — prefix-matched for every /admin/ai/* route
   '/admin/ai':            AI_VIEW_CONSOLE,
+
+  // My (employee self-service)
+  '/my':           MY_ACCESS,
+  '/my/leave':     MY_ACCESS,
+  '/my/requests':  MY_ACCESS,
+
+  // Team (manager approvals inbox)
+  '/team':       TEAM_ACCESS,
+  '/team/*':     TEAM_ACCESS,
 };
 
 // ── Menu item manifest role → capability ───────────────────────────
@@ -195,6 +213,7 @@ export const CAPABILITY_INHERITANCE = {
   [EVIDENCE_MANAGE]: [EVIDENCE_VIEW],
   [AI_MANAGE_CONSOLE]: [AI_VIEW_CONSOLE],
   [PEOPLE_MANAGE]: [PEOPLE_VIEW],
+  [CORRESPONDENCE_ADMIN]: [CORRESPONDENCE_ACT, CORRESPONDENCE_SUBMIT, MY_ACCESS, TEAM_ACCESS],
 };
 
 

@@ -178,6 +178,22 @@ APP_REGISTRY = [
         ],
     },
     {
+        "id": "my",
+        "kind": "domain",
+        "name": "My",
+        "version": "1.0.0",
+        "description": "Employee self-service — profile, leave balance, and my requests",
+        "roles": [],
+    },
+    {
+        "id": "team",
+        "kind": "domain",
+        "name": "Team",
+        "version": "1.0.0",
+        "description": "Manager approvals inbox — act on team requests",
+        "roles": [],
+    },
+    {
         "id": "healthy",
         "kind": "domain",
         "name": "Healthy Foods Factory",
@@ -512,6 +528,8 @@ BRAND_APP_PRESETS = {
     },
     "nibras": {
         "people": True,
+        "my": True,
+        "team": True,
     },
     "medos": {
         # Medical/clinical instance — no first-party domain apps yet.

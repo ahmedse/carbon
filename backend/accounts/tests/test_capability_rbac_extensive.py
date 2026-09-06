@@ -196,15 +196,16 @@ class TestCapabilityDefinitions:
         assert len(ALL_CAPABILITIES) == len({c.key for c in ALL_CAPABILITIES.values()})
 
     def test_capability_count(self):
-        """Sanity check: we expect ~38 capabilities.
+        """Sanity check: the registry grows deliberately across sprints.
 
-        The registry grew across sprints (ai, datahub, turnkey, appregistry,
-        healthy, dataschema, evidence domains) — 52 as of Sprint 23. The
-        bounds track deliberate growth, not a strict contract.
+        Grown across ai, datahub, turnkey, appregistry, healthy, dataschema,
+        evidence, people, and correspondence domains — 64 as of the e-Office
+        slice (people + my/team + correspondence). Bounds track deliberate
+        growth, not a strict contract.
         """
         count = len(ALL_CAPABILITIES)
-        assert count >= 30, f"Expected at least 30 capabilities, got {count}"
-        assert count <= 60, f"Expected at most 60 capabilities, got {count}"
+        assert count >= 60, f"Expected at least 60 capabilities, got {count}"
+        assert count <= 70, f"Expected at most 70 capabilities, got {count}"
 
     @pytest.mark.parametrize("domain,min_count", [
         ("carbon", 15),
@@ -321,6 +322,7 @@ class TestGroupCapabilityMappings:
             "admin", "admins_group",
             "carbon_lead", "catalog_lead", "mdm_lead", "dq_lead", "datahub_lead",
             "turnkey_lead",
+            "people_lead", "people_data_owners_group", "people_analysts_group",
             "dataowners_group", "analysts_group", "viewers_group", "auditors_group",
         }
         assert set(GROUP_CAPABILITIES.keys()) == expected_groups, \
