@@ -641,6 +641,14 @@ class TurnPipelineRunner:
         from ai.engine.cognition.auto_memory import AutoMemoryExtractor
 
         settings = get_settings()
+
+        # Apply per-instance tool exclusions (e.g. nibras hides create_dq_rule).
+        excluded_tools = set((instance_config or {}).get("excluded_tools") or [])
+        if excluded_tools and self._draft_tools is not None:
+            self._draft_tools = [
+                d for d in self._draft_tools
+                if d.get("function", {}).get("name") not in excluded_tools
+            ]
         turn_id = str(uuid.uuid4())
         created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         t0 = time.monotonic()

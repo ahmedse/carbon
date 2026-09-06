@@ -1350,18 +1350,18 @@ class DjangoStore(Store):
 
     @staticmethod
     def _apply_tenancy_filter(qs: Any) -> Any:
-        """Inject the CBAC partition filters into a Django queryset.
+        """Inject CBAC partition filters into a Django queryset.
 
-        Mirrors the host ``_apply_tenancy_filter`` semantics:
-          - ``visibility='global'``  → visible everywhere
-          - ``visibility='shared'``  → visible within the app
-          - ``visibility='private'`` → visible only to the host user/org
-        For now, scope to the Carbon app identifier; host-user/org-unit
-        narrowing is applied by ``build_scope`` at the Carbon boundary and
-        passed in as filters by callers.
+        Engine data is partitioned by ``instance_id`` (always present in
+        every WHERE clause the engine passes to ``execute``/``select``).
+        The ``app_identifier`` column on AppScopeMixin is a host-layer
+        visibility tag written at creation time; filtering by it here would
+        hide rows created when a different brand's DEFAULT_APP_IDENTIFIER was
+        active (e.g. Agent rows seeded as "carbon" become invisible when
+        DEFAULT_APP_IDENTIFIER="people" under the nibras brand).
+        Host RBAC and ``scope_q()`` handle the host-layer visibility;
+        the store layer must not duplicate that filter.
         """
-        if hasattr(qs.model, "app_identifier"):
-            qs = qs.filter(app_identifier=DEFAULT_APP_IDENTIFIER)
         return qs
 
 

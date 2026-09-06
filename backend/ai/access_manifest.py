@@ -30,7 +30,9 @@ logger = logging.getLogger("carbon.ai.access_manifest")
 #: capability key (keys are existence-checked against ALL_CAPABILITIES, so a
 #: stale key silently excludes, never leaks).  ``route`` may be ``None`` — the
 #: assistant then mentions the area without a page link.
-_WORK_AREAS: list[dict[str, Any]] = [
+#:
+#: Split by brand: Carbon (aastmt) work areas vs People & Payroll (nibras).
+_WORK_AREAS_CARBON: list[dict[str, Any]] = [
     {
         "key": "carbon",
         "label": "Emissions & Carbon Data",
@@ -140,8 +142,47 @@ _WORK_AREAS: list[dict[str, Any]] = [
     },
 ]
 
-#: Capability keys that imply the user can *operate* (not just view) in a work
-#: area.  Used for the "view-only vs view-and-operate" access level.
+#: Nibras (People & Payroll) work areas — never shown on other brands.
+_WORK_AREAS_PEOPLE: list[dict[str, Any]] = [
+    {
+        "key": "people",
+        "label": "People & Payroll",
+        "description": "Manage employees, payroll runs, leave, loans, attendance and GOSI/WPS.",
+        "route": "/people",
+        "capabilities": [
+            "people:view", "people:manage", "people:view_compensation",
+            "people:manage_payroll", "people:view_payroll",
+        ],
+    },
+    {
+        "key": "ai",
+        "label": "AI Workspace",
+        "description": "Use the AI workspace for assisted analysis.",
+        "route": "/carbon/console",
+        "capabilities": ["ai:view_console", "ai:manage_console"],
+    },
+]
+
+#: Backward-compat alias — Carbon brand uses the full list.
+_WORK_AREAS: list[dict[str, Any]] = _WORK_AREAS_CARBON
+
+
+def _active_work_areas() -> list[dict[str, Any]]:
+    """Return the work-area list for the active brand."""
+    try:
+        from ai.instance_registry import active_brand
+        brand = active_brand()
+    except Exception:
+        brand = "aastmt"
+    if brand == "nibras":
+        return _WORK_AREAS_PEOPLE
+    if brand == "tectona":
+        return [wa for wa in _WORK_AREAS_CARBON if wa["key"] in ("healthy", "ai")]
+    if brand == "medos":
+        return [wa for wa in _WORK_AREAS_CARBON if wa["key"] == "ai"]
+    return _WORK_AREAS_CARBON
+
+
 _OPERATE_CAPABILITIES: frozenset[str] = frozenset({
     "dq:manage_rules",
     "catalog:manage_products", "catalog:manage_metadata", "catalog:manage_policies",
@@ -194,17 +235,19 @@ def _is_operate(user, caps: frozenset[str]) -> bool:
 
 
 def _work_areas_for(caps: frozenset[str]) -> list[dict[str, str]]:
-    """Work areas the user can reach (user-facing labels only)."""
+    """Work areas the user can reach, scoped to the active brand."""
     from accounts.capabilities import ALL_CAPABILITIES
+
+    areas = _active_work_areas()
 
     if "*" in caps:
         return [
             {"key": wa["key"], "label": wa["label"], "description": wa["description"],
              "route": wa.get("route")}
-            for wa in _WORK_AREAS
+            for wa in areas
         ]
     result: list[dict[str, str]] = []
-    for wa in _WORK_AREAS:
+    for wa in areas:
         required = [k for k in wa["capabilities"] if k in ALL_CAPABILITIES]
         if required and caps.intersection(required):
             result.append({
@@ -215,15 +258,35 @@ def _work_areas_for(caps: frozenset[str]) -> list[dict[str, str]]:
 
 
 def _apps_for(scope) -> list[dict[str, str]]:
-    """Activated + capability-gated apps the user can reach (App Registry §7.5).
+    """Activated + capability-gated apps for the active brand (App Registry §7.5).
 
-    Only apps in ``scope.active_apps`` (already activation- and capability-
-    gated by ``build_scope``) are ever listed — the existence of any other app
-    is not exposed.
+    Intersects ``scope.active_apps`` with the brand's app preset so a platform
+    admin user never sees apps from a different brand's domain (e.g. carbon
+    apps must not appear on a nibras instance even for superusers).
     """
+    from django.conf import settings
+
     from appregistry.models import AppManifest
 
     active = scope.active_apps or []
+    if not active:
+        return []
+
+    # For non-aastmt brands, intersect with the brand's app preset so a
+    # platform admin never sees apps from another brand's domain.
+    # aastmt is not filtered — it allows all activated apps including custom ones.
+    try:
+        brand_presets: dict = getattr(settings, "BRAND_APP_PRESETS", {})
+        from ai.instance_registry import active_brand
+        brand = active_brand()
+        if brand != "aastmt":
+            preset = brand_presets.get(brand)
+            if preset is not None:
+                allowed = {slug for slug, enabled in preset.items() if enabled}
+                active = [a for a in active if a in allowed]
+    except Exception:
+        pass  # brand filter is best-effort; fail open within scope
+
     if not active:
         return []
     rows = AppManifest.objects.filter(slug__in=active).only(

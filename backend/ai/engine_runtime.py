@@ -112,6 +112,31 @@ async def _run_chat(
     instance_config = _instance_config(
         instance_id, host_user_id, app_identifier=payload.get("app_identifier")
     )
+
+    # Topic guard: check before dispatching to the LLM so prompt injection
+    # or training-knowledge bypass cannot circumvent the instance's prohibitions.
+    guard_refusal = _check_topic_guard(instance_config, message)
+    if guard_refusal:
+        return {
+            "status": "completed",
+            "task_id": task_id,
+            "result": {
+                "content": guard_refusal,
+                "actions": [],
+                "pending_actions": [],
+                "tool_trace": [],
+                "intent_zone": "off_limits",
+                "confidence_label": "confident",
+                "honest_uncertainty": False,
+                "truthfulness_flags": [],
+                "truthful": True,
+                "follow_up_questions": [],
+                "execution_ms": 0,
+                "external_sources": [],
+                "code_result": None,
+            },
+        }
+
     user_info = _build_chat_user_info(host_user_id)
 
     factory = get_session_factory(instance_id)
@@ -512,6 +537,34 @@ def _platform_display_name() -> str:
     title = getattr(dj_settings, "PLATFORM_TITLE", "") or ""
     name = getattr(dj_settings, "PLATFORM_NAME", "") or ""
     return title or name or "Data Trust Platform"
+
+
+def _check_topic_guard(instance_config: dict, message: str) -> str | None:
+    """Return a canned refusal if the message matches an instance topic guard.
+
+    The guard runs BEFORE the LLM so prohibitions cannot be bypassed via
+    training knowledge, web search, or prompt injection.  Returns ``None``
+    when no guard fires (the normal path).
+    """
+    import re
+
+    guard = (instance_config or {}).get("topic_guard") or {}
+    patterns: list[str] = guard.get("patterns") or []
+    if not patterns:
+        return None
+    msg = (message or "").strip()
+    if not msg:
+        return None
+    for pat in patterns:
+        try:
+            if re.search(pat, msg):
+                return (guard.get("refusal") or "").strip() or (
+                    "That topic is outside my scope. How can I help you with "
+                    "People & Payroll instead?"
+                )
+        except re.error:
+            logger.warning("instance_registry: invalid topic_guard pattern %r", pat)
+    return None
 
 
 def _build_chat_user_info(host_user_id: str | None) -> dict | None:
