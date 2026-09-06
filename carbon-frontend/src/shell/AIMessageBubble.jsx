@@ -1150,6 +1150,7 @@ function AIMessageBubble({
           createdAt={message.created_at}
           externalSources={message.external_sources || provenancePayload?.external_sources || []}
           sources={provenanceSources}
+          toolTrace={toolTrace}
         />
       )}
 

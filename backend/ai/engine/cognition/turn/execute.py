@@ -39,12 +39,16 @@ _OUTPUT_TYPE_MARKER_KEYS = frozenset({
 class ExecuteWitness:
     """Parallel tool dispatch + streaming. Executes tool calls from S3 draft."""
 
-    def __init__(self, executor=None, hook_pipeline=None, hook_ctx_defaults: dict | None = None, run_id: str = "", instance_id: str = ""):
+    def __init__(self, executor=None, hook_pipeline=None, hook_ctx_defaults: dict | None = None, run_id: str = "", instance_id: str = "", knowledge_store=None):
         self.executor = executor  # optional override for host API executor
         self.hook_pipeline = hook_pipeline  # P3.3: guardrail hook pipeline
         self.hook_ctx_defaults = hook_ctx_defaults or {}  # P3.3: default HookContext fields
         self.run_id = run_id  # Wave 8A: for tool event broadcasting
         self.instance_id = instance_id  # Wave 8A: for scoped studio broadcast
+        # S-PROC-01: knowledge store threaded into tool dispatch so
+        # ``search_knowledge`` / ``get_entity_details`` ground answers in the
+        # indexed process docs instead of returning "store not available".
+        self.knowledge_store = knowledge_store
 
     async def execute(
         self,
@@ -92,7 +96,7 @@ class ExecuteWitness:
                 await _broadcast_tool_events("tool.started", independent, self.run_id, self.instance_id)
 
                 results = await asyncio.gather(*[
-                    _execute_single_tool(tc, self.executor, self.hook_pipeline, ctx_defaults)
+                    _execute_single_tool(tc, self.executor, self.hook_pipeline, ctx_defaults, self.knowledge_store)
                     for tc in independent
                 ], return_exceptions=True)
 
@@ -139,7 +143,7 @@ class ExecuteWitness:
                 # Wave 8A: broadcast tool.started
                 await _broadcast_single_tool_event("tool.started", self.run_id, self.instance_id, tool_name, tc_id)
 
-                result = await _execute_single_tool(tc, self.executor, self.hook_pipeline, ctx_defaults)
+                result = await _execute_single_tool(tc, self.executor, self.hook_pipeline, ctx_defaults, self.knowledge_store)
                 if isinstance(result, dict) and "tool_call_id" not in result:
                     result["tool_call_id"] = tc_id
                 completed_tools.append(result)
@@ -291,6 +295,7 @@ async def _execute_single_tool(
     executor_override=None,
     hook_pipeline=None,           # P3.3: HookPipeline | None
     hook_ctx_defaults: dict | None = None,  # P3.3: default HookContext fields
+    knowledge_store=None,         # S-PROC-01: knowledge store for search/get_entity
 ) -> dict:
     """Execute a single tool call and return a result dict.
 
@@ -298,7 +303,14 @@ async def _execute_single_tool(
     hook_pipeline is provided. Before-hooks can cancel or redirect; after-hooks
     can redact the result.
 
-    Returns dict with keys: tool_name, result, error, latency_ms, guardrail_flags.
+    S-PROC-01 / S-TRACE-01: the resolved ``knowledge_store`` is injected into
+    the tool args so ``search_knowledge`` / ``get_entity_details`` ground
+    answers in indexed process docs. The parsed tool args are echoed back on
+    the result dict as ``tool_args`` so the surfacing layer can render a
+    step-by-step input/output trace.
+
+    Returns dict with keys: tool_name, result, error, latency_ms,
+    guardrail_flags, tool_args.
     """
     from ai.engine.agent.tools import get_tool_executors
 
@@ -412,6 +424,22 @@ async def _execute_single_tool(
             _call_args["instance_id"] = _hook_defaults["instance_id"]
         if _hook_defaults.get("conversation_id") and "conversation_id" not in _call_args:
             _call_args["conversation_id"] = _hook_defaults["conversation_id"]
+        # S-PROC-01: inject a knowledge store so ``search_knowledge`` /
+        # ``get_entity_details`` ground answers in indexed process docs. Use
+        # the threaded store when present; otherwise lazily build one from the
+        # host executor's DB session so no dispatch path can silently return
+        # "Knowledge store not available".
+        _ks = knowledge_store
+        if _ks is None and executor_override is not None:
+            _db = getattr(executor_override, "db", None)
+            if _db is not None:
+                try:
+                    from ai.engine.knowledge.store import KnowledgeStore
+                    _ks = KnowledgeStore(_db)
+                except Exception:  # noqa: BLE001 - never break a turn over store init
+                    _ks = None
+        if _ks is not None and "knowledge_store" not in _call_args:
+            _call_args["knowledge_store"] = _ks
         try:
             _sig = _inspect.signature(executor_fn)
             _has_var_kw = any(
@@ -509,6 +537,7 @@ async def _execute_single_tool(
             "error": None,
             "latency_ms": elapsed,
             "guardrail_flags": guardrail_flags,
+            "tool_args": args,  # S-TRACE-01: echo resolved input for the trace
             **_extra,
         }
     except Exception as e:

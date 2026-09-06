@@ -1,13 +1,15 @@
 // src/shell/PlanningHeader.jsx
-// Wave F3-F — a collapsible "Considered: …" planning pill shown above
-// multi-step assistant answers. Outcome language only (RULE_23 — the step's
-// human-readable step_label + formatted duration, never tool_id or raw JSON).
-// Theme tokens only (RULE_8). Keyboard-complete via a real <button> (MUI
-// Button — Enter/Space toggle), aria-expanded on the trigger. Expanded state
-// is persisted to localStorage (`pulse.planningHeader.expanded`).
+// Wave F3-F + S-TRACE-01 — a collapsible "Considered: …" planning pill shown
+// above assistant answers. Outcome language only (RULE_23 — the step's
+// human-readable step_label, never raw result JSON). S-TRACE-01 enriches each
+// step with the tool name, a sanitized input summary, and a sanitized output
+// summary — the "why this answer" payload is rendered without lossy remap
+// (S-TRACE-04). Theme tokens only (RULE_8). Keyboard-complete via a real
+// <button> (MUI Button — Enter/Space toggle), aria-expanded on the trigger.
+// Expanded state is persisted to localStorage (`pulse.planningHeader.expanded`).
 import { useState } from 'react';
 import PropTypes from 'prop-types';
-import { Box, Button, Paper, Stack, Typography } from '@mui/material';
+import { Box, Button, Chip, Paper, Stack, Typography } from '@mui/material';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
@@ -45,6 +47,27 @@ function formatDuration(ms) {
   return `${(ms / 1000).toFixed(1)} s`;
 }
 
+// S-TRACE-01 — build the outcome-language detail line for a single step:
+// the tool name, the sanitized input, and the sanitized output, joined with a
+// " → " so input→output provenance is visible at a glance. Falls back
+// gracefully for pre-S-TRACE-01 steps that only carry step_label/tool_id.
+function buildDetail(step) {
+  if (!step || typeof step !== 'object') return '';
+  const tool = typeof step.tool === 'string' ? step.tool.trim() : '';
+  const input = typeof step.input === 'string' ? step.input.trim() : '';
+  const output = typeof step.output === 'string' ? step.output.trim() : '';
+  const parts = [];
+  if (input || output) {
+    parts.push(input && output ? `${input} → ${output}` : input || output);
+  }
+  if (tool) parts.unshift(tool);
+  return parts.join(' · ');
+}
+
+function confidenceColor(confidence) {
+  return confidence === 'high' ? 'success' : confidence === 'low' ? 'warning' : 'default';
+}
+
 function PlanningHeader({ trace }) {
   const [expanded, setExpanded] = useState(readInitialExpanded);
   const [reducedMotion] = useState(readReducedMotion);
@@ -61,7 +84,7 @@ function PlanningHeader({ trace }) {
     }
   };
 
-  const firstLabel = trace[0]?.step_label || '';
+  const firstLabel = trace[0]?.step_label || trace[0]?.tool || '';
   const summary = truncate(firstLabel);
   const more = trace.length > 1 ? ` · +${trace.length - 1} more` : '';
   const label = `Considered: ${summary}${more}`;
@@ -96,23 +119,51 @@ function PlanningHeader({ trace }) {
 
       {expanded && (
         <Paper variant="outlined" sx={{ mt: 0.5, p: 1, bgcolor: 'background.paper' }}>
-          <Stack spacing={0.5}>
-            {trace.map((step, idx) => (
-              <Stack
-                key={`${step?.step_label ?? 'step'}-${idx}`}
-                direction="row"
-                justifyContent="space-between"
-                alignItems="baseline"
-                spacing={1}
-              >
-                <Typography variant="caption" sx={{ color: 'text.primary' }}>
-                  {step?.step_label}
-                </Typography>
-                <Typography variant="caption" sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>
-                  {formatDuration(step?.duration_ms)}
-                </Typography>
-              </Stack>
-            ))}
+          <Stack spacing={1}>
+            {trace.map((step, idx) => {
+              const stepLabel = step?.step_label || step?.tool || '';
+              const detail = buildDetail(step);
+              const confidence =
+                typeof step?.confidence === 'string' ? step.confidence : '';
+              return (
+                <Stack
+                  key={`${stepLabel || 'step'}-${idx}`}
+                  spacing={0.25}
+                >
+                  <Stack
+                    direction="row"
+                    justifyContent="space-between"
+                    alignItems="baseline"
+                    spacing={1}
+                  >
+                    <Typography variant="caption" sx={{ color: 'text.primary', fontWeight: 500 }}>
+                      {stepLabel}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>
+                      {formatDuration(step?.duration_ms)}
+                    </Typography>
+                  </Stack>
+                  {(detail || confidence) && (
+                    <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
+                      {confidence && (
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          color={confidenceColor(confidence)}
+                          label={confidence}
+                          sx={{ height: 16, '& .MuiChip-label': { px: 0.75, fontSize: '0.62rem' } }}
+                        />
+                      )}
+                      {detail && (
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                          {detail}
+                        </Typography>
+                      )}
+                    </Stack>
+                  )}
+                </Stack>
+              );
+            })}
           </Stack>
         </Paper>
       )}
@@ -125,6 +176,10 @@ PlanningHeader.propTypes = {
     PropTypes.shape({
       step_label: PropTypes.string,
       tool_id: PropTypes.string,
+      tool: PropTypes.string,
+      input: PropTypes.string,
+      output: PropTypes.string,
+      confidence: PropTypes.string,
       duration_ms: PropTypes.number,
     }),
   ),

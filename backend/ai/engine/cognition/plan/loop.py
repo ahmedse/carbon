@@ -193,7 +193,15 @@ class ReActLoop:
             memory_manager=self.memory_manager,
         )
         cw = self.critic_witness or CriticWitness()
-        ex = self.executor or ExecuteWitness()
+        # S-PROC-01 / S-TRACE-01: the ReAct loop's ExecuteWitness must carry the
+        # host executor (for ``call_host_api`` / ``search_knowledge`` grounding)
+        # and the knowledge store. Previously it was built bare — the loop could
+        # not reach the host executor or the knowledge backend at all.
+        _host_executor = getattr(dw, "executor", None)
+        ex = self.executor or ExecuteWitness(
+            executor=_host_executor,
+            knowledge_store=self.knowledge_store,
+        )
 
         # Use self.db or passed db
         _db = db or self.db

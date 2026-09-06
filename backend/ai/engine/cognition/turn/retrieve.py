@@ -19,6 +19,13 @@ from ai.engine.cognition.turn.witnesses import RetrievalResult
 
 logger = logging.getLogger("pulse.cognition.turn.retrieve")
 
+# Placeholder emitted when retrieval finds nothing. It is prompt-fodder for the
+# S3 draft stage (honest "you have no knowledge loaded" context), but must NEVER
+# be surfaced as a grounded knowledge_chunk — the S4 critic treats any non-empty
+# chunk as retrieval evidence, which would false-flag ``ungrounded_claim`` on
+# perfectly valid general-knowledge answers.
+_NO_KNOWLEDGE_PLACEHOLDER = "No knowledge loaded yet."
+
 
 class RetrievalWitness:
     """Semantic knowledge + memory retrieval. Zero LLM cost."""
@@ -35,7 +42,7 @@ class RetrievalWitness:
         user_info: dict | None = None,
     ) -> RetrievalResult:
         t0 = time.monotonic()
-        relevant_knowledge = "No knowledge loaded yet."
+        relevant_knowledge = _NO_KNOWLEDGE_PLACEHOLDER
         relevant_memories = "No memories available."
         citation_ids: list[str] = []
         tool_suggestions: list[str] = []
@@ -80,8 +87,18 @@ class RetrievalWitness:
         )
 
         elapsed = (time.monotonic() - t0) * 1000
+        # Empty retrieval must not masquerade as evidence: keep knowledge_chunks
+        # EMPTY when nothing was found (see _NO_KNOWLEDGE_PLACEHOLDER). The
+        # runner already re-supplies the placeholder for the draft prompt, so
+        # nothing downstream loses context; the critic now correctly sees
+        # "no retrieval evidence" and skips the grounding flag.
+        knowledge_chunks = (
+            [{"type": "text", "content": relevant_knowledge}]
+            if relevant_knowledge and relevant_knowledge != _NO_KNOWLEDGE_PLACEHOLDER
+            else []
+        )
         return RetrievalResult(
-            knowledge_chunks=[{"type": "text", "content": relevant_knowledge}],
+            knowledge_chunks=knowledge_chunks,
             memory_chunks=[{"type": "text", "content": relevant_memories}],
             tool_suggestions=tool_suggestions,
             citation_ids=citation_ids,

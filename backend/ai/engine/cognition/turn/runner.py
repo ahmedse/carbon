@@ -1862,6 +1862,7 @@ class TurnPipelineRunner:
             hook_ctx_defaults=hook_ctx_defaults,
             run_id=turn_id,
             instance_id=instance_id,
+            knowledge_store=self.knowledge_store,
         )
         execution = await execute_witness.execute(
             text=final_text,

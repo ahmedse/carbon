@@ -91,6 +91,25 @@ describe('PlanningHeader', () => {
     expect(none).toBeEmptyDOMElement();
   });
 
+  it('renders the S-TRACE-01 tool/input/output/confidence detail without lossy remap', () => {
+    const trace = [
+      {
+        step_label: 'Searched the knowledge base',
+        tool: 'search_knowledge',
+        input: 'payroll run lifecycle',
+        output: 'Found 1 match(es)',
+        confidence: 'high',
+        duration_ms: 350,
+      },
+    ];
+    render(<PlanningHeader trace={trace} />);
+    fireEvent.click(screen.getByRole('button', { name: /Show planning steps/i }));
+
+    expect(screen.getByText('Searched the knowledge base')).toBeInTheDocument();
+    expect(screen.getByText(/payroll run lifecycle → Found 1 match\(es\)/)).toBeInTheDocument();
+    expect(screen.getByText('high')).toBeInTheDocument();
+  });
+
   it('persists expanded state to localStorage and reads it back on a fresh mount', () => {
     const { unmount } = render(<PlanningHeader trace={TRACE_1} />);
     fireEvent.click(screen.getByRole('button', { name: /Show planning steps/i }));

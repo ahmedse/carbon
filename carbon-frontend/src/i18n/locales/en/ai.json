@@ -129,6 +129,7 @@
   "provenance": {
     "sources": "Sources",
     "toolsUsed": "Tools used",
+    "stepsConsidered": "Steps considered",
     "dataFreshness": "Data freshness",
     "truncated": "Truncated",
     "rows": "{{count}} rows",

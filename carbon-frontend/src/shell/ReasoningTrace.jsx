@@ -63,6 +63,26 @@ function providerLabel(source, t) {
   return t(PROVIDER_LABEL_KEYS[source] || 'source_external_web');
 }
 
+// S-TRACE-01 — outcome-language detail line for a single planning step
+// (tool + sanitized input → sanitized output). Renders the "why this answer"
+// trace without lossy remap (S-TRACE-04).
+function buildStepDetail(step) {
+  if (!step || typeof step !== 'object') return '';
+  const tool = typeof step.tool === 'string' ? step.tool.trim() : '';
+  const input = typeof step.input === 'string' ? step.input.trim() : '';
+  const output = typeof step.output === 'string' ? step.output.trim() : '';
+  const parts = [];
+  if (input || output) {
+    parts.push(input && output ? `${input} → ${output}` : input || output);
+  }
+  if (tool) parts.unshift(tool);
+  return parts.join(' · ');
+}
+
+function stepConfidenceColor(confidence) {
+  return confidence === 'high' ? 'success' : confidence === 'low' ? 'warning' : 'default';
+}
+
 function ReasoningTrace({
   lines = [],
   actions = [],
@@ -70,6 +90,7 @@ function ReasoningTrace({
   createdAt = null,
   externalSources = [],
   sources = [],
+  toolTrace = [],
 }) {
   const { isRtl } = useLanguage();
   const { t } = useTranslation('ai');
@@ -84,6 +105,9 @@ function ReasoningTrace({
     ...(Array.isArray(pendingActions) ? pendingActions : []).map(pendingLabel),
   ].filter(Boolean);
   const freshness = formatFreshness(createdAt);
+  const steps = (Array.isArray(toolTrace) ? toolTrace : []).filter(
+    (step) => step && typeof step === 'object',
+  );
 
   // External sources are already provenance-safe; validate defensively and
   // build the localized badge label + link text once (keyed on the prop).
@@ -241,6 +265,53 @@ function ReasoningTrace({
               </Box>
             )}
 
+            {steps.length > 0 && (
+              <Box>
+                <Typography
+                  variant="caption"
+                  sx={{ display: 'block', fontWeight: 600, color: 'text.secondary', mb: 0.25 }}
+                >
+                  {t('provenance.stepsConsidered')}
+                </Typography>
+                <Stack spacing={0.5}>
+                  {steps.map((step, idx) => {
+                    const stepLabel = step.step_label || step.tool || '';
+                    const detail = buildStepDetail(step);
+                    const confidence =
+                      typeof step.confidence === 'string' ? step.confidence : '';
+                    return (
+                      <Box key={`${stepLabel || 'step'}-${idx}`}>
+                        <Typography variant="caption" sx={{ display: 'block' }}>
+                          {stepLabel}
+                        </Typography>
+                        {(detail || confidence) && (
+                          <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
+                            {confidence && (
+                              <Chip
+                                size="small"
+                                variant="outlined"
+                                color={stepConfidenceColor(confidence)}
+                                label={confidence}
+                                sx={{ height: 16, '& .MuiChip-label': { px: 0.75, fontSize: '0.62rem' } }}
+                              />
+                            )}
+                            {detail && (
+                              <Typography
+                                variant="caption"
+                                sx={{ display: 'block', color: 'text.secondary' }}
+                              >
+                                {detail}
+                              </Typography>
+                            )}
+                          </Stack>
+                        )}
+                      </Box>
+                    );
+                  })}
+                </Stack>
+              </Box>
+            )}
+
             {freshness && (
               <Box>
                 <Typography
@@ -268,6 +339,7 @@ ReasoningTrace.propTypes = {
   createdAt: PropTypes.string,
   externalSources: PropTypes.array,
   sources: PropTypes.array,
+  toolTrace: PropTypes.array,
 };
 
 export default ReasoningTrace;

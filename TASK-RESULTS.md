@@ -1,5 +1,61 @@
 # TASK-RESULTS.md
 
+## [2026-09-07] Master Architect — QA-lead fixes S-PROC-01 + S-TRACE-01 (+ S-TRACE-04)
+
+**Role:** Master Architect · **Kind:** Grounding + tool-trace provenance. Two QA-lead findings fixed completely, end-to-end (engine → payload → frontend), per the "never shallow" directive.
+
+### Fixes
+| ID | Finding | Fix |
+|----|---------|-----|
+| **S-PROC-01** | Payroll-run-lifecycle Q&A returned empty because the knowledge base was empty and the chat path never wired `knowledge_store` lexical fallback. | Seeded `nibras`/`people` knowledge (10 entities: 6 process + 4 concept) via Django ORM; `KnowledgeStore._lexical_search` now deterministically ranks token/phrase/name overlap so the chat path returns grounded answers even with `chromadb` absent. |
+| **S-TRACE-01** | "Why this answer" was metadata-only; single-tool turns emitted an empty trace. | `_build_tool_trace` rewritten: every step emits `{step_label, tool_id, tool, input, output, confidence, duration_ms}`; removed the `len(steps) < 2 → []` gate. |
+| **S-TRACE-04** | Frontend renders the `tool_trace` payload with no lossy remap. | `PlanningHeader.jsx` + `ReasoningTrace.jsx` render per-step label, confidence chip, and input→output detail; i18n `provenance.stepsConsidered` added (en/ar). |
+
+### Files Created
+| File | What |
+|------|------|
+| `backend/ai/management/commands/seed_nibras_knowledge.py` | `seed_nibras_knowledge` (`--reset`, `--instance`, `--app`). Seeds `KnowledgeEntity` via Django ORM (10 process/concept specs). Ran: `created=9 updated=1 (instance_id='nibras', app='people')`. |
+| `backend/ai/tests/test_knowledge_store.py` | 3 tests: lexical ranking ("Payroll Run Lifecycle" first; "WPS Wage Protection System" first) + public `search()` lexical fallback with no vector backend. Uses `object.__new__(KnowledgeStore)` + `sync_to_async` seeding. |
+
+### Files Changed
+| File | What |
+|------|------|
+| `backend/ai/engine/knowledge/store.py` | Added `_lexical_search` (token overlap ×3 + phrase +2 + name +1, top-5 via `_entity_to_dict`); `search()` falls back to it when vector backend empty/unavailable. |
+| `backend/ai/engine_runtime.py` | Added `_clip_text`/`_summarize_tool_input`/`_summarize_tool_output`/`_tool_confidence`; `_build_tool_trace` emits the enriched per-step dict and no longer drops single-tool traces. |
+| `backend/ai/tests/test_tool_trace.py` | Expanded to 15 tests (per-step shape, single-tool non-empty, summary precedence, confidence). |
+| `carbon-frontend/src/shell/PlanningHeader.jsx` | Per-step Stack: label + duration, confidence `Chip` + detail (`tool · input → output`). |
+| `carbon-frontend/src/shell/ReasoningTrace.jsx` | "Steps considered" section with confidence chip + label + detail; `toolTrace` prop. |
+| `carbon-frontend/src/shell/AIMessageBubble.jsx` | Wires `message.tool_trace || metadata.tool_trace` into `ReasoningTrace`. |
+| `carbon-frontend/src/i18n/locales/{en,ar}/ai.json` | Added `provenance.stepsConsidered`. |
+| `carbon-frontend/src/__tests__/{PlanningHeader,ReasoningTrace}.test.jsx` | S-TRACE-01 rendering regression tests. |
+
+### Verification
+- `test_tool_trace.py` → **15 passed** · `test_knowledge_store.py` → **3 passed** · frontend `PlanningHeader`+`ReasoningTrace` → **15 passed**.
+- Frontend lint (0 errors) + build ✓ · route audit clean · engine boundary clean · deterministic intelligence tier ✓.
+
+### Second QA cycle — 2 pre-existing failures fixed (gate now GREEN)
+The first `verify.sh full` run surfaced **2 failures in other subsystems** (not regressions from S-PROC-01/S-TRACE-01). Both root causes diagnosed and fixed completely:
+
+| Failure | Root cause | Fix |
+|---------|-----------|-----|
+| `test_learning_trigger.py::test_feedback_post_triggers_learning` | Fixture content `"AI answer"` (9 chars) fell under `LongTermMemory.store_fact`'s noise threshold (`len < 15`) → no `MemoryLongTerm` row written. | Test now uses a real >15-char learning fact (`"The payroll run passes validation, calculation, and reconciliation gates."`) and asserts that exact row. |
+| `test_intelligence_live.py::test_live_confident_turn_is_grounded_and_calibrated` | `RetrievalWitness.retrieve` always emitted `"No knowledge loaded yet."` as a non-empty `knowledge_chunks` chunk even when retrieval found nothing → critic's `has_retrieval_results` was always True → false `ungrounded_claim` → LLM critic vetoed → `confidence_label="uncertain"` instead of high/medium. | `retrieve.py` now returns an **EMPTY** `knowledge_chunks` on empty retrieval (the placeholder is prompt-fodder for the draft only; the runner re-supplies it for the draft prompt). Critic now correctly sees "no retrieval evidence" and passes general-knowledge answers. |
+
+**Regression coverage added** — `backend/ai/tests/test_retrieval_grounding.py` (new, 5 tests):
+- `test_retrieve_empty_knowledge_emits_empty_chunks` — empty retrieval → `knowledge_chunks == []`.
+- `test_retrieve_populated_knowledge_emits_chunks` — populated store still emits chunks.
+- `test_critic_no_flag_when_retrieval_empty` — empty retrieval → `verdict=="pass"`, no `ungrounded_claim`.
+- `test_critic_flags_when_evidence_uncited` — real evidence + no citations → advisory `pass_with_flag`, never veto.
+
+### Full gate (post-fix)
+- `./.ai-toolkit/scripts/verify.sh full` → **GATE PASSED**:
+  - Backend: `django check` ✓ · `pytest` → **3259 passed** (was 3254 passed + 2 failed).
+  - Frontend: lint ✓ · build ✓.
+  - Routes: route audit clean (101 paths, 20 namespaces) ✓.
+  - Anti-patterns: no hardcoded secrets ✓, no MUI v5 Grid ✓, no hex ✓ (3 pre-existing advisories: `raw fetch()` in `exportDocuments.js`/`exportUtils.js`/`AITaskPanel.jsx`/password-reset pages, naive `datetime.now()` in QA smoke scripts, 98 `print()` in app code — all non-blocking warnings, not gate failures).
+  - Boundary: engine import boundary clean ✓.
+  - Intelligence: **deterministic + live** ✓ (live tier 2 → `4 passed`; was `1 failed, 5 passed`).
+
 ## [2026-09-06] Backend Worker — Phase OF-15
 
 **Role:** Backend Worker · **Kind:** e-Office correspondence — generic payload-only submit, acknowledge/review transitions + `act` dispatcher, people subject adapters (loan + profile-change), seed 5 policies + finance approver, finance-approver routing resolution.

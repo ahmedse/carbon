@@ -59,6 +59,31 @@ describe('ReasoningTrace panel', () => {
     expect(screen.getByText('Org units: 3')).toBeInTheDocument();
   });
 
+  it('renders the S-TRACE-01 "Steps considered" trace in the why-this-answer panel', () => {
+    openTrace({
+      toolTrace: [
+        {
+          step_label: 'Searched the knowledge base',
+          tool: 'search_knowledge',
+          input: 'payroll run lifecycle',
+          output: 'Found 1 match(es)',
+          confidence: 'high',
+        },
+      ],
+    });
+
+    expect(screen.getByText('Steps considered')).toBeInTheDocument();
+    expect(screen.getByText('Searched the knowledge base')).toBeInTheDocument();
+    expect(screen.getByText(/payroll run lifecycle → Found 1 match\(es\)/)).toBeInTheDocument();
+    expect(screen.getByText('high')).toBeInTheDocument();
+  });
+
+  it('omits the steps section when toolTrace is empty', () => {
+    openTrace({ lines: ['Org units: 3'], toolTrace: [] });
+
+    expect(screen.queryByText('Steps considered')).not.toBeInTheDocument();
+  });
+
   it('surfaces provenance source facts (tool, rows, truncation, resolved-at)', () => {
     openTrace({
       sources: [

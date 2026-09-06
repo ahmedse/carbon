@@ -105,7 +105,10 @@ def test_feedback_post_triggers_learning(django_store, user):
     from ai.models import KgFeedbackRecord, MemoryLongTerm
 
     conversation = _make_conversation(user)
-    message = _make_message(conversation, content="AI answer")
+    message = _make_message(
+        conversation,
+        content="The payroll run passes validation, calculation, and reconciliation gates.",
+    )
 
     client = APIClient()
     client.force_authenticate(user=user)
@@ -122,7 +125,10 @@ def test_feedback_post_triggers_learning(django_store, user):
     rec = KgFeedbackRecord.objects.filter(message_id=str(message.id)).get()
     assert rec.signal_type == "explicit_positive"
 
-    assert MemoryLongTerm.objects.filter(category="learned", content="AI answer").exists()
+    assert MemoryLongTerm.objects.filter(
+        category="learned",
+        content="The payroll run passes validation, calculation, and reconciliation gates.",
+    ).exists()
 
 
 @pytest.mark.django_db(transaction=True)

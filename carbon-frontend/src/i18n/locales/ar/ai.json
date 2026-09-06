@@ -129,6 +129,7 @@
   "provenance": {
     "sources": "المصادر",
     "toolsUsed": "الأدوات المستخدمة",
+    "stepsConsidered": "الخطوات المستعرضة",
     "dataFreshness": "حداثة البيانات",
     "truncated": "مقتطع",
     "rows": "{{count}} صف",

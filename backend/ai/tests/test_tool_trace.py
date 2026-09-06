@@ -1,11 +1,13 @@
-"""F3-B — read-only, outcome-language ``tool_trace`` for the "Considered…" pill.
+"""F3-B + S-TRACE-01 — read-only, outcome-language ``tool_trace`` for the
+"Considered…" / "Why this answer" surface.
 
 Covers ``_build_tool_trace`` in isolation (no DB, no Django TestCase):
   * static outcome copy per tool name (``_TOOL_STEP_LABELS``)
   * ``call_host_api*`` → "Queried live platform data"
   * result ``summary`` / ``label`` overrides the static map
   * error / ``requires_confirmation`` tools are dropped
-  * multi-step (>=2) gating
+  * S-TRACE-01: ``tool``, ``input``, ``output``, ``confidence`` per step
+  * single-tool turns now emit a trace (S-TRACE-01 — multi-step gate removed)
   * ``duration_ms`` derived from ``latency_ms`` (int, absent → 0)
   * never raises on malformed results
 """
@@ -16,7 +18,7 @@ import json
 from ai.engine_runtime import _build_tool_trace
 
 
-def _tool(name, result=None, error=None, latency_ms=12):
+def _tool(name, result=None, error=None, latency_ms=12, tool_args=None):
     item = {"tool_name": name}
     if latency_ms is not None:
         item["latency_ms"] = latency_ms
@@ -24,6 +26,8 @@ def _tool(name, result=None, error=None, latency_ms=12):
         item["error"] = error
     if result is not None:
         item["result"] = result
+    if tool_args is not None:
+        item["tool_args"] = tool_args
     return item
 
 
@@ -34,11 +38,10 @@ def test_static_label_and_ids():
     ]
     trace = _build_tool_trace(tools)
     assert len(trace) == 2
-    assert trace[0] == {
-        "step_label": "Searched the knowledge base",
-        "tool_id": "search_knowledge",
-        "duration_ms": 12,
-    }
+    assert trace[0]["step_label"] == "Searched the knowledge base"
+    assert trace[0]["tool_id"] == "search_knowledge"
+    assert trace[0]["tool"] == "search_knowledge"
+    assert trace[0]["duration_ms"] == 12
     assert trace[1]["step_label"] == "Looked up entity details"
 
 
@@ -81,8 +84,11 @@ def test_drops_error_and_confirmation_tools():
     assert [s["tool_id"] for s in trace] == ["search_knowledge", "get_entity_details"]
 
 
-def test_single_tool_returns_empty():
-    assert _build_tool_trace([_tool("search_knowledge", result="{}")]) == []
+def test_single_tool_emits_trace():
+    # S-TRACE-01: a single-tool turn still carries a trace entry.
+    trace = _build_tool_trace([_tool("search_knowledge", result="{}")])
+    assert len(trace) == 1
+    assert trace[0]["tool"] == "search_knowledge"
 
 
 def test_two_valid_tools_returns_two_elements():
@@ -109,8 +115,66 @@ def test_never_raises_on_malformed_result():
         _tool("learn_fact", result="{}", latency_ms=6),
     ]
     trace = _build_tool_trace(tools)
-    assert trace[0] == {
-        "step_label": "Searched the knowledge base",
-        "tool_id": "search_knowledge",
-        "duration_ms": 5,
-    }
+    assert trace[0]["step_label"] == "Searched the knowledge base"
+    assert trace[0]["tool_id"] == "search_knowledge"
+    assert trace[0]["duration_ms"] == 5
+
+
+def test_trace_carries_input_output_confidence():
+    tools = [
+        _tool(
+            "search_knowledge",
+            result=json.dumps({"entities": [{"name": "Payroll Run Lifecycle"}], "count": 1}),
+            tool_args={"query": "payroll run lifecycle"},
+        ),
+    ]
+    trace = _build_tool_trace(tools)
+    step = trace[0]
+    assert step["tool"] == "search_knowledge"
+    assert step["input"] == "payroll run lifecycle"
+    assert step["output"] == "Found 1 match(es)"
+    assert step["confidence"] == "high"
+
+
+def test_output_summary_count_shape():
+    # count-only shape (no results/rows key) → generic item count.
+    trace = _build_tool_trace([
+        _tool("call_host_api:list_payroll_runs", result=json.dumps({"count": 4})),
+    ])
+    assert trace[0]["output"] == "Returned 4 item(s)"
+    assert trace[0]["confidence"] == "high"
+
+
+def test_output_summary_rows_shape():
+    trace = _build_tool_trace([
+        _tool(
+            "call_host_api:list_payroll_runs",
+            result=json.dumps({"count": 2, "results": [{"id": 1}, {"id": 2}]}),
+        ),
+    ])
+    assert trace[0]["output"] == "Returned 2 row(s)"
+
+
+def test_empty_result_low_confidence():
+    trace = _build_tool_trace([
+        _tool("search_knowledge", result=json.dumps({"entities": [], "count": 0})),
+    ])
+    assert trace[0]["confidence"] == "low"
+
+
+def test_input_summary_falls_back_to_kv():
+    trace = _build_tool_trace([
+        _tool(
+            "call_host_api:list_employees",
+            result=json.dumps({"count": 10}),
+            tool_args={"limit": 50, "offset": 0},
+        ),
+    ])
+    assert trace[0]["input"] == "limit=50, offset=0"
+
+
+def test_input_summary_empty_when_no_args():
+    trace = _build_tool_trace([
+        _tool("search_knowledge", result=json.dumps({"count": 1})),
+    ])
+    assert trace[0]["input"] == ""

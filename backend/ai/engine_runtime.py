@@ -94,6 +94,7 @@ async def _run_chat(
     """
     from ai.engine.cognition.turn.runner import TurnPipelineRunner
     from ai.engine.core.database import get_session_factory
+    from ai.engine.knowledge.store import KnowledgeStore
     from ai.host_executor import CarbonHostExecutor
 
     message = payload.get("message") or ""
@@ -147,7 +148,16 @@ async def _run_chat(
             user_token=f"inproc:{instance_id}:{host_user_id}" if host_user_id else None,
             host_user_id=host_user_id,
         )
-        runner = TurnPipelineRunner(db=db, executor=executor)
+        # S-PROC-01: wire the knowledge store into the chat path so
+        # ``search_knowledge`` / ``get_entity_details`` can actually ground
+        # answers in the indexed People & Payroll process docs (previously the
+        # runner was built WITHOUT a store, and every search returned
+        # "Knowledge store not available" regardless of what was indexed).
+        runner = TurnPipelineRunner(
+            db=db,
+            executor=executor,
+            knowledge_store=KnowledgeStore(db),
+        )
         response, ledger = await runner.run(
             instance_id=instance_id,
             conversation_id=conversation_id,
@@ -814,18 +824,109 @@ _TOOL_STEP_LABELS: dict[str, str] = {
 }
 
 
+def _clip_text(text: str, limit: int) -> str:
+    """Truncate a string to ``limit`` chars, appending an ellipsis."""
+    text = text or ""
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)] + "\u2026"
+
+
+def _summarize_tool_input(item: dict) -> str:
+    """Outcome-language summary of a tool's input args (S-TRACE-01).
+
+    Never dumps raw JSON or full payloads (RULE_23). Prefers a semantic key
+    (``query`` / ``entity_name`` / ``name``), else a compact ``k=v`` join of
+    scalar top-level args.
+    """
+    args = item.get("tool_args") or item.get("input") or {}
+    if not isinstance(args, dict):
+        return ""
+    for key in ("query", "entity_name", "name", "search", "text"):
+        value = args.get(key)
+        if isinstance(value, str) and value.strip():
+            return _clip_text(value.strip(), 80)
+    parts: list[str] = []
+    for key, value in args.items():
+        if isinstance(value, (str, int, float, bool)) and str(value).strip():
+            parts.append(f"{key}={str(value)[:40]}")
+    return _clip_text(", ".join(parts), 80)
+
+
+def _summarize_tool_output(data) -> str:
+    """Outcome-language summary of a parsed tool result (S-TRACE-01).
+
+    Prefers an explicit ``summary`` / ``label``, then a count/entity/row
+    description — never a raw JSON dump (RULE_23).
+    """
+    if isinstance(data, dict):
+        for key in ("summary", "label"):
+            value = data.get(key)
+            if isinstance(value, str) and value.strip():
+                return _clip_text(value.strip(), 120)
+        entities = data.get("entities")
+        if isinstance(entities, list):
+            return f"Found {len(entities)} match(es)"
+        entity = data.get("entity")
+        if isinstance(entity, dict) and entity.get("name"):
+            return _clip_text(f"Found entity '{entity['name']}'", 120)
+        rows = data.get("rows") if data.get("rows") is not None else data.get("results")
+        if isinstance(rows, list):
+            return f"Returned {len(rows)} row(s)"
+        for key in ("count", "total"):
+            value = data.get(key)
+            if isinstance(value, int) and not isinstance(value, bool):
+                return f"Returned {value} item(s)"
+    if isinstance(data, list):
+        return f"Returned {len(data)} item(s)"
+    if isinstance(data, str) and data.strip():
+        return _clip_text(data.strip(), 120)
+    return ""
+
+
+def _tool_confidence(has_error: bool, data) -> str:
+    """Derive an outcome-level confidence signal (``high`` / ``low``).
+
+    ``high`` when the tool succeeded and produced a non-empty result; ``low``
+    for errors or empty results. RULE_23 — no raw floats, no engine internals.
+    """
+    if has_error:
+        return "low"
+    if isinstance(data, dict):
+        for key in ("entities", "rows", "results"):
+            value = data.get(key)
+            if isinstance(value, list):
+                return "high" if value else "low"
+        for key in ("count", "total"):
+            value = data.get(key)
+            if isinstance(value, int) and not isinstance(value, bool):
+                return "high" if value > 0 else "low"
+        if data.get("entity") or data.get("summary") or data.get("label"):
+            return "high"
+        return "low"
+    if isinstance(data, list):
+        return "high" if data else "low"
+    if isinstance(data, str) and data.strip():
+        return "high"
+    return "low"
+
+
 def _build_tool_trace(completed_tools: list[dict]) -> list[dict]:
     """Read-only, outcome-language ``tool_trace`` for the "Considered…" pill.
 
-    Each step is ``{"step_label", "tool_id", "duration_ms"}``.  Only successful
-    (no ``error``) and non-staged (no ``requires_confirmation``) tools are
-    included, and the trace is only emitted for multi-step (>=2) responses so
-    single-tool turns don't clutter the UI (F3-B contract).
+    Each step is ``{"step_label", "tool_id", "tool", "input", "output",
+    "confidence", "duration_ms"}`` — the S-TRACE-01 "why this answer" surface
+    now carries the tool name, a sanitized input summary, and a sanitized
+    output summary alongside the existing outcome label. Only successful (no
+    ``error``) and non-staged (no ``requires_confirmation``) tools are
+    included. The trace is emitted even for single-tool turns (S-TRACE-01) —
+    the previous multi-step (>=2) gate is removed.
 
-    ``step_label`` uses outcome language only (RULE_23): a non-empty
-    ``summary`` / ``label`` already in the result, else a static
+    All fields use outcome language only (RULE_23): ``step_label``/``output``
+    prefer a ``summary`` / ``label`` already in the result, else a static
     ``_TOOL_STEP_LABELS`` entry, else "Queried live platform data" for
-    ``call_host_api*``, else a generic step label.  Never raises — malformed
+    ``call_host_api*``, else a generic step label. ``input``/``output`` are
+    truncated summaries, never raw JSON dumps. Never raises — malformed
     results are skipped rather than surfaced.
     """
     steps: list[dict] = []
@@ -840,6 +941,8 @@ def _build_tool_trace(completed_tools: list[dict]) -> list[dict]:
         if isinstance(data, dict) and data.get("requires_confirmation"):
             continue
 
+        tool_name = str(item.get("tool_name") or "")
+
         step_label = None
         if isinstance(data, dict):
             for key in ("summary", "label"):
@@ -848,7 +951,6 @@ def _build_tool_trace(completed_tools: list[dict]) -> list[dict]:
                     step_label = value.strip()
                     break
         if step_label is None:
-            tool_name = str(item.get("tool_name") or "")
             step_label = (
                 _TOOL_STEP_LABELS.get(tool_name)
                 or ("Queried live platform data" if tool_name.startswith("call_host_api") else None)
@@ -859,14 +961,17 @@ def _build_tool_trace(completed_tools: list[dict]) -> list[dict]:
             duration_ms = int(item.get("latency_ms") or 0)
         except (TypeError, ValueError):
             duration_ms = 0
+
         steps.append({
             "step_label": step_label,
-            "tool_id": str(item.get("tool_name") or ""),
+            "tool_id": tool_name,
+            "tool": tool_name,
+            "input": _summarize_tool_input(item),
+            "output": _summarize_tool_output(data),
+            "confidence": _tool_confidence(False, data),
             "duration_ms": duration_ms,
         })
 
-    if len(steps) < 2:
-        return []
     return steps
 
 
