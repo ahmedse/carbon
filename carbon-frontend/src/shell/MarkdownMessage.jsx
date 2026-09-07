@@ -30,6 +30,7 @@ import 'highlight.js/styles/atom-one-dark.css';
 import 'katex/dist/katex.min.css';
 import {
   Box,
+  Button,
   Checkbox,
   Chip,
   Divider,
@@ -216,6 +217,94 @@ function repairXychart(code) {
     `y-axis${yLabel} 0 --> ${yMax}`,
     `bar [${values.join(', ')}]`,
   ].join('\n    ');
+}
+
+/**
+ * Repair a top-level ``bar`` diagram the model sometimes emits. Mermaid has NO
+ * ``bar`` diagram type — bar charts are ``xychart-beta``. The model's output
+ * uses a ``bar`` header with pie-style "Label" : value slices plus optional
+ * ``title`` / ``x-axis`` / ``y-axis`` label lines:
+ *
+ *   bar
+ *   title Employee Count by Position
+ *   x-axis Label Position
+ *   y-axis Label Count
+ *   "Heavy Duty Driver" : 52
+ *
+ * Convert it to the xychart-beta directives mermaid accepts:
+ *
+ *   xychart-beta
+ *       title "Employee Count by Position"
+ *       x-axis ["Heavy Duty Driver", …]
+ *       y-axis "Label Count" 0 --> 58
+ *       bar [52, …]
+ */
+function repairTopLevelBar(code) {
+  if (!code || typeof code !== 'string') return code;
+  const trimmed = code.trim();
+  // Only the top-level `bar` directive (NOT xychart-beta / pie / flowchart …).
+  if (!/^bar(?=\s|$)/im.test(trimmed)) return code;
+  if (/^xychart-beta\b/m.test(trimmed) || /^pie\b/m.test(trimmed)) return code;
+
+  const lines = trimmed.split('\n').map((l) => l.trim()).filter(Boolean);
+
+  let title = '';
+  let xLabel = '';
+  let yLabel = '';
+  let categories = '';
+  const labels = [];
+  const values = [];
+
+  const titleRe = /^title\s+(?:"([^"]+)"|(.+))$/i;
+  const xAxisRe = /^x-axis\s+(?:"([^"]+)"|\[(.*)\]|(.+))$/i;
+  const yAxisRe = /^y-axis\s+(?:"([^"]+)"|(.+))$/i;
+  const sliceRe = /"([^"]*)"\s*:\s*([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)/g;
+
+  for (const rawLine of lines) {
+    // Strip a leading `bar` token so glued slices on the same line are parsed too.
+    const line = rawLine.replace(/^bar(?=\s|$)/i, '').trim();
+    if (!line) continue;
+
+    let m = line.match(titleRe);
+    if (m) { title = (m[1] ?? m[2] ?? '').trim(); continue; }
+    m = line.match(xAxisRe);
+    if (m) {
+      if (m[2] !== undefined) categories = m[2].trim();
+      else xLabel = (m[1] ?? m[3] ?? '').trim();
+      continue;
+    }
+    m = line.match(yAxisRe);
+    if (m) { yLabel = (m[1] ?? m[2] ?? '').trim(); continue; }
+
+    let sm;
+    while ((sm = sliceRe.exec(line)) !== null) {
+      labels.push(sm[1]);
+      values.push(sm[2]);
+    }
+  }
+
+  if (values.length === 0) return code;
+
+  const maxVal = values.reduce((a, v) => Math.max(a, Number(v)), 0);
+  const yMax = Math.ceil(maxVal * 1.1) || 1;
+
+  let xAxis;
+  if (categories) {
+    xAxis = `x-axis [${categories}]`;
+  } else if (labels.length === values.length && labels.length > 0) {
+    xAxis = `x-axis [${labels.map((lbl) => `"${lbl}"`).join(', ')}]`;
+  } else if (xLabel) {
+    xAxis = `x-axis [${values.map((_, i) => `"${xLabel} ${i + 1}"`).join(', ')}]`;
+  } else {
+    xAxis = `x-axis [${values.map((_, i) => i + 1).join(', ')}]`;
+  }
+
+  const parts = ['xychart-beta'];
+  if (title) parts.push(`title "${title}"`);
+  parts.push(xAxis);
+  parts.push(`y-axis "${yLabel}" 0 --> ${yMax}`);
+  parts.push(`bar [${values.join(', ')}]`);
+  return parts.join('\n    ');
 }
 
 /**
@@ -487,10 +576,13 @@ function MermaidBlock({ code }) {
   // { html: svgWithoutStyle, css: extractedCSS } | null
   const [diagram, setDiagram] = useState(null);
   const [error, setError] = useState('');
-  const effectiveCode = repairXychart(reflowSingleLineMermaid(code));
+  const [attempt, setAttempt] = useState(0);
+  const effectiveCode = repairTopLevelBar(repairXychart(reflowSingleLineMermaid(code)));
 
   useEffect(() => {
     let cancelled = false;
+    setDiagram(null);
+    setError('');
     (async () => {
       try {
         const mermaid = (await import('mermaid')).default;
@@ -523,18 +615,29 @@ function MermaidBlock({ code }) {
     return () => {
       cancelled = true;
     };
-  }, [effectiveCode]);
+  }, [effectiveCode, attempt]);
 
   if (error) {
     return (
       <Box sx={{ my: 1.5, borderRadius: 1, border: 1, borderColor: 'warning.main', overflow: 'hidden' }}>
-        <Chip
-          size="small"
-          color="warning"
-          variant="outlined"
-          label="Diagram could not be rendered"
-          sx={{ m: 0.75 }}
-        />
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+          <Chip
+            size="small"
+            color="warning"
+            variant="outlined"
+            label="Diagram could not be rendered"
+            sx={{ m: 0.75 }}
+          />
+          <Button
+            size="small"
+            color="warning"
+            variant="text"
+            onClick={() => setAttempt((n) => n + 1)}
+            sx={{ m: 0.75, ml: 'auto', flexShrink: 0 }}
+          >
+            Retry
+          </Button>
+        </Box>
         <Box component="pre" dir="ltr" sx={{ m: 0, p: 1.5, bgcolor: '#282c34', overflowX: 'auto', fontSize: '0.8125rem', color: '#abb2bf' }}>
           <code>{effectiveCode}</code>
         </Box>
@@ -795,6 +898,7 @@ export {
   normalizeMermaidFences,
   reflowSingleLineMermaid,
   repairXychart,
+  repairTopLevelBar,
   reflowMarkdownStructure,
 };
 

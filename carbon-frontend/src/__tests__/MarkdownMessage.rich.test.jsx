@@ -13,6 +13,7 @@ import MarkdownMessage, {
   normalizeMermaidFences,
   reflowSingleLineMermaid,
   repairXychart,
+  repairTopLevelBar,
   reflowMarkdownStructure,
 } from '../shell/MarkdownMessage';
 
@@ -193,6 +194,59 @@ describe('MarkdownMessage rich renderer', () => {
     it('leaves non-xychart bodies untouched', () => {
       const flow = 'flowchart LR\n    A --> B';
       expect(repairXychart(flow)).toBe(flow);
+    });
+  });
+
+  describe('repairTopLevelBar', () => {
+    it('converts a top-level bar diagram into a valid xychart-beta', () => {
+      const bad = [
+        'bar',
+        'title Employee Count by Position',
+        'x-axis Label Position',
+        'y-axis Label Count',
+        '"Heavy Duty Driver" : 52',
+        '"Supervisor" : 23',
+        '"Floorman" : 22',
+        '"Roustabout" : 18',
+        '"PCP Helper" : 12',
+        '"Other" : 319',
+      ].join('\n');
+      const out = repairTopLevelBar(bad);
+      expect(out).toContain('xychart-beta');
+      expect(out).toContain('title "Employee Count by Position"');
+      expect(out).toContain(
+        'x-axis ["Heavy Duty Driver", "Supervisor", "Floorman", "Roustabout", "PCP Helper", "Other"]',
+      );
+      expect(out).toContain('y-axis "Label Count" 0 --> ');
+      expect(out).toContain('bar [52, 23, 22, 18, 12, 319]');
+      // No stray `bar` / pie-style directive may survive.
+      expect(out).not.toMatch(/^bar\b/m);
+      expect(out).not.toMatch(/"[^"]*"\s*:/);
+    });
+
+    it('handles quoted axis labels and a bracketed x-axis list', () => {
+      const bad = [
+        'bar',
+        'title "Scope Split"',
+        'x-axis [Scope 1, Scope 2]',
+        'y-axis "Count"',
+        '"Scope 1" : 4',
+        '"Scope 2" : 6',
+      ].join('\n');
+      const out = repairTopLevelBar(bad);
+      expect(out).toContain('title "Scope Split"');
+      expect(out).toContain('x-axis [Scope 1, Scope 2]');
+      expect(out).toContain('y-axis "Count" 0 --> ');
+      expect(out).toContain('bar [4, 6]');
+    });
+
+    it('leaves xychart-beta, pie, and flowchart bodies untouched', () => {
+      const xychart = 'xychart-beta\n    x-axis [A, B]\n    bar [1, 2]';
+      const pie = 'pie\n    title S\n    "A" : 1';
+      const flow = 'flowchart LR\n    A --> B';
+      expect(repairTopLevelBar(xychart)).toBe(xychart);
+      expect(repairTopLevelBar(pie)).toBe(pie);
+      expect(repairTopLevelBar(flow)).toBe(flow);
     });
   });
 

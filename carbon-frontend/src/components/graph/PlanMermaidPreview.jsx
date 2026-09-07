@@ -5,7 +5,7 @@
 // (RULE_8); outcome labels only (RULE_23).
 import React, { useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
-import { Box, Chip, Typography } from '@mui/material';
+import { Box, Button, Chip, Typography } from '@mui/material';
 import { planDagMermaid } from '../../utils/planGraph';
 
 const idRef = { current: 0 };
@@ -20,6 +20,7 @@ const idRef = { current: 0 };
 export default function PlanMermaidPreview({ plan, maxHeight = 340, testId = 'plan-mermaid-preview' }) {
   const [svg, setSvg] = useState('');
   const [error, setError] = useState('');
+  const [attempt, setAttempt] = useState(0);
   const code = useMemo(() => planDagMermaid(plan), [plan]);
 
   useEffect(() => {
@@ -48,18 +49,29 @@ export default function PlanMermaidPreview({ plan, maxHeight = 340, testId = 'pl
     return () => {
       cancelled = true;
     };
-  }, [code]);
+  }, [code, attempt]);
 
   if (error) {
     return (
       <Box sx={{ borderRadius: 1, border: 1, borderColor: 'warning.main', overflow: 'hidden' }}>
-        <Chip
-          size="small"
-          color="warning"
-          variant="outlined"
-          label="Diagram could not be rendered"
-          sx={{ m: 0.75 }}
-        />
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+          <Chip
+            size="small"
+            color="warning"
+            variant="outlined"
+            label="Diagram could not be rendered"
+            sx={{ m: 0.75 }}
+          />
+          <Button
+            size="small"
+            color="warning"
+            variant="text"
+            onClick={() => setAttempt((n) => n + 1)}
+            sx={{ m: 0.75, ml: 'auto', flexShrink: 0 }}
+          >
+            Retry
+          </Button>
+        </Box>
       </Box>
     );
   }
