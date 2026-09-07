@@ -1970,6 +1970,23 @@ class TurnPipelineRunner:
                     "[%s] Verification step failed", turn_id[:8], exc_info=True
                 )
 
+        # S-TRACE-01: concept/general turns ground their answer through S2
+        # retrieval (RetrievalWitness), not a ReAct tool call — so no tool
+        # lands in ``completed_tools`` and the "why this answer" trace came
+        # back empty even for fully grounded answers. Surface that retrieval
+        # as a synthetic ``search_knowledge`` tool step (the literal thing that
+        # grounded the answer) so the trace is non-empty for grounded
+        # single-pass turns. Only fires when NO real tool ran AND retrieval
+        # actually found chunks — never fabricates a trace for empty retrieval.
+        if not execution.completed_tools and retrieval.knowledge_chunks:
+            execution.completed_tools.append({
+                "tool_name": "search_knowledge",
+                "tool_args": {"query": user_message},
+                "result": {"count": len(retrieval.knowledge_chunks)},
+                "error": None,
+                "latency_ms": s2_latency,
+            })
+
         # S6 — Final ledger summary
         s6_start = time.monotonic()
         await _broadcast_run(instance_id, "run.step.started", {
