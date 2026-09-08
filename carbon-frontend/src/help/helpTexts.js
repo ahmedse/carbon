@@ -17,11 +17,29 @@ export const helpTexts = {
     scope1_microhelp: "Scope 1: Direct greenhouse gas emissions from sources owned or controlled by your organization (e.g., company vehicles, on-site fuel use).",
     scope2_microhelp: "Scope 2: Indirect emissions from the generation of purchased electricity, steam, heating, or cooling consumed by your organization.",
     scope3_microhelp: "Scope 3: All other indirect emissions that occur in your value chain, such as from suppliers, transportation, or product use.",
+
+    "employee.civilId": "Kuwait Civil ID (PACI) — 12 digits. Format is validated; the check digit is not yet enforced.",
+    "employee.gender": "Governed enum from the reference data (male / female).",
+    "employee.nationality": "Governed enum from the reference data — pick from the list instead of typing.",
+    "employee.employeeNo": "Unique employee number. 4–5 digits (e.g. 1024) or two letters + 3 digits (e.g. GF-001).",
+    "employee.employmentType": "Governed enum from the reference data (e.g. full_time, part_time).",
+    "employee.contractType": "Governed enum from the reference data (e.g. permanent, fixed_term).",
+    "employee.rotation": "Rotation pattern code from the reference data (e.g. 1/1, 2/1).",
+    "employee.basicSalary": "Monthly basic salary in KWD. Protected by compensation access control.",
     
     // ...add more keys as needed
   },
   ar: {
     // Example: "field.order": "حدد موقع هذا الحقل. يمكنك أيضًا سحب الحقول لإعادة الترتيب.",
     // Fill in Arabic strings as needed.
+
+    "employee.civilId": "الرقم المدني الكويتي (PACI) — 12 رقماً. يتم التحقق من الصيغة؛ رقم التحقق لا يُفرَض بعد.",
+    "employee.gender": "قيمة محكومة من البيانات المرجعية (ذكر / أنثى).",
+    "employee.nationality": "قيمة محكومة من البيانات المرجعية — اختر من القائمة بدلاً من الكتابة اليدوية.",
+    "employee.employeeNo": "رقم موظف فريد. 4–5 أرقام (مثال: 1024) أو حرفان + 3 أرقام (مثال: GF-001).",
+    "employee.employmentType": "قيمة محكومة من البيانات المرجعية (مثال: دوام كامل، جزئي).",
+    "employee.contractType": "قيمة محكومة من البيانات المرجعية (مثال: دائم، محدد المدة).",
+    "employee.rotation": "رمز نمط المناوبة من البيانات المرجعية (مثال: 1/1، 2/1).",
+    "employee.basicSalary": "الراتب الأساسي الشهري بالدينار الكويتي. محمي بصلاحية الوصول للتعويضات.",
   }
 };

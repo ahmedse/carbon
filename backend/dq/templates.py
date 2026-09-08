@@ -34,7 +34,8 @@ __all__ = [
 RULE_TEMPLATES: Dict[str, Dict[str, Any]] = {
     'employee_no': {
         'label': 'Employee Number',
-        'description': 'Employee numbers are 4-5 digits (e.g. 1024) or legacy '\n'                      'ERP codes (e.g. GF-001).',
+        'description': 'Employee numbers are 4-5 digits (e.g. 1024) or legacy '
+                       'ERP codes (e.g. GF-001).',
         'confirmation_required': True,
         'definition': {
             'schema_version': 1,

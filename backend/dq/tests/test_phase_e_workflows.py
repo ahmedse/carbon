@@ -8,6 +8,7 @@ Tests:
   * rule template catalog: employee_no (the design-doc emp-no case),
     instantiation with bindings/overrides, confirmation gate, catalog integrity
 """
+import re
 from unittest.mock import patch
 
 from django.test import TestCase
@@ -261,7 +262,11 @@ class RuleTemplateCatalogTests(TestCase):
         """{"employee_no": {"type": "regex", "params": {"pattern": "^\\d{4,5}$"}}}"""
         tpl = templates.get_rule_template('employee_no')
         self.assertEqual(tpl['definition']['type'], 'regex')
-        self.assertEqual(tpl['definition']['params']['pattern'], r'^\d{4,5}$')
+        # Design-doc case (4-5 digits) plus legacy ERP codes (e.g. GF-001).
+        pattern = tpl['definition']['params']['pattern']
+        self.assertEqual(pattern, r'^(\d{4,5}|[A-Z]{2}-\d{3})$')
+        self.assertIsNotNone(re.match(pattern, '1024'))
+        self.assertIsNotNone(re.match(pattern, 'GF-001'))
         self.assertEqual(tpl['definition']['dimension'], 'validity')
         self.assertTrue(tpl['confirmation_required'])
 

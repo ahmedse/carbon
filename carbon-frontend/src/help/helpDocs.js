@@ -206,7 +206,7 @@ const APP_HELP_DOCS = {
       },
       {
         q: "Who do I contact for support?",
-        a: "Use the Feedback page in the sidebar to send questions, bug reports, or suggestions, or email support directly at ahmed.saied@aast.edu.",
+        a: "Use the Feedback page in the sidebar to send questions, bug reports, or suggestions.",
       },
     ],
     contact: {
@@ -297,7 +297,7 @@ const APP_HELP_DOCS = {
       },
       {
         q: "Who do I contact for support?",
-        a: "Use the Feedback page in the sidebar, or email support at ahmed.saied@aast.edu.",
+        a: "Use the Feedback page in the sidebar.",
       },
     ],
     contact: {

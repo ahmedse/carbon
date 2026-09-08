@@ -61,6 +61,17 @@ Primary action is ONE button, top-right, semantic color. Secondary actions are s
 - Show total steps + current position. Allow back without data loss.
 - Validate per step; don't dump all errors at the end.
 - Save draft state so a refresh doesn't destroy progress.
+- **Reuse `src/components/Wizard` (the standard primitive)** — never hand-roll a Stepper per form.
+  - Contract: `steps=[{ key, label, content, validate? }]`, `onFinish`, `onCancel`, optional
+    `onStepChange`, `initialStep`, `finishLabel`, `nextLabel`, `backLabel`, `cancelLabel`,
+    `submitting`, `disableFinish`.
+  - `content` is a React node or `(ctx) => node` where `ctx = { errors, clearErrors }`;
+    `validate()` returns `{ valid, errors[] }`. The Wizard owns navigation + a per-step error
+    summary; the consumer owns the form state. Per-step validation gates Next; the last step
+    calls `onFinish()`.
+  - The Wizard is chrome-free (no modal) — wrap it in a `Dialog` or a page section. Dropdowns
+    for governed enums use `Autocomplete` fed by `useReferenceOptions` (mdm.ReferenceSet),
+    never free-text fields.
 
 ## Keyboard & Power Users
 - All primary actions keyboard-reachable; visible focus ring (design-system RULE 11).

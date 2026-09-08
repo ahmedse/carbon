@@ -8,12 +8,16 @@
 
 import csv
 import io
+import logging
 from datetime import date
+
+logger = logging.getLogger(__name__)
 
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.db import IntegrityError
 from django.db.models import Count, IntegerField, OuterRef, ProtectedError, Q, Subquery
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse
@@ -28,6 +32,7 @@ from core.feedback import AppFeedback
 from .calculation_engine import NonAuthoritativeRuleError
 from .chronicle import record_event, snapshot_employee, snapshot_position
 from .compensation_service import CompensationService
+from .employee_user_service import get_default_password, provision_employee_user
 from .leave_policy_service import fork_policy, get_version_history, propagate_policy
 from .services import CalculationService
 from .models import (
@@ -192,13 +197,36 @@ class EmployeeListCreateView(APIView):
         blocked = _blocked_write_response(instance)
         if blocked is not None:
             return blocked
-        serializer.save()
+        try:
+            serializer.save()
+        except IntegrityError:
+            return Response(
+                {'employee_no': 'This employee number is already taken.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         record_event(
             entity_type='Employee', entity_id=serializer.instance.pk, event_kind='hired',
             effective_date=timezone.localdate(), user=request.user,
             before=None, after=snapshot_employee(serializer.instance),
         )
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        # Auto-provision a platform User + employee group structure on hire
+        # (best-effort: a provisioning failure never blocks the hire).
+        data = dict(serializer.data)
+        try:
+            provision = provision_employee_user(
+                serializer.instance, password=get_default_password(),
+            )
+            if provision.user is not None:
+                data['username'] = provision.user.username
+            if provision.initial_password:
+                data['initial_password'] = provision.initial_password
+        except Exception:
+            logger.exception(
+                'Employee user auto-provisioning failed for employee_no=%s',
+                serializer.instance.employee_no,
+            )
+        return Response(data, status=status.HTTP_201_CREATED)
 
 
 class EmployeeDetailView(APIView):

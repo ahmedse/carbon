@@ -156,3 +156,83 @@ def test_link_employee_users_dry_run_makes_no_changes(org):
     )
 
     assert Employee.objects.filter(user__isnull=False).count() == 0
+
+
+# ── Auto-provisioning on employee create (API) ───────────────────────────────
+
+PEOPLE_API = '/carbon-api/people/'
+EMPLOYEES_URL = PEOPLE_API + 'employees/'
+
+
+@pytest.fixture
+def auth(api_client, get_token_for_user):
+    def _factory(user):
+        api_client.credentials(
+            HTTP_AUTHORIZATION=f'Bearer {get_token_for_user(user)}',
+        )
+        return api_client
+    return _factory
+
+
+@pytest.mark.django_db
+def test_create_employee_auto_provisions_user_and_groups(
+    auth, create_user, org, monkeypatch,
+):
+    monkeypatch.delenv('EMPLOYEE_DEFAULT_PASSWORD', raising=False)
+    client = auth(create_user('hire_admin', is_superuser=True))
+
+    payload = {
+        'org_unit': org.id,
+        'employee_no': 'GF-HIRE',
+        'full_name': 'New Hire',
+        'basic_salary': '1000.000',
+        'join_date': '2026-01-01',
+    }
+    resp = client.post(EMPLOYEES_URL, payload, format='json')
+    assert resp.status_code == 201
+    body = resp.json()
+
+    # The response surfaces the provisioned username + a generated password
+    # (env default unset → random).
+    assert body['username'] == 'emp_gf_hire'
+    assert body.get('initial_password')
+
+    employee = Employee.objects.get(employee_no='GF-HIRE')
+    assert employee.user is not None
+    assert employee.user.username == 'emp_gf_hire'
+    assert employee.user.is_active is True
+    assert employee.user.check_password(body['initial_password']) is True
+
+    # Global employee_group (my app baseline) + org-unit employee_group.
+    assert ScopedRole.objects.filter(
+        user=employee.user, group__name='employee_group', org_unit=None
+    ).exists()
+    assert ScopedRole.objects.filter(
+        user=employee.user, group__name='employee_group', org_unit=org
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_create_employee_uses_env_default_password(
+    auth, create_user, org, monkeypatch,
+):
+    monkeypatch.setenv('EMPLOYEE_DEFAULT_PASSWORD', 'EnvPa_132')
+    client = auth(create_user('hire_admin_env', is_superuser=True))
+
+    payload = {
+        'org_unit': org.id,
+        'employee_no': 'GF-ENV',
+        'full_name': 'Env Hire',
+        'basic_salary': '1000.000',
+        'join_date': '2026-01-01',
+    }
+    resp = client.post(EMPLOYEES_URL, payload, format='json')
+    assert resp.status_code == 201
+    body = resp.json()
+
+    assert body['username'] == 'emp_gf_env'
+    # No per-user generated password leaked when an env default is configured.
+    assert 'initial_password' not in body
+
+    employee = Employee.objects.get(employee_no='GF-ENV')
+    assert employee.user.check_password('EnvPa_132') is True

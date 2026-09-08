@@ -86,6 +86,10 @@ class EmployeeSerializer(serializers.ModelSerializer):
     position = serializers.PrimaryKeyRelatedField(
         queryset=Position.objects.all(), required=False, allow_null=True,
     )
+    # Linked platform account (auto-provisioned on hire). Read-only so the API
+    # never mutates the account through the employee payload.
+    user_id = serializers.IntegerField(source='user_id', read_only=True, default=None)
+    username = serializers.CharField(source='user.username', read_only=True, default=None)
 
     class Meta:
         model = Employee
@@ -95,9 +99,9 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'name_en_given', 'name_en_family', 'name_ar_given', 'name_ar_family',
             'civil_id', 'date_of_birth', 'gender', 'nationality_code',
             'employment_type_code', 'contract_type_code', 'kuwaitization',
-            'manager', 'position', 'created_at', 'updated_at',
+            'manager', 'position', 'user_id', 'username', 'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'user_id', 'username', 'created_at', 'updated_at']
 
     def validate_nationality_code(self, value):
         return _validate_reference_code(value, 'nationality')

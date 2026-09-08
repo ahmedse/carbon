@@ -17,26 +17,13 @@
 # Usage:
 #   ./manage.py link_employee_users [--password <pwd>] [--dry-run]
 
-import os
-import re
-
-from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand, CommandError
 
-from accounts.models import ScopedRole
 from mdm.models import OrgUnit
+from people.employee_user_service import get_default_password, provision_employee_user
 from people.models import Employee
 
-DEFAULT_PASSWORD = os.environ.get("EMPLOYEE_DEFAULT_PASSWORD", "")
-EMPLOYEE_GROUP = "employee_group"
-MANAGER_GROUP = "manager_group"
-
-
-def _slug_username(employee_no: str) -> str:
-    """Deterministic, URL-safe username from an employee number."""
-    slug = re.sub(r"[^a-z0-9]+", "_", (employee_no or "").lower()).strip("_")
-    return f"emp_{slug}" if slug else "emp"
+DEFAULT_PASSWORD = get_default_password()
 
 
 class Command(BaseCommand):
@@ -70,11 +57,6 @@ class Command(BaseCommand):
                 "or pass --password <pwd>."
             )
 
-        User = get_user_model()
-
-        employee_group, _ = Group.objects.get_or_create(name=EMPLOYEE_GROUP)
-        manager_group, _ = Group.objects.get_or_create(name=MANAGER_GROUP)
-
         # Manager signals: (a) has direct reports via the self FK, or (b) is the
         # OrgUnit.manager_employee_id soft-ref for their unit.
         direct_report_manager_ids = set(
@@ -102,70 +84,19 @@ class Command(BaseCommand):
                 emp.id in direct_report_manager_ids or emp.id in manager_org_ids
             )
 
-            if emp.user_id is not None:
-                # Already linked — just ensure group/scoped-role coverage.
-                user = emp.user
-                stats["reused_users"] += 1
-            else:
-                username = _slug_username(emp.employee_no)
-                user, was_created = User.objects.get_or_create(username=username)
-                if was_created:
-                    user.set_password(password)
-                    user.is_active = bool(emp.is_active)
-                    user.save(update_fields=["password", "is_active"])
-                    stats["created_users"] += 1
-                else:
-                    # Reused an existing account by username (idempotent re-run).
-                    stats["reused_users"] += 1
-                if not dry_run:
-                    emp.user = user
-                    emp.save(update_fields=["user"])
-                stats["linked"] += 1
-
-            # Django auth group membership (visible in admin; legacy surface).
-            if not dry_run:
-                user.groups.add(employee_group)
-                if is_manager:
-                    user.groups.add(manager_group)
-
-            # CBAC ScopedRole assignments (what capabilities actually resolve to).
-            if dry_run:
-                continue
-
-            # 1) GLOBAL employee_group → "all employees → employeegroup" (my app).
-            _, created = ScopedRole.objects.get_or_create(
-                user=user,
-                group=employee_group,
-                org_unit=None,
-                module=None,
-                defaults={"is_active": True},
+            result = provision_employee_user(
+                emp, password=password, is_manager=is_manager,
+                commit=not dry_run,
             )
-            if created:
-                stats["employee_global"] += 1
-
-            # 2) ORG-UNIT employee_group → "emp → orgunit".
-            if emp.org_unit_id is not None:
-                _, created = ScopedRole.objects.get_or_create(
-                    user=user,
-                    group=employee_group,
-                    org_unit=emp.org_unit,
-                    module=None,
-                    defaults={"is_active": True},
-                )
-                if created:
-                    stats["employee_org"] += 1
-
-            # 3) ORG-UNIT manager_group → "manager → orgunit".
-            if is_manager and emp.org_unit_id is not None:
-                _, created = ScopedRole.objects.get_or_create(
-                    user=user,
-                    group=manager_group,
-                    org_unit=emp.org_unit,
-                    module=None,
-                    defaults={"is_active": True},
-                )
-                if created:
-                    stats["manager_org"] += 1
+            if result.created:
+                stats["created_users"] += 1
+            else:
+                stats["reused_users"] += 1
+            if result.linked:
+                stats["linked"] += 1
+            stats["employee_global"] += result.employee_global
+            stats["employee_org"] += result.employee_org
+            stats["manager_org"] += result.manager_org
 
         if dry_run:
             self.stdout.write(

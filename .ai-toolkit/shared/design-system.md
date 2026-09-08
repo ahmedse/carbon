@@ -59,6 +59,7 @@ ls src/components/         # scan existing primitives
 - If it ALMOST fits → add a prop to the existing one (report to Master if it's shared).
 - NEVER create `Button2`, `NewCard`, `CustomTable`. Duplication is how multi-agent frontends rot.
 - One component = one file = one source of truth.
+- Standard primitives already exist — reuse by name: `SystemDialog` (modal chrome), `MicroHelp` (tooltips), `FormField` (label-above-field), `FilteredDataGrid` (list shell), `PageContainer`, and `Wizard` (multi-step forms).
 
 ---
 

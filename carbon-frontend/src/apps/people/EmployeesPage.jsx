@@ -12,54 +12,40 @@ import {
   Box,
   Button,
   Chip,
-  FormControlLabel,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   IconButton,
-  MenuItem,
   Snackbar,
   Stack,
-  Switch,
-  TextField,
   Tooltip,
   Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import CheckIcon from '@mui/icons-material/Check';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import EditIcon from '@mui/icons-material/Edit';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import FilteredDataGrid from '../../components/FilteredDataGrid';
-import SystemDialog from '../../components/SystemDialog';
 import PageContainer from '../../components/layout/PageContainer';
 import ErrorAlert from '../../components/Page/ErrorAlert';
+import EmployeeWizard from './EmployeeWizard';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import { useReferenceOptions } from '../../hooks/useReferenceOptions';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompensationAccess } from './useCompensationAccess';
 import RevealAmount from './RevealAmount';
+import { formatDate } from './utils';
 import {
   fetchEmployees,
   fetchPositions,
   createEmployee,
+  updateEmployee,
 } from '../../api/people';
 import { fetchOrgUnits } from '../../api/orgUnits';
-
-const EMPTY_FORM = {
-  org_unit: '',
-  employee_no: '',
-  full_name: '',
-  nationality: '',
-  nationality_code: '',
-  gender: '',
-  civil_id: '',
-  date_of_birth: '',
-  employment_type_code: '',
-  contract_type_code: '',
-  kuwaitization: false,
-  basic_salary: '',
-  join_date: '',
-  rotation: '',
-  position: '',
-  manager: '',
-  is_active: true,
-};
 
 function getInitials(employee) {
   if (employee.name_en_given && employee.name_en_family) {
@@ -70,9 +56,30 @@ function getInitials(employee) {
   return (employee.full_name || 'EE').slice(0, 2).toUpperCase();
 }
 
+function labelMapFromOptions(options) {
+  const map = {};
+  for (const o of options || []) map[o.value] = o.label;
+  return map;
+}
+
+function CopyRow({ label, value, copied, onCopy }) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, p: 1, borderRadius: 1, bgcolor: 'action.hover' }}>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography variant="caption" color="text.secondary">{label}</Typography>
+        <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600, wordBreak: 'break-all' }}>
+          {value}
+        </Typography>
+      </Box>
+      <IconButton size="small" onClick={onCopy} color={copied ? 'success' : 'primary'}>
+        {copied ? <CheckIcon sx={{ fontSize: 16 }} /> : <ContentCopyIcon sx={{ fontSize: 16 }} />}
+      </IconButton>
+    </Box>
+  );
+}
+
 export default function EmployeesPage() {
   const { t } = useTranslation('people');
-  const { t: tCommon } = useTranslation('common');
   useDocumentTitle(t('employeesTitle'));
   const { token } = useAuth();
   const { canViewCompensation } = useCompensationAccess();
@@ -93,10 +100,12 @@ export default function EmployeesPage() {
   });
 
   const [openDialog, setOpenDialog] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ ...EMPTY_FORM });
 
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [createdAccount, setCreatedAccount] = useState(null);
+  const [copiedField, setCopiedField] = useState(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -133,18 +142,27 @@ export default function EmployeesPage() {
     return map;
   }, [positions]);
 
+  const employeeMap = useMemo(() => {
+    const map = {};
+    for (const e of employees) if (e?.id != null) map[e.id] = e;
+    return map;
+  }, [employees]);
+
+  const genderMap = useMemo(() => labelMapFromOptions(genderRef.options), [genderRef.options]);
+  const employmentTypeMap = useMemo(() => labelMapFromOptions(employmentTypeRef.options), [employmentTypeRef.options]);
+  const contractTypeMap = useMemo(() => labelMapFromOptions(contractTypeRef.options), [contractTypeRef.options]);
+
   const orgUnitOptions = useMemo(
     () => orgUnits.map((u) => ({ value: String(u.id), label: u.name || u.code || String(u.id) })),
     [orgUnits],
   );
-  const rotationOptions = useMemo(() => {
-    const set = [...new Set(employees.map((e) => e.rotation).filter(Boolean))];
-    return set.map((v) => ({ value: v, label: v }));
-  }, [employees]);
-  const nationalityOptions = useMemo(() => {
-    const set = [...new Set(employees.map((e) => e.nationality).filter(Boolean))];
-    return set.map((v) => ({ value: v, label: v }));
-  }, [employees]);
+  const rotationRef = useReferenceOptions('rotation_pattern');
+  const nationalityRef = useReferenceOptions('nationality');
+  const genderRef = useReferenceOptions('gender');
+  const employmentTypeRef = useReferenceOptions('employment_type');
+  const contractTypeRef = useReferenceOptions('contract_type');
+  const rotationOptions = rotationRef.options;
+  const nationalityOptions = nationalityRef.options;
 
   const filterDefs = useMemo(() => [
     {
@@ -183,15 +201,25 @@ export default function EmployeesPage() {
       if (filters.rotation && emp.rotation !== filters.rotation) return false;
       if (filters.kuwaitization === 'true' && !emp.kuwaitization) return false;
       if (filters.kuwaitization === 'false' && emp.kuwaitization) return false;
-      if (filters.nationality && emp.nationality !== filters.nationality) return false;
+      if (filters.nationality) {
+        const nat = nationalityOptions.find((o) => o.value === filters.nationality);
+        const matches = emp.nationality_code === filters.nationality
+          || (nat && emp.nationality === nat.label);
+        if (!matches) return false;
+      }
       return true;
     });
-  }, [employees, searchValue, filters]);
+  }, [employees, searchValue, filters, nationalityOptions]);
 
   const handleView = useCallback((id) => navigate(`/people/employees/${id}`), [navigate]);
 
   const openCreate = useCallback(() => {
-    setForm({ ...EMPTY_FORM });
+    setEditingEmployee(null);
+    setOpenDialog(true);
+  }, []);
+
+  const openEdit = useCallback((employee) => {
+    setEditingEmployee(employee);
     setOpenDialog(true);
   }, []);
 
@@ -199,54 +227,18 @@ export default function EmployeesPage() {
     setOpenDialog(false);
   }, []);
 
-  const handleChange = (event) => {
-    const { name, value, checked, type } = event.target;
-    setForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
-  };
-
-  const handleSave = async () => {
-    if (
-      !form.org_unit ||
-      !form.employee_no.trim() ||
-      !form.full_name.trim() ||
-      !form.join_date
-    ) {
-      setSnackbar({ open: true, message: tCommon('allFieldsRequired'), severity: 'error' });
-      return;
-    }
-    if (canViewCompensation && !String(form.basic_salary).trim()) {
-      setSnackbar({ open: true, message: tCommon('allFieldsRequired'), severity: 'error' });
-      return;
-    }
-
-    const payload = {
-      org_unit: Number(form.org_unit),
-      employee_no: form.employee_no.trim(),
-      full_name: form.full_name.trim(),
-      join_date: form.join_date,
-      is_active: Boolean(form.is_active),
-      kuwaitization: Boolean(form.kuwaitization),
-    };
-    if (canViewCompensation) payload.basic_salary = String(form.basic_salary).trim();
-    const optionalText = [
-      ['nationality', form.nationality],
-      ['nationality_code', form.nationality_code],
-      ['gender', form.gender],
-      ['civil_id', form.civil_id],
-      ['date_of_birth', form.date_of_birth],
-      ['employment_type_code', form.employment_type_code],
-      ['contract_type_code', form.contract_type_code],
-      ['rotation', form.rotation],
-    ];
-    for (const [key, val] of optionalText) {
-      if (val && String(val).trim()) payload[key] = String(val).trim();
-    }
-    if (form.position) payload.position = Number(form.position);
-    if (form.manager) payload.manager = Number(form.manager);
-
+  const handleSaveWizard = useCallback(async (payload) => {
     setSaving(true);
     try {
-      await createEmployee(payload, token);
+      if (editingEmployee) {
+        await updateEmployee(editingEmployee.id, payload, token);
+      } else {
+        const created = await createEmployee(payload, token);
+        setCreatedAccount({
+          username: created?.username || null,
+          initialPassword: created?.initial_password || null,
+        });
+      }
       closeDialog();
       setSnackbar({ open: true, message: t('employeeSaved'), severity: 'success' });
       await loadData();
@@ -259,9 +251,20 @@ export default function EmployeesPage() {
     } finally {
       setSaving(false);
     }
-  };
+  }, [token, t, loadData, closeDialog, editingEmployee]);
 
   const closeSnackbar = () => setSnackbar((prev) => ({ ...prev, open: false }));
+
+  const copyToClipboard = useCallback(async (text, field) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // Clipboard may be unavailable (e.g. non-HTTPS); value is still shown.
+    }
+    setCopiedField(field);
+    window.setTimeout(() => setCopiedField(null), 1500);
+  }, []);
 
   const columns = useMemo(() => {
     const nameCell = (params) => (
@@ -282,11 +285,32 @@ export default function EmployeesPage() {
       </Box>
     );
 
+    const managerName = (v) => {
+      const m = employeeMap[v];
+      return m ? `${m.employee_no} — ${m.full_name}` : '—';
+    };
+    const refLabel = (map, v) => (v && map[v]) || v || '—';
+
     return [
       { field: 'employee_no', headerName: t('colEmployeeNo'), width: 100 },
-      { field: 'full_name', headerName: t('colFullName'), width: 220, renderCell: nameCell },
-      { field: 'position', headerName: t('colPosition'), width: 150, valueGetter: (v) => positionMap[v]?.title ?? '—' },
-      { field: 'org_unit', headerName: t('colOrgUnit'), width: 150, valueGetter: (v) => orgUnitMap[v]?.name ?? '—' },
+      { field: 'full_name', headerName: t('colFullName'), width: 200, renderCell: nameCell },
+      {
+        field: 'username',
+        headerName: t('colUsername'),
+        width: 130,
+        renderCell: (p) => (p.row.username
+          ? <Chip size="small" color="info" variant="outlined" label={p.row.username} />
+          : <Typography variant="body2" color="text.disabled">{t('colUserUnlinked')}</Typography>),
+      },
+      { field: 'civil_id', headerName: t('colCivilId'), width: 120, valueGetter: (v) => v || '—' },
+      { field: 'gender', headerName: t('colGender'), width: 90, valueGetter: (v) => refLabel(genderMap, v) },
+      { field: 'date_of_birth', headerName: t('colDateOfBirth'), width: 110, valueGetter: (v) => formatDate(v) },
+      { field: 'join_date', headerName: t('colJoinDate'), width: 110, valueGetter: (v) => formatDate(v) },
+      { field: 'position', headerName: t('colPosition'), width: 140, valueGetter: (v) => positionMap[v]?.title ?? '—' },
+      { field: 'org_unit', headerName: t('colOrgUnit'), width: 140, valueGetter: (v) => orgUnitMap[v]?.name ?? '—' },
+      { field: 'manager', headerName: t('colManager'), width: 160, valueGetter: (v) => managerName(v) },
+      { field: 'employment_type_code', headerName: t('colEmploymentType'), width: 130, valueGetter: (v) => refLabel(employmentTypeMap, v) },
+      { field: 'contract_type_code', headerName: t('colContractType'), width: 130, valueGetter: (v) => refLabel(contractTypeMap, v) },
       { field: 'nationality', headerName: t('colNationality'), width: 100, valueGetter: (v) => v || '—' },
       {
         field: 'rotation',
@@ -334,6 +358,11 @@ export default function EmployeesPage() {
           const emp = p.row;
           return (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+              <Tooltip title={t('actionEditEmployee')}>
+                <IconButton size="small" onClick={() => openEdit(emp)} sx={{ color: 'primary.main' }}>
+                  <EditIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
               <Tooltip title={t('actionViewEmployee')}>
                 <IconButton size="small" onClick={() => handleView(emp.id)} sx={{ color: 'primary.main' }}>
                   <VisibilityIcon sx={{ fontSize: 16 }} />
@@ -344,7 +373,7 @@ export default function EmployeesPage() {
         },
       },
     ];
-  }, [t, orgUnitMap, positionMap, handleView]);
+  }, [t, orgUnitMap, positionMap, employeeMap, genderMap, employmentTypeMap, contractTypeMap, handleView, openEdit]);
 
   if (error) {
     return (
@@ -382,184 +411,71 @@ export default function EmployeesPage() {
         emptySubtext={t('employeesEmptyDesc')}
       />
 
-      <SystemDialog
+      <Dialog
         open={openDialog}
-        title={t('employeeCreateTitle')}
-        onClose={closeDialog}
-        onCancel={closeDialog}
-        cancelLabel={tCommon('cancel')}
-        actions={
-          <Button variant="contained" onClick={handleSave} disabled={saving}>
-            {tCommon('save')}
-          </Button>
-        }
+        onClose={(event, reason) => {
+          if (reason === 'backdropClick' || reason === 'escapeKeyDown') return;
+          closeDialog();
+        }}
+        disableEscapeKeyDown
+        fullWidth
+        maxWidth="lg"
       >
-        <Stack spacing={2}>
-          <TextField
-            select
-            label={t('formOrgUnit')}
-            name="org_unit"
-            value={form.org_unit}
-            onChange={handleChange}
-            fullWidth
-            required
-          >
-            <MenuItem value="" disabled>{t('formOrgUnit')}</MenuItem>
-            {orgUnits.map((unit) => (
-              <MenuItem key={unit.id} value={unit.id}>{unit.name || unit.code || unit.id}</MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            label={t('formEmployeeNo')}
-            name="employee_no"
-            value={form.employee_no}
-            onChange={handleChange}
-            fullWidth
-            required
+        <DialogTitle sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+          {editingEmployee ? t('employeeEditTitle') : t('employeeCreateTitle')}
+          {editingEmployee?.username ? (
+            <Typography variant="caption" color="text.secondary">
+              {t('colUsername')}: {editingEmployee.username}
+            </Typography>
+          ) : null}
+        </DialogTitle>
+        <DialogContent sx={{ height: '70vh', minHeight: 480, p: 2 }}>
+          <EmployeeWizard
+            key={editingEmployee?.id ?? 'new'}
+            employee={editingEmployee}
+            orgUnits={orgUnits}
+            positions={positions}
+            employees={employees}
+            canViewCompensation={canViewCompensation}
+            saving={saving}
+            onSave={handleSaveWizard}
+            onCancel={closeDialog}
           />
-          <TextField
-            label={t('colFullName')}
-            name="full_name"
-            value={form.full_name}
-            onChange={handleChange}
-            fullWidth
-            required
-          />
-          <TextField
-            label={t('formNationality')}
-            name="nationality"
-            value={form.nationality}
-            onChange={handleChange}
-            fullWidth
-          />
-          <TextField
-            label={t('formNationalityCode')}
-            name="nationality_code"
-            value={form.nationality_code}
-            onChange={handleChange}
-            fullWidth
-          />
-          <TextField
-            select
-            label={t('formGender')}
-            name="gender"
-            value={form.gender}
-            onChange={handleChange}
-            fullWidth
-          >
-            <MenuItem value="">{t('fieldOptional')}</MenuItem>
-            <MenuItem value="male">{t('genderMale')}</MenuItem>
-            <MenuItem value="female">{t('genderFemale')}</MenuItem>
-          </TextField>
-          <TextField
-            label={t('formCivilId')}
-            name="civil_id"
-            value={form.civil_id}
-            onChange={handleChange}
-            fullWidth
-          />
-          <TextField
-            label={t('formDateOfBirth')}
-            name="date_of_birth"
-            value={form.date_of_birth}
-            onChange={handleChange}
-            type="date"
-            slotProps={{ inputLabel: { shrink: true } }}
-            fullWidth
-          />
-          <TextField
-            label={t('formEmploymentTypeCode')}
-            name="employment_type_code"
-            value={form.employment_type_code}
-            onChange={handleChange}
-            fullWidth
-          />
-          <TextField
-            label={t('formContractTypeCode')}
-            name="contract_type_code"
-            value={form.contract_type_code}
-            onChange={handleChange}
-            fullWidth
-          />
-          <FormControlLabel
-            control={
-              <Switch
-                checked={form.kuwaitization}
-                onChange={handleChange}
-                name="kuwaitization"
-                color="primary"
-              />
-            }
-            label={t('formKuwaitization')}
-          />
-          {canViewCompensation && (
-            <TextField
-              label={t('formBasicSalary')}
-              name="basic_salary"
-              value={form.basic_salary}
-              onChange={handleChange}
-              type="number"
-              inputProps={{ step: '0.001', min: '0' }}
-              fullWidth
-              required
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(createdAccount)}
+        onClose={() => setCreatedAccount(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{t('employeeCreatedTitle')}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            {t('provisionAccountNote')}
+          </Typography>
+          <Stack spacing={1}>
+            <CopyRow
+              label={t('colUsername')}
+              value={createdAccount?.username}
+              copied={copiedField === 'username'}
+              onCopy={() => copyToClipboard(createdAccount?.username, 'username')}
             />
-          )}
-          <TextField
-            label={t('formJoinDate')}
-            name="join_date"
-            value={form.join_date}
-            onChange={handleChange}
-            type="date"
-            slotProps={{ inputLabel: { shrink: true } }}
-            fullWidth
-            required
-          />
-          <TextField
-            label={t('formRotation')}
-            name="rotation"
-            value={form.rotation}
-            onChange={handleChange}
-            fullWidth
-          />
-          <TextField
-            select
-            label={t('colPosition')}
-            name="position"
-            value={form.position}
-            onChange={handleChange}
-            fullWidth
-          >
-            <MenuItem value="">{t('managerUnassigned')}</MenuItem>
-            {positions.map((p) => (
-              <MenuItem key={p.id} value={p.id}>{p.title || p.code}</MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            select
-            label={t('formManager')}
-            name="manager"
-            value={form.manager}
-            onChange={handleChange}
-            fullWidth
-          >
-            <MenuItem value="">{t('managerUnassigned')}</MenuItem>
-            {employees.map((e) => (
-              <MenuItem key={e.id} value={e.id}>{e.employee_no} — {e.full_name}</MenuItem>
-            ))}
-          </TextField>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={form.is_active}
-                onChange={handleChange}
-                name="is_active"
-                color="primary"
+            {createdAccount?.initialPassword ? (
+              <CopyRow
+                label={t('provisionPassword')}
+                value={createdAccount.initialPassword}
+                copied={copiedField === 'password'}
+                onCopy={() => copyToClipboard(createdAccount.initialPassword, 'password')}
               />
-            }
-            label={t('formIsActive')}
-          />
-        </Stack>
-      </SystemDialog>
+            ) : null}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCreatedAccount(null)}>{t('close')}</Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar
         open={snackbar.open}

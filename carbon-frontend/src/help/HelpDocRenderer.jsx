@@ -172,8 +172,7 @@ export default function HelpDocRenderer({ doc }) {
               </Typography>
             </Box>
             <Typography variant="body1" mb={2}>
-              • Use the <b>Feedback</b> page to reach our team.<br />
-              • Or email us at <a href={`mailto:${contact.email}`}>{contact.email}</a>
+              • Use the <b>Feedback</b> page to reach our team.
             </Typography>
             <Typography variant="body2" color="text.secondary">
               Version: {contact.version} &nbsp; | &nbsp; Last updated: {contact.lastUpdated}

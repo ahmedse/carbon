@@ -1,16 +1,19 @@
 // src/pages/admin/UsersPage.jsx
 // Admin page: create + manage user accounts. Role-gated by AdminRoute.
-import React, { useEffect, useState, useCallback } from "react";
+// Admin shell: FilteredDataGrid (search + Active/Staff filters) + SystemDialog + ConfirmDialog
+// (RULE_16, RULE_8). API via apiFetch wrappers (RULE_10); admin copy is plain English.
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
-  Box, Typography, Button, Table, TableHead, TableRow, TableCell, TableBody,
-  IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  Chip, CircularProgress, Alert, Switch, FormControlLabel,
+  Box, Typography, Button, IconButton, TextField,
+  Chip, Alert, Switch, FormControlLabel, Stack, Tooltip,
 } from "@mui/material";
-import useDocumentTitle from '../../hooks/useDocumentTitle';
-
 import AddRounded from "@mui/icons-material/AddRounded";
 import EditRounded from "@mui/icons-material/EditRounded";
 import DeleteRounded from "@mui/icons-material/DeleteRounded";
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
+import SystemDialog from '../../components/SystemDialog';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import { useAuth } from "../../auth/AuthContext";
 import { fetchUsers, createUser, updateUser, deleteUser } from "../../api/users";
 
@@ -28,6 +31,9 @@ export default function UsersPage() {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [searchValue, setSearchValue] = useState("");
+  const [filters, setFilters] = useState({ is_active: "", is_staff: "" });
 
   const load = useCallback(() => {
     setLoading(true);
@@ -79,98 +85,204 @@ export default function UsersPage() {
     }
   };
 
-  const handleDelete = async (u) => {
-    if (!window.confirm(`Delete user "${u.username}"? This cannot be undone.`)) return;
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
     setError("");
     try {
-      await deleteUser(token, u.id);
+      await deleteUser(token, deleteTarget.id);
+      setDeleteTarget(null);
       load();
     } catch (e) {
       setError(e.message || "Delete failed");
     }
   };
 
+  const filterDefs = useMemo(
+    () => [
+      {
+        key: 'is_active',
+        label: 'Active',
+        emptyLabel: 'All',
+        options: [
+          { value: 'true', label: 'Active' },
+          { value: 'false', label: 'Inactive' },
+        ],
+      },
+      {
+        key: 'is_staff',
+        label: 'Staff',
+        emptyLabel: 'All',
+        options: [
+          { value: 'true', label: 'Yes' },
+          { value: 'false', label: 'No' },
+        ],
+      },
+    ],
+    []
+  );
+
+  const filteredRows = useMemo(() => {
+    const q = searchValue.trim().toLowerCase();
+    return users.filter((u) => {
+      if (q) {
+        const hay = `${u.username ?? ''} ${u.email ?? ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (filters.is_active === 'true' && !u.is_active) return false;
+      if (filters.is_active === 'false' && u.is_active) return false;
+      if (filters.is_staff === 'true' && !u.is_staff) return false;
+      if (filters.is_staff === 'false' && u.is_staff) return false;
+      return true;
+    });
+  }, [users, searchValue, filters]);
+
+  const columns = useMemo(
+    () => [
+      {
+        field: 'username',
+        headerName: 'Username',
+        flex: 1,
+        minWidth: 160,
+        renderCell: (p) => <Typography sx={{ fontWeight: 600 }}>{p.value}</Typography>,
+      },
+      {
+        field: 'email',
+        headerName: 'Email',
+        flex: 1,
+        minWidth: 200,
+        valueGetter: (value, row) => row.email || '—',
+      },
+      {
+        field: 'is_active',
+        headerName: 'Active',
+        width: 110,
+        renderCell: (p) => (
+          <Chip
+            size="small"
+            label={p.value ? 'Active' : 'Inactive'}
+            color={p.value ? 'success' : 'default'}
+          />
+        ),
+      },
+      {
+        field: 'is_staff',
+        headerName: 'Staff',
+        width: 90,
+        valueGetter: (value, row) => (row.is_staff ? 'Yes' : 'No'),
+      },
+      {
+        field: 'actions',
+        headerName: '',
+        width: 100,
+        sortable: false,
+        filterable: false,
+        renderCell: (p) => (
+          <Box>
+            <Tooltip title="Edit user">
+              <IconButton size="small" onClick={() => openEdit(p.row)} aria-label="Edit user">
+                <EditRounded fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Delete user">
+              <IconButton
+                size="small"
+                sx={{ color: 'error.main' }}
+                onClick={() => setDeleteTarget(p.row)}
+                aria-label="Delete user"
+              >
+                <DeleteRounded fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        ),
+      },
+    ],
+    []
+  );
+
   return (
-    <Box sx={{ p: 3 }}>
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
-        <Box>
-          <Typography variant="h5" fontWeight={700}>Users</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Create and manage user accounts. Assign roles on the Access Control page.
-          </Typography>
-        </Box>
-        <Button variant="contained" startIcon={<AddRounded />} onClick={openCreate}>
-          New User
-        </Button>
-      </Box>
+    <>
+      {error && <Alert severity="error" sx={{ mx: 1, mt: 1 }} onClose={() => setError("")}>{error}</Alert>}
 
-      {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>{error}</Alert>}
+      <FilteredDataGrid
+        title="Users"
+        description="Create and manage user accounts. Assign roles on the Access Control page."
+        actions={
+          <Button variant="contained" size="small" startIcon={<AddRounded />} onClick={openCreate}>
+            New User
+          </Button>
+        }
+        rows={filteredRows}
+        columns={columns}
+        loading={loading}
+        countLabel={`${filteredRows.length} of ${users.length} users`}
+        searchValue={searchValue}
+        onSearchChange={setSearchValue}
+        filterDefs={filterDefs}
+        filterValues={filters}
+        onFilterChange={(key, value) => setFilters((prev) => ({ ...prev, [key]: value }))}
+        onClearFilters={() => {
+          setSearchValue('');
+          setFilters({ is_active: '', is_staff: '' });
+        }}
+        emptyMessage="No users yet."
+        emptySubtext="Create your first user account."
+      />
 
-      {loading ? (
-        <Box sx={{ textAlign: "center", py: 6 }}><CircularProgress /></Box>
-      ) : (
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Username</TableCell>
-              <TableCell>Email</TableCell>
-              <TableCell>Active</TableCell>
-              <TableCell>Staff</TableCell>
-              <TableCell align="right">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {users.length === 0 && (
-              <TableRow><TableCell colSpan={5}>No users yet.</TableCell></TableRow>
-            )}
-            {users.map((u) => (
-              <TableRow key={u.id}>
-                <TableCell><b>{u.username}</b></TableCell>
-                <TableCell>{u.email || "—"}</TableCell>
-                <TableCell>
-                  <Chip size="small" label={u.is_active ? "Active" : "Inactive"} color={u.is_active ? "success" : "default"} />
-                </TableCell>
-                <TableCell>{u.is_staff ? "Yes" : "No"}</TableCell>
-                <TableCell align="right">
-                  <IconButton size="small" onClick={() => openEdit(u)}><EditRounded fontSize="small" /></IconButton>
-                  <IconButton size="small" color="error" onClick={() => handleDelete(u)}><DeleteRounded fontSize="small" /></IconButton>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
-
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>{editingId ? "Edit User" : "New User"}</DialogTitle>
-        <DialogContent>
-          <TextField
-            label="Username" fullWidth required margin="normal"
-            value={form.username} disabled={!!editingId}
-            onChange={(e) => setForm({ ...form, username: e.target.value })}
-          />
-          <TextField
-            label="Email" type="email" fullWidth margin="normal"
-            value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
-          />
-          <TextField
-            label={editingId ? "New password (leave blank to keep)" : "Password"}
-            type="password" fullWidth margin="normal"
-            required={!editingId}
-            value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })}
-          />
-          <FormControlLabel
-            control={<Switch checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />}
-            label="Active"
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleSave} disabled={saving}>
+      {/* Create / edit dialog */}
+      <SystemDialog
+        open={dialogOpen}
+        title={editingId ? "Edit User" : "New User"}
+        onClose={() => setDialogOpen(false)}
+        onCancel={() => setDialogOpen(false)}
+        cancelLabel="Cancel"
+        actions={
+          <Button variant="contained" size="small" onClick={handleSave} disabled={saving}>
             {saving ? "Saving…" : "Save"}
           </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+        }
+        width={480}
+        height={400}
+        minWidth={400}
+        minHeight={320}
+        maxWidth="calc(100vw - 32px)"
+        maxHeight="calc(100vh - 32px)"
+      >
+        <Box px={2} py={1}>
+          <Stack spacing={2}>
+            <TextField
+              label="Username" fullWidth required size="small"
+              value={form.username} disabled={!!editingId}
+              onChange={(e) => setForm({ ...form, username: e.target.value })}
+            />
+            <TextField
+              label="Email" type="email" fullWidth size="small"
+              value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
+            <TextField
+              label={editingId ? "New password (leave blank to keep)" : "Password"}
+              type="password" fullWidth size="small"
+              required={!editingId}
+              value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })}
+            />
+            <FormControlLabel
+              control={<Switch checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />}
+              label="Active"
+            />
+          </Stack>
+        </Box>
+      </SystemDialog>
+
+      {/* Delete confirmation */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Delete User?"
+        message={deleteTarget ? `Delete user "${deleteTarget.username}"? This cannot be undone.` : ''}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
+    </>
   );
 }
