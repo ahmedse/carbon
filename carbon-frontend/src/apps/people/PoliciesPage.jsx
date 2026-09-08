@@ -59,6 +59,8 @@ const EMPTY_FORM = {
   requires_approval: true,
   min_service_days: '0',
   applies_to_contract_types: '',
+  applies_to_kuwaitization: 'any',
+  applies_to_rotations: '',
   category: '',
   tags: '',
   notes: '',
@@ -209,6 +211,10 @@ export default function PoliciesPage() {
       applies_to_contract_types: Array.isArray(policy.applies_to_contract_types)
         ? policy.applies_to_contract_types.join(', ')
         : (policy.applies_to_contract_types ?? ''),
+      applies_to_kuwaitization: policy.applies_to_kuwaitization ?? 'any',
+      applies_to_rotations: Array.isArray(policy.applies_to_rotations)
+        ? policy.applies_to_rotations.join(', ')
+        : (policy.applies_to_rotations ?? ''),
       category: policy.category ?? '',
       tags: Array.isArray(policy.tags) ? policy.tags.join(', ') : (policy.tags ?? ''),
       notes: policy.notes ?? '',
@@ -247,6 +253,8 @@ export default function PoliciesPage() {
       requires_approval: Boolean(form.requires_approval),
       min_service_days: parseInt(form.min_service_days, 10) || 0,
       applies_to_contract_types: splitComma(form.applies_to_contract_types),
+      applies_to_kuwaitization: form.applies_to_kuwaitization || 'any',
+      applies_to_rotations: splitComma(form.applies_to_rotations),
       category: form.category.trim(),
       tags: splitComma(form.tags),
       notes: form.notes,
@@ -514,6 +522,14 @@ export default function PoliciesPage() {
             <TextField size="small" label={t('colMinService')} name="min_service_days" value={form.min_service_days} onChange={handleChange} type="number" slotProps={{ htmlInput: { step: '1', min: '0' } }} fullWidth />
           </Stack>
           <TextField label={t('formContractTypes')} name="applies_to_contract_types" value={form.applies_to_contract_types} onChange={handleChange} fullWidth helperText={t('formContractTypesHint')} />
+          <Stack direction="row" spacing={2}>
+            <TextField select size="small" label={t('formKuwaitization')} name="applies_to_kuwaitization" value={form.applies_to_kuwaitization} onChange={handleChange} fullWidth helperText={t('formKuwaitizationHint')}>
+              <MenuItem value="any">{t('kuwaitiAny')}</MenuItem>
+              <MenuItem value="kuwaiti">{t('kuwaitiKuwaiti')}</MenuItem>
+              <MenuItem value="non_kuwaiti">{t('kuwaitiNonKuwaiti')}</MenuItem>
+            </TextField>
+            <TextField label={t('formRotations')} name="applies_to_rotations" value={form.applies_to_rotations} onChange={handleChange} fullWidth helperText={t('formRotationsHint')} />
+          </Stack>
           <Stack direction="row" spacing={2}>
             <TextField label={t('formCategory')} name="category" value={form.category} onChange={handleChange} fullWidth helperText={t('formCategoryHint')} />
             <TextField label={t('formTags')} name="tags" value={form.tags} onChange={handleChange} fullWidth helperText={t('formTagsHint')} />

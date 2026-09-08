@@ -328,6 +328,18 @@ class LeavePolicy(models.Model):
         (STATUS_DEPRECATED, 'Deprecated'),
     ]
 
+    # ── LPR-5 Kuwait HR applicability (GOFSCO issue #2/#3) ──
+    # Kuwaitization flag scope: Kuwaiti nationals (42-day leave) vs expats
+    # (30-day leave) are governed by different policies under KLL / KOC.
+    KUWAIT_ANY = 'any'
+    KUWAIT_ONLY = 'kuwaiti'
+    KUWAIT_NON = 'non_kuwaiti'
+    KUWAIT_CHOICES = [
+        (KUWAIT_ANY, 'Any'),
+        (KUWAIT_ONLY, 'Kuwaiti only'),
+        (KUWAIT_NON, 'Non-Kuwaiti only'),
+    ]
+
     leave_type = models.ForeignKey(
         'mdm.ReferenceValue', on_delete=models.PROTECT, related_name='+',
         help_text="Leave type from ReferenceSet 'leave_type'",
@@ -378,6 +390,14 @@ class LeavePolicy(models.Model):
     applies_to_contract_types = models.JSONField(
         default=list, blank=True,
         help_text="List of contract_type codes; empty = all contract types",
+    )
+    applies_to_kuwaitization = models.CharField(
+        max_length=16, choices=KUWAIT_CHOICES, default=KUWAIT_ANY,
+        help_text="Kuwaitization scope: any / Kuwaiti only / non-Kuwaiti only (GOFSCO 42-day vs 30-day leave)",
+    )
+    applies_to_rotations = models.JSONField(
+        default=list, blank=True,
+        help_text="List of rotation pattern codes (e.g. ['1/1','2/1']); empty = all rotations (GOFSCO rotation leave)",
     )
     notes = models.TextField(blank=True)
     # ── LPR-4 registry grouping + tagging (additive; null/blank-safe) ──

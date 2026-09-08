@@ -34,7 +34,7 @@ __all__ = [
 RULE_TEMPLATES: Dict[str, Dict[str, Any]] = {
     'employee_no': {
         'label': 'Employee Number',
-        'description': 'Employee numbers are exactly 4-5 digits.',
+        'description': 'Employee numbers are 4-5 digits (e.g. 1024) or legacy '\n'                      'ERP codes (e.g. GF-001).',
         'confirmation_required': True,
         'definition': {
             'schema_version': 1,
@@ -44,7 +44,37 @@ RULE_TEMPLATES: Dict[str, Dict[str, Any]] = {
             'type': 'regex',
             'severity': 'warn',
             'active': True,
-            'params': {'pattern': r'^\d{4,5}$'},
+            'params': {'pattern': r'^(\d{4,5}|[A-Z]{2}-\d{3})$'},
+        },
+    },
+    'civil_id': {
+        'label': 'Kuwait Civil ID Format',
+        'description': 'Kuwait Civil ID is exactly 12 digits (spaces ignored).',
+        'confirmation_required': True,
+        'definition': {
+            'schema_version': 1,
+            'name': 'Civil ID Format',
+            'level': 'field',
+            'dimension': 'validity',
+            'type': 'regex',
+            'severity': 'error',
+            'active': True,
+            'params': {'pattern': r'^\d{12}$'},
+        },
+    },
+    'gender': {
+        'label': 'Gender Allowed Values',
+        'description': 'Gender must be a governed value (male/female).',
+        'confirmation_required': True,
+        'definition': {
+            'schema_version': 1,
+            'name': 'Gender Allowed Values',
+            'level': 'field',
+            'dimension': 'validity',
+            'type': 'allowed_values',
+            'severity': 'error',
+            'active': True,
+            'params': {'values': ['male', 'female']},
         },
     },
     'email': {

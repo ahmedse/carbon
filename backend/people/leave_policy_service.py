@@ -23,7 +23,10 @@ def _eligible_queryset(policy):
       - gender restriction (male/female → ``gender__iexact``);
       - minimum service days (``join_date`` before the threshold date);
       - org-unit scope (``applies_to_org_units``; empty = all);
-      - contract-type scope (``applies_to_contract_types``; empty = all).
+      - contract-type scope (``applies_to_contract_types``; empty = all);
+      - Kuwaitization scope (``applies_to_kuwaitization``: Kuwaiti / non-Kuwaiti
+        / any — GOFSCO 42-day vs 30-day leave);
+      - rotation-pattern scope (``applies_to_rotations``; empty = all).
     """
     employees = Employee.objects.filter(is_active=True)
 
@@ -39,6 +42,14 @@ def _eligible_queryset(policy):
     if policy.applies_to_contract_types:
         employees = employees.filter(
             contract_type_code__in=policy.applies_to_contract_types,
+        )
+    if policy.applies_to_kuwaitization == LeavePolicy.KUWAIT_ONLY:
+        employees = employees.filter(kuwaitization=True)
+    elif policy.applies_to_kuwaitization == LeavePolicy.KUWAIT_NON:
+        employees = employees.filter(kuwaitization=False)
+    if policy.applies_to_rotations:
+        employees = employees.filter(
+            rotation__in=policy.applies_to_rotations,
         )
 
     return employees
@@ -194,6 +205,8 @@ def snapshot_policy(policy):
         'applies_to_org_units': list(
             policy.applies_to_org_units.values_list('id', flat=True),
         ),
+        'applies_to_kuwaitization': policy.applies_to_kuwaitization,
+        'applies_to_rotations': list(policy.applies_to_rotations or []),
     }
 
 

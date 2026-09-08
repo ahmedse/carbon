@@ -13,6 +13,8 @@ from rest_framework import serializers
 
 from mdm.models import ReferenceValue
 
+from .civil_id import validate as _validate_civil_id
+
 from .models import (
     AttendancePermission,
     AttendanceRecord,
@@ -105,6 +107,30 @@ class EmployeeSerializer(serializers.ModelSerializer):
 
     def validate_contract_type_code(self, value):
         return _validate_reference_code(value, 'contract_type')
+
+    def validate_gender(self, value):
+        return _validate_reference_code(value, 'gender')
+
+    def validate_rotation(self, value):
+        return _validate_reference_code(value, 'rotation_pattern')
+
+    def validate_civil_id(self, value):
+        """Enforce 12-digit Civil ID format (error); check-digit only when
+        ``ENFORCE_CHECK_DIGIT`` is on (see people/civil_id.py — RULE_16)."""
+        ok, errors = _validate_civil_id(value)
+        if not ok:
+            raise serializers.ValidationError(errors[0] if errors else 'Invalid Civil ID')
+        return value
+
+    def validate(self, attrs):
+        """Cross-field sanity: DOB must precede join date (impossible otherwise)."""
+        dob = attrs.get('date_of_birth')
+        join = attrs.get('join_date')
+        if dob and join and dob >= join:
+            raise serializers.ValidationError({
+                'date_of_birth': 'Date of birth must be before join date',
+            })
+        return attrs
 
 
 class PayrollRunSerializer(serializers.ModelSerializer):
@@ -253,6 +279,7 @@ class LeavePolicySerializer(serializers.ModelSerializer):
             'accrual_method', 'gender_restriction', 'requires_approval',
             'min_service_days', 'is_active', 'notes',
             'applies_to_org_units', 'applies_to_contract_types',
+            'applies_to_kuwaitization', 'applies_to_rotations',
             'category', 'tags',
             'employee_count', 'latest_version', 'version_count', 'updated_at',
         ]
