@@ -174,7 +174,16 @@ logs/
 
 # Indexing output
 indexed_src/
-backend/.env.carbon
+
+# Per-instance backend env files (secrets) — never commit, never git-clean
+backend/.env
+backend/.env.*
+# Deploy stamp (per-instance, written on the server)
+.deployed-tag
+# Instance-local deploy dirs (server-generated, untracked — see ADR-0015)
+deploy/medos/
+deploy/nibras/
+deploy/tectona/
 
 # GOFSCO / Nibras employee data (PII — civil IDs, emails, salary) — never commit
 raw/GOFSCO app/20260905/

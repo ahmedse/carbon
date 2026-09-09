@@ -72,7 +72,9 @@ log "New tag detected: $LATEST_TAG (current: ${CURRENT_TAG:-none})"
 # ── Checkout the tag ───────────────────────────────────────────────
 log "Checking out $LATEST_TAG"
 git clean -fd \
-    -e backend/staticfiles -e backend/mediafiles -e backend/dataschema_uploads
+    -e backend/staticfiles -e backend/mediafiles -e backend/dataschema_uploads \
+    -e backend/.env -e 'backend/.env.*' \
+    -e "deploy/${INSTANCE}/" -e .deployed-tag
 git checkout -f "$LATEST_TAG"
 
 # ── Load instance env (brand, app activation, domain) ──────────────
