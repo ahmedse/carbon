@@ -148,10 +148,6 @@ export default function EmployeesPage() {
     return map;
   }, [employees]);
 
-  const genderMap = useMemo(() => labelMapFromOptions(genderRef.options), [genderRef.options]);
-  const employmentTypeMap = useMemo(() => labelMapFromOptions(employmentTypeRef.options), [employmentTypeRef.options]);
-  const contractTypeMap = useMemo(() => labelMapFromOptions(contractTypeRef.options), [contractTypeRef.options]);
-
   const orgUnitOptions = useMemo(
     () => orgUnits.map((u) => ({ value: String(u.id), label: u.name || u.code || String(u.id) })),
     [orgUnits],
@@ -163,6 +159,10 @@ export default function EmployeesPage() {
   const contractTypeRef = useReferenceOptions('contract_type');
   const rotationOptions = rotationRef.options;
   const nationalityOptions = nationalityRef.options;
+
+  const genderMap = useMemo(() => labelMapFromOptions(genderRef.options), [genderRef.options]);
+  const employmentTypeMap = useMemo(() => labelMapFromOptions(employmentTypeRef.options), [employmentTypeRef.options]);
+  const contractTypeMap = useMemo(() => labelMapFromOptions(contractTypeRef.options), [contractTypeRef.options]);
 
   const filterDefs = useMemo(() => [
     {

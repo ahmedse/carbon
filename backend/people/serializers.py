@@ -88,7 +88,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
     )
     # Linked platform account (auto-provisioned on hire). Read-only so the API
     # never mutates the account through the employee payload.
-    user_id = serializers.IntegerField(source='user_id', read_only=True, default=None)
+    user_id = serializers.IntegerField(read_only=True, default=None)
     username = serializers.CharField(source='user.username', read_only=True, default=None)
 
     class Meta:
