@@ -26,12 +26,8 @@ def org_unit(db):
 @pytest.mark.django_db
 def test_sequential_allocations_increment(reference_value, org_unit):
     fmt = '{PREFIX}-{YEAR}-{SEQ:04d}'
-    first = allocate_reference_no(
-        corr_type=reference_value, org_unit=org_unit, numbering_format=fmt,
-    )
-    second = allocate_reference_no(
-        corr_type=reference_value, org_unit=org_unit, numbering_format=fmt,
-    )
+    first = allocate_reference_no(numbering_format=fmt)
+    second = allocate_reference_no(numbering_format=fmt)
 
     year = timezone.now().year
     assert first == f'CRS-{year}-0001'
@@ -40,33 +36,29 @@ def test_sequential_allocations_increment(reference_value, org_unit):
 
 
 @pytest.mark.django_db
-def test_different_corr_type_independent(reference_value, org_unit):
+def test_sequence_is_global_across_units_and_types(reference_value, org_unit):
+    # A single global sequence means two different org units / corr types can
+    # never produce the same reference number (the old per-unit counter bug).
     other = ReferenceValue.objects.create(
         reference_set=reference_value.reference_set,
         code='loan_request', label='Loan Request',
     )
+    other_org = OrgUnit.objects.create(
+        name='Finance', slug='finance', code='FIN', org_type='department',
+    )
     fmt = '{PREFIX}-{YEAR}-{SEQ:04d}'
-    first = allocate_reference_no(
-        corr_type=reference_value, org_unit=org_unit, numbering_format=fmt,
-    )
-    other_first = allocate_reference_no(
-        corr_type=other, org_unit=org_unit, numbering_format=fmt,
-    )
+    first = allocate_reference_no(numbering_format=fmt)
+    second = allocate_reference_no(numbering_format=fmt)
 
     year = timezone.now().year
     assert first == f'CRS-{year}-0001'
-    assert other_first == f'CRS-{year}-0001'
+    assert second == f'CRS-{year}-0002'
 
 
 @pytest.mark.django_db
 def test_different_year_independent(reference_value, org_unit):
     year = timezone.now().year
-    CorrespondenceRegistry.objects.create(
-        corr_type=reference_value, org_unit=org_unit, year=year - 1, counter=7,
-    )
+    CorrespondenceRegistry.objects.create(year=year - 1, counter=7)
 
-    first = allocate_reference_no(
-        corr_type=reference_value, org_unit=org_unit,
-        numbering_format='{PREFIX}-{YEAR}-{SEQ:04d}',
-    )
+    first = allocate_reference_no(numbering_format='{PREFIX}-{YEAR}-{SEQ:04d}')
     assert first == f'CRS-{year}-0001'

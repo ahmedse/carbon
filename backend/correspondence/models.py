@@ -160,20 +160,19 @@ class CorrespondenceAttachment(models.Model):
 
 
 class CorrespondenceRegistry(models.Model):
-    """Per (corr_type, org_unit, year) sequence counter for reference numbering."""
+    """Global per-year sequence counter for reference numbering.
 
-    corr_type = models.ForeignKey('mdm.ReferenceValue', on_delete=models.PROTECT)
-    org_unit = models.ForeignKey(
-        'mdm.OrgUnit', null=True, blank=True, on_delete=models.SET_NULL
-    )
-    year = models.PositiveSmallIntegerField()
+    ``reference_no`` is globally unique and the numbering format
+    (``{PREFIX}-{YEAR}-{SEQ:04d}``) carries no org/type discriminator, so the
+    sequence must be a single global counter per year — NOT per
+    ``(corr_type, org_unit, year)`` (which collides across units).
+    """
+
+    year = models.PositiveSmallIntegerField(unique=True)
     counter = models.PositiveIntegerField(default=0)
 
-    class Meta:
-        unique_together = [('corr_type', 'org_unit', 'year')]
-
     def __str__(self):
-        return f'{self.corr_type} · {self.org_unit or "global"} · {self.year}'
+        return f'global · {self.year} · {self.counter}'
 
 
 class Delegation(models.Model):

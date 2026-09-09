@@ -215,8 +215,6 @@ def submit_correspondence(*, corr, by, subject=None, subject_label=None,
         corr.policy_version = frozen['policy_version']
         corr.policy_snapshot = frozen['policy_snapshot']
         corr.reference_no = allocate_reference_no(
-            corr_type=corr.corr_type,
-            org_unit=corr.org_unit,
             numbering_format=policy.numbering_format,
             prefix=prefix,
         )

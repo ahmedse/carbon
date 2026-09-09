@@ -45,8 +45,8 @@ class CorrespondenceAttachmentAdmin(admin.ModelAdmin):
 
 @admin.register(CorrespondenceRegistry)
 class CorrespondenceRegistryAdmin(admin.ModelAdmin):
-    list_display = ('corr_type', 'org_unit', 'year', 'counter')
-    list_filter = ('corr_type', 'year')
+    list_display = ('year', 'counter')
+    list_filter = ('year',)
 
 
 @admin.register(Delegation)
