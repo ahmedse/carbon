@@ -8,7 +8,7 @@
 ## PROJECT IDENTITY
 PROJECT_NAME=Carbon
 PROJECT_TYPE=Data Trust Platform (Django + React) — metadata-driven data governance, carbon accounting first app
-WORKSPACE_ROOT=/home/ahmed/aast/carbon
+WORKSPACE_ROOT=/home/ahmed/ws/carbon
 DESCRIPTION=Carbon is evolving into a lighter, Ataccama-inspired Data Trust Platform that hosts domain apps on trusted data. Core: Catalog, MDM (reference data), Data Quality profiling+rules, metadata-driven schema engine (dataschema). First hosted app: Carbon emissions accounting (GHG Protocol). RBAC via ScopedRole (org-unit-scoped). Pulse = in-hand stateless reasoning engine (vendored under backend/ai/engine/); Carbon owns all AI knowledge/memory/learning/feedback.
 
 ## OPS SCRIPT (Universal — how to run/stop/inspect services)
@@ -29,7 +29,7 @@ BACKEND_DIR=backend/
 BACKEND_FRAMEWORK=Django 5.2 + Django REST Framework
 BACKEND_PORT=8009
 BACKEND_VENV=.venv                                      # repo-root venv — backend/venv and backend/.venv do NOT exist
-BACKEND_ACTIVATE=cd /home/ahmed/aast/carbon && source .venv/bin/activate
+BACKEND_ACTIVATE=cd /home/ahmed/ws/carbon && source .venv/bin/activate
 BACKEND_CHECK_CMD=python manage.py check
 BACKEND_DB=PostgreSQL on localhost:5432
 BACKEND_QUEUE=Redis 127.0.0.1:6379
@@ -46,8 +46,8 @@ FRONTEND_DIR=carbon-frontend/
 FRONTEND_FRAMEWORK=React 19.1 + Vite 6
 FRONTEND_UI=MUI v7.1 (zinc/blue theme, compact density)
 FRONTEND_PORT=5179
-FRONTEND_LINT_CMD=cd /home/ahmed/aast/carbon/carbon-frontend && npm run lint
-FRONTEND_BUILD_CMD=cd /home/ahmed/aast/carbon/carbon-frontend && npm run build
+FRONTEND_LINT_CMD=cd /home/ahmed/ws/carbon/carbon-frontend && npm run lint
+FRONTEND_BUILD_CMD=cd /home/ahmed/ws/carbon/carbon-frontend && npm run build
 FRONTEND_API_HELPER=carbon-frontend/src/api/api.js (apiFetch)
 FRONTEND_THEME=carbon-frontend/src/theme/carbonTheme.js
 FRONTEND_BASE_PATH=/carbon/
@@ -195,8 +195,8 @@ DEEPSEEK_CONTEXT=1M context, 384K max output. Cache hit is ~30x cheaper than mis
 ## TESTING (see .ai-toolkit/shared/testing.md for strategy)
 # NOTE: use python -m pytest (NOT ./manage.sh test) — manage.py test hits a
 # Conflicting 'aiconversation' models error under the unittest loader.
-BACKEND_TEST_CMD=cd backend && /home/ahmed/aast/carbon/.venv/bin/python -m pytest ai dq accounts -q
-BACKEND_TEST_SINGLE=cd backend && /home/ahmed/aast/carbon/.venv/bin/python -m pytest <app>/tests/test_x.py -q
+BACKEND_TEST_CMD=cd backend && /home/ahmed/ws/carbon/.venv/bin/python -m pytest ai dq accounts -q
+BACKEND_TEST_SINGLE=cd backend && /home/ahmed/ws/carbon/.venv/bin/python -m pytest <app>/tests/test_x.py -q
 BACKEND_TEST_DIR=<app>/tests/test_*.py
 BACKEND_TEST_COUNT=741 passing (pytest ai dq accounts, as of 2026-08-15)
 FRONTEND_UNIT=Vitest 4 + RTL — cd carbon-frontend && npm test (330 tests, as of 2026-08-15)

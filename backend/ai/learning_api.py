@@ -37,7 +37,11 @@ def _iso(dt) -> str | None:
 
 def _build_status(request) -> dict:
     """Assemble the flywheel status payload (read-only, no writes)."""
-    backend = getattr(django_settings, "AI_STORE_BACKEND", "inmemory")
+    # Fail closed (PULSE P1-01): never report an ephemeral fallback as if it
+    # were a real backend. Settings guarantees this attribute exists; a missing
+    # value raises (and is surfaced as a 503 by the view) rather than silently
+    # claiming "inmemory".
+    backend = django_settings.AI_STORE_BACKEND
 
     pending = AIMessage.objects.filter(
         outcome__in=LEARNABLE_OUTCOMES, learned_at__isnull=True

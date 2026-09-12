@@ -8,6 +8,8 @@ from datetime import timedelta
 from pathlib import Path
 from dotenv import load_dotenv
 
+from django.core.exceptions import ImproperlyConfigured
+
 
 logger = logging.getLogger(__name__)
 
@@ -670,8 +672,37 @@ API_PREFIX = API_PREFIX
 # ── AI Store (Phase 2 — in-process engine persistence seam) ─────────────
 # The AI engine is wired in-process; the HTTP provider transport is retired.
 # Select the persistence backend for the vendored engine
-# (``inmemory`` or ``django``).
-AI_STORE_BACKEND = os.environ.get("AI_STORE_BACKEND", "inmemory")
+# (``django`` = durable Postgres; ``inmemory`` = ephemeral, tests only).
+#
+# FAIL-CLOSED (PULSE P1-01): a deployment that forgets to configure durable
+# persistence must refuse to boot rather than silently drop every durable
+# write into an ephemeral in-process store. ``inmemory`` (or an unset value)
+# is therefore rejected unless the process is explicitly allowed to run
+# ephemerally — pytest, or an explicit ``PULSE_ALLOW_INMEMORY=1`` opt-in.
+def _resolve_ai_store_backend(env=None) -> str:
+    """Resolve ``AI_STORE_BACKEND`` fail-closed (PULSE P1-01).
+
+    ``env`` defaults to ``os.environ`` but may be passed explicitly so the
+    contract is unit-testable without depending on the ambient shell env.
+    """
+    env = os.environ if env is None else env
+    backend = (env.get("AI_STORE_BACKEND") or "").strip()
+    if backend and backend != "inmemory":
+        return backend
+    allowed_ephemeral = (
+        "PYTEST_CURRENT_TEST" in env or env.get("PULSE_ALLOW_INMEMORY") == "1"
+    )
+    if allowed_ephemeral:
+        return backend or "inmemory"
+    raise ImproperlyConfigured(
+        "AI_STORE_BACKEND must name a durable backend (e.g. 'django'). It is "
+        "currently unset or set to 'inmemory', which silently discards durable "
+        "writes. Set AI_STORE_BACKEND=django, or set PULSE_ALLOW_INMEMORY=1 to "
+        "explicitly opt into an ephemeral store (tests only)."
+    )
+
+
+AI_STORE_BACKEND = _resolve_ai_store_backend()
 
 # ── AI Intelligence ─────────────────────────────────────────────────────
 AI_CACHE_TTL_SECONDS = int(os.environ.get("AI_CACHE_TTL_SECONDS", 300))

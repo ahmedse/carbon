@@ -49,7 +49,7 @@ Reuse patterns, don't start from scratch.
 ### Running Analysis
 ```bash
 # Always in the virtualenv (from project.config.md → BACKEND_ACTIVATE)
-cd /home/ahmed/aast/carbon/backend && source .venv/bin/activate
+cd /home/ahmed/ws/carbon/backend && source .venv/bin/activate
 
 # Run management commands
 python manage.py <command> 2>&1 | tee /tmp/analysis.log

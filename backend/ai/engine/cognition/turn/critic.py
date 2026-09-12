@@ -3,7 +3,9 @@
 Rules-tier (always runs):
 1. Citation grounding: if retrieval found entities but the draft cites none → flag
 2. Tenancy: tool calls don't carry host_user_id yet → always pass
-3. Mutation check: any tool call with non-GET method and no confirmation → flag
+3. Mutation check: any tool call with non-GET method and no confirmation →
+   HARD veto (fail-closed); a dry_run preview is exempt and only records
+   ``dry_run_preview``
 4. Mutation confirmation gate: hard veto when is_mutation and no confirmation_token
 5. Dry-run hook: skip mutation veto when dry_run=True
 
@@ -87,19 +89,36 @@ class CriticWitness:
         # Always pass in PR-10 — tool calls don't carry host_user_id yet.
 
         # ── 3. Mutation check (legacy heuristic from PR-10) ────────────────
+        # FAIL-CLOSED (P1-02): an unconfirmed non-GET tool call is a HARD veto,
+        # not an advisory flag. Previously this only appended
+        # ``unconfirmed_mutation`` and the runner still advanced to S5, so the
+        # mutation executed regardless of the critic's verdict.
         for tc in draft.tool_calls:
             method = tc.get("method", "").upper()
             if method and method != "GET":
                 confirmed = tc.get("confirmed", False)
                 if not confirmed:
-                    flags.append("unconfirmed_mutation")
-                    break
+                    if dry_run:
+                        # Preview-only run — a preview must never hard-block.
+                        # Record the informational marker instead (dedup).
+                        if "dry_run_preview" not in flags:
+                            flags.append("dry_run_preview")
+                        break
+                    return CriticVerdict(
+                        verdict="veto",
+                        flags=["unconfirmed_mutation"],
+                        veto_reason="This action was blocked pending review: an "
+                                   f"unconfirmed state-changing tool call ({method}) "
+                                   "was proposed.",
+                    )
 
         # ── 4. PR-20: Mutation confirmation gate ───────────────────────────
         if is_mutation:
             if dry_run:
-                # Dry-run preview — skip mutation veto, add info flag
-                flags.append("dry_run_preview")
+                # Dry-run preview — skip mutation veto, add info flag (dedup so
+                # the flag list stays exactly ``["dry_run_preview"]``).
+                if "dry_run_preview" not in flags:
+                    flags.append("dry_run_preview")
             elif not confirmation_token:
                 # Hard veto: mutation without user confirmation
                 return CriticVerdict(
@@ -246,6 +265,16 @@ class CriticWitness:
 
 def _rules_only_verdict(flags: list[str]) -> CriticVerdict:
     """Fallback rules-only verdict when LLM critic is disabled or fails."""
+    # FAIL-CLOSED (P1-02): an unconfirmed mutation can NEVER pass — even when
+    # the LLM critic is off or errored, the rules tier returns a hard veto.
+    if "unconfirmed_mutation" in flags:
+        return CriticVerdict(
+            verdict="veto",
+            flags=["unconfirmed_mutation"],
+            veto_reason="This action was blocked pending review: an unconfirmed "
+                        "state-changing tool call (non-GET method) was proposed.",
+        )
+
     # If ungrounded_claim is the only flag, return pass_with_flag (not a hard veto)
     if flags == ["ungrounded_claim"]:
         return CriticVerdict(verdict="pass_with_flag", flags=flags)

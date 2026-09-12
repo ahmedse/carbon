@@ -128,8 +128,8 @@ have been **removed from `backend/pytest.ini`** and MUST NOT be re-added.
 ### Backend — always per-app, never full-suite
 
 ```bash
-cd /home/ahmed/aast/carbon/backend
-PY=/home/ahmed/aast/carbon/.venv/bin/python
+cd /home/ahmed/ws/carbon/backend
+PY=/home/ahmed/ws/carbon/.venv/bin/python
 # ONE app at a time (this is the unit of work):
 $PY -m pytest ai -q --maxfail=5 --disable-warnings -p no:cacheprovider
 $PY -m pytest catalog -q --maxfail=5 --disable-warnings -p no:cacheprovider
@@ -146,7 +146,7 @@ $PY -m pytest accounts -q --maxfail=5 --disable-warnings -p no:cacheprovider
 ### Frontend — targeted vitest, one build per phase
 
 ```bash
-cd /home/ahmed/aast/carbon/carbon-frontend
+cd /home/ahmed/ws/carbon/carbon-frontend
 # ONE spec file (or a tiny glob), never the whole suite:
 npx vitest run src/__tests__/AITaskPanel.test.jsx
 # Build once per phase (not per file):
@@ -160,14 +160,14 @@ npm run build
 ### E2E — only when a journey changed, one spec at a time
 
 ```bash
-cd /home/ahmed/aast/carbon/carbon-frontend
+cd /home/ahmed/ws/carbon/carbon-frontend
 npx playwright test e2e/journeys/journey-11-ai-coworker-dq.spec.ts
 ```
 
 ### Stale test-DB cleanup (run only if you see leftover `test_carbon*` DBs)
 
 ```bash
-cd /home/ahmed/aast/carbon
+cd /home/ahmed/ws/carbon
 export PGPASSWORD=securepassword123 PAGER=cat
 for db in $(psql -X -h localhost -U carbon_user -d postgres -tAc \
     "SELECT datname FROM pg_database WHERE datname LIKE 'test_carbon%';"); do
@@ -228,9 +228,9 @@ Rules:
 
 ```bash
 # Backend: per-app only (see RULE 7 — never full suite, never xdist)
-cd /home/ahmed/aast/carbon/backend
-/home/ahmed/aast/carbon/.venv/bin/python manage.py check
-/home/ahmed/aast/carbon/.venv/bin/python -m pytest <changed-app> -q --maxfail=5 --disable-warnings -p no:cacheprovider
+cd /home/ahmed/ws/carbon/backend
+/home/ahmed/ws/carbon/.venv/bin/python manage.py check
+/home/ahmed/ws/carbon/.venv/bin/python -m pytest <changed-app> -q --maxfail=5 --disable-warnings -p no:cacheprovider
 
 # Full gate (check + lint + anti-patterns)
 ./.ai-toolkit/scripts/verify.sh
@@ -239,7 +239,7 @@ cd /home/ahmed/aast/carbon/backend
 ./.ai-toolkit/scripts/verify.sh intelligence
 
 # Frontend: targeted vitest + one build (see RULE 7)
-cd /home/ahmed/aast/carbon/carbon-frontend
+cd /home/ahmed/ws/carbon/carbon-frontend
 npm run lint
 npx vitest run <specific-spec-file>
 npm run build

@@ -11,7 +11,15 @@ override must live in a ``-p`` plugin (imported during ``Config._preparse``,
 before that hook). ``load_dotenv(override=False)`` in ``config/settings.py`` then
 leaves our value alone. Nibras behavior is exercised separately via
 ``override_settings(DJANGO_BRAND=...)`` in dedicated tests.
+
+The same ordering applies to ``AI_STORE_BACKEND`` (PULSE P1-01): settings now
+fails closed if it is unset, but ``PYTEST_CURRENT_TEST`` is not yet defined when
+pytest-django imports settings. Pin the durable backend here so the suite boots
+even in CI without a ``backend/.env``. Tests may still override it per case.
 """
 import os
 
 os.environ.setdefault("DJANGO_BRAND", "aastmt")
+# Fail-closed settings require a durable store backend; `.env` is not present in
+# CI, so pin it before Django settings are force-imported (PULSE P1-01).
+os.environ.setdefault("AI_STORE_BACKEND", "django")

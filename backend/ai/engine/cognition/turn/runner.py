@@ -1765,6 +1765,26 @@ class TurnPipelineRunner:
                 draft = _dc.replace(draft, text=honest_text, confidence=0.2, model_used="honest_uncertainty")
                 # Critic passes through — this is not a safety issue.
                 critic = _dc.replace(critic, verdict="pass_with_flag", flags=["knowledge_gap"])
+        # ── FAIL-CLOSED GATE (P1-02): a critic veto MUST block execution ───
+        # Previously the S4 veto was advisory only: the runner fell through to
+        # S5 and dispatched the (unconfirmed) mutation anyway. Strip the tool
+        # calls so S5 runs zero tools, and surface the veto reason as the
+        # user-facing answer. The ledger write below still records the veto
+        # verdict + flags.
+        if critic.verdict == "veto":
+            _veto_msg = (
+                (critic.veto_reason or "").strip()
+                or "This action was blocked pending review."
+            )
+            logger.warning(
+                "[%s] S4 veto (%s) — blocking %d tool call(s): %s",
+                turn_id[:8],
+                ", ".join(critic.flags) or "unspecified",
+                len(draft.tool_calls or []),
+                _veto_msg[:160],
+            )
+            draft = _dc.replace(draft, tool_calls=[])
+            critic = _dc.replace(critic, rewritten_text=_veto_msg)
         ledger.critic = critic
         s4_latency = (time.monotonic() - s4_start) * 1000
         await _broadcast_run(instance_id, "run.step.completed", {
@@ -1799,7 +1819,13 @@ class TurnPipelineRunner:
         # weather request ALWAYS reaches the weather tool, independent of the
         # draft LLM's tool choice. This is a routing-layer fix, not a regex
         # patch on the user's phrasing.
-        if self.executor is not None and _is_wq(_resolved_user_message):
+        # NOTE: skipped when S4 vetoed (P1-02) — re-forcing a tool call here
+        # would defeat the fail-closed gate that stripped ``draft.tool_calls``.
+        if (
+            self.executor is not None
+            and _is_wq(_resolved_user_message)
+            and critic.verdict != "veto"
+        ):
             _has_weather_call = any(
                 (tc.get("function") or {}).get("name") == "web_research"
                 for tc in (draft.tool_calls or [])

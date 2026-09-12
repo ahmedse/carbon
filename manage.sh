@@ -179,6 +179,42 @@ fe_upsert() {
     fi
 }
 
+# Upsert KEY=VALUE into the backend .env (add if missing, replace if present).
+be_upsert() {
+    local key="$1" value="$2" envfile="$BACKEND_DIR/.env"
+    touch "$envfile"
+    if grep -qE "^${key}=" "$envfile" 2>/dev/null; then
+        sed -i "s#^${key}=.*#${key}=${value}#" "$envfile"
+    else
+        echo "${key}=${value}" >> "$envfile"
+    fi
+}
+
+# Safely export every KEY=VALUE from an env file. Unlike `source`, this does
+# NOT evaluate the value, so values containing # $ % @ * or spaces are safe.
+# It also OVERRIDES any stale export already in the shell, which makes the
+# .env file the single source of truth — Django's load_dotenv() only fills
+# keys that are missing, so a lingering `export DJANGO_BRAND=aastmt` would
+# otherwise pin the server to the WRONG brand/database/redis-db.
+load_env_file() {
+    local envfile="$1" line key value
+    [[ -f "$envfile" ]] || return 0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ -z "$line" ]] && continue                 # blank line
+        [[ "$line" == \#* ]] && continue             # full-line comment
+        key="${line%%=*}"
+        [[ "$key" == "$line" ]] && continue          # no '=' → malformed
+        [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+        value="${line#*=}"
+        value="${value%$'\r'}"                       # strip trailing CR
+        # Strip one layer of surrounding quotes (python-dotenv style).
+        case "$value" in
+            \"*\"|\'*\') value="${value:1:${#value}-2}" ;;
+        esac
+        export "$key=$value"
+    done < "$envfile"
+}
+
 # Create venv if not exists
 ensure_venv() {
     local python
@@ -266,11 +302,10 @@ start_backend() {
     # Clear Python cache
     find "$BACKEND_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 
-    # Dev isolation: backend/.env is the single source of truth for brand/DB.
-    # Unset any stale exported DB_NAME/DJANGO_BRAND so a lingering shell export
-    # can't override the brand-derived DB (e.g. DB_NAME=carbon_dev while the
-    # .env says DJANGO_BRAND=nibras → server would read the WRONG database).
-    unset DB_NAME DJANGO_BRAND 2>/dev/null || true
+    # backend/.env is the single source of truth (brand/DB/Redis/media/Pulse).
+    # load_env_file already ran in main(); re-assert here for defense-in-depth
+    # so a stale shell export can never pin the server to the wrong brand.
+    load_env_file "$BACKEND_DIR/.env"
 
     # Start Django runserver
     cd "$BACKEND_DIR" || return 1
@@ -316,6 +351,9 @@ start_frontend() {
     
     # Start
     cd "$FRONTEND_DIR" || return 1
+    # Vite reads .env itself, but a stale VITE_* export in the shell would take
+    # precedence — re-export the file so local .env is the source of truth.
+    load_env_file "$FRONTEND_DIR/.env"
     export PORT="$FRONTEND_PORT"
     export VITE_PORT="$FRONTEND_PORT"
     nohup npm run dev > "$FRONTEND_LOG" 2>&1 &
@@ -400,8 +438,11 @@ cmd_start() {
     python=$(get_python)
     if [[ -n "$python" ]]; then
         local su_count
+        # Django prints "N objects imported automatically" to stdout, which
+        # would break a bare numeric capture — use a marker and grep it out.
         su_count=$(cd "$BACKEND_DIR" && "$python" manage.py shell -c \
-            "from django.contrib.auth import get_user_model as _U; print(_U().objects.filter(is_superuser=True, is_active=True).count())" 2>/dev/null)
+            "from django.contrib.auth import get_user_model as _U; print('__SU_COUNT__=' + str(_U().objects.filter(is_superuser=True, is_active=True).count()))" 2>/dev/null \
+            | grep -oE '__SU_COUNT__=[0-9]+' | cut -d'=' -f2)
         if [[ "$su_count" =~ ^[0-9]+$ ]] && [[ "$su_count" -gt 0 ]]; then
             log_success "Superuser check: $su_count active admin account(s) present"
         else
@@ -589,6 +630,35 @@ cmd_brand() {
         [tectona]=tectona_dev
     )
 
+    # Per-brand Redis DB index (isolates Django cache + Pulse ephemeral memory).
+    local -A BRAND_REDIS_DB=(
+        [aastmt]=0
+        [nibras]=1
+        [medos]=2
+        [tectona]=3
+    )
+
+    # Backend branding — mirrors carbon-frontend/src/brands/*.js (single source
+    # of truth). Drives emails/PDFs/API docs + PLATFORM_TITLE on the backend.
+    local -A BRAND_PLATFORM_NAME=(
+        [aastmt]="Data Trust Platform"
+        [nibras]="Nibras"
+        [medos]="medOS"
+        [tectona]="Tectona"
+    )
+    local -A BRAND_PLATFORM_SHORT=(
+        [aastmt]="Data Trust"
+        [nibras]="نبراس"
+        [medos]="medOS"
+        [tectona]="Tectona"
+    )
+    local -A BRAND_INSTANCE_NAME=(
+        [aastmt]="AASTMT"
+        [nibras]="Nibras"
+        [medos]="ClearTurn"
+        [tectona]="ClearTurn"
+    )
+
     local current
     current=$(grep -E '^DJANGO_BRAND=' "$BACKEND_DIR/.env" 2>/dev/null | cut -d'=' -f2 | tr -d '[:space:]')
     current=${current:-aastmt}
@@ -622,14 +692,22 @@ cmd_brand() {
     log_info "Switching brand → ${MAGENTA}${brand}${NC} (DB: ${BRAND_DB[$brand]:-${brand}_dev})"
     echo ""
 
-    # 1) Backend: flip DJANGO_BRAND (DB name is derived from it in settings.py).
-    log_step "Updating backend/.env → DJANGO_BRAND=${brand}"
-    if grep -qE '^DJANGO_BRAND=' "$BACKEND_DIR/.env" 2>/dev/null; then
-        sed -i "s/^DJANGO_BRAND=.*/DJANGO_BRAND=${brand}/" "$BACKEND_DIR/.env"
-    else
-        echo "DJANGO_BRAND=${brand}" >> "$BACKEND_DIR/.env"
-    fi
-    log_success "backend/.env → DJANGO_BRAND=${brand}"
+    # 1) Backend: flip brand + all per-brand runtime scoping so switching is
+    # leak-free. (DB name is derived from DJANGO_BRAND in settings.py.)
+    log_step "Updating backend/.env (brand, DB, Redis, media, Pulse, branding)"
+    be_upsert "DJANGO_BRAND" "$brand"
+    be_upsert "PULSE_INSTANCE_ID" "$brand"
+    be_upsert "REDIS_URL" "redis://localhost:6379/${BRAND_REDIS_DB[$brand]}"
+    be_upsert "DJANGO_MEDIA_ROOT" "./mediafiles/${brand}/"
+    be_upsert "DATASCHEMA_UPLOAD_PATH" "dataschema_uploads/${brand}/"
+    be_upsert "CHROMA_PERSIST_DIR" "./chroma_db/${brand}"
+    be_upsert "DJANGO_PLATFORM_NAME" "${BRAND_PLATFORM_NAME[$brand]}"
+    be_upsert "DJANGO_PLATFORM_SHORT" "${BRAND_PLATFORM_SHORT[$brand]}"
+    be_upsert "DJANGO_INSTANCE_NAME" "${BRAND_INSTANCE_NAME[$brand]}"
+    # Ensure the brand's media/upload/chroma dirs exist so Django never falls
+    # back to a shared location.
+    mkdir -p "$BACKEND_DIR/mediafiles/$brand" "$BACKEND_DIR/dataschema_uploads/$brand" "$BACKEND_DIR/chroma_db/$brand" 2>/dev/null || true
+    log_success "backend/.env → DJANGO_BRAND=${brand}, PULSE_INSTANCE_ID=${brand}, REDIS_URL=…/${BRAND_REDIS_DB[$brand]}"
 
     # 2) Frontend: copy ONLY branding keys from the preset, preserving the
     # local API URL. (The presets point at production; a raw `cp` would make
@@ -859,7 +937,13 @@ cmd_help() {
 
 main() {
     setup_dirs
-    
+
+    # backend/.env is the single source of truth for every Django command
+    # (start, migrate, shell, test, schedules, createsuperuser, …). Load it
+    # here so a stale `export` in the caller's shell can never leak the wrong
+    # brand/DB/Redis/Pulse into any child process.
+    load_env_file "$BACKEND_DIR/.env"
+
     local cmd="${1:-help}"
     
     case "$cmd" in

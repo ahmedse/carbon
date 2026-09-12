@@ -7,14 +7,16 @@ swappable, async ``Store`` abstraction selected via
 
 Backends
 --------
-``inmemory`` (default)
-    Dict-backed, no external DB. Used for tests and as the stateless
-    default until a Django backend is explicitly selected.
-
 ``django``
     Django ORM via ``sync_to_async``. Queries are CBAC-partitioned on
     ``app_identifier`` / ``org_unit_id`` / ``host_user_id`` / ``visibility``
     (mirroring the host tenant filter semantics: global/shared/private).
+    This is the durable backend production must run.
+
+``inmemory``
+    Dict-backed, no external DB. Tests only — an ephemeral store silently
+    drops writes, so it is rejected unless ``PYTEST_CURRENT_TEST`` or an
+    explicit ``PULSE_ALLOW_INMEMORY=1`` allows it (PULSE P1-01).
 
 The engine is inert at import time — nothing opens a connection here until a
 session operation is actually invoked, so this module is safe to import from
@@ -26,6 +28,8 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from typing import Any
+
+from django.core.exceptions import ImproperlyConfigured
 
 from ai.instance_registry import resolve_default_app_identifier
 
@@ -1376,19 +1380,28 @@ _BACKENDS: dict[str, type[Store]] = {
 
 
 def get_store() -> Store:
-    """Return the configured Store singleton (selected by AI_STORE_BACKEND)."""
+    """Return the configured Store singleton (selected by AI_STORE_BACKEND).
+
+    Fail-closed (PULSE P1-01): a missing or unknown backend raises rather
+    than silently degrading to the ephemeral ``InMemoryStore``.
+    """
     global _store
     if _store is None:
         from django.conf import settings
 
-        backend = getattr(settings, "AI_STORE_BACKEND", "inmemory")
+        backend = getattr(settings, "AI_STORE_BACKEND", None)
+        if not backend:
+            raise ImproperlyConfigured(
+                "AI_STORE_BACKEND is not configured; refusing to fall back to "
+                "an ephemeral in-memory store. Set AI_STORE_BACKEND='django' "
+                "(PULSE P1-01)."
+            )
         cls = _BACKENDS.get(backend)
         if cls is None:
-            logger.warning(
-                "Unknown AI_STORE_BACKEND=%r; falling back to InMemoryStore",
-                backend,
+            raise ImproperlyConfigured(
+                "Unknown AI_STORE_BACKEND=%r; expected one of %s (PULSE P1-01)."
+                % (backend, sorted(_BACKENDS))
             )
-            cls = InMemoryStore
         _store = cls()
     return _store
 

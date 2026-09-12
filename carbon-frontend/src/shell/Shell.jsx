@@ -1,7 +1,8 @@
 // File: src/shell/Shell.jsx
 // Root IDE shell layout with activity bar, resizable sidebar, editor area, and copilot pane
 
-import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
+import { lazyWithRetry } from '../utils/lazyWithRetry';
 import { Box, Drawer, IconButton, Tooltip, Typography } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
@@ -25,8 +26,10 @@ import { NotesProvider, useNotes } from '../notes/NotesContext';
 import { NotesDrawer } from '../notes/NotesDrawer';
 import { LoadingSpinner, DialogLoadingSkeleton } from './LoadingFallback';
 
-// Lazy load heavy components for code splitting
-const CommandPalette = lazy(() => import('./CommandPalette'));
+// Lazy load heavy components for code splitting.
+// lazyWithRetry: a transient dev-server/network failure would otherwise be
+// cached by React.lazy forever, leaving the palette broken until a reload.
+const CommandPalette = lazyWithRetry(() => import('./CommandPalette'));
 
 // Default path per studio
 const STUDIO_PATHS = {
