@@ -167,6 +167,18 @@ get_venv_activate() {
     fi
 }
 
+# Upsert KEY=VALUE into the frontend .env (add if missing, replace if present).
+# Values may contain spaces/colons — we use a regex-escaped key match only.
+fe_upsert() {
+    local key="$1" value="$2" envfile="$FRONTEND_DIR/.env"
+    touch "$envfile"
+    if grep -qE "^${key}=" "$envfile" 2>/dev/null; then
+        sed -i "s#^${key}=.*#${key}=${value}#" "$envfile"
+    else
+        echo "${key}=${value}" >> "$envfile"
+    fi
+}
+
 # Create venv if not exists
 ensure_venv() {
     local python
@@ -619,12 +631,22 @@ cmd_brand() {
     fi
     log_success "backend/.env → DJANGO_BRAND=${brand}"
 
-    # 2) Frontend: apply the matching per-instance env file.
+    # 2) Frontend: copy ONLY branding keys from the preset, preserving the
+    # local API URL. (The presets point at production; a raw `cp` would make
+    # the local frontend talk to the live backend.)
     local fe="${FRONTEND_DIR}/.env.instance.${brand}"
     if [[ -f "$fe" ]]; then
-        log_step "Applying frontend env (.env.instance.${brand})"
-        cp "$fe" "$FRONTEND_DIR/.env"
-        log_success "carbon-frontend/.env → VITE_BRAND=${brand}"
+        log_step "Applying brand '${brand}' to frontend env (local API URL preserved)"
+        local -a FE_KEYS=(VITE_BRAND VITE_PLATFORM_NAME VITE_PLATFORM_SHORT VITE_PLATFORM_TITLE VITE_PLATFORM_TAGLINE VITE_PLATFORM_DESCRIPTION VITE_INSTANCE_NAME VITE_PULSE_INSTANCE_ID)
+        local k v
+        for k in "${FE_KEYS[@]}"; do
+            v=$(grep -E "^${k}=" "$fe" 2>/dev/null | head -1 | cut -d'=' -f2-)
+            [[ -n "$v" ]] && fe_upsert "$k" "$v"
+        done
+        # Local dev always talks to the local backend/frontend.
+        fe_upsert "VITE_API_BASE_URL" "http://localhost:${BACKEND_PORT}/carbon-api/"
+        fe_upsert "VITE_CANONICAL_URL" "http://localhost:${FRONTEND_PORT}"
+        log_success "carbon-frontend/.env → VITE_BRAND=${brand} (local API URL preserved)"
     else
         log_warn "No $fe — leaving carbon-frontend/.env unchanged"
     fi
