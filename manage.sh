@@ -381,40 +381,20 @@ cmd_start() {
     
     local all_ok=true
 
-    # Ensure the admin user is always correct before starting services.
-    # This is the canonical superuser — never change username/password.
+    # Read-only superuser check — does NOT seed or create any users.
+    # (Superusers already exist in the pulled prod data. To create one on a
+    #  fresh DB, use: ./manage.sh createsuperuser)
     local python
     python=$(get_python)
     if [[ -n "$python" ]]; then
-        log_step "Ensuring admin user (ahmed)..."
-        cd "$BACKEND_DIR" || true
-        "$python" manage.py shell -c "
-from django.contrib.auth import get_user_model
-from accounts.models import ScopedRole
-from django.contrib.auth.models import Group
-from core.models import Project
-
-U = get_user_model()
-u, created = U.objects.get_or_create(username='ahmed')
-u.set_password('AdminPa_132')
-u.is_staff = True
-u.is_superuser = True
-u.is_active = True
-u.save()
-
-# Ensure at least one project and admin role assignment exist
-project = Project.objects.first()
-if project:
-    group, _ = Group.objects.get_or_create(name='admins_group')
-    ScopedRole.objects.get_or_create(
-        user=u, group=group, project=project, module=None,
-        defaults={'is_active': True}
-    )
-
-action = 'created' if created else 'verified'
-print(f'Admin user ahmed {action}.')
-" 2>/dev/null && log_success "Admin user ahmed verified" || log_warn "Could not verify admin user (DB may not be ready yet)"
-        cd "$PROJECT_ROOT" || true
+        local su_count
+        su_count=$(cd "$BACKEND_DIR" && "$python" manage.py shell -c \
+            "from django.contrib.auth import get_user_model as _U; print(_U().objects.filter(is_superuser=True, is_active=True).count())" 2>/dev/null)
+        if [[ "$su_count" =~ ^[0-9]+$ ]] && [[ "$su_count" -gt 0 ]]; then
+            log_success "Superuser check: $su_count active admin account(s) present"
+        else
+            log_warn "No active superuser found. Create one with: ./manage.sh createsuperuser"
+        fi
     fi
 
     start_backend || all_ok=false
@@ -714,6 +694,19 @@ cmd_shell() {
     "$python" manage.py shell
 }
 
+cmd_createsuperuser() {
+    local python
+    python=$(get_python)
+    
+    if [[ -z "$python" ]]; then
+        log_error "Python venv not found!"
+        return 1
+    fi
+    
+    cd "$BACKEND_DIR" || return 1
+    "$python" manage.py createsuperuser
+}
+
 cmd_test() {
     print_header
     log_info "Running backend tests..."
@@ -815,6 +808,7 @@ cmd_help() {
     echo "  health             Run health checks"
     echo "  migrate            Run Django migrations"
     echo "  shell              Open Django shell"
+    echo "  createsuperuser    Create a Django superuser (interactive)"
     echo "  brand [id]         Show current brand, or switch (aastmt|nibras|medos|tectona)"
     echo "  test               Run backend tests (pytest)"
     echo "  schedules [--dry-run]  Materialize due plan schedules (W6-E F-29)"
@@ -855,6 +849,7 @@ main() {
         health)     cmd_health ;;
         migrate)    cmd_migrate ;;
         shell)      cmd_shell ;;
+        createsuperuser) cmd_createsuperuser ;;
         brand)      cmd_brand "${2:-}" ;;
         test)       cmd_test "$@" ;;
         schedules)  cmd_schedules "${2:-}" ;;

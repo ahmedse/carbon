@@ -256,7 +256,7 @@ INSTALLED_APPS = [
 INSTALLED_APPS.insert(0, 'anymail')
 
 if IS_DEVELOPMENT:
-    INSTALLED_APPS += ['debug_toolbar', 'silk', 'simulation']
+    INSTALLED_APPS += ['debug_toolbar', 'silk']
 
 AUTH_USER_MODEL = 'accounts.User'
 
