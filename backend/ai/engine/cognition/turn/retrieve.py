@@ -108,24 +108,20 @@ class RetrievalWitness:
     async def _hybrid_retrieve(
         self, kg_store, user_message: str, instance_id: str
     ) -> tuple[str, list[str]]:
-        """BE-02-2: pgvector → BM25 → fuse → LLM rerank → assemble_context.
+        """BE-02-2: pgvector → fuse → LLM rerank → assemble_context.
 
-        Returns (knowledge_context, citation_ids).
+        The BM25 lexical lane is retired (P1-15); ``bm25_results`` is always
+        empty so fusion degrades to pure pgvector.  Returns
+        (knowledge_context, citation_ids).
         """
         from ai.engine.knowledge_graph.context import assemble_context, fuse_scores, rerank_with_llm
-        from ai.engine.knowledge_graph.bm25 import BM25Index
 
         # ── Step 1: pgvector semantic search ────────────────────────────────
         vector_nodes = await kg_store.semantic_search(user_message, instance_id, top_k=20)
         vector_results = [(node.id, 0.85) for node in vector_nodes]  # approximate
 
-        # ── Step 2: BM25 lexical search ─────────────────────────────────────
-        try:
-            bm25 = BM25Index()
-            bm25_results = await bm25.search(kg_store.db, user_message, instance_id, top_k=20)
-        except Exception:
-            logger.debug("BM25 search failed, using only pgvector", exc_info=True)
-            bm25_results = []
+        # ── Step 2: BM25 lexical search — retired no-op (P1-15) ─────────────
+        bm25_results: list[tuple[str, float]] = []
 
         # ── Step 3: Fuse scores ─────────────────────────────────────────────
         settings = get_settings()

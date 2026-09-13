@@ -88,7 +88,7 @@ async def _write_trajectory_own_session(run_id: str) -> None:
     "another operation is in progress" race (seen in evals, where the
     harness closes the session immediately after the turn).
     """
-    from ai.store import get_store
+    from ai.engine.core.database import get_store
     from ai.engine.cognition.trajectory import write_trajectory
 
     factory = get_store().get_session_factory()
@@ -299,6 +299,23 @@ async def _normalize_weather_location(
     return text
 
 
+def _weather_location_fallback(weather_extractor, question: str) -> str:
+    """Return the host's deterministic location extractor result.
+
+    When no host extractor is injected (or it raises), return the raw question
+    unchanged — a safe no-op that never blocks the turn.
+    """
+    if weather_extractor is None:
+        return question
+    fn = getattr(weather_extractor, "extract_weather_location", None)
+    if fn is None:
+        return question
+    try:
+        return fn(question)
+    except Exception:  # noqa: BLE001 - fallback must never raise
+        return question
+
+
 async def _normalize_weather_question(
     *,
     instance_id: str,
@@ -306,17 +323,17 @@ async def _normalize_weather_question(
     question: str,
     conversation_history: list[dict] | None = None,
     model: str | None = None,
+    weather_extractor=None,
 ) -> str:
     """LLM-extract the canonical ``City, Country`` from a FULL weather question.
 
     The question can carry a greeting ("hi"), a misspelling ("toay"), a region
     name ("north cost egypt"), or a trailing advisory sub-question ("is it
     suitable for beach swimming?"). The LLM's geographic knowledge resolves all
-    of that to the single place the user means. Falls back to the deterministic
-    regex extractor on any failure (never blocks the turn).
+    of that to the single place the user means. Falls back to the host's
+    deterministic regex extractor on any failure (never blocks the turn).
     """
     from ai.engine.llm.router import route_chat
-    from ai.plugins.web_research import _extract_weather_location
 
     system = (
         "Extract the single place the user is asking about for a weather lookup. "
@@ -357,13 +374,13 @@ async def _normalize_weather_question(
         )
     except Exception:
         logger.warning("Weather question normalization failed", exc_info=True)
-        return _extract_weather_location(question)
+        return _weather_location_fallback(weather_extractor, question)
 
     text = (result.get("content") or "").strip().splitlines()[0].strip()
     text = text.strip(" .\"'`")
     if not text or len(text) > 60:
         # LLM returned something unusable — fall back to the regex extractor.
-        return _extract_weather_location(question)
+        return _weather_location_fallback(weather_extractor, question)
     return text
 
 
@@ -439,6 +456,7 @@ async def _synthesize_tool_results(
     draft_text: str,
     model: str | None = None,
     delivery: str = "explain",
+    envelope_synthesizer=None,
 ) -> dict | None:
     """Ask the LLM to write a grounded final answer from executed tool results.
 
@@ -506,11 +524,9 @@ async def _synthesize_tool_results(
     # the markdown text (the markdown remains the primary/fallback render for
     # the current UI). Flag-off guarantees zero behaviour change.
     envelope = None
-    if get_settings().PULSE_ENVELOPE_ENABLED:
+    if get_settings().PULSE_ENVELOPE_ENABLED and envelope_synthesizer is not None:
         try:
-            from ai.envelope_service import synthesize_envelope
-
-            envelope = await synthesize_envelope(
+            envelope = await envelope_synthesizer(
                 instance_id=instance_id,
                 conversation_id=conversation_id,
                 user_message=user_message,
@@ -614,12 +630,20 @@ class TurnPipelineRunner:
         memory_manager=None,
         executor=None,
         db=None,              # Store session for S6 ledger writes
+        weather_extractor=None,
+        envelope_synthesizer=None,
     ):
         self.llm_client = llm_client
         self.knowledge_store = knowledge_store
         self.memory_manager = memory_manager
         self.executor = executor
         self.db = db
+        # P2-03: host-provided services. ``weather_extractor`` exposes
+        # ``is_weather_query`` / ``extract_weather_location``; None means the
+        # feature degrades to a no-op (weather rewrite never fires). The
+        # engine never imports ``ai.plugins.web_research`` / ``ai.envelope_service``.
+        self.weather_extractor = weather_extractor
+        self.envelope_synthesizer = envelope_synthesizer
         # Curated tool set exposed to the S3 planner when an executor is
         # wired. Mutation/confirmation tools (create_dq_rule) plus read tools
         # that ground answers, including call_host_api so the planner can reach
@@ -641,6 +665,18 @@ class TurnPipelineRunner:
             except Exception:  # noqa: BLE001 - tools are best-effort, never fatal
                 logger.warning("Could not load draft tool definitions", exc_info=True)
                 self._draft_tools = None
+
+    def _is_weather_query(self, text: str) -> bool:
+        """Host-provided weather detector; ``False`` when not injected (fail-soft)."""
+        if self.weather_extractor is None:
+            return False
+        fn = getattr(self.weather_extractor, "is_weather_query", None)
+        if fn is None:
+            return False
+        try:
+            return bool(fn(text))
+        except Exception:  # noqa: BLE001 - detector must never crash a turn
+            return False
 
     async def run(
         self,
@@ -810,7 +846,7 @@ class TurnPipelineRunner:
         # [WEATHER-FT] If the previous turn stored a pending weather intent,
         # and the user's current message looks like a bare location answer
         # (no weather keywords), rewrite it so the weather tool re-fires.
-        from ai.plugins.web_research import _is_weather_query as _is_wq
+        _is_wq = self._is_weather_query
         _wm_focus_now = _wm.get_focus(conversation_id)
         _is_weather_rewrite_turn = False
         if (
@@ -843,7 +879,18 @@ class TurnPipelineRunner:
         if _entity:
             _wm.set_focus(conversation_id, _entity.name, _entity.entity_type)
         _pref_store = get_session_preference_store()
-        _pref_store.update(conversation_id, PreferenceClassifier().classify(user_message))
+        if host_user_id:
+            try:
+                from asgiref.sync import sync_to_async as _pref_s2a
+
+                await _pref_s2a(_pref_store.update, thread_sensitive=True)(
+                    host_user_id, PreferenceClassifier().classify(user_message)
+                )
+            except Exception as _e:  # noqa: BLE001 - preference persist is best-effort
+                logger.warning(
+                    "[GAP-4] preference persist failed user=%s: %s",
+                    host_user_id, _e,
+                )
 
         # ── S1.5 — Intent Resolution (LLM-as-classifier, no local models) ──
         # Recognises which read-only endpoint the user is after, with a
@@ -1545,7 +1592,19 @@ class TurnPipelineRunner:
             system_prompt = f"{system_prompt}\n\n{_wm_fragment}"
 
         # [GAP-4] Inject session preference constraints into system prompt
-        _pref_constraints = _pref_store.to_prompt_constraints(conversation_id)
+        _pref_constraints = ""
+        if host_user_id:
+            try:
+                from asgiref.sync import sync_to_async as _pref_s2a
+
+                _pref_constraints = await _pref_s2a(
+                    _pref_store.to_prompt_constraints, thread_sensitive=True
+                )(host_user_id)
+            except Exception as _e:  # noqa: BLE001 - preference read is best-effort
+                logger.warning(
+                    "[GAP-4] preference read failed user=%s: %s",
+                    host_user_id, _e,
+                )
         if _pref_constraints:
             system_prompt = f"{system_prompt}\n\n{_pref_constraints}"
 
@@ -1783,8 +1842,7 @@ class TurnPipelineRunner:
                 len(draft.tool_calls or []),
                 _veto_msg[:160],
             )
-            draft = _dc.replace(draft, tool_calls=[])
-            critic = _dc.replace(critic, rewritten_text=_veto_msg)
+            draft = _dc.replace(draft, tool_calls=[], text=_veto_msg)
         ledger.critic = critic
         s4_latency = (time.monotonic() - s4_start) * 1000
         await _broadcast_run(instance_id, "run.step.completed", {
@@ -1838,6 +1896,7 @@ class TurnPipelineRunner:
                     question=_resolved_user_message,
                     conversation_history=conversation_history,
                     model=model,
+                    weather_extractor=self.weather_extractor,
                 )
                 draft = _dc.replace(
                     draft,
@@ -1930,6 +1989,7 @@ class TurnPipelineRunner:
             draft_text=final_text,
             model=draft.model_used or model,
             delivery=_intent_resolution.delivery if _intent_resolution else "explain",
+            envelope_synthesizer=self.envelope_synthesizer,
         )
         if _synth and _synth.get("text"):
             final_text = _synth["text"]
@@ -1944,7 +2004,7 @@ class TurnPipelineRunner:
             # location confirmation) is re-routed into web_research._weather.
             if _synth.get("is_clarification"):
                 _clarif_msg = _synth.get("clarification_user_message") or _resolved_user_message
-                from ai.plugins.web_research import _is_weather_query as _is_wq2
+                _is_wq2 = self._is_weather_query
                 # Loop guard: if this turn was ALREADY a normalization retry and
                 # still no-matched, clarify once but do NOT re-arm pending_weather
                 # (otherwise a stubbornly-unresolvable place loops forever).
@@ -1966,8 +2026,10 @@ class TurnPipelineRunner:
 
         # ── Pulse v2 Phase 7: post-result verification ───────────────────
         # When enabled and tools actually ran, verify that the synthesized
-        # answer's factual claims are supported by the tool results. Fail-open:
-        # any error leaves the answer untouched. Corrects the text in place.
+        # answer's factual claims are supported by the tool results.
+        # Fail-closed: a verification error records passed=False + error in the
+        # ledger so an outage is visible; the answer itself is left uncorrected
+        # (no corrected_text) so the user still gets their response.
         if settings.PULSE_VERIFY_ENABLED and execution.completed_tools and final_text:
             try:
                 from ai.engine.cognition.turn.verify import VerificationWitness
@@ -1991,10 +2053,13 @@ class TurnPipelineRunner:
                 total_llm_calls += 1
                 ledger.verification_passed = _vr.passed
                 ledger.verification_unsupported = _vr.unsupported_claims
-            except Exception:
+                ledger.verification_error = _vr.error
+            except Exception as e:
                 logger.warning(
                     "[%s] Verification step failed", turn_id[:8], exc_info=True
                 )
+                ledger.verification_passed = False
+                ledger.verification_error = str(e)
 
         # S-TRACE-01: concept/general turns ground their answer through S2
         # retrieval (RetrievalWitness), not a ReAct tool call — so no tool
@@ -2038,6 +2103,7 @@ class TurnPipelineRunner:
                 "critic_verdict": critic.verdict,
                 "verification_passed": ledger.verification_passed,
                 "verification_unsupported": ledger.verification_unsupported,
+                "verification_error": ledger.verification_error,
             },
             s6_latency, verdict=critic.verdict,
         )
@@ -2542,6 +2608,11 @@ class TurnPipelineRunner:
             db=self.db,
             instance_id=instance_id,
             conversation_id=conversation_id,
+            # P1-07: worker tool calls run through the same S5 dispatch path as
+            # the orchestrator (read-only host APIs + knowledge lookups).
+            executor=self.executor,
+            instance_config=instance_config,
+            knowledge_store=self.knowledge_store,
         )
         fan_out_result = await pool.fan_out(
             tasks=tasks,

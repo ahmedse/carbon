@@ -11,7 +11,7 @@ from datetime import datetime
 from ai.engine.core.clock import utcnow
 from typing import Optional
 
-from ai.store import first
+from ai.engine.core.query import first
 
 from ai.engine.knowledge_graph.models import KgProactiveTrigger, TRIGGER_CATEGORIES, TRIGGER_SEVERITIES
 

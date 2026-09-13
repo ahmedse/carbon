@@ -17,11 +17,11 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_chat_completion_returns_nonempty_text():
-    """chat_completion returns assistant text for a trivial prompt."""
-    from ai.engine.llm.provider import chat_completion
+    """_chat_completion returns assistant text for a trivial prompt."""
+    from ai.engine.llm.provider import _chat_completion
 
     text = asyncio.run(
-        chat_completion([{"role": "user", "content": "Say OK"}], temperature=0.0)
+        _chat_completion([{"role": "user", "content": "Say OK"}], temperature=0.0)
     )
     assert isinstance(text, str)
     assert text.strip()

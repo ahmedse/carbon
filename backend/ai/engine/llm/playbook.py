@@ -22,7 +22,7 @@ from typing import Optional
 
 from ai.engine.core.models import BLOCK_KINDS, PlaybookBlock, generate_uuid
 from ai.engine.llm.prompts import RENDERING_CAPABILITIES
-from ai.store import first
+from ai.engine.core.query import first
 
 logger = logging.getLogger("pulse.llm.playbook")
 

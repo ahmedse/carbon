@@ -1,6 +1,12 @@
 """
 LLM provider abstraction — OpenAI-compatible interface.
+
 Swap providers by changing .env only.
+
+``create_completion`` is the single retried seam used by ``router.route_chat``.
+The ``_chat_completion`` / ``_chat_completion_with_tools`` helpers are PRIVATE
+seams (legacy + live-smoke-test only): callers that need usage accounting and
+budget enforcement MUST route through ``ai.engine.llm.router.route_chat``.
 """
 import logging
 
@@ -68,7 +74,7 @@ def get_llm_client() -> AsyncOpenAI:
 
 
 @_retry_decorator
-async def chat_completion(
+async def _chat_completion(
     messages: list[dict],
     model: str | None = None,
     temperature: float = 0.3,
@@ -83,7 +89,7 @@ async def chat_completion(
     settings = get_settings()
     client = get_llm_client()
     model = model or settings.LLM_MODEL
-    logger.debug(f"chat_completion: model={model}  messages={len(messages)}")
+    logger.debug(f"_chat_completion: model={model}  messages={len(messages)}")
 
     kwargs: dict = {
         "model": model,
@@ -95,12 +101,12 @@ async def chat_completion(
 
     response = await client.chat.completions.create(**kwargs)
     text = response.choices[0].message.content
-    logger.debug(f"chat_completion done: {len(text or '')} chars")
+    logger.debug(f"_chat_completion done: {len(text or '')} chars")
     return text
 
 
 @_retry_decorator
-async def chat_completion_with_tools(
+async def _chat_completion_with_tools(
     messages: list[dict],
     tools: list[dict],
     model: str | None = None,

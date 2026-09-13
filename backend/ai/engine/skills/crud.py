@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.engine.core.clock import utcnow
 from ai.engine.core.models import Skill
+from ai.engine.skills._authority import check_promotion_token
 from ai.engine.skills.schema import ProcedureBody
 
 logger = logging.getLogger("pulse.skills.crud")
@@ -166,13 +167,20 @@ class SkillsStore:
             skill_id, new_count, new_success_rate, new_avg_latency,
         )
 
-    async def promote_to_instance(
-        self, skill_id: str, promoted_by: str
+    async def _promote_to_instance(
+        self, skill_id: str, promoted_by: str, _token: object
     ) -> Skill | None:
-        """Promote a user-owned skill to instance-global."""
+        """Gate-only promotion (P1-06).  Private and token-guarded.
+
+        Promotes a user-owned skill to instance-global.  This must *never* be
+        called directly: it requires the singleton promotion token minted for
+        the admission gate.  Any other caller (missing or forged token) raises
+        ``RuntimeError`` so promotion cannot bypass the critics.
+        """
+        check_promotion_token(_token)
         skill = await self.db.get(Skill, skill_id)
         if skill is None:
-            logger.warning("SkillsStore.promote_to_instance: not found id=%s", skill_id)
+            logger.warning("SkillsStore._promote_to_instance: not found id=%s", skill_id)
             return None
 
         now = utcnow()
@@ -182,7 +190,7 @@ class SkillsStore:
         await self.db.commit()
         await self.db.refresh(skill)
         logger.info(
-            "SkillsStore.promote_to_instance: id=%s name=%r promoted_by=%r",
+            "SkillsStore._promote_to_instance: id=%s name=%r promoted_by=%r",
             skill_id, skill.name, promoted_by,
         )
         return skill

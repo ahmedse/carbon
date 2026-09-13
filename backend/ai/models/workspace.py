@@ -518,6 +518,41 @@ class AIUserProfile(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(100)],
         help_text="Soft-warning percent of the monthly token limit (1-100).",
     )
+
+    # ── GAP-4: durable communication-style preferences (P1-12) ──────────
+    # Persisted here (host-owned state) so they survive restarts, replacing
+    # the old in-memory SessionPreferenceStore dict.  Values mirror the
+    # engine enums in ai.engine.learning.preferences (Verbosity/Format/Depth).
+    pref_verbosity = models.CharField(
+        max_length=16,
+        default="normal",
+        choices=[
+            ("brief", "Brief"),
+            ("normal", "Normal"),
+            ("verbose", "Verbose"),
+        ],
+        help_text="Durable communication verbosity preference (GAP-4).",
+    )
+    pref_format = models.CharField(
+        max_length=16,
+        default="mixed",
+        choices=[
+            ("bullets", "Bullets"),
+            ("prose", "Prose"),
+            ("mixed", "Mixed"),
+        ],
+        help_text="Durable response format preference (GAP-4).",
+    )
+    pref_depth = models.CharField(
+        max_length=16,
+        default="normal",
+        choices=[
+            ("beginner", "Beginner"),
+            ("normal", "Normal"),
+            ("expert", "Expert"),
+        ],
+        help_text="Durable response depth preference (GAP-4).",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

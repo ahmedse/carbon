@@ -23,7 +23,7 @@ _MEMORY_NOISE_RE = re.compile(
     re.IGNORECASE,
 )
 
-from ai.store import first, scope_q
+from ai.engine.core.query import first, scope
 
 from ai.engine.core.models import MemoryLongTerm, generate_uuid
 
@@ -263,7 +263,7 @@ class LongTermMemory:
                 # Apply tenancy filter in SQL when fetching by ID
                 fact = first(await self.db.select(
                     MemoryLongTerm,
-                    scope_q(MemoryLongTerm, instance_id, host_user_id),
+                    scope(instance_id, host_user_id),
                     ("id", fid),
                 ))
                 if fact:
@@ -299,7 +299,7 @@ class LongTermMemory:
         now = utcnow()
         facts = await self.db.select(
             MemoryLongTerm,
-            scope_q(MemoryLongTerm, instance_id, host_user_id),
+            scope(instance_id, host_user_id),
             ("category__in", ["correction", "business_rule"]),
             ("archived", False),
         )
@@ -354,7 +354,7 @@ class LongTermMemory:
         now = utcnow()
         all_corrections = await self.db.select(
             MemoryLongTerm,
-            scope_q(MemoryLongTerm, instance_id, host_user_id),
+            scope(instance_id, host_user_id),
             ("category__in", ["correction", "business_rule"]),
             ("archived", False),
         )
@@ -429,7 +429,7 @@ class LongTermMemory:
         words = [w.lower() for w in query.split() if len(w) >= 3]
         facts = await self.db.select(
             MemoryLongTerm,
-            scope_q(MemoryLongTerm, instance_id, host_user_id),
+            scope(instance_id, host_user_id),
             ("archived", False),
         )
 

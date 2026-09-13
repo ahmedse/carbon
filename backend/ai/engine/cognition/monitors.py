@@ -230,7 +230,7 @@ async def check_schema_drift(db: Any, instance: Instance):
     """Detect if the host database schema has changed since last introspection."""
     import psycopg2
 
-    from ai.models import KnowledgeEntity
+    from ai.engine.core.models import KnowledgeEntity
 
     known_tables = set()
     current_tables = set()

@@ -8,7 +8,6 @@ import {
   Button,
   Chip,
   IconButton,
-  MenuItem,
   Paper,
   Snackbar,
   Stack,
@@ -34,6 +33,7 @@ import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
 import ErrorAlert from '../../components/Page/ErrorAlert';
 import EmptyState from '../../components/Page/EmptyState';
 import SystemDialog from '../../components/SystemDialog';
+import { SearchSelect } from '../../components/Form';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
 import {
@@ -260,21 +260,6 @@ export default function PayrollRunsPage() {
     );
   }
 
-  if (runs.length === 0) {
-    return (
-      <PageContainer>
-        <PageHeader icon={PaymentsIcon} title={t('payrollTitle')} subtitle={t('payrollSubtitle')} />
-        <EmptyState
-          icon={<PaymentsIcon />}
-          title={t('payrollEmpty')}
-          description={t('payrollEmptyDesc')}
-          actionLabel={t('actionAddPayrollRun')}
-          onAction={openCreate}
-        />
-      </PageContainer>
-    );
-  }
-
   return (
     <PageContainer>
       <PageHeader
@@ -282,12 +267,23 @@ export default function PayrollRunsPage() {
         title={t('payrollTitle')}
         subtitle={t('payrollSubtitle')}
         actions={
-          <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={openCreate}>
-            {t('actionAddPayrollRun')}
-          </Button>
+          runs.length > 0 ? (
+            <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={openCreate}>
+              {t('actionAddPayrollRun')}
+            </Button>
+          ) : undefined
         }
       />
 
+      {runs.length === 0 ? (
+        <EmptyState
+          icon={<PaymentsIcon />}
+          title={t('payrollEmpty')}
+          description={t('payrollEmptyDesc')}
+          actionLabel={t('actionAddPayrollRun')}
+          onAction={openCreate}
+        />
+      ) : (
       <Stack spacing={2}>
         <TableContainer component={Paper} variant="outlined">
           <Table size="small">
@@ -435,6 +431,7 @@ export default function PayrollRunsPage() {
           )}
         </Box>
       </Stack>
+      )}
 
       <SystemDialog
         open={openDialog}
@@ -449,20 +446,16 @@ export default function PayrollRunsPage() {
         }
       >
         <Stack spacing={2}>
-          <TextField
-            select
+          <SearchSelect
+            options={orgUnits}
+            valueKey="id"
+            labelKey="name"
             label={t('formOrgUnit')}
-            name="org_unit"
             value={form.org_unit}
-            onChange={handleChange}
-            fullWidth
+            onChange={(v) => setForm((prev) => ({ ...prev, org_unit: v ? v.id : '' }))}
             required
-          >
-            <MenuItem value="" disabled>{t('formOrgUnit')}</MenuItem>
-            {orgUnits.map((unit) => (
-              <MenuItem key={unit.id} value={unit.id}>{unit.name || unit.code || unit.id}</MenuItem>
-            ))}
-          </TextField>
+            noOptionsText={t('noOrgUnits') || 'No org units available'}
+          />
           <TextField
             type="date"
             label={t('colPeriodStart')}

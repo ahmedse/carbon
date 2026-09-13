@@ -16,6 +16,8 @@ from ai.engine.core.clock import utcnow
 from typing import Optional
 
 from ai.engine.core.config import get_settings
+from ai.engine.core.exceptions import ToolExecutionError
+from ai.engine.core.sql_validator import validate_sql
 from ai.engine.knowledge_graph.models import KgProactiveTrigger
 
 logger = logging.getLogger("pulse.proactive.trigger_evaluator")
@@ -128,15 +130,19 @@ async def _evaluate_threshold(
       "table": "transformer_readings",
       "operator": ">",        // >, <, >=, <=, ==, !=
       "value": 105.0,
-      "where": "asset_id = 'T-3'",  // optional filter
+      "where": {"field": "asset_id", "op": "==", "value": "T-3"},  // structured, optional
       "aggregation": "latest"   // latest | avg | max | min | count
     }
+
+    ``where`` MUST be a structured predicate dict (or a list of them) rendered
+    with bound parameters. A legacy raw SQL string is rejected (fail-closed)
+    and never executed.
     """
     table = condition.get("table", "")
     column = condition.get("column", "")
     operator = condition.get("operator", ">")
     threshold = condition.get("value")
-    where_clause = condition.get("where", "")
+    where_spec = condition.get("where")
     aggregation = condition.get("aggregation", "latest")
 
     if not table or not column or threshold is None:
@@ -145,6 +151,24 @@ async def _evaluate_threshold(
             trigger_name=trigger.name, category="threshold",
             detail="Incomplete condition: missing table, column, or value",
         )
+
+    # P1-09: fail-closed on legacy raw-string `where`. A raw SQL fragment is
+    # never interpolated — the caller must migrate to structured predicates
+    # ({"field": ..., "op": ..., "value": ...} or a list thereof).
+    if isinstance(where_spec, str):
+        if where_spec.strip():
+            logger.warning(
+                "Trigger '%s' uses a legacy raw string 'where' clause — rejected "
+                "and not executed. Migrate to structured predicates.",
+                trigger.name,
+            )
+            return TriggerResult(
+                trigger_id=trigger.id, fired=False, severity=trigger.severity,
+                trigger_name=trigger.name, category="threshold",
+                detail="legacy raw where clause rejected — migrate to structured predicates",
+            )
+        # Empty/whitespace string == no filter.
+        where_spec = None
 
     # Validate operator
     valid_ops = {">", "<", ">=", "<=", "==", "!="}
@@ -155,7 +179,7 @@ async def _evaluate_threshold(
             detail=f"Invalid operator: {operator}",
         )
 
-    measured = await _query_aggregation(host_db_url, table, column, aggregation, where_clause)
+    measured = await _query_aggregation(host_db_url, table, column, aggregation, where_spec)
     if measured is None:
         return TriggerResult(
             trigger_id=trigger.id, fired=False, severity=trigger.severity,
@@ -345,9 +369,15 @@ async def _query_aggregation(
     table: str,
     column: str,
     aggregation: str,
-    where_clause: str = "",
+    predicates=None,
 ) -> Optional[float]:
-    """Query host DB for an aggregated value. Runs in thread pool (sync psycopg2)."""
+    """Query host DB for an aggregated value. Runs in thread pool (sync psycopg2).
+
+    ``predicates`` is a structured predicate dict / list rendered by
+    :func:`_render_where` into a parameterized ``WHERE`` fragment — values are
+    always bound parameters, never interpolated. The assembled SQL is routed
+    through ``validate_sql`` before execution.
+    """
     import asyncio
     import psycopg2
 
@@ -363,12 +393,27 @@ async def _query_aggregation(
     if not template:
         return None
 
-    where_sql = f"WHERE {where_clause}" if where_clause else ""
+    try:
+        where_sql, params = _render_where(predicates)
+    except ValueError as e:
+        logger.warning(f"Host query predicates rejected: {e}")
+        return None
+
     # For "latest", the subquery needs a different structure
     if aggregation == "latest":
-        sql = f"SELECT {_qi(column)} FROM {_qi(table)} {where_sql} ORDER BY 1 DESC LIMIT 1"
+        sql = f"SELECT {_qi(column)} FROM {_qi(table)}"
+        if where_sql:
+            sql += f" {where_sql}"
+        sql += " ORDER BY 1 DESC LIMIT 1"
     else:
-        sql = template.replace("%WHERE%", where_sql)
+        sql = template.replace(" %WHERE%", f" {where_sql}" if where_sql else "")
+
+    # P1-09: every proactive SQL string must pass the read-only validator.
+    try:
+        validate_sql(sql)
+    except ToolExecutionError as e:
+        logger.warning(f"Host query rejected by SQL validator: {e}")
+        return None
 
     def _run():
         try:
@@ -376,7 +421,7 @@ async def _query_aggregation(
             conn.set_session(readonly=True, autocommit=True)
             cur = conn.cursor()
             cur.execute(f"SET statement_timeout = '5000'")
-            cur.execute(sql)
+            cur.execute(sql, params)
             row = cur.fetchone()
             cur.close()
             conn.close()
@@ -398,31 +443,52 @@ async def _query_time_avg(
 ) -> Optional[float]:
     """
     Query host DB for average value in a time window.
+
     If days_window is None, uses days_ago_start as "last N days from now".
     If days_window is set, uses days_ago_start..days_ago_start+days_window window ago.
+
+    All window values are bound as integer parameters (never interpolated) and
+    the assembled SQL is routed through ``validate_sql`` before execution.
     """
     import asyncio
     import psycopg2
 
-    if days_window is None:
+    try:
+        start = int(days_ago_start)
+        window = int(days_window) if days_window is not None else None
+    except (TypeError, ValueError):
+        logger.warning("Host time query received a non-integer window; rejected")
+        return None
+
+    if window is None:
         # Last N days from now
         sql = (
             f"SELECT AVG({_qi(column)}) FROM {_qi(table)} "
-            f"WHERE {_qi(time_column)} >= NOW() - INTERVAL '{days_ago_start} days'"
+            f"WHERE {_qi(time_column)} >= NOW() - INTERVAL '1 day' * %s"
         )
+        params = [start]
     else:
         # Window: from (days_ago_start + days_window) to days_ago_start ago
-        if days_ago_start == 0:
+        if start == 0:
             sql = (
                 f"SELECT AVG({_qi(column)}) FROM {_qi(table)} "
-                f"WHERE {_qi(time_column)} >= NOW() - INTERVAL '{days_window} hours'"
+                f"WHERE {_qi(time_column)} >= NOW() - INTERVAL '1 hour' * %s"
             )
+            params = [window]
         else:
             sql = (
                 f"SELECT AVG({_qi(column)}) FROM {_qi(table)} "
-                f"WHERE {_qi(time_column)} >= NOW() - INTERVAL '{days_ago_start + days_window} hours' "
-                f"AND {_qi(time_column)} < NOW() - INTERVAL '{days_ago_start} hours'"
+                f"WHERE {_qi(time_column)} >= NOW() - INTERVAL '1 hour' * %s "
+                f"AND {_qi(time_column)} < NOW() - INTERVAL '1 hour' * %s"
             )
+            params = [start + window, start]
+
+    # P1-09: every proactive SQL string must pass the read-only validator.
+    try:
+        validate_sql(sql)
+    except ToolExecutionError as e:
+        logger.warning(f"Host time query rejected by SQL validator: {e}")
+        return None
 
     def _run():
         try:
@@ -430,7 +496,7 @@ async def _query_time_avg(
             conn.set_session(readonly=True, autocommit=True)
             cur = conn.cursor()
             cur.execute(f"SET statement_timeout = '10000'")
-            cur.execute(sql)
+            cur.execute(sql, params)
             row = cur.fetchone()
             cur.close()
             conn.close()
@@ -443,6 +509,74 @@ async def _query_time_avg(
 
 
 # ── SQL safety ────────────────────────────────────────────────────────────────
+
+_ALLOWED_PREDICATE_OPS = {
+    "=", "==", "!=", "<", "<=", ">", ">=", "like", "is_null", "is_not_null",
+}
+
+
+def _render_where(predicates) -> tuple[str, list]:
+    """Render structured predicates to a parameterized WHERE fragment.
+
+    Accepts None / [] / {} (empty) -> ("", []).
+    Accepts a single dict {"field": str, "op": str, "value": Any} -> one predicate.
+    Accepts a list of such dicts -> AND'd predicates.
+    Returns (where_sql, params). Raises ValueError on any unsafe input.
+
+    Values are always returned as bound parameters — never interpolated into
+    the SQL text.
+    """
+    if predicates is None:
+        return ("", [])
+    if isinstance(predicates, dict):
+        if not predicates:
+            return ("", [])
+        predicates = [predicates]
+    if not isinstance(predicates, list):
+        raise ValueError(
+            f"predicates must be None, a dict, or a list of dicts; got "
+            f"{type(predicates).__name__}"
+        )
+    if not predicates:
+        return ("", [])
+
+    clauses: list[str] = []
+    params: list = []
+
+    for pred in predicates:
+        if not isinstance(pred, dict):
+            raise ValueError(
+                f"each predicate must be a dict; got {type(pred).__name__}"
+            )
+
+        field = pred.get("field")
+        op = pred.get("op")
+
+        if not isinstance(field, str) or not field.strip():
+            raise ValueError("predicate 'field' must be a non-empty string")
+        if not isinstance(op, str) or op.lower() not in _ALLOWED_PREDICATE_OPS:
+            raise ValueError(f"predicate 'op' is not allowlisted: {op!r}")
+
+        op = op.lower()
+        quoted = _qi(field)
+
+        if op == "is_null":
+            clauses.append(f"{quoted} IS NULL")
+            continue
+        if op == "is_not_null":
+            clauses.append(f"{quoted} IS NOT NULL")
+            continue
+        if op == "like":
+            clauses.append(f"{quoted} LIKE %s")
+            params.append(pred.get("value"))
+            continue
+
+        sql_op = "=" if op == "==" else op
+        clauses.append(f"{quoted} {sql_op} %s")
+        params.append(pred.get("value"))
+
+    return ("WHERE " + " AND ".join(clauses), params)
+
 
 def _qi(identifier: str) -> str:
     """Quote a SQL identifier to prevent injection. Only allows alphanumeric + underscore."""

@@ -77,33 +77,52 @@ def test_multiple_signals_in_one_message(clf):
     assert signal.depth == Depth.EXPERT
 
 
-# ── SessionPreferenceStore ─────────────────────────────────────────────────────
+# ── SessionPreferenceStore (durable, keyed by host_user_id) ───────────────────
 
-def test_store_updates_on_signal(store, clf):
-    signal = clf.classify("Keep it brief")
-    store.update("conv1", signal)
-    constraints = store.to_prompt_constraints("conv1")
+def _uid(user) -> str:
+    return str(user.pk)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_store_updates_on_signal(store, clf, create_user):
+    user = create_user("pref-brief-user")
+    store.update(_uid(user), clf.classify("Keep it brief"))
+    constraints = store.to_prompt_constraints(_uid(user))
     assert constraints  # non-empty
     assert "concise" in constraints.lower() or "150" in constraints or "200" in constraints
 
 
-def test_store_constraints_empty_for_normal_preferences(store):
-    constraints = store.to_prompt_constraints("conv-new")
-    assert constraints == ""
+@pytest.mark.django_db(transaction=True)
+def test_store_constraints_empty_for_normal_preferences(store, create_user):
+    user = create_user("pref-normal-user")
+    assert store.to_prompt_constraints(_uid(user)) == ""
 
 
-def test_store_update_with_empty_signal_has_no_effect(store):
+@pytest.mark.django_db(transaction=True)
+def test_store_update_with_empty_signal_has_no_effect(store, create_user):
     from ai.engine.learning.preferences import PreferenceSignal
-    store.update("conv1", PreferenceSignal())  # empty signal
-    constraints = store.to_prompt_constraints("conv1")
-    assert constraints == ""
+
+    user = create_user("pref-empty-user")
+    store.update(_uid(user), PreferenceSignal())  # empty signal
+    assert store.to_prompt_constraints(_uid(user)) == ""
 
 
-def test_store_clear_resets_preferences(store, clf):
-    store.update("conv1", clf.classify("Keep it brief"))
-    store.clear("conv1")
-    constraints = store.to_prompt_constraints("conv1")
-    assert constraints == ""
+@pytest.mark.django_db(transaction=True)
+def test_store_clear_resets_preferences(store, clf, create_user):
+    user = create_user("pref-clear-user")
+    store.update(_uid(user), clf.classify("Keep it brief"))
+    store.clear(_uid(user))
+    assert store.to_prompt_constraints(_uid(user)) == ""
+
+
+@pytest.mark.django_db(transaction=True)
+def test_preference_survives_restart(clf, create_user):
+    """A brand-new store instance reads the SAME durable profile (P1-12)."""
+    user = create_user("pref-restart-user")
+    SessionPreferenceStore().update(_uid(user), clf.classify("Give me bullet points"))
+    # Simulate a process restart: a fresh store instance, no shared memory.
+    constraints = SessionPreferenceStore().to_prompt_constraints(_uid(user))
+    assert "bullet" in constraints.lower()
 
 
 def test_singleton_returns_same_instance():

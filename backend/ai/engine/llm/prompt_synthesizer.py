@@ -19,11 +19,11 @@ import json
 import logging
 import time
 from typing import Optional
+from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.engine.core.models import PromptVersion, generate_uuid
-from ai.engine.llm.provider import chat_completion
 
 logger = logging.getLogger("pulse.llm.prompt_synthesizer")
 
@@ -268,8 +268,17 @@ async def synthesize_system_prompt(
         {"role": "user", "content": meta_prompt},
     ]
 
+    from ai.engine.llm.router import route_chat
+
     try:
-        synthesized = await chat_completion(messages, temperature=0.4)
+        result = await route_chat(
+            task="introspect",
+            instance_id=(instance_id or "prompt-synth"),
+            conversation_id=f"prompt-synth-{uuid4().hex[:8]}",
+            messages=messages,
+            temperature=0.4,
+        )
+        synthesized = result["content"]
     except Exception as exc:
         logger.error(f"Prompt synthesis failed for {instance_name}: {exc}")
         # Fall back to a minimal prompt

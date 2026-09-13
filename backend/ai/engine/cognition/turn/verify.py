@@ -3,9 +3,10 @@
 Checks that the synthesized answer's factual claims are supported by the tool
 results. Runs only when tool results exist. Returns a VerificationResult.
 
-The verification call is OPT-IN (``PULSE_VERIFY_ENABLED`` defaults to False)
-because it adds one LLM call per response. When enabled, it always fail-open:
-any error yields ``passed=True`` so it can never block the user's answer.
+The verification call is ON BY DEFAULT (``PULSE_VERIFY_ENABLED`` defaults to
+True) and fails CLOSED: any exception or unparseable response yields
+``passed=False`` with an ``error`` message so the ledger records that the
+answer was *not* verified rather than silently claiming it was.
 """
 from __future__ import annotations
 
@@ -24,6 +25,7 @@ class VerificationResult:
     unsupported_claims: list[str] = field(default_factory=list)
     verified_claims: list[str] = field(default_factory=list)
     corrected_text: str | None = None  # corrected version if passed=False
+    error: str = ""  # non-empty when verification failed closed
     tokens_used: int = 0
     model_used: str = ""
 
@@ -43,8 +45,9 @@ class VerificationWitness:
     ) -> VerificationResult:
         """Verify the answer against the tool results.
 
-        Returns VerificationResult. Never raises — returns passed=True with
-        empty claims on any failure (fail-open to avoid blocking responses).
+        Returns VerificationResult. Never raises — on any exception or
+        unparseable response it fails closed, returning ``passed=False`` with
+        an ``error`` message so the failure is visible in the turn ledger.
         """
 
         if not answer or not tool_results:
@@ -89,15 +92,17 @@ class VerificationWitness:
                 model=model,
                 tools=None,
             )
-        except Exception:
+        except Exception as e:
             logger.warning("VerificationWitness LLM call failed", exc_info=True)
-            return VerificationResult(passed=True)
+            return VerificationResult(passed=False, error=str(e))
 
         raw = (response.get("content") or "").strip()
         try:
             parsed = json.loads(raw)
         except (json.JSONDecodeError, TypeError):
-            return VerificationResult(passed=True)
+            return VerificationResult(
+                passed=False, error="unparseable verification response"
+            )
 
         tokens = int(response.get("input_tokens", 0) or 0) + int(
             response.get("output_tokens", 0) or 0

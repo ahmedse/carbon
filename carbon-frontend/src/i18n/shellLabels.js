@@ -94,7 +94,6 @@ export const NAV_LABEL_KEYS = {
   'Budget & Usage': 'nav.budgetAndUsage',
   'Engine Settings': 'nav.engineSettings',
   Agents: 'nav.agents',
-  'MCP Servers': 'nav.mcpServers',
   Tools: 'nav.tools',
   'Skills Catalog': 'nav.skillsCatalog',
   Topology: 'nav.topology',

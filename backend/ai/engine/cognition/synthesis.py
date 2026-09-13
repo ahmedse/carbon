@@ -12,7 +12,7 @@ from datetime import timedelta
 
 from ai.engine.core.clock import utcnow
 
-from ai.store import first, scope_q
+from ai.engine.core.query import first, scope
 
 from ai.engine.core.config import get_settings
 from ai.engine.core.models import (
@@ -55,7 +55,7 @@ async def synthesize_insights(db, instance: Instance):
         await db.aggregate(
             Insight,
             {"count": ("Count", "id")},
-            scope_q(Insight, instance.id, None),
+            scope(instance.id, None),
             ("created_at__gt", recent_cutoff),
         )
     )["count"] or 0
@@ -149,7 +149,7 @@ async def _gather_synthesis_context(db, instance: Instance) -> dict:
     # Recent notifications (last 20) — instance-wide (host_user_id=None → shared + global only)
     notifications = await db.select(
         Notification,
-        scope_q(Notification, instance.id, None),
+        scope(instance.id, None),
     )
     notifications.sort(key=lambda n: n.created_at, reverse=True)
     notifications = notifications[:20]
@@ -171,7 +171,7 @@ async def _gather_synthesis_context(db, instance: Instance) -> dict:
     # Recent episodes (last 20) — shared/global only for instance-wide synthesis
     episodes = await db.select(
         MemoryEpisodic,
-        scope_q(MemoryEpisodic, instance.id, None),
+        scope(instance.id, None),
         ("archived", False),
     )
     episodes.sort(key=lambda e: e.occurred_at, reverse=True)
@@ -192,7 +192,7 @@ async def _gather_synthesis_context(db, instance: Instance) -> dict:
         await db.aggregate(
             MemoryLongTerm,
             {"count": ("Count", "id")},
-            scope_q(MemoryLongTerm, instance.id, None),
+            scope(instance.id, None),
             ("archived", False),
         )
     )["count"] or 0
@@ -201,7 +201,7 @@ async def _gather_synthesis_context(db, instance: Instance) -> dict:
     # Low-confidence memories — shared/global only for instance-wide synthesis
     low_conf = await db.select(
         MemoryLongTerm,
-        scope_q(MemoryLongTerm, instance.id, None),
+        scope(instance.id, None),
         ("archived", False),
         ("confidence__lt", 0.5),
     )
@@ -296,7 +296,7 @@ async def reflect_on_insights(db, instance: Instance):
     # Get all active insights — instance-wide synthesis; never touch private user rows
     insights = await db.select(
         Insight,
-        scope_q(Insight, instance.id, None),
+        scope(instance.id, None),
         ("archived", False),
     )
     insights.sort(key=lambda i: i.created_at, reverse=True)
@@ -329,7 +329,7 @@ async def reflect_on_insights(db, instance: Instance):
     cutoff = utcnow() - timedelta(days=30)
     old_insights = await db.select(
         Insight,
-        scope_q(Insight, instance.id, None),
+        scope(instance.id, None),
         ("archived", False),
         ("created_at__lt", cutoff),
         ("confidence__lt", 0.5),
@@ -370,7 +370,7 @@ async def decay_stale_memories(db, instance: Instance):
     # Get stale, unused memories — instance-wide; never touch private user rows
     stale_memories = await db.select(
         MemoryLongTerm,
-        scope_q(MemoryLongTerm, instance.id, None),
+        scope(instance.id, None),
         ("archived", False),
         ("last_used__lt", cutoff),
         ("confidence__gt", 0.1),
@@ -448,7 +448,7 @@ async def learn_user_preferences(db, instance: Instance):
         existing = first(
             await db.select(
                 MemoryLongTerm,
-                scope_q(MemoryLongTerm, instance.id, None),
+                scope(instance.id, None),
                 ("category", "preference"),
                 ("source", f"auto:user:{user_id}"),
                 ("archived", False),

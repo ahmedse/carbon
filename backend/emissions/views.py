@@ -428,6 +428,25 @@ class GWPViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class CarbonBrandPermission(BasePermission):
+    """Reject requests to the carbon/emissions API unless the current brand
+    enables the 'carbon' domain app (F9-backend).
+
+    Reads ``settings.DJANGO_BRAND`` + ``settings.BRAND_APP_PRESETS`` — the same
+    source of truth the ``platform_apps`` view uses to hide domain apps for a
+    brand. When the brand preset does not contain 'carbon' the endpoint returns
+    403 instead of leaking carbon data to an unrelated instance (e.g. Nibras).
+    """
+
+    message = "The Carbon app is not enabled for this instance."
+
+    def has_permission(self, request, view):
+        from django.conf import settings
+        brand = getattr(settings, "DJANGO_BRAND", "aastmt")
+        presets = getattr(settings, "BRAND_APP_PRESETS", {}) or {}
+        return "carbon" in presets.get(brand, {})
+
+
 class CalculationWritePermission(BasePermission):
     """
     Read: any authenticated user can list/view calculations.

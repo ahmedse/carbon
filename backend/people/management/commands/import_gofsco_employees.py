@@ -13,7 +13,7 @@
 #
 # Inference (no salary/nationality/civil_id/hire-date in the export):
 #   - Cost centers prefixed "Kuwaitization - " ⇒ kuwaitization=True, KWT
-#   - basic_salary defaults to 0.000
+#   - basic_salary inferred from job title (F8 — never 0.000)
 #   - join_date left NULL (the export carries no hire date — we do NOT fabricate)
 #   - civil_id / date_of_birth / gender left blank (pending enrichment)
 #
@@ -111,6 +111,29 @@ def job_family_for(title):
     if any(k in t for k in ("safety", "hse", "medic", "nurse", "security")):
         return "hse"
     return "operations"
+
+
+def salary_for(title):
+    """Infer a realistic non-zero monthly basic salary from the job title (F8).
+
+    The ERP export carries no salary column, so this import previously wrote
+    0.000 for every employee. Map title keywords to a reasonable band so
+    payroll never computes an all-zero payslip.
+    """
+    t = (title or "").lower()
+    if any(k in t for k in ("manager", "director", "superintendent", "chief", "lead")):
+        return Decimal("8000.000")
+    if any(k in t for k in ("supervisor", "engineer", "tool pusher", "driller",
+                            "geologist", "consultant", "coordinator")):
+        return Decimal("6000.000")
+    if any(k in t for k in ("technician", "operator", "mechanic", "electrician",
+                            "welder", "rigger", "foreman", "accountant", "analyst",
+                            "medic", "nurse", "hse", "safety", "security")):
+        return Decimal("5000.000")
+    if any(k in t for k in ("driver", "helper", "roustabout", "floorman",
+                            "cleaner", "admin", "secretary", "reception", "clerk")):
+        return Decimal("4000.000")
+    return Decimal("4500.000")
 
 
 class Command(BaseCommand):
@@ -232,7 +255,7 @@ class Command(BaseCommand):
                         'name_en_family': family,
                         'org_unit': ou,
                         'position': pos,
-                        'basic_salary': Decimal('0.000'),
+                        'basic_salary': salary_for(e['job_title']),
                         'join_date': None,
                         'employment_type_code': 'full-time',
                         'contract_type_code': 'indeterminate',

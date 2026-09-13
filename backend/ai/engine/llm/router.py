@@ -270,6 +270,7 @@ async def route_chat(
         _own_session = get_session_factory()()
         db = _own_session
 
+    t0 = time.monotonic()
     try:
         spent = await _check_budget(instance_id, db)
         if spent is None:
@@ -288,7 +289,6 @@ async def route_chat(
                 "cost_usd": 0.0,
             }
 
-        t0 = time.monotonic()
         client = get_llm_client()
 
         kwargs: dict = {
@@ -326,9 +326,8 @@ async def route_chat(
         total_tokens = response.usage.total_tokens if response.usage else 0
         cost_usd = estimate_cost(model, input_tokens, output_tokens)
 
-        # Log to llm_call_logs
+        # Log to llm_call_logs (independent short-lived session)
         await _log_call(
-            db,
             instance_id=instance_id,
             conversation_id=conversation_id,
             task=task,
@@ -357,7 +356,19 @@ async def route_chat(
         return result
 
     except Exception as exc:
+        duration_ms = int((time.monotonic() - t0) * 1000)
         logger.error("LLM call failed (task=%s, model=%s): %s", task, model, exc)
+        await _log_call(
+            instance_id=instance_id,
+            conversation_id=conversation_id,
+            task=task,
+            model=model,
+            input_tokens=0,
+            output_tokens=0,
+            total_tokens=0,
+            duration_ms=duration_ms,
+            cost_usd=0.0,
+        )
         raise
     finally:
         if _own_session is not None:
@@ -367,7 +378,6 @@ async def route_chat(
 # ── Internal logging ─────────────────────────────────────────────────────────
 
 async def _log_call(
-    db,
     instance_id: str,
     conversation_id: str,
     task: str,
@@ -378,8 +388,14 @@ async def _log_call(
     duration_ms: int,
     cost_usd: float,
 ) -> None:
-    """Write a row to llm_call_logs."""
+    """Write a row to llm_call_logs in its OWN short-lived session.
+
+    Commits independently of the caller's transaction: a log write must never
+    ride along on (or roll back with) the caller's uncommitted work, and must
+    never trigger the caller's dirty-flush. Never raises.
+    """
     from uuid import uuid4
+    from ai.engine.core.database import get_session_factory
     from ai.engine.core.models import LLMCallLog
 
     log = LLMCallLog(
@@ -392,10 +408,10 @@ async def _log_call(
         duration_ms=duration_ms,
     )
     try:
-        # Use a savepoint so a log-write failure doesn't poison the outer transaction
-        async with db.begin_nested():
+        factory = get_session_factory()
+        async with factory() as db:
             db.add(log)
-            await db.flush()
+            await db.commit()
     except Exception as exc:
         logger.debug("Failed to write llm_call_logs: %s", exc)
 

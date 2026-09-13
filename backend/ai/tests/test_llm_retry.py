@@ -78,7 +78,7 @@ def test_route_chat_honors_model_override(monkeypatch):
     async def fake_check_budget(instance_id, db):
         return 0.0
 
-    async def fake_log_call(db, **kwargs):
+    async def fake_log_call(**kwargs):
         return None
 
     monkeypatch.setattr("ai.engine.llm.provider.get_llm_client", lambda: FakeClient())

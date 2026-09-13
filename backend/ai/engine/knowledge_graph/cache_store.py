@@ -22,10 +22,14 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from ai.models.knowledge_graph import KgCacheEntry
-from ai.store import first
+from ai.engine.knowledge_graph.models import KgCacheEntry
 
 logger = logging.getLogger("pulse.knowledge_graph.cache_store")
+
+
+def first(rows):
+    """Return the first row of a native ``select`` result, or ``None``."""
+    return rows[0] if rows else None
 
 
 # ── SQL table-name extractor ──────────────────────────────────────────────────

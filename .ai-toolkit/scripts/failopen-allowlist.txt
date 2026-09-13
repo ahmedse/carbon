@@ -1,0 +1,7 @@
+# Fail-open allowlist (P1-13)
+#
+# Format: relpath:lineno  # justification
+# Only add an entry when the detected pattern is CORRECT (not actually
+# fail-open) and you can justify why. Prefer fixing the code over allowlisting.
+
+backend/ai/adapter/carbon.py:530  # justified: user_memory_enabled() falls back to the model default (memory_enabled=True) when no AIUserProfile exists — reading the user's OWN memory tier, not an authority/permission grant.

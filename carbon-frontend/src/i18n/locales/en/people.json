@@ -356,6 +356,7 @@
   "rotationCreateTitle": "Add Rotation Schedule",
   "rotationDeleteConfirm": "Delete this rotation schedule?",
   "rotationDeleted": "Rotation schedule deleted",
+  "rotationDescription": "Configure recurring shift rotations and assign employees to rotation patterns.",
   "rotationEditTitle": "Edit Rotation Schedule",
   "rotationEmpty": "No rotation schedules",
   "rotationEmptyDesc": "No rotation schedules have been recorded yet.",

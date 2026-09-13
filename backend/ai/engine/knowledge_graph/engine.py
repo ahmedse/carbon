@@ -95,7 +95,7 @@ class ExecutionEngine:
             try:
                 from ai.engine.core.database import get_session_factory
                 from ai.engine.core.models import Instance
-                from ai.store import first
+                from ai.engine.core.query import first
                 _sf = get_session_factory()
                 async with _sf() as _s:
                     rows = await _s.select(Instance, {"id": self.instance_id})

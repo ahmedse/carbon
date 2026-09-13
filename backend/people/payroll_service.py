@@ -255,8 +255,14 @@ class PayrollRunService:
 
     @staticmethod
     def _resolve_rule(rules, category, formula_type=None):
-        """Return the active rule for a category (optionally a formula type)."""
-        qs = rules.filter(category=category).order_by("-effective_date", "-updated_at")
+        """Return the active AUTHORITATIVE rule for a category (optionally a formula type).
+
+        Regulated payroll figures (GOSI, loan schedule, net pay) may only be
+        computed from authoritative rules — the same contract the calculation
+        engine's ``_guard`` enforces. Non-authoritative demo/test rows are
+        skipped so they can never be selected for a live payroll run.
+        """
+        qs = rules.filter(category=category, is_authoritative=True).order_by("-effective_date", "-updated_at")
         if formula_type is None:
             return qs.first()
         for rule in qs:

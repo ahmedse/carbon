@@ -6,18 +6,41 @@ via asyncio.gather. Results are streamed to the widget as they complete.
 Wave 8A: Broadcasts tool.started/completed/failed events to the studio
 event stream so the ActivityFeed can show what the agent *did*.
 """
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 import time
+from collections.abc import Callable
 
 from ai.engine.cognition.turn.witnesses import ExecutionResult
 from ai.engine.core.resolution import payload_status
+from ai.engine.ports.evidence import EvidenceStore
 
 logger = logging.getLogger("pulse.cognition.turn.execute")
 
 # Lazy import — avoids circular dependency with notifier
 broadcast_run_event = None
+
+# Host-injected adapter provider (constructed once in host code). The engine
+# never imports ``ai.adapters``; callers wire it during bootstrap.
+_evidence_store_provider: Callable[[], EvidenceStore] | None = None
+
+
+def set_evidence_store_provider(provider: Callable[[], EvidenceStore]) -> None:
+    """Inject the host's ``EvidenceStore`` adapter at bootstrap."""
+    global _evidence_store_provider
+    _evidence_store_provider = provider
+
+
+def _resolve_evidence_store() -> EvidenceStore:
+    if _evidence_store_provider is None:
+        raise RuntimeError(
+            "EvidenceStore adapter not injected; call "
+            "ai.engine.cognition.turn.execute.set_evidence_store_provider() during bootstrap"
+        )
+    return _evidence_store_provider()
 
 # W6-C: output-type marker keys promoted from a dict tool result to the
 # wrapper's TOP level. plans_service._infer_output_type (frozen contract)
@@ -39,7 +62,7 @@ _OUTPUT_TYPE_MARKER_KEYS = frozenset({
 class ExecuteWitness:
     """Parallel tool dispatch + streaming. Executes tool calls from S3 draft."""
 
-    def __init__(self, executor=None, hook_pipeline=None, hook_ctx_defaults: dict | None = None, run_id: str = "", instance_id: str = "", knowledge_store=None):
+    def __init__(self, executor=None, hook_pipeline=None, hook_ctx_defaults: dict | None = None, run_id: str = "", instance_id: str = "", knowledge_store=None, evidence_store: EvidenceStore | None = None):
         self.executor = executor  # optional override for host API executor
         self.hook_pipeline = hook_pipeline  # P3.3: guardrail hook pipeline
         self.hook_ctx_defaults = hook_ctx_defaults or {}  # P3.3: default HookContext fields
@@ -49,6 +72,10 @@ class ExecuteWitness:
         # ``search_knowledge`` / ``get_entity_details`` ground answers in the
         # indexed process docs instead of returning "store not available".
         self.knowledge_store = knowledge_store
+        # P2-03: evidence store threaded via the port seam so the host may
+        # inject a mock/alternate adapter. When omitted, the host bootstrap
+        # provider is consulted (fail-closed if none is wired).
+        self.evidence_store = evidence_store
 
     async def execute(
         self,
@@ -207,8 +234,10 @@ class ExecuteWitness:
         ``no_match`` and confirmation-gated tool results are not evidence.
         """
         import json as _json
-        from asgiref.sync import sync_to_async
-        from ai.models.core import EvidenceRecord
+
+        evidence_store = self.evidence_store
+        if evidence_store is None:
+            evidence_store = _resolve_evidence_store()
 
         try:
             raw = tool_result.get("result")
@@ -248,7 +277,7 @@ class ExecuteWitness:
             host_user_id = ctx.get("host_user_id") or ""
             turn_id = ctx.get("run_id") or self.run_id or ""
 
-            await sync_to_async(EvidenceRecord.objects.create, thread_sensitive=True)(
+            await evidence_store.record(
                 instance_id=instance_id,
                 conversation_id=conversation_id,
                 turn_id=turn_id,

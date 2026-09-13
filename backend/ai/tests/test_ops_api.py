@@ -53,12 +53,12 @@ def test_modules_returns_twelve_types(auth_client):
 
 
 @pytest.mark.django_db
-def test_task_status_unknown_is_fail_visible(auth_client):
+def test_task_status_is_honest_not_supported(auth_client):
     resp = auth_client.get(f"{BASE}/tasks/nope/")
     assert resp.status_code == 200  # NOT 404
     body = resp.json()
-    assert body["status"] == "pulse_unavailable"
-    assert body["error"]["code"] == "not_found"
+    assert body["status"] == "not_supported"
+    assert body["error"]["code"] == "not_supported"
 
 
 @pytest.mark.django_db

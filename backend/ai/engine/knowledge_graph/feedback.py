@@ -22,9 +22,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from ai.engine.core.clock import utcnow
-from ai.store import first
 
 logger = logging.getLogger("pulse.knowledge_graph.feedback")
+
+
+def first(rows):
+    """Return the first row of a native ``select`` result, or ``None``."""
+    return rows[0] if rows else None
 
 
 # ── Quality score map ─────────────────────────────────────────────────────────
@@ -62,7 +66,7 @@ async def detect_rephrase(
     with the current one, and it arrived within the window.
     """
     from ai.engine.core.config import get_settings
-    from ai.models.core import Message
+    from ai.engine.core.models import Message
 
     window_sec = get_settings().KG_FEEDBACK_REPHRASE_WINDOW_SEC
 
@@ -99,7 +103,7 @@ async def detect_abandonment(
     True if the conversation has exactly 1 user message and 1 assistant
     message, and the assistant's message is the last one.
     """
-    from ai.models.core import Message
+    from ai.engine.core.models import Message
 
     messages = await db.select(Message, ("conversation_id", conversation_id))
     messages.sort(key=lambda m: m.timestamp or datetime.min)
@@ -154,7 +158,7 @@ async def record_feedback(
     Also creates a candidate golden pair if the signal is a correction
     with corrected_sql provided.
     """
-    from ai.models.knowledge_graph import KgFeedbackRecord, KgGoldenPair
+    from ai.engine.knowledge_graph.models import KgFeedbackRecord, KgGoldenPair
 
     score = quality_score_for(signal_type)
 
@@ -231,7 +235,7 @@ class FeedbackLearner:
         properties.synonyms list.
         Returns True if the node was found and updated.
         """
-        from ai.models.knowledge_graph import KnowledgeNode
+        from ai.engine.knowledge_graph.models import KnowledgeNode
 
         nodes = await db.select(
             KnowledgeNode,
@@ -277,7 +281,7 @@ class FeedbackLearner:
         """
         Mark a KgGoldenPair as approved (making it available for few-shot).
         """
-        from ai.models.knowledge_graph import KgGoldenPair
+        from ai.engine.knowledge_graph.models import KgGoldenPair
 
         pair = first(
             await db.select(
@@ -304,7 +308,7 @@ class FeedbackLearner:
         """
         Fetch the most recent approved golden pairs for prompt injection.
         """
-        from ai.models.knowledge_graph import KgGoldenPair
+        from ai.engine.knowledge_graph.models import KgGoldenPair
 
         pairs = await db.select(
             KgGoldenPair,
@@ -329,7 +333,7 @@ class FeedbackLearner:
         Returns a list of {"signal_type": ..., "avg_score": ..., "count": ...}
         sorted by avg_score ascending (weakest first).
         """
-        from ai.models.knowledge_graph import KgFeedbackRecord
+        from ai.engine.knowledge_graph.models import KgFeedbackRecord
 
         cutoff = utcnow() - timedelta(days=lookback_days)
 
@@ -365,7 +369,7 @@ class FeedbackLearner:
         Returns the score (0.0–1.0), or the neutral default if no data.
         """
         from ai.engine.core.config import get_settings
-        from ai.models.knowledge_graph import KgFeedbackRecord, KgQualityScore
+        from ai.engine.knowledge_graph.models import KgFeedbackRecord, KgQualityScore
 
         neutral = get_settings().KG_FEEDBACK_QUALITY_NEUTRAL
 
@@ -435,7 +439,7 @@ class ReviewQueue:
         item with the same title + category.
         Returns the item ID.
         """
-        from ai.models.knowledge_graph import KgReviewItem
+        from ai.engine.knowledge_graph.models import KgReviewItem
 
         # Check for existing pending item with same title/category
         existing = first(
@@ -487,7 +491,7 @@ class ReviewQueue:
         """
         List pending review items sorted by frequency (highest first).
         """
-        from ai.models.knowledge_graph import KgReviewItem
+        from ai.engine.knowledge_graph.models import KgReviewItem
 
         items = await db.select(
             KgReviewItem,
@@ -529,7 +533,7 @@ class ReviewQueue:
         Mark a review item as approved or rejected.
         Returns True if the item was found and updated.
         """
-        from ai.models.knowledge_graph import KgReviewItem
+        from ai.engine.knowledge_graph.models import KgReviewItem
 
         item = first(
             await db.select(
@@ -553,7 +557,7 @@ class ReviewQueue:
 
     async def pending_count(self, db) -> int:
         """Count pending review items for this instance."""
-        from ai.models.knowledge_graph import KgReviewItem
+        from ai.engine.knowledge_graph.models import KgReviewItem
 
         stats = await db.aggregate(
             KgReviewItem,
@@ -595,7 +599,7 @@ class DriftDetector:
             }
         """
         from ai.engine.core.config import get_settings
-        from ai.models.knowledge_graph import KgQualityScore
+        from ai.engine.knowledge_graph.models import KgQualityScore
 
         settings = get_settings()
         threshold = settings.KG_FEEDBACK_DRIFT_THRESHOLD
@@ -640,7 +644,7 @@ class DriftDetector:
         Return daily quality scores for the last *days* days.
         Used for the quality score trend chart.
         """
-        from ai.models.knowledge_graph import KgQualityScore
+        from ai.engine.knowledge_graph.models import KgQualityScore
 
         cutoff = (utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
 

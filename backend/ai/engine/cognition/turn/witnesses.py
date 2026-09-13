@@ -113,3 +113,4 @@ class TurnLedger:
     # Pulse v2 Phase 7 — post-result verification outcome.
     verification_passed: bool | None = None
     verification_unsupported: list = field(default_factory=list)
+    verification_error: str = ""

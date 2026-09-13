@@ -20,7 +20,7 @@ from dataclasses import dataclass
 
 from ai.engine.core.config import get_settings
 from ai.engine.core.models import Run
-from ai.store import first
+from ai.engine.core.query import first
 
 logger = logging.getLogger("pulse.agent.budget")
 

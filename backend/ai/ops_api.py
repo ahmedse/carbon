@@ -20,6 +20,7 @@ from rest_framework.views import APIView
 from accounts.ai_scoping import scope_ai_queryset
 from accounts.permissions import AdminOrSuperuserOnly
 from ai.engine_runtime import get_task, list_modules
+from ai.health import capability_health
 from ai.intelligence import CarbonIntelligence
 
 logger = logging.getLogger("carbon.ai.ops_api")
@@ -32,9 +33,14 @@ class PulseHealthView(APIView):
     required_capability = "ai:view_console"
 
     def get(self, request):
+        # Capability health (P1-14) is independent of the engine's own
+        # health check and never raises, so it is surfaced on both paths.
+        capabilities = capability_health()
         try:
             status = CarbonIntelligence().health_check()
-            return Response(asdict(status))
+            payload = asdict(status)
+            payload["capabilities"] = capabilities
+            return Response(payload)
         except Exception as exc:  # noqa: BLE001 — never 500 the console
             logger.exception("pulse health check failed")
             return Response(
@@ -44,6 +50,7 @@ class PulseHealthView(APIView):
                     "healthy": False,
                     "modules_available": [],
                     "error": str(exc),
+                    "capabilities": capabilities,
                 }
             )
 
@@ -63,9 +70,9 @@ class PulseModulesView(APIView):
 class PulseTaskStatusView(APIView):
     """GET /tasks/{task_id}/ — in-process task status (fail-visible).
 
-    ``engine_runtime.get_task`` never raises: unknown ids return a
-    fail-visible ``{status: pulse_unavailable, error: {code: not_found}}``
-    envelope, which we pass through unchanged.
+    ``engine_runtime.get_task`` never raises: until P7-08 wires a real async
+    task registry it returns an honest ``{status: not_supported, error:
+    {code: not_supported}}`` envelope, which we pass through unchanged.
     """
 
     permission_classes = [AdminOrSuperuserOnly]

@@ -38,7 +38,6 @@ import ForumIcon from '@mui/icons-material/Forum';
 import PsychologyIcon from '@mui/icons-material/Psychology';
 import MemoryIcon from '@mui/icons-material/Memory';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
-import HubIcon from '@mui/icons-material/Hub';
 import HandymanIcon from '@mui/icons-material/Handyman';
 import ExtensionIcon from '@mui/icons-material/Extension';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
@@ -189,7 +188,6 @@ function getSidebarItems(studioId, helpApps = []) {
         { label: 'Engine Settings', path: '/admin/ai/engine-settings', icon: TuneIcon, role: 'admin' },
         { type: 'group', label: 'Agents & Tooling' },
         { label: 'Agents', path: '/admin/ai/agents', icon: SmartToyIcon, role: 'admin' },
-        { label: 'MCP Servers', path: '/admin/ai/mcp', icon: HubIcon, role: 'admin' },
         { label: 'Tools', path: '/admin/ai/tools', icon: HandymanIcon, role: 'admin' },
         { label: 'Skills Catalog', path: '/admin/ai/skills', icon: ExtensionIcon, role: 'admin' },
         { label: 'Topology', path: '/admin/ai/topology', icon: SchemaIcon, role: 'admin' },
@@ -374,6 +372,12 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
   // If in admin studios, gate with can() — only platform admins see them
   if ((activeStudio === 'admin' || activeStudio === 'ai-admin') && !can(user, 'access_route', '/admin/users', authCtx)) {
     items = []; // Hide all admin items for non-admin users
+  }
+
+  // Brand isolation: hide carbon sidebar items entirely when the carbon app is
+  // disabled for this instance (FAIL-CLOSED — mirrors the studio filter in useShellState).
+  if (activeStudio === 'carbon' && !isAppEnabled('carbon')) {
+    items = [];
   }
 
   // Filter items by CBAC: each menu item gated by can(user, 'view_menu', label, authCtx)

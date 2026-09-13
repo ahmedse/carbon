@@ -1,8 +1,12 @@
 """
 Carbon AI Intelligence — Security Guards
 
-AI CONTRACT §9: Every AI call passes through guard chain BEFORE reaching provider.
-Five mandatory guards execute in order. Any guard failure = call rejected.
+AI CONTRACT §9: Every AI call passes through the guard chain BEFORE reaching
+provider. Three validation guards execute in order (ScopeGuard, AccessGuard,
+DataIsolationGuard); any failure = call rejected. AuditTrail logs every call
+(invoked by the caller after the provider returns), and MutationGuard only
+redacts mutation keywords from read-only responses (mutation gating moves to
+the P2-06 command boundary).
 
 Architecture: CarbonIntelligence → Guard Chain → AIProvider
                ↑                                    ↑
@@ -18,6 +22,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from .audit_service import AuditService
 from .protocol import Scope
 
 logger = logging.getLogger("carbon.ai.guards")
@@ -193,40 +198,25 @@ class DataIsolationGuard:
         return result
 
 
-# ── Guard 4: MutationGuard ──────────────────────────────────────────────
+# ── Response sanitization: MutationGuard ────────────────────────────────
 # AI CONTRACT §4: AI NEVER auto-mutates. Read-only scope = no mutation suggestions.
 
 class MutationGuard:
-    """Prevents AI from suggesting or performing data mutations.
+    """Redacts mutation suggestions from read-only AI responses.
 
     §4-NO-AUTO-MUTATION Rule 1: AIProvider responses are advisory only.
     §4-NO-AUTO-MUTATION Rule 2: Read-only scope blocks all mutation suggestions.
     §4-NO-AUTO-MUTATION Rule 3: Fix suggestions require explicit human confirmation.
-    """
 
-    MUTATION_OPERATIONS = {
-        "suggest_fix",
-        "auto_correct",
-        "apply_fix",
-        "bulk_update",
-        "delete_records",
-        "anonymize_data",
-    }
+    Note: the ``validate`` gate (blocking mutation *operations*) is retired —
+    mutation blocking is enforced by the P2-06 command boundary, not here.
+    This class only redacts mutation keywords from read-only responses.
+    """
 
     MUTATION_KEYWORDS_IN_RESPONSE = [
         "UPDATE ", "DELETE ", "INSERT ", "DROP ", "ALTER ",
         "TRUNCATE ", "CREATE TABLE", "auto-fix", "auto_correct",
     ]
-
-    @staticmethod
-    def validate(scope: Scope, operation: str) -> None:
-        """Reject mutation operations when scope is read-only."""
-        if scope.is_read_only and operation in MutationGuard.MUTATION_OPERATIONS:
-            raise PermissionError(
-                f"AI call rejected by MutationGuard: operation='{operation}' "
-                f"is a mutation but scope is read-only. "
-                f"See ai-contract.md §4."
-            )
 
     @staticmethod
     def sanitize_response(
@@ -294,31 +284,35 @@ class AuditTrail:
         error_message: str | None = None,
         request_fingerprint: str | None = None,
     ) -> None:
-        """Write audit record. Uses structured logging for log aggregation."""
-        import json
-        from datetime import datetime, timezone
+        """Write audit record via the single ``AuditService.log`` write path.
 
-        record = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "user_identifier": scope.user_identifier,
-            "app_identifier": scope.app_identifier or "platform",
-            "operation": operation,
-            "provider_name": provider_name,
-            "latency_ms": latency_ms,
-            "status": status,
-            "error_message": error_message,
-            "scope_snapshot": scope.to_dict(),
-            "request_fingerprint": request_fingerprint,
-        }
-
-        logger.info("AI_AUDIT %s", json.dumps(record, default=str))
+        Thin delegating wrapper (P2-09): maps the guard-chain fields onto
+        :meth:`AuditService.log`, which persists the ``AuditLog`` row and emits
+        the ``AI_AUDIT`` structured log line. No separate ``logger.info`` here.
+        """
+        AuditService.log(
+            action=operation,
+            actor=scope.user_identifier,
+            actor_type="user",
+            detail={
+                "provider_name": provider_name,
+                "latency_ms": latency_ms,
+                "status": status,
+                "error_message": error_message,
+                "scope_snapshot": scope.to_dict(),
+                "request_fingerprint": request_fingerprint,
+            },
+            instance_id=scope.app_identifier,
+            host_user_id=scope.user_identifier,
+            visibility="private",
+        )
 
 
 # ── Guard Chain Runner ───────────────────────────────────────────────────
-# AI CONTRACT §9: All 5 guards execute in order. Any failure = call rejected.
+# AI CONTRACT §9: Validation guards execute in order. Any failure = call rejected.
 
 class GuardChain:
-    """Runs all 5 guards in the mandatory order.
+    """Runs the validation guards in the mandatory order.
 
     Usage:
         chain = GuardChain()
@@ -343,11 +337,11 @@ class GuardChain:
         requested_modules: list[str] | None = None,
         table_names: list[str] | None = None,
     ) -> Scope:
-        """Execute all 5 guards in order. Returns the validated Scope.
+        """Execute the three validation guards in order. Returns the validated Scope.
 
         Raises:
             ValueError: ScopeGuard failure (missing/invalid scope)
-            PermissionError: AccessGuard, DataIsolationGuard, or MutationGuard failure
+            PermissionError: AccessGuard or DataIsolationGuard failure
         """
         # Guard 1: Scope must exist and have user_identifier
         self.scope_guard.validate(scope, operation)
@@ -361,12 +355,9 @@ class GuardChain:
         # Guard 3: Data isolation between domain apps
         self.isolation_guard.validate(scope, operation, table_names)
 
-        # Guard 4: No auto-mutation
-        self.mutation_guard.validate(scope, operation)
-
-        # Guard 5: Audit trail is NOT run here — the caller (CarbonIntelligence)
-        #           logs after the provider call completes so latency_ms is known.
-        #           The AuditTrail.log() staticmethod is called explicitly.
+        # Audit trail is NOT run here — the caller (CarbonIntelligence) logs
+        # after the provider call completes so latency_ms is known. The
+        # AuditTrail.log() staticmethod is called explicitly.
 
         return scope
 

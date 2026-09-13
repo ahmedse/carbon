@@ -20,6 +20,14 @@ export function fetchLeaveBalance(token) {
 }
 
 /**
+ * Current employee committed payslips (GET people/me/payslips/).
+ * Returns an array of payslip-line objects, or `[]` when none exist.
+ */
+export function fetchMyPayslips(token) {
+  return apiFetch(`${PROFILE_ROOT}payslips/`, { token });
+}
+
+/**
  * Count of inbox items requiring action (GET correspondence/inbox/).
  * Robust to both a plain JSON array and a paginated { count, ... } envelope.
  */

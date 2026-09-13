@@ -1,5 +1,5 @@
 // src/__tests__/AIAgentPanel.test.jsx
-// Sprint W2-A — Agent surface: 4-tab panel (Agents/MCP/Tools/Logs) + the
+// Sprint W2-A — Agent surface: 3-tab panel (Agents/Tools/Logs) + the
 // clustered AIActionRunner timeline. Covers: RULE_17 tab persistence, agent
 // run launch, tool args form + run, verbosity default expansion, the
 // confirm gate for staged mutations (RULE_21), the stop path ("Stopped by
@@ -76,12 +76,10 @@ const TOOLS = [
   },
 ];
 
-const MCP_SERVERS = [{ name: 'brave', command: 'npx', args: ['-y', '@modelcontextprotocol/server-brave'] }];
-
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
-  getSettings.mockResolvedValue({ agents: AGENTS, mcp_servers: MCP_SERVERS, tools_catalog: TOOLS });
+  getSettings.mockResolvedValue({ agents: AGENTS, tools_catalog: TOOLS });
   getPulseData.mockImplementation((token, key) =>
     Promise.resolve(
       key === 'tools'
@@ -97,12 +95,11 @@ beforeEach(() => {
 });
 
 // ── AIAgentPanel: tabs, persistence, launch, logs ─────────────────────────
-describe('AIAgentPanel — four internal tabs (RULE_17)', () => {
-  it('renders Agents/MCP/Tools/Logs tabs and defaults to Agents', async () => {
+describe('AIAgentPanel — three internal tabs (RULE_17)', () => {
+  it('renders Agents/Tools/Logs tabs and defaults to Agents', async () => {
     render(<AIAgentPanel conversationId="conv-1" />);
 
     expect(screen.getByRole('tab', { name: 'Agents' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'MCP' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Tools' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Logs' })).toBeInTheDocument();
 
@@ -122,12 +119,11 @@ describe('AIAgentPanel — four internal tabs (RULE_17)', () => {
     expect(localStorage.getItem('carbon-ai-agent-tab')).toBe('logs');
   });
 
-  it('renders a fresh Agents tab when the stored tab is restored', async () => {
-    localStorage.setItem('carbon-ai-agent-tab', 'mcp');
+  it('renders the stored tab when restored (RULE_17)', async () => {
+    localStorage.setItem('carbon-ai-agent-tab', 'tools');
     render(<AIAgentPanel conversationId="conv-1" />);
 
-    expect(await screen.findByText('MCP servers')).toBeInTheDocument();
-    expect(screen.getByText('brave')).toBeInTheDocument();
+    expect(await screen.findByText('create_dq_rule')).toBeInTheDocument();
     expect(screen.queryByText('data_sweeper')).not.toBeInTheDocument();
   });
 });

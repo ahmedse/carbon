@@ -8,10 +8,11 @@ swappable, async ``Store`` abstraction selected via
 Backends
 --------
 ``django``
-    Django ORM via ``sync_to_async``. Queries are CBAC-partitioned on
-    ``app_identifier`` / ``org_unit_id`` / ``host_user_id`` / ``visibility``
-    (mirroring the host tenant filter semantics: global/shared/private).
-    This is the durable backend production must run.
+    Django ORM via ``sync_to_async``. Durable rows carry the CBAC partition
+    columns ``app_identifier`` / ``org_unit_id`` / ``host_user_id`` /
+    ``visibility``; the ``instance_id`` + visibility triplet is enforced by
+    ``scope_q()`` at the query boundary (global/shared/private). This is the
+    durable backend production must run.
 
 ``inmemory``
     Dict-backed, no external DB. Tests only — an ephemeral store silently
@@ -73,10 +74,12 @@ def resolve_model(model: Any) -> Any:
     return resolved if resolved is not None else model
 
 
-def scope_q(model: Any, instance_id: str, host_user_id: str | None) -> Any:
+def _tenancy_q(instance_id: str, host_user_id: str | None) -> Any:
     """Build a Django ``Q`` for the engine's tenancy triplet.
 
-    Mirrors ``ai.engine.core.models._apply_tenancy_filter`` semantics exactly:
+    Shared by ``scope_q`` (host adapters) and ``_coerce_filter`` (which
+    expands an engine-owned ``TenancyScope``). Mirrors the engine-layer
+    tenancy filter semantics (``ai.engine.core.models``) exactly:
 
       - ``visibility='global'``  → visible regardless of user
       - ``visibility='shared'``  → visible to all users of the instance
@@ -97,10 +100,23 @@ def scope_q(model: Any, instance_id: str, host_user_id: str | None) -> Any:
     return Q(instance_id=instance_id) & vis
 
 
+def scope_q(model: Any, instance_id: str, host_user_id: str | None) -> Any:
+    """Build a Django ``Q`` for the engine's tenancy triplet.
+
+    ``model`` is retained for call-site compatibility only; it is unused.
+    """
+    return _tenancy_q(instance_id, host_user_id)
+
+
 def _coerce_filter(f: Any) -> Any:
     """Normalize a single filter into a Django ``Q`` (or pass-through)."""
     from django.db.models import Q
 
+    # Engine-owned tenancy filter (host→engine direction is allowed).
+    from ai.engine.core.query import TenancyScope
+
+    if isinstance(f, TenancyScope):
+        return _tenancy_q(f.instance_id, f.host_user_id)
     if isinstance(f, Q):
         return f
     if isinstance(f, dict):
@@ -1024,7 +1040,6 @@ class _DjangoSession(Session):
 
         def _select() -> list[Any]:
             qs = resolved.objects.all()
-            qs = self._store._apply_tenancy_filter(qs)
             if coerced:
                 qs = qs.filter(*coerced)
             return list(qs)
@@ -1052,6 +1067,24 @@ class _DjangoSession(Session):
 
         self._tracked.pop(id(obj), None)
         self._pending = [o for o in self._pending if o[0] is not obj]
+
+        # Evict any *other* tracked instance of the same row, not just the
+        # exact Python object being deleted.  ``commit()`` re-saves every
+        # tracked instance, and Django's ``save()`` falls back to INSERT when
+        # the UPDATE affects zero rows — so a stale copy fetched earlier (e.g.
+        # by ``query_edges`` before ``delete_edge``) would resurrect the row.
+        pk = getattr(obj, "pk", None)
+        if pk is not None:
+            self._tracked = {
+                key: value
+                for key, value in self._tracked.items()
+                if getattr(value, "pk", None) != pk
+            }
+            self._pending = [
+                (engine_obj, dj_obj)
+                for engine_obj, dj_obj in self._pending
+                if getattr(dj_obj, "pk", None) != pk
+            ]
 
         await sync_to_async(obj.delete, thread_sensitive=True)()
 
@@ -1094,7 +1127,6 @@ class _DjangoSession(Session):
 
         def _aggregate() -> dict[str, Any]:
             qs = resolved.objects.all()
-            qs = self._store._apply_tenancy_filter(qs)
             if coerced:
                 qs = qs.filter(*coerced)
             agg = {alias: _FUNCS[func_name](field) for alias, (func_name, field) in spec.items()}
@@ -1145,11 +1177,11 @@ class _DjangoSession(Session):
         if len(spec["descriptions"]) == 2 and spec["joins"]:
             join = spec["joins"][0]
             join_model = spec["table_map"].get(join["target_table"])
-            from_qs = self._store._apply_tenancy_filter(model.objects.all())
+            from_qs = model.objects.all()
             if from_filters:
                 from_qs = from_qs.filter(*from_filters)
             from_ids = list(from_qs.values_list(join["from_on_field"], flat=True))
-            join_qs = self._store._apply_tenancy_filter(join_model.objects.all())
+            join_qs = join_model.objects.all()
             join_qs = join_qs.filter(
                 **{f"{join['join_on_field']}__in": from_ids}
             )
@@ -1184,7 +1216,7 @@ class _DjangoSession(Session):
                 rows.append(_ExecRow(spec["cols"], [agent, handoff]))
             return _ExecResult(rows, rowcount=len(rows))
 
-        qs = self._store._apply_tenancy_filter(model.objects.all())
+        qs = model.objects.all()
         if from_filters:
             qs = qs.filter(*from_filters)
 
@@ -1194,7 +1226,7 @@ class _DjangoSession(Session):
         if spec["joins"]:
             join = spec["joins"][0]
             join_model = spec["table_map"].get(join["target_table"])
-            join_qs = self._store._apply_tenancy_filter(join_model.objects.all())
+            join_qs = join_model.objects.all()
             join_filters = spec["filters_by_table"].get(join["target_table"], [])
             if join_filters:
                 join_qs = join_qs.filter(*join_filters)
@@ -1268,7 +1300,7 @@ class _DjangoSession(Session):
 
     def _run_django_update(self, spec: dict[str, Any]) -> _ExecResult:
         """Translate a normalized update spec into ``QuerySet.update``."""
-        qs = self._store._apply_tenancy_filter(spec["model"].objects.all())
+        qs = spec["model"].objects.all()
         if spec["filters"]:
             qs = qs.filter(*spec["filters"])
         count = qs.update(**spec["values"])
@@ -1327,11 +1359,16 @@ class _DjangoSession(Session):
 
 
 class DjangoStore(Store):
-    """Django-ORM Store. CBAC-partitioned on the AppScopeMixin columns.
+    """Django-ORM Store.
 
     ``name`` maps to a Django database connection alias (``default`` is used
     when ``None``).  The engine models all live in the ``ai`` app, so no
     separate database is required — the seam is the ORM, not a new DB.
+
+    Tenancy is enforced at the query boundary, not inside the store: callers
+    inject ``scope_q(model, instance_id, host_user_id)`` (the instance_id +
+    visibility triplet) into the ``select``/``execute`` filters, and the
+    store applies those filters verbatim without duplicating them.
     """
 
     def get_engine(self, name: str | None = None) -> str:
@@ -1351,22 +1388,6 @@ class DjangoStore(Store):
 
     def list_initialized_instances(self) -> list[str]:
         return []
-
-    @staticmethod
-    def _apply_tenancy_filter(qs: Any) -> Any:
-        """Inject CBAC partition filters into a Django queryset.
-
-        Engine data is partitioned by ``instance_id`` (always present in
-        every WHERE clause the engine passes to ``execute``/``select``).
-        The ``app_identifier`` column on AppScopeMixin is a host-layer
-        visibility tag written at creation time; filtering by it here would
-        hide rows created when a different brand's DEFAULT_APP_IDENTIFIER was
-        active (e.g. Agent rows seeded as "carbon" become invisible when
-        DEFAULT_APP_IDENTIFIER="people" under the nibras brand).
-        Host RBAC and ``scope_q()`` handle the host-layer visibility;
-        the store layer must not duplicate that filter.
-        """
-        return qs
 
 
 # ── Store selection ──────────────────────────────────────────────────────

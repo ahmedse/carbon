@@ -18,7 +18,7 @@ CONFIG="$TOOLKIT_DIR/project.config.md"
 REG_DIR="$TOOLKIT_DIR/registry"
 mkdir -p "$REG_DIR"
 
-cfg() { grep "^$1=" "$CONFIG" 2>/dev/null | head -1 | cut -d= -f2- | sed 's/ *#.*//' | xargs || true; }
+cfg() { grep "^$1=" "$CONFIG" 2>/dev/null | head -1 | cut -d= -f2- | sed 's/ *#.*//' | tr -d '\r' | xargs || true; }
 
 BACKEND_DIR="$ROOT/$(cfg BACKEND_DIR)"
 FRONTEND_DIR="$ROOT/$(cfg FRONTEND_DIR)"
@@ -40,6 +40,16 @@ find_src() {
   eval "find \"$base\" \\( $prune -false \\) -prune -o \\( $* \\) -print" 2>/dev/null || true
 }
 
+# P0-04 (fail-closed): a generator that yields no data must fail the run
+# instead of silently writing an empty registry section.
+# Usage: require_nonempty "<label>" "<captured-output>"
+require_nonempty() {
+  if [ -z "$2" ]; then
+    echo "  ✗ ${1}: scan produced empty output — aborting registry build (fail-closed)" >&2
+    exit 1
+  fi
+}
+
 # ── API ENDPOINTS ─────────────────────────────────────────────────────────────
 scan_api() {
   echo "# Registry: API Endpoints  (auto-generated $STAMP — DO NOT EDIT)" > "$REG_DIR/api.md"
@@ -47,16 +57,21 @@ scan_api() {
   echo "> Before adding an endpoint, search here. Reuse or extend — never duplicate a route." >> "$REG_DIR/api.md"
   echo "" >> "$REG_DIR/api.md"
   if [ -d "$BACKEND_DIR" ]; then
+    local _out
     echo "## DRF Routers & url paths" >> "$REG_DIR/api.md"
     echo '```' >> "$REG_DIR/api.md"
-    grep -rn $GREP_EX "router.register\|path(\|re_path(" "$BACKEND_DIR" --include="urls.py" 2>/dev/null \
-      | sed "s|$ROOT/||" | head -300 >> "$REG_DIR/api.md" || true
+    _out="$(grep -rn $GREP_EX "router.register\|path(\|re_path(" "$BACKEND_DIR" --include="urls.py" 2>/dev/null \
+      | sed "s|$ROOT/||" | head -300 || true)"
+    require_nonempty "api routes" "$_out"
+    printf '%s\n' "$_out" >> "$REG_DIR/api.md"
     echo '```' >> "$REG_DIR/api.md"
     echo "" >> "$REG_DIR/api.md"
     echo "## @action custom endpoints (ViewSet extra routes)" >> "$REG_DIR/api.md"
     echo '```' >> "$REG_DIR/api.md"
-    grep -rn $GREP_EX "@action" "$BACKEND_DIR" --include="*.py" -A1 2>/dev/null \
-      | grep -E "@action|def " | sed "s|$ROOT/||" | head -200 >> "$REG_DIR/api.md" || true
+    _out="$(grep -rn $GREP_EX "@action" "$BACKEND_DIR" --include="*.py" -A1 2>/dev/null \
+      | grep -E "@action|def " | sed "s|$ROOT/||" | head -200 || true)"
+    require_nonempty "api @actions" "$_out"
+    printf '%s\n' "$_out" >> "$REG_DIR/api.md"
     echo '```' >> "$REG_DIR/api.md"
   fi
   echo "  ✓ registry/api.md"
@@ -69,16 +84,21 @@ scan_services() {
   echo "> Business logic lives in services. Before writing a new one, check this list — extend, don't duplicate." >> "$REG_DIR/services.md"
   echo "" >> "$REG_DIR/services.md"
   if [ -d "$BACKEND_DIR" ]; then
+    local _out
     echo "## Service classes" >> "$REG_DIR/services.md"
     echo '```' >> "$REG_DIR/services.md"
-    grep -rn $GREP_EX "^class .*Service" "$BACKEND_DIR" --include="*.py" 2>/dev/null \
-      | sed "s|$ROOT/||" | sort >> "$REG_DIR/services.md" || true
+    _out="$(grep -rn $GREP_EX "^class .*Service" "$BACKEND_DIR" --include="*.py" 2>/dev/null \
+      | sed "s|$ROOT/||" | sort || true)"
+    require_nonempty "service classes" "$_out"
+    printf '%s\n' "$_out" >> "$REG_DIR/services.md"
     echo '```' >> "$REG_DIR/services.md"
     echo "" >> "$REG_DIR/services.md"
     echo "## Management commands" >> "$REG_DIR/services.md"
     echo '```' >> "$REG_DIR/services.md"
-    find_src "$BACKEND_DIR" "-path '*/management/commands/*.py' ! -name '__init__.py'" \
-      | sed "s|$ROOT/||" | sort >> "$REG_DIR/services.md" || true
+    _out="$(find_src "$BACKEND_DIR" "-path '*/management/commands/*.py' ! -name '__init__.py'" \
+      | sed "s|$ROOT/||" | sort || true)"
+    require_nonempty "management commands" "$_out"
+    printf '%s\n' "$_out" >> "$REG_DIR/services.md"
     echo '```' >> "$REG_DIR/services.md"
   fi
   echo "  ✓ registry/services.md"
@@ -91,9 +111,12 @@ scan_models() {
   echo "> The data schema. Before adding a model or field, check here. Reuse existing models where possible." >> "$REG_DIR/models.md"
   echo "" >> "$REG_DIR/models.md"
   if [ -d "$BACKEND_DIR" ]; then
+    local _out
     echo '```' >> "$REG_DIR/models.md"
-    grep -rn $GREP_EX "^class .*(models.Model)\|^class .*(TimeStampedModel)\|^class .*(Abstract"  "$BACKEND_DIR" --include="*.py" 2>/dev/null \
-      | sed "s|$ROOT/||" | sort >> "$REG_DIR/models.md" || true
+    _out="$(grep -rn $GREP_EX "^class .*(models.Model)\|^class .*(TimeStampedModel)\|^class .*(Abstract"  "$BACKEND_DIR" --include="*.py" 2>/dev/null \
+      | sed "s|$ROOT/||" | sort || true)"
+    require_nonempty "data models" "$_out"
+    printf '%s\n' "$_out" >> "$REG_DIR/models.md"
     echo '```' >> "$REG_DIR/models.md"
   fi
   echo "  ✓ registry/models.md"
@@ -106,22 +129,29 @@ scan_components() {
   echo "> REUSE BEFORE CREATE. Before building any component, search here first." >> "$REG_DIR/components.md"
   echo "" >> "$REG_DIR/components.md"
   if [ -d "$FRONTEND_DIR/src" ]; then
+    local _out
     echo "## Components (src/components)" >> "$REG_DIR/components.md"
     echo '```' >> "$REG_DIR/components.md"
-    find_src "$FRONTEND_DIR/src/components" "-name '*.jsx' -o -name '*.tsx'" \
-      | sed "s|$ROOT/||" | sort >> "$REG_DIR/components.md" || true
+    _out="$(find_src "$FRONTEND_DIR/src/components" "-name '*.jsx' -o -name '*.tsx'" \
+      | sed "s|$ROOT/||" | sort || true)"
+    require_nonempty "frontend components" "$_out"
+    printf '%s\n' "$_out" >> "$REG_DIR/components.md"
     echo '```' >> "$REG_DIR/components.md"
     echo "" >> "$REG_DIR/components.md"
     echo "## Hooks (src/hooks)" >> "$REG_DIR/components.md"
     echo '```' >> "$REG_DIR/components.md"
-    find_src "$FRONTEND_DIR/src/hooks" "-name '*.js' -o -name '*.ts'" \
-      | sed "s|$ROOT/||" | sort >> "$REG_DIR/components.md" || true
+    _out="$(find_src "$FRONTEND_DIR/src/hooks" "-name '*.js' -o -name '*.ts'" \
+      | sed "s|$ROOT/||" | sort || true)"
+    require_nonempty "frontend hooks" "$_out"
+    printf '%s\n' "$_out" >> "$REG_DIR/components.md"
     echo '```' >> "$REG_DIR/components.md"
     echo "" >> "$REG_DIR/components.md"
     echo "## API modules (src/api)" >> "$REG_DIR/components.md"
     echo '```' >> "$REG_DIR/components.md"
-    find_src "$FRONTEND_DIR/src/api" "-name '*.js' -o -name '*.ts'" \
-      | sed "s|$ROOT/||" | sort >> "$REG_DIR/components.md" || true
+    _out="$(find_src "$FRONTEND_DIR/src/api" "-name '*.js' -o -name '*.ts'" \
+      | sed "s|$ROOT/||" | sort || true)"
+    require_nonempty "frontend api modules" "$_out"
+    printf '%s\n' "$_out" >> "$REG_DIR/components.md"
     echo '```' >> "$REG_DIR/components.md"
   fi
   echo "  ✓ registry/components.md"
@@ -134,18 +164,24 @@ scan_config() {
   echo "> Every env var the app reads. NEVER hardcode these — always read from env with a safe default." >> "$REG_DIR/config-keys.md"
   echo "" >> "$REG_DIR/config-keys.md"
   if [ -d "$BACKEND_DIR" ]; then
+    local _out
     echo "## Backend env vars (os.getenv / os.environ)" >> "$REG_DIR/config-keys.md"
     echo '```' >> "$REG_DIR/config-keys.md"
-    grep -rhoE $GREP_EX "os\.(getenv|environ(\.get)?)\(?\[?[\"'][A-Z_]+[\"']" "$BACKEND_DIR" --include="*.py" 2>/dev/null \
-      | grep -oE "[\"'][A-Z_]+[\"']" | tr -d "\"'" | sort -u >> "$REG_DIR/config-keys.md" || true
+    _out="$(grep -rhoE $GREP_EX "os\.(getenv|environ(\.get)?)\(?\[?[\"'][A-Z_]+[\"']" "$BACKEND_DIR" --include="*.py" 2>/dev/null \
+      | grep -oE "[\"'][A-Z_]+[\"']" | tr -d "\"'" | sort -u || true)"
+    require_nonempty "backend config keys" "$_out"
+    printf '%s\n' "$_out" >> "$REG_DIR/config-keys.md"
     echo '```' >> "$REG_DIR/config-keys.md"
   fi
   if [ -d "$FRONTEND_DIR/src" ]; then
+    local _out
     echo "" >> "$REG_DIR/config-keys.md"
     echo "## Frontend env vars (import.meta.env)" >> "$REG_DIR/config-keys.md"
     echo '```' >> "$REG_DIR/config-keys.md"
-    grep -rhoE $GREP_EX "import\.meta\.env\.[A-Z_]+" "$FRONTEND_DIR/src" 2>/dev/null \
-      | sort -u >> "$REG_DIR/config-keys.md" || true
+    _out="$(grep -rhoE $GREP_EX "import\.meta\.env\.[A-Z_]+" "$FRONTEND_DIR/src" 2>/dev/null \
+      | sort -u || true)"
+    require_nonempty "frontend config keys" "$_out"
+    printf '%s\n' "$_out" >> "$REG_DIR/config-keys.md"
     echo '```' >> "$REG_DIR/config-keys.md"
   fi
   echo "  ✓ registry/config-keys.md"

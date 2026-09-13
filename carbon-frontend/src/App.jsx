@@ -11,6 +11,7 @@ const ResetPasswordPage = React.lazy(() => import("./pages/ResetPasswordPage"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 import { Shell } from "./shell/Shell";
 import AdminRoute from "./components/AdminRoute";
+import AppEnabledRoute from "./components/AppEnabledRoute";
 import ErrorBoundary from "./shell/ErrorBoundary";
 import { NetworkStatusProvider } from "./components/NetworkStatusBanner";
 import { LoadingSpinner } from "./shell/LoadingFallback";
@@ -94,7 +95,6 @@ const KnowledgeBasePanel = React.lazy(() => import("./pages/admin/ai/KnowledgeBa
 const MemoryPanel = React.lazy(() => import("./pages/admin/ai/MemoryPanel"));
 const KnowledgeGraphPanel = React.lazy(() => import("./pages/admin/ai/KnowledgeGraphPanel"));
 const AgentsPanel = React.lazy(() => import("./pages/admin/ai/AgentsPanel"));
-const McpServersPanel = React.lazy(() => import("./pages/admin/ai/McpServersPanel"));
 const ToolsPanel = React.lazy(() => import("./pages/admin/ai/ToolsPanel"));
 const SkillsPanel = React.lazy(() => import("./pages/admin/ai/SkillsPanel"));
 const SkillLearningPanel = React.lazy(() => import("./pages/admin/ai/SkillLearningPanel"));
@@ -245,25 +245,25 @@ export default function App() {
                 
                 {/* Legacy Dashboard — removed P10a (blank content, dead page) */}
                 
-                {/* Emissions Calculator Routes */}
-                <Route path="/emissions" element={<EmissionsDashboard />} />
+                {/* Emissions Calculator Routes (carbon domain — brand-gated) */}
+                <Route path="/emissions" element={<AppEnabledRoute appId="carbon"><EmissionsDashboard /></AppEnabledRoute>} />
                 {/* Legacy command-palette alias — /emissions/dashboard resolves to the canonical dashboard */}
                 <Route path="/emissions/dashboard" element={<Navigate to="/carbon/dashboard" replace />} />
-                <Route path="/emissions/report" element={<EmissionsReport />} />
+                <Route path="/emissions/report" element={<AppEnabledRoute appId="carbon"><EmissionsReport /></AppEnabledRoute>} />
                 
                 {/* Carbon App — all routes under /carbon/* namespace */}
                 {/* Namespace root redirect — hitting the bare /carbon root (e.g. the
                     /carbon/ deployment mount path) must never 404. RULE_22. */}
-                <Route path="/carbon" element={<Navigate to="/carbon/chairman" replace />} />
-                <Route path="/carbon/chairman" element={<ChairmanDashboard />} />
-                <Route path="/carbon/console" element={<CarbonConsolePage />} />
-                <Route path="/carbon/dashboard" element={<CarbonDashboardPage />} />
+                <Route path="/carbon" element={<AppEnabledRoute appId="carbon"><Navigate to="/carbon/chairman" replace /></AppEnabledRoute>} />
+                <Route path="/carbon/chairman" element={<AppEnabledRoute appId="carbon"><ChairmanDashboard /></AppEnabledRoute>} />
+                <Route path="/carbon/console" element={<AppEnabledRoute appId="carbon"><CarbonConsolePage /></AppEnabledRoute>} />
+                <Route path="/carbon/dashboard" element={<AppEnabledRoute appId="carbon"><CarbonDashboardPage /></AppEnabledRoute>} />
                 <Route path="/carbon/analytics" element={<AdminRoute appId="carbon" requiredCapability={CARBON_VIEW_ANALYTICS}><AnalyticsDashboard /></AdminRoute>} />
                 {/* Carbon-domain admin routes — accessible by global admins OR carbon_lead Domain Leads */}
-                <Route path="/carbon/my-data" element={<MyDataPage />} />
-                <Route path="/carbon/my-data/:moduleId" element={<ModuleWorkspacePage />} />
-                <Route path="/carbon/my-data/:moduleId/:tableId" element={<DataEntryPage />} />
-                <Route path="/carbon/my-data/row/:tableId/:rowId" element={<RowDetailPage />} />
+                <Route path="/carbon/my-data" element={<AppEnabledRoute appId="carbon"><MyDataPage /></AppEnabledRoute>} />
+                <Route path="/carbon/my-data/:moduleId" element={<AppEnabledRoute appId="carbon"><ModuleWorkspacePage /></AppEnabledRoute>} />
+                <Route path="/carbon/my-data/:moduleId/:tableId" element={<AppEnabledRoute appId="carbon"><DataEntryPage /></AppEnabledRoute>} />
+                <Route path="/carbon/my-data/row/:tableId/:rowId" element={<AppEnabledRoute appId="carbon"><RowDetailPage /></AppEnabledRoute>} />
                 <Route path="/carbon/calculations" element={<AdminRoute appId="carbon" requiredCapability={CARBON_VIEW_CALCULATIONS}><CalculationsPage /></AdminRoute>} />
                 <Route path="/carbon/verification" element={<AdminRoute appId="carbon" requiredCapability={CARBON_VIEW_VERIFICATION}><VerificationPage /></AdminRoute>} />
                 <Route path="/carbon/admin/factors" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_EMISSION_FACTORS}><FactorsHubPage /></AdminRoute>} />
@@ -279,7 +279,7 @@ export default function App() {
                 <Route path="/carbon/reporting/periods" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_REPORTING_PERIODS}><ReportingPeriodsPage /></AdminRoute>} />
                 
                 {/* Carbon App — Data Owner Routes (namespace: /carbon/owner/*) */}
-                <Route path="/carbon/owner/assets" element={<DataOwnerAssetsPage />} />
+                <Route path="/carbon/owner/assets" element={<AppEnabledRoute appId="carbon"><DataOwnerAssetsPage /></AppEnabledRoute>} />
                 {/* Legacy redirects — old paths redirect to unified My Data page */}
                 <Route path="/carbon/data-entry" element={<Navigate to="/carbon/my-data" replace />} />
                 <Route path="/carbon/data-entry/entry/:moduleName/:tableId" element={<RedirectLegacyEntry />} />
@@ -410,7 +410,6 @@ export default function App() {
                 <Route path="/admin/ai/memory" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><MemoryPanel /></AdminRoute>} />
                 <Route path="/admin/ai/graph" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><KnowledgeGraphPanel /></AdminRoute>} />
                 <Route path="/admin/ai/agents" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AgentsPanel /></AdminRoute>} />
-                <Route path="/admin/ai/mcp" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><McpServersPanel /></AdminRoute>} />
                 <Route path="/admin/ai/tools" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><ToolsPanel /></AdminRoute>} />
                 <Route path="/admin/ai/skills" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><SkillsPanel /></AdminRoute>} />
                 <Route path="/admin/ai/archetypes" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><PulseArchetypesPanel /></AdminRoute>} />

@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass, field
 
 from ai.engine.core.clock import utcnow
 from ai.engine.core.resolution import payload_status
-from ai.store import first
+from ai.engine.core.query import first
 
 from ai.engine.cognition.plan.planner import Plan, PlanStep
 from ai.engine.cognition.turn.witnesses import CriticVerdict, DraftResult, RetrievalResult

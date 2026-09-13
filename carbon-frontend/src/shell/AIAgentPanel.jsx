@@ -1,11 +1,11 @@
 // src/shell/AIAgentPanel.jsx
-// Sprint W2-A — Agent surface: Agents / MCP / Tools / Logs internal tabs
+// Sprint W2-A — Agent surface: Agents / Tools / Logs internal tabs
 // (RULE_17 — MUI Tabs + localStorage key carbon-ai-agent-tab). Agents and
-// Tools launch clustered runs via AIActionRunner; MCP is read-only; Logs
-// renders durable ToolExecution + LLMCallLog rows from the Pulse read API.
+// Tools launch clustered runs via AIActionRunner; Logs renders durable
+// ToolExecution + LLMCallLog rows from the Pulse read API.
 // RULE_8 tokens only; RULE_10 apiFetch only (via src/api/aiPulse.js and
 // src/api/aiWorkspace.js); RULE_21: staged mutations confirm in the runner.
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   Box,
@@ -206,7 +206,7 @@ function AIAgentPanel({ conversationId: initialConversationId }) {
       return 'agents';
     }
   });
-  const [settings, setSettings] = useState({ agents: [], mcp_servers: [], tools_catalog: [] });
+  const [settings, setSettings] = useState({ agents: [], tools_catalog: [] });
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [settingsError, setSettingsError] = useState(null);
 
@@ -238,7 +238,6 @@ function AIAgentPanel({ conversationId: initialConversationId }) {
       const data = await getSettings(token);
       setSettings({
         agents: Array.isArray(data?.agents) ? data.agents : [],
-        mcp_servers: Array.isArray(data?.mcp_servers) ? data.mcp_servers : [],
         tools_catalog: Array.isArray(data?.tools_catalog) ? data.tools_catalog : [],
       });
     } catch (err) {
@@ -302,11 +301,6 @@ function AIAgentPanel({ conversationId: initialConversationId }) {
       setRun({ runId: Date.now(), ...spec, verbosity });
     },
     [conversationId, token, verbosity],
-  );
-
-  const mcpTools = useMemo(
-    () => settings.tools_catalog.filter((t) => t.kind === 'mcp'),
-    [settings.tools_catalog],
   );
 
   const selectTool = useCallback(
@@ -382,42 +376,6 @@ function AIAgentPanel({ conversationId: initialConversationId }) {
             </Stack>
           </Paper>
         ))}
-      </Stack>
-    );
-  };
-
-  const renderMcp = () => {
-    if (settingsLoading) {
-      return <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={22} /></Box>;
-    }
-    if (settings.mcp_servers.length === 0) {
-      return (
-        <Typography variant="body2" color="text.secondary" sx={{ py: 3, px: 1, fontSize: '0.75rem' }}>
-          No MCP servers configured.
-        </Typography>
-      );
-    }
-    return (
-      <Stack spacing={1}>
-        <SectionTitle>MCP servers</SectionTitle>
-        {settings.mcp_servers.map((server) => (
-          <Paper key={server.name} variant="outlined" sx={{ p: 1 }}>
-            <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>
-              {server.name}
-            </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.6875rem' }}>
-              {server.command} {Array.isArray(server.args) ? server.args.join(' ') : ''}
-            </Typography>
-          </Paper>
-        ))}
-        {mcpTools.length > 0 && (
-          <>
-            <SectionTitle>MCP tools ({mcpTools.length})</SectionTitle>
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
-              {mcpTools.map((t) => t.name).join(', ')} — run them from the Tools tab.
-            </Typography>
-          </>
-        )}
       </Stack>
     );
   };
@@ -542,7 +500,7 @@ function AIAgentPanel({ conversationId: initialConversationId }) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, bgcolor: 'background.default' }}>
-      {/* Internal views — one Agent icon, four tabs (RULE_17) */}
+      {/* Internal views — one Agent icon, three tabs (RULE_17) */}
       <Box sx={{ px: 1, pt: 0.5, borderBottom: 1, borderColor: 'divider' }}>
         <Tabs
           value={tab}
@@ -555,7 +513,6 @@ function AIAgentPanel({ conversationId: initialConversationId }) {
           }}
         >
           <Tab value="agents" label="Agents" />
-          <Tab value="mcp" label="MCP" />
           <Tab value="tools" label="Tools" />
           <Tab value="logs" label="Logs" />
         </Tabs>
@@ -564,9 +521,8 @@ function AIAgentPanel({ conversationId: initialConversationId }) {
       {/* Tab content */}
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 1 }}>
         {tab === 'agents' ? renderAgents()
-          : tab === 'mcp' ? renderMcp()
-            : tab === 'tools' ? renderTools()
-              : renderLogs()}
+          : tab === 'tools' ? renderTools()
+            : renderLogs()}
       </Box>
 
       {/* Run dock — clustered timeline + verbosity for the next run */}

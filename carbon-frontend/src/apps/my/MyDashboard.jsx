@@ -30,6 +30,7 @@ import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import ArticleIcon from '@mui/icons-material/Article';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import AddIcon from '@mui/icons-material/Add';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -38,7 +39,7 @@ import PageHeader from '../../components/Page/PageHeader';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
-import { fetchMyProfile, fetchLeaveBalance, fetchInboxCount } from '../../api/my';
+import { fetchMyProfile, fetchLeaveBalance, fetchInboxCount, fetchMyPayslips } from '../../api/my';
 import { FONT } from '../../theme/themeTokens';
 
 const NewRequestDialog = lazy(() => import('./components/NewRequestDialog'));
@@ -319,6 +320,134 @@ function LeaveBalanceCard({ balances, loading, error, onRetry }) {
   );
 }
 
+// ── Card: payslips (GET people/me/payslips/) ──────────────────────────
+
+const PAYSLIP_LINE_LABEL_KEYS = {
+  gross: 'payslipLineGross',
+  gosi: 'payslipLineGosi',
+  net: 'payslipLineNet',
+};
+
+function payslipLineLabel(lineType, t) {
+  const key = PAYSLIP_LINE_LABEL_KEYS[String(lineType || '').toLowerCase()];
+  if (key) return t(key);
+  return String(lineType || '').replace(/_/g, ' ') || '—';
+}
+
+function formatPayslipAmount(amount) {
+  const value = Number(amount);
+  if (Number.isNaN(value)) return '—';
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function PayslipsCard({ payslips, loading, error, onRetry }) {
+  const { t } = useTranslation('my');
+
+  if (loading) {
+    return (
+      <Card variant="outlined">
+        <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+          <SectionTitle icon={ReceiptLongIcon} title={t('payslipsTitle')} />
+          <Stack spacing={0.5} aria-label={t('loading')}>
+            <Skeleton />
+            <Skeleton width="70%" />
+            <Skeleton width="85%" />
+          </Stack>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card variant="outlined">
+        <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+          <SectionTitle icon={ReceiptLongIcon} title={t('payslipsTitle')} />
+          <InlineError message={error} onRetry={onRetry} />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (payslips.length === 0) {
+    return (
+      <Card variant="outlined">
+        <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+          <SectionTitle icon={ReceiptLongIcon} title={t('payslipsTitle')} />
+          <Typography sx={{ ...FONT.body2, color: 'text.secondary' }}>
+            {t('payslipsEmpty')}
+          </Typography>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Group lines by payroll_run id (newest run first).
+  const runs = [];
+  const runsById = new Map();
+  for (const line of payslips) {
+    const runId = line.payroll_run ?? '—';
+    let group = runsById.get(runId);
+    if (!group) {
+      group = { id: runId, lines: [] };
+      runsById.set(runId, group);
+      runs.push(group);
+    }
+    group.lines.push(line);
+  }
+  runs.sort((a, b) => Number(b.id) - Number(a.id));
+
+  return (
+    <Card variant="outlined">
+      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+        <SectionTitle icon={ReceiptLongIcon} title={t('payslipsTitle')} />
+        <Stack spacing={1.5}>
+          {runs.map((run) => (
+            <Stack key={String(run.id)} spacing={0.5}>
+              <Typography sx={{ ...FONT.body, fontWeight: 600 }}>
+                {t('payslipRunLabel', { id: run.id })}
+              </Typography>
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
+                        {t('payslipLineType')}
+                      </TableCell>
+                      <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
+                        {t('payslipAmount')}
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {run.lines.map((line) => (
+                      <TableRow key={line.id} hover>
+                        <TableCell sx={{ ...FONT.body2 }}>
+                          {payslipLineLabel(line.line_type, t)}
+                        </TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{ ...FONT.body2, fontVariantNumeric: 'tabular-nums' }}
+                          dir="ltr"
+                        >
+                          {formatPayslipAmount(line.amount)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Stack>
+          ))}
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Card: quick actions ───────────────────────────────────────────────
 
 function QuickActions({ onNewRequest }) {
@@ -384,6 +513,10 @@ export default function MyDashboard() {
   const [inboxLoading, setInboxLoading] = useState(true);
   const [inboxError, setInboxError] = useState(null);
 
+  const [payslips, setPayslips] = useState([]);
+  const [payslipsLoading, setPayslipsLoading] = useState(true);
+  const [payslipsError, setPayslipsError] = useState(null);
+
   const loadProfile = useCallback(async () => {
     setProfileLoading(true);
     setProfileError(null);
@@ -421,12 +554,26 @@ export default function MyDashboard() {
     }
   }, [token, t]);
 
-  // Fire the three fetches in parallel.
+  const loadPayslips = useCallback(async () => {
+    setPayslipsLoading(true);
+    setPayslipsError(null);
+    try {
+      const data = await fetchMyPayslips(token);
+      setPayslips(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setPayslipsError(err?.message || t('error'));
+    } finally {
+      setPayslipsLoading(false);
+    }
+  }, [token, t]);
+
+  // Fire the fetches in parallel.
   useEffect(() => {
     loadProfile();
     loadBalances();
     loadInbox();
-  }, [loadProfile, loadBalances, loadInbox]);
+    loadPayslips();
+  }, [loadProfile, loadBalances, loadInbox, loadPayslips]);
 
   const handleNewRequestSubmitted = useCallback(() => {
     setDialogOpen(false);
@@ -463,6 +610,12 @@ export default function MyDashboard() {
             loading={balancesLoading}
             error={balancesError}
             onRetry={loadBalances}
+          />
+          <PayslipsCard
+            payslips={payslips}
+            loading={payslipsLoading}
+            error={payslipsError}
+            onRetry={loadPayslips}
           />
           <QuickActions onNewRequest={() => setDialogOpen(true)} />
         </Stack>

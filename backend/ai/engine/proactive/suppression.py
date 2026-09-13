@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from ai.engine.core.clock import utcnow
 from collections import defaultdict
 
-from ai.store import first
+from ai.engine.core.query import first
 
 from ai.engine.core.config import get_settings
 from ai.engine.knowledge_graph.models import KgProactiveInsight, KgProactiveTrigger

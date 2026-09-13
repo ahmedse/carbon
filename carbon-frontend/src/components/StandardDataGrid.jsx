@@ -14,6 +14,7 @@ export default function StandardDataGrid({
   checkboxSelection = false,
   hideFooterSelectedRowCount = true,
   toolbar = false,
+  height = 480,
   _initialState = {
     pagination: { paginationModel: { pageSize: 25, page: 0 } },
   },
@@ -26,6 +27,7 @@ export default function StandardDataGrid({
     <Paper
       variant="outlined"
       sx={{
+        height,
         flex: 1,
         minHeight: 0,
         borderRadius: 2,

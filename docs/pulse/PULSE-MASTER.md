@@ -1,6 +1,6 @@
 # PULSE — Master Reference (Single Source of Truth)
 
-> **Status:** CANONICAL · **Owner:** Master Architect · **Last audited:** 2026-08-30
+> **Status:** CANONICAL · **Owner:** Master Architect · **Last audited:** 2026-08-30 · **Phase 1 reconcile:** fail-closed guards verified (P1-01…P1-17)
 > **This document is the single entry point for all Pulse work.** It supersedes the *vision*
 > portions of `DESIGN-GENERALIZED-INTELLIGENCE-PULSE-BRAIN.md`, `DESIGN_AI_WORKSPACE_NEXTGEN.md`,
 > `DESIGN_AI_WORKSPACE_V4.md`, and `DESIGN_AI_WORKSTATION.md`. Those remain as historical detail;
@@ -38,7 +38,7 @@ o-series + memory. Research: CoALA, ReAct, Reflexion, Voyager, Generative Agents
 | 1 | **Perception / salience** | Understand meaning + urgency; route reasoning depth | `engine/cognition/turn/salience.py`, `turn/intent.py` |
 | 2 | **Memory** | Working, short-term, episodic, semantic — persistent + scoped | `engine/memory/*`, `ai/context_assembler.py` |
 | 3 | **Reasoning** | Multi-step plan → execute → observe → replan | `engine/cognition/turn/runner.py`, `cognition/plan/loop.py` |
-| 4 | **Action** | Tools with permission, dry-run, consent | `engine/agent/plugins.py`, `agent/tools.py`, MCP |
+| 4 | **Action** | Tools with permission, dry-run, consent | `engine/agent/plugins.py`, `agent/tools.py` (MCP deferred → Phase 7) |
 | 5 | **Grounding / truthfulness** | Never assert what a tool didn't confirm | `engine/cognition/turn/critic.py` (S4) |
 | 6 | **Learning / growth** | Turn experience into reusable skills **actually reused** | `cognition/trajectory.py`, `consolidation.py`, `skills/*` |
 | 7 | **Metacognition / awareness** | Knows what it knows, its capabilities, its uncertainty | knowledge-gap critic, `list_my_capabilities` |
@@ -109,7 +109,7 @@ backend/ai/                      ← Carbon host (durable state, guards, API)
     proactive/                   ← triggers, insight generator, delivery, suppression
     skills/                      ← SkillRegistry + admission gate (4 critics)
     learning/preferences.py      ← session preference classifier
-    agent/                       ← tools.py, plugins.py (ToolPlugin ABC), MCP, orchestrator, budget
+    agent/                       ← tools.py, plugins.py (ToolPlugin ABC), orchestrator, budget  (MCP: Phase 7)
     llm/                         ← router (task lanes), provider, prompts, playbook
 ```
 
@@ -125,22 +125,25 @@ Cost is logged per call; a per-instance daily USD budget is enforced.
 | 1 Perception | **Solid, shallow** | regex salience + LLM intent ladder; salience not learned |
 | 2 Memory | **Strong, half-ephemeral** | long-term/episodic excellent; **short-term + working are in-process dicts (lost on restart, not shared across workers)** |
 | 3 Reasoning | **Genuinely strong** | ReAct loop: topological phases, parallel steps, consent pauses, bounded replans, resume |
-| 4 Action | **Strong & modern** | plugin ABC, `requires_confirmation`, **MCP dynamic tools**, truthful capability manifest |
-| 5 Grounding | **Best-in-class** | S4 critic: grounding + tenancy + safety + `knowledge_gap` → escalate or honest uncertainty; phantom-success guards |
-| 6 Learning | **Built but likely COLD** | full pipeline exists, but skills are `gate_status=pending`; planner reads `list_promoted`; **no automatic promotion→reuse arrow** |
+| 4 Action | **Strong & modern** | plugin ABC, `requires_confirmation`, truthful capability manifest; MCP **deferred to Phase 7** (P1-14) |
+| 5 Grounding | **Best-in-class (fail-closed)** | S4 critic: grounding + tenancy + safety + `knowledge_gap` → escalate or honest uncertainty; phantom-success guards; unconfirmed mutation → hard veto (P1-02); verified by 60-attempt red-team suite (P1-17) |
+| 6 Learning | **Gate fail-closed, reuse COLD** | admission gate hardened (4 critics fail-closed + gate-only promotion, P1-04/05/06); planner reads `list_promoted`; **no automatic promotion→reuse arrow yet** |
 | 7 Metacognition | **Partial** | knowledge-gap critic + capability manifest real; no confidence surfaced to user |
 | 8 Proactivity | **Built but NOT DELIVERED** | triggers/briefings/drift real, but `proactive/delivery.py` pushes to an **in-process WS registry, not the Django/React UI** |
 
 **Keep (don't lose these differentiators):** the S4 grounding critic, the RULE_21 consent
-architecture, MCP support, episodic memory with causal chains, and the learning *gate* machinery.
+architecture, episodic memory with causal chains, and the learning *gate* machinery. (MCP support is
+**deferred to Phase 7** — P1-14 removed its UI affordances.)
 
 ---
 
 ## 5. The five critical gaps (the truth Pulse 0.2 must fix)
 
-1. **G1 — Learning loop is cold.** Consolidation drafts `Skill` rows at `gate_status=pending`;
-   `SkillAwarePlanner` only sees `list_promoted`. Experience is *recorded* but never *reused*. This
-   is **learning theater** until the promotion→reuse arrow is closed **and observable**.
+1. **G1 — Learning loop is cold (gate now fail-closed).** Phase 1 hardened the admission gate
+   (critics fail-closed + gate-only promotion, P1-04/05/06), but consolidation still drafts `Skill`
+   rows at `gate_status=pending` and `SkillAwarePlanner` only sees `list_promoted`. Experience is
+   *recorded* but never *reused*. The **promotion→reuse arrow** remains open — close it **and make
+   reuse observable**.
 2. **G2 — Proactivity never reaches the human.** `proactive/delivery.py` → `notifier._subscribers`
    (engine in-process WebSocket), not the Django HTTP/SSE surface the React app consumes. The engine
    "thinks" daily; the user never hears it. **Highest-ROI fix.**

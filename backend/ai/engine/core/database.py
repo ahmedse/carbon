@@ -1,26 +1,52 @@
 """
-Persistence facade — delegates to the configured Store (Phase 2).
+Persistence facade — delegates to the host-injected Store (P2-03).
 
 The SQLAlchemy-backed engine database is retired.  This module keeps the same
 public function names used by the engine internals
 (``get_engine``, ``get_session_factory``, ``get_effective_storage_mode``,
 ``get_db``, ``get_instance_db``, ``init_db``, ``list_initialized_instances``)
-but now delegates to a swappable :mod:`ai.store` backend selected via
-``settings.AI_STORE_BACKEND``.
+but now delegates to a swappable :class:`~ai.engine.ports.store.Store`
+provided by the host at bootstrap time.
 
-The engine is inert at import time, so nothing opens a connection here until
-a session operation is actually invoked.
+The engine is inert at import time and holds NO ``ai.store`` import: the host
+must call :func:`set_store_provider` during bootstrap (``ai.apps.AIConfig.ready``).
+Until then, :func:`get_store` raises a clear ``RuntimeError`` rather than
+silently falling back to an ephemeral store.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
-from ai.store import Store, get_store
+from ai.engine.ports.store import Store
 
 _log = logging.getLogger("pulse.database")
+
+# Host-injected provider returning the concrete Store backend.  The engine
+# never imports ``ai.store``; the host (``ai.apps.AIConfig.ready``) wires it.
+_store_provider: Callable[[], Store] | None = None
+
+
+def set_store_provider(provider: Callable[[], Store]) -> None:
+    """Inject the host's concrete Store provider at bootstrap time.
+
+    Called once from ``ai.apps.AIConfig.ready`` (and from test helpers that
+    construct the engine directly).
+    """
+    global _store_provider
+    _store_provider = provider
+
+
+def get_store() -> Store:
+    """Return the host-injected Store, or fail-closed when not injected."""
+    if _store_provider is None:
+        raise RuntimeError(
+            "Pulse store provider not injected; call "
+            "ai.engine.core.database.set_store_provider() during bootstrap"
+        )
+    return _store_provider()
 
 
 def _store() -> Store:
@@ -70,6 +96,8 @@ def list_initialized_instances() -> list[str]:
 
 
 __all__ = [
+    "get_store",
+    "set_store_provider",
     "get_engine",
     "get_session_factory",
     "get_effective_storage_mode",

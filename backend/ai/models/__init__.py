@@ -59,6 +59,7 @@ from .core import (
     VectorEmbedding,
 )
 from .feedback import DqFeedbackEvent
+from .pdp import PolicyDecisionRow
 from .knowledge_graph import (
     KgBootstrapRun,
     KgCacheEntry,
@@ -88,6 +89,7 @@ __all__ = [
     "AppScopeMixin",
     "generate_uuid",
     "ModelCatalog",
+    "PolicyDecisionRow",
     # core
     "AcceptanceReport",
     "Agent",

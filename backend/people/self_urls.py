@@ -8,6 +8,8 @@ from .self_views import (
     LeaveSelfCollectionView,
     LeaveSelfDetailView,
     LoanSelfCollectionView,
+    PayslipSelfCollectionView,
+    PayslipSelfDetailView,
     ProfileChangeSelfView,
 )
 
@@ -17,5 +19,7 @@ urlpatterns = [
     path('leave/', LeaveSelfCollectionView.as_view(), name='people-me-leave-collection'),
     path('leave/<int:pk>/', LeaveSelfDetailView.as_view(), name='people-me-leave-detail'),
     path('loan/', LoanSelfCollectionView.as_view(), name='people-me-loan-collection'),
+    path('payslips/', PayslipSelfCollectionView.as_view(), name='people-me-payslip-collection'),
+    path('payslips/<int:pk>/', PayslipSelfDetailView.as_view(), name='people-me-payslip-detail'),
     path('profile-change/', ProfileChangeSelfView.as_view(), name='people-me-profile-change'),
 ]

@@ -26,11 +26,16 @@ from ai.engine.knowledge_graph.models import (
     NODE_TYPES,
     RELATIONSHIP_TYPES,
     SOURCE_TYPES,
+    KnowledgeEdge,
+    KnowledgeNode,
 )
-from ai.models.knowledge_graph import KnowledgeEdge, KnowledgeNode
-from ai.store import first
 
 logger = logging.getLogger("pulse.knowledge_graph.store")
+
+
+def first(rows):
+    """Return the first row of a native ``select`` result, or ``None``."""
+    return rows[0] if rows else None
 
 # ── Per-instance in-memory graph ─────────────────────────────────────────────
 #
@@ -127,20 +132,6 @@ def _get_chroma_collection(chroma_client):
     )
 
 
-# ── BM25 lazy singleton ──────────────────────────────────────────────────────
-
-_bm25_instance = None
-
-
-def _get_bm25():
-    """Lazy-load the BM25 index singleton."""
-    global _bm25_instance
-    if _bm25_instance is None:
-        from ai.engine.knowledge_graph.bm25 import BM25Index
-        _bm25_instance = BM25Index()
-    return _bm25_instance
-
-
 # ── Store class ───────────────────────────────────────────────────────────────
 
 class KnowledgeGraphStore:
@@ -221,13 +212,6 @@ class KnowledgeGraphStore:
         _cache_node(node)
         _ensure_adj(node.id, node.instance_id)
 
-        # BE-02-2: Sync BM25 index
-        try:
-            bm25 = _get_bm25()
-            await bm25.index_node(self.db, node)
-        except Exception as exc:
-            logger.warning(f"BM25 index_node failed for {node.id}: {exc}")
-
         return node
 
     async def upsert_node(self, name: str, instance_id: str, node_type: str,
@@ -278,13 +262,6 @@ class KnowledgeGraphStore:
                     setattr(existing, key, value)
                 existing.updated_at = utcnow()
                 await self.db.commit()
-
-                # Sync BM25
-                try:
-                    bm25 = _get_bm25()
-                    await bm25.index_node(self.db, existing)
-                except Exception as exc:
-                    logger.warning(f"BM25 re-index in upsert failed for {existing.id}: {exc}")
 
                 _cache_node(existing)
             return existing
@@ -368,13 +345,6 @@ class KnowledgeGraphStore:
 
         _cache_node(node)
 
-        # BE-02-2: Sync BM25 index
-        try:
-            bm25 = _get_bm25()
-            await bm25.index_node(self.db, node)
-        except Exception as exc:
-            logger.warning(f"BM25 re-index failed for {node_id}: {exc}")
-
         return node
 
     async def get_node(self, node_id: str) -> Optional[KnowledgeNode]:
@@ -434,13 +404,6 @@ class KnowledgeGraphStore:
 
         _cache_for(node.instance_id).pop(node_id, None)
         _adj_for(node.instance_id).pop(node_id, None)
-
-        # BE-02-2: Remove from BM25 index
-        try:
-            bm25 = _get_bm25()
-            await bm25.delete_node(self.db, node_id)
-        except Exception as exc:
-            logger.warning(f"BM25 delete_node failed for {node_id}: {exc}")
 
         return True
 

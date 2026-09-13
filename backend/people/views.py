@@ -1168,6 +1168,8 @@ class PayrollRunComputeView(APIView):
             result = service.compute(run)
         except PayrollServiceError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        except NonAuthoritativeRuleError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         return Response(result)
 
 

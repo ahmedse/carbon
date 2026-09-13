@@ -130,6 +130,7 @@ PULSE ENGINE (backend/ai/engine/, imports only engine.** + engine.ports.*)
 | P0-08 | Add `vulture`, `import-linter`, forbidden-term grep to CI in **report-only** mode | CI | Baseline counts in CI artifact | S | — |
 | P0-09 | Confirm dead-code candidates with coverage run over tests + one smoke session + entry-point analysis; produce `confirmed_dead` vs `dynamically_registered` lists | `docs/pulse/DEAD-CODE.md` | Each item classified with evidence | M | P0-07 |
 | P0-10 | Choose pilot process and owner: `dq.rule.release` (validate → review → publish → verify) or equivalent whose host services already exist | `docs/pulse/PILOT.md` | Owner named; existing endpoints listed; gaps listed | XS | — |
+| P0-11 | **QA & measurement framework.** Two axes (intelligence = spine S1→S6; features = P0-06 capability surface) × two modalities (tests binary / gauges thresholded). 4-layer evidence ladder L0 static → L1 replay → L2 red-team+process → L3 live canary. Core rule: **outcome not activity** — every feature claim ends in a final-state assertion + pass^k. Consolidated harness at `backend/ai/eval/` (fixtures, scorer, reporter, gauges) | `docs/pulse/QA-FRAMEWORK.md`, `backend/ai/eval/` | Ladder wired to CI/phase gates; every gauge ships a test that fails when the gauge is silent; `eval_pulse_behavior.py`/`qa_pulse_smoke.py` superseded by one reporter | M | P0-06, P0-07 |
 
 ### Phase 1 — Fail-closed (Weeks 2–3)
 
@@ -361,6 +362,7 @@ PULSE ENGINE (backend/ai/engine/, imports only engine.** + engine.ports.*)
 8. P0-07 replay fixtures (needed for every later A/B and regression).
 9. P0-10 pick the pilot process and name its owner.
 10. P0-02 write ADR-0031 with D1–D12 so nobody re-litigates the decisions mid-build.
+11. P0-11 QA & measurement framework (the connective tissue for P0-07 / P1-17 / Phase 4 / D9).
 
 ---
 

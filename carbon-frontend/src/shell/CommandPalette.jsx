@@ -22,6 +22,7 @@ import StorageIcon from '@mui/icons-material/Storage';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import SettingsIcon from '@mui/icons-material/Settings';
 import HelpIcon from '@mui/icons-material/Help';
+import { useEnabledApps } from '../hooks/useEnabledApps';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -37,6 +38,7 @@ const COMMANDS = [
     id: 'dashboard-executive',
     label: 'Executive Summary',
     description: 'View high-level carbon footprint overview',
+    appId: 'carbon',
     path: '/dashboard',
     icon: DashboardIcon,
     keywords: ['dashboard', 'executive', 'summary', 'overview', 'home'],
@@ -45,6 +47,7 @@ const COMMANDS = [
     id: 'dashboard-analytics',
     label: 'Analytics Dashboard',
     description: 'Detailed analytics and trends',
+    appId: 'carbon',
     path: '/dashboards/analytics',
     icon: BarChartIcon,
     keywords: ['analytics', 'dashboard', 'charts', 'trends', 'analysis'],
@@ -53,6 +56,7 @@ const COMMANDS = [
     id: 'dashboard-targets',
     label: 'Targets & Progress',
     description: 'Track emission reduction targets',
+    appId: 'carbon',
     path: '/dashboards/targets',
     icon: AssessmentIcon,
     keywords: ['targets', 'goals', 'progress', 'reduction', 'objectives'],
@@ -69,6 +73,7 @@ const COMMANDS = [
     id: 'dashboard-reporting',
     label: 'Reporting Dashboard',
     description: 'Generate and view reports',
+    appId: 'carbon',
     path: '/dashboards/reporting',
     icon: DescriptionIcon,
     keywords: ['reports', 'reporting', 'export', 'documents'],
@@ -79,6 +84,7 @@ const COMMANDS = [
     id: 'emissions-dashboard',
     label: 'Emissions Dashboard',
     description: 'View emissions by scope and source',
+    appId: 'carbon',
     path: '/carbon/dashboard',
     icon: Co2Icon,
     keywords: ['emissions', 'carbon', 'co2', 'scope', 'sources'],
@@ -87,6 +93,7 @@ const COMMANDS = [
     id: 'emissions-report',
     label: 'Emissions Report',
     description: 'Generate detailed emissions report',
+    appId: 'carbon',
     path: '/emissions/report',
     icon: DescriptionIcon,
     keywords: ['report', 'emissions', 'export', 'ghg'],
@@ -97,6 +104,7 @@ const COMMANDS = [
     id: 'data-entry',
     label: 'Data Entry',
     description: 'Enter and manage emissions data',
+    appId: 'carbon',
     path: '/carbon/data-entry',
     icon: StorageIcon,
     keywords: ['data', 'entry', 'input', 'schema', 'records'],
@@ -197,8 +205,12 @@ export default function CommandPalette({ open, onClose }) {
   const inputRef = useRef(null);
   const listRef = useRef(null);
   const navigate = useNavigate();
+  const { isAppEnabled } = useEnabledApps();
 
-  const filteredCommands = useMemo(() => searchCommands(query), [query]);
+  const filteredCommands = useMemo(
+    () => searchCommands(query).filter((cmd) => !cmd.appId || isAppEnabled(cmd.appId)),
+    [query, isAppEnabled],
+  );
 
   const handleCommandSelect = useCallback((command) => {
     navigate(command.path);

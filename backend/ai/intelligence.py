@@ -277,7 +277,8 @@ class CarbonIntelligence:
     def get_task_status(self, task_id: str) -> dict[str, Any]:
         """Retrieve an in-process task's current status.
 
-        Returns a raw dict or ``{status: pulse_unavailable, error: {...}}``.
+        Returns a raw dict; honest ``not_supported`` until P7-08 wires a real
+        async task registry (tasks currently run synchronously).
         """
         return get_task(task_id, timeout=10)
 

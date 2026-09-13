@@ -169,6 +169,18 @@ def refresh(job: DQJob) -> DQJob:
             job.save(update_fields=['payload', 'updated_at'])
         return job
 
+    if response.get('status') == 'not_supported':
+        # P1-16: no async task registry exists (P7-08) — fail immediately,
+        # do NOT poll a feature that can never succeed.
+        job.status = 'failed'
+        job.error = str(response.get('error', {}).get('message', 'Pulse task status is not supported'))
+        job.progress = 0
+        job.save(update_fields=['status', 'error', 'progress', 'updated_at'])
+        _publish(job, 'failed', 'The check couldn\'t finish — task status is unavailable.')
+        if spec.get('on_failed'):
+            _resolve(spec, 'on_failed')(job, job.error)
+        return job
+
     task_status = response.get('status')  # pending | working | completed | failed
     if task_status in ('pending', 'working', 'running'):
         job.status = 'running'

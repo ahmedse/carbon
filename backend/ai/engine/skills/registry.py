@@ -9,8 +9,8 @@ from datetime import datetime, timezone
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ai.engine.core.clock import utcnow
 from ai.engine.core.models import Skill
+from ai.engine.skills._authority import assert_allowed_transition
 
 logger = logging.getLogger("pulse.skills.registry")
 
@@ -83,24 +83,30 @@ class SkillRegistry:
 
     # ── Update ──────────────────────────────────────────────────────────────
 
-    async def update_status(
+    async def _update_status(
         self, skill_id: str, new_status: str, promoted_by: str | None = None
     ) -> Skill | None:
-        """Transition a skill's status. When promoting to instance_promoted,
-        sets promoted_at and promoted_by."""
+        """Transition a skill's status (P1-06).  Private.
+
+        ``instance_promoted`` is gate-only and is refused here with a
+        ``RuntimeError``; promotion must go through the admission gate.  All
+        other transitions are validated against the explicit transition table.
+        """
+        if new_status == "instance_promoted":
+            raise RuntimeError(
+                "instance_promoted is gate-only: promote via the admission gate"
+            )
         logger.debug(
-            "SkillRegistry.update_status: id=%s new_status=%s promoted_by=%s",
+            "SkillRegistry._update_status: id=%s new_status=%s promoted_by=%s",
             skill_id, new_status, promoted_by,
         )
         skill = await self.get(skill_id)
         if skill is None:
-            logger.warning("SkillRegistry.update_status: skill not found id=%s", skill_id)
+            logger.warning("SkillRegistry._update_status: skill not found id=%s", skill_id)
             return None
 
+        assert_allowed_transition(skill.status, new_status)
         skill.status = new_status
-        if new_status == "instance_promoted":
-            skill.promoted_at = utcnow()
-            skill.promoted_by = promoted_by
 
         await self.db.commit()
         await self.db.refresh(skill)

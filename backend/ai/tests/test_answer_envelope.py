@@ -223,6 +223,7 @@ async def test_flag_off_returns_no_envelope_key(monkeypatch):
             "result": {"status_code": 200, "data": {"breakdown": []}},
         }],
         draft_text="",
+        envelope_synthesizer=synthesize_envelope,
     )
     assert result is not None
     assert "text" in result
@@ -257,6 +258,7 @@ async def test_flag_on_attaches_envelope_alongside_markdown(monkeypatch):
             }},
         }],
         draft_text="",
+        envelope_synthesizer=synthesize_envelope,
     )
     assert result is not None
     assert "text" in result          # markdown still produced

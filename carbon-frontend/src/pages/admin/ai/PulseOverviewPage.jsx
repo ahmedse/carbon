@@ -12,6 +12,48 @@ import PageContainer from '../../../components/layout/PageContainer';
 import { useAuth } from '../../../auth/AuthContext';
 import { apiFetch } from '../../../api/api';
 
+// Per-capability status → MUI chip color (P1-14). Unknown states fall back
+// to the neutral default chip so a new backend state never breaks the UI.
+const CAPABILITY_STATUS_COLORS = {
+  healthy: 'success',
+  configured: 'primary',
+  degraded: 'warning',
+  disabled: 'default',
+  unavailable: 'error',
+};
+
+const CAPABILITY_LABELS = {
+  store: 'Store',
+  reason_lane: 'Reason lane',
+  verify: 'Verify',
+  mcp: 'MCP',
+  sandbox: 'Sandbox',
+};
+
+/** One capability: name + status chip + detail line. */
+function CapabilityCard({ name, cap }) {
+  const status = cap?.status || 'unavailable';
+  return (
+    <Paper variant="outlined" sx={{ p: 1.5 }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+          {CAPABILITY_LABELS[name] || name}
+        </Typography>
+        <Chip
+          size="small"
+          color={CAPABILITY_STATUS_COLORS[status] || 'default'}
+          label={status}
+        />
+      </Stack>
+      {cap?.detail && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+          {cap.detail}
+        </Typography>
+      )}
+    </Paper>
+  );
+}
+
 export default function PulseOverviewPage() {
   useDocumentTitle('Pulse Overview');
   const { token } = useAuth();
@@ -89,6 +131,23 @@ export default function PulseOverviewPage() {
                   <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                     {health.modules.map((m) => (
                       <Chip key={m} size="small" variant="outlined" label={m} />
+                    ))}
+                  </Box>
+                </Stack>
+              )}
+
+              {health.capabilities && (
+                <Stack spacing={1}>
+                  <Typography variant="overline" color="text.secondary">Capabilities</Typography>
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                      gap: 1,
+                    }}
+                  >
+                    {Object.entries(health.capabilities).map(([name, cap]) => (
+                      <CapabilityCard key={name} name={name} cap={cap} />
                     ))}
                   </Box>
                 </Stack>

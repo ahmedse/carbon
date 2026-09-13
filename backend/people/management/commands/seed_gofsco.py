@@ -70,18 +70,21 @@ class Command(BaseCommand):
             return rs
 
         _ref_set('nationality', 'nationality', 'Employee nationalities', [
-            ('KWT', 'Kuwaiti'), ('EGY', 'Egyptian'), ('IND', 'Indian'),
-            ('PHL', 'Filipino'), ('PAK', 'Pakistani'), ('BGD', 'Bangladeshi'),
-            ('NPL', 'Nepali'), ('LKA', 'Sri Lankan'), ('JOR', 'Jordanian'),
-            ('SYR', 'Syrian'), ('USA', 'American'), ('GBR', 'British'),
+            ('KWT', 'Kuwaiti'), ('EGY', 'Egyptian'), ('SAU', 'Saudi'),
+            ('JOR', 'Jordanian'), ('IND', 'Indian'), ('PHL', 'Filipino'),
+            ('PAK', 'Pakistani'), ('BGD', 'Bangladeshi'), ('NPL', 'Nepali'),
+            ('LKA', 'Sri Lankan'), ('SYR', 'Syrian'), ('USA', 'American'),
+            ('GBR', 'British'), ('OTH', 'Other'),
         ])
         _ref_set('employment_type', 'employment-type', 'Employment types', [
             ('full-time', 'Full-Time'), ('part-time', 'Part-Time'),
+            ('contractor', 'Contractor'), ('intern', 'Intern'),
             ('contract', 'Contract'), ('secondment', 'Secondment'),
         ])
         _ref_set('contract_type', 'contract-type', 'Contract types', [
+            ('permanent', 'Permanent'), ('fixed-term', 'Fixed-Term'),
+            ('temporary', 'Temporary'),
             ('indeterminate', 'Indeterminate (Open-ended)'),
-            ('fixed-term', 'Fixed-Term'),
             ('project', 'Project-Based'),
         ])
         _ref_set('job_family', 'job-family', 'Job families', [
@@ -91,7 +94,7 @@ class Command(BaseCommand):
             ('admin', 'Administration'),
         ])
         _ref_set('gender', 'gender', 'Genders', [
-            ('male', 'Male'), ('female', 'Female'),
+            ('male', 'Male'), ('female', 'Female'), ('other', 'Other'),
         ])
         _ref_set('rotation_pattern', 'rotation-pattern', 'Rotation schedules', [
             ('1/1', '1 week on / 1 week off'),

@@ -867,21 +867,25 @@ class PlansService:
     def _ask_discovery_llm(self, brief: str, turns: list) -> dict:
         """One discovery round → ``{"action": "ask"|"complete", "question": ...}``.
 
-        Uses the shared ``chat_completion`` seam (lazily imported, mirroring
+        Routes through ``route_chat`` (lazily imported, mirroring
         ``_decompose``) so tests can patch it without hitting a live LLM.
         """
         from ai.engine.core.config import get_settings
-        from ai.engine.llm.provider import chat_completion
+        from ai.engine.llm.router import route_chat
 
         settings = get_settings()
-        text = _run_async(
-            chat_completion(
-                self._discovery_prompt(brief, turns),
+        result = _run_async(
+            route_chat(
+                task="deep",
+                instance_id=PLAN_INSTANCE_ID,
+                conversation_id="discovery",
+                messages=self._discovery_prompt(brief, turns),
                 model=settings.LLM_MODEL,
                 temperature=0.3,
                 response_format={"type": "json_object"},
             )
         )
+        text = (result or {}).get("content")
         try:
             data = json.loads((text or "").strip())
         except (json.JSONDecodeError, TypeError):

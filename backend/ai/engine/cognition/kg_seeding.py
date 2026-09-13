@@ -11,7 +11,7 @@ import json
 import logging
 import re
 
-from ai.store import first
+from ai.engine.core.query import first
 
 from ai.engine.core.models import KgNode, Trajectory, generate_uuid
 

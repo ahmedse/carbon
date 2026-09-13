@@ -5,13 +5,38 @@ for schema entities.
 import json
 import logging
 import re
+from collections.abc import Callable
 from typing import Optional
 
 from ai.engine.core.config import get_settings
 from ai.engine.core.models import KnowledgeEntity, generate_uuid
-from ai.store import first
+from ai.engine.ports.knowledge import KnowledgeEntityStore
 
 logger = logging.getLogger("pulse.knowledge.store")
+
+# Host-injected adapter provider (constructed once in host code). The engine
+# never imports ``ai.adapters``; callers wire it during bootstrap.
+_knowledge_entity_store_provider: Callable[[], KnowledgeEntityStore] | None = None
+
+
+def set_knowledge_entity_store_provider(provider: Callable[[], KnowledgeEntityStore]) -> None:
+    """Inject the host's ``KnowledgeEntityStore`` adapter at bootstrap."""
+    global _knowledge_entity_store_provider
+    _knowledge_entity_store_provider = provider
+
+
+def _resolve_knowledge_entity_store() -> KnowledgeEntityStore:
+    if _knowledge_entity_store_provider is None:
+        raise RuntimeError(
+            "KnowledgeEntityStore adapter not injected; call "
+            "ai.engine.knowledge.store.set_knowledge_entity_store_provider() during bootstrap"
+        )
+    return _knowledge_entity_store_provider()
+
+
+def first(rows):
+    """Return the first row of a native ``select`` result, or ``None``."""
+    return rows[0] if rows else None
 
 # ── Backward-compat: ChromaDB client for code that hasn't migrated yet ────────
 _chroma_client = None
@@ -47,8 +72,16 @@ def get_chroma_client():
 
 
 class KnowledgeStore:
-    def __init__(self, db_session, chroma_client=None):
+    def __init__(
+        self,
+        db_session,
+        chroma_client=None,
+        entity_store: KnowledgeEntityStore | None = None,
+    ):
         self.db_session = db_session
+        # P2-03: entity store injected via the port seam; when omitted the
+        # host bootstrap provider is consulted (fail-closed if none is wired).
+        self._entity_store = entity_store
         from ai.engine.knowledge.vector_store import get_vector_store
         self.vector = get_vector_store(db_session)
 
@@ -167,24 +200,19 @@ class KnowledgeStore:
         if not q:
             return []
 
-        from asgiref.sync import sync_to_async
-        from ai.models.core import KnowledgeEntity as DjangoKnowledgeEntity
-
         query_terms = {t for t in re.split(r"\W+", q.lower()) if len(t) > 1}
         if not query_terms:
             return []
 
-        def _run():
-            return list(
-                DjangoKnowledgeEntity.objects.filter(instance_id=instance_id)
-            )
-
-        rows = await sync_to_async(_run, thread_sensitive=True)()
+        entity_store: KnowledgeEntityStore = getattr(self, "_entity_store", None)
+        if entity_store is None:
+            entity_store = _resolve_knowledge_entity_store()
+        rows = await entity_store.list_by_instance(instance_id)
 
         scored: list[tuple[int, int, dict]] = []
         for r in rows:
-            name = (r.name or "").lower()
-            desc = (r.semantic_description or "").lower()
+            name = (r["name"] or "").lower()
+            desc = (r["semantic_description"] or "").lower()
             haystack = f"{name} {desc}"
             haystack_terms = set(re.split(r"\W+", haystack))
 
@@ -196,7 +224,7 @@ class KnowledgeStore:
             score = overlap * 3 + phrase_bonus + name_bonus
             if score <= 0:
                 continue
-            scored.append((score, -len(name), self._entity_to_dict(r)))
+            scored.append((score, -len(name), r))
 
         scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
         return [item[2] for item in scored[:top_k]]

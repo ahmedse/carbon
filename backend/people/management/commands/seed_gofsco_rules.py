@@ -146,12 +146,70 @@ AUTHORITATIVE_RULES = [
         "payroll",
         f"{KLL_SOURCE} + WPS file structure",
         {
-            "inputs": ["basic", "housing", "transport", "overtime", "leave_pay"],
+            "inputs": ["basic"],
             "formula": {
                 "type": "sum",
                 "params": {
-                    "components": ["basic", "housing", "transport", "overtime", "leave_pay"],
+                    "components": ["basic"],
+                    "base_input": "basic",
                 },
+            },
+        },
+    ),
+    (
+        "kw-gosi",
+        "2026.1",
+        "GOSI/PIFSS contribution — employee + employer shares (age-banded)",
+        "gosi",
+        "Public Institution for Social Security (PIFSS) — Kuwait",
+        {
+            "inputs": ["gross_salary", "employee_age"],
+            "formula": {
+                "type": "gosi",
+                "params": {
+                    "salary_input": "gross_salary",
+                    "age_input": "employee_age",
+                    "employee_bands": [
+                        {"max_age": 30, "rate": "0.055"},
+                        {"max_age": None, "rate": "0.075"},
+                    ],
+                    "employer_bands": [
+                        {"max_age": None, "rate": "0.110"},
+                    ],
+                },
+            },
+        },
+    ),
+    (
+        "kw-loan-schedule",
+        "2026.1",
+        "Loan schedule — flat-rate amortization",
+        "other",
+        f"{GOFSCO_SOURCE} (employee loan amortization)",
+        {
+            "inputs": ["principal", "interest_rate", "term_months"],
+            "formula": {
+                "type": "loan_schedule",
+                "params": {
+                    "method": "flat",
+                    "rate_is_annual": True,
+                    "rate_is_percent": False,
+                    "periods_per_year": 12,
+                },
+            },
+        },
+    ),
+    (
+        "kw-net-pay",
+        "2026.1",
+        "Net pay — gross minus deductions",
+        "other",
+        f"{GOFSCO_SOURCE} (WPS net-pay derivation)",
+        {
+            "inputs": ["gross", "deductions"],
+            "formula": {
+                "type": "net_pay",
+                "params": {},
             },
         },
     ),

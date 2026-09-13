@@ -317,3 +317,54 @@ class PayrollRunServiceTests(TestCase):
         net_amount = PayslipLine.objects.get(employee=self.in_scope, line_type="net").amount
         self.assertEqual(first["amount"], net_amount)
         self.assertEqual(records[0]["value"], net_amount)
+
+
+class SeedGofscoComputeRegressionTests(TestCase):
+    """F6 regression: the authoritative GOFSCO seed must provide every rule the
+    payroll compute pipeline requires (gross/gosi/loan_schedule/net_pay), and
+    ``compute`` must succeed end-to-end against the seeded rules."""
+
+    def test_compute_succeeds_with_seeded_authoritative_rules(self):
+        from django.core.management import call_command
+
+        call_command("seed_gofsco_rules", verbosity=0)
+
+        # The four rules compute() resolves must all be authoritative.
+        gross = ComplianceRule.objects.get(rule_id="kw-gross-pay")
+        self.assertTrue(gross.is_authoritative)
+        self.assertEqual(
+            gross.inputs_schema["formula"]["params"]["components"], ["basic"]
+        )
+        self.assertEqual(
+            gross.inputs_schema["formula"]["params"].get("base_input"), "basic"
+        )
+        self.assertTrue(
+            ComplianceRule.objects.get(rule_id="kw-gosi").is_authoritative
+        )
+        self.assertTrue(
+            ComplianceRule.objects.get(rule_id="kw-loan-schedule").is_authoritative
+        )
+        self.assertTrue(
+            ComplianceRule.objects.get(rule_id="kw-net-pay").is_authoritative
+        )
+
+        hq = OrgUnit.objects.create(name="HQ", slug="hq")
+        Employee.objects.create(
+            org_unit=hq, employee_no="E-1", full_name="In Scope",
+            basic_salary=Decimal("1000.000"), join_date=date(2024, 1, 1),
+        )
+        run = PayrollRun.objects.create(
+            org_unit=hq,
+            period_start=date(2026, 1, 1),
+            period_end=date(2026, 1, 31),
+        )
+
+        result = PayrollRunService().compute(run)
+
+        self.assertEqual(result["status"], "computed")
+        self.assertEqual(result["employees"], 1)
+        line_types = set(
+            PayslipLine.objects.filter(payroll_run=run)
+            .values_list("line_type", flat=True)
+        )
+        self.assertEqual(line_types, {"gross", "gosi", "net"})

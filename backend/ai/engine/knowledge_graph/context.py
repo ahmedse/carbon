@@ -13,13 +13,17 @@ import logging
 from typing import TYPE_CHECKING
 
 from ai.engine.core.config import get_settings
-from ai.models.knowledge_graph import KnowledgeNode
-from ai.store import first
+from ai.engine.knowledge_graph.models import KnowledgeNode
 
 if TYPE_CHECKING:
     from ai.engine.knowledge_graph.store import KnowledgeGraphStore
 
 logger = logging.getLogger("pulse.knowledge_graph.context")
+
+
+def first(rows):
+    """Return the first row of a native ``select`` result, or ``None``."""
+    return rows[0] if rows else None
 
 # Rough tokens-per-character for English prose
 _CHARS_PER_TOKEN = 4

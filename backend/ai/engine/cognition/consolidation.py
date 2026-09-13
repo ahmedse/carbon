@@ -25,7 +25,7 @@ import logging
 
 from ai.engine.core.clock import utcnow
 
-from ai.store import first
+from ai.engine.core.query import first
 
 from ai.engine.core.config import get_settings
 from ai.engine.core.models import Skill, Trajectory, generate_uuid
@@ -521,7 +521,7 @@ async def _run_consolidation_for_all_instances():
     Designed to be used as the callback for _for_each_instance or
     directly from the scheduler.
     """
-    from ai.store import get_store
+    from ai.engine.core.database import get_store
     from ai.engine.core.models import Instance
 
     factory = get_store().get_session_factory()

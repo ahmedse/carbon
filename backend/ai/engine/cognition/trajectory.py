@@ -10,7 +10,7 @@ import logging
 import re
 
 from ai.engine.core.models import Trajectory, Run, RunStep, TurnLedgerRow
-from ai.store import first
+from ai.engine.core.query import first
 
 logger = logging.getLogger("pulse.cognition.trajectory")
 

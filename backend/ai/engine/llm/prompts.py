@@ -14,7 +14,7 @@ below are the only remaining static prompts (schema analysis, not chat).
 import logging
 from datetime import datetime
 
-from ai.store import first
+from ai.engine.core.query import first
 
 logger = logging.getLogger("pulse.llm.prompts")
 

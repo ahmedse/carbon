@@ -21,6 +21,10 @@ Primary action is ONE button, top-right, semantic color. Secondary actions are s
 
 ## Forms
 - **Label above field.** Inline validation on blur, not only on submit.
+- **Every dropdown is searchable** — use `SearchSelect` (RULE 13), never a raw `<Select>`
+  with hardcoded options for enums/entities. A picker must always show one of the 4 states
+  (loading spinner / error+retry / "no matches" guidance / loaded options); a silently
+  empty listbox is a bug, not a valid empty state.
 - Show the error next to the field + a summary if many. Never a raw stack trace.
 - Required fields marked; optional is the exception, not the rule (Principle 7).
 - Disable submit only when truly invalid; show WHY it's disabled.

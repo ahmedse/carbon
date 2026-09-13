@@ -56,6 +56,12 @@ Each pattern: **trap → correct practice → detectable?**. Stable ids `UP-NNNN
 - **Seen in:** carbon (Phase 19 — `AIMessage.parent` self-FK).
 - **Detectable:** grep for `-p no:xdist` / `--reuse-db` + `-n auto` together.
 
+### UP-0009 — Non-searchable dropdowns: silently-empty listbox reads as "no choices"
+- **Trap:** Raw `<Select>`/`<TextField select>` with hardcoded `<MenuItem>`s for data-driven enums/entities (org units, employees, domains). At list size >~5 they're unusable, and when the async fetch fails they render an EMPTY listbox with no loading/error/empty signal — the user reads "no choices" when the real problem is a failed/ungated fetch. Symptom: payroll "Org Unit" dropdown empty while the API returns 37 units.
+- **Correct:** Use the shared `SearchSelect` primitive (`src/components/Form/SearchSelect.jsx`) — search + auto-highlight + the 4 data states (loading spinner / error+Retry / empty guidance / loaded). Feed async options via `useReferenceOptions(setName)` or the entity list endpoint; pass `loading`/`error`/`onRetry`. Raw `<Select>` only for fixed ≤~5 purely-local enums.
+- **Seen in:** carbon (QA Nibras payroll cycle).
+- **Detectable:** grep `<Select |<TextField select` across `src/**` and flag any fed by a fetch/enum of unknown size.
+
 ---
 
 *Source: ~/ai-toolkit/patterns/index.md — symlinked into every project*

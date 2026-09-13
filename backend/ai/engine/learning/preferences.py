@@ -1,18 +1,45 @@
-"""In-session preference classifier and session preference store (GAP-4).
+"""Preference classifier and durable per-user preference store (GAP-4).
 
 Detects user preference signals from natural language messages and
 applies them as system-prompt constraints for remaining turns.
 
 Domain-agnostic: signals are about communication style (verbosity, format,
 depth), not topic or domain content.
+
+P1-12: preferences are persisted on ``AIUserProfile`` (host-owned durable
+state), keyed by ``host_user_id``, so they survive process restarts. The
+classifier remains domain-agnostic; only the persistence seam reaches into
+the host adapter (``ai.adapters.preferences``) via the
+``ai.engine.ports.preferences.UserPreferenceStore`` port.
 """
 from __future__ import annotations
 
 import re
-import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
+
+from ai.engine.ports.preferences import UserPreferenceStore
+
+# Host-injected adapter provider (constructed once in host code). The engine
+# never imports ``ai.adapters``; callers wire it during bootstrap.
+_user_preference_store_provider: Callable[[], UserPreferenceStore] | None = None
+
+
+def set_user_preference_store_provider(provider: Callable[[], UserPreferenceStore]) -> None:
+    """Inject the host's ``UserPreferenceStore`` adapter at bootstrap."""
+    global _user_preference_store_provider
+    _user_preference_store_provider = provider
+
+
+def _resolve_user_preference_store() -> UserPreferenceStore:
+    if _user_preference_store_provider is None:
+        raise RuntimeError(
+            "UserPreferenceStore adapter not injected; call "
+            "ai.engine.learning.preferences.set_user_preference_store_provider() during bootstrap"
+        )
+    return _user_preference_store_provider()
 
 
 class Verbosity(str, Enum):
@@ -158,32 +185,50 @@ class PreferenceClassifier:
 
 
 class SessionPreferenceStore:
-    """Thread-safe store of SessionPreferences keyed by conversation_id."""
+    """Durable per-user preference store backed by ``AIUserProfile`` (P1-12).
 
-    def __init__(self) -> None:
-        self._store: dict[str, SessionPreferences] = {}
-        self._lock = threading.Lock()
+    Replaces the in-memory, conversation-keyed dict with host-owned durable
+    state: preferences are keyed by ``host_user_id`` (the authenticated user)
+    and survive process restarts. The classifier stays domain-agnostic; only
+    the persistence seam reaches into the host adapter
+    (``DjangoUserPreferenceAdapter``).
 
-    def get(self, conversation_id: str) -> SessionPreferences:
-        with self._lock:
-            if conversation_id not in self._store:
-                self._store[conversation_id] = SessionPreferences()
-            return self._store[conversation_id]
+    Methods are synchronous Django-ORM calls; async callers (the turn runner)
+    wrap them in ``sync_to_async``.
+    """
 
-    def update(self, conversation_id: str, signal: PreferenceSignal) -> None:
+    def __init__(self, store: UserPreferenceStore | None = None):
+        if store is None:
+            store = _resolve_user_preference_store()
+        self._store = store
+
+    def get(self, host_user_id: str) -> SessionPreferences:
+        prefs = self._store.get_preferences(host_user_id)
+        return SessionPreferences(
+            verbosity=Verbosity(prefs["verbosity"]),
+            format=Format(prefs["format"]),
+            depth=Depth(prefs["depth"]),
+        )
+
+    def update(self, host_user_id: str, signal: PreferenceSignal) -> None:
         if signal.is_empty():
             return
-        with self._lock:
-            if conversation_id not in self._store:
-                self._store[conversation_id] = SessionPreferences()
-            self._store[conversation_id].apply_signal(signal)
+        prefs = self.get(host_user_id)
+        prefs.apply_signal(signal)
+        self._store.save_preferences(
+            host_user_id,
+            {
+                "verbosity": prefs.verbosity.value,
+                "format": prefs.format.value,
+                "depth": prefs.depth.value,
+            },
+        )
 
-    def to_prompt_constraints(self, conversation_id: str) -> str:
-        return self.get(conversation_id).to_prompt_constraints()
+    def to_prompt_constraints(self, host_user_id: str) -> str:
+        return self.get(host_user_id).to_prompt_constraints()
 
-    def clear(self, conversation_id: str) -> None:
-        with self._lock:
-            self._store.pop(conversation_id, None)
+    def clear(self, host_user_id: str) -> None:
+        self._store.reset_preferences(host_user_id)
 
 
 # ── Process-level singleton ────────────────────────────────────────────────────

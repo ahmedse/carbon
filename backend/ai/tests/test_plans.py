@@ -402,11 +402,17 @@ def test_discovery_start_returns_question(
     user, patch_engine_seams, run_ids_cleanup, monkeypatch
 ):
     monkeypatch.setattr(
-        "ai.engine.llm.provider.chat_completion",
+        "ai.engine.llm.router.route_chat",
         AsyncMock(
-            return_value=(
-                '{"action": "ask", "question": "Which data sources should I analyze?"}'
-            )
+            return_value={
+                "content": '{"action": "ask", "question": "Which data sources should I analyze?"}',
+                "tool_calls": None,
+                "finish_reason": "stop",
+                "model": "test",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cost_usd": 0.0,
+            }
         ),
     )
     service = PlansService()
@@ -430,11 +436,27 @@ def test_discovery_advance_continues_or_completes(
     user, patch_engine_seams, run_ids_cleanup, monkeypatch
 ):
     monkeypatch.setattr(
-        "ai.engine.llm.provider.chat_completion",
+        "ai.engine.llm.router.route_chat",
         AsyncMock(
             side_effect=[
-                '{"action": "ask", "question": "Which data sources?"}',
-                '{"action": "ask", "question": "What time period?"}',
+                {
+                    "content": '{"action": "ask", "question": "Which data sources?"}',
+                    "tool_calls": None,
+                    "finish_reason": "stop",
+                    "model": "test",
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "cost_usd": 0.0,
+                },
+                {
+                    "content": '{"action": "ask", "question": "What time period?"}',
+                    "tool_calls": None,
+                    "finish_reason": "stop",
+                    "model": "test",
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "cost_usd": 0.0,
+                },
             ]
         ),
     )
@@ -480,11 +502,27 @@ def test_discovery_complete_transitions_to_pending_approval(
         "synthesis_instruction": "Summarize.",
     }
     monkeypatch.setattr(
-        "ai.engine.llm.provider.chat_completion",
+        "ai.engine.llm.router.route_chat",
         AsyncMock(
             side_effect=[
-                '{"action": "ask", "question": "Which data sources?"}',
-                '{"action": "complete"}',
+                {
+                    "content": '{"action": "ask", "question": "Which data sources?"}',
+                    "tool_calls": None,
+                    "finish_reason": "stop",
+                    "model": "test",
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "cost_usd": 0.0,
+                },
+                {
+                    "content": '{"action": "complete"}',
+                    "tool_calls": None,
+                    "finish_reason": "stop",
+                    "model": "test",
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "cost_usd": 0.0,
+                },
             ]
         ),
     )

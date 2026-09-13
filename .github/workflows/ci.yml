@@ -19,6 +19,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ── Repo hygiene (P0-03): fail on CRLF in any tracked text file ──
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check line endings (LF only)
+        run: |
+          set -o pipefail
+          bad=$(grep -rlIU $'\r' \
+            --include='*.py' --include='*.js' --include='*.jsx' \
+            --include='*.ts' --include='*.tsx' --include='*.sh' \
+            --include='*.md' --include='*.yml' --include='*.yaml' \
+            --include='*.json' --include='*.html' --include='*.css' \
+            --include='*.toml' --include='*.cfg' --include='*.txt' \
+            . 2>/dev/null || true)
+          if [ -n "$bad" ]; then
+            echo "CRLF (\\r) detected in tracked text files — run: git add --renormalize ." >&2
+            printf '%s\n' "$bad" >&2
+            exit 1
+          fi
+          echo "Line endings OK (LF only)"
+
+      - name: Fail-open lint (P1-13)
+        run: python3 .ai-toolkit/scripts/failopen-lint.py
+
   # ── Backend tests ────────────────────────────────────────────
   backend:
     runs-on: ubuntu-latest

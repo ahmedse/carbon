@@ -292,13 +292,13 @@ function NotesShortcutHandler({ toggleOpen }) {
           </Box>
         )}
 
-        {/* Drawer Sidebar — hidden: not rendered, peek: overlay, pinned: persistent */}
+        {/* Drawer Sidebar — hidden: not rendered, peek: overlay, pinned: in-flow */}
         {sidebarMode !== 'hidden' && (
           <Drawer
             anchor={isRtl ? 'right' : 'left'}
             open
             onClose={dismissSidebarPeek}
-            variant={sidebarMode === 'peek' ? 'temporary' : 'persistent'}
+            variant={sidebarMode === 'peek' ? 'temporary' : 'permanent'}
             sx={{
               width: sidebarMode === 'pinned' ? drawerWidthClamped : undefined,
               flexShrink: sidebarMode === 'pinned' ? 0 : undefined,

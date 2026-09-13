@@ -5,7 +5,7 @@ This is what the agent calls before each LLM invocation to get relevant context.
 import logging
 from dataclasses import dataclass, field
 
-from ai.store import scope_q
+from ai.engine.core.query import scope
 
 from ai.engine.memory.short_term import ShortTermMemory
 from ai.engine.memory.long_term import LongTermMemory
@@ -251,7 +251,7 @@ class MemoryManager:
         # ── Channel A: cognition-synthesized Insight rows ──
         rows_a = await self.long_term.db.select(
             Insight,
-            scope_q(Insight, instance_id, host_user_id),
+            scope(instance_id, host_user_id),
             ("archived", False),
             ("confidence__gte", 0.5),
         )
@@ -315,7 +315,7 @@ class MemoryManager:
 
         rows = await self.long_term.db.select(
             MemoryLongTerm,
-            scope_q(MemoryLongTerm, instance_id, host_user_id),
+            scope(instance_id, host_user_id),
             ("category", "preference"),
             ("source", f"auto:user:{user_identifier}"),
             ("archived", False),

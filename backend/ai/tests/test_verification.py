@@ -75,9 +75,9 @@ async def test_verification_corrects_wrong_number():
     assert "2.5" in result.corrected_text
 
 
-async def test_verification_returns_passed_on_llm_failure():
-    """VerificationWitness must return passed=True (fail-open) when the
-    verification LLM call fails — never block the response."""
+async def test_verification_fails_closed_on_llm_failure():
+    """VerificationWitness must fail closed — passed=False with an error — when
+    the verification LLM call fails, so the ledger shows it was not verified."""
     from ai.engine.cognition.turn.verify import VerificationWitness
 
     vw = VerificationWitness()
@@ -93,7 +93,35 @@ async def test_verification_returns_passed_on_llm_failure():
             conversation_id="c1",
         )
 
-    assert result.passed is True
+    assert result.passed is False
+    assert result.error
+
+
+async def test_verification_fails_closed_on_unparseable_json():
+    """VerificationWitness must fail closed — passed=False with an 'unparseable'
+    error — when the verification LLM returns non-JSON content."""
+    from ai.engine.cognition.turn.verify import VerificationWitness
+
+    vw = VerificationWitness()
+    with patch(
+        "ai.engine.cognition.turn.verify.route_chat",
+        AsyncMock(return_value={
+            "content": "not json",
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "model": "test",
+        }),
+    ):
+        result = await vw.verify(
+            answer="Some answer",
+            tool_results=[{"tool_name": "get_entity_details", "result": {}}],
+            user_message="test",
+            instance_id="i1",
+            conversation_id="c1",
+        )
+
+    assert result.passed is False
+    assert "unparseable" in result.error
 
 
 async def test_verification_returns_passed_when_no_answer_or_results():

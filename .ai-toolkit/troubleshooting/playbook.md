@@ -492,3 +492,28 @@ Append a new entry every time you confirm+fix a non-trivial bug (see `shared/deb
 - Best practice note: never trust `carbon.log` alone for startup failures — always check the manage.sh-redirected `logs/backend.log` too. For large migrations, keep the file importable at every save (imports + usages change atomically) or use `python -m py_compile` before saving.
 - Regression guard: `./manage.sh start` → `curl http://127.0.0.1:8009/carbon-api/health/` → 200.
 - First seen: 2026-08-27.
+
+### PB-46 — Pulse/AI chat "Failed to fetch" (SSE stream dies mid-response) — pending `ai` migration on pulled prod DB
+- Symptom: Pulse AI chat (AI Workspace) fails immediately with "Failed to fetch" — a network-level error, NOT a status-coded "Request failed: NNN" message. Backend + frontend both show RUNNING; health endpoint returns 200. In the browser network tab the request to `POST /carbon-api/ai/workspace/conversations/<id>/messages/stream/` appears to start then resets/errors.
+- Layer: backend / data (migration state)
+- Root cause: the streaming endpoint (`workspace_api.event_stream`) sends `HTTP 200` headers first, then the generator raises mid-stream. The exception — `django.db.utils.ProgrammingError: column ai_aiuserprofile.pref_verbosity does not exist` (or `pref_format`/`pref_depth`) — happens in `CarbonIntelligence.send_message_stream → _enforce_quota → AIUsage.check_quota → quota_snapshot → AIUserProfile.objects.get_or_create`. Because the headers were already flushed as 200, the browser sees the connection reset and reports it as `TypeError: Failed to fetch` (the `streamJsonPost` `!response.ok` branch never runs — status was 200). The column is missing because migration `ai.0029` (adds `pref_verbosity`/`pref_format`/`pref_depth` to `AIUserProfile`) was never applied to the brand DB — the DB was pulled from prod while local `main` is schema-ahead (same class as the `people`/`correspondence` migrations noted in the gotchas).
+- Fix: `./manage.sh migrate` (applies the pending `ai.0029`). Verify with `./manage.sh manage showmigrations ai` (0029 must show `[X]`) and re-send a Pulse message.
+- Best practice note: "Failed to fetch" on an SSE endpoint ≠ the server is down. When a `StreamingHttpResponse` generator raises AFTER headers are sent, Django logs a 500 in `logs/backend.log` but the client only ever sees a network reset. Always grep `logs/backend.log` for `ProgrammingError`/`UndefinedColumn`/`does not exist` before assuming a connectivity problem. After pulling a prod DB, run `./manage.sh migrate` (and `makemigrations --check --dry-run`) before starting work — schema-ahead dev DBs are a standing gotcha, not a one-off.
+- Regression guard: `showmigrations ai` shows all `[X]`; `python manage.py check` passes; a live Pulse message streams `chunk`/`done` frames without error.
+- First seen: 2026-09-13.
+
+### PB-47 — Pulse AI chat "I couldn't reach the AI service — try again in a moment." — empty `LLM_API_KEY`
+- Symptom: Pulse AI chat (AI Workspace) returns the generic "I couldn't reach the AI service — try again in a moment." message instead of a reply. Backend + frontend both RUNNING; health 200; DB migrations clean. This is a status-coded failure (the client shows the polite fallback), NOT "Failed to fetch".
+- Layer: backend / config (secrets)
+- Root cause: `LLM_API_KEY` is empty in `backend/.env`, so the Pulse engine's OpenAI-compatible client (`AsyncOpenAI` → `api.poe.com/v1`) sends no key. poe.com returns `openai.BadRequestError: 400 — authentication_error / missing_api_key`. The engine catches the provider error and surfaces the polite fallback string (found at `ai/intelligence.py` lines 619/748/2394/2521/3865). The key lives in prod's `backend/.env.carbon` (not in the DB, not in the repo), so pulling the DB does NOT fix it.
+- Fix: sync the `LLM_*` block from prod into local `backend/.env` (the key is a secret — never print it):
+  ```bash
+  ssh carbon-prod 'grep -E "^LLM_" /srv/carbon/backend/.env.carbon' > /tmp/llm.env
+  # upsert each key into backend/.env (Python one-liner, safe vs sed escaping)
+  # then: ./manage.sh restart   (backend process caches env on startup)
+  ```
+  Verify without exposing the key: `awk -F= '/^LLM_/{print $1" => "(length($2)==0?"EMPTY":"SET len="length($2))}' backend/.env` → `LLM_API_KEY => SET len=50`.
+- Live verification (real round-trip, ~negligible cost): `python manage.py shell -c` → `get_llm_client()` + a `max_tokens=5` "Reply with exactly: OK" completion → `httpx ... "HTTP/1.1 200 OK"` and reply `'OK'`. Do NOT rely on `backend/smoke_chat_wiring.py` for this — it stubs `get_llm_client` and never touches the real provider.
+- Best practice note: "I couldn't reach the AI service" ≠ network outage. It's the engine's catch-all for ANY provider/LLM error (auth, quota, model-not-found, timeout). Grep `logs/backend.log` for `openai.BadRequestError`/`missing_api_key`/`authentication_error` to confirm. The LLM key is environment-only (never in the DB or git), so "get from prod" = pull `backend/.env.carbon` from the VPS, not `scripts/pull-vps-db.sh`.
+- Regression guard: the live `get_llm_client()` round-trip returns 200 + `'OK'`; a real Pulse message streams a reply instead of the fallback string.
+- First seen: 2026-09-13.

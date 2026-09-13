@@ -5,6 +5,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    CarbonBrandPermission,
     ReportingPeriodViewSet,
     EmissionFactorViewSet,
     GWPViewSet,
@@ -39,6 +40,53 @@ from .views import (
 )
 
 app_name = 'emissions'
+
+
+# F9-backend: the carbon/emissions API is brand-gated. When the current
+# DJANGO_BRAND does not enable the 'carbon' domain app, every endpoint in this
+# urlconf must reject requests (403). Prepend CarbonBrandPermission to every
+# view (ViewSets and plain APIViews alike) so no route can slip through.
+def _brand_gate(view_cls):
+    existing = list(getattr(view_cls, "permission_classes", None) or [])
+    if CarbonBrandPermission not in existing:
+        view_cls.permission_classes = [CarbonBrandPermission] + existing
+    return view_cls
+
+
+for _view in (
+    ReportingPeriodViewSet,
+    EmissionFactorViewSet,
+    GWPViewSet,
+    CalculationViewSet,
+    CalculationSummaryAPIView,
+    CalculationRuleViewSet,
+    ReportConfigViewSet,
+    DashboardAPIView,
+    YearlyComparisonAPIView,
+    ReportAPIView,
+    CalculateAPIView,
+    BatchCalculateAPIView,
+    OwnerDashboardAPIView,
+    OwnerSummaryAPIView,
+    OwnerAssetsAPIView,
+    OwnerActivityAPIView,
+    MyDataAPIView,
+    ConsoleAPIView,
+    VerificationRecordViewSet,
+    CalculationAuditViewSet,
+    SBTiTargetViewSet,
+    ExportAuditViewSet,
+    OrganizationalBoundaryViewSet,
+    BaseYearViewSet,
+    RecalculationTriggerViewSet,
+    InventorySourceViewSet,
+    InventorySourceStatusViewSet,
+    CoverageGoalViewSet,
+    CoverageActionViewSet,
+    InventoryCoverageAPIView,
+    ChairmanAPIView,
+):
+    _brand_gate(_view)
 
 # Create router for ViewSets
 router = DefaultRouter()

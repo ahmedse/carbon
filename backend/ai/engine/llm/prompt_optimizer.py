@@ -8,13 +8,13 @@ import hashlib
 import json
 import logging
 from typing import Optional
+from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.engine.core.config import get_settings
 from ai.engine.core.models import PromptEval, PromptVersion, generate_uuid
-from ai.engine.llm.provider import chat_completion
 from ai.engine.llm.prompt_eval import compute_prompt_score, evaluate_prompt, get_eval_queries
 
 logger = logging.getLogger("pulse.llm.prompt_optimizer")
@@ -149,8 +149,8 @@ async def optimize_prompt(
             break
 
         # Critique → rewrite
-        critique = await _critique_prompt(prompt_text, evals)
-        prompt_text = await _rewrite_prompt(prompt_text, critique, {"name": instance_name})
+        critique = await _critique_prompt(prompt_text, evals, instance_id)
+        prompt_text = await _rewrite_prompt(prompt_text, critique, {"name": instance_name}, instance_id)
         parent_id = version.id
 
     # Activate the winner
@@ -164,7 +164,7 @@ async def optimize_prompt(
     return best_prompt
 
 
-async def _critique_prompt(prompt_text: str, eval_results: list[PromptEval]) -> str:
+async def _critique_prompt(prompt_text: str, eval_results: list[PromptEval], instance_id: str) -> str:
     """LLM analyzes failures, returns natural-language critique."""
     if not eval_results:
         return "No evaluation data available — cannot critique."
@@ -187,7 +187,16 @@ async def _critique_prompt(prompt_text: str, eval_results: list[PromptEval]) -> 
         )},
     ]
 
-    critique = await chat_completion(messages, temperature=0.4)
+    from ai.engine.llm.router import route_chat
+
+    result = await route_chat(
+        task="introspect",
+        instance_id=instance_id,
+        conversation_id=f"prompt-opt-{uuid4().hex[:8]}",
+        messages=messages,
+        temperature=0.4,
+    )
+    critique = result["content"] or ""
     return critique.strip()
 
 
@@ -195,6 +204,7 @@ async def _rewrite_prompt(
     current_prompt: str,
     critique: str,
     instance_context: dict,
+    instance_id: str,
 ) -> str:
     """LLM rewrites prompt incorporating critique."""
     messages = [
@@ -206,7 +216,16 @@ async def _rewrite_prompt(
         )},
     ]
 
-    rewritten = await chat_completion(messages, temperature=0.4)
+    from ai.engine.llm.router import route_chat
+
+    result = await route_chat(
+        task="introspect",
+        instance_id=instance_id,
+        conversation_id=f"prompt-opt-{uuid4().hex[:8]}",
+        messages=messages,
+        temperature=0.4,
+    )
+    rewritten = result["content"] or ""
 
     # Strip markdown fences if LLM adds them
     rewritten = rewritten.strip()

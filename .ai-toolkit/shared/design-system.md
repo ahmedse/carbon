@@ -59,7 +59,7 @@ ls src/components/         # scan existing primitives
 - If it ALMOST fits → add a prop to the existing one (report to Master if it's shared).
 - NEVER create `Button2`, `NewCard`, `CustomTable`. Duplication is how multi-agent frontends rot.
 - One component = one file = one source of truth.
-- Standard primitives already exist — reuse by name: `SystemDialog` (modal chrome), `MicroHelp` (tooltips), `FormField` (label-above-field), `FilteredDataGrid` (list shell), `PageContainer`, and `Wizard` (multi-step forms).
+- Standard primitives already exist — reuse by name: `SystemDialog` (modal chrome), `MicroHelp` (tooltips), `FormField` (label-above-field), `SearchSelect` (the ONE searchable dropdown — see RULE 13), `FilteredDataGrid` (list shell), `PageContainer`, and `Wizard` (multi-step forms).
 
 ---
 
@@ -173,6 +173,28 @@ Enterprise UIs communicate state at a glance:
 
 ---
 
+## RULE 13 — Every Picker Is a Searchable Autocomplete
+
+Enterprise pickers (governed enums, org units, employees, positions, domains,
+owners, tags, countries, currencies…) are NEVER a raw `<Select>` / `<TextField select>`
+with a wall of `<MenuItem>`s. A list of 5 is a dropdown; a list of 50+ is unusable
+without search, and every picker needs to signal its async state.
+
+- **ALWAYS use `SearchSelect`** (`src/components/Form/SearchSelect.jsx`) — the single
+  searchable dropdown primitive. It provides, by default:
+  - type-to-filter search (case-insensitive, partial, auto-highlight)
+  - the 4 data states: loading spinner / error + Retry / empty guidance / loaded
+  - clearable, keyboard-navigable, multiple, groupBy, i18n label/helper/required
+- **Async options** are fed from `useReferenceOptions(setName)` (mdm.ReferenceSet) or the
+  entity's list endpoint; pass `loading`/`error`/`onRetry` to `SearchSelect`. Never render
+  a picker before its options resolve into one of the 4 states (a silent empty listbox is a
+  defect — it reads as "no choices" when the real problem is a failed fetch).
+- **A raw `<Select>` is acceptable ONLY for** a fixed, ≤~5 option, purely-local enum that
+  cannot grow (e.g. log level: DEBUG/INFO/WARN/ERROR). Anything data-driven or open-ended →
+  `SearchSelect`.
+
+---
+
 ## RULE 12 — Consistency Over Cleverness
 
 - The same action looks and behaves the same everywhere (predictability > novelty).
@@ -201,6 +223,10 @@ Enterprise UIs communicate state at a glance:
 
 - Hardcoded hex colors or raw px spacing
 - Duplicated component (`Button2`, `CustomCard`)
+- Raw `<Select>`/`<TextField select>` with hardcoded `<MenuItem>`s for a data-driven or
+  open-ended enum/entity picker (use `SearchSelect` — RULE 13)
+- A picker whose listbox silently renders empty because options failed to load (missing
+  loading/error/empty state)
 - Blank screen while loading / no empty state
 - Status shown by color with no label/icon
 - Per-child `margin` instead of container spacing

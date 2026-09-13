@@ -404,7 +404,7 @@ async def run_data_profiling(
     Returns a summary dict.
     """
     from ai.engine.core.config import get_settings
-    from ai.models.knowledge_graph import KnowledgeEdge, KnowledgeNode
+    from ai.engine.knowledge_graph.models import KnowledgeEdge, KnowledgeNode
 
     settings = get_settings()
     if not settings.KG_DATA_PROFILING_ENABLED and not force:

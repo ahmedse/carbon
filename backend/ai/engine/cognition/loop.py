@@ -4,18 +4,33 @@ Conscious cognition loop — continuous monitoring, pattern detection, and wisdo
 Goes beyond scheduled health checks: the loop tracks its own state, detects patterns
 across snapshots and memories, synthesizes insights, and builds intelligence over time.
 """
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
+from collections.abc import Callable
+from typing import Any
 
 from ai.engine.core.clock import utcnow
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from ai.engine.core.config import get_settings
+from ai.engine.ports.cognition import SweepRunStore
 
 logger = logging.getLogger("pulse.cognition.loop")
 
 _scheduler: AsyncIOScheduler | None = None
+
+# Host-injected adapter factory (constructed once in host code). The engine
+# never imports ``ai.adapters``; callers wire it during bootstrap.
+_sweep_store_factory: Callable[[Any], SweepRunStore] | None = None
+
+
+def set_sweep_store_factory(factory: Callable[[Any], SweepRunStore]) -> None:
+    """Inject the host's ``SweepRunStore`` adapter factory at bootstrap."""
+    global _sweep_store_factory
+    _sweep_store_factory = factory
 
 # ── Loop state (in-process, queryable via API) ──
 _loop_state: dict = {
@@ -123,38 +138,49 @@ async def _tracked(task_name: str, fn):
         })
 
 
-async def _persist_sweep_run(task_name: str, start, elapsed_ms: int, status: str) -> None:
+async def _persist_sweep_run(
+    task_name: str,
+    start,
+    elapsed_ms: int,
+    status: str,
+    sweep_store: SweepRunStore | None = None,
+) -> None:
     """Best-effort upsert of a CognitionSweepRun row for ``task_name``.
 
-    Never raises — sweep persistence must not fail the loop itself.  Uses the
-    Store seam (``AI_STORE_BACKEND``) so it works identically under the
-    ``inmemory`` and ``django`` backends.
+    Never raises — sweep persistence must not fail the loop itself.  The host
+    injects a :class:`~ai.engine.ports.cognition.SweepRunStore` adapter factory
+    via :func:`set_sweep_store_factory` (or passes ``sweep_store`` directly);
+    when neither is present this fails closed with a clear error.
     """
     try:
-        from ai.store import first, get_store
-        from ai.models.core import CognitionSweepRun
+        store = sweep_store
+        if store is None:
+            if _sweep_store_factory is None:
+                raise RuntimeError(
+                    "SweepRunStore adapter not injected; call "
+                    "ai.engine.cognition.loop.set_sweep_store_factory() during bootstrap"
+                )
+            from ai.engine.core.database import get_session_factory
 
-        factory = get_store().get_session_factory()
-        async with factory() as db:
-            rows = await db.select(CognitionSweepRun, ("task_name", task_name))
-            row = first(rows)
-            error = None if status == "ok" else status
-            if row is not None:
-                row.last_run = start
-                row.last_status = status
-                row.last_duration_ms = elapsed_ms
-                row.run_count += 1
-                row.last_error = error
-            else:
-                db.add(CognitionSweepRun(
+            factory = get_session_factory()
+            async with factory() as db:
+                store = _sweep_store_factory(db)
+                await store.record_run(
                     task_name=task_name,
                     last_run=start,
                     last_status=status,
                     last_duration_ms=elapsed_ms,
-                    run_count=1,
-                    last_error=error,
-                ))
-            await db.commit()
+                    last_error=None if status == "ok" else status,
+                )
+            return
+
+        await store.record_run(
+            task_name=task_name,
+            last_run=start,
+            last_status=status,
+            last_duration_ms=elapsed_ms,
+            last_error=None if status == "ok" else status,
+        )
     except Exception as e:  # pragma: no cover - best-effort ledger
         logger.warning("Failed to persist sweep run for %s: %s", task_name, e)
 
@@ -172,10 +198,10 @@ async def _broadcast_all_instances(event: str, task_name: str, data: dict | None
 
 async def _for_each_instance(callback):
     """Run an async callback(db, instance) for every active instance."""
-    from ai.store import get_store
+    from ai.engine.core.database import get_session_factory
     from ai.engine.core.models import Instance
 
-    factory = get_store().get_session_factory()
+    factory = get_session_factory()
     async with factory() as db:
         instances = await db.select(Instance, ("status", "active"))
         for instance in instances:

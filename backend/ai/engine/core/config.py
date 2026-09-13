@@ -223,8 +223,8 @@ class Settings(BaseSettings):
     # ── Pulse v2 Phase 6 — Carbon business context injection ──
     PULSE_CARBON_CONTEXT_ENABLED: bool = True
 
-    # ── Pulse v2 Phase 7 — post-result verification (opt-in) ──
-    PULSE_VERIFY_ENABLED: bool = False
+    # ── Pulse v2 Phase 7 — post-result verification (on by default, fail-closed) ──
+    PULSE_VERIFY_ENABLED: bool = True
 
     # ── Answer Envelope (PAQ-2A) — typed structured-output synthesis ──
     # Off by default: when False the synthesis path is behaviourally identical

@@ -15,7 +15,10 @@ Critics
 4. MARGINAL GAIN (eval) — runs the skill on a small sample, compares
    to baseline.
 
-All results are written to SkillAdmissionLog.
+All results are written to SkillAdmissionLog. Critic exceptions are
+fail-closed: if a critic raises or returns an unparseable LLM response it
+rejects the skill (reason ``critic_error``) and leaves it pending, so removing
+the LLM key means nothing is promoted.
 """
 
 import json
@@ -30,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.engine.core.config import get_settings
 from ai.engine.core.models import Skill, SkillAdmissionLog, generate_uuid
+from ai.engine.skills._authority import assert_allowed_transition
 
 logger = logging.getLogger("pulse.skills.gate")
 
@@ -192,13 +196,35 @@ async def harmlessness_critic(skill: Skill) -> CriticVerdict:
 
             try:
                 verdict = json.loads(content)
-                if isinstance(verdict, dict) and not verdict.get("passed", True):
+                if not isinstance(verdict, dict):
+                    logger.warning("harmlessness_critic: unparseable LLM response: %s", content[:200])
+                    return CriticVerdict(
+                        passed=False,
+                        flags=["harmlessness_llm_unparseable", "critic_error"],
+                        details={
+                            "phase": "rules+llm",
+                            "kind": skill.kind,
+                            "error": "unparseable LLM response",
+                            "reason": "critic_error",
+                        },
+                    )
+                if not verdict.get("passed", True):
                     llm_flags = verdict.get("flags", [])
                     flags.extend(llm_flags)
                     if not llm_flags:
                         flags.append("harmlessness_llm_rejected")
             except json.JSONDecodeError:
                 logger.warning("harmlessness_critic: unparseable LLM response: %s", content[:200])
+                return CriticVerdict(
+                    passed=False,
+                    flags=["harmlessness_llm_unparseable", "critic_error"],
+                    details={
+                        "phase": "rules+llm",
+                        "kind": skill.kind,
+                        "error": "unparseable LLM response",
+                        "reason": "critic_error",
+                    },
+                )
 
             return CriticVerdict(
                 passed=len(flags) == 0,
@@ -207,9 +233,11 @@ async def harmlessness_critic(skill: Skill) -> CriticVerdict:
             )
         except Exception as exc:
             logger.warning("harmlessness_critic: LLM call failed: %s", exc)
-            # Fail open on LLM error — structural critic already cleared
-            return CriticVerdict(passed=True, flags=["harmlessness_llm_error"],
-                                 details={"error": str(exc)})
+            # Fail closed on LLM error — an errored critic rejects the skill.
+            return CriticVerdict(passed=False,
+                                 flags=["harmlessness_llm_error", "critic_error"],
+                                 details={"error": str(exc),
+                                          "reason": "critic_error"})
 
     return CriticVerdict(passed=True, flags=[],
                          details={"phase": "rules_only"})
@@ -287,27 +315,46 @@ async def consistency_critic(skill: Skill, db: AsyncSession) -> CriticVerdict:
 
         try:
             verdict = json.loads(content)
-            if isinstance(verdict, dict):
-                passed = verdict.get("passed", True)
-                flags = verdict.get("flags", [])
+            if not isinstance(verdict, dict):
+                logger.warning("consistency_critic: unparseable LLM response: %s", content[:200])
                 return CriticVerdict(
-                    passed=passed,
-                    flags=flags,
+                    passed=False,
+                    flags=["consistency_llm_unparseable", "critic_error"],
                     details={
                         "existing_count": len(promoted),
-                        "conflicting_skill": verdict.get("conflicting_skill_name"),
-                        "rationale": verdict.get("rationale"),
+                        "error": "unparseable LLM response",
+                        "reason": "critic_error",
                     },
                 )
+            passed = verdict.get("passed", True)
+            flags = verdict.get("flags", [])
+            return CriticVerdict(
+                passed=passed,
+                flags=flags,
+                details={
+                    "existing_count": len(promoted),
+                    "conflicting_skill": verdict.get("conflicting_skill_name"),
+                    "rationale": verdict.get("rationale"),
+                },
+            )
         except json.JSONDecodeError:
             logger.warning("consistency_critic: unparseable LLM response: %s", content[:200])
-
-        return CriticVerdict(passed=True, flags=["consistency_llm_unparseable"])
+            return CriticVerdict(
+                passed=False,
+                flags=["consistency_llm_unparseable", "critic_error"],
+                details={
+                    "existing_count": len(promoted),
+                    "error": "unparseable LLM response",
+                    "reason": "critic_error",
+                },
+            )
 
     except Exception as exc:
         logger.warning("consistency_critic: LLM call failed: %s", exc)
-        return CriticVerdict(passed=True, flags=["consistency_llm_error"],
-                             details={"error": str(exc)})
+        return CriticVerdict(passed=False,
+                             flags=["consistency_llm_error", "critic_error"],
+                             details={"error": str(exc),
+                                      "reason": "critic_error"})
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -396,8 +443,10 @@ async def marginal_gain_check(
 
     except Exception as exc:
         logger.warning("marginal_gain_check: error: %s", exc)
-        return CriticVerdict(passed=True, flags=["marginal_gain_error"],
-                             details={"error": str(exc)})
+        return CriticVerdict(passed=False,
+                             flags=["marginal_gain_error", "critic_error"],
+                             details={"error": str(exc),
+                                      "reason": "critic_error"})
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -463,24 +512,38 @@ async def admit_skill(skill_id: str, db: AsyncSession, admitted_by: str = "auto"
     return _result("admitted", None, s, h, c, g)
 
 
-async def promote_skill(skill_id: str, db: AsyncSession, promoted_by: str = "auto") -> Skill:
-    """Admit then promote a skill to instance_promoted.
+async def _promote_skill(skill_id: str, db: AsyncSession, promoted_by: str = "auto") -> Skill:
+    """Gate-only promotion: admit then promote a skill to instance_promoted.
 
-    If admission fails, raises ValueError with the rejection reason.
-    Only promotes skills with gate_status='pending'.
+    Private by design (P1-06).  The only sanctioned way to move a skill into
+    ``instance_promoted``.  Unlike the previous implementation, this *always*
+    runs the admission gate — there is no ``gate_status`` short-circuit that
+    would let a non-pending skill skip the critics.  If admission fails, it
+    raises ``ValueError`` and leaves the skill untouched.
     """
     result = await db.execute(select(Skill).where(Skill.id == skill_id))
     skill = result.scalar_one_or_none()
     if not skill:
         raise ValueError(f"Skill not found: {skill_id}")
 
-    if skill.gate_status == "pending":
-        admission = await admit_skill(skill_id, db, admitted_by=promoted_by)
-        if admission["verdict"] != "admitted":
-            raise ValueError(
-                f"Admission rejected by {admission['rejected_by']}: "
-                f"{admission['flags']}"
-            )
+    admission = await admit_skill(skill_id, db, admitted_by=promoted_by)
+    if admission["verdict"] != "admitted":
+        raise ValueError(
+            f"Admission rejected by {admission['rejected_by']}: "
+            f"{admission['flags']}"
+        )
+
+    # admit_skill's _write_log already committed, which clears the store's
+    # tracked-object registry — re-fetch the row so the status transition
+    # below is actually persisted (same guard as run_skill_admission).
+    fresh = await db.execute(select(Skill).where(Skill.id == skill_id))
+    skill = fresh.scalar_one_or_none()
+    if skill is None:
+        raise ValueError(f"Skill not found after admission: {skill_id}")
+
+    # The verdict is "admitted", but enforce the transition table anyway so a
+    # skill in an unexpected state can never be force-promoted.
+    assert_allowed_transition(skill.status, "instance_promoted")
 
     now = utcnow()
     skill.status = "instance_promoted"
@@ -490,7 +553,7 @@ async def promote_skill(skill_id: str, db: AsyncSession, promoted_by: str = "aut
 
     await db.commit()
     await db.refresh(skill)
-    logger.info("promote_skill: %s (%s) → instance_promoted by %s",
+    logger.info("_promote_skill: %s (%s) → instance_promoted by %s",
                  skill.name, skill.id, promoted_by)
     return skill
 
@@ -568,6 +631,7 @@ async def run_skill_admission(db, instance_id: str) -> dict:
                     )
                     continue
 
+                assert_allowed_transition(skill.status, "instance_promoted")
                 now = utcnow()
                 skill.status = "instance_promoted"
                 skill.promoted_at = now
@@ -603,7 +667,7 @@ async def _run_skill_admission_for_all_instances():
     Called from the scheduler (``loop.py``) after the consolidation sweep has
     drafted new pending skills.
     """
-    from ai.store import get_store
+    from ai.engine.core.database import get_store
     from ai.engine.core.models import Instance
 
     factory = get_store().get_session_factory()

@@ -7,13 +7,13 @@ and computes quality scores. Uses LLM-as-judge for relevance scoring.
 import json
 import logging
 from typing import Optional
+from uuid import uuid4
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.engine.core.config import get_settings
 from ai.engine.core.models import Message, PromptEval, PromptVersion, generate_uuid
-from ai.engine.llm.provider import chat_completion
 
 logger = logging.getLogger("pulse.llm.prompt_eval")
 
@@ -65,9 +65,11 @@ async def evaluate_prompt(
     4. Create and return PromptEval rows (NOT committed — caller decides)
 
     Tool call accuracy is approximate: we record tool_calls_made as [] since
-    chat_completion() does not return tool calls. Real tool-call evaluation
+    the eval path does not request tool calls. Real tool-call evaluation
     would require a full agent loop simulation.
     """
+    from ai.engine.llm.router import route_chat
+
     settings = get_settings()
     eval_model = model or settings.EVAL_MODEL or settings.LLM_MODEL
     evals: list[PromptEval] = []
@@ -79,14 +81,30 @@ async def evaluate_prompt(
                 {"role": "system", "content": prompt_text},
                 {"role": "user", "content": query},
             ]
-            response_text = await chat_completion(messages, model=eval_model, temperature=0.2)
+            response_result = await route_chat(
+                task="eval",
+                instance_id=instance_id,
+                conversation_id=f"prompt-eval-{uuid4().hex[:8]}",
+                messages=messages,
+                model=eval_model,
+                temperature=0.2,
+            )
+            response_text = response_result["content"]
 
             # 2. Judge relevance with LLM
             judge_messages = [
                 {"role": "system", "content": "You are an impartial evaluation judge. Return only a float."},
                 {"role": "user", "content": _JUDGE_PROMPT.format(query=query, response=response_text)},
             ]
-            relevance_raw = await chat_completion(judge_messages, model=eval_model, temperature=0.0)
+            relevance_result = await route_chat(
+                task="eval",
+                instance_id=instance_id,
+                conversation_id=f"prompt-eval-{uuid4().hex[:8]}",
+                messages=judge_messages,
+                model=eval_model,
+                temperature=0.0,
+            )
+            relevance_raw = relevance_result["content"]
             try:
                 relevance_score = float(relevance_raw.strip())
                 relevance_score = max(0.0, min(1.0, relevance_score))

@@ -10,7 +10,7 @@ from typing import Optional
 
 from ai.engine.core.clock import utcnow
 
-from ai.store import first, scope_q
+from ai.engine.core.query import first, scope
 
 from ai.engine.core.config import get_settings
 from ai.engine.core.models import MemoryEpisodic, generate_uuid
@@ -162,7 +162,7 @@ class EpisodicMemory:
         for candidate_id in results["ids"][0]:
             rows = await self.db.select(
                 MemoryEpisodic,
-                scope_q(MemoryEpisodic, instance_id, host_user_id),
+                scope(instance_id, host_user_id),
                 ("id", candidate_id),
                 ("archived", False),
             )
@@ -293,7 +293,7 @@ class EpisodicMemory:
 
         episodes = await self.db.select(
             MemoryEpisodic,
-            scope_q(MemoryEpisodic, instance_id, host_user_id),
+            scope(instance_id, host_user_id),
             ("archived", False),
         )
 
@@ -438,7 +438,7 @@ class EpisodicMemory:
         for eid in episode_ids:
             rows = await self.db.select(
                 MemoryEpisodic,
-                scope_q(MemoryEpisodic, instance_id, host_user_id),
+                scope(instance_id, host_user_id),
                 ("id", eid),
                 ("archived", False),
             )

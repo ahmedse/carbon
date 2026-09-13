@@ -356,6 +356,7 @@
   "rotationCreateTitle": "إضافة جدول مناوبة",
   "rotationDeleteConfirm": "حذف جدول المناوبة هذا؟",
   "rotationDeleted": "تم حذف جدول المناوبة",
+  "rotationDescription": "إعداد مناوبات العمل المتكررة وتعيين الموظفين لأنماط المناوبة.",
   "rotationEditTitle": "تعديل جدول مناوبة",
   "rotationEmpty": "لا توجد جداول مناوبة",
   "rotationEmptyDesc": "لم تُسجَّل أي جداول مناوبة بعد.",

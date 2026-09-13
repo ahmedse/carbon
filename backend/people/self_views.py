@@ -30,7 +30,7 @@ from correspondence.policies import PolicyNotFound
 from correspondence.serializers import CorrespondenceDetailSerializer
 from mdm.models import ReferenceValue
 
-from .models import LeaveEntitlement, LeaveRecord, Loan
+from .models import LeaveEntitlement, LeaveRecord, Loan, PayslipLine
 from .permissions import IsActiveEmployee
 from .self_serializers import (
     EmployeeSummarySerializer,
@@ -38,9 +38,13 @@ from .self_serializers import (
     LeaveRecordDetailSerializer,
     LeaveRecordSerializer,
 )
-from .serializers import LoanSerializer
+from .serializers import LoanSerializer, PayslipLineSerializer
 
 SUBJECT_TYPE = 'people.LeaveRecord'
+
+# Payroll run statuses whose payslip lines are final and safe to expose to the
+# employee (F10). Draft/computed runs are internal and stay hidden.
+COMMITTED_RUN_STATUSES = ('validated', 'committed')
 
 
 # ── helpers ────────────────────────────────────────────────────────────────
@@ -399,6 +403,36 @@ class LoanSelfCollectionView(APIView):
             CorrespondenceDetailSerializer(corr).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+class PayslipSelfCollectionView(APIView):
+    """GET lists my committed/validated payslip lines (self-service F10)."""
+
+    permission_classes = [IsAuthenticated, IsActiveEmployee]
+
+    def get(self, request):
+        profile = request.user.employee_profile
+        qs = PayslipLine.objects.filter(
+            employee=profile,
+            payroll_run__status__in=COMMITTED_RUN_STATUSES,
+        )
+        return Response(PayslipLineSerializer(qs, many=True).data)
+
+
+class PayslipSelfDetailView(APIView):
+    """GET a single committed/validated payslip line of mine (self-service F10)."""
+
+    permission_classes = [IsAuthenticated, IsActiveEmployee]
+
+    def get(self, request, pk):
+        profile = request.user.employee_profile
+        line = get_object_or_404(
+            PayslipLine,
+            pk=pk,
+            employee=profile,
+            payroll_run__status__in=COMMITTED_RUN_STATUSES,
+        )
+        return Response(PayslipLineSerializer(line).data)
 
 
 class ProfileChangeSelfView(APIView):

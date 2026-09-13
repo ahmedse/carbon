@@ -96,6 +96,16 @@ async def _run_chat(
     from ai.engine.core.database import get_session_factory
     from ai.engine.knowledge.store import KnowledgeStore
     from ai.host_executor import CarbonHostExecutor
+    from ai.envelope_service import synthesize_envelope
+    from ai.plugins import web_research
+
+    # P2-03: host-provided services injected into the engine runner. The
+    # runner never imports ``ai.plugins.web_research`` / ``ai.envelope_service``
+    # directly; these host-side callables are passed in instead.
+    weather_extractor = types.SimpleNamespace(
+        is_weather_query=web_research._is_weather_query,
+        extract_weather_location=web_research._extract_weather_location,
+    )
 
     message = payload.get("message") or ""
     model = payload.get("model")
@@ -157,6 +167,8 @@ async def _run_chat(
             db=db,
             executor=executor,
             knowledge_store=KnowledgeStore(db),
+            weather_extractor=weather_extractor,
+            envelope_synthesizer=synthesize_envelope,
         )
         response, ledger = await runner.run(
             instance_id=instance_id,
@@ -3688,12 +3700,22 @@ def dispatch_task_stream(task_type: str, payload: dict[str, Any], *, instance_id
 
 
 def get_task(task_id: str, *, timeout: int | None = None) -> dict[str, Any]:
-    """Retrieve an in-process task's status."""
+    """Retrieve an in-process task's status.
+
+    P1-16: honest ``not_supported`` — the in-process engine runs tasks
+    synchronously (``dispatch_task`` returns the terminal result inline), so
+    there is no async task registry to poll.  A real registry arrives in
+    P7-08; until then every call fails closed with ``not_supported`` rather
+    than a misleading ``not_found`` that implies a registry exists.
+    """
     return {
-        "status": "pulse_unavailable",
+        "status": "not_supported",
         "error": {
-            "code": "not_found",
-            "message": f"No in-process task with id {task_id!r}",
+            "code": "not_supported",
+            "message": (
+                "In-process task status polling is not implemented (P7-08); "
+                f"task {task_id!r} ran synchronously and has no pollable status."
+            ),
         },
     }
 

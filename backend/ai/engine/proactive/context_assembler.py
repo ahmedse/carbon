@@ -12,7 +12,7 @@ from ai.engine.core.clock import utcnow
 
 from openai import AsyncOpenAI
 
-from ai.store import first
+from ai.engine.core.query import first
 
 from ai.engine.core.config import get_settings
 from ai.engine.core.models import Notification, SystemSnapshot
@@ -76,16 +76,28 @@ async def _execute_context_queries(
     queries: list[dict],
     host_db_url: str,
 ) -> list[dict]:
-    """Execute attached context queries against the host DB."""
+    """Execute attached context queries against the host DB.
+
+    Every SQL spec is routed through the read-only ``validate_sql`` guard
+    (fail-closed) before it is executed; a rejected query is recorded as an
+    error and never runs.
+    """
     import asyncio
     import psycopg2
+
+    from ai.engine.core.exceptions import ToolExecutionError
+    from ai.engine.core.sql_validator import validate_sql
 
     results = []
     for query_spec in queries[:5]:  # cap at 5 context queries
         sql = query_spec.get("sql", "")
         label = query_spec.get("label", query_spec.get("intent", "context query"))
 
-        if not sql or not sql.strip().upper().startswith("SELECT"):
+        try:
+            validate_sql(sql)
+        except ToolExecutionError as e:
+            logger.warning(f"Context query '{label}' rejected by SQL validator: {e}")
+            results.append({"label": label, "error": str(e)})
             continue
 
         def _run(q=sql):

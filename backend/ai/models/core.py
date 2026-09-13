@@ -687,7 +687,7 @@ class Skill(AppScopeMixin):
     last_executed_at = models.DateTimeField(null=True, blank=True)
     preconditions = models.TextField(null=True, blank=True)
     provenance_run_ids = models.TextField(null=True, blank=True)
-    gate_status = models.TextField(null=True, blank=True)
+    gate_status = models.TextField(default="pending", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

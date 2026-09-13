@@ -15,6 +15,34 @@ class AIConfig(AppConfig):
     verbose_name = "AI Copilot"
 
     def ready(self):
+        # ── P2-03: store + adapter DI bootstrap ──────────────────────────
+        # The vendored engine must never import ``ai.store`` / ``ai.adapters``
+        # directly. We inject the host's concrete backends here — the single,
+        # earliest bootstrap point (runs for the web process, management
+        # commands like ``run_cognition_loop``, and the pytest suite alike).
+        from ai.engine.core.database import set_store_provider
+        from ai.store import get_store as _host_get_store
+
+        set_store_provider(_host_get_store)
+
+        from ai.adapters.cognition import DjangoSweepRunAdapter
+        from ai.adapters.evidence import DjangoEvidenceAdapter
+        from ai.adapters.knowledge import DjangoKnowledgeEntityAdapter
+        from ai.adapters.preferences import DjangoUserPreferenceAdapter
+        from ai.adapters.watches import DjangoWatchAdapter
+
+        from ai.engine.cognition.loop import set_sweep_store_factory
+        from ai.engine.cognition.turn.execute import set_evidence_store_provider
+        from ai.engine.knowledge.store import set_knowledge_entity_store_provider
+        from ai.engine.learning.preferences import set_user_preference_store_provider
+        from ai.engine.proactive.user_watches import set_user_watch_store_factory
+
+        set_sweep_store_factory(DjangoSweepRunAdapter)
+        set_evidence_store_provider(DjangoEvidenceAdapter)
+        set_knowledge_entity_store_provider(DjangoKnowledgeEntityAdapter)
+        set_user_preference_store_provider(DjangoUserPreferenceAdapter)
+        set_user_watch_store_factory(DjangoWatchAdapter)
+
         # Sprint 12 (ARCH_AI_EXTENSIBILITY): register built-in tool/workflow
         # plugins once at startup. Idempotent by name, so safe for ready(),
         # management commands, and the test suite alike.
