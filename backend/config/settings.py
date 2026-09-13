@@ -241,6 +241,7 @@ INSTALLED_APPS = [
     'healthy',
     'people',
     'correspondence',
+    'regulations',
     'rest_framework_simplejwt.token_blacklist',
     'django.contrib.admin',
     'django.contrib.auth',

@@ -1,9 +1,9 @@
 """
 Store — persistence seam for the AI engine (Pulse Vendoring Phase 2).
 
-Replaces the SQLAlchemy-backed ``ai/engine/core/database.py`` with a
+Replaces the retired dual-ORM ``ai/engine/core/database.py`` with a
 swappable, async ``Store`` abstraction selected via
-``settings.AI_STORE_BACKEND``.
+``settings.AI_STORE_BACKEND`` (Django is the single ORM — P2-05).
 
 Backends
 --------
@@ -46,14 +46,14 @@ DEFAULT_VISIBILITY = "private"
 
 # ── Session ──────────────────────────────────────────────────────────────
 #
-# ``get_session_factory(name)`` returns a callable; calling it yields a
-# Session that mirrors the subset of SQLAlchemy AsyncSession used by the
-# engine: ``add``, ``commit``, ``select``, ``get``, ``delete``, ``refresh``,
-# ``flush``, ``close`` plus async-context-manager support.
+# ``get_session_factory(name)`` returns a callable; calling it yields an
+# async Session exposing the engine's persistence surface: ``add``, ``commit``,
+# ``select``, ``get``, ``delete``, ``refresh``, ``flush``, ``close`` plus
+# async-context-manager support.
 
 
 def resolve_model(model: Any) -> Any:
-    """Map an engine (SQLAlchemy) model class → the Django model class.
+    """Map an engine model class → the Django model class.
 
     The 49 engine tables are mirrored 1:1 into ``ai.models`` under identical
     class names, so resolution is a name lookup.  Django models are returned
@@ -150,7 +150,7 @@ def _coerce_filter(f: Any) -> Any:
 
 
 def _to_django_instance(obj: Any) -> Any:
-    """Convert a SQLAlchemy model instance → a Django model instance.
+    """Convert an engine model instance → a Django model instance.
 
     Field names are 1:1 across the two layers, so this is a straight
     attribute copy (skipping ``None`` so Django defaults — ``id`` UUID,
@@ -176,14 +176,14 @@ def _to_django_instance(obj: Any) -> Any:
 
 def _backfill_engine_attrs(engine_obj: Any, dj_obj: Any) -> None:
     """Copy DB-generated values (PK, auto timestamps, server defaults) from a
-    freshly-saved Django instance back onto the engine (SQLAlchemy) instance.
+    freshly-saved Django instance back onto the engine instance.
 
-    SQLAlchemy applies Python-side ``default=`` at flush time and populates
-    the instance with it; the Django store can't do that at ``add()`` time, so
-    we propagate the values the Django ``save()`` generated instead.  This is
-    what lets the engine read ``agent.id`` / ``created_at`` immediately after
-    ``await db.commit()`` (e.g. ``seed_defaults`` uses ``agents[name].id`` to
-    wire handoff edges).
+    The retired SQLAlchemy layer applied Python-side ``default=`` at flush
+    time and populated the instance with it; the Django store can't do that at
+    ``add()`` time, so we propagate the values the Django ``save()`` generated
+    instead.  This is what lets the engine read ``agent.id`` / ``created_at``
+    immediately after ``await db.commit()`` (e.g. ``seed_defaults`` uses
+    ``agents[name].id`` to wire handoff edges).
     """
     if engine_obj is dj_obj:
         return
@@ -210,7 +210,7 @@ def first(rows: list[Any]) -> Any:
 
 
 class Session(ABC):
-    """Async session handle. Mirrors the SQLAlchemy AsyncSession surface."""
+    """Async session handle — the engine's persistence seam."""
 
     @abstractmethod
     async def __aenter__(self) -> "Session":
@@ -269,33 +269,12 @@ class Session(ABC):
     async def close(self) -> None:
         ...
 
-    # ── SQLAlchemy statement execution (Phase 3 fix) ───────────────────────
-    # Concrete defaults so in-memory/stub sessions keep working; the Django
-    # backend overrides these with real translation.
-
-    def execute(self, statement: Any, params: Any = None, **kwargs: Any) -> Any:
-        """Execute a SQLAlchemy-style statement (``select``/``update``/``text``)."""
-        raise NotImplementedError(
-            f"{type(self).__name__} does not implement execute(); "
-            "use the DjangoStore backend for structured statements."
-        )
-
-    def get_bind(self, *args: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError(
-            f"{type(self).__name__} does not implement get_bind()"
-        )
-
-    async def rollback(self) -> None:
-        raise NotImplementedError(
-            f"{type(self).__name__} does not implement rollback()"
-        )
-
 
 # ── Store ABC ────────────────────────────────────────────────────────────
 
 
 class Store(ABC):
-    """Async persistence abstraction replacing the SQLAlchemy layer."""
+    """Async persistence abstraction (Django is the single ORM)."""
 
     @abstractmethod
     def get_engine(self, name: str | None = None) -> Any:
@@ -400,48 +379,6 @@ class _InMemorySession(Session):
                 out[alias] = None
         return out
 
-    async def execute(self, statement: Any, params: Any = None, **kwargs: Any) -> Any:
-        """Execute a structured statement against the in-memory namespace."""
-        import sqlalchemy as sa
-
-        if isinstance(statement, sa.sql.selectable.Select):
-            spec = _select_spec(statement)
-            model = spec["from_model"]
-            namespace = self._store._engine(self._name)
-            rows = [o for o in namespace.values() if isinstance(o, model)]
-            filters = spec["filters_by_table"].get(spec["from_table"], [])
-            if filters:
-                rows = [o for o in rows if all(_q_check(q, o) for q in filters)]
-            rows, _needs_random = _order_rows(rows, spec["order_by"])
-            if spec["limit"] is not None:
-                offset = spec["offset"] or 0
-                rows = rows[offset : offset + spec["limit"]]
-            return _project_result(rows, spec)
-
-        if isinstance(statement, sa.sql.dml.Update):
-            spec = _update_spec(statement)
-            model = spec["model"]
-            namespace = self._store._engine(self._name)
-            count = 0
-            for obj in list(namespace.values()):
-                if isinstance(obj, model) and all(_q_check(q, obj) for q in spec["filters"]):
-                    for field, value in spec["values"].items():
-                        setattr(obj, field, value)
-                    count += 1
-            return _ExecResult([], rowcount=count)
-
-        raise NotImplementedError(
-            f"InMemorySession execute(): unsupported statement type "
-            f"{type(statement).__name__}"
-        )
-
-    def get_bind(self, *args: Any, **kwargs: Any) -> Any:
-        # In-memory backend is not Postgres; vector_store takes the JSON path.
-        return _BindStub("sqlite")
-
-    async def rollback(self) -> None:
-        return None
-
     async def close(self) -> None:
         self._closed = True
 
@@ -506,7 +443,7 @@ class _DjangoSession(Session):
     def add(self, obj: Any) -> None:
         # Keep the original (engine) object paired with its Django mirror so
         # ``commit`` can back-fill generated PKs/defaults onto the engine
-        # instance — mirroring SQLAlchemy's post-flush attribute population
+        # instance — mirroring the engine's post-flush attribute population
         # (the engine relies on ``agent.id`` being set right after commit).
         self._pending.append((obj, _to_django_instance(obj)))
 
@@ -525,7 +462,7 @@ class _DjangoSession(Session):
                 dj_obj.save()
                 _backfill_engine_attrs(engine_obj, dj_obj)
             # Re-save fetched objects whose attributes may have been mutated
-            # in place (mirrors SQLAlchemy's dirty-flush on commit).
+            # in place (mirrors the engine's dirty-flush on commit).
             for obj in tracked:
                 obj.save()
             self._pending.clear()
@@ -592,7 +529,7 @@ class _DjangoSession(Session):
     async def refresh(self, obj: Any) -> None:
         from asgiref.sync import sync_to_async
 
-        # Resolve engine (SQLAlchemy) instances to their Django mirror first —
+        # Resolve engine instances to their Django mirror first —
         # `refresh_from_db` only exists on the Django layer. This matches the
         # `add` / `select` / `get` invariant (QA F1: create_dq_rule runtime
         # crash was the only Store method missing this conversion).
@@ -634,226 +571,6 @@ class _DjangoSession(Session):
             return qs.aggregate(**agg)
 
         return await sync_to_async(_aggregate, thread_sensitive=True)()
-
-    # ── SQLAlchemy statement execution (Phase 3 fix) ───────────────────────
-    #
-    # The engine calls ``await db.execute(stmt)`` for agent-registry fan-out,
-    # skill search, tool-execution DML and vector-store raw SQL.  Before this
-    # fix every call raised ``AttributeError`` (no ``execute`` method), which
-    # the callers swallowed — silently degrading fan-out + skill search and
-    # spamming "couldn't reach the AI service" logs on every chat turn.
-
-    async def execute(self, statement: Any, params: Any = None, **kwargs: Any) -> Any:
-        """Execute a SQLAlchemy statement against the Django ORM."""
-        import sqlalchemy as sa
-        from asgiref.sync import sync_to_async
-        from sqlalchemy.sql.elements import TextClause
-
-        if isinstance(statement, sa.sql.selectable.Select):
-            spec = _select_spec(statement)
-            return await sync_to_async(
-                self._run_django_select, thread_sensitive=True
-            )(spec)
-        if isinstance(statement, sa.sql.dml.Update):
-            spec = _update_spec(statement)
-            return await sync_to_async(
-                self._run_django_update, thread_sensitive=True
-            )(spec)
-        if isinstance(statement, TextClause):
-            return await sync_to_async(
-                self._run_django_text, thread_sensitive=True
-            )(statement, params)
-        raise NotImplementedError(
-            f"DjangoStore execute(): unsupported statement type "
-            f"{type(statement).__name__}"
-        )
-
-    def _run_django_select(self, spec: dict[str, Any]) -> _ExecResult:
-        """Translate a normalized select spec into a Django ORM query."""
-        model = spec["from_model"]
-        from_filters = spec["filters_by_table"].get(spec["from_table"], [])
-
-        # Two-entity projection (e.g. ``select(Agent, AgentHandoff).join(...)``)
-        # → build (from_entity, join_entity) pairs via the ON-column link.
-        if len(spec["descriptions"]) == 2 and spec["joins"]:
-            join = spec["joins"][0]
-            join_model = spec["table_map"].get(join["target_table"])
-            from_qs = model.objects.all()
-            if from_filters:
-                from_qs = from_qs.filter(*from_filters)
-            from_ids = list(from_qs.values_list(join["from_on_field"], flat=True))
-            join_qs = join_model.objects.all()
-            join_qs = join_qs.filter(
-                **{f"{join['join_on_field']}__in": from_ids}
-            )
-            join_filters = spec["filters_by_table"].get(join["target_table"], [])
-            if join_filters:
-                join_qs = join_qs.filter(*join_filters)
-            join_rows = list(join_qs)
-            from_vals = [getattr(r, join["join_on_field"]) for r in join_rows]
-            from_map = {
-                getattr(o, join["from_on_field"]): o
-                for o in model.objects.filter(
-                    **{f"{join['from_on_field']}__in": from_vals}
-                )
-            }
-            pairs = [
-                (from_map[getattr(r, join["join_on_field"])], r)
-                for r in join_rows
-                if getattr(r, join["join_on_field"]) in from_map
-            ]
-            for spec_ob in reversed(
-                [s for s in spec["order_by"] if s and s[0] == "field"]
-            ):
-                field, desc, _nulls_last = spec_ob[1], spec_ob[2], spec_ob[3]
-                pairs.sort(
-                    key=lambda p, f=field: getattr(p[0], f, None) or "",
-                    reverse=desc,
-                )
-            rows = []
-            for agent, handoff in pairs:
-                self._tracked[id(agent)] = agent
-                self._tracked[id(handoff)] = handoff
-                rows.append(_ExecRow(spec["cols"], [agent, handoff]))
-            return _ExecResult(rows, rowcount=len(rows))
-
-        qs = model.objects.all()
-        if from_filters:
-            qs = qs.filter(*from_filters)
-
-        # Single-entity projection with a join (e.g. prompt-eval sampling):
-        # narrow the join entity first, then filter the main query via the ON
-        # column.
-        if spec["joins"]:
-            join = spec["joins"][0]
-            join_model = spec["table_map"].get(join["target_table"])
-            join_qs = join_model.objects.all()
-            join_filters = spec["filters_by_table"].get(join["target_table"], [])
-            if join_filters:
-                join_qs = join_qs.filter(*join_filters)
-            join_ids = list(
-                join_qs.values_list(join["join_on_field"], flat=True)
-            )
-            qs = qs.filter(**{f"{join['from_on_field']}__in": join_ids})
-
-        qs, needs_random = self._apply_django_order(qs, spec["order_by"])
-        limit = spec["limit"]
-        offset = spec["offset"] or 0
-
-        if needs_random:
-            rows = list(qs)
-            import random
-
-            rows = random.sample(rows, min(limit or len(rows), len(rows)))
-        elif limit is not None:
-            rows = list(qs[offset : offset + limit])
-        elif offset:
-            rows = list(qs[offset:])
-        else:
-            rows = list(qs)
-
-        if spec["single_entity"]:
-            for row in rows:
-                self._tracked[id(row)] = row
-        return _project_result(rows, spec)
-
-    def _apply_django_order(
-        self, qs: Any, order_specs: list[tuple | None]
-    ) -> tuple[Any, bool]:
-        """Apply ORDER BY specs; returns (qs, needs_random)."""
-        from django.db.models import Case, F, IntegerField, Value, When
-
-        needs_random = False
-        annotations: dict[str, Any] = {}
-        order_bits: list[Any] = []
-        for spec in order_specs:
-            if spec is None:
-                continue
-            if spec[0] == "random":
-                needs_random = True
-                continue
-            if spec[0] == "bool":
-                field, value = spec[1], spec[2]
-                name = f"_ord_{field}"
-                annotations[name] = Case(
-                    When(**{field: value}, then=Value(1)),
-                    default=Value(0),
-                    output_field=IntegerField(),
-                )
-                order_bits.append(f"-{name}")
-                continue
-            field, desc, nulls_last = spec[1], spec[2], spec[3]
-            if nulls_last:
-                order_bits.append(
-                    F(field).desc(nulls_last=True)
-                    if desc
-                    else F(field).asc(nulls_last=True)
-                )
-            elif desc:
-                order_bits.append(f"-{field}")
-            else:
-                order_bits.append(field)
-        if annotations:
-            qs = qs.annotate(**annotations)
-        if order_bits:
-            qs = qs.order_by(*order_bits)
-        return qs, needs_random
-
-    def _run_django_update(self, spec: dict[str, Any]) -> _ExecResult:
-        """Translate a normalized update spec into ``QuerySet.update``."""
-        qs = spec["model"].objects.all()
-        if spec["filters"]:
-            qs = qs.filter(*spec["filters"])
-        count = qs.update(**spec["values"])
-        return _ExecResult([], rowcount=count)
-
-    def _run_django_text(self, statement: Any, params: Any) -> _ExecResult:
-        """Run raw ``text()`` SQL through the Django DB cursor.
-
-        Engine table names (``vector_embeddings``, ``skill``, …) are mapped to
-        their Django mirror table names (``ai_vectorembedding``, ``ai_skill``)
-        so the engine's raw SQL hits the same rows as the ORM path.  ``:name``
-        bind parameters are translated to Django's ``%(name)s`` (Postgres
-        ``::`` casts, ``->>`` operators and ``<=>``/``<->`` are untouched).
-        """
-        import re as _re
-        from django.db import connection
-
-        sql = statement.text
-        for tablename, engine_cls in _engine_table_map().items():
-            model = resolve_model(engine_cls)
-            if model is None:
-                continue
-            db_table = model._meta.db_table
-            if db_table != tablename:
-                sql = _re.sub(rf"\b{_re.escape(tablename)}\b", db_table, sql)
-        sql = _re.sub(r"(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)", r"%(\1)s", sql)
-        bind = dict(params) if params else dict(getattr(statement, "_params", None) or {})
-        with connection.cursor() as cur:
-            cur.execute(sql, bind)
-            if cur.description:
-                cols = [d[0] for d in cur.description]
-                if len(cols) == 1:
-                    rows = [row[0] for row in cur.fetchall()]
-                    return _ExecResult(rows, is_scalar=True, rowcount=len(rows))
-                rows = [dict(zip(cols, row)) for row in cur.fetchall()]
-                return _ExecResult(rows, rowcount=len(rows))
-            return _ExecResult([], rowcount=cur.rowcount)
-
-    def get_bind(self, *args: Any, **kwargs: Any) -> Any:
-        from django.db import connection
-
-        return _BindStub(connection.vendor)
-
-    async def rollback(self) -> None:
-        from django.db import connection, transaction
-
-        # ``set_rollback`` only works inside an ``atomic`` block; outside one
-        # the transaction is per-statement autocommit, so there is nothing to
-        # roll back — mirror that as a no-op instead of raising.
-        if connection.in_atomic_block:
-            transaction.set_rollback(True)
-        return None
 
     async def close(self) -> None:
         self._closed = True

@@ -15,7 +15,7 @@ from typing import Any, Protocol
 
 
 class Session(Protocol):
-    """Async session handle — mirrors the SQLAlchemy AsyncSession surface."""
+    """Async session handle — the engine's persistence seam."""
 
     async def __aenter__(self) -> "Session":
         ...
@@ -54,15 +54,6 @@ class Session(Protocol):
         ...
 
     async def close(self) -> None:
-        ...
-
-    def execute(self, statement: Any, params: Any = None, **kwargs: Any) -> Any:
-        ...
-
-    def get_bind(self, *args: Any, **kwargs: Any) -> Any:
-        ...
-
-    async def rollback(self) -> None:
         ...
 
 

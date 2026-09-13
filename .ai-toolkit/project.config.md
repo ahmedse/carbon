@@ -6,10 +6,16 @@
 # Last audited: 2026-08-02.
 
 ## PROJECT IDENTITY
-PROJECT_NAME=Carbon
-PROJECT_TYPE=Data Trust Platform (Django + React) — metadata-driven data governance, carbon accounting first app
+PROJECT_NAME=ClearTurn Trust Platform (repo codename "Carbon")
+PROJECT_TYPE=Modular monolith (Django + React) — ONE codebase deployed as MULTIPLE isolated instances (own brand + apps + DB each)
 WORKSPACE_ROOT=/home/ahmed/ws/carbon
-DESCRIPTION=Carbon is evolving into a lighter, Ataccama-inspired Data Trust Platform that hosts domain apps on trusted data. Core: Catalog, MDM (reference data), Data Quality profiling+rules, metadata-driven schema engine (dataschema). First hosted app: Carbon emissions accounting (GHG Protocol). RBAC via ScopedRole (org-unit-scoped). Pulse = in-hand stateless reasoning engine (vendored under backend/ai/engine/); Carbon owns all AI knowledge/memory/learning/feedback.
+DESCRIPTION=One ClearTurn Trust Platform + Pulse (in-hand AI engine). Core (shared): Catalog, MDM, DQ, Evidence, Connections, RBAC/OrgUnit, dataschema, AI/Pulse. Pulse = in-hand stateless reasoning engine (backend/ai/engine/); the platform owns ALL durable AI state. Canonical topology: docs/CLEARTURN-PLATFORM-ARCHITECTURE.md + docs/NIBRAS-MASTER-STRATEGY.md.
+
+## INSTANCES (PRODUCT LINE) — 3 separate platforms, one codebase
+# Do NOT conflate. Nibras is NOT the university; the university is AASTMT.
+INSTANCE_AASTMT=CUSTOMER Arab Academy (AASTMT, academic). Brand "AASTMT · Data Trust Platform". Apps: Carbon (GHG emissions, LIVE), Performarc/Research Lifecycler/Facilities/Sustainability (future).
+INSTANCE_NIBRAS=CUSTOMER GOFSCO (Kuwait oilfield services, ~500 emp) — anchor customer + DESIGN PARTNER. Brand "Nibras / نبراس". ClearTurn's AI-native ERP product (mid-market GCC oilfield/manufacturing). Apps: People/HRMS (KLL/GOSI/WPS payroll, wedge), Stores, Finance.
+INSTANCE_TECTONA=OWNER ClearTurn (flagship AI showcase). Brand "ClearTurn Tectona". Apps: Healthy (factory AI).
 
 ## OPS SCRIPT (Universal — how to run/stop/inspect services)
 OPS_SCRIPT=./manage.sh
@@ -86,7 +92,7 @@ DEPLOY_VERIFY=docker exec <container> grep -c <marker> /app/<path>  ← must be 
 # Core platform apps (NEVER import emissions):
 ARCH_CORE_APPS=accounts, core, catalog, mdm, dq, dataschema, connections, evidence, importexport
 # Hosted apps (may import core apps, never the reverse):
-ARCH_HOSTED_APPS=emissions
+ARCH_HOSTED_APPS=emissions, people, healthy
 # Superseded / out of active scope:
 ARCH_SUPERSEDED=ai_copilot (superseded by backend/ai/)
 # ── AI Architecture ─────────────────────────────────────────────────

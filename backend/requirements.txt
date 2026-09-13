@@ -52,7 +52,6 @@ python-docx==1.1.2                    # Word (.docx) generation for AI study exp
 openpyxl==3.1.5                       # Excel (.xlsx) generation for AI study exports
 
 # ── Vendored Pulse Engine (backend/ai/engine) — INERT, import-only (ADR-0009) ──
-sqlalchemy[asyncio]>=2.0.36,<2.1    # Engine ORM (Phase 1 inert; Phase 2 swaps to Django Store)
 pydantic>=2.7.0,<3                  # Schema models (core/config.py, models)
 pydantic-settings==2.6.0            # Engine Settings (core/config.py)
 openai==2.30.0                      # LLM provider client (llm/provider.py)

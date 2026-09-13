@@ -18,9 +18,8 @@ from datetime import datetime
 from typing import Optional
 
 from ai.engine.core.clock import utcnow
+from ai.engine.core.query import and_, or_
 from uuid import uuid4
-
-from django.db.models import Q
 
 from ai.engine.knowledge_graph.models import (
     NODE_TYPES,
@@ -383,7 +382,7 @@ class KnowledgeGraphStore:
         # Remove all edges touching this node
         edges = await self.db.select(
             KnowledgeEdge,
-            Q(source_node_id=node_id) | Q(target_node_id=node_id),
+            or_(("source_node_id", node_id), ("target_node_id", node_id)),
         )
         for edge in edges:
             _adj_remove_edge(edge.id, edge.source_node_id, edge.target_node_id, edge.instance_id)
@@ -478,8 +477,10 @@ class KnowledgeGraphStore:
 
         if as_of is not None:
             filters.append(
-                Q(valid_from__lte=as_of)
-                & (Q(valid_to__isnull=True) | Q(valid_to__gt=as_of))
+                and_(
+                    ("valid_from__lte", as_of),
+                    or_(("valid_to__isnull", True), ("valid_to__gt", as_of)),
+                )
             )
         else:
             filters.append(("valid_to__isnull", True))
@@ -705,7 +706,10 @@ class KnowledgeGraphStore:
         if include_edges and len(node_ids) > 1:
             edges = await self.db.select(
                 KnowledgeEdge,
-                Q(source_node_id__in=node_ids) & Q(target_node_id__in=node_ids),
+                and_(
+                    ("source_node_id__in", node_ids),
+                    ("target_node_id__in", node_ids),
+                ),
             )
 
         return {"nodes": nodes, "edges": edges}

@@ -1,7 +1,7 @@
-# Chairman Demo Script — Carbon Data Trust Platform + Pulse AI + Nibras
+# Chairman Demo Script — ClearTurn Trust Platform + Pulse AI (AASTMT Carbon · GOFSCO Nibras)
 
 > **Audience:** Chairman / C-level. **Duration:** ~20–25 min. **Environment:** this dev machine (`http://127.0.0.1:5179`).
-> **Narrative thread:** *"One platform, one trusted data spine — from raw campus activity, through a governed carbon ledger, to an AI executive that can *explain* the numbers."*
+> **Narrative thread:** *"One ClearTurn platform, many isolated instances — AASTMT's governed carbon ledger, GOFSCO's Nibras ERP, and one shared Pulse AI that can *explain* any governed number."*
 
 ---
 
@@ -31,7 +31,7 @@
 
 ## 1. The one-liner (30 seconds)
 
-> "This is the Carbon Data Trust Platform — three things on one spine. **Nibras** runs the university (people, payroll, leave). **Carbon** turns that activity into an auditable emissions ledger. **Pulse AI** is the executive layer that can answer *any* question against the governed data — and prove it with an audit trail."
+> "This is the ClearTurn Trust Platform + Pulse AI — one codebase, deployed as isolated instances. **AASTMT Data Trust** runs the university and hosts **Carbon**, the auditable emissions ledger. **Nibras** is GOFSCO's AI-native ERP (people, payroll, leave — Kuwait-compliant). **Pulse AI** is the shared executive layer that answers *any* question against governed data — and proves it with an audit trail."
 
 Then jump straight into the Chairman Dashboard.
 
@@ -94,7 +94,7 @@ Ask the agent **real questions that hit governed data** (keep a cheat-sheet open
 
 ---
 
-## 5. Nibras — the enterprise ERP (4 min)
+## 5. Nibras — GOFSCO's AI-native ERP (4 min)
 
 **URLs:**
 - `http://127.0.0.1:5179/people` — People home
@@ -111,7 +111,7 @@ Show the breadth quickly:
 2. **Payroll Runs** — *"payroll is a governed workflow, not a spreadsheet."* Open a run → payslip.
 3. **Leave / Requests** — the self-service side (`/my/leave`, `/team` inbox for approval flow).
 
-**Talk track:** *"Nibras is the operational source. Its rows feed Carbon, and Carbon feeds Pulse. One spine, three lenses."*
+**Talk track:** *"Nibras is GOFSCO's operational ERP — a separate instance with its own isolated database. Same platform, same Pulse AI, different tenant."*
 
 ---
 
@@ -171,4 +171,4 @@ For a **carbon-rich demo** (non-empty Chairman KPIs), follow `alamein-campus/ALA
 1. **Chairman Dashboard** (`/carbon/chairman`) — the 6 KPIs + SBTi.
 2. **Pulse workspace** (`/admin/ai/workspace`) — ask one governed question, show the sourced structured answer.
 3. **Audit Trail** (`/admin/ai/audit`) — "and here's the proof."
-4. Close: "one spine — operations → carbon ledger → governed AI."
+4. Close: "one platform, many instances — AASTMT carbon, GOFSCO Nibras, one governed Pulse AI."

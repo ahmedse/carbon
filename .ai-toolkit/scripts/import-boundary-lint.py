@@ -20,9 +20,9 @@ TOP-LEVEL module name (first dot-segment) and flag:
   * top-level ``django``.
 
 ``from __future__ import ...`` and relative imports (``.module`` / ``..module``)
-are ignored. ``sqlalchemy`` is intentionally ALLOWED for now — P2-05 removes it
-from the engine in a later task; do NOT flag it (its top-level is neither ``ai``
-nor ``django``, so it is classified as an allowed third-party SDK).
+are ignored. SQLAlchemy has been fully retired from the engine (P2-05 single
+ORM); a stray ``import sqlalchemy`` is classified as a third-party SDK by its
+top-level name, so it is not auto-flagged here — keep the engine free of it.
 
 Outputs one ``relpath:lineno: imported '<module>'`` line per offender and exits 1
 when any offender is not present in the allowlist.

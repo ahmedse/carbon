@@ -7,11 +7,6 @@
 #
 # NOTE: sqlalchemy is deliberately NOT allowlisted here. The script classifies
 # it as an allowed third-party SDK (its top-level is neither `ai` nor
-# `django`). P2-05 owns the sqlalchemy removal from the engine in a later task.
+# `django`). P2-05 has removed sqlalchemy from the engine entirely.
 
-# Deferred to P2-05 (single ORM). `backend/ai/engine/knowledge_graph/store.py`
-# still constructs Django `Q` expressions directly and hands them to the host
-# session's `_coerce_filter`. Replacing this with a portable filter DSL is the
-# P2-05 KG-store conversion — deliberately kept out of P2-04 to avoid
-# destabilising the KG path before the chairman demo. Remove this entry in P2-05.
-backend/ai/engine/knowledge_graph/store.py:23  # django.db.models Q — see P2-05
+# (No entries — the engine import boundary is clean as of P2-05.)
