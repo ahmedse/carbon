@@ -112,11 +112,30 @@ def _coerce_filter(f: Any) -> Any:
     """Normalize a single filter into a Django ``Q`` (or pass-through)."""
     from django.db.models import Q
 
-    # Engine-owned tenancy filter (host→engine direction is allowed).
-    from ai.engine.core.query import TenancyScope
+    # Engine-owned query DSL (host→engine direction is allowed).
+    from ai.engine.core.query import And, Not, Or, TenancyScope
 
     if isinstance(f, TenancyScope):
         return _tenancy_q(f.instance_id, f.host_user_id)
+    if isinstance(f, Or):
+        q = None
+        for child in f.filters:
+            child_q = _coerce_filter(child)
+            if child_q is None:
+                continue
+            q = child_q if q is None else (q | child_q)
+        return q
+    if isinstance(f, And):
+        q = None
+        for child in f.filters:
+            child_q = _coerce_filter(child)
+            if child_q is None:
+                continue
+            q = child_q if q is None else (q & child_q)
+        return q
+    if isinstance(f, Not):
+        child_q = _coerce_filter(f.filter)
+        return ~child_q if child_q is not None else None
     if isinstance(f, Q):
         return f
     if isinstance(f, dict):

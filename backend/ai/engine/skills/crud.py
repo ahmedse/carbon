@@ -11,21 +11,29 @@ import json
 import logging
 from datetime import datetime
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from ai.engine.core.clock import utcnow
 from ai.engine.core.models import Skill
+from ai.engine.core.query import first
+from ai.engine.ports.store import Session
 from ai.engine.skills._authority import check_promotion_token
 from ai.engine.skills.schema import ProcedureBody
 
 logger = logging.getLogger("pulse.skills.crud")
 
 
+def _dt_key(value):
+    """Sort key for datetimes (None-safe)."""
+    if value is None:
+        return 0
+    if isinstance(value, datetime):
+        return value.timestamp()
+    return 0
+
+
 class SkillsStore:
     """Procedure-aware CRUD. Coexists with SkillRegistry (general CRUD)."""
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: Session):
         self.db = db
 
     # ── Create ──────────────────────────────────────────────────────────────
@@ -72,33 +80,29 @@ class SkillsStore:
         self, instance_id: str, name: str, kind: str = "procedure"
     ) -> Skill | None:
         """Look up a skill by name and kind."""
-        result = await self.db.execute(
-            select(Skill).where(
-                Skill.instance_id == instance_id,
-                Skill.name == name,
-                Skill.kind == kind,
+        return first(
+            await self.db.select(
+                Skill,
+                ("instance_id", instance_id),
+                ("name", name),
+                ("kind", kind),
             )
         )
-        return result.scalar_one_or_none()
 
     async def list_procedures(
         self, instance_id: str, status: str | None = None, limit: int = 50
     ) -> list[Skill]:
         """List procedures, optionally filtered by status."""
-        conditions = [
-            Skill.instance_id == instance_id,
-            Skill.kind == "procedure",
+        filters: list = [
+            ("instance_id", instance_id),
+            ("kind", "procedure"),
         ]
         if status:
-            conditions.append(Skill.status == status)
+            filters.append(("status", status))
 
-        result = await self.db.execute(
-            select(Skill)
-            .where(*conditions)
-            .order_by(Skill.created_at.desc())
-            .limit(limit)
-        )
-        return list(result.scalars().all())
+        rows = await self.db.select(Skill, *filters)
+        rows.sort(key=lambda s: _dt_key(s.created_at), reverse=True)
+        return rows[:limit]
 
     async def resolve_skill(
         self, instance_id: str, skill_ref: str
@@ -108,29 +112,27 @@ class SkillsStore:
         Prefers instance_promoted, falls back to draft by author.
         """
         # Try by ID first
-        result = await self.db.execute(
-            select(Skill).where(
-                Skill.id == skill_ref,
-                Skill.instance_id == instance_id,
+        skill = first(
+            await self.db.select(
+                Skill,
+                ("id", skill_ref),
+                ("instance_id", instance_id),
             )
         )
-        skill = result.scalar_one_or_none()
         if skill is not None:
             return skill
 
         # Try by name — prefer promoted, then draft
-        result = await self.db.execute(
-            select(Skill).where(
-                Skill.instance_id == instance_id,
-                Skill.name == skill_ref,
-            ).order_by(
-                # instance_promoted sorts after draft alphabetically,
-                # so reverse: promoted first, then draft
-                Skill.status.desc(),
-                Skill.created_at.desc(),
-            ).limit(1)
+        rows = await self.db.select(
+            Skill,
+            ("instance_id", instance_id),
+            ("name", skill_ref),
         )
-        return result.scalar_one_or_none()
+        rows.sort(
+            key=lambda s: (s.status or "", _dt_key(s.created_at)),
+            reverse=True,
+        )
+        return rows[0] if rows else None
 
     # ── Update ──────────────────────────────────────────────────────────────
 

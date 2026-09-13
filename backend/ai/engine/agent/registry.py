@@ -18,11 +18,20 @@ import json
 import logging
 from typing import Optional
 
-from sqlalchemy import select
-
 from ai.engine.core.models import AGENT_ROLES, Agent, AgentHandoff
+from ai.engine.core.query import first
 
 logger = logging.getLogger("pulse.agent.registry")
+
+
+def _dt_key(value):
+    """Sort key for datetimes (None-safe)."""
+    if value is None:
+        return 0
+    try:
+        return value.timestamp()
+    except AttributeError:
+        return 0
 
 
 class AgentRegistry:
@@ -56,12 +65,13 @@ class AgentRegistry:
         tool_set_json = json.dumps(tool_set) if tool_set is not None else None
         blocks_json = json.dumps(playbook_blocks) if playbook_blocks is not None else None
 
-        stmt = select(Agent).where(
-            Agent.instance_id == instance_id,
-            Agent.name == name,
+        agent = first(
+            await self.db.select(
+                Agent,
+                ("instance_id", instance_id),
+                ("name", name),
+            )
         )
-        result = await self.db.execute(stmt)
-        agent = result.scalar_one_or_none()
 
         if agent is None:
             agent = Agent(
@@ -89,38 +99,38 @@ class AgentRegistry:
 
     async def get_agent(self, instance_id: str, name_or_role: str) -> Optional[Agent]:
         """Look up by name first, then by role (returns first active)."""
-        stmt = select(Agent).where(
-            Agent.instance_id == instance_id,
-            Agent.name == name_or_role,
-            Agent.is_active.is_(True),
+        agent = first(
+            await self.db.select(
+                Agent,
+                ("instance_id", instance_id),
+                ("name", name_or_role),
+                ("is_active", True),
+            )
         )
-        result = await self.db.execute(stmt)
-        agent = result.scalar_one_or_none()
         if agent is not None:
             return agent
 
-        stmt = select(Agent).where(
-            Agent.instance_id == instance_id,
-            Agent.role == name_or_role,
-            Agent.is_active.is_(True),
-        ).order_by(Agent.created_at.asc())
-        result = await self.db.execute(stmt)
-        return result.scalars().first()
+        rows = await self.db.select(
+            Agent,
+            ("instance_id", instance_id),
+            ("role", name_or_role),
+            ("is_active", True),
+        )
+        rows.sort(key=lambda a: _dt_key(a.created_at))
+        return rows[0] if rows else None
 
     async def list_agents(self, instance_id: str, role: Optional[str] = None) -> list[Agent]:
         """All agents for an instance, optionally filtered by role."""
-        stmt = select(Agent).where(Agent.instance_id == instance_id)
+        filters: list = [("instance_id", instance_id)]
         if role is not None:
-            stmt = stmt.where(Agent.role == role)
-        stmt = stmt.order_by(Agent.created_at.asc())
-        result = await self.db.execute(stmt)
-        return list(result.scalars().all())
+            filters.append(("role", role))
+        rows = await self.db.select(Agent, *filters)
+        rows.sort(key=lambda a: _dt_key(a.created_at))
+        return rows
 
     async def remove_agent(self, agent_id: str) -> None:
         """Soft-delete an agent (is_active=False); the row stays in the DB."""
-        stmt = select(Agent).where(Agent.id == agent_id)
-        result = await self.db.execute(stmt)
-        agent = result.scalar_one_or_none()
+        agent = first(await self.db.select(Agent, ("id", agent_id)))
         if agent is not None:
             agent.is_active = False
             await self.db.commit()
@@ -135,12 +145,13 @@ class AgentRegistry:
         max_parallel: int = 1,
     ) -> Optional[AgentHandoff]:
         """Declare a valid handoff edge.  Idempotent — skips if the pair exists."""
-        stmt = select(AgentHandoff).where(
-            AgentHandoff.from_agent_id == from_agent_id,
-            AgentHandoff.to_agent_id == to_agent_id,
+        existing = first(
+            await self.db.select(
+                AgentHandoff,
+                ("from_agent_id", from_agent_id),
+                ("to_agent_id", to_agent_id),
+            )
         )
-        result = await self.db.execute(stmt)
-        existing = result.scalar_one_or_none()
         if existing is not None:
             return existing
 
@@ -161,31 +172,39 @@ class AgentRegistry:
         implicit); every other handoff must be declared.
         """
         if from_agent_id == to_agent_id:
-            stmt = select(Agent).where(Agent.id == from_agent_id)
-            result = await self.db.execute(stmt)
-            agent = result.scalar_one_or_none()
+            agent = first(await self.db.select(Agent, ("id", from_agent_id)))
             return agent is not None and agent.role == "orchestrator"
 
-        stmt = select(AgentHandoff.id).where(
-            AgentHandoff.from_agent_id == from_agent_id,
-            AgentHandoff.to_agent_id == to_agent_id,
+        handoff = first(
+            await self.db.select(
+                AgentHandoff,
+                ("from_agent_id", from_agent_id),
+                ("to_agent_id", to_agent_id),
+            )
         )
-        result = await self.db.execute(stmt)
-        return result.scalar_one_or_none() is not None
+        return handoff is not None
 
     async def get_workers_for(self, agent_id: str) -> list[tuple[Agent, AgentHandoff]]:
         """All active agents this agent can delegate to, with handoff metadata."""
-        stmt = (
-            select(Agent, AgentHandoff)
-            .join(AgentHandoff, AgentHandoff.to_agent_id == Agent.id)
-            .where(
-                AgentHandoff.from_agent_id == agent_id,
-                Agent.is_active.is_(True),
-            )
-            .order_by(Agent.created_at.asc())
+        handoffs = await self.db.select(
+            AgentHandoff,
+            ("from_agent_id", agent_id),
         )
-        result = await self.db.execute(stmt)
-        return [(agent, handoff) for agent, handoff in result.all()]
+        if not handoffs:
+            return []
+
+        agents = await self.db.select(
+            Agent,
+            ("id__in", [h.to_agent_id for h in handoffs]),
+            ("is_active", True),
+        )
+        agents.sort(key=lambda a: _dt_key(a.created_at))
+        handoff_by_to = {h.to_agent_id: h for h in handoffs}
+        return [
+            (agent, handoff_by_to[agent.id])
+            for agent in agents
+            if agent.id in handoff_by_to
+        ]
 
     # ── Default topology ────────────────────────────────────────────────────
 

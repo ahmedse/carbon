@@ -64,6 +64,7 @@ class LeaveRecordSerializer(serializers.ModelSerializer):
 
     reference_no = serializers.SerializerMethodField()
     correspondence_id = serializers.SerializerMethodField()
+    correspondence_status = serializers.SerializerMethodField()
     leave_type = serializers.SerializerMethodField()
     leave_type_label = serializers.SerializerMethodField()
 
@@ -73,6 +74,7 @@ class LeaveRecordSerializer(serializers.ModelSerializer):
             'id', 'leave_type', 'leave_type_label', 'start_date', 'end_date',
             'days', 'status',
             'created_at', 'updated_at', 'reference_no', 'correspondence_id',
+            'correspondence_status',
         ]
         read_only_fields = fields
 
@@ -100,6 +102,10 @@ class LeaveRecordSerializer(serializers.ModelSerializer):
     def get_correspondence_id(self, obj):
         corr = self._correspondence(obj)
         return corr.id if corr else None
+
+    def get_correspondence_status(self, obj):
+        corr = self._correspondence(obj)
+        return corr.status if corr else obj.status
 
 
 class LeaveRecordDetailSerializer(LeaveRecordSerializer):

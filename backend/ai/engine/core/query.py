@@ -20,3 +20,36 @@ class TenancyScope:
 def scope(instance_id: str, host_user_id: str | None) -> TenancyScope:
     """Build an engine-side tenancy filter (expanded by the host store)."""
     return TenancyScope(instance_id=instance_id, host_user_id=host_user_id)
+
+
+@dataclass(frozen=True)
+class Or:
+    """Portable OR composition. Expanded by the host store into its ORM."""
+    filters: tuple[Any, ...]
+
+
+@dataclass(frozen=True)
+class And:
+    """Portable AND composition. Expanded by the host store into its ORM."""
+    filters: tuple[Any, ...]
+
+
+@dataclass(frozen=True)
+class Not:
+    """Portable negation. Expanded by the host store into its ORM."""
+    filter: Any
+
+
+def or_(*filters: Any) -> Or:
+    """Build an OR composition of engine filters (no host ORM import)."""
+    return Or(tuple(filters))
+
+
+def and_(*filters: Any) -> And:
+    """Build an AND composition of engine filters (no host ORM import)."""
+    return And(tuple(filters))
+
+
+def not_(filter_: Any) -> Not:
+    """Build a negation of an engine filter (no host ORM import)."""
+    return Not(filter_)

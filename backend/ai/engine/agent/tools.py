@@ -1177,12 +1177,12 @@ async def execute_run_ops_workflow(
     source: str | None = None
     # Prefer the staged upload (lossless, untruncated).
     if upload_id:
-        from sqlalchemy import select
         from ai.engine.core.models import CsvUpload
+        from ai.engine.core.query import first
 
-        row = (
-            await executor.db.execute(select(CsvUpload).where(CsvUpload.id == upload_id))
-        ).scalar_one_or_none()
+        row = first(
+            await executor.db.select(CsvUpload, ("id", upload_id))
+        )
         if row is None:
             return {"error": f"No staged upload found for upload_id={upload_id!r}."}
         source = row.content

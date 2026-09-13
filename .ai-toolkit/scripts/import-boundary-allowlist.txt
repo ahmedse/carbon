@@ -1,0 +1,17 @@
+# Import-boundary allowlist (P2-04)
+#
+# Format: relpath:lineno  # justification
+# Only add an entry when a detected import is CORRECT (the engine may
+# legitimately depend on it) and you can justify why. Prefer fixing the code
+# over allowlisting. Blank lines and `#` comment lines are ignored.
+#
+# NOTE: sqlalchemy is deliberately NOT allowlisted here. The script classifies
+# it as an allowed third-party SDK (its top-level is neither `ai` nor
+# `django`). P2-05 owns the sqlalchemy removal from the engine in a later task.
+
+# Deferred to P2-05 (single ORM). `backend/ai/engine/knowledge_graph/store.py`
+# still constructs Django `Q` expressions directly and hands them to the host
+# session's `_coerce_filter`. Replacing this with a portable filter DSL is the
+# P2-05 KG-store conversion — deliberately kept out of P2-04 to avoid
+# destabilising the KG path before the chairman demo. Remove this entry in P2-05.
+backend/ai/engine/knowledge_graph/store.py:23  # django.db.models Q — see P2-05

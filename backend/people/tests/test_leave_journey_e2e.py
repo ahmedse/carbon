@@ -211,6 +211,41 @@ def test_balance_pending_rises_then_falls(workflow, api_client, get_token_for_us
     assert record.status == 'draft'
 
 
+# ── 3b. approved correspondence counts days as used (F13 regression) ───────
+
+@pytest.mark.django_db
+def test_balance_used_after_approval(workflow, api_client, get_token_for_user):
+    wf = workflow
+    _seed_annual(wf, days='20')
+    _auth(api_client, wf.requester_user, get_token_for_user)
+
+    before = _annual_balance(api_client)
+    assert _dec(before['used']) == Decimal('0')
+    assert _dec(before['remaining']) == Decimal('20')
+
+    submitted = api_client.post(LEAVE_URL, _payload(), format='json')
+    assert submitted.status_code == 201, submitted.content
+
+    corr_id = submitted.json()['id']
+    _auth(api_client, wf.manager_user, get_token_for_user)
+    approve = api_client.post(
+        f'{PREFIX}/correspondence/{corr_id}/approve/',
+        {'comment': 'approved'}, format='json',
+    )
+    assert approve.status_code == 200, approve.content
+    assert approve.json()['status'] == 'approved'
+
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    after = _annual_balance(api_client)
+    assert _dec(after['used']) == Decimal('5')
+    assert _dec(after['pending']) == Decimal('0')
+    assert _dec(after['remaining']) == Decimal('15')
+
+    # LeaveRecord stays 'draft' — approved days still count as used (F13).
+    record = LeaveRecord.objects.get(pk=submitted.json()['subject_id'])
+    assert record.status == 'draft'
+
+
 # ── 4. reject path: rejected request no longer blocks a new overlap ────────
 
 @pytest.mark.django_db

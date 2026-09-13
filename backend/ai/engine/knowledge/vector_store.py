@@ -16,8 +16,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+from ai.engine.ports.store import Session
 
 _log = logging.getLogger("pulse.vector_store")
 
@@ -68,7 +67,7 @@ class AbstractVectorStore(ABC):
 
 # ── Factory ───────────────────────────────────────────────────────────────────
 
-def get_vector_store(db_session: AsyncSession) -> AbstractVectorStore:
+def get_vector_store(db_session: Session) -> AbstractVectorStore:
     """Return the configured vector store backend.
 
     The backend is chosen once per process based on ``VECTOR_BACKEND``.
@@ -90,7 +89,7 @@ class ChromaDbVectorStore(AbstractVectorStore):
     """ChromaDB-backed store. Kept for backward compatibility.
     Prefer PgVectorStore for new deployments. Requires ``pip install chromadb``."""
 
-    def __init__(self, db_session: AsyncSession):
+    def __init__(self, db_session: Session):
         self.db = db_session
         self._client = None
 
@@ -150,7 +149,7 @@ class PgVectorStore(AbstractVectorStore):
     via ``embedding_json::vector`` casts.
     """
 
-    def __init__(self, db_session: AsyncSession):
+    def __init__(self, db_session: Session):
         self.db = db_session
 
     # ── helpers ───────────────────────────────────────────────────────────
@@ -182,33 +181,29 @@ class PgVectorStore(AbstractVectorStore):
 
     async def upsert(self, collection, ids, documents, metadatas, instance_id):
         from ai.engine.core.models import VectorEmbedding
+        from ai.engine.core.query import first
 
         vectors = await self._embed(documents)
         if not vectors:
             return  # embedding failed — logged in _embed, no zero-vector stored
-        now = None  # let server_default handle it
 
         for i, eid in enumerate(ids):
             emb_json = self._embedding_json(vectors[i])
             meta_json = json.dumps(metadatas[i]) if i < len(metadatas) else "{}"
 
-            # Check for existing row (upsert pattern)
-            result = await self.db.execute(
-                text(
-                    "SELECT id FROM vector_embeddings WHERE id = :id AND collection = :coll"
-                ),
-                {"id": eid, "coll": collection},
-            )
-            existing = result.scalar_one_or_none()
-
-            if existing:
-                await self.db.execute(
-                    text(
-                        "UPDATE vector_embeddings SET document = :doc, metadata_json = :meta, "
-                        "embedding_json = :emb WHERE id = :id"
-                    ),
-                    {"id": eid, "doc": documents[i], "meta": meta_json, "emb": emb_json},
+            # Check for an existing row in this collection (upsert pattern).
+            existing = first(
+                await self.db.select(
+                    VectorEmbedding,
+                    ("id", eid),
+                    ("collection", collection),
                 )
+            )
+
+            if existing is not None:
+                existing.document = documents[i]
+                existing.metadata_json = meta_json
+                existing.embedding_json = emb_json
             else:
                 row = VectorEmbedding(
                     id=eid,
@@ -223,6 +218,8 @@ class PgVectorStore(AbstractVectorStore):
         await self.db.commit()
 
     async def query(self, collection, query_texts, n_results, where, instance_id):
+        from ai.engine.core.models import VectorEmbedding
+
         query_vecs = await self._embed(query_texts)
         if not query_vecs or not query_vecs[0]:
             _log.error(
@@ -231,64 +228,27 @@ class PgVectorStore(AbstractVectorStore):
             return {"ids": [[]], "documents": [[]], "metadatas": [[]], "distances": [[]]}
 
         query_vec = query_vecs[0]
-        query_json = self._embedding_json(query_vec)
 
-        # Build WHERE clause from ChromaDB-style `where` dict
-        where_clauses = ["collection = :coll"]
-        params: dict = {"coll": collection, "limit": n_results}
+        rows = await self.db.select(VectorEmbedding, ("collection", collection))
 
-        # Determine dialect for metadata JSON filter
-        try:
-            bind = self.db.get_bind()
-            is_pg = bind.dialect.name == "postgresql"
-        except Exception:
-            is_pg = False
-
-        if where:
-            for key, val in where.items():
-                param_key = f"w_{key}"
-                if is_pg:
-                    where_clauses.append(f"metadata_json::jsonb->>'{key}' = :{param_key}")
-                else:
-                    where_clauses.append(f"json_extract(metadata_json, '$.{key}') = :{param_key}")
-                params[param_key] = val
-
-        where_sql = " AND ".join(where_clauses)
-
-        # Try pgvector native cosine similarity first
-        pgvector_sql = (
-            "SELECT id, document, metadata_json, embedding_json, "
-            "  1 - (embedding_json::vector <=> :query_vec::vector) AS similarity "
-            f"FROM vector_embeddings WHERE {where_sql} "
-            "AND embedding_json IS NOT NULL "
-            "ORDER BY similarity DESC LIMIT :limit"
-        )
-
-        try:
-            params["query_vec"] = query_json
-            result = await self.db.execute(text(pgvector_sql), params)
-            rows = result.mappings().all()
-            del params["query_vec"]
-        except Exception:
-            # pgvector extension not available → rollback & fall back to Python cosine similarity
-            await self.db.rollback()
-            params.pop("query_vec", None)
-            rows = await self._query_python_fallback(
-                where_sql, params, query_vec, n_results
-            )
+        # Apply the ChromaDB-style metadata filter in Python, then score the
+        # surviving rows by cosine similarity (single portable path — no
+        # pgvector raw SQL, no dialect branching).
+        scored = self._score_rows(rows, query_vec, where or {})
+        scored.sort(key=lambda r: r["similarity"], reverse=True)
+        scored = scored[:n_results]
 
         ids_list: list[str] = []
         docs_list: list[str] = []
         metas_list: list[dict] = []
         dists_list: list[float] = []
 
-        for row in rows:
+        for row in scored:
             ids_list.append(row["id"])
             docs_list.append(row["document"])
             metas_list.append(json.loads(row["metadata_json"]) if row["metadata_json"] else {})
             # similarity → distance
-            sim = row.get("similarity", 0.0)
-            dists_list.append(1.0 - float(sim))
+            dists_list.append(1.0 - float(row["similarity"]))
 
         return {
             "ids": [ids_list],
@@ -297,25 +257,15 @@ class PgVectorStore(AbstractVectorStore):
             "distances": [dists_list],
         }
 
-    async def _query_python_fallback(
+    def _score_rows(
         self,
-        where_sql: str,
-        params: dict,
+        rows: list,
         query_vec: list[float],
-        n_results: int,
+        where: dict,
     ) -> list[dict]:
-        """Fallback: load all matching rows and compute cosine similarity in Python."""
+        """Filter rows by the ``where`` metadata dict and score by cosine."""
         import math
 
-        sql = (
-            "SELECT id, document, metadata_json, embedding_json "
-            f"FROM vector_embeddings WHERE {where_sql} "
-            "AND embedding_json IS NOT NULL"
-        )
-        result = await self.db.execute(text(sql), params)
-        rows = result.mappings().all()
-
-        # Compute cosine similarity in Python
         def cosine_sim(a: list[float], b: list[float]) -> float:
             dot = sum(x * y for x, y in zip(a, b))
             norm_a = math.sqrt(sum(x * x for x in a))
@@ -326,27 +276,46 @@ class PgVectorStore(AbstractVectorStore):
 
         scored = []
         for row in rows:
-            emb = json.loads(row["embedding_json"]) if row["embedding_json"] else []
-            if emb:
-                sim = cosine_sim(query_vec, emb)
-                scored.append({**row, "similarity": sim})
+            emb = self._parse_embedding(getattr(row, "embedding_json", None))
+            if not emb:
+                continue
+            if where:
+                try:
+                    meta = json.loads(getattr(row, "metadata_json", None) or "{}")
+                except (TypeError, ValueError):
+                    meta = {}
+                if not all(meta.get(k) == v for k, v in where.items()):
+                    continue
+            sim = cosine_sim(query_vec, emb)
+            scored.append(
+                {
+                    "id": getattr(row, "id", None),
+                    "document": getattr(row, "document", None),
+                    "metadata_json": getattr(row, "metadata_json", None),
+                    "similarity": sim,
+                }
+            )
 
-        scored.sort(key=lambda r: r["similarity"], reverse=True)
-        return scored[:n_results]
+        return scored
 
     async def delete(self, collection, ids, instance_id):
+        from ai.engine.core.models import VectorEmbedding
+
         if not ids:
             return
-        placeholders = ",".join([f":id_{i}" for i in range(len(ids))])
-        params = {f"id_{i}": eid for i, eid in enumerate(ids)}
-        params["coll"] = collection
-        await self.db.execute(
-            text(f"DELETE FROM vector_embeddings WHERE collection = :coll AND id IN ({placeholders})"),
-            params,
+        rows = await self.db.select(
+            VectorEmbedding,
+            ("collection", collection),
+            ("id__in", list(ids)),
         )
+        for row in rows:
+            await self.db.delete(row)
         await self.db.commit()
 
     async def update(self, collection, ids, documents, metadatas, instance_id):
+        from ai.engine.core.models import VectorEmbedding
+        from ai.engine.core.query import first
+
         if not documents:
             return
         # Re-embed updated documents
@@ -356,11 +325,15 @@ class PgVectorStore(AbstractVectorStore):
         for i, eid in enumerate(ids):
             meta_json = json.dumps(metadatas[i]) if i < len(metadatas) else "{}"
             emb_json = self._embedding_json(vectors[i])
-            await self.db.execute(
-                text(
-                    "UPDATE vector_embeddings SET document = :doc, metadata_json = :meta, "
-                    "embedding_json = :emb WHERE id = :id AND collection = :coll"
-                ),
-                {"id": eid, "coll": collection, "doc": documents[i], "meta": meta_json, "emb": emb_json},
+            row = first(
+                await self.db.select(
+                    VectorEmbedding,
+                    ("id", eid),
+                    ("collection", collection),
+                )
             )
+            if row is not None:
+                row.document = documents[i]
+                row.metadata_json = meta_json
+                row.embedding_json = emb_json
         await self.db.commit()

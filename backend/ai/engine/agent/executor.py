@@ -9,12 +9,12 @@ from datetime import datetime
 
 from ai.engine.core.clock import utcnow
 import httpx
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.engine.core.config import get_settings
 from ai.engine.core.exceptions import ToolExecutionError
 from ai.engine.core.models import ToolExecution, generate_uuid
+from ai.engine.core.query import first
+from ai.engine.ports.store import Session
 
 logger = logging.getLogger("pulse.agent.executor")
 
@@ -51,7 +51,7 @@ class HostAPIExecutor:
 
     def __init__(
         self,
-        db: AsyncSession,
+        db: Session,
         instance_config: dict | None = None,
         user_token: str | None = None,
     ):
@@ -139,14 +139,12 @@ class HostAPIExecutor:
         sees the latest (most refined) version — not a stack of duplicates.
         Returns the number of records cancelled.
         """
-        stmt = (
-            select(ToolExecution)
-            .where(ToolExecution.conversation_id == conversation_id)
-            .where(ToolExecution.tool_name == "learn_fact")
-            .where(ToolExecution.status == "pending_confirmation")
+        stale = await self.db.select(
+            ToolExecution,
+            ("conversation_id", conversation_id),
+            ("tool_name", "learn_fact"),
+            ("status", "pending_confirmation"),
         )
-        result = await self.db.execute(stmt)
-        stale = result.scalars().all()
         for ex in stale:
             ex.status = "declined"
             ex.result = json.dumps({"reason": "superseded_by_newer_proposal"})
@@ -160,9 +158,7 @@ class HostAPIExecutor:
 
     async def confirm_execution(self, execution_id: str, expected_host_user_id: str | None = None) -> dict:
         """User confirmed — execute the API call."""
-        stmt = select(ToolExecution).where(ToolExecution.id == execution_id)
-        result = await self.db.execute(stmt)
-        execution = result.scalar_one_or_none()
+        execution = first(await self.db.select(ToolExecution, ("id", execution_id)))
 
         if not execution:
             raise ToolExecutionError(f"Execution '{execution_id}' not found")
@@ -213,11 +209,9 @@ class HostAPIExecutor:
         """User declined — mark as declined."""
         # Defense-in-depth ownership check (P0-2)
         if expected_host_user_id is not None:
-            exec_row = (
-                await self.db.execute(
-                    select(ToolExecution).where(ToolExecution.id == execution_id)
-                )
-            ).scalar_one_or_none()
+            exec_row = first(
+                await self.db.select(ToolExecution, ("id", execution_id))
+            )
             if (
                 exec_row
                 and exec_row.host_user_id is not None
@@ -228,12 +222,10 @@ class HostAPIExecutor:
                     f"not {expected_host_user_id}"
                 )
 
-        stmt = (
-            update(ToolExecution)
-            .where(ToolExecution.id == execution_id)
-            .values(status="declined", executed_at=utcnow())
-        )
-        await self.db.execute(stmt)
+        execution = first(await self.db.select(ToolExecution, ("id", execution_id)))
+        if execution is not None:
+            execution.status = "declined"
+            execution.executed_at = utcnow()
         await self.db.commit()
         logger.info(f"Declined execution: {execution_id}")
 

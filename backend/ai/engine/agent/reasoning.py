@@ -12,6 +12,17 @@ from ai.engine.core.config import get_settings
 from ai.engine.llm.prompts import build_chat_prompt
 from ai.engine.llm.router import get_model_for_task, route_chat
 
+
+def _dt_key(value):
+    """Sort key for datetimes (None-safe)."""
+    if value is None:
+        return 0
+    try:
+        return value.timestamp()
+    except AttributeError:
+        return 0
+
+
 # Fast regex to detect simple conversational messages that don't need tools
 _CONVERSATIONAL_RE = re.compile(
     r"^\s*"
@@ -1136,22 +1147,17 @@ class PulseAgent:
         Closes the feedback loop: corrections → golden pairs → better SQL generation.
         """
         from ai.engine.core.database import get_session_factory
-        from sqlalchemy import select
         from ai.engine.knowledge_graph.models import KgGoldenPair
 
         session_factory = get_session_factory()
         async with session_factory() as db:
-            stmt = (
-                select(KgGoldenPair)
-                .where(
-                    KgGoldenPair.instance_id == instance_id,
-                    KgGoldenPair.review_status == "approved",
-                )
-                .order_by(KgGoldenPair.reviewed_at.desc())
-                .limit(limit)
+            rows = await db.select(
+                KgGoldenPair,
+                ("instance_id", instance_id),
+                ("review_status", "approved"),
             )
-            result = await db.execute(stmt)
-            rows = result.scalars().all()
+            rows.sort(key=lambda r: _dt_key(r.reviewed_at), reverse=True)
+            rows = rows[:limit]
             return [
                 {
                     "natural_language": r.natural_language,

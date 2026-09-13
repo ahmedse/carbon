@@ -43,6 +43,38 @@ class AIConfig(AppConfig):
         set_user_preference_store_provider(DjangoUserPreferenceAdapter)
         set_user_watch_store_factory(DjangoWatchAdapter)
 
+        # ── P2-03: PII / step-index / host-DB-URL DI bootstrap ─────────
+        from ai.pii_guard import PIIGuard
+        from ai.engine.cognition.auto_memory import set_pii_redactor
+
+        set_pii_redactor(PIIGuard.redact)
+
+        from ai.plans_service import set_current_step_index
+        from ai.engine.cognition.plan.loop import set_step_index_context
+
+        set_step_index_context(set_current_step_index)
+
+        from ai.engine.knowledge_graph.engine import set_default_host_db_url_provider
+
+        def _host_default_db_url() -> str:
+            from django.conf import settings
+            try:
+                db = settings.DATABASES["default"]
+            except (KeyError, AttributeError):
+                return ""
+            engine_name = db.get("ENGINE", "")
+            if "postgres" not in engine_name and "cockroach" not in engine_name:
+                return ""
+            user = db.get("USER", "") or ""
+            password = db.get("PASSWORD", "") or ""
+            host = db.get("HOST", "") or "localhost"
+            port = db.get("PORT", "") or "5432"
+            name = db.get("NAME", "") or ""
+            auth = f"{user}:{password}@" if user else ""
+            return f"postgresql://{auth}{host}:{port}/{name}"
+
+        set_default_host_db_url_provider(_host_default_db_url)
+
         # Sprint 12 (ARCH_AI_EXTENSIBILITY): register built-in tool/workflow
         # plugins once at startup. Idempotent by name, so safe for ready(),
         # management commands, and the test suite alike.

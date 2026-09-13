@@ -10,14 +10,20 @@ import logging
 from typing import Optional
 from uuid import uuid4
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from ai.engine.core.config import get_settings
 from ai.engine.core.models import PromptEval, PromptVersion, generate_uuid
+from ai.engine.core.query import first
 from ai.engine.llm.prompt_eval import compute_prompt_score, evaluate_prompt, get_eval_queries
+from ai.engine.ports.store import Session
 
 logger = logging.getLogger("pulse.llm.prompt_optimizer")
+
+
+def _score_key(value):
+    """Sort key for prompt scores (None-safe, None sorts last)."""
+    if value is None:
+        return -1.0
+    return value
 
 # ── Meta-prompts ──────────────────────────────────────────────────────────
 
@@ -62,7 +68,7 @@ Return ONLY the rewritten system prompt text, no preamble, no markdown fences.""
 # ── Public API ────────────────────────────────────────────────────────────
 
 async def optimize_prompt(
-    db: AsyncSession,
+    db: Session,
     instance_name: str,
     instance_id: str,
     max_rounds: int = 3,
@@ -79,16 +85,13 @@ async def optimize_prompt(
     6. Return the highest-scoring prompt.
     """
     # 1. Find the current active prompt version
-    result = await db.execute(
-        select(PromptVersion)
-        .where(
-            PromptVersion.instance_id == instance_id,
-            PromptVersion.is_active == True,  # noqa: E712
-        )
-        .order_by(PromptVersion.improvement_round.desc())
-        .limit(1)
+    active = await db.select(
+        PromptVersion,
+        ("instance_id", instance_id),
+        ("is_active", True),
     )
-    current_version = result.scalar_one_or_none()
+    active.sort(key=lambda v: v.improvement_round or 0, reverse=True)
+    current_version = active[0] if active else None
 
     if current_version is None:
         logger.warning(f"No active prompt version for {instance_name} — cannot optimize")
@@ -237,24 +240,17 @@ async def _rewrite_prompt(
     return rewritten.strip()
 
 
-async def _activate_best(db: AsyncSession, instance_id: str, best_score: float) -> None:
+async def _activate_best(db: Session, instance_id: str, best_score: float) -> None:
     """Deactivate all prompts for this instance, then activate the highest-scoring one."""
-    from sqlalchemy import update
-
     # Deactivate all
-    await db.execute(
-        update(PromptVersion)
-        .where(PromptVersion.instance_id == instance_id)
-        .values(is_active=False)
+    all_versions = await db.select(
+        PromptVersion, ("instance_id", instance_id)
     )
+    for v in all_versions:
+        v.is_active = False
 
-    # Find the best-scoring version
-    result = await db.execute(
-        select(PromptVersion)
-        .where(PromptVersion.instance_id == instance_id)
-        .order_by(PromptVersion.score.desc().nullslast())
-        .limit(1)
-    )
-    best = result.scalar_one_or_none()
+    # Find the best-scoring version (None score sorts last)
+    all_versions.sort(key=lambda v: _score_key(v.score), reverse=True)
+    best = all_versions[0] if all_versions else None
     if best:
         best.is_active = True

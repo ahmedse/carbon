@@ -632,6 +632,7 @@ class TurnPipelineRunner:
         db=None,              # Store session for S6 ledger writes
         weather_extractor=None,
         envelope_synthesizer=None,
+        carbon_context_assembler=None,
     ):
         self.llm_client = llm_client
         self.knowledge_store = knowledge_store
@@ -644,6 +645,7 @@ class TurnPipelineRunner:
         # engine never imports ``ai.plugins.web_research`` / ``ai.envelope_service``.
         self.weather_extractor = weather_extractor
         self.envelope_synthesizer = envelope_synthesizer
+        self.carbon_context_assembler = carbon_context_assembler
         # Curated tool set exposed to the S3 planner when an executor is
         # wired. Mutation/confirmation tools (create_dq_rule) plus read tools
         # that ground answers, including call_host_api so the planner can reach
@@ -1479,12 +1481,12 @@ class TurnPipelineRunner:
         )
         if _carbon_ctx_enabled:
             try:
-                from ai.context.carbon_context import CarbonContextAssembler
-                _carbon_context = await CarbonContextAssembler().assemble(
-                    app_identifier=config.get("app_identifier"),
-                )
-                if _carbon_context:
-                    system_prompt = f"{system_prompt}\n{_carbon_context}"
+                if self.carbon_context_assembler is not None:
+                    _carbon_context = await self.carbon_context_assembler().assemble(
+                        app_identifier=config.get("app_identifier"),
+                    )
+                    if _carbon_context:
+                        system_prompt = f"{system_prompt}\n{_carbon_context}"
             except Exception:
                 logger.warning(
                     f"[{turn_id[:8]}] Carbon context assembly failed", exc_info=True

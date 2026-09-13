@@ -6,19 +6,27 @@ Owned by PR-18. No tool wiring, no agent integration — pure storage layer.
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import and_, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from ai.engine.core.models import Skill
+from ai.engine.core.query import first, or_
+from ai.engine.ports.store import Session
 from ai.engine.skills._authority import assert_allowed_transition
 
 logger = logging.getLogger("pulse.skills.registry")
 
 
-class SkillRegistry:
-    """Async CRUD for the Skill table. Stores an AsyncSession per instance."""
+def _dt_key(value):
+    """Sort key for datetimes (None-safe)."""
+    if value is None:
+        return 0
+    if isinstance(value, datetime):
+        return value.timestamp()
+    return 0
 
-    def __init__(self, db: AsyncSession):
+
+class SkillRegistry:
+    """Async CRUD for the Skill table. Stores a Session per instance."""
+
+    def __init__(self, db: Session):
         self.db = db
 
     # ── Create ──────────────────────────────────────────────────────────────
@@ -38,48 +46,54 @@ class SkillRegistry:
     async def get(self, skill_id: str) -> Skill | None:
         """Retrieve a single skill by primary key."""
         logger.debug("SkillRegistry.get: id=%s", skill_id)
-        result = await self.db.execute(select(Skill).where(Skill.id == skill_id))
-        return result.scalar_one_or_none()
+        return first(await self.db.select(Skill, ("id", skill_id)))
 
     async def list_by_user(self, instance_id: str, author_user_id: str) -> list[Skill]:
         """Return all skills authored by a given user (any status)."""
         logger.debug("SkillRegistry.list_by_user: instance_id=%s author=%s", instance_id, author_user_id)
-        result = await self.db.execute(
-            select(Skill)
-            .where(Skill.instance_id == instance_id, Skill.author_user_id == author_user_id)
-            .order_by(Skill.created_at.desc())
+        rows = await self.db.select(
+            Skill,
+            ("instance_id", instance_id),
+            ("author_user_id", author_user_id),
         )
-        return list(result.scalars().all())
+        rows.sort(key=lambda s: _dt_key(s.created_at), reverse=True)
+        return rows
 
     async def list_promoted(self, instance_id: str, kind: str | None = None) -> list[Skill]:
         """Return instance-promoted skills, optionally filtered by kind."""
         logger.debug("SkillRegistry.list_promoted: instance_id=%s kind=%s", instance_id, kind)
-        conditions = [Skill.instance_id == instance_id, Skill.status == "instance_promoted"]
+        filters: list = [
+            ("instance_id", instance_id),
+            ("status", "instance_promoted"),
+        ]
         if kind is not None:
-            conditions.append(Skill.kind == kind)
-        result = await self.db.execute(
-            select(Skill).where(*conditions).order_by(Skill.promoted_at.desc())
-        )
-        return list(result.scalars().all())
+            filters.append(("kind", kind))
+        rows = await self.db.select(Skill, *filters)
+        rows.sort(key=lambda s: _dt_key(s.promoted_at), reverse=True)
+        return rows
 
     async def search(self, instance_id: str, author_user_id: str, query: str) -> list[Skill]:
         """LIKE search across name and description, scoped to user's own + promoted."""
         logger.debug("SkillRegistry.search: instance_id=%s author=%s query=%r", instance_id, author_user_id, query)
-        like_term = f"%{query}%"
         own_or_promoted = or_(
-            Skill.author_user_id == author_user_id,
-            Skill.status == "instance_promoted",
+            ("author_user_id", author_user_id),
+            ("status", "instance_promoted"),
         )
         name_or_desc = or_(
-            Skill.name.ilike(like_term),
-            Skill.description.ilike(like_term),
+            ("name__icontains", query),
+            ("description__icontains", query),
         )
-        result = await self.db.execute(
-            select(Skill)
-            .where(Skill.instance_id == instance_id, own_or_promoted, name_or_desc)
-            .order_by(Skill.status == "instance_promoted", Skill.created_at.desc())
+        rows = await self.db.select(
+            Skill,
+            ("instance_id", instance_id),
+            own_or_promoted,
+            name_or_desc,
         )
-        return list(result.scalars().all())
+        rows.sort(
+            key=lambda s: (s.status == "instance_promoted", _dt_key(s.created_at)),
+            reverse=True,
+        )
+        return rows
 
     # ── Update ──────────────────────────────────────────────────────────────
 

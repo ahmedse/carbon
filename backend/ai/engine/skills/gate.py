@@ -28,11 +28,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from ai.engine.core.clock import utcnow
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.engine.core.config import get_settings
 from ai.engine.core.models import Skill, SkillAdmissionLog, generate_uuid
+from ai.engine.core.query import first
+from ai.engine.ports.store import Session
 from ai.engine.skills._authority import assert_allowed_transition
 
 logger = logging.getLogger("pulse.skills.gate")
@@ -98,7 +98,7 @@ Return ONLY a JSON object:
 # CRITIC 1 — Structural (rules only, <1 ms)
 # ═══════════════════════════════════════════════════════════════════════════
 
-async def structural_critic(skill: Skill, db: AsyncSession | None = None) -> CriticVerdict:
+async def structural_critic(skill: Skill, db: Session | None = None) -> CriticVerdict:
     """Validate signature JSON, body JSON, kind, and name uniqueness.
 
     Returns CriticVerdict with flags for each issue found.
@@ -132,14 +132,12 @@ async def structural_critic(skill: Skill, db: AsyncSession | None = None) -> Cri
     # ── Name collision with existing tools (optional fast check) ──
     if db is not None and skill.name:
         from ai.engine.core.models import Skill as SkillModel
-        existing = await db.execute(
-            select(SkillModel).where(
-                SkillModel.instance_id == skill.instance_id,
-                SkillModel.name == skill.name,
-                SkillModel.id != skill.id,
-            )
+        existing = await db.select(
+            SkillModel,
+            ("instance_id", skill.instance_id),
+            ("name", skill.name),
         )
-        if existing.scalar_one_or_none():
+        if any(s.id != skill.id for s in existing):
             flags.append(f"name_collision: {skill.name}")
 
     return CriticVerdict(
@@ -268,7 +266,7 @@ Return ONLY a JSON object:
 {{"passed": true/false, "flags": ["flag1"], "conflicting_skill_name": "name or null", "rationale": "one sentence"}}"""
 
 
-async def consistency_critic(skill: Skill, db: AsyncSession) -> CriticVerdict:
+async def consistency_critic(skill: Skill, db: Session) -> CriticVerdict:
     """Check that the new skill doesn't contradict any existing promoted skill."""
     settings = get_settings()
 
@@ -278,14 +276,12 @@ async def consistency_critic(skill: Skill, db: AsyncSession) -> CriticVerdict:
     from ai.engine.llm.router import route_chat
 
     # Fetch instance-promoted skills excluding this one
-    result = await db.execute(
-        select(Skill).where(
-            Skill.instance_id == skill.instance_id,
-            Skill.status == "instance_promoted",
-            Skill.id != skill.id,
-        )
+    promoted = await db.select(
+        Skill,
+        ("instance_id", skill.instance_id),
+        ("status", "instance_promoted"),
     )
-    promoted = result.scalars().all()
+    promoted = [s for s in promoted if s.id != skill.id]
 
     if not promoted:
         return CriticVerdict(passed=True, flags=[],
@@ -362,7 +358,7 @@ async def consistency_critic(skill: Skill, db: AsyncSession) -> CriticVerdict:
 # ═══════════════════════════════════════════════════════════════════════════
 
 async def marginal_gain_check(
-    skill: Skill, db: AsyncSession, instance_id: str
+    skill: Skill, db: Session, instance_id: str
 ) -> CriticVerdict:
     """Run the eval suite against current code vs baseline scorecard.
 
@@ -453,7 +449,7 @@ async def marginal_gain_check(
 # Top-level admission
 # ═══════════════════════════════════════════════════════════════════════════
 
-async def admit_skill(skill_id: str, db: AsyncSession, admitted_by: str = "auto") -> dict:
+async def admit_skill(skill_id: str, db: Session, admitted_by: str = "auto") -> dict:
     """Run all 4 critics and return the admission verdict.
 
     Returns:
@@ -462,8 +458,7 @@ async def admit_skill(skill_id: str, db: AsyncSession, admitted_by: str = "auto"
          "critics": {...}}
     """
     # Fetch skill
-    result = await db.execute(select(Skill).where(Skill.id == skill_id))
-    skill = result.scalar_one_or_none()
+    skill = first(await db.select(Skill, ("id", skill_id)))
     if not skill:
         return {"verdict": "rejected", "flags": ["skill_not_found"], "passed": False,
                 "rejected_by": "structural", "critics": {}}
@@ -512,7 +507,7 @@ async def admit_skill(skill_id: str, db: AsyncSession, admitted_by: str = "auto"
     return _result("admitted", None, s, h, c, g)
 
 
-async def _promote_skill(skill_id: str, db: AsyncSession, promoted_by: str = "auto") -> Skill:
+async def _promote_skill(skill_id: str, db: Session, promoted_by: str = "auto") -> Skill:
     """Gate-only promotion: admit then promote a skill to instance_promoted.
 
     Private by design (P1-06).  The only sanctioned way to move a skill into
@@ -521,8 +516,7 @@ async def _promote_skill(skill_id: str, db: AsyncSession, promoted_by: str = "au
     would let a non-pending skill skip the critics.  If admission fails, it
     raises ``ValueError`` and leaves the skill untouched.
     """
-    result = await db.execute(select(Skill).where(Skill.id == skill_id))
-    skill = result.scalar_one_or_none()
+    skill = first(await db.select(Skill, ("id", skill_id)))
     if not skill:
         raise ValueError(f"Skill not found: {skill_id}")
 
@@ -536,8 +530,7 @@ async def _promote_skill(skill_id: str, db: AsyncSession, promoted_by: str = "au
     # admit_skill's _write_log already committed, which clears the store's
     # tracked-object registry — re-fetch the row so the status transition
     # below is actually persisted (same guard as run_skill_admission).
-    fresh = await db.execute(select(Skill).where(Skill.id == skill_id))
-    skill = fresh.scalar_one_or_none()
+    skill = first(await db.select(Skill, ("id", skill_id)))
     if skill is None:
         raise ValueError(f"Skill not found after admission: {skill_id}")
 
@@ -558,10 +551,9 @@ async def _promote_skill(skill_id: str, db: AsyncSession, promoted_by: str = "au
     return skill
 
 
-async def rollback_skill(skill_id: str, db: AsyncSession, reason: str = "") -> Skill:
+async def rollback_skill(skill_id: str, db: Session, reason: str = "") -> Skill:
     """Deprecate a skill with a rollback reason."""
-    result = await db.execute(select(Skill).where(Skill.id == skill_id))
-    skill = result.scalar_one_or_none()
+    skill = first(await db.select(Skill, ("id", skill_id)))
     if not skill:
         raise ValueError(f"Skill not found: {skill_id}")
 
@@ -598,13 +590,11 @@ async def run_skill_admission(db, instance_id: str) -> dict:
         logger.info("Skill admission disabled — skipping instance=%s", instance_id)
         return {"evaluated": 0, "promoted": 0, "rejected": 0}
 
-    result = await db.execute(
-        select(Skill).where(
-            Skill.instance_id == instance_id,
-            Skill.gate_status == "pending",
-        )
+    pending = await db.select(
+        Skill,
+        ("instance_id", instance_id),
+        ("gate_status", "pending"),
     )
-    pending = list(result.scalars().all())
 
     promoted = 0
     rejected = 0
@@ -620,10 +610,7 @@ async def run_skill_admission(db, instance_id: str) -> dict:
                 # store's tracked-object registry — re-fetch the row so the
                 # status transition below is actually persisted.
                 skill_id = skill.id
-                fresh = await db.execute(
-                    select(Skill).where(Skill.id == skill_id)
-                )
-                skill = fresh.scalar_one_or_none()
+                skill = first(await db.select(Skill, ("id", skill_id)))
                 if skill is None:
                     logger.warning(
                         "run_skill_admission: skill %s vanished after admission",
@@ -723,7 +710,7 @@ def _result(verdict: str, rejected_by: str | None,
 
 
 async def _write_log(
-    db: AsyncSession,
+    db: Session,
     skill: Skill,
     structural: CriticVerdict | None,
     harmlessness: CriticVerdict | None,

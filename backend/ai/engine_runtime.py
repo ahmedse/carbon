@@ -98,6 +98,7 @@ async def _run_chat(
     from ai.host_executor import CarbonHostExecutor
     from ai.envelope_service import synthesize_envelope
     from ai.plugins import web_research
+    from ai.context.carbon_context import CarbonContextAssembler
 
     # P2-03: host-provided services injected into the engine runner. The
     # runner never imports ``ai.plugins.web_research`` / ``ai.envelope_service``
@@ -169,6 +170,7 @@ async def _run_chat(
             knowledge_store=KnowledgeStore(db),
             weather_extractor=weather_extractor,
             envelope_synthesizer=synthesize_envelope,
+            carbon_context_assembler=CarbonContextAssembler,
         )
         response, ledger = await runner.run(
             instance_id=instance_id,

@@ -27,17 +27,26 @@ import json
 import logging
 from typing import Any, Optional
 
-from sqlalchemy import select
-
 from ai.engine.core.models import (
     Agent,
     AgentHandoff,
     Skill,
     SkillAdmissionLog,
 )
+from ai.engine.core.query import first
 from ai.plans_service import PLAN_INSTANCE_ID, _run_async
 
 logger = logging.getLogger("carbon.ai.catalog_service")
+
+
+def _dt_key(value):
+    """Sort key for datetimes (None-safe)."""
+    if value is None:
+        return 0
+    try:
+        return value.timestamp()
+    except AttributeError:
+        return 0
 
 
 class AgentNotFoundError(Exception):
@@ -190,9 +199,9 @@ class CatalogService:
                 }
                 for agent in agents
             ]
-            result = await db.execute(select(AgentHandoff))
+            result = await db.select(AgentHandoff)
             edges = []
-            for handoff in result.scalars().all():
+            for handoff in result:
                 if (
                     handoff.from_agent_id in agent_ids
                     and handoff.to_agent_id in agent_ids
@@ -211,13 +220,12 @@ class CatalogService:
         from ai.engine.core.database import get_session_factory
 
         async with get_session_factory(self.instance_id)() as db:
-            result = await db.execute(
-                select(Skill)
-                .where(Skill.instance_id == self.instance_id)
-                .order_by(Skill.created_at.asc())
+            skills = await db.select(
+                Skill, ("instance_id", self.instance_id)
             )
+            skills.sort(key=lambda s: _dt_key(s.created_at))
             out = []
-            for skill in result.scalars().all():
+            for skill in skills:
                 log = await self._last_admission_for(db, skill.id)
                 out.append(self._skill_to_dict(skill, log))
             return out
@@ -304,8 +312,7 @@ class CatalogService:
 
     async def _find_agent(self, db, agent_id: str):
         """Fetch an agent by id, scoped to this instance (or 404)."""
-        result = await db.execute(select(Agent).where(Agent.id == agent_id))
-        agent = result.scalar_one_or_none()
+        agent = first(await db.select(Agent, ("id", agent_id)))
         if agent is None or agent.instance_id != self.instance_id:
             raise AgentNotFoundError(agent_id)
         return agent
@@ -331,8 +338,8 @@ class CatalogService:
             }
             for _worker, handoff in workers
         ]
-        result = await db.execute(
-            select(AgentHandoff).where(AgentHandoff.to_agent_id == agent_id)
+        result = await db.select(
+            AgentHandoff, ("to_agent_id", agent_id)
         )
         incoming = [
             {
@@ -340,40 +347,34 @@ class CatalogService:
                 "description": handoff.description,
                 "max_parallel": handoff.max_parallel,
             }
-            for handoff in result.scalars().all()
+            for handoff in result
         ]
         return outgoing, incoming
 
     async def _admitted_skills(self, db) -> list[dict]:
         """Instance skills whose latest admission-gate verdict is 'admitted'."""
-        result = await db.execute(
-            select(Skill).where(Skill.instance_id == self.instance_id)
-        )
+        skills = await db.select(Skill, ("instance_id", self.instance_id))
         out: list[dict] = []
-        for skill in result.scalars().all():
+        for skill in skills:
             log = await self._last_admission_for(db, skill.id)
             if log is not None and log.verdict == "admitted":
                 out.append(self._skill_to_dict(skill, log))
         return out
 
     async def _last_admission_for(self, db, skill_id: str):
-        result = await db.execute(
-            select(SkillAdmissionLog)
-            .where(SkillAdmissionLog.skill_id == skill_id)
-            .order_by(SkillAdmissionLog.created_at.desc())
-            .limit(1)
+        logs = await db.select(
+            SkillAdmissionLog, ("skill_id", skill_id)
         )
-        return result.scalars().first()
+        logs.sort(key=lambda l: _dt_key(l.created_at), reverse=True)
+        return logs[0] if logs else None
 
     async def _last_admission(self, db):
         """Most recent admission-gate evaluation in this instance."""
-        result = await db.execute(
-            select(SkillAdmissionLog)
-            .where(SkillAdmissionLog.instance_id == self.instance_id)
-            .order_by(SkillAdmissionLog.created_at.desc())
-            .limit(1)
+        logs = await db.select(
+            SkillAdmissionLog, ("instance_id", self.instance_id)
         )
-        log = result.scalars().first()
+        logs.sort(key=lambda l: _dt_key(l.created_at), reverse=True)
+        log = logs[0] if logs else None
         return self._admission_to_dict(log) if log is not None else None
 
     # ── Serializers ──────────────────────────────────────────────────────

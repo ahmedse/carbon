@@ -65,6 +65,20 @@ def _linked_actionable_corr(record) -> bool:
     ).exists()
 
 
+def _linked_approved_corr(record) -> bool:
+    """True if this leave record has a workflow correspondence that was approved.
+
+    Leave records submitted through the correspondence engine keep a ``draft``
+    LeaveRecord status by design — the linked Correspondence holds the lifecycle
+    status. An approved leave is therefore detected via its Correspondence.
+    """
+    return Correspondence.objects.filter(
+        subject_type=SUBJECT_TYPE,
+        subject_id=record.pk,
+        status='approved',
+    ).exists()
+
+
 def _record_blocks_overlap(record) -> bool:
     """Whether an existing leave record should block a new request."""
     if record.status in ('approved', 'submitted'):
@@ -87,10 +101,12 @@ def _compute_balance(profile, code, year):
     # Opening balance is the entitlement plus whatever carried forward from last year.
     opening_balance = entitled + carried_forward
 
-    used = LeaveRecord.objects.filter(
-        employee=profile, leave_type__code=code, status='approved',
-        start_date__year=year,
-    ).aggregate(total=Sum('days'))['total'] or Decimal('0')
+    used = Decimal('0')
+    for record in LeaveRecord.objects.filter(
+        employee=profile, leave_type__code=code, start_date__year=year,
+    ):
+        if record.status == 'approved' or _linked_approved_corr(record):
+            used += record.days
 
     pending = Decimal('0')
     for record in LeaveRecord.objects.filter(employee=profile, leave_type__code=code):

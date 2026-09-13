@@ -396,7 +396,7 @@ class SkillAwarePlanner:
 
         Args:
             utterance: the user's natural-language request
-            skill_registry: SkillRegistry with AsyncSession
+            skill_registry: SkillRegistry with Session
             llm_client: AsyncOpenAI client (uses self.llm_client if None)
             model: LLM model name (uses self.model if empty)
             instance_id: pulse instance id

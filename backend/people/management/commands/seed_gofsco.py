@@ -4,7 +4,7 @@
 # Context: KOC field-services company; rotation statuses; Kuwait Labour Law;
 # Kuwaitization; KOC gate-pass certifications; EOSI; GOSI; WPS.
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 from datetime import date, timedelta
 import decimal
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = 'Seed realistic GOFSCO HR data (employees, entitlements, certs, benefits, loans)'
+    help = 'DEPRECATED — refuses to run. Fabricated GOFSCO demo data is forbidden.'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -23,6 +23,12 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        raise CommandError(
+            "seed_gofsco is DEPRECATED and disabled: it fabricates demo HR data "
+            "(GF-00X employees, payroll, loans, certs, benefits). Policy: never "
+            "seed — use actual GOFSCO data. Use seed_gofsco_rules, seed_people_dq, "
+            "seed_correspondence, and import_gofsco_employees instead."
+        )
         from mdm.models import OrgUnit
         from people.models import (
             BenefitType, Certification, Employee, EmployeeBenefit,

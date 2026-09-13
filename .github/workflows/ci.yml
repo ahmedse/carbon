@@ -45,6 +45,9 @@ jobs:
       - name: Fail-open lint (P1-13)
         run: python3 .ai-toolkit/scripts/failopen-lint.py
 
+      - name: Import-boundary lint (P2-04)
+        run: python3 .ai-toolkit/scripts/import-boundary-lint.py
+
   # ── Backend tests ────────────────────────────────────────────
   backend:
     runs-on: ubuntu-latest

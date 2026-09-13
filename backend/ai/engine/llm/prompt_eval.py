@@ -6,14 +6,13 @@ and computes quality scores. Uses LLM-as-judge for relevance scoring.
 """
 import json
 import logging
+import random
 from typing import Optional
 from uuid import uuid4
 
-from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from ai.engine.core.config import get_settings
 from ai.engine.core.models import Message, PromptEval, PromptVersion, generate_uuid
+from ai.engine.ports.store import Session
 
 logger = logging.getLogger("pulse.llm.prompt_eval")
 
@@ -50,7 +49,7 @@ Return ONLY a single float number, nothing else. Example: 0.85"""
 # ── Public API ────────────────────────────────────────────────────────────
 
 async def evaluate_prompt(
-    db: AsyncSession,
+    db: Session,
     prompt_text: str,
     instance_id: str,
     eval_queries: list[str],
@@ -151,7 +150,7 @@ async def evaluate_prompt(
     return evals
 
 
-async def compute_prompt_score(db: AsyncSession, prompt_version_id: str) -> float:
+async def compute_prompt_score(db: Session, prompt_version_id: str) -> float:
     """Aggregate PromptEval rows for this version into a 0–1 score.
 
     Weights:
@@ -160,10 +159,9 @@ async def compute_prompt_score(db: AsyncSession, prompt_version_id: str) -> floa
       - 20% tool accuracy (1.0 if no expected tool calls, else ratio matched)
       - 10% user_feedback (normalised -1/+1 → 0–1)
     """
-    result = await db.execute(
-        select(PromptEval).where(PromptEval.prompt_version_id == prompt_version_id)
+    evals = await db.select(
+        PromptEval, ("prompt_version_id", prompt_version_id)
     )
-    evals = result.scalars().all()
 
     if not evals:
         return 0.0
@@ -214,7 +212,7 @@ async def compute_prompt_score(db: AsyncSession, prompt_version_id: str) -> floa
 
 
 async def get_eval_queries(
-    db: AsyncSession, instance_id: str, count: int = 5
+    db: Session, instance_id: str, count: int = 5
 ) -> list[str]:
     """Sample diverse user queries from Message history for a given instance.
 
@@ -223,25 +221,26 @@ async def get_eval_queries(
     """
     from ai.engine.core.models import Conversation
 
-    result = await db.execute(
-        select(Message.content)
-        .join(Conversation, Message.conversation_id == Conversation.id)
-        .where(
-            Conversation.instance_id == instance_id,
-            Message.role == "user",
-            Message.content.isnot(None),
-            Message.content != "",
-        )
-        .order_by(func.random())
-        .limit(count)
-    )
-    rows = result.scalars().all()
+    conversations = await db.select(Conversation, ("instance_id", instance_id))
+    conv_ids = [c.id for c in conversations]
+    if not conv_ids:
+        return _SYNTHETIC_QUERIES[:count]
 
-    if rows and len(rows) >= count:
-        return [str(r) for r in rows if str(r).strip()]
+    messages = await db.select(
+        Message,
+        ("conversation_id__in", conv_ids),
+        ("role", "user"),
+    )
+    real = [
+        m.content
+        for m in messages
+        if m.content is not None and str(m.content).strip()
+    ]
+
+    if len(real) >= count:
+        return random.sample(real, count)
 
     # If we got some but not enough, combine with synthetics
-    real = [str(r) for r in rows if str(r).strip()]
     needed = max(0, count - len(real))
     return real + _SYNTHETIC_QUERIES[:needed]
 

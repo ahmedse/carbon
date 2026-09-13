@@ -5,9 +5,16 @@ from datetime import timedelta
 from ai.engine.core.clock import utcnow
 from ai.engine.llm.router import route_chat
 from ai.engine.memory.long_term import LongTermMemory
-from ai.pii_guard import PIIGuard
 
 logger = logging.getLogger("pulse.auto_memory")
+
+_pii_redactor = None
+
+
+def set_pii_redactor(fn) -> None:
+    """Inject the host PII redaction function (PIIGuard.redact)."""
+    global _pii_redactor
+    _pii_redactor = fn
 
 _CLASSIFY_PROMPT = (
     "Classify the following user message into exactly one of these types:\n"
@@ -59,7 +66,7 @@ class AutoMemoryExtractor:
             await mem.store_fact(
                 instance_id=instance_id,
                 category=memory_type,
-                content=PIIGuard.redact(user_message[:500]),
+                content=(_pii_redactor(user_message[:500]) if _pii_redactor is not None else user_message[:500]),
                 source="auto_extract",
                 confidence=0.85,
                 host_user_id=host_user_id,

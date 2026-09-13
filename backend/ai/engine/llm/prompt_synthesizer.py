@@ -21,9 +21,8 @@ import time
 from typing import Optional
 from uuid import uuid4
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from ai.engine.core.models import PromptVersion, generate_uuid
+from ai.engine.ports.store import Session
 
 logger = logging.getLogger("pulse.llm.prompt_synthesizer")
 
@@ -139,7 +138,7 @@ async def synthesize_system_prompt(
     kg_edge_count: int = 0,
     kg_summary_text: str = "",
     optimize: bool = False,
-    db: AsyncSession | None = None,
+    db: Session | None = None,
     instance_id: str = "",
 ) -> str:
     """Generate an optimal system prompt for a specific instance.
@@ -365,7 +364,7 @@ You ONLY discuss topics related to {domain_noun}:
 # ── Optimize-and-cache entry point ────────────────────────────────────────
 
 async def optimize_and_cache(
-    db: AsyncSession,
+    db: Session,
     instance_name: str,
     instance_id: str,
     display_name: str = "",

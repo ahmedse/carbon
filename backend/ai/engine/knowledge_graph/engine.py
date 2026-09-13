@@ -54,30 +54,21 @@ class ExecutionResult:
 
 # ── Engine ────────────────────────────────────────────────────────────────────
 
-def _default_host_db_url() -> str:
-    """Build a psycopg2 DSN from the Django default database.
+_default_host_db_url_provider = None
 
-    The Carbon instance's host database *is* the Carbon PostgreSQL database, so
-    when ``HOST_DB_URL`` is unset and no ``Instance.host_db_url`` row exists,
-    fall back to ``settings.DATABASES["default"]``.  This keeps the read-only
-    execution engine functional without any hardcoded connection string.
-    """
-    try:
-        from django.conf import settings
-    except Exception:  # pragma: no cover - non-Django harness guard
+
+def set_default_host_db_url_provider(fn) -> None:
+    """Inject a host function that returns the default host DB URL (str) or ''."""
+    global _default_host_db_url_provider
+    _default_host_db_url_provider = fn
+
+
+def _default_host_db_url() -> str:
+    """Return the host-provided default DB URL, or '' when not injected."""
+    if _default_host_db_url_provider is None:
         return ""
     try:
-        db = settings.DATABASES.get("default", {})
-        engine_name = db.get("ENGINE", "")
-        if "postgres" not in engine_name and "cockroach" not in engine_name:
-            return ""
-        user = db.get("USER", "") or ""
-        password = db.get("PASSWORD", "") or ""
-        host = db.get("HOST", "") or "localhost"
-        port = db.get("PORT", "") or "5432"
-        name = db.get("NAME", "") or ""
-        auth = f"{user}:{password}@" if user else ""
-        return f"postgresql://{auth}{host}:{port}/{name}"
+        return _default_host_db_url_provider() or ""
     except Exception:
         return ""
 

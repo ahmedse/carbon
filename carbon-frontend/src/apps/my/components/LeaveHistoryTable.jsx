@@ -1,9 +1,9 @@
 // src/apps/my/components/LeaveHistoryTable.jsx
 // Presentational — a compact table of leave request records. The display
-// status is DERIVED from `reference_no` presence (submitted vs draft) because
-// the raw leave `status` is always "draft" in this thin slice (the governed
-// Correspondence carries the real approval status). Color never stands alone
-// — a text label always accompanies the chip.
+// status is DERIVED from `record.correspondence_status` (the workflow status
+// carried on the linked Correspondence), falling back to `record.status` and
+// finally "draft". Color never stands alone — a text label always accompanies
+// the chip.
 
 import React, { useMemo } from 'react';
 import PropTypes from 'prop-types';
@@ -26,6 +26,23 @@ import {
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import { useTranslation } from 'react-i18next';
 import { FONT } from '../../../theme/themeTokens';
+
+// ── Display status mapping ────────────────────────────────────────────
+// The real workflow status lives on the linked Correspondence
+// (`record.correspondence_status`). Map each status to a Chip color and a
+// localization key. Color never stands alone — a text label accompanies it.
+
+const STATUS_META = {
+  draft: { color: 'default', labelKey: 'statusDraft' },
+  submitted: { color: 'info', labelKey: 'statusSubmitted' },
+  in_review: { color: 'info', labelKey: 'statusInReview' },
+  approved: { color: 'success', labelKey: 'statusApproved' },
+  rejected: { color: 'error', labelKey: 'statusRejected' },
+  sent_back: { color: 'warning', labelKey: 'statusSentBack' },
+  cancelled: { color: 'default', labelKey: 'statusCancelled' },
+  expired: { color: 'default', labelKey: 'statusExpired' },
+  archived: { color: 'default', labelKey: 'statusArchived' },
+};
 
 // ── Small presentational helpers ──────────────────────────────────────
 
@@ -144,7 +161,8 @@ export default function LeaveHistoryTable({ records, loading, error, onRetry }) 
               </TableHead>
               <TableBody>
                 {sorted.map((record) => {
-                  const submitted = Boolean(record.reference_no);
+                  const status = record.correspondence_status ?? record.status ?? 'draft';
+                  const meta = STATUS_META[status] || STATUS_META.draft;
                   return (
                     <TableRow key={record.id} hover>
                       <TableCell sx={{ ...FONT.body2 }}>
@@ -166,8 +184,8 @@ export default function LeaveHistoryTable({ records, loading, error, onRetry }) 
                         <Chip
                           size="small"
                           variant="outlined"
-                          color={submitted ? 'success' : 'default'}
-                          label={submitted ? t('statusSubmitted') : t('statusDraft')}
+                          color={meta.color}
+                          label={t(meta.labelKey)}
                         />
                       </TableCell>
                     </TableRow>

@@ -428,8 +428,8 @@ async def budget_hook(ctx: HookContext) -> HookResult:
 
     # Read current budget state from Run row
     try:
-        from sqlalchemy import select
         from ai.engine.core.models import Run
+        from ai.engine.core.query import first
 
         # Use the context's db session if available; otherwise get a fresh one
         if ctx.db is not None:
@@ -442,19 +442,15 @@ async def budget_hook(ctx: HookContext) -> HookResult:
             own_db = True
 
         try:
-            stmt = select(
-                Run.tokens_consumed,
-                Run.token_budget,
-                Run.budget_exceeded,
-            ).where(Run.id == run_id)
-            result = await db.execute(stmt)
-            row = result.one_or_none()
+            run = first(await db.select(Run, ("id", run_id)))
 
-            if row is None:
+            if run is None:
                 logger.debug("budget_hook: Run row %s not found — passing", run_id[:8])
                 return HookResult(action="pass")
 
-            consumed, budget, exceeded_flag = row
+            consumed = run.tokens_consumed
+            budget = run.token_budget
+            exceeded_flag = run.budget_exceeded
             effective_budget = budget if budget is not None else settings.GUARDRAIL_MAX_TOKENS_PER_RUN
 
             if exceeded_flag:

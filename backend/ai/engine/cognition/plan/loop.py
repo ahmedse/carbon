@@ -20,6 +20,15 @@ from ai.engine.llm.router import model_for_profile
 
 logger = logging.getLogger("pulse.cognition.plan.loop")
 
+_step_index_context = None
+
+
+def set_step_index_context(fn) -> None:
+    """Inject the host step-index contextvar setter (plans_service.set_current_step_index)."""
+    global _step_index_context
+    _step_index_context = fn
+
+
 # Lazy import — resolved at first emit
 _broadcast_run = None
 
@@ -833,8 +842,8 @@ class ReActLoop:
             # attribute artifacts to THIS step (multi-step / parallel runs).
             # Contextvars flow onto the sync_to_async worker thread via
             # asgiref, and are cleared so sibling steps never bleed.
-            from ai.plans_service import set_current_step_index
-            set_current_step_index(step.step_id)
+            if _step_index_context is not None:
+                _step_index_context(step.step_id)
             try:
                 execution = await ex.execute(
                     text=draft.text,
@@ -845,7 +854,8 @@ class ReActLoop:
                     is_worker=(step.agent_role not in ("orchestrator", "", None)),
                 )
             finally:
-                set_current_step_index(None)
+                if _step_index_context is not None:
+                    _step_index_context(None)
             result.executed = True
             result.tool_output = execution.completed_tools[0] if execution.completed_tools else None
 
@@ -1000,7 +1010,8 @@ class ReActLoop:
                             confirmation_token=confirmation_token,
                         )
                         if _critic2.verdict != "veto":
-                            set_current_step_index(step.step_id)
+                            if _step_index_context is not None:
+                                _step_index_context(step.step_id)
                             try:
                                 _execution2 = await ex.execute(
                                     text=_draft2.text,
@@ -1011,7 +1022,8 @@ class ReActLoop:
                                     is_worker=(step.agent_role not in ("orchestrator", "", None)),
                                 )
                             finally:
-                                set_current_step_index(None)
+                                if _step_index_context is not None:
+                                    _step_index_context(None)
                             result.executed = True
                             result.draft_text = _draft2.text
                             result.tool_output = (
