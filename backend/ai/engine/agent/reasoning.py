@@ -1160,8 +1160,8 @@ class PulseAgent:
             rows = rows[:limit]
             return [
                 {
-                    "natural_language": r.natural_language,
-                    "corrected_sql": r.corrected_sql,
+                    "natural_language": r.question,
+                    "corrected_sql": r.sql,
                 }
                 for r in rows
             ]

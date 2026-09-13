@@ -1,0 +1,757 @@
+{
+  "source": "raw/GOFSCO app/20260913",
+  "extracted_on": "2026-09-13",
+  "description": "GOFSCO Kuwaitization data extracted from KOC contract appendices and summary Excel",
+  "contracts": [
+    {
+      "sr": 1,
+      "name": "Well Testing - Local",
+      "contract_no": "25063762",
+      "code": "swt_local",
+      "required": 8,
+      "supplied": 0,
+      "vacancy": 8,
+      "reimbursement": {
+        "salary": "Reimbursed",
+        "pifss_employee": "Reimbursed",
+        "pifss_company": "Not Reimbursed",
+        "increments": "Reimbursed",
+        "medical": "Reimbursed",
+        "annual_bonus": "Reimbursed",
+        "annual_tickets": "Reimbursed"
+      },
+      "org_unit_names": [
+        "Surface Well Testing"
+      ]
+    },
+    {
+      "sr": 2,
+      "name": "Well Testing - International",
+      "contract_no": "21056156",
+      "code": "swt_intl",
+      "required": 24,
+      "supplied": 21,
+      "vacancy": 3,
+      "reimbursement": {
+        "salary": "Not Reimbursed",
+        "pifss_employee": "Not Reimbursed",
+        "pifss_company": "Not Reimbursed",
+        "increments": "Reimbursed",
+        "medical": "Reimbursed",
+        "annual_bonus": "Reimbursed",
+        "annual_tickets": "Reimbursed"
+      },
+      "org_unit_names": [
+        "Surface Well Testing International",
+        "Surface Well Testing - International"
+      ]
+    },
+    {
+      "sr": 3,
+      "name": "Wireline",
+      "contract_no": "19053759",
+      "code": "wireline",
+      "required": 6,
+      "supplied": 2,
+      "vacancy": 4,
+      "reimbursement": {
+        "salary": "Not Reimbursed",
+        "pifss_employee": "Not Reimbursed",
+        "pifss_company": "Not Reimbursed",
+        "increments": "Not Reimbursed",
+        "medical": "Reimbursed",
+        "annual_bonus": "Reimbursed",
+        "annual_tickets": "Reimbursed"
+      },
+      "org_unit_names": [
+        "Wireline Logging Operation",
+        "Wire Line"
+      ]
+    },
+    {
+      "sr": 4,
+      "name": "Coiled Tubing",
+      "contract_no": "20054974",
+      "code": "coiled_tubing",
+      "required": 25,
+      "supplied": 19,
+      "vacancy": 6,
+      "reimbursement": {
+        "salary": "Not Reimbursed",
+        "pifss_employee": "Not Reimbursed",
+        "pifss_company": "Not Reimbursed",
+        "increments": "Reimbursed",
+        "medical": "Reimbursed",
+        "annual_bonus": "Reimbursed",
+        "annual_tickets": "Reimbursed"
+      },
+      "org_unit_names": [
+        "Coiled Tubing"
+      ]
+    },
+    {
+      "sr": 5,
+      "name": "PCP",
+      "contract_no": "21057656",
+      "code": "pcp",
+      "required": 8,
+      "supplied": 2,
+      "vacancy": 6,
+      "reimbursement": {
+        "salary": "Not Reimbursed",
+        "pifss_employee": "Not Reimbursed",
+        "pifss_company": "Not Reimbursed",
+        "increments": "Reimbursed",
+        "medical": "Reimbursed",
+        "annual_bonus": "Reimbursed",
+        "annual_tickets": "Reimbursed"
+      },
+      "org_unit_names": [
+        "Progressive Cavity Pump (PCP)"
+      ]
+    },
+    {
+      "sr": 6,
+      "name": "Drilling - Rig 60",
+      "contract_no": "21056253",
+      "code": "drilling_60",
+      "required": 11,
+      "supplied": 0,
+      "vacancy": 11,
+      "reimbursement": {
+        "salary": "Not Reimbursed",
+        "pifss_employee": "Not Reimbursed",
+        "pifss_company": "Not Reimbursed",
+        "increments": "Reimbursed",
+        "medical": "Reimbursed",
+        "annual_bonus": "Reimbursed",
+        "annual_tickets": "Reimbursed"
+      },
+      "org_unit_names": [
+        "Drilling"
+      ]
+    },
+    {
+      "sr": 7,
+      "name": "Drilling - Rig 61",
+      "contract_no": "21056254",
+      "code": "drilling_61",
+      "required": 11,
+      "supplied": 10,
+      "vacancy": 1,
+      "reimbursement": {
+        "salary": "Not Reimbursed",
+        "pifss_employee": "Not Reimbursed",
+        "pifss_company": "Not Reimbursed",
+        "increments": "Reimbursed",
+        "medical": "Reimbursed",
+        "annual_bonus": "Reimbursed",
+        "annual_tickets": "Reimbursed"
+      },
+      "org_unit_names": [
+        "Drilling Rig 61"
+      ]
+    }
+  ],
+  "kuwaiti_employees": [
+    {
+      "sr": 1,
+      "employee_no": "2119",
+      "full_name": "Abdullah Khalaf Khashan Alenezi",
+      "job_title": "Accountant III",
+      "cost_center": "Kuwaitization - Coiled Tubing",
+      "contract_code": "coiled_tubing",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 2,
+      "employee_no": "1748",
+      "full_name": "Mubarak Saleem Mubarak Alotaibi",
+      "job_title": "Admin Officer II",
+      "cost_center": "Kuwaitization - Coiled Tubing",
+      "contract_code": "coiled_tubing",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 3,
+      "employee_no": "2113",
+      "full_name": "Ibrahim Yousef Faleh Alnuwaiem",
+      "job_title": "Admin Officer II",
+      "cost_center": "Kuwaitization - Coiled Tubing",
+      "contract_code": "coiled_tubing",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 4,
+      "employee_no": "2089",
+      "full_name": "Khaled Obaid Dhuwaihi Alshammari",
+      "job_title": "Coordinator II",
+      "cost_center": "Kuwaitization - Coiled Tubing",
+      "contract_code": "coiled_tubing",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 5,
+      "employee_no": "1818",
+      "full_name": "Mubarak Fahad Mubarak Alenezi",
+      "job_title": "Electrician II",
+      "cost_center": "Kuwaitization - Coiled Tubing",
+      "contract_code": "coiled_tubing",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 6,
+      "employee_no": "2216",
+      "full_name": "Mubarak Mohammad Barrak Aladwani",
+      "job_title": "Engineer I",
+      "cost_center": "Kuwaitization - Coiled Tubing",
+      "contract_code": "coiled_tubing",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 7,
+      "employee_no": "2122",
+      "full_name": "Ali A A Alsumaiti",
+      "job_title": "Lead Admin Officer",
+      "cost_center": "Kuwaitization - Coiled Tubing",
+      "contract_code": "coiled_tubing",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 8,
+      "employee_no": "2073",
+      "full_name": "Meshal Abbas Mohammad Sanaseeri",
+      "job_title": "Lead Engineer",
+      "cost_center": "Kuwaitization - Coiled Tubing",
+      "contract_code": "coiled_tubing",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 9,
+      "employee_no": "663",
+      "full_name": "Zaben Mohsen Al-Enezi",
+      "job_title": "Lead Technical Assistant",
+      "cost_center": "Kuwaitization - Coiled Tubing",
+      "contract_code": "coiled_tubing",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 10,
+      "employee_no": "1749",
+      "full_name": "Mohammad Naser Hazzaa Aladwani",
+      "job_title": "Lead Technical Assistant Coordinator",
+      "cost_center": "Kuwaitization - Coiled Tubing",
+      "contract_code": "coiled_tubing",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 11,
+      "employee_no": "1308",
+      "full_name": "Ahmad B A Albarjas",
+      "job_title": "Operator II",
+      "cost_center": "Kuwaitization - Coiled Tubing",
+      "contract_code": "coiled_tubing",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 12,
+      "employee_no": "2060",
+      "full_name": "Fahad Ali Hamad AlHajri",
+      "job_title": "Operator II",
+      "cost_center": "Kuwaitization - Coiled Tubing",
+      "contract_code": "coiled_tubing",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 13,
+      "employee_no": "2062",
+      "full_name": "Abdullah Salem Ali AlAjmi",
+      "job_title": "Operator IIII",
+      "cost_center": "Kuwaitization - Coiled Tubing",
+      "contract_code": "coiled_tubing",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 14,
+      "employee_no": "656",
+      "full_name": "Suleiman Abdulmottaleb Ahmad",
+      "job_title": "Senior Engineer",
+      "cost_center": "Kuwaitization - Coiled Tubing",
+      "contract_code": "coiled_tubing",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 15,
+      "employee_no": "2055",
+      "full_name": "Fahad Awwadh Owayed Almutairi",
+      "job_title": "Senior Foreman",
+      "cost_center": "Kuwaitization - Coiled Tubing",
+      "contract_code": "coiled_tubing",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 16,
+      "employee_no": "2118",
+      "full_name": "Fahad Khaled Jassim Alfuraih",
+      "job_title": "Senior Supervisor",
+      "cost_center": "Kuwaitization - Coiled Tubing",
+      "contract_code": "coiled_tubing",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 17,
+      "employee_no": "1742",
+      "full_name": "Ghanim Mohammad Ghanim Al Wadi",
+      "job_title": "Senior Technical Assistant",
+      "cost_center": "Kuwaitization - Coiled Tubing",
+      "contract_code": "coiled_tubing",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 18,
+      "employee_no": "2134",
+      "full_name": "Eissa Mohammad Abdulrahman Alali",
+      "job_title": "Vehicle Operator I",
+      "cost_center": "Kuwaitization - Coiled Tubing",
+      "contract_code": "coiled_tubing",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 19,
+      "employee_no": "2151",
+      "full_name": "Nawaf S F Alhajeri",
+      "job_title": "Vehicle Operator II",
+      "cost_center": "Kuwaitization - Coiled Tubing",
+      "contract_code": "coiled_tubing",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 20,
+      "employee_no": "2334",
+      "full_name": "Ahmad E H Alnaqi",
+      "job_title": "Assistant Driller",
+      "cost_center": "Kuwaitization - Drilling Rig 61",
+      "contract_code": "drilling_60",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 21,
+      "employee_no": "2337",
+      "full_name": "Humoud Yaqoub Ibrahim Alhajri",
+      "job_title": "Assistant Driller",
+      "cost_center": "Kuwaitization - Drilling Rig 61",
+      "contract_code": "drilling_60",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 22,
+      "employee_no": "2338",
+      "full_name": "Faisal Ghazi Abdullateef Aldhafeeri",
+      "job_title": "Assistant Driller",
+      "cost_center": "Kuwaitization - Drilling Rig 61",
+      "contract_code": "drilling_60",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 23,
+      "employee_no": "2354",
+      "full_name": "Fahad M M Alajmi",
+      "job_title": "Derrickman",
+      "cost_center": "Kuwaitization - Drilling Rig 61",
+      "contract_code": "drilling_60",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 24,
+      "employee_no": "2335",
+      "full_name": "Saleh Ahmad Hussain Alkandari",
+      "job_title": "Driller",
+      "cost_center": "Kuwaitization - Drilling Rig 61",
+      "contract_code": "drilling_60",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 25,
+      "employee_no": "2336",
+      "full_name": "Abdullah Taleb Mohammad Almarri",
+      "job_title": "Floorman",
+      "cost_center": "Kuwaitization - Drilling Rig 61",
+      "contract_code": "drilling_60",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 26,
+      "employee_no": "2339",
+      "full_name": "Fahad J M Alajmi",
+      "job_title": "Floorman",
+      "cost_center": "Kuwaitization - Drilling Rig 61",
+      "contract_code": "drilling_60",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 27,
+      "employee_no": "2340",
+      "full_name": "Hamad Mohammad Saif Alajmi",
+      "job_title": "Floorman",
+      "cost_center": "Kuwaitization - Drilling Rig 61",
+      "contract_code": "drilling_60",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 28,
+      "employee_no": "2414",
+      "full_name": "Ali Mohammad Zaid Alzaid",
+      "job_title": "Floorman",
+      "cost_center": "Kuwaitization - Drilling Rig 61",
+      "contract_code": "drilling_60",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 29,
+      "employee_no": "2342",
+      "full_name": "Ebraheem S E Alnafjan",
+      "job_title": "Safety Officer II",
+      "cost_center": "Kuwaitization - Drilling Rig 61",
+      "contract_code": "drilling_60",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 30,
+      "employee_no": "1095",
+      "full_name": "Fatemah Mohammad Abdullah Alkandari",
+      "job_title": "Accountant I",
+      "cost_center": "Kuwaitization - Progressive Cavity Pump (PCP)",
+      "contract_code": "pcp",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 31,
+      "employee_no": "1322",
+      "full_name": "Turki Mohammad Saud Alwazzan",
+      "job_title": "Admin Officer I",
+      "cost_center": "Kuwaitization - Progressive Cavity Pump (PCP)",
+      "contract_code": "pcp",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 32,
+      "employee_no": "1141",
+      "full_name": "Shahad Mohammad Jaber Aleidan",
+      "job_title": "Admin Officer I",
+      "cost_center": "Kuwaitization - Surface Well Testing International",
+      "contract_code": "swt_local",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 33,
+      "employee_no": "2175",
+      "full_name": "Fahad Ahmad Ibrahim Mohammad",
+      "job_title": "Dispatcher I",
+      "cost_center": "Kuwaitization - Surface Well Testing International",
+      "contract_code": "swt_local",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 34,
+      "employee_no": "2176",
+      "full_name": "Meshal Dhahi Shadeed Alhendal",
+      "job_title": "Dispatcher I",
+      "cost_center": "Kuwaitization - Surface Well Testing International",
+      "contract_code": "swt_local",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 35,
+      "employee_no": "1132",
+      "full_name": "Basel Jassim Abdullah Dashti",
+      "job_title": "Engineer I",
+      "cost_center": "Kuwaitization - Surface Well Testing International",
+      "contract_code": "swt_local",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 36,
+      "employee_no": "1156",
+      "full_name": "Abdullah J A Alqattan",
+      "job_title": "Engineer I",
+      "cost_center": "Kuwaitization - Surface Well Testing International",
+      "contract_code": "swt_local",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 37,
+      "employee_no": "1211",
+      "full_name": "Sarah Ibrahim Abdulmajeed Alkharji",
+      "job_title": "Engineer I",
+      "cost_center": "Kuwaitization - Surface Well Testing International",
+      "contract_code": "swt_local",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 38,
+      "employee_no": "2220",
+      "full_name": "Talal E A A M Alkandari",
+      "job_title": "Engineer II",
+      "cost_center": "Kuwaitization - Surface Well Testing International",
+      "contract_code": "swt_local",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 39,
+      "employee_no": "2221",
+      "full_name": "Noor A H Falah",
+      "job_title": "Engineer II",
+      "cost_center": "Kuwaitization - Surface Well Testing International",
+      "contract_code": "swt_local",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 40,
+      "employee_no": "2110",
+      "full_name": "Jumanah S A Alkhayat",
+      "job_title": "Engineer III",
+      "cost_center": "Kuwaitization - Surface Well Testing International",
+      "contract_code": "swt_local",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 41,
+      "employee_no": "2126",
+      "full_name": "Humoud Tharian Fares Alenezi",
+      "job_title": "Lead Admin Officer",
+      "cost_center": "Kuwaitization - Surface Well Testing International",
+      "contract_code": "swt_local",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 42,
+      "employee_no": "2165",
+      "full_name": "Mohammad Mansour Mohammad Almutawaa",
+      "job_title": "Lead Admin Officer",
+      "cost_center": "Kuwaitization - Surface Well Testing International",
+      "contract_code": "swt_local",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 43,
+      "employee_no": "2066",
+      "full_name": "Falah Ali Badah AlHajri",
+      "job_title": "Mechanic I",
+      "cost_center": "Kuwaitization - Surface Well Testing International",
+      "contract_code": "swt_local",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 44,
+      "employee_no": "2069",
+      "full_name": "Abdullah Suleiman Rashed AlRuwaished",
+      "job_title": "Operator I",
+      "cost_center": "Kuwaitization - Surface Well Testing International",
+      "contract_code": "swt_local",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 45,
+      "employee_no": "2068",
+      "full_name": "Hamad Abdullah Saad AlAzmi",
+      "job_title": "Operator III",
+      "cost_center": "Kuwaitization - Surface Well Testing International",
+      "contract_code": "swt_local",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 46,
+      "employee_no": "2070",
+      "full_name": "Saad Kamel Shehab AlKhaldi",
+      "job_title": "Operator III",
+      "cost_center": "Kuwaitization - Surface Well Testing International",
+      "contract_code": "swt_local",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 47,
+      "employee_no": "2067",
+      "full_name": "Fahad Abdulrahman Mostafa Mostafa",
+      "job_title": "Operator IIII",
+      "cost_center": "Kuwaitization - Surface Well Testing International",
+      "contract_code": "swt_local",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 48,
+      "employee_no": "1357",
+      "full_name": "Shurouq Bader Mubarak Alsaleem",
+      "job_title": "Senior Accountant",
+      "cost_center": "Kuwaitization - Surface Well Testing International",
+      "contract_code": "swt_local",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 49,
+      "employee_no": "570",
+      "full_name": "Abdullah Mohammad Hamad",
+      "job_title": "Senior Foreman",
+      "cost_center": "Kuwaitization - Surface Well Testing International",
+      "contract_code": "swt_local",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 50,
+      "employee_no": "2120",
+      "full_name": "Abdullah Ibrahim Hamad Alkhamees",
+      "job_title": "Senior Foreman",
+      "cost_center": "Kuwaitization - Surface Well Testing International",
+      "contract_code": "swt_local",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 51,
+      "employee_no": "2065",
+      "full_name": "Mubarak Mohammad Saad AlAzmi",
+      "job_title": "Senior Technical Assistant",
+      "cost_center": "Kuwaitization - Surface Well Testing International",
+      "contract_code": "swt_local",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 52,
+      "employee_no": "2072",
+      "full_name": "Ahmad Mohammad Abdulhadi Naqi",
+      "job_title": "Technical Assistant I",
+      "cost_center": "Kuwaitization - Surface Well Testing International",
+      "contract_code": "swt_local",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 53,
+      "employee_no": "1497",
+      "full_name": "Hussain Yousef Ali Alibrahim",
+      "job_title": "Engineer I",
+      "cost_center": "Kuwaitization - Wireline Logging Operation",
+      "contract_code": "wireline",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    },
+    {
+      "sr": 54,
+      "employee_no": "2222",
+      "full_name": "Mohammed A E Alothman",
+      "job_title": "Engineer II",
+      "cost_center": "Kuwaitization - Wireline Logging Operation",
+      "contract_code": "wireline",
+      "nationality_code": "KWT",
+      "kuwaitization": true
+    }
+  ],
+  "pdf_documents": [
+    {
+      "file": "Coiled Tubing - Contract No. 20054974.pdf",
+      "pages": 39,
+      "type": "kuwaitization_appendix",
+      "contract_code": "coiled_tubing"
+    },
+    {
+      "file": "Drilling Rig 60 - Contract No. 21056253.pdf",
+      "pages": 26,
+      "type": "kuwaitization_appendix",
+      "contract_code": "drilling_60",
+      "note": "scanned - no extractable text"
+    },
+    {
+      "file": "Drilling Rig 61 - Contract No. 21056254.pdf",
+      "pages": 26,
+      "type": "kuwaitization_appendix",
+      "contract_code": "drilling_61",
+      "note": "scanned - no extractable text"
+    },
+    {
+      "file": "PCP - Contract No. 21057656.pdf",
+      "pages": 30,
+      "type": "kuwaitization_appendix",
+      "contract_code": "pcp",
+      "note": "scanned - no extractable text"
+    },
+    {
+      "file": "Well Testing International - Contract No. 21056156.pdf",
+      "pages": 39,
+      "type": "kuwaitization_appendix",
+      "contract_code": "swt_intl"
+    },
+    {
+      "file": "Well Testing Local - Contract No. 25063762.pdf",
+      "pages": 51,
+      "type": "kuwaitization_appendix",
+      "contract_code": "swt_local"
+    },
+    {
+      "file": "Wireline Logging - JV GOFSCO-FALCON - Contract No. 19053759.pdf",
+      "pages": 30,
+      "type": "kuwaitization_appendix",
+      "contract_code": "wireline"
+    },
+    {
+      "file": "Mechanism for addressing the status of employees whose nationalities have been withdrawn from Contractor contracts in the Oil Sector-674.pdf",
+      "pages": 4,
+      "type": "koc_policy_674",
+      "note": "scanned - KOC circular on nationality withdrawal handling"
+    }
+  ],
+  "totals": {
+    "total_required": 93,
+    "total_supplied": 54,
+    "total_vacancy": 39,
+    "kuwaiti_employee_count": 54
+  }
+}

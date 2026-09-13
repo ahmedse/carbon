@@ -307,9 +307,17 @@ start_backend() {
     # so a stale shell export can never pin the server to the wrong brand.
     load_env_file "$BACKEND_DIR/.env"
 
-    # Start Django runserver
+    # Start Django runserver WITHOUT StatReloader auto-reload by default.
+    # StatReloader restarts the whole server on every .py edit; during active
+    # development files change every few seconds, and each reload queues
+    # in-flight requests ~13s (observed loan POST latency spike 4.3s -> 17.6s).
+    # Set DJANGO_AUTORELOAD=1 to opt back into auto-reload for manual dev.
+    local reload_flag="--noreload"
+    if [[ "${DJANGO_AUTORELOAD:-0}" == "1" ]]; then
+        reload_flag=""
+    fi
     cd "$BACKEND_DIR" || return 1
-    nohup "$python" manage.py runserver 0.0.0.0:$BACKEND_PORT > "$BACKEND_LOG" 2>&1 &
+    nohup "$python" manage.py runserver $reload_flag 0.0.0.0:$BACKEND_PORT > "$BACKEND_LOG" 2>&1 &
     echo $! > "$BACKEND_PID"
     
     # Verify (wait longer for AI models to load)
