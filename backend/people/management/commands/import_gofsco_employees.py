@@ -113,27 +113,88 @@ def job_family_for(title):
     return "operations"
 
 
-def salary_for(title):
-    """Infer a realistic non-zero monthly basic salary from the job title (F8).
+def salary_for(title, is_kuwaiti=False):
+    """Estimate monthly basic salary (KWD) from job title — Kuwait KOC contractor market rates.
 
-    The ERP export carries no salary column, so this import previously wrote
-    0.000 for every employee. Map title keywords to a reasonable band so
-    payroll never computes an all-zero payslip.
+    Source: Kuwait private sector / KOC contractor prevailing rates 2026.
+    These are ESTIMATED values only (F8 — no salary column in ERP export).
+    Kuwaiti nationals receive ~2× basic (nationalization premium + PIFSS loading).
     """
     t = (title or "").lower()
-    if any(k in t for k in ("manager", "director", "superintendent", "chief", "lead")):
-        return Decimal("8000.000")
-    if any(k in t for k in ("supervisor", "engineer", "tool pusher", "driller",
-                            "geologist", "consultant", "coordinator")):
-        return Decimal("6000.000")
-    if any(k in t for k in ("technician", "operator", "mechanic", "electrician",
-                            "welder", "rigger", "foreman", "accountant", "analyst",
-                            "medic", "nurse", "hse", "safety", "security")):
-        return Decimal("5000.000")
-    if any(k in t for k in ("driver", "helper", "roustabout", "floorman",
-                            "cleaner", "admin", "secretary", "reception", "clerk")):
-        return Decimal("4000.000")
-    return Decimal("4500.000")
+
+    # C-suite / country leadership
+    if any(k in t for k in ("chief executive", "ceo", "country operations", "chairman")):
+        base = Decimal("4500")
+    elif any(k in t for k in ("general manager", "vice president", "country manager")):
+        base = Decimal("3200")
+    # Directors
+    elif any(k in t for k in ("project director", "director")):
+        base = Decimal("2200")
+    # Operations / functional managers
+    elif any(k in t for k in ("operations manager", "operation manager", "gro manager",
+                               "finance manager", "assistant operation manager")):
+        base = Decimal("1400")
+    # Generic managers
+    elif "manager" in t:
+        base = Decimal("1100")
+    # Lead / Senior engineers
+    elif any(k in t for k in ("lead engineer", "senior engineer", "tool pusher",
+                               "superintendent", "driller")):
+        base = Decimal("780")
+    # Engineers (grade by Roman suffix)
+    elif "engineer" in t:
+        if any(k in t for k in ("iii", "iv", " 3", " 4")):
+            base = Decimal("640")
+        elif "ii" in t or " 2" in t:
+            base = Decimal("520")
+        else:
+            base = Decimal("420")  # Engineer I / plain
+    # Senior supervisors / team leaders / senior foremen
+    elif any(k in t for k in ("senior supervisor", "team leader", "senior foreman",
+                               "senior accountant", "senior technical assistant",
+                               "lead admin officer", "lead technical")):
+        base = Decimal("420")
+    # Supervisors / foremen / coordinators / safety officers / HSE
+    elif any(k in t for k in ("supervisor", "foreman", "coordinator", "safety officer",
+                               "hse officer", "accountant", "analyst", "medic",
+                               "nurse", "security", "dispatcher")):
+        base = Decimal("320")
+    # Technicians / operators / mechanics / electricians / welders
+    elif any(k in t for k in ("technician", "technical assistant", "operator",
+                               "mechanic", "electrician", "welder", "rigger",
+                               "assistant driller", "derrickman")):
+        if any(k in t for k in ("iii", "iv", "senior", "lead")):
+            base = Decimal("270")
+        elif "ii" in t:
+            base = Decimal("220")
+        else:
+            base = Decimal("180")
+    # Admin / secretaries / receptionists / clerks
+    elif any(k in t for k in ("admin officer", "administrative", "secretary",
+                               "receptionist", "clerk", "executive secretary")):
+        if any(k in t for k in ("ii", "senior", "lead")):
+            base = Decimal("190")
+        else:
+            base = Decimal("150")
+    # Drivers / vehicle operators
+    elif any(k in t for k in ("driver", "vehicle operator")):
+        base = Decimal("120")
+    # Helpers / cleaners / roustabouts / floormen
+    elif any(k in t for k in ("helper", "cleaner", "roustabout", "floorman", "floor man")):
+        base = Decimal("85")
+    else:
+        base = Decimal("170")
+
+    # Kuwaiti nationals: nationalization premium (~2× for unskilled, ~1.6× for professionals)
+    if is_kuwaiti:
+        if base < Decimal("200"):
+            base = base * Decimal("2.2")
+        elif base < Decimal("600"):
+            base = base * Decimal("1.8")
+        else:
+            base = base * Decimal("1.4")
+
+    return base.quantize(Decimal("1"))
 
 
 class Command(BaseCommand):

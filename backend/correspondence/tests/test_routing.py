@@ -5,6 +5,8 @@ from datetime import date, timedelta
 from types import SimpleNamespace
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from correspondence.models import Delegation
@@ -159,6 +161,25 @@ def test_finance_returns_finance_group_users(create_user, create_scoped_role):
     ids = resolve_step_approvers(step=_step('finance'), requester=other)
 
     assert ids == [finance_user.id]
+
+
+@pytest.mark.django_db
+def test_finance_routing_query_count_is_constant(create_user, create_scoped_role):
+    # F16 regression: a loan submission fired 2665 SQL queries because
+    # _users_with_capability() called has_capability() once per active user.
+    # The query count must not scale with the number of ordinary users.
+    requester = create_user('of4_finance_req')
+    finance_user = create_user('of4_finance_approver')
+    create_scoped_role(finance_user, 'finance_group')
+
+    for i in range(30):
+        create_user(f'of4_ordinary_{i}')
+
+    with CaptureQueriesContext(connection) as ctx:
+        ids = resolve_step_approvers(step=_step('finance'), requester=requester)
+
+    assert ids == [finance_user.id]
+    assert len(ctx.captured_queries) < 10
 
 
 # ── skip_if_self ───────────────────────────────────────────────────────────

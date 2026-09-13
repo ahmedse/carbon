@@ -13,7 +13,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.utils import timezone
 
-from accounts.capabilities import has_capability
+from accounts.capabilities import ALL_CAPABILITIES, GROUP_CAPABILITIES, _expand_capabilities
 
 from .models import Delegation
 
@@ -21,12 +21,58 @@ User = get_user_model()
 
 
 def _users_with_capability(cap_key: str) -> list[int]:
-    """Ordered list of active user ids that hold cap_key (superuser '*' counts)."""
-    ids = []
-    for u in User.objects.filter(is_active=True).order_by('id'):
-        if has_capability(u, cap_key):
-            ids.append(u.id)
-    return ids
+    """Ordered list of active user ids that hold cap_key (superuser '*' counts).
+
+    Resolved with a constant number of SQL queries (no per-user loop) by
+    translating the rules in ``accounts.capabilities.get_user_capabilities``
+    into set-based ScopedRole lookups:
+      * active superusers always qualify (their capabilities are ``{"*"}``);
+      * a GLOBAL wildcard group grants every known capability;
+      * a GLOBAL non-wildcard group grants cap_key if its (expanded) caps contain it;
+      * a SCOPED non-wildcard group grants cap_key if its (expanded) caps contain it
+        (the flat check does not scope non-wildcard groups);
+      * a SCOPED wildcard group grants ONLY view capabilities
+        (action == "view" or action.startswith("view_")).
+
+    ``derive_employee_capabilities`` is intentionally ignored: it never yields
+    the capabilities resolved here (correspondence:admin / people:manage /
+    correspondence:finance), so only superuser + ScopedRole membership matters.
+    """
+    ScopedRole = apps.get_model('accounts', 'ScopedRole')
+
+    cap = ALL_CAPABILITIES.get(cap_key)
+    is_view = bool(cap and (cap.action == 'view' or cap.action.startswith('view_')))
+
+    full_groups: list[str] = []      # wildcard groups (grant every *known* capability)
+    grantor_groups: list[str] = []   # non-wildcard groups whose caps include cap_key
+    for name, gcaps in GROUP_CAPABILITIES.items():
+        if '*' in gcaps:
+            if cap is not None:
+                full_groups.append(name)
+        elif cap_key in _expand_capabilities(gcaps):
+            grantor_groups.append(name)
+
+    ids: set[int] = set(
+        User.objects.filter(is_active=True, is_superuser=True).values_list('id', flat=True)
+    )
+
+    scoped = ScopedRole.objects.filter(is_active=True, user__is_active=True)
+
+    # Global roles (org_unit IS NULL AND module IS NULL).
+    global_q = Q(org_unit__isnull=True, module__isnull=True) & (
+        Q(group__name__in=full_groups) | Q(group__name__in=grantor_groups)
+    )
+    ids.update(scoped.filter(global_q).values_list('user_id', flat=True))
+
+    # Scoped roles (anything not global). Non-wildcard groups grant their full
+    # set; wildcard groups grant only view capabilities.
+    scoped_grant = Q(group__name__in=grantor_groups)
+    if is_view:
+        scoped_grant |= Q(group__name__in=full_groups)
+    scoped_q = ~Q(org_unit__isnull=True, module__isnull=True) & scoped_grant
+    ids.update(scoped.filter(scoped_q).values_list('user_id', flat=True))
+
+    return sorted(ids)
 
 
 def resolve_step_approvers(*, step, requester, org_unit=None) -> list[int]:
