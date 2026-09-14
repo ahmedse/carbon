@@ -1,0 +1,18 @@
+# Carbon trigger / metric configuration — starter skeleton.
+# Migrated from the proactive insight generator (performance-drift metrics and
+# forecast-deviation config); P2-08 source-PR workers populate real values.
+metrics:
+  - name: Unit 2 Heat Rate
+    table: unit_metrics
+    column: heat_rate
+    lookback_days: 30
+    threshold_pct: 2.0
+    direction: increase
+
+deviations:
+  - forecast_table: demand_forecasts
+    actual_table: demand_actuals
+    value_column: value_mw
+    time_column: timestamp
+    join_column: timestamp
+    threshold_pct: 8.0

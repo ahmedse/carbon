@@ -115,6 +115,7 @@ function AITaskPlanCard({
   onRun,
   onPause,
   onFork,
+  onRetry,
   onSwitchToChat,
   onEditPlan,
   onEditStep,
@@ -137,6 +138,7 @@ function AITaskPlanCard({
   const { phases } = buildPlanPhases(plan);
   const reviewable = plan.status === 'pending_approval';
   const runnable = plan.status === 'approved' || plan.status === 'paused';
+  const failed = plan.status === 'failed';
   const showRun = runnable && !running;
   const editable = plan.status !== 'running' && !running;
   // F-28 — steer a paused run: only `pending` steps are editable; completed /
@@ -585,6 +587,31 @@ function AITaskPlanCard({
           <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
             This plan was cancelled — nothing was executed.
           </Typography>
+        )}
+        {failed && onRetry && (
+          <Stack direction="row" spacing={1} sx={{ mt: 0.25, flexWrap: 'wrap', rowGap: 0.5 }}>
+            <Button
+              size="small"
+              variant="contained"
+              color="warning"
+              disabled={busy}
+              onClick={onRetry}
+              sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+            >
+              Retry failed steps
+            </Button>
+            {onFork && (
+              <Button
+                size="small"
+                variant="outlined"
+                disabled={busy}
+                onClick={onFork}
+                sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+              >
+                Fork
+              </Button>
+            )}
+          </Stack>
         )}
       </Stack>
     </Paper>

@@ -2,6 +2,8 @@
 # Seeds a minimal realistic AASTMT org slice + Transportation "Gas Bills" scenario.
 # Additive + idempotent. Safe to re-run.
 
+import os
+
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -97,7 +99,9 @@ class Command(BaseCommand):
         # Give ahmed a global admin role for the acceptance tests
         ahmed = User.objects.filter(username='ahmed').first()
         if ahmed:
-            ahmed.set_password('AdminPa_132')
+            admin_password = os.environ.get("CARBON_ADMIN_PASSWORD")
+            if admin_password:
+                ahmed.set_password(admin_password)
             ahmed.is_active = True
             ahmed.is_staff = True
             ahmed.is_superuser = True

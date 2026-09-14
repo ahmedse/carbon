@@ -562,6 +562,20 @@ def test_list_plans_is_owner_scoped(user, other_user, patch_engine_seams, run_id
 
 
 @pytest.mark.django_db
+def test_serialize_run_includes_definition_id(user, run_ids_cleanup):
+    """P3-05c: ``_serialize_run`` exposes ``definition_id`` so the Review Queue
+    can match a user's runs to a governed process definition client-side."""
+    plan = _make_plan(user)
+    plan.definition_id = "proc-verify"
+    plan.save(update_fields=["definition_id"])
+    run_ids_cleanup.append(plan.id)
+
+    result = PlansService().get_plan(user, plan.id)
+
+    assert result["definition_id"] == "proc-verify"
+
+
+@pytest.mark.django_db
 def test_get_plan_rejects_other_users_plan(user, other_user, patch_engine_seams, run_ids_cleanup):
     plan = _make_plan(other_user, status="approved")
     run_ids_cleanup.append(plan.id)

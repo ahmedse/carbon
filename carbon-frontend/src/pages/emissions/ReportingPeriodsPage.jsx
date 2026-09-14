@@ -285,14 +285,16 @@ export default function ReportingPeriodsPage() {
         </Typography>
         <Stack direction="row" gap={1}>
           <Tooltip title={t('refresh')}>
-            <IconButton
-              onClick={loadPeriods}
-              size="small"
-              disabled={loading}
-              sx={{ color: 'primary.main' }}
-            >
-              <RefreshIcon />
-            </IconButton>
+            <span>
+              <IconButton
+                onClick={loadPeriods}
+                size="small"
+                disabled={loading}
+                sx={{ color: 'primary.main' }}
+              >
+                <RefreshIcon />
+              </IconButton>
+            </span>
           </Tooltip>
           <Button
             variant="contained"

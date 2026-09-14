@@ -76,6 +76,7 @@ import {
   resumePlanStream,
   runPlanStream,
   stopPlan,
+  durableResumeRun,
 } from '../api/aiWorkspace';
 import ScheduleDialog from '../components/ai/ScheduleDialog';
 import ScheduleList from '../components/ai/ScheduleList';
@@ -1065,8 +1066,23 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     }
   };
 
-  const handleFork = async () => {
+  // Retry failed steps: crash-resume re-queues failed steps, then stream.
+  const handleRetry = async () => {
     if (!selectedPlan) return;
+    setMutating(true);
+    try {
+      await durableResumeRun(token, selectedPlan.id);
+      await refreshPlan(selectedPlan.id);
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not re-queue failed steps');
+      setMutating(false);
+      return;
+    }
+    setMutating(false);
+    handleRun();
+  };
+
+  const handleFork = async () => {
     setMutating(true);
     try {
       const forked = await forkPlan(token, selectedPlan.id);
@@ -1306,6 +1322,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           onRun={handleRun}
           onPause={handlePause}
           onFork={handleFork}
+          onRetry={handleRetry}
           onEditPlan={handleEditPlan}
           onEditStep={(step) => setEditStepTarget({ step })}
           onConfirmStep={handleConfirmStep}

@@ -1,7 +1,15 @@
 // src/shell/EnvelopeMessage.test.jsx
 // PAQ-2B — deterministic renderer for the typed AnswerEnvelope.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
+
+// react-chartjs-2 needs a canvas 2D context — not available in jsdom.
+vi.mock('react-chartjs-2', () => ({
+  Bar: () => <div data-testid="chartjs" data-type="bar" />,
+  Doughnut: () => <div data-testid="chartjs" data-type="pie" />,
+  Line: () => <div data-testid="chartjs" data-type="line" />,
+}));
+
 import EnvelopeMessage from './EnvelopeMessage';
 
 const sampleEnvelope = {
@@ -90,12 +98,12 @@ describe('EnvelopeMessage — full envelope', () => {
     expect(screen.getByText(/2026/)).toBeInTheDocument();
   });
 
-  it('renders a deterministic SVG chart', () => {
+  it('renders a chart with the declared type', () => {
     render(<EnvelopeMessage envelope={sampleEnvelope} fallbackContent="" />);
 
     const chart = screen.getByTestId('envelope-chart');
     expect(screen.getByText('Employees by gender')).toBeInTheDocument();
-    expect(chart.querySelector('svg')).not.toBeNull();
+    expect(within(chart).getByTestId('chartjs')).toHaveAttribute('data-type', 'bar');
   });
 
   it('renders pie and line chart types without crashing', () => {
@@ -113,8 +121,8 @@ describe('EnvelopeMessage — full envelope', () => {
 
     const charts = screen.getAllByTestId('envelope-chart');
     expect(charts).toHaveLength(2);
-    expect(charts[0].querySelector('svg')).not.toBeNull();
-    expect(charts[1].querySelector('svg')).not.toBeNull();
+    expect(within(charts[0]).getByTestId('chartjs')).toHaveAttribute('data-type', 'pie');
+    expect(within(charts[1]).getByTestId('chartjs')).toHaveAttribute('data-type', 'line');
   });
 
   it('renders "No data" for an empty table', () => {

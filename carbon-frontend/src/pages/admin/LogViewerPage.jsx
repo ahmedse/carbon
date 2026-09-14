@@ -137,9 +137,11 @@ export default function LogViewerPage() {
             label="Auto-refresh (30s)"
           />
           <Tooltip title="Refresh">
-            <IconButton onClick={fetchLogs} disabled={loading}>
-              <RefreshIcon />
-            </IconButton>
+            <span>
+              <IconButton onClick={fetchLogs} disabled={loading}>
+                <RefreshIcon />
+              </IconButton>
+            </span>
           </Tooltip>
         </Box>
       </Box>

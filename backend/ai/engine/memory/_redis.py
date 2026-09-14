@@ -5,7 +5,7 @@ created lazily and is never fatal: if Redis is unreachable, ``get_redis_client``
 logs a visible warning and returns ``None`` so callers fall back to their
 in-process stores (never silently).
 
-This module is pure engine plumbing — it imports nothing from Carbon's domain
+This module is pure engine plumbing — it imports nothing from the host's domain
 apps (RULE_20 / RULE_6).
 """
 from __future__ import annotations

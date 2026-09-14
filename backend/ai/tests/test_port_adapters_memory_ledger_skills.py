@@ -122,6 +122,45 @@ def test_ledger_record_stage_writes_row(django_store):
 
 
 @pytest.mark.django_db(transaction=True)
+def test_ledger_record_stage_coerces_decimal_payload(django_store):
+    """Regression: a tool-result payload containing Decimal must not break
+    JSONField serialization (was ``TypeError: Object of type Decimal is not
+    JSON serializable``, which failed the whole turn at final commit)."""
+    from decimal import Decimal
+
+    from ai.adapters.ledger import DjangoLedgerAdapter
+
+    async def _go():
+        factory = get_store().get_session_factory()
+        async with factory() as db:
+            adapter = DjangoLedgerAdapter(db)
+
+            row_id = await adapter.record_stage(
+                turn_id="turn-decimal",
+                instance_id=INSTANCE,
+                conversation_id="conv-decimal",
+                host_user_id=USER,
+                stage="execution",
+                stage_index=4,
+                payload={
+                    "total": Decimal("123.45"),
+                    "nested": {"sum": Decimal("99.9")},
+                    "rows": [{"v": Decimal("1.0")}],
+                },
+                latency_ms=12.3,
+            )
+            assert row_id
+
+            rows = await db.select(TurnLedgerRow, ("id", row_id))
+            assert len(rows) == 1
+            # Decimals must have been coerced to strings, never left raw.
+            assert rows[0].payload_json["total"] == "123.45"
+            assert rows[0].payload_json["nested"]["sum"] == "99.9"
+
+    _run(_go())
+
+
+@pytest.mark.django_db(transaction=True)
 def test_skill_add_get_list_promoted_and_gate_only(django_store):
     from ai.adapters.skills import DjangoSkillAdapter
 

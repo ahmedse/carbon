@@ -95,7 +95,3 @@ Notes:
 - `model_id` is the 32-hex model UUID (from register/`GET /api/v1/models/`).
 - Categorical features are sent as **float codes** (matching the persisted `category_maps` order).
 - Every response includes `request_id` — persist it to feed back actuals later.
-
----
-
-*Source: ~/ai-toolkit/shared/model-serving-runbook.md*

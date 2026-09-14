@@ -1,19 +1,21 @@
-"""P1-07 regression — worker fan-out tool calls must run through guardrails.
+"""P2-06c — worker fan-out tool calls routed through the command boundary.
 
-``WorkerPool._run_worker`` used to ignore the tool calls returned by its LLM
-call entirely: read-only work was dropped and a mutation was neither executed
-*nor* audited. These tests lock in the interim wiring (until P2-06) where every
-worker tool call is dispatched through ``ExecuteWitness`` with
-``is_worker=True``, so:
+``WorkerPool._run_worker`` used to dispatch worker tool calls through an
+interim ``ExecuteWitness`` + ``readonly_worker_hook`` pipeline (P1-07). These
+tests lock in the P2-06c wiring where the worker delegates to the host
+executor's ``execute_worker_tools_via_boundary`` seam, which builds a
+``Command`` per tool call and routes it through the 13-stage command boundary:
 
-  * a mutation (``call_host_api`` with a body / non-GET method) is BLOCKED by
-    the default hook pipeline and the block is surfaced in the WorkerArtifact;
-  * a read-only tool executes and its result is aggregated into the artifact;
+  * a mutation (``call_host_api`` with a body / non-GET method) is REFUSED at
+    the boundary consent stage (the executor never runs) and surfaced in the
+    WorkerArtifact;
+  * a read-only tool executes via the boundary executor closure and its result
+    is aggregated into the artifact;
   * a text-only worker is unchanged.
 
 Fully offline and deterministic: ``route_chat`` and the tool executors are
-faked, the guardrail budget hook is disabled, and evidence writes / event
-broadcasts are no-ops.
+faked, and ``get_command_boundary`` is monkeypatched to build a boundary with
+an offline PDP stub + fake ledger (no DjangoLedgerAdapter, no DB).
 """
 from __future__ import annotations
 
@@ -22,21 +24,20 @@ from types import SimpleNamespace
 
 import pytest
 
+import ai.command_boundary_factory as factory_module
 import ai.engine.agent.guardrails as guardrails_mod
 import ai.engine.agent.workers as workers_mod
-import ai.engine.cognition.turn.execute as execute_mod
+from ai.command_boundary import CommandBoundary
 from ai.engine.agent.workers import WorkerArtifact, WorkerPool, WorkerTask
-from ai.engine.cognition.turn.execute import ExecuteWitness
+from ai.engine.ports import Decision
+from ai.host_executor import CarbonHostExecutor
 
 
 class _FakeSettings:
-    """Minimal settings surface used by WorkerPool + the guardrail hooks."""
+    """Minimal settings surface used by WorkerPool."""
 
     AGENT_MAX_WORKERS = 6
     AGENT_WORKER_TIMEOUT_SEC = 30
-    GUARDRAIL_MAX_TOOL_CALLS_PER_RUN = 100
-    GUARDRAIL_BUDGET_ENFORCEMENT = False
-    GUARDRAIL_REDACTED_TOOLS = "[]"
 
 
 def _tool_call(name: str, args: dict) -> dict:
@@ -70,9 +71,50 @@ def _patch_route_chat(monkeypatch, response: dict) -> None:
     monkeypatch.setattr("ai.engine.llm.router.route_chat", fake_route_chat)
 
 
+class _OfflinePDP:
+    """Offline PDP mirroring ``ai.pdp.DEFAULT_POLICIES``: reads ALLOW, mutations ASK."""
+
+    _READ = frozenset({"read", "list", "get", "search", "view", "inspect", "retrieve", "describe"})
+    _MUTATE = frozenset({"create", "update", "upsert", "write", "send", "execute", "run", "archive", "delete"})
+
+    async def decide(self, principal, action, objects, process_state=None,
+                     autonomy="human_only", budget=None, time=None) -> dict:
+        if action in self._READ:
+            return {"decision": Decision.ALLOW, "reason": "read-only action is permitted", "policy_version": "offline-v1"}
+        if action in self._MUTATE:
+            return {"decision": Decision.ASK, "reason": "mutating action governed by autonomy", "policy_version": "offline-v1"}
+        return {"decision": Decision.REFUSE, "reason": "default deny", "policy_version": "offline-v1"}
+
+
+class _FakeLedger:
+    """In-memory ledger sink (no DjangoLedgerAdapter, no DB)."""
+
+    def __init__(self):
+        self.rows: list[dict] = []
+
+    async def record_stage(self, **kwargs) -> str | None:
+        self.rows.append(kwargs)
+        return f"row-{len(self.rows)}"
+
+
+def _install_offline_boundary(monkeypatch) -> None:
+    """Monkeypatch the factory to build an offline, fail-closed boundary."""
+
+    def _factory(db, *, executor=None, tool_catalog=None, pdp=None,
+                 ledger=None, clock=None):
+        return CommandBoundary(
+            pdp=_OfflinePDP(),
+            ledger=_FakeLedger(),
+            executor=executor,
+            tool_catalog=tool_catalog,
+        )
+
+    monkeypatch.setattr(factory_module, "get_command_boundary", _factory)
+
+
 @pytest.fixture
 def harness(monkeypatch):
-    """Wire fakes around the worker→ExecuteWitness dispatch path."""
+    """Wire fakes around the worker→boundary dispatch path (offline)."""
     calls: dict[str, list] = {"search_knowledge": [], "call_host_api": []}
 
     async def fake_search_knowledge(query=None, **kwargs):
@@ -89,19 +131,12 @@ def harness(monkeypatch):
             "call_host_api": fake_call_host_api,
         }
 
-    async def fake_register_evidence(self, **kwargs):
-        return None
-
-    async def fake_broadcast(*args, **kwargs):
-        return None
-
-    # Deterministic settings (budget hook off → no DB access).
+    # Deterministic settings (no budget enforcement → no DB access).
     monkeypatch.setattr(workers_mod, "get_settings", lambda: _FakeSettings())
-    monkeypatch.setattr(guardrails_mod, "get_settings", lambda: _FakeSettings())
-    # Offline tool executors + no side-effecting evidence/broadcast.
+    # Offline tool executors — the boundary executor closure dispatches here.
     monkeypatch.setattr("ai.engine.agent.tools.get_tool_executors", fake_get_tool_executors)
-    monkeypatch.setattr(ExecuteWitness, "_register_evidence", fake_register_evidence)
-    monkeypatch.setattr(execute_mod, "broadcast_run_event", fake_broadcast)
+    # Offline boundary — no DjangoLedgerAdapter / real PDP / DB access.
+    _install_offline_boundary(monkeypatch)
 
     return SimpleNamespace(calls=calls, monkeypatch=monkeypatch)
 
@@ -112,6 +147,9 @@ def _pool() -> WorkerPool:
         db=None,
         instance_id="inst-1",
         conversation_id="conv-1",
+        executor=CarbonHostExecutor(
+            db=None, instance_config={}, user_token="tok", host_user_id="u1",
+        ),
     )
 
 
@@ -120,7 +158,7 @@ def _pool() -> WorkerPool:
 
 @pytest.mark.asyncio
 async def test_worker_mutation_tool_call_is_blocked(harness, monkeypatch):
-    """A worker's mutation call must be cancelled by the hooks, not executed."""
+    """A worker's mutation call must be refused by the boundary, not executed."""
     _patch_route_chat(monkeypatch, {
         "content": "Attempting to create a record.",
         "tool_calls": [
@@ -136,15 +174,12 @@ async def test_worker_mutation_tool_call_is_blocked(harness, monkeypatch):
     artifact = await _pool()._run_worker(task, registry, "orchestrator-1", "sys")
 
     assert isinstance(artifact, WorkerArtifact)
-    # The mutation was blocked at the hook layer — its executor never ran.
+    # The mutation was refused at the boundary consent stage — never executed.
     assert harness.calls["call_host_api"] == []
     # …and the block is surfaced in the artifact, never swallowed.
     assert artifact.error
-    assert "blocked by guardrail" in artifact.error.lower()
-    assert "requires user confirmation" in artifact.error
     assert "worker_tool_blocked" in artifact.guardrail_flags
     assert "blocked:call_host_api" in artifact.guardrail_flags
-    assert "guardrail" in (artifact.detail or "").lower()
 
 
 # ── 2. Read-only worker tool call executes and its result is used ───────────
@@ -153,15 +188,6 @@ async def test_worker_mutation_tool_call_is_blocked(harness, monkeypatch):
 @pytest.mark.asyncio
 async def test_worker_readonly_tool_call_executes(harness, monkeypatch):
     """A read-only worker call runs and its output lands in the artifact."""
-    captured_ctx: list = []
-    real_readonly_hook = guardrails_mod.readonly_worker_hook
-
-    async def spy_readonly_hook(ctx):
-        captured_ctx.append(ctx)
-        return await real_readonly_hook(ctx)
-
-    monkeypatch.setattr(guardrails_mod, "readonly_worker_hook", spy_readonly_hook)
-
     _patch_route_chat(monkeypatch, {
         "content": "Searching the knowledge base.",
         "tool_calls": [
@@ -176,7 +202,7 @@ async def test_worker_readonly_tool_call_executes(harness, monkeypatch):
 
     artifact = await _pool()._run_worker(task, registry, "orchestrator-1", "sys")
 
-    # The read-only executor ran with the LLM's args.
+    # The read-only executor ran with the LLM's args (via the boundary closure).
     assert harness.calls["search_knowledge"], "read-only executor must run"
     assert harness.calls["search_knowledge"][0]["query"] == "emission factors"
     # Its result is reflected in the artifact as real work.
@@ -185,12 +211,6 @@ async def test_worker_readonly_tool_call_executes(harness, monkeypatch):
     assert "Searching the knowledge base." in artifact.detail
     assert "search_knowledge" in artifact.detail
     assert "grid factor" in artifact.detail
-    # is_worker=True was threaded into the HookContext for the worker call.
-    assert captured_ctx, "readonly_worker_hook must see the worker tool call"
-    assert all(c.is_worker for c in captured_ctx)
-    assert captured_ctx[0].agent_role == "researcher"
-    assert captured_ctx[0].instance_id == "inst-1"
-    assert captured_ctx[0].run_id
 
 
 # ── 3. A worker with no tool calls keeps the text-only behavior ─────────────

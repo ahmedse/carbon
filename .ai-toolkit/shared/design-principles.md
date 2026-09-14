@@ -62,7 +62,3 @@ Debugger / Curator   → preserve + promote learnings
 ```
 
 A feature is not "designed" until the user, their goal, the flow, and acceptance criteria exist.
-
----
-
-*Source: ~/ai-toolkit/shared/design-principles.md — shared across all projects*

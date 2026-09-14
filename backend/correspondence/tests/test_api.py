@@ -10,6 +10,7 @@ from django.conf import settings
 from django.urls import reverse
 
 from accounts.capabilities import has_capability
+from catalog.models import GovernanceEvent
 from correspondence.fsm import submit_correspondence
 from correspondence.models import Correspondence, WorkflowPolicy, WorkflowPolicyStep
 from mdm.models import OrgUnit, ReferenceSet, ReferenceValue
@@ -236,6 +237,38 @@ def test_cancel_by_requester_and_non_requester(
     )
     assert resp.status_code == 200
     assert resp.json()['status'] == 'cancelled'
+
+
+@pytest.mark.django_db
+def test_archive_by_requester(workflow, api_client, get_token_for_user):
+    wf = workflow
+    corr = _draft(wf.corr_type, wf.org, wf.requester_user)
+    submit_correspondence(corr=corr, by=wf.requester_user)
+
+    # Approve to a terminal status.
+    _auth(api_client, wf.manager_user, get_token_for_user)
+    resp = api_client.post(
+        f'{PREFIX}/correspondence/{corr.id}/approve/', {}, format='json',
+    )
+    assert resp.status_code == 200
+    assert resp.json()['status'] == 'approved'
+
+    # Requester archives the approved correspondence.
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    resp = api_client.post(
+        f'{PREFIX}/correspondence/{corr.id}/archive/', {}, format='json',
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['status'] == 'archived'
+    assert data['resolved_at'] is not None
+
+    corr.refresh_from_db()
+    assert corr.status == 'archived'
+    assert corr.resolved_at is not None
+    assert GovernanceEvent.objects.filter(
+        entity_type='correspondence', entity_id=corr.id, action='archive',
+    ).exists()
 
 
 @pytest.mark.django_db

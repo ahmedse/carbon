@@ -66,15 +66,30 @@ class CalculationSummaryService:
             user,
             Calculation.objects.select_related('module', 'reporting_period', 'emission_factor')
         )
+        # The chat planner frequently passes a YEAR (e.g. "2026") as
+        # ``reporting_period_id`` when the user asks "emissions in 2026". A
+        # year is not a period id — filtering by it yields zero rows and a
+        # false "no data" answer. Resolve the id against real periods; when it
+        # does not match, ignore the filter (org-scoped data) instead of
+        # returning an empty result.
+        effective_period_id = None
         if period_id:
-            qs = qs.filter(reporting_period_id=period_id)
+            if ReportingPeriod.objects.filter(pk=period_id).exists():
+                effective_period_id = period_id
+                qs = qs.filter(reporting_period_id=period_id)
+            else:
+                logger.warning(
+                    "get_summary: period_id %r does not match any ReportingPeriod; "
+                    "ignoring filter (falling back to org-scoped data)",
+                    period_id,
+                )
 
         total_calculations = qs.count()
         stale_count = qs.filter(is_stale=True).count()  # E3-3
 
         if total_calculations == 0:
             return {
-                'period_id': int(period_id) if period_id else None,
+                'period_id': int(effective_period_id) if effective_period_id else None,
                 'total_calculations': 0,
                 'stale_count': 0,
                 'by_scope': {},
@@ -107,9 +122,9 @@ class CalculationSummaryService:
         latest_run_at = latest_run['latest']
 
         last_audit = None
-        if period_id:
+        if effective_period_id:
             audit = CalculationAudit.objects.filter(
-                reporting_period_id=period_id
+                reporting_period_id=effective_period_id
             ).order_by('-triggered_at').first()
             if audit:
                 last_audit = {
@@ -123,7 +138,7 @@ class CalculationSummaryService:
                 }
 
         return {
-            'period_id': int(period_id) if period_id else None,
+            'period_id': int(effective_period_id) if effective_period_id else None,
             'total_calculations': total_calculations,
             'stale_count': stale_count,
             'by_scope': by_scope_dict,

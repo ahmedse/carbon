@@ -56,10 +56,18 @@ export async function refreshAccessToken() {
       body: JSON.stringify({ refresh }),
     });
     if (!res.ok) {
-      // Refresh token is dead — redirect immediately so visibility-handler retries can't loop
-      lastRefreshTimestamp = 0;
-      globalLogout();
-      throw new Error("Session expired");
+      // 401/400 = the refresh token itself was rejected (revoked/expired) — the
+      // session is genuinely over. 429/5xx = transient (rate-limit / server
+      // blip) — do NOT clear the session; the next interval/tab-focus refresh
+      // will retry. Network failures (fetch throws) also propagate untouched.
+      if (res.status === 401 || res.status === 400) {
+        lastRefreshTimestamp = 0;
+        globalLogout();
+        const err = new Error("Session expired");
+        err.isSessionExpired = true;
+        throw err;
+      }
+      throw new Error(`Refresh unavailable (${res.status})`);
     }
     const data = await res.json();
     if (!data.access) throw new Error("No new access token");
@@ -78,6 +86,19 @@ export function getLastRefreshTimestamp() {
   return lastRefreshTimestamp;
 }
 
+/**
+ * Handle a refresh failure without clearing the session on transient errors.
+ * - Genuine expiry (isSessionExpired) → globalLogout + "Session expired".
+ * - Transient (429/5xx/network) → rethrow so callers can retry next cycle.
+ */
+function handleRefreshFailure(error) {
+  if (error && error.isSessionExpired) {
+    globalLogout();
+    throw new Error("Session expired");
+  }
+  throw error;
+}
+
 /** Returns the currently valid access token, refreshing if expired. */
 async function getValidAccessToken(token) {
   let accessToken = token || localStorage.getItem("access");
@@ -88,8 +109,7 @@ async function getValidAccessToken(token) {
       try {
         accessToken = await refreshAccessToken();
       } catch (_e) {
-        globalLogout();
-        throw new Error("Session expired");
+        handleRefreshFailure(_e);
       }
     }
     return accessToken;
@@ -99,8 +119,7 @@ async function getValidAccessToken(token) {
     try {
       accessToken = await refreshAccessToken();
     } catch (_e) {
-      globalLogout();
-      throw new Error("Session expired");
+      handleRefreshFailure(_e);
     }
   }
 
@@ -164,8 +183,7 @@ export async function authFetch(
         response = await fetch(url, { ...fetchOptions, headers }); // retry after refresh
         clearTimeout(timeout);
       } catch (_refreshError) {
-        globalLogout();
-        throw new Error("Session expired");
+        handleRefreshFailure(_refreshError);
       }
     }
 
@@ -252,8 +270,7 @@ export async function apiFetch(
     try {
       accessToken = await refreshAccessToken();
     } catch (_e) {
-      globalLogout();
-      throw new Error("Session expired");
+      handleRefreshFailure(_e);
     }
   }
 
@@ -308,8 +325,7 @@ export async function apiFetch(
         const retryIsJson = response.headers.get("content-type")?.includes("application/json");
         responseData = retryIsJson ? await response.json() : await response.text();
       } catch (_refreshError) {
-        globalLogout();
-        throw new Error("Session expired");
+        handleRefreshFailure(_refreshError);
       }
     }
 
@@ -403,8 +419,7 @@ export async function apiFetchStream(
         headers.Authorization = `Bearer ${accessToken}`;
         response = await fetch(url, { method: "GET", headers, signal });
       } catch (_refreshError) {
-        globalLogout();
-        throw new Error("Session expired");
+        handleRefreshFailure(_refreshError);
       }
     }
 

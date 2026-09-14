@@ -104,7 +104,3 @@ Lives under: <nav location>
 ### Hand-off
 Data/endpoints: <...>   Patterns: <ux-patterns sections>   Primitives: <design-system>
 ```
-
----
-
-*Source: ~/ai-toolkit/shared/user-stories.md — shared across all projects*

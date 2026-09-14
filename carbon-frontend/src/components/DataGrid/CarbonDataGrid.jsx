@@ -55,11 +55,6 @@ function CarbonDataGrid({
   const stripedBg = theme.palette.mode === 'dark' ? theme.palette.grey[900] : theme.palette.grey[50];
   const stripedAlt = theme.palette.mode === 'dark' ? theme.palette.grey[800] : theme.palette.grey[100];
 
-  const components = {
-    ...(showColumnToggle ? { Toolbar: GridToolbar } : {}),
-    NoRowsOverlay: () => <NoRowsOverlay message={emptyMessage} />,
-  };
-
   return (
     <Box
       ref={containerRef}
@@ -77,13 +72,16 @@ function CarbonDataGrid({
           loading={loading}
           getRowId={getRowId}
           checkboxSelection={checkboxSelection}
-          onSelectionModelChange={(selection) => onSelectionChange?.(selection)}
-          pageSize={pageSize}
-          rowsPerPageOptions={pageSizeOptions}
+          onRowSelectionModelChange={(model) => onSelectionChange?.(Array.from(model?.ids || []))}
+          initialState={{ pagination: { paginationModel: { pageSize } } }}
+          pageSizeOptions={pageSizeOptions}
           density={density}
           onRowClick={onRowClick}
-          disableSelectionOnClick
-          components={components}
+          disableRowSelectionOnClick
+          slots={{
+            ...(showColumnToggle ? { toolbar: GridToolbar } : {}),
+            noRowsOverlay: () => <NoRowsOverlay message={emptyMessage} />,
+          }}
           sx={{
             border: 'none',
             '& .MuiDataGrid-columnHeaders': {

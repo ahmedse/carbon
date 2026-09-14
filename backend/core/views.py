@@ -1,10 +1,15 @@
-from .models import Module, Feedback, Notification
-from .serializers import ModuleSerializer, FeedbackSerializer, NotificationSerializer
+from .models import Module, Feedback, Notification, RequestAuditLog
+from .serializers import (
+    ModuleSerializer, FeedbackSerializer, NotificationSerializer,
+    RequestAuditLogSerializer,
+)
+from .filters import RequestAuditLogFilter
 from .feedback import AppFeedback
 from accounts.permissions import AdminOrSuperuserOnly
 from accounts.rbac_utils import get_visible_module_ids
 from catalog.models import AssetProfile, GovernanceEvent
 from catalog.serializers import GovernanceEventSerializer
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
@@ -185,3 +190,17 @@ class NotificationViewSet(viewsets.ModelViewSet):
             'results': serializer.data,
             'unread_count': unread_count,
         })
+
+
+class RequestAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only view of the general request audit trail (mutating requests).
+
+    Exposes every POST/PUT/PATCH/DELETE captured by ``core.middleware.AuditMiddleware``.
+    Admin/superuser only; filterable by username, method, path, and timestamp range.
+    """
+    queryset = RequestAuditLog.objects.select_related('user').order_by('-timestamp')
+    serializer_class = RequestAuditLogSerializer
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = 'platform:view_audit'
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = RequestAuditLogFilter

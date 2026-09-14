@@ -202,7 +202,15 @@ class EmissionsDomainAI(DomainAIOperations):
                 input_schema={
                     "type": "object",
                     "properties": {
-                        "reporting_period_id": {"type": "string", "description": "Optional reporting period id."},
+                        "reporting_period_id": {
+                            "type": "string",
+                            "description": (
+                                "Optional reporting period id (a small integer like '16' for "
+                                "'FY 2025-26'). Do NOT pass a calendar year here — when the "
+                                "user asks about a year (e.g. 'emissions in 2026'), omit this "
+                                "field entirely so the org-wide summary is returned."
+                            ),
+                        },
                     },
                 },
                 output_description="Totals by scope, status, and module, plus latest run and last audit.",

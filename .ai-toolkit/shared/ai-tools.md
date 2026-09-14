@@ -93,7 +93,3 @@ and not "generate an ad-hoc Cairo weather tool."
 
 The test: **would a competent intern pick the right tool from your catalog?** If the
 answer requires per-question tools, your catalog is wrong, not your tooling.
-
----
-
-*Source: ~/ai-toolkit/shared/ai-tools.md (mirrored into carbon/.ai-toolkit/shared/)*

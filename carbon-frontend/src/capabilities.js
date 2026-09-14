@@ -85,6 +85,13 @@ export const EVIDENCE_MANAGE = 'evidence:manage';
 export const AI_VIEW_CONSOLE   = 'ai:view_console';
 export const AI_MANAGE_CONSOLE = 'ai:manage_console';
 
+// ── AI (Process Registry — P3-05c governance) ─────────────────────
+export const AI_PROCESS_OWNER = 'ai:process_owner';
+export const AI_PUBLISHER     = 'ai:publisher';
+export const AI_OPERATOR      = 'ai:operator';
+export const AI_AUDITOR       = 'ai:auditor';
+export const AI_INSPECT_CASE  = 'ai:inspect_case';
+
 // ── Manifest role → capability mapping ─────────────────────────────
 // Maps manifest role keys (carbon:data_owner) to capability keys.
 // Used by filterMenuItems and canAccessRoute for backward compatibility.

@@ -43,6 +43,22 @@ from django.core.files.base import ContentFile
 from django.utils import timezone
 
 from ai.instance_registry import resolve_instance_id
+from ai import run_machine
+from ai import workflow
+from ai.models.step_journal import STEP_KIND_ACTIVITY, STEP_KIND_WORKFLOW
+from ai.step_journal import (
+    StepJournal,
+    canonical_step_id,
+    EVENT_OUTCOME_UNKNOWN,
+    EVENT_STEP_COMPLETED,
+    EVENT_STEP_CONSENT_DECLINED,
+    EVENT_STEP_CONSENT_GRANTED,
+    EVENT_STEP_CONSENT_REQUESTED,
+    EVENT_STEP_FAILED,
+    EVENT_STEP_QUEUED,
+    EVENT_STEP_RETRIED,
+    EVENT_STEP_STARTED,
+)
 
 logger = logging.getLogger("carbon.ai.plans_service")
 
@@ -90,6 +106,12 @@ _CRON_WEEKDAY_NAMES = (
 
 # Statuses from which a plan may (re)enter execution.
 _RUNNABLE_STATUSES = {STATUS_APPROVED, STATUS_PAUSED}
+
+# P3-11 — human-readable copy for the two run-lifecycle actions. These are the
+# distinct outcome messages the frontend (P3-05c) surfaces: ``cancel`` stops
+# work; ``compensate`` reverses prior effects and needs its own approval.
+CANCEL_MESSAGE = "cancel stops the run; no further work will start"
+COMPENSATE_MESSAGE = "compensate reverses prior effects and requires separate approval"
 
 
 def _runnable_state(status: str) -> str:
@@ -144,6 +166,68 @@ def _display_timezone():
 RETRY_MAX_ATTEMPTS = 3
 RETRY_BASE_DELAY_SECONDS = 1.0
 RETRY_MAX_DELAY_SECONDS = 8.0
+
+# Lifecycle states whose transition is journaled as a step event (P3-07b).
+# ``ready``/``planned``/``cancelled``/``awaiting_reconciliation`` are not
+# journaled here: ``planned`` is emitted by ``begin_step`` (``step_queued``),
+# ``cancelled`` by ``decline_step`` (``step_consent_declined``), and
+# ``awaiting_reconciliation`` rides the ``outcome_unknown`` event emitted by
+# ``reconcile_outcome``.
+_ADVANCE_EVENT_BY_STATE = {
+    run_machine.RUN_EXECUTING: EVENT_STEP_STARTED,
+    run_machine.RUN_SUCCEEDED: EVENT_STEP_COMPLETED,
+    run_machine.RUN_FAILED: EVENT_STEP_FAILED,
+    run_machine.RUN_AWAITING_APPROVAL: EVENT_STEP_CONSENT_REQUESTED,
+}
+
+
+def _replay_result(action: str, recon: dict) -> dict:
+    """Shape the replay decision response (RULE_23 outcome terms only)."""
+    return {
+        "action": action,
+        "step_state": recon["step_state"],
+        "status": recon["status"],
+        "retry_count": recon["retry_count"],
+        "outcome": recon["outcome"],
+        "consent": recon["consent"],
+        "committed": recon["committed"],
+    }
+
+
+def _restore_step_from_recon(step, recon: dict) -> None:
+    """Realign a step row with its journal-reconstructed state (replay).
+
+    Direct restoration, not a state-machine transition: replay is an explicit
+    operator action that recovers a crashed/stale row from its append-only
+    journal (the single source of truth).  Only fields that differ are
+    written.
+    """
+    fields = ["updated_at"]
+    if step.step_state != recon["step_state"]:
+        step.step_state = recon["step_state"]
+        fields.append("step_state")
+    if step.status != recon["status"]:
+        step.status = recon["status"]
+        fields.append("status")
+    if step.retry_count != recon["retry_count"]:
+        step.retry_count = recon["retry_count"]
+        fields.append("retry_count")
+    if step.outcome != recon["outcome"]:
+        step.outcome = recon["outcome"]
+        fields.append("outcome")
+    step.save(update_fields=fields)
+
+
+def _retry_activity_step(run, step) -> None:
+    """Retry a failed activity (bounded RETRY_*) and journal ``step_retried``."""
+    step.retry_count = (step.retry_count or 0) + 1
+    step.status = STEP_PENDING
+    step.error = None
+    step.save(update_fields=["status", "error", "retry_count", "updated_at"])
+    StepJournal.append(
+        run.id, canonical_step_id(step), EVENT_STEP_RETRIED,
+        payload={"attempt": step.retry_count},
+    )
 
 
 class PlanNotAccessibleError(Exception):
@@ -205,6 +289,82 @@ def _parse_tool_output_json(tool_output_json):
             return {}
         return parsed if isinstance(parsed, dict) else {}
     return {}
+
+
+def _lifecycle_scope(user):
+    """Build the host scope for a run-lifecycle action (P3-11).
+
+    The caller is the authenticated owner; the boundary's ScopeGuard +
+    AccessGuard still validate the scope shape, but ownership of the run is
+    enforced separately by ``PlansService._get_owned_run`` (CBAC).
+    """
+    from ai.protocol import Scope
+
+    return Scope(
+        user_identifier=str(user.pk),
+        org_unit_ids=["*"],
+        module_ids=["*"],
+        is_superuser=bool(getattr(user, "is_superuser", False)),
+    )
+
+
+def _lifecycle_command(user, run, action: str):
+    """Build a fail-closed boundary ``Command`` for ``cancel``/``compensate``.
+
+    The idempotency key binds the action to the exact run (``action:run_id``)
+    so a ``cancel`` and a ``compensate`` can never alias the same effect slot.
+    ``compensate`` carries ``requires_grant=True`` + its own capability; the
+    human's explicit endpoint call is the confirmation token (there is no
+    AI-initiated staged mutation to auto-confirm — RULE_21).
+    """
+    from ai.command_boundary import Command
+
+    is_compensate = action == "compensate"
+    return Command(
+        principal=str(user.pk),
+        scope=_lifecycle_scope(user),
+        action=action,
+        tool=action,
+        objects=[str(run.id)],
+        params={},
+        requires_confirmation=is_compensate,
+        confirmation_token=(
+            f"human:{user.pk}:{run.id}" if is_compensate else None
+        ),
+        requires_grant=is_compensate,
+        capability=("run.compensate" if is_compensate else "run.cancel"),
+        object_id=str(run.id),
+        object_type="plan",
+        idempotency_key=f"{action}:{run.id}",
+        autonomy="human_only",
+    )
+
+
+def _lifecycle_boundary(action: str, *, executor):
+    """Assemble the command boundary for a run-lifecycle action (P3-11).
+
+    Uses the real PDP (default-deny) and the real ``resolve_grant`` so the
+    grant stage (stage 8) is exercised for ``compensate``. The catalog
+    declaration mirrors ``command_boundary_factory``: ``compensate`` is the
+    only entry that requires a grant.
+    """
+    from ai.command_boundary import CommandBoundary
+    from ai.grant import resolve_grant
+    from ai.pdp import PDP
+
+    requires_grant = action == "compensate"
+    capability = "run.compensate" if requires_grant else "run.cancel"
+    return CommandBoundary(
+        pdp=PDP(),
+        executor=executor,
+        tool_catalog={
+            action: {
+                "requires_grant": requires_grant,
+                "required_capability": capability,
+            }
+        },
+        grant_resolver=resolve_grant,
+    )
 
 
 # The plan Run id for the currently-executing step (set by the Django-side
@@ -368,6 +528,531 @@ class PlansService:
             raise PlanStepError(f"Step {step_id} not found on plan {run.id}.")
         return step
 
+    # ── P3-07a durable run machine ───────────────────────────────────────
+
+    @staticmethod
+    def begin_step(
+        run,
+        step_id,
+        *,
+        step_index=None,
+        intent="",
+        tool_name=None,
+        tool_args_json=None,
+        depends_on_json=None,
+        idempotency_key="",
+    ):
+        """Idempotently materialize a step row keyed on ``(run_id, step_id)``.
+
+        The idempotency key is ``(instance, step)`` = ``(run.id, step_id)``:
+        two calls with the same pair return the SAME row — no duplicate step,
+        no effect re-run (P3-07a). New rows start in ``planned``.
+        """
+        from ai.models.core import RunStep
+
+        if step_index is None:
+            step_index = int(step_id) if str(step_id).isdigit() else 0
+        step, created = RunStep.objects.get_or_create(
+            run_id=run.id,
+            step_id=str(step_id),
+            defaults={
+                "step_index": step_index,
+                "intent": intent or "",
+                "tool_name": tool_name or "",
+                "tool_args_json": tool_args_json,
+                "depends_on_json": depends_on_json,
+                "status": STEP_PENDING,
+                "step_state": run_machine.RUN_PLANNED,
+                "idempotency_key": idempotency_key or "",
+            },
+        )
+        if created:
+            StepJournal.append(
+                run.id,
+                canonical_step_id(step),
+                EVENT_STEP_QUEUED,
+                payload={"step_index": step_index},
+            )
+        return step, created
+
+    @staticmethod
+    def advance_step(step, new_state, *, outcome="", error="", kind="step"):
+        """Advance a step's durable state via the closed transition table.
+
+        Rejects any edge not in ``STEP_TRANSITIONS`` (e.g. ``succeeded →
+        executing``) with :class:`ai.run_machine.InvalidStateTransition`.
+        """
+        fields = ["step_state", "updated_at"]
+        run_machine.transition(step, new_state, kind=kind, field="step_state")
+        if outcome:
+            step.outcome = outcome
+            fields.append("outcome")
+        if error:
+            step.last_error = error
+            fields.append("last_error")
+        step.save(update_fields=fields)
+
+        # Journal the lifecycle event (P3-07b).  Only transitions in the
+        # closed map are journaled; ``step_queued`` is emitted by begin_step,
+        # consent/cancel events by their own seams.
+        event_type = _ADVANCE_EVENT_BY_STATE.get(new_state)
+        if event_type:
+            StepJournal.append(
+                step.run_id,
+                canonical_step_id(step),
+                event_type,
+                payload={"outcome": outcome} if outcome else {},
+            )
+        return step
+
+    @staticmethod
+    def reconcile_outcome(step, op_id=""):
+        """Route an inconclusive read-back to ``awaiting_reconciliation``.
+
+        ``executing → outcome_unknown → awaiting_reconciliation`` (two legal
+        edges). Idempotent: an already-reconciled or terminal step is a no-op.
+        The reconciliation worker itself is P3-08 (separate).
+
+        ``op_id`` is the downstream effect's **operation id**, persisted here at
+        effect-dispatch time so the reconciliation worker can perform its
+        authoritative read-back by operation id (P3-08).
+        """
+        # Persist the operation id at dispatch time regardless of the routing
+        # branch — it is the reconciliation worker's only read-back key.
+        if op_id:
+            step.operation_id = str(op_id)
+
+        if step.step_state in {
+            run_machine.RUN_AWAITING_RECONCILIATION,
+            run_machine.RUN_SUCCEEDED,
+            run_machine.RUN_FAILED,
+            run_machine.RUN_CANCELLED,
+        }:
+            step.save(update_fields=["operation_id", "updated_at"])
+            return step
+        if step.step_state != run_machine.RUN_OUTCOME_UNKNOWN:
+            run_machine.transition(
+                step, run_machine.RUN_OUTCOME_UNKNOWN, kind="step", field="step_state"
+            )
+            step.outcome = "outcome_unknown"
+        run_machine.transition(
+            step,
+            run_machine.RUN_AWAITING_RECONCILIATION,
+            kind="step",
+            field="step_state",
+        )
+        StepJournal.append(
+            step.run_id,
+            canonical_step_id(step),
+            EVENT_OUTCOME_UNKNOWN,
+            payload={"operation_id": str(op_id)} if op_id else {},
+        )
+        step.save(
+            update_fields=["step_state", "outcome", "operation_id", "updated_at"]
+        )
+        return step
+
+    # ── P3-07b workflow/activity split + replay ─────────────────────────
+
+    @staticmethod
+    def is_activity(step) -> bool:
+        """True when ``step`` is a side-effecting activity (LLM/host call).
+
+        Workflow steps are pure deterministic orchestration (sequencing /
+        phase / consent routing) and replay with no side effects.  The
+        classification reads the explicit ``step_kind`` marker when present;
+        otherwise it falls back to ``tool_name`` presence (a tool-bearing step
+        is always an activity).  The default ``step_kind`` is ``activity``, so
+        an unmarked step fails safe toward "retry, don't skip".
+        """
+        kind = getattr(step, "step_kind", "") or ""
+        if kind == STEP_KIND_WORKFLOW:
+            return False
+        if kind == STEP_KIND_ACTIVITY:
+            return True
+        return bool(getattr(step, "tool_name", ""))
+
+    @staticmethod
+    def replay_step(run, step) -> dict:
+        """Deterministically replay a step from its append-only journal.
+
+        The journal — not ``RunStep.status`` — is the source of truth.  The
+        pure fold in :class:`ai.step_journal.StepJournal` reconstructs exactly
+        one state; the step row is restored to that state and a replay
+        *decision* is returned (RULE_23 terms):
+
+        * ``noop``    — terminal *committed* journal event
+                        (``step_completed`` / ``step_consent_declined``); the
+                        step must NEVER be re-executed (exactly-one-effect).
+        * ``requeue`` — pure workflow step; deterministic, safe to re-run.
+        * ``resume``  — interrupted activity; resume from the reconstructed
+                        ``step_state``.
+
+        Idempotent: restoring to the same state is a no-op write, so replaying
+        twice yields the same decision and reconstructed state.
+        """
+        entries = StepJournal.for_step(run.id, canonical_step_id(step))
+        if not entries:
+            # No journal yet (legacy/materialized step): nothing committed.
+            recon = {
+                "step_state": step.step_state,
+                "status": step.status,
+                "retry_count": step.retry_count,
+                "outcome": step.outcome,
+                "consent": None,
+                "committed": False,
+            }
+            action = "requeue" if not PlansService.is_activity(step) else "resume"
+            return _replay_result(action, recon)
+
+        recon = StepJournal.reconstruct(entries)
+        _restore_step_from_recon(step, recon)
+
+        if recon["committed"]:
+            action = "noop"
+        elif not PlansService.is_activity(step):
+            action = "requeue"
+        else:
+            action = "resume"
+        return _replay_result(action, recon)
+
+    # ── P3-07b deterministic activity dispatch + restart-mid-run resume ────
+
+    @staticmethod
+    def _ensure_operation_id(run, step) -> str:
+        """Return the activity's stable operation id, persisting it once.
+
+        ``operation_id`` is the downstream effect's read-back key (P3-08) and
+        MUST be stable across retries and restarts so re-dispatch is
+        idempotent.  When absent it is derived deterministically from
+        ``(run, step)`` (no randomness — replay-safe) and persisted on the
+        ``RunStep`` row.
+        """
+        op = str(getattr(step, "operation_id", "") or "").strip()
+        if not op:
+            op = f"op-{run.id}-{canonical_step_id(step)}"
+            step.operation_id = op
+            step.save(update_fields=["operation_id", "updated_at"])
+        return op
+
+    @staticmethod
+    def _invoke_effect(effect_fn, operation_id, attempt) -> dict:
+        """Call the activity effect and normalize its result to a status dict.
+
+        ``effect_fn(operation_id=..., attempt=...)`` may return a dict with a
+        ``status`` key (``succeeded``/``failed``/``outcome_unknown``) plus
+        optional ``result``/``error``; anything else is treated as success.
+        A raised exception is a transient ``failed``.
+        """
+        try:
+            result = effect_fn(operation_id=operation_id, attempt=attempt)
+        except Exception as exc:  # noqa: BLE001 - transient failure is recoverable
+            return {"status": workflow.STATUS_FAILED, "error": str(exc)}
+        if isinstance(result, dict):
+            return result
+        return {"status": workflow.STATUS_SUCCEEDED, "result": result}
+
+    def dispatch_activity(
+        self,
+        run,
+        step,
+        effect_fn,
+        *,
+        activity_kind=None,
+        canonical_inputs=None,
+        sleep=None,
+    ):
+        """Execute one activity (LLM/host call) with the bounded retry policy.
+
+        This is the single place an *effect* is dispatched on the deterministic
+        workflow path.  It writes a ``dispatched`` journal entry BEFORE the
+        effect and a ``succeeded``/``failed``/``outcome_unknown`` entry AFTER,
+        so the run journal is always replayable and a restart can resume
+        mid-run.
+
+        Retry policy (REUSED, not re-implemented):
+          * a transient ``failed`` re-queues (``planned``) up to
+            ``RETRY_MAX_ATTEMPTS`` total dispatches — ``_retry_backoff_delay``
+            paces each retry, ``_mark_run_paused`` marks the run paused, and
+            ``_append_retry_audit`` records durable provenance;
+          * ``outcome_unknown`` is NEVER blind-retried — it routes to
+            reconciliation via ``reconcile_outcome(op_id=...)`` (P3-08).
+
+        ``sleep`` is injectable for tests (default ``time.sleep``).  Time does
+        not affect the result — ordering is sequence-based, not time-based.
+        """
+        import time as _time
+
+        sleep = sleep if sleep is not None else _time.sleep
+        journal = workflow.RunJournal(str(run.id))
+
+        # Consent gate — never auto-approve (RULE_21).
+        if step.step_state == run_machine.RUN_AWAITING_APPROVAL:
+            return workflow.STATUS_PLANNED
+
+        # Idempotent: a committed activity is never re-dispatched.
+        if step.step_state in {run_machine.RUN_SUCCEEDED, run_machine.RUN_CANCELLED}:
+            return (
+                workflow.STATUS_SUCCEEDED
+                if step.step_state == run_machine.RUN_SUCCEEDED
+                else workflow.STATUS_SKIPPED
+            )
+        if step.step_state == run_machine.RUN_AWAITING_RECONCILIATION:
+            return workflow.STATUS_OUTCOME_UNKNOWN
+
+        spec = workflow.ActivitySpec.from_step(step)
+        if activity_kind is not None:
+            spec = workflow.ActivitySpec(
+                step_id=spec.step_id,
+                step_index=spec.step_index,
+                activity_kind=activity_kind,
+                depends_on=spec.depends_on,
+                tool_name=spec.tool_name,
+            )
+
+        operation_id = self._ensure_operation_id(run, step)
+
+        # Advance the durable step to ``executing`` (planned → ready → executing).
+        if step.step_state == run_machine.RUN_PLANNED:
+            PlansService.advance_step(step, run_machine.RUN_READY)
+            PlansService.advance_step(step, run_machine.RUN_EXECUTING)
+        elif step.step_state == run_machine.RUN_READY:
+            PlansService.advance_step(step, run_machine.RUN_EXECUTING)
+        elif step.step_state == run_machine.RUN_FAILED:
+            # A previous run exhausted the cap; a fresh dispatch starts over
+            # from the re-queued (planned) state written by the resume path.
+            step.step_state = run_machine.RUN_PLANNED
+            step.status = STEP_PENDING
+            step.save(update_fields=["step_state", "status", "updated_at"])
+            PlansService.advance_step(step, run_machine.RUN_READY)
+            PlansService.advance_step(step, run_machine.RUN_EXECUTING)
+        # else: already executing — fine.
+
+        step.status = STEP_RUNNING
+        step.save(update_fields=["status", "updated_at"])
+
+        last_error = ""
+
+        for attempt in range(RETRY_MAX_ATTEMPTS):
+            journal.append(
+                spec,
+                status=workflow.STATUS_DISPATCHED,
+                operation_id=operation_id,
+                canonical_inputs=canonical_inputs,
+                attempt=attempt,
+            )
+            outcome = self._invoke_effect(effect_fn, operation_id, attempt)
+            status = outcome.get("status")
+
+            if status == workflow.STATUS_SUCCEEDED:
+                journal.append(
+                    spec,
+                    status=workflow.STATUS_SUCCEEDED,
+                    operation_id=operation_id,
+                    result=outcome.get("result"),
+                    attempt=attempt,
+                )
+                PlansService.advance_step(
+                    step, run_machine.RUN_SUCCEEDED, outcome="succeeded"
+                )
+                step.status = STEP_COMPLETED
+                step.save(update_fields=["status", "updated_at"])
+                return workflow.STATUS_SUCCEEDED
+
+            if status == workflow.STATUS_OUTCOME_UNKNOWN:
+                journal.append(
+                    spec,
+                    status=workflow.STATUS_OUTCOME_UNKNOWN,
+                    operation_id=operation_id,
+                    error=outcome.get("error"),
+                    attempt=attempt,
+                )
+                # Never blind-retry: route to reconciliation (P3-08).
+                PlansService.reconcile_outcome(step, op_id=operation_id)
+                return workflow.STATUS_OUTCOME_UNKNOWN
+
+            # Transient failure.
+            last_error = outcome.get("error") or "activity failed"
+            journal.append(
+                spec,
+                status=workflow.STATUS_FAILED,
+                operation_id=operation_id,
+                error=last_error,
+                attempt=attempt,
+            )
+            if attempt >= RETRY_MAX_ATTEMPTS - 1:
+                break
+            # Re-queue (append-only) for the next attempt.
+            next_attempt = attempt + 1
+            journal.append(
+                spec,
+                status=workflow.STATUS_PLANNED,
+                operation_id=operation_id,
+                attempt=next_attempt,
+            )
+            step.status = STEP_PENDING
+            step.retry_count = (step.retry_count or 0) + 1
+            step.save(update_fields=["status", "retry_count", "updated_at"])
+            self._mark_run_paused(run)
+            self._append_retry_audit(run, next_attempt, [int(spec.step_index)])
+            sleep(self._retry_backoff_delay(next_attempt))
+
+        # Retry cap exhausted → terminal failure.
+        PlansService.advance_step(
+            step, run_machine.RUN_FAILED, outcome="failed", error=last_error
+        )
+        step.status = STEP_FAILED
+        step.save(update_fields=["status", "updated_at"])
+        return workflow.STATUS_FAILED
+
+    def resume_workflow(self, user, plan_id: str, *, now=None) -> dict:
+        """Restart-mid-run: reconcile the journal, then re-enter the driver.
+
+        Reuses ``resume_plan`` for the pre-flight gate (kills non-runnable
+        statuses) and reads the append-only run journal (``RunJournalEntry``)
+        — NOT the free-text ``RunStep.status`` — as the source of truth.
+        In-flight entries are reconciled to a resumable state
+        (``dispatched``/stale → re-queue, ``succeeded``/``skipped`` stay done,
+        ``outcome_unknown`` stays for the reconciler, ``failed`` re-queues up
+        to the retry cap), then the deterministic driver returns the first
+        incomplete activity honoring dependency order.
+
+        A step that is ``awaiting_approval`` stays gated — NEVER auto-approved
+        (RULE_21) regardless of elapsed time.  ``now`` is recorded for the
+        caller; it is deliberately NOT used to expire consent.
+        """
+        from ai.models.core import RunStep
+
+        now = now or timezone.now()
+        run = self._get_owned_run(user, plan_id)
+        # Reuse the canonical pre-flight gate (blocks non-runnable statuses).
+        self.resume_plan(user, plan_id)
+
+        steps = list(RunStep.objects.filter(run_id=run.id).order_by("step_index"))
+        specs = [workflow.ActivitySpec.from_step(s) for s in steps]
+        journal = workflow.RunJournal(str(run.id))
+
+        decisions = workflow.reconcile_inflight(
+            specs, journal.entries(), retry_max=RETRY_MAX_ATTEMPTS
+        )
+        for decision in decisions:
+            journal.append(
+                decision.spec,
+                status=workflow.STATUS_PLANNED,
+                attempt=decision.attempt,
+            )
+
+        nxt = workflow.next_activity(specs, journal.entries())
+        next_step = None
+        if nxt is not None:
+            candidate = next(
+                (s for s in steps if canonical_step_id(s) == nxt.step_id), None
+            )
+            if candidate is not None and candidate.step_state in {
+                run_machine.RUN_AWAITING_APPROVAL,
+                run_machine.RUN_AWAITING_RECONCILIATION,
+            }:
+                # Consent/reconciliation gate: block, never auto-advance.
+                nxt = None
+            else:
+                next_step = candidate
+
+        return {
+            "status": "resumed",
+            "plan_id": run.id,
+            "next_activity": nxt,
+            "next_step": next_step,
+            "requeued": [d.as_dict() for d in decisions],
+            "journal_count": journal.count(),
+            "resumed_at": now.isoformat(),
+        }
+
+    def resume_and_run_next(self, user, plan_id: str, effect_fn, *, now=None, sleep=None) -> dict:
+        """Resume from the journal and execute exactly the next activity.
+
+        Never re-executes a committed activity (the driver skips
+        ``succeeded``/``skipped`` entries), so a restart mid-run resumes at the
+        first incomplete activity only.
+        """
+        resumed = self.resume_workflow(user, plan_id, now=now)
+        next_step = resumed.get("next_step")
+        if next_step is None:
+            return {**resumed, "executed": None}
+        run = self._get_owned_run(user, plan_id)
+        final = self.dispatch_activity(run, next_step, effect_fn, sleep=sleep)
+        return {
+            **resumed,
+            "executed": {
+                "step_id": canonical_step_id(next_step),
+                "step_index": next_step.step_index,
+                "status": final,
+            },
+        }
+
+    @staticmethod
+    def preflight(run, step=None, *, action="run", objects=None, autonomy="human_only"):
+        """Re-check authorization + kill switch before a new effect (P3-07a).
+
+        (1) Kill switch — fail-closed, checked FIRST: a killed process blocks
+            the effect regardless of policy and records ``kill_switched_at``.
+        (2) PDP re-check — the current authorization is re-evaluated (the PDP
+            persists its decision). ``REFUSE``/``ASK``/``DEFER`` block;
+            ``ALLOW``/``ALLOW_WITH_CONFIRMATION`` permit (consent is handled
+            by the existing confirm/decline seam, not here).
+
+        Note (deferred): ProcessDefinition uses the 6-level ``VALID_AUTONOMY``
+        dial while the PDP uses a 3-level runtime dial; full reconciliation is
+        out of scope for P3-07a. The ``autonomy`` argument defaults to the
+        conservative ``human_only``.
+        """
+        from ai import pdp
+        from ai.engine.ports.policy import Decision
+        from ai.registry_service import ProcessRegistry
+
+        process_id = run.definition_id or ""
+        objects = list(objects or [])
+        if process_id and process_id not in objects:
+            objects.insert(0, process_id)
+        if step is not None and step.id and step.id not in objects:
+            objects.append(step.id)
+
+        # (1) Kill switch — fail-closed, before anything else.
+        if process_id:
+            try:
+                killed = ProcessRegistry().is_killed(process_id)
+            except Exception:  # noqa: BLE001 - unresolvable def → not killed
+                logger.warning("Preflight: process %r not resolvable", process_id)
+                killed = False
+            if killed:
+                run.kill_switched_at = timezone.now()
+                run.save(update_fields=["kill_switched_at", "updated_at"])
+                return {
+                    "allowed": False,
+                    "reason": "kill_switch",
+                    "decision": "refuse",
+                }
+
+        # (2) PDP re-check — persisted by the PDP itself.
+        decision = _run_async(
+            pdp.decide(
+                principal=str(run.host_user_id or ""),
+                action=action,
+                objects=objects,
+                autonomy=autonomy,
+            )
+        )
+        decision_value = decision["decision"]
+        allowed = decision_value not in {
+            Decision.REFUSE,
+            Decision.ASK,
+            Decision.DEFER,
+        }
+        return {
+            "allowed": allowed,
+            "reason": decision["reason"],
+            "decision": decision_value.value,
+        }
+
     @staticmethod
     def store_artifact(run_id, step_index, name, content_bytes, mime_type):
         """Persist a plan-step artifact and return its public metadata (W5-C).
@@ -470,6 +1155,7 @@ class PlansService:
             artifacts_by_step.setdefault(a.step_index, []).append(a)
         return {
             "id": run.id,
+            "definition_id": run.definition_id,
             "status": run.status,
             "brief": run.user_message,
             "forked_from": (
@@ -2311,11 +2997,12 @@ class PlansService:
                 break
             await asyncio.sleep(self._retry_backoff_delay(attempt))
             for step in failed_steps:
-                step.status = STEP_PENDING
-                step.error = None
-                await sync_to_async(step.save)(
-                    update_fields=["status", "error", "updated_at"]
-                )
+                # Only *activities* are retried (P3-07b): a workflow step
+                # cannot fail from a transient side effect.  Journal the retry
+                # (``step_retried`` with the incrementing attempt) so replay
+                # reconstructs the exact retry count deterministically.
+                if self.is_activity(step):
+                    await sync_to_async(_retry_activity_step)(run, step)
             await sync_to_async(self._mark_run_paused)(run)
             await sync_to_async(self._append_retry_audit)(
                 run, attempt, [s.step_index for s in failed_steps]
@@ -2514,6 +3201,12 @@ class PlansService:
                 from uuid import uuid4
                 step.confirmation_token = str(uuid4())
             step.save(update_fields=["confirmation_token", "updated_at"])
+            StepJournal.append(
+                run.id,
+                canonical_step_id(step),
+                EVENT_STEP_CONSENT_GRANTED,
+                payload={"unstaged": True},
+            )
             logger.info(
                 "Plan step consent recorded (unstaged) plan=%s step=%s user=%s",
                 plan_id, step.step_index, str(user.pk),
@@ -2552,6 +3245,14 @@ class PlansService:
 
         step.status = STEP_COMPLETED
         step.save(update_fields=["status", "updated_at"])
+        # Journal the committed consent + completion (exactly-one-effect): a
+        # confirmed step reconstructs as ``succeeded``, never re-executed.
+        StepJournal.append(
+            run.id, canonical_step_id(step), EVENT_STEP_CONSENT_GRANTED
+        )
+        StepJournal.append(
+            run.id, canonical_step_id(step), EVENT_STEP_COMPLETED
+        )
         logger.info(
             "Plan step confirmed plan=%s step=%s user=%s",
             plan_id, step.step_index, user_pk,
@@ -2598,6 +3299,9 @@ class PlansService:
             # Nothing staged — treat as a plain decline and skip the step.
             step.status = STEP_SKIPPED
             step.save(update_fields=["status", "updated_at"])
+            StepJournal.append(
+                run.id, canonical_step_id(step), EVENT_STEP_CONSENT_DECLINED
+            )
             return {
                 "status": "declined",
                 "plan_id": plan_id,
@@ -2631,30 +3335,155 @@ class PlansService:
 
         step.status = STEP_SKIPPED
         step.save(update_fields=["status", "updated_at"])
+        StepJournal.append(
+            run.id, canonical_step_id(step), EVENT_STEP_CONSENT_DECLINED
+        )
         logger.info(
             "Plan step declined plan=%s step=%s user=%s",
             plan_id, step.step_index, user_pk,
         )
         return {"status": "declined", "plan_id": plan_id, "step_id": step.step_index}
 
-    # ── Stop / audit ──────────────────────────────────────────────────────
+    # ── Stop (cancel) / compensate / audit ────────────────────────────────
 
-    def stop_plan(self, user, plan_id: str) -> dict:
-        """Request cancellation of a plan run (idempotent)."""
-        run = self._get_owned_run(user, plan_id)
-        if run.status in (STATUS_COMPLETED, STATUS_FAILED, STATUS_CANCELLED):
-            return self.get_plan(user, plan_id)
+    @staticmethod
+    def _apply_cancel(run) -> None:
+        """Transition the run to ``cancelled`` and skip every not-yet-started step.
 
+        Only steps still in a pre-execution state (``planned`` / ``ready`` /
+        ``awaiting_approval``) are skipped; a step that already began or
+        committed is left untouched so no effect is fabricated and none is
+        re-run. ``cancel`` performs no executor work of its own — it can never
+        start a new effect.
+        """
         from ai.models.core import RunStep
 
         run.status = STATUS_CANCELLED
+        run.run_state = run_machine.RUN_CANCELLED
         run.completed_at = run.completed_at or timezone.now()
-        run.save(update_fields=["status", "completed_at", "updated_at"])
-        RunStep.objects.filter(run_id=run.id, status=STEP_PENDING).update(
-            status=STEP_SKIPPED
+        run.save(
+            update_fields=["status", "run_state", "completed_at", "updated_at"]
         )
-        logger.info("Plan stopped id=%s user=%s", plan_id, str(user.pk))
-        return self.get_plan(user, plan_id)
+        RunStep.objects.filter(
+            run_id=run.id,
+            step_state__in=(
+                run_machine.RUN_PLANNED,
+                run_machine.RUN_READY,
+                run_machine.RUN_AWAITING_APPROVAL,
+            ),
+        ).update(
+            status=STEP_SKIPPED,
+            step_state=run_machine.RUN_CANCELLED,
+        )
+
+    @staticmethod
+    def _apply_compensate(run, note: str, command) -> None:
+        """Record a distinct compensation effect on the run.
+
+        The compensation is written to ``run.working_notes["compensation"]`` —
+        deliberately separate from any ``cancel`` transition — so the reversal
+        of prior effects is auditable and never aliased to a plain stop.
+        """
+        notes = dict(run.working_notes or {})
+        notes["compensation"] = {
+            "action": "compensate",
+            "status": "compensated",
+            "note": note or "",
+            "by": command.principal,
+            "capability": command.capability,
+            "at": timezone.now().isoformat(),
+        }
+        run.working_notes = notes
+        run.save(update_fields=["working_notes", "updated_at"])
+
+    def cancel_plan(self, user, plan_id: str) -> dict:
+        """Cancel a plan run: stop work, skip remaining steps, no new effects.
+
+        Idempotent and fail-closed: the ``cancel`` action is authorized through
+        the PDP (its own policy row, ``action="cancel"``) before any state is
+        changed, and it never requires a grant (a user can always stop their
+        own run).
+        """
+        from asgiref.sync import async_to_sync
+
+        run = self._get_owned_run(user, plan_id)
+        if run.status in (STATUS_COMPLETED, STATUS_FAILED, STATUS_CANCELLED):
+            return {**self.get_plan(user, plan_id), "message": CANCEL_MESSAGE}
+
+        async def _executor(command):
+            from asgiref.sync import sync_to_async
+
+            # Run the Django ORM mutation back on the caller's thread so it
+            # joins the surrounding transaction (the boundary's async body
+            # otherwise runs the write on the loop's worker thread).
+            await sync_to_async(self._apply_cancel, thread_sensitive=True)(run)
+            return {"cancelled": True, "plan_id": plan_id}
+
+        boundary = _lifecycle_boundary("cancel", executor=_executor)
+        outcome = async_to_sync(boundary.execute)(
+            _lifecycle_command(user, run, "cancel")
+        )
+        if outcome.status not in ("executed", "confirmed"):
+            raise PlanForbiddenError(
+                outcome.error or outcome.reason or "cancel refused (fail-closed)"
+            )
+        logger.info("Plan cancelled id=%s user=%s", plan_id, str(user.pk))
+        return {**self.get_plan(user, plan_id), "message": CANCEL_MESSAGE}
+
+    def stop_plan(self, user, plan_id: str) -> dict:
+        """Request cancellation of a plan run (idempotent) — ``cancel`` semantics."""
+        return self.cancel_plan(user, plan_id)
+
+    def compensate_plan(self, user, plan_id: str, note: str = "") -> dict:
+        """Reverse prior effects of a plan run (requires its own approval).
+
+        ``compensate`` is a *separate* authorized action from ``cancel``: it is
+        routed through the command boundary with ``requires_grant=True`` and
+        its own capability (``run.compensate``), so a ``cancel`` authorization
+        never satisfies it. Without an active, fully-matching ``ApprovalGrant``
+        the boundary refuses fail-closed and no compensation record is written.
+        """
+        from asgiref.sync import async_to_sync
+
+        run = self._get_owned_run(user, plan_id)
+        existing = (run.working_notes or {}).get("compensation")
+        if existing and existing.get("status") == "compensated":
+            return {
+                **self.get_plan(user, plan_id),
+                "message": COMPENSATE_MESSAGE,
+                "compensation": existing,
+            }
+
+        async def _executor(command):
+            from asgiref.sync import sync_to_async
+
+            # Run the Django ORM mutation back on the caller's thread (see
+            # ``cancel_plan``) so the compensation record joins the same
+            # transaction as the run it annotates.
+            await sync_to_async(self._apply_compensate, thread_sensitive=True)(
+                run, note or "", command
+            )
+            return {"compensated": True, "plan_id": plan_id}
+
+        command = _lifecycle_command(user, run, "compensate")
+        command.params = {"note": note or ""}
+        boundary = _lifecycle_boundary("compensate", executor=_executor)
+        outcome = async_to_sync(boundary.execute)(command)
+        if outcome.status == "deferred":
+            raise PlanNotRunnableError(
+                outcome.error or "compensate deferred to approval inbox"
+            )
+        if outcome.status not in ("executed", "confirmed"):
+            raise PlanForbiddenError(
+                outcome.error or outcome.reason
+                or "compensate refused (no authorized grant)"
+            )
+        logger.info("Plan compensated id=%s user=%s", plan_id, str(user.pk))
+        return {
+            **self.get_plan(user, plan_id),
+            "message": COMPENSATE_MESSAGE,
+            "compensation": (run.working_notes or {}).get("compensation"),
+        }
 
     def get_ledger(self, user, plan_id: str) -> dict:
         """Audit ledger for a plan: steps, confirmations, replans, latency,

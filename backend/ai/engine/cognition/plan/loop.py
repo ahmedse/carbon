@@ -43,14 +43,22 @@ def _get_broadcast():
 def _tool_requires_confirmation(tool_name: str) -> bool:
     """True when a registered plugin gates its write behind confirmation.
 
-    Lazy import avoids a circular dependency; a lookup failure is treated as
-    read-only (fail-open for the guard).
+    Lazy import avoids a circular dependency; a lookup failure is now treated
+    as confirmation-required (deny-by-default / fail-closed) so an unregistered
+    or unavailable plugin registry can never silently downgrade a mutation to
+    read-only.
     """
+    requires_confirmation = True  # fail-closed default
     try:
         from ai.engine.agent.plugins import is_confirmation_tool
-        return is_confirmation_tool(tool_name)
+        requires_confirmation = is_confirmation_tool(tool_name)
     except Exception:  # noqa: BLE001 - guard must never raise into the run
-        return False
+        logger.warning(
+            "confirmation-tool registry unavailable; treating %s as "
+            "confirmation-required (fail-closed)",
+            tool_name,
+        )
+    return requires_confirmation
 
 
 # Pulse v2 Phase 5: read-only tools the loop may auto-chain for multi-hop
@@ -451,6 +459,7 @@ class ReActLoop:
                     agent_role=step.agent_role,
                     plan_source=plan.source,
                     flight_director=fd,
+                    host_user_id=host_user_id,
                 )
                 return step, _res, (time.monotonic() - _t0) * 1000
 
@@ -679,6 +688,7 @@ class ReActLoop:
         agent_role: str | None = None,
         plan_source: str = "",
         flight_director=None,   # FlightDirector — additive in-loop supervisor
+        host_user_id: str | None = None,
     ) -> StepResult:
         """Execute one plan step: draft → critic → execute → observe."""
 
@@ -819,19 +829,44 @@ class ReActLoop:
                 and not confirmation_token
                 and not dry_run
             ):
-                from uuid import uuid4
-                result.paused = True
-                result.confirmation_token = str(uuid4())
-                result.executed = False
-                result.error = None
-                result.critic_verdict = "pass"
-                logger.info(
-                    "ReActLoop: consent gate hit step=%d tool=%s token=%s "
-                    "(mutation requires confirmation)",
-                    step.step_id, step.tool_name or "?",
-                    result.confirmation_token[:8],
-                )
-                return result
+                # ── P2-06d: route the consent gate through the command
+                # boundary so the consent decision is a boundary outcome
+                # (stage-7 refusal), not a loop-local veto→pause. The seam is
+                # looked up defensively; when absent (no host executor, e.g.
+                # unit-test fakes) the legacy pause logic runs unchanged.
+                _host = getattr(ex, "executor", None)
+                _seam = getattr(_host, "execute_step_via_boundary", None)
+                _requires_consent = True
+                if callable(_seam):
+                    _consent = await _seam(
+                        effect=None,
+                        tool_name=step.tool_name or "plan_step",
+                        is_mutation=True,
+                        confirmation_token=None,
+                        instance_id=instance_id,
+                        host_user_id=host_user_id,
+                        conversation_id=conversation_id,
+                    )
+                    # The boundary refused the no-token mutation at its consent
+                    # stage → still pause exactly as before. A False here is
+                    # defensive (should not happen for a no-token mutation):
+                    # fall through to the critic-veto path unchanged.
+                    _requires_consent = bool(_consent.get("requires_confirmation"))
+
+                if _requires_consent:
+                    from uuid import uuid4
+                    result.paused = True
+                    result.confirmation_token = str(uuid4())
+                    result.executed = False
+                    result.error = None
+                    result.critic_verdict = "pass"
+                    logger.info(
+                        "ReActLoop: consent gate hit step=%d tool=%s token=%s "
+                        "(mutation requires confirmation)",
+                        step.step_id, step.tool_name or "?",
+                        result.confirmation_token[:8],
+                    )
+                    return result
 
             result.error = critic.veto_reason or "Step vetoed by critic"
             return result
@@ -859,14 +894,40 @@ class ReActLoop:
             result.executed = True
             result.tool_output = execution.completed_tools[0] if execution.completed_tools else None
 
-            # ── Tool-error propagation ────────────────────────────────────
-            # Tool-level failures ride inside result.tool_output (dict with an
-            # "error" key); without this lift, failed steps were persisted as
-            # "completed" and the run could finish "completed" with silent
-            # failures. Promote tool errors to step errors so _persist_run_step
-            # marks the step failed and _finalize_run fails the run honestly.
+            # ── Tool-error propagation + bounded retry ───────────────────
+            # Retry transient tool failures (e.g. empty web_research response)
+            # up to RETRY_MAX_ATTEMPTS times before marking the step failed.
+            # Consent and mutation steps are never auto-retried (RULE_21).
+            _MAX_TOOL_RETRIES = 2
+            _tool_attempt = 0
             if result.tool_output and isinstance(result.tool_output, dict):
                 _tool_err = result.tool_output.get("error")
+                while _tool_err and _tool_attempt < _MAX_TOOL_RETRIES and not step.is_mutation:
+                    _tool_attempt += 1
+                    logger.info(
+                        "ReActLoop: retrying step %d tool=%s (attempt %d/%d): %s",
+                        step.step_id, step.tool_name or "?", _tool_attempt, _MAX_TOOL_RETRIES, _tool_err,
+                    )
+                    import asyncio as _asyncio
+                    await _asyncio.sleep(min(2 ** _tool_attempt, 8))
+                    try:
+                        _retry_exec = await ex.execute(
+                            text=draft.text,
+                            tool_calls=draft.tool_calls,
+                            stream_callback=stream_callback,
+                            progress_callback=progress_callback,
+                            agent_role=agent_role or step.agent_role,
+                            is_worker=(step.agent_role not in ("orchestrator", "", None)),
+                        )
+                    except Exception as _re:
+                        _tool_err = str(_re)
+                        break
+                    result.tool_output = _retry_exec.completed_tools[0] if _retry_exec.completed_tools else None
+                    _tool_err = (
+                        result.tool_output.get("error")
+                        if result.tool_output and isinstance(result.tool_output, dict)
+                        else None
+                    )
                 if _tool_err:
                     result.error = str(_tool_err)
 

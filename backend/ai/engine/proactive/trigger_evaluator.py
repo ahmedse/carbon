@@ -216,7 +216,7 @@ async def _evaluate_trend(
     Condition format:
     {
       "column": "efficiency",
-      "table": "unit_metrics",
+      "table": "metrics",
       "time_column": "recorded_at",
       "baseline_days": 30,
       "recent_days": 3,

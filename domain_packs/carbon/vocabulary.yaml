@@ -1,0 +1,29 @@
+# Carbon domain vocabulary — starter skeleton.
+# P2-08 source-PR workers populate the real content later.
+brand_name: Carbon
+
+campuses:
+  - South Valley
+  - Smart Village
+  - Abu Qir
+  - Alamein
+
+concepts:
+  - name: emission_factors
+    terms:
+      - emission factors
+      - list_emission_factors
+  - name: ghg
+    terms:
+      - GHG
+      - GHG Protocol
+      - greenhouse gas
+  - name: footprint
+    terms:
+      - footprint
+      - carbon footprint
+
+analysis_dimensions:
+  - supplier
+  - module
+  - category

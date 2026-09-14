@@ -476,6 +476,67 @@ AI_WEB_SEARCH = Capability(
     category="admin",
 )
 
+# ── AI governance roles (P3-05b) ───────────────────────────────────
+# Five durable governance roles for the Pulse AI control plane. Each is a
+# distinct capability key under the "ai" domain. They are intentionally
+# non-overlapping: process_owner ≠ policy_owner ≠ publisher ≠ operator ≠
+# auditor. The auditor role is read-only and additionally carries
+# ``ai:view_console`` (declared directly, never implied by a write capability).
+
+AI_PROCESS_OWNER = Capability(
+    key="ai:process_owner",
+    domain="ai",
+    action="process_owner",
+    label="Process Owner",
+    description="Own and approve a process definition",
+    category="admin",
+)
+
+AI_POLICY_OWNER = Capability(
+    key="ai:policy_owner",
+    domain="ai",
+    action="policy_owner",
+    label="Policy Owner",
+    description="Own and approve PDP policies",
+    category="admin",
+)
+
+AI_PUBLISHER = Capability(
+    key="ai:publisher",
+    domain="ai",
+    action="publisher",
+    label="Publisher",
+    description="Publish reviewed definitions and contracts",
+    category="admin",
+)
+
+AI_OPERATOR = Capability(
+    key="ai:operator",
+    domain="ai",
+    action="operator",
+    label="Operator",
+    description="Run, observe, and reconcile process instances",
+    category="admin",
+)
+
+AI_AUDITOR = Capability(
+    key="ai:auditor",
+    domain="ai",
+    action="auditor",
+    label="AI Auditor",
+    description="Read-only access across registry, decisions, and grants",
+    category="admin",
+)
+
+AI_INSPECT_CASE = Capability(
+    key="ai:inspect_case",
+    domain="ai",
+    action="inspect_case",
+    label="Inspect Process Cases",
+    description="Read-only inspection of process run state, blockers, SLA, and journal events",
+    category="admin",
+)
+
 # ── Dataset Hub capabilities (Phase P1 — trust core) ──────────────
 
 DATAHUB_VIEW = Capability(
@@ -719,6 +780,12 @@ ALL_CAPABILITIES: Dict[str, Capability] = {
     AI_MANAGE_CONSOLE.key: AI_MANAGE_CONSOLE,
     AI_CODE_EXECUTE.key: AI_CODE_EXECUTE,
     AI_WEB_SEARCH.key: AI_WEB_SEARCH,
+    AI_PROCESS_OWNER.key: AI_PROCESS_OWNER,
+    AI_POLICY_OWNER.key: AI_POLICY_OWNER,
+    AI_PUBLISHER.key: AI_PUBLISHER,
+    AI_OPERATOR.key: AI_OPERATOR,
+    AI_AUDITOR.key: AI_AUDITOR,
+    AI_INSPECT_CASE.key: AI_INSPECT_CASE,
     # Dataset Hub
     DATAHUB_VIEW.key: DATAHUB_VIEW,
     DATAHUB_INGEST.key: DATAHUB_INGEST,
@@ -839,6 +906,11 @@ IMPLIES: Dict[str, Set[str]] = {
 
     # ── AI admin → view ──
     AI_MANAGE_CONSOLE.key: {AI_VIEW_CONSOLE.key, AI_CODE_EXECUTE.key, AI_WEB_SEARCH.key},
+
+    # ── AI governance roles → read-only case inspection ──
+    AI_OPERATOR.key: {AI_INSPECT_CASE.key},
+    AI_AUDITOR.key: {AI_INSPECT_CASE.key},
+    AI_PROCESS_OWNER.key: {AI_INSPECT_CASE.key},
 }
 
 
@@ -1024,6 +1096,26 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         APPREGISTRY_VIEW.key,
         HEALTHY_VIEW.key,
         PEOPLE_VIEW.key,
+    },
+
+    # ── AI governance roles (P3-05b) ──
+    # Each role resolves to its declared capability only. The auditor (read-only)
+    # additionally carries ai:view_console — the AI console is a read-only surface.
+    "ai_process_owner_group": {
+        AI_PROCESS_OWNER.key,
+    },
+    "ai_policy_owner_group": {
+        AI_POLICY_OWNER.key,
+    },
+    "ai_publisher_group": {
+        AI_PUBLISHER.key,
+    },
+    "ai_operator_group": {
+        AI_OPERATOR.key,
+    },
+    "ai_auditor_group": {
+        AI_AUDITOR.key,
+        AI_VIEW_CONSOLE.key,
     },
 }
 

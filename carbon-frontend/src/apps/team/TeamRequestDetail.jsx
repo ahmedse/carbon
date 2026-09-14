@@ -23,6 +23,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import UndoIcon from '@mui/icons-material/Undo';
 import HowToVoteIcon from '@mui/icons-material/HowToVote';
+import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import PageContainer from '../../components/layout/PageContainer';
@@ -35,12 +36,16 @@ import {
   approveCorrespondence,
   rejectCorrespondence,
   sendBackCorrespondence,
+  archiveCorrespondence,
 } from '../../api/team';
 import { SectionTitle } from '../my/components/myRequestsCommon';
 import SummaryCard from '../my/components/SummaryCard';
 import ApproverChainStepper from '../my/components/ApproverChainStepper';
 import WorkflowGraph from '../my/components/WorkflowGraph';
 import RequestTimeline from '../my/components/RequestTimeline';
+
+/** Statuses that are terminal — the request can only be archived from here. */
+const TERMINAL_STATUSES = ['approved', 'rejected', 'cancelled', 'expired'];
 
 /** Pull a human-readable message out of an apiFetch-thrown error. */
 function extractErrorMessage(err, fallback) {
@@ -75,6 +80,8 @@ export default function TeamRequestDetail() {
   const [validation, setValidation] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [view, setView] = useState('stepper');
+
+  const isTerminal = Boolean(data && TERMINAL_STATUSES.includes(data.status));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -118,6 +125,9 @@ export default function TeamRequestDetail() {
         } else if (action === 'reject') {
           await rejectCorrespondence(token, id, { comment: trimmed });
           notify({ message: t('successRejected'), type: 'success' });
+        } else if (action === 'archive') {
+          await archiveCorrespondence(token, id);
+          notify({ message: t('successArchived'), type: 'success' });
         } else {
           await sendBackCorrespondence(token, id, { comment: trimmed });
           notify({ message: t('successSentBack'), type: 'success' });
@@ -204,56 +214,73 @@ export default function TeamRequestDetail() {
             )}
             <RequestTimeline events={data.events} />
 
-            {/* Manager act bar — approve / reject / send back */}
+            {/* Manager act bar — approve / reject / send back, or archive for terminal requests */}
             <Card variant="outlined">
               <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
                 <SectionTitle icon={HowToVoteIcon} title={t('actionsTitle')} />
-                <TextField
-                  fullWidth
-                  size="small"
-                  multiline
-                  minRows={2}
-                  maxRows={4}
-                  value={comment}
-                  onChange={handleCommentChange}
-                  label={t('commentLabel')}
-                  placeholder={t('commentPlaceholder')}
-                  error={Boolean(validation)}
-                  helperText={validation || undefined}
-                  sx={{ mb: 1 }}
-                />
-                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                  <Button
-                    size="small"
-                    variant="contained"
-                    color="success"
-                    startIcon={<CheckIcon />}
-                    disabled={submitting}
-                    onClick={() => handleAction('approve')}
-                  >
-                    {t('approve')}
-                  </Button>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="error"
-                    startIcon={<CloseIcon />}
-                    disabled={submitting}
-                    onClick={() => handleAction('reject')}
-                  >
-                    {t('reject')}
-                  </Button>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="warning"
-                    startIcon={<UndoIcon />}
-                    disabled={submitting}
-                    onClick={() => handleAction('sendBack')}
-                  >
-                    {t('sendBack')}
-                  </Button>
-                </Stack>
+                {isTerminal ? (
+                  <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                    <Button
+                      size="small"
+                      variant="contained"
+                      color="primary"
+                      startIcon={<ArchiveOutlinedIcon />}
+                      disabled={submitting}
+                      onClick={() => handleAction('archive')}
+                    >
+                      {t('archive')}
+                    </Button>
+                  </Stack>
+                ) : (
+                  <>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      multiline
+                      minRows={2}
+                      maxRows={4}
+                      value={comment}
+                      onChange={handleCommentChange}
+                      label={t('commentLabel')}
+                      placeholder={t('commentPlaceholder')}
+                      error={Boolean(validation)}
+                      helperText={validation || undefined}
+                      sx={{ mb: 1 }}
+                    />
+                    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color="success"
+                        startIcon={<CheckIcon />}
+                        disabled={submitting}
+                        onClick={() => handleAction('approve')}
+                      >
+                        {t('approve')}
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="error"
+                        startIcon={<CloseIcon />}
+                        disabled={submitting}
+                        onClick={() => handleAction('reject')}
+                      >
+                        {t('reject')}
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="warning"
+                        startIcon={<UndoIcon />}
+                        disabled={submitting}
+                        onClick={() => handleAction('sendBack')}
+                      >
+                        {t('sendBack')}
+                      </Button>
+                    </Stack>
+                  </>
+                )}
               </CardContent>
             </Card>
           </Stack>

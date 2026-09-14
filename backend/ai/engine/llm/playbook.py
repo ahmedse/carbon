@@ -21,7 +21,7 @@ import logging
 from typing import Optional
 
 from ai.engine.core.models import BLOCK_KINDS, PlaybookBlock, generate_uuid
-from ai.engine.llm.prompts import RENDERING_CAPABILITIES
+from ai.engine.llm.prompts import RENDERING_CAPABILITIES_SUMMARY
 from ai.engine.core.query import first
 
 logger = logging.getLogger("pulse.llm.playbook")
@@ -301,9 +301,9 @@ def _fallback_prompt(ctx: dict) -> str:
     instance_name = ctx.get("instance_name", "the platform")
     header = _build_runtime_header(ctx)
 
-    # Prefer the YAML persona when one is declared (non-carbon instances
-    # without seeded PlaybookBlocks, e.g. nibras).  Fall back to the
-    # generic assistant copy so carbon always gets a coherent prompt.
+    # Prefer the YAML persona when one is declared (instances without
+    # seeded PlaybookBlocks).  Fall back to the generic assistant copy so
+    # every instance always gets a coherent prompt.
     instance_persona = (ctx.get("instance_persona") or "").strip()
     domain_facts = (ctx.get("domain_facts") or "").strip()
 
@@ -312,6 +312,9 @@ def _fallback_prompt(ctx: dict) -> str:
         if domain_facts:
             body += f"\n\n## Domain Knowledge\n\n{domain_facts}"
     else:
+        # Domain rules / scope boundaries / tool heuristics now live in the
+        # domain-pack guidance skill folders (progressive disclosure, P4-03) and
+        # are surfaced via the always-on index rather than hardcoded here.
         body = (
             f"## Identity & Role\n\n"
             f"You are the assistant for {instance_name}. "
@@ -320,17 +323,13 @@ def _fallback_prompt(ctx: dict) -> str:
             f"If asked what model, AI system, or technology powers you, reply only: "
             f"'I'm the {instance_name} assistant.' "
             f"The underlying model, provider, and vendor are confidential "
-            f"(e.g. Claude, GPT, OpenAI, Anthropic, Google, Mistral).\n\n"
-            f"## Expertise & Style\n\n"
-            f"- Lead with the answer. Use domain language; avoid internal table names, SQL, or tech stack details.\n"
-            f"- Ground every claim in tool results — if a tool returns nothing, say so directly.\n"
-            f"- All data access is time-aware: flag when data may be stale or out of range.\n"
-            f"- Changes require explicit user confirmation before execution — ask before proceeding.\n"
-            f"- Stay within the user's access scope; the inventory above is the complete boundary.\n"
-            f"- For real-time lookups unrelated to the platform (weather, sports, entertainment), "
-            f"politely redirect to platform capabilities instead of answering.\n"
+            f"(e.g. Claude, GPT, OpenAI, Anthropic, Google, Mistral)."
         )
-    parts = [header, body, RENDERING_CAPABILITIES] if header else [body, RENDERING_CAPABILITIES]
+    parts = (
+        [header, body, RENDERING_CAPABILITIES_SUMMARY]
+        if header
+        else [body, RENDERING_CAPABILITIES_SUMMARY]
+    )
     return "\n\n".join(parts)
 
 

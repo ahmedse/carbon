@@ -308,8 +308,9 @@ export default function DataTableGrid({
     setFilters(f => ({ ...f, _search: search }));
   };
 
-  // Ensure selection is updated robustly
-  const handleSelectionChange = (ids) => {
+  // Ensure selection is updated robustly (v8: model is { type, ids: Set })
+  const handleSelectionChange = (model) => {
+    const ids = Array.from(model?.ids || []);
     if (onSelectionChange) onSelectionChange(ids);
     if (onRowSelectionModelChange) onRowSelectionModelChange(ids);
   };
@@ -393,12 +394,12 @@ export default function DataTableGrid({
           rows={mappedRows}
           columns={columns}
           checkboxSelection
-          disableSelectionOnClick
+          disableRowSelectionOnClick
           editMode="none"
           onRowSelectionModelChange={handleSelectionChange}
           getRowId={row => row.id}
-          pageSize={20}
-          rowsPerPageOptions={[20, 50, 100]}
+          initialState={{ pagination: { paginationModel: { pageSize: 20 } } }}
+          pageSizeOptions={[20, 50, 100]}
           sx={{
             bgcolor: 'background.paper',
             borderRadius: 2,

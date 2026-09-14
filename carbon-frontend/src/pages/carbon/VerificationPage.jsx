@@ -476,9 +476,11 @@ export default function VerificationPage() {
                 </Select>
               </FormControl>
               <Tooltip title="Refresh">
-                <IconButton onClick={loadRecords} size="small" disabled={loading}>
-                  <RefreshIcon />
-                </IconButton>
+                <span>
+                  <IconButton onClick={loadRecords} size="small" disabled={loading}>
+                    <RefreshIcon />
+                  </IconButton>
+                </span>
               </Tooltip>
             </Stack>
           }

@@ -46,6 +46,7 @@ async def build_chat_prompt(
     instance_config: dict | None = None,
     conversation_id: str = "",
     instance_id: str = "",
+    guidance_skills: list | None = None,
 ) -> str:
     """Build the system prompt for chat interactions.
 
@@ -169,8 +170,8 @@ async def build_chat_prompt(
         result = f"{result}\n\n{api_catalog_section}" if result else api_catalog_section
 
     # ── Live-data grounding directive (derived from the catalog) — bridges the
-    # semantic gap between "tell me about emission factors here" and the
-    # `list_emission_factors` endpoint, so the S3 planner queries live data
+    # semantic gap between "tell me about the live data here" and the
+    # matching endpoint, so the S3 planner queries live data
     # instead of lecturing from parametric knowledge.
     grounding_section = _build_grounding_directive(api_catalog)
     if grounding_section:
@@ -185,12 +186,45 @@ async def build_chat_prompt(
     if access_section:
         result = f"{result}\n\n{access_section}" if result else access_section
 
-    # ── Rich rendering capabilities (appended to every path, even without an
-    # access inventory) — the model must know it can draw diagrams, format
-    # tables/code/math, and render figures in its markdown replies.
-    result = f"{result}\n\n{RENDERING_CAPABILITIES}" if result else RENDERING_CAPABILITIES
+    # ── Guidance skills + compact rendering directive (appended to every path,
+    # even without an access inventory) — progressive disclosure: the always-on
+    # prompt carries only the skill index (name + one-line description) and the
+    # compact rendering summary.  Full skill bodies and worked examples are
+    # loaded on demand via ai.domain_skills → ai.engine.knowledge.skill_folder.
+    guidance_section = _build_guidance_section(guidance_skills)
+    if RENDERING_CAPABILITIES_SUMMARY in (result or ""):
+        # The fallback prompt already carries the compact rendering summary;
+        # append only the skill index so it is not emitted twice.
+        guidance_section = _build_guidance_index(guidance_skills)
+    if guidance_section:
+        result = f"{result}\n\n{guidance_section}" if result else guidance_section
 
     return result
+
+
+def _build_guidance_index(guidance_skills: list | None) -> str:
+    """Render the compact one-line-per-skill index (progressive disclosure)."""
+    if not guidance_skills:
+        return ""
+    from ai.engine.knowledge.skill_folder import skill_index_prompt
+
+    return skill_index_prompt(guidance_skills)
+
+
+def _build_guidance_section(guidance_skills: list | None) -> str:
+    """Render the always-on guidance index + compact rendering summary.
+
+    The full ``RENDERING_CAPABILITIES`` worked examples are intentionally NOT
+    emitted here — they live in the ``rich-content-rendering`` skill folder's
+    ``references/formatting-examples.md`` and are loaded on demand.  This keeps
+    the always-on prompt measurably shorter (progressive disclosure, P4-03).
+    """
+    parts: list[str] = []
+    index = _build_guidance_index(guidance_skills)
+    if index:
+        parts.append(index)
+    parts.append(RENDERING_CAPABILITIES_SUMMARY)
+    return "\n\n".join(parts)
 
 
 def _build_api_catalog_section(api_catalog: list | None) -> str:
@@ -220,7 +254,7 @@ def _build_api_catalog_section(api_catalog: list | None) -> str:
 
 
 def _endpoint_to_domain_phrase(name: str) -> str:
-    """`list_emission_factors` → `emission factors` (human-readable domain)."""
+    """`list_<domain>` → `<domain>` (human-readable domain phrase)."""
     for prefix in ("list_", "get_", "search_", "query_"):
         if name.startswith(prefix):
             name = name[len(prefix):]
@@ -232,10 +266,10 @@ def _build_grounding_directive(api_catalog: list | None) -> str:
     """Render a live-data grounding rule derived from the endpoint catalog.
 
     The model's parametric knowledge is generic textbook reference data; the
-    platform's actual records (emission factors, calculation summaries, DQ
+    platform's actual records (reference data, calculation summaries, data-quality
     rules, …) live behind ``call_host_api``. This directive names each read
     domain so the model maps a natural-language question ("tell me about
-    emission factors here") to the matching endpoint instead of lecturing from
+    the live data here") to the matching endpoint instead of lecturing from
     memory. Derived entirely from ``instance.yaml`` (ADR-0017), so it
     generalises to any instance with zero code changes.
     """
@@ -402,28 +436,42 @@ right construct instead of describing things in prose:
   inline after prose, and NEVER collapse a diagram to a single line — a
   single-line or inline fence will NOT render as a diagram in the UI.
 - **Data charts** — when your answer holds 3+ comparable numeric records, emit a
-  Mermaid chart IN ADDITION to a table: ```mermaid pie``` for proportions of a
-  whole; ```mermaid xychart-beta``` with a `bar` series for ranking/magnitude
-  (`line` for a trend). Keep labels ≤ 14 chars and use only real values. Every
-  directive (`title`, `x-axis`, `y-axis`, `bar`, `line`, each `pie` slice) goes
-  on its own line. For example:
+  Mermaid chart IN ADDITION to a table. Choose the type intelligently:
+  - Use ```mermaid pie``` when the values are **parts of a whole** (scope %, category
+    shares, breakdowns that add up to 100%). Pie slices must sum to a meaningful total.
+  - Use ```mermaid xychart-beta``` with `bar` when comparing **magnitudes across
+    independent categories** (module CO₂e, top emitters, year-over-year absolute).
+  - Use ```mermaid xychart-beta``` with `line` for **trends over time**.
+  - Keep x-axis labels ≤ 14 chars — abbreviate or shorten longer names (the renderer
+    truncates them anyway). NEVER include em-dashes (—), angle brackets, or braces in
+    axis labels; use a hyphen (-) instead. One `bar` line holds ALL values
+    comma-separated. Every directive (`title`, `x-axis`, `y-axis`, `bar`, `line`,
+    each `pie` slice) goes on its own line. Example:
   ```mermaid
   pie title Scope breakdown
-      "Scope 1" : 4
-      "Scope 2" : 2
-      "Scope 3" : 1
+      "Scope 1" : 2258
+      "Scope 2" : 8032
+      "Scope 3" : 6
   ```
   ```mermaid
   xychart-beta
-      title "kg CO2e per unit"
-      x-axis [Diesel, Gasoline, LPG]
-      y-axis "kg CO2e" 0 --> 3
-      bar [2.51, 2.19, 1.52]
+      title "CO2e by Module (tonnes)"
+      x-axis ["Module A", "Module B", "Module C"]
+      y-axis "CO2e tonnes" 0 --> 6000
+      bar [5566, 4023, 707]
   ```
   NEVER write `axis x`, `axis y`, or per-point `bar x: 1 y: 2.51` lines —
   those are invalid Mermaid and the chart will NOT render. Use exactly the
-  `x-axis [...]` / `y-axis "..." 0 --> N` / `bar [...]` form above (one `bar`
-  line holding ALL values, comma-separated).
+  `x-axis [...]` / `y-axis "..." 0 --> N` / `bar [...]` form above.
+- **Tables** — every row on its OWN line. NEVER put two data rows on the same line.
+  A correctly formed module-breakdown table looks like:
+
+  | Module | Calculations | CO₂e (kg) | CO₂e (t) |
+  |--------|-------------|-----------|---------|
+  | Module A | 47 | 5,586,304 | 5,566 |
+  | Module B | 84 | 4,023,122 | 4,023 |
+
+  One data row per line — NEVER collapse rows.
 - **Math** — $inline$ and $$block$$ render with KaTeX.
 - **Figures** — images with a title render with a caption below them.
 - **Links** — internal platform routes (starting with /) render as in-app links.
@@ -437,6 +485,26 @@ flowchart LR
     B -- Yes --> C[Activate]
     B -- No --> D[Investigate]
 ```
+"""
+
+
+#: Compact always-on rendering directive (P4-03 progressive disclosure).
+#: The full worked examples in ``RENDERING_CAPABILITIES`` now live in the
+#: ``rich-content-rendering`` skill folder's ``references/formatting-examples.md``
+#: and are loaded on demand.  This summary stays in the always-on prompt so the
+#: model still knows it can draw diagrams and format rich content.
+RENDERING_CAPABILITIES_SUMMARY = """## Rich content rendering
+
+Your replies render as rich Markdown. Use the right construct instead of prose:
+
+- **Tables** — GFM tables render as styled tables. Leave a blank line before the table; put the header, the `|---|---|` delimiter, and every data row each on its OWN line.
+- **Code** — fenced blocks (```python, ```sql, ```json) render with syntax highlighting and a copy button; indent JSON with 2 spaces per level.
+- **Diagrams** — a ```mermaid fenced block renders as a live diagram (flowchart, sequenceDiagram, stateDiagram-v2, classDiagram, pie, gantt). You CAN draw diagrams; when a process or structure is clearer as a picture, emit one.
+- **Mermaid line rules** — the opening ```mermaid fence starts on its OWN line preceded by a blank line; the closing fence is on its own line; each directive on its own line.
+- **Data charts** — for 3+ comparable numeric records, emit a Mermaid chart IN ADDITION to a table: ```mermaid pie for parts-of-a-whole; ```mermaid xychart-beta with `bar` for magnitudes or `line` for trends.
+- **Math** — $inline$ and $$block$$ render with KaTeX.
+- **Figures** — images with a title render with a caption below.
+- **Links** — internal platform routes (starting with /) render as in-app links.
 """
 
 

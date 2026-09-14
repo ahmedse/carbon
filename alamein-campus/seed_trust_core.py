@@ -6,10 +6,16 @@ Creates: Domains → Tags → Glossary → Asset Profiles → DQ Rules →
 NO rows, NO emission factors, NO calculation rules.
 """
 import requests, sys, time, os
+from dotenv import load_dotenv
 
 BASE = os.environ.get("CARBON_API", "http://localhost:8009/carbon-api")
 USERNAME = os.environ.get("CARBON_USER", "ahmed")
-PASSWORD = os.environ.get("CARBON_PASS", "AdminPa_132")
+
+# Credentials come from backend/.env (gitignored) — never hardcoded in source.
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "backend", ".env"))
+PASSWORD = os.environ.get("CARBON_ADMIN_PASSWORD") or os.environ.get("CARBON_PASS")
+if not PASSWORD:
+    raise SystemExit("CARBON_ADMIN_PASSWORD not set — add it to backend/.env (see backend/.env.example).")
 
 # ── Auth ────────────────────────────────────────────────────
 for attempt in range(5):

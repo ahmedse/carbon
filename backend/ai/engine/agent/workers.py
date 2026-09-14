@@ -56,9 +56,9 @@ class WorkerArtifact:
     tokens_used: int = 0
     latency_ms: float = 0.0
     error: str | None = None
-    # P1-07: guardrail outcomes observed while executing worker tool calls
+    # P2-06c: guardrail outcomes observed while executing worker tool calls
     # (e.g. ["worker_tool_blocked", "blocked:call_host_api"]). Empty when the
-    # worker made no tool calls or every call passed its hooks.
+    # worker made no tool calls or every call passed the boundary.
     guardrail_flags: list[str] = field(default_factory=list)
 
 
@@ -117,22 +117,12 @@ class WorkerPool:
         self._instance_id = instance_id
         self._conversation_id = conversation_id
         self._settings = get_settings()
-        # P1-07: optional host executor / instance config / knowledge store so a
-        # worker's read-only tool calls run through the same dispatch path as the
-        # orchestrator (host GETs, knowledge lookups) instead of being dropped.
+        # P2-06c: the host executor provides the command-boundary seam
+        # (``execute_worker_tools_via_boundary``) so a worker's tool calls are
+        # routed through the 13-stage boundary instead of being dropped.
         self._executor = executor
         self._instance_config = instance_config or {}
         self._knowledge_store = knowledge_store
-        # P3.3: Guardrail pipeline — built lazily and passed to worker context.
-        # Workers use is_worker=True, which activates readonly_worker_hook.
-        self._hook_pipeline = None  # built on first use via _get_hook_pipeline()
-
-    def _get_hook_pipeline(self):
-        """Lazily build the guardrail pipeline (first fan_out call)."""
-        if self._hook_pipeline is None:
-            from ai.engine.agent.guardrails import build_default_pipeline
-            self._hook_pipeline = build_default_pipeline()
-        return self._hook_pipeline
 
     async def fan_out(
         self,
@@ -320,56 +310,26 @@ class WorkerPool:
             tokens = response.get("input_tokens", 0) + response.get("output_tokens", 0)
             sub_budget_consumed = tokens
 
-            # ── P1-07: execute the worker's tool calls THROUGH the hooks ──
-            # Previously the returned ``tool_calls`` were ignored entirely, so a
-            # worker could never do read-only work and a mutation could never be
-            # audited. Now every call goes through ExecuteWitness with
-            # is_worker=True: mutations are cancelled by consent_hook /
-            # readonly_worker_hook and surfaced in the artifact; read-only calls
-            # execute and their results are aggregated into the worker content.
+            # ── P2-06c: execute the worker's tool calls THROUGH the boundary ──
+            # The worker no longer builds a hook pipeline; instead the engine
+            # delegates to the host executor's command-boundary seam, which
+            # builds a ``Command`` per tool call and routes it through the
+            # 13-stage boundary. A mutation is refused at the consent stage
+            # (executor never runs); a read executes via the boundary closure.
             guardrail_flags: list[str] = []
             blocked_reasons: list[str] = []
             artifact_error: str | None = None
             tool_calls = response.get("tool_calls") or []
 
             if tool_calls:
-                # P3.3/P1-07: build the guardrail pipeline *inside* the try so a
-                # broken pipeline fails closed (worker error, nothing executed)
-                # instead of aborting the whole fan-out or running tools unhooked.
-                _pipeline = self._get_hook_pipeline()
-                if _pipeline is None:
-                    # Fail-closed: a missing/broken pipeline must never become a
-                    # bypass — refuse to execute any worker tool call.
-                    latency = (time.monotonic() - t0) * 1000
-                    logger.error(
-                        "Fan-out worker guardrail pipeline unavailable — blocking "
-                        "%d tool call(s): role=%s",
-                        len(tool_calls), task.agent_role,
-                    )
-                    return WorkerArtifact(
-                        worker_role=task.agent_role,
-                        worker_id=worker_id,
-                        summary="",
-                        detail="",
-                        error=(
-                            "Guardrail pipeline unavailable — worker tool calls "
-                            "blocked (fail-closed)"
-                        ),
-                        tokens_used=tokens,
-                        latency_ms=latency,
-                        guardrail_flags=["guardrail_pipeline_unavailable"],
-                    )
-
-                execution = await asyncio.wait_for(
+                completed_tools = await asyncio.wait_for(
                     self._execute_worker_tools(
                         task=task,
                         tool_calls=tool_calls,
-                        hook_pipeline=_pipeline,
                         worker_run_id=_worker_run_id,
                     ),
                     timeout=timeout,
                 )
-                completed_tools = execution.completed_tools
                 guardrail_flags, blocked_reasons = _collect_guardrail_outcome(completed_tools)
 
                 tool_text = _render_worker_tool_results(completed_tools)
@@ -454,34 +414,45 @@ class WorkerPool:
         *,
         task: WorkerTask,
         tool_calls: list[dict],
-        hook_pipeline,
         worker_run_id: str,
-    ):
-        """Run a worker's tool calls through ExecuteWitness (is_worker=True).
+    ) -> list[dict]:
+        """Run a worker's tool calls through the host command-boundary seam.
 
-        Reuses the same S5 executor + hook pipeline as the orchestrator turn
-        rather than re-implementing the before/after hook loop. The
-        ``is_worker=True`` default is what activates ``readonly_worker_hook``
-        so a mutation is cancelled, while read-only tools execute normally.
+        The engine never imports the boundary — it delegates to the host
+        executor's ``execute_worker_tools_via_boundary`` seam, which builds a
+        ``Command`` per tool call and routes it through the 13-stage boundary.
+        A worker mutation is refused at the consent stage (the boundary
+        executor never runs); a read executes via the boundary closure. When
+        no boundary seam is available the calls fail closed.
         """
-        from ai.engine.cognition.turn.execute import ExecuteWitness
+        if (
+            self._executor is None
+            or not callable(getattr(self._executor, "execute_worker_tools_via_boundary", None))
+        ):
+            logger.error(
+                "Fan-out worker boundary seam unavailable — blocking %d tool call(s)",
+                len(tool_calls),
+            )
+            blocked: list[dict] = []
+            for tc in tool_calls:
+                name = tc.get("function", {}).get("name", "unknown")
+                blocked.append({
+                    "tool_name": name,
+                    "tool_call_id": tc.get("id", ""),
+                    "result": None,
+                    "error": "worker tool execution unavailable (no boundary seam)",
+                    "guardrail_flags": ["worker_tool_blocked", f"blocked:{name}"],
+                })
+            return blocked
 
-        execute_witness = ExecuteWitness(
-            executor=self._executor,
-            hook_pipeline=hook_pipeline,
-            hook_ctx_defaults={
-                "is_worker": True,
-                "agent_role": task.agent_role,
-                "instance_id": self._instance_id,
-                "conversation_id": self._conversation_id,
-                "run_id": worker_run_id,
-                "instance_config": self._instance_config or {},
-            },
-            run_id=worker_run_id,
+        return await self._executor.execute_worker_tools_via_boundary(
+            tool_calls=tool_calls,
             instance_id=self._instance_id,
+            conversation_id=self._conversation_id,
+            run_id=worker_run_id,
+            host_user_id=getattr(self._executor, "host_user_id", None),
             knowledge_store=self._knowledge_store,
         )
-        return await execute_witness.execute(text="", tool_calls=tool_calls)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -526,15 +497,18 @@ def _collect_guardrail_outcome(
     """Extract guardrail flags + block reasons from executed worker tools.
 
     Returns ``(flags, blocked_reasons)`` where ``flags`` is de-duplicated and
-    ``blocked_reasons`` holds the human-readable reason for each hook-cancelled
-    call. Non-guardrail tool errors are deliberately not treated as blocks.
+    ``blocked_reasons`` holds the human-readable reason for each blocked call
+    (a boundary refusal carrying ``worker_tool_blocked``, or a legacy hook
+    cancellation). Non-guardrail tool errors are deliberately not treated as
+    blocks.
     """
     flags: list[str] = []
     blocked_reasons: list[str] = []
     for tr in completed_tools:
-        flags.extend(tr.get("guardrail_flags") or [])
+        tr_flags = tr.get("guardrail_flags") or []
+        flags.extend(tr_flags)
         err = tr.get("error") or ""
-        if err.startswith(_GUARDRAIL_CANCEL_PREFIX):
+        if "worker_tool_blocked" in tr_flags or err.startswith(_GUARDRAIL_CANCEL_PREFIX):
             name = tr.get("tool_name", "tool")
             flags.append("worker_tool_blocked")
             flags.append(f"blocked:{name}")
@@ -548,9 +522,10 @@ def _collect_guardrail_outcome(
 def _render_worker_tool_results(completed_tools: list[dict]) -> str:
     """Render executed worker tool results into a compact text block.
 
-    Successful results and hook blocks/errors are both included so the
-    ``WorkerArtifact`` reflects real read-only work — and, just as importantly,
-    surfaces the fact that a mutation was blocked instead of swallowing it.
+    Successful results and boundary/hook blocks and errors are both included
+    so the ``WorkerArtifact`` reflects real read-only work — and, just as
+    importantly, surfaces the fact that a mutation was blocked instead of
+    swallowing it.
     """
     parts: list[str] = []
     for tr in completed_tools:

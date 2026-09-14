@@ -14,11 +14,12 @@ Lenient by design (mirrors ``memory/_redis.py``): if Redis is unreachable,
 ``publish`` logs a warning and no-ops, and ``subscribe`` yields nothing. The
 bus never crashes a caller.
 
-This module is pure engine plumbing — it imports nothing from Carbon's domain
+This module is pure engine plumbing — it imports nothing from the host's domain
 apps (RULE_20 / RULE_6).
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -99,8 +100,14 @@ async def publish(channel: str, payload: dict) -> None:
         await _aclose(client)
 
 
-async def subscribe(channel: str) -> AsyncIterator[dict]:
+async def subscribe(
+    channel: str, ready: asyncio.Event | None = None
+) -> AsyncIterator[dict]:
     """Yield decoded JSON frames from ``channel``.
+
+    If ``ready`` is provided it is set once the subscription is registered on
+    the server (after ``pubsub.subscribe`` returns), so callers can await it
+    before publishing to avoid a subscribe/publish race.
 
     If Redis is unreachable (or the connection drops), the generator simply
     ends without yielding anything — it never raises to the caller.
@@ -109,6 +116,8 @@ async def subscribe(channel: str) -> AsyncIterator[dict]:
     pubsub = client.pubsub()
     try:
         await pubsub.subscribe(channel)
+        if ready is not None:
+            ready.set()
         async for message in pubsub.listen():
             if message is None or message.get("type") != "message":
                 continue

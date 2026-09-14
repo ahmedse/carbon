@@ -133,6 +133,50 @@ class OpsWorkflowRunner:
             path = path.replace(f"{{{k}}}", str(v))
         return method, path
 
+    async def _host_effect(
+        self,
+        *,
+        api_name: str,
+        method: str,
+        path: str,
+        params: dict | None = None,
+        body: dict | None = None,
+        needs_confirmation: bool = False,
+        effect=None,
+    ) -> dict:
+        """Run a resolved host REST call through the command-boundary seam.
+
+        When the executor exposes ``execute_host_api_via_boundary`` the call is
+        wrapped in a fail-closed command and run through the boundary's execute
+        stage (the ``effect`` closure performs the actual host call). Without a
+        seam (legacy host executors / tests) the call falls back to the direct
+        host call, preserving existing behaviour.
+        """
+        seam = getattr(self.executor, "execute_host_api_via_boundary", None)
+        if callable(seam):
+            if effect is None:
+                async def _direct():
+                    return await self.executor.call_api_direct(
+                        method, path, params, body
+                    )
+
+                effect = _direct
+            return await seam(
+                effect=effect,
+                api_name=api_name,
+                method=method,
+                path=path,
+                query_params=params,
+                body=body,
+                needs_confirmation=needs_confirmation,
+                instance_id=self.instance_id,
+                host_user_id=self.host_user_id,
+                conversation_id=self.conversation_id,
+            )
+
+        # Legacy fallback: executor without a boundary seam.
+        return await self.executor.call_api_direct(method, path, params, body)
+
     async def _resolve_dataset_id(self, wf: dict) -> tuple[str, dict]:
         """Resolve the workflow's dataset to a host id and return its detail.
 
@@ -151,7 +195,9 @@ class OpsWorkflowRunner:
         dataset_id = ds_ref
         if not ds_ref.isdigit():
             method, path = self._path(list_api)
-            listing = await self.executor.call_api_direct(method, path)
+            listing = await self._host_effect(
+                api_name=list_api, method=method, path=path
+            )
             items = _extract_items(listing)
             match = next(
                 (
@@ -169,7 +215,9 @@ class OpsWorkflowRunner:
             dataset_id = str(match.get("id"))
 
         method, path = self._path(get_api, {"id": dataset_id})
-        detail = await self.executor.call_api_direct(method, path)
+        detail = await self._host_effect(
+            api_name=get_api, method=method, path=path
+        )
         return dataset_id, _unwrap(detail)
 
     # ── STEP 1: ingest ───────────────────────────────────────────────────
@@ -226,8 +274,12 @@ class OpsWorkflowRunner:
         except OpsWorkflowError as e:
             return StepResult("ingest_csv", "failed", str(e), errors=[str(e)])
 
-        host_dry = await self.executor.call_api_direct(
-            method, path, {"dry_run": "true"}, payload
+        host_dry = await self._host_effect(
+            api_name=bulk_api,
+            method=method,
+            path=path,
+            params={"dry_run": "true"},
+            body=payload,
         )
         if isinstance(host_dry, dict) and host_dry.get("error"):
             err = str(host_dry["error"])
@@ -282,7 +334,13 @@ class OpsWorkflowRunner:
                 data={**data, "wrote": False, "execution_id": execution.id},
             )
 
-        write_res = await self.executor.call_api_direct(method, path, None, payload)
+        write_res = await self._host_effect(
+            api_name=bulk_api,
+            method=method,
+            path=path,
+            body=payload,
+            needs_confirmation=False,
+        )
         if isinstance(write_res, dict) and write_res.get("error"):
             err = str(write_res["error"])
             return StepResult(
@@ -377,7 +435,13 @@ class OpsWorkflowRunner:
                 data={"engine_id": engine_id, "execution_id": execution.id},
             )
 
-        res = await self.executor.call_api_direct(method, path, None, {})
+        res = await self._host_effect(
+            api_name=infer_api,
+            method=method,
+            path=path,
+            body={},
+            needs_confirmation=False,
+        )
         if isinstance(res, dict) and res.get("error"):
             err = str(res["error"])
             return StepResult("run_inference", "failed", f"Inference failed: {err}",
@@ -395,7 +459,9 @@ class OpsWorkflowRunner:
             return engine_ref
         list_api = wf.get("api", {}).get("list_ai_engines", "list_ai_engines")
         method, path = self._path(list_api)
-        listing = await self.executor.call_api_direct(method, path)
+        listing = await self._host_effect(
+            api_name=list_api, method=method, path=path
+        )
         items = _extract_items(listing)
         match = next(
             (it for it in items
@@ -427,7 +493,9 @@ class OpsWorkflowRunner:
 
         output_api = wf.get("api", {}).get("ops_output", "get_daily_summaries")
         method, path = self._path(output_api, {"engine_id": engine_id})
-        res = await self.executor.call_api_direct(method, path)
+        res = await self._host_effect(
+            api_name=output_api, method=method, path=path
+        )
         if isinstance(res, dict) and res.get("error"):
             err = str(res["error"])
             return StepResult("produce_ops_output", "failed",

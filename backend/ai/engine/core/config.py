@@ -140,9 +140,9 @@ class Settings(BaseSettings):
     SKILL_GATE_MARGINAL_GAIN_SUITE: str = "regression"
     SKILL_GATE_MARGINAL_GAIN_BASELINE_PATH: str = ""  # if empty, uses instances/{instance}/data/scorecard.json
 
-    # ── Task Handler (Phase 7 — Carbon AI Modules) ──
-    TASK_DQ_VALIDATE_TIMEOUT: int = 10          # seconds — sync (Carbon expects 10s)
-    TASK_DQ_SUGGEST_TIMEOUT: int = 60           # seconds — async (Carbon expects 60s)
+    # ── Task Handler (Phase 7 — domain AI modules) ──
+    TASK_DQ_VALIDATE_TIMEOUT: int = 10          # seconds — sync (host expects 10s)
+    TASK_DQ_SUGGEST_TIMEOUT: int = 60           # seconds — async (host expects 60s)
     TASK_NL_QUERY_TIMEOUT: int = 30             # seconds
     TASK_NL_QUERY_MAX_ROWS: int = 100           # max rows returned
     TASK_ANOMALY_MIN_HISTORY: int = 6           # minimum profile snapshots needed
@@ -156,6 +156,9 @@ class Settings(BaseSettings):
     # ── Hybrid Retrieval (BE-02-2) ──
     RETRIEVAL_LLM_RERANK: bool = True    # use LLM to rerank fused (pgvector+BM25) results
     RETRIEVAL_HYBRID_ALPHA: float = 0.6  # vector weight in score fusion; BM25 weight = 1-alpha
+    # P4-02 — max non-mandatory curated-knowledge chunks surfaced per turn
+    # (applicability-first). Mandatory items are never counted against this.
+    RETRIEVAL_TOP_K: int = 10
 
     # ── Knowledge Graph ──
     KG_FORCE_REANALYZE: bool = False   # set True to re-run schema analysis on every startup
@@ -220,17 +223,18 @@ class Settings(BaseSettings):
     PULSE_LOOP_MAX_STEPS: int = 6
     PULSE_LOOP_MAX_TOKENS: int = 8000
 
-    # ── Pulse v2 Phase 6 — Carbon business context injection ──
-    PULSE_CARBON_CONTEXT_ENABLED: bool = True
+    # ── Pulse v2 Phase 6 — domain business context injection ──
+    PULSE_DOMAIN_CONTEXT_ENABLED: bool = True
 
     # ── Pulse v2 Phase 7 — post-result verification (on by default, fail-closed) ──
     PULSE_VERIFY_ENABLED: bool = True
 
     # ── Answer Envelope (PAQ-2A) — typed structured-output synthesis ──
-    # Off by default: when False the synthesis path is behaviourally identical
-    # to the pre-envelope pipeline. PAQ-2B flips this on and renders the typed
-    # blocks from the envelope instead of reflowing markdown.
-    PULSE_ENVELOPE_ENABLED: bool = False
+    # When True, data-bearing turns synthesize a typed AnswerEnvelope (tables/
+    # charts/caveats/sources) that the frontend renders deterministically via
+    # components — instead of reflowing the model's ad-hoc markdown. Fail-open:
+    # any synthesis error falls back to the markdown path unchanged.
+    PULSE_ENVELOPE_ENABLED: bool = True
 
     # ── Pulse v2 Phase 9 — model policy / turn profiles ──
     # Strong model for multi-hop investigation turns. Empty = use the instance

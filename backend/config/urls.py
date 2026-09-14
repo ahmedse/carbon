@@ -5,8 +5,7 @@ from django.conf import settings
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import path, include
-from rest_framework_simplejwt.views import TokenRefreshView
-from accounts.views import ThrottledTokenObtainPairView
+from accounts.views import ThrottledTokenObtainPairView, ThrottledTokenRefreshView
 from accounts.password_reset_signals import NotifyingPasswordResetView
 from .health_views import health_check, metrics_view, prometheus_metrics_view
 from ai import workspace_api as ai_workspace_views
@@ -31,7 +30,7 @@ urlpatterns = [
 
     # JWT Auth endpoints under API prefix
     path(f'{api_prefix}/token/', ThrottledTokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path(f'{api_prefix}/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path(f'{api_prefix}/token/refresh/', ThrottledTokenRefreshView.as_view(), name='token_refresh'),
 
     # Phase 1.1/1.6: Password Reset (with in-app notification)
     path(
@@ -90,6 +89,8 @@ urlpatterns = [
     path(f'{api_prefix}/ai/work-objectives/', include('ai.work_objectives_urls')),
     path(f'{api_prefix}/ai/plans/', include('ai.plans_urls')),
     path(f'{api_prefix}/ai/catalog/', include('ai.catalog_urls')),
+    path(f'{api_prefix}/ai/registry/', include('ai.registry_urls')),
+    path(f'{api_prefix}/ai/inbox/', include('ai.task_inbox_urls')),
     path(f'{api_prefix}/ai/runs/', include('ai.durable_urls')),
     path(f'{api_prefix}/ai/usage/', include('ai.usage_urls')),
     path(f'{api_prefix}/ai/profile/', ai_workspace_views.UserProfileView.as_view(), name='ai-user-profile'),

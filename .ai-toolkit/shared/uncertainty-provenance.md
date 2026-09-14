@@ -115,7 +115,3 @@ One line:
 - A confidence/score attached to inputs but **absent** from the emitted answer.
 - `try/except` that continues the pipeline on a default instead of surfacing `error`.
 - Any junction where a low-confidence input yields a high-confidence output.
-
----
-
-*Source: ~/ai-toolkit/shared/uncertainty-provenance.md (mirrored into carbon/.ai-toolkit/shared/)*

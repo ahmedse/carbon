@@ -5,6 +5,7 @@ from rest_framework import status, viewsets
 from rest_framework.permissions import BasePermission, IsAuthenticated, IsAdminUser
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
+from core.throttling import RefreshRateThrottle
 from django.conf import settings
 from django.contrib.auth.models import Group
 from drf_spectacular.utils import extend_schema
@@ -24,7 +25,7 @@ from django.db.models import Q
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.exceptions import TokenError
 
 # ── Authz manifest: pre-resolved route/app access for frontend ─────
@@ -121,6 +122,16 @@ class ThrottledTokenObtainPairView(TokenObtainPairView):
     """JWT obtain view with request throttling."""
 
     throttle_classes = [LoginRateThrottle]
+
+
+class ThrottledTokenRefreshView(TokenRefreshView):
+    """JWT refresh view with its own (generous) throttle scope.
+
+    Uses `RefreshRateThrottle` so the recurring refresh cadence is never
+    throttled by the shared anonymous request bucket (see core/throttling.py).
+    """
+
+    throttle_classes = [RefreshRateThrottle]
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -398,22 +409,54 @@ class ScopedRoleViewSet(viewsets.ModelViewSet):
                 "You can only manage role assignments within your own organization units."
             )
 
+    def _write_audit(self, *, action, user, group, org_unit, module, extra=None):
+        RoleAssignmentAuditLog.objects.create(
+            user=user,
+            actor=self.request.user,
+            group=group,
+            org_unit=org_unit,
+            module=module,
+            action=action,
+            extra=extra or {},
+        )
+
     def perform_create(self, serializer):
         self._assert_within_subtree(
             serializer.validated_data.get('org_unit'),
             serializer.validated_data.get('module'),
         )
-        serializer.save()
+        instance = serializer.save()
+        self._write_audit(
+            action='assigned',
+            user=instance.user,
+            group=instance.group,
+            org_unit=instance.org_unit,
+            module=instance.module,
+        )
 
     def perform_update(self, serializer):
         self._assert_within_subtree(
             serializer.validated_data.get('org_unit'),
             serializer.validated_data.get('module'),
         )
-        serializer.save()
+        instance = serializer.save()
+        self._write_audit(
+            action='modified',
+            user=instance.user,
+            group=instance.group,
+            org_unit=instance.org_unit,
+            module=instance.module,
+        )
 
     def perform_destroy(self, instance):
         self._assert_within_subtree(instance.org_unit, instance.module)
+        self._write_audit(
+            action='removed',
+            user=instance.user,
+            group=instance.group,
+            org_unit=instance.org_unit,
+            module=instance.module,
+        )
         instance.delete()
 
 

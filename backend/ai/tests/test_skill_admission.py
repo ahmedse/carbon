@@ -6,8 +6,9 @@ Proves the sleep-time promotion arrow is wired and gated:
     ``instance_promoted`` when every *active* critic passes.  The
     marginal-gain critic is disabled via config for this test because the
     ``evals.stream`` infra it needs does not exist in the repo.
-  * A draft whose body carries a dangerous SQL pattern is rejected by the
-    harmlessness critic (rules phase, no LLM), left pending, and logged.
+  * A draft whose ``sql_macro`` body carries a dangerous SQL pattern is
+    rejected by the structural critic (P3-10 — legacy executable-body kinds
+    are refused at admission), left pending, and logged.
   * ``SKILL_ADMISSION_ENABLED=false`` short-circuits with zero evaluations
     and zero ``SkillAdmissionLog`` rows.
   * Critic errors are fail-closed: an errored or unparseable critic rejects
@@ -148,7 +149,12 @@ def test_admission_promotes_clean_draft(django_store, cfg, monkeypatch):
 
 @pytest.mark.django_db(transaction=True)
 def test_admission_rejects_dangerous_sql(django_store, cfg):
-    """A sql_macro body with DROP TABLE is rejected by harmlessness (rules)."""
+    """A sql_macro body with DROP TABLE is rejected structurally (P3-10).
+
+    Legacy executable-body kinds (``sql_macro`` / ``api_call``) are refused at
+    the structural critic before harmlessness even runs, so the dangerous SQL
+    never reaches the LLM-free rules pass.
+    """
     from ai.models.core import Skill, SkillAdmissionLog
 
     instance_id, skill_id = asyncio.run(
@@ -171,7 +177,8 @@ def test_admission_rejects_dangerous_sql(django_store, cfg):
     logs = list(SkillAdmissionLog.objects.filter(skill_id=skill_id))
     assert len(logs) == 1
     assert logs[0].verdict == "rejected"
-    assert logs[0].rejected_by == "harmlessness"
+    assert logs[0].rejected_by == "structural"
+    assert "legacy_executable_body_kind" in (logs[0].structural_flags_json or "")
 
 
 @pytest.mark.django_db(transaction=True)

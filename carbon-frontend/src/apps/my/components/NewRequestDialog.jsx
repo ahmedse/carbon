@@ -29,6 +29,7 @@ import {
   submitProfileChange,
   submitGenericCorrespondence,
 } from '../../../api/my';
+import { fetchOrgUnits } from '../../../api/orgUnits';
 import { CORR_TYPES, corrTypeLabel } from './myRequestsLabels';
 
 // ── Constants & pure helpers ───────────────────────────────────────────
@@ -130,6 +131,8 @@ function mapSubmitError(t, err) {
         return t('errorTitleRequired');
       case 'corr_type is required':
         return t('errorSelectRequestType');
+      case 'org_unit is required':
+        return t('errorOrgUnitRequired');
       case 'Submission blocked by DQ gate':
         return t('errorDqGate');
       case 'No workflow policy configured':
@@ -464,8 +467,15 @@ export default function NewRequestDialog({ open, onClose, profile, balances, onS
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
+  const [orgUnits, setOrgUnits] = useState([]);
+  const [selectedOrgUnit, setSelectedOrgUnit] = useState('');
 
   const firstFieldRef = useRef(null);
+
+  // F20: payload-only types need an org_unit. Employees carry one on their
+  // profile; profile-less users (e.g. admins) must pick one in the dialog.
+  const needsOrgUnit =
+    ['internal_memo', 'circular', 'decision'].includes(requestType) && !profile?.org_unit?.id;
 
   // Memoized type → field-group lookup (the module constant is read once).
   const fieldGroup = useMemo(() => TYPE_FIELD_GROUP[requestType] || null, [requestType]);
@@ -520,11 +530,28 @@ export default function NewRequestDialog({ open, onClose, profile, balances, onS
       setErrors({});
       setSubmitError(null);
       setSubmitting(false);
+      setSelectedOrgUnit('');
       const id = setTimeout(() => firstFieldRef.current?.focus(), 0);
       return () => clearTimeout(id);
     }
     return undefined;
   }, [open]);
+
+  // Load org units once when a profile-less user selects a payload-only type.
+  useEffect(() => {
+    if (!open || !needsOrgUnit || orgUnits.length > 0) return undefined;
+    let active = true;
+    fetchOrgUnits(token)
+      .then((list) => {
+        if (active) setOrgUnits(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        if (active) setOrgUnits([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, needsOrgUnit, orgUnits.length, token]);
 
   const validate = useCallback(() => {
     const next = {};
@@ -579,13 +606,14 @@ export default function NewRequestDialog({ open, onClose, profile, balances, onS
       case 'decision':
         if (!form.title.trim()) next.title = t('errorTitleRequired');
         if (!form.body.trim()) next.body = t('errorBodyRequired');
+        if (needsOrgUnit && !selectedOrgUnit) next.org_unit = t('errorOrgUnitRequired');
         break;
       default:
         next.requestType = t('errorSelectRequestType');
         break;
     }
     return next;
-  }, [requestType, form, leaveEndBeforeStart, t]);
+  }, [requestType, form, leaveEndBeforeStart, needsOrgUnit, selectedOrgUnit, t]);
 
   const handleSubmit = useCallback(async () => {
     if (!requestType) {
@@ -644,6 +672,7 @@ export default function NewRequestDialog({ open, onClose, profile, balances, onS
             payload: { body: form.body.trim() },
           };
           if (profile?.org_unit?.id) payload.org_unit = profile.org_unit.id;
+          else if (selectedOrgUnit) payload.org_unit = selectedOrgUnit;
           await submitGenericCorrespondence(token, payload);
           break;
         }
@@ -654,7 +683,7 @@ export default function NewRequestDialog({ open, onClose, profile, balances, onS
     } finally {
       setSubmitting(false);
     }
-  }, [requestType, form, leaveDays, profile, token, t, validate, onSubmitted]);
+  }, [requestType, form, leaveDays, profile, selectedOrgUnit, token, t, validate, onSubmitted]);
 
   const canSubmit = Boolean(requestType) && !submitting;
 
@@ -722,6 +751,29 @@ export default function NewRequestDialog({ open, onClose, profile, balances, onS
           onRemoveChange={removeChange}
           onUpdateChange={updateChange}
         />
+
+        {needsOrgUnit && (
+          <TextField
+            select
+            size="small"
+            fullWidth
+            required
+            label={t('fieldOrgUnit')}
+            value={selectedOrgUnit}
+            onChange={(e) => {
+              setSelectedOrgUnit(e.target.value);
+              setErrors((prev) => ({ ...prev, org_unit: undefined }));
+            }}
+            error={Boolean(errors.org_unit)}
+            helperText={errors.org_unit}
+          >
+            {orgUnits.map((unit) => (
+              <MenuItem key={unit.id} value={String(unit.id)}>
+                {unit.name || unit.code || String(unit.id)}
+              </MenuItem>
+            ))}
+          </TextField>
+        )}
 
         {fieldGroup && <ApproverChainPreview profile={profile} />}
       </Stack>

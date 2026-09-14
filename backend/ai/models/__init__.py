@@ -60,6 +60,16 @@ from .core import (
 )
 from .feedback import DqFeedbackEvent
 from .pdp import PolicyDecisionRow
+from .approval import ApprovalGrant
+from .human_task import HumanTask
+from .knowledge import KnowledgeItem
+from .reconciliation import ReconciliationEscalation
+from .step_journal import StepJournalEntry
+from .journal import RunJournalEntry
+from .capability import Capability
+from .process import ProcessDefinition
+from .process_interview import ProcessInterview
+from .autonomy import AutonomyOverride
 from .knowledge_graph import (
     KgBootstrapRun,
     KgCacheEntry,
@@ -90,6 +100,16 @@ __all__ = [
     "generate_uuid",
     "ModelCatalog",
     "PolicyDecisionRow",
+    "ApprovalGrant",
+    "HumanTask",
+    "KnowledgeItem",
+    "ReconciliationEscalation",
+    "StepJournalEntry",
+    "RunJournalEntry",
+    "Capability",
+    "ProcessDefinition",
+    "ProcessInterview",
+    "AutonomyOverride",
     # core
     "AcceptanceReport",
     "Agent",

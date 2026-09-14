@@ -4,6 +4,8 @@
 # status codes), never DRF Response objects. Zero behavioral change vs. the
 # logic previously in views.
 
+from django.utils import timezone
+
 # Mask shown on every read path (API + admin) for stored connection config.
 MASK_VALUE = "***"
 
@@ -35,8 +37,9 @@ class ConnectionService:
                 )
 
             # Simulate a test; real implementation would try actual connection
-            source.last_test_status = 'Connection test successful'
+            source.last_test_status = 'success'
             source.status = 'active'
+            source.last_tested_at = timezone.now()
             source.save(update_fields=['last_test_status', 'status', 'last_tested_at'])
 
             return (
@@ -48,11 +51,16 @@ class ConnectionService:
                 200,
             )
         except Exception as e:
-            source.last_test_status = str(e)
+            source.last_test_status = 'failure'
             source.status = 'error'
+            source.last_tested_at = timezone.now()
             source.save(update_fields=['last_test_status', 'status', 'last_tested_at'])
             return (
-                {'status': 'failure', 'message': str(e)},
+                {
+                    'status': 'failure',
+                    'message': str(e),
+                    'last_tested_at': source.last_tested_at,
+                },
                 400,
             )
 

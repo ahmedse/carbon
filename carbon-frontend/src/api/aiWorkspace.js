@@ -445,8 +445,10 @@ async function streamJsonPost(token, path, body, { onChunk, onProgress, onDone, 
   if (accessToken && isJwtExpired(accessToken)) {
     try {
       accessToken = await refreshAccessToken();
-    } catch {
-      onError?.('Session expired');
+    } catch (e) {
+      // Genuine expiry already redirects via refreshAccessToken; don't label a
+      // transient refresh failure (429/5xx) as "Session expired".
+      onError?.(e?.isSessionExpired ? 'Session expired' : 'Session refresh unavailable');
       return;
     }
   }
@@ -1041,6 +1043,18 @@ export function declinePlanStep(token, planId, stepId) {
  */
 export function stopPlan(token, planId) {
   return apiFetch(`${PLANS_BASE}${planId}/stop/`, { token, method: 'POST' });
+}
+
+const RUNS_BASE = 'ai/runs/';
+
+/**
+ * Crash-safe resume for a failed or interrupted run.
+ * Re-queues failed/running steps to pending, then marks the run paused so
+ * resumePlanStream can re-enter from the first incomplete step.
+ * Use this for failed plans; resumePlanStream handles paused/approved plans.
+ */
+export function durableResumeRun(token, planId) {
+  return apiFetch(`${RUNS_BASE}${planId}/resume/`, { token, method: 'POST' });
 }
 
 /**

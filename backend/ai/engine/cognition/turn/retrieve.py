@@ -13,9 +13,12 @@ from the semantic search results.
 import asyncio
 import logging
 import time
+from datetime import datetime, timezone
 
 from ai.engine.core.config import get_settings
 from ai.engine.cognition.turn.witnesses import RetrievalResult
+from ai.engine.knowledge.classes import KnowledgeItemProjection
+from ai.engine.knowledge.retrieval import applicability_first
 
 logger = logging.getLogger("pulse.cognition.turn.retrieve")
 
@@ -25,6 +28,56 @@ logger = logging.getLogger("pulse.cognition.turn.retrieve")
 # chunk as retrieval evidence, which would false-flag ``ungrounded_claim`` on
 # perfectly valid general-knowledge answers.
 _NO_KNOWLEDGE_PLACEHOLDER = "No knowledge loaded yet."
+
+
+def _serialize_dt(dt):
+    """ISO-format a datetime for a chunk dict (``None`` stays ``None``)."""
+    return dt.isoformat() if dt is not None else None
+
+
+def _curated_knowledge_chunks(knowledge_items, scope, process_state) -> list[dict]:
+    """Apply applicability-first selection and render chunk dicts.
+
+    Each chunk carries the resolved content plus freshness metadata
+    (``knowledge_class``, ``version``, effective window, ``ingested_at``,
+    ``is_mandatory``, ``source``) so downstream stages can attach freshness.
+    Returns ``[]`` when ``knowledge_items`` is empty/None or the selection
+    raises — the curated layer degrades to the graph semantic path rather than
+    breaking the turn.
+    """
+    if not knowledge_items:
+        return []
+    try:
+        settings = get_settings()
+        top_k = getattr(settings, "RETRIEVAL_TOP_K", 10)
+        selected = applicability_first(
+            knowledge_items,
+            scope=scope,
+            objects=None,
+            process_state=process_state,
+            now=datetime.now(timezone.utc),
+            top_k=top_k,
+        )
+    except Exception:  # noqa: BLE001 — curated layer is best-effort, never fatal
+        logger.warning("Applicability-first retrieval failed; using graph path", exc_info=True)
+        return []
+
+    chunks: list[dict] = []
+    for item in selected:
+        chunks.append(
+            {
+                "type": "text",
+                "content": item.content,
+                "knowledge_class": item.knowledge_class,
+                "version": item.version,
+                "effective_start": _serialize_dt(item.effective_start),
+                "effective_end": _serialize_dt(item.effective_end),
+                "ingested_at": _serialize_dt(item.ingested_at),
+                "is_mandatory": item.is_mandatory,
+                "source": item.source,
+            }
+        )
+    return chunks
 
 
 class RetrievalWitness:
@@ -40,15 +93,26 @@ class RetrievalWitness:
         conversation_id: str,
         user_message: str,
         user_info: dict | None = None,
+        *,
+        knowledge_items: list[KnowledgeItemProjection] | None = None,
+        scope: dict | None = None,
+        process_state: dict | None = None,
     ) -> RetrievalResult:
         t0 = time.monotonic()
         relevant_knowledge = _NO_KNOWLEDGE_PLACEHOLDER
         relevant_memories = "No memories available."
         citation_ids: list[str] = []
         tool_suggestions: list[str] = []
+        curated_chunks: list[dict] = []
 
         async def _fetch_knowledge():
-            nonlocal relevant_knowledge, citation_ids, tool_suggestions
+            nonlocal relevant_knowledge, citation_ids, tool_suggestions, curated_chunks
+            # P4-02: applicability-first curated knowledge — the authoritative
+            # layer. Computed first so a curated item always surfaces even when
+            # the graph semantic path is missing or fails.
+            curated_chunks = _curated_knowledge_chunks(
+                knowledge_items, scope, process_state
+            )
             if not self.knowledge_store:
                 return
             from ai.engine.knowledge_graph.store import KnowledgeGraphStore
@@ -92,11 +156,12 @@ class RetrievalWitness:
         # runner already re-supplies the placeholder for the draft prompt, so
         # nothing downstream loses context; the critic now correctly sees
         # "no retrieval evidence" and skips the grounding flag.
-        knowledge_chunks = (
-            [{"type": "text", "content": relevant_knowledge}]
-            if relevant_knowledge and relevant_knowledge != _NO_KNOWLEDGE_PLACEHOLDER
-            else []
-        )
+        # P4-02: curated (applicability-first) chunks take precedence as the
+        # authoritative layer; the graph semantic result is appended afterwards
+        # and still feeds citation_ids.
+        knowledge_chunks = list(curated_chunks)
+        if relevant_knowledge and relevant_knowledge != _NO_KNOWLEDGE_PLACEHOLDER:
+            knowledge_chunks.append({"type": "text", "content": relevant_knowledge})
         return RetrievalResult(
             knowledge_chunks=knowledge_chunks,
             memory_chunks=[{"type": "text", "content": relevant_memories}],

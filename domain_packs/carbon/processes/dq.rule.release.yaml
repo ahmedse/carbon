@@ -1,0 +1,93 @@
+# Pilot process definition (P0-10 / docs/pulse/PILOT.md).
+id: dq.rule.release
+version: "1.0"
+owner: ai
+status: active
+
+objects:
+  - type: dq.rule
+    selector: rule_id
+
+inputs:
+  rule_id:
+    type: string
+  revision:
+    type: string
+
+scope:
+  source: authenticated_host_context
+
+objective:
+  predicate: dq.rule.active_revision_matches_approved_revision
+
+steps:
+  - id: validate
+    kind: command
+    capability: dq.rule.validate
+    depends_on: []
+    autonomy: act_notify
+    binds_to: dq.rule
+    consent: false
+    idempotency_scope: rule_id
+    unknown_outcome: escalate
+
+  - id: review
+    kind: human_task
+    capability: dq.rule.review
+    depends_on:
+      - validate
+    autonomy: human_only
+    separation_of_duties:
+      - process_owner
+      - publisher
+    binds_to: inbox
+    consent: false
+    approval_ref: dq.rule.review
+
+  - id: publish
+    kind: command
+    capability: dq.rule.publish
+    depends_on:
+      - review
+    autonomy: act_confirm
+    binds_to: dq.rule
+    consent: true
+    idempotency_scope: rule_id+revision
+    unknown_outcome: escalate
+
+  - id: verify
+    kind: assertion
+    capability: dq.rule.active_revision_matches_approved_revision
+    depends_on:
+      - publish
+    autonomy: observe
+    binds_to: dq.rule
+    consent: false
+
+constraints:
+  precedence:
+    - from: validate
+      to: review
+    - from: review
+      to: publish
+    - from: publish
+      to: verify
+
+evidence:
+  - type: DQResult
+    from_step: validate
+  - type: ApprovalGrant
+    from_step: review
+
+policies:
+  refuse_if:
+    - active_revision differs from approved_revision
+  ask_if:
+    - rule has active consumers
+
+exceptions: []
+
+kill_switch: false
+
+tests:
+  - name: pilot-happy-path

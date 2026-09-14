@@ -106,7 +106,7 @@ class IntentResolution:
 
 
 def _endpoint_to_domain_phrase(name: str) -> str:
-    """Turn ``list_emission_factors`` into the human phrase ``emission factors``."""
+    """Turn ``list_<endpoint>`` into the human phrase ``<endpoint>`` (no list_/get_ prefix)."""
     return re.sub(r"^(list|get|search|query|fetch)_", "", name).replace("_", " ")
 
 
@@ -144,9 +144,9 @@ def _build_system_prompt(labels: list[dict]) -> str:
     lines += [
         "",
         "Rules:",
-        "- Match the user's INTENT, not just keywords. \"Emission factors?\" and "
-        "  \"what emission factors do we have in the system?\" both match "
-        "  `list_emission_factors`.",
+        "- Match the user's INTENT, not just keywords. \"Reference data?\" and "
+        "  \"what reference data do we have in the system?\" both match "
+        "  the corresponding read endpoint (e.g. a `list_…` endpoint).",
         "- Any question about data the system holds — especially with deictic "
         "  cues (\"here\", \"we\", \"our\", \"my\", \"do we track/have\", \"in "
         "  the system\") — MUST name the matching endpoint in `endpoint`.",
@@ -157,8 +157,8 @@ def _build_system_prompt(labels: list[dict]) -> str:
         "  \"yes\", \"ok\" continue the PREVIOUS topic — return the SAME "
         "  endpoint at high confidence (action = \"answer\"), never clarify.",
         "- When the user names a specific branch / campus / module (e.g. "
-        "  \"South Valley\", \"Smart Village\", \"Abu Qir\", \"Alamein\") and "
-        "  asks about its emissions / footprint / carbon, that is the "
+        "  \"East Campus\", \"Building 4\", \"Module B\") and "
+        "  asks about its activity / totals / metrics, that is the "
         "  calculation-summary endpoint (it breaks down totals by module): "
         "  action = \"answer\" with `endpoint` set to it and delivery = "
         "  \"analyze\" or \"summarize\" — do NOT clarify just because a branch "
@@ -185,16 +185,17 @@ def _build_system_prompt(labels: list[dict]) -> str:
         "- Set `delivery` to what the user wants DONE with the data: `list` "
         "  (enumerate every record — \"show me ALL\", \"list them\"), `lookup` "
         "  (one specific value), `explain` (understand what this is / how it "
-        "  works / why it matters — \"show me the emission factors\", \"tell "
+        "  works / why it matters — \"show me the reference data\", \"tell "
         "  me about X\"), `analyze` (insights — highest/lowest, outliers, what "
         "  drives X), `compare` (side-by-side), or `summarize` (roll-up). A "
         "  bare \"show me <topic>\" with no \"all\" and no specific value "
         "  means `explain`, NOT `list`.",
         "- Classify the `zone` of the request:",
-        "  * \"platform\": the user wants data FROM the system (emission factors, DQ rules, "
+        "  * \"platform\": the user wants data FROM the system (reference data, data-quality rules, "
         "    calculations, catalog entries, modules, org units). Endpoint will be non-null.",
-        "  * \"concept\": the user wants to UNDERSTAND a domain concept (GHG Protocol, carbon "
-        "    accounting, what Scope 1/2/3 means). No live data needed. Endpoint = null.",
+        "  * \"concept\": the user wants to UNDERSTAND a domain concept (an industry reporting "
+        "    protocol, an accounting framework, or what a reporting scope means). No live data "
+        "    needed. Endpoint = null.",
         "  * \"real_time\": the user wants information that requires LIVE INTERNET DATA — "
         "    current weather, live news, today's stock prices, latest publications. "
         "    Endpoint = null. The assistant will use a web search tool.",

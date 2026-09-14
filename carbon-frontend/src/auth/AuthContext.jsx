@@ -1,7 +1,8 @@
-import React, { createContext, useState, useContext, useEffect, useRef } from "react";
+import React, { createContext, useState, useContext, useEffect, useMemo, useRef } from "react";
 import { API_BASE_URL, API_ROUTES } from "../config";
 import { fetchModules } from "../api/modules";
 import { apiFetch, refreshAccessToken } from "../api/api"; // <-- Add this import
+import { DATASCHEMA_VIEW } from "../capabilities";
 
 // --- Helpers for token management ---
 // refreshAccessToken is imported from api.js (single source of truth)
@@ -39,6 +40,24 @@ export const AuthProvider = ({ children }) => {
 
   // Debug helper (disabled by default, enable for debugging)
   const debug = (..._args) => { /* if (import.meta.env.DEV) console.log("[Auth]", ..._args); */ };
+
+  // F23: The dataschema/tables/ read endpoint is gated by
+  // DataTableViewSet.required_role = {admin, admins_group, dataowners_group,
+  // auditors_group, viewers_group, analysts_group}. People-only roles
+  // (people_analysts_group etc.) ARE visibility roles but are NOT in that
+  // required_role set, so `get_visible_module_ids` returns "unrestricted"
+  // (all modules, incl. carbon id 1) for them even though they cannot actually
+  // read those tables — causing 403 spam from refetchTables(). Gate table
+  // prefetch on the dataschema:view capability so we only fetch tables for
+  // users who can actually view schema data.
+  const canViewTables = useMemo(() => {
+    if (isGlobalAdminFlag === true) return true;
+    if (!Array.isArray(userCapabilities)) return true; // capabilities not loaded yet — fail open
+    return userCapabilities.some((c) => {
+      const key = typeof c === 'string' ? c : c?.key;
+      return key === DATASCHEMA_VIEW || key === '*';
+    });
+  }, [isGlobalAdminFlag, userCapabilities]);
 
   // --- Fetch perspective context from backend ---
   const fetchPerspectiveContext = async (token) => {
@@ -137,7 +156,11 @@ export const AuthProvider = ({ children }) => {
           await refreshAccessToken();
         } catch (err) {
           debug("Token refresh failed:", err);
-          logout("refreshError");
+          // Only log out when the refresh token itself is dead; transient
+          // failures (429/5xx/network) are retried on the next interval.
+          if (err?.isSessionExpired) {
+            logout("refreshError");
+          }
         }
       }, refreshIntervalMs);
     };
@@ -184,13 +207,13 @@ export const AuthProvider = ({ children }) => {
     // eslint-disable-next-line
   }, [user, context]);
 
-  // --- Refetch tables when context changes ---
+  // --- Refetch tables when context changes (or when the table-view gate flips) ---
   useEffect(() => {
     if (user && context?.modules) {
       refetchTables();
     }
     // eslint-disable-next-line
-  }, [user, context?.modules]);
+  }, [user, context?.modules, canViewTables]);
 
   // --- Login: fetch tokens, user roles, and build project list ---
   const login = async ({ username, password }) => {
@@ -335,6 +358,10 @@ export const AuthProvider = ({ children }) => {
   // --- Fetch tables by module (fixed to use apiFetch with auto token refresh) ---
   const refetchTables = async () => {
     if (!user || !context?.projectId || !context?.modules) return;
+    if (!canViewTables) {
+      setTablesByModule({});
+      return;
+    }
     try {
       const grouped = {};
       // Limit concurrency to avoid browser connection pool exhaustion

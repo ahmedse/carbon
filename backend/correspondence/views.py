@@ -90,7 +90,7 @@ class CorrespondenceViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_serializer_class(self):
         if self.action in ('retrieve', 'approve', 'reject', 'send_back',
-                           'cancel', 'resubmit', 'acknowledge'):
+                           'cancel', 'resubmit', 'acknowledge', 'archive'):
             return CorrespondenceDetailSerializer
         return CorrespondenceSerializer
 
@@ -103,8 +103,8 @@ class CorrespondenceViewSet(viewsets.ReadOnlyModelViewSet):
         if self.action in ('approve', 'reject', 'send_back', 'acknowledge',
                            'review'):
             return base + [CanActOnCorrespondence()]
-        if self.action in ('cancel', 'resubmit'):
-            # cancel/resubmit are requester-only (fsm enforces + maps
+        if self.action in ('cancel', 'resubmit', 'archive'):
+            # cancel/resubmit/archive are requester-only (fsm enforces + maps
             # NotActorError -> 403); requester-or-admin gate is CanViewCorrespondence.
             return base + [CanViewCorrespondence()]
         return base
@@ -190,14 +190,18 @@ class CorrespondenceViewSet(viewsets.ReadOnlyModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        org_unit = None
-        if org_unit_id:
-            org_unit = OrgUnit.objects.filter(pk=org_unit_id).first()
-            if org_unit is None:
-                return Response(
-                    {'detail': f'Unknown org_unit {org_unit_id!r}'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        if not org_unit_id:
+            return Response(
+                {'detail': 'org_unit is required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        org_unit = OrgUnit.objects.filter(pk=org_unit_id).first()
+        if org_unit is None:
+            return Response(
+                {'detail': f'Unknown org_unit {org_unit_id!r}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         try:
             with transaction.atomic():
@@ -314,6 +318,13 @@ class CorrespondenceViewSet(viewsets.ReadOnlyModelViewSet):
         corr = self.get_object()
         return self._transition(
             corr, request.user, lambda: fsm.resubmit(corr, request.user),
+        )
+
+    @action(detail=True, methods=['post'], url_path='archive')
+    def archive(self, request, pk=None):
+        corr = self.get_object()
+        return self._transition(
+            corr, request.user, lambda: fsm.archive(corr, request.user),
         )
 
 

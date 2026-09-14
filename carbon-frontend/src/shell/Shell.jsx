@@ -1,8 +1,7 @@
 // File: src/shell/Shell.jsx
 // Root IDE shell layout with activity bar, resizable sidebar, editor area, and copilot pane
 
-import React, { Suspense, useEffect, useMemo, useState } from 'react';
-import { lazyWithRetry } from '../utils/lazyWithRetry';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Box, Drawer, IconButton, Tooltip, Typography } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
@@ -17,6 +16,7 @@ import { ActivityBar } from './ActivityBar';
 import { ShellSidebar } from './ShellSidebar';
 import { EditorArea } from './EditorArea';
 import { StatusBar } from './StatusBar';
+import CommandPalette from './CommandPalette';
 import HeaderEnhanced from '../components/HeaderEnhanced';
 import DevelopmentBanner from './DevelopmentBanner';
 import ErrorBoundary from './ErrorBoundary';
@@ -24,12 +24,7 @@ import { AIWorkspace } from './AIWorkspace';
 import { AITaskTransferProvider } from './AITaskTransferContext';
 import { NotesProvider, useNotes } from '../notes/NotesContext';
 import { NotesDrawer } from '../notes/NotesDrawer';
-import { LoadingSpinner, DialogLoadingSkeleton } from './LoadingFallback';
-
-// Lazy load heavy components for code splitting.
-// lazyWithRetry: a transient dev-server/network failure would otherwise be
-// cached by React.lazy forever, leaving the palette broken until a reload.
-const CommandPalette = lazyWithRetry(() => import('./CommandPalette'));
+import { LoadingSpinner } from './LoadingFallback';
 
 // Default path per studio
 const STUDIO_PATHS = {
@@ -455,14 +450,12 @@ function NotesShortcutHandler({ toggleOpen }) {
         onToggleCopilot={toggleCopilot}
       />
 
-      {/* Command Palette — isolated ErrorBoundary so a lazy-load failure doesn't crash the shell */}
+      {/* Command Palette — isolated ErrorBoundary so a render failure doesn't crash the shell */}
       <ErrorBoundary>
-        <Suspense fallback={<DialogLoadingSkeleton />}>
-          <CommandPalette
-            open={commandPaletteOpen}
-            onClose={() => setCommandPaletteOpen(false)}
-          />
-        </Suspense>
+        <CommandPalette
+          open={commandPaletteOpen}
+          onClose={() => setCommandPaletteOpen(false)}
+        />
       </ErrorBoundary>
     </Box>
   );

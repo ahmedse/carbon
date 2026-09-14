@@ -22,6 +22,8 @@ from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_UP
 
+from django.db import transaction
+
 from dq.typed_gate import check_instances
 
 from .models import ComplianceRule, PayrollRunValidation
@@ -258,12 +260,16 @@ def _gosi_bounds_finding(lines):
     )
 
 
+@transaction.atomic
 def persist_findings(run, findings):
     """Persist run-scoped summaries — one ``PayrollRunValidation`` per finding.
 
-    ADR 0025: never a per-row result store (no ``DQResult`` rows). Only this
-    function writes, and only when explicitly called.
+    Idempotent per run (F19): any rows previously persisted for ``run`` are
+    deleted before the new set is written, so repeated validate→commit cycles
+    never duplicate rule rows. ADR 0025: never a per-row result store (no
+    ``DQResult`` rows). Only this function writes, and only when called.
     """
+    PayrollRunValidation.objects.filter(payroll_run=run).delete()
     created = []
     for finding in (findings or []):
         created.append(PayrollRunValidation.objects.create(

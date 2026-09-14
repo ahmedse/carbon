@@ -39,14 +39,27 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import MarkdownMessage from './MarkdownMessage';
 import { formatDisplayDateTime } from '../utils/dateUtils';
+import { Bar, Doughnut, Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  ArcElement,
+  Tooltip as ChartTooltip,
+  Legend,
+  Filler,
+} from 'chart.js';
 
-// ── Chart geometry (fixed viewBox — deterministic, resolution-independent) ──
-const CHART_W = 320;
-const CHART_H = 180;
-const PAD_L = 8;
-const PAD_R = 8;
-const PAD_T = 12;
-const PAD_B = 30;
+ChartJS.register(
+  CategoryScale, LinearScale, PointElement, LineElement,
+  BarElement, ArcElement, ChartTooltip, Legend, Filler,
+);
+
+// Fixed render height so a chart never dominates or overlaps the thread.
+const CHART_HEIGHT = 240;
 
 // ── Small helpers ────────────────────────────────────────────────────────────
 
@@ -204,168 +217,36 @@ EnvelopeTable.propTypes = {
   t: PropTypes.func.isRequired,
 };
 
-// ── Charts — deterministic pure-SVG (no chart library) ──────────────────────
+// ── Charts ── Card shell + Chart.js with rich options ────────────────────────
 
-function BarChartSvg({ pairs, theme }) {
-  const max = Math.max(...pairs.map((p) => p.value), 0) || 1;
-  const innerW = CHART_W - PAD_L - PAD_R;
-  const innerH = CHART_H - PAD_T - PAD_B;
-  const n = pairs.length || 1;
-  const step = innerW / n;
-  const barW = Math.min(36, step * 0.6);
+const PALETTE = (theme) => [
+  theme.palette.primary.main,
+  theme.palette.info.main,
+  theme.palette.warning.main,
+  theme.palette.success.main,
+  theme.palette.error.main,
+  theme.palette.secondary.main,
+];
 
-  return (
-    <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} width="100%" height="auto" role="img">
-      <line
-        x1={PAD_L}
-        y1={CHART_H - PAD_B}
-        x2={CHART_W - PAD_R}
-        y2={CHART_H - PAD_B}
-        stroke={theme.palette.divider}
-        strokeWidth={1}
-      />
-      {pairs.map((p, i) => {
-        const h = (p.value / max) * innerH;
-        const x = PAD_L + i * step + (step - barW) / 2;
-        const y = CHART_H - PAD_B - h;
-        return (
-          <g key={i}>
-            <rect x={x} y={y} width={barW} height={h} rx={2} fill={theme.palette.primary.main} />
-            <text
-              x={PAD_L + i * step + step / 2}
-              y={CHART_H - PAD_B + 12}
-              textAnchor="middle"
-              fontSize={10}
-              fill={theme.palette.text.secondary}
-            >
-              {truncateLabel(p.label)}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
-function LineChartSvg({ pairs, theme }) {
-  const max = Math.max(...pairs.map((p) => p.value), 0) || 1;
-  const innerW = CHART_W - PAD_L - PAD_R;
-  const innerH = CHART_H - PAD_T - PAD_B;
-  const n = pairs.length;
-  const xFor = (i) => (n <= 1 ? PAD_L + innerW / 2 : PAD_L + (i / (n - 1)) * innerW);
-  const yFor = (v) => CHART_H - PAD_B - (v / max) * innerH;
-  const points = pairs.map((p, i) => `${xFor(i)},${yFor(p.value)}`).join(' ');
-
-  return (
-    <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} width="100%" height="auto" role="img">
-      <line
-        x1={PAD_L}
-        y1={CHART_H - PAD_B}
-        x2={CHART_W - PAD_R}
-        y2={CHART_H - PAD_B}
-        stroke={theme.palette.divider}
-        strokeWidth={1}
-      />
-      {n > 1 && (
-        <polyline points={points} fill="none" stroke={theme.palette.primary.main} strokeWidth={2} />
-      )}
-      {pairs.map((p, i) => (
-        <g key={i}>
-          <circle cx={xFor(i)} cy={yFor(p.value)} r={3} fill={theme.palette.primary.main} />
-          <text
-            x={xFor(i)}
-            y={CHART_H - PAD_B + 12}
-            textAnchor="middle"
-            fontSize={10}
-            fill={theme.palette.text.secondary}
-          >
-            {truncateLabel(p.label)}
-          </text>
-        </g>
-      ))}
-    </svg>
-  );
-}
-
-function polar(cx, cy, r, angle) {
-  return [cx + r * Math.cos(angle), cy + r * Math.sin(angle)];
-}
-
-function donutPath(cx, cy, rOuter, rInner, startAngle, endAngle) {
-  const [x1o, y1o] = polar(cx, cy, rOuter, startAngle);
-  const [x2o, y2o] = polar(cx, cy, rOuter, endAngle);
-  const [x2i, y2i] = polar(cx, cy, rInner, endAngle);
-  const [x1i, y1i] = polar(cx, cy, rInner, startAngle);
-  const largeArc = endAngle - startAngle > Math.PI ? 1 : 0;
-  return [
-    `M ${x1o} ${y1o}`,
-    `A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${x2o} ${y2o}`,
-    `L ${x2i} ${y2i}`,
-    `A ${rInner} ${rInner} 0 ${largeArc} 0 ${x1i} ${y1i}`,
-    'Z',
-  ].join(' ');
-}
-
-const PIE_COLORS = ['primary', 'info', 'warning', 'success', 'error', 'secondary'];
-
-function PieChartSvg({ pairs, theme }) {
-  const size = 180;
-  const cx = size / 2;
-  const cy = size / 2;
-  const rOuter = 68;
-  const rInner = 40;
-  const total = pairs.reduce((a, p) => a + p.value, 0) || 1;
-
-  let angle = -Math.PI / 2; // start at 12 o'clock
-
-  return (
-    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1.5 }}>
-      <svg viewBox={`0 0 ${size} ${size}`} width={140} height={140} role="img">
-        {pairs.map((p, i) => {
-          const frac = p.value / total;
-          const start = angle;
-          const end = angle + frac * Math.PI * 2;
-          angle = end;
-          return (
-            <path
-              key={i}
-              d={donutPath(cx, cy, rOuter, rInner, start, end)}
-              fill={theme.palette[PIE_COLORS[i % PIE_COLORS.length]].main}
-            />
-          );
-        })}
-        <text
-          x={cx}
-          y={cy}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fontSize={10}
-          fill={theme.palette.text.secondary}
-        >
-          {truncateLabel(`${total}`, 8)}
-        </text>
-      </svg>
-      <Box component="ul" sx={{ pl: 2, my: 0, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-        {pairs.map((p, i) => (
-          <Box component="li" key={i} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            <Box
-              sx={{
-                width: 8,
-                height: 8,
-                borderRadius: 0.5,
-                bgcolor: `${PIE_COLORS[i % PIE_COLORS.length]}.main`,
-                flexShrink: 0,
-              }}
-            />
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              {truncateLabel(p.label, 24)} · {p.value}
-            </Typography>
-          </Box>
-        ))}
-      </Box>
-    </Box>
-  );
-}
+// Inline Chart.js plugin — draws center text inside a Doughnut.
+const centerTextPlugin = {
+  id: 'centerText',
+  afterDraw(chart) {
+    const { ctx, data, chartArea } = chart;
+    if (!chartArea) return;
+    const total = (data.datasets[0]?.data || []).reduce((a, b) => a + Number(b), 0);
+    if (!total) return;
+    const cx = (chartArea.left + chartArea.right) / 2;
+    const cy = (chartArea.top + chartArea.bottom) / 2;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `600 13px ${chart.options.plugins?.legend?.labels?.font?.family || 'inherit'}`;
+    ctx.fillStyle = chart.options.plugins?.legend?.labels?.color || '#555';
+    ctx.fillText(Number(total).toLocaleString(), cx, cy);
+    ctx.restore();
+  },
+};
 
 function EnvelopeChart({ chart, t }) {
   const theme = useTheme();
@@ -373,25 +254,204 @@ function EnvelopeChart({ chart, t }) {
 
   const { chart_type: type = 'bar', title } = chart;
   const pairs = flattenSeries(chart.series);
+  if (pairs.length === 0) {
+    return (
+      <Box data-testid="envelope-chart">
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>{t('envelope.noData')}</Typography>
+      </Box>
+    );
+  }
+
+  const labels = pairs.map((p) => truncateLabel(p.label, 18));
+  const values = pairs.map((p) => p.value);
+  const palette = PALETTE(theme);
+
+  const sharedTooltip = {
+    backgroundColor: theme.palette.grey[900],
+    titleColor: '#fff',
+    bodyColor: alpha(theme.palette.common.white, 0.85),
+    titleFont: { size: 12, weight: '600' },
+    bodyFont: { size: 11 },
+    padding: 10,
+    cornerRadius: 8,
+    displayColors: true,
+    boxWidth: 10,
+    boxHeight: 10,
+  };
+
+  let ChartComp, data, options, plugins;
+
+  if (type === 'pie') {
+    ChartComp = Doughnut;
+    plugins = [centerTextPlugin];
+    data = {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: palette.map((c, i) => i < values.length ? c : undefined).filter(Boolean),
+        borderColor: theme.palette.background.paper,
+        borderWidth: 3,
+        hoverOffset: 6,
+      }],
+    };
+    options = {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { animateRotate: true, duration: 700 },
+      cutout: '62%',
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: {
+            usePointStyle: true,
+            pointStyle: 'circle',
+            padding: 14,
+            font: { size: 11, family: theme.typography.fontFamily },
+            color: theme.palette.text.secondary,
+            generateLabels: (ch) => {
+              const ds = ch.data.datasets[0];
+              const total = (ds.data || []).reduce((a, b) => a + Number(b), 0);
+              return ch.data.labels.map((lbl, i) => {
+                const pct = total ? ((Number(ds.data[i]) / total) * 100).toFixed(0) : 0;
+                return {
+                  text: `${lbl}  ${pct}%`,
+                  fillStyle: ds.backgroundColor[i],
+                  strokeStyle: ds.backgroundColor[i],
+                  hidden: false,
+                  index: i,
+                };
+              });
+            },
+          },
+        },
+        tooltip: {
+          ...sharedTooltip,
+          callbacks: {
+            label: (c) => {
+              const total = c.dataset.data.reduce((a, b) => a + Number(b), 0);
+              const pct = total ? ((c.parsed / total) * 100).toFixed(1) : 0;
+              return `  ${c.label}: ${Number(c.parsed).toLocaleString()}  (${pct}%)`;
+            },
+          },
+        },
+      },
+    };
+  } else if (type === 'line') {
+    ChartComp = Line;
+    plugins = [];
+    data = {
+      labels,
+      datasets: [{
+        label: (chart.series?.[0]?.name) || title || '',
+        data: values,
+        borderColor: theme.palette.primary.main,
+        backgroundColor: alpha(theme.palette.primary.main, 0.15),
+        fill: true,
+        tension: 0.4,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        pointBackgroundColor: theme.palette.primary.main,
+        borderWidth: 2.5,
+      }],
+    };
+    options = {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 600 },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          ...sharedTooltip,
+          callbacks: { label: (c) => `  ${c.dataset.label || ''}: ${Number(c.parsed.y).toLocaleString()}` },
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          grid: { color: alpha(theme.palette.divider, 0.7) },
+          ticks: { font: { size: 10 }, color: theme.palette.text.disabled, callback: (v) => Number(v).toLocaleString() },
+          border: { display: false },
+        },
+        x: {
+          grid: { display: false },
+          ticks: { font: { size: 10 }, color: theme.palette.text.disabled, maxRotation: 0 },
+          border: { display: false },
+        },
+      },
+    };
+  } else {
+    // bar (default)
+    ChartComp = Bar;
+    plugins = [];
+    data = {
+      labels,
+      datasets: [{
+        label: (chart.series?.[0]?.name) || title || '',
+        data: values,
+        backgroundColor: labels.map((_, i) => alpha(palette[i % palette.length], 0.85)),
+        hoverBackgroundColor: labels.map((_, i) => palette[i % palette.length]),
+        borderRadius: 6,
+        borderSkipped: false,
+        maxBarThickness: 52,
+      }],
+    };
+    options = {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 600 },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          ...sharedTooltip,
+          callbacks: {
+            label: (c) => {
+              const total = c.dataset.data.reduce((a, b) => a + Number(b), 0);
+              const pct = total ? ` (${((Number(c.parsed.y) / total) * 100).toFixed(1)}%)` : '';
+              return `  ${Number(c.parsed.y).toLocaleString()}${pct}`;
+            },
+          },
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          grid: { color: alpha(theme.palette.divider, 0.7), drawBorder: false },
+          ticks: { font: { size: 10 }, color: theme.palette.text.disabled, callback: (v) => Number(v).toLocaleString() },
+          border: { display: false },
+        },
+        x: {
+          grid: { display: false },
+          ticks: { font: { size: 10 }, color: theme.palette.text.disabled, maxRotation: 0 },
+          border: { display: false },
+        },
+      },
+    };
+  }
 
   return (
-    <Box data-testid="envelope-chart">
+    <Box
+      data-testid="envelope-chart"
+      sx={{
+        borderRadius: 2,
+        border: 1,
+        borderColor: 'divider',
+        bgcolor: 'background.paper',
+        p: 2,
+        boxShadow: '0 1px 4px 0 rgba(0,0,0,0.06)',
+      }}
+    >
       {title ? (
-        <Typography variant="subtitle2" sx={{ mb: 0.5, fontWeight: 600 }}>
+        <Typography
+          variant="subtitle2"
+          sx={{ mb: 1.5, fontWeight: 700, color: 'text.primary', letterSpacing: 0 }}
+        >
           {cellString(title)}
         </Typography>
       ) : null}
-      {pairs.length === 0 ? (
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          {t('envelope.noData')}
-        </Typography>
-      ) : (
-        <>
-          {type === 'pie' && <PieChartSvg pairs={pairs} theme={theme} />}
-          {type === 'line' && <LineChartSvg pairs={pairs} theme={theme} />}
-          {type !== 'pie' && type !== 'line' && <BarChartSvg pairs={pairs} theme={theme} />}
-        </>
-      )}
+      <Box sx={{ height: 260 }}>
+        <ChartComp data={data} options={options} plugins={plugins} />
+      </Box>
     </Box>
   );
 }

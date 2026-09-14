@@ -75,6 +75,27 @@ platform unsustainable. Every worker reads this before touching `backend/ai/`.
 `ai/intelligence.py` · `ai/providers/pulse.py` · `ai/engine_runtime.py` · `ai/serializers.py` ·
 `ai/workspace_api.py`. No other file crosses the seam.
 
+**The "one door" — every host effect routes through the command boundary (Gate 2, DONE).**
+The engine never mutates the host directly. Every effect path funnels through `CommandBoundary`
+(`ai/command_boundary.py`, 14 fail-closed stages: identity → scope → contract → validate →
+state_eligibility → pdp → consent → grant → budget → revision → execute → persist_events → verify →
+outcome) and `PDP` (`ai/pdp.py`, **default-deny** with explicit permit policies). The host executor
+(`ai/host_executor.py`, `CarbonHostExecutor`) exposes four seam methods the engine calls and
+fails closed on if absent:
+
+| Seam (`execute_*_via_boundary`) | Effect path routed (P0-06) | Task |
+|---------------------------------|----------------------------|------|
+| `execute_host_api_via_boundary` | `call_host_api` + ops_workflow REST (7 reads/writes) | P2-06b, P2-06f |
+| `execute_worker_tools_via_boundary` | worker fan-out | P2-06c |
+| `execute_step_via_boundary` | ReAct plan-step consent gate | P2-06d |
+| `execute_delivery_via_boundary` | proactive delivery (`deliver`) | P2-06e |
+
+Each seam wraps the effect in a `Command` and maps the `Outcome` → plain dict (the engine never
+imports boundary types). A no-token mutation is refused at stage 7 (consent) before the effect runs —
+this is RULE_21 enforced as a code path, not a convention. Enforced mechanically by `verify.sh
+intelligence` (import-linter + fail-open lint + forbidden-term grep + vulture + replay smoke) and
+`audit-imports.sh` / `audit-routes.sh`.
+
 ---
 
 ## 3. Architecture map (what actually exists — audited 2026-08-30)

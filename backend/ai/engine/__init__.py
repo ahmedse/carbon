@@ -1,4 +1,4 @@
-# Carbon Pulse Engine — vendored in-hand (INERT).
+# Pulse Engine — vendored in-hand (INERT).
 #
 # Phase 1 vendors the full Pulse engine source verbatim. The package is
 # intentionally NOT wired to Django, creates no migrations, and opens no DB

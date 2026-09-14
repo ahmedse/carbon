@@ -2,7 +2,7 @@
 # DRF serializers for Module models.
 
 from rest_framework import serializers
-from .models import Module, Feedback, Notification
+from .models import Module, Feedback, Notification, RequestAuditLog
 
 
 class FeedbackSerializer(serializers.ModelSerializer):
@@ -41,3 +41,20 @@ class NotificationSerializer(serializers.ModelSerializer):
         ref_name = 'CoreNotification'
         fields = ['id', 'user', 'verb', 'message', 'link', 'read_at', 'created_at']
         read_only_fields = ['id', 'user', 'read_at', 'created_at']
+
+
+class RequestAuditLogSerializer(serializers.ModelSerializer):
+    """Read-only serializer for the general request audit trail (RequestAuditLog)."""
+    user = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RequestAuditLog
+        fields = [
+            'id', 'user', 'ip_address', 'method', 'path', 'query_string',
+            'status_code', 'duration_ms', 'correlation_id', 'timestamp',
+        ]
+        read_only_fields = fields
+
+    def get_user(self, obj):
+        """Expose the acting user's username, or None for anonymous/system actions."""
+        return obj.user.username if obj.user else None

@@ -54,3 +54,12 @@ export function sendBackCorrespondence(token, id, { comment } = {}) {
     token,
   });
 }
+
+/** POST correspondence/{id}/archive/ — requester-or-admin, terminal statuses only. */
+export function archiveCorrespondence(token, id) {
+  return apiFetch(`${CORRESPONDENCE_ROOT}${id}/archive/`, {
+    method: 'POST',
+    body: {},
+    token,
+  });
+}

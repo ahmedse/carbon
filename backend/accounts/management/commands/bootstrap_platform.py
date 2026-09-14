@@ -28,7 +28,7 @@ from accounts.constants import (
     PROTECTED_GROUPS,
     DOMAIN_LEAD_GROUPS,
 )
-from accounts.models import GroupMetadata, PlatformAppConfig
+from accounts.models import GroupMetadata, PlatformAppConfig, ScopedRole
 
 # ── Group definitions ────────────────────────────────────────────────────────
 # name → (category, description, is_protected, is_scoped)
@@ -278,6 +278,22 @@ class Command(BaseCommand):
                 user.groups.add(admins_group)
                 assigned += 1
                 self.stdout.write(f"  + Superuser '{user.username}' → {ADMINS_GROUP}")
+
+            # CBAC source of truth: mirror the membership into a GLOBAL
+            # ScopedRole (org_unit=None, module=None). Without this, a
+            # superuser resolves to zero admin role in me/context + my-roles
+            # (the frontend reads ScopedRole, not user.groups). Idempotent.
+            _, role_created = ScopedRole.objects.get_or_create(
+                user=user,
+                group=admins_group,
+                org_unit=None,
+                module=None,
+                defaults={"is_active": True},
+            )
+            if role_created:
+                self.stdout.write(
+                    f"  + Superuser '{user.username}' → global ScopedRole {ADMINS_GROUP}"
+                )
 
         if assigned == 0:
             self.stdout.write("  Superusers: already in admins_group (skip)")

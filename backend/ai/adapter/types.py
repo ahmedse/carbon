@@ -62,6 +62,7 @@ class ToolDef:
     domain: str = ""
     input_schema: dict[str, Any] = field(default_factory=dict)
     output_description: str = ""
+    requires_grant: bool = False
 
 
 @dataclass

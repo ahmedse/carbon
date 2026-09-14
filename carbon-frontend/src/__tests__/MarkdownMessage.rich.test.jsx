@@ -15,6 +15,9 @@ import MarkdownMessage, {
   repairXychart,
   repairTopLevelBar,
   reflowMarkdownStructure,
+  repairTableBlocks,
+  sanitizeXychartAxisLabels,
+  reflowCollapsedDataOnlyRows,
 } from '../shell/MarkdownMessage';
 
 const renderRich = (content) =>
@@ -247,6 +250,91 @@ describe('MarkdownMessage rich renderer', () => {
       expect(repairTopLevelBar(xychart)).toBe(xychart);
       expect(repairTopLevelBar(pie)).toBe(pie);
       expect(repairTopLevelBar(flow)).toBe(flow);
+    });
+  });
+
+  describe('sanitizeXychartAxisLabels', () => {
+    it('quotes an unquoted title, strips parens, normalizes subscripts', () => {
+      const bad =
+        'xychart-beta\n    title Emissions by Scope (kg CO\u2082e)\n' +
+        '    x-axis [Scope 1, Scope 2, Scope 3]\n' +
+        '    y-axis "kg CO\u2082e" 0 --> 8500000\n' +
+        '    bar [2257628.88, 8032225.88, 6264.93]';
+      const out = sanitizeXychartAxisLabels(bad);
+      expect(out).toContain('title "Emissions by Scope kg CO2e"');
+      expect(out).toContain('x-axis ["Scope 1", "Scope 2", "Scope 3"]');
+      expect(out).toContain('y-axis "kg CO2e" 0 --> 8500000');
+      expect(out).not.toContain('(');
+      expect(out).not.toContain('\u2082');
+    });
+
+    it('replaces em-dashes in x-axis labels and truncates long ones', () => {
+      const bad =
+        'xychart-beta\n    x-axis [Abu Qir \u2014 Carbon Footprint, Smart Village]\n    bar [1, 2]';
+      const out = sanitizeXychartAxisLabels(bad);
+      expect(out).not.toContain('\u2014');
+      expect(out).toContain('"Abu Qir - Carbon F\u2026"');
+    });
+
+    it('leaves non-xychart code untouched', () => {
+      const pie = 'pie title Scope\n    "A" : 1';
+      expect(sanitizeXychartAxisLabels(pie)).toBe(pie);
+    });
+  });
+
+  describe('reflowCollapsedDataOnlyRows', () => {
+    it('splits data rows glued with || into separate lines', () => {
+      const line = '| Abu Qir | 47 || Smart Village | 84 || South Valley | 4 |';
+      const rows = reflowCollapsedDataOnlyRows(line);
+      expect(rows).toEqual([
+        '| Abu Qir | 47 |',
+        '| Smart Village | 84 |',
+        '| South Valley | 4 |',
+      ]);
+    });
+
+    it('returns null for a delimiter row', () => {
+      expect(reflowCollapsedDataOnlyRows('|---|---|')).toBeNull();
+    });
+
+    it('returns null for a single well-formed row', () => {
+      expect(reflowCollapsedDataOnlyRows('| Abu Qir | 47 |')).toBeNull();
+    });
+  });
+
+  describe('repairTableBlocks', () => {
+    it('splits an ATX heading glued to the table header and drops the header/delimiter blank', () => {
+      const input =
+        '###### Emissions by Module | **Module** | **Calculations** | **CO2e (kg)** |\n' +
+        '\n' +
+        '|-----------|-----------------|---------------|\n' +
+        '| Abu Qir | 47 | 5,566,303.70 |\n' +
+        '| Smart Village | 64 | 4,023,121.79 |';
+      const out = repairTableBlocks(input).split('\n');
+      // Heading is on its own line.
+      expect(out).toContain('###### Emissions by Module');
+      // Header row immediately precedes the delimiter (no blank between).
+      const headerIdx = out.findIndex((l) => l.includes('| **Module** |'));
+      expect(headerIdx).toBeGreaterThan(-1);
+      expect(out[headerIdx + 1]).toMatch(/^\|-+\|/);
+    });
+
+    it('leaves a well-formed table untouched', () => {
+      const good =
+        '| A | B |\n|---|---|\n| 1 | 2 |';
+      expect(repairTableBlocks(good)).toBe(good);
+    });
+
+    it('renders the repaired module table as a real table', () => {
+      renderRich(
+        '###### Emissions by Module | Module | Calcs | CO2e |\n' +
+        '\n' +
+        '|--------|-------|------|\n' +
+        '| Abu Qir | 47 | 5566 |\n' +
+        '| Smart Village | 64 | 4023 |',
+      );
+      expect(screen.getByRole('table')).toBeInTheDocument();
+      expect(screen.getByText('Abu Qir')).toBeInTheDocument();
     });
   });
 

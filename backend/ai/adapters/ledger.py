@@ -7,6 +7,7 @@ instead of raising, so a ledger flush can never fail the turn (I7 / L7).
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -46,7 +47,8 @@ class DjangoLedgerAdapter:
                 host_user_id=host_user_id,
                 stage=stage,
                 stage_index=stage_index,
-                payload_json=payload,
+                # Coerce non-JSON types (e.g. Decimal) before JSONField serialization.
+                payload_json=json.loads(json.dumps(payload, default=str)) if payload is not None else None,
                 latency_ms=latency_ms,
                 tokens_used=tokens_used,
                 model_used=model_used,

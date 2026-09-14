@@ -148,6 +148,22 @@ class ValidateRunTests(TestCase):
         self.assertIsInstance(net_finding["failed"], int)
         self.assertIsInstance(net_finding["sample_failures"], list)
 
+    def test_persist_findings_is_idempotent(self):
+        run = self._run()
+        PayslipLine.objects.create(
+            payroll_run=run, employee=self.employee, line_type="net",
+            amount=Decimal("-5.000"), rule_id="kw-netpay-test", rule_version="2026.1",
+        )
+
+        findings = validate_run(run)
+        persist_findings(run, findings)
+        persist_findings(run, findings)
+
+        self.assertEqual(
+            PayrollRunValidation.objects.filter(payroll_run=run).count(),
+            len(findings),
+        )
+
     def test_lineage_missing_returns_error(self):
         run = self._run()
         PayslipLine.objects.create(

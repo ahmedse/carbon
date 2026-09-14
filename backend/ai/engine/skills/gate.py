@@ -113,6 +113,14 @@ async def structural_critic(skill: Skill, db: Session | None = None) -> CriticVe
     if skill.kind not in SKILL_KINDS:
         flags.append(f"invalid_kind: {skill.kind}")
 
+    # Legacy executable-body kinds are rejected at admission (P3-10). Their
+    # bodies carried a raw host effect (sql_macro / api_call); that shape has
+    # been superseded by ``process_ref`` orchestration. Rejecting here keeps the
+    # dangerous bodies from ever being admitted, and ``invoke_skill`` also
+    # refuses them at execution time (defence in depth).
+    if skill.kind in ("sql_macro", "api_call"):
+        flags.append(f"legacy_executable_body_kind: {skill.kind}")
+
     # ── Signature: must be valid JSON object ──
     try:
         sig = json.loads(skill.signature) if skill.signature else {}

@@ -170,9 +170,3 @@ Component states: <list per interactive component>
 - A string not wrapped in `t()` and missing from the AR catalog
 - A table rendering hundreds/thousands of rows with no virtualization/pagination
 - A full-page re-render on every keystroke (no debounce/memo)
-
----
-
-*Source: ~/ai-toolkit/shared/frontend-ready.md — shared across all projects. This is the frontend
-completion gate: a view is not "ready" until this spec is complete; a view is not "done" until it
-satisfies this spec (validated by QA Layer 4).*

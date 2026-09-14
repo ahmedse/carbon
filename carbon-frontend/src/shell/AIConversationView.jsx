@@ -1211,17 +1211,6 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
           </Box>
         )}
 
-        {/* Session start divider (Copilot-style thread chrome) */}
-        {messages.length > 0 && (
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.5, pt: 0.5, pb: 0.25 }}>
-            <Box sx={{ flex: 1, height: 1, bgcolor: 'divider' }} />
-            <Typography variant="caption" color="text.disabled">
-              Session
-            </Typography>
-            <Box sx={{ flex: 1, height: 1, bgcolor: 'divider' }} />
-          </Stack>
-        )}
-
         {/* Older-message collapse toggle (only when the thread exceeds the cap) */}
         {olderMessages.length > 0 && (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 0.5 }}>

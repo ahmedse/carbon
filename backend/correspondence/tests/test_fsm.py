@@ -11,11 +11,13 @@ from django.utils import timezone
 from catalog.models import GovernanceEvent
 from correspondence.exceptions import (
     CommentRequired,
+    InvalidTransition,
     NotActorError,
     SubmissionBlocked,
 )
 from correspondence.fsm import (
     approve,
+    archive,
     cancel,
     reject,
     resubmit,
@@ -188,6 +190,48 @@ def test_cancel_by_requester_and_non_requester(leave_workflow, create_user):
     assert corr.status == 'cancelled'
     assert corr.resolved_at is not None
     assert corr.current_approver_ids == []
+
+
+# ── archive ─────────────────────────────────────────────────────────────────
+
+@pytest.mark.django_db
+def test_archive_by_requester_and_non_requester(leave_workflow, create_user):
+    wf = leave_workflow
+    outsider = create_user('fsm_archive_outsider')
+    corr = _draft(wf.corr_type, wf.org, wf.requester_user)
+    corr = submit_correspondence(corr=corr, by=wf.requester_user)
+    corr = approve(corr, wf.manager_user)
+    assert corr.status == 'approved'
+
+    with pytest.raises(NotActorError):
+        archive(corr, outsider)
+
+    # Cannot archive a non-terminal status.
+    pending = _draft(wf.corr_type, wf.org, wf.requester_user)
+    pending = submit_correspondence(corr=pending, by=wf.requester_user)
+    with pytest.raises(InvalidTransition):
+        archive(pending, wf.requester_user)
+
+    corr = archive(corr, wf.requester_user)
+    assert corr.status == 'archived'
+    assert corr.resolved_at is not None
+    assert corr.current_approver_ids == []
+
+    # Idempotence: archiving an already-archived corr is an InvalidTransition.
+    with pytest.raises(InvalidTransition):
+        archive(corr, wf.requester_user)
+
+
+@pytest.mark.django_db
+def test_archive_by_admin(leave_workflow, create_user):
+    wf = leave_workflow
+    admin = create_user('fsm_archive_admin', is_superuser=True)
+    corr = _draft(wf.corr_type, wf.org, wf.requester_user)
+    corr = submit_correspondence(corr=corr, by=wf.requester_user)
+    corr = approve(corr, wf.manager_user)
+
+    corr = archive(corr, admin)
+    assert corr.status == 'archived'
 
 
 # ── skip_if_self ────────────────────────────────────────────────────────────

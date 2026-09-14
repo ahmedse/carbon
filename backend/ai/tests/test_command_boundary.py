@@ -209,7 +209,7 @@ async def test_confirmation_with_token_yields_confirmed_status():
     assert outcome.confirmation_token == "tok-123"
 
 
-async def test_budget_exceeded_refused_at_stage_8():
+async def test_budget_exceeded_refused_at_stage_9():
     async def over_budget(command: Command) -> BudgetVerdict:
         return BudgetVerdict(allowed=False, reason="run token budget exceeded",
                              flags=["budget_exceeded"])
@@ -258,13 +258,86 @@ async def test_clean_allow_path_yields_executed():
     assert outcome.result == {"ok": True}
 
 
-async def test_stage_order_runs_exactly_1_to_13():
+async def test_stage_order_runs_exactly_1_to_14():
     boundary = make_boundary()
     outcome = await boundary.execute(make_command())
     assert outcome.status == "executed"
     assert outcome.stages == list(STAGES)
     # strict, positional ordering
-    assert len(outcome.stages) == len(STAGES) == 13
+    assert len(outcome.stages) == len(STAGES) == 14
+
+
+# ── Grant stage (P3-06 business approval) ────────────────────────────
+
+async def test_grant_refused_when_requires_grant_and_no_resolver():
+    # No grant resolver injected → the default resolver returns None (fail-closed).
+    boundary = make_boundary()
+    outcome = await boundary.execute(
+        make_command(requires_grant=True, capability="ai:publisher")
+    )
+    assert outcome.status == "refused"
+    assert outcome.stages[-1] == "grant"
+    assert "ApprovalGrant" in (outcome.error or "")
+
+
+async def test_grant_allowed_when_resolver_returns_match():
+    async def grant_ok(command: Command):
+        return {"id": "g1", "granted_by": "alice"}
+
+    boundary = make_boundary(grant_resolver=grant_ok)
+    outcome = await boundary.execute(
+        make_command(requires_grant=True, capability="ai:publisher")
+    )
+    assert outcome.status == "executed"
+    assert "grant" in outcome.stages
+
+
+async def test_grant_enforced_via_catalog_requires_grant_flag():
+    seen: list[str] = []
+
+    async def recording_resolver(command: Command):
+        seen.append(command.capability)
+        return None  # fail-closed: no matching grant
+
+    boundary = make_boundary(
+        tool_catalog={
+            "test_tool": {
+                "requires_grant": True,
+                "required_capability": "ai:publisher",
+            }
+        },
+        grant_resolver=recording_resolver,
+    )
+    # command does not set requires_grant/capability — resolved from the catalog.
+    outcome = await boundary.execute(make_command())
+    assert outcome.status == "refused"
+    assert outcome.stages[-1] == "grant"
+    assert seen == ["ai:publisher"]
+
+
+async def test_grant_resolver_exception_fails_closed():
+    async def boom(command: Command):
+        raise RuntimeError("grant backend down")
+
+    boundary = make_boundary(grant_resolver=boom)
+    outcome = await boundary.execute(make_command(requires_grant=True))
+    assert outcome.status == "refused"
+    assert "grant backend down" in (outcome.error or "")
+    assert outcome.stages[-1] == "grant"
+
+
+async def test_grant_stage_skipped_when_not_required():
+    calls: list[Command] = []
+
+    async def recording_resolver(command: Command):
+        calls.append(command)
+        return None
+
+    boundary = make_boundary(grant_resolver=recording_resolver)
+    outcome = await boundary.execute(make_command())  # requires_grant=False
+    assert outcome.status == "executed"
+    assert calls == []  # resolver never invoked
+    assert "grant" in outcome.stages  # stage recorded but a no-op
 
 
 async def test_persist_writes_ledger_and_event_bus():

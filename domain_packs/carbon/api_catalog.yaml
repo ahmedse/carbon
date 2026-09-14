@@ -1,0 +1,142 @@
+# Carbon tool/API catalog — starter skeleton.
+# The host tool registry will list its real tools here; P2-08 source-PR
+# workers populate the full set.
+default_source_type: carbon_api
+
+# kind: read | write | confirm
+tools:
+  - name: create_dq_rule
+    kind: write
+    requires_confirmation: true
+    source_type: carbon_api
+
+  - name: search_knowledge
+    kind: read
+    requires_confirmation: false
+    source_type: knowledge_graph
+
+  - name: get_entity_details
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: list_my_capabilities
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: plan_task
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+# Governed host-action capabilities (P3-01). Each entry is a capability
+# contract; ``host_action`` resolves against backend/ai/capability_registry.py.
+# Pilot: docs/pulse/PILOT.md ``dq.rule.release``
+#   validate (read_only) → review (human_task) → publish (mutation) → verify (assertion)
+capabilities:
+  - capability_id: dq.rule.validate
+    business_name: Validate DQ rule
+    purpose: Run the rule in read-only projection and return its result
+    kind: read_only
+    inputs:
+      rule_id:
+        type: string
+    preconditions:
+      rule_exists: true
+    permissions:
+      - dq.rule.validate
+    effects:
+      produces: DQResult
+    side_effects: []
+    approval_requirements: {}
+    requires_confirmation: false
+    idempotency: "true (read-only)"
+    verification:
+      predicate: dq.rule.result_returned
+    failure_semantics: abort
+    recovery: retry
+    owner: ai
+    version: "1.0"
+    host_action: dq.rule.validate
+
+  - capability_id: dq.rule.review
+    business_name: Review DQ rule
+    purpose: Create a durable human review task before release
+    kind: human_task
+    inputs:
+      rule_id:
+        type: string
+      revision:
+        type: string
+    preconditions:
+      validation_passed: true
+    permissions:
+      - dq.rule.review
+    effects:
+      creates: HumanTask
+    side_effects:
+      - inbox_task
+    approval_requirements:
+      human_reviewer: true
+    requires_confirmation: false
+    idempotency: dedupe by rule_id+revision
+    verification:
+      predicate: dq.rule.review_completed
+    failure_semantics: suspend
+    recovery: human_decision
+    owner: ai
+    version: "1.0"
+    host_action: human_task:inbox
+
+  - capability_id: dq.rule.publish
+    business_name: Publish DQ rule
+    purpose: Promote the reviewed revision to active with explicit consent
+    kind: mutation
+    inputs:
+      rule_id:
+        type: string
+      revision:
+        type: string
+    preconditions:
+      review_approved: true
+    permissions:
+      - dq.rule.publish
+    effects:
+      mutates: dq.rule
+      sets: active_revision
+    side_effects:
+      - version_bump
+    approval_requirements:
+      requires_grant: true
+    requires_confirmation: true
+    idempotency: dedupe by rule_id+revision
+    verification:
+      predicate: dq.rule.active_revision_matches_approved_revision
+    failure_semantics: abort
+    recovery: manual_rollback
+    owner: ai
+    version: "1.0"
+    host_action: dq.rule.publish
+
+  - capability_id: dq.rule.active_revision_matches_approved_revision
+    business_name: Verify active revision matches approved revision
+    purpose: Assert the published active revision equals the approved revision
+    kind: assertion
+    inputs:
+      rule:
+        type: dq.rule
+    preconditions: {}
+    permissions:
+      - dq.rule.active_revision_matches_approved_revision
+    effects: {}
+    side_effects: []
+    approval_requirements: {}
+    requires_confirmation: false
+    idempotency: "true (read-only)"
+    verification: {}
+    failure_semantics: fail
+    recovery: escalate
+    owner: ai
+    version: "1.0"
+    host_action: dq.rule.active_revision_matches_approved_revision

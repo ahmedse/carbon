@@ -1,0 +1,55 @@
+# Forbidden domain terms for the portability gate (P2-08 / P2-11).
+#
+# One literal term per line. Lines are word-boundary matched (case-sensitive):
+# a term matches only when it is NOT immediately preceded/followed by a word
+# character ([A-Za-z0-9_]). List both case variants explicitly (e.g. "carbon"
+# and "Carbon"). `#` starts a comment; blank lines are ignored.
+#
+# Purpose: the engine (`backend/ai/engine/**`) must be DOMAIN-AGNOSTIC. Any
+# Carbon/DQ/GHG vocabulary that still lives in the engine belongs in
+# `domain_packs/carbon/*` and is loaded via the DomainPack port. A hit here is
+# a P2-08 violation.
+#
+# SCOPE RULING (Master Architect): this list tracks DOMAIN VOCABULARY — the
+# natural-language nouns, brand/tenant names, and energy-domain example metrics
+# that make the engine "carbon-aware". It deliberately EXCLUDES opaque host
+# identifiers that the engine must pass through verbatim as seam tokens:
+#   - `create_dq_rule`, `list_emission_factors`  (host tool / endpoint names)
+#   - `carbon_api`  (host EvidenceRecord source_type vocabulary)
+#   - `TASK_DQ_*`  (generic data-quality task constants — DQ is platform-generic)
+#   - `PULSE_CARBON_CONTEXT_ENABLED` / `carbon_context_*`  (compound identifiers;
+#     the feature is renamed to "domain context" via the DomainPack seam instead)
+# Flagging those would force the neutral fallback to break host behavior.
+#
+# Refine this list as extraction proceeds. When a term legitimately remains
+# (e.g. a generic fallback value), allowlist the exact `relpath:lineno` in
+# `forbidden-terms-allowlist.txt` with a justification — prefer fixing the code.
+
+# ── Brand / product ──
+carbon
+Carbon
+CARBON
+
+# ── GHG / emissions domain ──
+GHG
+GHG Protocol
+footprint
+emission factors
+
+# ── Campus / instance names ──
+Alamein
+South Valley
+Smart Village
+Abu Qir
+Nibras
+nibras
+Gigacast
+gigacast
+
+# ── Power/energy domain example metrics ──
+unit_metrics
+heat_rate
+demand_forecasts
+demand_actuals
+value_mw
+Unit 2 Heat Rate

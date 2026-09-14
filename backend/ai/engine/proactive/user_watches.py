@@ -37,7 +37,7 @@ def set_user_watch_store_factory(factory: Callable[[Any], UserWatchStore]) -> No
     _watch_store_factory = factory
 
 
-async def run_user_watches(db, instance, watch_store: UserWatchStore | None = None) -> dict:
+async def run_user_watches(db, instance, watch_store: UserWatchStore | None = None, executor=None) -> dict:
     """Evaluate enabled user watches for ``instance`` and fire crossed ones."""
     instance_id = instance.id
     host_db_url = instance.host_db_url
@@ -104,6 +104,7 @@ async def run_user_watches(db, instance, watch_store: UserWatchStore | None = No
 
             from ai.engine.proactive.delivery import deliver_insight
 
+            _deliver_kwargs = {} if executor is None else {"executor": executor}
             await deliver_insight(
                 db,
                 instance_id,
@@ -121,6 +122,7 @@ async def run_user_watches(db, instance, watch_store: UserWatchStore | None = No
                         "threshold": watch["threshold"],
                     },
                 },
+                **_deliver_kwargs,
             )
 
             await watch_store.record_fire(watch["id"])

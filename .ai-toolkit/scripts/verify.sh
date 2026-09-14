@@ -9,6 +9,7 @@
 #   ./.ai-toolkit/scripts/verify.sh backend    # backend only
 #   ./.ai-toolkit/scripts/verify.sh frontend   # frontend only
 #   ./.ai-toolkit/scripts/verify.sh antipatterns
+#   ./.ai-toolkit/scripts/verify.sh intelligence  # P2-11: boundary lints + vulture + replay smoke
 
 set -uo pipefail
 
@@ -99,6 +100,40 @@ verify_antipatterns() {
   [ "$pc" -gt 0 ] && warn "$pc print() calls in backend app code (use logger)" || pass "no stray print()"
 }
 
+# ── INTELLIGENCE (P2-11): engine boundary + replay gates ──────────────────────
+#   import-linter contract  → HARD  (engine may not import the Django host layer)
+#   fail-open lint          → HARD  (no except-returns-True / no-op filters)
+#   forbidden-term grep     → HARD  (engine is domain-agnostic)
+#   vulture dead-code       → REPORT-ONLY (strict threshold lands in P7-10)
+#   replay smoke            → HARD  (deterministic offline L1 fixtures, no DB/LLM)
+verify_intelligence() {
+  echo "── Intelligence (engine boundary + replay) ──"
+  local PY="$ROOT/.venv/bin/python"
+  [ -x "$PY" ] || PY="python3"
+  local S="$SCRIPT_DIR"
+
+  if "$S/audit-imports.sh" >/tmp/vi1.log 2>&1; then pass "import-linter contract"; else fail "import-linter contract"; cat /tmp/vi1.log; fi
+  if "$PY" "$S/failopen-lint.py" >/tmp/vi2.log 2>&1; then pass "fail-open lint"; else fail "fail-open lint"; cat /tmp/vi2.log; fi
+  if "$PY" "$S/forbidden-term-lint.py" >/tmp/vi3.log 2>&1; then pass "forbidden-term grep"; else fail "forbidden-term grep"; cat /tmp/vi3.log; fi
+
+  # vulture: report-only (P0-08 report → strict P7-10). Warn + count, never fail.
+  local VULTURE_BIN="$ROOT/.venv/bin/vulture"
+  [ -x "$VULTURE_BIN" ] || VULTURE_BIN="$(command -v vulture || true)"
+  if [ -n "$VULTURE_BIN" ] && [ -x "$VULTURE_BIN" ]; then
+    local vn
+    vn=$("$VULTURE_BIN" "$ROOT/backend/ai/engine" --min-confidence 80 2>/dev/null | wc -l | tr -d ' ')
+    warn "vulture report-only: $vn finding(s) in engine (strict gate lands in P7-10)"
+  else
+    warn "vulture not installed — skipping report-only scan"
+  fi
+
+  if ( cd "$BACKEND_DIR" && "$PY" -m pytest ai/tests/test_replay_fixtures.py -q -m "not live" >/tmp/vi5.log 2>&1 ); then
+    pass "replay smoke ($(grep -oE '[0-9]+ passed' /tmp/vi5.log | head -1))"
+  else
+    fail "replay smoke"; tail -20 /tmp/vi5.log
+  fi
+}
+
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 TARGET="${1:-all}"
 echo "Verification gate: $TARGET"
@@ -108,9 +143,10 @@ case "$TARGET" in
   frontend)     verify_frontend ;;
   tests)        verify_tests ;;
   antipatterns) verify_antipatterns ;;
+  intelligence) verify_intelligence ;;
   all)          verify_backend; verify_frontend; verify_antipatterns ;;
-  full)         verify_backend; verify_tests; verify_frontend; verify_antipatterns ;;
-  *) echo "Unknown: $TARGET (use backend|frontend|tests|antipatterns|all|full)"; exit 1 ;;
+  full)         verify_backend; verify_tests; verify_frontend; verify_antipatterns; verify_intelligence ;;
+  *) echo "Unknown: $TARGET (use backend|frontend|tests|antipatterns|intelligence|all|full)"; exit 1 ;;
 esac
 echo "════════════════════════════════════════"
 if [ "$FAIL" -eq 0 ]; then echo "${GREEN}GATE PASSED${NC}"; else echo "${RED}GATE FAILED — fix before reporting done${NC}"; exit 1; fi

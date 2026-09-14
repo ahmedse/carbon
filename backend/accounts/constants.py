@@ -32,6 +32,24 @@ PEOPLE_LEAD_GROUP = "people_lead"
 
 DOMAIN_LEAD_GROUPS = {CARBON_LEAD_GROUP, CATALOG_LEAD_GROUP, MDM_LEAD_GROUP, DQ_LEAD_GROUP, DATAHUB_LEAD_GROUP, TURNKEY_LEAD_GROUP, PEOPLE_LEAD_GROUP}
 
+# ── AI governance roles (P3-05b) ───────────────────────────────────
+# Five durable governance roles for the Pulse AI control plane. Each maps to a
+# single capability key in accounts.capabilities.GROUP_CAPABILITIES; the auditor
+# additionally carries ai:view_console (read-only console access).
+AI_PROCESS_OWNER_GROUP = "ai_process_owner_group"
+AI_POLICY_OWNER_GROUP = "ai_policy_owner_group"
+AI_PUBLISHER_GROUP = "ai_publisher_group"
+AI_OPERATOR_GROUP = "ai_operator_group"
+AI_AUDITOR_GROUP = "ai_auditor_group"
+
+AI_GOVERNANCE_GROUPS = {
+    AI_PROCESS_OWNER_GROUP,
+    AI_POLICY_OWNER_GROUP,
+    AI_PUBLISHER_GROUP,
+    AI_OPERATOR_GROUP,
+    AI_AUDITOR_GROUP,
+}
+
 # ── Role classification sets ───────────────────────────────────────
 # Roles that confer full platform administration (global only).
 ADMIN_ROLES = {ADMIN_GROUP, ADMINS_GROUP}
@@ -71,6 +89,7 @@ PROTECTED_GROUPS = {
     PEOPLE_DATA_OWNERS_GROUP,
     PEOPLE_ANALYSTS_GROUP,
     FINANCE_GROUP,
+    *AI_GOVERNANCE_GROUPS,
 }
 
 # ── Convenience: all canonical group names as a flat set ───────────
@@ -86,6 +105,7 @@ ALL_CANONICAL_GROUPS = {
     PEOPLE_ANALYSTS_GROUP,
     FINANCE_GROUP,
     *DOMAIN_LEAD_GROUPS,
+    *AI_GOVERNANCE_GROUPS,
 }
 
 # ── Brand-scoped group installation (ADR-0015 multi-instance) ──────

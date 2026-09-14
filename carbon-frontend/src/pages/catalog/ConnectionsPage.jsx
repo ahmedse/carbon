@@ -105,6 +105,40 @@ export default function ConnectionsPage() {
     { value: 'custom', label: t('custom') },
   ];
 
+  const connectionConfigFieldSets = {
+    database: [
+      { key: 'host', label: t('host') },
+      { key: 'port', label: t('port') },
+      { key: 'database_name', label: t('databaseName') },
+      { key: 'username', label: t('username') },
+      { key: 'password', label: t('password'), type: 'password' },
+    ],
+    api: [
+      { key: 'base_url', label: t('baseUrl') },
+      { key: 'api_key', label: t('apiKey'), type: 'password' },
+    ],
+    mdm: [
+      { key: 'base_url', label: t('baseUrl') },
+      { key: 'api_key', label: t('apiKey'), type: 'password' },
+    ],
+    iot: [
+      { key: 'endpoint', label: t('endpoint') },
+      { key: 'api_key', label: t('apiKey'), type: 'password' },
+    ],
+    excel: [{ key: 'file_path', label: t('filePath') }],
+    manual: [{ key: 'file_path', label: t('filePath') }],
+  };
+
+  const getConfigFields = (sourceType) =>
+    connectionConfigFieldSets[sourceType] || [{ key: 'endpoint', label: t('endpoint') }];
+
+  const setConnectionConfig = (key, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      connection_config: { ...(prev.connection_config || {}), [key]: value },
+    }));
+  };
+
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -136,7 +170,9 @@ export default function ConnectionsPage() {
           slug: item.slug || '',
           source_type: item.source_type || 'api',
           description: item.description || '',
-          connection_config: item.connection_config || {},
+          // Do NOT prefill masked secrets (values === '***') into the dialog.
+          // Fields render empty; only keys the user actually types are sent.
+          connection_config: {},
         });
       } else {
         setFormData({
@@ -164,10 +200,17 @@ export default function ConnectionsPage() {
   const handleSave = async () => {
     try {
       if (dialogType === 'datasource') {
+        // Send only config keys the user actually typed (drop empty/unset values).
+        // On edit this preserves stored secrets — the backend keeps masked fields
+        // untouched when a key is absent.
+        const connection_config = Object.entries(formData.connection_config || {})
+          .filter(([, value]) => value !== undefined && value !== null && value !== '')
+          .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {});
+        const payload = { ...formData, connection_config };
         if (editingItem) {
-          await updateDataSource(token, editingItem.id, formData);
+          await updateDataSource(token, editingItem.id, payload);
         } else {
-          await createDataSource(token, formData);
+          await createDataSource(token, payload);
         }
       } else {
         if (editingItem) {
@@ -205,6 +248,7 @@ export default function ConnectionsPage() {
       await testDataSource(token, id);
       setError(null);
       notify({ message: t('connectionTestSuccess'), type: 'success' });
+      await loadData();
     } catch (err) {
       setError(err.message || t('connectionTestFailedShort'));
     }
@@ -355,9 +399,9 @@ export default function ConnectionsPage() {
         onCancel={handleCloseDialog}
         cancelLabel={t('common:cancel')}
         width={480}
-        height={420}
+        height={640}
         minWidth={400}
-        minHeight={340}
+        minHeight={480}
         maxWidth="calc(100vw - 32px)"
         maxHeight="calc(100vh - 32px)"
         actions={
@@ -408,6 +452,20 @@ export default function ConnectionsPage() {
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
             margin="normal"
           />
+          {dialogType === 'datasource' &&
+            getConfigFields(formData.source_type).map((field) => (
+              <TextField
+                key={field.key}
+                label={field.label}
+                size="small"
+                fullWidth
+                type={field.type || 'text'}
+                value={(formData.connection_config || {})[field.key] || ''}
+                onChange={(e) => setConnectionConfig(field.key, e.target.value)}
+                placeholder={editingItem ? t('unchangedHint') : undefined}
+                margin="normal"
+              />
+            ))}
         </Box>
       </SystemDialog>
 

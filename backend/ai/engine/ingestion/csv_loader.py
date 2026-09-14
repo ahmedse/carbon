@@ -5,7 +5,7 @@ This module is **pure** (no DB, no network, no host-specific knowledge) so it ca
 be unit-tested in isolation and reused across any host system. Everything that is
 host-specific — the canonical field names, their types and valid ranges, which
 columns come from the file vs. an external provider — is passed in as a
-``FieldSchema`` that callers fetch live from the host (e.g. Gigacast's
+``FieldSchema`` that callers fetch live from the host (e.g. the host's
 ``GET /datasets/{id}/`` ``fields_schema``).
 
 Responsibilities (mirrors the proven host-side loader, generalised):

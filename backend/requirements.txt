@@ -17,6 +17,8 @@ sqlparse==0.5.3                       # SQL formatting
 
 # Data & Computation
 pandas==2.3.0                         # Data manipulation
+numpy==2.5.3                          # Numerical compute (code sandbox)
+matplotlib==3.11.2                    # Charting (code sandbox)
 
 # Environment and Utilities
 python-dotenv==1.1.0                  # Env variable management

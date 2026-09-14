@@ -11,9 +11,12 @@ import urllib.request
 import urllib.error
 from datetime import datetime
 
+from dotenv import load_dotenv
+
 BASE_URL = "http://localhost:8009/carbon-api"
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "backend", ".env"))
 ADMIN_USER = os.environ.get("PULSE_QA_USER", "ahmed")
-ADMIN_PASS = os.environ.get("PULSE_QA_PASS", "AdminPa_132")
+ADMIN_PASS = os.environ.get("PULSE_QA_PASS") or os.environ.get("CARBON_ADMIN_PASSWORD")
 
 QUESTIONS = [
     ("1. weather (real_time)", "what's the weather in Cairo today?"),

@@ -73,7 +73,7 @@ def _run_async(coro):
 
 
 async def _run_chat(
-    instance_id: str, payload: dict[str, Any], task_id: str, *, stream_callback=None
+    instance_id: str, payload: dict[str, Any], task_id: str, *, stream_callback=None, progress_callback=None
 ) -> dict[str, Any]:
     """Run a single chat turn through the six-witness pipeline.
 
@@ -151,6 +151,13 @@ async def _run_chat(
 
     user_info = _build_chat_user_info(host_user_id)
 
+    # P4-02: applicability-first curated knowledge for the S2 retrieval
+    # witness. Best-effort — a loader/RBAC failure yields (None, None) and the
+    # turn still runs on the graph semantic path.
+    knowledge_items, knowledge_scope = _resolve_knowledge_items(
+        host_user_id, instance_config.get("app_identifier")
+    )
+
     factory = get_session_factory(instance_id)
     async with factory() as db:
         executor = CarbonHostExecutor(
@@ -170,7 +177,7 @@ async def _run_chat(
             knowledge_store=KnowledgeStore(db),
             weather_extractor=weather_extractor,
             envelope_synthesizer=synthesize_envelope,
-            carbon_context_assembler=CarbonContextAssembler,
+            domain_context_assembler=CarbonContextAssembler,
         )
         response, ledger = await runner.run(
             instance_id=instance_id,
@@ -181,8 +188,11 @@ async def _run_chat(
             instance_config=instance_config,
             user_info=user_info,
             stream_callback=stream_callback,
+            progress_callback=progress_callback,
             model=model,
             temperature=temperature,
+            knowledge_items=knowledge_items,
+            scope=knowledge_scope,
         )
 
         # Deterministic, tool-grounded outcome surfacing — the assistant text
@@ -640,6 +650,64 @@ def _build_chat_user_info(host_user_id: str | None) -> dict | None:
     except Exception:  # noqa: BLE001 - identity is best-effort, never fatal
         logger.exception("Could not resolve chat user_info; using anonymous")
         return None
+
+
+def _resolve_knowledge_items(
+    host_user_id: str | None, app_identifier: str | None
+) -> tuple:
+    """Best-effort curated-knowledge load for the chat turn (P4-02).
+
+    Resolves the user's visible org-unit ids via the canonical RBAC helper and
+    loads the applicability-first projection list plus the ``scope`` dict the
+    engine's scope filter consumes.  Returns ``(knowledge_items, scope)``.
+
+    Fails open to ``(None, None)`` on ANY error — the curated layer is an
+    enhancement; the graph semantic path and host RBAC remain the backstops, so
+    a loader failure must never break a chat turn.
+    """
+    from asgiref.sync import sync_to_async
+
+    def _load():
+        from django.contrib.auth import get_user_model
+
+        from accounts.rbac_utils import get_visible_org_units
+        from ai.knowledge_loader import load_knowledge_items
+
+        User = get_user_model()
+        user = None
+        if host_user_id:
+            try:
+                user = User.objects.get(pk=host_user_id)
+            except (User.DoesNotExist, ValueError, TypeError):
+                user = None
+
+        org_unit_ids: list[int] | None = None
+        if user is not None:
+            org_unit_ids = [ou.id for ou in get_visible_org_units(user)]
+        else:
+            # No resolved user → no org context: global (unscoped) items only.
+            org_unit_ids = []
+
+        scope: dict | None = None
+        if org_unit_ids:
+            scope = {"org_unit_ids": list(org_unit_ids)}
+            if len(org_unit_ids) == 1:
+                # Scalar form names the active scope and wins in the engine
+                # scope filter (see applicability_first._scope_matches).
+                scope["org_unit_id"] = org_unit_ids[0]
+
+        items = load_knowledge_items(
+            app_identifier=app_identifier or "carbon",
+            org_unit_ids=org_unit_ids,
+            host_user_id=str(host_user_id) if host_user_id else None,
+        )
+        return items, scope
+
+    try:
+        return _run_async(sync_to_async(_load, thread_sensitive=True)())
+    except Exception:  # noqa: BLE001 - curated layer is best-effort, never fatal
+        logger.exception("Could not load applicability-first knowledge items; using graph path")
+        return None, None
 
 
 def _classify_pending(data: dict, item: dict) -> tuple[str | None, dict | None]:
@@ -3679,8 +3747,14 @@ def dispatch_task_stream(task_type: str, payload: dict[str, Any], *, instance_id
         async def cb(delta: str):
             q.put(("chunk", delta))
 
+        async def pcb(message: str):
+            q.put(("progress", {"stage": "working", "message": message}))
+
         try:
-            result = await _run_chat(instance_id, payload, _new_task_id(), stream_callback=cb)
+            result = await _run_chat(
+                instance_id, payload, _new_task_id(),
+                stream_callback=cb, progress_callback=pcb,
+            )
             q.put(("done", result))
         except Exception as exc:  # noqa: BLE001 - fail-visible
             from ai.engine.llm.provider import classify_llm_error

@@ -2,7 +2,7 @@
 import React from 'react';
 import PropTypes from 'prop-types';
 import { Box, Typography, keyframes } from '@mui/material';
-import SmartToyIcon from '@mui/icons-material/SmartToy';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 
 const pulse = keyframes`
   0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
@@ -31,7 +31,7 @@ function AIWorkingIndicator({ conversationType = 'chat', stage = null }) {
         px: 2,
       }}
     >
-      <SmartToyIcon
+      <AutoAwesomeIcon
         sx={{
           fontSize: 18,
           color: 'primary.light',

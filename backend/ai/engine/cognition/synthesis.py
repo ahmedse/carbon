@@ -529,7 +529,7 @@ def _extract_user_patterns(user_id: str, convs: list) -> str:
 
 # ── 5. Recurring Query Pattern Detection ──────────────────────────────────
 
-async def detect_recurring_queries(db, instance: Instance):
+async def detect_recurring_queries(db, instance: Instance, executor=None):
     """
     Analyse conversation history to find recurring query patterns.
     When a pattern is detected (same intent >3 times in 14 days),
@@ -611,7 +611,8 @@ async def detect_recurring_queries(db, instance: Instance):
     }
 
     from ai.engine.proactive.delivery import deliver_insight
-    await deliver_insight(db, instance_id, insight_data)
+    _deliver_kwargs = {} if executor is None else {"executor": executor}
+    await deliver_insight(db, instance_id, insight_data, **_deliver_kwargs)
 
     logger.info(
         f"Detected {len(recurring)} recurring query patterns for {instance_id}"

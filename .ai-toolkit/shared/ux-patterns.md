@@ -110,7 +110,3 @@ Primary action is ONE button, top-right, semantic color. Secondary actions are s
 - A form that clears on error. A destructive action with no confirm/undo.
 - Two navigation models competing. Color-only status. Modal-on-modal.
 - Reinventing an interaction that already exists elsewhere in the app.
-
----
-
-*Source: ~/ai-toolkit/shared/ux-patterns.md — shared across all projects*

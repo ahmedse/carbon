@@ -40,7 +40,7 @@ def first(rows):
 #
 # INSTANCE ISOLATION: Each instance has its own independent adjacency list and
 # node cache. Previously these were module-level globals shared across all
-# instances — Carbon and Gigacast nodes were mixed in the same dicts.
+# instances — nodes from different tenants were mixed in the same dicts.
 #
 # Structure per instance_id:
 #   _adjacency[instance_id][node_id] → {

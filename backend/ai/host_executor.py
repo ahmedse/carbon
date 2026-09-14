@@ -26,11 +26,48 @@ from __future__ import annotations
 
 import json
 import logging
+from decimal import Decimal
 
 from ai.engine.agent.executor import HostAPIExecutor
 from ai.engine.core.exceptions import ToolExecutionError
 
 logger = logging.getLogger("carbon.ai.host_executor")
+
+
+def _json_coerce(obj: object) -> object:
+    """json.dumps default — Decimal→float, everything else→str."""
+    if isinstance(obj, Decimal):
+        return float(obj)
+    return str(obj)
+
+
+#: Worker read-only tools (mirrors ``ai.engine.agent.guardrails._READONLY_TOOLS``).
+#: Anything else is treated as read for the worker boundary — the worker's tool
+#: set is already filtered, matching the old ``readonly_worker_hook`` "allow it".
+_READONLY_WORKER_TOOLS: frozenset[str] = frozenset({
+    "search_knowledge",
+    "get_entity_details",
+    "query_knowledge_graph",
+    "get_schema_info",
+    "get_relationship_info",
+    "get_table_profile",
+})
+
+
+def _worker_is_mutation(name: str, args: dict) -> bool:
+    """Classify a worker tool call as a mutation (mirror readonly_worker_hook).
+
+    Read-only tools are never mutations; ``call_host_api`` is a mutation iff it
+    carries a body or an explicit mutating ``_method``; any other tool passes
+    as read (matching the old hook's "allow it").
+    """
+    if name in _READONLY_WORKER_TOOLS:
+        return False
+    if name == "call_host_api":
+        has_body = bool(args.get("body"))
+        method = str(args.get("_method", "")).upper()
+        return has_body or method in {"POST", "PUT", "DELETE", "PATCH"}
+    return False
 
 
 def _canonical_endpoint(endpoint: str) -> str:
@@ -549,6 +586,54 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
     return {"status_code": 404, "data": {"detail": f"Unknown People endpoint: {resource}"}}
 
 
+# ── P3-10 — governed skill invocation seam ──────────────────────────────
+
+# Map the process-definition autonomy levels (6 levels, ``VALID_AUTONOMY``) to
+# the PDP's per-activity dial (3 levels: human_only / act_confirm / auto). The
+# mapping is deliberately conservative: anything that does not already assume
+# silent execution is treated as human-gated.
+_PROCESS_TO_PDP_AUTONOMY = {
+    "human_only": "human_only",
+    "observe": "human_only",
+    "propose": "human_only",
+    "act_confirm": "act_confirm",
+    "act_notify": "auto",
+    "act_silent": "auto",
+}
+
+
+def _map_autonomy(autonomy: str | None) -> str:
+    """Map a process-step autonomy to the PDP dial level (fail-closed default)."""
+    return _PROCESS_TO_PDP_AUTONOMY.get(
+        (autonomy or "human_only").strip(), "human_only"
+    )
+
+
+def _capability_contract(capability_id: str) -> dict:
+    """Return ``{requires_grant, version}`` for a capability.
+
+    Empty when the capability id is blank or the row is unknown (fail-closed:
+    ``requires_grant`` defaults False, so the grant stage is never assumed
+    present).
+    """
+    if not capability_id:
+        return {"requires_grant": False, "version": ""}
+    try:
+        from ai.models.capability import Capability
+
+        cap = Capability.objects.filter(capability_id=capability_id).first()
+        if cap is None:
+            return {"requires_grant": False, "version": ""}
+        return {
+            "requires_grant": bool(
+                (cap.approval_requirements or {}).get("requires_grant")
+            ),
+            "version": str(cap.version) if cap.version else "",
+        }
+    except Exception:  # noqa: BLE001 — fail-closed, never assume a grant
+        return {"requires_grant": False, "version": ""}
+
+
 class CarbonHostExecutor(HostAPIExecutor):
     """HostAPIExecutor whose transport is this Django process.
 
@@ -567,6 +652,749 @@ class CarbonHostExecutor(HostAPIExecutor):
     ):
         super().__init__(db, instance_config=instance_config, user_token=user_token)
         self.host_user_id = host_user_id
+
+    # ── Command boundary (P2-06b) ───────────────────────────────────────
+
+    async def execute_host_api_via_boundary(
+        self,
+        *,
+        effect,
+        api_name: str,
+        method: str,
+        path: str,
+        query_params: dict | None = None,
+        body: dict | None = None,
+        explanation: str = "",
+        conversation_id: str = "",
+        needs_confirmation: bool = False,
+        instance_id: str = "",
+        host_user_id: str | None = None,
+    ) -> dict:
+        """Route a resolved ``call_host_api`` effect through the fail-closed
+        command boundary.
+
+        ``effect`` is the engine tool's host-effect closure (``call_api_direct``
+        for reads / ``create_pending_execution`` for mutations); this method
+        wraps it in a :class:`~ai.command_boundary.Command` with a real PDP and
+        ledger so every host effect passes identity → scope → contract →
+        validate → PDP → consent → budget → idempotency → execute → verify →
+        outcome.  ``requires_confirmation=False`` because the pending-execution
+        card *is* the consent mechanism for mutations (stage 7 must not
+        pre-refuse it).
+        """
+        from ai.command_boundary import Command
+        from ai.command_boundary_factory import get_command_boundary
+        from ai.protocol import Scope
+
+        uid = str(host_user_id) if host_user_id else (instance_id or "")
+        command = Command(
+            principal=uid or None,
+            scope=Scope(user_identifier=uid),
+            tool="call_host_api",
+            action="call_host_api",
+            params={
+                "api_name": api_name,
+                "method": method,
+                "path": path,
+                "query_params": query_params,
+                "body": body,
+                "explanation": explanation,
+                "conversation_id": conversation_id,
+            },
+            objects=[api_name],
+            requires_confirmation=False,
+            autonomy="human_only" if needs_confirmation else "auto",
+            instance_id=instance_id,
+            host_user_id=host_user_id,
+        )
+        boundary = get_command_boundary(
+            self.db,
+            executor=effect,
+            tool_catalog={"call_host_api": True},
+        )
+        outcome = await boundary.execute(command)
+        if outcome.status in ("executed", "confirmed"):
+            result = outcome.result
+            return result if isinstance(result, dict) else {"result": result}
+        return {"error": outcome.error or outcome.reason or "action refused"}
+
+    async def inspect_case_via_boundary(
+        self,
+        *,
+        run_id,
+        instance_id="",
+        conversation_id="",
+        host_user_id=None,
+    ) -> dict:
+        """Read-only case inspection (P4-05) through the fail-closed boundary.
+
+        Resolves the caller and gates on ``ai:inspect_case`` BEFORE any read,
+        then runs a SELECT-only effect closure that assembles the run's current
+        activity, blocker, SLA, applicable SOP clause, and journal event ids.
+        The boundary persists only its own PDP/ledger audit rows — the case
+        tables (run/step/journal) are never mutated.
+        """
+        from asgiref.sync import sync_to_async
+
+        from ai.command_boundary import Command
+        from ai.command_boundary_factory import get_command_boundary
+        from ai.protocol import Scope
+
+        effective_host_user_id = host_user_id or self.host_user_id
+        uid = str(effective_host_user_id) if effective_host_user_id else (instance_id or "")
+
+        # ── Capability gate (fail-closed) — resolve the user and check the
+        # ``ai:inspect_case`` capability BEFORE touching any case table.
+        def _check_capability() -> bool:
+            from accounts.capabilities import get_user_capabilities
+
+            if not uid:
+                return False
+            from accounts.models import User
+
+            try:
+                user = User.objects.get(pk=uid)
+            except Exception:  # noqa: BLE001 — fail closed on any resolution error
+                return False
+            return "ai:inspect_case" in get_user_capabilities(user)
+
+        authorized = await sync_to_async(_check_capability, thread_sensitive=True)()
+        if not authorized:
+            return {"error": "missing capability ai:inspect_case"}
+
+        # ── Read-only effect closure (SELECTs only — no mutation) ──────────
+        def _gather_case() -> dict:
+            from ai.models.core import Run, RunStep
+            from ai.models.human_task import HumanTask
+            from ai.models.process import ProcessDefinition
+            from ai.models.step_journal import StepJournalEntry
+
+            iso = lambda dt: dt.isoformat() if dt else None
+
+            run = Run.objects.filter(id=run_id).first()
+            if run is None:
+                return {"error": "run not found", "run_id": run_id}
+
+            steps = list(RunStep.objects.filter(run_id=run_id).order_by("step_index"))
+
+            # Current activity = latest non-planned step (highest step_index with
+            # a non-empty step_state/status); otherwise the last step.
+            current_step = None
+            for step in reversed(steps):
+                state = (step.step_state or "").strip()
+                status = (step.status or "").strip()
+                if state not in ("", "planned") or status not in ("", "planned"):
+                    current_step = step
+                    break
+            if current_step is None and steps:
+                current_step = steps[-1]
+
+            def _step_dict(step) -> dict:
+                return {
+                    "id": step.id,
+                    "step_id": step.step_id,
+                    "step_index": step.step_index,
+                    "step_state": step.step_state,
+                    "status": step.status,
+                    "tool_name": step.tool_name,
+                    "operation_id": step.operation_id,
+                    "outcome": step.outcome,
+                    "last_error": step.last_error,
+                }
+
+            current_activity = _step_dict(current_step) if current_step else None
+
+            journal = list(
+                StepJournalEntry.objects.filter(run_id=run_id).order_by("sequence")
+            )
+            event_ids = [
+                {
+                    "id": entry.id,
+                    "event_type": entry.event_type,
+                    "sequence": entry.sequence,
+                    "step_id": entry.step_id,
+                }
+                for entry in journal
+            ]
+            operation_ids = sorted(
+                {s.operation_id for s in steps if (s.operation_id or "").strip()}
+            )
+
+            # ── Blocker resolution (pending approval → kill switch → failed step) ──
+            blocker = None
+            pending = None
+            for task in HumanTask.objects.filter(
+                run_id=run_id, status="pending",
+            ).order_by("created_at"):
+                if not task.is_expired():
+                    pending = task
+                    break
+            if pending is not None:
+                blocker = {
+                    "kind": "awaiting_approval",
+                    "required_authority": pending.required_authority,
+                    "task_id": pending.id,
+                }
+            elif run.kill_switched_at is not None:
+                blocker = {"kind": "kill_switch", "at": iso(run.kill_switched_at)}
+            else:
+                failed_step = None
+                for step in steps:
+                    if (step.last_error or "").strip() and step.status == "failed":
+                        failed_step = step
+                        break
+                if failed_step is not None:
+                    blocker = {
+                        "kind": "failed_step",
+                        "step_id": failed_step.step_id,
+                        "last_error": failed_step.last_error,
+                    }
+
+            # ── SLA + applicable SOP clause from the pinned definition ────
+            sla: dict = {"constraints": []}
+            applicable_sop_clause: list = []
+
+            definition_qs = ProcessDefinition.objects.filter(
+                process_id=run.definition_id,
+            )
+            if run.definition_version:
+                definition_qs = definition_qs.filter(version=run.definition_version)
+            definition = definition_qs.order_by("-created_at").first()
+            doc = (definition.definition if definition else None) or {}
+
+            constraints = doc.get("constraints") or []
+            if isinstance(constraints, list):
+                sla["constraints"] = constraints
+                for clause in constraints:
+                    text = clause if isinstance(clause, str) else str(clause)
+                    if any(
+                        keyword in text.lower()
+                        for keyword in ("sla", "within", "response", "deadline", "turnaround")
+                    ):
+                        sla.setdefault("clauses", []).append(clause)
+
+            policies = doc.get("policies") or []
+            exceptions = doc.get("exceptions") or []
+            if isinstance(policies, (list, tuple)):
+                applicable_sop_clause.extend(policies)
+            if isinstance(exceptions, (list, tuple)):
+                applicable_sop_clause.extend(exceptions)
+            if isinstance(constraints, (list, tuple)):
+                applicable_sop_clause.extend(constraints)
+
+            return {
+                "run_id": run.id,
+                "process_id": run.definition_id,
+                "process_version": run.definition_version,
+                "run_state": run.run_state,
+                "status": run.status,
+                "created_at": iso(run.created_at),
+                "updated_at": iso(run.updated_at),
+                "kill_switched_at": iso(run.kill_switched_at) if run.kill_switched_at else None,
+                "current_activity": current_activity,
+                "blocker": blocker,
+                "sla": sla,
+                "applicable_sop_clause": applicable_sop_clause,
+                "event_ids": event_ids,
+                "operation_ids": operation_ids,
+            }
+
+        async def _read_effect(command=None) -> dict:
+            return await sync_to_async(_gather_case, thread_sensitive=True)()
+
+        command = Command(
+            principal=uid or None,
+            scope=Scope(user_identifier=uid),
+            tool="inspect_case",
+            action="inspect",
+            params={"run_id": run_id},
+            objects=[run_id],
+            requires_confirmation=False,
+            autonomy="auto",
+            instance_id=instance_id,
+            host_user_id=effective_host_user_id,
+        )
+        boundary = get_command_boundary(
+            self.db,
+            executor=_read_effect,
+            tool_catalog={"inspect_case": True},
+        )
+        outcome = await boundary.execute(command)
+        if outcome.status in ("executed", "confirmed"):
+            result = outcome.result
+            return result if isinstance(result, dict) else {"result": result}
+        return {"error": outcome.error or outcome.reason or "action refused"}
+
+    async def invoke_skill_via_boundary(
+        self,
+        *,
+        skill_name: str = "",
+        process_ref: str = "",
+        args: dict | None = None,
+        explanation: str = "",
+        conversation_id: str = "",
+        instance_id: str = "",
+        host_user_id: str | None = None,
+        author_user_id: str | None = None,
+        allowed_tools: list[str] | None = None,
+    ) -> dict:
+        """Route an executable-skill invocation through the command boundary.
+
+        The skill body's ``process_ref`` (``process_id`` or ``process_id@version``)
+        is resolved to a governed process definition, its status is gated
+        (active/review only), and a run is created (or resumed) as the boundary's
+        executor closure — so the PDP, consent, and grant stages all run for the
+        ``invoke_skill`` effect before the run is touched. Fail-closed at every
+        step: unknown refs, non-invokable statuses, kill-switched processes, and
+        a missing host user all refuse without executing any skill body.
+        """
+        from asgiref.sync import sync_to_async
+
+        from ai.command_boundary import Command
+        from ai.command_boundary_factory import get_command_boundary
+        from ai.models.core import Run
+        from ai.models.process import STATUS_ACTIVE, STATUS_REVIEW
+        from ai.plans_service import PlansService, STATUS_APPROVED, STATUS_PAUSED
+        from ai.protocol import Scope
+        from ai.registry_service import (
+            ProcessRegistry,
+            RegistryError,
+            RegistryNotFoundError,
+        )
+
+        uid = str(host_user_id) if host_user_id else (instance_id or "")
+        principal = str(author_user_id) if author_user_id else uid
+        registry = ProcessRegistry()
+
+        def _refused(error: str) -> dict:
+            return {
+                "status": "refused",
+                "run_id": None,
+                "process_id": None,
+                "process_version": None,
+                "boundary_outcome": None,
+                "pdp_decision": None,
+                "error": error,
+            }
+
+        # ── Resolve the referenced process (fail-closed on unknown ref) ──
+        try:
+            definition = await sync_to_async(
+                registry.resolve, thread_sensitive=True
+            )(process_ref)
+        except RegistryNotFoundError:
+            return _refused(f"No process definition found for {process_ref!r}.")
+        except RegistryError as exc:
+            return _refused(str(exc))
+
+        process_id = definition.process_id
+        process_version = definition.version or ""
+
+        # ── Status gate: only active/review may be invoked ───────────────
+        if definition.status not in (STATUS_ACTIVE, STATUS_REVIEW):
+            return _refused(
+                f"Process {process_id!r} is {definition.status!r}; only active "
+                "or review processes may be invoked."
+            )
+        if (definition.definition or {}).get("kill_switch"):
+            return _refused(f"Process {process_id!r} is kill-switched.")
+
+        steps = (definition.definition or {}).get("steps", []) or []
+        first_step = steps[0] if steps and isinstance(steps[0], dict) else {}
+        capability_id = str(first_step.get("capability", "") or "")
+        step_id = first_step.get("id", "")
+
+        # ── Effective autonomy (definition default + per-org overrides) ──
+        autonomy = first_step.get("autonomy") or "human_only"
+        try:
+            effective = await sync_to_async(
+                registry.get_autonomy, thread_sensitive=True
+            )(process_id)
+            entry = (effective.get("steps") or {}).get(step_id) or {}
+            autonomy = entry.get("default") or autonomy
+        except Exception:  # noqa: BLE001 — fall back to the definition default
+            pass
+
+        contract = await sync_to_async(
+            _capability_contract, thread_sensitive=True
+        )(capability_id)
+        step_requires_grant = bool(
+            (first_step.get("approval_requirements") or {}).get("requires_grant")
+        ) or bool(first_step.get("requires_grant"))
+        requires_grant = step_requires_grant or contract["requires_grant"]
+        capability_version = contract["version"]
+
+        # ── Effect closure: create (or resume) a governed run ────────────
+        async def _run_effect(command: Command) -> dict:
+            from accounts.models import User
+
+            if not uid:
+                return {"status": "refused", "error": "No host user for run creation."}
+            try:
+                user = await sync_to_async(
+                    User.objects.get, thread_sensitive=True
+                )(pk=uid)
+            except Exception as exc:  # noqa: BLE001 — fail closed
+                return {"status": "refused", "error": f"Host user {uid!r} not found."}
+
+            service = PlansService()
+
+            _existing = sync_to_async(
+                lambda: list(
+                    Run.objects.filter(
+                        host_user_id=uid,
+                        definition_id=process_id,
+                        status__in=[STATUS_APPROVED, STATUS_PAUSED],
+                    ).order_by("-created_at")[:1]
+                ),
+                thread_sensitive=True,
+            )
+            existing = await _existing()
+            if existing:
+                plan_id = existing[0].id
+                _resume = sync_to_async(
+                    service.resume_workflow, thread_sensitive=True
+                )
+                await _resume(user, plan_id)
+                return {
+                    "status": "resumed",
+                    "run_id": plan_id,
+                    "process_id": process_id,
+                    "process_version": process_version,
+                }
+
+            brief = f"Invoke skill {skill_name!r} for governed process {process_id}."
+            _create = sync_to_async(service.create_plan, thread_sensitive=True)
+            plan = await _create(user, brief, conversation_id or "")
+            plan_id = plan.get("id") if isinstance(plan, dict) else None
+            if not plan_id:
+                return {"status": "refused", "error": "Plan creation returned no plan id."}
+
+            def _pin() -> None:
+                run = Run.objects.get(id=plan_id)
+                run.pin_definition(process_id, process_version)
+                run.save(update_fields=["definition_id", "definition_version"])
+
+            await sync_to_async(_pin, thread_sensitive=True)()
+            return {
+                "status": "created",
+                "run_id": plan_id,
+                "process_id": process_id,
+                "process_version": process_version,
+            }
+
+        # ── Authorized tools (P4-04) ──────────────────────────────────────
+        # Resolve the invoking principal's capabilities and derive the subset
+        # of TOOL_CAPABILITY_MAP tools they are authorized to use.  Fail-closed:
+        # any failure to resolve the user yields an empty authorized set (never
+        # "all tools").  This feeds the PDP's ``deny-unauthorized-skill-tool``
+        # mandatory policy at stage 6.
+        from accounts.capabilities import get_user_capabilities
+        from ai.pdp import authorized_tool_names
+
+        def _resolve_authorized_tools() -> frozenset[str]:
+            if not uid:
+                return frozenset()
+            try:
+                from accounts.models import User
+
+                user = User.objects.get(pk=uid)
+            except Exception:  # noqa: BLE001 — fail-closed on any resolution error
+                return frozenset()
+            return authorized_tool_names(get_user_capabilities(user))
+
+        authorized = await sync_to_async(
+            _resolve_authorized_tools, thread_sensitive=True
+        )()
+        process_state = {
+            "skill_allowed_tools": sorted(set(allowed_tools or [])),
+            "authorized_tools": sorted(authorized),
+        }
+
+        command = Command(
+            principal=principal or None,
+            scope=Scope(user_identifier=uid),
+            tool="invoke_skill",
+            action="invoke_skill",
+            params={
+                "skill_name": skill_name,
+                "process_ref": process_ref,
+                "args": args,
+                "author_user_id": author_user_id,
+                "explanation": explanation,
+                "conversation_id": conversation_id,
+            },
+            objects=[process_id],
+            requires_confirmation=False,
+            requires_grant=bool(requires_grant),
+            capability=capability_id,
+            process_version=process_version,
+            capability_version=capability_version,
+            autonomy=_map_autonomy(autonomy),
+            process_state=process_state,
+            instance_id=instance_id,
+            host_user_id=host_user_id,
+            idempotency_key=f"invoke_skill:{process_ref}:{principal}",
+        )
+
+        boundary = get_command_boundary(
+            self.db,
+            executor=_run_effect,
+            tool_catalog={"invoke_skill": True},
+        )
+        outcome = await boundary.execute(command)
+
+        pdp_decision = outcome.decision.value if outcome.decision else None
+        if outcome.status in ("executed", "confirmed"):
+            result = outcome.result if isinstance(outcome.result, dict) else {}
+            return {
+                "status": outcome.status,
+                "run_id": result.get("run_id"),
+                "process_id": process_id,
+                "process_version": process_version,
+                "boundary_outcome": outcome.status,
+                "pdp_decision": pdp_decision,
+                "error": None,
+            }
+        return {
+            "status": outcome.status,
+            "run_id": None,
+            "process_id": process_id,
+            "process_version": process_version,
+            "boundary_outcome": outcome.status,
+            "pdp_decision": pdp_decision,
+            "error": outcome.error or outcome.reason or "action refused",
+        }
+
+    async def execute_worker_tools_via_boundary(
+        self,
+        *,
+        tool_calls: list[dict],
+        instance_id: str = "",
+        conversation_id: str = "",
+        run_id: str | None = None,
+        host_user_id: str | None = None,
+        knowledge_store=None,
+    ) -> list[dict]:
+        """Route a worker's fan-out tool calls through the command boundary.
+
+        Each worker tool call becomes one fail-closed ``Command``: read-only
+        tools are declared ``action="read"`` (PDP → ALLOW) so stage-7 consent
+        is skipped and the boundary executor closure runs the tool; mutations
+        are declared ``action="execute"`` with ``autonomy="human_only"``
+        (PDP → ASK) so stage-7 consent refuses them without ever running the
+        closure. Workers are read-only (ADR-001).
+        """
+        from ai.command_boundary import Command
+        from ai.command_boundary_factory import get_command_boundary, _STATIC_TOOL_NAMES
+        from ai.protocol import Scope
+        from ai.engine.cognition.turn.execute import _execute_single_tool
+
+        uid = str(host_user_id) if host_user_id else (instance_id or "")
+
+        results: list[dict] = []
+        for tc in tool_calls:
+            name = tc.get("function", {}).get("name", "unknown")
+            raw_args = tc.get("function", {}).get("arguments", "{}")
+            if isinstance(raw_args, str):
+                try:
+                    args = json.loads(raw_args)
+                except (json.JSONDecodeError, TypeError):
+                    args = {}
+            elif isinstance(raw_args, dict):
+                args = raw_args
+            else:
+                args = {}
+
+            action = "execute" if _worker_is_mutation(name, args) else "read"
+
+            command = Command(
+                principal=uid or None,
+                scope=Scope(user_identifier=uid),
+                tool=name,
+                action=action,
+                params=args,
+                objects=[name],
+                requires_confirmation=False,
+                autonomy="human_only",
+                instance_id=instance_id,
+                run_id=run_id,
+                host_user_id=host_user_id,
+            )
+
+            async def effect(command: Command) -> dict:
+                return await _execute_single_tool(
+                    tc,
+                    self,
+                    hook_pipeline=None,
+                    hook_ctx_defaults={
+                        "instance_id": instance_id,
+                        "conversation_id": conversation_id,
+                        "run_id": run_id,
+                        "host_user_id": host_user_id,
+                    },
+                    knowledge_store=knowledge_store,
+                )
+
+            boundary = get_command_boundary(
+                self.db,
+                executor=effect,
+                tool_catalog={n: True for n in _STATIC_TOOL_NAMES},
+            )
+            outcome = await boundary.execute(command)
+
+            if outcome.status in ("executed", "confirmed"):
+                result = outcome.result
+                if isinstance(result, dict) and "tool_name" in result:
+                    results.append(result)
+                else:
+                    results.append({
+                        "tool_name": name,
+                        "tool_call_id": tc.get("id", ""),
+                        "result": result,
+                        "error": None,
+                        "guardrail_flags": [],
+                    })
+            else:
+                results.append({
+                    "tool_name": name,
+                    "tool_call_id": tc.get("id", ""),
+                    "result": None,
+                    "error": (
+                        "Worker tool call refused by boundary: "
+                        f"{outcome.error or outcome.reason or 'refused'}"
+                    ),
+                    "guardrail_flags": ["worker_tool_blocked", f"blocked:{name}"],
+                })
+
+        return results
+
+    async def execute_delivery_via_boundary(
+        self,
+        *,
+        effect,
+        instance_id: str = "",
+        host_user_id: str | None = None,
+        delivery_type: str = "proactive_delivery",
+    ) -> dict:
+        """Route a proactive-delivery host effect through the fail-closed
+        command boundary (P2-06e).
+
+        ``effect`` is the engine's host-effect closure that performs the actual
+        delivery (WebSocket/event-bus push + notification persistence); this
+        method wraps it in a :class:`~ai.command_boundary.Command` so every
+        delivery passes the 14-stage boundary and the PDP persists a
+        :class:`~ai.models.pdp.PolicyDecisionRow` per delivery.
+        """
+        from ai.command_boundary import Command
+        from ai.command_boundary_factory import get_command_boundary
+        from ai.protocol import Scope
+
+        uid = str(host_user_id) if host_user_id else (instance_id or "")
+        command = Command(
+            principal=uid or None,
+            scope=Scope(user_identifier=uid),
+            tool="proactive_delivery",
+            action="deliver",
+            params={"delivery_type": delivery_type},
+            objects=[instance_id or "", delivery_type],
+            requires_confirmation=False,
+            autonomy="auto",
+            instance_id=instance_id,
+            host_user_id=host_user_id,
+        )
+        boundary = get_command_boundary(
+            self.db,
+            executor=effect,
+            tool_catalog={"proactive_delivery": True},
+        )
+        outcome = await boundary.execute(command)
+        return {
+            "status": outcome.status,
+            "result": outcome.result,
+            "error": outcome.error,
+            "reason": outcome.reason,
+        }
+
+    async def execute_step_via_boundary(
+        self,
+        *,
+        effect,
+        tool_name: str,
+        is_mutation: bool,
+        confirmation_token: str | None = None,
+        instance_id: str = "",
+        host_user_id: str | None = None,
+        conversation_id: str = "",
+    ) -> dict:
+        """Route a ReAct plan step through the fail-closed command boundary.
+
+        ``effect`` is the step's actual tool-effect closure (or ``None`` when
+        the caller only wants the boundary's consent verdict for a no-token
+        mutation — in that case a no-op closure is supplied so stage 11 has
+        something to run if consent ever passes).  The method builds a
+        :class:`~ai.command_boundary.Command` and maps the
+        :class:`~ai.command_boundary.Outcome` to a plain dict the engine can
+        read without importing boundary types.
+
+        Mutations are declared with a mutating action and
+        ``autonomy="human_only"`` so the PDP returns ``ASK`` at stage 6 and
+        stage 7 (consent) refuses a no-token mutation before the effect
+        closure ever runs; a supplied ``confirmation_token`` satisfies stage 7
+        and the effect executes.
+        """
+        from ai.command_boundary import Command
+        from ai.command_boundary_factory import get_command_boundary
+        from ai.protocol import Scope
+
+        uid = str(host_user_id) if host_user_id else (instance_id or "")
+        action = "execute" if is_mutation else "read"
+
+        command = Command(
+            principal=uid or None,
+            scope=Scope(user_identifier=uid),
+            tool=tool_name or "plan_step",
+            action=action,
+            params={"conversation_id": conversation_id},
+            objects=[tool_name or "plan_step"],
+            requires_confirmation=bool(is_mutation),
+            confirmation_token=confirmation_token,
+            autonomy="human_only" if is_mutation else "auto",
+            instance_id=instance_id,
+            host_user_id=host_user_id,
+        )
+
+        async def _noop(command=None) -> dict:
+            return {}
+
+        boundary = get_command_boundary(
+            self.db,
+            executor=effect if effect is not None else _noop,
+            tool_catalog={tool_name or "plan_step": True},
+        )
+        outcome = await boundary.execute(command)
+
+        if outcome.status in ("executed", "confirmed"):
+            return {
+                "status": outcome.status,
+                "result": outcome.result,
+                "requires_confirmation": False,
+            }
+        if (
+            outcome.status == "refused"
+            and outcome.error
+            and "confirmation" in outcome.error.lower()
+        ):
+            return {
+                "status": "refused",
+                "error": outcome.error,
+                "requires_confirmation": True,
+            }
+        return {
+            "status": outcome.status,
+            "error": outcome.error or outcome.reason,
+            "requires_confirmation": False,
+        }
 
     # ── In-process transport ────────────────────────────────────────────
 
@@ -1161,7 +1989,12 @@ class CarbonHostExecutor(HostAPIExecutor):
         except Exception as exc:  # noqa: BLE001 - fail-visible
             logger.exception("In-process calculation summary failed")
             raise ToolExecutionError(f"Calculation summary failed: {exc}") from exc
-        return {"status_code": 200, "data": summary}
+        # Coerce Decimal/date types so the payload is always JSON-safe.
+        coerced = json.loads(json.dumps(summary, default=_json_coerce))
+        # Steer the envelope synthesis to bar charts: scope/module are magnitude
+        # comparisons per category, not balanced proportions — bars read better.
+        coerced["suggested_chart_type"] = "bar"
+        return {"status_code": 200, "data": coerced}
 
     async def _chairman_overview_in_process(
         self, method: str = "GET", params: dict | None = None, body: dict | None = None
@@ -1187,7 +2020,8 @@ class CarbonHostExecutor(HostAPIExecutor):
         except Exception as exc:  # noqa: BLE001 - fail-visible
             logger.exception("In-process chairman overview failed")
             raise ToolExecutionError(f"Chairman overview failed: {exc}") from exc
-        return {"status_code": 200, "data": payload}
+        # Coerce Decimal/date types so the payload is always JSON-safe.
+        return {"status_code": 200, "data": json.loads(json.dumps(payload, default=_json_coerce))}
 
     async def _people_analytics_in_process(
         self,

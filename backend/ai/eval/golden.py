@@ -73,6 +73,27 @@ GOLDEN_QUERIES: list[dict] = [
         "expected_dimension": None,
         "invariants": ["does not fabricate People data"],
     },
+    {
+        "question": "Summarize total emissions by scope and by module",
+        "expected_tool": "call_host_api",
+        "expected_dimension": None,
+        "invariants": [
+            "envelope carries tables/charts",
+            "headline does not claim 'no data'",
+        ],
+    },
+    {
+        "question": "Tell me about AASTMT carbon emissions in 2026",
+        # AASTMT is the whole organisation, not a sub-entity filter — the org's
+        # own name must NOT be treated as a missing entity (over-scoping bug).
+        "expected_tool": "call_host_api",
+        "expected_dimension": None,
+        "invariants": [
+            "org name is not a filter → full breakdown",
+            "headline does not claim 'no data'",
+            "envelope carries tables/charts",
+        ],
+    },
 ]
 
 # ── Golden population spec ─────────────────────────────────────────────────

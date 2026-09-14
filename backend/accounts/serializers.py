@@ -172,6 +172,7 @@ class ScopedRoleCreateSerializer(serializers.ModelSerializer):
 
 class RoleAssignmentAuditLogSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField()
+    actor = serializers.StringRelatedField()
     group = serializers.StringRelatedField()
     org_unit = serializers.StringRelatedField()
     module = serializers.StringRelatedField()
@@ -179,7 +180,7 @@ class RoleAssignmentAuditLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = RoleAssignmentAuditLog
         fields = [
-            'id', 'user', 'group', 'org_unit', 'module', 'action', 'timestamp'
+            'id', 'user', 'actor', 'group', 'org_unit', 'module', 'action', 'timestamp'
         ]
 
 

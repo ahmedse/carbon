@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://carbon.example/process-definition.schema.json",
+  "title": "ProcessDefinition",
+  "description": "Unified schema for a governed process definition (P3-03). Enforced at runtime by ai/models/process.py::validate_definition (jsonschema is not in backend/requirements.txt); this document is the canonical external contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "version", "owner", "status", "steps"],
+  "properties": {
+    "id": { "type": "string" },
+    "version": { "type": "string" },
+    "owner": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "review", "active", "deprecated"]
+    },
+    "objects": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "inputs": { "type": "object" },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "source": { "type": "string" }
+      }
+    },
+    "objective": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "object", "properties": { "predicate": { "type": "string" } } }
+      ]
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "capability"],
+        "properties": {
+          "id": { "type": "string" },
+          "kind": {
+            "type": "string",
+            "enum": ["command", "human_task", "assertion"]
+          },
+          "capability": { "type": "string" },
+          "depends_on": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "autonomy": {
+            "type": "string",
+            "enum": ["observe", "propose", "act_confirm", "act_notify", "act_silent", "human_only"]
+          },
+          "separation_of_duties": {},
+          "binds_to": { "type": ["string", "array"] },
+          "consent": { "type": "boolean" },
+          "approval_ref": { "type": "string" },
+          "concurrency": {},
+          "idempotency_scope": { "type": "string" },
+          "unknown_outcome": { "type": "string" }
+        }
+      }
+    },
+    "constraints": { "type": "object" },
+    "evidence": { "type": "array" },
+    "policies": { "type": "object" },
+    "exceptions": { "type": "array" },
+    "kill_switch": { "type": "boolean" },
+    "tests": { "type": "array" }
+  }
+}

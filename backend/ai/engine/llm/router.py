@@ -14,7 +14,7 @@ Usage::
 
     response = await route_chat(
         task="chat",
-        instance_id="gigacast",
+        instance_id="demo",
         conversation_id="conv-123",
         messages=[{"role": "user", "content": "Hello"}],
     )

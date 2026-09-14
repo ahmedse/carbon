@@ -89,8 +89,9 @@ _REPLAYABLE_STATUSES = {
     STATUS_CANCELLED,
 }
 
-# Resumable statuses: paused / approved (W3-C) or interrupted (stuck running).
-_RESUMABLE_STATUSES = {STATUS_RUNNING, STATUS_PAUSED, STATUS_APPROVED}
+# Resumable statuses: paused / approved (W3-C), interrupted (stuck running),
+# or failed (one or more steps errored — re-queue and retry).
+_RESUMABLE_STATUSES = {STATUS_RUNNING, STATUS_PAUSED, STATUS_APPROVED, STATUS_FAILED}
 
 
 class PlanConsentError(Exception):
@@ -412,7 +413,7 @@ class DurableExecutionService:
                 step.save(update_fields=["status", "error", "updated_at"])
             # completed / skipped / pending / awaiting_approval — untouched.
 
-        interrupted = run.status == STATUS_RUNNING
+        interrupted = run.status in {STATUS_RUNNING, STATUS_FAILED}
         if interrupted:
             run.status = STATUS_PAUSED
 

@@ -28,6 +28,7 @@ async def deliver_insight(
     insight_data: dict,
     trigger_id: str | None = None,
     group_id: str | None = None,
+    executor=None,
 ) -> str:
     """
     Persist a proactive insight and route it to the appropriate delivery channel.
@@ -50,7 +51,7 @@ async def deliver_insight(
     insight = KgProactiveInsight(
         instance_id=instance_id,
         # Instance-level insight (not user-private) → visible to authenticated
-        # carbon users. The Django store copies this onto the persisted row so
+        # platform users. The Django store copies this onto the persisted row so
         # the read boundary (scope_ai_queryset) admits it (Phase A3).
         visibility="shared",
         trigger_id=trigger_id,
@@ -72,11 +73,10 @@ async def deliver_insight(
 
     insight_id = insight.id
 
-    # Deliver based on channel
-    if channel in ("websocket", "banner"):
-        await _push_websocket(db, instance_id, insight)
-    if severity in ("warning", "critical"):
-        await _create_notification(db, instance_id, insight_data, severity)
+    # Deliver based on channel. Delivery is a host effect, so when an executor
+    # with the boundary seam is supplied the push/notify work is routed through
+    # the fail-closed command boundary (PDP decision row per delivery).
+    await _deliver(db, instance_id, insight, insight_data, severity, channel, executor)
 
     logger.info(
         f"Delivered [{severity}] insight '{insight_data.get('title', '')}' "
@@ -90,6 +90,7 @@ async def deliver_batch(
     instance_id: str,
     insights: list[dict],
     group_id: str | None = None,
+    executor=None,
 ) -> list[str]:
     """Deliver multiple insights, respecting the per-evaluation cap."""
     settings = get_settings()
@@ -100,9 +101,74 @@ async def deliver_batch(
             db, instance_id, insight_data,
             trigger_id=insight_data.get("trigger_id"),
             group_id=group_id,
+            executor=executor,
         )
         ids.append(insight_id)
     return ids
+
+
+async def _deliver(
+    db,
+    instance_id: str,
+    insight: KgProactiveInsight,
+    insight_data: dict,
+    severity: str,
+    channel: str,
+    executor=None,
+) -> None:
+    """Run the delivery host effect for one insight.
+
+    Delivery is a host effect. When ``executor`` exposes the
+    ``execute_delivery_via_boundary`` seam, the push/notify work is wrapped in a
+    command-boundary ``Command`` so the PDP records a decision row per delivery.
+    When an executor is supplied without that seam, delivery fails closed
+    (nothing is sent). When no executor is supplied, the legacy direct path is
+    preserved.
+    """
+
+    async def _deliver_effect(command=None):
+        if channel in ("websocket", "banner"):
+            await _push_websocket(db, instance_id, insight)
+        if severity in ("warning", "critical"):
+            await _create_notification(db, instance_id, insight_data, severity)
+        return {
+            "insight_id": insight.id,
+            "channel": channel,
+            "severity": severity,
+        }
+
+    if executor is None:
+        await _deliver_effect()
+        return
+
+    boundary_method = getattr(executor, "execute_delivery_via_boundary", None)
+    if not callable(boundary_method):
+        logger.warning(
+            "Delivery boundary seam unavailable for %s — blocking delivery "
+            "(fail-closed)",
+            instance_id,
+        )
+        return
+
+    outcome = await boundary_method(
+        effect=_deliver_effect,
+        instance_id=instance_id,
+        host_user_id=getattr(executor, "host_user_id", None),
+        delivery_type=channel,
+    )
+
+    status = outcome.get("status") if isinstance(outcome, dict) else None
+    if status not in ("executed", "confirmed"):
+        reason = (
+            (outcome.get("error") or outcome.get("reason") or status)
+            if isinstance(outcome, dict)
+            else status
+        )
+        logger.warning(
+            "Delivery for %s refused/failed by boundary: %s",
+            instance_id,
+            reason,
+        )
 
 
 async def expire_stale_insights(db, instance_id: str) -> int:
@@ -213,11 +279,11 @@ def _build_insight_frame(instance_id: str, insight: KgProactiveInsight) -> dict:
                 else utcnow().isoformat()
             ),
             # CBAC scoping fields — instance-level insight, visible to
-            # authenticated carbon users (org narrowing at the read boundary).
+            # authenticated users (org narrowing at the read boundary).
             "visibility": getattr(insight, "visibility", None) or "shared",
             "org_unit_id": getattr(insight, "org_unit_id", None),
             "host_user_id": getattr(insight, "host_user_id", None),
-            "app_identifier": getattr(insight, "app_identifier", None) or "carbon",
+            "app_identifier": getattr(insight, "app_identifier", None) or instance_id,
         },
     )
 

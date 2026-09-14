@@ -270,9 +270,11 @@ export default function CalculationsPage() {
           actions={
             <Stack direction="row" spacing={1}>
               <Tooltip title="Refresh">
-                <IconButton onClick={loadCalculations} size="small" disabled={loading}>
-                  <RefreshIcon />
-                </IconButton>
+                <span>
+                  <IconButton onClick={loadCalculations} size="small" disabled={loading}>
+                    <RefreshIcon />
+                  </IconButton>
+                </span>
               </Tooltip>
               {selectedRows.length > 0 && isAdmin && (
                 <Button
@@ -380,8 +382,10 @@ export default function CalculationsPage() {
               disableRowSelectionOnClick
               checkboxSelection={isAdmin}
               {...(isAdmin ? {
-                rowSelectionModel: selectedRows,
-                onRowSelectionModelChange: (ids) => setSelectedRows(ids),
+                rowSelectionModel: selectedRows.length
+                  ? { type: 'include', ids: new Set(selectedRows) }
+                  : { type: 'include', ids: new Set() },
+                onRowSelectionModelChange: (model) => setSelectedRows(Array.from(model?.ids || [])),
               } : {})}
               onRowClick={handleRowClick}
               getRowId={(row) => row.id}

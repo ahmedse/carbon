@@ -14,7 +14,11 @@ import asyncio
 
 from ai.engine.agent.reasoning import PulseAgent
 from ai.engine.llm.playbook import _fallback_prompt
-from ai.engine.llm.prompts import RENDERING_CAPABILITIES, build_chat_prompt
+from ai.engine.llm.prompts import (
+    RENDERING_CAPABILITIES,
+    RENDERING_CAPABILITIES_SUMMARY,
+    build_chat_prompt,
+)
 
 
 def test_rendering_capabilities_block_mentions_diagrams():
@@ -42,7 +46,10 @@ def test_build_chat_prompt_includes_rendering_block():
     )
     assert "## Rich content rendering" in prompt
     assert "```mermaid" in prompt
-    assert "flowchart LR" in prompt
+    # The compact summary carries the directive; the full worked examples moved
+    # to the rich-content-rendering skill references (progressive disclosure).
+    assert RENDERING_CAPABILITIES_SUMMARY in prompt
+    assert "flowchart" in prompt
 
 
 def test_build_chat_prompt_rendering_block_survives_access_inventory():

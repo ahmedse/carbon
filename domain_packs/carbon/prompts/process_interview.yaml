@@ -1,0 +1,48 @@
+# Process-owner interview kit (P3-04) — the four pilot topics.
+#
+# This is the single source of truth for the interview question bank. It is
+# loaded by ``ai/process_interview.py`` via ``load_domain_pack(...).prompts()``
+# (keyed by file stem: ``process_interview``). If the pack is absent (Neutral
+# domain pack) the module falls back to an identical built-in default list.
+#
+# Each question carries:
+#   id        — stable question id (keys the answers dict in ``record_answers``)
+#   question  — the interview prompt text
+#   field     — dotted path into the process definition document where the
+#               answer is written (must stay schema-compatible: no new
+#               top-level keys — ``additionalProperties:false``)
+#   required  — whether an answer is mandatory for a complete kit
+#   hint      — guidance for the owner answering
+#
+# Topic → field mapping (validated against ``ai/process_schema.json``):
+#   emergency waivers           → exceptions            (array, top-level)
+#   approval validity after edit → scope.approval_validity (sub-key of the
+#                               existing ``scope`` object — no new top-level key)
+#   reconciliation owner        → owner                 (string, top-level, required)
+#   SLA                         → constraints.sla        (sub-key of the existing
+#                               ``constraints`` object — ``constraints`` is
+#                               ``type: object`` so sub-keys are allowed)
+
+- id: emergency_waivers
+  question: "Under what conditions may an emergency waiver bypass the normal approval flow for this process?"
+  field: exceptions
+  required: false
+  hint: "Record as a list of waiver conditions; leave empty if no waivers are permitted."
+
+- id: approval_validity_after_edit
+  question: "Does editing a previously approved definition invalidate its approval?"
+  field: scope.approval_validity
+  required: false
+  hint: "e.g. 're-approval required after any edit' — stored under scope.approval_validity."
+
+- id: reconciliation_owner
+  question: "Who owns reconciliation when a running instance diverges from this process?"
+  field: owner
+  required: false
+  hint: "Identity string of the accountable owner (overwrites the definition owner field)."
+
+- id: sla
+  question: "What service-level agreement applies to this process?"
+  field: constraints.sla
+  required: false
+  hint: "e.g. 'review within 2 business days' — stored under constraints.sla."

@@ -11744,3 +11744,253 @@ cd /home/ahmed/aast/carbon/carbon-frontend
 npm run build && node scripts/check-i18n-keys.js
 npx vitest run src/__tests__/PeoplePages.test.jsx
 ```
+
+---
+
+## PULSE UNIFIED REMEDIATION PLAN — Phase 2 (Boundaries)
+
+> Canonical spec: `docs/pulse/PULSE-UNIFIED-REMEDIATION-PLAN.md` (Gate 2).
+> Tracked here for worker dispatch. Master runs all verification (workers have no terminal).
+
+| ID | Task | Status |
+|----|------|--------|
+| P2-04 | import-boundary-lint enforcing | DONE |
+| P2-05 | Single ORM (SQLAlchemy removed, Django canonical) | DONE — 1738 tests green, sqlalchemy uninstalled |
+| P2-06a | Command Boundary core (`command_boundary.py`, 13 stages) | DONE |
+| P2-07 | PDP v1 (`pdp.py`, default-deny) | DONE |
+| P2-06b | Route `call_host_api` through the boundary | DONE — 1746 tests green, import-boundary-lint clean |
+| P2-06c | Route worker fan-out through the boundary | DONE — 1746 tests green, import-boundary-lint clean |
+| P2-08 | Domain-pack extraction (forbidden-term grep = 0) | **DONE — source neutralized, `forbidden-term-lint` EXIT 0; handoff issued to Phase 3 master** |
+| P2-06e | Route proactive delivery through the boundary | **DONE — `execute_delivery_via_boundary` seam + PDP `deliver` permit; 4 tests green** |
+| P2-06d | Route ReAct loop through the boundary | **DONE — `execute_step_via_boundary` seam + fail-closed `_tool_requires_confirmation`; consent gate = boundary outcome; 1772 tests green, 3 lints clean** |
+| P2-06f | Route `ops_workflow` host REST through the boundary | **DONE — `_host_effect` seam helper routes 7 host REST calls; 1769 tests green, 3 lints clean** |
+| P2-11 | Toolkit gates (`verify.sh intelligence` + `audit-imports` + `audit-routes`) | **DONE — `verify.sh intelligence` (import-linter + fail-open + forbidden-term + vulture-report + replay smoke) wired into CI; `audit-imports`/`audit-routes` fail on seeded violation** |
+| — | `PULSE-MASTER.md` §boundary reconciled | **DONE — §2 documents the "one door" CommandBoundary routing (4 seams + PDP default-deny), wired to `verify.sh intelligence`/`audit-imports`/`audit-routes`** |
+
+---
+
+## P2-08 — Domain-pack extraction (DONE — source extraction/neutralization complete)
+
+> Canonical: plan row P2-08a–g. Acceptance: **forbidden-term grep over `engine/**` = 0 per file**.
+> Engine becomes domain-agnostic; Carbon-specific vocabulary/constants move to `domain_packs/carbon/`,
+> loaded via a `DomainPack` port. **One PR per source (a–g).** Foundation (F) is a prerequisite.
+
+> **STATUS: DONE (Master-verified 2026-09-13).** All domain vocabulary neutralized across
+> `engine/**` (14 files). `forbidden-term-lint.py` EXIT 0, `import-boundary-lint.py` EXIT 0,
+> `manage.py check` EXIT 0, full `ai` suite 1762 passed. See TASK-RESULTS.md "P2-08 source
+> extraction/neutralization".
+
+### Foundation (F) — `DomainPack` port + pack skeleton + forbidden-term lint
+> **STATUS: DONE** (Master-verified 2026-09-13). `domain.py` parses, `import-boundary-lint`
+> clean, zero forbidden terms in the new port files, loader loads the carbon pack + neutral fallback works.
+
+- **CREATE `backend/ai/engine/ports/domain.py`** — `DomainPack` Protocol with accessors:
+  `vocabulary() -> dict`, `api_catalog() -> dict`, `processes() -> list`, `skills() -> list`,
+  `triggers() -> dict`, `prompts() -> dict`; plus a module-level `get_domain_pack()`
+  loader that resolves the pack by instance/brand (default `"carbon"`) from `domain_packs/`,
+  with a **neutral generic fallback** (empty collections + safe defaults) when no pack is loaded —
+  the engine must boot and behave identically pack-less. Loader lives in the engine (ports read
+  only); it MUST NOT import Django. YAML parsing via stdlib-only fallback if PyYAML absent.
+- **CREATE `domain_packs/carbon/`** skeleton: `vocabulary.yaml`, `api_catalog.yaml`,
+  `processes/`, `skills/`, `triggers.yaml`, `prompts/`. Each YAML schema is defined here so the
+  seven source PRs have a fixed contract.
+- **CREATE `.ai-toolkit/scripts/forbidden-term-lint.py` + `forbidden-terms.txt`** — scans
+  `backend/ai/engine/**` for the domain terms listed in `forbidden-terms.txt`; allowlist keyed by
+  `relpath:lineno` (same convention as `import-boundary-lint.py`). Exits 1 on any non-allowlisted
+  hit, prints `Forbidden domain term: clean (engine is domain-agnostic)` on 0. This is the P2-08
+  acceptance gate and feeds P2-11's `verify.sh intelligence`.
+
+### Source PRs (one per file; forbidden-term grep must return 0 for that file)
+| PR | File | Extract | Into |
+|----|------|---------|------|
+| a | `engine/cognition/turn/intent.py` | campus names ("South Valley","Smart Village","Abu Qir","Alamein"), `list_emission_factors`, "emission factors", GHG terms ("GHG Protocol","carbon","footprint") | `vocabulary.yaml` |
+| b | `engine/cognition/plan/loop.py` | `_allow` set (`create_dq_rule`,`search_knowledge`,`get_entity_details`,`list_my_capabilities`,`plan_task`) | `api_catalog.yaml` (tool allow-list) |
+| c | `engine/cognition/plan/planner.py` | supplier/module/category analysis-dimension phrases (`_MULTI_SIGNALS`) | `vocabulary.yaml` |
+| d | `engine/cognition/turn/execute.py` | `"carbon_api"` source-type default + `source_map` | `api_catalog.yaml` |
+| e | `engine/proactive/delivery.py` | `"carbon"` brand fallback (`app_identifier`) + channel routes | `vocabulary.yaml` / `api_catalog.yaml` |
+| f | `engine/proactive/insight_generator.py` | power-domain example metric defaults (`unit_metrics`/`heat_rate`/`demand_forecasts`/`demand_actuals`/`value_mw`, `threshold_pct` 2.0/8.0, "Unit 2 Heat Rate") | `triggers.yaml` |
+| g | `engine/core/config.py` | DQ/Carbon constants (`TASK_DQ_VALIDATE_TIMEOUT=10`,`TASK_DQ_SUGGEST_TIMEOUT=60`,`PULSE_CARBON_CONTEXT_ENABLED`) + "Carbon expects …" comments | `api_catalog.yaml` / `vocabulary.yaml` |
+
+**Additional files surfaced by the lint baseline (77 hits / 16 files)** — each needs a PR too,
+mostly brand-in-docstring/comments or prompt-string vocabulary. Fold into the fan-out after a–g:
+`engine/__init__.py` (brand docstring), `engine/agent/plugins.py` (`create_dq_rule`),
+`engine/agent/tools.py` (`footprint`/`emission factors`), `engine/cognition/turn/draft.py`
+(`create_dq_rule`), `engine/cognition/turn/runner.py` (`Carbon`/`GHG`/`list_emission_factors`/
+`emission factors`/`PULSE_CARBON_CONTEXT_ENABLED`/`create_dq_rule`), `engine/core/event_bus.py`
+(brand docstring), `engine/knowledge_graph/store.py` (brand docstring), `engine/llm/playbook.py`
+(`carbon`), `engine/llm/prompts.py` (`emission factors`/`list_emission_factors`),
+`engine/memory/_redis.py` (brand docstring), `engine/proactive/trigger_evaluator.py`
+(`unit_metrics` example). Prompt strings → `domain_packs/carbon/prompts/`; docstrings/comments →
+neutralize in place (no data path, no port needed).
+
+**Rules for every source PR:**
+- Engine file must read via the `DomainPack` port; keep a **generic neutral fallback** so behavior
+  is unchanged when no pack loads (existing fixtures must stay green).
+- `import-boundary-lint` stays clean (no new `ai.` host imports; the port is `engine.ports`).
+- Do NOT touch other source files — one PR = one file. Cross-cutting schema decisions go in the
+  Foundation worker's PR only.
+
+### Forbidden terms (initial `forbidden-terms.txt`, refined by Foundation worker)
+`carbon`, `Carbon`, `GHG`, `GHG Protocol`, `footprint`, `emission factors`, `list_emission_factors`,
+`carbon_api`, `Alamein`, `South Valley`, `Smart Village`, `Abu Qir`, `Nibras`, `unit_metrics`,
+`heat_rate`, `demand_forecasts`, `demand_actuals`, `value_mw`, `Unit 2 Heat Rate`, `TASK_DQ_`,
+`PULSE_CARBON_CONTEXT_ENABLED`, `create_dq_rule`. (Words like `carbon` must be word-boundary
+matched so `carbon_copy`-style identifiers and generic prose don't false-positive — final list is
+the Foundation worker's responsibility, reviewed by Master before dispatch of a–g.)
+
+### Dispatch plan
+1. **Foundation worker** (backend-worker): port + pack skeleton + forbidden-term-lint + term list. Master verifies lint script runs + EXIT semantics on a seeded violation.
+2. **Fan out a–g** (7× backend-worker) once Foundation is merged & verified — they are independent.
+3. **Master final gate:** `forbidden-term-lint.py` = 0 over `engine/**`, `import-boundary-lint` clean, `pytest ai -q -m "not live"` green.
+
+---
+
+## Phase P2-06b — Route `call_host_api` through the command boundary
+**Role:** backend-worker · **Model:** DeepSeek V4-Flash · **Depends on:** P2-06a, P2-07 (both DONE)
+
+> **STATUS: DONE** (Master-verified). Architectural correction applied by Master:
+> the engine tool must NOT import host modules (`ai.command_boundary`,
+> `ai.command_boundary_factory`, `ai.protocol`) — that violates RULE_20 / P2-04
+> and `command_boundary.py`'s own "MUST NOT be imported by `ai.engine/`" contract.
+> Final shape: `execute_call_host_api` delegates its resolved host-effect closure
+> to `executor.execute_host_api_via_boundary(...)`; `CarbonHostExecutor` (host) is
+> what actually builds the `Command` and calls `CommandBoundary.execute()`.
+
+### Objective
+Wire the production `CommandBoundary` (P2-06a) with real dependencies and route the
+`call_host_api` tool (`backend/ai/engine/agent/tools.py::execute_call_host_api`) through it,
+replacing its ad-hoc `requires_confirmation`/`create_pending_execution` gate with the
+13-stage fail-closed boundary. Preserve the user-visible staging flow (mutations still
+return `requires_confirmation` + `execution_id`).
+
+### Files
+- CREATE `backend/ai/command_boundary_factory.py` — `get_command_boundary(db, *, executor=None, ...)` wiring the real `PDP`, `DjangoLedgerAdapter`, tool catalog (registered tool names), identity resolver, params validator, budget checker.
+- EDIT `backend/ai/pdp.py` — add a permit `Policy` for the `call_host_api` host action (and the host verb set) so legitimate calls are not default-denied; mutating verbs still gate on the autonomy dial.
+- EDIT `backend/ai/engine/agent/tools.py` — `execute_call_host_api` builds a `Command` and calls `boundary.execute()`; the old gate moves into the boundary executor closure.
+- CREATE `backend/ai/tests/test_call_host_api_boundary.py` — proves the tool routes through the boundary.
+
+### Contract (read these first)
+- `backend/ai/command_boundary.py` — `Command`, `Outcome`, `CommandBoundary.execute()`, `execute()`.
+- `backend/ai/pdp.py` — `PDP`, `Policy`, `Decision`, `DEFAULT_POLICIES`.
+- `backend/ai/adapters/ledger.py` — `DjangoLedgerAdapter(db)`.
+- `backend/ai/engine/agent/executor.py` — `HostAPIExecutor` (staging API).
+
+### DO NOT TOUCH
+- `backend/ai/engine/` port files (engine stays portable — never import `command_boundary` from `ai/engine/`).
+- `backend/ai/guards.py`, `backend/ai/protocol.py` (guard contracts unchanged).
+- Frontend, `config/settings.py`, `backend/accounts/*`.
+
+### Verification Gate (Master runs)
+```bash
+cd /home/ahmed/ws/carbon/backend && /home/ahmed/ws/carbon/.venv/bin/python -m pytest ai -q -k "not code_sandbox" -m "not live"
+cd /home/ahmed/ws/carbon && python3 .ai-toolkit/scripts/import-boundary-lint.py
+```
+
+---
+
+## Phase P2-06c — Route worker fan-out through the command boundary
+**Role:** backend-worker · **Model:** DeepSeek V4-Flash · **Depends on:** P2-06a, P2-06b, P2-07 (all DONE)
+
+> **STATUS: DONE** (Master-verified). The P1-07 interim hook call is deleted;
+> `workers.py` now delegates to `CarbonHostExecutor.execute_worker_tools_via_boundary`,
+> which builds a `Command` per tool call (read → `action="read"` → PDP ALLOW;
+> mutation → `action="execute"` + `autonomy="human_only"` → PDP ASK → stage-7
+> consent refuses, executor never runs). Engine stays host-free.
+
+### Objective
+Replace the interim P1-07 hook mechanism in `backend/ai/engine/agent/workers.py`
+(`_get_hook_pipeline()` + `ExecuteWitness(is_worker=True, hook_pipeline=...)` +
+`readonly_worker_hook`) with the 13-stage fail-closed `CommandBoundary`. Every
+worker tool call becomes a `Command`; the boundary's PDP + consent stages block
+mutations (workers are read-only), read-only tools execute. Delete the interim
+hook call entirely.
+
+### Contract (read these first)
+- `backend/ai/command_boundary.py` — `Command`, `Outcome`, `CommandBoundary`, `STAGES`.
+- `backend/ai/command_boundary_factory.py` — `get_command_boundary(db, *, executor, tool_catalog, ...)`, `_STATIC_TOOL_NAMES`.
+- `backend/ai/pdp.py` — `DEFAULT_POLICIES`, `_READ_ACTIONS`, `_MUTATING_ACTIONS`, `_mutation_outcome`, `_read_outcome`.
+- `backend/ai/engine/agent/workers.py` — current `_run_worker` / `_execute_worker_tools` / `_collect_guardrail_outcome` / `_render_worker_tool_results`.
+- `backend/ai/engine/cognition/turn/execute.py` — `_execute_single_tool(tool_call, executor_override, hook_pipeline, hook_ctx_defaults, knowledge_store)` returns the completed-tool dict.
+- `backend/ai/host_executor.py` — `CarbonHostExecutor.execute_host_api_via_boundary` (the P2-06b seam to mirror).
+
+### How the boundary blocks a worker mutation (the key mechanism)
+A worker mutation must be REFUSED, and its executor must NEVER run. Achieve this
+with NO new PDP policy, purely by mapping the `Command` fields:
+
+- Read-only worker tool → `Command.action="read"` → PDP `permit-read-only`
+  (`"read" ∈ _READ_ACTIONS`) → `Decision.ALLOW` → stage 7 skipped → executor runs.
+- Mutation worker tool → `Command.action="execute"` + `autonomy="human_only"` →
+  PDP `permit-mutations-by-autonomy` → `_mutation_outcome("human_only")` →
+  `Decision.ASK` → stage 7 consent (`requires_confirmation` becomes True because
+  ASK ∈ {ALLOW_WITH_CONFIRMATION, ASK}; `confirmation_token`/`_confirmed` absent)
+  → `Outcome(status="refused", error="consent: action requires confirmation …")`.
+  The boundary executor closure is never invoked.
+
+### Files
+1. **EDIT `backend/ai/engine/agent/workers.py`**
+   - Delete `_get_hook_pipeline()` and the `self._hook_pipeline` field.
+   - `_run_worker`: drop the `_pipeline = self._get_hook_pipeline()` + fail-closed
+     block; call the new `_execute_worker_tools` (below) instead.
+   - `_execute_worker_tools` → delegate to the host executor seam:
+     `self._executor.execute_worker_tools_via_boundary(tool_calls=tool_calls, instance_id=…, conversation_id=…, run_id=worker_run_id, host_user_id=getattr(self._executor, "host_user_id", None), knowledge_store=self._knowledge_store)`.
+     If `self._executor` is None or lacks the seam → fail-closed: return one
+     blocked dict per tool call (error "worker tool execution unavailable (no boundary seam)",
+     `guardrail_flags=["worker_tool_blocked", f"blocked:{name}"]`). No engine imports
+     of `command_boundary` / `command_boundary_factory` / `ai.protocol` — ever.
+   - Update `_collect_guardrail_outcome` to key the block classification off
+     `"worker_tool_blocked"` in `guardrail_flags` (and/or the error prefix), not
+     only the old `_GUARDRAIL_CANCEL_PREFIX` string. Preserve the `WorkerArtifact`
+     surface (error/guardrail_flags/detail) unchanged.
+
+2. **EDIT `backend/ai/host_executor.py`** — add `CarbonHostExecutor.execute_worker_tools_via_boundary` (mirror the P2-06b seam):
+   ```python
+   async def execute_worker_tools_via_boundary(self, *, tool_calls, instance_id="",
+           conversation_id="", run_id=None, host_user_id=None, knowledge_store=None) -> list[dict]:
+       from ai.command_boundary import Command
+       from ai.command_boundary_factory import get_command_boundary, _STATIC_TOOL_NAMES
+       from ai.protocol import Scope
+       # classify + build one Command per tool call; action="read" | "execute";
+       # autonomy="human_only"; requires_confirmation=False; objects=[tool_name];
+       # params=args; tool=tool_name; scope=Scope(user_identifier=uid); principal=uid.
+       # boundary executor = closure that calls
+       #   ai.engine.cognition.turn.execute._execute_single_tool(
+       #       tool_call, self, hook_pipeline=None, hook_ctx_defaults={...}, knowledge_store=knowledge_store)
+       # tool_catalog={name: True for name in _STATIC_TOOL_NAMES}
+       # map Outcome → completed-tool dict:
+       #   executed/confirmed → result = outcome.result (the _execute_single_tool dict, or {"result": …})
+       #   refused/failed → {"tool_name", "tool_call_id", "result": None,
+       #        "error": f"Worker tool call refused by boundary: {outcome.error or outcome.reason}",
+       #        "guardrail_flags": ["worker_tool_blocked", f"blocked:{tool_name}"]}
+   ```
+   Classification helper (host-side, mirrors `readonly_worker_hook` exactly):
+   `_READONLY_WORKER_TOOLS = {"search_knowledge","get_entity_details","query_knowledge_graph","get_schema_info","get_relationship_info","get_table_profile"}`;
+   read if `name ∈ _READONLY_WORKER_TOOLS`; `call_host_api` → mutation iff
+   `args.get("body")` truthy or `args.get("_method","").upper() in {"POST","PUT","DELETE","PATCH"}`;
+   all other tools → read (pass), matching the old hook.
+
+3. **EDIT `backend/ai/tests/test_worker_fanout_hooks.py`** (rename docstring to "P2-06c — worker fan-out routes through the command boundary"):
+   - Inject a host-executor fake with `execute_worker_tools_via_boundary` (or keep
+     the real `CarbonHostExecutor` wiring with a stubbed `db` + offline PDP/ledger),
+     monkeypatch `factory.get_command_boundary`/`ai.engine.agent.tools.get_tool_executors`
+     as needed for full offline determinism.
+   - `test_worker_mutation_tool_call_is_blocked`: assert the mutation executor
+     NEVER ran, `artifact.error` is non-empty, `guardrail_flags` contains
+     `worker_tool_blocked` + `blocked:call_host_api`.
+   - `test_worker_readonly_tool_call_executes`: assert the read-only executor ran
+     and its result landed in the artifact (error None, flags empty).
+
+### DO NOT TOUCH
+- `backend/ai/engine/` must stay host-free: never import `ai.command_boundary`,
+  `ai.command_boundary_factory`, `ai.protocol`, `ai.pdp` from any `engine/` file.
+- `backend/ai/guards.py`, `backend/ai/protocol.py`, `backend/ai/command_boundary.py`
+  (13-stage core unchanged), `backend/ai/pdp.py` (no new policy needed).
+- `guardrails.py` (`readonly_worker_hook` / `build_default_pipeline` stay — they
+  still serve the orchestrator `ExecuteWitness` path). Only `workers.py` stops calling them.
+- Frontend, `config/settings.py`, `backend/accounts/*`.
+
+### Verification Gate (Master runs)
+```bash
+cd /home/ahmed/ws/carbon/backend && /home/ahmed/ws/carbon/.venv/bin/python -m pytest ai/tests/test_worker_fanout_hooks.py ai/tests/redteam/test_worker.py ai/engine/cognition/turn -q -k "not code_sandbox" -m "not live"
+cd /home/ahmed/ws/carbon && python3 .ai-toolkit/scripts/import-boundary-lint.py
+cd /home/ahmed/ws/carbon/backend && /home/ahmed/ws/carbon/.venv/bin/python -m pytest ai -q -k "not code_sandbox" -m "not live"
+```

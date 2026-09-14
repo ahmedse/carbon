@@ -220,6 +220,71 @@ function repairXychart(code) {
 }
 
 /**
+ * Sanitize an xychart-beta block for mermaid compatibility. The parser rejects
+ * an unquoted `title` containing parentheses, and chokes on em-dashes / angle
+ * brackets / pipes in labels. We: (1) quote the `title` and strip parens,
+ * (2) normalize subscript digits (CO₂e → CO2e) everywhere, (3) clean + quote +
+ * truncate each x-axis category, (4) quote the y-axis label.
+ */
+const SUBSCRIPT_MAP = {
+  '\u2080': '0', '\u2081': '1', '\u2082': '2', '\u2083': '3', '\u2084': '4',
+  '\u2085': '5', '\u2086': '6', '\u2087': '7', '\u2088': '8', '\u2089': '9',
+};
+
+function normalizeSubscripts(text) {
+  return text.replace(/[\u2080-\u2089]/g, (c) => SUBSCRIPT_MAP[c] || c);
+}
+
+function sanitizeXychartAxisLabels(code) {
+  if (!code || !code.includes('xychart-beta')) return code;
+
+  return code
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim();
+      const indent = line.slice(0, line.length - line.trimStart().length);
+
+      // title — quote it, strip parens (invalid unquoted), normalize subscripts.
+      const titleMatch = trimmed.match(/^title\s+(.+)$/i);
+      if (titleMatch) {
+        const raw = normalizeSubscripts(titleMatch[1].trim().replace(/^"|"$/g, ''))
+          .replace(/[()<>{}|]/g, '')
+          .trim();
+        return `${indent}title "${raw}"`;
+      }
+
+      // x-axis [a, b, c] — clean + quote + truncate each category.
+      const xAxisMatch = trimmed.match(/^x-axis\s*\[([^\]]+)\]$/i);
+      if (xAxisMatch) {
+        const safe = xAxisMatch[1]
+          .split(',')
+          .map((lbl) => {
+            const clean = normalizeSubscripts(lbl.trim().replace(/^"|"$/g, ''))
+              .replace(/\u2014|\u2013/g, '-')
+              .replace(/[<>{}|]/g, '')
+              .trim();
+            const truncated = clean.length > 20 ? `${clean.slice(0, 18)}\u2026` : clean;
+            return `"${truncated}"`;
+          })
+          .join(', ');
+        return `${indent}x-axis [${safe}]`;
+      }
+
+      // y-axis "label" 0 --> N — quote the label, normalize subscripts.
+      const yAxisMatch = trimmed.match(/^y-axis\s+(?:"([^"]*)"|([^0-9-]+?))\s+([-\d.]+\s*-->\s*[-\d.]+)$/i);
+      if (yAxisMatch) {
+        const label = normalizeSubscripts((yAxisMatch[1] ?? yAxisMatch[2] ?? '').trim())
+          .replace(/[()<>{}|]/g, '')
+          .trim();
+        return `${indent}y-axis "${label}" ${yAxisMatch[3].replace(/\s+/g, ' ')}`;
+      }
+
+      return line;
+    })
+    .join('\n');
+}
+
+/**
  * Repair a top-level ``bar`` diagram the model sometimes emits. Mermaid has NO
  * ``bar`` diagram type — bar charts are ``xychart-beta``. The model's output
  * uses a ``bar`` header with pie-style "Label" : value slices plus optional
@@ -308,6 +373,52 @@ function repairTopLevelBar(code) {
 }
 
 /**
+ * Repair GFM table blocks the model breaks across lines. Two failure modes:
+ *   1. An ATX heading glued to the table header row on one line:
+ *      "###### Title | H1 | H2 |" → heading + blank + "| H1 | H2 |".
+ *   2. A blank line between the header row and its delimiter row (GFM requires
+ *      the delimiter to immediately follow the header) — the blank is dropped.
+ * Runs before the line-oriented reflow so the header/delimiter/rows land as a
+ * single contiguous table block the GFM parser recognizes.
+ */
+function repairTableBlocks(content) {
+  if (!content || typeof content !== 'string' || !content.includes('|')) return content;
+
+  const DELIM = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/;
+  const isPipeRow = (l) => /^\s*\|.*\|\s*$/.test(l);
+
+  // Pass 1: split a leading ATX heading glued to a table header row.
+  const split = [];
+  for (const raw of content.split('\n')) {
+    const trimmed = raw.trim();
+    const m = trimmed.match(/^(#{1,6}\s+.+?)\s+(\|.+\|)\s*$/);
+    if (m && (m[2].match(/\|/g) || []).length >= 2) {
+      split.push(m[1]);
+      split.push('');
+      split.push(m[2]);
+    } else {
+      split.push(raw);
+    }
+  }
+
+  // Pass 2: drop a blank line sitting between a table header row and its delimiter.
+  const out = [];
+  for (let i = 0; i < split.length; i += 1) {
+    const cur = split[i];
+    const prev = out[out.length - 1];
+    if (
+      cur.trim() === '' &&
+      prev !== undefined && isPipeRow(prev) && !DELIM.test(prev) &&
+      i + 1 < split.length && DELIM.test(split[i + 1])
+    ) {
+      continue; // drop the blank so header and delimiter are adjacent
+    }
+    out.push(cur);
+  }
+  return out.join('\n');
+}
+
+/**
  * Reflow structural markdown the model sometimes collapses onto a single line.
  * gpt-4o frequently emits a whole section as one run-on line: ATX headings
  * glued to prose, ordered-list items concatenated, and bullets concatenated.
@@ -340,6 +451,14 @@ function reflowMarkdownStructure(content) {
     const tableLines = reflowCollapsedTable(trimmed);
     if (tableLines) {
       out.push(...tableLines);
+      continue;
+    }
+
+    // Data rows collapsed on one line (header+delimiter already separate):
+    // "| A | 1 || B | 2 ||" → split into individual rows.
+    const dataRows = reflowCollapsedDataOnlyRows(trimmed);
+    if (dataRows) {
+      out.push(...dataRows);
       continue;
     }
 
@@ -433,6 +552,27 @@ function reflowCollapsedTable(line) {
   for (let i = 1; i < rows.length; i += 1) out.push(rows[i].trim());
   out.push(''); // close the table block
   return out;
+}
+
+/**
+ * Reflow collapsed data-only table rows onto separate lines.
+ * Handles the case where the model emits all data rows on ONE line separated
+ * by adjacent pipes with no spaces (``||``) — the header and delimiter are
+ * already on their own lines, only the data is collapsed:
+ *   | Abu Qir — X | 47 || Smart Village — Y | 84 || ...
+ */
+function reflowCollapsedDataOnlyRows(line) {
+  if (!line.startsWith('|')) return null;
+  if (/\|\s*:?-{2,}:?\s*\|/.test(line)) return null; // delimiter row — skip
+  // Require at least one adjacent-pipe row boundary (0 spaces between rows).
+  if (!/\|\s{0,1}\|/.test(line)) return null;
+  const sentinel = '\u0001';
+  const exploded = line.replace(/\|\s{0,1}\|/g, `|${sentinel}|`).split(sentinel);
+  if (exploded.length < 2) return null;
+  const rows = exploded.map((r) => r.trim()).filter(Boolean);
+  // Each segment must have ≥2 pipes to be a real row (guards against empty cells).
+  if (rows.some((r) => (r.match(/\|/g) || []).length < 2)) return null;
+  return rows;
 }
 
 /** Split one prose line's collapsed headings / list items onto their own lines. */
@@ -577,7 +717,7 @@ function MermaidBlock({ code }) {
   const [diagram, setDiagram] = useState(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
-  const effectiveCode = repairTopLevelBar(repairXychart(reflowSingleLineMermaid(code)));
+  const effectiveCode = sanitizeXychartAxisLabels(repairTopLevelBar(repairXychart(reflowSingleLineMermaid(code))));
 
   useEffect(() => {
     let cancelled = false;
@@ -591,6 +731,11 @@ function MermaidBlock({ code }) {
           securityLevel: 'loose',
           theme: 'default',
           fontFamily: 'inherit',
+          // Keep charts compact and responsive — never full-bleed square blocks.
+          pie: { useMaxWidth: true },
+          xyChart: { width: 560, height: 300 },
+          flowchart: { useMaxWidth: true },
+          sequence: { useMaxWidth: true },
         });
         mermaidIdRef.current += 1;
         const id = `mmd-${mermaidIdRef.current}-${Date.now()}`;
@@ -660,13 +805,23 @@ function MermaidBlock({ code }) {
       <Box
         sx={{
           my: 1.5,
+          display: 'flex',
+          justifyContent: 'center',
           overflowX: 'auto',
           bgcolor: 'background.paper',
           borderRadius: 1,
           border: 1,
           borderColor: 'divider',
           p: 1.5,
-          '& svg': { maxWidth: '100%', height: 'auto' },
+          // Cap the rendered height so a square pie/flowchart never dominates the
+          // thread; width scales down to fit, height follows the aspect ratio.
+          '& svg': {
+            maxWidth: '100%',
+            maxHeight: 320,
+            height: 'auto',
+            width: 'auto',
+            display: 'block',
+          },
           '& a': { color: 'primary.main' },
         }}
         dangerouslySetInnerHTML={{ __html: diagram.html }}
@@ -900,10 +1055,13 @@ export {
   repairXychart,
   repairTopLevelBar,
   reflowMarkdownStructure,
+  repairTableBlocks,
+  sanitizeXychartAxisLabels,
+  reflowCollapsedDataOnlyRows,
 };
 
 export default function MarkdownMessage({ content }) {
-  const normalized = reflowMarkdownStructure(normalizeMermaidFences(content));
+  const normalized = reflowMarkdownStructure(repairTableBlocks(normalizeMermaidFences(content)));
   return (
     <Box sx={{ '& > *:first-of-type': { mt: 0 }, '& > *:last-of-type': { mb: 0 } }}>
       <ReactMarkdown

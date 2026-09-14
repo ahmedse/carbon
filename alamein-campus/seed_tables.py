@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Create 5 Data Products, 15 tables, all fields via Carbon API."""
-import requests, json, sys, time
+import requests, json, sys, time, os
+from dotenv import load_dotenv
 
 BASE = "http://localhost:8009/carbon-api"
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "backend", ".env"))
+PASSWORD = os.environ.get("CARBON_ADMIN_PASSWORD") or os.environ.get("CARBON_PASS")
+if not PASSWORD:
+    raise SystemExit("CARBON_ADMIN_PASSWORD not set — add it to backend/.env (see backend/.env.example).")
 
 # ── Login with retry ───────────────────────────────────────
 for attempt in range(5):
-    resp = requests.post(f"{BASE}/token/", json={"username": "ahmed", "password": "AdminPa_132"})
+    resp = requests.post(f"{BASE}/token/", json={"username": "ahmed", "password": PASSWORD})
     if resp.status_code == 200:
         TOKEN = resp.json()["access"]
         break

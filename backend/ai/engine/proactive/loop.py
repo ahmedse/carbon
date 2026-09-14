@@ -19,7 +19,7 @@ from ai.engine.core.models import Instance
 logger = logging.getLogger("pulse.proactive.loop")
 
 
-async def run_proactive_evaluation(db, instance: Instance) -> dict:
+async def run_proactive_evaluation(db, instance: Instance, executor=None) -> dict:
     """
     Main proactive evaluation — called per instance by the cognition scheduler.
     Returns a summary dict for status reporting.
@@ -78,7 +78,7 @@ async def run_proactive_evaluation(db, instance: Instance) -> dict:
                 }
 
                 group_id = getattr(tr, "_group_id", None)
-                await deliver_insight(db, instance_id, insight_data, tr.trigger_id, group_id)
+                await deliver_insight(db, instance_id, insight_data, tr.trigger_id, group_id, executor)
                 await record_fire(db, tr.trigger_id)
                 summary["insights_delivered"] += 1
 
@@ -98,7 +98,7 @@ async def run_proactive_evaluation(db, instance: Instance) -> dict:
     return summary
 
 
-async def run_daily_briefing(db, instance: Instance) -> dict:
+async def run_daily_briefing(db, instance: Instance, executor=None) -> dict:
     """
     Generate and deliver a daily briefing for an instance.
     Should be called once per day at the configured briefing hour.
@@ -116,7 +116,8 @@ async def run_daily_briefing(db, instance: Instance) -> dict:
 
         if briefing:
             from ai.engine.proactive.delivery import deliver_insight
-            await deliver_insight(db, instance_id, briefing)
+            _deliver_kwargs = {} if executor is None else {"executor": executor}
+            await deliver_insight(db, instance_id, briefing, **_deliver_kwargs)
             summary["delivered"] = True
             summary["title"] = briefing["title"]
 

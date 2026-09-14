@@ -26,6 +26,10 @@ class PolicyDecisionRow(AppScopeMixin):
     reason = models.TextField(default="")
     policy_version = models.TextField(default="")
     autonomy = models.TextField(default="human_only")
+    # Which boundary stage produced this decision ("pdp" for the authorization
+    # point; "grant" for the business-approval stage). Keeps authorization and
+    # business approval attribution distinct in the audit ledger.
+    stage = models.TextField(default="pdp", db_index=True)
     process_state = models.JSONField(null=True, blank=True)
     budget = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

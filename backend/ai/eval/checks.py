@@ -169,3 +169,53 @@ def assert_synonym_merged(breakdown, canonical, raw_variant):
         f"'{raw_variant}' not merged into '{canonical}' and still appears "
         f"as its own bucket; merged_from={merged!r}"
     )
+
+
+# ── AnswerEnvelope invariants (typed structured-output path) ─────────────────
+
+import re as _re
+
+#: A headline that asserts the absence of data (allow up to 3 words between
+#: "no" and the data noun, e.g. "no carbon emissions data").
+_NO_DATA_HEADLINE_RE = _re.compile(
+    r"\bno\s+(?:\w+\s+){0,3}(?:data|records?|results?|calculations?|emissions?|entries|rows)\b"
+    r"|there (?:is|are) no \w"
+    r"|\bnot available\b",
+    _re.IGNORECASE,
+)
+
+
+def assert_envelope_has_data(envelope):
+    """Assert a data-bearing envelope actually carries tables or charts.
+
+    ``envelope`` is an :class:`AnswerEnvelope` or its ``model_dump()`` dict.
+    Raises when both ``tables`` and ``charts`` are empty — the exact failure
+    where a data question rendered as prose-only.
+    """
+    tables = _attr(envelope, "tables") or []
+    charts = _attr(envelope, "charts") or []
+    if not tables and not charts:
+        raise AssertionError("envelope has neither tables nor charts for a data question")
+
+
+def assert_envelope_not_no_data(envelope):
+    """Assert the envelope headline does NOT falsely claim data is absent.
+
+    Guards the "no data available" regression: a headline asserting absence is
+    a hard failure whenever the envelope also carries tables/charts.
+    """
+    headline = str(_attr(envelope, "headline") or "")
+    tables = _attr(envelope, "tables") or []
+    charts = _attr(envelope, "charts") or []
+    if (tables or charts) and _NO_DATA_HEADLINE_RE.search(headline):
+        raise AssertionError(
+            f"envelope carries data but headline claims none: {headline!r}"
+        )
+
+
+def _attr(obj, name):
+    """Read ``name`` from a pydantic model or a plain dict (envelope-agnostic)."""
+    if isinstance(obj, dict):
+        return obj.get(name)
+    return getattr(obj, name, None)
+

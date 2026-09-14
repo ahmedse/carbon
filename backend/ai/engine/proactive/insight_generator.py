@@ -127,9 +127,9 @@ async def detect_performance_drift(
 
     metrics_config is a list of:
     {
-        "table": "unit_metrics",
-        "column": "heat_rate",
-        "name": "Unit 2 Heat Rate",
+        "table": "metrics",
+        "column": "efficiency",
+        "name": "Example Metric",
         "lookback_days": 30,
         "threshold_pct": 2.0,
         "direction": "increase"  # increase means degradation
@@ -196,9 +196,9 @@ async def detect_forecast_deviations(
 
     deviation_config:
     {
-        "forecast_table": "demand_forecasts",
-        "actual_table": "demand_actuals",
-        "value_column": "value_mw",
+        "forecast_table": "forecasts",
+        "actual_table": "actuals",
+        "value_column": "value",
         "time_column": "timestamp",
         "join_column": "timestamp",
         "threshold_pct": 8.0

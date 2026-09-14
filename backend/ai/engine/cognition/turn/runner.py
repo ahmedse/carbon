@@ -180,21 +180,21 @@ _DELIVERY_SYNTHESIS = {
         "The user wants to UNDERSTAND this dataset, not just see rows. Lead "
         "with what it IS and how it is used, group it meaningfully (by "
         "category/scope), name the notable entries and what they mean, and "
-        "present the data as a Markdown table PLUS a Mermaid chart so it is "
-        "both readable and visual. End with one natural next step."
+        "present the data as a Markdown table so it is readable. "
+        "End with one natural next step."
     ),
     "analyze": (
         "The user wants insight — surface the extremes (highest/lowest), the "
         "groupings, and patterns. Lead with the finding, then support it with "
-        "a Markdown table and a Mermaid chart."
+        "a Markdown table."
     ),
     "compare": (
         "The user wants a side-by-side comparison — contrast the entries on the "
-        "dimensions that matter using a Markdown table and a Mermaid bar chart."
+        "dimensions that matter using a Markdown table."
     ),
     "summarize": (
-        "The user wants a roll-up — give headline numbers, a compact table and "
-        "chart of the main groups, no exhaustive list."
+        "The user wants a roll-up — give headline numbers and a compact table "
+        "of the main groups, no exhaustive list."
     ),
 }
 
@@ -432,19 +432,146 @@ async def _clarify_no_matches(
 
 
 def _append_evidence_footer(synthesized: str, usable: list[dict]) -> str:
-    """Append a source footer citing the tools that grounded the answer."""
-    if not synthesized or not usable:
-        return synthesized
-    sources: list[str] = []
+    """No-op — technical tool names are not surfaced to end users."""
+    return synthesized
+
+
+def _render_tool_tables(usable: list[dict]) -> str:
+    """Deterministically render GFM markdown tables from structured tool results.
+
+    Covers the known platform data shapes so the synthesis LLM never has to
+    format a table itself — it only writes prose around the pre-built tables.
+    Returns an empty string when no tabular structure is found.
+    """
+    import json as _json
+
+    _SCOPE_NAMES = {1: "Scope 1 — Direct", 2: "Scope 2 — Indirect Energy", 3: "Scope 3 — Value Chain"}
+
+    parts: list[str] = []
     for tr in usable:
-        name = (tr.get("tool_name") or "").strip()
-        if name and name not in sources:
-            sources.append(name)
-    if not sources:
-        return synthesized
-    import datetime
-    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    return synthesized + f"\n\n---\n*Sources: {', '.join(sources)} — retrieved {ts}*"
+        result = tr.get("result")
+        if result is None:
+            continue
+        data = result
+        if isinstance(result, str):
+            try:
+                data = _json.loads(result)
+            except (TypeError, ValueError):
+                continue
+        if isinstance(data, dict) and "status_code" in data and "data" in data:
+            data = data["data"]
+        if not isinstance(data, dict):
+            continue
+
+        by_scope = data.get("by_scope") or {}
+        if isinstance(by_scope, dict) and by_scope:
+            rows = []
+            for k, v in by_scope.items():
+                if isinstance(v, dict):
+                    name = _SCOPE_NAMES.get(int(k), f"Scope {k}")
+                    co2e = float(v.get("total_co2e_kg") or 0)
+                    count = v.get("count", 0)
+                    rows.append(f"| {name} | {co2e:,.1f} | {count} |")
+            if rows:
+                parts.append(
+                    "| Scope | CO₂e (kg) | Calculations |\n"
+                    "|---|---|---|\n" + "\n".join(rows)
+                )
+
+        by_module = data.get("by_module") or []
+        if isinstance(by_module, list) and by_module:
+            rows = []
+            for m in by_module[:30]:
+                if isinstance(m, dict):
+                    name = m.get("module_name") or m.get("module") or "—"
+                    co2e = float(m.get("total_co2e_kg") or 0)
+                    count = m.get("count", 0)
+                    rows.append(f"| {name} | {co2e:,.1f} | {count} |")
+            if rows:
+                parts.append(
+                    "| Module / Branch | CO₂e (kg) | Calculations |\n"
+                    "|---|---|---|\n" + "\n".join(rows)
+                )
+
+        # Generic list-of-dicts shapes (rows / results / items / records)
+        if not parts:
+            for key in ("rows", "results", "items", "records"):
+                items = data.get(key)
+                if isinstance(items, list) and items and isinstance(items[0], dict):
+                    cols = list(items[0].keys())[:8]
+                    header = "| " + " | ".join(str(c).replace("_", " ").title() for c in cols) + " |"
+                    sep = "|" + "|".join(["---"] * len(cols)) + "|"
+                    rows = [
+                        "| " + " | ".join(str(row.get(c, "")) for c in cols) + " |"
+                        for row in items[:50]
+                    ]
+                    if rows:
+                        parts.append("\n".join([header, sep] + rows))
+                    break
+
+    return "\n\n".join(parts)
+
+
+def _envelope_to_markdown(envelope) -> str:
+    """Build a clean markdown fallback from a typed envelope.
+
+    Used for copy/export and any non-envelope surface. Renders headline + prose
+    + well-formed GFM tables from the typed blocks — never the model's ad-hoc
+    markdown — so even the fallback text is structurally valid.
+    """
+    parts: list[str] = []
+    headline = (getattr(envelope, "headline", "") or "").strip()
+    if headline:
+        parts.append(headline)
+    for para in getattr(envelope, "prose", None) or []:
+        text = (para or "").strip()
+        if text:
+            parts.append(text)
+    for table in getattr(envelope, "tables", None) or []:
+        title = (getattr(table, "title", "") or "").strip()
+        columns = list(getattr(table, "columns", None) or [])
+        rows = list(getattr(table, "rows", None) or [])
+        if not columns:
+            continue
+        if title:
+            parts.append(f"### {title}")
+        lines = [
+            "| " + " | ".join(str(c) for c in columns) + " |",
+            "| " + " | ".join("---" for _ in columns) + " |",
+        ]
+        for row in rows:
+            lines.append("| " + " | ".join(str(c) for c in row) + " |")
+        parts.append("\n".join(lines))
+    for caveat in getattr(envelope, "caveats", None) or []:
+        text = (getattr(caveat, "text", "") or "").strip()
+        if text:
+            parts.append(f"> {text}")
+    return "\n\n".join(parts).strip()
+
+
+async def _stream_final_text(text: str, *, stream_callback, progress_callback) -> None:
+    """Stream a finished answer to the UI in 80-char chunks.
+
+    Emits the ``Composing response…`` thinking cue first, then streams the
+    text progressively so the user sees movement during the final render.
+    Shared by BOTH the markdown-synthesis path and the typed-envelope path so
+    data answers also stream and show the thinking indicator.
+    """
+    if not stream_callback or not text:
+        return
+    if progress_callback:
+        try:
+            await progress_callback("Composing response…")
+        except Exception:
+            pass
+    pos = 0
+    while pos < len(text):
+        end = min(pos + 80, len(text))
+        try:
+            await stream_callback(text[pos:end])
+        except Exception:
+            break
+        pos = end
 
 
 async def _synthesize_tool_results(
@@ -457,6 +584,8 @@ async def _synthesize_tool_results(
     model: str | None = None,
     delivery: str = "explain",
     envelope_synthesizer=None,
+    stream_callback=None,
+    progress_callback=None,
 ) -> dict | None:
     """Ask the LLM to write a grounded final answer from executed tool results.
 
@@ -510,20 +639,22 @@ async def _synthesize_tool_results(
     if not usable:
         return None
 
-    stripped = (draft_text or "").strip()
-    # A substantial prose answer already exists — don't re-synthesize.
-    if len(stripped) >= 300:
-        return None
-
     results_text = _render_tool_results_for_synthesis(usable)
     if not results_text.strip():
         return None
 
-    # [PAQ-2A] Typed Answer Envelope (additive, flag-gated). When enabled,
-    # synthesize the structured envelope FIRST; on success it rides alongside
-    # the markdown text (the markdown remains the primary/fallback render for
-    # the current UI). Flag-off guarantees zero behaviour change.
+    # [PAQ-2A/2B] Typed Answer Envelope. When enabled and the tools returned
+    # structured data, synthesize the envelope FIRST — even when the model
+    # already wrote a long markdown draft — so data answers render as typed
+    # blocks (deterministic tables/charts) instead of ad-hoc markdown the model
+    # frequently malforms. Fail-open: any error folds to ``None`` and the
+    # markdown path below runs unchanged.
     envelope = None
+    if progress_callback:
+        try:
+            await progress_callback("Analysing data…")
+        except Exception:
+            pass
     if get_settings().PULSE_ENVELOPE_ENABLED and envelope_synthesizer is not None:
         try:
             envelope = await envelope_synthesizer(
@@ -536,6 +667,43 @@ async def _synthesize_tool_results(
         except Exception:  # noqa: BLE001 - envelope must never break the turn
             logger.warning("Envelope synthesis failed", exc_info=True)
             envelope = None
+
+    # When the envelope carries data blocks it BECOMES the answer, regardless of
+    # draft length: the frontend renders the typed blocks and the markdown
+    # fallback (copy/export/non-envelope surfaces) is built from the envelope's
+    # own headline + prose + clean GFM tables — never the model's ad-hoc tables.
+    if envelope is not None and (envelope.tables or envelope.charts):
+        _env_text = _envelope_to_markdown(envelope)
+        await _stream_final_text(
+            _env_text,
+            stream_callback=stream_callback,
+            progress_callback=progress_callback,
+        )
+        return {
+            "text": _env_text,
+            "tokens": 0,
+            "model": model or "",
+            "envelope": envelope.model_dump(),
+        }
+
+    stripped = (draft_text or "").strip()
+    # No usable envelope data blocks — keep the existing markdown behaviour: a
+    # substantial prose answer already exists → don't re-synthesize.
+    #
+    # EXCEPTION (no-data hallucination net): when the draft falsely claims
+    # "no data" while the executed tools actually returned data, the draft is a
+    # history-poisoned hallucination and MUST be re-synthesized from the real
+    # tool results. The synthesis prompt below carries a hard NON-EMPTY GUARD
+    # (never say "no data" when usable tools returned data), so forcing this
+    # path guarantees a factual answer instead of silently keeping "no data".
+    if len(stripped) >= 300:
+        from ai.engine.cognition.turn.verify import detect_no_data_contradiction
+
+        draft_contradicts_data = bool(
+            detect_no_data_contradiction(stripped, usable)
+        )
+        if not draft_contradicts_data:
+            return None
 
     from ai.engine.llm.router import route_chat
 
@@ -552,21 +720,21 @@ async def _synthesize_tool_results(
         "an overview, a comparison, or 'all' should you show the full "
         "breakdown. Never answer 'about the whole organisation' when the user "
         "named one branch.\n"
-        "FORMAT — rich, publication-grade: open with a **bold one-line "
-        "takeaway**; if there are 3+ records, ALWAYS include a Markdown table "
-        "of the meaningful columns; if the records carry comparable numbers, "
-        "ALSO emit a Mermaid chart (```mermaid pie``` for proportions, "
-        "```mermaid xychart-beta``` with a `bar` series for ranking/magnitude "
-        "and `line` for a trend). Mermaid line rules (critical): open the "
-        "```mermaid fence on its OWN line after a blank line, close ``` on its "
-        "own line, and put every directive on its own line — never inline the "
-        "fence after prose or collapse the chart to one line. Use ## / ### "
-        "headings, **bold** key figures "
-        "and field names, and close with 2-4 “Key takeaways” as a bold-lead "
-        "bullet list. State actual values — never invent numbers. Omit verbose "
-        "metadata (raw source strings, internal ids, tags). Do not mention "
-        "tools, API calls, fetching, or that you 'found' the data. If the data "
-        "has no matching rows, say so plainly."
+        "ORG-NAME GUARD: the platform's own organisation / campus / company "
+        "name (the whole institution you serve) is NOT a filterable sub-entity "
+        "— when the user names the whole organisation, treat it as 'all data' "
+        "and show the full breakdown, never as a missing entity. A named "
+        "year or period is a TIME WINDOW, not an entity filter.\n"
+        "NON-EMPTY GUARD: if the tool results contain ANY calculations or rows "
+        "(a non-zero total, count, or breakdown), you MUST report those values "
+        "— NEVER say 'no data is available' when the tool returned data. Only "
+        "state that data is absent when the tool result is genuinely empty.\n"
+        "FORMAT: open with a **bold one-line takeaway**, then write 2-3 "
+        "sentences of explanatory prose. Do NOT include any tables or "
+        "structured data \u2014 data tables are appended automatically. "
+        "Close with 2-4 bold-lead 'Key takeaways' bullet points. "
+        "Do not mention tools, API calls, or fetching. "
+        "Do NOT include charts or diagrams unless the user explicitly asked."
     )
 
     # Precedence 2: usable data exists but some entities were unresolved —
@@ -580,6 +748,8 @@ async def _synthesize_tool_results(
             "user to clarify — do NOT invent values for them."
         )
 
+    pre_tables = _render_tool_tables(usable)
+
     try:
         result = await route_chat(
             task="cognition",
@@ -587,13 +757,10 @@ async def _synthesize_tool_results(
             conversation_id=f"synthesis-{conversation_id}",
             messages=[
                 {"role": "system", "content": system},
-                {
-                    "role": "user",
-                    "content": (
-                        f"User's question: {user_message}\n\n"
-                        f"Tool results (JSON):\n{results_text}"
-                    ),
-                },
+                {"role": "user", "content": (
+                    f"User's question: {user_message}\n\n"
+                    f"Tool results (JSON):\n{results_text}"
+                )},
             ],
             temperature=0.3,
             model=model,
@@ -607,8 +774,16 @@ async def _synthesize_tool_results(
     if not synthesized:
         return None
 
-    # Phase 4: cite which tools grounded the answer.
-    synthesized = _append_evidence_footer(synthesized, usable)
+    # Inject deterministically-rendered tables after the LLM prose.
+    if pre_tables:
+        synthesized = synthesized + "\n\n" + pre_tables
+
+    # Stream the synthesized text so the UI shows progress.
+    await _stream_final_text(
+        synthesized,
+        stream_callback=stream_callback,
+        progress_callback=progress_callback,
+    )
 
     tokens = int(result.get("input_tokens", 0) or 0) + int(result.get("output_tokens", 0) or 0)
     synthesized_result = {"text": synthesized, "tokens": tokens, "model": result.get("model", "")}
@@ -632,7 +807,7 @@ class TurnPipelineRunner:
         db=None,              # Store session for S6 ledger writes
         weather_extractor=None,
         envelope_synthesizer=None,
-        carbon_context_assembler=None,
+        domain_context_assembler=None,
     ):
         self.llm_client = llm_client
         self.knowledge_store = knowledge_store
@@ -645,7 +820,7 @@ class TurnPipelineRunner:
         # engine never imports ``ai.plugins.web_research`` / ``ai.envelope_service``.
         self.weather_extractor = weather_extractor
         self.envelope_synthesizer = envelope_synthesizer
-        self.carbon_context_assembler = carbon_context_assembler
+        self.domain_context_assembler = domain_context_assembler
         # Curated tool set exposed to the S3 planner when an executor is
         # wired. Mutation/confirmation tools (create_dq_rule) plus read tools
         # that ground answers, including call_host_api so the planner can reach
@@ -696,6 +871,12 @@ class TurnPipelineRunner:
         # Phase 22-A — per-user default chat temperature (0.0-2.0); None
         # keeps the draft witness's built-in default (0.3).
         temperature: float | None = None,
+        # P4-02 — host-supplied applicability-first curated knowledge.  The
+        # S2 retrieval witness consumes these directly (optional; None keeps
+        # the graph semantic path only).
+        knowledge_items: list | None = None,
+        scope: dict | None = None,
+        process_state: dict | None = None,
     ) -> tuple:
         """Execute one turn. Returns (AgentResponse, TurnLedger)."""
         from ai.engine.agent.reasoning import AgentResponse
@@ -703,7 +884,7 @@ class TurnPipelineRunner:
 
         settings = get_settings()
 
-        # Apply per-instance tool exclusions (e.g. nibras hides create_dq_rule).
+        # Apply per-instance tool exclusions (e.g. an instance hides create_dq_rule).
         excluded_tools = set((instance_config or {}).get("excluded_tools") or [])
         if excluded_tools and self._draft_tools is not None:
             self._draft_tools = [
@@ -1077,6 +1258,9 @@ class TurnPipelineRunner:
         )
         retrieval = await retrieve_witness.retrieve(
             instance_id, conversation_id, user_message, user_info,
+            knowledge_items=knowledge_items,
+            scope=scope,
+            process_state=process_state,
         )
         ledger.retrieval = retrieval
         s2_latency = retrieval.retrieval_latency_ms
@@ -1470,26 +1654,26 @@ class TurnPipelineRunner:
             instance_id=instance_id,
         )
 
-        # ── Pulse v2 Phase 6: inject Carbon business context ──────────────
-        # Only injected when the instance declares carbon_context_enabled: true
-        # (instance.yaml). Falls back to the legacy PULSE_CARBON_CONTEXT_ENABLED
-        # setting for the default carbon instance.
-        _carbon_ctx_enabled = (
-            config.get("carbon_context_enabled", None)
-            if config.get("carbon_context_enabled") is not None
-            else settings.PULSE_CARBON_CONTEXT_ENABLED
+        # ── Pulse v2 Phase 6: inject domain business context ──────────────
+        # Only injected when the instance declares domain_context_enabled: true
+        # (instance.yaml). Falls back to the legacy PULSE_DOMAIN_CONTEXT_ENABLED
+        # setting for the default instance.
+        _domain_ctx_enabled = (
+            config.get("domain_context_enabled", None)
+            if config.get("domain_context_enabled") is not None
+            else settings.PULSE_DOMAIN_CONTEXT_ENABLED
         )
-        if _carbon_ctx_enabled:
+        if _domain_ctx_enabled:
             try:
-                if self.carbon_context_assembler is not None:
-                    _carbon_context = await self.carbon_context_assembler().assemble(
+                if self.domain_context_assembler is not None:
+                    _domain_context = await self.domain_context_assembler().assemble(
                         app_identifier=config.get("app_identifier"),
                     )
-                    if _carbon_context:
-                        system_prompt = f"{system_prompt}\n{_carbon_context}"
+                    if _domain_context:
+                        system_prompt = f"{system_prompt}\n{_domain_context}"
             except Exception:
                 logger.warning(
-                    f"[{turn_id[:8]}] Carbon context assembly failed", exc_info=True
+                    f"[{turn_id[:8]}] Domain context assembly failed", exc_info=True
                 )
 
         # Tool-aware drafting: when an executor is wired, expose the curated
@@ -1521,8 +1705,8 @@ class TurnPipelineRunner:
                 "steps, each naming the tool or agent that would do it and the "
                 "deliverable it produces. Then invite the user to discuss, add, "
                 "remove, or reword steps. This proposal lives only in the chat "
-                "— it is NOT a task yet. A plain question (e.g. 'what is the "
-                "GHG Protocol?') should just be answered directly, with no "
+                "— it is NOT a task yet. A plain question (e.g. 'what is an "
+                "industry reporting protocol?') should just be answered directly, with no "
                 "plan proposal at all.\n"
                 "- Iterate the proposal in chat as the user gives feedback. "
                 "Re-present the revised numbered plan after each change and ask "
@@ -1555,7 +1739,7 @@ class TurnPipelineRunner:
                 "when the user wants the rule bound to a specific column now. "
                 "Never offer a duplicate-check instead of proceeding.\n"
                 "- Use web_research when the task needs internet facts (e.g. a "
-                "study comparing carbon standards) — cite its results; never "
+                "study comparing reporting standards) — cite its results; never "
                 "invent sources.\n"
                 "- Use export_document to produce a downloadable Word/Excel "
                 "artifact when the user wants the findings as a document; tell "
@@ -1632,7 +1816,7 @@ class TurnPipelineRunner:
 
         # [S1.5] Inject the intent resolver's matched endpoint into S3 so the
         # planner *confirms* the tool instead of lecturing from memory. This is
-        # the mechanism that stops "tell me about emission factors here" from
+        # the mechanism that stops "tell me about the live data here" from
         # becoming a textbook answer — the matched tool is now named up front.
         if (
             _intent_resolution is not None
@@ -1992,6 +2176,8 @@ class TurnPipelineRunner:
             model=draft.model_used or model,
             delivery=_intent_resolution.delivery if _intent_resolution else "explain",
             envelope_synthesizer=self.envelope_synthesizer,
+            stream_callback=stream_callback,
+            progress_callback=progress_callback,
         )
         if _synth and _synth.get("text"):
             final_text = _synth["text"]

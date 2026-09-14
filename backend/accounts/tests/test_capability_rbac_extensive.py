@@ -59,6 +59,11 @@ from accounts.capabilities import (
     EVIDENCE_MANAGE,
     AI_VIEW_CONSOLE,
     AI_MANAGE_CONSOLE,
+    AI_PROCESS_OWNER,
+    AI_POLICY_OWNER,
+    AI_PUBLISHER,
+    AI_OPERATOR,
+    AI_AUDITOR,
     PLATFORM_ADMIN,
     PLATFORM_MANAGE_USERS,
     PLATFORM_MANAGE_GROUPS,
@@ -75,6 +80,13 @@ from accounts.capabilities import (
     get_capability,
     get_capability_matrix,
     get_capabilities_for_frontend,
+)
+from accounts.constants import (
+    AI_AUDITOR_GROUP,
+    AI_OPERATOR_GROUP,
+    AI_POLICY_OWNER_GROUP,
+    AI_PROCESS_OWNER_GROUP,
+    AI_PUBLISHER_GROUP,
 )
 
 
@@ -199,13 +211,13 @@ class TestCapabilityDefinitions:
         """Sanity check: the registry grows deliberately across sprints.
 
         Grown across ai, datahub, turnkey, appregistry, healthy, dataschema,
-        evidence, people, and correspondence domains — 64 as of the e-Office
-        slice (people + my/team + correspondence). Bounds track deliberate
-        growth, not a strict contract.
+        evidence, people, correspondence, and the P3-05b AI governance roles
+        (process_owner, policy_owner, publisher, operator, auditor) — 70 as of
+        P3-05b. Bounds track deliberate growth, not a strict contract.
         """
         count = len(ALL_CAPABILITIES)
         assert count >= 60, f"Expected at least 60 capabilities, got {count}"
-        assert count <= 70, f"Expected at most 70 capabilities, got {count}"
+        assert count <= 75, f"Expected at most 75 capabilities, got {count}"
 
     @pytest.mark.parametrize("domain,min_count", [
         ("carbon", 15),
@@ -325,6 +337,8 @@ class TestGroupCapabilityMappings:
             "people_lead", "people_data_owners_group", "people_analysts_group",
             "employee_group", "manager_group", "finance_group",
             "dataowners_group", "analysts_group", "viewers_group", "auditors_group",
+            "ai_process_owner_group", "ai_policy_owner_group", "ai_publisher_group",
+            "ai_operator_group", "ai_auditor_group",
         }
         assert set(GROUP_CAPABILITIES.keys()) == expected_groups, \
             f"Unexpected groups: {set(GROUP_CAPABILITIES.keys()) ^ expected_groups}"
@@ -461,6 +475,38 @@ class TestGroupCapabilityMappings:
         assert AI_VIEW_CONSOLE.key in IMPLIES[AI_MANAGE_CONSOLE.key]
         expanded = _expand_capabilities({AI_MANAGE_CONSOLE.key})
         assert AI_VIEW_CONSOLE.key in expanded
+
+    # ── P3-05b: AI governance roles ──
+    def test_ai_governance_capabilities_exist(self):
+        """All five governance role capabilities are registered under the ai domain."""
+        for cap in (AI_PROCESS_OWNER, AI_POLICY_OWNER, AI_PUBLISHER, AI_OPERATOR, AI_AUDITOR):
+            assert cap.key in ALL_CAPABILITIES
+            assert cap.domain == "ai"
+
+    def test_ai_governance_roles_resolve_to_declared_caps_only(self):
+        """Each role resolves to its declared capability — non-overlapping."""
+        assert GROUP_CAPABILITIES[AI_PROCESS_OWNER_GROUP] == {AI_PROCESS_OWNER.key}
+        assert GROUP_CAPABILITIES[AI_POLICY_OWNER_GROUP] == {AI_POLICY_OWNER.key}
+        assert GROUP_CAPABILITIES[AI_PUBLISHER_GROUP] == {AI_PUBLISHER.key}
+        assert GROUP_CAPABILITIES[AI_OPERATOR_GROUP] == {AI_OPERATOR.key}
+        assert GROUP_CAPABILITIES[AI_AUDITOR_GROUP] == {
+            AI_AUDITOR.key, AI_VIEW_CONSOLE.key,
+        }
+
+    def test_ai_view_console_does_not_imply_any_write(self):
+        """ai:view_console must NOT transitively imply any governance write role."""
+        expanded = _expand_capabilities({AI_VIEW_CONSOLE.key})
+        for write_cap in (AI_PROCESS_OWNER, AI_POLICY_OWNER, AI_PUBLISHER, AI_OPERATOR, AI_AUDITOR):
+            assert write_cap.key not in expanded
+
+    def test_ai_governance_roles_do_not_cross_imply(self):
+        """No governance role implies another governance role."""
+        for cap in (AI_PROCESS_OWNER, AI_POLICY_OWNER, AI_PUBLISHER, AI_OPERATOR, AI_AUDITOR):
+            expanded = _expand_capabilities({cap.key})
+            for other in (AI_PROCESS_OWNER, AI_POLICY_OWNER, AI_PUBLISHER, AI_OPERATOR, AI_AUDITOR):
+                if other.key != cap.key:
+                    assert other.key not in expanded, \
+                        f"{cap.key} unexpectedly implies {other.key}"
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -44,7 +44,7 @@ export default function StandardDataGrid({
         pageSizeOptions={rowsPerPageOptions}
         paginationModel={paginationModel}
         onPaginationModelChange={setPaginationModel}
-        disableSelectionOnClick
+        disableRowSelectionOnClick
         checkboxSelection={checkboxSelection}
         hideFooterSelectedRowCount={hideFooterSelectedRowCount}
         slots={toolbar ? { toolbar: GridToolbar } : undefined}

@@ -80,9 +80,11 @@ function renderView() {
 }
 
 describe('AIConversationView Copilot-style thread chrome (Phase 21-C)', () => {
-  it('shows a Session divider above the thread', async () => {
+  it('does not show a Session divider above the thread', async () => {
     renderView();
-    expect(await screen.findByText('Session')).toBeInTheDocument();
+    // The redundant "Session" divider was removed for a cleaner Copilot-style thread.
+    await screen.findByRole('button', { name: 'Show older messages' });
+    expect(screen.queryByText('Session')).not.toBeInTheDocument();
   });
 
   it('collapses older messages behind a toggle on long threads', async () => {

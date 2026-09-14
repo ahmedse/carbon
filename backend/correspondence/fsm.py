@@ -16,6 +16,7 @@ from types import SimpleNamespace
 from django.db import transaction
 from django.utils import timezone
 
+from accounts.capabilities import has_capability
 from catalog.audit_utils import emit_governance_event
 from dq.typed_gate import check_instances
 
@@ -533,4 +534,38 @@ def resubmit(corr, by, subject=None, subject_label=None):
                 title=f'Action needed on {corr.reference_no}',
                 body=corr.title,
             )
+        return corr
+
+
+def archive(corr, by):
+    """Requester (or a correspondence:admin) archives a terminal
+    correspondence -> archived. Terminal states only (approved/rejected/
+    cancelled/expired); archiving an already-archived corr is an
+    InvalidTransition, mirroring ``cancel``."""
+    with transaction.atomic():
+        if by.id != corr.requester_id and not has_capability(by, 'correspondence:admin'):
+            raise NotActorError(
+                'Only the requester or a correspondence admin may archive a request'
+            )
+        if corr.status not in ('approved', 'rejected', 'cancelled', 'expired'):
+            raise InvalidTransition(
+                f'Cannot archive from status {corr.status!r}'
+            )
+
+        old_status = corr.status
+        corr.status = 'archived'
+        corr.resolved_at = timezone.now()
+        corr.current_approver_ids = []
+        corr.save()
+
+        _add_event(corr, by, 'archived', old_status, corr.status)
+        _governance(corr, by, 'archive', old_status=old_status)
+
+        notify(
+            corr,
+            user_ids=[corr.requester_id],
+            type='status_changed',
+            title=f'{corr.reference_no} was archived',
+            body=corr.title,
+        )
         return corr

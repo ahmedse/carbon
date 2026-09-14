@@ -181,6 +181,29 @@ AUTHORITATIVE_RULES = [
         },
     ),
     (
+        "kw-wps",
+        "2026.1",
+        "WPS export — Wage Protection System record (net payable)",
+        "wps",
+        "Kuwait Wage Protection System (WPS) salary file structure — amount = net payable",
+        {
+            "inputs": ["net"],
+            "formula": {
+                "type": "wps",
+                "params": {
+                    "field_map": {
+                        "employee_number": "employee_no",
+                        "employee_name": "employee_name",
+                        "salary": "basic_salary",
+                        "period_start": "period_start",
+                        "period_end": "period_end",
+                    },
+                    "amount_components": ["net"],
+                },
+            },
+        },
+    ),
+    (
         "kw-loan-schedule",
         "2026.1",
         "Loan schedule — flat-rate amortization",

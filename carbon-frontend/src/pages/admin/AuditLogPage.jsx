@@ -55,10 +55,6 @@ const ACTION_TOKEN = {
   UPDATE: 'primary.light',
   DELETE: 'error.main',
   READ: 'text.secondary',
-  LOGIN: 'secondary.light',
-  LOGOUT: 'text.disabled',
-  EXPORT: 'warning.main',
-  IMPORT: 'info.main',
 };
 
 const resolveToken = (theme, token) =>
@@ -69,11 +65,27 @@ const ACTION_LABEL = {
   UPDATE: 'Update',
   DELETE: 'Delete',
   READ: 'Read',
-  LOGIN: 'Login',
-  LOGOUT: 'Logout',
-  EXPORT: 'Export',
-  IMPORT: 'Import',
 };
+
+// RequestAuditLog records HTTP methods; the page surfaces them as CRUD actions.
+const METHOD_TO_ACTION = { POST: 'CREATE', PUT: 'UPDATE', PATCH: 'UPDATE', DELETE: 'DELETE' };
+const actionFromMethod = (method) => METHOD_TO_ACTION[method] || 'READ';
+
+// Action filter → HTTP method(s) sent to the API.
+const ACTION_TO_METHODS = { CREATE: 'POST', UPDATE: 'PUT,PATCH', DELETE: 'DELETE', READ: 'GET' };
+
+// status_code → success/error for display (mutating requests are 2xx on success).
+const statusFromCode = (code) =>
+  typeof code === 'number' && code >= 200 && code < 300 ? 'success' : 'error';
+
+// Map a RequestAuditLog row into the page's display shape.
+const normalizeAudit = (a) => ({
+  ...a,
+  action: actionFromMethod(a.method),
+  entity_type: a.path,
+  entity_id: '',
+  status: statusFromCode(a.status_code),
+});
 
 function ActionChip({ action }) {
   const theme = useTheme();
@@ -205,10 +217,10 @@ export default function AuditLogPage() {
     try {
       const token = localStorage.getItem('access');
       const params = new URLSearchParams();
-      if (filterAction) params.append('action', filterAction);
+      if (filterAction) params.append('method', ACTION_TO_METHODS[filterAction] || filterAction);
       if (filterUser) params.append('user', filterUser);
-      if (filterDateFrom) params.append('created_from', filterDateFrom);
-      if (filterDateTo) params.append('created_to', filterDateTo);
+      if (filterDateFrom) params.append('timestamp__gte', `${filterDateFrom}T00:00:00`);
+      if (filterDateTo) params.append('timestamp__lte', `${filterDateTo}T23:59:59`);
 
       const endpoint =
         params.toString()
@@ -216,7 +228,8 @@ export default function AuditLogPage() {
           : API_ROUTES.auditLogs;
 
       const data = await apiFetch(endpoint, { token });
-      setAudits(Array.isArray(data) ? data : data?.results || []);
+      const raw = Array.isArray(data) ? data : data?.results || [];
+      setAudits(raw.map(normalizeAudit));
     } catch (err) {
       setError(err.message || 'Failed to load audit logs');
       console.error('Failed to fetch audits:', err);

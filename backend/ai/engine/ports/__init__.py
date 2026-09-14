@@ -27,6 +27,7 @@ The ten Protocols:
 Protocol         Role
 ===============  ============================================================
 ``Clock``        time source (deterministic under replay)
+``DomainPack``   domain vocabulary/catalog/processes/skills/triggers/prompts (P2-08)
 ``EpisodicStore``  event memory + causal chains + decay
 ``LongTermStore``  durable fact memory (dedup / contradiction / supersede)
 ``OrgMemory``    org-scoped long-term memory seeds
@@ -42,6 +43,7 @@ Protocol         Role
 from ai.engine.ports.actions import ActionOutcome, ActionProposal, HostActions
 from ai.engine.ports.clock import Clock
 from ai.engine.ports.cognition import SweepRunStore
+from ai.engine.ports.domain import DomainPack
 from ai.engine.ports.events import EventBus
 from ai.engine.ports.evidence import EvidenceStore
 from ai.engine.ports.kg import EdgeRecord, KnowledgeGraphStore, NodeRecord
@@ -63,6 +65,7 @@ from ai.engine.ports.watches import UserWatchStore, WatchRecord
 
 __all__ = [
     "Clock",
+    "DomainPack",
     "EpisodicStore",
     "LongTermStore",
     "OrgMemory",

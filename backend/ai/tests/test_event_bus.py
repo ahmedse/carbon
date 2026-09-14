@@ -30,21 +30,29 @@ def test_publish_subscribe_round_trip():
     async def _run() -> None:
         channel = event_bus.events_channel()
         payload = _unique_payload()
+        token = payload["payload"]["token"]
         received: list[dict] = []
+        ready = asyncio.Event()
 
         async def _consume() -> None:
-            async for frame in event_bus.subscribe(channel):
+            async for frame in event_bus.subscribe(channel, ready=ready):
                 received.append(frame)
-                break
+                if (frame.get("payload") or {}).get("token") == token:
+                    break
 
         task = asyncio.create_task(_consume())
-        # Let the subscription register on the server before publishing.
-        await asyncio.sleep(0.5)
+        # Deterministic: await subscription readiness instead of a fixed sleep,
+        # so publish cannot race subscribe. Stale frames from other publishers
+        # (shared channel) are ignored by filtering on our unique token.
+        await asyncio.wait_for(ready.wait(), timeout=5.0)
         await event_bus.publish(channel, payload)
         await asyncio.wait_for(task, timeout=5.0)
 
-        assert len(received) == 1
-        frame = received[0]
+        own = [
+            f for f in received if (f.get("payload") or {}).get("token") == token
+        ]
+        assert len(own) == 1
+        frame = own[0]
         assert frame["event_type"] == payload["event_type"]
         assert frame["instance_id"] == payload["instance_id"]
         assert frame["payload"] == payload["payload"]
@@ -88,23 +96,37 @@ def test_notifier_broadcast_run_event_publishes_to_bus():
 
     async def _run() -> None:
         channel = event_bus.events_channel()
+        # Unique run_id so we can pick OUR frame out of the shared channel —
+        # other tests (and a live dev server) publish run events to the same
+        # `pulse:events:{instance}` pub/sub channel, so a stale frame may arrive
+        # before ours. Consume until our own frame is seen.
+        run_id = f"r-{uuid.uuid4().hex}"
         received: list[dict] = []
+        ready = asyncio.Event()
 
         async def _consume() -> None:
-            async for frame in event_bus.subscribe(channel):
+            async for frame in event_bus.subscribe(channel, ready=ready):
                 received.append(frame)
-                break
+                payload = frame.get("payload") or {}
+                if payload.get("payload", {}).get("run_id") == run_id:
+                    break
 
         task = asyncio.create_task(_consume())
-        await asyncio.sleep(0.5)
+        # Deterministic: await subscription readiness before publishing.
+        await asyncio.wait_for(ready.wait(), timeout=5.0)
         await notifier.broadcast_run_event(
-            "test-instance", "run.started", {"run_id": "r-1"}
+            "test-instance", "run.started", {"run_id": run_id}
         )
         await asyncio.wait_for(task, timeout=5.0)
 
-        assert len(received) == 1
-        assert received[0]["event_type"] == "run.started"
-        assert received[0]["instance_id"] == "test-instance"
-        assert received[0]["payload"]["payload"] == {"run_id": "r-1"}
+        own = [
+            f
+            for f in received
+            if (f.get("payload") or {}).get("payload", {}).get("run_id") == run_id
+        ]
+        assert len(own) == 1
+        assert own[0]["event_type"] == "run.started"
+        assert own[0]["instance_id"] == "test-instance"
+        assert own[0]["payload"]["payload"] == {"run_id": run_id}
 
     asyncio.run(_run())

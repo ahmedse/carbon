@@ -53,6 +53,7 @@ import SchemaIcon from '@mui/icons-material/Schema';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
+import InboxIcon from '@mui/icons-material/Inbox';
 import SearchIcon from '@mui/icons-material/Search';
 import PolicyIcon from '@mui/icons-material/Policy';
 import { useAuth } from '../auth/AuthContext';
@@ -204,6 +205,10 @@ function getSidebarItems(studioId, helpApps = []) {
         { label: 'Watches', path: '/admin/ai/watches', icon: NotificationsActiveIcon, role: 'admin' },
         { label: 'Audit Trail', path: '/admin/ai/audit', icon: HistoryIcon, role: 'admin' },
         { label: 'Run Timeline', path: '/admin/ai/runs', icon: TimelineIcon, role: 'admin' },
+        { label: 'Human Task Inbox', path: '/admin/ai/inbox', icon: InboxIcon, role: 'admin' },
+        { type: 'group', label: 'Governance' },
+        { label: 'Process Registry', path: '/admin/ai/registry', icon: RuleIcon, role: 'admin' },
+        { label: 'Review Queue', path: '/admin/ai/review-queue', icon: AccountTreeIcon, role: 'admin' },
         { label: 'Logs', path: '/admin/ai/logs', icon: ArticleIcon, role: 'admin' },
       ];
     

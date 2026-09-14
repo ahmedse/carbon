@@ -1,7 +1,7 @@
 """Command Boundary core — the single host-side seam for every host effect.
 
 P2-06a.  Every host-effect (mutation or read-only action) flows through one
-ordered, **fail-closed** pipeline of 13 stages.  Any stage failure returns
+ordered, **fail-closed** pipeline of 14 stages.  Any stage failure returns
 ``Outcome(status="refused"|"failed")`` — never a silent pass, never a permit
 when the stage could not prove eligibility.
 
@@ -18,11 +18,11 @@ Folded in (not called separately):
     - ``DataIsolationGuard`` → stage 4 (domain-app isolation)
   plus ``DataIsolationGuard.sanitize_response`` + ``MutationGuard.sanitize_response``
   → stage 13 (response sanitization).
-* ``ai.engine.agent.guardrails.HookPipeline`` hooks → stages 7/8/13:
+* ``ai.engine.agent.guardrails.HookPipeline`` hooks → stages 7/9/14:
     - ``consent_hook``   → stage 7 (unconfirmed mutation is refused)
-    - ``budget_hook``    → stage 8 (over-budget is refused)
-    - ``rate_limit_hook``→ stage 8 (warn, not refuse)
-    - ``redaction_hook`` → stage 13 (confidential result redaction)
+    - ``budget_hook``    → stage 9 (over-budget is refused)
+    - ``rate_limit_hook``→ stage 9 (warn, not refuse)
+    - ``redaction_hook`` → stage 14 (confidential result redaction)
 
 Decision logic is fully constructor-injected (ports + callables) so the boundary
 runs offline with fakes/stubs and never hard-depends on the real PDP or ORM.
@@ -48,7 +48,7 @@ from ai.protocol import Scope
 
 logger = logging.getLogger("carbon.ai.command_boundary")
 
-# ── The 13 ordered stages ──────────────────────────────────────────────────
+# ── The 14 ordered stages ──────────────────────────────────────────
 STAGES: tuple[str, ...] = (
     "identity",            # 1  resolve principal
     "scope",               # 2  ScopeGuard — scope exists
@@ -57,13 +57,30 @@ STAGES: tuple[str, ...] = (
     "state_eligibility",   # 5  allowed in current process state
     "pdp",                 # 6  PolicyDecisionPoint → Decision
     "consent",             # 7  confirmation gate (consent_hook)
-    "budget",              # 8  budget + rate-limit (budget_hook)
-    "revision",            # 9  object revision matches
-    "execute",             # 10 idempotent execution
-    "persist_events",      # 11 ledger / event port
-    "verify",              # 12 verify the effect (fail-closed)
-    "outcome",             # 13 sanitize + redact, emit Outcome
+    "grant",               # 8  business-approval gate (ApprovalGrant)
+    "budget",              # 9  budget + rate-limit (budget_hook)
+    "revision",            # 10 object revision matches
+    "execute",             # 11 idempotent execution
+    "persist_events",      # 12 ledger / event port
+    "verify",              # 13 verify the effect (fail-closed)
+    "outcome",             # 14 sanitize + redact, emit Outcome
 )
+
+
+# P3-11 — host-owned run-lifecycle actions with fixed grant semantics.
+#
+# ``cancel`` stops a run and starts no new work: it is a declared, governed
+# action but must NEVER require a grant (a user can always stop their own run).
+# ``compensate`` reverses prior effects: it must ALWAYS carry its own durable
+# ``ApprovalGrant`` and must never be satisfiable by a ``cancel`` authorization.
+#
+# These are enforced here — not left to caller discipline — so the two actions
+# can never be conflated. The capability string is the action-specific grant
+# binding; the boundary refuses ``compensate`` without a matching grant.
+LIFECYCLE_ACTIONS: dict[str, dict[str, Any]] = {
+    "cancel": {"requires_grant": False, "capability": "run.cancel"},
+    "compensate": {"requires_grant": True, "capability": "run.compensate"},
+}
 
 
 # ── Data shapes ────────────────────────────────────────────────────────────
@@ -92,8 +109,19 @@ class Command:
     autonomy: str = "human_only"
     budget: dict[str, Any] | None = None
 
-    # revision check (stage 9)
+    # revision check (stage 10)
     expected_revision: Any = None           # value, or dict {object: revision}
+
+    # grant check (stage 8, P3-06 business approval)
+    requires_grant: bool = False            # fail-closed: False by default
+    capability: str = ""                    # capability the effect falls under
+    process_version: str = ""               # pins the process definition version
+    capability_version: str = ""            # pins the capability version
+    object_revisions: dict[str, Any] = field(default_factory=dict)  # {object_id: revision}
+    evidence_digest: str = ""               # pins the evidence digest
+    object_id: str = ""                     # generic object identity (testable standalone)
+    object_type: str = ""                   # generic object kind
+    process_instance: str = ""              # future FK → ProcessInstance (UUID string)
 
     # guard inputs (folded GuardChain)
     requested_org_units: list[str] | None = None
@@ -152,6 +180,11 @@ ParamsValidator = Callable[[dict[str, Any]], Awaitable[None]]
 EligibilityChecker = Callable[[Command], Awaitable[bool]]
 BudgetChecker = Callable[[Command], Awaitable[BudgetVerdict]]
 RevisionResolver = Callable[[list[str]], Awaitable[Mapping[str, Any] | None]]
+GrantResolver = Callable[[Command], Awaitable[Mapping[str, Any] | None]]
+# Enqueues a durable human-approval task when a grant-required capability has no
+# active grant yet. Returns the created task id, or ``None`` to fall back to the
+# fail-closed refusal. Host-side seam (RULE_20 / ADR-0007) — engine never calls it.
+TaskEnqueuer = Callable[[Command], Awaitable[str | None]]
 Verifier = Callable[[Command, Any], Awaitable[None]]
 
 
@@ -201,6 +234,10 @@ async def _default_revision(objects: list[str]) -> Mapping[str, Any] | None:
     return None  # cannot resolve → revision-constrained commands fail closed
 
 
+async def _default_grant(command: Command) -> Mapping[str, Any] | None:
+    return None  # no resolver configured → fail closed (never assume a grant)
+
+
 async def _default_budget(command: Command) -> BudgetVerdict:
     budget = command.budget or {}
     if budget.get("budget_exceeded") or budget.get("exceeded"):
@@ -222,7 +259,7 @@ async def _default_budget(command: Command) -> BudgetVerdict:
 # ── The boundary ───────────────────────────────────────────────────────────
 
 class CommandBoundary:
-    """Routes every host effect through the 13 ordered, fail-closed stages.
+    """Routes every host effect through the 14 ordered, fail-closed stages.
 
     All decision inputs are injected; defaults are offline and fail-closed:
     default-deny PDP, empty tool catalog, no executor, no ledger.
@@ -242,6 +279,8 @@ class CommandBoundary:
         eligibility_checker: EligibilityChecker | None = None,
         budget_checker: BudgetChecker | None = None,
         revision_resolver: RevisionResolver | None = None,
+        grant_resolver: GrantResolver | None = None,
+        task_enqueuer: TaskEnqueuer | None = None,
         verifier: Verifier | None = None,
         idempotency_store: MutableMapping[str, Outcome] | None = None,
         redacted_tools: set[str] | None = None,
@@ -258,6 +297,8 @@ class CommandBoundary:
         self._eligibility_checker = eligibility_checker
         self._budget_checker: BudgetChecker = budget_checker or _default_budget
         self._revision_resolver: RevisionResolver = revision_resolver or _default_revision
+        self._grant_resolver: GrantResolver = grant_resolver or _default_grant
+        self._task_enqueuer: TaskEnqueuer | None = task_enqueuer
         self._verifier: Verifier = verifier or _noop_verifier
         self._idempotency_store: MutableMapping[str, Outcome] = (
             idempotency_store if idempotency_store is not None else {}
@@ -266,7 +307,7 @@ class CommandBoundary:
         self._clock = clock
 
     async def execute(self, command: Command) -> Outcome:
-        """Run the 13 stages and return the fail-closed ``Outcome``."""
+        """Run the 14 stages and return the fail-closed ``Outcome``."""
         stages: list[str] = []
         decision: Decision | None = None
         decision_reason = ""
@@ -362,7 +403,43 @@ class CommandBoundary:
                     "was supplied (fail-closed)"
                 )
 
-            # ── Stage 8: budget + rate-limit (budget_hook) ────────────────
+            # ── Stage 8: grant (business approval, P3-06) ───────────────
+            # Strictly separate from authorization (stage 6 PDP) and consent
+            # (stage 7): a PDP ALLOW does not waive the requirement for a
+            # durable, human-minted ApprovalGrant when the capability declares
+            # ``requires_grant``. Fail closed when no exact match exists.
+            stages.append("grant")
+            if self._command_requires_grant(command):
+                if not command.capability:
+                    command.capability = self._catalog_capability(command)
+                try:
+                    grant = await self._grant_resolver(command)
+                except Exception as exc:  # noqa: BLE001 — fail closed on grant
+                    return refused(f"grant: {exc}")
+                if not grant:
+                    if self._task_enqueuer is not None:
+                        try:
+                            task_id = await self._task_enqueuer(command)
+                        except Exception as exc:  # noqa: BLE001 — fail closed
+                            return refused(f"grant: inbox enqueue failed: {exc}")
+                        if task_id:
+                            return Outcome(
+                                status="deferred",
+                                result={"task_id": task_id},
+                                error=(
+                                    "grant: no active ApprovalGrant — "
+                                    "deferred to human task inbox"
+                                ),
+                                decision=decision,
+                                reason=decision_reason,
+                                policy_version=policy_version,
+                                stages=stages,
+                            )
+                    return refused(
+                        "grant: no active, fully-matching ApprovalGrant (fail-closed)"
+                    )
+
+            # ── Stage 9: budget + rate-limit (budget_hook) ───────────────
             stages.append("budget")
             try:
                 budget = await self._budget_checker(command)
@@ -371,13 +448,13 @@ class CommandBoundary:
             if not budget.allowed:
                 return refused(budget.reason or "budget: exceeded")
 
-            # ── Stage 9: revision check ───────────────────────────────────
+            # ── Stage 10: revision check ──────────────────────────────
             stages.append("revision")
             if command.expected_revision is not None:
                 if not await self._revision_ok(command):
                     return refused("revision: object revision mismatch (fail-closed)")
 
-            # ── Stage 10: execute (idempotent) ────────────────────────────
+            # ── Stage 11: execute (idempotent) ────────────────────────
             stages.append("execute")
             key = command.idempotency_key
             if key and key in self._idempotency_store:
@@ -388,7 +465,7 @@ class CommandBoundary:
             except Exception as exc:  # noqa: BLE001 — fail closed on execute
                 return failed(f"execute: {exc}")
 
-            # ── Stage 11: persist events (ledger / event port) ────────────
+            # ── Stage 12: persist events (ledger / event port) ────────
             stages.append("persist_events")
             try:
                 event_ids = await self._persist(
@@ -398,14 +475,14 @@ class CommandBoundary:
                 logger.warning("persist_events: %s", exc)
                 event_ids = []
 
-            # ── Stage 12: verify the effect (fail-closed) ─────────────────
+            # ── Stage 13: verify the effect (fail-closed) ────────────────
             stages.append("verify")
             try:
                 await self._verifier(command, result)
             except Exception as exc:  # noqa: BLE001 — fail closed on verify
                 return failed(f"verify: {exc}")
 
-            # ── Stage 13: outcome (sanitize + redact, emit) ───────────────
+            # ── Stage 14: outcome (sanitize + redact, emit) ───────────
             stages.append("outcome")
             final_result = self._sanitize_result(scope, result, command.tool)
             status = "confirmed" if requires_confirmation else "executed"
@@ -433,6 +510,56 @@ class CommandBoundary:
         return (command.tool in self._tool_catalog) or (
             command.action in self._tool_catalog
         )
+
+    def _catalog_entry(self, command: Command) -> Any:
+        """Return the tool-catalog entry for the command, if any.
+
+        Uses membership (not truthiness) so a falsy-but-present entry (e.g. an
+        empty ``dict`` declaration) is still returned.
+        """
+        if command.tool in self._tool_catalog:
+            return self._tool_catalog[command.tool]
+        if command.action in self._tool_catalog:
+            return self._tool_catalog[command.action]
+        return None
+
+    def _command_requires_grant(self, command: Command) -> bool:
+        """True when the command (or its declared catalog entry) needs a grant.
+
+        Run-lifecycle actions (P3-11) are enforced absolutely: ``compensate``
+        always requires a grant and ``cancel`` never does, regardless of what a
+        caller or catalog entry might otherwise request — the two semantics
+        must never be conflated.
+        """
+        action = command.action or command.tool
+        lifecycle = LIFECYCLE_ACTIONS.get(action)
+        if lifecycle is not None:
+            return bool(lifecycle["requires_grant"])
+        if command.requires_grant:
+            return True
+        entry = self._catalog_entry(command)
+        if entry is None or isinstance(entry, bool):
+            return False
+        if hasattr(entry, "requires_grant"):
+            return bool(entry.requires_grant)
+        if isinstance(entry, Mapping):
+            return bool(entry.get("requires_grant"))
+        return False
+
+    def _catalog_capability(self, command: Command) -> str:
+        """Return the declared capability for the command's catalog entry."""
+        action = command.action or command.tool
+        lifecycle = LIFECYCLE_ACTIONS.get(action)
+        if lifecycle is not None:
+            return str(lifecycle["capability"])
+        entry = self._catalog_entry(command)
+        if entry is None or isinstance(entry, bool):
+            return ""
+        if hasattr(entry, "required_capability"):
+            return entry.required_capability or ""
+        if isinstance(entry, Mapping):
+            return entry.get("required_capability") or ""
+        return ""
 
     async def _decide(self, command: Command, principal: str) -> PolicyDecision:
         try:
@@ -533,7 +660,7 @@ class CommandBoundary:
 async def execute(
     command: Command, *, boundary: CommandBoundary | None = None
 ) -> Outcome:
-    """Route one host effect through the 13-stage boundary."""
+    """Route one host effect through the 14-stage boundary."""
     if boundary is None:
         boundary = CommandBoundary()
     return await boundary.execute(command)
@@ -541,9 +668,11 @@ async def execute(
 
 __all__ = [
     "STAGES",
+    "LIFECYCLE_ACTIONS",
     "Command",
     "Outcome",
     "BudgetVerdict",
+    "GrantResolver",
     "CommandBoundary",
     "execute",
 ]

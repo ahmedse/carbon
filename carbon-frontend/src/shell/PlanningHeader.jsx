@@ -12,6 +12,7 @@ import PropTypes from 'prop-types';
 import { Box, Button, Chip, Paper, Stack, Typography } from '@mui/material';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { toolLabel } from './aiTaskStatus';
 
 const STORAGE_KEY = 'pulse.planningHeader.expanded';
 const SUMMARY_MAX = 48;
@@ -47,20 +48,30 @@ function formatDuration(ms) {
   return `${(ms / 1000).toFixed(1)} s`;
 }
 
-// S-TRACE-01 — build the outcome-language detail line for a single step:
-// the tool name, the sanitized input, and the sanitized output, joined with a
-// " → " so input→output provenance is visible at a glance. Falls back
-// gracefully for pre-S-TRACE-01 steps that only carry step_label/tool_id.
+// S-TRACE-01 — build the outcome-language detail line for a single step.
+// Strips raw API-call params (api_name=xxx, explanation=yyy) so the trace
+// stays in outcome language (RULE_23), and uses the friendly toolLabel.
+function sanitizeInput(tool, raw) {
+  if (!raw || typeof raw !== 'string') return '';
+  if (String(tool).includes('call_host_api') || /api_name\s*=/.test(raw)) {
+    const m = raw.match(/api_name\s*=\s*([\w]+)/);
+    if (m) return m[1].replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    return '';
+  }
+  return raw;
+}
+
 function buildDetail(step) {
   if (!step || typeof step !== 'object') return '';
-  const tool = typeof step.tool === 'string' ? step.tool.trim() : '';
-  const input = typeof step.input === 'string' ? step.input.trim() : '';
+  const rawTool = typeof step.tool === 'string' ? step.tool.trim() : '';
+  const label = rawTool ? toolLabel(rawTool) : '';
+  const input = sanitizeInput(rawTool, typeof step.input === 'string' ? step.input.trim() : '');
   const output = typeof step.output === 'string' ? step.output.trim() : '';
   const parts = [];
   if (input || output) {
     parts.push(input && output ? `${input} → ${output}` : input || output);
   }
-  if (tool) parts.unshift(tool);
+  if (label) parts.unshift(label);
   return parts.join(' · ');
 }
 

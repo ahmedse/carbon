@@ -17,6 +17,7 @@ below is relative to ``/carbon-api/ai/plans/``:
     POST   /{id}/steps/confirm/     confirm a paused consent step
     POST   /{id}/steps/decline/     decline a paused consent step
     POST   /{id}/stop/              cancel a run
+    POST   /{id}/compensate/        reverse prior effects (own approval)
     GET    /{id}/ledger/            audit ledger
     GET    /{id}/qos/               acceptance QoS report (W4-D/25-C)
     GET    /{id}/flight/            supervision state (W4-D/25-C)
@@ -130,6 +131,11 @@ urlpatterns = [
         "<str:pk>/stop/",
         PlanViewSet.as_view({"post": "stop"}),
         name="ai-plan-stop",
+    ),
+    path(
+        "<str:pk>/compensate/",
+        PlanViewSet.as_view({"post": "compensate"}),
+        name="ai-plan-compensate",
     ),
     path(
         "<str:pk>/ledger/",

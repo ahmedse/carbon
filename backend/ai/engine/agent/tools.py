@@ -51,8 +51,25 @@ STATIC_TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "inspect_case",
+            "description": "Read-only inspection of a process run (case): current activity, blocker, SLA, applicable SOP clause, and journal event ids. Use to answer questions like 'where are we on R-118?'",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "run_id": {
+                        "type": "string",
+                        "description": "The id of the process run (case) to inspect.",
+                    },
+                },
+                "required": ["run_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "call_host_api",
-            "description": "Call the host system's REST API to read LIVE operational data. Use this for any question about the user's actual data (emission factors, calculations, reporting periods, GWP values, footprint summaries, tables, DQ rules) — a GET endpoint needs no confirmation; mutations (POST/PUT/DELETE) require user confirmation. Use the EXACT api_name values listed in the 'Available Host API Endpoints' section of your system prompt. Do NOT use search_knowledge for live data — search_knowledge only searches the knowledge graph, not the data catalog. IMPORTANT: for any question about a specific calendar date, you MUST pass the date through query_params (date / date_from / date_to) — never rely on 'latest' endpoints for a historical or arbitrary date.",
+            "description": "Call the host system's REST API to read LIVE operational data. Use this for any question about the user's actual data (reference data, calculations, reporting periods, conversion values, summaries, tables, data-quality rules) — a GET endpoint needs no confirmation; mutations (POST/PUT/DELETE) require user confirmation. Use the EXACT api_name values listed in the 'Available Host API Endpoints' section of your system prompt. Do NOT use search_knowledge for live data — search_knowledge only searches the knowledge graph, not the data catalog. IMPORTANT: for any question about a specific calendar date, you MUST pass the date through query_params (date / date_from / date_to) — never rely on 'latest' endpoints for a historical or arbitrary date.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -370,6 +387,26 @@ async def execute_get_entity_details(
     if entity:
         return {"entity": entity}
     return {"entity": None, "message": f"Entity '{entity_name}' not found"}
+
+
+async def execute_inspect_case(
+    run_id: str,
+    executor=None,
+    instance_id: str = "",
+    conversation_id: str = "",
+    **kwargs,
+) -> dict:
+    """Read-only case inspection — delegated to the host executor, which routes
+    through the fail-closed command boundary and the ai:inspect_case capability."""
+    if executor is None:
+        return {"error": "Host executor not available"}
+    host_user_id = kwargs.get("host_user_id") or getattr(executor, "host_user_id", None)
+    return await executor.inspect_case_via_boundary(
+        run_id=run_id,
+        instance_id=instance_id,
+        conversation_id=conversation_id,
+        host_user_id=host_user_id,
+    )
 
 
 def _get_slug_resolution(executor, api_name: str) -> tuple[str, list[str]] | None:
@@ -721,86 +758,120 @@ async def execute_call_host_api(
 
     logger.debug(f"call_host_api: {method} {path}  (api={api_name})")
     logger.debug(f"  reason: {explanation}")
-    # Non-GET methods ALWAYS require confirmation regardless of catalog entry
-    if method.upper() != "GET" or executor.requires_confirmation(api_name):
-        confirmation_msg = entry.get(
-            "confirmation_message",
-            f"This will execute {method} {path}. Do you want to proceed?",
-        )
-        execution = await executor.create_pending_execution(
-            conversation_id=conversation_id,
-            tool_name=f"call_host_api:{api_name}",
-            method=method,
-            endpoint=path,
-            params=query_params,
-            body=body,
-            confirmation_message=confirmation_msg,
-        )
-        return {
-            "requires_confirmation": True,
-            "execution_id": execution.id,
-            "method": method,
-            "endpoint": path,
-            "confirmation_message": confirmation_msg,
-        }
+    # ── P2-06b: the host executor routes the host effect through the ───────
+    # fail-closed command boundary (identity → scope → contract → validate →
+    # PDP → consent → budget → idempotency → execute → verify → outcome).
+    # The tool's own method/catalog check decides read (direct) vs. mutation
+    # (stage a pending execution); the boundary adds PDP + contract + audit +
+    # fail-closed refusal.  ``requires_confirmation=False`` on the Command so
+    # stage-7 consent does not pre-refuse: the pending execution IS the
+    # confirmation mechanism for mutations.
 
-    # Direct execution for read-only endpoints
-    settings = get_settings()
+    needs_confirmation = (
+        method.upper() != "GET" or executor.requires_confirmation(api_name)
+    )
+    host_user_id = kwargs.get("host_user_id") or getattr(executor, "host_user_id", None)
 
-    async def _exec_direct() -> dict:
-        try:
-            return await executor.call_api_direct(method, path, query_params, body)
-        except Exception as e:
-            return {"error": str(e)}
-
-    # N1: optional validate→execute→retry discipline (gated, default off).
-    if settings.API_DISCIPLINE_ENABLED:
-        from ai.engine.agent.api_discipline import APIErrorCategory, APIRetryLoop, validate_api_call
-
-        invalid = validate_api_call(executor, api_name)
-        if invalid is not None:
-            return invalid
-
-        # Build an LLM-backed repair function only when we have both an LLM
-        # client and query params to correct. Repair is limited to query_params
-        # (the common bad-date / wrong-filter case); path IDs are already handled
-        # deterministically by the slug resolver above.
-        _last_error = [""]
-        repair_fn = None
-        if instance_id and query_params:
-            async def repair_fn(category: "APIErrorCategory") -> bool:
-                nonlocal query_params
-                fixed = await _llm_repair_query_params(
-                    instance_id, conversation_id, api_name, entry, query_params,
-                    last_error=_last_error[0],
-                )
-                if fixed is None:
-                    return False
-                logger.info(
-                    "api_discipline: LLM repaired query_params for %s: %s → %s",
-                    api_name, query_params, fixed,
-                )
-                query_params = fixed
-                return True
-
-        async def _exec_tracked() -> dict:
-            result = await _exec_direct()
-            if isinstance(result, dict) and "error" in result:
-                _last_error[0] = str(result["error"])
-            return result
-
-        loop = APIRetryLoop(settings.API_MAX_RETRIES, settings.API_RETRY_BACKOFF_MS)
-        outcome = await loop.run(_exec_tracked, repair_fn=repair_fn)
-        if outcome.retry_count:
-            logger.info(
-                "api_discipline: %s succeeded=%s after %d retr%s",
-                api_name, outcome.succeeded, outcome.retry_count,
-                "y" if outcome.retry_count == 1 else "ies",
+    async def _host_effect(command=None) -> dict:
+        # Non-GET methods ALWAYS require confirmation regardless of catalog entry
+        if needs_confirmation:
+            confirmation_msg = entry.get(
+                "confirmation_message",
+                f"This will execute {method} {path}. Do you want to proceed?",
             )
-        return outcome.final_result
+            execution = await executor.create_pending_execution(
+                conversation_id=conversation_id,
+                tool_name=f"call_host_api:{api_name}",
+                method=method,
+                endpoint=path,
+                params=query_params,
+                body=body,
+                confirmation_message=confirmation_msg,
+            )
+            return {
+                "requires_confirmation": True,
+                "execution_id": execution.id,
+                "method": method,
+                "endpoint": path,
+                "confirmation_message": confirmation_msg,
+            }
 
-    # Legacy single-shot path (flag off — unchanged behaviour).
-    return await _exec_direct()
+        # Direct execution for read-only endpoints
+        settings = get_settings()
+
+        async def _exec_direct() -> dict:
+            try:
+                return await executor.call_api_direct(method, path, query_params, body)
+            except Exception as e:
+                return {"error": str(e)}
+
+        # N1: optional validate→execute→retry discipline (gated, default off).
+        if settings.API_DISCIPLINE_ENABLED:
+            from ai.engine.agent.api_discipline import APIErrorCategory, APIRetryLoop, validate_api_call
+
+            invalid = validate_api_call(executor, api_name)
+            if invalid is not None:
+                return invalid
+
+            # Build an LLM-backed repair function only when we have both an LLM
+            # client and query params to correct. Repair is limited to
+            # query_params (the common bad-date / wrong-filter case); path IDs
+            # are already handled deterministically by the slug resolver above.
+            _last_error = [""]
+            repair_fn = None
+            if instance_id and query_params:
+                async def repair_fn(category: "APIErrorCategory") -> bool:
+                    nonlocal query_params
+                    fixed = await _llm_repair_query_params(
+                        instance_id, conversation_id, api_name, entry, query_params,
+                        last_error=_last_error[0],
+                    )
+                    if fixed is None:
+                        return False
+                    logger.info(
+                        "api_discipline: LLM repaired query_params for %s: %s → %s",
+                        api_name, query_params, fixed,
+                    )
+                    query_params = fixed
+                    return True
+
+            async def _exec_tracked() -> dict:
+                result = await _exec_direct()
+                if isinstance(result, dict) and "error" in result:
+                    _last_error[0] = str(result["error"])
+                return result
+
+            loop = APIRetryLoop(settings.API_MAX_RETRIES, settings.API_RETRY_BACKOFF_MS)
+            outcome = await loop.run(_exec_tracked, repair_fn=repair_fn)
+            if outcome.retry_count:
+                logger.info(
+                    "api_discipline: %s succeeded=%s after %d retr%s",
+                    api_name, outcome.succeeded, outcome.retry_count,
+                    "y" if outcome.retry_count == 1 else "ies",
+                )
+            return outcome.final_result
+
+        # Legacy single-shot path (flag off — unchanged behaviour).
+        return await _exec_direct()
+
+    boundary_method = getattr(executor, "execute_host_api_via_boundary", None)
+    if callable(boundary_method):
+        return await boundary_method(
+            effect=_host_effect,
+            api_name=api_name,
+            method=method,
+            path=path,
+            query_params=query_params,
+            body=body,
+            explanation=explanation,
+            conversation_id=conversation_id,
+            needs_confirmation=needs_confirmation,
+            instance_id=instance_id,
+            host_user_id=host_user_id,
+        )
+
+    # Legacy fallback: executor without a boundary (non-host executors/tests).
+    return await _host_effect()
 
 
 async def execute_navigate_to(
@@ -1347,10 +1418,22 @@ async def execute_invoke_skill(
     executor=None,
     **kwargs,
 ) -> dict:
-    """Invoke a skill by name — returns the skill body as DATA only.
+    """Invoke a skill by name.
 
-    Does NOT execute SQL or host API calls; the agent decides what to do with
-    the returned recipe. Increments usage_count on the skill row.
+    Two shapes are supported:
+
+    * **Executable skill** — the body carries ``{"process_ref": "id@version"}``.
+      The call is routed through the host command boundary via the executor's
+      ``invoke_skill_via_boundary`` seam, so the referenced process's PDP /
+      consent / grant gates apply and a governed run is created (or resumed).
+      No SQL or host API body is executed here.
+
+    * **Guidance skill** — data-only return (``prompt_template``, ``procedure``,
+      ``heuristic``, ``resolution``, ``multi_step_plan``, ``code_snippet``). The
+      agent decides what to do with the returned recipe.
+
+    Legacy executable-body kinds (``sql_macro`` / ``api_call``) are refused
+    fail-closed at both admission and invocation (P3-10).
     """
     from ai.engine.skills.registry import SkillRegistry
 
@@ -1366,6 +1449,12 @@ async def execute_invoke_skill(
 
     author_user_id = _author_user_id_from_token(executor.user_token)
     args = args or {}
+    conversation_id = kwargs.get("conversation_id", "")
+    host_user_id = (
+        kwargs.get("host_user_id")
+        or getattr(executor, "host_user_id", None)
+        or ""
+    )
 
     started = time.monotonic()
     registry = SkillRegistry(executor.db)
@@ -1379,11 +1468,60 @@ async def execute_invoke_skill(
     except json.JSONDecodeError:
         body = {}
 
-    if skill.kind == "sql_macro":
-        result = {"kind": skill.kind, "body": body, "args_passed": args}
-    elif skill.kind == "api_call":
-        result = {"kind": skill.kind, "body": body, "args_passed": args}
-    elif skill.kind == "prompt_template":
+    # Legacy executable-body kinds are refused fail-closed (P3-10).
+    if skill.kind in ("sql_macro", "api_call"):
+        return {"error": f"skill kind '{skill.kind}' is not executable"}
+
+    # Executable skill — body references a governed process. Route through the
+    # host command boundary (PDP + consent + grant). Fail-closed when the host
+    # executor does not expose the seam.
+    process_ref = (body or {}).get("process_ref")
+    if process_ref:
+        boundary_method = getattr(executor, "invoke_skill_via_boundary", None)
+        if not callable(boundary_method):
+            return {
+                "error": (
+                    "Skill references a governed process but the host executor "
+                    "has no process-boundary seam."
+                ),
+            }
+        # P4-04: pass the skill's declared allowed_tools through to the PDP.
+        raw_tools = (body or {}).get("allowed_tools") or []
+        if isinstance(raw_tools, str):
+            raw_tools = [raw_tools]
+        allowed_tools = [str(tool) for tool in raw_tools if tool]
+        host_result = await boundary_method(
+            skill_name=skill_name,
+            process_ref=process_ref,
+            args=args,
+            instance_id=instance_id,
+            conversation_id=conversation_id,
+            host_user_id=host_user_id,
+            author_user_id=author_user_id,
+            allowed_tools=allowed_tools,
+        )
+        # Record telemetry only when the host produced a run (not a refusal).
+        run_id = (host_result or {}).get("run_id")
+        if run_id:
+            from ai.engine.skills.crud import SkillsStore
+
+            elapsed_ms = (time.monotonic() - started) * 1000
+            await SkillsStore(executor.db).update_stats(
+                skill.id, success=True, latency_ms=elapsed_ms
+            )
+        return {
+            "skill_id": skill.id,
+            "skill_name": skill.name,
+            "kind": skill.kind,
+            "result": host_result,
+            "message": (
+                f"Invoked executable skill '{skill.name}' via the governed "
+                "process boundary."
+            ),
+        }
+
+    # Guidance skills — return the recipe as data only.
+    if skill.kind == "prompt_template":
         template = (body or {}).get("user_prompt_template", "")
         result = {
             "kind": skill.kind,
@@ -1391,8 +1529,6 @@ async def execute_invoke_skill(
             "args_passed": args,
             "rendered_prompt": _render_prompt_template(template, args),
         }
-    elif skill.kind == "multi_step_plan":
-        result = {"kind": skill.kind, "body": body, "args_passed": args}
     elif skill.kind == "code_snippet":
         code = (body or {}).get("code", "")
         if not code:
@@ -1432,6 +1568,7 @@ async def execute_invoke_skill(
 STATIC_TOOL_EXECUTORS = {
     "search_knowledge": execute_search_knowledge,
     "get_entity_details": execute_get_entity_details,
+    "inspect_case": execute_inspect_case,
     "call_host_api": execute_call_host_api,
     "navigate_to": execute_navigate_to,
     "open_entity": execute_open_entity,

@@ -401,6 +401,8 @@ REST_FRAMEWORK = {
         'heavy': '10/min',
         # Development: allow rapid logins for E2E testing
         'login': '1000/minute' if IS_DEVELOPMENT else '5/minute',
+        # JWT refresh: dedicated generous scope (core.throttling.RefreshRateThrottle)
+        'refresh': '1000/minute' if IS_DEVELOPMENT else '30/minute',
     },
     # Phase 1.4: Default API pagination (overridable via APIConfig model)
     'DEFAULT_PAGINATION_CLASS': 'config.pagination.CarbonPageNumberPagination',

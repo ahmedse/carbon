@@ -29,6 +29,8 @@ urlpatterns = [
          name='correspondence-cancel'),
     path('<int:pk>/resubmit/', CorrespondenceViewSet.as_view({'post': 'resubmit'}),
          name='correspondence-resubmit'),
+    path('<int:pk>/archive/', CorrespondenceViewSet.as_view({'post': 'archive'}),
+         name='correspondence-archive'),
     path('notifications/', NotificationViewSet.as_view({'get': 'list'}),
          name='correspondence-notifications'),
     path('notifications/read-all/', NotificationViewSet.as_view({'post': 'read_all'}),

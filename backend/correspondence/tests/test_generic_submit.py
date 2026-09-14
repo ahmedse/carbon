@@ -128,6 +128,17 @@ def test_create_unknown_org_unit_400(memo_workflow, api_client, get_token_for_us
 
 
 @pytest.mark.django_db
+def test_create_missing_org_unit_400(memo_workflow, api_client, get_token_for_user):
+    wf = memo_workflow
+    _auth(api_client, wf.requester_user, get_token_for_user)
+
+    resp = api_client.post(CREATE_URL, _payload(wf, org_unit=None), format='json')
+
+    assert resp.status_code == 400
+    assert resp.json()['detail'] == 'org_unit is required'
+
+
+@pytest.mark.django_db
 def test_create_without_submit_capability_403(
     memo_workflow, api_client, get_token_for_user, create_user,
 ):

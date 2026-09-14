@@ -368,3 +368,19 @@ class SeedGofscoComputeRegressionTests(TestCase):
             .values_list("line_type", flat=True)
         )
         self.assertEqual(line_types, {"gross", "gosi", "net"})
+
+    def test_authoritative_rules_include_wps(self):
+        from people.management.commands.seed_gofsco_rules import AUTHORITATIVE_RULES
+
+        wps_rules = [r for r in AUTHORITATIVE_RULES if r[3] == "wps"]
+        self.assertEqual(len(wps_rules), 1)
+
+        rule_id, version, name, category, formula_ref, inputs_schema = wps_rules[0]
+        self.assertEqual(rule_id, "kw-wps")
+        self.assertEqual(version, "2026.1")
+        self.assertEqual(category, "wps")
+        params = inputs_schema["formula"]["params"]
+        self.assertIn("field_map", params)
+        self.assertIn("amount_components", params)
+        self.assertEqual(params["amount_components"], ["net"])
+        self.assertIn("employee_number", params["field_map"])

@@ -17,6 +17,7 @@ Endpoints (all owner-scoped, CBAC via ``host_user_id``):
     POST   /carbon-api/ai/plans/{id}/steps/confirm/   confirm a paused consent step
     POST   /carbon-api/ai/plans/{id}/steps/decline/   decline a paused consent step
     POST   /carbon-api/ai/plans/{id}/stop/            cancel a run
+    POST   /carbon-api/ai/plans/{id}/compensate/      reverse prior effects (own approval)
     GET    /carbon-api/ai/plans/{id}/ledger/          audit ledger
     GET    /carbon-api/ai/plans/{id}/qos/             acceptance QoS report (W4-D/25-C)
     GET    /carbon-api/ai/plans/{id}/flight/          supervision state (W4-D/25-C)
@@ -66,6 +67,16 @@ class PlanDiscoverSerializer(serializers.Serializer):
 
 class PlanConfirmSerializer(serializers.Serializer):
     step_id = serializers.IntegerField(required=True)
+
+
+class PlanCompensateSerializer(serializers.Serializer):
+    """POST /plans/{id}/compensate/ — optional note for the reversal.
+
+    ``note`` is a human-readable reason for the compensation; it is pinned into
+    the grant's canonical args and recorded in the run's compensation record.
+    """
+
+    note = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class PlanEditSerializer(serializers.Serializer):
@@ -584,6 +595,40 @@ class PlanViewSet(viewsets.GenericViewSet):
         except PlanNotAccessibleError as exc:
             return Response(
                 {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="compensate",
+        url_name="compensate-plan",
+    )
+    def compensate(self, request, pk=None):
+        """Reverse prior effects of a plan run (requires its own approval).
+
+        Refused fail-closed (403) without a human-minted ``ApprovalGrant`` for
+        capability ``run.compensate`` — a ``cancel`` authorization never
+        satisfies compensation.
+        """
+        serializer = PlanCompensateSerializer(data=request.data or {})
+        serializer.is_valid(raise_exception=True)
+        try:
+            return Response(
+                self.service.compensate_plan(
+                    request.user, pk, serializer.validated_data.get("note", "")
+                )
+            )
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+        except PlanNotRunnableError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST
+            )
+        except PlanForbiddenError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_403_FORBIDDEN
             )
 
     @action(detail=True, methods=["get"], url_path="ledger", url_name="plan-ledger")

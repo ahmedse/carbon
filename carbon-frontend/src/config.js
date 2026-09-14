@@ -98,7 +98,7 @@ export const API_ROUTES = {
   groups: "accounts/groups/",
   scopedRoles: "accounts/scoped-roles/",
   roleRegistry: "accounts/role-registry/",
-  auditLogs: "accounts/role-audit-logs/",
+  auditLogs: "core/audit-logs/",
   platformApps: "accounts/platform-apps/",
 
   // Catalog (domains, glossary, tags, assets, governance)

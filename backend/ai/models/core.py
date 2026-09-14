@@ -370,6 +370,34 @@ class Run(AppScopeMixin):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    # ── P3-07a durable run machine ────────────────────────────────────────
+    run_state = models.TextField(default="planned")
+    definition_id = models.TextField(default="")
+    definition_version = models.TextField(default="")
+    idempotency_key = models.TextField(blank=True, default="")
+    kill_switched_at = models.DateTimeField(null=True, blank=True)
+
+    def pin_definition(self, definition_id: str = "", version: str = "") -> None:
+        """Pin the definition id + version (write-once per instance).
+
+        Both fields are immutable after first set — the "definition version
+        pinned per instance" invariant (P3-07a).
+        """
+        if definition_id and not self.definition_id:
+            self.definition_id = str(definition_id)
+        if version and not self.definition_version:
+            self.definition_version = str(version)
+
+    def pin_definition_version(self, version: str) -> bool:
+        """Write-once version pin. Returns True when pinned, False when refused.
+
+        A second write is refused (returns False) — the version cannot change
+        after it is first set (P3-07a invariant).
+        """
+        if self.definition_version:
+            return False
+        self.definition_version = str(version)
+        return True
 
     class Meta:
         app_label = "ai"
@@ -391,11 +419,38 @@ class RunStep(AppScopeMixin):
     error = models.TextField(null=True, blank=True)
     latency_ms = models.FloatField(null=True, blank=True)
     confirmation_token = models.TextField(null=True, blank=True)
+    # ── P3-07a durable run machine ────────────────────────────────────────
+    step_state = models.TextField(default="planned")
+    step_id = models.TextField(default="")
+    idempotency_key = models.TextField(blank=True, default="")
+    operation_id = models.TextField(blank=True, default="")
+    outcome = models.TextField(default="")
+    retry_count = models.IntegerField(default=0)
+    last_error = models.TextField(blank=True, default="")
+    # ── P3-07b workflow/activity split ────────────────────────────────────
+    # ``workflow`` = pure deterministic orchestration (replayable, no side
+    # effects); ``activity`` = non-deterministic side effect (LLM/host call).
+    # Default ``activity``: only activities are retried, emit outcome_unknown,
+    # and consume the consent gate.  Constants live in
+    # ``ai.models.step_journal`` (STEP_KIND_WORKFLOW / STEP_KIND_ACTIVITY).
+    step_kind = models.TextField(default="activity")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         app_label = "ai"
+        indexes = [
+            models.Index(
+                fields=["run_id", "step_id"], name="ai_runstep_lookup_idx"
+            ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run_id", "step_id"],
+                name="ai_runstep_run_step_uniq",
+                condition=models.Q(step_id__gt=""),
+            ),
+        ]
 
 
 class RunArtifact(models.Model):
