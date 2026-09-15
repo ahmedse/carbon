@@ -1,0 +1,102 @@
+# Nibras leave request lifecycle — governed ProcessDefinition (P5a).
+#
+# submit → (human review) → record → verify.
+# Autonomy dials keep this flow deterministic and admin-governed: the AI may
+# stage submit/record for confirmation, while review is explicitly human-only.
+id: leave.request.lifecycle
+version: "1.0"
+owner: ai
+status: active
+
+objects:
+  - type: leave.request
+    selector: request_id
+
+inputs:
+  request_id:
+    type: string
+
+scope:
+  source: authenticated_host_context
+
+objective:
+  predicate: leave.request.recorded_and_entitlement_decremented
+
+steps:
+  - id: submit
+    kind: command
+    capability: leave.request.submit
+    depends_on: []
+    autonomy: act_confirm
+    binds_to: leave.request
+    consent: true
+    idempotency_scope: request_id
+    unknown_outcome: escalate
+
+  - id: review
+    kind: human_task
+    capability: leave.request.review
+    depends_on:
+      - submit
+    autonomy: human_only
+    separation_of_duties:
+      - requester
+      - approver
+    binds_to: inbox
+    consent: false
+    approval_ref: leave.request.review
+
+  - id: record
+    kind: command
+    capability: leave.request.record
+    depends_on:
+      - review
+    autonomy: act_confirm
+    binds_to: leave.request
+    consent: true
+    idempotency_scope: request_id
+    unknown_outcome: escalate
+
+  - id: verify
+    kind: assertion
+    capability: leave.request.recorded_and_entitlement_decremented
+    depends_on:
+      - record
+    autonomy: observe
+    binds_to: leave.request
+    consent: false
+
+constraints:
+  precedence:
+    - from: submit
+      to: review
+    - from: review
+      to: record
+    - from: record
+      to: verify
+
+evidence:
+  - type: LeaveRequest
+    from_step: submit
+  - type: ApprovalGrant
+    from_step: review
+  - type: LeaveRecord
+    from_step: record
+  - type: LeaveEntitlementDelta
+    from_step: record
+
+policies:
+  refuse_if:
+    - requester equals approver
+    - request is not reviewed before record
+  ask_if:
+    - requested days exceed remaining entitlement
+
+exceptions: []
+
+kill_switch: false
+
+tests:
+  - name: happy-path-recorded-and-entitlement-decremented
+  - name: refuse-record-when-not-reviewed
+  - name: record-requires-human-consent

@@ -1,0 +1,102 @@
+# Nibras loan request lifecycle — governed ProcessDefinition (P5b).
+#
+# submit → (human review) → activate → verify.
+# Autonomy dials keep this flow deterministic and admin-governed: the AI may
+# stage submit/activate for confirmation, while review is explicitly human-only.
+id: loan.request.lifecycle
+version: "1.0"
+owner: ai
+status: active
+
+objects:
+  - type: loan.request
+    selector: request_id
+
+inputs:
+  request_id:
+    type: string
+
+scope:
+  source: authenticated_host_context
+
+objective:
+  predicate: loan.request.activated_and_scheduled
+
+steps:
+  - id: submit
+    kind: command
+    capability: loan.request.submit
+    depends_on: []
+    autonomy: act_confirm
+    binds_to: loan.request
+    consent: true
+    idempotency_scope: request_id
+    unknown_outcome: escalate
+
+  - id: review
+    kind: human_task
+    capability: loan.request.review
+    depends_on:
+      - submit
+    autonomy: human_only
+    separation_of_duties:
+      - requester
+      - approver
+    binds_to: inbox
+    consent: false
+    approval_ref: loan.request.review
+
+  - id: activate
+    kind: command
+    capability: loan.request.activate
+    depends_on:
+      - review
+    autonomy: act_confirm
+    binds_to: loan.request
+    consent: true
+    idempotency_scope: request_id
+    unknown_outcome: escalate
+
+  - id: verify
+    kind: assertion
+    capability: loan.request.activated_and_scheduled
+    depends_on:
+      - activate
+    autonomy: observe
+    binds_to: loan.request
+    consent: false
+
+constraints:
+  precedence:
+    - from: submit
+      to: review
+    - from: review
+      to: activate
+    - from: activate
+      to: verify
+
+evidence:
+  - type: LoanRequest
+    from_step: submit
+  - type: ApprovalGrant
+    from_step: review
+  - type: LoanActivation
+    from_step: activate
+  - type: LoanInstallmentSchedule
+    from_step: activate
+
+policies:
+  refuse_if:
+    - requester equals approver
+    - request is not reviewed before activate
+  ask_if:
+    - principal exceeds configured approval threshold
+
+exceptions: []
+
+kill_switch: false
+
+tests:
+  - name: happy-path-activated-and-scheduled
+  - name: refuse-activate-when-not-reviewed
+  - name: activate-requires-human-consent

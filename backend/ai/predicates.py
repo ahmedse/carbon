@@ -15,6 +15,7 @@ closed (returns ``False``) when either revision is missing or incoercible.
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 
@@ -42,3 +43,98 @@ def dq_rule_active_revision_matches_approved_revision(rule: Any) -> bool:
         return str(active) == str(approved)
     except (TypeError, ValueError):
         return False
+
+
+def _field(obj: Any, key: str) -> Any:
+    """Extract a value from a mapping or a plain object (no DB access)."""
+    if isinstance(obj, dict):
+        return obj.get(key)
+    return getattr(obj, key, None)
+
+
+def payroll_run_committed_and_variance_clean(run: Any) -> bool:
+    """True iff the payroll run is committed AND its validations are variance-clean.
+
+    The Nibras ``payroll.run.lifecycle`` postcondition (verify step): after the
+    commit stage the run's ``status`` must be ``committed`` and every recorded
+    validation finding must have passed. Reads an already-loaded run-like object
+    (mapping or plain object) — never the database (RULE_21). Fail-closed: a
+    non-committed status, or a missing/unconfirmable variance signal, returns
+    ``False`` (never a false "verified" on absent data).
+    """
+    status = _field(run, "status")
+    if status is None or str(status).lower() != "committed":
+        return False
+
+    variance_clean = _field(run, "variance_clean")
+    if variance_clean is not None:
+        return bool(variance_clean)
+
+    validations = _field(run, "validations")
+    if not isinstance(validations, (list, tuple)) or not validations:
+        return False
+    return all(bool(_field(v, "passed")) for v in validations)
+
+
+def _as_decimal(value: Any) -> Decimal | None:
+    """Coerce numeric-like values to Decimal; return None on failure."""
+    if value is None:
+        return None
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+
+
+def leave_request_recorded_and_entitlement_decremented(record: Any) -> bool:
+    """True iff leave is approved and entitlement decrement is verifiable.
+
+    The Nibras ``leave.request.lifecycle`` postcondition: the request is
+    approved/recorded and the entitlement ledger moved down for that request.
+    Reads an already-loaded record-like object (mapping or plain object) with
+    no DB access (RULE_21). Fail-closed: if status/decrement signals are
+    missing or incoercible, return ``False``.
+    """
+    status = _field(record, "status")
+    if status is None or str(status).lower() != "approved":
+        return False
+
+    decremented = _field(record, "entitlement_decremented")
+    if decremented is not None:
+        return bool(decremented)
+
+    remaining_before = _as_decimal(_field(record, "remaining_before"))
+    remaining_after = _as_decimal(_field(record, "remaining_after"))
+    if remaining_before is not None and remaining_after is not None:
+        return remaining_after < remaining_before
+
+    return False
+
+
+def loan_request_activated_and_scheduled(record: Any) -> bool:
+    """True iff loan is active and installment schedule is verifiable.
+
+    The Nibras ``loan.request.lifecycle`` postcondition: the request is
+    activated and at least one installment exists for its repayment schedule.
+    Reads an already-loaded record-like object (mapping or plain object) with
+    no DB access (RULE_21). Fail-closed: if activation/schedule signals are
+    missing or incoercible, return ``False``.
+    """
+    status = _field(record, "status")
+    if status is None or str(status).lower() != "active":
+        return False
+
+    scheduled = _field(record, "installments_scheduled")
+    if scheduled is not None:
+        return bool(scheduled)
+
+    installment_count = _field(record, "installment_count")
+    as_decimal = _as_decimal(installment_count)
+    if as_decimal is not None:
+        return as_decimal > 0
+
+    installments = _field(record, "installments")
+    if isinstance(installments, (list, tuple)):
+        return len(installments) > 0
+
+    return False

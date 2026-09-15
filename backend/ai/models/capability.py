@@ -78,8 +78,20 @@ class CapabilityValidationError(ValueError):
 
 
 def default_pack_dir() -> Path:
-    """Return the Carbon domain pack directory (host resolves brand → dir)."""
-    return Path(settings.BASE_DIR).parent / "domain_packs" / "carbon"
+    """Return the active brand's domain pack directory (host resolves brand → dir).
+
+    Resolves the brand → instance id via :func:`ai.instance_registry.resolve_instance_id`
+    (``domain_packs/<instance_id>``, e.g. ``nibras`` under ``DJANGO_BRAND=nibras``)
+    and falls back to the Carbon pack when the brand has no pack directory. The
+    import is local so this module holds no import-time brand/Django coupling.
+    """
+    from ai.instance_registry import resolve_instance_id
+
+    root = Path(settings.BASE_DIR).parent / "domain_packs"
+    instance_dir = root / resolve_instance_id()
+    if instance_dir.is_dir():
+        return instance_dir
+    return root / "carbon"
 
 
 def resolve_host_action(host_action: str) -> Any:

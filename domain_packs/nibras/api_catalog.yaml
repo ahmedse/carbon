@@ -1,0 +1,623 @@
+# Nibras (HRMS) — tool / API catalog + governed capability contracts.
+#
+# This pack is the ONLY place Nibras People & Payroll host actions are declared
+# for the intelligence layer (F1a: Nibras pack parity with domain_packs/carbon).
+# ``tools:`` lists agent-facing tools; ``capabilities:`` declares governed
+# host-action contracts (P3-01). Each capability's ``host_action`` resolves
+# against backend/ai/capability_registry.py (fail-closed).
+default_source_type: carbon_api
+
+# kind: read | write | confirm
+tools:
+  # ── Read ──────────────────────────────────────────────────────────────
+  - name: list_payroll_runs
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: get_payroll_run
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: list_payslip_lines
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  # ── Run lifecycle mutations (staged + confirmed; RULE_21) ─────────────
+  - name: compute_payroll_run
+    kind: confirm
+    requires_confirmation: true
+    source_type: carbon_api
+
+  - name: validate_payroll_run
+    kind: confirm
+    requires_confirmation: true
+    source_type: carbon_api
+
+  - name: commit_payroll_run
+    kind: confirm
+    requires_confirmation: true
+    source_type: carbon_api
+
+  # ── Leave lifecycle reads/mutations (staged + confirmed; RULE_21) ──────
+  - name: list_leave_records
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: list_leave_entitlements
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: create_leave_record
+    kind: confirm
+    requires_confirmation: true
+    source_type: carbon_api
+
+# Governed host-action capabilities (P3-01). Pilot process:
+#   domain_packs/nibras/processes/payroll.run.lifecycle.yaml
+#   compute (mutation) → validate (mutation) → review (human_task) →
+#   commit (mutation, final) → verify (assertion)
+capabilities:
+  # ── Reads ─────────────────────────────────────────────────────────────
+  - capability_id: payroll.run.list
+    business_name: List payroll runs
+    purpose: List the payroll runs visible to the requester
+    kind: read_only
+    inputs: {}
+    preconditions: {}
+    permissions:
+      - payroll.run.list
+    effects: {}
+    side_effects: []
+    approval_requirements: {}
+    requires_confirmation: false
+    idempotency: "true (read-only)"
+    verification:
+      predicate: payroll.run.results_returned
+    failure_semantics: abort
+    recovery: retry
+    owner: ai
+    version: "1.0"
+    host_action: payroll.run.list
+
+  - capability_id: payroll.run.get
+    business_name: Get payroll run
+    purpose: Return one payroll run's status, period, and summary totals
+    kind: read_only
+    inputs:
+      run_id:
+        type: string
+    preconditions:
+      run_exists: true
+    permissions:
+      - payroll.run.get
+    effects: {}
+    side_effects: []
+    approval_requirements: {}
+    requires_confirmation: false
+    idempotency: "true (read-only)"
+    verification:
+      predicate: payroll.run.detail_returned
+    failure_semantics: abort
+    recovery: retry
+    owner: ai
+    version: "1.0"
+    host_action: payroll.run.get
+
+  - capability_id: payroll.payslip.list
+    business_name: List payslip lines
+    purpose: Return the payslip lines for a run (gross, gosi, loan, net)
+    kind: read_only
+    inputs:
+      run_id:
+        type: string
+    preconditions:
+      run_exists: true
+    permissions:
+      - payroll.payslip.list
+    effects: {}
+    side_effects: []
+    approval_requirements: {}
+    requires_confirmation: false
+    idempotency: "true (read-only)"
+    verification:
+      predicate: payroll.payslip.lines_returned
+    failure_semantics: abort
+    recovery: retry
+    owner: ai
+    version: "1.0"
+    host_action: payroll.payslip.list
+
+  # ── Compute (draft → computed) ────────────────────────────────────────
+  - capability_id: payroll.run.compute
+    business_name: Compute payroll run
+    purpose: >
+      Apply tax and statutory deduction rules to a draft run to produce its
+      payslip lines, advancing it from draft to computed.
+    kind: mutation
+    inputs:
+      run_id:
+        type: string
+    preconditions:
+      run_status_is_draft: true
+    permissions:
+      - payroll.run.compute
+    effects:
+      mutates: payroll.run
+      sets: status=computed
+      produces: PayslipLines
+    side_effects:
+      - payslip_lines_generated
+    approval_requirements:
+      requires_grant: true
+    requires_confirmation: true
+    idempotency: dedupe by run_id (re-compute replaces prior lines)
+    verification:
+      predicate: payroll.run.status_is_computed
+    failure_semantics: abort
+    recovery: retry_after_fix
+    owner: ai
+    version: "1.0"
+    host_action: payroll.run.compute
+
+  # ── Validate (computed → validated) ───────────────────────────────────
+  - capability_id: payroll.run.validate
+    business_name: Validate payroll run
+    purpose: >
+      Run variance checks and approval gates against a computed run, advancing
+      it from computed to validated and persisting any findings.
+    kind: mutation
+    inputs:
+      run_id:
+        type: string
+    preconditions:
+      run_status_is_computed: true
+    permissions:
+      - payroll.run.validate
+    effects:
+      mutates: payroll.run
+      sets: status=validated
+      produces: PayrollRunValidations
+    side_effects:
+      - validation_findings_persisted
+    approval_requirements:
+      requires_grant: true
+    requires_confirmation: true
+    idempotency: dedupe by run_id (re-validate refreshes findings)
+    verification:
+      predicate: payroll.run.status_is_validated
+    failure_semantics: abort
+    recovery: retry_after_fix
+    owner: ai
+    version: "1.0"
+    host_action: payroll.run.validate
+
+  # ── Review (human task, preparer ≠ approver) ──────────────────────────
+  - capability_id: payroll.run.review
+    business_name: Review payroll run
+    purpose: >
+      Create a durable human review task so an approver (distinct from the
+      preparer) signs off on the validated run before it is committed.
+    kind: human_task
+    inputs:
+      run_id:
+        type: string
+    preconditions:
+      run_status_is_validated: true
+    permissions:
+      - payroll.run.review
+    effects:
+      creates: HumanTask
+    side_effects:
+      - inbox_task
+    approval_requirements:
+      human_reviewer: true
+    requires_confirmation: false
+    idempotency: dedupe by run_id
+    verification:
+      predicate: payroll.run.review_completed
+    failure_semantics: suspend
+    recovery: human_decision
+    owner: ai
+    version: "1.0"
+    host_action: human_task:inbox
+
+  # ── Commit (validated → committed; FINAL, triggers WPS SIF) ───────────
+  - capability_id: payroll.run.commit
+    business_name: Commit payroll run
+    purpose: >
+      Post a validated and reviewed run as final and irreversible, triggering
+      WPS SIF file generation for salary disbursement.
+    kind: mutation
+    inputs:
+      run_id:
+        type: string
+    preconditions:
+      run_status_is_validated: true
+      review_approved: true
+    permissions:
+      - payroll.run.commit
+    effects:
+      mutates: payroll.run
+      sets: status=committed
+      produces: WpsSifFile
+    side_effects:
+      - wps_sif_generated
+      - irreversible
+    approval_requirements:
+      requires_grant: true
+      human_reviewer: true
+    requires_confirmation: true
+    idempotency: dedupe by run_id (a committed run cannot be re-committed)
+    verification:
+      predicate: payroll.run.committed_and_variance_clean
+    failure_semantics: abort
+    recovery: manual_reconciliation
+    owner: ai
+    version: "1.0"
+    host_action: payroll.run.commit
+
+  # ── Verify (assertion — objective postcondition) ──────────────────────
+  - capability_id: payroll.run.committed_and_variance_clean
+    business_name: Verify run committed and variance-clean
+    purpose: >
+      Assert the run reached committed status and every validation finding
+      passed (no unresolved variance).
+    kind: assertion
+    inputs:
+      run:
+        type: payroll.run
+    preconditions: {}
+    permissions:
+      - payroll.run.committed_and_variance_clean
+    effects: {}
+    side_effects: []
+    approval_requirements: {}
+    requires_confirmation: false
+    idempotency: "true (read-only)"
+    verification: {}
+    failure_semantics: fail
+    recovery: escalate
+    owner: ai
+    version: "1.0"
+    host_action: payroll.run.committed_and_variance_clean
+
+  # ── Leave reads ─────────────────────────────────────────────────────────
+  - capability_id: leave.request.list
+    business_name: List leave requests
+    purpose: List leave requests visible to the requester
+    kind: read_only
+    inputs: {}
+    preconditions: {}
+    permissions:
+      - leave.request.list
+    effects: {}
+    side_effects: []
+    approval_requirements: {}
+    requires_confirmation: false
+    idempotency: "true (read-only)"
+    verification:
+      predicate: leave.request.results_returned
+    failure_semantics: abort
+    recovery: retry
+    owner: ai
+    version: "1.0"
+    host_action: leave.request.list
+
+  - capability_id: leave.entitlement.list
+    business_name: List leave entitlements
+    purpose: List leave entitlements visible to the requester
+    kind: read_only
+    inputs: {}
+    preconditions: {}
+    permissions:
+      - leave.entitlement.list
+    effects: {}
+    side_effects: []
+    approval_requirements: {}
+    requires_confirmation: false
+    idempotency: "true (read-only)"
+    verification:
+      predicate: leave.entitlement.results_returned
+    failure_semantics: abort
+    recovery: retry
+    owner: ai
+    version: "1.0"
+    host_action: leave.entitlement.list
+
+  # ── Submit (create pending request) ────────────────────────────────────
+  - capability_id: leave.request.submit
+    business_name: Submit leave request
+    purpose: >
+      Create a pending leave request for approval, capturing the requested
+      leave type, dates, and requested days.
+    kind: mutation
+    inputs:
+      request:
+        type: leave.request
+    preconditions:
+      requester_is_active_employee: true
+      leave_type_is_valid: true
+      requested_range_is_valid: true
+    permissions:
+      - leave.request.submit
+    effects:
+      mutates: leave.request
+      sets: status=submitted
+      produces: LeaveRequest
+    side_effects:
+      - leave_request_created
+    approval_requirements:
+      requires_grant: true
+    requires_confirmation: true
+    idempotency: dedupe by request fingerprint (employee+type+dates)
+    verification:
+      predicate: leave.request.status_is_submitted
+    failure_semantics: abort
+    recovery: retry_after_fix
+    owner: ai
+    version: "1.0"
+    host_action: leave.request.submit
+
+  # ── Review (human task, requester ≠ approver) ──────────────────────────
+  - capability_id: leave.request.review
+    business_name: Review leave request
+    purpose: >
+      Create a durable human review task so an approver distinct from the
+      requester decides the leave request before it is recorded.
+    kind: human_task
+    inputs:
+      request_id:
+        type: string
+    preconditions:
+      request_status_is_submitted: true
+    permissions:
+      - leave.request.review
+    effects:
+      creates: HumanTask
+    side_effects:
+      - inbox_task
+    approval_requirements:
+      human_reviewer: true
+    requires_confirmation: false
+    idempotency: dedupe by request_id
+    verification:
+      predicate: leave.request.review_completed
+    failure_semantics: suspend
+    recovery: human_decision
+    owner: ai
+    version: "1.0"
+    host_action: human_task:inbox
+
+  # ── Record (approved request → recorded + entitlement impact) ──────────
+  - capability_id: leave.request.record
+    business_name: Record approved leave request
+    purpose: >
+      Finalize an approved leave request as a recorded leave entry and apply
+      its entitlement usage impact.
+    kind: mutation
+    inputs:
+      request_id:
+        type: string
+    preconditions:
+      request_status_is_approved: true
+      review_approved: true
+    permissions:
+      - leave.request.record
+    effects:
+      mutates: leave.request
+      sets: status=approved
+      produces: LeaveRecord
+    side_effects:
+      - entitlement_usage_updated
+    approval_requirements:
+      requires_grant: true
+      human_reviewer: true
+    requires_confirmation: true
+    idempotency: dedupe by request_id
+    verification:
+      predicate: leave.request.recorded_and_entitlement_decremented
+    failure_semantics: abort
+    recovery: manual_reconciliation
+    owner: ai
+    version: "1.0"
+    host_action: leave.request.record
+
+  # ── Verify (assertion — objective postcondition) ───────────────────────
+  - capability_id: leave.request.recorded_and_entitlement_decremented
+    business_name: Verify leave recorded and entitlement decremented
+    purpose: >
+      Assert the leave request is approved/recorded and the relevant
+      entitlement balance was decremented for the same request.
+    kind: assertion
+    inputs:
+      leave:
+        type: leave.request
+    preconditions: {}
+    permissions:
+      - leave.request.recorded_and_entitlement_decremented
+    effects: {}
+    side_effects: []
+    approval_requirements: {}
+    requires_confirmation: false
+    idempotency: "true (read-only)"
+    verification: {}
+    failure_semantics: fail
+    recovery: escalate
+    owner: ai
+    version: "1.0"
+    host_action: leave.request.recorded_and_entitlement_decremented
+
+  # ── Loan reads ──────────────────────────────────────────────────────────
+  - capability_id: loan.list
+    business_name: List loans
+    purpose: List loans visible to the requester
+    kind: read_only
+    inputs: {}
+    preconditions: {}
+    permissions:
+      - loan.list
+    effects: {}
+    side_effects: []
+    approval_requirements: {}
+    requires_confirmation: false
+    idempotency: "true (read-only)"
+    verification:
+      predicate: loan.results_returned
+    failure_semantics: abort
+    recovery: retry
+    owner: ai
+    version: "1.0"
+    host_action: loan.list
+
+  - capability_id: loan.installment.list
+    business_name: List loan installments
+    purpose: List loan installments visible to the requester
+    kind: read_only
+    inputs:
+      loan_id:
+        type: string
+    preconditions: {}
+    permissions:
+      - loan.installment.list
+    effects: {}
+    side_effects: []
+    approval_requirements: {}
+    requires_confirmation: false
+    idempotency: "true (read-only)"
+    verification:
+      predicate: loan.installment.results_returned
+    failure_semantics: abort
+    recovery: retry
+    owner: ai
+    version: "1.0"
+    host_action: loan.installment.list
+
+  # ── Submit (create pending loan request) ───────────────────────────────
+  - capability_id: loan.request.submit
+    business_name: Submit loan request
+    purpose: >
+      Create a pending loan request for approval, capturing loan type,
+      principal, interest rate, term, and start date.
+    kind: mutation
+    inputs:
+      request:
+        type: loan.request
+    preconditions:
+      requester_is_active_employee: true
+      loan_type_is_valid: true
+      principal_is_positive: true
+      term_months_is_positive: true
+      start_date_is_valid: true
+    permissions:
+      - loan.request.submit
+    effects:
+      mutates: loan.request
+      sets: status=draft
+      produces: LoanRequest
+    side_effects:
+      - loan_request_created
+    approval_requirements:
+      requires_grant: true
+    requires_confirmation: true
+    idempotency: dedupe by request fingerprint (employee+type+principal+term+start_date)
+    verification:
+      predicate: loan.request.status_is_draft
+    failure_semantics: abort
+    recovery: retry_after_fix
+    owner: ai
+    version: "1.0"
+    host_action: loan.request.submit
+
+  # ── Review (human task, requester ≠ approver) ──────────────────────────
+  - capability_id: loan.request.review
+    business_name: Review loan request
+    purpose: >
+      Create a durable human review task so an approver distinct from the
+      requester decides the loan request before activation.
+    kind: human_task
+    inputs:
+      request_id:
+        type: string
+    preconditions:
+      request_status_is_draft: true
+    permissions:
+      - loan.request.review
+    effects:
+      creates: HumanTask
+    side_effects:
+      - inbox_task
+    approval_requirements:
+      human_reviewer: true
+    requires_confirmation: false
+    idempotency: dedupe by request_id
+    verification:
+      predicate: loan.request.review_completed
+    failure_semantics: suspend
+    recovery: human_decision
+    owner: ai
+    version: "1.0"
+    host_action: human_task:inbox
+
+  # ── Activate (approved loan → active + installment schedule) ───────────
+  - capability_id: loan.request.activate
+    business_name: Activate approved loan request
+    purpose: >
+      Finalize an approved loan request as an active loan and generate its
+      installment schedule.
+    kind: mutation
+    inputs:
+      request_id:
+        type: string
+    preconditions:
+      request_status_is_approved: true
+      review_approved: true
+    permissions:
+      - loan.request.activate
+    effects:
+      mutates: loan.request
+      sets: status=active
+      produces: LoanInstallmentSchedule
+    side_effects:
+      - loan_installments_scheduled
+    approval_requirements:
+      requires_grant: true
+      human_reviewer: true
+    requires_confirmation: true
+    idempotency: dedupe by request_id
+    verification:
+      predicate: loan.request.activated_and_scheduled
+    failure_semantics: abort
+    recovery: manual_reconciliation
+    owner: ai
+    version: "1.0"
+    host_action: loan.request.activate
+
+  # ── Verify (assertion — objective postcondition) ───────────────────────
+  - capability_id: loan.request.activated_and_scheduled
+    business_name: Verify loan activated and installments scheduled
+    purpose: >
+      Assert the loan request is active and an installment schedule exists for
+      the same loan.
+    kind: assertion
+    inputs:
+      loan:
+        type: loan.request
+    preconditions: {}
+    permissions:
+      - loan.request.activated_and_scheduled
+    effects: {}
+    side_effects: []
+    approval_requirements: {}
+    requires_confirmation: false
+    idempotency: "true (read-only)"
+    verification: {}
+    failure_semantics: fail
+    recovery: escalate
+    owner: ai
+    version: "1.0"
+    host_action: loan.request.activated_and_scheduled

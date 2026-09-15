@@ -34,6 +34,43 @@ HOST_ACTION_REGISTRY: dict[str, str] = {
     "dq.rule.active_revision_matches_approved_revision": (
         "ai.predicates:dq_rule_active_revision_matches_approved_revision"
     ),
+    # ── Nibras People & Payroll run lifecycle (domain_packs/nibras) ─────────
+    # draft → compute (mutation) → validate (mutation) → review (human task) →
+    # commit (mutation, final/irreversible; triggers WPS SIF) → verify
+    # (assertion). Each mutation binds to its DRF run-lifecycle view; the
+    # command boundary owns the consent gate (RULE_21). Read bindings back the
+    # process's grounding lookups. Values resolve lazily (no people import here).
+    "payroll.run.compute": "people.views:PayrollRunComputeView",
+    "payroll.run.validate": "people.views:PayrollRunValidateView",
+    "payroll.run.commit": "people.views:PayrollRunCommitView",
+    "payroll.run.list": "people.views:PayrollRunListCreateView",
+    "payroll.run.get": "people.views:PayrollRunDetailView",
+    "payroll.payslip.list": "people.views:PayslipLineListView",
+    "payroll.run.committed_and_variance_clean": (
+        "ai.predicates:payroll_run_committed_and_variance_clean"
+    ),
+    # ── Nibras Leave request lifecycle (domain_packs/nibras) ───────────────
+    # submit (mutation) → review (human task) → record (mutation) → verify
+    # (assertion). Mutations/reads bind to existing People leave views; review
+    # uses the inbox sentinel and resolves fail-closed like payroll.
+    "leave.request.submit": "people.views:LeaveRecordListCreateView",
+    "leave.request.record": "people.views:LeaveRecordDetailView",
+    "leave.request.list": "people.views:LeaveRecordListCreateView",
+    "leave.entitlement.list": "people.views:LeaveEntitlementListCreateView",
+    "leave.request.recorded_and_entitlement_decremented": (
+        "ai.predicates:leave_request_recorded_and_entitlement_decremented"
+    ),
+    # ── Nibras Loan request lifecycle (domain_packs/nibras) ────────────────
+    # submit (mutation) → review (human task) → activate (mutation) → verify
+    # (assertion). Mutations/reads bind to People loan views; review uses the
+    # inbox sentinel and resolves fail-closed like payroll/leave.
+    "loan.request.submit": "people.views:LoanListCreateView",
+    "loan.request.activate": "people.views:LoanDetailView",
+    "loan.list": "people.views:LoanListCreateView",
+    "loan.installment.list": "people.views:LoanInstallmentListCreateView",
+    "loan.request.activated_and_scheduled": (
+        "ai.predicates:loan_request_activated_and_scheduled"
+    ),
     # Human-task sentinel (recognized by the loader, not importable).
     HUMAN_TASK_SENTINEL: HUMAN_TASK_SENTINEL,
 }

@@ -1,0 +1,121 @@
+# Nibras payroll run lifecycle — governed ProcessDefinition (P3-03).
+#
+# draft → compute → validate → (human review) → commit → verify.
+# Autonomy dials keep the AI coworker deterministic and admin-governed: it may
+# stage compute/validate for confirmation, but the human review and the final
+# commit are human-only, and commit additionally requires explicit consent.
+id: payroll.run.lifecycle
+version: "1.0"
+owner: ai
+status: active
+
+objects:
+  - type: payroll.run
+    selector: run_id
+
+inputs:
+  run_id:
+    type: string
+
+scope:
+  source: authenticated_host_context
+
+objective:
+  predicate: payroll.run.committed_and_variance_clean
+
+steps:
+  - id: compute
+    kind: command
+    capability: payroll.run.compute
+    depends_on: []
+    autonomy: act_confirm
+    binds_to: payroll.run
+    consent: true
+    idempotency_scope: run_id
+    unknown_outcome: escalate
+
+  - id: validate
+    kind: command
+    capability: payroll.run.validate
+    depends_on:
+      - compute
+    autonomy: act_confirm
+    binds_to: payroll.run
+    consent: true
+    idempotency_scope: run_id
+    unknown_outcome: escalate
+
+  - id: review
+    kind: human_task
+    capability: payroll.run.review
+    depends_on:
+      - validate
+    autonomy: human_only
+    separation_of_duties:
+      - preparer
+      - approver
+    binds_to: inbox
+    consent: false
+    approval_ref: payroll.run.review
+
+  - id: commit
+    kind: command
+    capability: payroll.run.commit
+    depends_on:
+      - review
+    autonomy: human_only
+    separation_of_duties:
+      - preparer
+      - approver
+    binds_to: payroll.run
+    consent: true
+    idempotency_scope: run_id
+    unknown_outcome: escalate
+
+  - id: verify
+    kind: assertion
+    capability: payroll.run.committed_and_variance_clean
+    depends_on:
+      - commit
+    autonomy: observe
+    binds_to: payroll.run
+    consent: false
+
+constraints:
+  precedence:
+    - from: compute
+      to: validate
+    - from: validate
+      to: review
+    - from: review
+      to: commit
+    - from: commit
+      to: verify
+
+evidence:
+  - type: PayslipLines
+    from_step: compute
+  - type: PayrollRunValidations
+    from_step: validate
+  - type: ApprovalGrant
+    from_step: review
+  - type: WpsSifFile
+    from_step: commit
+
+policies:
+  refuse_if:
+    - run is not validated before commit
+    - review approval is missing before commit
+    - preparer equals approver
+  ask_if:
+    - validation findings contain unresolved variance
+    - run period overlaps an already-committed run
+
+exceptions: []
+
+kill_switch: false
+
+tests:
+  - name: happy-path-committed-and-variance-clean
+  - name: refuse-commit-when-not-validated
+  - name: commit-requires-human-consent
