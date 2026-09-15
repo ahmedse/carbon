@@ -41,6 +41,9 @@
     "artifacts": "المخرجات",
     "memory": "الذاكرة",
     "usage": "الاستخدام",
+    "processes": "العمليات",
+    "skills": "المهارات",
+    "watches": "المراقبات",
     "settings": "الإعدادات"
   },
   "delete": {

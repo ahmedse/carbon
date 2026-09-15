@@ -41,6 +41,9 @@
     "artifacts": "Artifacts",
     "memory": "Memory",
     "usage": "Usage",
+    "processes": "Processes",
+    "skills": "Skills",
+    "watches": "Watches",
     "settings": "Settings"
   },
   "delete": {

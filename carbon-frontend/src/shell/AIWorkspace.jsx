@@ -21,6 +21,8 @@ import {
   Typography,
 } from '@mui/material';
 import AddCommentOutlinedIcon from '@mui/icons-material/AddCommentOutlined';
+import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
+import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DataUsageIcon from '@mui/icons-material/DataUsage';
@@ -30,6 +32,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
 import ManageSearchIcon from '@mui/icons-material/ManageSearch';
+import NotificationsActiveOutlinedIcon from '@mui/icons-material/NotificationsActiveOutlined';
 import PsychologyOutlinedIcon from '@mui/icons-material/PsychologyOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import TaskAltOutlinedIcon from '@mui/icons-material/TaskAltOutlined';
@@ -55,6 +58,9 @@ import AIArtifactBrowser from './AIArtifactBrowser';
 import AISuggestionRail from './AISuggestionRail';
 import AIUsageTab from './AIUsageTab';
 import AISettingsTab from './AISettingsTab';
+import AIProcessesTab from './AIProcessesTab';
+import SkillsPanel from '../pages/admin/ai/SkillsPanel';
+import WatchesPanel from '../pages/admin/ai/WatchesPanel';
 import AIMemoryConsole from './AIMemoryConsole';
 import AITaskPanel from './AITaskPanel';
 import InvestigateTab from './InvestigateTab';
@@ -588,6 +594,12 @@ export function AIWorkspace({ onClose }) {
               {providerOffline && <AIOfflineBanner />}
               {activePanel === 'usage' ? (
                 <AIUsageTab />
+              ) : activePanel === 'processes' ? (
+                <AIProcessesTab />
+              ) : activePanel === 'skills' ? (
+                <SkillsPanel />
+              ) : activePanel === 'watches' ? (
+                <WatchesPanel />
               ) : activePanel === 'settings' ? (
                 <AISettingsTab />
               ) : activePanel === 'memory' ? (
@@ -728,6 +740,9 @@ export function AIWorkspace({ onClose }) {
                 { id: 'artifacts',   icon: <Inventory2OutlinedIcon sx={{ fontSize: 16 }} />,         label: t('panel.artifacts')   },
                 { id: 'memory',      icon: <PsychologyOutlinedIcon sx={{ fontSize: 16 }} />,         label: t('panel.memory')      },
                 { id: 'usage',       icon: <DataUsageIcon sx={{ fontSize: 16 }} />,                  label: t('panel.usage')       },
+                { id: 'processes',   icon: <AccountTreeOutlinedIcon sx={{ fontSize: 16 }} />,        label: t('panel.processes')   },
+                { id: 'skills',      icon: <AutoAwesomeOutlinedIcon sx={{ fontSize: 16 }} />,         label: t('panel.skills')      },
+                { id: 'watches',     icon: <NotificationsActiveOutlinedIcon sx={{ fontSize: 16 }} />, label: t('panel.watches')     },
                 { id: 'settings',    icon: <SettingsOutlinedIcon sx={{ fontSize: 16 }} />,           label: t('panel.settings')    },
               ].map(({ id, icon, label }) => (
                 <Tooltip key={id} title={label} placement="left">

@@ -35,6 +35,9 @@ vi.mock('../shell/AITaskPanel', () => ({
   default: ({ externalTab }) => <div data-testid="task-panel" data-tab={externalTab ?? 'tasks'} />,
 }));
 
+vi.mock('../pages/admin/ai/SkillsPanel', () => ({ default: () => <div data-testid="skills-tab" /> }));
+vi.mock('../pages/admin/ai/WatchesPanel', () => ({ default: () => <div data-testid="watches-tab" /> }));
+
 vi.mock('../api/aiPulse', () => ({
   listDomainManifests: vi.fn().mockResolvedValue({ apps: [] }),
 }));
@@ -182,6 +185,27 @@ describe('AIWorkspace Memory console (G2)', () => {
 
     expect(await screen.findByTestId('memory-console')).toBeInTheDocument();
     expect(memoryButton).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
+describe('AIWorkspace Skills + Watches console (P6b)', () => {
+  it('renders SkillsPanel when the Skills icon is clicked', async () => {
+    render(<AIWorkspace onClose={vi.fn()} />);
+
+    const skillsButton = await screen.findByRole('button', { name: 'Skills' });
+    fireEvent.click(skillsButton);
+
+    expect(await screen.findByTestId('skills-tab')).toBeInTheDocument();
+    expect(skillsButton).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('renders WatchesPanel when the Watches icon is clicked', async () => {
+    render(<AIWorkspace onClose={vi.fn()} />);
+
+    const watchesButton = await screen.findByRole('button', { name: 'Watches' });
+    fireEvent.click(watchesButton);
+
+    expect(await screen.findByTestId('watches-tab')).toBeInTheDocument();
   });
 });
 
