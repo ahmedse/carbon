@@ -1045,6 +1045,45 @@ export function stopPlan(token, planId) {
   return apiFetch(`${PLANS_BASE}${planId}/stop/`, { token, method: 'POST' });
 }
 
+/**
+ * Re-run an already-executed plan from a clean slate. Resets every step to
+ * pending and returns the run to ``approved`` so a subsequent run stream
+ * re-executes it. Works for completed / failed / cancelled plans.
+ */
+export function rerunPlan(token, planId) {
+  return apiFetch(`${PLANS_BASE}${planId}/rerun/`, { token, method: 'POST' });
+}
+
+// ── W-7 — per-step controls ────────────────────────────────────────────────
+// Each transitions a single step's state (never bypasses the fail-closed
+// boundary); re-execution of a re-queued step happens through run/resume where
+// consent (RULE_21) still applies. Guard violations return 409.
+
+/** Re-queue a single failed step for re-execution. */
+export function stepRetry(token, planId, stepId) {
+  return apiFetch(`${PLANS_BASE}${planId}/steps/${stepId}/retry/`, { token, method: 'POST' });
+}
+
+/** Skip a single step — mark it satisfied without executing it. */
+export function stepSkip(token, planId, stepId) {
+  return apiFetch(`${PLANS_BASE}${planId}/steps/${stepId}/skip/`, { token, method: 'POST' });
+}
+
+/** Cancel a single step — abandon it; the run continues. */
+export function stepCancel(token, planId, stepId) {
+  return apiFetch(`${PLANS_BASE}${planId}/steps/${stepId}/cancel/`, { token, method: 'POST' });
+}
+
+/** Hold a running step at paused. */
+export function stepPause(token, planId, stepId) {
+  return apiFetch(`${PLANS_BASE}${planId}/steps/${stepId}/pause/`, { token, method: 'POST' });
+}
+
+/** Return a paused step to pending so the driver re-runs it. */
+export function stepResume(token, planId, stepId) {
+  return apiFetch(`${PLANS_BASE}${planId}/steps/${stepId}/resume/`, { token, method: 'POST' });
+}
+
 const RUNS_BASE = 'ai/runs/';
 
 /**

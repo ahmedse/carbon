@@ -22,6 +22,7 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  Drawer,
   IconButton,
   Paper,
   Stack,
@@ -30,6 +31,7 @@ import {
   TextField,
   Tooltip,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -42,6 +44,13 @@ import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
 import StopIcon from '@mui/icons-material/Stop';
+import ReplayIcon from '@mui/icons-material/Replay';
+import SkipNextIcon from '@mui/icons-material/SkipNext';
+import CloseIcon from '@mui/icons-material/Close';
+import PauseIcon from '@mui/icons-material/Pause';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import CallSplitIcon from '@mui/icons-material/CallSplit';
+import MenuIcon from '@mui/icons-material/Menu';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
@@ -62,6 +71,7 @@ import {
   editPlanStep,
   editSchedule,
   forkPlan,
+  rerunPlan,
   getPlan,
   getPlanLedger,
   listPlanArtifacts,
@@ -75,6 +85,11 @@ import {
   promotePlanTemplate,
   resumePlanStream,
   runPlanStream,
+  stepCancel,
+  stepPause,
+  stepResume,
+  stepRetry,
+  stepSkip,
   stopPlan,
   durableResumeRun,
 } from '../api/aiWorkspace';
@@ -84,6 +99,9 @@ import SystemDialog from '../components/SystemDialog';
 import { buildPlanPhases, summarizePlanDiff } from '../utils/planGraph';
 import { agentRoleLabel, toolLabel } from './aiTaskStatus';
 import AITaskPlanCard from './AITaskPlanCard';
+import MarkdownMessage from './MarkdownMessage';
+import AgentCockpit from './AgentCockpit';
+import PlanDagGraph from '../components/graph/PlanDagGraph';
 import AITaskAuditCard from './AITaskAuditCard';
 import SubagentResultCard from './SubagentResultCard';
 import PlanDiffReviewDialog from './PlanDiffReviewDialog';
@@ -95,6 +113,19 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 const TASK_TAB_KEY = 'carbon-ai-task-tab';
+// U-1 (DESIGN-AGENT-WORKFLOW-AND-UI §6) — the single-cockpit layout is the
+// default; the legacy 6-tab layout stays reachable as a fallback via the
+// localStorage override ("Switch to classic view"). `segment` persists
+// separately from the classic `tab` so neither layout fights the other.
+const COCKPIT_KEY = 'carbon-ai-cockpit';
+const COCKPIT_SEGMENT_KEY = 'carbon-ai-cockpit-segment';
+const cockpitEnabled = () => {
+  try {
+    return localStorage.getItem(COCKPIT_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+};
 const PROJECT_TIMEZONE = 'Africa/Cairo';
 
 // W5-D — estimated token cost uses a single DeepSeek V4-Flash blended rate
@@ -266,7 +297,69 @@ function InputParams({ value }) {
 
 InputParams.propTypes = { value: PropTypes.any };
 
-function StepCard({ step, phaseName, confirming, onConfirm, onDecline }) {
+// W-7 — per-step control toolbar. The visible set of controls is driven purely
+// by the step's status (see STEP_CONTROLS). Every action stops event
+// propagation so it never toggles the row's expand/collapse.
+const STEP_CONTROLS = {
+  pending: ['skip', 'cancel'],
+  running: ['pause', 'cancel'],
+  paused: ['resume', 'skip', 'cancel'],
+  failed: ['retry', 'skip'],
+  awaiting_approval: ['skip'],
+};
+
+const STEP_CONTROL_META = {
+  retry: { label: 'Retry', icon: ReplayIcon },
+  skip: { label: 'Skip', icon: SkipNextIcon },
+  cancel: { label: 'Cancel', icon: CloseIcon },
+  pause: { label: 'Pause', icon: PauseIcon },
+  resume: { label: 'Resume', icon: PlayArrowIcon },
+};
+
+export function StepToolbar({ step, busy, onRetry, onSkip, onCancel, onPause, onResume }) {
+  const controls = STEP_CONTROLS[step.status] || [];
+  if (controls.length === 0) return null;
+  const handlers = { retry: onRetry, skip: onSkip, cancel: onCancel, pause: onPause, resume: onResume };
+  const run = (name) => (event) => {
+    event.stopPropagation();
+    handlers[name]?.(step.step_id);
+  };
+  return (
+    <Stack direction="row" spacing={0.25} alignItems="center">
+      {controls.map((name) => {
+        const meta = STEP_CONTROL_META[name];
+        const Icon = meta.icon;
+        return (
+          <Tooltip key={name} title={meta.label}>
+            <span>
+              <IconButton
+                size="small"
+                disabled={busy}
+                aria-label={meta.label}
+                onClick={run(name)}
+                sx={{ p: 0.375 }}
+              >
+                <Icon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </span>
+          </Tooltip>
+        );
+      })}
+    </Stack>
+  );
+}
+
+StepToolbar.propTypes = {
+  step: PropTypes.object.isRequired,
+  busy: PropTypes.bool,
+  onRetry: PropTypes.func,
+  onSkip: PropTypes.func,
+  onCancel: PropTypes.func,
+  onPause: PropTypes.func,
+  onResume: PropTypes.func,
+};
+
+function StepCard({ step, phaseName, confirming, busy, onConfirm, onDecline, onRetry, onSkip, onCancel, onPause, onResume }) {
   const [open, setOpen] = useState(true);
   const meta = STEP_STATUS_ICON[step.status] || { label: 'Pending', color: 'default' };
   const showBody = open || step.status === 'awaiting_approval' || step.status === 'failed';
@@ -296,6 +389,15 @@ function StepCard({ step, phaseName, confirming, onConfirm, onDecline }) {
         {step.tool_name && (
           <Chip size="small" variant="outlined" label={toolLabel(step.tool_name)} sx={{ height: 16, fontSize: '0.5625rem' }} />
         )}
+        <StepToolbar
+          step={step}
+          busy={busy}
+          onRetry={onRetry}
+          onSkip={onSkip}
+          onCancel={onCancel}
+          onPause={onPause}
+          onResume={onResume}
+        />
         <Chip size="small" variant="outlined" label={meta.label} color={meta.color} sx={{ height: 16, fontSize: '0.5625rem' }} />
       </Stack>
 
@@ -363,8 +465,14 @@ StepCard.propTypes = {
   step: PropTypes.object.isRequired,
   phaseName: PropTypes.string,
   confirming: PropTypes.bool,
+  busy: PropTypes.bool,
   onConfirm: PropTypes.func,
   onDecline: PropTypes.func,
+  onRetry: PropTypes.func,
+  onSkip: PropTypes.func,
+  onCancel: PropTypes.func,
+  onPause: PropTypes.func,
+  onResume: PropTypes.func,
 };
 
 // W5-D — labelled metric for the Monitor grid (mirrors AITaskAuditCard Stat).
@@ -531,6 +639,21 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     }
   });
 
+  // U-1 — single-cockpit layout (default) vs. legacy 6-tab fallback.
+  const [cockpit, setCockpit] = useState(cockpitEnabled);
+  const [segment, setSegment] = useState(() => {
+    try {
+      return localStorage.getItem(COCKPIT_SEGMENT_KEY) || 'steps';
+    } catch {
+      return 'steps';
+    }
+  });
+  // Library overflow (Templates / Scheduled demoted from primary nav): null | 'templates' | 'scheduled'.
+  const [libraryView, setLibraryView] = useState(null);
+  // Narrow layout: the Tasks rail collapses into a drawer toggled from the cockpit header.
+  const [railOpen, setRailOpen] = useState(false);
+  const narrow = useMediaQuery('(max-width:719px)');
+
   // Task list + composer
   const [plans, setPlans] = useState([]);
   const [plansLoading, setPlansLoading] = useState(true);
@@ -600,6 +723,29 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     }
   }, []);
 
+  // U-1 — cockpit segment (Plan · Steps · Output · Metrics), persisted like the
+  // classic tab so a reload restores the last view (RULE_17).
+  const handleSegmentChange = useCallback((value) => {
+    if (!value) return;
+    setSegment(value);
+    try {
+      localStorage.setItem(COCKPIT_SEGMENT_KEY, value);
+    } catch {
+      // storage may be unavailable — segment still switches in-memory
+    }
+  }, []);
+
+  // "Switch to classic view" — persist the fallback preference and re-render
+  // into the 6-tab layout without a reload so nothing in flight is lost.
+  const switchToClassic = useCallback(() => {
+    try {
+      localStorage.setItem(COCKPIT_KEY, 'off');
+    } catch {
+      // storage may be unavailable — still flips in-memory for this session
+    }
+    setCockpit(false);
+  }, []);
+
   // W5-D — the workspace activity bar (Monitor 📊 / Results 📦) drives this
   // panel's internal tab. Only external *changes* move the tab, so the RULE_17
   // persisted value still wins on mount and internal tab clicks aren't fought.
@@ -611,6 +757,18 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       setTab(externalTab);
     }
   }, [externalTab]);
+
+  // U-1 — the same activity-bar view drives the cockpit segment in parallel:
+  // monitor → Metrics, results → Output, tasks/run → Steps. Runs alongside the
+  // classic `tab` effect so neither layout loses the external-jump behaviour.
+  const prevExternalSegRef = useRef(externalTab);
+  useEffect(() => {
+    if (prevExternalSegRef.current === externalTab) return;
+    prevExternalSegRef.current = externalTab;
+    if (externalTab === 'monitor') handleSegmentChange('metrics');
+    else if (externalTab === 'results') handleSegmentChange('output');
+    else if (externalTab === 'tasks' || externalTab === 'run') handleSegmentChange('steps');
+  }, [externalTab, handleSegmentChange]);
 
   const loadPlans = useCallback(async () => {
     setPlansLoading(true);
@@ -818,7 +976,12 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   // live; load once when the run has settled and no ledger is present yet.
   useEffect(() => {
     const planId = selectedPlan?.id;
-    if (!planId || (tab !== 'monitor' && tab !== 'results')) return undefined;
+    // Fires on the classic Monitor/Results tabs OR the cockpit Metrics/Output
+    // segments — both surfaces render the ledger.
+    const ledgerVisible =
+      tab === 'monitor' || tab === 'results'
+      || (cockpit && (segment === 'metrics' || segment === 'output'));
+    if (!planId || !ledgerVisible) return undefined;
     if (phase === 'working') {
       const timer = setInterval(() => loadLedger(planId), 5000);
       return () => clearInterval(timer);
@@ -827,12 +990,13 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       loadLedger(planId);
     }
     return undefined;
-  }, [tab, phase, selectedPlan?.id, ledger, loadLedger]);
+  }, [tab, cockpit, segment, phase, selectedPlan?.id, ledger, loadLedger]);
 
-  // W5-D — Results tab loads the plan's artifacts once the run has finished.
+  // W5-D — Results/Output loads the plan's artifacts once the run has finished.
   useEffect(() => {
     const planId = selectedPlan?.id;
-    if (tab !== 'results' || !planId || phase !== 'finished') return undefined;
+    const artifactsVisible = tab === 'results' || (cockpit && segment === 'output');
+    if (!artifactsVisible || !planId || phase !== 'finished') return undefined;
     let cancelled = false;
     setArtifactsLoading(true);
     listPlanArtifacts(token, planId)
@@ -848,7 +1012,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     return () => {
       cancelled = true;
     };
-  }, [tab, phase, selectedPlan?.id, token]);
+  }, [tab, cockpit, segment, phase, selectedPlan?.id, token]);
 
   const upsertStep = useCallback((patch) => {
     setRunSteps((prev) => {
@@ -967,6 +1131,80 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       notifyFromErrorRef.current(err, 'Could not decline the step');
     } finally {
       setConfirmingId(null);
+    }
+  };
+
+  // ── W-7 — per-step controls. Each transitions a single step; a guard
+  // violation (409) means the step already changed state — surfaced gracefully
+  // via notifyFromError. The plan is re-fetched so the toolbar reflects the
+  // new status.
+  const handleStepRetry = async (stepId) => {
+    if (!selectedPlan) return;
+    setMutating(true);
+    try {
+      await stepRetry(token, selectedPlan.id, stepId);
+      await refreshPlan(selectedPlan.id);
+      notifyRef.current('Step re-queued.', 'success');
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not retry the step');
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  const handleStepSkip = async (stepId) => {
+    if (!selectedPlan) return;
+    setMutating(true);
+    try {
+      await stepSkip(token, selectedPlan.id, stepId);
+      await refreshPlan(selectedPlan.id);
+      notifyRef.current('Step skipped.', 'success');
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not skip the step');
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  const handleStepCancel = async (stepId) => {
+    if (!selectedPlan) return;
+    setMutating(true);
+    try {
+      await stepCancel(token, selectedPlan.id, stepId);
+      await refreshPlan(selectedPlan.id);
+      notifyRef.current('Step cancelled.', 'success');
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not cancel the step');
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  const handleStepPause = async (stepId) => {
+    if (!selectedPlan) return;
+    setMutating(true);
+    try {
+      await stepPause(token, selectedPlan.id, stepId);
+      await refreshPlan(selectedPlan.id);
+      notifyRef.current('Step paused.', 'success');
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not pause the step');
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  const handleStepResume = async (stepId) => {
+    if (!selectedPlan) return;
+    setMutating(true);
+    try {
+      await stepResume(token, selectedPlan.id, stepId);
+      await refreshPlan(selectedPlan.id);
+      notifyRef.current('Step resumed.', 'success');
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not resume the step');
+    } finally {
+      setMutating(false);
     }
   };
 
@@ -1094,6 +1332,28 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     } finally {
       setMutating(false);
     }
+  };
+
+  // Re-run an executed (completed/failed/cancelled) plan from a clean slate:
+  // reset it server-side to ``approved`` then stream the run.
+  const handleRerun = async () => {
+    if (!selectedPlan) return;
+    const executed = ['completed', 'failed', 'cancelled'].includes(selectedPlan.status);
+    if (!executed) {
+      handleRun();
+      return;
+    }
+    setMutating(true);
+    try {
+      await rerunPlan(token, selectedPlan.id);
+      await refreshPlan(selectedPlan.id);
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not re-run the plan');
+      setMutating(false);
+      return;
+    }
+    setMutating(false);
+    handleRun();
   };
 
   // ── W3-D — plan templates (Gap #3) ─────────────────────────────────────
@@ -1366,8 +1626,14 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
                   step={step}
                   phaseName={phaseNameFor(step.step_id)}
                   confirming={confirmingId === step.step_id}
+                  busy={mutating}
                   onConfirm={handleConfirmStep}
                   onDecline={handleDeclineStep}
+                  onRetry={handleStepRetry}
+                  onSkip={handleStepSkip}
+                  onCancel={handleStepCancel}
+                  onPause={handleStepPause}
+                  onResume={handleStepResume}
                 />
               ))}
             </Box>
@@ -1397,8 +1663,14 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
                   step={step}
                   phaseName={phaseNameFor(step.step_id)}
                   confirming={confirmingId === step.step_id}
+                  busy={mutating}
                   onConfirm={handleConfirmStep}
                   onDecline={handleDeclineStep}
+                  onRetry={handleStepRetry}
+                  onSkip={handleStepSkip}
+                  onCancel={handleStepCancel}
+                  onPause={handleStepPause}
+                  onResume={handleStepResume}
                 />
               ))}
               {phase === 'paused' && (
@@ -1732,7 +2004,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     }
 
     const finalResponse = ledger?.final_response;
-    const rerunnable = selectedPlan.status === 'approved';
+    const rerunnable = ['approved', 'completed', 'failed', 'cancelled'].includes(selectedPlan.status);
 
     return (
       <Stack spacing={1.25}>
@@ -1741,9 +2013,9 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             Final response
           </Typography>
           {finalResponse ? (
-            <Typography variant="body2" sx={{ fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-              {finalResponse}
-            </Typography>
+            <Box sx={{ fontSize: '0.8125rem', wordBreak: 'break-word' }}>
+              <MarkdownMessage content={finalResponse} />
+            </Box>
           ) : (
             <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
               No final response recorded for this run.
@@ -1779,13 +2051,13 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             Actions
           </Typography>
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
-            <Tooltip title={rerunnable ? 'Run the plan again' : 'Approve the plan to run it again'}>
+            <Tooltip title={rerunnable ? 'Run the plan again from a clean slate' : 'Approve the plan to run it'}>
               <span>
                 <Button
                   size="small"
                   variant="contained"
                   disabled={!rerunnable || mutating}
-                  onClick={handleRun}
+                  onClick={handleRerun}
                   sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
                 >
                   Rerun
@@ -1825,43 +2097,181 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     );
   };
 
+  // ── U-1 cockpit — Plan segment: reuse the live plan DAG (already fed by
+  // `plan`, so wiring is trivial and lower-risk than re-deriving phases).
+  const renderPlanSegment = () => {
+    if (!selectedPlan) {
+      return (
+        <Typography variant="body2" color="text.secondary" sx={{ py: 3, fontSize: '0.75rem' }}>
+          Open a task from the rail to see its plan graph.
+        </Typography>
+      );
+    }
+    return (
+      <PlanDagGraph
+        plan={selectedPlan}
+        height={420}
+        live={phase === 'working'}
+        onConfirmStep={handleConfirmStep}
+        onDeclineStep={handleDeclineStep}
+        confirmingId={confirmingId}
+      />
+    );
+  };
+
+  // Global run toolbar — mirrors AITaskPlanCard's status gating exactly and
+  // reuses its handlers (no new logic). Run doubles as Resume for a paused
+  // plan (the plan card labels the same onRun "Resume run").
+  const renderRunToolbar = () => {
+    const status = selectedPlan?.status;
+    const running = phase === 'working';
+    const busy = mutating;
+    const runnable = status === 'approved' || status === 'paused';
+    const paused = status === 'paused';
+    const failed = status === 'failed';
+    const showRun = runnable && !running;
+    const btn = (title, disabled, onClick, Icon, color) => (
+      <Tooltip title={title}>
+        <span>
+          <IconButton size="small" aria-label={title} disabled={disabled} onClick={onClick} sx={{ p: 0.375 }}>
+            <Icon sx={{ fontSize: 16, color: color && !disabled ? color : undefined }} />
+          </IconButton>
+        </span>
+      </Tooltip>
+    );
+    return (
+      <Stack direction="row" spacing={0.25} alignItems="center" sx={{ flexShrink: 0 }}>
+        {btn(paused ? 'Resume run' : 'Run plan', !showRun || busy, handleRun, PlayArrowIcon, 'primary.main')}
+        {btn('Pause run', !running || busy, handlePause, PauseIcon, 'warning.main')}
+        {btn('Stop the run', !running, handleStop, StopIcon, 'error.main')}
+        {btn('Retry failed steps', !failed || busy, handleRetry, ReplayIcon, 'warning.main')}
+        {btn('Fork into a reviewable copy', !selectedPlan || busy, handleFork, CallSplitIcon)}
+      </Stack>
+    );
+  };
+
+  const renderCockpit = () => {
+    const planMeta = selectedPlan
+      ? ({ pending_approval: { label: 'Needs review', color: 'warning' }, approved: { label: 'Approved', color: 'primary' }, running: { label: 'Running…', color: 'primary' }, paused: { label: 'Needs approval', color: 'warning' }, completed: { label: 'Completed', color: 'success' }, failed: { label: 'Failed', color: 'error' }, cancelled: { label: 'Cancelled', color: 'default' } }[selectedPlan.status] || { label: selectedPlan.status, color: 'default' })
+      : null;
+
+    const cockpitHeader = (
+      <Stack direction="row" alignItems="center" spacing={0.75} sx={{ minWidth: 0 }}>
+        {narrow && (
+          <Tooltip title="Tasks">
+            <IconButton size="small" aria-label="Toggle tasks" onClick={() => setRailOpen(true)} sx={{ p: 0.375 }}>
+              <MenuIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+        )}
+        <Typography variant="body2" sx={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {selectedPlan ? selectedPlan.brief : 'No task selected'}
+        </Typography>
+        {planMeta && (
+          <Chip size="small" variant="outlined" label={planMeta.label} color={planMeta.color} sx={{ height: 18, fontSize: '0.625rem', flexShrink: 0 }} />
+        )}
+        {renderRunToolbar()}
+      </Stack>
+    );
+
+    const rail = (
+      <Box sx={{ overflowY: 'auto', p: 1, width: narrow ? 260 : 240 }}>
+        {renderTasks()}
+      </Box>
+    );
+
+    return (
+      <Box sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
+        {narrow ? (
+          <Drawer anchor="left" open={railOpen} onClose={() => setRailOpen(false)}>
+            {rail}
+          </Drawer>
+        ) : (
+          <Box sx={{ flexShrink: 0, borderRight: 1, borderColor: 'divider', minHeight: 0 }}>
+            {rail}
+          </Box>
+        )}
+        <AgentCockpit
+          segment={segment}
+          onSegment={handleSegmentChange}
+          header={cockpitHeader}
+          plan={selectedPlan}
+          renderPlan={renderPlanSegment}
+          renderSteps={renderRun}
+          renderOutput={renderResults}
+          renderMetrics={renderMonitor}
+          onOpenTemplates={() => { loadTemplates(); setLibraryView('templates'); }}
+          onOpenScheduled={() => { loadSchedules(); setLibraryView('scheduled'); }}
+          onSwitchToClassic={switchToClassic}
+        />
+      </Box>
+    );
+  };
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, bgcolor: 'background.default' }}>
-      {/* Internal views — one Tasks icon, two tabs (RULE_17) */}
-      <Box sx={{ px: 1, pt: 0.5, borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs
-          value={tab}
-          onChange={handleTabChange}
-          variant="fullWidth"
-          aria-label="Task views"
-          sx={{
-            minHeight: 34,
-            '& .MuiTab-root': { minHeight: 34, fontSize: '0.6875rem', py: 0.5 },
-          }}
-        >
-          <Tab value="tasks" label="Tasks" />
-          <Tab value="run" label="Run" />
-          <Tab value="monitor" label="Monitor" />
-          <Tab value="results" label="Results" />
-          <Tab value="templates" label="Templates" />
-          <Tab value="scheduled" label="Scheduled" />
-        </Tabs>
-      </Box>
+      {cockpit ? (
+        renderCockpit()
+      ) : (
+        <>
+          {/* Internal views — one Tasks icon, two tabs (RULE_17) */}
+          <Box sx={{ px: 1, pt: 0.5, borderBottom: 1, borderColor: 'divider' }}>
+            <Tabs
+              value={tab}
+              onChange={handleTabChange}
+              variant="fullWidth"
+              aria-label="Task views"
+              sx={{
+                minHeight: 34,
+                '& .MuiTab-root': { minHeight: 34, fontSize: '0.6875rem', py: 0.5 },
+              }}
+            >
+              <Tab value="tasks" label="Tasks" />
+              <Tab value="run" label="Run" />
+              <Tab value="monitor" label="Monitor" />
+              <Tab value="results" label="Results" />
+              <Tab value="templates" label="Templates" />
+              <Tab value="scheduled" label="Scheduled" />
+            </Tabs>
+          </Box>
 
-      {/* Tab content */}
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 1 }}>
-        {tab === 'tasks'
-          ? renderTasks()
-          : tab === 'run'
-            ? renderRun()
-            : tab === 'monitor'
-              ? renderMonitor()
-              : tab === 'results'
-                ? renderResults()
-                : tab === 'templates'
-                  ? renderTemplates()
-                  : renderScheduled()}
-      </Box>
+          {/* Tab content */}
+          <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 1 }}>
+            {tab === 'tasks'
+              ? renderTasks()
+              : tab === 'run'
+                ? renderRun()
+                : tab === 'monitor'
+                  ? renderMonitor()
+                  : tab === 'results'
+                    ? renderResults()
+                    : tab === 'templates'
+                      ? renderTemplates()
+                      : renderScheduled()}
+          </Box>
+        </>
+      )}
+
+      {/* U-1 — Library overflow: Templates / Scheduled demoted from primary nav.
+          Rendered as dialogs over the cockpit; reuse the tab-body renderers. */}
+      <Dialog open={libraryView === 'templates'} onClose={() => setLibraryView(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontSize: '0.875rem', fontWeight: 700, py: 1.25, display: 'flex', alignItems: 'center' }}>
+          <Box sx={{ flex: 1 }}>Templates</Box>
+          <IconButton size="small" aria-label="Close" onClick={() => setLibraryView(null)} sx={{ p: 0.375 }}>
+            <CloseIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers>{renderTemplates()}</DialogContent>
+      </Dialog>
+      <Dialog open={libraryView === 'scheduled'} onClose={() => setLibraryView(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontSize: '0.875rem', fontWeight: 700, py: 1.25, display: 'flex', alignItems: 'center' }}>
+          <Box sx={{ flex: 1 }}>Scheduled</Box>
+          <IconButton size="small" aria-label="Close" onClick={() => setLibraryView(null)} sx={{ p: 0.375 }}>
+            <CloseIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers>{renderScheduled()}</DialogContent>
+      </Dialog>
 
       {/* W3-F — diff-review consent gate + step edit dialog (survive tab switches) */}
       <PlanDiffReviewDialog

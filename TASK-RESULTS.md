@@ -5926,3 +5926,62 @@ Worker hand-wrote `0041_knowledgeitem.py` with index names `ai_knowledgeitem_cla
 
 ### PDP refusal surface (quoted)
 Negative test persists `PolicyDecisionRow.reason` = `"mandatory policy 'deny-unauthorized-skill-tool' failed during evaluation: ValueError: skill declares unauthorized tool(s): code_execute"` — the disallowed tool is named in the reason, and the decision is `refuse` (not a pre-boundary early return).
+
+---
+
+## [2026-09-14] Master Architect — Pulse Phase 4 · P4-05: Read-only `inspect_case` tool + `ai:inspect_case` capability
+
+**Role:** Master Architect (DeepSeek V4-Pro) · **Kind:** read-only host tool + host CBAC capability (Gate 4 → "answer cites run state + event ids"). Dispatched a backend-worker; Master verified all artifacts personally.
+
+**Spec:** "Read-only case-inspection capability: current activity, blocker, SLA, applicable SOP clause, event ids — used by Pulse to answer 'where are we on R-118?' | host capability + tool | Answer cites run state + event ids | M | P3-07".
+
+### Final architecture
+- **`backend/accounts/capabilities.py`** — new `AI_INSPECT_CASE` capability (`ai:inspect_case`, read-only `inspect_case` action). Registered in `ALL_CAPABILITIES`; `IMPLIES` adds operator/auditor/process-owner → `ai:inspect_case` (operator observes instances, auditor read-only, owner inspects its own runs). Superuser already covered by `"*"`.
+- **`carbon-frontend/src/capabilities.js`** — mirrored `export const AI_INSPECT_CASE = 'ai:inspect_case';`.
+- **`backend/ai/engine/agent/tools.py`** — `inspect_case` added to `STATIC_TOOL_DEFINITIONS` (required `run_id` arg) and `STATIC_TOOL_EXECUTORS`; `execute_inspect_case(run_id, executor=None, instance_id="", conversation_id="", **kwargs)` only delegates to `executor.inspect_case_via_boundary(...)` — the engine never touches Django models (RULE_20/ADR-0007).
+- **`backend/ai/command_boundary_factory.py`** — `"inspect_case"` added to `_STATIC_TOOL_NAMES` (stage-3 contract passes).
+- **`backend/ai/host_executor.py`** — `CarbonHostExecutor.inspect_case_via_boundary(run_id, instance_id="", conversation_id="", host_user_id=None)`. **Fail-closed capability gate first** (`ai:inspect_case` in `get_user_capabilities(user)`, any resolution error → refuse, `{"error": "missing capability ai:inspect_case"}` before any read), then a **SELECT-only** effect closure that assembles `run_id / process_id / process_version / run_state / status / current_activity / blocker / sla / applicable_sop_clause / event_ids / operation_ids` from `Run` + `RunStep` + `StepJournalEntry` + `HumanTask` + `ProcessDefinition`. Routed through the fail-closed boundary with `action="inspect"` (auto-permitted by PDP `permit-read-only`, `_READ_ACTIONS` already includes `inspect`), `requires_confirmation=False`, `autonomy="auto"`. Blocker precedence: pending non-expired `HumanTask` → `kill_switched_at` → failed step's `last_error` → `None`. SLA/SOP clause sourced from the pinned `ProcessDefinition.definition` (`constraints` filtered for time keywords + raw `policies`/`exceptions`/`constraints`).
+- **`backend/ai/registry_service.py`** — closed the port gap: `async def get_active_run(run_id) -> dict | None` on the host `ProcessRegistry`, matching the **async** `ProcessRegistry.get_active_run` Protocol (`ai/engine/ports/process.py:62`) that the command boundary awaits (`_check_eligibility`). Wraps the sync ORM read in `sync_to_async(thread_sensitive=True)`; returns a `RunRecord`-shaped dict (`id/process_id/process_version/state/created_at/updated_at/context`) or `None`.
+
+### Master corrections (caught during verification — not thin)
+1. Worker shipped `get_active_run` as a **synchronous** method, which violates the async port Protocol and would crash `await self._process_registry.get_active_run(...)` at the boundary. Master rewrote it `async` (via `sync_to_async`) and updated the test to `await` it.
+2. `test_registry_get_active_run` initially used plain `django_db`; the `sync_to_async` read runs on a separate connection and can't see the uncommitted transaction, so the run resolved to `None`. Master changed the marker to `django_db(transaction=True)` (consistent with the other boundary tests).
+
+### Tests
+- **`backend/ai/tests/test_case_inspection.py`** (new, 7 tests): `test_inspect_case_capability_declared_and_registered`, `test_inspect_case_implied_by_governance_roles`, `test_inspect_case_returns_run_state_and_event_ids` (asserts `run_state=="running"`, `current_activity.step_state=="running"`, both journal event ids, `operation_id "op-1"`, non-empty `sla` + `applicable_sop_clause`), `test_inspect_case_is_read_only` (Run/RunStep/StepJournalEntry/ApprovalGrant counts unchanged), `test_inspect_case_requires_capability` (error before read, no case fields leaked), `test_inspect_case_unknown_run` (graceful error), `test_registry_get_active_run` (async bridge).
+
+### Verification (Master-run)
+- `manage.py check` → **0 issues**; `makemigrations ai --check --dry-run` → **No changes detected** (no model change).
+- `test_case_inspection.py` → **7 passed**.
+- Full `ai` suite → **1966 passed, 1 skipped, 4 failed** — the 4 failures are **pre-existing and unrelated to P4-05** (reproduce in isolation, no P4-05 file in their call path):
+  - `test_durable.py::test_resume_rejects_non_resumable_statuses` (status mapping drift: plan persisted as `paused` regardless of input status).
+  - `test_chat_stream.py::test_dispatch_task_stream_*` ×3 (`fake_run_chat` mock lacks the `progress_callback` kwarg now passed by `engine_runtime._collect`).
+- `import-boundary-lint.py` → clean; `forbidden-term-lint.py` → clean; `failopen-lint.py` → clean.
+
+---
+
+## [2026-09-14] Master Architect — Pulse Phase 4 · P4-06: Deterministic clarification policy
+
+**Role:** Master Architect (DeepSeek V4-Pro) · **Kind:** safety (Gate 4 → "ask, never guess authority"). Dispatched a backend-worker; Master verified all artifacts personally.
+
+**Spec:** "Clarification policy: ask when object identity ambiguous, evidence missing, or authority unclear; never guess authority | `cognition/turn/draft.py`, prompts | Fixture tests for the three cases | S | —".
+
+### Final architecture
+- **`backend/ai/engine/cognition/turn/clarify.py`** (new, pure/engine-side, stdlib-only — ADR-0007/RULE_20): `ClarificationDecision` frozen dataclass (`needs_clarification: bool`, `reason: str | None`, `question: str`) + `CLARIFICATION_REASONS = ("ambiguous_identity", "missing_evidence", "unclear_authority")` + pure `evaluate_clarification(*, object_candidates, evidence_available, evidence_required, authority_granted, authority_required)`. Evaluated in precedence order: (1) `object_candidates < 1 or > 1` → `ambiguous_identity` (zero = no match, >1 = multiple matches — never pick arbitrarily); (2) `evidence_required and not evidence_available` → `missing_evidence`; (3) `authority_required is not None and authority_required not in granted and "*" not in granted` → `unclear_authority` (the "never guess authority" rule — a `"*"` wildcard counts as an *explicit* unrestricted grant, consistent with CBAC superuser `{"*"}`). Else clear.
+- **`backend/ai/engine/cognition/turn/draft.py`** — `DraftWitness.draft()` gained keyword-only `clarify_inputs: dict | None = None`. After the budget check and **before any LLM call**, when `clarify_inputs` is provided the policy runs and — if it needs clarification — short-circuits with a `DraftResult(text=question, tool_calls=[], claimed_citations=[], confidence=0.3, model_used="clarification_policy", tokens_used=0)`. **`route_chat` is never invoked in that case** (the enforcement point). Missing keys default to "clear" (`object_candidates=1`, `evidence_available=True`, `evidence_required=False`, `authority_granted=frozenset({"*"})`, `authority_required=None`).
+- **`backend/ai/engine/cognition/turn/runner.py`** — appended one bullet to the Zone-1 GROUNDING RULES f-string: `CLARIFICATION POLICY: if the object the user refers to is ambiguous (zero or multiple matches), if required evidence or source data is missing, or if your authority to perform the requested action is unclear, ASK one clarifying question instead of guessing. Never assume or guess authority — when in doubt about permission, ask.` (the prompt half of the spec).
+
+### Master note (worker judgment call confirmed)
+Worker flagged the `"*"` wildcard-vs-literal-rule tension: the spec's default `authority_granted=frozenset({"*"})` would conflict with a literal `authority_required not in granted` check. Master **confirmed** the `"*"` wildcard interpretation (explicit unrestricted grant → clear), matching CBAC's superuser `{"*"}` semantics.
+
+### Tests
+- **`backend/ai/tests/test_clarification_policy.py`** (new, 10 pure tests — no DB, no LLM): `CLARIFICATION_REASONS` constant; ambiguous identity (0 and 2 candidates); missing evidence (required vs not-required); unclear authority (asserts "never guess" — did not return a clear decision); clear case; superuser wildcard; `test_draft_short_circuits_without_llm_call` (monkeypatches `route_chat` to raise `AssertionError` if called, asserts `model_used == "clarification_policy"`, `tool_calls == []`, `tokens_used == 0`); `test_draft_proceeds_when_clear` (fake `route_chat` called once, `model_used == "fake"`).
+
+### Verification (Master-run)
+- `manage.py check` → **0 issues**.
+- `test_clarification_policy.py` → **10 passed**.
+- Full `ai` suite → **1975 passed, 1 skipped, 5 failed** — 4 failures are the same **pre-existing** set as P4-05, plus 1 **flaky order-dependent** test that passes in isolation and is unrelated to P4-06 (no P4-06 file in its call path):
+  - `test_durable.py::test_resume_rejects_non_resumable_statuses` (pre-existing status-mapping drift).
+  - `test_durable.py::test_replay_preserves_step_order_and_depends_on` (flaky: `RunStep.objects.filter(run_id=...)` returned `[1, 0]` instead of `[0, 1]` in the full run; **passes in isolation**, unrelated to draft/clarify).
+  - `test_chat_stream.py::test_dispatch_task_stream_*` ×3 (pre-existing `progress_callback` mock drift).
+- `import-boundary-lint.py` → clean; `forbidden-term-lint.py` → clean; `failopen-lint.py` → clean.

@@ -471,6 +471,15 @@ function reflowMarkdownStructure(content) {
       continue;
     }
 
+    // Last resort: a table fully collapsed onto one line with single-pipe
+    // separators everywhere (no `| |` row seams for the reflows above to split
+    // on). Re-chunk it using the delimiter run's inferred column count.
+    const fullTable = reflowFullyCollapsedTable(trimmed);
+    if (fullTable) {
+      out.push(...fullTable);
+      continue;
+    }
+
     out.push(...reflowLine(trimmed));
   }
 
@@ -520,6 +529,69 @@ function splitProseFromInlineTableHeader(line, _prevLines) {
   return result;
 }
 
+
+/**
+ * Reflow a FULLY collapsed GFM table — one where the whole table (optional
+ * caption + header + delimiter + every data row) is glued onto a single line
+ * using single pipes as separators everywhere. ``reflowCollapsedTable`` cannot
+ * handle this because there are no ``| |`` row seams to split on; instead we
+ * use the delimiter run's column count (N) to re-chunk the cells:
+ *
+ *   Campus Coverage | Campus | Coverage | Covered |---|---|---| Abu Qir | 80% | 4 | …
+ *   → caption "Campus Coverage", a 3-col header, then N-sized data rows.
+ *
+ * Returns null when no ``|---|---|`` delimiter run is present so the caller
+ * falls through to the other table/prose reflows.
+ */
+function reflowFullyCollapsedTable(line) {
+  const delimRe = /\|(?:\s*:?-{2,}:?\s*\|)+/;
+  const m = line.match(delimRe);
+  if (!m) return null;
+  const delimN = (m[0].match(/:?-{2,}:?/g) || []).length;
+  if (delimN < 2) return null;
+
+  const before = line.slice(0, m.index);
+  const after = line.slice(m.index + m[0].length);
+
+  const beforeCells = before.split('|').map((c) => c.trim());
+  while (beforeCells.length && beforeCells[beforeCells.length - 1] === '') beforeCells.pop();
+
+  const afterCells = after.split('|').map((c) => c.trim());
+  while (afterCells.length && afterCells[0] === '') afterCells.shift();
+  while (afterCells.length && afterCells[afterCells.length - 1] === '') afterCells.pop();
+
+  // The model's delimiter count is unreliable. Prefer a column count N that is
+  // ≤ the header cell count AND divides the data cells evenly, taking the
+  // largest such N; otherwise fall back to the delimiter count.
+  let n = delimN;
+  const maxN = beforeCells.length;
+  if (afterCells.length > 0 && (delimN > maxN || afterCells.length % delimN !== 0)) {
+    for (let cand = Math.min(maxN, afterCells.length); cand >= 2; cand -= 1) {
+      if (afterCells.length % cand === 0) { n = cand; break; }
+    }
+  }
+  if (n < 2 || beforeCells.length < n) return null;
+
+  let prose = '';
+  let headerCells = beforeCells;
+  if (beforeCells.length > n) {
+    headerCells = beforeCells.slice(beforeCells.length - n);
+    prose = beforeCells.slice(0, beforeCells.length - n).join(' ').trim();
+  }
+
+  const out = [];
+  if (prose) out.push(prose);
+  out.push('');
+  out.push(`| ${headerCells.join(' | ')} |`);
+  out.push(`|${Array(n).fill('---').join('|')}|`);
+  for (let i = 0; i < afterCells.length; i += n) {
+    const row = afterCells.slice(i, i + n);
+    while (row.length < n) row.push('');
+    out.push(`| ${row.join(' | ')} |`);
+  }
+  out.push('');
+  return out;
+}
 
 /**
  * Reflow a GFM table the model collapsed onto a single line back into the

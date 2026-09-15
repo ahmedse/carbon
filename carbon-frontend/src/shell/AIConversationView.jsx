@@ -82,6 +82,10 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
   const [sending, setSending] = useState(false);
   const [stopped, setStopped] = useState(false);
   const [workingStage, setWorkingStage] = useState(null);
+  // Collapsible "AI is thinking…" timeline (VS Code Copilot-style): accumulate
+  // the narrated working stages, collapsed by default, expand on click.
+  const [stageHistory, setStageHistory] = useState([]);
+  const [thinkingExpanded, setThinkingExpanded] = useState(false);
   const [sendMode, setSendMode] = useState('queue');
   // Phase 21-C — collapsed "older messages" region toggle.
   const [showOlder, setShowOlder] = useState(false);
@@ -179,6 +183,17 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
     }
   }, [messages.length, streamingText, workingStage]);
 
+  // Accumulate narrated working stages into the collapsible thinking timeline.
+  // History persists after the turn completes (collapsed, VS Code Copilot-style);
+  // it is cleared only when a new send/retry begins.
+  useEffect(() => {
+    if (workingStage) {
+      setStageHistory((prev) =>
+        prev[prev.length - 1] === workingStage ? prev : [...prev, workingStage],
+      );
+    }
+  }, [workingStage]);
+
   useEffect(() => {
     const isWorking = conversation?.status === 'working' || sending;
     if (!isWorking) {
@@ -212,6 +227,7 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
       }
       setStreamingText(null);
       setWorkingStage(null);
+      setThinkingExpanded(false);
       if (canonical?.status !== 'working') {
         setSending(false);
       }
@@ -235,6 +251,8 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
       streamingActiveRef.current = false;
       setStreamingText(null);
       setWorkingStage(null);
+      setStageHistory([]);
+      setThinkingExpanded(false);
       setSending(false);
       if (errorKind === 'transient') {
         setTransientError(true);
@@ -265,6 +283,8 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
       setStopped(false);
       setProviderOffline(false);
       setTransientError(false);
+      setStageHistory([]);
+      setThinkingExpanded(false);
 
       if (type === 'chat') {
         setStreamingText('');
@@ -354,6 +374,8 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
     setSending(false);
     setStreamingText(null);
     setWorkingStage(null);
+    setStageHistory([]);
+    setThinkingExpanded(false);
     setStopped(true);
     try {
       await stopGeneration(token, conversationId);
@@ -674,6 +696,8 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
       setStopped(false);
       setProviderOffline(false);
       setTransientError(false);
+      setStageHistory([]);
+      setThinkingExpanded(false);
       if (type === 'chat') {
         setStreamingText('');
       } else {
@@ -1055,7 +1079,7 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
   const isWorking = conversation.status === 'working' || sending;
   const isOwner = !conversation || conversation.visibility !== 'shared' || String(conversation.user_id) === String(user?.id);
   const convStatus = conversation.status;
-  const isStreaming = streamingText !== null;
+  const isStreaming = Boolean(streamingText);
   const statusVariant = providerOffline
     ? 'offline'
     : transientError
@@ -1114,6 +1138,12 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
         : isWorking && elapsedSeconds >= 5
           ? 'This may take a moment…'
           : null;
+
+  // A turn is still in flight while text is streaming or the server reports
+  // "working". The collapsible thinking block stays visible during the turn and
+  // remains (collapsed) after it finishes, above the final answer.
+  const turnActive = streamingText !== null || isWorking;
+  const showThinking = stageHistory.length > 0 || isWorking;
 
   return (
     <>
@@ -1261,9 +1291,21 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
             />
           ))}
         </Collapse>
-        {recentMessages.map((msg) => {
+        {recentMessages.map((msg, idx) => {
+          const isLastAssistant =
+            msg.role === 'assistant' && idx === recentMessages.length - 1;
           return (
             <React.Fragment key={msg.id}>
+              {isLastAssistant && !turnActive && stageHistory.length > 0 && (
+                <AIWorkingIndicator
+                  conversationType={conversationType}
+                  collapsible
+                  expanded={thinkingExpanded}
+                  onToggle={() => setThinkingExpanded((v) => !v)}
+                  history={stageHistory}
+                  done
+                />
+              )}
               <AIMessageBubble
                 message={msg}
                 onNotify={notify}
@@ -1298,15 +1340,28 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
           );
         })}
 
-        {streamingText !== null ? (
-          <AIMessageBubble
-            message={{
-              id: 'streaming',
-              role: 'assistant',
-              content: streamingText || '…',
-              created_at: new Date().toISOString(),
-            }}
-          />
+        {streamingText ? (
+          <>
+            {showThinking && (
+              <AIWorkingIndicator
+                conversationType={conversationType}
+                stage={workingStage}
+                collapsible
+                expanded={thinkingExpanded}
+                onToggle={() => setThinkingExpanded((v) => !v)}
+                history={stageHistory}
+                done={false}
+              />
+            )}
+            <AIMessageBubble
+              message={{
+                id: 'streaming',
+                role: 'assistant',
+                content: streamingText,
+                created_at: new Date().toISOString(),
+              }}
+            />
+          </>
         ) : isWorking ? (
           <>
             {messages.length > 0 && (
@@ -1319,7 +1374,17 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
                 }}
               />
             )}
-            <AIWorkingIndicator conversationType={conversationType} stage={workingStage} />
+            {showThinking && (
+              <AIWorkingIndicator
+                conversationType={conversationType}
+                stage={workingStage}
+                collapsible
+                expanded={thinkingExpanded}
+                onToggle={() => setThinkingExpanded((v) => !v)}
+                history={stageHistory}
+                done={false}
+              />
+            )}
             {workingNotice && (
               <Box sx={{ px: 2, pb: 1 }}>
                 <Typography variant="caption" color="text.secondary">

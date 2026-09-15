@@ -132,6 +132,14 @@ verify_intelligence() {
   else
     fail "replay smoke"; tail -20 /tmp/vi5.log
   fi
+
+  # HRMS answer-quality gate — deterministic (no LLM/network): grounding, CBAC
+  # deny, and no-fabrication regression protection (Pulse roadmap P4a).
+  if ( cd "$BACKEND_DIR" && "$PY" -m pytest ai/tests/test_hrms_answer_quality_eval.py -q >/tmp/vi6.log 2>&1 ); then
+    pass "hrms eval ($(grep -oE '[0-9]+ passed' /tmp/vi6.log | head -1))"
+  else
+    fail "hrms eval"; tail -20 /tmp/vi6.log
+  fi
 }
 
 # ── MAIN ──────────────────────────────────────────────────────────────────────
