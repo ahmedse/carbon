@@ -16,6 +16,9 @@ A "breakdown" is the list of row dicts produced by ``_people_analytics``, e.g.::
 
 from __future__ import annotations
 
+from collections import Counter
+from decimal import Decimal, InvalidOperation
+
 #: Keywords that mark a caveat as disclosing missing/unrecorded data.
 _MISSING_DATA_MARKERS = (
     "missing",
@@ -218,4 +221,95 @@ def _attr(obj, name):
     if isinstance(obj, dict):
         return obj.get(name)
     return getattr(obj, name, None)
+
+
+# ── HRMS payroll invariants (deterministic, host-side) ─────────────────────
+
+_MONEY_RE = _re.compile(r"(?<!\d)(\d+\.\d{1,3})(?!\d)")
+
+
+def _to_decimal(value) -> Decimal:
+    """Coerce ``value`` to Decimal without float conversion."""
+    if isinstance(value, Decimal):
+        return value
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise AssertionError(f"invalid decimal value: {value!r}") from exc
+
+
+def assert_net_pay_grounded(payslip_rows):
+    """Assert per-employee net line equals gross - gosi - loan_installment.
+
+    Args:
+        payslip_rows: list of payslip row dicts with keys:
+            employee, line_type, amount.
+
+    Raises:
+        AssertionError: when required line types are missing or arithmetic fails.
+    """
+    per_employee: dict[str, dict[str, Decimal]] = {}
+    for row in payslip_rows:
+        employee = str(row.get("employee"))
+        line_type = str(row.get("line_type"))
+        amount = _to_decimal(row.get("amount"))
+        per_employee.setdefault(employee, {})[line_type] = amount
+
+    required = ("gross", "gosi", "loan_installment", "net")
+    for employee, lines in per_employee.items():
+        missing = [k for k in required if k not in lines]
+        if missing:
+            raise AssertionError(
+                f"employee {employee} missing line types: {missing}; got {sorted(lines)}"
+            )
+        expected_net = lines["gross"] - lines["gosi"] - lines["loan_installment"]
+        if lines["net"] != expected_net:
+            raise AssertionError(
+                f"employee {employee} net {lines['net']} != gross-gosi-loan {expected_net}"
+            )
+
+
+def assert_no_pay_figures_beyond_db(rendered, db_rows):
+    """Assert rendered payroll figures are a subset of DB payslip amounts.
+
+    ``rendered`` may be a string, dict, list, or nested mix. Any decimal-like
+    money value found in it must exist in ``db_rows`` amounts (multiset-safe).
+    """
+
+    def _collect_text(node, out):
+        if node is None:
+            return
+        if isinstance(node, str):
+            out.append(node)
+            return
+        if isinstance(node, dict):
+            for val in node.values():
+                _collect_text(val, out)
+            return
+        if isinstance(node, (list, tuple, set)):
+            for val in node:
+                _collect_text(val, out)
+            return
+        out.append(str(node))
+
+    texts: list[str] = []
+    _collect_text(rendered, texts)
+    rendered_amounts = [_to_decimal(m.group(1)) for t in texts for m in _MONEY_RE.finditer(t)]
+
+    db_amounts = [_to_decimal(row.get("amount")) for row in db_rows]
+    rendered_counter = Counter(rendered_amounts)
+    db_counter = Counter(db_amounts)
+
+    for amount, used in rendered_counter.items():
+        have = db_counter.get(amount, 0)
+        if used > have:
+            raise AssertionError(
+                f"rendered amount {amount} appears {used} times, DB has {have}"
+            )
+
+
+def assert_scoped_empty_for_denied(rows):
+    """Assert out-of-scope/denied query result is empty."""
+    if rows:
+        raise AssertionError(f"denied scope returned {len(rows)} row(s): {rows[:3]!r}")
 

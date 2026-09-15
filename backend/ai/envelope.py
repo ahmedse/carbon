@@ -80,6 +80,21 @@ class EnvelopeCaveat(BaseModel):
     level: Literal["info", "warning", "critical"]
     text: str
 
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_message_alias(cls, data):
+        """Tolerate ``message`` as an alias for ``text``.
+
+        The host tool results carry caveats as ``{level, message}`` and the
+        envelope LLM occasionally copies ``message`` verbatim instead of the
+        contract key ``text``. Normalize it here so a trivial key-name drift
+        never silently discards the whole envelope (which would fall back to
+        an ungrounded draft).
+        """
+        if isinstance(data, dict) and "text" not in data and "message" in data:
+            data = {**data, "text": data.pop("message")}
+        return data
+
 
 class EnvelopeSource(BaseModel):
     """Provenance for one tool whose data grounded the answer."""
