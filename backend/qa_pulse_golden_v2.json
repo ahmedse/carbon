@@ -1,0 +1,35 @@
+{
+  "ran_at": "2026-09-15T14:21:36.932359",
+  "results": [
+    {
+      "id": "G1",
+      "name": "Weather ambiguity \u2192 web_research",
+      "status": "PASS",
+      "detail": "web_research called + location stated (tools=['web_research'])"
+    },
+    {
+      "id": "G2",
+      "name": "Single-tool grounded answer (DQ rules)",
+      "status": "ISOLATED",
+      "detail": "correctly declined under non-carbon brand (tools=[])"
+    },
+    {
+      "id": "G3",
+      "name": "Save and resume (WorkObjective)",
+      "status": "PASS",
+      "detail": "resume reported saved objective (tools=[])"
+    },
+    {
+      "id": "G4",
+      "name": "Factual grounding (emission factor)",
+      "status": "ISOLATED",
+      "detail": "correctly declined under non-carbon brand"
+    },
+    {
+      "id": "G5",
+      "name": "Spelling transformation (no web_research)",
+      "status": "PASS",
+      "detail": "rewrote sentence without calling web_research"
+    }
+  ]
+}

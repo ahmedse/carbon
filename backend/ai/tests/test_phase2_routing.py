@@ -47,6 +47,39 @@ async def test_weather_tool_description_mentions_weather():
     assert "weather" in desc.lower(), f"'weather' not in web_research description: {desc}"
 
 
+def test_text_transform_request_detected():
+    """G5 regression: a spelling/grammar/rewrite meta-task quoting a sentence
+    that mentions 'weather' must be recognised as a text transform, so the
+    WEATHER-DETERMINISTIC block never re-routes it into web_research."""
+    from ai.engine.cognition.turn.runner import _is_text_transform_request
+
+    # The exact Phase-10.4 G5 message and close variants.
+    assert _is_text_transform_request(
+        "Correct the spelling in this sentence: 'what is the weather in north cost egypt toay?'"
+    )
+    assert _is_text_transform_request("fix the grammar in this sentence")
+    assert _is_text_transform_request("proofread this paragraph for me")
+    assert _is_text_transform_request("can you rewrite this: the weather is nice")
+    assert _is_text_transform_request("translate this to Arabic: what is the weather today?")
+
+    # Genuine weather/lookup questions must NOT be flagged.
+    assert not _is_text_transform_request("what is the weather in north coast egypt today?")
+    assert not _is_text_transform_request("is it suitable for beach swimming today?")
+    assert not _is_text_transform_request("show me the emission factors")
+
+
+def test_weather_deterministic_block_guards_text_transform():
+    """The WEATHER-DETERMINISTIC force-web_research block must skip text-transform
+    requests (source-level guard, mirrors test_zone_concept_does_not_block_tool_call)."""
+    import pathlib
+    runner_path = (
+        pathlib.Path(__file__).resolve().parent.parent
+        / "engine" / "cognition" / "turn" / "runner.py"
+    )
+    source = runner_path.read_text()
+    assert "not _is_text_transform_request(_resolved_user_message)" in source
+
+
 def test_zone_concept_does_not_block_tool_call():
     """The single-pass path must no longer inject a 'no platform tool needed'
     veto for concept/general zones. We assert the veto string is gone from the

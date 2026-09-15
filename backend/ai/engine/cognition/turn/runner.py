@@ -45,6 +45,39 @@ def _is_capability_query(text: str) -> bool:
     return bool(_CAPABILITY_QUERY_PATTERN.search(text))
 
 
+# ── G5 text-transformation meta-task guard ────────────────────────────────
+# A turn whose ACTUAL ask is to transform quoted text (correct spelling/grammar,
+# proofread, rephrase, rewrite, translate, fix typos) must NEVER be re-routed
+# into live weather fetching just because the quoted sentence happens to name
+# "weather"/"forecast". Regex-only and engine-local (the engine cannot import
+# ``ai.plugins.web_research`` — RULE_20), so it lives here beside the routing.
+_TEXT_TRANSFORM_RE = re.compile(
+    r"\b(?:"
+    r"correct(?:\s+the)?\s+spelling|"
+    r"fix(?:\s+the)?\s+spelling|"
+    r"check(?:\s+the)?\s+spelling|"
+    r"spell(?:-|\s)?check|"
+    r"correct(?:\s+the)?\s+grammar|"
+    r"fix(?:\s+the)?\s+grammar|"
+    r"check(?:\s+the)?\s+grammar|"
+    r"proofread|"
+    r"rephrase|"
+    r"rewrite(?:\s+(?:the|this))?|"
+    r"fix(?:\s+the)?\s+typos?|"
+    r"typo\b|"
+    r"translate(?:\s+(?:this|the|to|into)\b)?"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _is_text_transform_request(text: str) -> bool:
+    """True when the user's ask is to transform quoted text, not to act on it."""
+    if not text:
+        return False
+    return bool(_TEXT_TRANSFORM_RE.search(text))
+
+
 def _filter_draft_tools(
     draft_tools: list[dict] | None,
     user_message: str,
@@ -2176,6 +2209,7 @@ class TurnPipelineRunner:
         if (
             self.executor is not None
             and _is_wq(_resolved_user_message)
+            and not _is_text_transform_request(_resolved_user_message)
             and critic.verdict != "veto"
         ):
             _has_weather_call = any(
