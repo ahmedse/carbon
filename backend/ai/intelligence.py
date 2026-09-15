@@ -606,6 +606,14 @@ class CarbonIntelligence:
                         partial_parts.append(value)
                         yield {"type": "chunk", "content": value}
                         continue
+                    if kind == "progress":
+                        _p = value or {}
+                        yield {
+                            "type": "progress",
+                            "stage": _p.get("stage"),
+                            "message": _p.get("message"),
+                        }
+                        continue
                     if kind == "error":
                         latency_ms = int((time.perf_counter() - started_at) * 1000)
                         guard_chain.audit_trail.log(
@@ -2380,6 +2388,14 @@ class CarbonIntelligence:
                     if kind == "chunk":
                         partial_parts.append(value)
                         yield {"type": "chunk", "content": value}
+                        continue
+                    if kind == "progress":
+                        _p = value or {}
+                        yield {
+                            "type": "progress",
+                            "stage": _p.get("stage"),
+                            "message": _p.get("message"),
+                        }
                         continue
                     if kind == "error":
                         latency_ms = int((time.perf_counter() - started_at) * 1000)

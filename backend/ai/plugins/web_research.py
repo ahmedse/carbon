@@ -28,7 +28,7 @@ import logging
 import re
 from datetime import datetime, timezone
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 import httpx
 
@@ -39,9 +39,12 @@ logger = logging.getLogger("carbon.ai.plugins.web_research")
 
 _WIKI_API = "https://en.wikipedia.org/w/api.php"
 _DDG_API = "https://api.duckduckgo.com/"
+_DDG_HTML = "https://html.duckduckgo.com/html/"
 _OPEN_METEO_GEO = "https://geocoding-api.open-meteo.com/v1/search"
 _OPEN_METEO_FORECAST = "https://api.open-meteo.com/v1/forecast"
 _UA = "Carbon-Data-Trust-Research/1.0 (research agent; +contact: platform@example.com)"
+# The DDG HTML SERP endpoint rejects non-browser agents, so use a browser UA.
+_BROWSER_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"
 _TIMEOUT = 12.0
 
 # WMO weather interpretation codes → human-readable condition (Open-Meteo).
@@ -99,6 +102,21 @@ def _strip_html(fragment: str) -> str:
 def _now_iso() -> str:
     """UTC timestamp for external-source provenance (stdlib only, RULE_20)."""
     return datetime.now(timezone.utc).isoformat()
+
+
+def _decode_ddg_href(href: str) -> str:
+    """Decode a DuckDuckGo SERP redirect href to its real target URL."""
+    if not href:
+        return ""
+    candidate = href if href.startswith("http") else f"https:{href}"
+    if "uddg=" in candidate:
+        params = parse_qs(urlparse(candidate).query)
+        target = (params.get("uddg") or [""])[0]
+        if target:
+            return unquote(target)
+    if href.startswith("//"):
+        return f"https:{href}"
+    return href
 
 
 def _is_weather_query(query: str) -> bool:
@@ -268,7 +286,7 @@ class WebResearch(ToolPlugin):
             )
             g.raise_for_status()
             matches = (g.json().get("results") or [])
-        except httpx.HTTPError as exc:
+        except (httpx.HTTPError, ValueError) as exc:
             logger.warning("web_research geocoding error: %s", exc)
             return error("geocode_http_error", detail=str(exc))
 
@@ -298,7 +316,7 @@ class WebResearch(ToolPlugin):
             )
             w.raise_for_status()
             current = (w.json().get("current") or {})
-        except httpx.HTTPError as exc:
+        except (httpx.HTTPError, ValueError) as exc:
             logger.warning("web_research forecast error: %s", exc)
             return error("forecast_http_error", detail=str(exc))
 
@@ -408,7 +426,7 @@ class WebResearch(ToolPlugin):
                         "snippet": _strip_html(snippet)[:800],
                         "source": "wikipedia",
                     })
-        except httpx.HTTPError as exc:
+        except (httpx.HTTPError, ValueError) as exc:
             logger.warning("web_research wikipedia error: %s", exc)
 
         # 2) DuckDuckGo Instant Answer (direct abstract + related topics).
@@ -443,8 +461,21 @@ class WebResearch(ToolPlugin):
                     "snippet": rt[:800],
                     "source": "duckduckgo",
                 })
-        except httpx.HTTPError as exc:
+        except (httpx.HTTPError, ValueError) as exc:
             logger.warning("web_research duckduckgo error: %s", exc)
+
+        # 3) DuckDuckGo HTML SERP (keyless general web search). The Instant
+        #    Answer API only returns curated abstracts, so specific research
+        #    queries (e.g. "AASHE CDP 2026 benchmarks") come back empty there.
+        #    This fills the remaining slots with real ranked web results.
+        if len(results) < max_results:
+            try:
+                serp = await self._ddg_html_search(
+                    client, query, max_results - len(results), seen_urls
+                )
+                results.extend(serp)
+            except (httpx.HTTPError, ValueError) as exc:
+                logger.warning("web_research ddg-html error: %s", exc)
 
         if not results:
             return {
@@ -468,6 +499,56 @@ class WebResearch(ToolPlugin):
             "source": "external_web",
             "retrieved_at": retrieved_at,
         }
+
+    async def _ddg_html_search(
+        self,
+        client: httpx.AsyncClient,
+        query: str,
+        limit: int,
+        seen_urls: set[str],
+    ) -> list[dict]:
+        """Keyless general web search via DuckDuckGo's HTML SERP endpoint.
+
+        Returns ``{title, url, snippet, source}`` dicts. The result hrefs are
+        DDG redirect links (``//duckduckgo.com/l/?uddg=...``); the real target
+        is decoded from the ``uddg`` query parameter.
+        """
+        resp = await client.post(
+            _DDG_HTML,
+            data={"q": query, "kl": "us-en"},
+            headers={"User-Agent": _BROWSER_UA},
+        )
+        resp.raise_for_status()
+        body = resp.text
+
+        anchors = re.findall(
+            r'<a[^>]+class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
+            body, re.S,
+        )
+        snippets = re.findall(
+            r'class="result__snippet"[^>]*>(.*?)</a>', body, re.S,
+        )
+
+        out: list[dict] = []
+        for i, (href, title_html) in enumerate(anchors):
+            if len(out) >= limit:
+                break
+            url = _decode_ddg_href(href)
+            if not url or url in seen_urls:
+                continue
+            title = _strip_html(title_html)
+            if not title:
+                continue
+            snippet = _strip_html(snippets[i]) if i < len(snippets) else ""
+            seen_urls.add(url)
+            out.append({
+                "title": title[:300],
+                "url": url,
+                "snippet": snippet[:800],
+                "source": "duckduckgo",
+            })
+        return out
+
 
 
 def _title_snippet(hits: list[dict], title: str) -> str:

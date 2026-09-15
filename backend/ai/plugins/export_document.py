@@ -50,6 +50,30 @@ def _slugify(value: str) -> str:
     return value[:60] or "document"
 
 
+# Brand palette for a polished, consistent look across DOCX + XLSX.
+_BRAND_TEAL = "0B5F4E"
+_BRAND_BAND = "EAF3F0"
+_BRAND_MUTED = "6B7280"
+
+
+def _looks_numeric(text: str) -> bool:
+    """True for values that read as a number (currency/percent/commas allowed)."""
+    return bool(re.match(r"^[\s$€£]*[-+]?[\d,]+(?:\.\d+)?\s*%?$", (text or "").strip()))
+
+
+def _to_number(value: Any) -> float | None:
+    """Parse a display string like '8,032,225.88' or '78.0' to a float, else None."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    s = str(value or "").strip().replace(",", "").replace("$", "").replace("€", "").replace("£", "")
+    if s.endswith("%"):
+        s = s[:-1]
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
 class ExportDocument(ToolPlugin):
     name = "export_document"
     description = (
@@ -218,84 +242,205 @@ class ExportDocument(ToolPlugin):
 
     def _write_docx(self, path: Path, title: str, content: str, table: dict | None) -> None:
         from docx import Document
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.shared import Pt, RGBColor
 
         doc = Document()
-        doc.add_heading(title, level=0)
+        # Normal body typography
+        normal = doc.styles["Normal"]
+        normal.font.name = "Calibri"
+        normal.font.size = Pt(10.5)
+
+        heading = doc.add_heading(title, level=0)
+        for run in heading.runs:
+            run.font.color.rgb = RGBColor.from_string(_BRAND_TEAL)
+
+        sub = doc.add_paragraph()
+        sub_run = sub.add_run(
+            f"Generated {now().strftime('%B %d, %Y')}  ·  Carbon Data Trust Platform"
+        )
+        sub_run.italic = True
+        sub_run.font.size = Pt(9)
+        sub_run.font.color.rgb = RGBColor.from_string(_BRAND_MUTED)
+        sub.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
         if content:
             self._render_markdown_to_docx(doc, content)
         if table:
-            headers = table.get("headers") or []
-            rows = table.get("rows") or []
-            if headers:
-                t = doc.add_table(rows=1, cols=len(headers))
-                t.style = "Light Grid Accent 1"
-                for i, h in enumerate(headers):
-                    t.rows[0].cells[i].text = str(h)
-                for row in rows:
-                    cells = t.add_row().cells
-                    for i in range(len(headers)):
-                        cells[i].text = str(row[i]) if i < len(row) else ""
+            self._render_table_docx(doc, table)
         doc.save(str(path))
 
     @staticmethod
-    def _render_markdown_to_docx(doc, content: str) -> None:
+    def _shade_cell(cell, hex_fill: str) -> None:
+        """Apply a solid background fill to a table cell (python-docx has no API)."""
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+
+        tc_pr = cell._tc.get_or_add_tcPr()
+        shd = OxmlElement("w:shd")
+        shd.set(qn("w:val"), "clear")
+        shd.set(qn("w:color"), "auto")
+        shd.set(qn("w:fill"), hex_fill)
+        tc_pr.append(shd)
+
+    def _render_table_docx(self, doc, table: dict) -> None:
         from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.shared import Pt, RGBColor
+
+        headers = table.get("headers") or []
+        rows = table.get("rows") or []
+        if not headers:
+            return
+        doc.add_paragraph()
+        t = doc.add_table(rows=1, cols=len(headers))
+        t.style = "Table Grid"
+        # Header row — teal fill, white bold text.
+        for i, h in enumerate(headers):
+            cell = t.rows[0].cells[i]
+            cell.text = ""
+            run = cell.paragraphs[0].add_run(str(h))
+            run.bold = True
+            run.font.size = Pt(10)
+            run.font.color.rgb = RGBColor.from_string("FFFFFF")
+            self._shade_cell(cell, _BRAND_TEAL)
+        for ridx, row in enumerate(rows):
+            is_total = bool(row) and str(row[0]).strip().upper().startswith("TOTAL")
+            cells = t.add_row().cells
+            for i in range(len(headers)):
+                val = str(row[i]) if i < len(row) else ""
+                cells[i].text = ""
+                para = cells[i].paragraphs[0]
+                run = para.add_run(val)
+                run.font.size = Pt(9.5)
+                if is_total:
+                    run.bold = True
+                if i > 0 and _looks_numeric(val):
+                    para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                if is_total:
+                    self._shade_cell(cells[i], _BRAND_BAND)
+                elif ridx % 2 == 1:
+                    self._shade_cell(cells[i], "F5F8F7")
+
+    @staticmethod
+    def _render_markdown_to_docx(doc, content: str) -> None:
+        from docx.shared import RGBColor
+
+        head_color = RGBColor.from_string(_BRAND_TEAL)
+
+        def add_rich(paragraph, text: str) -> None:
+            # Split on ** for inline bold; even segments plain, odd segments bold.
+            for idx, seg in enumerate(re.split(r"\*\*", text)):
+                if not seg:
+                    continue
+                run = paragraph.add_run(seg)
+                if idx % 2 == 1:
+                    run.bold = True
 
         for line in content.splitlines():
             stripped = line.strip()
             if not stripped:
                 continue
             if stripped.startswith("### "):
-                doc.add_heading(stripped[4:], level=3)
+                h = doc.add_heading(stripped[4:], level=3)
+                for r in h.runs:
+                    r.font.color.rgb = head_color
             elif stripped.startswith("## "):
-                doc.add_heading(stripped[3:], level=2)
+                h = doc.add_heading(stripped[3:], level=2)
+                for r in h.runs:
+                    r.font.color.rgb = head_color
             elif stripped.startswith("# "):
-                doc.add_heading(stripped[2:], level=1)
+                h = doc.add_heading(stripped[2:], level=1)
+                for r in h.runs:
+                    r.font.color.rgb = head_color
             elif re.match(r"^[-*•]\s+", stripped):
-                doc.add_paragraph(stripped[2:].lstrip(), style="List Bullet")
+                add_rich(doc.add_paragraph(style="List Bullet"), re.sub(r"^[-*•]\s+", "", stripped))
             elif re.match(r"^\d+[.)]\s+", stripped):
-                doc.add_paragraph(re.sub(r"^\d+[.)]\s+", "", stripped), style="List Number")
+                add_rich(doc.add_paragraph(style="List Number"), re.sub(r"^\d+[.)]\s+", "", stripped))
             elif stripped.startswith("> "):
-                p = doc.add_paragraph(stripped[2:])
-                p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                p.paragraph_format.left_indent = None
+                add_rich(doc.add_paragraph(stripped[2:]), "")
             else:
-                doc.add_paragraph(stripped)
+                add_rich(doc.add_paragraph(), stripped)
 
     def _write_xlsx(self, path: Path, title: str, content: str, table: dict | None) -> None:
         from openpyxl import Workbook
-        from openpyxl.styles import Font
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+        from openpyxl.utils import get_column_letter
 
         wb = Workbook()
         ws = wb.active
         ws.title = "Report"
-        ws["A1"] = title
-        ws["A1"].font = Font(bold=True, size=14)
+        teal_fill = PatternFill("solid", fgColor=_BRAND_TEAL)
+        band_fill = PatternFill("solid", fgColor=_BRAND_BAND)
+        thin = Side(style="thin", color="D0D7DE")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
-        row = 3
-        if table:
-            headers = table.get("headers") or []
-            rows = table.get("rows") or []
-            if headers:
-                for c, h in enumerate(headers, start=1):
-                    cell = ws.cell(row=row, column=c, value=str(h))
-                    cell.font = Font(bold=True)
-                row += 1
-                for r in rows:
-                    for c in range(len(headers)):
-                        ws.cell(row=row, column=c + 1, value=r[c] if c < len(r) else "")
-                    row += 1
-                row += 1
-        if content:
-            ws.cell(row=row, column=1, value="Summary").font = Font(bold=True)
+        headers = (table or {}).get("headers") or []
+        rows = (table or {}).get("rows") or []
+        ncols = max(3, len(headers))
+
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
+        title_cell = ws.cell(row=1, column=1, value=title)
+        title_cell.font = Font(bold=True, size=15, color="FFFFFF")
+        title_cell.fill = teal_fill
+        title_cell.alignment = Alignment(horizontal="left", vertical="center")
+        ws.row_dimensions[1].height = 26
+        ws.cell(
+            row=2, column=1,
+            value=f"Generated {now().strftime('%B %d, %Y')} · Carbon Data Trust Platform",
+        ).font = Font(italic=True, size=9, color=_BRAND_MUTED)
+
+        row = 4
+        if headers:
+            for c, h in enumerate(headers, start=1):
+                cell = ws.cell(row=row, column=c, value=str(h))
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = teal_fill
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.border = border
+            header_row = row
             row += 1
+            for ridx, r in enumerate(rows):
+                is_total = bool(r) and str(r[0]).strip().upper().startswith("TOTAL")
+                for c in range(len(headers)):
+                    raw = r[c] if c < len(r) else ""
+                    num = _to_number(raw) if c > 0 else None
+                    cell = ws.cell(row=row, column=c + 1, value=num if num is not None else raw)
+                    cell.border = border
+                    if num is not None:
+                        cell.alignment = Alignment(horizontal="right")
+                        cell.number_format = "#,##0.00"
+                    if is_total:
+                        cell.font = Font(bold=True)
+                        cell.fill = band_fill
+                    elif ridx % 2 == 1:
+                        cell.fill = band_fill
+                row += 1
+            ws.freeze_panes = ws.cell(row=header_row + 1, column=1)
+            # Auto-fit column widths from header + cell content.
+            for c in range(1, len(headers) + 1):
+                longest = len(str(headers[c - 1]))
+                for r in rows:
+                    if c - 1 < len(r):
+                        longest = max(longest, len(str(r[c - 1])))
+                ws.column_dimensions[get_column_letter(c)].width = min(42, longest + 5)
+            row += 1
+
+        if content:
+            ws2 = wb.create_sheet("Summary")
+            ws2.column_dimensions["A"].width = 96
+            rr = 1
             for line in content.splitlines():
                 stripped = line.strip()
                 if not stripped:
                     continue
-                stripped = re.sub(r"^#+\s+", "", stripped)
-                stripped = re.sub(r"^[-*•]\s+", "• ", stripped)
-                ws.cell(row=row, column=1, value=stripped[:4000])
-                row += 1
+                is_head = bool(re.match(r"^#+\s+", stripped))
+                text = re.sub(r"^#+\s+", "", stripped)
+                text = re.sub(r"^[-*•]\s+", "•  ", text).replace("**", "")
+                cell = ws2.cell(row=rr, column=1, value=text[:4000])
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+                if is_head:
+                    cell.font = Font(bold=True, size=12, color=_BRAND_TEAL)
+                rr += 1
 
         wb.save(str(path))
+

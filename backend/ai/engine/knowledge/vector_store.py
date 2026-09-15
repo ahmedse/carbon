@@ -101,10 +101,7 @@ class ChromaDbVectorStore(AbstractVectorStore):
 
     def _get_collection(self, collection: str):
         chroma = self._get_client()
-        return chroma.get_or_create_collection(
-            name=collection,
-            metadata={},
-        )
+        return chroma.get_or_create_collection(name=collection)
 
     async def upsert(self, collection, ids, documents, metadatas, instance_id):
         coll = self._get_collection(collection)
