@@ -789,6 +789,40 @@ cmd_schedules() {
     fi
 }
 
+# Pulse Heartbeat (P1b): proactive/consolidation/distill/decay loops + telemetry.
+# Cron (manual/CI-only; NO docker):
+#   0 2 * * * cd /home/ahmed/aast/carbon && ./manage.sh maintenance >> logs/maintenance.log 2>&1
+# Preview first with:  ./manage.sh maintenance --dry-run
+cmd_maintenance() {
+    print_header
+    log_info "Running Pulse maintenance (heartbeat)..."
+    echo ""
+
+    local python
+    python=$(get_python)
+
+    if [[ -z "$python" ]]; then
+        log_error "Python venv not found!"
+        return 1
+    fi
+
+    cd "$BACKEND_DIR" || return 1
+    "$python" manage.py ensure_pulse_instance
+
+    # Build args, omitting empties so argparse never sees a stray "" positional.
+    local -a maint_args=()
+    local loops_arg
+    if [[ "${1:-}" == "--dry-run" ]]; then
+        maint_args+=(--dry-run)
+        loops_arg="${2:-}"
+    else
+        loops_arg="${1:-}"
+    fi
+    [[ -n "$loops_arg" ]] && maint_args+=(--loops "$loops_arg")
+
+    "$python" manage.py run_pulse_maintenance "${maint_args[@]}"
+}
+
 cmd_shell() {
     local python
     python=$(get_python)
@@ -920,6 +954,7 @@ cmd_help() {
     echo "  brand [id]         Show current brand, or switch (aastmt|nibras|medos|tectona)"
     echo "  test               Run backend tests (pytest)"
     echo "  schedules [--dry-run]  Materialize due plan schedules (W6-E F-29)"
+    echo "  maintenance [--dry-run] [--loops]  Pulse heartbeat: consolidate/distill/decay"
     echo "  clean              Deep clean (stop, clear caches, archive logs)"
     echo "  killall            Emergency: force kill everything"
     echo "  help               Show this help"
@@ -931,6 +966,7 @@ cmd_help() {
     echo "  ./manage.sh logs backend   # View backend logs"
     echo "  ./manage.sh migrate        # Run DB migrations"
     echo "  ./manage.sh schedules      # Fire due plan schedules (cron: */5 * * * *)"
+    echo "  ./manage.sh maintenance    # Pulse heartbeat (cron: 0 2 * * *)"
     echo "  ./manage.sh clean          # Full cleanup"
     echo ""
     echo -e "${CYAN}Ports:${NC}"
@@ -967,6 +1003,7 @@ main() {
         brand)      cmd_brand "${2:-}" ;;
         test)       cmd_test "$@" ;;
         schedules)  cmd_schedules "${2:-}" ;;
+        maintenance) cmd_maintenance "${2:-}" "${3:-}" ;;
         clean)      cmd_clean ;;
         killall)    cmd_killall ;;
         help|-h|--help) cmd_help ;;

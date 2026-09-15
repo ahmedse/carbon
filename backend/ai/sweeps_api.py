@@ -30,6 +30,7 @@ class SweepsStatusView(APIView):
 
     def get(self, request):
         from ai.engine.cognition.loop import get_loop_status
+        from ai.models import PulseHeartbeat
         from ai.models.core import CognitionSweepRun
 
         live = {}
@@ -58,10 +59,34 @@ class SweepsStatusView(APIView):
             for row in latest.values()
         ]
 
+        latest_heartbeats: dict[tuple[str, str], "PulseHeartbeat"] = {}
+        for row in scope_ai_queryset(
+            PulseHeartbeat.objects, request.user
+        ).order_by("instance_id", "loop", "-started_at"):
+            key = (row.instance_id, row.loop)
+            latest_heartbeats.setdefault(key, row)
+
+        heartbeats = [
+            {
+                "instance_id": row.instance_id,
+                "loop": row.loop,
+                "status": row.status,
+                "started_at": row.started_at.isoformat() if row.started_at else None,
+                "finished_at": row.finished_at.isoformat() if row.finished_at else None,
+                "items_produced": row.items_produced,
+                "llm_calls": row.llm_calls,
+                "cost_usd": str(row.cost_usd),
+                "error": row.error,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in latest_heartbeats.values()
+        ]
+
         return Response(
             {
                 "scheduler_running": bool(live.get("scheduler_running", False)),
                 "tasks": tasks,
+                "heartbeats": heartbeats,
                 "live": live,
             }
         )
