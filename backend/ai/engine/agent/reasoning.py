@@ -70,6 +70,10 @@ class AgentResponse:
     # Rich response fields (Phase B)
     response_type: str = "inferred"  # data_grounded | inferred | cached | clarification
     confidence_label: str = ""       # high | medium | low | uncertain
+    # Machine-readable surface actions (e.g. navigation short-circuit). Merged
+    # into the runtime's ``metadata.actions`` so the frontend can render
+    # "Open X" buttons deterministically.
+    actions: list[dict] = field(default_factory=list)
     summary: str = ""                # one-sentence TL;DR
     citations: list[dict] = field(default_factory=list)  # [{id, source, detail, data_preview}]
     follow_ups: list[str] = field(default_factory=list)   # 3 suggested follow-up questions

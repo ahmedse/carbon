@@ -236,6 +236,61 @@ api_catalog:
     requires_auth: true
     requires_confirmation: true
 
+  # ── Self-service ("my …") — resolves to the LOGGED-IN employee only ──
+  # Use these for ANY first-person request ("my leave", "اجازاتي", "my salary",
+  # "who am I"). They are scoped server-side to the caller's own record and can
+  # never expose another employee — never use the org-wide list_* endpoints for
+  # a first-person question.
+
+  - name: get_my_profile
+    method: GET
+    path: /carbon-api/people/me/
+    description: >
+      The logged-in employee's OWN profile: id, employee_no, full_name,
+      job_title, org_unit, manager, is_active. Use for "who am I", "my
+      profile/department/manager", "بياناتي".
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_my_leave
+    method: GET
+    path: /carbon-api/people/me/leave/
+    description: >
+      The logged-in employee's OWN leave records (all statuses) with linked
+      correspondence status. Fields: id, leave_type, start_date, end_date,
+      days, status. Use for "my leave", "my vacations", "اجازاتي", "اجازاتي انا".
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: get_my_leave_balance
+    method: GET
+    path: /carbon-api/people/me/leave-balance/
+    description: >
+      The logged-in employee's OWN leave balance per leave type: entitled,
+      carried_forward, opening_balance, used, pending, remaining. Use for
+      "how much leave do I have left", "رصيد اجازاتي".
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_my_loans
+    method: GET
+    path: /carbon-api/people/me/loan/
+    description: >
+      The logged-in employee's OWN loans: id, loan_type, principal,
+      interest_rate, term_months, status. Use for "my loans", "قروضي".
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_my_payslips
+    method: GET
+    path: /carbon-api/people/me/payslips/
+    description: >
+      The logged-in employee's OWN payslip lines from committed/validated
+      payroll runs only: id, line_type (gross | gosi | loan_installment | net),
+      amount, payroll_run. Use for "my payslip", "my salary", "راتبي".
+    requires_auth: true
+    requires_confirmation: false
+
   # ── Leave ──
 
   - name: list_leave_entitlements
@@ -299,29 +354,64 @@ api_catalog:
     requires_confirmation: false
 
 navigation_routes:
+  - name: people_home
+    type: app
+    path: /people
+    description: People & Payroll app home page.
+    label: People & Payroll
+    labels:
+      en: [people, people app, hr, hrms, human resources, workforce, staff, nibras]
+      ar: [الموارد البشرية, شؤون الموظفين, الموظفون, إدارة الموظفين, الناس, نبراس]
+
   - name: employees
+    type: page
     path: /people/employees
     description: Employees list page.
+    label: Employees
+    labels:
+      en: [employees, employee list, staff directory, directory]
+      ar: [الموظفون, قائمة الموظفين, سجل الموظفين]
 
   - name: employee_detail
+    type: entity
     path: /people/employees/{id}
     description: Employee detail page.
 
   - name: payroll
+    type: page
     path: /people/payroll
     description: Payroll runs list page.
+    label: Payroll
+    labels:
+      en: [payroll, payroll runs, payslips, salaries]
+      ar: [الرواتب, كشوف المرتبات, مسيرات الرواتب]
 
   - name: leave
+    type: page
     path: /people/leave
     description: Leave records and entitlements page.
+    label: Leave
+    labels:
+      en: [leave, leave records, entitlements, vacations, time off]
+      ar: [الإجازات, الرخص, العطل, إدارة الإجازات]
 
   - name: loans
+    type: page
     path: /people/loans
     description: Loans list page.
+    label: Loans
+    labels:
+      en: [loans, loan records, advances]
+      ar: [القروض, السلف, السلفيات]
 
   - name: attendance
+    type: page
     path: /people/attendance
     description: Attendance records page.
+    label: Attendance
+    labels:
+      en: [attendance, attendance records, time and attendance]
+      ar: [الحضور, سجل الحضور والانصراف, الحضور والانصراف]
 
 # Tools excluded for this instance — Carbon-domain tools not relevant here.
 excluded_tools:

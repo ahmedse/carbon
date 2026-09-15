@@ -10,6 +10,9 @@ python manage.py migrate --noinput
 echo "==> Bootstrapping platform (groups, apps, CBAC)..."
 python manage.py bootstrap_platform || echo "⚠ Bootstrap had issues — continuing anyway"
 
+echo "==> Ensuring Nibras admin accounts (no-op unless DJANGO_BRAND=nibras)..."
+python manage.py ensure_nibras_admins || echo "⚠ Admin provisioning had issues — continuing anyway"
+
 echo "==> Collecting static files..."
 python manage.py collectstatic --noinput
 

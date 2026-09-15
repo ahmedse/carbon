@@ -927,6 +927,50 @@ async def _synthesize_tool_results(
     return synthesized_result
 
 
+def _navigation_actions(nav) -> list[dict]:
+    """Machine-readable navigate actions for a resolved NavigationResolution."""
+    return [
+        {
+            "type": "navigate",
+            "route": t.route,
+            "label": t.label,
+            "summary": f"Open {t.label}",
+        }
+        for t in nav.targets
+    ]
+
+
+def _navigation_text(nav) -> str:
+    """Propose→confirm copy for a resolved navigation (EN/AR)."""
+    ar = nav.lang == "ar"
+    if nav.action == "navigate":
+        label = nav.targets[0].label
+        return (
+            f"هل تريد فتح **{label}**؟" if ar
+            else f"Would you like to open **{label}**?"
+        )
+    return (
+        "عدة أماكن تطابق طلبك — اختر الوجهة المطلوبة:" if ar
+        else "A few places match — which would you like to open?"
+    )
+
+
+def _navigation_response(nav, *, total_tokens=0, total_llm_calls=0):
+    """Build the propose→confirm AgentResponse for a resolved navigation."""
+    from ai.engine.agent.reasoning import AgentResponse
+    return AgentResponse(
+        text=_navigation_text(nav),
+        sources_cited=[],
+        tools_used=[],
+        confidence=1.0,
+        total_tokens=total_tokens,
+        llm_calls=total_llm_calls,
+        model="",
+        response_type="inferred",
+        actions=_navigation_actions(nav),
+    )
+
+
 class TurnPipelineRunner:
     """Runs the six-witness pipeline for every turn — the only codepath.
 
@@ -1225,6 +1269,7 @@ class TurnPipelineRunner:
                 _intent_resolution = await IntentResolver().resolve(
                     user_message=_resolved_for_intent,
                     api_catalog=(instance_config or {}).get("api_catalog"),
+                    navigation_routes=(instance_config or {}).get("navigation_routes"),
                     conversation_history=conversation_history,
                     instance_id=instance_id,
                     conversation_id=conversation_id,
@@ -1263,6 +1308,50 @@ class TurnPipelineRunner:
             # Thread the zone to the engine runtime so it can surface
             # provenance (metadata["intent_zone"]) to the frontend.
             ledger.intent_zone = _intent_resolution.zone
+
+            # [NAV] LLM-recognised navigation: ground the target *concept*
+            # against the enumerated routes and propose→confirm (RULE_21 — no
+            # auto-jump). The LLM's comprehension drives this; grounding is the
+            # deterministic guard that prevents the "People (HRMS)" hallucination.
+            if _intent_resolution.action == "navigate" and _intent_resolution.navigate_target:
+                from ai.engine.cognition.turn.navigation import ground_navigation
+                _nav = ground_navigation(_intent_resolution.navigate_target, instance_config)
+                if _nav.action in ("navigate", "disambiguate"):
+                    total_latency = (time.monotonic() - t0) * 1000
+                    await self._write_ledger_row(
+                        turn_id, instance_id, conversation_id, host_user_id,
+                        "final", 5,
+                        {
+                            "total_latency_ms": total_latency,
+                            "total_tokens": total_tokens,
+                            "total_llm_calls": total_llm_calls,
+                            "navigation_shortcircuit": _nav.action,
+                            "navigation_source": "llm_intent",
+                            "navigation_targets": [t.route for t in _nav.targets],
+                        },
+                        total_latency, verdict="pass",
+                    )
+                    if self.db is not None:
+                        await self.db.commit()
+
+                    ledger.final_response = _navigation_text(_nav)[:500]
+                    ledger.total_latency_ms = total_latency
+                    ledger.total_tokens = total_tokens
+                    ledger.total_llm_calls = total_llm_calls
+
+                    response = _navigation_response(
+                        _nav, total_tokens=total_tokens, total_llm_calls=total_llm_calls,
+                    )
+                    await _broadcast_run(instance_id, "run.completed", {
+                        "run_id": turn_id,
+                        "total_latency_ms": total_latency,
+                        "total_tokens": total_tokens,
+                        "total_llm_calls": total_llm_calls,
+                        "navigation_shortcircuit": _nav.action,
+                    })
+                    return response, ledger
+                # else: navigation intent but the concept didn't ground to any
+                # declared destination → fall through to the normal pipeline.
 
             # [S1.5-zone] Hard refuse — off_limits (jailbreak/PII/security) is a
             # GATE layered on top of any zone. Mirrors the clarify/disambiguate

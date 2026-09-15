@@ -99,6 +99,7 @@ class IntentResolution:
     zone: str = "platform"            # platform|concept|real_time|general|off_limits
     clarification: str = ""           # question to ask (action == "clarify")
     options: list[str] = field(default_factory=list)  # options (action == "disambiguate")
+    navigate_target: str = ""         # concept to navigate to (action == "navigate")
     raw: dict = field(default_factory=dict)
     input_tokens: int = 0
     output_tokens: int = 0
@@ -129,7 +130,32 @@ def _build_label_set(api_catalog: list[dict]) -> list[dict]:
     return labels
 
 
-def _build_system_prompt(labels: list[dict]) -> str:
+def _build_nav_targets(navigation_routes: list[dict] | None) -> list[dict]:
+    """Closed navigation destination set (app/page homes only, no {id} detail)."""
+    out: list[dict] = []
+    for r in navigation_routes or []:
+        if not isinstance(r, dict):
+            continue
+        if r.get("type") not in ("app", "page"):
+            continue
+        name = r.get("name") or ""
+        path = r.get("path") or ""
+        if not name or not path or "{" in path:
+            continue
+        labels_cfg = r.get("labels") or {}
+        aliases = [
+            str(a) for a in
+            (list(labels_cfg.get("en") or []) + list(labels_cfg.get("ar") or []))
+        ]
+        out.append({
+            "name": name,
+            "label": r.get("label") or name.replace("_", " ").strip(),
+            "aliases": aliases,
+        })
+    return out
+
+
+def _build_system_prompt(labels: list[dict], nav_targets: list[dict] | None = None) -> str:
     lines = [
         "You are the intent recogniser for an AI assistant inside a business "
         "system. Your ONLY job is to decide which read-only data endpoint the "
@@ -206,6 +232,28 @@ def _build_system_prompt(labels: list[dict]) -> str:
         "- Default to \"platform\" when uncertain and an endpoint matches.",
         "- Use \"concept\" (not \"platform\") when the question is about explaining what something "
         "  IS rather than reading the current values in the system.",
+    ]
+    if nav_targets:
+        lines += [
+            "",
+            "NAVIGATION: the user may ask to GO TO / OPEN / VISIT / FLY TO a place "
+            "(\"fly to the people app\", \"take me to payroll\", \"روح لتطبيق الموظفين\"). "
+            "That is a NAVIGATION request, NOT a data lookup. Return "
+            "action = \"navigate\" with `target` = the short name or label of the "
+            "destination they mean. The ONLY valid destinations:",
+        ]
+        for t in nav_targets:
+            alias_txt = ", ".join(t["aliases"][:8]) if t["aliases"] else ""
+            lines.append(
+                f"- {t['name']} — \"{t['label']}\""
+                + (f" (aliases: {alias_txt})" if alias_txt else "")
+            )
+        lines += [
+            "- `target` must be one of these names/labels or a near synonym — "
+            "never an invented URL, route, or a person/entity name.",
+            'For navigation respond: {"action":"navigate","target":"people","confidence":0.9}',
+        ]
+    lines += [
         "",
         "Respond with ONLY valid JSON matching exactly this shape:",
         '{"action":"answer","endpoint":"list_gwp_gases","confidence":0.95,'
@@ -241,7 +289,7 @@ def _parse_json(content: str | None) -> dict | None:
 
 def _to_resolution(data: dict) -> IntentResolution:
     action = str(data.get("action") or "answer").lower()
-    if action not in {"answer", "disambiguate", "clarify"}:
+    if action not in {"answer", "disambiguate", "clarify", "navigate"}:
         action = "answer"
 
     try:
@@ -301,6 +349,8 @@ def _to_resolution(data: dict) -> IntentResolution:
     if candidates and candidates[0].confidence >= 0.7:
         zone = "platform"
 
+    navigate_target = str(data.get("target") or "").strip() if action == "navigate" else ""
+
     return IntentResolution(
         action=action,
         delivery=delivery,
@@ -312,6 +362,7 @@ def _to_resolution(data: dict) -> IntentResolution:
         zone=zone,
         clarification=clarification,
         options=options,
+        navigate_target=navigate_target,
         raw=data,
     )
 
@@ -324,6 +375,7 @@ class IntentResolver:
         *,
         user_message: str,
         api_catalog: list[dict] | None,
+        navigation_routes: list[dict] | None = None,
         conversation_history: list[dict] | None = None,
         instance_id: str = "",
         conversation_id: str = "",
@@ -344,12 +396,13 @@ class IntentResolver:
             return None
 
         labels = _build_label_set(api_catalog)
-        if not labels:
+        nav_targets = _build_nav_targets(navigation_routes)
+        if not labels and not nav_targets:
             return None
 
         from ai.engine.llm.router import route_chat
 
-        system_prompt = _build_system_prompt(labels)
+        system_prompt = _build_system_prompt(labels, nav_targets)
 
         # Fold a short recent-history window in so the classifier can resolve
         # "they/those" against prior turns (the regex anaphora resolver only
@@ -401,6 +454,20 @@ class IntentResolver:
         resolution.input_tokens = int(result.get("input_tokens") or 0)
         resolution.output_tokens = int(result.get("output_tokens") or 0)
         resolution.model_used = str(result.get("model") or "")
+
+        # Navigation is NOT a data lookup — it bypasses the endpoint confidence
+        # ladder entirely. The runner grounds the target *concept* against the
+        # enumerated navigation_routes (an LLM-invented route is never trusted).
+        if resolution.action == "navigate":
+            if resolution.navigate_target:
+                logger.info(
+                    "IntentResolver: action=navigate target=%r conf=%.2f (conv=%s)",
+                    resolution.navigate_target, resolution.confidence,
+                    conversation_id[:8],
+                )
+                return resolution
+            logger.info("IntentResolver: navigate with no target; falling through")
+            return None
 
         # Apply the confidence ladder *after* parsing so a weak/garbage answer
         # is re-routed to the honest path rather than trusted blindly.

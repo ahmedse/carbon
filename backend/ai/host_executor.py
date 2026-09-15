@@ -586,6 +586,90 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
     return {"status_code": 404, "data": {"detail": f"Unknown People endpoint: {resource}"}}
 
 
+def _people_me(user, sub, method) -> dict:
+    """Self-service People reads — strictly scoped to the CALLER's own record.
+
+    Mirrors ``people/self_views.py`` (``IsActiveEmployee``): every query is
+    filtered to ``user.employee_profile`` so the caller can only ever see their
+    own leave, balance, loans, payslips, and profile. Authorization here IS the
+    self-scoping — it deliberately does NOT require ``people:view`` (an ordinary
+    employee holds only ``my:access``). Fail-closed when no active employee is
+    linked, so "my leave" can never fall back to the org-wide population.
+    """
+    from people.models import Employee
+
+    if method not in ("GET", "HEAD", "OPTIONS"):
+        return {"status_code": 405, "data": {"detail": "Self-service endpoints are read-only"}}
+
+    try:
+        profile = user.employee_profile
+    except (Employee.DoesNotExist, AttributeError):
+        profile = None
+    if profile is None or not getattr(profile, "is_active", False):
+        return {
+            "status_code": 403,
+            "data": {"detail": (
+                "No active employee profile is linked to your account, so your "
+                "personal records cannot be resolved."
+            )},
+        }
+
+    from people.self_serializers import EmployeeSummarySerializer
+
+    if not sub:
+        return {"status_code": 200, "data": EmployeeSummarySerializer(profile).data}
+
+    if sub == "leave":
+        from people.models import LeaveRecord
+        from people.self_serializers import LeaveRecordSerializer
+
+        qs = LeaveRecord.objects.filter(employee=profile)
+        results = LeaveRecordSerializer(qs, many=True).data
+        return {"status_code": 200, "data": {"count": len(results), "results": results}}
+
+    if sub == "leave-balance":
+        from django.utils import timezone
+        from mdm.models import ReferenceValue
+        from people.self_serializers import LeaveBalanceSerializer
+        from people.self_views import _compute_balance
+
+        year = timezone.now().year
+        codes = list(
+            ReferenceValue.objects.filter(reference_set__name="leave_type")
+            .order_by("sort_order", "code").values_list("code", flat=True)
+        )
+        balances = []
+        for code in codes:
+            entitled, carried, used, pending, remaining = _compute_balance(profile, code, year)
+            balances.append({
+                "leave_type": code, "entitled": entitled, "carried_forward": carried,
+                "opening_balance": entitled + carried, "used": used, "pending": pending,
+                "remaining": remaining,
+            })
+        return {"status_code": 200, "data": LeaveBalanceSerializer(balances, many=True).data}
+
+    if sub == "loan":
+        from people.models import Loan
+        from people.serializers import LoanSerializer
+
+        qs = Loan.objects.filter(employee=profile)
+        results = LoanSerializer(qs, many=True).data
+        return {"status_code": 200, "data": {"count": len(results), "results": results}}
+
+    if sub == "payslips":
+        from people.models import PayslipLine
+        from people.self_views import COMMITTED_RUN_STATUSES
+        from people import serializers as S
+
+        qs = PayslipLine.objects.filter(
+            employee=profile, payroll_run__status__in=COMMITTED_RUN_STATUSES,
+        )
+        results = S.PayslipLineSerializer(qs, many=True).data
+        return {"status_code": 200, "data": {"count": len(results), "results": results}}
+
+    return {"status_code": 404, "data": {"detail": f"Unknown self-service resource: me/{sub}"}}
+
+
 # ── P3-10 — governed skill invocation seam ──────────────────────────────
 
 # Map the process-definition autonomy levels (6 levels, ``VALID_AUTONOMY``) to
@@ -2082,6 +2166,11 @@ class CarbonHostExecutor(HostAPIExecutor):
         resource, pk, action = _people_route(endpoint)
 
         def _dispatch() -> dict:
+            if resource == "me":
+                # Self-service: the self-scoping IS the authorization (mirrors
+                # IsActiveEmployee). Must NOT require people:view — an ordinary
+                # employee holds only my:access, yet may read their own records.
+                return _people_me(user, pk, method)
             cap = "people:view" if method in ("GET", "HEAD", "OPTIONS") else "people:manage"
             if not _people_can(user, cap):
                 return {"status_code": 403, "data": {"detail": f"{cap} capability required"}}

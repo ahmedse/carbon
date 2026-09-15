@@ -199,6 +199,11 @@ async def _run_chat(
         # is LLM prose, so success/failure claims ride here, not in prose.
         completed_tools = getattr(getattr(ledger, "execution", None), "completed_tools", None) or []
         actions, pending_actions = _extract_tool_actions(completed_tools)
+        # Merge deterministic surface actions emitted directly on the response
+        # (e.g. the bilingual navigation short-circuit) with tool-derived ones.
+        resp_actions = getattr(response, "actions", None) or []
+        if resp_actions:
+            actions = _merge_surface_actions(actions, resp_actions)
         tool_trace = _build_tool_trace(completed_tools)
         external_sources = _build_external_sources(completed_tools)
         code_result = _build_code_result(completed_tools)
@@ -638,11 +643,35 @@ def _build_chat_user_info(host_user_id: str | None) -> dict | None:
         display_name = (
             getattr(user, "display_name", "") or user.get_full_name() or user.username
         )
+        # Domain subject binding — who this user *is* inside the active app.
+        # Today only People links a user to a first-class subject (Employee);
+        # other apps contribute their own binding here as they gain one. This is
+        # what lets the assistant resolve "my/me/I" without interrogating the user.
+        employee = None
+        try:
+            from people.models import Employee
+
+            try:
+                emp = user.employee_profile
+            except (Employee.DoesNotExist, AttributeError):
+                emp = None
+            if emp is not None:
+                employee = {
+                    "id": emp.id,
+                    "employee_no": emp.employee_no,
+                    "full_name": emp.full_name,
+                    "job_title": emp.position.title if emp.position_id else None,
+                    "org_unit": emp.org_unit.name if emp.org_unit_id else None,
+                    "is_active": bool(emp.is_active),
+                }
+        except Exception:  # noqa: BLE001 - subject binding is best-effort
+            employee = None
         return {
             "username": user.username,
             "display_name": display_name,
             "email": user.email or "",
             "roles": roles,
+            "employee": employee,
         }
 
     try:
@@ -769,6 +798,33 @@ def _classify_pending(data: dict, item: dict) -> tuple[str | None, dict | None]:
 
     # 4. Unrecognized — refuse to fabricate a card.
     return None, None
+
+
+def _merge_surface_actions(actions: list[dict], extra: list[dict]) -> list[dict]:
+    """Append response-supplied surface actions, deduped by identity key.
+
+    Navigation short-circuits emit actions directly on the AgentResponse;
+    tool-derived actions are computed from completed_tools. This merges both
+    without double-rendering the same destination.
+    """
+    merged = list(actions or [])
+    seen = {
+        (a.get("type"), a.get("route") or a.get("panel") or a.get("path") or a.get("filename"))
+        for a in merged
+        if isinstance(a, dict)
+    }
+    for a in extra or []:
+        if not isinstance(a, dict):
+            continue
+        key = (
+            a.get("type"),
+            a.get("route") or a.get("panel") or a.get("path") or a.get("filename"),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(a)
+    return merged
 
 
 def _extract_tool_actions(completed_tools: list[dict]) -> tuple[list[dict], list[dict]]:

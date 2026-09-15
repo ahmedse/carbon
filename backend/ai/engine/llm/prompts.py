@@ -71,6 +71,7 @@ async def build_chat_prompt(
         now_utc = datetime.now(timezone.utc)
         current_datetime = now_utc.strftime('%A, %B %d, %Y %H:%M UTC')
 
+    identity_directive = ""
     if user_info:
         username = user_info.get("username", "Unknown")
         display_name = user_info.get("display_name") or username
@@ -79,6 +80,31 @@ async def build_chat_prompt(
         email_part = f" <{email}>" if email else ""
         roles_part = f" — Roles: {', '.join(roles)}" if roles else ""
         user_context = f"**{display_name}**{email_part}{roles_part}"
+        # Domain subject binding: lets the model resolve first-person requests
+        # ("my leave", "اجازاتي") to THIS person and steers it to self-scoped
+        # endpoints instead of the org-wide lists (which would leak others' data).
+        employee = user_info.get("employee") or None
+        if employee:
+            emp_bits = [
+                str(employee[k]) for k in ("full_name", "job_title", "org_unit")
+                if employee.get(k)
+            ]
+            if employee.get("employee_no"):
+                emp_bits.insert(1, f"employee #{employee['employee_no']}")
+            emp_line = ", ".join(emp_bits)
+            user_context = f"{user_context}\n**Employee identity**: {emp_line}"
+            identity_directive = (
+                f"**Identity**: You are assisting {emp_line}. When they say "
+                "\"my\", \"me\", \"mine\", or \"I\" — or the Arabic اجازاتي / "
+                "راتبي / بياناتي / قروضي — it refers to THIS person; never ask "
+                "who they are. For first-person questions about their own leave, "
+                "leave balance, loans, payslips, or profile, call the "
+                "self-service endpoints (get_my_profile, list_my_leave, "
+                "get_my_leave_balance, list_my_loans, list_my_payslips). Do NOT "
+                "use the organisation-wide list endpoints (list_employees, "
+                "list_leave_records, …) for a first-person request — they return "
+                "the whole population and would expose other employees' data.\n"
+            )
     else:
         user_context = (
             "Anonymous (no Pulse API key configured — user identity unknown; "
@@ -168,6 +194,13 @@ async def build_chat_prompt(
     api_catalog_section = _build_api_catalog_section(api_catalog)
     if api_catalog_section:
         result = f"{result}\n\n{api_catalog_section}" if result else api_catalog_section
+
+    # ── Caller identity directive (per-user) — appended so it is always
+    # present regardless of the assembler/fallback path. Lets the model
+    # resolve first-person requests to the logged-in employee and steer to
+    # self-scoped endpoints instead of org-wide lists.
+    if identity_directive:
+        result = f"{result}\n\n{identity_directive}" if result else identity_directive
 
     # ── Live-data grounding directive (derived from the catalog) — bridges the
     # semantic gap between "tell me about the live data here" and the

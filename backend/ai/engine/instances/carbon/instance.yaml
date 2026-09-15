@@ -165,10 +165,57 @@ api_catalog:
     requires_confirmation: false
 
 navigation_routes:
+  - name: carbon_home
+    type: app
+    path: /carbon/chairman
+    description: Carbon footprint app home (chairman dashboard).
+    label: Carbon Dashboard
+    labels:
+      en: [carbon, carbon app, carbon footprint, chairman, chairman dashboard, emissions, footprint]
+      ar: [الكربون, البصمة الكربونية, لوحة الرئيس, الانبعاثات, البصمة]
+
+  - name: carbon_dashboard
+    type: page
+    path: /carbon/dashboard
+    description: Carbon analytics dashboard.
+    label: Carbon Analytics
+    labels:
+      en: [carbon dashboard, analytics, analytics dashboard, emissions dashboard]
+      ar: [لوحة التحليلات, تحليلات الكربون, لوحة الانبعاثات]
+
+  - name: dq_home
+    type: app
+    path: /dq
+    description: Data-quality workspace (rules, results, reference sets).
+    label: Data Quality
+    labels:
+      en: [data quality, dq, dq workspace, data quality rules, quality]
+      ar: [جودة البيانات, جودة, قواعد الجودة]
+
+  - name: catalog_home
+    type: app
+    path: /catalog
+    description: Data catalog (products, tables, metadata, mdm).
+    label: Data Catalog
+    labels:
+      en: [catalog, data catalog, metadata, data products, mdm]
+      ar: [الكتالوج, فهرس البيانات, البيانات الوصفية, منتجات البيانات]
+
+  - name: emissions_home
+    type: app
+    path: /emissions
+    description: Emissions dashboard and reporting.
+    label: Emissions
+    labels:
+      en: [emissions, emissions report, emissions reporting]
+      ar: [الانبعاثات, تقارير الانبعاثات]
+
   - name: dq_rule_detail
+    type: entity
     path: /dq/rules/{id}
     description: Data-quality rule detail page.
 
   - name: dq_rule_results
+    type: entity
     path: /dq/rules/{id}/results
     description: Data-quality rule results page.
