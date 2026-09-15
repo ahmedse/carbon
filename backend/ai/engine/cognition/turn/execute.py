@@ -674,7 +674,11 @@ def _build_tool_result_summary(completed_tools: list[dict]) -> str:
                 f'**{tool_name}**: I couldn\'t resolve "{hint}". Could you clarify what you meant?'
             )
         elif error:
-            tool_summaries.append(f"**{tool_name}**: Error — {error}")
+            # RULE_23 (C-F4b): describe the outcome only — never leak the raw
+            # internal error text or the tool identifier into user-facing chat.
+            tool_summaries.append(
+                "One step couldn't be completed, so nothing was changed."
+            )
         elif isinstance(result_data, dict):
             items = list(result_data.items())[:10]
             list_payload = None

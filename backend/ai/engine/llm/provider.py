@@ -22,7 +22,7 @@ from tenacity import (
     retry,
     retry_if_exception_type,
     stop_after_attempt,
-    wait_exponential,
+    wait_random_exponential,
 )
 
 from ai.engine.core.config import get_settings
@@ -33,8 +33,8 @@ RETRYABLE_ERRORS = (APITimeoutError, RateLimitError, APIConnectionError, Interna
 
 _retry_decorator = retry(
     retry=retry_if_exception_type(RETRYABLE_ERRORS),
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=1, max=10),
+    stop=stop_after_attempt(4),
+    wait=wait_random_exponential(multiplier=1, max=10),
     before_sleep=before_sleep_log(logger, logging.WARNING),
     reraise=True,
 )

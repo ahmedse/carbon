@@ -45,7 +45,14 @@ from django.utils import timezone
 from ai.instance_registry import resolve_instance_id
 from ai import run_machine
 from ai import workflow
-from ai.models.step_journal import STEP_KIND_ACTIVITY, STEP_KIND_WORKFLOW
+from ai.models.step_journal import (
+    STEP_KIND_ACTIVITY,
+    STEP_KIND_WORKFLOW,
+    EVENT_STEP_CANCELLED,
+    EVENT_STEP_PAUSED,
+    EVENT_STEP_RESUMED,
+    EVENT_STEP_SKIPPED,
+)
 from ai.step_journal import (
     StepJournal,
     canonical_step_id,
@@ -83,6 +90,10 @@ STEP_RUNNING = "running"
 STEP_COMPLETED = "completed"
 STEP_FAILED = "failed"
 STEP_SKIPPED = "skipped"
+# W-7 per-step control: a running step held by ``pause_step``. Not an engine
+# status — the host owns this transient state; ``resume_step`` returns the
+# step to ``pending`` so the driver re-runs it.
+STEP_PAUSED = "paused"
 
 # Serialized step runnable-state enum (F-28) — the product-level lock/edit
 # contract the frontend consumes. Derived from ``RunStep.status`` so the UI
@@ -95,6 +106,7 @@ _RUNNABLE_STATE_BY_STATUS = {
     STEP_COMPLETED: RUNNABLE_COMPLETED,
     STEP_SKIPPED: RUNNABLE_COMPLETED,
     STEP_RUNNING: RUNNABLE_IN_FLIGHT,
+    STEP_PAUSED: RUNNABLE_IN_FLIGHT,
     STEP_PENDING: RUNNABLE_PENDING,
     STEP_AWAITING_APPROVAL: RUNNABLE_PENDING,
 }
@@ -3344,6 +3356,169 @@ class PlansService:
         )
         return {"status": "declined", "plan_id": plan_id, "step_id": step.step_index}
 
+    # ── W-7: per-step controls ────────────────────────────────────────────
+
+    def retry_step(self, user, plan_id: str, step_id) -> dict:
+        """Re-queue a single failed step for re-execution (user-initiated).
+
+        Only a ``failed`` step may be retried. The step is reset to
+        ``pending`` with its error cleared and ``retry_count`` incremented —
+        it is NOT executed inline. Re-execution happens when the durable
+        ``run``/``resume`` path re-enters (the fail-closed command boundary +
+        RULE_21 consent still apply there), keeping the exactly-one-effect
+        contract intact. This is a user-initiated single-step retry, distinct
+        from the automatic bounded transient retry (``_retry_activity_step``).
+
+        If the run itself is ``failed`` (or an interrupted ``running``) it is
+        flipped back to ``paused`` — mirroring the run-status transition
+        ``durable_service.resume_run`` performs — so the UI's ``run``/``resume``
+        picks the re-queued step up. Only this step is re-queued; sibling
+        failed steps are left for the resume path's own reconciliation.
+        """
+        run = self._get_owned_run(user, plan_id)
+        step = self._get_owned_step(run, step_id)
+        if step.status != STEP_FAILED:
+            raise PlanStepError(
+                f"Step {step.step_index} cannot be retried "
+                f"(status: {step.status}); only failed steps may be retried."
+            )
+        step.retry_count = (step.retry_count or 0) + 1
+        step.status = STEP_PENDING
+        step.error = None
+        step.last_error = ""
+        step.save(update_fields=[
+            "status", "error", "last_error", "retry_count", "updated_at",
+        ])
+        StepJournal.append(
+            run.id, canonical_step_id(step), EVENT_STEP_RETRIED,
+            payload={"attempt": step.retry_count},
+        )
+        # Mirror ``durable_service.resume_run``'s run-status transition: a
+        # failed / interrupted-running run becomes ``paused`` — the engine's
+        # re-entry state for ``resume_run_id`` — so resume re-executes the
+        # re-queued step. Runs already resumable (paused / approved) are left
+        # untouched.
+        if run.status in (STATUS_FAILED, STATUS_RUNNING):
+            run.status = STATUS_PAUSED
+            run.save(update_fields=["status", "updated_at"])
+        logger.info(
+            "Plan step retried plan=%s step=%s user=%s attempt=%s",
+            plan_id, step.step_index, str(user.pk), step.retry_count,
+        )
+        return {"status": "retried", "plan_id": plan_id, "step_id": step.step_index}
+
+    def skip_step(self, user, plan_id: str, step_id) -> dict:
+        """Skip a single step — mark it satisfied without executing it.
+
+        Allowed from ``pending`` / ``failed`` / ``awaiting_approval`` /
+        ``paused``. A skipped step is treated as *committed* by the workflow
+        driver's ``depends_on`` gating (``workflow.COMMITTED_STATUSES`` holds
+        ``skipped``), so its dependents still unblock. No host effect runs —
+        skipping only transitions step state.
+        """
+        run = self._get_owned_run(user, plan_id)
+        step = self._get_owned_step(run, step_id)
+        if step.status not in (
+            STEP_PENDING, STEP_FAILED, STEP_AWAITING_APPROVAL, STEP_PAUSED
+        ):
+            raise PlanStepError(
+                f"Step {step.step_index} cannot be skipped "
+                f"(status: {step.status})."
+            )
+        prior = step.status
+        step.status = STEP_SKIPPED
+        step.save(update_fields=["status", "updated_at"])
+        StepJournal.append(
+            run.id, canonical_step_id(step), EVENT_STEP_SKIPPED,
+            payload={"from": prior},
+        )
+        logger.info(
+            "Plan step skipped plan=%s step=%s user=%s from=%s",
+            plan_id, step.step_index, str(user.pk), prior,
+        )
+        return {"status": "skipped", "plan_id": plan_id, "step_id": step.step_index}
+
+    def cancel_step(self, user, plan_id: str, step_id) -> dict:
+        """Cancel a single step — abandon it; the run continues.
+
+        Allowed from ``pending`` / ``running`` / ``paused``. The step is marked
+        ``skipped`` (abandoned, not re-run) so dependents still unblock. This
+        is single-step only — cancelling the whole run is ``stop_plan``. No
+        host effect runs; cancel only transitions step state.
+        """
+        run = self._get_owned_run(user, plan_id)
+        step = self._get_owned_step(run, step_id)
+        if step.status not in (STEP_PENDING, STEP_RUNNING, STEP_PAUSED):
+            raise PlanStepError(
+                f"Step {step.step_index} cannot be cancelled "
+                f"(status: {step.status})."
+            )
+        prior = step.status
+        step.status = STEP_SKIPPED
+        step.save(update_fields=["status", "updated_at"])
+        StepJournal.append(
+            run.id, canonical_step_id(step), EVENT_STEP_CANCELLED,
+            payload={"from": prior},
+        )
+        logger.info(
+            "Plan step cancelled plan=%s step=%s user=%s from=%s",
+            plan_id, step.step_index, str(user.pk), prior,
+        )
+        return {
+            "status": "cancelled", "plan_id": plan_id, "step_id": step.step_index,
+        }
+
+    def pause_step(self, user, plan_id: str, step_id) -> dict:
+        """Hold a running step at ``paused`` (user-initiated).
+
+        Only a ``running`` step may be paused. Pausing does not stop any
+        in-flight host effect — the boundary owns effect execution — it marks
+        the step held so the driver does not advance past it until
+        ``resume_step`` returns it to ``pending``.
+        """
+        run = self._get_owned_run(user, plan_id)
+        step = self._get_owned_step(run, step_id)
+        if step.status != STEP_RUNNING:
+            raise PlanStepError(
+                f"Step {step.step_index} cannot be paused "
+                f"(status: {step.status}); only running steps may be paused."
+            )
+        step.status = STEP_PAUSED
+        step.save(update_fields=["status", "updated_at"])
+        StepJournal.append(
+            run.id, canonical_step_id(step), EVENT_STEP_PAUSED
+        )
+        logger.info(
+            "Plan step paused plan=%s step=%s user=%s",
+            plan_id, step.step_index, str(user.pk),
+        )
+        return {"status": "paused", "plan_id": plan_id, "step_id": step.step_index}
+
+    def resume_step(self, user, plan_id: str, step_id) -> dict:
+        """Release a paused step back to ``pending`` (user-initiated).
+
+        Only a ``paused`` step may be resumed. The step returns to ``pending``
+        so the driver re-runs it on the next ``run``/``resume`` — no effect is
+        executed here.
+        """
+        run = self._get_owned_run(user, plan_id)
+        step = self._get_owned_step(run, step_id)
+        if step.status != STEP_PAUSED:
+            raise PlanStepError(
+                f"Step {step.step_index} cannot be resumed "
+                f"(status: {step.status}); only paused steps may be resumed."
+            )
+        step.status = STEP_PENDING
+        step.save(update_fields=["status", "updated_at"])
+        StepJournal.append(
+            run.id, canonical_step_id(step), EVENT_STEP_RESUMED
+        )
+        logger.info(
+            "Plan step resumed plan=%s step=%s user=%s",
+            plan_id, step.step_index, str(user.pk),
+        )
+        return {"status": "resumed", "plan_id": plan_id, "step_id": step.step_index}
+
     # ── Stop (cancel) / compensate / audit ────────────────────────────────
 
     @staticmethod
@@ -3433,6 +3608,60 @@ class PlansService:
     def stop_plan(self, user, plan_id: str) -> dict:
         """Request cancellation of a plan run (idempotent) — ``cancel`` semantics."""
         return self.cancel_plan(user, plan_id)
+
+    def rerun_plan(self, user, plan_id: str) -> dict:
+        """Re-run an already-executed plan from a clean slate (workspace convenience).
+
+        Allowed for a ``completed`` / ``failed`` / ``cancelled`` run. Every step
+        is reset to ``pending`` (outputs, verdicts, tokens and errors cleared)
+        while ``step_index`` order and ``depends_on`` are preserved, and the run
+        is returned to ``approved`` — a runnable status — so the existing
+        ``run_plan_stream`` re-executes it. Nothing executes here (RULE_21): the
+        fail-closed boundary + consent still apply when the caller triggers the
+        run. Distinct from durable ``replay_run`` (which stages to ``replaying``
+        for the admin audit surface).
+        """
+        run = self._get_owned_run(user, plan_id)
+        if run.status not in (STATUS_COMPLETED, STATUS_FAILED, STATUS_CANCELLED):
+            raise PlanNotRunnableError(
+                f"Only an executed plan can be re-run (status: {run.status}). "
+                "Re-run a completed, failed, or cancelled plan."
+            )
+        from ai.models.core import RunStep
+
+        steps = list(
+            RunStep.objects.filter(run_id=run.id).order_by("step_index")
+        )
+        for step in steps:
+            step.status = STEP_PENDING
+            step.confirmation_token = None
+            step.error = None
+            step.last_error = ""
+            step.critic_verdict = None
+            step.draft_text = None
+            step.tool_output_json = None
+            step.latency_ms = None
+            step.retry_count = 0
+            step.save(update_fields=[
+                "status", "confirmation_token", "error", "last_error",
+                "critic_verdict", "draft_text", "tool_output_json",
+                "latency_ms", "retry_count", "updated_at",
+            ])
+        previous_status = run.status
+        run.status = STATUS_APPROVED
+        run.final_response = None
+        run.completed_at = None
+        run.save(update_fields=[
+            "status", "final_response", "completed_at", "updated_at",
+        ])
+        logger.info(
+            "Plan re-run staged id=%s user=%s of=%s steps=%d",
+            plan_id, str(user.pk), previous_status, len(steps),
+        )
+        return {
+            **self.get_plan(user, plan_id),
+            "rerun": {"of": previous_status, "reset_count": len(steps)},
+        }
 
     def compensate_plan(self, user, plan_id: str, note: str = "") -> dict:
         """Reverse prior effects of a plan run (requires its own approval).

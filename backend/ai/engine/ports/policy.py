@@ -31,6 +31,10 @@ class PolicyDecision(TypedDict, total=False):
     decision: Decision
     reason: str
     policy_version: str
+    # True when the decision is a fail-closed REFUSE caused by an infrastructure/
+    # evaluation error (e.g. the store is unreachable) rather than a real policy
+    # outcome. Lets the boundary classify it as an operational failure, not a deny.
+    evaluation_error: bool
 
 
 class PolicyDecisionPoint(Protocol):

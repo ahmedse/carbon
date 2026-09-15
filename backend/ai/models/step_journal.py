@@ -30,6 +30,15 @@ EVENT_STEP_CONSENT_GRANTED = "step_consent_granted"
 EVENT_STEP_CONSENT_DECLINED = "step_consent_declined"
 EVENT_OUTCOME_UNKNOWN = "outcome_unknown"
 
+# W-7 per-step controls — user-initiated workflow-control markers. These are
+# NON-EFFECT events: they re-queue or transition a step's control state but
+# never commit a host effect, so the deterministic replay fold ignores them
+# for effect reconstruction (see ``CONTROL_JOURNAL_EVENTS``).
+EVENT_STEP_SKIPPED = "step_skipped"
+EVENT_STEP_CANCELLED = "step_cancelled"
+EVENT_STEP_PAUSED = "step_paused"
+EVENT_STEP_RESUMED = "step_resumed"
+
 STEP_JOURNAL_EVENTS: frozenset[str] = frozenset(
     {
         EVENT_STEP_QUEUED,
@@ -41,6 +50,23 @@ STEP_JOURNAL_EVENTS: frozenset[str] = frozenset(
         EVENT_STEP_CONSENT_GRANTED,
         EVENT_STEP_CONSENT_DECLINED,
         EVENT_OUTCOME_UNKNOWN,
+        EVENT_STEP_SKIPPED,
+        EVENT_STEP_CANCELLED,
+        EVENT_STEP_PAUSED,
+        EVENT_STEP_RESUMED,
+    }
+)
+
+# W-7 control markers: non-effect events the replay fold treats as no-ops for
+# effect reconstruction (they never commit or re-run a host effect). ``retry``
+# is deliberately excluded — it is already a first-class fold transition
+# (increments ``retry_count`` and re-queues the step to ``pending``).
+CONTROL_JOURNAL_EVENTS: frozenset[str] = frozenset(
+    {
+        EVENT_STEP_SKIPPED,
+        EVENT_STEP_CANCELLED,
+        EVENT_STEP_PAUSED,
+        EVENT_STEP_RESUMED,
     }
 )
 

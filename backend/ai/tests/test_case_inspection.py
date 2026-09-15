@@ -257,7 +257,7 @@ def test_inspect_case_unknown_run():
     assert result.get("run_id") == "does-not-exist"
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_registry_get_active_run():
     user = User.objects.create_user(username="registry", password="secret123")
     _seed_run(user, run_id="R-118")

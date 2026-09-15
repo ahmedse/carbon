@@ -18,6 +18,7 @@ from django.db.models import Max
 
 from ai import run_machine
 from ai.models.step_journal import (
+    CONTROL_JOURNAL_EVENTS,
     EVENT_OUTCOME_UNKNOWN,
     EVENT_STEP_COMPLETED,
     EVENT_STEP_CONSENT_DECLINED,
@@ -132,6 +133,13 @@ class StepJournal:
         last_event = None
 
         for entry in entries:
+            if entry.event_type in CONTROL_JOURNAL_EVENTS:
+                # W-7 workflow-control markers (skip/cancel/pause/resume) are
+                # non-effect events: they never commit or re-run a host effect,
+                # so they are transparent to the exactly-one-effect fold. Skip
+                # them without touching ``last_event`` so ``committed`` still
+                # reflects the last real effect outcome.
+                continue
             last_event = entry.event_type
             if entry.event_type == EVENT_STEP_RETRIED:
                 retry_count += 1

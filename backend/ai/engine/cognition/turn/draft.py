@@ -10,6 +10,7 @@ import logging
 import re
 import time
 
+from ai.engine.cognition.turn.clarify import evaluate_clarification
 from ai.engine.cognition.turn.witnesses import DraftResult
 from ai.engine.llm.router import route_chat
 
@@ -41,6 +42,10 @@ class DraftWitness:
         # Phase 22-A — per-user default chat temperature (0.0-2.0); None
         # keeps this witness's built-in default (0.3).
         temperature: float | None = None,
+        # P4-06 — deterministic clarification gate. When provided, the policy
+        # runs FIRST (after the budget check, before any LLM call) and may
+        # short-circuit the draft with a clarifying question.
+        clarify_inputs: dict | None = None,
     ) -> DraftResult:
         """Single LLM call to plan and draft a response.
 
@@ -49,6 +54,15 @@ class DraftWitness:
 
         ``tools`` — optional OpenAI tool definitions; when provided the
         planner can emit tool_calls for S5 to execute (e.g. create_dq_rule).
+
+        ``clarify_inputs`` — optional dict that MAY contain any of
+        ``object_candidates`` (int), ``evidence_available`` (bool),
+        ``evidence_required`` (bool), ``authority_granted`` (frozenset/set),
+        and ``authority_required`` (str | None). When provided, the
+        deterministic clarification policy runs FIRST (after the budget
+        check, before any LLM call) and short-circuits the draft with a
+        clarifying question if needed — the LLM is never invoked in that case.
+        Missing keys default to a "clear" value.
         """
         # P3.4: Check budget before LLM call — graceful fallback if exceeded
         if budget_tracker is not None and budget_tracker.exceeded:
@@ -65,6 +79,33 @@ class DraftWitness:
                 model_used="budget_fallback",
                 tokens_used=0,
             )
+
+        # P4-06: deterministic clarification gate. Runs before any LLM call
+        # and short-circuits when the policy says to ask instead of guess.
+        if clarify_inputs is not None:
+            decision = evaluate_clarification(
+                object_candidates=clarify_inputs.get("object_candidates", 1),
+                evidence_available=clarify_inputs.get("evidence_available", True),
+                evidence_required=clarify_inputs.get("evidence_required", False),
+                authority_granted=clarify_inputs.get(
+                    "authority_granted", frozenset({"*"})
+                ),
+                authority_required=clarify_inputs.get("authority_required", None),
+            )
+            if decision.needs_clarification:
+                logger.warning(
+                    "DraftWitness: clarification required conv=%s reason=%s",
+                    conversation_id[:8],
+                    decision.reason,
+                )
+                return DraftResult(
+                    text=decision.question,
+                    tool_calls=[],
+                    claimed_citations=[],
+                    confidence=0.3,
+                    model_used="clarification_policy",
+                    tokens_used=0,
+                )
 
         messages = [{"role": "system", "content": system_prompt}]
         if conversation_history:

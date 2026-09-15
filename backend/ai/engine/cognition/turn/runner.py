@@ -512,6 +512,88 @@ def _render_tool_tables(usable: list[dict]) -> str:
     return "\n\n".join(parts)
 
 
+def _wants_visual(user_message: str) -> bool:
+    """True when the user explicitly asked for a chart / graph / visual."""
+    if not user_message:
+        return False
+    import re
+    return bool(re.search(
+        r"\b(chart|charts|graph|graphs|visual|visuals|visualise|visualize|"
+        r"plot|plots|diagram|diagrams|pie|bar\s*chart|trend|trends|infographic|figure|figures)\b",
+        user_message, re.IGNORECASE))
+
+
+def _render_tool_charts(usable: list[dict]) -> str:
+    """Deterministic Mermaid charts from structured tool results.
+
+    Pie for the scope split (parts of a whole); a bar chart for per-branch
+    magnitudes. Mermaid line rules are strict — the fence and every directive
+    each sit on their own line. Returns '' when no chartable structure exists.
+    """
+    import json as _json
+
+    _SCOPE_NAMES = {1: "Scope 1", 2: "Scope 2", 3: "Scope 3"}
+    have_pie = False
+    have_bar = False
+    charts: list[str] = []
+    for tr in usable:
+        result = tr.get("result")
+        if result is None:
+            continue
+        data = result
+        if isinstance(result, str):
+            try:
+                data = _json.loads(result)
+            except (TypeError, ValueError):
+                continue
+        if isinstance(data, dict) and "status_code" in data and "data" in data:
+            data = data["data"]
+        if not isinstance(data, dict):
+            continue
+
+        by_scope = data.get("by_scope") or {}
+        if isinstance(by_scope, dict) and by_scope and not have_pie:
+            slices = []
+            for k, v in by_scope.items():
+                if isinstance(v, dict):
+                    co2e = float(v.get("total_co2e_kg") or 0)
+                    if co2e > 0:
+                        try:
+                            name = _SCOPE_NAMES.get(int(k), f"Scope {k}")
+                        except (TypeError, ValueError):
+                            name = f"Scope {k}"
+                        slices.append(f'    "{name}" : {round(co2e, 1)}')
+            if slices:
+                charts.append(
+                    "```mermaid\npie showData title Emissions by scope (CO2e kg)\n"
+                    + "\n".join(slices) + "\n```"
+                )
+                have_pie = True
+
+        by_module = data.get("by_module") or []
+        if isinstance(by_module, list) and by_module and not have_bar:
+            labels: list[str] = []
+            values: list[float] = []
+            for m in by_module[:12]:
+                if isinstance(m, dict):
+                    name = str(m.get("module_name") or m.get("module") or "-")
+                    name = name.replace('"', "'").replace("—", "-").strip()[:20]
+                    labels.append(f'"{name}"')
+                    values.append(round(float(m.get("total_co2e_kg") or 0), 1))
+            if labels and any(values):
+                ymax = int(max(values) * 1.1) or 1
+                charts.append(
+                    "```mermaid\nxychart-beta\n"
+                    '    title "Emissions by branch (CO2e kg)"\n'
+                    f"    x-axis [{', '.join(labels)}]\n"
+                    f'    y-axis "CO2e (kg)" 0 --> {ymax}\n'
+                    f"    bar [{', '.join(str(v) for v in values)}]\n```"
+                )
+                have_bar = True
+
+    return "\n\n".join(charts)
+
+
 def _envelope_to_markdown(envelope) -> str:
     """Build a clean markdown fallback from a typed envelope.
 
@@ -674,6 +756,10 @@ async def _synthesize_tool_results(
     # own headline + prose + clean GFM tables — never the model's ad-hoc tables.
     if envelope is not None and (envelope.tables or envelope.charts):
         _env_text = _envelope_to_markdown(envelope)
+        if _wants_visual(user_message) and "```mermaid" not in _env_text:
+            _charts = _render_tool_charts(usable)
+            if _charts:
+                _env_text = f"{_env_text}\n\n{_charts}"
         await _stream_final_text(
             _env_text,
             stream_callback=stream_callback,
@@ -703,6 +789,19 @@ async def _synthesize_tool_results(
             detect_no_data_contradiction(stripped, usable)
         )
         if not draft_contradicts_data:
+            # Even when the model's own draft is kept, honour an explicit
+            # request for visuals by appending deterministic charts it omitted.
+            if _wants_visual(user_message) and "```mermaid" not in stripped:
+                _charts = _render_tool_charts(usable)
+                if _charts:
+                    delta = "\n\n" + _charts
+                    if stream_callback:
+                        try:
+                            await stream_callback(delta)
+                        except Exception:
+                            pass
+                    return {"text": draft_text.rstrip() + delta,
+                            "tokens": 0, "model": model or ""}
             return None
 
     from ai.engine.llm.router import route_chat
@@ -749,6 +848,7 @@ async def _synthesize_tool_results(
         )
 
     pre_tables = _render_tool_tables(usable)
+    pre_charts = _render_tool_charts(usable) if _wants_visual(user_message) else ""
 
     try:
         result = await route_chat(
@@ -777,6 +877,8 @@ async def _synthesize_tool_results(
     # Inject deterministically-rendered tables after the LLM prose.
     if pre_tables:
         synthesized = synthesized + "\n\n" + pre_tables
+    if pre_charts and "```mermaid" not in synthesized:
+        synthesized = synthesized + "\n\n" + pre_charts
 
     # Stream the synthesized text so the UI shows progress.
     await _stream_final_text(
@@ -1763,7 +1865,13 @@ class TurnPipelineRunner:
                 "never as a fallback when you are unsure.\n"
                 "- When the user asks what you can do, use the capability-list "
                 "tool so the app can attach the matching page links as small "
-                "buttons under your reply."
+                "buttons under your reply.\n"
+                "- CLARIFICATION POLICY: if the object the user refers to is "
+                "ambiguous (zero or multiple matches), if required evidence "
+                "or source data is missing, or if your authority to perform "
+                "the requested action is unclear, ASK one clarifying question "
+                "instead of guessing. Never assume or guess authority — when "
+                "in doubt about permission, ask."
             )
 
         # [GAP-3] Resolve anaphora: substitute pronouns with active entity

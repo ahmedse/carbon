@@ -382,6 +382,12 @@ class CommandBoundary:
             decision = pdp_result.get("decision", Decision.REFUSE)
             decision_reason = pdp_result.get("reason", "")
             policy_version = pdp_result.get("policy_version")
+            # C-F4a: an authorization *evaluation error* is an operational failure,
+            # not a policy refusal — classify it as `failed` (still fail-closed: no
+            # effect runs) so it is distinguishable from a default-deny in the
+            # ledger, metrics, and user-facing copy.
+            if pdp_result.get("evaluation_error"):
+                return failed("authorization check could not be completed")
             if decision == Decision.REFUSE:
                 return refused(decision_reason or "pdp: refused (default deny)")
             if decision == Decision.DEFER:
@@ -572,12 +578,16 @@ class CommandBoundary:
                 budget=command.budget,
                 time=self._clock.utcnow() if self._clock else None,
             )
-        except Exception:  # noqa: BLE001 — evaluation error → refuse (P2-07)
+        except Exception:  # noqa: BLE001 — evaluation error → fail closed (P2-07)
+            # C-F4a: an infra/evaluation error is an operational FAILURE, not a
+            # policy denial. Stay fail-closed (REFUSE) but flag it so the boundary
+            # classifies the outcome as `failed`, not `refused`, and ops can alert.
             logger.exception("pdp: evaluation error")
             return {
                 "decision": Decision.REFUSE,
                 "reason": "pdp: evaluation error (fail-closed)",
                 "policy_version": None,
+                "evaluation_error": True,
             }
 
     async def _check_eligibility(self, command: Command) -> bool:

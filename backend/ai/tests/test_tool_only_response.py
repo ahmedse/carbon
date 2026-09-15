@@ -25,14 +25,16 @@ class TestToolResultSummary:
         assert "Retrieved 2 row(s)" in summary
         assert "Here's what I found" in summary
 
-    def test_tool_with_error_is_reported(self):
+    def test_tool_with_error_is_outcome_only(self):
+        # C-F4b / RULE_23: a failed tool must NOT leak the internal tool id or the
+        # raw error text into user-facing chat — describe the outcome only.
         summary = _build_tool_result_summary([
             {"tool_name": "get_chairman_overview", "result": {},
              "error": "Calculation summary failed"},
         ])
-        assert "get_chairman_overview" in summary
-        assert "Error" in summary
-        assert "Calculation summary failed" in summary
+        assert "get_chairman_overview" not in summary
+        assert "Calculation summary failed" not in summary
+        assert "nothing was changed" in summary
 
     def test_tool_with_dict_items_brief_summary(self):
         summary = _build_tool_result_summary([

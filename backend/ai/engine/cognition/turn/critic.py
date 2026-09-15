@@ -1,6 +1,11 @@
-"""S4 — Critic witness (rules-tier safety + LLM-tier reviewer).
+"""S4 — Critic witness (three roles): hard host gates (boundary) · deterministic
+quality checks (grounding, tenancy, malformed plan, invalid refs) · LLM critique
+(plausibility + alternatives, advisory — never a security control).
 
-Rules-tier (always runs):
+Security boundary: authorization + tenancy hard vetoes are enforced by the
+command boundary + PDP, not by this witness's LLM tier.
+
+Rules-tier (deterministic quality checks / hard gates, always runs):
 1. Citation grounding: if retrieval found entities but the draft cites none → flag
 2. Tenancy: tool calls don't carry host_user_id yet → always pass
 3. Mutation check: any tool call with non-GET method and no confirmation →
@@ -31,20 +36,21 @@ _KNOWLEDGE_GAP_RE = re.compile(
 
 # ── LLM critic prompt ────────────────────────────────────────────────────────
 
-CRITIC_SYSTEM_PROMPT = """You are a safety and accuracy reviewer for an AI copilot. Review this draft response against the provided knowledge context.
+CRITIC_SYSTEM_PROMPT = """You are a quality and plausibility reviewer for an AI copilot's draft response. Review this draft response against the provided knowledge context.
 
 RULES:
 1. Fix ungrounded claims — anything not supported by the knowledge context.
-2. Detect cross-tenant data leaks — data from one user/instance visible to another.
+2. Flag data that appears to come from a different user or instance than the requester (a consistency flag; actual tenancy enforcement is deterministic, not this review).
 3. Fix incorrect API references — wrong endpoint names, wrong parameters.
-4. If the draft is clean, return "pass". If minor fixes needed, return "rewrite" with corrected text. If the draft is dangerous or completely wrong, return "veto".
+4. Suggest a more plausible or more complete alternative when the draft is weak, vague, or omits an important consideration.
+5. If the draft is clean, return "pass". If minor fixes needed, return "rewrite" with corrected text. If the draft is unsupported, incoherent, or harmful in plain content terms, return "veto". State-changing actions are vetoed separately by deterministic gates, not by this review.
 
 Return ONLY valid JSON — no markdown, no code fences, no explanation:
 {"verdict": "pass"|"rewrite"|"veto", "rewritten_text": "...", "veto_reason": "..."}"""
 
 
 class CriticWitness:
-    """Rules-tier + optional LLM-tier safety review."""
+    """Rules-tier deterministic quality checks + optional LLM-tier plausibility review (advisory, never an enforcement control)."""
 
     async def review(
         self,
@@ -59,7 +65,7 @@ class CriticWitness:
         user_message: str = "",
         salience: "SalienceResult | None" = None,
     ) -> CriticVerdict:
-        """Review a draft against retrieval evidence and safety rules.
+        """Review a draft against retrieval evidence and quality rules and deterministic hard gates.
 
         Args:
             draft: S3 draft result with text + tool calls
@@ -195,7 +201,7 @@ class CriticWitness:
         conversation_id: str,
         user_message: str,
     ) -> CriticVerdict:
-        """Run LLM-tier review: send draft + flags + knowledge to LLM."""
+        """Run LLM-tier plausibility/quality review (advisory)."""
         # Build knowledge context
         knowledge_text = ""
         for chunk in retrieval.knowledge_chunks[:10]:

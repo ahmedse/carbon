@@ -16,6 +16,11 @@ below is relative to ``/carbon-api/ai/plans/``:
     POST   /{id}/fork/              fork into a new reviewable plan
     POST   /{id}/steps/confirm/     confirm a paused consent step
     POST   /{id}/steps/decline/     decline a paused consent step
+    POST   /{id}/steps/{step}/retry/   re-queue a failed step (W-7)
+    POST   /{id}/steps/{step}/skip/    skip a step (W-7)
+    POST   /{id}/steps/{step}/cancel/  cancel a step (W-7)
+    POST   /{id}/steps/{step}/pause/   pause a running step (W-7)
+    POST   /{id}/steps/{step}/resume/  resume a paused step (W-7)
     POST   /{id}/stop/              cancel a run
     POST   /{id}/compensate/        reverse prior effects (own approval)
     GET    /{id}/ledger/            audit ledger
@@ -107,6 +112,34 @@ urlpatterns = [
         PlanViewSet.as_view({"post": "decline_step"}),
         name="ai-plan-step-decline",
     ),
+    # W-7 per-step controls MUST precede the catch-all ``steps/<step_id>/``
+    # PATCH route below (the extra path segment already disambiguates them,
+    # but explicit ordering keeps the routing intent unambiguous).
+    path(
+        "<str:pk>/steps/<str:step_id>/retry/",
+        PlanViewSet.as_view({"post": "step_retry"}),
+        name="ai-plan-step-retry",
+    ),
+    path(
+        "<str:pk>/steps/<str:step_id>/skip/",
+        PlanViewSet.as_view({"post": "step_skip"}),
+        name="ai-plan-step-skip",
+    ),
+    path(
+        "<str:pk>/steps/<str:step_id>/cancel/",
+        PlanViewSet.as_view({"post": "step_cancel"}),
+        name="ai-plan-step-cancel",
+    ),
+    path(
+        "<str:pk>/steps/<str:step_id>/pause/",
+        PlanViewSet.as_view({"post": "step_pause"}),
+        name="ai-plan-step-pause",
+    ),
+    path(
+        "<str:pk>/steps/<str:step_id>/resume/",
+        PlanViewSet.as_view({"post": "step_resume"}),
+        name="ai-plan-step-resume",
+    ),
     path(
         "<str:pk>/steps/<str:step_id>/",
         PlanViewSet.as_view({"patch": "edit_step"}),
@@ -126,6 +159,11 @@ urlpatterns = [
         "<str:pk>/fork/",
         PlanViewSet.as_view({"post": "fork"}),
         name="ai-plan-fork",
+    ),
+    path(
+        "<str:pk>/rerun/",
+        PlanViewSet.as_view({"post": "rerun"}),
+        name="ai-plan-rerun",
     ),
     path(
         "<str:pk>/stop/",

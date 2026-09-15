@@ -390,6 +390,20 @@ class PlanViewSet(viewsets.GenericViewSet):
             )
         return Response(result, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=["post"], url_path="rerun", url_name="rerun-plan")
+    def rerun(self, request, pk=None):
+        """Re-run an executed plan from a clean slate (resets steps → approved)."""
+        try:
+            return Response(self.service.rerun_plan(request.user, pk))
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+        except (PlanNotRunnableError, ValueError) as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_409_CONFLICT
+            )
+
     # ── W3-D: plan templates (Gap #3) ─────────────────────────────────────
 
     def list_templates(self, request):
@@ -584,6 +598,88 @@ class PlanViewSet(viewsets.GenericViewSet):
                 {"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST
             )
         return Response(result)
+
+    # ── W-7: per-step controls ────────────────────────────────────────────
+
+    def _run_step_control(self, control, request, pk, step_id):
+        """Shared dispatch + error mapping for the W-7 per-step controls.
+
+        ``control`` is the bound ``PlansService`` method; ``step_id`` comes
+        from the URL. Ownership failures → 404; a state-guard / consent
+        violation (the step is not in a state the control permits, or does not
+        exist) → 409 Conflict — the request is well-formed but conflicts with
+        the step's current state.
+        """
+        try:
+            return Response(control(request.user, pk, step_id))
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+        except (PlanNotRunnableError, PlanStepError) as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_409_CONFLICT
+            )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"steps/(?P<step_id>[^/.]+)/retry",
+        url_name="retry-plan-step",
+    )
+    def step_retry(self, request, pk=None, step_id=None):
+        """Re-queue a single failed step for re-execution (user-initiated)."""
+        return self._run_step_control(
+            self.service.retry_step, request, pk, step_id
+        )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"steps/(?P<step_id>[^/.]+)/skip",
+        url_name="skip-plan-step",
+    )
+    def step_skip(self, request, pk=None, step_id=None):
+        """Skip a single step — mark it satisfied without executing it."""
+        return self._run_step_control(
+            self.service.skip_step, request, pk, step_id
+        )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"steps/(?P<step_id>[^/.]+)/cancel",
+        url_name="cancel-plan-step",
+    )
+    def step_cancel(self, request, pk=None, step_id=None):
+        """Cancel a single step — abandon it; the run continues."""
+        return self._run_step_control(
+            self.service.cancel_step, request, pk, step_id
+        )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"steps/(?P<step_id>[^/.]+)/pause",
+        url_name="pause-plan-step",
+    )
+    def step_pause(self, request, pk=None, step_id=None):
+        """Hold a running step at ``paused`` (user-initiated)."""
+        return self._run_step_control(
+            self.service.pause_step, request, pk, step_id
+        )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"steps/(?P<step_id>[^/.]+)/resume",
+        url_name="resume-plan-step",
+    )
+    def step_resume(self, request, pk=None, step_id=None):
+        """Release a paused step back to ``pending`` (user-initiated)."""
+        return self._run_step_control(
+            self.service.resume_step, request, pk, step_id
+        )
 
     # ── Stop / audit ──────────────────────────────────────────────────────
 
