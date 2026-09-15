@@ -112,7 +112,7 @@ backend/ai/                      ← Carbon host (durable state, guards, API)
         intent.py     (S1.5)     ← LLM intent classifier + confidence ladder
         retrieve.py   (S2)       ← knowledge + memory context pack
         draft.py      (S3)       ← LLM tool-use draft
-        critic.py     (S4)       ← grounding + tenancy + safety + honest-uncertainty
+        critic.py     (S4)       ← deterministic hard gates + grounding/tenancy checks + LLM plausibility critique + honest-uncertainty
         execute.py    (S5)       ← parallel tool dispatch + streaming
         runner.py     (S6)       ← orchestrates S1..S6 + ledger + synthesis
       plan/loop.py               ← ReAct multi-step loop (phases, consent, replan, resume)
@@ -147,7 +147,7 @@ Cost is logged per call; a per-instance daily USD budget is enforced.
 | 2 Memory | **Strong, half-ephemeral** | long-term/episodic excellent; **short-term + working are in-process dicts (lost on restart, not shared across workers)** |
 | 3 Reasoning | **Genuinely strong** | ReAct loop: topological phases, parallel steps, consent pauses, bounded replans, resume |
 | 4 Action | **Strong & modern** | plugin ABC, `requires_confirmation`, truthful capability manifest; MCP **deferred to Phase 7** (P1-14) |
-| 5 Grounding | **Best-in-class (fail-closed)** | S4 critic: grounding + tenancy + safety + `knowledge_gap` → escalate or honest uncertainty; phantom-success guards; unconfirmed mutation → hard veto (P1-02); verified by 60-attempt red-team suite (P1-17) |
+| 5 Grounding | **Best-in-class (fail-closed)** | S4 critic: deterministic grounding/tenancy checks + LLM plausibility critique + `knowledge_gap` → escalate or honest uncertainty; phantom-success guards; unconfirmed mutation → hard veto (P1-02); verified by 60-attempt red-team suite (P1-17) |
 | 6 Learning | **Gate fail-closed, reuse COLD** | admission gate hardened (4 critics fail-closed + gate-only promotion, P1-04/05/06); planner reads `list_promoted`; **no automatic promotion→reuse arrow yet** |
 | 7 Metacognition | **Partial** | knowledge-gap critic + capability manifest real; no confidence surfaced to user |
 | 8 Proactivity | **Built but NOT DELIVERED** | triggers/briefings/drift real, but `proactive/delivery.py` pushes to an **in-process WS registry, not the Django/React UI** |
