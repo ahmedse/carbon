@@ -693,3 +693,132 @@ async def test_react_loop_respects_node_retry_policy():
     assert calls["n"] == 3
     assert result.step_results[0].error is None
     assert result.succeeded is True
+
+
+def test_evaluate_wait_immediate_duration_until():
+    from ai.engine.workflow.wait import evaluate_wait, wait_duration_ms
+
+    empty = WorkflowNode(id="w0", node_type="wait")
+    d0 = evaluate_wait(empty, {})
+    assert d0.satisfied and d0.reason == "immediate"
+
+    timed = WorkflowNode(id="w1", node_type="wait", meta={"wait_ms": 200})
+    assert wait_duration_ms(timed) == 200
+    pending = evaluate_wait(timed, {}, elapsed_ms=0)
+    assert not pending.satisfied and pending.sleep_ms == 200
+    done = evaluate_wait(timed, {}, elapsed_ms=200)
+    assert done.satisfied and done.reason == "duration"
+
+    until = WorkflowNode(
+        id="w2", node_type="wait", meta={"until": "status == 'ready'"},
+    )
+    assert not evaluate_wait(until, {"status": "wait"}).satisfied
+    early = evaluate_wait(until, {"status": "ready"})
+    assert early.satisfied and early.reason == "until"
+
+
+def test_advance_blocks_on_unsatisfied_wait():
+    from ai.engine.workflow.driver import advance_and_ready_tasks
+
+    g = WorkflowGraph(
+        nodes=[
+            WorkflowNode(id="t0", node_type="task", intent="a", meta={"step_id": 0}),
+            WorkflowNode(id="w", node_type="wait", meta={"wait_ms": 5000}),
+            WorkflowNode(id="t1", node_type="task", intent="b", meta={"step_id": 1}),
+        ],
+        edges=[
+            WorkflowEdge(source="t0", target="w"),
+            WorkflowEdge(source="w", target="t1"),
+        ],
+        entry="t0",
+    )
+    ready, _, gateways, _ = advance_and_ready_tasks(g, completed_step_ids=[0])
+    assert ready == []
+    assert "w" not in gateways
+
+    ready2, _, gateways2, _ = advance_and_ready_tasks(
+        g, completed_step_ids=[0], completed_gateways={"w"},
+    )
+    assert ready2 == [1]
+    assert "w" in gateways2
+
+
+@pytest.mark.asyncio
+async def test_react_loop_wait_timer_then_continues():
+    """Live ReActLoop: wait node sleeps then unlocks the next task."""
+    from unittest.mock import AsyncMock, patch
+
+    from ai.engine.cognition.plan.loop import ReActLoop, StepResult
+    from ai.engine.cognition.plan.planner import Plan, PlanStep
+    from ai.engine.cognition.turn.witnesses import CriticVerdict, DraftResult
+
+    g = WorkflowGraph(
+        nodes=[
+            WorkflowNode(id="t0", node_type="task", intent="before", meta={"step_id": 0}),
+            WorkflowNode(id="w", node_type="wait", meta={"wait_ms": 50}),
+            WorkflowNode(id="t1", node_type="task", intent="after", meta={"step_id": 1}),
+        ],
+        edges=[
+            WorkflowEdge(source="t0", target="w"),
+            WorkflowEdge(source="w", target="t1"),
+        ],
+        entry="t0",
+    )
+    plan = Plan(
+        pattern="custom",
+        steps=[
+            PlanStep(step_id=0, intent="before", tool_name=None, tool_args={},
+                     is_mutation=False, depends_on=[], agent_role="orchestrator"),
+            PlanStep(step_id=1, intent="after", tool_name=None, tool_args={},
+                     is_mutation=False, depends_on=[0], agent_role="orchestrator"),
+        ],
+        phases=[],
+    )
+    executed: list[int] = []
+
+    class _Exec:
+        async def execute(self, **kwargs):
+            step = kwargs.get("step")
+            executed.append(step.step_id)
+            return MagicMock(completed_tools=[])
+
+    class _Draft:
+        async def draft(self, **kwargs):
+            return DraftResult(text="ok", tool_calls=[])
+
+    class _Critic:
+        async def review(self, **kwargs):
+            return CriticVerdict(verdict="pass", flags=[])
+
+    loop = ReActLoop(
+        llm_client=None,
+        draft_witness=_Draft(),
+        critic_witness=_Critic(),
+        executor=_Exec(),
+    )
+    waits: list[str] = []
+
+    async def _on_wait(node_id, decision, duration_ms=0, until=None):
+        waits.append(f"{node_id}:{decision.reason}:{duration_ms}")
+
+    with patch(
+        "ai.engine.cognition.plan.loop._get_broadcast",
+        return_value=AsyncMock(),
+    ), patch(
+        "ai.engine.agent.tools.get_tool_definitions",
+        return_value=[],
+    ):
+        loop._should_inject_followup = lambda *a, **k: False  # type: ignore
+        result = await loop.run(
+            plan=plan,
+            instance_id="test",
+            conversation_id="c1",
+            user_message="go",
+            system_prompt="sys",
+            workflow_graph=g,
+            on_wait_fired=_on_wait,
+        )
+
+    assert executed == [0, 1]
+    assert any(w.startswith("w:duration:50") for w in waits)
+    assert result.succeeded is True
