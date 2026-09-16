@@ -13,7 +13,9 @@ export function stageForStatus(status, phase) {
   // Live execution always on Run.
   if (phase === 'working' || phase === 'paused') return 'run';
   // Terminal success → Done / Output (picker open or post-refresh).
-  if (status === 'completed') return 'done';
+  if (status === 'completed' || status === 'completed_with_gaps') return 'done';
+  // Consent still open → stay on Run even if the row lagged to completed.
+  if (status === 'paused') return 'run';
   // In-session settle banners before status catches up.
   if (phase && SETTLING_PHASES.has(phase)) return 'run';
   if (!status) return 'idle';

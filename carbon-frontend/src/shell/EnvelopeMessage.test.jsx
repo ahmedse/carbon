@@ -106,6 +106,32 @@ describe('EnvelopeMessage — full envelope', () => {
     expect(within(chart).getByTestId('chartjs')).toHaveAttribute('data-type', 'bar');
   });
 
+  it('omits empty-series charts (no title + No data shell)', () => {
+    render(
+      <EnvelopeMessage
+        envelope={{
+          headline: 'We have 530 active employees.',
+          prose: ['Headcount is grounded on is_active=True.'],
+          charts: [
+            { chart_type: 'bar', title: 'Active Employee Count', series: [] },
+            {
+              chart_type: 'bar',
+              title: 'Still empty',
+              series: [{ name: 'Employees', data: [] }],
+            },
+          ],
+          sources: [{ tool: 'aggregate_entity', rows_returned: 1, truncated: false }],
+        }}
+        fallbackContent=""
+      />,
+    );
+
+    expect(screen.getByText(/530 active employees/)).toBeInTheDocument();
+    expect(screen.queryByTestId('envelope-chart')).not.toBeInTheDocument();
+    expect(screen.queryByText('Active Employee Count')).not.toBeInTheDocument();
+    expect(screen.queryByText('No data')).not.toBeInTheDocument();
+  });
+
   it('renders pie and line chart types without crashing', () => {
     render(
       <EnvelopeMessage

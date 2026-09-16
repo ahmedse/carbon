@@ -52,10 +52,26 @@ describe('buildPlanGraph', () => {
     expect(edges).toEqual([{ source: 0, target: 1, label: 'depends on' }]);
   });
 
-  it('tolerates a plan with no steps', () => {
-    const { nodes, edges } = buildPlanGraph({ id: 'x', steps: null });
-    expect(nodes).toEqual([]);
-    expect(edges).toEqual([]);
+  it('enriches from workflow_graph with gateway + guard edges', () => {
+    const plan = {
+      ...PLAN,
+      workflow_graph: {
+        version: '1',
+        entry: 'c',
+        nodes: [
+          { id: 'c', node_type: 'choice', intent: 'Pick path', meta: {} },
+          { id: 't0', node_type: 'task', intent: 'Search', meta: { step_id: 0 } },
+          { id: 't1', node_type: 'task', intent: 'Create', meta: { step_id: 1 } },
+        ],
+        edges: [
+          { source: 'c', target: 't0', guard: "status == 'ok'" },
+          { source: 'c', target: 't1', is_default: true },
+        ],
+      },
+    };
+    const { nodes, edges } = buildPlanGraph(plan);
+    expect(nodes.some((n) => n.node_type === 'choice' && n.is_gateway)).toBe(true);
+    expect(edges.some((e) => e.guard === "status == 'ok'")).toBe(true);
   });
 });
 

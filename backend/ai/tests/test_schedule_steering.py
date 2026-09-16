@@ -178,7 +178,7 @@ def patch_resume_seams(monkeypatch):
         lambda *a, **k: _FakeFactory(),
     )
     monkeypatch.setattr(
-        "ai.engine_runtime._carbon_instance_config",
+        "ai.plans_service._plan_instance_config",
         lambda *a, **k: {
             "display_name": "Carbon",
             "description": "Carbon Data Trust",

@@ -104,12 +104,13 @@ class CarbonHostAdapter(HostAdapterContract):
     def get_tool_catalog(self, user, scope) -> ToolCatalog:
         # Spine tools (engine function-calling definitions) + registry-driven
         # domain tools, CBAC-filtered per user. Never hardcode tool names here.
-        from ai.engine.agent.tools import STATIC_TOOL_DEFINITIONS
-        from ai.engine.cognition.turn.runner import _CHAT_STATIC_TOOLS
+        from ai.engine.agent.tools import get_tool_definitions
+        from ai.engine.cognition.turn.runner import _CHAT_STATIC_TOOLS, _ECF_CHAT_TOOLS
+        from ai.engine.core.config import get_settings
         from ai.domain_protocol import get_domain, list_domains
 
         definitions: dict[str, dict[str, Any]] = {}
-        for entry in STATIC_TOOL_DEFINITIONS:
+        for entry in get_tool_definitions():
             if not isinstance(entry, dict):
                 continue
             function = entry.get("function") or {}
@@ -119,7 +120,11 @@ class CarbonHostAdapter(HostAdapterContract):
 
         tools: list[ToolDef] = []
         # Spine tools are always present (required_capability=None).
-        for name in sorted(_CHAT_STATIC_TOOLS):
+        # When ECF_ENABLED, also surface resolve/aggregate (Chat planner uses them).
+        spine = set(_CHAT_STATIC_TOOLS)
+        if getattr(get_settings(), "ECF_ENABLED", False):
+            spine |= _ECF_CHAT_TOOLS
+        for name in sorted(spine):
             function = definitions.get(name, {})
             tools.append(
                 ToolDef(

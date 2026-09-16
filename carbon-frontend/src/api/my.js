@@ -95,6 +95,16 @@ export function fetchCorrespondenceDetail(token, id) {
   return apiFetch(`${CORRESPONDENCE_ROOT}${id}/`, { token });
 }
 
+/** Requester cancels a non-terminal request (POST correspondence/{id}/cancel/). */
+export function cancelCorrespondence(token, id) {
+  return apiFetch(`${CORRESPONDENCE_ROOT}${id}/cancel/`, { method: 'POST', token });
+}
+
+/** Requester resubmits a sent-back request (POST correspondence/{id}/resubmit/). */
+export function resubmitCorrespondence(token, id) {
+  return apiFetch(`${CORRESPONDENCE_ROOT}${id}/resubmit/`, { method: 'POST', token });
+}
+
 /**
  * Submit a loan request (POST people/me/loan/).
  * On success returns the Correspondence detail object (NOT a loan record).

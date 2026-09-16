@@ -2,7 +2,7 @@
 
 Proves descriptor metrics{} → aggregate() is the single definition path:
   headcount → is_active=True
-  kuwaiti   → nationality_code=KW (never kuwaitization boolean)
+  kuwaiti   → nationality__code=KWT (never kuwaitization boolean)
 """
 from __future__ import annotations
 
@@ -26,14 +26,14 @@ from ai.engine.agent.tools import (
 
 NIBRAS_YAML = Path(__file__).parent.parent / "engine/instances/nibras/instance.yaml"
 
-# Mixed population: active/inactive × KW / non-KW / kuwaitization flag mismatch.
+# Mixed population: active/inactive × KWT / non-KWT / kuwaitization flag mismatch.
 _POPULATION = [
-    {"id": 1, "is_active": True,  "nationality_code": "KW", "kuwaitization": True},
-    {"id": 2, "is_active": True,  "nationality_code": "KW", "kuwaitization": False},  # KW but flag off
-    {"id": 3, "is_active": True,  "nationality_code": "IN", "kuwaitization": True},   # flag on, not KW
-    {"id": 4, "is_active": True,  "nationality_code": "EG", "kuwaitization": False},
-    {"id": 5, "is_active": False, "nationality_code": "KW", "kuwaitization": True},   # inactive KW
-    {"id": 6, "is_active": False, "nationality_code": "IN", "kuwaitization": False},
+    {"id": 1, "is_active": True,  "nationality__code": "KWT", "kuwaitization": True},
+    {"id": 2, "is_active": True,  "nationality__code": "KWT", "kuwaitization": False},  # KWT but flag off
+    {"id": 3, "is_active": True,  "nationality__code": "IND", "kuwaitization": True},   # flag on, not KWT
+    {"id": 4, "is_active": True,  "nationality__code": "EGY", "kuwaitization": False},
+    {"id": 5, "is_active": False, "nationality__code": "KWT", "kuwaitization": True},   # inactive KWT
+    {"id": 6, "is_active": False, "nationality__code": "IND", "kuwaitization": False},
 ]
 
 
@@ -67,18 +67,18 @@ class TestAggregateCanonicalMetrics:
 
     def test_kuwaiti_uses_nationality_code_not_kuwaitization(self, nibras_desc):
         r = aggregate(nibras_desc, "kuwaiti", count_fn=_count_fn())
-        assert r.value == 3  # ids 1, 2, 5 — nationality_code=KW (incl. inactive)
-        assert r.filter == {"nationality_code": "KW"}
-        assert "nationality_code" in r.cited_fields
+        assert r.value == 3  # ids 1, 2, 5 — nationality__code=KWT (incl. inactive)
+        assert r.filter == {"nationality__code": "KWT"}
+        assert "nationality__code" in r.cited_fields
         assert "kuwaitization" not in r.filter
         assert "kuwaitization" not in r.cited_fields
         # Prove divergence from the boolean: kuwaitization=True would be ids 1,3,5 → 3
-        # but id membership differs — id 2 is KW without flag; id 3 has flag without KW.
+        # but id membership differs — id 2 is KWT without flag; id 3 has flag without KWT.
         kw_flag = sum(1 for p in _POPULATION if p["kuwaitization"])
         assert kw_flag == 3
-        kw_ids = {p["id"] for p in _POPULATION if p["nationality_code"] == "KW"}
+        kw_ids = {p["id"] for p in _POPULATION if p["nationality__code"] == "KWT"}
         flag_ids = {p["id"] for p in _POPULATION if p["kuwaitization"]}
-        assert kw_ids != flag_ids, "fixture must prove KW ≠ kuwaitization membership"
+        assert kw_ids != flag_ids, "fixture must prove KWT ≠ kuwaitization membership"
 
     def test_headcount_stable_across_calls(self, nibras_desc):
         a = aggregate(nibras_desc, "headcount", count_fn=_count_fn())
@@ -132,8 +132,8 @@ class TestExecuteAggregateEntity:
             executor=executor,
         )
         assert result["value"] == 3
-        assert result["filter"] == {"nationality_code": "KW"}
-        assert "nationality_code" in result["citation"]
+        assert result["filter"] == {"nationality__code": "KWT"}
+        assert "nationality__code" in result["citation"]
         assert "kuwaitization" not in result["citation"]
 
     @pytest.mark.asyncio
@@ -164,6 +164,30 @@ class TestExecuteAggregateEntity:
         )
         assert "error" in result
         assert "entity_count" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_unauthorized_when_people_metric_access_denied(self):
+        """A10: ESS without people:view must not get a soft zero headcount."""
+        cfg = yaml.safe_load(NIBRAS_YAML.read_text())
+        executor = SimpleNamespace(
+            instance_config=cfg,
+            entity_count=_count_fn(),
+            people_metric_access=lambda: {
+                "allowed": False,
+                "reason": "people:view_required",
+                "message": "Not authorized to view organization workforce metrics.",
+            },
+        )
+        result = await execute_aggregate_entity(
+            entity_type="employee",
+            metric="headcount",
+            explanation="count",
+            executor=executor,
+        )
+        assert result.get("unauthorized") is True
+        assert result.get("value") is None
+        assert "Not authorized" in (result.get("message") or "")
+        assert result.get("reason") == "people:view_required"
 
 
 class TestAggregateToolCatalogGate:

@@ -200,6 +200,12 @@
   "timelineSystem": "System",
   "timelineEmpty": "No activity yet",
   "backToRequests": "Back to My Requests",
+  "cancelRequest": "Cancel request",
+  "cancelRequestConfirm": "Cancel this request? It will be withdrawn from your manager's inbox.",
+  "successCancelled": "Request cancelled.",
+  "resubmitRequest": "Resubmit",
+  "resubmitRequestConfirm": "Resubmit this request to your manager?",
+  "successResubmitted": "Request resubmitted.",
   "detailNotFound": "Request not found",
   "openRequest": "Open request {{ref}}",
   "status": {

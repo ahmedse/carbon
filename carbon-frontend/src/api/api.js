@@ -67,7 +67,14 @@ export async function refreshAccessToken() {
         err.isSessionExpired = true;
         throw err;
       }
-      throw new Error(`Refresh unavailable (${res.status})`);
+      const err = new Error(
+        res.status === 429
+          ? "Too many requests. Please wait a moment and try again."
+          : `Refresh unavailable (${res.status})`
+      );
+      err.status = res.status;
+      if (res.status === 429) err.isRateLimited = true;
+      throw err;
     }
     const data = await res.json();
     if (!data.access) throw new Error("No new access token");

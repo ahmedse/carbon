@@ -17,6 +17,7 @@ export const ERROR_CODE_KEYS = {
   timeout: 'timeout',
   network_error: 'network',
   server_error: 'server',
+  rate_limited: 'rateLimited',
   unknown_error: 'generic',
 };
 

@@ -49,6 +49,26 @@ describe('normalizeError — errorCode / messageKey wiring (I18N-5)', () => {
     expect(out.messageKey).toBe('server');
   });
 
+  it('maps 429 to rate_limit (never auth/session)', () => {
+    const out = normalizeError({
+      status: 429,
+      message: 'Request was throttled. Expected available in 19 seconds.',
+    });
+    expect(out.type).toBe('rate_limit');
+    expect(out.errorCode).toBe('rate_limited');
+    expect(out.messageKey).toBe('rateLimited');
+    expect(out.canRetry).toBe(true);
+  });
+
+  it('maps isRateLimited flag without status to rate_limit', () => {
+    const out = normalizeError({
+      message: 'Too many requests. Please wait a moment and try again.',
+      isRateLimited: true,
+    });
+    expect(out.type).toBe('rate_limit');
+    expect(out.status).toBe(429);
+  });
+
   it('maps anything else to errorCode=unknown_error + messageKey=generic', () => {
     const out = normalizeError({ status: 418 });
     expect(out.errorCode).toBe('unknown_error');

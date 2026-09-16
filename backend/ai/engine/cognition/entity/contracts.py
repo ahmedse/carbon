@@ -105,10 +105,12 @@ def honest_masking(
     descriptor: EntityDescriptor,
     user_capabilities: frozenset[str] | None = None,
 ) -> dict:
-    """Replace 0/null/0.000 with "(hidden)" for fields the caller cannot see.
+    """Redact capability-gated fields the caller cannot see.
 
-    The legacy behaviour was to return 0.000 for masked salaries, which the
-    LLM then reported as "no employees have a salary" — a false statement.
+    Always replaces the value when the capability is absent — never leave a
+    real salary visible to unauthorized callers (A5). Zero/null used to be the
+    only trigger because the host sometimes returned ``0.000`` as a soft mask;
+    that missed the case where the raw amount leaked through.
     """
     if user_capabilities is None:
         user_capabilities = frozenset()
@@ -117,15 +119,7 @@ def honest_masking(
     for field_name, policy in descriptor.masking.items():
         if policy.capability in user_capabilities:
             continue  # caller is authorised — leave value intact
-        val = result.get(field_name)
-        # Treat numeric zero, "0", "0.000", "0.0", None as masked
-        is_zero_or_null = (
-            val is None
-            or (isinstance(val, (int, float)) and val == 0)
-            or str(val).strip() in ("0", "0.0", "0.00", "0.000", "")
-        )
-        if is_zero_or_null:
-            result[field_name] = "(hidden — salary access required)"
+        result[field_name] = "(hidden — salary access required)"
     return result
 
 

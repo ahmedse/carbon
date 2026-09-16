@@ -318,12 +318,41 @@ def test_runner_draft_allow_derives_plugin_tools():
     """G-C proof: the chat allow-set is registry-derived, so a new chat-visible
     plugin is exposed with zero edits to runner.py's spine constants."""
     register_plugin(EchoPlugin())
-    from ai.engine.cognition.turn.runner import _CHAT_STATIC_TOOLS
+    from ai.engine.cognition.turn.runner import _chat_tool_allowlist
 
-    allow = _CHAT_STATIC_TOOLS | chat_tool_names()
+    allow = _chat_tool_allowlist()
     assert "echo_test" in allow                      # registry contribution
     assert "search_knowledge" in allow               # spine static tool
+    assert "call_host_api" in allow
     assert "internal_secret_tool" not in allow       # hidden plugin excluded
+    # ECF tools join the Chat planner when ECF_ENABLED (name→entity path).
+    from ai.engine.core.config import get_settings
+    if getattr(get_settings(), "ECF_ENABLED", False):
+        assert "resolve_entity" in allow
+        assert "aggregate_entity" in allow
+
+
+def test_draft_tools_include_ecf_when_enabled():
+    """Chat draft tool list must expose resolve_entity when ECF is on —
+    otherwise name lookups false-miss via search_knowledge."""
+    from ai.engine.cognition.turn.runner import TurnPipelineRunner
+    from ai.engine.core.config import get_settings
+
+    if not getattr(get_settings(), "ECF_ENABLED", False):
+        import pytest
+        pytest.skip("ECF_ENABLED is False")
+
+    class _Exec:
+        instance_config = None
+
+    runner = TurnPipelineRunner(executor=_Exec())
+    names = {
+        d.get("function", {}).get("name")
+        for d in (runner._draft_tools or [])
+    }
+    assert "resolve_entity" in names
+    assert "aggregate_entity" in names
+    assert "call_host_api" in names
 
 
 def test_unit_converter_plugin_converts_linear_units():

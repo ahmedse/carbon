@@ -48,6 +48,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import PauseIcon from '@mui/icons-material/Pause';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CallSplitIcon from '@mui/icons-material/CallSplit';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
@@ -105,7 +106,7 @@ import StepEditDialog from './StepEditDialog';
 import DiscoveryComposer from './DiscoveryComposer';
 import AgentTaskPicker from './AgentTaskPicker';
 import AgentStage, { stageForStatus } from './AgentStage';
-import AgentRunSurface from './AgentRunSurface';
+import AgentRunSurface, { mergePlanWithRunSteps } from './AgentRunSurface';
 import AgentReviewSurface from './AgentReviewSurface';
 import StepOutputRenderer, { ArtifactCard } from '../components/ai/StepOutputRenderer';
 
@@ -357,7 +358,9 @@ StepToolbar.propTypes = {
   onResume: PropTypes.func,
 };
 
-function StepCard({ step, phaseName, confirming, busy, onConfirm, onDecline, onRetry, onSkip, onCancel, onPause, onResume }) {
+function StepCard({
+  step, phaseName, confirming, busy, onConfirm, onDecline, onRetry, onSkip, onCancel, onPause, onResume, onEdit,
+}) {
   const [open, setOpen] = useState(true);
   const meta = STEP_STATUS_ICON[step.status] || { label: 'Pending', color: 'default' };
   const showBody = open || step.status === 'awaiting_approval' || step.status === 'failed';
@@ -386,6 +389,22 @@ function StepCard({ step, phaseName, confirming, busy, onConfirm, onDecline, onR
         )}
         {step.tool_name && (
           <Chip size="small" variant="outlined" label={toolLabel(step.tool_name)} sx={{ height: 16, fontSize: '0.5625rem' }} />
+        )}
+        {onEdit && (
+          <Tooltip title="Edit step">
+            <IconButton
+              size="small"
+              aria-label={`Edit step ${step.step_id}`}
+              disabled={busy}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(step);
+              }}
+              sx={{ p: 0.25 }}
+            >
+              <EditOutlinedIcon sx={{ fontSize: 14 }} />
+            </IconButton>
+          </Tooltip>
         )}
         <StepToolbar
           step={step}
@@ -471,6 +490,7 @@ StepCard.propTypes = {
   onCancel: PropTypes.func,
   onPause: PropTypes.func,
   onResume: PropTypes.func,
+  onEdit: PropTypes.func,
 };
 
 // W5-D — labelled metric for the Monitor grid (mirrors AITaskAuditCard Stat).
@@ -838,7 +858,9 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     try {
       const plan = await getPlan(token, planId);
       setSelectedPlan(plan);
-      setPlans((prev) => prev.map((p) => (p.id === planId ? { ...p, status: plan.status } : p)));
+      // Replace the list row wholesale (status + steps) so picker chips use
+      // effectivePlanStatus on fresh step outcomes — not a lagged failed step.
+      setPlans((prev) => prev.map((p) => (p.id === planId ? { ...p, ...plan } : p)));
       return plan;
     } catch (err) {
       notifyFromErrorRef.current(err, 'Could not refresh the plan');
@@ -936,12 +958,19 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     onFocusPlanConsumed?.();
   }, [focusPlanId, openPlan, onFocusPlanConsumed]);
 
-  // Chat-first: completed plans open on Done → Output by default.
+  // Chat-first: when a plan first becomes completed, land on Done → Output once.
+  // Do not re-force on every segment change — otherwise Metrics / Plan graph /
+  // bottom Monitor never stick (user click → effect snaps back to Output).
+  const autoOutputPlanRef = useRef(null);
   useEffect(() => {
-    if (!chatFirst || selectedPlan?.status !== 'completed') return;
-    if (segment === 'output') return;
-    handleSegmentChange('output');
-  }, [chatFirst, selectedPlan?.status, segment, handleSegmentChange]);
+    if (!chatFirst || selectedPlan?.status !== 'completed' || !selectedPlan?.id) {
+      if (selectedPlan?.status !== 'completed') autoOutputPlanRef.current = null;
+      return;
+    }
+    if (autoOutputPlanRef.current === selectedPlan.id) return;
+    autoOutputPlanRef.current = selectedPlan.id;
+    if (segment !== 'output') handleSegmentChange('output');
+  }, [chatFirst, selectedPlan?.id, selectedPlan?.status, segment, handleSegmentChange]);
 
   // W5-B — discovery finished → open reviewable plan in the Review stage.
   const handleDiscoveryReady = useCallback((plan) => {
@@ -1077,10 +1106,13 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     });
   }, []);
 
+  const stopRequestedRef = useRef(false);
+
   const handleRun = async () => {
     if (!selectedPlan) return;
     const planId = selectedPlan.id;
     const streamFn = selectedPlan.status === 'paused' ? resumePlanStream : runPlanStream;
+    stopRequestedRef.current = false;
     setPhase('working');
     setErrorMessage(null);
     setLedger(null);
@@ -1091,6 +1123,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     try {
       await streamFn(token, planId, {
         onFrame: (frame) => {
+          if (stopRequestedRef.current) return;
           if (frame.type === 'step_start') {
             upsertStep({ step_id: frame.step_id, intent: frame.intent, status: 'running' });
           } else if (frame.type === 'step_confirm') {
@@ -1110,9 +1143,15 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           }
         },
         onDone: async (frame) => {
+          // Operator Stop wins over a late stream "completed" frame.
+          if (stopRequestedRef.current || runPhaseRef.current === 'stopped') {
+            setPhase('stopped');
+            await refreshPlan(planId);
+            return;
+          }
           const doneStatus = frame?.status || 'completed';
           if (doneStatus === 'paused') setPhase('paused');
-          else if (doneStatus === 'stopped') setPhase('stopped');
+          else if (doneStatus === 'stopped' || doneStatus === 'cancelled') setPhase('stopped');
           else if (doneStatus === 'failed') { setPhase('error'); setErrorMessage('The run failed.'); }
           else setPhase('finished');
           await refreshPlan(planId);
@@ -1133,11 +1172,13 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
 
   const handleStop = async () => {
     if (!selectedPlan || runPhaseRef.current !== 'working') return;
+    stopRequestedRef.current = true;
     setPhase('stopped');
     try {
       await stopPlan(token, selectedPlan.id);
       await refreshPlan(selectedPlan.id);
     } catch (err) {
+      stopRequestedRef.current = false;
       notifyFromErrorRef.current(err, 'Could not stop the run');
     }
   };
@@ -1654,6 +1695,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             onCancel={handleStepCancel}
             onPause={handleStepPause}
             onResume={handleStepResume}
+            onEdit={(s) => setEditStepTarget({ step: s })}
           />
         ))}
         {phase === 'paused' && (
@@ -2165,12 +2207,11 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
 
   // Global run toolbar — one location (top bar).
   const renderRunToolbar = () => {
-    const status = selectedPlan?.status;
     const running = phase === 'working';
     const busy = mutating;
-    const runnable = status === 'approved' || status === 'paused';
-    const paused = status === 'paused';
-    const failed = status === 'failed';
+    const runnable = selectedEffective === 'approved' || selectedEffective === 'paused';
+    const paused = selectedEffective === 'paused';
+    const failed = selectedEffective === 'failed';
     const showRun = runnable && !running;
     const btn = (title, disabled, onClick, Icon, color) => (
       <Tooltip title={title}>
@@ -2194,8 +2235,17 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
 
   const clarifying = selectedPlan?.status === 'discovering';
   const showComposer = !selectedPlan || clarifying;
-  const selectedEffective = selectedPlan ? effectivePlanStatus(selectedPlan) : '';
+  // Prefer live runSteps over stale selectedPlan.steps so chips flip as soon
+  // as the stream finishes (before/without waiting on refreshPlan).
+  const selectedEffective = selectedPlan
+    ? effectivePlanStatus(
+      runSteps.length
+        ? { ...selectedPlan, steps: mergePlanWithRunSteps(selectedPlan, runSteps).steps }
+        : selectedPlan,
+    )
+    : '';
   // Toolbar when runnable or mid/post-run (Approve stays on Review stage).
+  // Retry affordance keys off effective status (all finished → completed).
   const showRunToolbar = ['approved', 'running', 'paused', 'failed', 'completed'].includes(
     selectedEffective,
   );
@@ -2288,30 +2338,75 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           done={(
             <Stack spacing={1} data-testid="agent-done-surface">
               <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>
-                Run completed
+                {effectivePlanStatus(selectedPlan) === 'paused'
+                  ? 'Run paused — a step still needs approval'
+                  : 'Run completed'}
               </Typography>
-              {selectedPlan && (
-                <AgentRunSurface
-                  plan={selectedPlan}
-                  runSteps={runSteps}
-                  phase={phase}
-                  live={false}
-                  artifacts={artifacts}
-                  artifactsLoading={artifactsLoading}
-                  artifactsContent={
-                    artifacts.length > 0 ? (
-                      <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', gap: 0.75 }}>
-                        {artifacts.map((artifact) => (
-                          <Box key={artifact.id ?? artifact.name} sx={{ minWidth: 200, flex: '1 1 200px', maxWidth: 320 }}>
-                            <ResultArtifactCard artifact={artifact} planId={selectedPlan.id} token={token} />
-                          </Box>
-                        ))}
-                      </Stack>
-                    ) : null
-                  }
-                  listContent={null}
-                />
-              )}
+              {selectedPlan && (() => {
+                const doneSteps = (runSteps.length ? runSteps : (selectedPlan.steps || [])).map((s) => ({
+                  step_id: s.step_id,
+                  intent: s.intent,
+                  tool_name: s.tool_name,
+                  tool_args: s.tool_args,
+                  status: s.status || 'pending',
+                  tool_output: s.tool_output ?? null,
+                  output_type: s.output_type ?? null,
+                  artifacts: s.artifacts ?? [],
+                  error: s.error ?? null,
+                  agent_role: s.agent_role,
+                  runnable_state: s.runnable_state,
+                }));
+                const actionable = doneSteps.some(
+                  (s) => s.status === 'awaiting_approval' || s.status === 'failed' || s.status === 'paused',
+                );
+                const doneList = (
+                  <Stack spacing={1}>
+                    {doneSteps.map((step) => (
+                      <StepCard
+                        key={step.step_id}
+                        step={step}
+                        confirming={confirmingId === step.step_id}
+                        busy={mutating}
+                        onConfirm={handleConfirmStep}
+                        onDecline={handleDeclineStep}
+                        onRetry={handleStepRetry}
+                        onSkip={handleStepSkip}
+                        onCancel={handleStepCancel}
+                        onPause={handleStepPause}
+                        onResume={handleStepResume}
+                        onEdit={(s) => setEditStepTarget({ step: s })}
+                      />
+                    ))}
+                  </Stack>
+                );
+                return (
+                  <AgentRunSurface
+                    plan={selectedPlan}
+                    runSteps={runSteps}
+                    phase={phase}
+                    live={false}
+                    defaultListOpen={actionable}
+                    artifacts={artifacts}
+                    artifactsLoading={artifactsLoading}
+                    artifactsContent={
+                      artifacts.length > 0 ? (
+                        <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', gap: 0.75 }}>
+                          {artifacts.map((artifact) => (
+                            <Box key={artifact.id ?? artifact.name} sx={{ minWidth: 200, flex: '1 1 200px', maxWidth: 320 }}>
+                              <ResultArtifactCard artifact={artifact} planId={selectedPlan.id} token={token} />
+                            </Box>
+                          ))}
+                        </Stack>
+                      ) : null
+                    }
+                    listContent={doneList}
+                    confirmingId={confirmingId}
+                    onConfirmStep={handleConfirmStep}
+                    onDeclineStep={handleDeclineStep}
+                    onRetryStep={handleStepRetry}
+                  />
+                );
+              })()}
               <Stack direction="row" spacing={0.5}>
                 <Button
                   size="small"

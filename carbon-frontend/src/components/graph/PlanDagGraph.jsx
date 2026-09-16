@@ -412,12 +412,14 @@ export default function PlanDagGraph({
       const color = colorFor(n.status);
       const statusLabel = NODE_STATUS[n.status] || 'PENDING';
       const rawTitle = String(n.label || `Step ${n.id}`);
-      const rawTool = String(n.tool_name || 'Reasoning (LLM)');
+      const kind = n.is_gateway || ['choice', 'parallel', 'observe', 'map', 'loop'].includes(n.node_type)
+        ? String(n.node_type || 'gateway').toUpperCase()
+        : String(n.tool_name || 'Reasoning (LLM)');
       // Title is truncated to leave room for the right-aligned status label.
       const titleMax = Math.max(8, Math.floor((n.w - 78) / 6.6));
       const title = rawTitle.length > titleMax ? `${rawTitle.slice(0, titleMax - 1)}…` : rawTitle;
       const toolMax = Math.max(8, Math.floor((n.w - 28) / 5.6));
-      const tool = rawTool.length > toolMax ? `${rawTool.slice(0, toolMax - 1)}…` : rawTool;
+      const tool = kind.length > toolMax ? `${kind.slice(0, toolMax - 1)}…` : kind;
       return (
         <>
           {/* Status accent bar — the primary at-a-glance signal */}
@@ -430,7 +432,7 @@ export default function PlanDagGraph({
           <text x={n.w - 10} y={n.h / 2 + 1} fontSize={10} fontWeight={700} fill={color} textAnchor="end">
             {statusLabel}
           </text>
-          {/* Tool / kind */}
+          {/* Tool / gateway kind */}
           <text x={16} y={n.h / 2 + 14} fontSize={11} fill={theme.palette.text.secondary}>
             {tool}
           </text>
@@ -469,7 +471,8 @@ export default function PlanDagGraph({
         sx={{ fontSize: '0.625rem', lineHeight: 1.35 }}
         data-testid="plan-graph-workflow-note"
       >
-        Sequential + parallel phases today. Branches, loops, and conditions land in a later workflow pass.
+        Graph schema + guards ready (ADR-0034). Choice/parallel render when
+        ``workflow_graph`` is on the plan; ReActLoop drives live branch eligibility.
       </Typography>
     </Stack>
   );

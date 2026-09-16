@@ -2030,6 +2030,29 @@ async def _llm_transliterate(query: str, instance_id: str, conversation_id: str)
         return []
 
 
+# Compensation fields: omit from Chat identity lookups unless the user asked
+# about pay (A5 minimize-disclosure — even when CBAC allows the amount).
+_COMPENSATION_INTENT_RE = re.compile(
+    r"(?i)\b(salary|compensation|pay\b|wage|payroll|راتب|أجر|مرتب|تعويض)",
+)
+
+
+def _omit_compensation_unless_asked(
+    record: dict,
+    descriptor,
+    query: str,
+) -> dict:
+    """Drop descriptor.masking fields unless the query is about compensation."""
+    if not record or not getattr(descriptor, "masking", None):
+        return record
+    if _COMPENSATION_INTENT_RE.search(query or ""):
+        return record
+    out = dict(record)
+    for field_name in descriptor.masking:
+        out.pop(field_name, None)
+    return out
+
+
 async def execute_resolve_entity(
     entity_type: str,
     query: str,
@@ -2102,6 +2125,43 @@ async def execute_resolve_entity(
                 honest_masking(resolve_labels(c, descriptor, label_fetch_fn=fetch), descriptor, caps)
                 for c in (result.suggestions or [])
             ]
+            # ESS / no people:view: if the identity exists outside the caller's
+            # org scope, say unauthorized — never "no matching record" (B4).
+            exists_elsewhere = False
+            exists_fn = getattr(executor, "entity_exists_unscoped", None)
+            if (
+                entity_type == "employee"
+                and "people:view" not in caps
+                and callable(exists_fn)
+                and (query or "").strip()
+            ):
+                q = (query or "").strip()
+                for field in (descriptor.identifiers or []):
+                    try:
+                        if exists_fn(descriptor.model, {field: q}):
+                            exists_elsewhere = True
+                            break
+                    except Exception:  # noqa: BLE001
+                        continue
+            if (
+                entity_type == "employee"
+                and "people:view" not in caps
+                and exists_elsewhere
+            ):
+                ar = (result.lang or "") == "ar"
+                return {
+                    "found": False,
+                    "unauthorized": True,
+                    "status_code": 403,
+                    "message": (
+                        "غير مصرح بالبحث عن موظفين آخرين (مطلوب صلاحية people:view)."
+                        if ar
+                        else "Not authorized to look up other employees (people:view required)."
+                    ),
+                    "searched_total": result.searched_total,
+                    "query": query,
+                    "suggestions": [],
+                }
             msg = grounded_refusal(result)
             if suggestions:
                 names = [
@@ -2122,6 +2182,7 @@ async def execute_resolve_entity(
         if result.action == "match":
             record = resolve_labels(result.record or {}, descriptor, label_fetch_fn=fetch)
             record = honest_masking(record, descriptor, caps)
+            record = _omit_compensation_unless_asked(record, descriptor, query)
             return {
                 "found": True,
                 "action": "match",
@@ -2130,7 +2191,11 @@ async def execute_resolve_entity(
                 "matched_field": result.matched_field,
             }
         candidates = [
-            honest_masking(resolve_labels(c, descriptor, label_fetch_fn=fetch), descriptor, caps)
+            _omit_compensation_unless_asked(
+                honest_masking(resolve_labels(c, descriptor, label_fetch_fn=fetch), descriptor, caps),
+                descriptor,
+                query,
+            )
             for c in (result.candidates or [])
         ]
         return {
@@ -2190,6 +2255,25 @@ async def execute_aggregate_entity(
     count_fn = getattr(executor, "entity_count", None)
     if count_fn is None:
         return {"error": "Host executor does not support entity_count"}
+
+    # A10 — ESS empty org scope must not report headcount 0 as truth.
+    access_fn = getattr(executor, "people_metric_access", None)
+    if callable(access_fn) and entity_type == "employee":
+        try:
+            access = await sync_to_async(access_fn, thread_sensitive=True)()
+        except Exception:  # noqa: BLE001
+            access = {"allowed": True}
+        if isinstance(access, dict) and access.get("allowed") is False:
+            return {
+                "unauthorized": True,
+                "status_code": 403,
+                "metric": metric,
+                "value": None,
+                "entity_type": entity_type,
+                "message": access.get("message")
+                or "Not authorized to view organization workforce metrics.",
+                "reason": access.get("reason") or "forbidden",
+            }
 
     def _run():
         return aggregate(descriptor, metric, count_fn=count_fn)

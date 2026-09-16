@@ -98,6 +98,9 @@ API_KEY = os.getenv("REPORTING_API_KEY", "")     # safe default only for non-sec
 ## RULE 9 — Rate Limiting & Abuse
 
 - Auth endpoints and expensive endpoints should be rate-limited (DRF throttling).
+- **429 ≠ session death:** a throttled request or throttled JWT refresh must NOT clear
+  tokens or redirect to `login?expired=1`. Only refresh token rejection (401/400 on
+  `/token/refresh/`) is genuine expiry (`api.js` `globalLogout`). See playbook PB-49.
 - Long-running jobs are idempotent + guarded (don't let a client trigger 100 trainings).
 
 ---

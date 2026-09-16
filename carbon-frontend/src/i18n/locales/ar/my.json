@@ -200,6 +200,12 @@
   "timelineSystem": "النظام",
   "timelineEmpty": "لا يوجد نشاط بعد",
   "backToRequests": "العودة إلى طلباتي",
+  "cancelRequest": "إلغاء الطلب",
+  "cancelRequestConfirm": "إلغاء هذا الطلب؟ سيتم سحبه من صندوق موافقة مديرك.",
+  "successCancelled": "تم إلغاء الطلب.",
+  "resubmitRequest": "إعادة الإرسال",
+  "resubmitRequestConfirm": "إعادة إرسال هذا الطلب إلى مديرك؟",
+  "successResubmitted": "تم إعادة إرسال الطلب.",
   "detailNotFound": "لم يتم العثور على الطلب",
   "openRequest": "فتح الطلب {{ref}}",
   "status": {

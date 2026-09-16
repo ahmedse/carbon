@@ -39,6 +39,14 @@ EVENT_STEP_CANCELLED = "step_cancelled"
 EVENT_STEP_PAUSED = "step_paused"
 EVENT_STEP_RESUMED = "step_resumed"
 
+# ADR-0034 / W-3 — control-flow decisions (non-effect; journaled for replay).
+EVENT_GUARD_EVAL = "guard_eval"
+EVENT_EDGE_CHOSEN = "edge_chosen"
+EVENT_LOOP_ITER = "loop_iter"
+EVENT_HEAL_PROPOSED = "heal_proposed"
+EVENT_COMPENSATION_QUEUED = "compensation_queued"
+EVENT_WAIT_FIRED = "wait_fired"
+
 STEP_JOURNAL_EVENTS: frozenset[str] = frozenset(
     {
         EVENT_STEP_QUEUED,
@@ -54,6 +62,12 @@ STEP_JOURNAL_EVENTS: frozenset[str] = frozenset(
         EVENT_STEP_CANCELLED,
         EVENT_STEP_PAUSED,
         EVENT_STEP_RESUMED,
+        EVENT_GUARD_EVAL,
+        EVENT_EDGE_CHOSEN,
+        EVENT_LOOP_ITER,
+        EVENT_HEAL_PROPOSED,
+        EVENT_COMPENSATION_QUEUED,
+        EVENT_WAIT_FIRED,
     }
 )
 
@@ -67,6 +81,12 @@ CONTROL_JOURNAL_EVENTS: frozenset[str] = frozenset(
         EVENT_STEP_CANCELLED,
         EVENT_STEP_PAUSED,
         EVENT_STEP_RESUMED,
+        EVENT_GUARD_EVAL,
+        EVENT_EDGE_CHOSEN,
+        EVENT_LOOP_ITER,
+        EVENT_HEAL_PROPOSED,
+        EVENT_COMPENSATION_QUEUED,
+        EVENT_WAIT_FIRED,
     }
 )
 

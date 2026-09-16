@@ -3,6 +3,7 @@
 // Fetches a single correspondence record (with events + approver chain) and
 // composes SummaryCard + ApproverChainStepper + RequestTimeline. Handles the
 // full state matrix: loading / 404 / error / loaded.
+// Requester actions: cancel (non-terminal) · resubmit (sent_back) — J-LV-03/04.
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Box, Button, Skeleton, Stack, ToggleButton, ToggleButtonGroup } from '@mui/material';
@@ -13,15 +14,23 @@ import PageContainer from '../../../components/layout/PageContainer';
 import PageHeader from '../../../components/Page/PageHeader';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
 import { useAuth } from '../../../auth/AuthContext';
-import { fetchCorrespondenceDetail } from '../../../api/my';
+import { useNotification } from '../../../components/NotificationProvider';
+import {
+  cancelCorrespondence,
+  fetchCorrespondenceDetail,
+  resubmitCorrespondence,
+} from '../../../api/my';
 import SummaryCard from './SummaryCard';
 import ApproverChainStepper from './ApproverChainStepper';
 import WorkflowGraph from './WorkflowGraph';
 import RequestTimeline from './RequestTimeline';
 
+const CANCELLABLE = new Set(['draft', 'submitted', 'in_review', 'sent_back']);
+
 export default function RequestDetail() {
   const { t } = useTranslation('my');
   const { token } = useAuth();
+  const { notify } = useNotification();
   const { id } = useParams();
   const navigate = useNavigate();
   useDocumentTitle(t('detailTitle'));
@@ -31,6 +40,7 @@ export default function RequestDetail() {
   const [error, setError] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const [view, setView] = useState('stepper');
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -53,6 +63,37 @@ export default function RequestDetail() {
     load();
   }, [load]);
 
+  const handleCancel = useCallback(async () => {
+    if (!window.confirm(t('cancelRequestConfirm'))) return;
+    setBusy(true);
+    try {
+      await cancelCorrespondence(token, id);
+      notify({ message: t('successCancelled'), type: 'success' });
+      await load();
+    } catch (err) {
+      notify({ message: err?.message || t('error'), type: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  }, [token, id, t, notify, load]);
+
+  const handleResubmit = useCallback(async () => {
+    if (!window.confirm(t('resubmitRequestConfirm'))) return;
+    setBusy(true);
+    try {
+      await resubmitCorrespondence(token, id);
+      notify({ message: t('successResubmitted'), type: 'success' });
+      await load();
+    } catch (err) {
+      notify({ message: err?.message || t('error'), type: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  }, [token, id, t, notify, load]);
+
+  const canCancel = data && CANCELLABLE.has(data.status);
+  const canResubmit = data && data.status === 'sent_back';
+
   return (
     <Box
       component="main"
@@ -63,14 +104,38 @@ export default function RequestDetail() {
           title={t('detailTitle')}
           subtitle={t('detailSubtitle')}
           actions={
-            <Button
-              size="small"
-              variant="outlined"
-              startIcon={<ArrowBackIcon />}
-              onClick={() => navigate('/my/requests')}
-            >
-              {t('backToRequests')}
-            </Button>
+            <Stack direction="row" spacing={1}>
+              {canResubmit ? (
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="primary"
+                  disabled={busy}
+                  onClick={handleResubmit}
+                >
+                  {t('resubmitRequest')}
+                </Button>
+              ) : null}
+              {canCancel ? (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="warning"
+                  disabled={busy}
+                  onClick={handleCancel}
+                >
+                  {t('cancelRequest')}
+                </Button>
+              ) : null}
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<ArrowBackIcon />}
+                onClick={() => navigate('/my/requests')}
+              >
+                {t('backToRequests')}
+              </Button>
+            </Stack>
           }
         />
         {loading ? (

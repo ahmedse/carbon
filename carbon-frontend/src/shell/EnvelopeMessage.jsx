@@ -254,12 +254,10 @@ function EnvelopeChart({ chart, t }) {
 
   const { chart_type: type = 'bar', title } = chart;
   const pairs = flattenSeries(chart.series);
+  // Trust fix: never render a titled "No data" shell when series is empty.
+  // Backend enrich_envelope_charts should fill scalars; if it cannot, omit.
   if (pairs.length === 0) {
-    return (
-      <Box data-testid="envelope-chart">
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>{t('envelope.noData')}</Typography>
-      </Box>
-    );
+    return null;
   }
 
   const labels = pairs.map((p) => truncateLabel(p.label, 18));

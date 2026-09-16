@@ -1,7 +1,12 @@
 # DESIGN — Resilient Agent Workflow Engine + Agent UI Remake
 
-Status: PROPOSED · Author: Master Architect · Date: 2026-09-14
+Status: ACCEPTED (ADR-0034) · Author: Master Architect (Pulse) · Date: 2026-09-14 · Updated: 2026-09-16
 Scope: (A) a real resilient workflow engine with per-step controls; (B) a full Agent UI remake.
+
+> **Implementation status (2026-09-16 evening):** Board ~**82%** weighted.
+> Engine W-1…W-7 mostly done (W-3/W-4/W-5 partial polish). UI U-1…U-3 usable
+> chat-first; **U-4** still TODO. See canvas `pulse-agent-workflow-board` and §7 table.
+> Next: cap multi-hop follow-up spam · wait timers / replay goldens · U-4 tokens.
 
 ---
 
@@ -241,19 +246,19 @@ Each phase: dispatch a worker with a non-shallow spec; Master verifies personall
 (`manage.py check`, targeted tests, full `ai` suite, 3 engine lints; frontend: `vitest` +
 build). No phase ships shallow.
 
-| Phase | Deliverable | Where | Done when |
+| Phase | Deliverable | Status | Done when / remaining |
 |---|---|---|---|
-| **W-1** | Graph schema + validator + old→graph compile shim (pure, RULE_20) | `engine/workflow/graph.py` | Schema + compile round-trip tests; old plans validate unchanged |
-| **W-2** | Guard expression evaluator (pure, sandboxed) | `engine/workflow/guards.py` | Grammar + eval unit tests incl. injection attempts |
-| **W-3** | Graph driver: choice/parallel/map/loop/wait + journal events; deterministic replay | `workflow.py`, `step_journal.py` | Replay-golden fixtures for each node type |
-| **W-4** | Per-node retry/catch/timeout + compensation routing | `plans_service.py` | Fault-injection tests: transient→retry, permanent→catch, write→compensate |
-| **W-5** | `observe` self-heal (bounded, gated, journaled, P4-10 safe) | `engine/workflow/heal.py` | Heal fixture: failed step → repaired remainder re-enters approval |
-| **W-6** | `completed_with_gaps` partial-complete + partial artifact streaming | `plans_service.py`, journal | Partial-run test: 1 branch fails-caught → status + gap report |
-| **W-7** | Per-step control endpoints + service | `plans_urls.py`, `plans_service.py`, `durable_service.py` | Endpoint tests for retry/skip/cancel/pause/resume; boundary consent respected |
-| **U-1** | `RunCockpit` + segmented control; delete 6-tab nav; Library menu | `shell/` | Vitest render + interaction; old flows preserved |
-| **U-2** | `StepRow` + `StepToolbar` wired to W-7 endpoints; live output inline | `shell/` | Vitest per-status toolbar; e2e retry a failed step |
-| **U-3** | `PlanDagGraph` upgrade: branches/loops/guards; Metrics + Output segments | `components/graph/`, `shell/` | Vitest; visual parity check |
-| **U-4** | Design-token consistency pass (spacing/type/status colors) | `shell/`, theme | Lint + visual pass |
+| **W-1** | Graph schema + validator + compile shim | **DONE** | Schema + round-trip tests |
+| **W-2** | Guard expression evaluator | **DONE** | Grammar + injection tests |
+| **W-3** | Driver choice/parallel/map/loop + journal | **PARTIAL ~85%** | Wait timers; replay-golden fixtures |
+| **W-4** | Retry/catch/timeout + compensation | **PARTIAL ~90%** | Hard-cancel in-flight tool I/O; compensate UX |
+| **W-5** | `observe` self-heal | **PARTIAL ~85%** | Heuristic heal shipped; LLM repair optional |
+| **W-6** | `completed_with_gaps` | **DONE ~95%** | Status + UI chip; artifact stream polish |
+| **W-7** | Per-step control endpoints | **DONE ~95%** | Endpoints + StepToolbar (+ Done List) |
+| **U-1** | Chat-first cockpit | **PARTIAL ~80%** | AgentStage shipped; classic 6-tab fallback remains |
+| **U-2** | StepToolbar + live controls | **DONE ~90%** | Vitest; Playwright e2e still open |
+| **U-3** | PlanDagGraph branches/guards + segments | **PARTIAL ~75%** | Live choice highlight during run |
+| **U-4** | Design-token consistency pass | **TODO ~15%** | Spacing/type/status audit |
 
 **Sequencing:** W-1→W-2→W-3 are the engine core (blocking). W-4..W-7 build on W-3. UI
 U-1 can start after W-7 endpoints exist (or against mocks). Ship in vertical slices so each

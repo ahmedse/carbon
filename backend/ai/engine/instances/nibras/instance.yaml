@@ -457,8 +457,9 @@ entities:
       basic_salary: {capability: people:view_compensation}
     metrics:
       # ONE canonical definition each — kills the 55-vs-5 Kuwaiti inconsistency.
+      # nationality is a ReferenceValue FK (NSR-7); live code is KWT (not legacy CharField KW).
       headcount: {filter: {is_active: true},      description: "Total active employees"}
-      kuwaiti:   {filter: {nationality_code: "KW"}, description: "Employees with nationality_code=KW (not the kuwaitization boolean)"}
+      kuwaiti:   {filter: {nationality__code: "KWT"}, description: "Employees with nationality.code=KWT (not the kuwaitization boolean)"}
     scope_lookup: org_unit_id__in
 
   # Entity #2 — ECF-8 generalize proof: descriptor only, zero new algorithm code.

@@ -14,7 +14,7 @@ import ai.engine.cognition.turn.runner as runner_mod
 import ai.engine.llm.router as router_mod
 from ai.envelope import envelope_from_json, envelope_json_schema
 from ai.envelope_prompt import build_envelope_system_prompt
-from ai.envelope_service import synthesize_envelope
+from ai.envelope_service import enrich_envelope_charts, synthesize_envelope
 
 
 # ── fixtures / helpers ──────────────────────────────────────────────────────
@@ -157,6 +157,116 @@ def test_build_envelope_system_prompt_mentions_keys_and_chart_rule():
     for key in ("headline", "prose", "tables", "charts", "caveats", "sources"):
         assert key in prompt
     assert "suggested_chart_type" in prompt
+    assert "aggregate_entity" in prompt
+    assert "empty `series`" in prompt
+
+
+# ── enrich_envelope_charts (scalar → series) ────────────────────────────────
+
+def test_enrich_fills_empty_series_from_aggregate_entity():
+    """P0: prose-correct headcount must not ship a titled empty chart."""
+    raw = _envelope(
+        headline="We have 530 active employees.",
+        prose=["Active headcount grounded on is_active=True."],
+        tables=[],
+        charts=[{
+            "chart_type": "bar",
+            "title": "Active Employee Count",
+            "series": [],
+        }],
+        sources=[{"tool": "aggregate_entity", "rows_returned": 1, "truncated": False}],
+    )
+    env = envelope_from_json(json.dumps(raw))
+    usable = [{
+        "tool_name": "aggregate_entity",
+        "result": {
+            "metric": "headcount",
+            "value": 530,
+            "description": "Total active employees",
+            "filter": {"is_active": True},
+            "entity_type": "employee",
+            "cited_fields": ["is_active"],
+        },
+    }]
+    enriched = enrich_envelope_charts(env, usable)
+    assert len(enriched.charts) == 1
+    chart = enriched.charts[0]
+    assert chart.title == "Active Employee Count"
+    assert chart.series == [{
+        "name": "Total active employees",
+        "data": [["Total active employees", 530]],
+    }]
+
+
+def test_enrich_drops_empty_chart_without_scalar():
+    raw = _envelope(
+        tables=[],
+        charts=[{
+            "chart_type": "bar",
+            "title": "Active Employee Count",
+            "series": [],
+        }],
+        sources=[{"tool": "analyze_employees", "rows_returned": 0, "truncated": False}],
+    )
+    env = envelope_from_json(json.dumps(raw))
+    enriched = enrich_envelope_charts(env, [{"tool_name": "x", "result": {"rows": []}}])
+    assert enriched.charts == []
+
+
+def test_enrich_synthesises_chart_when_llm_omitted_charts():
+    raw = _envelope(
+        headline="We have 530 active employees.",
+        prose=["Grounded on aggregate_entity."],
+        tables=[],
+        charts=[],
+        sources=[],
+    )
+    env = envelope_from_json(json.dumps(raw))
+    usable = [{
+        "tool_name": "aggregate_entity",
+        "result": {
+            "metric": "headcount",
+            "value": 530,
+            "description": "Total active employees",
+        },
+    }]
+    enriched = enrich_envelope_charts(env, usable)
+    assert len(enriched.charts) == 1
+    assert enriched.charts[0].series[0]["data"] == [["Total active employees", 530]]
+    assert enriched.sources  # provenance mandatory for data blocks
+    assert enriched.sources[0].tool == "aggregate_entity"
+
+
+@pytest.mark.asyncio
+async def test_synthesize_envelope_enriches_empty_headcount_chart(monkeypatch):
+    """End-to-end: LLM empty series + aggregate scalar → filled chart."""
+    llm_payload = _envelope(
+        headline="We have 530 active employees.",
+        prose=["Active employees only."],
+        tables=[],
+        charts=[{
+            "chart_type": "bar",
+            "title": "Active Employee Count",
+            "series": [],
+        }],
+        sources=[{"tool": "aggregate_entity", "rows_returned": 1, "truncated": False}],
+    )
+    _stub_route_chat(monkeypatch, json.dumps(llm_payload))
+    env = await synthesize_envelope(
+        instance_id="i",
+        conversation_id="c",
+        user_message="how many active employees?",
+        usable_tools=[{
+            "tool_name": "aggregate_entity",
+            "result": {
+                "metric": "headcount",
+                "value": 530,
+                "description": "Total active employees",
+            },
+        }],
+    )
+    assert env is not None
+    assert env.charts[0].series[0]["data"][0][1] == 530
 
 
 # ── synthesize_envelope (async, mocked LLM) ─────────────────────────────────

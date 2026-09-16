@@ -106,6 +106,18 @@ def test_draft_tools_allow_set_includes_memory_tools():
     assert "forget_fact" in names
 
 
+def test_draft_tools_allow_set_includes_ecf_resolve_when_enabled():
+    from ai.engine.core.config import get_settings
+
+    if not getattr(get_settings(), "ECF_ENABLED", False):
+        import pytest
+        pytest.skip("ECF_ENABLED is False")
+    runner = TurnPipelineRunner(executor=object())
+    names = _names(runner._draft_tools or [])
+    assert "resolve_entity" in names
+    assert "aggregate_entity" in names
+
+
 def test_draft_tools_none_without_executor():
     runner = TurnPipelineRunner(executor=None)
     assert runner._draft_tools is None

@@ -28,13 +28,28 @@ class TestToolResultSummary:
     def test_tool_with_error_is_outcome_only(self):
         # C-F4b / RULE_23: a failed tool must NOT leak the internal tool id or the
         # raw error text into user-facing chat — describe the outcome only.
+        # All-failed gate: calibration refuse, not mutation "nothing was changed".
         summary = _build_tool_result_summary([
             {"tool_name": "get_chairman_overview", "result": {},
              "error": "Calculation summary failed"},
         ])
         assert "get_chairman_overview" not in summary
         assert "Calculation summary failed" not in summary
-        assert "nothing was changed" in summary
+        assert "nothing was changed" not in summary
+        assert "Here's what I found" not in summary
+        assert "couldn't complete that lookup" in summary
+
+    def test_mixed_success_and_error_keeps_found_wrapper(self):
+        summary = _build_tool_result_summary([
+            {"tool_name": "list_emission_factors",
+             "result": {"results": [{"code": "A"}]}},
+            {"tool_name": "aggregate_entity", "result": {},
+             "error": "boom"},
+        ])
+        assert "Here's what I found" in summary
+        assert "Retrieved 1 row(s)" in summary
+        assert "One lookup step couldn't be completed" in summary
+        assert "nothing was changed" not in summary
 
     def test_tool_with_dict_items_brief_summary(self):
         summary = _build_tool_result_summary([

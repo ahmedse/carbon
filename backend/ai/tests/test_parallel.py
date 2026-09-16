@@ -248,7 +248,7 @@ class _engine_patches:
         )
         self._stack.enter_context(
             patch(
-                "ai.engine_runtime._carbon_instance_config",
+                "ai.plans_service._plan_instance_config",
                 lambda user_pk: {
                     "display_name": "Carbon",
                     "description": "W6D parallel proof",

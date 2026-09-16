@@ -11,6 +11,7 @@ export const PLAN_STATUS = {
   running: { label: 'Running…', color: 'primary' },
   paused: { label: 'Needs approval', color: 'warning' },
   completed: { label: 'Completed', color: 'success' },
+  completed_with_gaps: { label: 'Completed with gaps', color: 'warning' },
   failed: { label: 'Failed', color: 'error' },
   cancelled: { label: 'Cancelled', color: 'default' },
 };
@@ -35,11 +36,21 @@ export function effectivePlanStatus(plan) {
   if (!plan) return '';
   const status = plan.status || '';
   if (PLAN_STATUS_LOCKED.has(status)) return status;
+  if (status === 'completed_with_gaps') return 'completed_with_gaps';
   const steps = Array.isArray(plan.steps) ? plan.steps : [];
   if (!steps.length) return status;
   if (steps.some((s) => s.status === 'awaiting_approval')) return 'paused';
   if (!steps.every((s) => STEP_TERMINAL.has(s.status))) return status;
-  if (steps.some((s) => s.status === 'failed')) return 'failed';
+  const failed = steps.filter((s) => s.status === 'failed');
+  const completed = steps.filter((s) => s.status === 'completed');
+  if (
+    failed.length
+    && completed.length
+    && failed.every((s) => String(s.error || '').startsWith('[caught]'))
+  ) {
+    return 'completed_with_gaps';
+  }
+  if (failed.length) return 'failed';
   return 'completed';
 }
 

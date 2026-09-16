@@ -209,6 +209,34 @@ _PEOPLE_ENTITY_SCOPE_LOOKUP: dict[str, str] = {
     "people.models.AttendanceRecord": "employee__org_unit_id__in",
 }
 
+# Soft aliases for pre-ReferenceValue CharField filter keys in ECF metrics/resolves.
+# Analytics already remaps dimensions; entity_fetch/entity_count must too (A9).
+_PEOPLE_ENTITY_FILTER_ALIASES: dict[str, str] = {
+    "nationality_code": "nationality__code",
+    "employment_type_code": "employment_type__code",
+    "contract_type_code": "contract_type__code",
+    "gender_code": "gender__code",
+}
+# Legacy short codes → live ReferenceValue.code (nibras People seed uses KWT).
+_PEOPLE_REF_CODE_ALIASES: dict[tuple[str, str], str] = {
+    ("nationality__code", "KW"): "KWT",
+    ("nationality_code", "KW"): "KWT",
+}
+
+
+def _normalize_people_entity_filters(filters: dict | None) -> dict:
+    """Remap legacy ECF filter keys/codes onto live People ORM lookups."""
+    if not filters:
+        return {}
+    out: dict = {}
+    for key, value in filters.items():
+        nk = _PEOPLE_ENTITY_FILTER_ALIASES.get(key, key)
+        if isinstance(value, str):
+            value = _PEOPLE_REF_CODE_ALIASES.get((nk, value), value)
+            value = _PEOPLE_REF_CODE_ALIASES.get((key, value), value)
+        out[nk] = value
+    return out
+
 
 def _people_entity_scope_lookup(model_path: str, instance_config: dict | None = None) -> str | None:
     """Return Django filter key for org scoping a People model path.
@@ -2259,7 +2287,17 @@ class CarbonHostExecutor(HostAPIExecutor):
                 return _people_me(user, pk, method)
             cap = "people:view" if method in ("GET", "HEAD", "OPTIONS") else "people:manage"
             if not _people_can(user, cap):
-                return {"status_code": 403, "data": {"detail": f"{cap} capability required"}}
+                return {
+                    "status_code": 403,
+                    "unauthorized": True,
+                    "data": {
+                        "detail": f"{cap} capability required",
+                        "message": (
+                            "Not authorized to view this HR data for other employees. "
+                            f"Required capability: {cap}."
+                        ),
+                    },
+                }
             return _people_execute(user, resource, pk, action, method, params or {}, body or {})
 
         try:
@@ -2310,7 +2348,7 @@ class CarbonHostExecutor(HostAPIExecutor):
                 pass
 
         if filters:
-            qs = qs.filter(**filters)
+            qs = qs.filter(**_normalize_people_entity_filters(filters))
         if limit and limit > 0:
             qs = qs[:limit]
 
@@ -2351,8 +2389,66 @@ class CarbonHostExecutor(HostAPIExecutor):
                 pass
 
         if filters:
-            qs = qs.filter(**filters)
+            qs = qs.filter(**_normalize_people_entity_filters(filters))
         return qs.count()
+
+    def people_metric_access(self) -> dict:
+        """Whether the caller may run People org-scoped aggregates (A10 honesty).
+
+        ESS with ``my:access`` only has empty visible orgs → ``entity_count``
+        returns 0, which Chat then charts as "no employees". That is a soft lie.
+        Require ``people:view`` (or global admin); never unscoped brand totals.
+        """
+        from people.permissions import is_global_admin
+
+        if not self.host_user_id:
+            return {
+                "allowed": False,
+                "reason": "authentication_required",
+                "message": "Not authorized to view organization workforce metrics.",
+            }
+        from django.contrib.auth import get_user_model
+
+        try:
+            user = get_user_model().objects.get(pk=self.host_user_id)
+        except Exception:  # noqa: BLE001
+            return {
+                "allowed": False,
+                "reason": "authentication_required",
+                "message": "Not authorized to view organization workforce metrics.",
+            }
+        if is_global_admin(user):
+            return {"allowed": True, "reason": "global_admin"}
+        if _people_can(user, "people:view"):
+            return {"allowed": True, "reason": "people:view"}
+        return {
+            "allowed": False,
+            "reason": "people:view_required",
+            "message": (
+                "Not authorized to view organization workforce metrics "
+                "(people:view required)."
+            ),
+        }
+
+    def entity_exists_unscoped(self, model_path: str, filters: dict) -> bool:
+        """True if any row matches filters with **no** org CBAC scope applied.
+
+        Used only to distinguish ``not found`` from ``unauthorized`` for ESS
+        callers who lack ``people:view`` (Wave B4 soft-deny honesty). Never
+        returns row payloads.
+        """
+        import importlib
+
+        if not filters:
+            return False
+        mod_name, cls_name = model_path.rsplit(".", 1)
+        model_cls = getattr(importlib.import_module(mod_name), cls_name)
+        try:
+            return model_cls.objects.filter(
+                **_normalize_people_entity_filters(filters)
+            ).exists()
+        except Exception:  # noqa: BLE001 — bad filter → treat as absent
+            return False
 
     def user_capabilities(self) -> frozenset:
         """Return the acting user's CBAC capability keys (for honest masking)."""

@@ -1,4 +1,4 @@
-# Registry: Configuration Keys  (auto-generated 2026-09-16 15:59 — DO NOT EDIT)
+# Registry: Configuration Keys  (auto-generated 2026-09-16 19:49 — DO NOT EDIT)
 
 > Every env var the app reads. NEVER hardcode these — always read from env with a safe default.
 
@@ -30,6 +30,7 @@ PULSE_JWT_SECRET
 PULSE_QA_PASS
 PULSE_QA_USER
 REDIS_URL
+SKILL_GATE_MARGINAL_GAIN_ENABLED
 SMTP_BACKEND
 SMTP_ENABLED
 SMTP_FROM_EMAIL

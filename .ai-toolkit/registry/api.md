@@ -1,4 +1,4 @@
-# Registry: API Endpoints  (auto-generated 2026-09-16 15:59 — DO NOT EDIT)
+# Registry: API Endpoints  (auto-generated 2026-09-16 19:49 — DO NOT EDIT)
 
 > Before adding an endpoint, search here. Reuse or extend — never duplicate a route.
 
@@ -46,24 +46,25 @@ backend/config/urls.py:89:    path(f'{api_prefix}/ai/work-objectives/', include(
 backend/config/urls.py:90:    path(f'{api_prefix}/ai/plans/', include('ai.plans_urls')),
 backend/config/urls.py:91:    path(f'{api_prefix}/ai/catalog/', include('ai.catalog_urls')),
 backend/config/urls.py:92:    path(f'{api_prefix}/ai/registry/', include('ai.registry_urls')),
-backend/config/urls.py:93:    path(f'{api_prefix}/ai/inbox/', include('ai.task_inbox_urls')),
-backend/config/urls.py:94:    path(f'{api_prefix}/ai/runs/', include('ai.durable_urls')),
-backend/config/urls.py:95:    path(f'{api_prefix}/ai/usage/', include('ai.usage_urls')),
-backend/config/urls.py:96:    path(f'{api_prefix}/ai/profile/', ai_workspace_views.UserProfileView.as_view(), name='ai-user-profile'),
-backend/config/urls.py:97:    path(f'{api_prefix}/ai/memory/', include('ai.memory_urls')),
-backend/config/urls.py:98:    path(f'{api_prefix}/ai/pulse/', include('ai.ops_urls')),
-backend/config/urls.py:99:    path(f'{api_prefix}/ai/insights/', include('ai.insights_urls')),
-backend/config/urls.py:100:    path(f'{api_prefix}/ai/operations/', include('ai.progress_urls')),
-backend/config/urls.py:101:    path(f'{api_prefix}/ai/audit/', include('ai.audit_urls')),
-backend/config/urls.py:102:    path(f'{api_prefix}/ai/watches/', include('ai.watches_urls')),
-backend/config/urls.py:103:    path(f'{api_prefix}/mcp/', include('ai.mcp.server_urls')),
-backend/config/urls.py:104:    path(f'{api_prefix}/', include('evidence.urls')),
-backend/config/urls.py:114:    urlpatterns.insert(0, path('admin/', admin.site.urls))
-backend/config/urls.py:120:    path(f'{api_prefix}/schema/', SpectacularAPIView.as_view(permission_classes=[AdminOrSuperuserOnly]), name='schema'),
-backend/config/urls.py:121:    path(f'{api_prefix}/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='schema-swagger-ui'),
-backend/config/urls.py:122:    path(f'{api_prefix}/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='schema-redoc'),
-backend/config/urls.py:130:        path('__debug__/', include(debug_toolbar.urls)),
-backend/config/urls.py:131:        path('silk/', include('silk.urls', namespace='silk')),
+backend/config/urls.py:93:    path(f'{api_prefix}/ai/skills/', include('ai.skills_decision_urls')),
+backend/config/urls.py:94:    path(f'{api_prefix}/ai/inbox/', include('ai.task_inbox_urls')),
+backend/config/urls.py:95:    path(f'{api_prefix}/ai/runs/', include('ai.durable_urls')),
+backend/config/urls.py:96:    path(f'{api_prefix}/ai/usage/', include('ai.usage_urls')),
+backend/config/urls.py:97:    path(f'{api_prefix}/ai/profile/', ai_workspace_views.UserProfileView.as_view(), name='ai-user-profile'),
+backend/config/urls.py:98:    path(f'{api_prefix}/ai/memory/', include('ai.memory_urls')),
+backend/config/urls.py:99:    path(f'{api_prefix}/ai/pulse/', include('ai.ops_urls')),
+backend/config/urls.py:100:    path(f'{api_prefix}/ai/insights/', include('ai.insights_urls')),
+backend/config/urls.py:101:    path(f'{api_prefix}/ai/operations/', include('ai.progress_urls')),
+backend/config/urls.py:102:    path(f'{api_prefix}/ai/audit/', include('ai.audit_urls')),
+backend/config/urls.py:103:    path(f'{api_prefix}/ai/watches/', include('ai.watches_urls')),
+backend/config/urls.py:104:    path(f'{api_prefix}/mcp/', include('ai.mcp.server_urls')),
+backend/config/urls.py:105:    path(f'{api_prefix}/', include('evidence.urls')),
+backend/config/urls.py:115:    urlpatterns.insert(0, path('admin/', admin.site.urls))
+backend/config/urls.py:121:    path(f'{api_prefix}/schema/', SpectacularAPIView.as_view(permission_classes=[AdminOrSuperuserOnly]), name='schema'),
+backend/config/urls.py:122:    path(f'{api_prefix}/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='schema-swagger-ui'),
+backend/config/urls.py:123:    path(f'{api_prefix}/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='schema-redoc'),
+backend/config/urls.py:131:        path('__debug__/', include(debug_toolbar.urls)),
+backend/config/urls.py:132:        path('silk/', include('silk.urls', namespace='silk')),
 backend/evidence/urls.py:9:router.register(r'evidence', EvidenceViewSet, basename='evidence')
 backend/evidence/urls.py:12:    path('', include(router.urls)),
 backend/accounts/urls.py:16:router.register(r'users', UserViewSet)
@@ -329,12 +330,12 @@ backend/mdm/views.py:266:    @action(detail=False, methods=['post'], url_path='a
 backend/mdm/views.py-267-    def archive_bulk(self, request):
 backend/mdm/views.py:289:    @action(detail=False, methods=['post'], url_path='bulk-create')
 backend/mdm/views.py-290-    def bulk_create(self, request):
-backend/mdm/views.py:620:    @action(detail=True, methods=['get'])
-backend/mdm/views.py-621-    def tree(self, request, pk=None):
-backend/mdm/views.py:640:    @action(detail=False, methods=['get'], url_path='tree')
-backend/mdm/views.py-641-    def list_tree(self, request):
-backend/mdm/views.py:680:    @action(detail=True, methods=['get'])
-backend/mdm/views.py-681-    def ancestors(self, request, pk=None):
+backend/mdm/views.py:642:    @action(detail=True, methods=['get'])
+backend/mdm/views.py-643-    def tree(self, request, pk=None):
+backend/mdm/views.py:662:    @action(detail=False, methods=['get'], url_path='tree')
+backend/mdm/views.py-663-    def list_tree(self, request):
+backend/mdm/views.py:702:    @action(detail=True, methods=['get'])
+backend/mdm/views.py-703-    def ancestors(self, request, pk=None):
 backend/dq/views.py:270:    @action(detail=True, methods=['post'], url_path='run')
 backend/dq/views.py-271-    def run(self, request, pk=None):
 backend/dq/views.py:306:    @action(detail=True, methods=['get'])
@@ -355,46 +356,49 @@ backend/dataschema/views.py:529:    @action(detail=False, methods=['post'], url_
 backend/dataschema/views.py-530-    def bulk_import(self, request):
 backend/dataschema/views.py:590:    @action(detail=False, methods=['get'], url_path='download-template')
 backend/dataschema/views.py-591-    def download_template(self, request):
-backend/ai/catalog_api.py:225:    @action(detail=False, methods=["get"], url_path="topology")
-backend/ai/catalog_api.py-226-    def topology(self, request):
-backend/ai/catalog_api.py:233:    @action(detail=False, methods=["get"], url_path="skills")
-backend/ai/catalog_api.py-234-    def skills(self, request):
-backend/ai/catalog_api.py:241:    @action(detail=False, methods=["get"], url_path="index")
-backend/ai/catalog_api.py-242-    def federated_index(self, request):
+backend/ai/catalog_api.py:249:    @action(detail=False, methods=["get"], url_path="topology")
+backend/ai/catalog_api.py-250-    def topology(self, request):
+backend/ai/catalog_api.py:257:    @action(detail=False, methods=["get"], url_path="skills")
+backend/ai/catalog_api.py-258-    def skills(self, request):
+backend/ai/catalog_api.py:265:    @action(detail=False, methods=["get"], url_path="capabilities")
+backend/ai/catalog_api.py-266-    def capabilities(self, request):
+backend/ai/catalog_api.py:276:    @action(detail=False, methods=["get"], url_path="index")
+backend/ai/catalog_api.py-277-    def federated_index(self, request):
 backend/ai/plans_api.py:202:    @action(
-backend/ai/plans_api.py:262:    @action(
-backend/ai/plans_api.py:297:    @action(detail=True, methods=["post"], url_path="approve", url_name="approve-plan")
-backend/ai/plans_api.py-298-    def approve(self, request, pk=None):
-backend/ai/plans_api.py:311:    @action(detail=True, methods=["post"], url_path="decline", url_name="decline-plan")
-backend/ai/plans_api.py-312-    def decline(self, request, pk=None):
-backend/ai/plans_api.py:337:    @action(detail=True, methods=["post"], url_path="pause", url_name="pause-plan")
-backend/ai/plans_api.py-338-    def pause(self, request, pk=None):
-backend/ai/plans_api.py:351:    @action(detail=True, methods=["post"], url_path="resume", url_name="resume-plan")
-backend/ai/plans_api.py-352-    def resume(self, request, pk=None):
-backend/ai/plans_api.py:382:    @action(detail=True, methods=["post"], url_path="fork", url_name="fork-plan")
-backend/ai/plans_api.py-383-    def fork(self, request, pk=None):
-backend/ai/plans_api.py:393:    @action(detail=True, methods=["post"], url_path="rerun", url_name="rerun-plan")
-backend/ai/plans_api.py-394-    def rerun(self, request, pk=None):
-backend/ai/plans_api.py:519:    @action(detail=True, methods=["post"], url_path="run", url_name="run-plan")
-backend/ai/plans_api.py-520-    def run(self, request, pk=None):
-backend/ai/plans_api.py:554:    @action(
-backend/ai/plans_api.py:578:    @action(
-backend/ai/plans_api.py:624:    @action(
-backend/ai/plans_api.py:636:    @action(
-backend/ai/plans_api.py:648:    @action(
-backend/ai/plans_api.py:660:    @action(
-backend/ai/plans_api.py:672:    @action(
-backend/ai/plans_api.py:686:    @action(detail=True, methods=["post"], url_path="stop", url_name="stop-plan")
-backend/ai/plans_api.py-687-    def stop(self, request, pk=None):
-backend/ai/plans_api.py:696:    @action(
-backend/ai/plans_api.py:730:    @action(detail=True, methods=["get"], url_path="ledger", url_name="plan-ledger")
-backend/ai/plans_api.py-731-    def ledger(self, request, pk=None):
-backend/ai/plans_api.py:743:    @action(detail=True, methods=["get"], url_path="qos", url_name="plan-qos")
-backend/ai/plans_api.py-744-    def qos(self, request, pk=None):
-backend/ai/plans_api.py:761:    @action(detail=True, methods=["get"], url_path="flight", url_name="plan-flight")
-backend/ai/plans_api.py-762-    def flight(self, request, pk=None):
-backend/ai/plans_api.py:781:    @action(
-backend/ai/plans_api.py:796:    @action(
+backend/ai/plans_api.py:228:    @action(
+backend/ai/plans_api.py:282:    @action(
+backend/ai/plans_api.py:317:    @action(detail=True, methods=["post"], url_path="approve", url_name="approve-plan")
+backend/ai/plans_api.py-318-    def approve(self, request, pk=None):
+backend/ai/plans_api.py:331:    @action(detail=True, methods=["post"], url_path="decline", url_name="decline-plan")
+backend/ai/plans_api.py-332-    def decline(self, request, pk=None):
+backend/ai/plans_api.py:357:    @action(detail=True, methods=["post"], url_path="pause", url_name="pause-plan")
+backend/ai/plans_api.py-358-    def pause(self, request, pk=None):
+backend/ai/plans_api.py:371:    @action(detail=True, methods=["post"], url_path="resume", url_name="resume-plan")
+backend/ai/plans_api.py-372-    def resume(self, request, pk=None):
+backend/ai/plans_api.py:402:    @action(detail=True, methods=["post"], url_path="fork", url_name="fork-plan")
+backend/ai/plans_api.py-403-    def fork(self, request, pk=None):
+backend/ai/plans_api.py:413:    @action(detail=True, methods=["post"], url_path="rerun", url_name="rerun-plan")
+backend/ai/plans_api.py-414-    def rerun(self, request, pk=None):
+backend/ai/plans_api.py:539:    @action(detail=True, methods=["post"], url_path="run", url_name="run-plan")
+backend/ai/plans_api.py-540-    def run(self, request, pk=None):
+backend/ai/plans_api.py:574:    @action(
+backend/ai/plans_api.py:598:    @action(
+backend/ai/plans_api.py:644:    @action(
+backend/ai/plans_api.py:656:    @action(
+backend/ai/plans_api.py:668:    @action(
+backend/ai/plans_api.py:680:    @action(
+backend/ai/plans_api.py:692:    @action(
+backend/ai/plans_api.py:706:    @action(detail=True, methods=["post"], url_path="stop", url_name="stop-plan")
+backend/ai/plans_api.py-707-    def stop(self, request, pk=None):
+backend/ai/plans_api.py:716:    @action(
+backend/ai/plans_api.py:750:    @action(detail=True, methods=["get"], url_path="ledger", url_name="plan-ledger")
+backend/ai/plans_api.py-751-    def ledger(self, request, pk=None):
+backend/ai/plans_api.py:763:    @action(detail=True, methods=["get"], url_path="qos", url_name="plan-qos")
+backend/ai/plans_api.py-764-    def qos(self, request, pk=None):
+backend/ai/plans_api.py:781:    @action(detail=True, methods=["get"], url_path="flight", url_name="plan-flight")
+backend/ai/plans_api.py-782-    def flight(self, request, pk=None):
+backend/ai/plans_api.py:801:    @action(
+backend/ai/plans_api.py:816:    @action(
 backend/ai/durable_api.py:64:    @action(detail=True, methods=["get"], url_path="timeline",
 backend/ai/durable_api.py:97:    @action(detail=True, methods=["post"], url_path="resume",
 backend/ai/durable_api.py:114:    @action(detail=True, methods=["post"], url_path="replay",
@@ -484,7 +488,4 @@ backend/correspondence/views.py-395-    def read_all(self, request):
 backend/catalog/views.py:174:    @action(detail=False, methods=['post'], url_path='archive-bulk')
 backend/catalog/views.py-175-    def archive_bulk(self, request):
 backend/catalog/views.py:625:    @action(detail=True, methods=['post'], url_path='reactions')
-backend/catalog/views.py-626-    def reactions(self, request, pk=None):
-backend/catalog/views.py:698:    @action(detail=True, methods=['post'], url_path='reactions')
-backend/catalog/views.py-699-    def reactions(self, request, note_id=None, pk=None):
 ```

@@ -7,7 +7,7 @@
 ## Verdict
 
 **READY** for staff go-live on automated product evidence (pytest + vitest + production build).  
-**TASKS status: PARTIAL** — Playwright UI leave journey shipped but not green on this host (stack/seed), corroborated by API leave journey tests.
+**TASKS status: PARTIAL** — Playwright UI leave journey shipped; **manual browser leave→approve PASS** 2026-09-16 (`CRS-2026-0025`, evidence `docs/nibras/evidence/deep-qa/2026-09-16/`). Host Playwright still ops residual if CI needs headed Chromium.
 
 ## Results matrix
 
@@ -16,7 +16,8 @@
 | Backend `people/tests/` | **PASS** | 228 passed |
 | Frontend `npm run build` | **PASS** | ✓ built (~19s); fixed orphaned `NODE_STATUS` map in `PlanDagGraph.jsx` (syntax blocked build) |
 | Vitest staff smoke | **PASS** | 6 files / 33 tests |
-| Playwright leave→approve UI | **PARTIAL / BLOCKED** | Spec shipped; Chromium launched with host browser cache; login failed (`emp_1001` — no live seeded stack on :8009/:5179 during gate). Sandbox path also missing browser binary / historically `libnspr4.so`. |
+| Leave→approve (manual browser) | **PASS** | Deep QA U2 2026-09-16 — emp_1001 submit → emp_1399 approve → Approved |
+| Playwright leave→approve UI | **PARTIAL** | Spec shipped; CI/host Chromium ops residual (seeded stack + libs) |
 | Leave approve (API) | **PASS** | `test_leave_journey_e2e.py` — 5 tests |
 | Hire onboard entitlements | **PASS** | `test_employee_onboard.py` — 7 tests |
 | Payroll compute w/o ledger fails | **PASS** | `PayrollRunServiceTests::test_compute_fails_without_verified_ledger` |

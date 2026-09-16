@@ -517,3 +517,66 @@ Append a new entry every time you confirm+fix a non-trivial bug (see `shared/deb
 - Best practice note: "I couldn't reach the AI service" ≠ network outage. It's the engine's catch-all for ANY provider/LLM error (auth, quota, model-not-found, timeout). Grep `logs/backend.log` for `openai.BadRequestError`/`missing_api_key`/`authentication_error` to confirm. The LLM key is environment-only (never in the DB or git), so "get from prod" = pull `backend/.env.carbon` from the VPS, not `scripts/pull-vps-db.sh`.
 - Regression guard: the live `get_llm_client()` round-trip returns 200 + `'OK'`; a real Pulse message streams a reply instead of the fallback string.
 - First seen: 2026-09-13.
+
+### PB-48 — manage.sh advertises `/carbon/` but app opens at `/` (VITE_BASE=/)
+- Symptom: `./manage.sh status` / start banner / help print `http://localhost:5179/carbon/`; QA navigates there (or `/carbon/people`) and gets SPA 404. Correct People URL is `http://127.0.0.1:5179/people` (Nibras). Root is `http://127.0.0.1:5179/`.
+- Layer: devops / config drift
+- Root cause: hard-coded `/carbon/` in `manage.sh` while every brand `.env` / `.env.instance.*` sets `VITE_BASE=/` (RULE_5 — namespaces live in route paths, not the Vite basename).
+- Fix: `manage.sh` `frontend_public_url()` reads `VITE_BASE` from `carbon-frontend/.env` and prints that URL for start/status/health/help. Do not hard-code `/carbon/`.
+- Best practice note: treat `/carbon/*` as the **emissions Carbon studio namespace**, not the platform home URL.
+- Regression guard: `./manage.sh help | grep Frontend` → `http://localhost:5179/`; curl that URL → 200 when FE is up.
+- First seen: 2026-09-16 (Nibras deep QA).
+
+### PB-49 — API throttle toast cascades to `login?expired=1` (false session death)
+- Symptom: UI shows "Request was throttled. Expected available in N seconds." then redirects to `/login?expired=1` and clears localStorage. User still had a valid refresh token.
+- Layer: frontend / auth
+- Root cause: `NotificationProvider.notifyFromError` treated **any** normalized 401 as session expiry (clear + redirect). Under load (People grids + Pulse), a 429 and a concurrent 401 (expired access mid-burst, or post-refresh permission edge) raced: throttle toast then false logout. Refresh path already avoided logout on 429, but the provider duplicated logout without checking for a live refresh token.
+- Fix: (1) `errorNormalizer` classifies 429 as `rate_limit` / `rate_limited` (canRetry); (2) refresh failures attach `status` + `isRateLimited` on 429 and never `globalLogout`; (3) `notifyFromError` toasts 429 / `feedback.code===throttled` without logout; 401 redirect only if `isSessionExpired` or refresh token already absent.
+- Best practice note: **only** `api.js` `globalLogout` (refresh 401/400) owns forced re-login. Provider must not clear sessions on lone 401s while `refresh` remains.
+- Regression guard: `npx vitest run src/__tests__/errorNormalizer.test.js` (429 cases); manual: burst People list → see throttle toast, stay signed in.
+- First seen: 2026-09-16 (Nibras deep QA / Employees grid).
+
+### PB-50 — Agent reports Postgres/backend STOPPED while host Postgres is alive
+- Symptom: agent `./manage.sh status` shows PostgreSQL STOPPED / `pg_isready` fails / backend restart fails with connection refused; user host terminal shows Postgres RUNNING; leave submit gets HTTP 000.
+- Layer: agent sandbox / devops
+- Root cause: (1) `./manage.sh start` **always kills** the existing Django process before restart; (2) Cursor agent sandbox can false-negative TCP to `localhost:5432` even when host Postgres (e.g. pid still up since boot) is fine — so recovery from the agent kills backend then cannot reconnect. Postgres logs show client EOFs, not a crash.
+- Fix: diagnose with host `ss`/`pgrep`/`pg_isready` outside sandbox (`required_permissions: ["all"]`); restart stack from a **host** terminal (`./manage.sh start`). Do not trust agent-only `pg_isready` as proof Postgres died.
+- Best practice note: mid-QA "DB dropped" is usually backend recycle + sandboxed health check, not a Postgres crash. Check `logs/backend.log` and PG log for `unexpected EOF` vs `shutting down`.
+- Regression guard: host `./manage.sh status` shows all RUNNING after host restart; `POST /carbon-api/token/` → 200.
+- First seen: 2026-09-16 (Nibras deep QA U2).
+
+### PB-51 — Agent Stop mid-run shows Completed (e.g. 6/7) instead of Cancelled
+- Symptom: User clicks Stop while Running…; picker/header later show Completed; Monitor may show 6/7 steps.
+- Layer: backend (ReActLoop) + frontend (stream onDone)
+- Root cause: `cancel_plan` set `run.status=cancelled` and skipped pending steps, but in-memory ReActLoop kept executing and `_finalize_run` unconditionally wrote `completed`/`failed`. Frontend `onDone` with `completed` overwrote the stopped phase after Stop.
+- Fix: (1) poll `_run_is_cancelled` each loop iteration; (2) `_finalize_run` preserves `cancelled`/`paused`; (3) SSE `done.status` maps cancelled→`stopped`; (4) UI `stopRequestedRef` ignores late completed frames.
+- Best practice note: any mid-run operator control must be observed by the executor AND finalize must be fail-closed on terminal operator statuses. Never reconcile `cancelled` into `completed` from step terminals.
+- Regression guard: `ai/tests/test_react_cancel_finalize.py`; live: Stop during multi-step run → Cancelled chip, not Completed.
+- First seen: 2026-09-16 (Pulse Agent deep QA).
+
+### PB-52 — Agent Metrics snap back to Output on completed plans
+- Symptom: On a completed chat-first Agent task, clicking Metrics / bottom Monitor immediately returns to Output; Duration/Tokens never stick.
+- Layer: frontend
+- Root cause: `useEffect` forced `segment='output'` whenever `status===completed` and `segment!=='output'`, so every Metrics click re-triggered the effect.
+- Fix: auto-land Output once per plan id (`autoOutputPlanRef`); do not re-force on subsequent segment changes.
+- Best practice note: "default view on arrival" must be one-shot per entity, not a continuous invariant.
+- Regression guard: open completed plan → Metrics stays contained; Duration visible.
+- First seen: 2026-09-16 (Pulse Agent deep QA).
+
+### PB-53 — Chat dumps EN "nothing was changed" on failed Kuwaiti/AR lookup (A9)
+- Symptom: User asks `كم موظف كويتي؟` (or any metric). UI shows `Running aggregate_entity…` then "Here's what I found: One step couldn't be completed, so nothing was changed" + toast "That action didn't complete — nothing was created or changed." No integer; English; sounds like a failed write.
+- Layer: backend (ECF metric + Chat fail-path UX)
+- Root cause: (1) `kuwaiti` metric filtered `nationality_code=KW` but live ORM is FK `nationality__code=KWT` → `FieldError` inside `aggregate_entity`. (2) Tool-only turn + `_build_tool_result_summary` / `_FAILED_ACTION_COPY` used **mutation** abort copy for every tool error, including read-only Chat lookups.
+- Fix: (1) Descriptor `nationality__code: KWT` + host filter aliases. (2) Gate: all-failed tools → calibration refuse ("couldn't complete that lookup… no answer was invented"); read tools use `_FAILED_LOOKUP_COPY` not mutation copy.
+- Best practice note: Never promote tool-only summaries that claim "changed/created" in Chat mode. Fail copy must be intent-aware (lookup vs mutation) and language-aware (still EN stub — AR localize next). Prefer fixing the metric over masking.
+- Regression guard: `ai/tests/test_ecf_aggregate.py` · `ai/tests/test_tool_only_response.py` (all-failed gate) · live Chat `كم موظف كويتي نشط؟` → **55** Arabic.
+- First seen: 2026-09-16 (Pulse Chat Wave A/C A9).
+
+### PB-54 — ESS headcount charts as 0 / Chat dumps salary on identity lookup (A10 / A5)
+- Symptom: (A10) `emp_1001` asks headcount → prose "0 active" + empty chart while admin sees 530. (A5) "Who is employee 1021?" includes Basic Salary 320 even when only identity was asked.
+- Layer: backend (ECF aggregate authz + masking / Chat minimize-disclosure)
+- Root cause: (A10) RULE_12 empty visible orgs → `entity_count` returns 0 with no `people:view` gate — soft lie. (A5) `honest_masking` only rewrote zero/null salaries; real amounts passed through without capability; Chat also volunteered pay on identity resolve when admin *had* capability.
+- Fix: (A10) `CarbonHostExecutor.people_metric_access` + `execute_aggregate_entity` unauthorized (no value/chart). (A5) always redact masked fields without capability; omit compensation fields from resolve unless query mentions salary/compensation (AR/EN).
+- Best practice note: Never report scoped-empty as brand total. Never chart unauthorized aggregates. Chat identity ≠ compensation disclosure.
+- Regression guard: `test_unauthorized_when_people_metric_access_denied` · `TestHonestMasking.test_real_salary_hidden_without_capability` · UI ESS headcount → unauthorized not 0.
+- First seen: 2026-09-16 (Pulse Chat Wave A).

@@ -369,7 +369,16 @@ def _strip_invalid_tool_args(steps: list[PlanStep]) -> None:
 # "summarize the findings" synthesis step is never coerced by accident.
 _EXPORT_DOC_INTENT = re.compile(
     r"\b(?:word|docx|excel|xlsx|spreadsheet|workbook|downloadable)\b"
-    r"|\b(?:export|download)\b[^.]*\b(?:report|document|workbook|spreadsheet|file|findings)\b",
+    r"|\b(?:export|download)\b[^.]*\b(?:report|document|workbook|spreadsheet|file|findings)\b"
+    r"|\b(?:board[- ]ready|deliverable)\b[^.]*\b(?:report|brief|workbook|document)\b"
+    r"|\b(?:report|briefing)\b[^.]*\b(?:word|excel|docx|xlsx|spreadsheet)\b",
+    re.IGNORECASE,
+)
+
+_EXPORT_UTTERANCE = re.compile(
+    r"\b(?:word|docx|excel|xlsx|spreadsheet|workbook|\.docx|\.xlsx)\b"
+    r"|\b(?:export|downloadable|board[- ]ready)\b"
+    r"|\bas\s+(?:a\s+)?(?:word|excel|spreadsheet|workbook)\b",
     re.IGNORECASE,
 )
 
@@ -406,6 +415,41 @@ def _coerce_export_steps(steps: list[PlanStep]) -> None:
             "Coerced step %d to export_document (format=%s) intent=%r",
             step.step_id, fmt, (step.intent or "")[:60],
         )
+
+
+def _ensure_export_deliverable(utterance: str, steps: list[PlanStep]) -> None:
+    """Append an export_document step when the brief asks for a file deliverable.
+
+    Live Agent QA: briefs that said "Word/Excel" still produced no artifacts
+    because every step stayed tool-less reasoning. Coercion only rewrites
+    existing intents; this adds a terminal deliverable when none exists.
+    """
+    if not _EXPORT_UTTERANCE.search(utterance or ""):
+        return
+    if any((s.tool_name or "") == "export_document" for s in steps):
+        return
+    wants_word = bool(re.search(r"\b(?:word|docx|\.doc)\b", utterance or "", re.I))
+    wants_excel = bool(re.search(r"\b(?:excel|xlsx|spreadsheet|workbook|\.xls)\b", utterance or "", re.I))
+    if wants_word and not wants_excel:
+        fmt = "docx"
+    elif wants_excel and not wants_word:
+        fmt = "xlsx"
+    else:
+        fmt = "both"
+    next_id = max((s.step_id for s in steps), default=-1) + 1
+    deps = [s.step_id for s in steps]
+    steps.append(
+        PlanStep(
+            step_id=next_id,
+            intent=f"Export findings as {fmt.upper()} deliverable",
+            tool_name="export_document",
+            tool_args={"format": fmt, "title": "Agent report"},
+            depends_on=deps[-3:] if len(deps) > 3 else deps,
+            is_mutation=True,
+            agent_role="orchestrator",
+        )
+    )
+    logger.info("Appended export_document step %d format=%s", next_id, fmt)
 
 
 # ── Planner ────────────────────────────────────────────────────────────────────
@@ -712,6 +756,7 @@ class SkillAwarePlanner:
         # (format inferred from the intent) so the report is actually built
         # from the prior findings that flow in via depends_on.
         _coerce_export_steps(steps)
+        _ensure_export_deliverable(utterance, steps)
 
         # Deterministic mutation classification — a capability fact of the
         # tool, NOT the LLM's judgment. The LLM routinely under-marks mutation

@@ -69,6 +69,7 @@ def test_multihop_stops_at_max_steps():
     step_result = StepResult(
         step_id=0,
         intent="compare factor",
+        critic_verdict="pass",
         followup=ObservationResult(
             needs_followup=True,
             followup_tool="web_research",
@@ -90,6 +91,7 @@ def test_multihop_rejects_mutation_tool_regardless_of_budget():
     bad = StepResult(
         step_id=0,
         intent="write rule",
+        critic_verdict="pass",
         followup=ObservationResult(
             needs_followup=True,
             followup_tool="create_dq_rule",
@@ -97,3 +99,45 @@ def test_multihop_rejects_mutation_tool_regardless_of_budget():
         ),
     )
     assert loop._should_inject_followup(bad, 0, 10) is False
+
+
+def test_multihop_call_host_api_get_only_and_hard_cap():
+    """call_host_api follow-ups must be GET; hard cap blocks consent spam."""
+    from ai.engine.cognition.plan.loop import _MAX_AUTO_FOLLOWUPS
+
+    loop = ReActLoop()
+    get_ok = StepResult(
+        step_id=0,
+        intent="fetch",
+        critic_verdict="pass",
+        followup=ObservationResult(
+            needs_followup=True,
+            followup_tool="call_host_api",
+            followup_args={"method": "GET", "endpoint": "/api/x"},
+        ),
+    )
+    post_bad = StepResult(
+        step_id=0,
+        intent="write",
+        critic_verdict="pass",
+        followup=ObservationResult(
+            needs_followup=True,
+            followup_tool="call_host_api",
+            followup_args={"method": "POST", "endpoint": "/api/x"},
+        ),
+    )
+    paused = StepResult(
+        step_id=0,
+        intent="paused parent",
+        critic_verdict="pass",
+        paused=True,
+        followup=ObservationResult(
+            needs_followup=True,
+            followup_tool="web_research",
+            followup_args={"query": "x"},
+        ),
+    )
+    assert loop._should_inject_followup(get_ok, 0, 10) is True
+    assert loop._should_inject_followup(post_bad, 0, 10) is False
+    assert loop._should_inject_followup(paused, 0, 10) is False
+    assert loop._should_inject_followup(get_ok, _MAX_AUTO_FOLLOWUPS, 10) is False

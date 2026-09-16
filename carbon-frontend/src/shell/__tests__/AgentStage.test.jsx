@@ -23,6 +23,8 @@ describe('stageForStatus', () => {
   it('routes completed plans to done even after finished phase', () => {
     expect(stageForStatus('completed', 'finished')).toBe('done');
     expect(stageForStatus('completed')).toBe('done');
+    expect(stageForStatus('completed_with_gaps')).toBe('done');
+    expect(stageForStatus('paused')).toBe('run');
   });
 });
 

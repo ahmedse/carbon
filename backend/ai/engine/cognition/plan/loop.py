@@ -5,6 +5,7 @@ PR-20: Executes each PlanStep through draft → critic → execute → observe,
 with mutation confirmation gates, dry-run previews, and up to 2 replans.
 """
 import asyncio
+import inspect
 import json
 import logging
 import time
@@ -64,12 +65,28 @@ def _tool_requires_confirmation(tool_name: str) -> bool:
 # Pulse v2 Phase 5: read-only tools the loop may auto-chain for multi-hop
 # reasoning. Mutation/planning tools are deliberately excluded — an automatic
 # follow-up must never write state or trigger a consent gate without the user.
+# ``call_host_api`` is allowed only for GET (see ``_followup_is_readonly``).
 _ALLOWED_FOLLOWUP_TOOLS = frozenset({
     "web_research",
     "get_entity_details",
     "search_knowledge",
     "call_host_api",
 })
+
+# Hard cap on auto-injected follow-ups per run (independent of PULSE_LOOP_MAX_STEPS).
+# Live QA: uncapped chaining produced 3× "Fetch call_host_api" consent spam.
+_MAX_AUTO_FOLLOWUPS = 2
+
+
+def _followup_is_readonly(tool_name: str | None, tool_args: dict | None) -> bool:
+    """True when an allow-listed follow-up cannot trigger RULE_21 consent."""
+    if not tool_name:
+        return False
+    if tool_name != "call_host_api":
+        return True
+    args = tool_args or {}
+    method = str(args.get("method") or "GET").upper()
+    return method in ("GET", "HEAD", "OPTIONS")
 
 
 # ── Dataclasses ────────────────────────────────────────────────────────────────
@@ -113,6 +130,8 @@ class StepResult:
     confirmation_token: str | None = None
     # Pulse v2 Phase 5: read-only follow-up requested by the observation.
     followup: ObservationResult | None = None
+    # Token usage from the draft LLM call (Monitor / ledger).
+    tokens_used: int = 0
 
 
 @dataclass
@@ -172,6 +191,13 @@ class ReActLoop:
         host_user_id: str | None = None,
         resume_run_id: str | None = None,  # P1.3: resume from a paused run
         flight_director=None,     # FlightDirector — additive in-loop supervisor
+        workflow_graph=None,      # ADR-0034 WorkflowGraph | dict | None
+        workflow_context: dict | None = None,
+        on_workflow_choice=None,  # (node_id, chosen_edge|None, evaluations) -> None
+        on_heal_proposed=None,    # (observe_node_id, HealProposal) -> None | awaitable
+        on_compensation_queued=None,  # (failed_step_id, comp_step_id, node_id) -> ...
+        on_wait_fired=None,       # (node_id, WaitDecision) -> None | awaitable
+        max_heals: int | None = None,
     ) -> ReActResult:
         """Execute the plan through the ReAct loop.
 
@@ -196,6 +222,12 @@ class ReActLoop:
             host_user_id: optional host user for tenancy
             resume_run_id: P1.3 — if set, resume an existing paused run
                 from the first pending step
+            workflow_graph: optional ADR-0034 graph; when set, step eligibility
+                is driven by ``advance_and_ready_tasks`` (choice / parallel)
+            workflow_context: mutable guard-eval context (status, last verdict, …)
+            on_workflow_choice: optional callback for journaling choice decisions
+            on_heal_proposed: optional callback for journaling observe heals
+            max_heals: override DEFAULT_MAX_HEALS for observe self-heal
 
         Returns:
             ReActResult with step results and final synthesis
@@ -328,6 +360,67 @@ class ReActLoop:
             s for s in plan.steps if s.step_id not in completed_ids
         ]
 
+        # ADR-0034: optional workflow graph drives choice / parallel eligibility.
+        _wf_graph = None
+        if workflow_graph is not None:
+            try:
+                from ai.engine.workflow.graph import WorkflowGraph
+                if isinstance(workflow_graph, WorkflowGraph):
+                    _wf_graph = workflow_graph
+                elif isinstance(workflow_graph, dict):
+                    _wf_graph = WorkflowGraph.from_dict(workflow_graph)
+            except Exception:  # noqa: BLE001 — never block a run on bad graph
+                logger.exception("ReActLoop: failed to load workflow_graph; using depends_on")
+                _wf_graph = None
+        _wf_ctx: dict = workflow_context if workflow_context is not None else {}
+        _wf_gateways: set[str] = set()
+        _wf_skipped_nodes: set[str] = set()
+        _wf_journaled: set[str] = set()
+        _wf_choice_batch: list[tuple] = []
+        _gap_step_ids: set[int] = set()
+        _heals_used = 0
+        _wf_loop_iters: dict[str, int] = {}
+        _wf_map_iters: dict[str, int] = {}
+        _wf_wait_started: dict[str, float] = {}
+        try:
+            from ai.engine.workflow.heal import DEFAULT_MAX_HEALS as _DEFAULT_MAX_HEALS
+            _max_heals = int(max_heals) if max_heals is not None else _DEFAULT_MAX_HEALS
+        except Exception:  # noqa: BLE001
+            _max_heals = 1
+
+        def _requeue_body_steps(body_ids: list[int]) -> None:
+            nonlocal remaining
+            _plan_by = {s.step_id: s for s in plan.steps}
+            for _bsid in body_ids:
+                completed_ids.discard(_bsid)
+                _bs = _plan_by.get(_bsid)
+                if _bs is None:
+                    continue
+                remaining = [s for s in remaining if s.step_id != _bsid]
+                remaining.insert(0, _bs)
+
+        def _on_choice(node_id, chosen, evaluations):
+            if node_id in _wf_journaled:
+                return
+            _wf_journaled.add(node_id)
+            _wf_choice_batch.append((node_id, chosen, evaluations))
+
+        async def _flush_choice_journal():
+            if not _wf_choice_batch or on_workflow_choice is None:
+                _wf_choice_batch.clear()
+                return
+            import inspect
+            for node_id, chosen, evaluations in _wf_choice_batch:
+                try:
+                    maybe = on_workflow_choice(node_id, chosen, evaluations)
+                    if inspect.isawaitable(maybe):
+                        await maybe
+                except Exception:  # noqa: BLE001 — journaling must not halt the run
+                    logger.exception(
+                        "ReActLoop: on_workflow_choice failed node=%s", node_id,
+                    )
+            _wf_choice_batch.clear()
+
         # Pulse v2 Phase 5: multi-hop follow-up budget + next-step id counter.
         followup_steps_used = 0
         _next_step_id = max((s.step_id for s in plan.steps), default=-1) + 1
@@ -390,8 +483,257 @@ class ReActLoop:
                         return False
             return True
 
+        stopped_for_cancel = False
+        total_tokens = 0
         while remaining:
-            ready, remaining = self._partition_ready(remaining, completed_ids)
+            # Operator Stop (cancel_plan) must halt the in-memory loop. Without
+            # this poll, ReAct keeps executing and _finalize_run clobbers
+            # ``cancelled`` → ``completed`` (live QA: Stop → Completed 6/7).
+            if _db is not None and run_id is not None:
+                if await self._run_is_cancelled(_db, run_id):
+                    stopped_for_cancel = True
+                    logger.info("ReActLoop: cancel observed mid-run id=%s", run_id)
+                    break
+            # ADR-0034: when a workflow graph is present, it owns eligibility
+            # (choice / parallel / auto gateways). Otherwise classic depends_on.
+            if _wf_graph is not None:
+                from ai.engine.workflow.driver import (
+                    advance_and_ready_tasks,
+                    incoming,
+                    node_for_step,
+                )
+                from ai.engine.workflow.loops import (
+                    body_step_ids,
+                    evaluate_loop,
+                    evaluate_map,
+                )
+
+                # Seed completed graph ids for loop/map gateway checks.
+                _completed_graph = set(_wf_gateways) | set(_wf_skipped_nodes)
+                for _sid in completed_ids:
+                    _n = node_for_step(_wf_graph, _sid)
+                    if _n is not None:
+                        _completed_graph.add(_n.id)
+
+                # Map fan-out: one body pass per collection item.
+                for _mn in _wf_graph.nodes:
+                    if _mn.node_type != "map" or _mn.id in _wf_gateways:
+                        continue
+                    if _mn.id in _wf_skipped_nodes:
+                        continue
+                    _preds = incoming(_wf_graph, _mn.id)
+                    if _preds and not all(
+                        e.source in _completed_graph for e in _preds
+                    ):
+                        continue
+                    _body_done = True
+                    if _wf_map_iters.get(_mn.id, 0) > 0:
+                        for _bsid in body_step_ids(_wf_graph, _mn):
+                            if _bsid not in completed_ids:
+                                _body_done = False
+                                break
+                    if not _body_done:
+                        continue
+                    _action, _body, _wf_map_iters, _item = evaluate_map(
+                        _wf_graph, _mn, _wf_ctx, _wf_map_iters,
+                    )
+                    if _action == "body" and _body:
+                        _wf_ctx["map_item"] = _item
+                        _wf_ctx["map_index"] = int(_wf_map_iters.get(_mn.id, 1)) - 1
+                        _wf_ctx["map_node"] = _mn.id
+                        _requeue_body_steps(_body)
+                        await _get_broadcast()(instance_id, "run.map.iter", {
+                            "run_id": run_id,
+                            "map_node": _mn.id,
+                            "map_index": _wf_ctx["map_index"],
+                            "body_step_ids": _body,
+                        })
+                    else:
+                        _wf_gateways.add(_mn.id)
+                        _wf_ctx.pop("map_item", None)
+
+                # Bounded while-loops: re-queue body steps while guard holds.
+                for _ln in _wf_graph.nodes:
+                    if _ln.node_type != "loop" or _ln.id in _wf_gateways:
+                        continue
+                    if _ln.id in _wf_skipped_nodes:
+                        continue
+                    _preds = incoming(_wf_graph, _ln.id)
+                    if _preds and not all(
+                        e.source in _completed_graph for e in _preds
+                    ):
+                        continue
+                    _body_done = True
+                    if _wf_loop_iters.get(_ln.id, 0) > 0:
+                        for _bsid in body_step_ids(_wf_graph, _ln):
+                            if _bsid not in completed_ids:
+                                _body_done = False
+                                break
+                    if not _body_done:
+                        continue
+
+                    _wf_ctx["loop_iter"] = _wf_loop_iters.get(_ln.id, 0)
+                    _wf_ctx["loop_node"] = _ln.id
+                    _action, _body, _wf_loop_iters = evaluate_loop(
+                        _wf_graph,
+                        _ln,
+                        _wf_ctx,
+                        _wf_loop_iters,
+                        on_loop_iter=lambda nid, n, mx: logger.info(
+                            "ReActLoop: loop %s iter %d/%d", nid, n, mx,
+                        ),
+                    )
+                    if _action == "body" and _body:
+                        _requeue_body_steps(_body)
+                        await _get_broadcast()(instance_id, "run.loop.iter", {
+                            "run_id": run_id,
+                            "loop_node": _ln.id,
+                            "iteration": _wf_loop_iters.get(_ln.id),
+                            "max_iterations": _ln.max_iterations,
+                            "body_step_ids": _body,
+                        })
+                    else:
+                        _wf_gateways.add(_ln.id)
+                        _skip_body = [
+                            s for s in remaining
+                            if s.step_id in set(body_step_ids(_wf_graph, _ln))
+                            and s.step_id not in completed_ids
+                        ]
+                        if _skip_body:
+                            remaining = [
+                                s for s in remaining
+                                if s.step_id not in {x.step_id for x in _skip_body}
+                            ]
+                            for _ss in _skip_body:
+                                step_results.append(StepResult(
+                                    step_id=_ss.step_id,
+                                    intent=_ss.intent,
+                                    critic_verdict="pass",
+                                    executed=False,
+                                    error="loop_exited",
+                                ))
+                                completed_ids.add(_ss.step_id)
+
+                # Wait timers / until-guards (host-driven; not auto-advanced).
+                from ai.engine.workflow.wait import (
+                    evaluate_wait,
+                    wait_duration_ms,
+                    wait_until_guard,
+                )
+                import time as _time
+
+                for _wnode in _wf_graph.nodes:
+                    if _wnode.node_type != "wait" or _wnode.id in _wf_gateways:
+                        continue
+                    if _wnode.id in _wf_skipped_nodes:
+                        continue
+                    _preds = incoming(_wf_graph, _wnode.id)
+                    if _preds and not all(
+                        e.source in _completed_graph for e in _preds
+                    ):
+                        continue
+                    _started = _wf_wait_started.setdefault(
+                        _wnode.id, _time.monotonic(),
+                    )
+                    _elapsed_ms = int((_time.monotonic() - _started) * 1000)
+                    _decision = evaluate_wait(
+                        _wnode, _wf_ctx, elapsed_ms=_elapsed_ms,
+                    )
+                    if not _decision.satisfied and _decision.sleep_ms > 0:
+                        await _get_broadcast()(instance_id, "run.wait.sleep", {
+                            "run_id": run_id,
+                            "wait_node": _wnode.id,
+                            "sleep_ms": _decision.sleep_ms,
+                            "elapsed_ms": _elapsed_ms,
+                        })
+                        # Cap per-tick sleep; re-evaluate next loop turn if longer.
+                        _chunk = min(_decision.sleep_ms, 5_000) / 1000.0
+                        await asyncio.sleep(_chunk)
+                        if _db is not None and run_id is not None:
+                            if await self._run_is_cancelled(_db, run_id):
+                                stopped_for_cancel = True
+                                break
+                        _elapsed_ms = int(
+                            (_time.monotonic() - _wf_wait_started[_wnode.id]) * 1000
+                        )
+                        _decision = evaluate_wait(
+                            _wnode, _wf_ctx, elapsed_ms=_elapsed_ms,
+                        )
+                    if not _decision.satisfied:
+                        # until-only still pending — leave wait incomplete.
+                        continue
+                    _wf_gateways.add(_wnode.id)
+                    _completed_graph.add(_wnode.id)
+                    _wf_wait_started.pop(_wnode.id, None)
+                    await _get_broadcast()(instance_id, "run.wait.fired", {
+                        "run_id": run_id,
+                        "wait_node": _wnode.id,
+                        "reason": _decision.reason,
+                        "duration_ms": wait_duration_ms(_wnode),
+                    })
+                    if on_wait_fired is not None:
+                        _maybe = on_wait_fired(_wnode.id, _decision)
+                        if inspect.isawaitable(_maybe):
+                            await _maybe
+                    logger.info(
+                        "ReActLoop: wait %s fired reason=%s duration_ms=%s until=%s",
+                        _wnode.id,
+                        _decision.reason,
+                        wait_duration_ms(_wnode),
+                        wait_until_guard(_wnode),
+                    )
+
+                if stopped_for_cancel:
+                    break
+
+                ready_ids, newly_skipped, _wf_gateways, _wf_skipped_nodes = (
+                    advance_and_ready_tasks(
+                        _wf_graph,
+                        completed_ids,
+                        _wf_ctx,
+                        completed_gateways=_wf_gateways,
+                        skipped_graph_ids=_wf_skipped_nodes,
+                        on_choice=_on_choice,
+                    )
+                )
+                await _flush_choice_journal()
+                if newly_skipped:
+                    skip_steps = [
+                        s for s in remaining if s.step_id in newly_skipped
+                    ]
+                    remaining = [
+                        s for s in remaining if s.step_id not in newly_skipped
+                    ]
+                    for _ss in skip_steps:
+                        step_results.append(StepResult(
+                            step_id=_ss.step_id,
+                            intent=_ss.intent,
+                            critic_verdict="pass",
+                            executed=False,
+                            error=None,
+                        ))
+                        completed_ids.add(_ss.step_id)
+                        if _db is not None and run_id is not None:
+                            await self._persist_skipped_step(
+                                _db, run_id, _ss, reason="unchosen_branch",
+                            )
+                        await _get_broadcast()(instance_id, "run.step.skipped", {
+                            "run_id": run_id,
+                            "step_index": _ss.step_id,
+                            "intent": _ss.intent,
+                            "reason": "unchosen_branch",
+                        })
+                ready_id_set = set(ready_ids)
+                by_remaining = {s.step_id: s for s in remaining}
+                ready = [
+                    by_remaining[sid] for sid in ready_ids if sid in by_remaining
+                ]
+                remaining = [
+                    s for s in remaining if s.step_id not in ready_id_set
+                ]
+            else:
+                ready, remaining = self._partition_ready(remaining, completed_ids)
+
             # Phase barrier filter — sequential phases must not jump ahead.
             # Steps blocked by an earlier phase stay in the pool (they are
             # pushed back into ``remaining``) so they run once their phase is
@@ -408,12 +750,26 @@ class ReActLoop:
             if not ready:
                 # Circular dependency or phase barrier blocking — surface as
                 # sequentially-run remaining so execution never stalls.
-                if remaining:
+                # With a workflow graph, do NOT force-run remaining (would
+                # execute unchosen XOR branches); exit cleanly instead —
+                # unless a wait timer is still pending (re-enter outer loop).
+                if remaining and _wf_graph is None:
                     logger.warning(
                         "ReActLoop: phase barrier/circular deps block ready set; "
                         "running remaining sequentially"
                     )
                     ready, remaining = remaining[:1], remaining[1:]
+                elif remaining and _wf_graph is not None:
+                    if _wf_wait_started:
+                        # Timer / until still open — keep looping (sleep already
+                        # happened in the wait handler above).
+                        continue
+                    logger.warning(
+                        "ReActLoop: workflow graph has no ready tasks with %d "
+                        "remaining; stopping (not force-running)",
+                        len(remaining),
+                    )
+                    break
                 else:
                     break
 
@@ -438,7 +794,15 @@ class ReActLoop:
             # Phase 2 — execute in parallel (sequential fast-path when len==1)
             async def _run_one(step):
                 _t0 = time.monotonic()
-                _res = await self._execute_step(
+                _retry_policy = None
+                _timeout_ms = None
+                if _wf_graph is not None:
+                    from ai.engine.workflow.driver import node_for_step
+                    _wn = node_for_step(_wf_graph, step.step_id)
+                    if _wn is not None:
+                        _retry_policy = _wn.retry
+                        _timeout_ms = _wn.timeout_ms
+                _exec_coro = self._execute_step(
                     step=step,
                     dw=dw,
                     cw=cw,
@@ -460,7 +824,23 @@ class ReActLoop:
                     plan_source=plan.source,
                     flight_director=fd,
                     host_user_id=host_user_id,
+                    retry_policy=_retry_policy,
                 )
+                try:
+                    if _timeout_ms and int(_timeout_ms) > 0:
+                        _res = await asyncio.wait_for(
+                            _exec_coro, timeout=float(_timeout_ms) / 1000.0,
+                        )
+                    else:
+                        _res = await _exec_coro
+                except asyncio.TimeoutError:
+                    _res = StepResult(
+                        step_id=step.step_id,
+                        intent=step.intent,
+                        critic_verdict="veto",
+                        executed=False,
+                        error=f"[timeout] exceeded timeout_ms={_timeout_ms}",
+                    )
                 return step, _res, (time.monotonic() - _t0) * 1000
 
             if len(ready) == 1:
@@ -473,6 +853,7 @@ class ReActLoop:
             for step, result, step_latency in executed:
                 step_results.append(result)
                 total_llm_calls += 1  # each step involves at least one LLM call
+                total_tokens += int(getattr(result, "tokens_used", 0) or 0)
 
                 # ── Step event based on result ────────────────────────
                 # Any error (critic veto OR lifted tool error) fails the step;
@@ -523,6 +904,154 @@ class ReActLoop:
                     stopped_for_pause = True
                     break
 
+                # ── W-4 catch / W-5 observe heal (before persist) ─────
+                # Exhausted veto or hard tool error may route to catch.next.
+                # Mark the error ``[caught]`` so reconcile can emit
+                # ``completed_with_gaps`` instead of hard-failed.
+                _catch_healed = False
+                _mid_veto_replan = (
+                    result.critic_verdict == "veto"
+                    and replans_used < self.MAX_REPLANS
+                )
+                if (
+                    _wf_graph is not None
+                    and not result.paused
+                    and not _mid_veto_replan
+                    and (result.error or result.critic_verdict == "veto")
+                ):
+                    from ai.engine.workflow.compensate import compensation_step_id
+                    from ai.engine.workflow.driver import (
+                        node_for_step,
+                        resolve_catch,
+                        step_id_for_node,
+                    )
+                    from ai.engine.workflow.heal import propose_heal
+                    from ai.engine.workflow.retry import classify_error
+
+                    _node = node_for_step(_wf_graph, step.step_id)
+                    _err_class = classify_error(
+                        result.error or f"critic:{result.critic_verdict}"
+                    )
+                    _catch_id = resolve_catch(_node, _err_class)
+                    if _catch_id:
+                        _raw_err = result.error or f"critic:{result.critic_verdict}"
+                        if not str(_raw_err).startswith("[caught]"):
+                            result.error = f"[caught] {_raw_err}"
+                        _gap_step_ids.add(step.step_id)
+                        _by = {n.id: n for n in _wf_graph.nodes}
+                        _catch_node = _by.get(_catch_id)
+                        if (
+                            _catch_node is not None
+                            and _catch_node.node_type == "observe"
+                            and _heals_used < _max_heals
+                        ):
+                            _proposal = propose_heal(
+                                goal=user_message or plan.synthesis_instruction or "",
+                                failed_step=step,
+                                failed_error=result.error,
+                                remaining_steps=remaining,
+                                next_step_id=_next_step_id,
+                            )
+                            _heals_used += 1
+                            _wf_gateways.add(_catch_id)
+                            _next_step_id = max(
+                                _next_step_id,
+                                max(
+                                    (s.step_id for s in _proposal.new_steps),
+                                    default=_next_step_id - 1,
+                                ) + 1,
+                            )
+                            remaining = list(_proposal.new_steps)
+                            _existing_ids = {s.step_id for s in plan.steps}
+                            for _ns in _proposal.new_steps:
+                                if _ns.step_id not in _existing_ids:
+                                    plan.steps.append(_ns)
+                                    _existing_ids.add(_ns.step_id)
+                            if on_heal_proposed is not None:
+                                import inspect
+                                try:
+                                    _maybe = on_heal_proposed(
+                                        _catch_id, _proposal,
+                                    )
+                                    if inspect.isawaitable(_maybe):
+                                        await _maybe
+                                except Exception:  # noqa: BLE001
+                                    logger.exception(
+                                        "ReActLoop: on_heal_proposed failed node=%s",
+                                        _catch_id,
+                                    )
+                            await _get_broadcast()(instance_id, "run.heal.proposed", {
+                                "run_id": run_id,
+                                "observe_node": _catch_id,
+                                "failed_step": step.step_id,
+                                "summary": _proposal.summary,
+                                "gap_step_ids": list(_proposal.gap_step_ids),
+                            })
+                            _catch_healed = True
+                            logger.info(
+                                "ReActLoop: observe heal after step %d → %d new steps",
+                                step.step_id, len(_proposal.new_steps),
+                            )
+                        elif _catch_node is not None and _catch_node.node_type == "task":
+                            # Catch → fallback/compensate task (RULE_21 if mutation).
+                            _csid = step_id_for_node(_catch_node)
+                            if _csid is not None:
+                                _requeue_body_steps([_csid])
+                                _plan_by = {s.step_id: s for s in plan.steps}
+                                _cs = _plan_by.get(_csid)
+                                if _cs is not None and (
+                                    _catch_node.is_mutation or _node and _node.compensation
+                                ):
+                                    _cs.is_mutation = True
+                                await _get_broadcast()(
+                                    instance_id, "run.catch.routed", {
+                                        "run_id": run_id,
+                                        "failed_step": step.step_id,
+                                        "catch_node": _catch_id,
+                                        "catch_step_id": _csid,
+                                        "error_class": _err_class,
+                                    },
+                                )
+                                _catch_healed = True
+
+                    # Saga: node.compensation queues a reversal step (consent-gated).
+                    if not _catch_healed and _node is not None and _node.compensation:
+                        _comp_sid = compensation_step_id(_wf_graph, _node)
+                        if _comp_sid is not None:
+                            if result.error and not str(result.error).startswith("[caught]"):
+                                result.error = f"[caught] {result.error}"
+                            _gap_step_ids.add(step.step_id)
+                            _requeue_body_steps([_comp_sid])
+                            _plan_by = {s.step_id: s for s in plan.steps}
+                            _cs = _plan_by.get(_comp_sid)
+                            if _cs is not None:
+                                _cs.is_mutation = True  # RULE_21 — never auto-write
+                            await _get_broadcast()(
+                                instance_id, "run.compensation.queued", {
+                                    "run_id": run_id,
+                                    "failed_step": step.step_id,
+                                    "compensation_step_id": _comp_sid,
+                                    "compensation_node": _node.compensation,
+                                },
+                            )
+                            if on_compensation_queued is not None:
+                                import inspect
+                                try:
+                                    _maybe = on_compensation_queued(
+                                        step.step_id, _comp_sid, _node.compensation,
+                                    )
+                                    if inspect.isawaitable(_maybe):
+                                        await _maybe
+                                except Exception:  # noqa: BLE001
+                                    logger.exception(
+                                        "ReActLoop: on_compensation_queued failed",
+                                    )
+                            _catch_healed = True
+                            logger.info(
+                                "ReActLoop: compensation queued step %d after failure of %d",
+                                _comp_sid, step.step_id,
+                            )
+
                 # ── P1.1: Persist RunStep row ──────────────────────────
                 if _db is not None and run_id is not None:
                     await self._persist_run_step(
@@ -533,7 +1062,7 @@ class ReActLoop:
                         step_latency_ms=step_latency,
                     )
 
-                if result.critic_verdict == "veto":
+                if result.critic_verdict == "veto" and not _catch_healed:
                     if replans_used < self.MAX_REPLANS:
                         logger.info(
                             "ReActLoop: step %d vetoed, replanning (%d/%d)",
@@ -557,6 +1086,34 @@ class ReActLoop:
                 completed_ids.add(step.step_id)
                 if result.draft_text:
                     step_contexts[step.step_id] = result.draft_text
+
+                # ADR-0034: refresh guard context for subsequent choice nodes.
+                if _wf_graph is not None:
+                    _ok = (
+                        not result.error
+                        and result.critic_verdict != "veto"
+                        and not result.paused
+                    )
+                    # Caught failures still set status=failed for guards, but
+                    # the run continues via the heal / catch path.
+                    _wf_ctx["status"] = "ok" if _ok else "failed"
+                    _wf_ctx["last_step_id"] = step.step_id
+                    _wf_ctx["last_verdict"] = result.critic_verdict or ""
+                    _wf_ctx["caught"] = bool(
+                        result.error and str(result.error).startswith("[caught]")
+                    )
+                    _wf_ctx[f"step_{step.step_id}"] = {
+                        "status": _wf_ctx["status"],
+                        "verdict": result.critic_verdict or "",
+                        "error": result.error,
+                        "caught": _wf_ctx["caught"],
+                    }
+
+                if _catch_healed:
+                    # Repaired remainder uses classic depends_on (new recovery
+                    # steps are not in the original workflow_graph).
+                    _wf_graph = None
+                    break
 
                 # ── Pulse v2 Phase 5: inject a read-only follow-up step ────
                 # When the observation concluded more data is needed and named
@@ -604,34 +1161,71 @@ class ReActLoop:
             if stopped_for_pause:
                 break  # stop the entire loop (outer while)
 
-        # ── Check for pause (consent gate hit) ────────────────────────────
+        # ── Check for pause (consent gate hit) / operator cancel ──────────
         is_paused = bool(step_results and step_results[-1].paused)
+        is_cancelled = stopped_for_cancel
+        if not is_cancelled and _db is not None and run_id is not None:
+            is_cancelled = await self._run_is_cancelled(_db, run_id)
+
         if is_paused:
             # Don't synthesize — return the confirmation prompt
             last = step_results[-1]
             final_response = _extract_confirmation_message(last.tool_output)
             succeeded = False
+            final_status = "paused"
+        elif is_cancelled:
+            final_response = "Run stopped — remaining steps were not executed."
+            succeeded = False
+            final_status = "cancelled"
         else:
             # ── Synthesise final response ─────────────────────────────────
             final_response = await self._synthesise(
                 plan, step_results, user_message, system_prompt, step_contexts,
                 instance_id=instance_id,
+                gap_step_ids=sorted(_gap_step_ids),
             )
-            succeeded = all(
-                r.critic_verdict in ("pass", "pass_with_flag") and not r.error
-                for r in step_results
-            )
+            ok_results = [
+                r for r in step_results
+                if r.critic_verdict in ("pass", "pass_with_flag") and not r.error
+            ]
+            caught = [
+                r for r in step_results
+                if r.error and str(r.error).startswith("[caught]")
+            ]
+            hard_fails = [
+                r for r in step_results
+                if (r.error or r.critic_verdict == "veto")
+                and not (r.error and str(r.error).startswith("[caught]"))
+            ]
+            if ok_results and caught and not hard_fails:
+                succeeded = True
+                final_status = "completed_with_gaps"
+            elif hard_fails:
+                succeeded = False
+                final_status = "failed"
+            else:
+                succeeded = all(
+                    r.critic_verdict in ("pass", "pass_with_flag") and not r.error
+                    for r in step_results
+                ) if step_results else True
+                final_status = "completed" if succeeded else "failed"
 
         # ── P1.1: Update Run row with final status ────────────────────────
         if _db is not None and run_id is not None:
             total_latency = (time.monotonic() - t0) * 1000
-            if is_paused:
-                # Run already set to paused in the loop — just update latency
+            if is_paused or is_cancelled:
+                # Pause/cancel already own the Run status — never clobber via
+                # _finalize_run (that path wrote completed/failed and hid Stop).
                 from ai.engine.core.models import Run
                 row = first(await _db.select(Run, ("id", run_id)))
                 if row:
                     row.total_llm_calls = total_llm_calls
                     row.total_latency_ms = total_latency
+                    row.total_tokens = (row.total_tokens or 0) + total_tokens
+                    if is_cancelled and not final_response:
+                        pass
+                    elif is_cancelled:
+                        row.final_response = (final_response or "")[:2000]
                     row.updated_at = utcnow()
                     await _db.commit()
             else:
@@ -642,24 +1236,45 @@ class ReActLoop:
                     final_response=final_response,
                     total_latency_ms=total_latency,
                     total_llm_calls=total_llm_calls,
+                    total_tokens=total_tokens,
                     step_results=step_results,
+                    final_status=final_status,
                 )
 
-        if not is_paused:
+        if not is_paused and not is_cancelled:
             _total_latency = (time.monotonic() - t0) * 1000
-            await _get_broadcast()(instance_id, "run.completed" if succeeded else "run.failed", {
+            _evt = (
+                "run.completed"
+                if final_status in ("completed", "completed_with_gaps")
+                else "run.failed"
+            )
+            await _get_broadcast()(instance_id, _evt, {
                 "run_id": run_id,
+                "status": final_status,
                 "total_latency_ms": _total_latency,
                 "total_llm_calls": total_llm_calls,
+                "steps_completed": len([
+                    r for r in step_results
+                    if r.critic_verdict in ("pass", "pass_with_flag") and not r.error
+                ]),
+                "steps_failed": len([
+                    r for r in step_results
+                    if r.error or r.critic_verdict == "veto"
+                ]),
+                "gap_step_ids": sorted(_gap_step_ids),
+            })
+        elif is_cancelled:
+            await _get_broadcast()(instance_id, "run.cancelled", {
+                "run_id": run_id,
+                "total_llm_calls": total_llm_calls,
                 "steps_completed": len([r for r in step_results if r.critic_verdict in ("pass", "pass_with_flag")]),
-                "steps_failed": len([r for r in step_results if r.error or r.critic_verdict == "veto"]),
             })
 
         return ReActResult(
             plan=plan,
             step_results=step_results,
             final_response=final_response,
-            succeeded=succeeded,
+            succeeded=succeeded and not is_cancelled,
             replans_used=replans_used,
             confirmations_required=confirmations_required,
         )
@@ -689,6 +1304,7 @@ class ReActLoop:
         plan_source: str = "",
         flight_director=None,   # FlightDirector — additive in-loop supervisor
         host_user_id: str | None = None,
+        retry_policy: dict | None = None,
     ) -> StepResult:
         """Execute one plan step: draft → critic → execute → observe."""
 
@@ -809,6 +1425,7 @@ class ReActLoop:
             draft_text=draft.text,
             critic_verdict=critic.verdict,
             critic_flags=critic.flags.copy(),
+            tokens_used=int(getattr(draft, "tokens_used", 0) or 0),
         )
 
         if critic.verdict == "veto":
@@ -894,22 +1511,39 @@ class ReActLoop:
             result.executed = True
             result.tool_output = execution.completed_tools[0] if execution.completed_tools else None
 
-            # ── Tool-error propagation + bounded retry ───────────────────
-            # Retry transient tool failures (e.g. empty web_research response)
-            # up to RETRY_MAX_ATTEMPTS times before marking the step failed.
-            # Consent and mutation steps are never auto-retried (RULE_21).
-            _MAX_TOOL_RETRIES = 2
+            # ── Tool-error propagation + bounded retry (W-4 policy) ───────
+            # Per-node ``retry`` from the workflow graph wins; otherwise the
+            # default transient policy applies. Mutations are never auto-retried
+            # (RULE_21).
+            from ai.engine.workflow.retry import (
+                backoff_seconds,
+                normalize_retry_policy,
+                should_retry,
+            )
+
+            _policy = normalize_retry_policy(retry_policy)
             _tool_attempt = 0
             if result.tool_output and isinstance(result.tool_output, dict):
                 _tool_err = result.tool_output.get("error")
-                while _tool_err and _tool_attempt < _MAX_TOOL_RETRIES and not step.is_mutation:
+                while (
+                    _tool_err
+                    and not step.is_mutation
+                    and should_retry(_policy, _tool_err, _tool_attempt)
+                ):
                     _tool_attempt += 1
+                    _delay = backoff_seconds(_policy, _tool_attempt)
                     logger.info(
-                        "ReActLoop: retrying step %d tool=%s (attempt %d/%d): %s",
-                        step.step_id, step.tool_name or "?", _tool_attempt, _MAX_TOOL_RETRIES, _tool_err,
+                        "ReActLoop: retrying step %d tool=%s (attempt %d/%d, wait=%.2fs): %s",
+                        step.step_id,
+                        step.tool_name or "?",
+                        _tool_attempt,
+                        int(_policy["max_attempts"]) - 1,
+                        _delay,
+                        _tool_err,
                     )
                     import asyncio as _asyncio
-                    await _asyncio.sleep(min(2 ** _tool_attempt, 8))
+                    if _delay > 0:
+                        await _asyncio.sleep(_delay)
                     try:
                         _retry_exec = await ex.execute(
                             text=draft.text,
@@ -922,7 +1556,10 @@ class ReActLoop:
                     except Exception as _re:
                         _tool_err = str(_re)
                         break
-                    result.tool_output = _retry_exec.completed_tools[0] if _retry_exec.completed_tools else None
+                    result.tool_output = (
+                        _retry_exec.completed_tools[0]
+                        if _retry_exec.completed_tools else None
+                    )
                     _tool_err = (
                         result.tool_output.get("error")
                         if result.tool_output and isinstance(result.tool_output, dict)
@@ -1246,12 +1883,22 @@ class ReActLoop:
         included). Kept as a method so the budget/allow-list logic is testable
         without a full ReActLoop run.
         """
-        return bool(
+        if not (
             result
             and result.followup
             and result.followup.needs_followup
             and result.followup.followup_tool in _ALLOWED_FOLLOWUP_TOOLS
             and followup_steps_used < max_steps
+            and followup_steps_used < _MAX_AUTO_FOLLOWUPS
+        ):
+            return False
+        # Never chain off a failed / paused / consent step — that produced the
+        # Done-ledger spam of awaiting_approval follow-ups (live QA).
+        if result.error or result.paused or result.critic_verdict == "veto":
+            return False
+        return _followup_is_readonly(
+            result.followup.followup_tool,
+            result.followup.followup_args,
         )
 
     def _build_step_prompt(
@@ -1317,6 +1964,40 @@ class ReActLoop:
         )]
 
     # ── P1.1: Durable run persistence helpers ─────────────────────────────
+
+    async def _persist_skipped_step(
+        self,
+        _db,
+        run_id: str,
+        step: PlanStep,
+        reason: str = "unchosen_branch",
+    ) -> None:
+        """Persist a RunStep marked skipped (e.g. XOR branch not taken)."""
+        from ai.engine.core.models import RunStep, generate_uuid
+
+        existing = first(await _db.select(
+            RunStep,
+            ("run_id", run_id),
+            ("step_index", step.step_id),
+        ))
+        if existing:
+            existing.status = "skipped"
+            existing.error = reason
+            existing.updated_at = utcnow()
+            await _db.commit()
+            return
+        _db.add(RunStep(
+            id=generate_uuid(),
+            run_id=run_id,
+            step_index=step.step_id,
+            intent=step.intent,
+            tool_name=step.tool_name,
+            tool_args_json=json.dumps(step.tool_args) if step.tool_args else None,
+            depends_on_json=json.dumps(step.depends_on) if step.depends_on else None,
+            status="skipped",
+            error=reason,
+        ))
+        await _db.commit()
 
     async def _persist_run_step(
         self,
@@ -1405,6 +2086,12 @@ class ReActLoop:
             await _db.commit()
             logger.info("ReActLoop: paused Run id=%s", run_id)
 
+    async def _run_is_cancelled(self, _db, run_id: str) -> bool:
+        """True when the durable Run was cancelled (operator Stop)."""
+        from ai.engine.core.models import Run
+        row = first(await _db.select(Run, ("id", run_id)))
+        return bool(row and row.status == "cancelled")
+
     async def _finalize_run(
         self,
         _db,
@@ -1414,6 +2101,8 @@ class ReActLoop:
         total_latency_ms: float,
         total_llm_calls: int,
         step_results: list[StepResult],
+        total_tokens: int = 0,
+        final_status: str | None = None,
     ) -> None:
         """Update the Run row with final status and summary."""
         from ai.engine.core.models import Run
@@ -1423,10 +2112,29 @@ class ReActLoop:
             logger.warning("ReActLoop: Run row id=%s not found for finalization", run_id)
             return
 
-        run_row.status = "completed" if succeeded else "failed"
+        # Never overwrite an operator cancel (or pause) with completed/failed.
+        if run_row.status in ("cancelled", "paused"):
+            run_row.total_llm_calls = total_llm_calls
+            run_row.total_latency_ms = total_latency_ms
+            if total_tokens:
+                run_row.total_tokens = (run_row.total_tokens or 0) + total_tokens
+            run_row.updated_at = utcnow()
+            await _db.commit()
+            logger.info(
+                "ReActLoop: skip finalize status clobber id=%s keep=%s",
+                run_id, run_row.status,
+            )
+            return
+
+        if final_status in ("completed", "completed_with_gaps", "failed"):
+            run_row.status = final_status
+        else:
+            run_row.status = "completed" if succeeded else "failed"
         run_row.final_response = final_response[:2000] if final_response else None
         run_row.total_llm_calls = total_llm_calls
         run_row.total_latency_ms = total_latency_ms
+        if total_tokens:
+            run_row.total_tokens = (run_row.total_tokens or 0) + total_tokens
         run_row.completed_at = utcnow()
         await _db.commit()
         logger.debug("ReActLoop: finalized Run row id=%s status=%s", run_id, run_row.status)
@@ -1441,9 +2149,10 @@ class ReActLoop:
         system_prompt: str,
         step_contexts: dict[int, str],
         instance_id: str = "",
+        gap_step_ids: list[int] | None = None,
     ) -> str:
         """Combine step results into a final response using the plan's synthesis_instruction."""
-        if len(step_results) == 1 and plan.source == "single_step":
+        if len(step_results) == 1 and plan.source == "single_step" and not gap_step_ids:
             return step_results[0].draft_text or ""
 
         # Build a synthesis prompt
@@ -1451,12 +2160,25 @@ class ReActLoop:
         parts.append(f"Plan: {plan.pattern} — {plan.synthesis_instruction}")
         parts.append("Step results:")
         for r in step_results:
-            status = "✓" if r.critic_verdict in ("pass", "pass_with_flag") else "✗"
+            caught = bool(r.error and str(r.error).startswith("[caught]"))
+            if caught:
+                status = "△"
+            elif r.critic_verdict in ("pass", "pass_with_flag") and not r.error:
+                status = "✓"
+            else:
+                status = "✗"
             parts.append(f"  [{status}] Step {r.step_id}: {r.intent}")
             if r.draft_text:
                 parts.append(f"    Output: {r.draft_text[:500]}")
             if r.error:
                 parts.append(f"    Error: {r.error}")
+
+        if gap_step_ids:
+            parts.append(
+                "Partial completion — gaps at step(s): "
+                + ", ".join(str(i) for i in gap_step_ids)
+                + ". Report what was delivered and what is missing."
+            )
 
         # If we have an LLM, use it for synthesis; otherwise concatenate
         if self.llm_client is not None and self.model:
@@ -1464,9 +2186,19 @@ class ReActLoop:
         else:
             # Simple concatenation fallback
             texts = [r.draft_text for r in step_results if r.draft_text]
+            gap_note = ""
+            if gap_step_ids:
+                gap_note = (
+                    "\n\nCompleted with gaps — missing/failed step(s): "
+                    + ", ".join(str(i) for i in gap_step_ids) + "."
+                )
             if not texts:
-                return "I wasn't able to complete the requested plan. Some steps encountered errors."
-            return "\n\n".join(texts)
+                return (
+                    "I wasn't able to complete the requested plan. "
+                    "Some steps encountered errors."
+                    + gap_note
+                )
+            return "\n\n".join(texts) + gap_note
 
     @property
     def model(self) -> str:

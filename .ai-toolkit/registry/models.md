@@ -1,4 +1,4 @@
-# Registry: Data Models  (auto-generated 2026-09-16 15:59 — DO NOT EDIT)
+# Registry: Data Models  (auto-generated 2026-09-16 19:49 — DO NOT EDIT)
 
 > The data schema. Before adding a model or field, check here. Reuse existing models where possible.
 
@@ -116,31 +116,31 @@ backend/integrations/turnkey/models.py:138:class PredictionRecord(models.Model):
 backend/integrations/turnkey/models.py:171:class DriftAlert(models.Model):
 backend/integrations/turnkey/models.py:44:class TurnKeyConfig(models.Model):
 backend/integrations/turnkey/models.py:85:class TurnKeyModelLink(models.Model):
-backend/mdm/models.py:111:class ReferenceValue(models.Model):
-backend/mdm/models.py:153:class OrgUnit(models.Model):
-backend/mdm/models.py:8:class ReferenceSet(models.Model):
+backend/mdm/models.py:112:class ReferenceValue(models.Model):
+backend/mdm/models.py:154:class OrgUnit(models.Model):
+backend/mdm/models.py:9:class ReferenceSet(models.Model):
 backend/people/models.py:14:class ComplianceRule(models.Model):
-backend/people/models.py:171:class PayrollRun(models.Model):
-backend/people/models.py:203:class PayslipLine(models.Model):
-backend/people/models.py:233:class PayrollRunValidation(models.Model):
-backend/people/models.py:257:class Position(models.Model):
-backend/people/models.py:296:class LeavePolicy(models.Model):
-backend/people/models.py:428:class LeavePolicyVersion(models.Model):
-backend/people/models.py:462:class LeaveEntitlement(models.Model):
-backend/people/models.py:496:class LeaveRecord(models.Model):
-backend/people/models.py:529:class BenefitType(models.Model):
-backend/people/models.py:557:class CompensationComponent(models.Model):
-backend/people/models.py:603:class CompensationPlan(models.Model):
-backend/people/models.py:650:class EmployeeCompensation(models.Model):
-backend/people/models.py:729:class EmployeeBenefit(models.Model):
-backend/people/models.py:760:class Loan(models.Model):
-backend/people/models.py:76:class Employee(models.Model):
-backend/people/models.py:788:class LoanInstallment(models.Model):
-backend/people/models.py:815:class AttendanceRecord(models.Model):
-backend/people/models.py:852:class AttendancePermission(models.Model):
-backend/people/models.py:876:class Certification(models.Model):
-backend/people/models.py:895:class RotationSchedule(models.Model):
-backend/people/models.py:913:class PersonnelEvent(models.Model):
+backend/people/models.py:191:class PayrollRun(models.Model):
+backend/people/models.py:223:class PayslipLine(models.Model):
+backend/people/models.py:256:class PayrollRunValidation(models.Model):
+backend/people/models.py:280:class Position(models.Model):
+backend/people/models.py:330:class LeavePolicy(models.Model):
+backend/people/models.py:462:class LeavePolicyVersion(models.Model):
+backend/people/models.py:496:class LeaveEntitlement(models.Model):
+backend/people/models.py:530:class LeaveRecord(models.Model):
+backend/people/models.py:563:class BenefitType(models.Model):
+backend/people/models.py:589:class CompensationComponent(models.Model):
+backend/people/models.py:635:class CompensationPlan(models.Model):
+backend/people/models.py:682:class EmployeeCompensation(models.Model):
+backend/people/models.py:761:class EmployeeBenefit(models.Model):
+backend/people/models.py:77:class Employee(models.Model):
+backend/people/models.py:792:class Loan(models.Model):
+backend/people/models.py:826:class LoanInstallment(models.Model):
+backend/people/models.py:853:class AttendanceRecord(models.Model):
+backend/people/models.py:890:class AttendancePermission(models.Model):
+backend/people/models.py:920:class Certification(models.Model):
+backend/people/models.py:945:class RotationSchedule(models.Model):
+backend/people/models.py:969:class PersonnelEvent(models.Model):
 backend/regulations/models.py:106:class AuditProgram(models.Model):
 backend/regulations/models.py:125:class AuditRun(models.Model):
 backend/regulations/models.py:154:class AuditFinding(models.Model):

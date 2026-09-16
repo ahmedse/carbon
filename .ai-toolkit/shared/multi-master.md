@@ -50,6 +50,37 @@ If the human did not name a seat, **ask once** before dispatching anything.
 4. Workers inherit the Master’s seat for the phase. A Pulse-dispatched worker must not
    receive NSR phases. Spec **DO NOT TOUCH** must name the other seat’s trees.
 5. `TASKS.md` Active focus **must** include an **Owner** column. Missing Owner = do not dispatch.
+6. **Shared local stack lease** (see below) — code ownership ≠ process ownership of `:8009`/`:5179`.
+
+---
+
+## Shared local stack lease (BINDING)
+
+Dev stack ports (`BACKEND`/`FRONTEND` via `./manage.sh`, typically **:8009** / **:5179**) and Postgres used by that stack are **shared infrastructure**. Either seat may *use* them; neither may **kill/restart** without a lease.
+
+### Rules
+
+1. Before exclusive browser/API QA or long Pulse chat that needs a stable process, the seat posts COMMS:
+
+```text
+TYPE:INFO  Ask: STACK-HOLD <Seat> until <HH:MM offset or ISO> — reason
+Paths: manage.sh, :8009, :5179
+```
+
+2. While a `STACK-HOLD` is open (until time / explicit `STACK-RELEASE` INFO):
+   - Other seat **must not** run `./manage.sh start|restart|stop|killall|clean-ports`, `pkill` on `runserver`/Vite, or kill the lease-holder’s PID.
+   - Need restart → `REQUEST` + wait `ACK` (or human override).
+3. `./manage.sh start` **always kills** the existing backend first (playbook PB-50). Treat it as a lease violation if another seat holds `STACK-HOLD`.
+4. Agent sandbox may false-negative `pg_isready` / TCP to localhost while host Postgres is fine (PB-50). Diagnose and restart only with host/`all` permissions; do not conclude “stack dead” from sandbox-only probes.
+5. Request-level errors in the other seat’s code (e.g. Pulse chat 500s) are **not** a license to restart the process during a hold — file COMMS `INFO`/`REQUEST` instead.
+
+### Release
+
+```text
+TYPE:INFO  Ask: STACK-RELEASE <Seat> — hold ended
+```
+
+Or hold expires at the stated time (whichever comes first). Human message overrides.
 
 ---
 
@@ -93,3 +124,5 @@ Status proof stays in `TASK-RESULTS.md`.
 - Editing `people/**` from a Pulse session “just to help.”
 - Using chat memory instead of MASTERS-COMMS for cross-seat asks.
 - Closing another seat’s TASK-RESULTS sections.
+- `./manage.sh start` / killing `:8009` while another seat’s `STACK-HOLD` is open.
+- Trusting agent-sandbox `pg_isready` as proof Postgres died (PB-50).

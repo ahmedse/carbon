@@ -257,7 +257,7 @@ class ExportDocument(ToolPlugin):
 
         sub = doc.add_paragraph()
         sub_run = sub.add_run(
-            f"Generated {now().strftime('%B %d, %Y')}  ·  Carbon Data Trust Platform"
+            f"Generated {now().strftime('%B %d, %Y')}  ·  Pulse Agent deliverable"
         )
         sub_run.italic = True
         sub_run.font.size = Pt(9)
@@ -386,7 +386,7 @@ class ExportDocument(ToolPlugin):
         ws.row_dimensions[1].height = 26
         ws.cell(
             row=2, column=1,
-            value=f"Generated {now().strftime('%B %d, %Y')} · Carbon Data Trust Platform",
+            value=f"Generated {now().strftime('%B %d, %Y')} · Pulse Agent deliverable",
         ).font = Font(italic=True, size=9, color=_BRAND_MUTED)
 
         row = 4

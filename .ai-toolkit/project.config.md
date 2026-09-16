@@ -56,7 +56,10 @@ FRONTEND_LINT_CMD=cd /home/ahmed/ws/carbon/carbon-frontend && npm run lint
 FRONTEND_BUILD_CMD=cd /home/ahmed/ws/carbon/carbon-frontend && npm run build
 FRONTEND_API_HELPER=carbon-frontend/src/api/api.js (apiFetch)
 FRONTEND_THEME=carbon-frontend/src/theme/carbonTheme.js
-FRONTEND_BASE_PATH=/carbon/
+# Vite router basename — MUST be "/". App namespaces live in route paths
+# (/people, /my, /team, /carbon/*, /admin/*, …). manage.sh reads VITE_BASE for status URLs.
+FRONTEND_BASE_PATH=/
+FRONTEND_DEV_URL=http://localhost:5179/
 
 ## DESIGN SYSTEM
 DESIGN_LANGUAGE=Enterprise data-platform style — dense, compact, zinc/blue palette, Inter font. Palantir/Ataccama-inspired.
@@ -113,7 +116,7 @@ ARCH_AI_MISSING=WorkspaceContext (§11 in ai-contract.md), streaming SSE path, f
 ARCH_AI_TASK_6=report.draft (async, 60s) — Dashboard data → narrative GHG report draft
 ARCH_AI_DISCOVERY=No HTTP agent-card (engine is in-hand). Engine capabilities validated at import/startup.
 ARCH_AI_PACKAGE=Modular monolith: ONE Django app (backend/ai/). All Pulse modules are internal Python packages (engine/, knowledge/, memory/, graph/, ingestion/, proactive/, archetypes/, learning/, feedback/). One backend/ai/models/ + one migrations/ namespace. NO new Django apps.
-ARCH_AI_EXTENSIBILITY=New AI capability = register a tool/workflow, NOT a new app. Tool registry: engine/agent/registry.py + tools.py. MCP: engine/agent/mcp_client.py (MCP servers = discovered remote tools). Generic workflows: six-witness pipeline + learning loops as declarative specs. Plugins: ToolPlugin/WorkflowPlugin ABC, self-register at startup.
+ARCH_AI_EXTENSIBILITY=New AI capability = register a tool/workflow, NOT a new app. Tool registry: engine/agent/registry.py + tools.py. MCP: engine/agent/mcp_client.py. Agent plans: linear steps + typed workflow graph (ADR-0034) under engine/workflow/{graph,guards,driver}.py; plan_json.workflow_graph is the compile shim. Plugins: ToolPlugin/WorkflowPlugin ABC, self-register at startup.
 ARCH_AI_PORTABILITY=Portable contract: one facade (CarbonIntelligence), one stable contract (AIProvider ABC + task envelope), zero upward imports (layer imports NOTHING from catalog/mdm/dq/emissions/accounts/core; domain apps plug IN via ai/domain/{app}.py), injected deps (config/DB/cache via bootstrap). Migrate = copy package + adapt bootstrap.
 ARCH_AI_CONSOLE=docs/PULSE_CONSOLE_DESIGN.md — the admin "Pulse" section: 16 panels across 5 groups (Overview/Workspace/Conversations + Intelligence Core + Agents & Tooling + Feedback & Learning + Observability). Frontend Phase A builds full menu + live Overview/Workspace/Conversations + shared placeholder for gated panels.
 ARCH_AI_OPS_API=backend/ai/ops_api.py + ops_urls.py (Phase 2b) — read-only DRF viewsets for every Phase 2 model under /carbon-api/ai/pulse/ (health, tasks, knowledge, memory, graph, agents, mcp, tools, skills, archetypes, prompts, feedback, learning, monitoring, audit, logs). CBAC-scoped, read-only (RULE_21).
@@ -128,7 +131,7 @@ RULE_1=Tenant model/code is FULLY removed. Do NOT reintroduce tenant, multi-tena
 RULE_2=Project model is FULLY removed (replaced by OrgUnit in mdm). Do NOT reintroduce Project.
 RULE_3=Core apps (accounts, core, catalog, mdm, dq, dataschema, connections, evidence, importexport) MUST NOT import from emissions. Emissions may import core.
 RULE_4=API prefix is /carbon-api/ (config/urls.py). All backend routes are under this prefix.
-RULE_5=Frontend routes are ABSOLUTE and namespace-prefixed (/carbon/*, /admin/*, /catalog/*, /dq/*, /settings, /help, /emissions). VITE_BASE (router basename) MUST stay "/" — App.jsx already carries the namespace prefixes, so any non-/ basename would double-prefix and 404.
+RULE_5=Frontend routes are ABSOLUTE and namespace-prefixed (/people/*, /my/*, /team/*, /carbon/*, /admin/*, /catalog/*, /dq/*, /settings, /help, /emissions). VITE_BASE (router basename) MUST stay "/" — App.jsx already carries the namespace prefixes, so any non-/ basename would double-prefix and 404. Dev entry URL is http://localhost:5179/ (NOT /carbon/ unless opening the emissions Carbon studio). manage.sh status/start/health MUST print the URL derived from VITE_BASE.
 RULE_6=Pulse is IN-HAND, vendored under backend/ai/engine/ (stateless engine only — agent/llm/cognition/core). Pulse holds NO memory, does NO learning, stores NO graphs. All durable AI state (conversations, knowledge, memory, feedback, graphs) is Carbon-owned via Django apps in backend/ai/. NO separate AI database: durable state → Carbon Postgres; transient/queue state → Redis.
 RULE_13=Pulse engine is called in-process (in-hand), NOT over HTTP and NOT dependent on being online. The task envelope (docs/PULSE_CONTRACT_SPEC.md) remains the internal async job contract carried over Redis, not a network boundary. Graceful degradation: timeout 10s sync, 60s async; fall back to deterministic path on failure.
 RULE_14=DQ Level 2 (nl_check rules) are evaluated by Pulse. Carbon sends row data + natural language rule → Pulse returns {passed, explanation, failed_rows}. DQ executor Phase A (deterministic: unique/threshold/reference_integrity) runs locally; Phase B (nl_check) calls Pulse.

@@ -58,6 +58,21 @@ readonly FRONTEND_SPILL_PORTS=(5180 5181 5182 5183 5184 5185)
 DJANGO_API_PREFIX=$(grep -E '^DJANGO_API_PREFIX=' "$BACKEND_DIR/.env" 2>/dev/null | cut -d'=' -f2 || true)
 DJANGO_API_PREFIX=${DJANGO_API_PREFIX:-/carbon-api/}
 
+# Frontend public URL from VITE_BASE (all brand presets use "/" — not /carbon/).
+# Trailing slash always present so status/health/help stay consistent.
+frontend_public_url() {
+    local base
+    base=$(grep -E '^VITE_BASE=' "$FRONTEND_DIR/.env" 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '[:space:]"' || true)
+    base=${base:-/}
+    if [[ "$base" != /* ]]; then
+        base="/$base"
+    fi
+    if [[ "$base" != */ ]]; then
+        base="${base}/"
+    fi
+    echo "http://localhost:${FRONTEND_PORT}${base}"
+}
+
 # Log files
 readonly BACKEND_LOG="$LOGS_DIR/backend.log"
 readonly FRONTEND_LOG="$LOGS_DIR/frontend.log"
@@ -574,7 +589,7 @@ cmd_start() {
     if [[ "$all_ok" == true ]]; then
         log_success "All services started!"
         echo ""
-        echo -e "  ${CYAN}Frontend:${NC}  ${GREEN}http://localhost:$FRONTEND_PORT/carbon/${NC}"
+        echo -e "  ${CYAN}Frontend:${NC}  ${GREEN}$(frontend_public_url)${NC}"
         echo -e "  ${CYAN}Backend:${NC}   ${GREEN}http://localhost:$BACKEND_PORT${NC}"
         echo -e "  ${CYAN}API Docs:${NC}  ${GREEN}http://localhost:$BACKEND_PORT/swagger/${NC}"
         echo -e "  ${CYAN}Admin:${NC}     ${GREEN}http://localhost:$BACKEND_PORT/admin/${NC}"
@@ -629,7 +644,7 @@ cmd_status() {
     printf "  %-18s" "Frontend:"
     if pid_running "$frontend_pid" && port_in_use "$FRONTEND_PORT"; then
         echo -e "${GREEN}RUNNING${NC} (PID: $frontend_pid, Port: $FRONTEND_PORT)"
-        echo -e "  $(printf '%-18s' '') ${CYAN}http://localhost:$FRONTEND_PORT/carbon/${NC}"
+        echo -e "  $(printf '%-18s' '') ${CYAN}$(frontend_public_url)${NC}"
     else
         echo -e "${RED}STOPPED${NC}"
     fi
@@ -705,7 +720,7 @@ cmd_health() {
     
     printf "  %-18s" "Frontend:"
     local frontend_response
-    frontend_response=$(curl -sf -o /dev/null -w "%{http_code}" "http://localhost:$FRONTEND_PORT/carbon/" 2>/dev/null || echo "000")
+    frontend_response=$(curl -sf -o /dev/null -w "%{http_code}" "$(frontend_public_url)" 2>/dev/null || echo "000")
     if [[ "$frontend_response" == "200" || "$frontend_response" == "304" ]]; then
         echo -e "${GREEN}HEALTHY${NC} (HTTP $frontend_response)"
     else
@@ -1090,7 +1105,7 @@ cmd_help() {
     echo ""
     echo -e "${CYAN}Ports:${NC}"
     echo "  Backend:   http://localhost:$BACKEND_PORT"
-    echo "  Frontend:  http://localhost:$FRONTEND_PORT/carbon/"
+    echo "  Frontend:  $(frontend_public_url)"
     echo "  (Vite strictPort — if you see :5180, run clean-ports; do not use the spillover URL)"
     echo ""
 }

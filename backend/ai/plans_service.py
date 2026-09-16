@@ -72,6 +72,20 @@ logger = logging.getLogger("carbon.ai.plans_service")
 # Engine instance namespace (mirrors the chat/action paths).
 PLAN_INSTANCE_ID = resolve_instance_id()
 
+
+def _plan_instance_config(host_user_id: str | None = None) -> dict:
+    """Brand-resolved instance config for plan execution (not hard-coded carbon).
+
+    Plan runs must load the active brand's YAML (e.g. nibras ``entities``) so
+    ECF tools like ``resolve_entity`` see registered types. ``_carbon_instance_config``
+    always loads carbon, which has no entities — that surfaces as
+    ``Entity type 'employee' is not registered for this instance.``
+    """
+    from ai.engine_runtime import _instance_config
+
+    return _instance_config(PLAN_INSTANCE_ID, host_user_id)
+
+
 # Run statuses this service owns (superset of the engine's status set).
 STATUS_DISCOVERING = "discovering"
 STATUS_PENDING_APPROVAL = "pending_approval"
@@ -79,6 +93,7 @@ STATUS_APPROVED = "approved"
 STATUS_RUNNING = "running"
 STATUS_PAUSED = "paused"
 STATUS_COMPLETED = "completed"
+STATUS_COMPLETED_WITH_GAPS = "completed_with_gaps"
 STATUS_FAILED = "failed"
 STATUS_CANCELLED = "cancelled"
 
@@ -106,16 +121,24 @@ _RUN_STATUS_RECONCILEABLE = frozenset({
     STATUS_RUNNING,
     STATUS_PAUSED,
     STATUS_COMPLETED,
+    STATUS_COMPLETED_WITH_GAPS,
     STATUS_FAILED,
 })
+
+
+def _step_is_caught_failure(step) -> bool:
+    """True when a failed step was routed through a catch (W-4/W-6)."""
+    err = getattr(step, "error", None) or ""
+    return isinstance(err, str) and err.startswith("[caught]")
 
 
 def _derived_status_from_steps(steps):
     """Derive plan status from durable step rows when every step is terminal.
 
     Returns ``None`` when steps are empty or still in flight (so callers keep
-    the stored run status). Any ``awaiting_approval`` → paused; any ``failed``
-    among a fully-settled set → failed; otherwise completed.
+    the stored run status). Any ``awaiting_approval`` → paused; mixed
+    completed + caught failures → ``completed_with_gaps``; any uncaught
+    ``failed`` → failed; otherwise completed.
     """
     if not steps:
         return None
@@ -124,7 +147,11 @@ def _derived_status_from_steps(steps):
         return STATUS_PAUSED
     if not all(st in _STEP_TERMINAL for st in statuses):
         return None
-    if any(st == STEP_FAILED for st in statuses):
+    failed = [s for s in steps if getattr(s, "status", None) == STEP_FAILED]
+    completed = [s for s in steps if getattr(s, "status", None) == STEP_COMPLETED]
+    if failed and completed and all(_step_is_caught_failure(s) for s in failed):
+        return STATUS_COMPLETED_WITH_GAPS
+    if failed:
         return STATUS_FAILED
     return STATUS_COMPLETED
 
@@ -144,7 +171,9 @@ def _reconcile_run_status_from_steps(run, steps) -> None:
         return
     fields = ["status", "updated_at"]
     run.status = derived
-    if derived in (STATUS_COMPLETED, STATUS_FAILED) and not run.completed_at:
+    if derived in (
+        STATUS_COMPLETED, STATUS_COMPLETED_WITH_GAPS, STATUS_FAILED,
+    ) and not run.completed_at:
         run.completed_at = timezone.now()
         fields.append("completed_at")
     run.save(update_fields=fields)
@@ -1295,6 +1324,10 @@ class PlansService:
                 }
                 for s in steps
             ],
+            "workflow_graph": (
+                plan_json.get("workflow_graph")
+                or PlansService._compile_workflow_graph_from_json(plan_json)
+            ),
         }
 
     # ── W3-C: replan helpers ─────────────────────────────────────────────
@@ -1340,7 +1373,192 @@ class PlansService:
             "source": plan.source,
             "skill_name": plan.skill_name,
             "needs_confirmation": bool(plan.needs_confirmation),
+            # ADR-0034 — typed graph compile (additive; UI/driver may ignore).
+            "workflow_graph": PlansService._compile_workflow_graph(plan),
         }
+
+    @staticmethod
+    def _compile_workflow_graph(plan) -> dict | None:
+        """Compile legacy Plan → WorkflowGraph dict (fail-soft)."""
+        try:
+            from ai.engine.workflow.graph import compile_plan_to_graph
+
+            return compile_plan_to_graph(plan).to_dict()
+        except Exception:  # noqa: BLE001 — never block plan persistence
+            logger.exception("workflow_graph compile failed")
+            return None
+
+    @staticmethod
+    def record_workflow_choice(run_id: str, node_id: str, context: dict | None = None) -> dict:
+        """Journal guard evaluations + chosen edge for a choice node (ADR-0034).
+
+        Fail-soft: returns ``{chosen, evaluations}`` even if journaling fails.
+        """
+        from ai.engine.workflow.driver import decide_choice
+        from ai.engine.workflow.graph import WorkflowGraph
+        from ai.models.core import Run
+        from ai.models.step_journal import EVENT_EDGE_CHOSEN, EVENT_GUARD_EVAL
+        from ai.step_journal import StepJournal
+
+        run = Run.objects.filter(id=run_id).first()
+        graph_raw = (run.plan_json or {}).get("workflow_graph") if run else None
+        if not graph_raw:
+            return {"chosen": None, "evaluations": []}
+        graph = WorkflowGraph.from_dict(graph_raw)
+        chosen, evaluations = decide_choice(graph, node_id, context or {})
+        try:
+            for ev in evaluations:
+                StepJournal.append(
+                    run_id,
+                    node_id,
+                    EVENT_GUARD_EVAL,
+                    payload=ev,
+                )
+            if chosen is not None:
+                StepJournal.append(
+                    run_id,
+                    node_id,
+                    EVENT_EDGE_CHOSEN,
+                    payload={
+                        "source": chosen.source,
+                        "target": chosen.target,
+                        "guard": chosen.guard,
+                        "is_default": chosen.is_default,
+                    },
+                )
+        except Exception:  # noqa: BLE001 — journaling must never block routing
+            logger.exception("workflow choice journal failed run=%s node=%s", run_id, node_id)
+        return {
+            "chosen": (
+                {"source": chosen.source, "target": chosen.target, "guard": chosen.guard}
+                if chosen else None
+            ),
+            "evaluations": evaluations,
+        }
+
+    @staticmethod
+    def record_workflow_heal(
+        run_id: str, observe_node_id: str, payload: dict | None = None,
+    ) -> dict:
+        """Journal an observe-node heal proposal (ADR-0034 / W-5)."""
+        from ai.models.step_journal import EVENT_HEAL_PROPOSED
+        from ai.step_journal import StepJournal
+
+        body = dict(payload or {})
+        body.setdefault("observe_node", observe_node_id)
+        try:
+            StepJournal.append(
+                run_id,
+                observe_node_id,
+                EVENT_HEAL_PROPOSED,
+                payload=body,
+            )
+        except Exception:  # noqa: BLE001 — journaling must never block heal
+            logger.exception(
+                "workflow heal journal failed run=%s node=%s", run_id, observe_node_id,
+            )
+        return body
+
+    @staticmethod
+    def record_workflow_compensation(
+        run_id: str,
+        failed_step_id: int,
+        compensation_step_id: int,
+        compensation_node: str,
+    ) -> dict:
+        """Journal a saga compensation enqueue (ADR-0034 / W-4)."""
+        from ai.models.step_journal import EVENT_COMPENSATION_QUEUED
+        from ai.step_journal import StepJournal
+
+        body = {
+            "failed_step_id": failed_step_id,
+            "compensation_step_id": compensation_step_id,
+            "compensation_node": compensation_node,
+        }
+        try:
+            StepJournal.append(
+                run_id,
+                str(failed_step_id),
+                EVENT_COMPENSATION_QUEUED,
+                payload=body,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "workflow compensation journal failed run=%s", run_id,
+            )
+        return body
+
+    @staticmethod
+    def record_workflow_wait(
+        run_id: str,
+        node_id: str,
+        *,
+        duration_ms: int = 0,
+        reason: str = "immediate",
+        until_guard: str | None = None,
+    ) -> dict:
+        """Journal a wait node firing (ADR-0034 / W-3 timers)."""
+        from ai.models.step_journal import EVENT_WAIT_FIRED
+        from ai.step_journal import StepJournal
+
+        body = {
+            "node_id": node_id,
+            "duration_ms": int(duration_ms or 0),
+            "reason": reason,
+            "until_guard": until_guard,
+        }
+        try:
+            StepJournal.append(
+                run_id,
+                node_id,
+                EVENT_WAIT_FIRED,
+                payload=body,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "workflow wait journal failed run=%s node=%s", run_id, node_id,
+            )
+        return body
+
+    @staticmethod
+    def _compile_workflow_graph_from_json(plan_json: dict) -> dict | None:
+        """Compile from persisted plan_json when workflow_graph was never stored."""
+        if not plan_json or not plan_json.get("steps"):
+            return None
+        try:
+            from types import SimpleNamespace
+
+            from ai.engine.workflow.graph import compile_plan_to_graph
+
+            steps = [
+                SimpleNamespace(
+                    step_id=s.get("step_id", i),
+                    intent=s.get("intent", ""),
+                    tool_name=s.get("tool_name"),
+                    tool_args=s.get("tool_args") or {},
+                    is_mutation=bool(s.get("is_mutation")),
+                    depends_on=s.get("depends_on") or [],
+                    agent_role=s.get("agent_role", "orchestrator"),
+                )
+                for i, s in enumerate(plan_json.get("steps") or [])
+                if isinstance(s, dict)
+            ]
+            phases = [
+                SimpleNamespace(
+                    phase_id=p.get("phase_id", i),
+                    name=p.get("name", ""),
+                    strategy=p.get("strategy", "sequential"),
+                    step_ids=p.get("step_ids") or [],
+                )
+                for i, p in enumerate(plan_json.get("phases") or [])
+                if isinstance(p, dict)
+            ]
+            return compile_plan_to_graph(
+                SimpleNamespace(steps=steps, phases=phases)
+            ).to_dict()
+        except Exception:  # noqa: BLE001
+            logger.exception("workflow_graph compile-from-json failed")
+            return None
 
     def _decompose(self, user, brief):
         """Run SkillAwarePlanner.decompose on a fresh engine session."""
@@ -2814,6 +3032,80 @@ class PlansService:
             # owning plan from this thread-local during execution.
             set_current_plan_run(str(run.id))
             try:
+                wf_raw = (getattr(run, "plan_json", None) or {}).get("workflow_graph")
+                wf_ctx: dict = {"status": "ok"}
+
+                async def _on_choice(node_id, chosen, evaluations):
+                    # Journal via Django ORM on a worker thread (async-safe).
+                    try:
+                        await sync_to_async(PlansService.record_workflow_choice)(
+                            str(run.id), node_id, dict(wf_ctx),
+                        )
+                    except Exception:  # noqa: BLE001
+                        logger.exception(
+                            "workflow choice journal failed run=%s node=%s",
+                            run.id, node_id,
+                        )
+
+                async def _on_heal(observe_node_id, proposal):
+                    try:
+                        await sync_to_async(PlansService.record_workflow_heal)(
+                            str(run.id), observe_node_id, proposal.journal_payload,
+                        )
+                    except Exception:  # noqa: BLE001
+                        logger.exception(
+                            "workflow heal journal failed run=%s node=%s",
+                            run.id, observe_node_id,
+                        )
+
+                async def _on_compensation(failed_sid, comp_sid, comp_node):
+                    try:
+                        await sync_to_async(PlansService.record_workflow_compensation)(
+                            str(run.id), failed_sid, comp_sid, comp_node,
+                        )
+                    except Exception:  # noqa: BLE001
+                        logger.exception(
+                            "workflow compensation journal failed run=%s", run.id,
+                        )
+
+                async def _on_wait(node_id, decision):
+                    try:
+                        await sync_to_async(PlansService.record_workflow_wait)(
+                            str(run.id),
+                            node_id,
+                            duration_ms=getattr(decision, "sleep_ms", 0)
+                            if False
+                            else wait_duration_from_decision(decision),
+                            reason=getattr(decision, "reason", "immediate"),
+                        )
+                    except Exception:  # noqa: BLE001
+                        logger.exception(
+                            "workflow wait journal failed run=%s node=%s",
+                            run.id, node_id,
+                        )
+
+                def wait_duration_from_decision(decision):
+                    # Prefer configured duration from decision context; fall back 0.
+                    return int(getattr(decision, "duration_ms", 0) or 0)
+
+                # duration is on the node, not WaitDecision — look up via reason only
+                async def _on_wait(node_id, decision):
+                    try:
+                        from ai.engine.workflow.wait import wait_duration_ms as _wdms
+                        # decision has no duration; journal reason + 0 and let
+                        # payload carry sleep leftover.
+                        await sync_to_async(PlansService.record_workflow_wait)(
+                            str(run.id),
+                            node_id,
+                            duration_ms=int(getattr(decision, "sleep_ms", 0) or 0),
+                            reason=str(getattr(decision, "reason", "immediate")),
+                        )
+                    except Exception:  # noqa: BLE001
+                        logger.exception(
+                            "workflow wait journal failed run=%s node=%s",
+                            run.id, node_id,
+                        )
+
                 await loop.run(
                     plan=plan,
                     instance_id=PLAN_INSTANCE_ID,
@@ -2825,6 +3117,12 @@ class PlansService:
                     host_user_id=user_pk,
                     resume_run_id=run.id,
                     flight_director=flight_director,
+                    workflow_graph=wf_raw,
+                    workflow_context=wf_ctx,
+                    on_workflow_choice=_on_choice,
+                    on_heal_proposed=_on_heal,
+                    on_compensation_queued=_on_compensation,
+                    on_wait_fired=_on_wait,
                 )
             finally:
                 set_current_plan_run(None)
@@ -2927,7 +3225,6 @@ class PlansService:
 
         from ai.models.core import RunStep
         from ai.flight_director import FlightDirector
-        from ai.engine_runtime import _carbon_instance_config
         from ai.engine.core.database import get_session_factory
         from ai.host_executor import CarbonHostExecutor
 
@@ -2943,7 +3240,7 @@ class PlansService:
         async with get_session_factory(PLAN_INSTANCE_ID)() as db:
             executor = CarbonHostExecutor(
                 db=db,
-                instance_config=_carbon_instance_config(user_pk),
+                instance_config=_plan_instance_config(user_pk),
                 user_token=f"inproc:carbon:{user_pk}",
                 host_user_id=user_pk,
             )
@@ -3026,10 +3323,7 @@ class PlansService:
         from asgiref.sync import sync_to_async
 
         from ai.models.core import RunStep
-        from ai.engine_runtime import (
-            _build_chat_user_info,
-            _carbon_instance_config,
-        )
+        from ai.engine_runtime import _build_chat_user_info
 
         # Django ORM is sync-only — inside this async generator every ORM
         # touchpoint runs through thread-sensitive sync_to_async (same
@@ -3048,7 +3342,7 @@ class PlansService:
 
         user_pk = str(user.pk)
         plan = self._rebuild_plan(run)
-        instance_config = _carbon_instance_config(user_pk)
+        instance_config = _plan_instance_config(user_pk)
         user_info = _build_chat_user_info(user_pk)
         conversation_id = run.conversation_id or f"plan-{run.id}"
 
@@ -3174,7 +3468,7 @@ class PlansService:
         # report (spec §3.5–§3.6). Re-queries read-only host state and never
         # fails the run; non-terminal runs skip closure (mirrors the
         # feed_run_feedback terminal guard).
-        if run.status in (STATUS_COMPLETED, STATUS_FAILED):
+        if run.status in (STATUS_COMPLETED, STATUS_COMPLETED_WITH_GAPS, STATUS_FAILED):
             report = None
             try:
                 report = await self._write_acceptance_report(
@@ -3256,6 +3550,9 @@ class PlansService:
         final_status = (
             STATUS_PAUSED if paused_step is not None else run.status
         )
+        # SSE contract uses ``stopped`` for operator cancel (UI Stop button).
+        if final_status == STATUS_CANCELLED:
+            final_status = "stopped"
         yield {
             "type": "done",
             "plan_id": run.id,
@@ -3275,7 +3572,6 @@ class PlansService:
         """
         from asgiref.sync import async_to_sync
 
-        from ai.engine_runtime import _carbon_instance_config
         from ai.engine.core.database import get_session_factory
         from ai.host_executor import CarbonHostExecutor
 
@@ -3332,7 +3628,7 @@ class PlansService:
             }
 
         user_pk = str(user.pk)
-        instance_config = _carbon_instance_config(user_pk)
+        instance_config = _plan_instance_config(user_pk)
         factory = get_session_factory(PLAN_INSTANCE_ID)
 
         async def _confirm():
@@ -3381,7 +3677,6 @@ class PlansService:
         """
         from asgiref.sync import async_to_sync
 
-        from ai.engine_runtime import _carbon_instance_config
         from ai.engine.core.database import get_session_factory
         from ai.host_executor import CarbonHostExecutor
 
@@ -3422,7 +3717,7 @@ class PlansService:
             }
 
         user_pk = str(user.pk)
-        instance_config = _carbon_instance_config(user_pk)
+        instance_config = _plan_instance_config(user_pk)
         factory = get_session_factory(PLAN_INSTANCE_ID)
 
         async def _decline():
@@ -3683,7 +3978,9 @@ class PlansService:
         from asgiref.sync import async_to_sync
 
         run = self._get_owned_run(user, plan_id)
-        if run.status in (STATUS_COMPLETED, STATUS_FAILED, STATUS_CANCELLED):
+        if run.status in (
+            STATUS_COMPLETED, STATUS_COMPLETED_WITH_GAPS, STATUS_FAILED, STATUS_CANCELLED,
+        ):
             return {**self.get_plan(user, plan_id), "message": CANCEL_MESSAGE}
 
         async def _executor(command):

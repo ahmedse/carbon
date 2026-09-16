@@ -25,14 +25,14 @@ from ai.engine.cognition.entity.resolver import resolve
 NIBRAS_YAML = Path(__file__).parent.parent / "engine/instances/nibras/instance.yaml"
 
 # In-memory population for metric golden cases (ECF-6). Mirrors the
-# KW ≠ kuwaitization divergence that caused the real 55-vs-5 inconsistency.
+# KWT ≠ kuwaitization divergence that caused the real 55-vs-5 inconsistency.
 _METRIC_POPULATION = [
-    {"id": 1, "is_active": True,  "nationality_code": "KW", "kuwaitization": True},
-    {"id": 2, "is_active": True,  "nationality_code": "KW", "kuwaitization": False},
-    {"id": 3, "is_active": True,  "nationality_code": "IN", "kuwaitization": True},
-    {"id": 4, "is_active": True,  "nationality_code": "EG", "kuwaitization": False},
-    {"id": 5, "is_active": False, "nationality_code": "KW", "kuwaitization": True},
-    {"id": 6, "is_active": False, "nationality_code": "IN", "kuwaitization": False},
+    {"id": 1, "is_active": True,  "nationality__code": "KWT", "kuwaitization": True},
+    {"id": 2, "is_active": True,  "nationality__code": "KWT", "kuwaitization": False},
+    {"id": 3, "is_active": True,  "nationality__code": "IND", "kuwaitization": True},
+    {"id": 4, "is_active": True,  "nationality__code": "EGY", "kuwaitization": False},
+    {"id": 5, "is_active": False, "nationality__code": "KWT", "kuwaitization": True},
+    {"id": 6, "is_active": False, "nationality__code": "IND", "kuwaitization": False},
 ]
 
 _METRIC_CASE_IDS = frozenset({"headcount_stable", "kuwaiti_count_stable"})
@@ -428,10 +428,10 @@ def assert_golden_invariants(case: GoldenCase, result: dict[str, Any]) -> None:
             assert result["filter"].get("is_active") is True
             assert "is_active" in result["cited_fields"]
         if case.id == "kuwaiti_count_stable":
-            assert result["filter"] == {"nationality_code": "KW"}
-            assert "nationality_code" in result["cited_fields"]
+            assert result["filter"] == {"nationality__code": "KWT"}
+            assert "nationality__code" in result["cited_fields"]
             assert "kuwaitization" not in result["filter"]
-            assert "nationality_code" in result["citation"]
+            assert "nationality__code" in result["citation"]
         for inv in case.invariants:
             assert inv, f"[{case.id}]: empty invariant"
         return

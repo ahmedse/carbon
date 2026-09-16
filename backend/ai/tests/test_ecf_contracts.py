@@ -60,6 +60,12 @@ class TestHonestMasking:
         result = honest_masking(record, emp_desc, frozenset())
         assert "(hidden" in result["basic_salary"]
 
+    def test_real_salary_hidden_without_capability(self, emp_desc):
+        """A5: unauthorized callers must never see a real amount (not only zeros)."""
+        record = {"id": 1, "full_name": "Alice", "basic_salary": "320.000"}
+        result = honest_masking(record, emp_desc, frozenset())
+        assert result["basic_salary"] == "(hidden — salary access required)"
+
     def test_real_salary_shown_with_capability(self, emp_desc):
         record = {"id": 1, "full_name": "Alice", "basic_salary": "756.000"}
         result = honest_masking(record, emp_desc, frozenset({"people:view_compensation"}))

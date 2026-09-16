@@ -1251,10 +1251,34 @@ def _build_code_result(completed_tools: list[dict]) -> dict | None:
 
 #: Outcome-oriented copy for a failed tool action (RULE_23 — never leak raw
 #: internal exception text into user-facing chat; QA F2).
+#: Split read vs mutation — Chat advisory lookups must not sound like a
+#: failed write ("nothing was created or changed") — A9 / M08 gate.
 _FAILED_ACTION_COPY = (
     "⚠️ That action didn't complete — nothing was created or changed. "
     "Please try again in a moment."
 )
+_FAILED_LOOKUP_COPY = (
+    "⚠️ That lookup didn't complete. Please try again in a moment — "
+    "no answer was invented."
+)
+
+# Tools that are never host mutations in Chat — fail copy must be lookup-shaped.
+_READ_TOOL_NAMES = frozenset({
+    "aggregate_entity",
+    "resolve_entity",
+    "get_entity_details",
+    "search_knowledge",
+    "call_host_api",
+    "list_my_capabilities",
+    "navigate_to",
+})
+
+
+def _fail_copy_for_tool(tool_name: str | None) -> str:
+    name = (tool_name or "").split(":", 1)[0].strip()
+    if name in _READ_TOOL_NAMES or name.startswith("get_") or name.startswith("list_"):
+        return _FAILED_LOOKUP_COPY
+    return _FAILED_ACTION_COPY
 
 
 def _clarification_question(missing: list[str] | None) -> str:
@@ -1383,7 +1407,7 @@ def _grounded_outcome_note(completed_tools: list[dict]) -> str:
         if not isinstance(item, dict):
             continue
         if item.get("error"):
-            lines.append(_FAILED_ACTION_COPY)
+            lines.append(_fail_copy_for_tool(item.get("tool_name") or item.get("tool")))
             continue
         raw = item.get("result")
         try:
@@ -1401,7 +1425,9 @@ def _grounded_outcome_note(completed_tools: list[dict]) -> str:
             if clarification.get("needed"):
                 lines.append(_clarification_question(clarification.get("missing")))
             else:
-                lines.append(_FAILED_ACTION_COPY)
+                lines.append(
+                    _fail_copy_for_tool(item.get("tool_name") or item.get("tool"))
+                )
             continue
         if data.get("requires_confirmation"):
             kind, payload = _classify_pending(data, item)

@@ -1,3 +1,78 @@
+## [2026-09-16] master-architect (Nibras) — Deep QA board + J-LV-05
+
+- **Coverage:** **11/81** cases (**14%**); **11/46 P0 (24%)** — board updated.
+- **J-LV-05 PASS:** annual rem 22; request 29 working days (2026-11-01…12-10) → UI alert **Insufficient leave balance — 22 days remaining**.
+- Canvas: `nibras-deep-qa-plan.canvas.tsx` execution board.
+
+## [2026-09-16] master-architect (Nibras) — Deep QA J-LN-01/02/03 + stack lease
+
+- **Stack lease:** DECISION 20260916-10 — `STACK-HOLD`/`RELEASE` binding in `.ai-toolkit/shared/multi-master.md` + seats.md; HOLD Nibras until 22:00+03 (COMMS 20260916-11).
+- **J-LN-01 PASS:** emp_1001 UI New Request loan → `CRS-2026-0032` / Loan 23; emp_1399 approve → in_review; emp_1132 (finance_group) approve → **approved**; loan **active**; **6** installments materialized.
+- **J-LN-02 PASS:** finance approve before manager → **403** “not the current approver”.
+- **J-LN-03 PASS:** My Loans card nested **Personal Loan** label (no `[object]`); 500.00 / 6 / Active visible.
+- **Cast note:** live `finance_group` had 0 users — ScopedRole on `emp_1132` for FIN-1.
+- Evidence: `docs/nibras/evidence/deep-qa/2026-09-16/SESSION-NOTES.md`
+
+## [2026-09-16] master-architect (Nibras) — Deep QA J-LV-06 overlap
+
+- **Verdict:** **PASS** (API + UI). Not “zero violations” for the whole Deep QA plan — only this NEG case + prior leave theatre P0s executed.
+- **API:** overlap vs approved/pending → **400**; dates on cancelled/rejected → **201**.
+- **UI:** emp_1001 Request Leave 2026-09-21…22 → alert **“Overlaps an existing leave request”** (`errorOverlap`). Evidence: `docs/nibras/evidence/deep-qa/2026-09-16/j-lv-06-overlap-ui.png`.
+- **Ops:** BE was STOPPED mid-submit (FE network toast); restarted `:8009`; PG stayed up.
+- **Residuals logged in SESSION-NOTES:** J-LV-05/07/08/11, loans J-LN-*, hire, Playwright host.
+- **Next:** J-LN-01 loan → mgr → finance → installments.
+
+## [2026-09-16] master-architect (Nibras) — Deep QA J-LV-03
+
+**Seat:** Nibras
+
+### Summary
+- Shipped **Resubmit** on My Request detail (`resubmitCorrespondence`).
+- Browser: mgr send-back → emp resubmit → mgr approve on `CRS-2026-0028`.
+- Events: `submitted → sent_back → resubmitted → approved`. Annual used=4 pending=0 rem=26.
+
+---
+
+## [2026-09-16] master-architect (Nibras) — Deep QA J-LV-02/04 + cancel FE
+
+**Seat:** Nibras
+
+### Summary
+- Toolkit refresh: RULE_5 / FRONTEND_BASE_PATH=/, security 429 note, playbook PB-48/49/50.
+- P1: manage.sh VITE_BASE URL; FE throttle≠logout.
+- **J-LV-04 PASS:** Cancel control on My Request detail (`cancelCorrespondence`); `CRS-2026-0026` cancelled; pending freed.
+- **J-LV-02 PASS:** `CRS-2026-0027` rejected by emp_1399; annual used=2 pending=0 remaining=28.
+- Evidence: `docs/nibras/evidence/deep-qa/2026-09-16/SESSION-NOTES.md`.
+
+### Files
+| Action | Path |
+|--------|------|
+| MODIFY | `carbon-frontend/src/apps/my/components/RequestDetail.jsx` |
+| MODIFY | `carbon-frontend/src/api/my.js` |
+| MODIFY | `carbon-frontend/src/i18n/locales/{en,ar}/my.json` |
+| MODIFY | `.ai-toolkit/{project.config.md,shared/security.md,troubleshooting/playbook.md}` |
+| MODIFY | `manage.sh` |
+
+---
+
+## Nibras Deep QA + P1 ops (2026-09-16)
+
+## [2026-09-16] master-architect (Nibras) — Deep QA U2 + P1 URL/throttle
+
+**Seat:** Nibras
+
+### Evidence
+- Browser U2 leave→approve **PASS**: `CRS-2026-0025` emp_1001 → emp_1399 → Approved; used 2 / remaining 28. Notes: `docs/nibras/evidence/deep-qa/2026-09-16/SESSION-NOTES.md`, `u2-emp-approved.png`.
+- P1 manage.sh: `frontend_public_url()` from `VITE_BASE` → `http://localhost:5179/`.
+- P1 throttle UX: 429 → `rate_limit`; notifyFromError does not clear session while refresh token exists. Vitest `errorNormalizer` 10/10.
+- Toolkit: PB-48/49/50, RULE_5 + FRONTEND_BASE_PATH=/, security 429 note.
+
+### Master decision
+- NSR product READY unchanged; Deep QA **ACTIVE** — next P0s J-LV-02 reject, J-LV-04 cancel, J-LV-03 send-back.
+- Mid-session “Postgres dropped” = PB-50 (sandbox false negative + manage.sh kill backend), not DB crash.
+
+---
+
 # TASK-RESULTS — Active handoffs only
 
 Append worker verification here for **current** phases.

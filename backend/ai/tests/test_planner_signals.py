@@ -23,7 +23,7 @@ def test_greeting_stays_single():
 
 # ── export-step coercion (document-generation reliability) ──────────────────
 
-from ai.engine.cognition.plan.planner import _coerce_export_steps, PlanStep
+from ai.engine.cognition.plan.planner import _coerce_export_steps, _ensure_export_deliverable, PlanStep
 
 
 def test_coerce_word_step_to_export_docx():
@@ -58,3 +58,26 @@ def test_existing_tool_step_untouched():
     s = PlanStep(step_id=0, intent="Generate an Excel workbook", tool_name="call_host_api")
     _coerce_export_steps([s])
     assert s.tool_name == "call_host_api"
+
+
+def test_ensure_export_appended_when_brief_asks_for_docx():
+    steps = [
+        PlanStep(step_id=0, intent="Count employees", tool_name="get_entity_details"),
+        PlanStep(step_id=1, intent="Summarize findings", tool_name=None),
+    ]
+    _ensure_export_deliverable(
+        "Count employees by status and export a Word report",
+        steps,
+    )
+    assert len(steps) == 3
+    assert steps[-1].tool_name == "export_document"
+    assert steps[-1].tool_args["format"] == "docx"
+
+
+def test_ensure_export_noop_when_already_present():
+    steps = [
+        PlanStep(step_id=0, intent="Export Word", tool_name="export_document", tool_args={"format": "docx"}),
+    ]
+    _ensure_export_deliverable("export a Word report", steps)
+    assert len(steps) == 1
+

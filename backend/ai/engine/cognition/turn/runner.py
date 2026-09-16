@@ -100,17 +100,30 @@ def _filter_draft_tools(
 #: Spine static tools ALWAYS exposed to the chat planner. Registry plugins
 #: contribute the rest via ``chat_tool_names()`` (G-C: freeze the spine, grow
 #: the periphery — new chat tools need zero edits to this module).
+#: When ``ECF_ENABLED``, ``resolve_entity`` / ``aggregate_entity`` join the
+#: allow-set dynamically (see ``_chat_tool_allowlist``) — otherwise name
+#: lookups fall through to ``search_knowledge`` and false-miss live People rows.
 _CHAT_STATIC_TOOLS = frozenset({
     "search_knowledge", "get_entity_details",
     "learn_fact", "forget_fact",
-    # call_host_api is the ONLY way the chat planner reaches live host data
-    # (list_emission_factors, get_calculation_summary, …). The system prompt's
-    # "Available Host API Endpoints" section tells the model to call these via
-    # call_host_api, so it MUST be in the chat tool set — otherwise the model
-    # falls back to search_knowledge (KG-only) or hallucinates the endpoint
-    # names as raw tool calls ("Unknown tool: get_calculation_summary").
+    # call_host_api reaches REST host endpoints listed in the system prompt.
+    # ECF resolve/aggregate are separate function tools (not REST) and are
+    # gated in ``_chat_tool_allowlist`` when ECF_ENABLED.
     "call_host_api",
 })
+
+_ECF_CHAT_TOOLS = frozenset({"resolve_entity", "aggregate_entity"})
+
+
+def _chat_tool_allowlist() -> frozenset[str]:
+    """Chat planner allow-set: spine ∪ chat-visible plugins ∪ ECF (when on)."""
+    from ai.engine.agent.plugins import chat_tool_names
+    from ai.engine.core.config import get_settings
+
+    allow = _CHAT_STATIC_TOOLS | chat_tool_names()
+    if getattr(get_settings(), "ECF_ENABLED", False):
+        allow = allow | _ECF_CHAT_TOOLS
+    return allow
 
 
 async def _write_trajectory_own_session(run_id: str) -> None:
@@ -1008,12 +1021,10 @@ class TurnPipelineRunner:
         if executor is not None:
             try:
                 from ai.engine.agent.tools import get_tool_definitions
-                from ai.engine.agent.plugins import chat_tool_names
 
-                # Chat-visible tool set = spine static tools ∪ registry plugins
-                # that opt in (chat_visible=True). New tools arrive by adding a
-                # plugin + registering it — zero edits to this allow-list (G-C).
-                allow = _CHAT_STATIC_TOOLS | chat_tool_names()
+                # Chat-visible tool set = spine ∪ chat-visible plugins ∪ ECF
+                # tools when ECF_ENABLED (name resolve must not fall to KG).
+                allow = _chat_tool_allowlist()
                 cfg = getattr(executor, "instance_config", None)
                 self._draft_tools = [
                     d for d in get_tool_definitions(cfg)

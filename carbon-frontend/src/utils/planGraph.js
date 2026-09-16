@@ -10,8 +10,12 @@
  * ids (not present in the step list) are skipped so a malformed plan never
  * crashes the graph.
  *
+ * When ``plan.workflow_graph`` is present (ADR-0034), task nodes are enriched
+ * with ``node_type`` and edges may carry ``guard`` / ``is_default``; choice /
+ * parallel gateways are added as synthetic nodes (string ids).
+ *
  * @param {object} plan - plan payload from GET /ai/plans/{id}/
- * @returns {{nodes: Array<{id:number,label:string,status:string,tool_name:string|null}>, edges: Array<{source:number,target:number,label:string}>}}
+ * @returns {{nodes: Array<object>, edges: Array<object>}}
  */
 export function buildPlanGraph(plan) {
   const steps = Array.isArray(plan?.steps) ? plan.steps : [];
@@ -24,6 +28,8 @@ export function buildPlanGraph(plan) {
       tool_name: s.tool_name || null,
       agent_role: s.agent_role || 'orchestrator',
       phase_id: s.phase_id ?? null,
+      node_type: 'task',
+      is_gateway: false,
     }));
 
   const ids = new Set(nodes.map((n) => n.id));
@@ -35,8 +41,64 @@ export function buildPlanGraph(plan) {
       edges.push({ source: dep, target: s.step_id, label: 'depends on' });
     });
   });
+
+  const wg = plan?.workflow_graph;
+  if (wg && Array.isArray(wg.nodes) && wg.nodes.length) {
+    const wgToStep = new Map();
+    wg.nodes.forEach((wn) => {
+      const sid = wn?.meta?.step_id;
+      if (wn?.node_type === 'task' && sid !== undefined && sid !== null) {
+        wgToStep.set(wn.id, sid);
+      }
+    });
+    nodes.forEach((n) => {
+      const wn = wg.nodes.find((x) => x?.meta?.step_id === n.id);
+      if (wn?.node_type) n.node_type = wn.node_type;
+    });
+    // Synthetic gateways (choice / parallel / observe)
+    wg.nodes.forEach((wn) => {
+      if (!wn || !['choice', 'parallel', 'observe', 'map', 'loop'].includes(wn.node_type)) {
+        return;
+      }
+      if (ids.has(wn.id)) return;
+      nodes.push({
+        id: wn.id,
+        label: wn.intent || wn.node_type,
+        status: 'pending',
+        tool_name: null,
+        agent_role: 'orchestrator',
+        phase_id: wn.meta?.phase_id ?? null,
+        node_type: wn.node_type,
+        is_gateway: true,
+      });
+      ids.add(wn.id);
+    });
+    // Prefer workflow edges when they resolve to known node ids
+    const resolved = [];
+    (wg.edges || []).forEach((we) => {
+      const source = wgToStep.has(we.source) ? wgToStep.get(we.source) : we.source;
+      const target = wgToStep.has(we.target) ? wgToStep.get(we.target) : we.target;
+      if (!ids.has(source) || !ids.has(target)) return;
+      const label = we.guard
+        ? `if ${we.guard}`
+        : (we.is_default ? 'default' : (we.label || 'next'));
+      resolved.push({
+        source,
+        target,
+        label,
+        guard: we.guard || null,
+        is_default: Boolean(we.is_default),
+      });
+    });
+    if (resolved.length) {
+      edges.length = 0;
+      edges.push(...resolved);
+    }
+  }
+
   // Deterministic ordering (source, then target) for stable renders + tests.
-  edges.sort((a, b) => a.source - b.source || a.target - b.target);
+  edges.sort((a, b) => String(a.source).localeCompare(String(b.source), undefined, { numeric: true })
+    || String(a.target).localeCompare(String(b.target), undefined, { numeric: true }));
   return { nodes, edges };
 }
 
@@ -100,13 +162,20 @@ export function planDagMermaid(plan) {
   }
   const lines = ['graph LR'];
   nodes.forEach((n) => {
+    const safeId = String(n.id).replace(/[^a-zA-Z0-9_]/g, '_');
+    const prefix = n.is_gateway || ['choice', 'parallel', 'observe', 'map', 'loop'].includes(n.node_type)
+      ? (n.node_type === 'choice' ? '{' : '[')
+      : '[';
+    const suffix = prefix === '{' ? '}' : ']';
     const label = String(n.label || `Step ${n.id}`).replace(/"/g, "'");
-    lines.push(`  s${n.id}["${label}"]`);
+    lines.push(`  s${safeId}${prefix}"${label}"${suffix}`);
   });
   edges.forEach((e) => {
-    lines.push(`  s${e.source} --> s${e.target}`);
-  });
-  return lines.join('\n');
+    const s = String(e.source).replace(/[^a-zA-Z0-9_]/g, '_');
+    const t = String(e.target).replace(/[^a-zA-Z0-9_]/g, '_');
+    const edgeLabel = e.guard ? `|${String(e.guard).replace(/\|/g, '/')}|` : '';
+    lines.push(`  s${s} -->${edgeLabel} s${t}`);
+  });  return lines.join('\n');
 }
 
 /**
@@ -230,7 +299,7 @@ export function layoutExecutionGraph(plan) {
     byRank.get(r).push(n);
   });
   const ranks = [...byRank.keys()].sort((a, b) => a - b);
-  ranks.forEach((r) => byRank.get(r).sort((a, b) => a.id - b.id));
+  ranks.forEach((r) => byRank.get(r).sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true })));
 
   const L = EXEC_LAYOUT;
   const width = L.padX * 2 + (maxRank + 1) * L.nodeW + maxRank * L.colGap;

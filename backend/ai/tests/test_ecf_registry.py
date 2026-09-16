@@ -84,10 +84,11 @@ class TestLoadDescriptors:
         assert "kuwaiti" in emp.metrics
         # headcount must filter on is_active=True
         assert emp.metrics["headcount"].filter.get("is_active") is True
-        # kuwaiti must use nationality_code, NOT kuwaitization boolean
-        assert "nationality_code" in emp.metrics["kuwaiti"].filter
+        # kuwaiti must use nationality__code (ReferenceValue), NOT kuwaitization boolean
+        assert "nationality__code" in emp.metrics["kuwaiti"].filter
+        assert emp.metrics["kuwaiti"].filter.get("nationality__code") == "KWT"
         assert "kuwaitization" not in emp.metrics["kuwaiti"].filter, (
-            "kuwaiti metric must use nationality_code, not the kuwaitization boolean — "
+            "kuwaiti metric must use nationality__code, not the kuwaitization boolean — "
             "that is what caused the 55-vs-5 inconsistency"
         )
 

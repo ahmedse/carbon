@@ -6,7 +6,7 @@ import { errorMessageKey } from "../i18n/errorMessages";
 
 /**
  * @typedef {Object} NormalizedError
- * @property {'network'|'auth'|'server'|'validation'|'not_found'|'unknown'} type
+ * @property {'network'|'auth'|'server'|'validation'|'not_found'|'rate_limit'|'unknown'} type
  * @property {string} message — human-readable fallback (English)
  * @property {string} errorCode — canonical machine-readable code (stable across locales)
  * @property {string|null} messageKey — namespace-relative key for useTranslation('errors'); null if unresolvable
@@ -34,6 +34,7 @@ function classifyStatus(status) {
   if (status === 401 || status === 403) return "auth";
   if (status === 404) return "not_found";
   if (status === 422 || status === 400) return "validation";
+  if (status === 429) return "rate_limit";
   if (status >= 500) return "server";
   return "unknown";
 }
@@ -103,6 +104,25 @@ export function normalizeError(error, context = {}) {
       messageKey: errorMessageKey(errorCode),
       canRetry: false,
       status,
+      feedback,
+      correlationId,
+      timestamp,
+    };
+  }
+
+  // Rate limit (429) — never treat as session expiry
+  if (classifyStatus(status) === "rate_limit" || error?.isRateLimited) {
+    const errorCode = "rate_limited";
+    return {
+      type: "rate_limit",
+      message:
+        feedback?.detail ||
+        error?.message ||
+        "Too many requests. Please wait a moment and try again.",
+      errorCode,
+      messageKey: errorMessageKey(errorCode),
+      canRetry: true,
+      status: status || 429,
       feedback,
       correlationId,
       timestamp,

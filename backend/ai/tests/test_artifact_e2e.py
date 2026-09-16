@@ -157,7 +157,7 @@ def test_plan_export_document_end_to_end_artifact(
                 "ai.engine.llm.prompts.build_chat_prompt",
                 AsyncMock(return_value="W6C system prompt"),
             ), patch(
-                "ai.engine_runtime._carbon_instance_config",
+                "ai.plans_service._plan_instance_config",
                 lambda user_pk: {
                     "display_name": "Carbon",
                     "description": "W6C artifact proof",

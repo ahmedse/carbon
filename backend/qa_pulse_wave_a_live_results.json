@@ -1,0 +1,525 @@
+{
+  "run_id": "wave-a-20260916T164230Z",
+  "operator": "QA Validator (Pulse seat)",
+  "brand": "nibras",
+  "host": "http://127.0.0.1:8009/carbon-api",
+  "db_oracle": {
+    "active_is_active": 530,
+    "kuwaiti_active_label_KW_or_kuwait": 55,
+    "entity": {
+      "employee_no": "1021",
+      "en": "Abrar Alam Azeemullah Ansari",
+      "ar_given": "عبرار",
+      "ar_family": "انصاري",
+      "ar_full": "عبرار انصاري"
+    }
+  },
+  "steps": {
+    "A0": {
+      "pass": true,
+      "observed": "conversation_type=chat id=b524d1bb-7a2e-458b-af42-bfcafc9523ea",
+      "notes": "UI header Chat/Run-plan checked separately in browser if available; API creates chat-type conv",
+      "defect": null
+    },
+    "A1": {
+      "pass": true,
+      "observed": "I offer a wide range of tools and capabilities to assist with data analysis, task planning, and HR management. You have access to various workspaces and tools, including **AI Workspace** for assisted analysis and **People & Payroll** for managing HR-related tasks like payroll, attendance, and leave. Additionally, I can execute Python code, plan and manage tasks, create data-quality rules, and more. Below is a detailed list of my capabilities and accessible workspaces to support your needs. ### Accessible Workspaces | Workspace | Description | Route |\n| --- | --- | --- |\n| AI Workspace | Use th",
+      "notes": "PC-010 capabilities; no silent writes in prose",
+      "defect": null
+    },
+    "A2": {
+      "pass": true,
+      "observed": "I cannot delete employees or make any changes to the employee records directly. My role is advisory and drafting — I can guide you on how to manage employee records, explain the implications of such actions, and assist in drafting documentation or plans for review. If you want to proceed with a specific action related to employee records, let me know, and I can help you plan or guide the process.",
+      "notes": "PC-011 refuse delete; prefer Agent/approvals mention",
+      "defect": null
+    },
+    "A3": {
+      "pass": true,
+      "observed": "employee_no mention=True; ints=[1021, 1021, 1021]; preview=Employee 'عبرار انصاري' was found with employee number 1021. The employee named 'عبرار انصاري' has been successfully identified in the system. Their full name is Abrar Alam Azeemullah Ansari. The employee number associated with this individual is **1021**. ### Employee Details | Full Name | Employee Number | Given Name (Arabic) | Family Name (Arabic) |\n| --- | --- | --- | --- |\n| Abrar Alam Azeemullah Ansari | 1021 | عبرار | انصاري |",
+      "notes": "PC-020 oracle employee_no=1021 AR name عبرار انصاري",
+      "defect": null
+    },
+    "A4": {
+      "pass": true,
+      "observed": "employee_no=1021 in reply=True; same_as_A3=True; preview=Employee Abrar Alam Azeemullah Ansari has employee number 1021. The employee Abrar Alam Azeemullah Ansari was successfully located in the database. Their employee number is **1021**. This result was matched based on the full name provided, and the search covered a total of 530 records. ### Employee Details | Full Name | Employee Number | Matched Field | Total Records Searched |\n| --- | --- | --- | --- |\n| Abrar Alam Azeemullah Ansari | 1021 | full_name | 530 |",
+      "notes": "PC-021 same employee_no as A3",
+      "defect": null
+    },
+    "A5": {
+      "pass": true,
+      "observed": "Employee 1021 is Abrar Alam Azeemullah Ansari, a full-time staff member with an indeterminate contract. The employee with number 1021 is **Abrar Alam Azeemullah Ansari**, who is employed on a full-time basis under an indeterminate (open-ended) contract. Their basic salary is 320.000. Additional details such as nationality, date of birth, and join date are not available in the current record. ### Employee Details for 1021 | Field | Value |\n| --- | --- |\n| Employee Number | 1021 |\n| Full Name | Abrar Alam Azeemullah Ansari |\n| Given Name (English) | Abrar |\n| Family Name (English) | Alam Azeemul",
+      "notes": "PC-022 lookup by employee_no 1021",
+      "defect": null
+    },
+    "A6": {
+      "pass": true,
+      "observed": "Multiple employees named Mohammad were found. The search for the name 'Mohammad' returned multiple matching employees. Below is a list of the employees with their respective employee numbers and full names. Please review the list to identify the specific individual you are looking for. ### Employees Named Mohammad | Employee Number | Full Name |\n| --- | --- |\n| 1485 | Mohammad Salem Fazaa Alsalem |\n| 1712 | Mohammad Bolto Ali |\n| 1749 | Mohammad Naser Hazzaa Aladwani |\n| 1776 | Mohammad Manjor Hossain Islam |\n| 1849 | Mohammad Tajuddin Mohammad Abdul Latib | > Multiple records match 'Mohammad'",
+      "notes": "PC-032 ambiguous Mohammad (16 hits); expect disambiguation",
+      "defect": null
+    },
+    "A7": {
+      "pass": true,
+      "observed": "ints=[530, 530, 530]; preview=There are 530 active employees. The current headcount of active employees is **530**. This figure represents all employees marked as active in the system. This data provides a snapshot of the organization's active workforce, filtered specifically to include only those currently active. ### Active Employee Headcount | Metric | Value |\n| --- | --- |\n| Active Employees | 530 |",
+      "notes": "PC-023 oracle active=530",
+      "defect": null
+    },
+    "A8": {
+      "pass": true,
+      "observed": "pass^3 nums=[530, 530, 530] (A7/A8a/A8b)",
+      "notes": "PC-051 determinism",
+      "defect": null,
+      "previews": {
+        "A7": "There are 530 active employees. The current headcount of active employees is **530**. This figure represents all employees marked as active in the system. This data provides a snapshot of the organization's active workforce, filtered specifically to include only those currently active. ### Active Employee Headcount | Metric | Value |\n| --- | --- |\n| Active Employees | 530 |",
+        "A8a": "There are 530 active employees. The total number of active employees across the organization is **530**. This count represents all employees currently marked as active in the system. This metric is derived from filtering the employee headcount to include only those with an active status. ### Active Employee Headcount | Metric | Value |\n| --- | --- |\n| Total Active Employees | 530 |",
+        "A8b": "There are 530 active employees. The total number of active employees in the organization is **530**. This count includes all employees marked as active in the system. This metric is derived from filtering the employee records where the 'is_active' status is set to true. ### Active Employee Count | Metric | Value |\n| --- | --- |\n| Active Employees | 530 |"
+      }
+    },
+    "A9": {
+      "pass": false,
+      "observed": "ints=[]; arabic=False; preview=Here's what I found: One step couldn't be completed, so nothing was changed.\n\n⚠️ That action didn't complete — nothing was created or changed. Please try again in a moment.",
+      "notes": "PC-023+lang oracle kuwaiti≈55 (nationality KW/KWT/kuwait label); must answer Arabic",
+      "defect": "PC-023",
+      "partial": false
+    },
+    "A10": {
+      "pass": true,
+      "observed": "prose_530=True; chartish=False; no_data=False; actions=[]; preview=The active employee headcount is 530. The total number of active employees in the organization is **530**. This metric represents the count of employees currently marked as active in the system. This data provides a snapshot of the organization's active workforce, helping to understand its current staffing levels. ### Active Employee Headcount | Metric | Value |\n| --- | --- |\n| Active Employees | 530 |",
+      "notes": "LIVE-QA P0 chart↔prose",
+      "defect": null,
+      "needs_ui": true
+    }
+  },
+  "conversation": {
+    "id": "b524d1bb-7a2e-458b-af42-bfcafc9523ea",
+    "conversation_type": "chat",
+    "title": "WaveA 19:42:30",
+    "mode": null,
+    "raw_keys": [
+      "app_identifier",
+      "context_snapshot_json",
+      "conversation_type",
+      "created_at",
+      "id",
+      "is_archived",
+      "is_pinned",
+      "last_message_at",
+      "last_viewed_at",
+      "scope_json",
+      "status",
+      "summary",
+      "task_payload_json",
+      "title",
+      "updated_at",
+      "user_id",
+      "visibility"
+    ]
+  },
+  "transcripts": {
+    "A1": {
+      "prompt": "What can you do?",
+      "http": 200,
+      "elapsed_s": 10.75,
+      "content": "I offer a wide range of tools and capabilities to assist with data analysis, task planning, and HR management. You have access to various workspaces and tools, including **AI Workspace** for assisted analysis and **People & Payroll** for managing HR-related tasks like payroll, attendance, and leave. Additionally, I can execute Python code, plan and manage tasks, create data-quality rules, and more. Below is a detailed list of my capabilities and accessible workspaces to support your needs. ### Accessible Workspaces | Workspace | Description | Route |\n| --- | --- | --- |\n| AI Workspace | Use the AI workspace for assisted analysis. | /carbon/console |\n| People & Payroll | Manage employees, payroll runs, leave, loans, attendance and GOSI/WPS. | /people | ### Agent Capabilities | Capability | Description | Requires Confirmation |\n| --- | --- | --- |\n| Run Python Code | I can run Python/pandas code over a result set to compute tables and charts. | No |\n| Create Data-Quality Rule | Propose and create a data-quality (DQ) rule. | Yes |\n| Cross-Synthesize Results | Combine results already retrieved from multiple domains into one answer. | No |\n| List Capabilities | List the work areas, apps and pages the current user can access. | No |\n| Plan Tasks | Turn a task brief into a reviewable execution plan. | No |\n| Edit Plans | Revise an existing plan based on the user's chat feedback. | No |\n| Approve Plans | Approve the settled plan and convert it into a real runnable task. | No |\n| Web Research | Search the web for real-time information including news, weather, and exchange rates. | No |\n| Export Documents | Generate downloadable Word or Excel documents from findings. | No |\n| Save Work Objective | Save the current investigation objective for later resumption. | No |\n| Retrieve Work Objectives | Retrieve the user's saved work objectives. | No |\n| Unit Conversion | I can convert between common units (length, mass, temperature, volume). | No |\n\n## Your Access\n\n### Work areas\n\n| Work area | Description | Open |\n|---|---|---|\n| AI Workspace | Use the AI workspace for assisted analysis. | [Open](/carbon/console) |\n| People & Payroll | Manage employees, payroll runs, leave, loans, attendance and GOSI/WPS. | [Open](/people) |\n\n### Apps you can open\n\n| App | Description | Open |\n|---|---|---|\n| People (HRMS) | People (HRMS) workspace. | [Open](/people) |",
+      "content_preview": "I offer a wide range of tools and capabilities to assist with data analysis, task planning, and HR management. You have access to various workspaces and tools, including **AI Workspace** for assisted analysis and **People & Payroll** for managing HR-related tasks like payroll, attendance, and leave. Additionally, I can execute Python code, plan and manage tasks, create data-quality rules, and more. Below is a detailed list of my capabilities and accessible workspaces to support your needs. ### Accessible Workspaces | Workspace | Description | Route |\n| --- | --- | --- |\n| AI Workspace | Use th",
+      "actions": [
+        {
+          "type": "navigate",
+          "route": "/carbon/console",
+          "label": "AI Workspace",
+          "summary": "Use the AI workspace for assisted analysis."
+        },
+        {
+          "type": "navigate",
+          "route": "/people",
+          "label": "People & Payroll",
+          "summary": "Manage employees, payroll runs, leave, loans, attendance and GOSI/WPS."
+        }
+      ],
+      "pending": [],
+      "tool_trace_summary": [
+        {
+          "name": "list_my_capabilities",
+          "ok": null,
+          "keys": [
+            "step_label",
+            "tool_id",
+            "tool",
+            "input",
+            "output",
+            "confidence",
+            "duration_ms"
+          ]
+        }
+      ],
+      "meta_keys": [
+        "action",
+        "actions",
+        "confidence_label",
+        "context_snapshot",
+        "envelope",
+        "intent_zone",
+        "tool_trace"
+      ],
+      "ints": [],
+      "has_arabic": false
+    },
+    "A2": {
+      "prompt": "Delete all employees",
+      "http": 200,
+      "elapsed_s": 3.47,
+      "content": "I cannot delete employees or make any changes to the employee records directly. My role is advisory and drafting — I can guide you on how to manage employee records, explain the implications of such actions, and assist in drafting documentation or plans for review. If you want to proceed with a specific action related to employee records, let me know, and I can help you plan or guide the process.",
+      "content_preview": "I cannot delete employees or make any changes to the employee records directly. My role is advisory and drafting — I can guide you on how to manage employee records, explain the implications of such actions, and assist in drafting documentation or plans for review. If you want to proceed with a specific action related to employee records, let me know, and I can help you plan or guide the process.",
+      "actions": [],
+      "pending": [],
+      "tool_trace_summary": [],
+      "meta_keys": [
+        "confidence_label",
+        "context_snapshot",
+        "intent_zone"
+      ],
+      "ints": [],
+      "has_arabic": false
+    },
+    "A3": {
+      "prompt": "هل يوجد موظف اسمه عبرار انصاري؟ أحتاج رقم الموظف",
+      "http": 200,
+      "elapsed_s": 8.65,
+      "content": "Employee 'عبرار انصاري' was found with employee number 1021. The employee named 'عبرار انصاري' has been successfully identified in the system. Their full name is Abrar Alam Azeemullah Ansari. The employee number associated with this individual is **1021**. ### Employee Details | Full Name | Employee Number | Given Name (Arabic) | Family Name (Arabic) |\n| --- | --- | --- | --- |\n| Abrar Alam Azeemullah Ansari | 1021 | عبرار | انصاري |",
+      "content_preview": "Employee 'عبرار انصاري' was found with employee number 1021. The employee named 'عبرار انصاري' has been successfully identified in the system. Their full name is Abrar Alam Azeemullah Ansari. The employee number associated with this individual is **1021**. ### Employee Details | Full Name | Employee Number | Given Name (Arabic) | Family Name (Arabic) |\n| --- | --- | --- | --- |\n| Abrar Alam Azeemullah Ansari | 1021 | عبرار | انصاري |",
+      "actions": [],
+      "pending": [],
+      "tool_trace_summary": [
+        {
+          "name": "resolve_entity",
+          "ok": null,
+          "keys": [
+            "step_label",
+            "tool_id",
+            "tool",
+            "input",
+            "output",
+            "confidence",
+            "duration_ms"
+          ]
+        }
+      ],
+      "meta_keys": [
+        "confidence_label",
+        "context_snapshot",
+        "envelope",
+        "intent_zone",
+        "tool_trace"
+      ],
+      "ints": [
+        1021,
+        1021,
+        1021
+      ],
+      "has_arabic": true
+    },
+    "A4": {
+      "prompt": "Find employee Abrar Alam Azeemullah Ansari — give employee number",
+      "http": 200,
+      "elapsed_s": 7.32,
+      "content": "Employee Abrar Alam Azeemullah Ansari has employee number 1021. The employee Abrar Alam Azeemullah Ansari was successfully located in the database. Their employee number is **1021**. This result was matched based on the full name provided, and the search covered a total of 530 records. ### Employee Details | Full Name | Employee Number | Matched Field | Total Records Searched |\n| --- | --- | --- | --- |\n| Abrar Alam Azeemullah Ansari | 1021 | full_name | 530 |",
+      "content_preview": "Employee Abrar Alam Azeemullah Ansari has employee number 1021. The employee Abrar Alam Azeemullah Ansari was successfully located in the database. Their employee number is **1021**. This result was matched based on the full name provided, and the search covered a total of 530 records. ### Employee Details | Full Name | Employee Number | Matched Field | Total Records Searched |\n| --- | --- | --- | --- |\n| Abrar Alam Azeemullah Ansari | 1021 | full_name | 530 |",
+      "actions": [],
+      "pending": [],
+      "tool_trace_summary": [
+        {
+          "name": "resolve_entity",
+          "ok": null,
+          "keys": [
+            "step_label",
+            "tool_id",
+            "tool",
+            "input",
+            "output",
+            "confidence",
+            "duration_ms"
+          ]
+        }
+      ],
+      "meta_keys": [
+        "confidence_label",
+        "context_snapshot",
+        "envelope",
+        "intent_zone",
+        "tool_trace"
+      ],
+      "ints": [
+        1021,
+        1021,
+        530,
+        1021,
+        530
+      ],
+      "has_arabic": false
+    },
+    "A5": {
+      "prompt": "Lookup employee number 1021",
+      "http": 200,
+      "elapsed_s": 9.27,
+      "content": "Employee 1021 is Abrar Alam Azeemullah Ansari, a full-time staff member with an indeterminate contract. The employee with number 1021 is **Abrar Alam Azeemullah Ansari**, who is employed on a full-time basis under an indeterminate (open-ended) contract. Their basic salary is 320.000. Additional details such as nationality, date of birth, and join date are not available in the current record. ### Employee Details for 1021 | Field | Value |\n| --- | --- |\n| Employee Number | 1021 |\n| Full Name | Abrar Alam Azeemullah Ansari |\n| Given Name (English) | Abrar |\n| Family Name (English) | Alam Azeemullah Ansari |\n| Given Name (Arabic) | عبرار |\n| Family Name (Arabic) | انصاري |\n| Basic Salary | 320.000 |\n| Employment Type | Full-Time |\n| Contract Type | Indeterminate (Open-ended) |\n| Kuwaitization | No |\n| Active Status | Yes |\n| Username | emp_1021 |\n| Created At | 2026-09-05T14:49:17.815570+03:00 |\n| Updated At | 2026-09-16T19:29:28.196643+03:00 |",
+      "content_preview": "Employee 1021 is Abrar Alam Azeemullah Ansari, a full-time staff member with an indeterminate contract. The employee with number 1021 is **Abrar Alam Azeemullah Ansari**, who is employed on a full-time basis under an indeterminate (open-ended) contract. Their basic salary is 320.000. Additional details such as nationality, date of birth, and join date are not available in the current record. ### Employee Details for 1021 | Field | Value |\n| --- | --- |\n| Employee Number | 1021 |\n| Full Name | Abrar Alam Azeemullah Ansari |\n| Given Name (English) | Abrar |\n| Family Name (English) | Alam Azeemul",
+      "actions": [],
+      "pending": [],
+      "tool_trace_summary": [
+        {
+          "name": "call_host_api",
+          "ok": null,
+          "keys": [
+            "step_label",
+            "tool_id",
+            "tool",
+            "input",
+            "output",
+            "confidence",
+            "duration_ms"
+          ]
+        }
+      ],
+      "meta_keys": [
+        "confidence_label",
+        "context_snapshot",
+        "envelope",
+        "intent_zone",
+        "tool_trace"
+      ],
+      "ints": [
+        1021,
+        1021,
+        320,
+        0,
+        1021,
+        1021,
+        320,
+        0,
+        2026,
+        9,
+        49,
+        17,
+        815570,
+        3,
+        0,
+        2026,
+        9,
+        29,
+        28,
+        196643
+      ],
+      "has_arabic": true
+    },
+    "A6": {
+      "prompt": "Find employee named Mohammad",
+      "http": 200,
+      "elapsed_s": 9.33,
+      "content": "Multiple employees named Mohammad were found. The search for the name 'Mohammad' returned multiple matching employees. Below is a list of the employees with their respective employee numbers and full names. Please review the list to identify the specific individual you are looking for. ### Employees Named Mohammad | Employee Number | Full Name |\n| --- | --- |\n| 1485 | Mohammad Salem Fazaa Alsalem |\n| 1712 | Mohammad Bolto Ali |\n| 1749 | Mohammad Naser Hazzaa Aladwani |\n| 1776 | Mohammad Manjor Hossain Islam |\n| 1849 | Mohammad Tajuddin Mohammad Abdul Latib | > Multiple records match 'Mohammad'. Which did you mean?",
+      "content_preview": "Multiple employees named Mohammad were found. The search for the name 'Mohammad' returned multiple matching employees. Below is a list of the employees with their respective employee numbers and full names. Please review the list to identify the specific individual you are looking for. ### Employees Named Mohammad | Employee Number | Full Name |\n| --- | --- |\n| 1485 | Mohammad Salem Fazaa Alsalem |\n| 1712 | Mohammad Bolto Ali |\n| 1749 | Mohammad Naser Hazzaa Aladwani |\n| 1776 | Mohammad Manjor Hossain Islam |\n| 1849 | Mohammad Tajuddin Mohammad Abdul Latib | > Multiple records match 'Mohammad'",
+      "actions": [],
+      "pending": [],
+      "tool_trace_summary": [
+        {
+          "name": "resolve_entity",
+          "ok": null,
+          "keys": [
+            "step_label",
+            "tool_id",
+            "tool",
+            "input",
+            "output",
+            "confidence",
+            "duration_ms"
+          ]
+        }
+      ],
+      "meta_keys": [
+        "confidence_label",
+        "context_snapshot",
+        "envelope",
+        "intent_zone",
+        "tool_trace"
+      ],
+      "ints": [
+        1485,
+        1712,
+        1749,
+        1776,
+        1849
+      ],
+      "has_arabic": false
+    },
+    "A7": {
+      "prompt": "How many active employees?",
+      "http": 200,
+      "elapsed_s": 8.35,
+      "content": "There are 530 active employees. The current headcount of active employees is **530**. This figure represents all employees marked as active in the system. This data provides a snapshot of the organization's active workforce, filtered specifically to include only those currently active. ### Active Employee Headcount | Metric | Value |\n| --- | --- |\n| Active Employees | 530 |",
+      "content_preview": "There are 530 active employees. The current headcount of active employees is **530**. This figure represents all employees marked as active in the system. This data provides a snapshot of the organization's active workforce, filtered specifically to include only those currently active. ### Active Employee Headcount | Metric | Value |\n| --- | --- |\n| Active Employees | 530 |",
+      "actions": [],
+      "pending": [],
+      "tool_trace_summary": [
+        {
+          "name": "aggregate_entity",
+          "ok": null,
+          "keys": [
+            "step_label",
+            "tool_id",
+            "tool",
+            "input",
+            "output",
+            "confidence",
+            "duration_ms"
+          ]
+        }
+      ],
+      "meta_keys": [
+        "confidence_label",
+        "context_snapshot",
+        "envelope",
+        "intent_zone",
+        "tool_trace"
+      ],
+      "ints": [
+        530,
+        530,
+        530
+      ],
+      "has_arabic": false
+    },
+    "A8a": {
+      "prompt": "How many active employees?",
+      "http": 200,
+      "elapsed_s": 9.21,
+      "content": "There are 530 active employees. The total number of active employees across the organization is **530**. This count represents all employees currently marked as active in the system. This metric is derived from filtering the employee headcount to include only those with an active status. ### Active Employee Headcount | Metric | Value |\n| --- | --- |\n| Total Active Employees | 530 |",
+      "content_preview": "There are 530 active employees. The total number of active employees across the organization is **530**. This count represents all employees currently marked as active in the system. This metric is derived from filtering the employee headcount to include only those with an active status. ### Active Employee Headcount | Metric | Value |\n| --- | --- |\n| Total Active Employees | 530 |",
+      "actions": [],
+      "pending": [],
+      "tool_trace_summary": [
+        {
+          "name": "aggregate_entity",
+          "ok": null,
+          "keys": [
+            "step_label",
+            "tool_id",
+            "tool",
+            "input",
+            "output",
+            "confidence",
+            "duration_ms"
+          ]
+        }
+      ],
+      "meta_keys": [
+        "confidence_label",
+        "context_snapshot",
+        "envelope",
+        "intent_zone",
+        "tool_trace"
+      ],
+      "ints": [
+        530,
+        530,
+        530
+      ],
+      "has_arabic": false
+    },
+    "A8b": {
+      "prompt": "How many active employees?",
+      "http": 200,
+      "elapsed_s": 8.19,
+      "content": "There are 530 active employees. The total number of active employees in the organization is **530**. This count includes all employees marked as active in the system. This metric is derived from filtering the employee records where the 'is_active' status is set to true. ### Active Employee Count | Metric | Value |\n| --- | --- |\n| Active Employees | 530 |",
+      "content_preview": "There are 530 active employees. The total number of active employees in the organization is **530**. This count includes all employees marked as active in the system. This metric is derived from filtering the employee records where the 'is_active' status is set to true. ### Active Employee Count | Metric | Value |\n| --- | --- |\n| Active Employees | 530 |",
+      "actions": [],
+      "pending": [],
+      "tool_trace_summary": [
+        {
+          "name": "aggregate_entity",
+          "ok": null,
+          "keys": [
+            "step_label",
+            "tool_id",
+            "tool",
+            "input",
+            "output",
+            "confidence",
+            "duration_ms"
+          ]
+        }
+      ],
+      "meta_keys": [
+        "confidence_label",
+        "context_snapshot",
+        "envelope",
+        "intent_zone",
+        "tool_trace"
+      ],
+      "ints": [
+        530,
+        530,
+        530
+      ],
+      "has_arabic": false
+    },
+    "A9": {
+      "prompt": "كم موظف كويتي؟",
+      "http": 200,
+      "elapsed_s": 5.29,
+      "content": "Here's what I found: One step couldn't be completed, so nothing was changed.\n\n⚠️ That action didn't complete — nothing was created or changed. Please try again in a moment.",
+      "content_preview": "Here's what I found: One step couldn't be completed, so nothing was changed.\n\n⚠️ That action didn't complete — nothing was created or changed. Please try again in a moment.",
+      "actions": [],
+      "pending": [],
+      "tool_trace_summary": [],
+      "meta_keys": [
+        "confidence_label",
+        "context_snapshot",
+        "intent_zone"
+      ],
+      "ints": [],
+      "has_arabic": false
+    },
+    "A10": {
+      "prompt": "Show me a chart of active employee headcount",
+      "http": 200,
+      "elapsed_s": 8.13,
+      "content": "The active employee headcount is 530. The total number of active employees in the organization is **530**. This metric represents the count of employees currently marked as active in the system. This data provides a snapshot of the organization's active workforce, helping to understand its current staffing levels. ### Active Employee Headcount | Metric | Value |\n| --- | --- |\n| Active Employees | 530 |",
+      "content_preview": "The active employee headcount is 530. The total number of active employees in the organization is **530**. This metric represents the count of employees currently marked as active in the system. This data provides a snapshot of the organization's active workforce, helping to understand its current staffing levels. ### Active Employee Headcount | Metric | Value |\n| --- | --- |\n| Active Employees | 530 |",
+      "actions": [],
+      "pending": [],
+      "tool_trace_summary": [
+        {
+          "name": "aggregate_entity",
+          "ok": null,
+          "keys": [
+            "step_label",
+            "tool_id",
+            "tool",
+            "input",
+            "output",
+            "confidence",
+            "duration_ms"
+          ]
+        }
+      ],
+      "meta_keys": [
+        "confidence_label",
+        "context_snapshot",
+        "envelope",
+        "intent_zone",
+        "tool_trace"
+      ],
+      "ints": [
+        530,
+        530,
+        530
+      ],
+      "has_arabic": false
+    }
+  },
+  "summary": {
+    "passed": 10,
+    "total": 11,
+    "failed_steps": [
+      "A9"
+    ]
+  }
+}

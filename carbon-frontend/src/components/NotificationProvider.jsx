@@ -86,22 +86,57 @@ export function NotificationProvider({ children }) {
   // Smart router: choose dialog vs toast based on structured content.
   const notifyFromError = useCallback(
     (error, fallbackMessage = tErrors('somethingWentWrong')) => {
-      // If the error was normalized by errorNormalizer, check for auth type
       const normalized = error?.normalized;
-      if (normalized?.type === "auth" && normalized?.status === 401) {
-        // Session expired — trigger re-login instead of a toast
+
+      // Rate limit — stay signed in; toast only (never force login).
+      if (
+        normalized?.type === "rate_limit" ||
+        error?.status === 429 ||
+        error?.isRateLimited ||
+        error?.feedback?.code === "throttled"
+      ) {
+        const message =
+          normalized?.message ||
+          error?.feedback?.detail ||
+          error?.message ||
+          tErrors("rateLimited");
         setNotification({
-          message: tErrors('sessionExpiredRedirecting'),
+          message,
           type: "warning",
-          duration: 2500,
+          duration: 6000,
           key: Date.now(),
         });
-        localStorage.clear();
-        setTimeout(() => {
-          window.location.href = `${
-            import.meta.env.VITE_BASE || "/"
-          }login?expired=1`;
-        }, 1500);
+        return;
+      }
+
+      // Genuine session death is owned by api.js globalLogout (refresh 401/400).
+      // A lone 401 here often races with throttle storms / Pulse bursts and used
+      // to clear the session falsely. Only redirect when the refresh token is
+      // already gone (logout already in progress) or the error is flagged.
+      if (normalized?.type === "auth" && normalized?.status === 401) {
+        if (error?.isSessionExpired || !localStorage.getItem("refresh")) {
+          setNotification({
+            message: tErrors("sessionExpiredRedirecting"),
+            type: "warning",
+            duration: 2500,
+            key: Date.now(),
+          });
+          localStorage.clear();
+          setTimeout(() => {
+            window.location.href = `${
+              import.meta.env.VITE_BASE || "/"
+            }login?expired=1`;
+          }, 1500);
+          return;
+        }
+        setNotification({
+          message:
+            normalized.message ||
+            tErrors("sessionExpired"),
+          type: "warning",
+          duration: 5000,
+          key: Date.now(),
+        });
         return;
       }
 

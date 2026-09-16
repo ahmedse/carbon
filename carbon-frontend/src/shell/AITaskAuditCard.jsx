@@ -19,7 +19,7 @@ import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
 import TokenOutlinedIcon from '@mui/icons-material/TokenOutlined';
 
-import { PLAN_STATUS } from './aiTaskStatus';
+import { PLAN_STATUS, STEP_STATUS } from './aiTaskStatus';
 
 // ── Small labelled value row ──────────────────────────────────────────────
 function Stat({ icon, label, value }) {
@@ -106,10 +106,12 @@ function AITaskAuditCard({ ledger }) {
         </Typography>
         <Stack spacing={0.5}>
           {steps.map((step) => {
-            const stepMeta = PLAN_STATUS[step.status] || PLAN_STATUS.pending_approval;
+            const stepMeta = STEP_STATUS[step.status]
+              || PLAN_STATUS[step.status]
+              || STEP_STATUS.pending;
             return (
               <Stack key={step.step_id} direction="row" alignItems="center" spacing={0.75} sx={{ px: 0.75, py: 0.375, borderRadius: 1, bgcolor: 'action.hover' }}>
-                <CheckCircleOutlineIcon sx={{ fontSize: 14, color: step.confirmed ? 'success.main' : 'text.disabled' }} />
+                <CheckCircleOutlineIcon sx={{ fontSize: 14, color: step.confirmed || step.status === 'completed' ? 'success.main' : 'text.disabled' }} />
                 <Typography variant="body2" sx={{ flex: 1, minWidth: 0, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {step.intent || `Step ${step.step_id}`}
                 </Typography>

@@ -25,7 +25,7 @@ cp .ai-toolkit/decisions/0000-template.md .ai-toolkit/decisions/00NN-short-title
 - Master Architect owns ADRs. Workers READ them before touching the relevant area.
 - Link the ADR from the relevant TASKS.md phase when it constrains the work.
 
-## Index (0001–0033)
+## Index (0001–0034)
 
 | # | Title | Status |
 |---|-------|--------|
@@ -62,5 +62,6 @@ cp .ai-toolkit/decisions/0000-template.md .ai-toolkit/decisions/00NN-short-title
 | [0031](0031-pulse-unified-remediation-plan.md) | Pulse Unified Remediation Plan (D1–D12) | Accepted |
 | [0032](0032-entity-capability-framework.md) | Entity Capability Framework (ECF) | Accepted |
 | [0033](0033-pulse-identity-propagation.md) | Pulse Identity Propagation (actor-chain) | Accepted |
+| [0034](0034-resilient-agent-workflow-graph.md) | Resilient Agent Workflow Graph (typed nodes + guards) | Accepted |
 
 <!-- Add a row per ADR. Keep newest at the bottom. -->

@@ -1,4 +1,4 @@
-# Registry: Backend Services & Utilities  (auto-generated 2026-09-16 15:59 — DO NOT EDIT)
+# Registry: Backend Services & Utilities  (auto-generated 2026-09-16 19:49 — DO NOT EDIT)
 
 > Business logic lives in services. Before writing a new one, check this list — extend, don't duplicate.
 
@@ -10,7 +10,7 @@ backend/accounts/services.py:61:class AppManifestService:
 backend/ai/audit_service.py:23:class AuditService:
 backend/ai/catalog_service.py:60:class CatalogService:
 backend/ai/durable_service.py:101:class DurableExecutionService:
-backend/ai/plans_service.py:494:class PlansService:
+backend/ai/plans_service.py:567:class PlansService:
 backend/ai/subagent_service.py:68:class SubagentService:
 backend/appregistry/services.py:13:class AppRegistryService:
 backend/connections/services.py:22:class ConnectionService:
@@ -58,13 +58,14 @@ backend/healthy/services.py:408:class LoadoutService:
 backend/healthy/services.py:453:class DashboardService:
 backend/importexport/services.py:20:class ImportService:
 backend/importexport/services.py:78:class ExportService:
-backend/mdm/services.py:123:class OrgUnitService:
-backend/mdm/services.py:12:class ReferenceSetService:
+backend/mdm/services.py:190:class OrgUnitService:
+backend/mdm/services.py:79:class ReferenceSetService:
 backend/people/compensation_service.py:22:class CompensationService:
-backend/people/payroll_service.py:115:class PayrollRunService:
-backend/people/payroll_service.py:36:class PayrollServiceError(Exception):
+backend/people/loan_service.py:24:class LoanServiceError(Exception):
+backend/people/payroll_service.py:142:class PayrollRunService:
+backend/people/payroll_service.py:41:class PayrollServiceError(Exception):
 backend/people/services.py:13:class CalculationService:
-backend/people/tests/test_payroll_service.py:136:class PayrollRunServiceTests(TestCase):
+backend/people/tests/test_payroll_service.py:161:class PayrollRunServiceTests(TestCase):
 ```
 
 ## Management commands
@@ -87,6 +88,7 @@ backend/ai/management/commands/run_due_schedules.py
 backend/ai/management/commands/run_learning_loop.py
 backend/ai/management/commands/run_pulse_maintenance.py
 backend/ai/management/commands/seed_ai_demo.py
+backend/ai/management/commands/seed_catalog_skills.py
 backend/ai/management/commands/seed_nibras_knowledge.py
 backend/ai/management/commands/seed_nibras_processes.py
 backend/ai/management/commands/simulate_agent_workflows.py

@@ -673,6 +673,11 @@ def _build_tool_result_summary(completed_tools: list[dict]) -> str:
     Handles the real pipeline shape (``result`` is a JSON string from
     ``_safe_serialize``) as well as raw dict results. Deterministic and
     side-effect free so it can be unit-tested directly.
+
+    Gate (Chat QA A9 / M08): when **every** tool errored, do **not** wrap in
+    "Here's what I found" + mutation language ("nothing was changed"). That
+    dump reads as an unintelligent engagement. Use a read-safe calibration
+    refuse instead — Chat is advisory; a failed lookup is not a write abort.
     """
     if not completed_tools:
         return ""
@@ -698,6 +703,13 @@ def _build_tool_result_summary(completed_tools: list[dict]) -> str:
                     return raw[key]
         return raw
 
+    # All-failed gate — refuse calibration, never mutation-abort dump.
+    if all(isinstance(t, dict) and t.get("error") for t in completed_tools):
+        return (
+            "I couldn't complete that lookup just now. "
+            "Please try again in a moment — no answer was invented."
+        )
+
     tool_summaries: list[str] = []
     for tool_result in completed_tools:
         tool_name = tool_result.get("tool_name", "unknown")
@@ -715,10 +727,10 @@ def _build_tool_result_summary(completed_tools: list[dict]) -> str:
                 f'**{tool_name}**: I couldn\'t resolve "{hint}". Could you clarify what you meant?'
             )
         elif error:
-            # RULE_23 (C-F4b): describe the outcome only — never leak the raw
-            # internal error text or the tool identifier into user-facing chat.
+            # RULE_23 (C-F4b): outcome only — never leak raw error / tool id.
+            # Read-path wording: do not claim "nothing was changed" (mutation UX).
             tool_summaries.append(
-                "One step couldn't be completed, so nothing was changed."
+                "One lookup step couldn't be completed."
             )
         elif isinstance(result_data, dict):
             items = list(result_data.items())[:10]
