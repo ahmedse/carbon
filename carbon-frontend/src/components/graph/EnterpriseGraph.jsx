@@ -48,9 +48,11 @@ import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 1.15;
-const NODE_MIN_W = 96;
+/** Prefer pan/scroll over shrinking node type below readable size in the Pulse rail. */
+const FIT_ZOOM_FLOOR = 0.82;
+const NODE_MIN_W = 120;
 const NODE_MAX_W = 640;
-const NODE_MIN_H = 36;
+const NODE_MIN_H = 48;
 const NODE_MAX_H = 320;
 const DRAG_THRESHOLD = 3;
 
@@ -364,7 +366,10 @@ export default function EnterpriseGraph({
   }, [viewW, viewH, theme, exportFileName]);
 
   const fitView = useCallback(() => {
-    setZoomClamped(Math.min(1, viewW / Math.max(width, 1)));
+    const fitted = viewW / Math.max(width, 1);
+    // Cap at 1× so we never enlarge past layout size; floor so auto-fit in a
+    // narrow Pulse rail does not crush node type into illegible pixels.
+    setZoomClamped(Math.max(FIT_ZOOM_FLOOR, Math.min(1, fitted)));
     setPan({ x: 0, y: 0 });
   }, [setZoomClamped, viewW, width]);
 

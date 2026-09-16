@@ -47,7 +47,7 @@ evidence → not done.
 | **ECF** (Entity Capability Framework, ADR-0032) | **Pulse** | **COMPLETE** | ECF-8 DONE — LeaveRecord descriptor-only generalize proof |
 | **PEC** (Pulse Enterprise Control-plane) | **Pulse** | COMPLETE | Core P1–P7 closed |
 | **PEC-R** (Pulse residuals) | **Pulse** | **COMPLETE** | R4 journey-16 **3/3 PASS** · R5–R7 · leave fetch |
-| **Pulse Chat QA** | **Pulse** | **ACTIVE** | Deep Chat expert journey · Measurement Board · Wave A live |
+| **Pulse Chat QA** | **Pulse** | **ACTIVE** | Wave A: headcount pass^3 ✓ · A9 AR→EN FAIL · chart P0 fix in flight |
 | **NSR** (Nibras Staff-Ready) | **Nibras** | **COMPLETE** (W9 PARTIAL) | Staff go-live **READY**; Playwright UI leave journey ops residual — `docs/nibras/evidence/NSR-9-go-live-gate.md` |
 | **OF-15…OF-20** | **Nibras** | DONE | Leave vertical live |
 | **NIR-3C / NIR-7A/B** | **Nibras** | DONE | Code+tests shipped |
