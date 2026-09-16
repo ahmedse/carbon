@@ -74,6 +74,10 @@ def _fake_client_class(router):
         async def get(self, url, *, params=None, **kwargs):
             return self._router(url, params or {})
 
+        async def post(self, url, *, data=None, headers=None, **kwargs):
+            # DDG HTML SERP path uses POST; empty body → no extra results.
+            return _Resp(text="")
+
         async def __aenter__(self):
             return self
 

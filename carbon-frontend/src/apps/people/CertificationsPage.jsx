@@ -5,6 +5,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
+  Autocomplete,
   Button,
   IconButton,
   MenuItem,
@@ -32,6 +33,7 @@ import ErrorAlert from '../../components/Page/ErrorAlert';
 import EmptyState from '../../components/Page/EmptyState';
 import SystemDialog from '../../components/SystemDialog';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import { useReferenceOptions } from '../../hooks/useReferenceOptions';
 import { useAuth } from '../../auth/AuthContext';
 import {
   fetchCertifications,
@@ -40,7 +42,7 @@ import {
   updateCertification,
   deleteCertification,
 } from '../../api/people';
-import { buildEmployeeLabels, formatDate } from './utils';
+import { buildEmployeeLabels, formatDate, refCode, refLabel } from './utils';
 
 const EMPTY_FORM = {
   employee: '',
@@ -56,6 +58,7 @@ export default function CertificationsPage() {
   const { t: tCommon } = useTranslation('common');
   useDocumentTitle(t('certificationsTitle'));
   const { token } = useAuth();
+  const certTypeRef = useReferenceOptions('cert_type');
 
   const [certifications, setCertifications] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -112,7 +115,7 @@ export default function CertificationsPage() {
     setEditingCertification(certification);
     setForm({
       employee: certification.employee ?? '',
-      cert_type: certification.cert_type ?? '',
+      cert_type: refCode(certification.cert_type),
       number: certification.number ?? '',
       issued_date: certification.issued_date ? String(certification.issued_date).slice(0, 10) : '',
       expiry_date: certification.expiry_date ? String(certification.expiry_date).slice(0, 10) : '',
@@ -222,7 +225,7 @@ export default function CertificationsPage() {
               {certifications.map((certification) => (
                 <TableRow key={certification.id} hover>
                   <TableCell>{employeeName(certification.employee)}</TableCell>
-                  <TableCell>{certification.cert_type ?? '—'}</TableCell>
+                  <TableCell>{refLabel(certification.cert_type) || refCode(certification.cert_type) || '—'}</TableCell>
                   <TableCell>{certification.number ?? '—'}</TableCell>
                   <TableCell>{formatDate(certification.issued_date)}</TableCell>
                   <TableCell>{formatDate(certification.expiry_date)}</TableCell>
@@ -275,13 +278,16 @@ export default function CertificationsPage() {
               </MenuItem>
             ))}
           </TextField>
-          <TextField
-            label={t('colCertType')}
-            name="cert_type"
-            value={form.cert_type}
-            onChange={handleChange}
-            fullWidth
-            required
+          <Autocomplete
+            size="small"
+            options={certTypeRef.options}
+            value={certTypeRef.options.find((o) => o.value === form.cert_type) || null}
+            onChange={(e, v) => setForm((prev) => ({ ...prev, cert_type: v ? v.value : '' }))}
+            getOptionLabel={(o) => o.label}
+            isOptionEqualToValue={(a, b) => a.value === b.value}
+            renderInput={(params) => (
+              <TextField {...params} label={t('colCertType')} required />
+            )}
           />
           <TextField
             label={t('colCertNumber')}

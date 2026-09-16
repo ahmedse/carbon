@@ -344,24 +344,62 @@ export default function PoliciesPage() {
   };
 
   const columns = useMemo(() => {
-    const nameCell = (params) => (
-      <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <Typography noWrap sx={{ ...FONT.body2, fontWeight: 600 }}>{params.row.name || '—'}</Typography>
-        {params.row.description && (
-          <Typography noWrap sx={{ ...FONT.caption, color: 'text.secondary' }}>{params.row.description}</Typography>
-        )}
-        {Array.isArray(params.row.tags) && params.row.tags.length > 0 && (
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-            {params.row.tags.map((tag) => (
-              <Chip key={tag} size="small" variant="outlined" label={tag} />
-            ))}
-          </Box>
-        )}
-      </Box>
-    );
+    const nameCell = (params) => {
+      const title = params.row.name || '—';
+      const desc = params.row.description || '';
+      return (
+        <Tooltip title={desc || title} enterDelay={400}>
+          <Typography noWrap sx={{ ...FONT.body2, fontWeight: 600, width: '100%' }}>
+            {title}
+          </Typography>
+        </Tooltip>
+      );
+    };
+
+    const tagsCell = (params) => {
+      const tags = Array.isArray(params.row.tags) ? params.row.tags.filter(Boolean) : [];
+      if (tags.length === 0) return '—';
+      const visible = tags.slice(0, 3);
+      const extra = tags.length - visible.length;
+      return (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5,
+            minWidth: 0,
+            overflow: 'hidden',
+            width: '100%',
+          }}
+        >
+          {visible.map((tag) => (
+            <Chip
+              key={tag}
+              size="small"
+              variant="outlined"
+              label={tag}
+              sx={{ height: 20, maxWidth: 96, '& .MuiChip-label': { px: 0.75, ...FONT.caption } }}
+            />
+          ))}
+          {extra > 0 && (
+            <Typography sx={{ ...FONT.caption, color: 'text.secondary', flexShrink: 0 }}>
+              +{extra}
+            </Typography>
+          )}
+        </Box>
+      );
+    };
 
     return [
-      { field: 'name', headerName: t('colName'), flex: 1, minWidth: 220, renderCell: nameCell },
+      { field: 'name', headerName: t('colName'), flex: 1.2, minWidth: 220, renderCell: nameCell },
+      {
+        field: 'tags',
+        headerName: t('colTags'),
+        flex: 0.9,
+        minWidth: 160,
+        sortable: false,
+        renderCell: tagsCell,
+      },
       {
         field: 'category',
         headerName: t('colCategory'),
@@ -418,7 +456,7 @@ export default function PoliciesPage() {
         ),
       },
     ];
-  }, [t, navigate, openEdit]);
+  }, [t, navigate]);
 
   const closeSnackbar = () => setSnackbar((prev) => ({ ...prev, open: false }));
 

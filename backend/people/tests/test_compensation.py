@@ -36,13 +36,23 @@ def verify_url(employee, line):
 # ── Fixtures ────────────────────────────────────────────────────────────────
 
 @pytest.fixture
-def org_a(db):
-    return OrgUnit.objects.create(name='Org A', slug='org-a')
+def deployment_root(db):
+    """ADR-0028: one active parent=None root; org_a/org_b are siblings under it."""
+    return OrgUnit.objects.create(name='Deployment Root', slug='deploy-root', org_type='company')
 
 
 @pytest.fixture
-def org_b(db):
-    return OrgUnit.objects.create(name='Org B', slug='org-b')
+def org_a(deployment_root):
+    return OrgUnit.objects.create(
+        name='Org A', slug='org-a', parent=deployment_root, org_type='division',
+    )
+
+
+@pytest.fixture
+def org_b(deployment_root):
+    return OrgUnit.objects.create(
+        name='Org B', slug='org-b', parent=deployment_root, org_type='division',
+    )
 
 
 @pytest.fixture

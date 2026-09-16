@@ -1,3 +1,4 @@
+from people.tests.ref_helpers import ensure_ref
 # File: people/tests/test_leave_policy_versioning.py
 # LPR-3A — LeavePolicyVersion snapshot + fork semantics tests.
 #
@@ -51,7 +52,7 @@ def female_employee(org):
     return Employee.objects.create(
         org_unit=org, employee_no='E-F', full_name='Alice Active',
         basic_salary='1000.000', join_date=date.today() - timedelta(days=400),
-        gender='female', is_active=True,
+        gender=ensure_ref('gender', 'female'), is_active=True,
     )
 
 

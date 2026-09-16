@@ -15,7 +15,7 @@ import pytest
 from asgiref.sync import async_to_sync
 
 from accounts.models import User
-from mdm.models import OrgUnit
+from mdm.models import OrgUnit, ReferenceSet, ReferenceValue
 from people.models import Employee, Position
 
 
@@ -54,7 +54,34 @@ def _make_org(name: str = "Nibras HQ", slug: str = "nibras-hq") -> OrgUnit:
     return OrgUnit.objects.get_or_create(slug=slug, defaults={"name": name})[0]
 
 
+def _ref(set_name: str, code: str, label: str | None = None) -> ReferenceValue:
+    """Create/fetch a governed ReferenceValue (Employee.gender / nationality FKs)."""
+    rs, _ = ReferenceSet.objects.get_or_create(
+        name=set_name,
+        defaults={"slug": set_name.replace("_", "-")},
+    )
+    rv, _ = ReferenceValue.objects.get_or_create(
+        reference_set=rs,
+        code=code,
+        defaults={"label": label or code, "is_active": True},
+    )
+    return rv
+
+
+def _as_ref(set_name: str, value, *, label: str | None = None):
+    """Accept ReferenceValue, code string, or blank/None → FK instance or None."""
+    if value is None:
+        return None
+    if isinstance(value, ReferenceValue):
+        return value
+    code = str(value).strip()
+    if not code:
+        return None
+    return _ref(set_name, code, label=label)
+
+
 def _make_position(org: OrgUnit, title: str = "Engineer") -> Position:
+    # Omit grade: model FK is nullable; avoid writing grade when DB/model diverge.
     code = title.upper().replace(" ", "-")
     return Position.objects.get_or_create(
         org_unit=org, code=code, defaults={"title": title}
@@ -66,7 +93,8 @@ def _make_employee(
     no: str = "E001",
     name: str = "Ali Hassan",
     position=None,
-    gender: str = "",
+    gender="",
+    nationality=None,
     **extra,
 ) -> Employee:
     return Employee.objects.create(
@@ -76,7 +104,8 @@ def _make_employee(
         basic_salary=Decimal("1200.000"),
         is_active=True,
         position=position,
-        gender=gender,
+        gender=_as_ref("gender", gender),
+        nationality=_as_ref("nationality", nationality),
         **extra,
     )
 
@@ -204,12 +233,13 @@ def test_analytics_gender_breakdown_correct():
 
 @pytest.mark.django_db(transaction=True)
 def test_analytics_synonym_normalization_merges_M_into_male():
-    """'M' and 'Male' must be merged into 'male'; was_normalized=True; note emitted."""
+    """Dirty ReferenceValue codes 'M'/'Male' merge into 'male' after FK resolve."""
     user = User.objects.create_superuser(username="tg-syn", password="secret123")
     org = _make_org("Syn-HQ", "syn-hq")
+    # Distinct codes on ReferenceSet 'gender' (governed FK); analytics synonym-merges.
     _make_employee(org, "SN001", "John",  gender="male")
-    _make_employee(org, "SN002", "James", gender="Male")   # capitalisation variant
-    _make_employee(org, "SN003", "Ali",   gender="M")       # abbreviation variant
+    _make_employee(org, "SN002", "James", gender="Male")   # capitalisation variant code
+    _make_employee(org, "SN003", "Ali",   gender="M")       # abbreviation variant code
     _make_employee(org, "SN004", "Sara",  gender="female")
 
     result = _analytics(_executor(user), "gender")

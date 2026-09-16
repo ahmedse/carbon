@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.utils.text import slugify
@@ -181,6 +182,35 @@ class OrgUnit(models.Model):
 
     def __str__(self):
         return self.name
+
+    def clean(self):
+        """ADR-0028: at most one active OrgUnit with parent=None per deployment."""
+        super().clean()
+        if self.parent_id is not None or self.parent is not None:
+            return
+        # Inactive roots do not count toward the invariant.
+        if not self.is_active:
+            return
+        qs = OrgUnit.objects.filter(parent__isnull=True, is_active=True)
+        if self.pk:
+            qs = qs.exclude(pk=self.pk)
+        other = qs.first()
+        if other is not None:
+            raise ValidationError(
+                {
+                    'parent': (
+                        f"Only one active root OrgUnit is allowed per deployment "
+                        f"(ADR-0028). Active root already exists: "
+                        f"id={other.id} slug={other.slug!r}."
+                    )
+                }
+            )
+
+    def save(self, *args, **kwargs):
+        # Enforce single-root invariant for ORM paths (seeds, admin, services).
+        # Serializers may also validate; full_clean keeps create()/save() honest.
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
     def get_ancestors(self):
         """Return list of ancestors from root to parent."""

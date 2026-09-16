@@ -25,6 +25,7 @@ Tell the agent:
 | Role | File | Recommended Model | Cognitive Mode | Tools |
 |------|------|-------------------|---------------|-------|
 | **Master Architect** | `roles/master-architect.md` | DeepSeek V4 Pro | Plan + Decompose | read, search, edit, todo |
+| — multi-master | `shared/multi-master.md` + `masters/seats.md` + `docs/ops/MASTERS-COMMS.md` | — | Declare seat; never steal tracks | — |
 | **Scientific Researcher** | `roles/researcher.md` | DeepSeek V4.1-Flash | Experiment + Analyze | read, search, edit, terminal |
 | **Backend Worker** | `roles/backend-worker.md` | DeepSeek V4.1-Flash | Execute (Python/Django) | read, edit, terminal |
 | **Frontend Worker** | `roles/frontend-worker.md` | DeepSeek V4.1-Flash | Execute (React/MUI) | read, edit, terminal |
@@ -43,6 +44,7 @@ Tell the agent:
 |------|---------|
 | `project.config.md` | **Project-specific facts** — edit this per project |
 | `shared/base-rules.md` | Universal rules: ops script, terminal, verification, handoff protocol |
+| `shared/multi-master.md` | **Multi-Master law** — seats, ownership, MASTERS-COMMS (Masters only) |
 | `shared/ai-contract.md` | Binding Pulse/AI engine contract (RULE_18) — all AI work |
 | `shared/frontend-ready.md` | Screen Spec / RULE_29 — Frontend + Product Designer |
 | `shared/compact-ui.md` | MUI density spec — Frontend Worker |

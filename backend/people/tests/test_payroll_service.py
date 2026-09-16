@@ -9,8 +9,10 @@ from mdm.models import OrgUnit
 
 from people.models import (
     AttendanceRecord,
+    CompensationComponent,
     ComplianceRule,
     Employee,
+    EmployeeCompensation,
     Loan,
     PayslipLine,
     PayrollRun,
@@ -20,6 +22,29 @@ from people.payroll_service import (
     PayrollServiceError,
     make_finding,
 )
+from people.tests.ref_helpers import ensure_ref
+
+
+def _verified_basic_line(employee, amount=Decimal("1000.000"), *, start=None):
+    """Ensure a verified monthly basic ledger line exists for payroll compute."""
+    component, _ = CompensationComponent.objects.get_or_create(
+        code="basic",
+        defaults={
+            "name": "Basic Salary",
+            "direction": "earning",
+            "is_wps_relevant": True,
+            "sort_order": 10,
+            "is_active": True,
+        },
+    )
+    return EmployeeCompensation.objects.create(
+        employee=employee,
+        component=component,
+        amount=amount,
+        frequency="monthly",
+        effective_start=start or date(2024, 1, 1),
+        is_verified=True,
+    )
 
 
 def _gross_rule():
@@ -27,7 +52,7 @@ def _gross_rule():
         rule_id="kw-gross-test",
         version="2026.1",
         name="[TEST ONLY] Gross pay",
-        category="payroll",
+        category=ensure_ref('compliance_category', 'payroll'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
         effective_date=date(2026, 1, 1),
         inputs_schema={
             "inputs": ["basic"],
@@ -45,7 +70,7 @@ def _gosi_rule():
         rule_id="kw-gosi-test",
         version="2026.1",
         name="[TEST ONLY] GOSI",
-        category="gosi",
+        category=ensure_ref('compliance_category', 'gosi'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
         effective_date=date(2026, 1, 1),
         inputs_schema={
             "inputs": ["gross_salary", "employee_age"],
@@ -66,7 +91,7 @@ def _loan_rule():
         rule_id="kw-loan-test",
         version="2026.1",
         name="[TEST ONLY] Loan schedule",
-        category="other",
+        category=ensure_ref('compliance_category', 'other'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
         effective_date=date(2026, 1, 1),
         inputs_schema={
             "inputs": ["principal", "interest_rate", "term_months"],
@@ -88,7 +113,7 @@ def _net_rule():
         rule_id="kw-netpay-test",
         version="2026.1",
         name="[TEST ONLY] Net pay",
-        category="other",
+        category=ensure_ref('compliance_category', 'other'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
         effective_date=date(2026, 1, 1),
         inputs_schema={
             "inputs": ["gross", "deductions"],
@@ -103,7 +128,7 @@ def _wps_rule(authoritative=True):
         rule_id="kw-wps-test",
         version="2026.1",
         name="[TEST ONLY] WPS",
-        category="wps",
+        category=ensure_ref('compliance_category', 'wps'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
         effective_date=date(2026, 1, 1),
         inputs_schema={
             "inputs": ["net"],
@@ -135,9 +160,11 @@ class StubValidationSeam:
 
 class PayrollRunServiceTests(TestCase):
     def setUp(self):
-        self.hq = OrgUnit.objects.create(name="HQ", slug="hq")
+        # ADR-0028: single active root; HQ / Other are siblings under deployment root.
+        self.root = OrgUnit.objects.create(name="Deployment Root", slug="deploy-root", org_type="company")
+        self.hq = OrgUnit.objects.create(name="HQ", slug="hq", parent=self.root, org_type="division")
         self.sub = OrgUnit.objects.create(name="Sub Unit", slug="sub", parent=self.hq)
-        self.other = OrgUnit.objects.create(name="Other Unit", slug="other")
+        self.other = OrgUnit.objects.create(name="Other Unit", slug="other", parent=self.root, org_type="division")
 
         self.in_scope = Employee.objects.create(
             org_unit=self.hq, employee_no="E-1", full_name="In Scope",
@@ -151,6 +178,8 @@ class PayrollRunServiceTests(TestCase):
             org_unit=self.other, employee_no="E-3", full_name="Out Scope",
             basic_salary=Decimal("1000.000"), join_date=date(2024, 1, 1),
         )
+        for emp in (self.in_scope, self.sub_scope, self.out_scope):
+            _verified_basic_line(emp, Decimal("1000.000"))
 
         _gross_rule()
         _gosi_rule()
@@ -171,7 +200,7 @@ class PayrollRunServiceTests(TestCase):
         run = self._run()
         # Give the in-scope employee an active loan so the full pipeline runs.
         Loan.objects.create(
-            employee=self.in_scope, loan_type="advance",
+            employee=self.in_scope, loan_type=ensure_ref('loan_type', 'advance'),
             principal=Decimal("1200.000"), interest_rate=Decimal("0"),
             term_months=12, start_date=date(2026, 8, 1),
         )
@@ -184,25 +213,25 @@ class PayrollRunServiceTests(TestCase):
 
         in_lines = PayslipLine.objects.filter(employee=self.in_scope)
         self.assertEqual(
-            set(in_lines.values_list("line_type", flat=True)),
+            set(in_lines.values_list("line_type__code", flat=True)),
             {"gross", "gosi", "loan_installment", "net"},
         )
-        self.assertEqual(in_lines.get(line_type="gross").amount, Decimal("1000.000"))
-        self.assertEqual(in_lines.get(line_type="gosi").amount, Decimal("200.000"))
+        self.assertEqual(in_lines.get(line_type__code='gross').amount, Decimal("1000.000"))
+        self.assertEqual(in_lines.get(line_type__code='gosi').amount, Decimal("200.000"))
         self.assertEqual(
-            in_lines.get(line_type="loan_installment").amount, Decimal("100.000")
+            in_lines.get(line_type__code='loan_installment').amount, Decimal("100.000")
         )
         # net = 1000 − (100 GOSI employee share + 100 installment) = 800
-        self.assertEqual(in_lines.get(line_type="net").amount, Decimal("800.000"))
+        self.assertEqual(in_lines.get(line_type__code='net').amount, Decimal("800.000"))
 
-        gross_line = in_lines.get(line_type="gross")
+        gross_line = in_lines.get(line_type__code='gross')
         self.assertEqual(gross_line.rule_id, "kw-gross-test")
         self.assertEqual(gross_line.rule_version, "2026.1")
 
         # sub_scope employee has no loan → gross/gosi/net only.
         sub_lines = PayslipLine.objects.filter(employee=self.sub_scope)
         self.assertEqual(
-            set(sub_lines.values_list("line_type", flat=True)),
+            set(sub_lines.values_list("line_type__code", flat=True)),
             {"gross", "gosi", "net"},
         )
 
@@ -276,10 +305,33 @@ class PayrollRunServiceTests(TestCase):
 
         self.service.compute(run)
 
-        gross = PayslipLine.objects.get(employee=self.in_scope, line_type="gross")
+        gross = PayslipLine.objects.get(employee=self.in_scope, line_type__code='gross')
         self.assertEqual(gross.inputs["data_row_id"], data_row.pk)
         self.assertEqual(gross.inputs["row_hash"], "hash-abc")
         self.assertIn("measurements", gross.inputs)
+        self.assertEqual(gross.inputs["basic_source"], "ledger")
+
+    def test_compute_fails_without_verified_ledger(self):
+        """Payroll must fail closed when only Employee.basic_salary exists."""
+        orphan = Employee.objects.create(
+            org_unit=self.hq, employee_no="E-NO-LEDGER", full_name="No Ledger",
+            basic_salary=Decimal("9999.000"), join_date=date(2024, 1, 1),
+        )
+        # Scope only this employee by putting the run on a dedicated org unit.
+        lone = OrgUnit.objects.create(name="Lone", slug="lone", parent=self.hq)
+        orphan.org_unit = lone
+        orphan.save(update_fields=["org_unit"])
+
+        run = PayrollRun.objects.create(
+            org_unit=lone,
+            period_start=date(2026, 8, 1),
+            period_end=date(2026, 8, 31),
+        )
+        with self.assertRaises(PayrollServiceError) as ctx:
+            self.service.compute(run)
+        self.assertIn("E-NO-LEDGER", str(ctx.exception))
+        self.assertIn("verified", str(ctx.exception).lower())
+        self.assertFalse(PayslipLine.objects.filter(payroll_run=run).exists())
 
     # --- WPS export (NIR-5H) ----------------------------------------------
 
@@ -314,7 +366,7 @@ class PayrollRunServiceTests(TestCase):
         self.assertEqual(first["employee_name"], "In Scope")
         self.assertEqual(first["salary"], "1000.000")
 
-        net_amount = PayslipLine.objects.get(employee=self.in_scope, line_type="net").amount
+        net_amount = PayslipLine.objects.get(employee=self.in_scope, line_type__code='net').amount
         self.assertEqual(first["amount"], net_amount)
         self.assertEqual(records[0]["value"], net_amount)
 
@@ -349,10 +401,11 @@ class SeedGofscoComputeRegressionTests(TestCase):
         )
 
         hq = OrgUnit.objects.create(name="HQ", slug="hq")
-        Employee.objects.create(
+        emp = Employee.objects.create(
             org_unit=hq, employee_no="E-1", full_name="In Scope",
             basic_salary=Decimal("1000.000"), join_date=date(2024, 1, 1),
         )
+        _verified_basic_line(emp, Decimal("1000.000"))
         run = PayrollRun.objects.create(
             org_unit=hq,
             period_start=date(2026, 1, 1),
@@ -365,7 +418,7 @@ class SeedGofscoComputeRegressionTests(TestCase):
         self.assertEqual(result["employees"], 1)
         line_types = set(
             PayslipLine.objects.filter(payroll_run=run)
-            .values_list("line_type", flat=True)
+            .values_list("line_type__code", flat=True)
         )
         self.assertEqual(line_types, {"gross", "gosi", "net"})
 

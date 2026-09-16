@@ -6,10 +6,12 @@
 // MicroHelp tooltips + format hints. Per-step validation gates Next.
 //
 // Reuses the standard Wizard primitive (src/components/Wizard).
+// NSR-7C: form stores codes under FK names; payload never emits `*_code`.
 
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Alert,
   Autocomplete,
   Box,
   FormControlLabel,
@@ -22,6 +24,9 @@ import {
 import Wizard from '../../components/Wizard';
 import MicroHelp from '../../components/MicroHelp';
 import { useReferenceOptions } from '../../hooks/useReferenceOptions';
+import { orgUnitSelectOptions } from '../../api/orgUnits';
+import { buildEmployeeWizardPayload } from './employeeWizardPayload';
+import { refCode } from './utils';
 
 const EMPTY_FORM = {
   org_unit: '',
@@ -32,14 +37,14 @@ const EMPTY_FORM = {
   name_ar_given: '',
   name_ar_family: '',
   nationality: '',
-  nationality_code: '',
   gender: '',
   civil_id: '',
   date_of_birth: '',
-  employment_type_code: '',
-  contract_type_code: '',
+  employment_type: '',
+  contract_type: '',
   kuwaitization: false,
   basic_salary: '',
+  opening_basic: '',
   join_date: '',
   rotation: '',
   position: '',
@@ -58,17 +63,17 @@ function formFromEmployee(emp) {
     name_en_family: emp.name_en_family || '',
     name_ar_given: emp.name_ar_given || '',
     name_ar_family: emp.name_ar_family || '',
-    nationality: emp.nationality || '',
-    nationality_code: emp.nationality_code || '',
-    gender: emp.gender || '',
+    nationality: refCode(emp.nationality),
+    gender: refCode(emp.gender),
     civil_id: emp.civil_id || '',
     date_of_birth: emp.date_of_birth || '',
-    employment_type_code: emp.employment_type_code || '',
-    contract_type_code: emp.contract_type_code || '',
+    employment_type: refCode(emp.employment_type),
+    contract_type: refCode(emp.contract_type),
     kuwaitization: Boolean(emp.kuwaitization),
     basic_salary: emp.basic_salary != null ? String(emp.basic_salary) : '',
+    opening_basic: '',
     join_date: emp.join_date || '',
-    rotation: emp.rotation || '',
+    rotation: refCode(emp.rotation),
     position: emp.position != null ? String(emp.position) : '',
     manager: emp.manager != null ? String(emp.manager) : '',
     is_active: emp.is_active !== false,
@@ -132,7 +137,7 @@ export default function EmployeeWizard({
   const setField = (name, value) => setForm((prev) => ({ ...prev, [name]: value }));
 
   const orgUnitOptions = useMemo(
-    () => orgUnits.map((u) => ({ value: String(u.id), label: u.name || u.code || String(u.id) })),
+    () => orgUnitSelectOptions(orgUnits),
     [orgUnits],
   );
   const positionOptions = useMemo(
@@ -150,63 +155,28 @@ export default function EmployeeWizard({
     setField('civil_id', (e.target.value || '').replace(/\D/g, '').slice(0, 12));
   };
 
-  const handleNationality = (code) => {
-    const opt = nationality.options.find((o) => o.value === code);
-    setForm((prev) => ({
-      ...prev,
-      nationality_code: code,
-      nationality: opt ? opt.label : prev.nationality,
-    }));
-  };
-
   const handleKuwaitization = (e) => {
     const checked = e.target.checked;
     setForm((prev) => ({
       ...prev,
       kuwaitization: checked,
       // Helpful default: Kuwaitization implies Kuwaiti nationality unless set.
-      ...(checked && !prev.nationality_code ? { nationality_code: 'KWT', nationality: 'Kuwaiti' } : {}),
+      ...(checked && !prev.nationality ? { nationality: 'KWT' } : {}),
     }));
   };
 
+  const isCreate = !employee;
   const labelOf = (opts, val) =>
     opts.find((o) => o.value === String(val) || o.value === val)?.label || val || '—';
 
-  const buildPayload = () => {
-    const payload = {
-      org_unit: Number(form.org_unit),
-      employee_no: form.employee_no.trim(),
-      full_name: form.full_name.trim(),
-      join_date: form.join_date,
-      is_active: Boolean(form.is_active),
-      kuwaitization: Boolean(form.kuwaitization),
-    };
-    if (canViewCompensation) payload.basic_salary = String(form.basic_salary).trim();
-    const optionalText = [
-      ['nationality', form.nationality],
-      ['nationality_code', form.nationality_code],
-      ['gender', form.gender],
-      ['civil_id', form.civil_id],
-      ['date_of_birth', form.date_of_birth],
-      ['employment_type_code', form.employment_type_code],
-      ['contract_type_code', form.contract_type_code],
-      ['rotation', form.rotation],
-      ['name_en_given', form.name_en_given],
-      ['name_en_family', form.name_en_family],
-      ['name_ar_given', form.name_ar_given],
-      ['name_ar_family', form.name_ar_family],
-    ];
-    for (const [key, val] of optionalText) {
-      if (val && String(val).trim()) payload[key] = String(val).trim();
-    }
-    payload.position = form.position ? Number(form.position) : null;
-    payload.manager = form.manager ? Number(form.manager) : null;
-    return payload;
-  };
+  const buildPayload = () => buildEmployeeWizardPayload(form, { includeOpeningBasic: isCreate });
 
   const civilIdValid = !form.civil_id || /^\d{12}$/.test(form.civil_id);
   const dobBeforeJoin = !(form.date_of_birth && form.join_date)
     || form.date_of_birth < form.join_date;
+  const openingBasicRaw = String(form.opening_basic ?? '').trim();
+  const openingBasicValid = !openingBasicRaw
+    || (!Number.isNaN(Number(openingBasicRaw)) && Number(openingBasicRaw) >= 0);
 
   const steps = [
     {
@@ -274,8 +244,8 @@ export default function EmployeeWizard({
             lang={lang}
           />
           <OptionAutocomplete
-            value={form.nationality_code}
-            onChange={handleNationality}
+            value={form.nationality}
+            onChange={(v) => setField('nationality', v)}
             options={nationality.options}
             label={t('formNationality')}
             helpKey="employee.nationality"
@@ -285,7 +255,7 @@ export default function EmployeeWizard({
             control={<Switch checked={form.kuwaitization} onChange={handleKuwaitization} color="primary" />}
             label={t('formKuwaitization')}
           />
-          {form.kuwaitization && form.nationality_code && form.nationality_code !== 'KWT' && (
+          {form.kuwaitization && form.nationality && form.nationality !== 'KWT' && (
             <Typography variant="caption" color="warning.main">
               {t('kuwaitizationHint')}
             </Typography>
@@ -301,6 +271,7 @@ export default function EmployeeWizard({
         if (!form.employee_no.trim()) errors.push(t('errEmployeeNoRequired'));
         if (!form.org_unit) errors.push(t('errOrgUnitRequired'));
         if (!form.join_date) errors.push(t('errJoinDateRequired'));
+        if (!form.manager) errors.push(t('errManagerRequired'));
         return { valid: errors.length === 0, errors };
       },
       content: () => (
@@ -336,19 +307,20 @@ export default function EmployeeWizard({
             onChange={(v) => setField('manager', v)}
             options={managerOptions}
             label={t('formManager')}
+            required
             placeholder={t('managerUnassigned')}
           />
           <OptionAutocomplete
-            value={form.employment_type_code}
-            onChange={(v) => setField('employment_type_code', v)}
+            value={form.employment_type}
+            onChange={(v) => setField('employment_type', v)}
             options={employmentType.options}
             label={t('formEmploymentType')}
             helpKey="employee.employmentType"
             lang={lang}
           />
           <OptionAutocomplete
-            value={form.contract_type_code}
-            onChange={(v) => setField('contract_type_code', v)}
+            value={form.contract_type}
+            onChange={(v) => setField('contract_type', v)}
             options={contractType.options}
             label={t('formContractType')}
             helpKey="employee.contractType"
@@ -384,28 +356,45 @@ export default function EmployeeWizard({
       label: t('sectionCompensation'),
       validate: () => {
         const errors = [];
-        if (canViewCompensation) {
-          if (!String(form.basic_salary).trim()) errors.push(t('errBasicSalaryRequired'));
-          else if (Number(form.basic_salary) < 0) errors.push(t('errBasicSalaryNegative'));
-        }
+        if (!openingBasicValid) errors.push(t('errOpeningBasicInvalid'));
         return { valid: errors.length === 0, errors };
       },
       content: () => (
         <Stack spacing={2}>
-          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
-            <TextField
-              size="small"
-              label={t('formBasicSalary')}
-              value={form.basic_salary}
-              onChange={(e) => setField('basic_salary', e.target.value)}
-              type="number"
-              inputProps={{ step: '0.001', min: '0' }}
-              helperText={t('formBasicSalaryHint')}
-              required
-              fullWidth
-            />
-            <MicroHelp helpKey="employee.basicSalary" lang={lang} />
-          </Box>
+          <Alert severity="info" role="status">
+            {isCreate ? t('wizardOpeningBasicIntro') : t('wizardCompViaPayTab')}
+          </Alert>
+          {canViewCompensation && isCreate && (
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
+              <TextField
+                size="small"
+                label={t('formOpeningBasic')}
+                type="number"
+                value={form.opening_basic}
+                onChange={(e) => setField('opening_basic', e.target.value)}
+                helperText={t('formOpeningBasicHint')}
+                error={!openingBasicValid}
+                fullWidth
+                slotProps={{ htmlInput: { min: 0, step: '0.001', 'data-testid': 'wizard-opening-basic' } }}
+              />
+              <MicroHelp helpKey="employee.basicSalary" lang={lang} />
+            </Box>
+          )}
+          {canViewCompensation && !isCreate && (
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
+              <TextField
+                size="small"
+                label={t('formBasicSalaryReadonly')}
+                value={form.basic_salary ? form.basic_salary : '—'}
+                helperText={t('wizardCompReadOnlyHint')}
+                fullWidth
+                disabled
+                slotProps={{ htmlInput: { 'aria-readonly': true, readOnly: true } }}
+                data-testid="wizard-basic-salary-readonly"
+              />
+              <MicroHelp helpKey="employee.basicSalary" lang={lang} />
+            </Box>
+          )}
         </Stack>
       ),
     },
@@ -417,16 +406,31 @@ export default function EmployeeWizard({
           <Typography variant="subtitle2" color="text.secondary">{t('reviewIntro')}</Typography>
           <ReviewRow label={t('colFullName')} value={form.full_name || '—'} />
           <ReviewRow label={t('formEmployeeNo')} value={form.employee_no || '—'} />
-          <ReviewRow label={t('formNationality')} value={labelOf(nationality.options, form.nationality_code)} />
+          <ReviewRow label={t('formNationality')} value={labelOf(nationality.options, form.nationality)} />
           <ReviewRow label={t('formGender')} value={labelOf(gender.options, form.gender)} />
           <ReviewRow label={t('formCivilId')} value={civilIdDisplay || '—'} />
           <ReviewRow label={t('formJoinDate')} value={form.join_date || '—'} />
+          <ReviewRow label={t('formManager')} value={labelOf(managerOptions, form.manager)} />
           <ReviewRow label={t('formOrgUnit')} value={labelOf(orgUnitOptions, form.org_unit)} />
           <ReviewRow label={t('colPosition')} value={labelOf(positionOptions, form.position)} />
-          <ReviewRow label={t('formEmploymentType')} value={labelOf(employmentType.options, form.employment_type_code)} />
-          <ReviewRow label={t('formContractType')} value={labelOf(contractType.options, form.contract_type_code)} />
+          <ReviewRow label={t('formEmploymentType')} value={labelOf(employmentType.options, form.employment_type)} />
+          <ReviewRow label={t('formContractType')} value={labelOf(contractType.options, form.contract_type)} />
           <ReviewRow label={t('formRotation')} value={labelOf(rotation.options, form.rotation)} />
-          {canViewCompensation && <ReviewRow label={t('formBasicSalary')} value={form.basic_salary || '—'} />}
+          {canViewCompensation && isCreate && (
+            <ReviewRow
+              label={t('formOpeningBasic')}
+              value={openingBasicRaw || t('openingBasicNone')}
+            />
+          )}
+          {canViewCompensation && !isCreate && (
+            <ReviewRow
+              label={t('formBasicSalaryReadonly')}
+              value={form.basic_salary || t('compBasicNone')}
+            />
+          )}
+          <Typography variant="caption" color="text.secondary">
+            {isCreate ? t('wizardOnboardReadyHint') : t('wizardCompViaPayTab')}
+          </Typography>
           <ReviewRow label={t('formKuwaitization')} value={form.kuwaitization ? t('yes') : t('no')} />
           <ReviewRow label={t('formIsActive')} value={form.is_active ? t('yes') : t('no')} />
         </Stack>

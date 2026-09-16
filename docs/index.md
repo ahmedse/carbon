@@ -28,6 +28,7 @@ Modular monolith (Django + React) deployed as isolated brand instances (AASTMT Â
 | [DESIGN-PEOPLE-ORG-PROFILES.md](./DESIGN-PEOPLE-ORG-PROFILES.md) | Org / employee profiles |
 | [DESIGN-PEOPLE-REFERENCE-GOVERNANCE.md](./DESIGN-PEOPLE-REFERENCE-GOVERNANCE.md) | Governed lookups (ADR-0027) |
 | [SCREEN-SPEC-COMPENSATION-LEDGER.md](./SCREEN-SPEC-COMPENSATION-LEDGER.md) | Compensation UI ready-spec (ADR-0029) |
+| [SCREEN-SPEC-EMPLOYEE-WIZARD.md](./SCREEN-SPEC-EMPLOYEE-WIZARD.md) | Hire wizard acceptance (NSR-4B: manager, join_date, opening_basic) |
 | [QA-MANUAL-PEOPLE-MY-TEAM.md](./QA-MANUAL-PEOPLE-MY-TEAM.md) | Manual QA for people/my/team |
 
 ## Pulse / AI
@@ -35,6 +36,9 @@ Modular monolith (Django + React) deployed as isolated brand instances (AASTMT Â
 | Doc | Role |
 |-----|------|
 | [pulse/](./pulse/) | Pulse QA + UX living docs |
+| [pulse/QA-CHAT-AGENTIC-SCENARIO-BANK.md](./pulse/QA-CHAT-AGENTIC-SCENARIO-BANK.md) | Chat + Agentic scenario banks + measurement gates (Master/QA) |
+| [pulse/LIVE-QA-2026-09-16.md](./pulse/LIVE-QA-2026-09-16.md) | Live server QA findings (Chat/Agent UX) |
+| [pulse/QA-FRAMEWORK.md](./pulse/QA-FRAMEWORK.md) | Canonical intelligence/feature measurement spec |
 | [DESIGN_AI_WORKSPACE_V4.md](./DESIGN_AI_WORKSPACE_V4.md) | AI workspace implementation target |
 | [DESIGN-AGENT-WORKFLOW-AND-UI.md](./DESIGN-AGENT-WORKFLOW-AND-UI.md) | Agent workflow + UI |
 | [PULSE-COWORKER-IMPLEMENTATION-SPEC.md](./PULSE-COWORKER-IMPLEMENTATION-SPEC.md) | Coworker implementation |

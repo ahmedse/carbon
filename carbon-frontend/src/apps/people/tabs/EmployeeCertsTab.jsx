@@ -11,7 +11,7 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { useTranslation } from 'react-i18next';
 import EmptyState from '../../../components/Page/EmptyState';
 import BadgeIcon from '@mui/icons-material/Badge';
-import { daysUntilExpiry, expiryUrgency, formatDate } from '../utils';
+import { daysUntilExpiry, expiryUrgency, formatDate, refCode, refLabel } from '../utils';
 
 function urgencyChip(expiryDate, t) {
   const u = expiryUrgency(expiryDate);
@@ -68,7 +68,7 @@ export default function EmployeeCertsTab({ entityData }) {
                 return (
                   <TableRow key={cert.id} hover sx={{ bgcolor: isUrgent ? 'error.50' : undefined }}>
                     <TableCell sx={{ fontSize: '0.75rem', fontWeight: isUrgent ? 600 : 400, py: 0.625 }}>
-                      {cert.cert_type ?? '—'}
+                      {refLabel(cert.cert_type) || refCode(cert.cert_type) || '—'}
                     </TableCell>
                     <TableCell sx={{ fontSize: '0.75rem', fontFamily: 'monospace', py: 0.625 }}>
                       {cert.number || '—'}

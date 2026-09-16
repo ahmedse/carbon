@@ -10,7 +10,7 @@ export default {
   name:        'My',
   version:     '1.0.0',
   description: 'Employee self-service — profile, leave balance, and requests',
-  icon:        'Dashboard',   // mapped in useShellState.js MANIFEST_ICON_MAP
+  icon:        'Person',   // mapped in useShellState.js MANIFEST_ICON_MAP
 
   // ── NAMESPACE ─────────────────────────────────────────────────
   routePrefix: '/my',          // frontend My landing page

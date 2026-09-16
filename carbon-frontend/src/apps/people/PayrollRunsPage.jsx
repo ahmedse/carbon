@@ -1,7 +1,7 @@
 // src/apps/people/PayrollRunsPage.jsx
 // People & Payroll — payroll runs (full CRUD + lifecycle: compute / validate / commit).
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -47,7 +47,12 @@ import {
   commitPayrollRun,
   exportWpsPayrollRun,
 } from '../../api/people';
-import { fetchOrgUnits } from '../../api/orgUnits';
+import {
+  fetchOrgUnits,
+  orgUnitDepth,
+  orgUnitOptionLabel,
+  prepareOrgUnitsForPicker,
+} from '../../api/orgUnits';
 import { formatDate, statusColor, statusLabelKey } from './utils';
 
 const ACTION_FUNCS = {
@@ -67,6 +72,16 @@ const EMPTY_FORM = {
   period_start: '',
   period_end: '',
 };
+
+/** True when compute failed because a verified ledger basic line is missing (NSR-2A). */
+function isLedgerMissingError(err) {
+  const msg = String(err?.message || err?.detail || err?.feedback?.detail || '').toLowerCase();
+  return (
+    (msg.includes('verified') && msg.includes('basic') && msg.includes('ledger'))
+    || msg.includes('no verified monthly')
+    || (msg.includes('compensation ledger') && msg.includes('basic'))
+  );
+}
 
 export default function PayrollRunsPage() {
   const { t } = useTranslation('people');
@@ -88,6 +103,7 @@ export default function PayrollRunsPage() {
   const [editingRun, setEditingRun] = useState(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [actionError, setActionError] = useState(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -123,9 +139,19 @@ export default function PayrollRunsPage() {
       .finally(() => setValidationsLoading(false));
   }, [selectedId, token, t, validationsKey]);
 
+  const orgUnitsForPicker = useMemo(
+    () => prepareOrgUnitsForPicker(orgUnits),
+    [orgUnits],
+  );
+  const orgUnitById = useMemo(() => {
+    const map = new Map();
+    for (const u of orgUnitsForPicker) map.set(u.id, u);
+    return map;
+  }, [orgUnitsForPicker]);
+
   const orgUnitName = (id) => {
-    const unit = orgUnits.find((u) => u.id === id);
-    return unit?.name || unit?.code || '—';
+    const unit = orgUnitById.get(id) || orgUnits.find((u) => u.id === id);
+    return unit?.full_path || unit?.name || unit?.code || '—';
   };
 
   const openCreate = () => {
@@ -205,13 +231,22 @@ export default function PayrollRunsPage() {
       setBusyId(run.id);
       ACTION_FUNCS[action](run.id, token)
         .then(() => loadData())
-        .catch((err) =>
-          setSnackbar({
-            open: true,
-            severity: 'error',
-            message: err?.message || err?.feedback?.title || err?.detail || t('actionError'),
-          }),
-        )
+        .catch((err) => {
+          const apiMsg = err?.message || err?.feedback?.title || err?.detail || t('actionError');
+          if (action === 'compute' && isLedgerMissingError(err)) {
+            setActionError({
+              title: t('payrollLedgerMissingTitle'),
+              detail: t('payrollLedgerMissingDetail'),
+              apiMsg,
+            });
+          } else {
+            setActionError({
+              title: t('payrollActionErrorTitle'),
+              detail: apiMsg,
+              apiMsg,
+            });
+          }
+        })
         .finally(() => setBusyId(null));
     },
     [token, t, loadData],
@@ -447,9 +482,15 @@ export default function PayrollRunsPage() {
       >
         <Stack spacing={2}>
           <SearchSelect
-            options={orgUnits}
+            options={orgUnitsForPicker}
             valueKey="id"
             labelKey="name"
+            getOptionLabel={(o) =>
+              orgUnitOptionLabel(o, {
+                depth: orgUnitDepth(o, orgUnitById),
+                preferPath: Boolean(o?.full_path),
+              })
+            }
             label={t('formOrgUnit')}
             value={form.org_unit}
             onChange={(v) => setForm((prev) => ({ ...prev, org_unit: v ? v.id : '' }))}
@@ -476,6 +517,31 @@ export default function PayrollRunsPage() {
             fullWidth
             required
           />
+        </Stack>
+      </SystemDialog>
+
+      <SystemDialog
+        open={Boolean(actionError)}
+        title={actionError?.title || t('payrollActionErrorTitle')}
+        onClose={() => setActionError(null)}
+        onCancel={() => setActionError(null)}
+        cancelLabel={tCommon('close')}
+        showCancel={false}
+        actions={
+          <Button variant="contained" onClick={() => setActionError(null)}>
+            {tCommon('close')}
+          </Button>
+        }
+      >
+        <Stack spacing={1.5}>
+          <Alert severity="error" role="alert">
+            {actionError?.detail}
+          </Alert>
+          {actionError?.apiMsg && actionError.apiMsg !== actionError.detail && (
+            <Typography variant="body2" color="text.secondary" dir="ltr">
+              {actionError.apiMsg}
+            </Typography>
+          )}
         </Stack>
       </SystemDialog>
 

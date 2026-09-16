@@ -32,6 +32,7 @@ from core.feedback import AppFeedback
 from .calculation_engine import NonAuthoritativeRuleError
 from .chronicle import record_event, snapshot_employee, snapshot_position
 from .compensation_service import CompensationService
+from .employee_onboard_service import onboard_employee
 from .employee_user_service import get_default_password, provision_employee_user
 from .leave_policy_service import fork_policy, get_version_history, propagate_policy
 from .services import CalculationService
@@ -193,6 +194,7 @@ class EmployeeListCreateView(APIView):
     def post(self, request):
         serializer = EmployeeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        opening_basic = serializer.validated_data.pop('opening_basic', None)
         instance = Employee(**serializer.validated_data)
         blocked = _blocked_write_response(instance)
         if blocked is not None:
@@ -209,6 +211,19 @@ class EmployeeListCreateView(APIView):
             effective_date=timezone.localdate(), user=request.user,
             before=None, after=snapshot_employee(serializer.instance),
         )
+
+        # NSR-4A: leave entitlements + optional opening basic ledger line.
+        try:
+            onboard_employee(
+                serializer.instance,
+                opening_basic=opening_basic,
+                user=request.user,
+            )
+        except Exception:
+            logger.exception(
+                'Employee onboard hooks failed for employee_no=%s',
+                serializer.instance.employee_no,
+            )
 
         # Auto-provision a platform User + employee group structure on hire
         # (best-effort: a provisioning failure never blocks the hire).
@@ -247,6 +262,21 @@ class EmployeeDetailView(APIView):
         employee = get_object_or_404(self._get_queryset(request.user), pk=pk)
         before = snapshot_employee(employee)
         old_salary = employee.basic_salary
+        # ADR-0029 / NSR-2A: payroll SoT is the verified ledger. Reject client
+        # attempts to change basic_salary when a verified basic line exists.
+        if 'basic_salary' in request.data:
+            verified = CompensationService.verified_basic_amount(employee)
+            if verified is not None:
+                return Response(
+                    {
+                        'detail': (
+                            'basic_salary cannot be changed while a verified '
+                            'compensation ledger basic line exists; append a '
+                            'new ledger line instead.'
+                        ),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         serializer = EmployeeSerializer(employee, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         for field, value in serializer.validated_data.items():
@@ -405,7 +435,7 @@ class CompensationPlanListView(APIView):
         if request.query_params.get('pay_grade'):
             qs = qs.filter(pay_grade_code=request.query_params['pay_grade'])
         if request.query_params.get('job_family'):
-            qs = qs.filter(job_family_code=request.query_params['job_family'])
+            qs = qs.filter(job_family__code=request.query_params['job_family'])
         return Response(CompensationPlanSerializer(qs, many=True).data)
 
     def post(self, request):

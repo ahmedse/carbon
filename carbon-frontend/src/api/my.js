@@ -28,6 +28,25 @@ export function fetchMyPayslips(token) {
 }
 
 /**
+ * Normalize GET people/me/loan/ payloads (plain array or paginated envelope).
+ * Exported for unit tests / list helpers (NSR-3B).
+ */
+export function normalizeMyLoans(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.results)) return data.results;
+  return [];
+}
+
+/**
+ * Current employee loans (GET people/me/loan/).
+ * Returns an array of loan objects (id, loan_type, principal, status, …).
+ */
+export async function fetchMyLoans(token) {
+  const data = await apiFetch(`${PROFILE_ROOT}loan/`, { token });
+  return normalizeMyLoans(data);
+}
+
+/**
  * Count of inbox items requiring action (GET correspondence/inbox/).
  * Robust to both a plain JSON array and a paginated { count, ... } envelope.
  */

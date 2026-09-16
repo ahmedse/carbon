@@ -23,18 +23,29 @@ RULE_PAYLOAD = {
     'version': '2026.1',
     'name': 'EOSI accrual',
     'category': 'eosi',
+    'jurisdiction': 'KW',
     'effective_date': '2026-01-01',
 }
 
 
 @pytest.fixture
-def org_a(db):
-    return OrgUnit.objects.create(name='Org A', slug='org-a')
+def deployment_root(db):
+    """ADR-0028: one active parent=None root; org_a/org_b are siblings under it."""
+    return OrgUnit.objects.create(name='Deployment Root', slug='deploy-root', org_type='company')
 
 
 @pytest.fixture
-def org_b(db):
-    return OrgUnit.objects.create(name='Org B', slug='org-b')
+def org_a(deployment_root):
+    return OrgUnit.objects.create(
+        name='Org A', slug='org-a', parent=deployment_root, org_type='division',
+    )
+
+
+@pytest.fixture
+def org_b(deployment_root):
+    return OrgUnit.objects.create(
+        name='Org B', slug='org-b', parent=deployment_root, org_type='division',
+    )
 
 
 @pytest.fixture
@@ -75,6 +86,9 @@ def test_unauthenticated_gets_401(api_client, url):
 
 @pytest.mark.django_db
 def test_superuser_full_access(auth, create_user):
+    from people.tests.ref_helpers import ensure_ref
+    ensure_ref('compliance_category', 'eosi')
+    ensure_ref('jurisdiction', 'KW')
     client = auth(create_user('people_super', is_superuser=True))
     assert client.get(RULES_URL).status_code == 200
     resp = client.post(RULES_URL, RULE_PAYLOAD, format='json')

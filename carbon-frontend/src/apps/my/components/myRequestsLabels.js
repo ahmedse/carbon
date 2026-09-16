@@ -216,7 +216,7 @@ export function payloadRows(t, item, lang) {
       ];
     case 'loan_request':
       return [
-        { label: t('summaryLoanType'), value: payload.loan_type || '—' },
+        { label: t('summaryLoanType'), value: (typeof payload.loan_type === 'object' ? (payload.loan_type?.label || payload.loan_type?.code) : payload.loan_type) || '—' },
         { label: t('summaryPrincipal'), value: payload.principal != null ? String(payload.principal) : '—' },
         { label: t('summaryInterestRate'), value: payload.interest_rate != null ? String(payload.interest_rate) : '—' },
         { label: t('summaryTermMonths'), value: payload.term_months != null ? String(payload.term_months) : '—' },

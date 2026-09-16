@@ -732,7 +732,7 @@ class ReActLoop:
         step_tools: list[dict] | None = None
         if step.tool_name:
             step_tools = [
-                d for d in get_tool_definitions()
+                d for d in get_tool_definitions(instance_config)
                 if d.get("function", {}).get("name") == step.tool_name
             ] or None
         elif plan_source == "single_step":
@@ -741,7 +741,7 @@ class ReActLoop:
             _allow = {"create_dq_rule", "search_knowledge", "get_entity_details",
                       "list_my_capabilities", "plan_task"}
             step_tools = [
-                d for d in get_tool_definitions()
+                d for d in get_tool_definitions(instance_config)
                 if d.get("function", {}).get("name") in _allow
             ] or None
         else:

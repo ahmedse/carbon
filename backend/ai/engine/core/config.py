@@ -130,9 +130,11 @@ class Settings(BaseSettings):
 
     # ── Entity Capability Framework (ADR-0032) ──
     # Generic resolve/search/get/aggregate/describe over registered entity descriptors.
-    # Additive: only instances with an `entities:` block (nibras) expose resolve_entity;
+    # Additive: only instances with an `entities:` block expose resolve_entity;
     # instances without one are unaffected. Legacy list_employees/get_employee stay live.
-    ECF_ENABLED: bool = False  # off until ECF-7 cutover (ADR-0032 gate: goldens green + human sign-off)
+    # Cutover ECF-7 2026-09-16; human sign-off; goldens green.
+    # Emergency rollback: set env ECF_ENABLED=false (pydantic-settings).
+    ECF_ENABLED: bool = True
 
     # ── Navigation Resolution (deterministic, bilingual EN/AR pre-classifier) ──
     # Resolves "fly to / open / take me to <area>" (and Arabic equivalents)

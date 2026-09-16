@@ -207,7 +207,7 @@ class Command(BaseCommand):
                             help='Extract + report only; do not write to the DB')
 
     def handle(self, *args, **options):
-        from mdm.models import OrgUnit
+        from mdm.models import OrgUnit, ReferenceValue
         from people.models import Employee, Position
 
         path = Path(options['path'])
@@ -295,13 +295,25 @@ class Command(BaseCommand):
                         'code': f'JOB-{slugify(title)[:44].upper() or i}',
                         'status': 'filled',
                         'fte': Decimal('1.0'),
-                        'job_family_code': job_family_for(title),
+                        'job_family': ReferenceValue.objects.filter(
+                            reference_set__name='job_family',
+                            code=job_family_for(title),
+                        ).first(),
                     },
                 )
                 pos_by_title[title] = pos
 
             created = 0
             updated = 0
+            full_time = ReferenceValue.objects.filter(
+                reference_set__name='employment_type', code='full-time',
+            ).first()
+            indeterminate = ReferenceValue.objects.filter(
+                reference_set__name='contract_type', code='indeterminate',
+            ).first()
+            kwt = ReferenceValue.objects.filter(
+                reference_set__name='nationality', code='KWT',
+            ).first()
             for e in employees:
                 dept, kuwait = normalize_cost_center(e['cost_center'])
                 ou = dept_ous[dept]
@@ -318,14 +330,13 @@ class Command(BaseCommand):
                         'position': pos,
                         'basic_salary': salary_for(e['job_title']),
                         'join_date': None,
-                        'employment_type_code': 'full-time',
-                        'contract_type_code': 'indeterminate',
+                        'employment_type': full_time,
+                        'contract_type': indeterminate,
                         'kuwaitization': kuwait,
-                        'nationality_code': 'KWT' if kuwait else '',
-                        'nationality': 'Kuwaiti' if kuwait else '',
+                        'nationality': kwt if kuwait else None,
                         'civil_id': '',
-                        'gender': '',
-                        'rotation': '',
+                        'gender': None,
+                        'rotation': None,
                         'is_active': True,
                     },
                 )

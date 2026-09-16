@@ -10,7 +10,7 @@ export default {
   name:        'Team',
   version:     '1.0.0',
   description: 'Manager approvals inbox — act on team requests',
-  icon:        'Diversity3',   // mapped in useShellState.js MANIFEST_ICON_MAP
+  icon:        'SupervisorAccount',   // mapped in useShellState.js MANIFEST_ICON_MAP
 
   // ── NAMESPACE ─────────────────────────────────────────────────
   routePrefix: '/team',             // frontend Team landing page

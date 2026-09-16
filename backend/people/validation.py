@@ -93,17 +93,24 @@ def validate_write(instance):
     }
 
 
+def _line_code(ln):
+    """Return the payslip line_type code (FK → ReferenceValue)."""
+    if ln.line_type_id is None:
+        return None
+    return ln.line_type.code
+
+
 def validate_run(run):
     """Tier-2 batch: evaluate business rules over a run's computed lines.
 
     Returns a list of finding dicts (the ``make_finding`` shape). Pure read +
     pure compute — does NOT change ``run.status`` (the service does that).
     """
-    lines = list(run.lines.all())
+    lines = list(run.lines.select_related('line_type').all())
     findings = []
 
     # (a) net pay must be non-negative
-    net_lines = [ln for ln in lines if ln.line_type == "net"]
+    net_lines = [ln for ln in lines if _line_code(ln) == "net"]
     if net_lines:
         failures = [
             f"line #{ln.id} employee={ln.employee_id} net={ln.amount}"
@@ -119,7 +126,7 @@ def validate_run(run):
     # (d) every line must carry rule_id + rule_version lineage
     if lines:
         failures = [
-            f"line #{ln.id} {ln.line_type}"
+            f"line #{ln.id} {_line_code(ln)}"
             for ln in lines
             if not (ln.rule_id and ln.rule_version)
         ]
@@ -147,13 +154,13 @@ def _reconcile_findings(run, lines):
     GOSI employee share cannot be reconstructed from rule params, skip rather
     than fabricate a false failure.
     """
-    gross_lines = [ln for ln in lines if ln.line_type == "gross"]
-    net_lines = [ln for ln in lines if ln.line_type == "net"]
+    gross_lines = [ln for ln in lines if _line_code(ln) == "gross"]
+    net_lines = [ln for ln in lines if _line_code(ln) == "net"]
     if not gross_lines or not net_lines:
         return []
 
-    loan_lines = [ln for ln in lines if ln.line_type == "loan_installment"]
-    gosi_lines = [ln for ln in lines if ln.line_type == "gosi"]
+    loan_lines = [ln for ln in lines if _line_code(ln) == "loan_installment"]
+    gosi_lines = [ln for ln in lines if _line_code(ln) == "gosi"]
 
     gross_total = sum((ln.amount for ln in gross_lines), Decimal("0"))
     net_total = sum((ln.amount for ln in net_lines), Decimal("0"))
@@ -225,7 +232,7 @@ def _gosi_bounds_finding(lines):
     Skips (returns None) when there are no gosi lines or no configured bounds —
     bounds are never hardcoded.
     """
-    gosi_lines = [ln for ln in lines if ln.line_type == "gosi"]
+    gosi_lines = [ln for ln in lines if _line_code(ln) == "gosi"]
     if not gosi_lines:
         return None
 
@@ -233,7 +240,7 @@ def _gosi_bounds_finding(lines):
         rule_id=gosi_lines[0].rule_id, version=gosi_lines[0].rule_version
     ).first()
     if rule is None:
-        rule = ComplianceRule.objects.filter(category="gosi").order_by(
+        rule = ComplianceRule.objects.filter(category__code="gosi").order_by(
             "-effective_date", "-updated_at"
         ).first()
     if rule is None:

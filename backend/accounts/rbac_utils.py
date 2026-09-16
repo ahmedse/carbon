@@ -68,22 +68,45 @@ def get_allowed_module_ids(user, roles):
 
 
 def get_visible_org_units(user):
-    """Return org units the user may view for emissions owner pages."""
+    """Return org units the user may view for emissions owner pages.
+
+    ADR-0028: when a deployment root exists, results are limited to that
+    root's subtree even for global admins / global visibility roles.
+    """
     if not user or not getattr(user, 'is_authenticated', False):
         return []
     from mdm.models import OrgUnit
+    from mdm.services import get_deployment_org_unit_ids
+
+    def _scope(qs):
+        try:
+            deployment_ids = get_deployment_org_unit_ids(include_self=True)
+        except RuntimeError:
+            return OrgUnit.objects.none()
+        if deployment_ids:
+            qs = qs.filter(id__in=deployment_ids)
+        return qs
 
     if user_is_global_admin(user):
-        return list(OrgUnit.objects.filter(is_active=True).order_by('name'))
+        return list(_scope(OrgUnit.objects.filter(is_active=True)).order_by('name'))
 
-    # Users with a global visibility role (org_unit=None, module=None) can see all org units
+    # Users with a global visibility role (org_unit=None, module=None) can see
+    # all org units within the deployment root subtree.
     if ScopedRole.objects.filter(
         user=user, is_active=True, org_unit=None, module=None,
         group__name__in=VISIBILITY_ROLES,
     ).exists():
-        return list(OrgUnit.objects.filter(is_active=True).order_by('name'))
+        return list(_scope(OrgUnit.objects.filter(is_active=True)).order_by('name'))
 
     allowed_ids = get_allowed_org_unit_ids(user, VISIBILITY_ROLES)
+    if not allowed_ids:
+        return []
+    try:
+        deployment_ids = get_deployment_org_unit_ids(include_self=True)
+    except RuntimeError:
+        return []
+    if deployment_ids:
+        allowed_ids &= deployment_ids
     if not allowed_ids:
         return []
     return list(OrgUnit.objects.filter(id__in=allowed_ids, is_active=True).order_by('name'))

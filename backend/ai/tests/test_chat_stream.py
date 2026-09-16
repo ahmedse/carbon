@@ -50,7 +50,9 @@ def _make_conversation(user, conversation_type="chat", payload=None):
 def test_dispatch_task_stream_chat_yields_chunks_then_done(monkeypatch):
     import ai.engine_runtime as rt
 
-    async def fake_run_chat(instance_id, payload, task_id, *, stream_callback=None):
+    async def fake_run_chat(
+        instance_id, payload, task_id, *, stream_callback=None, progress_callback=None
+    ):
         assert stream_callback is not None
         await stream_callback("Hel")
         await stream_callback("lo")
@@ -86,7 +88,9 @@ def test_dispatch_task_stream_non_chat_yields_single_error():
 def test_dispatch_task_stream_engine_error_yields_error(monkeypatch):
     import ai.engine_runtime as rt
 
-    async def fake_run_chat(instance_id, payload, task_id, *, stream_callback=None):
+    async def fake_run_chat(
+        instance_id, payload, task_id, *, stream_callback=None, progress_callback=None
+    ):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(rt, "_run_chat", fake_run_chat)
@@ -103,8 +107,11 @@ def test_dispatch_task_stream_passes_async_callback(monkeypatch):
 
     captured: dict[str, object] = {}
 
-    async def fake_run_chat(instance_id, payload, task_id, *, stream_callback=None):
+    async def fake_run_chat(
+        instance_id, payload, task_id, *, stream_callback=None, progress_callback=None
+    ):
         captured["cb"] = stream_callback
+        captured["pcb"] = progress_callback
         await stream_callback("x")
         return {
             "status": "completed",
@@ -117,6 +124,7 @@ def test_dispatch_task_stream_passes_async_callback(monkeypatch):
     list(rt.dispatch_task_stream("chat", {"message": "hi"}))
 
     assert inspect.iscoroutinefunction(captured["cb"])
+    assert inspect.iscoroutinefunction(captured["pcb"])
 
 
 # ── PulseProvider.chat_stream ────────────────────────────────────────────

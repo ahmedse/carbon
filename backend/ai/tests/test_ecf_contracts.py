@@ -1,8 +1,11 @@
 """ECF-3 — Boundary contract guard tests."""
 from __future__ import annotations
 
+import json
 import yaml
 from pathlib import Path
+from types import SimpleNamespace
+
 import pytest
 
 from ai.engine.cognition.entity.registry import load_descriptors
@@ -14,6 +17,7 @@ from ai.engine.cognition.entity.contracts import (
     apply_entity_contracts,
 )
 from ai.engine.cognition.entity.resolver import ResolveResult
+from ai.engine_runtime import _apply_ecf_entity_contracts
 
 NIBRAS_YAML = Path(__file__).parent.parent / "engine/instances/nibras/instance.yaml"
 
@@ -128,3 +132,68 @@ class TestApplyEntityContracts:
         r, p = apply_entity_contracts(tool_result, prose, None)
         assert r == tool_result
         assert p == prose
+
+
+class TestRuntimeHook:
+    """Cover ``_apply_ecf_entity_contracts`` call site (flag-gated)."""
+
+    @pytest.fixture
+    def nibras_cfg(self):
+        return yaml.safe_load(NIBRAS_YAML.read_text())
+
+    def test_flag_off_is_noop(self, nibras_cfg, monkeypatch):
+        monkeypatch.setattr(
+            "ai.engine.core.config.get_settings",
+            lambda: SimpleNamespace(ECF_ENABLED=False),
+        )
+        tools = [{
+            "tool_name": "call_host_api:list_employees",
+            "result": json.dumps({
+                "data": {
+                    "total": 530, "count": 1, "truncated": True,
+                    "results": [{"id": 1, "full_name": "Alice", "basic_salary": "0.000"}],
+                }
+            }),
+        }]
+        prose = "No employee found."
+        out_tools, out_prose = _apply_ecf_entity_contracts(tools, prose, nibras_cfg)
+        assert out_tools is tools or out_tools == tools
+        assert out_prose == prose
+
+    def test_flag_on_rewrites_truncated_claim_and_masks(self, nibras_cfg, monkeypatch):
+        monkeypatch.setattr(
+            "ai.engine.core.config.get_settings",
+            lambda: SimpleNamespace(ECF_ENABLED=True),
+        )
+        tools = [{
+            "tool_name": "call_host_api:list_employees",
+            "result": json.dumps({
+                "data": {
+                    "total": 530, "count": 1, "truncated": True,
+                    "results": [
+                        {"id": 1, "full_name": "Alice", "basic_salary": "0.000", "position": 170},
+                    ],
+                }
+            }),
+        }]
+        prose = "No employee found."
+        out_tools, out_prose = _apply_ecf_entity_contracts(
+            tools, prose, nibras_cfg, user_capabilities=frozenset()
+        )
+        assert "530" in out_prose or "first page" in out_prose or "complete search" in out_prose
+        cleaned = json.loads(out_tools[0]["result"])
+        assert cleaned["data"]["results"][0]["basic_salary"].startswith("(hidden")
+
+    def test_non_entity_tool_skipped(self, nibras_cfg, monkeypatch):
+        monkeypatch.setattr(
+            "ai.engine.core.config.get_settings",
+            lambda: SimpleNamespace(ECF_ENABLED=True),
+        )
+        tools = [{
+            "tool_name": "search_knowledge",
+            "result": json.dumps({"results": [{"id": 1}]}),
+        }]
+        prose = "No employee found."
+        out_tools, out_prose = _apply_ecf_entity_contracts(tools, prose, nibras_cfg)
+        assert out_prose == prose
+        assert out_tools[0]["result"] == tools[0]["result"]

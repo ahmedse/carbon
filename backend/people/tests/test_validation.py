@@ -17,6 +17,7 @@ from django.test import TestCase
 from dq.models import DQRule, DQResult, ModelRuleAssignment
 from mdm.models import OrgUnit
 
+from people.tests.ref_helpers import ensure_ref
 from people.models import (
     Employee,
     PayrollRun,
@@ -75,12 +76,13 @@ class ValidateWriteTests(TestCase):
         )
 
     def test_bad_employee_blocked(self):
-        result = validate_write(self._employee(""))
+        result = validate_write(self._employee(None))
         self.assertTrue(result["blocked"])
         self.assertGreaterEqual(result["failed"], 1)
 
     def test_good_employee_passes(self):
-        result = validate_write(self._employee("Kuwaiti"))
+        from people.tests.ref_helpers import ensure_ref
+        result = validate_write(self._employee(ensure_ref('nationality', 'KWT', 'Kuwaiti')))
         self.assertFalse(result["blocked"])
         self.assertEqual(result["failed"], 0)
 
@@ -95,7 +97,6 @@ class ValidateRunTests(TestCase):
             org_unit=cls.org,
             employee_no="E-1",
             full_name="Test Employee",
-            nationality="Kuwaiti",
             basic_salary=Decimal("1000.000"),
             join_date=date(2024, 1, 1),
         )
@@ -110,7 +111,7 @@ class ValidateRunTests(TestCase):
     def test_negative_net_returns_error_and_persists_failed_validation(self):
         run = self._run()
         PayslipLine.objects.create(
-            payroll_run=run, employee=self.employee, line_type="net",
+            payroll_run=run, employee=self.employee, line_type=ensure_ref('payslip_line_type', 'net'),
             amount=Decimal("-5.000"), rule_id="kw-netpay-test", rule_version="2026.1",
         )
 
@@ -130,7 +131,7 @@ class ValidateRunTests(TestCase):
     def test_summary_stores_counts_and_samples_not_rows(self):
         run = self._run()
         PayslipLine.objects.create(
-            payroll_run=run, employee=self.employee, line_type="net",
+            payroll_run=run, employee=self.employee, line_type=ensure_ref('payslip_line_type', 'net'),
             amount=Decimal("-5.000"), rule_id="kw-netpay-test", rule_version="2026.1",
         )
 
@@ -151,7 +152,7 @@ class ValidateRunTests(TestCase):
     def test_persist_findings_is_idempotent(self):
         run = self._run()
         PayslipLine.objects.create(
-            payroll_run=run, employee=self.employee, line_type="net",
+            payroll_run=run, employee=self.employee, line_type=ensure_ref('payslip_line_type', 'net'),
             amount=Decimal("-5.000"), rule_id="kw-netpay-test", rule_version="2026.1",
         )
 
@@ -167,7 +168,7 @@ class ValidateRunTests(TestCase):
     def test_lineage_missing_returns_error(self):
         run = self._run()
         PayslipLine.objects.create(
-            payroll_run=run, employee=self.employee, line_type="gross",
+            payroll_run=run, employee=self.employee, line_type=ensure_ref('payslip_line_type', 'gross'),
             amount=Decimal("1000.000"), rule_id="", rule_version="",
         )
 
@@ -180,15 +181,15 @@ class ValidateRunTests(TestCase):
     def test_reconciliation_passes_then_fails(self):
         run = self._run()
         PayslipLine.objects.create(
-            payroll_run=run, employee=self.employee, line_type="gross",
+            payroll_run=run, employee=self.employee, line_type=ensure_ref('payslip_line_type', 'gross'),
             amount=Decimal("1000.000"), rule_id="kw-gross-test", rule_version="2026.1",
         )
         PayslipLine.objects.create(
-            payroll_run=run, employee=self.employee, line_type="loan_installment",
+            payroll_run=run, employee=self.employee, line_type=ensure_ref('payslip_line_type', 'loan_installment'),
             amount=Decimal("100.000"), rule_id="kw-loan-test", rule_version="2026.1",
         )
         PayslipLine.objects.create(
-            payroll_run=run, employee=self.employee, line_type="net",
+            payroll_run=run, employee=self.employee, line_type=ensure_ref('payslip_line_type', 'net'),
             amount=Decimal("900.000"), rule_id="kw-netpay-test", rule_version="2026.1",
         )
 
@@ -196,7 +197,7 @@ class ValidateRunTests(TestCase):
         recon = next(f for f in findings if f["rule_key"] == "net_reconciliation")
         self.assertTrue(recon["passed"])
 
-        PayslipLine.objects.filter(payroll_run=run, line_type="net").update(
+        PayslipLine.objects.filter(payroll_run=run, line_type=ensure_ref('payslip_line_type', 'net')).update(
             amount=Decimal("800.000")
         )
         findings2 = validate_run(run)

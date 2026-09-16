@@ -250,6 +250,25 @@ export function fetchComplianceRules(token) {
   return apiFetch(`${ROOT}compliance-rules/`, { token });
 }
 
+/** Create a compliance rule. */
+export function createComplianceRule(data, token) {
+  return apiFetch(`${ROOT}compliance-rules/`, { method: 'POST', body: data, token });
+}
+
+/** Update a compliance rule (partial). */
+export function updateComplianceRule(id, data, token) {
+  return apiFetch(`${ROOT}compliance-rules/${encodeURIComponent(id)}/`, {
+    method: 'PATCH', body: data, token,
+  });
+}
+
+/** Delete a compliance rule. */
+export function deleteComplianceRule(id, token) {
+  return apiFetch(`${ROOT}compliance-rules/${encodeURIComponent(id)}/`, {
+    method: 'DELETE', token,
+  });
+}
+
 /** List positions. */
 export function fetchPositions(token) {
   return apiFetch(`${ROOT}positions/`, { token });
@@ -320,6 +339,11 @@ export function fetchCompensationComponents(token) {
   return apiFetch(`${ROOT}compensation-components/`, { token });
 }
 
+/** Create a compensation component (admin only on the API). */
+export function createCompensationComponent(data, token) {
+  return apiFetch(`${ROOT}compensation-components/`, { method: 'POST', body: data, token });
+}
+
 /** Compensation plan matrix (config layer above the per-employee ledger). */
 export function fetchCompensationPlan(token, { payGrade, jobFamily } = {}) {
   const params = new URLSearchParams();
@@ -327,6 +351,11 @@ export function fetchCompensationPlan(token, { payGrade, jobFamily } = {}) {
   if (jobFamily) params.set('job_family', jobFamily);
   const qs = params.toString() ? `?${params}` : '';
   return apiFetch(`${ROOT}compensation-plan/${qs}`, { token });
+}
+
+/** Create a compensation plan row (admin only on the API). */
+export function createCompensationPlan(data, token) {
+  return apiFetch(`${ROOT}compensation-plan/`, { method: 'POST', body: data, token });
 }
 
 /** Single employee. */

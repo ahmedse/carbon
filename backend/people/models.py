@@ -15,16 +15,6 @@ class ComplianceRule(models.Model):
     """A versioned compliance rule. The rule library is the seam that
     authoritative KLL / PIFSS / WPS figures drop into without engine changes."""
 
-    CATEGORY_CHOICES = [
-        ('leave', 'Leave'),
-        ('eosi', 'EOSI'),
-        ('gosi', 'GOSI'),
-        ('wps', 'WPS'),
-        ('overtime', 'Overtime'),
-        ('payroll', 'Payroll'),
-        ('other', 'Other'),
-    ]
-
     # ``rule_id`` is unique only together with ``version`` — a rule can have
     # multiple dated versions in the library (versioned seam).
     rule_id = models.CharField(
@@ -38,8 +28,18 @@ class ComplianceRule(models.Model):
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
 
-    jurisdiction = models.CharField(max_length=10, default='KW')
-    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
+    jurisdiction = models.ForeignKey(
+        'mdm.ReferenceValue',
+        on_delete=models.PROTECT,
+        related_name='+',
+        help_text="Jurisdiction from ReferenceSet 'jurisdiction' (e.g. KW)",
+    )
+    category = models.ForeignKey(
+        'mdm.ReferenceValue',
+        on_delete=models.PROTECT,
+        related_name='+',
+        help_text="Category from ReferenceSet 'compliance_category'",
+    )
     effective_date = models.DateField(help_text="Date the rule becomes effective")
     formula_ref = models.CharField(
         max_length=200, blank=True, help_text="e.g. 'KLL Art. 51'",
@@ -65,21 +65,22 @@ class ComplianceRule(models.Model):
 
     class Meta:
         unique_together = ('rule_id', 'version')
-        ordering = ['category', 'rule_id', '-effective_date']
+        ordering = ['category__sort_order', 'category__code', 'rule_id', '-effective_date']
         verbose_name = "Compliance Rule"
         verbose_name_plural = "Compliance Rules"
 
     def __str__(self):
-        return f"{self.rule_id} v{self.version} ({self.category})"
+        cat = self.category.code if self.category_id else '?'
+        return f"{self.rule_id} v{self.version} ({cat})"
 
 
 class Employee(models.Model):
     """Minimal employee master (org-scoped).
 
     P3 profile enrichment: bilingual identity + Kuwait HR profile fields
-    (civil ID, DOB, gender, governed-enum codes, kuwaitization flag,
-    reporting manager). The ``*_code`` fields are validated against
-    ``mdm.ReferenceSet`` in the API layer (see people/serializers.py).
+    (civil ID, DOB, gender, governed lookups, kuwaitization flag,
+    reporting manager). Bucket-1 lookups are FKs to ``mdm.ReferenceValue``
+    (ADR-0027); see ``GovernedValueField`` in mdm/serializers.py.
     """
 
     org_unit = models.ForeignKey(
@@ -109,21 +110,29 @@ class Employee(models.Model):
         help_text="Civil ID (Kuwait) — plain text, no validation of checksum",
     )
     date_of_birth = models.DateField(null=True, blank=True)
-    gender = models.CharField(
-        max_length=16, blank=True, default='',
-        help_text="Free text (e.g. 'male'/'female'); NOT a governed enum",
+    gender = models.ForeignKey(
+        'mdm.ReferenceValue',
+        on_delete=models.PROTECT,
+        related_name='+',
+        null=True,
+        blank=True,
+        help_text="Gender from ReferenceSet 'gender'",
     )
-    nationality_code = models.CharField(
-        max_length=40, blank=True, default='',
-        help_text="Code from ReferenceSet 'nationality' (governed enum)",
+    employment_type = models.ForeignKey(
+        'mdm.ReferenceValue',
+        on_delete=models.PROTECT,
+        related_name='+',
+        null=True,
+        blank=True,
+        help_text="Employment type from ReferenceSet 'employment_type'",
     )
-    employment_type_code = models.CharField(
-        max_length=40, blank=True, default='',
-        help_text="Code from ReferenceSet 'employment_type' (governed enum)",
-    )
-    contract_type_code = models.CharField(
-        max_length=40, blank=True, default='',
-        help_text="Code from ReferenceSet 'contract_type' (governed enum)",
+    contract_type = models.ForeignKey(
+        'mdm.ReferenceValue',
+        on_delete=models.PROTECT,
+        related_name='+',
+        null=True,
+        blank=True,
+        help_text="Contract type from ReferenceSet 'contract_type'",
     )
     kuwaitization = models.BooleanField(
         default=False,
@@ -139,15 +148,26 @@ class Employee(models.Model):
         related_name='incumbents',
         help_text='Current single position (same-app FK; incumbent resolution)',
     )
-    nationality = models.CharField(max_length=100, blank=True)
+    nationality = models.ForeignKey(
+        'mdm.ReferenceValue',
+        on_delete=models.PROTECT,
+        related_name='+',
+        null=True,
+        blank=True,
+        help_text="Nationality from ReferenceSet 'nationality'",
+    )
     basic_salary = models.DecimalField(max_digits=14, decimal_places=3)
     join_date = models.DateField(
         null=True, blank=True,
         help_text="Service start date (null = unknown, e.g. bulk ERP import)",
     )
-    rotation = models.CharField(
-        max_length=32, blank=True,
-        help_text="Config label only (e.g. '1/1'), NOT calculation logic",
+    rotation = models.ForeignKey(
+        'mdm.ReferenceValue',
+        on_delete=models.PROTECT,
+        related_name='+',
+        null=True,
+        blank=True,
+        help_text="Rotation pattern from ReferenceSet 'rotation_pattern'",
     )
     photo = models.ImageField(
         upload_to='people/photos/',
@@ -209,9 +229,11 @@ class PayslipLine(models.Model):
 
     payroll_run = models.ForeignKey(PayrollRun, on_delete=models.CASCADE, related_name='lines')
     employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name='payslip_lines')
-    line_type = models.CharField(
-        max_length=40,
-        help_text="gross | basic | overtime | leave_pay | eosi_accrual | gosi | deduction | …",
+    line_type = models.ForeignKey(
+        'mdm.ReferenceValue',
+        on_delete=models.PROTECT,
+        related_name='+',
+        help_text="Line type from ReferenceSet 'payslip_line_type'",
     )
     amount = models.DecimalField(max_digits=14, decimal_places=3)
     rule_id = models.CharField(max_length=120)
@@ -227,7 +249,8 @@ class PayslipLine(models.Model):
         verbose_name_plural = "Payslip Lines"
 
     def __str__(self):
-        return f"{self.employee} {self.line_type} = {self.amount}"
+        code = self.line_type.code if self.line_type_id else self.line_type
+        return f"{self.employee} {code} = {self.amount}"
 
 
 class PayrollRunValidation(models.Model):
@@ -265,7 +288,14 @@ class Position(models.Model):
     )
     code = models.CharField(max_length=64)
     title = models.CharField(max_length=200)
-    grade = models.CharField(max_length=64, blank=True)
+    grade = models.ForeignKey(
+        'mdm.ReferenceValue',
+        on_delete=models.PROTECT,
+        related_name='+',
+        null=True,
+        blank=True,
+        help_text="Grade from ReferenceSet 'grade'",
+    )
     reports_to = models.ForeignKey(
         'self',
         on_delete=models.SET_NULL,
@@ -279,9 +309,13 @@ class Position(models.Model):
     STATUS_CHOICES = [('proposed', 'Proposed'), ('open', 'Open'), ('filled', 'Filled'), ('frozen', 'Frozen'), ('closed', 'Closed')]
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='filled')
     fte = models.DecimalField(max_digits=4, decimal_places=2, default=1)
-    job_family_code = models.CharField(
-        max_length=40, blank=True, default='',
-        help_text="Code from ReferenceSet 'job_family' (governed enum)",
+    job_family = models.ForeignKey(
+        'mdm.ReferenceValue',
+        on_delete=models.PROTECT,
+        related_name='+',
+        null=True,
+        blank=True,
+        help_text="Job family from ReferenceSet 'job_family'",
     )
 
     class Meta:
@@ -529,24 +563,22 @@ class LeaveRecord(models.Model):
 class BenefitType(models.Model):
     """A categorised benefit definition (M5 — C&B)."""
 
-    CATEGORY_CHOICES = [
-        ('accommodation', 'Accommodation'),
-        ('vehicle', 'Vehicle'),
-        ('medical', 'Medical'),
-        ('school', 'School'),
-        ('tickets', 'Tickets'),
-        ('other', 'Other'),
-    ]
-
     code = models.CharField(max_length=64, unique=True)
     name = models.CharField(max_length=200)
-    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
+    category = models.ForeignKey(
+        'mdm.ReferenceValue',
+        on_delete=models.PROTECT,
+        related_name='+',
+        null=True,
+        blank=True,
+        help_text="Category from ReferenceSet 'benefit_category'",
+    )
     is_eosi_base = models.BooleanField(default=False)
     is_taxable = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
 
     class Meta:
-        ordering = ['category', 'code']
+        ordering = ['category__sort_order', 'category__code', 'code']
         verbose_name = "Benefit Type"
         verbose_name_plural = "Benefit Types"
 
@@ -768,7 +800,12 @@ class Loan(models.Model):
     ]
 
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='loans')
-    loan_type = models.CharField(max_length=40)
+    loan_type = models.ForeignKey(
+        'mdm.ReferenceValue',
+        on_delete=models.PROTECT,
+        related_name='+',
+        help_text="Loan type from ReferenceSet 'loan_type'",
+    )
     principal = models.DecimalField(max_digits=14, decimal_places=3)
     interest_rate = models.DecimalField(max_digits=6, decimal_places=3, default=0)
     term_months = models.PositiveSmallIntegerField()
@@ -782,7 +819,8 @@ class Loan(models.Model):
         verbose_name_plural = "Loans"
 
     def __str__(self):
-        return f"{self.employee} {self.loan_type} ({self.principal})"
+        code = self.loan_type.code if self.loan_type_id else self.loan_type
+        return f"{self.employee} {code} ({self.principal})"
 
 
 class LoanInstallment(models.Model):
@@ -859,7 +897,12 @@ class AttendancePermission(models.Model):
 
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='permissions')
     date = models.DateField()
-    permission_type = models.CharField(max_length=64)
+    permission_type = models.ForeignKey(
+        'mdm.ReferenceValue',
+        on_delete=models.PROTECT,
+        related_name='+',
+        help_text="Permission type from ReferenceSet 'permission_type'",
+    )
     hours = models.DecimalField(max_digits=6, decimal_places=2)
     approved = models.BooleanField(default=False)
     notes = models.TextField(blank=True)
@@ -870,14 +913,20 @@ class AttendancePermission(models.Model):
         verbose_name_plural = "Attendance Permissions"
 
     def __str__(self):
-        return f"{self.employee} {self.date} {self.permission_type} ({self.hours}h)"
+        code = self.permission_type.code if self.permission_type_id else self.permission_type
+        return f"{self.employee} {self.date} {code} ({self.hours}h)"
 
 
 class Certification(models.Model):
     """An employee certification (GOFSCO KOC)."""
 
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='certifications')
-    cert_type = models.CharField(max_length=64)
+    cert_type = models.ForeignKey(
+        'mdm.ReferenceValue',
+        on_delete=models.PROTECT,
+        related_name='+',
+        help_text="Cert type from ReferenceSet 'cert_type'",
+    )
     number = models.CharField(max_length=128, blank=True)
     issued_date = models.DateField(null=True, blank=True)
     expiry_date = models.DateField(null=True, blank=True)
@@ -889,14 +938,20 @@ class Certification(models.Model):
         verbose_name_plural = "Certifications"
 
     def __str__(self):
-        return f"{self.employee} {self.cert_type} ({self.number})"
+        code = self.cert_type.code if self.cert_type_id else self.cert_type
+        return f"{self.employee} {code} ({self.number})"
 
 
 class RotationSchedule(models.Model):
     """A rotation schedule configuration (GOFSCO — config only, no logic)."""
 
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='rotation_schedules')
-    pattern = models.CharField(max_length=32)
+    pattern = models.ForeignKey(
+        'mdm.ReferenceValue',
+        on_delete=models.PROTECT,
+        related_name='+',
+        help_text="Pattern from ReferenceSet 'rotation_pattern'",
+    )
     start_date = models.DateField()
     config = models.JSONField(default=dict, blank=True)
     is_active = models.BooleanField(default=True)
@@ -907,7 +962,8 @@ class RotationSchedule(models.Model):
         verbose_name_plural = "Rotation Schedules"
 
     def __str__(self):
-        return f"{self.employee} {self.pattern} ({self.start_date})"
+        code = self.pattern.code if self.pattern_id else self.pattern
+        return f"{self.employee} {code} ({self.start_date})"
 
 
 class PersonnelEvent(models.Model):

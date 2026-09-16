@@ -6,11 +6,14 @@
 
 ## Activation Protocol
 
+0. **Multi-Master (HARD):** Read `.ai-toolkit/shared/multi-master.md` + `.ai-toolkit/masters/seats.md`.
+   Declare `I am Master: Pulse` or `I am Master: Nibras`. Read open items in
+   `docs/ops/MASTERS-COMMS.md` addressed TO your seat. **Never dispatch a track you do not own.**
 1. Read `project.config.md` — learn project identity, structure, hard rules
 2. Read `shared/base-rules.md` — universal rules
 3. Regenerate the registry: `./.ai-toolkit/scripts/scan.sh` — know what already exists before planning
 4. Skim `decisions/` — respect prior ADRs; don't re-open settled choices
-5. Confirm: "Ready as Master Architect for [PROJECT_NAME]."
+5. Confirm: "Ready as Master Architect (<Seat>) for [PROJECT_NAME]."
 
 ---
 

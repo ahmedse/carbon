@@ -113,6 +113,7 @@
     "mcpServers": "MCP Servers",
     "tools": "Tools",
     "skillsCatalog": "Skills Catalog",
+    "capabilities": "Capabilities",
     "topology": "Topology",
     "archetypes": "Archetypes",
     "promptsAndPlaybook": "Prompts & Playbook",
@@ -151,7 +152,10 @@
     "referenceData": "Reference Data",
     "rotation": "Rotation",
     "myLeave": "My Leave",
-    "myRequests": "My Requests"
+    "myRequests": "My Requests",
+    "my": "My",
+    "team": "Team",
+    "requestDetail": "Request Detail"
   },
   "group": {
     "dataProducts": "Data Products",

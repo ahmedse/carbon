@@ -64,16 +64,16 @@ def _confidence_label(score: float) -> str:
 
 
 def _resolve_app_identifier(instance_id: str, insight_data: dict) -> str:
-    """Brand-aware app partition for CBAC (list + SSE must agree)."""
+    """Resolve app partition without importing the host package (RULE_20).
+
+    Prefer an explicit ``app_identifier`` from the caller (host should inject
+    brand defaults). Otherwise fall back to ``instance_id`` — never a
+    hard-coded brand string.
+    """
     explicit = insight_data.get("app_identifier")
     if explicit:
         return str(explicit)
-    try:
-        from ai.instance_registry import default_app_for_instance
-
-        return default_app_for_instance(instance_id)
-    except Exception:
-        return instance_id or "carbon"
+    return str(instance_id or "")
 
 
 def build_outcome_fields(insight_data: dict) -> dict:

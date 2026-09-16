@@ -1,6 +1,83 @@
 # mdm/serializers.py
+from django.utils import timezone
 from rest_framework import serializers
+
+from .governed import resolve_reference_value
 from .models import ReferenceSet, ReferenceValue, OrgUnit
+
+
+class GovernedValueField(serializers.Field):
+    """ADR-0027 governed lookup: FK to ``mdm.ReferenceValue``.
+
+    Read shape: ``{id, code, label, set}`` or ``null``.
+    Write shape: integer PK **or** string code within ``set_name``
+    (resolved to a ``ReferenceValue`` instance). Blank/null → null when
+    ``allow_null=True``. Never creates ReferenceValues (RULE_16).
+    """
+
+    def __init__(self, set_name, **kwargs):
+        self.set_name = set_name
+        kwargs.setdefault('allow_null', True)
+        super().__init__(**kwargs)
+
+    def to_representation(self, value):
+        if value is None:
+            return None
+        if isinstance(value, int):
+            try:
+                value = ReferenceValue.objects.select_related('reference_set').get(pk=value)
+            except ReferenceValue.DoesNotExist:
+                return None
+        set_name = self.set_name
+        if getattr(value, 'reference_set_id', None):
+            # Prefer the related set name when already loaded / available.
+            try:
+                set_name = value.reference_set.name
+            except Exception:
+                set_name = self.set_name
+        return {
+            'id': value.pk,
+            'code': value.code,
+            'label': value.label,
+            'set': set_name,
+        }
+
+    def to_internal_value(self, data):
+        if data is None or data == '':
+            if not self.allow_null:
+                raise serializers.ValidationError('This field may not be null.')
+            return None
+
+        # Nested write: {"id": 12} or {"code": "EGY"}
+        if isinstance(data, dict):
+            if data.get('id') is not None:
+                data = data['id']
+            elif data.get('code') is not None:
+                data = data['code']
+            else:
+                raise serializers.ValidationError(
+                    'Expected reference id, code, or {id|code} object.'
+                )
+
+        try:
+            return resolve_reference_value(
+                self.set_name,
+                data,
+                as_of=timezone.localdate(),
+                require_current=True,
+            )
+        except ReferenceSet.DoesNotExist:
+            raise serializers.ValidationError(
+                f"Reference set {self.set_name!r} is not configured"
+            )
+        except ReferenceValue.DoesNotExist:
+            raise serializers.ValidationError(
+                f"{data!r} is not a current value of reference set {self.set_name!r}"
+            )
+        except (TypeError, ValueError):
+            raise serializers.ValidationError(
+                'Expected reference id (int) or code (string).'
+            )
 
 
 class ReferenceValueSerializer(serializers.ModelSerializer):
@@ -170,7 +247,7 @@ class OrgUnitSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, data):
-        """Validate against circular references."""
+        """Validate against circular references and ADR-0028 single root."""
         # Check if parent is being set and would create a circular ref
         new_parent = data.get('parent')
         if self.instance and new_parent:
@@ -180,4 +257,27 @@ class OrgUnitSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     "Cannot set parent to be a descendant of this unit (circular reference)"
                 )
+
+        # Resolve effective parent / is_active for create + partial update
+        if self.instance:
+            parent = data['parent'] if 'parent' in data else self.instance.parent
+            is_active = data['is_active'] if 'is_active' in data else self.instance.is_active
+            exclude_pk = self.instance.pk
+        else:
+            parent = data.get('parent')
+            is_active = data.get('is_active', True)
+            exclude_pk = None
+        if parent is None and is_active:
+            qs = OrgUnit.objects.filter(parent__isnull=True, is_active=True)
+            if exclude_pk:
+                qs = qs.exclude(pk=exclude_pk)
+            other = qs.first()
+            if other is not None:
+                raise serializers.ValidationError({
+                    'parent': (
+                        f"Only one active root OrgUnit is allowed per deployment "
+                        f"(ADR-0028). Active root already exists: "
+                        f"id={other.id} slug={other.slug!r}."
+                    )
+                })
         return data

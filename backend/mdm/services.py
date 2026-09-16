@@ -4,9 +4,76 @@
 # never DRF Response objects, and never call self.get_object() — views resolve
 # objects and pass them in. Zero behavioral change vs. the logic previously in views.
 
+from django.conf import settings
+
 from .models import ReferenceSet, ReferenceValue, OrgUnit
 from .serializers import ReferenceValueSerializer
 from catalog.audit_utils import emit_governance_event
+
+
+# ADR-0028 — deployment identity for instance-gated org seeds
+GOFSCO_SEED_BRANDS = frozenset({'gofsco', 'nibras'})
+GOFSCO_SEED_INSTANCES = frozenset({'gofsco', 'nibras'})
+AASTMT_SEED_BRANDS = frozenset({'aastmt'})
+AASTMT_SEED_INSTANCES = frozenset({'aastmt', 'aast'})
+_KNOWN_BRANDS = frozenset({'aastmt', 'gofsco', 'nibras', 'medos', 'tectona'})
+
+
+def get_deployment_root():
+    """Return the single active OrgUnit with parent=None, or None if missing.
+
+    Raises RuntimeError if more than one active root exists (ADR-0028
+    data corruption — one deployment must have exactly one root).
+    """
+    roots = list(
+        OrgUnit.objects.filter(parent__isnull=True, is_active=True).order_by('id')
+    )
+    if not roots:
+        return None
+    if len(roots) > 1:
+        ids = [r.id for r in roots]
+        raise RuntimeError(
+            f"Multiple active OrgUnit roots found (ids={ids}); "
+            "ADR-0028 requires exactly one parent=None root per deployment."
+        )
+    return roots[0]
+
+
+def get_deployment_org_unit_ids(include_self=True):
+    """Descendant id set for the deployment root (empty if no root yet)."""
+    root = get_deployment_root()
+    if root is None:
+        return set()
+    return root.get_descendant_ids(include_self=include_self)
+
+
+def _deployment_identity():
+    brand = (getattr(settings, 'DJANGO_BRAND', '') or '').strip().lower()
+    instance = (getattr(settings, 'INSTANCE_NAME', '') or '').strip().lower()
+    return brand, instance
+
+
+def is_seed_identity_allowed(allowed_brands, allowed_instances):
+    """True if DJANGO_BRAND or INSTANCE_NAME matches the seed's deployment.
+
+    Known brands that are *not* in ``allowed_brands`` refuse even when
+    INSTANCE_NAME would otherwise match (avoids default INSTANCE_NAME=AASTMT
+    unlocking AASTMT seeds on a nibras brand cell).
+    """
+    brand, instance = _deployment_identity()
+    if brand in allowed_brands:
+        return True
+    if brand in _KNOWN_BRANDS and brand not in allowed_brands:
+        return False
+    return instance in allowed_instances
+
+
+def is_gofsco_org_seed_allowed():
+    return is_seed_identity_allowed(GOFSCO_SEED_BRANDS, GOFSCO_SEED_INSTANCES)
+
+
+def is_aastmt_org_seed_allowed():
+    return is_seed_identity_allowed(AASTMT_SEED_BRANDS, AASTMT_SEED_INSTANCES)
 
 
 class ReferenceSetService:
@@ -133,3 +200,8 @@ class OrgUnitService:
     def get_ancestors(org_unit):
         """Return the ancestor chain from root to this unit's parent (root-first)."""
         return org_unit.get_ancestors()
+
+    @staticmethod
+    def get_deployment_root():
+        """Proxy to module-level get_deployment_root (ADR-0028)."""
+        return get_deployment_root()

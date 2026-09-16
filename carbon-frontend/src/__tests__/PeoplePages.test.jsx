@@ -32,19 +32,23 @@ const PEOPLE_PATHS = [
   '/people/leave',
   '/people/payroll',
   '/people/payslip',
-  '/people/attendance',
   '/people/config',
   '/people/policies',
   '/people/loans',
   '/people/certifications',
-  '/people/rotation',
 ];
+
+// NSR-6A Path H: Attendance + Rotation hidden from go-live nav (routes may still exist).
+const HIDDEN_NAV_PATHS = ['/people/attendance', '/people/rotation'];
 
 describe('People & Payroll pages (NIR-4A)', () => {
   it('registers all /people/* navigation paths', () => {
     const paths = peopleManifest.navigation.items.map((item) => item.path);
     for (const path of PEOPLE_PATHS) {
       expect(paths).toContain(path);
+    }
+    for (const path of HIDDEN_NAV_PATHS) {
+      expect(paths).not.toContain(path);
     }
   });
 
@@ -68,7 +72,7 @@ describe('People & Payroll pages (NIR-4A)', () => {
     expect(NAV_LABEL_KEYS.Rotation).toBe('nav.rotation');
   });
 
-  it('places Loans under Payroll & Benefits and Certifications/Rotation under Workforce', () => {
+  it('places Loans under Payroll & Benefits and Certifications under Workforce (Rotation nav hidden)', () => {
     const items = peopleManifest.navigation.items;
     const groupOf = (label) => {
       let currentGroup = null;
@@ -83,7 +87,8 @@ describe('People & Payroll pages (NIR-4A)', () => {
     };
     expect(groupOf('Loans')).toBe('Payroll & Benefits');
     expect(groupOf('Certifications')).toBe('Workforce');
-    expect(groupOf('Rotation')).toBe('Workforce');
+    expect(groupOf('Rotation')).toBeNull();
+    expect(groupOf('Attendance')).toBeNull();
   });
 
   it('exports all People API helper functions', () => {
@@ -125,6 +130,13 @@ describe('People & Payroll pages (NIR-4A)', () => {
       'updateAttendancePermission',
       'deleteAttendancePermission',
       'fetchComplianceRules',
+      'createComplianceRule',
+      'updateComplianceRule',
+      'deleteComplianceRule',
+      'fetchCompensationComponents',
+      'createCompensationComponent',
+      'fetchCompensationPlan',
+      'createCompensationPlan',
       'fetchPositions',
       'createEmployee',
       'updateEmployee',

@@ -18,6 +18,7 @@ from people.calculation_engine import (
     format_wps_record,
 )
 from people.models import ComplianceRule, Employee
+from people.tests.ref_helpers import compliance_rule_defaults, ensure_ref
 
 
 def _eosi_rule(*, authoritative=False):
@@ -25,7 +26,7 @@ def _eosi_rule(*, authoritative=False):
         rule_id="kw-eosi-test",
         version="2026.1",
         name="[TEST ONLY — NON-AUTHORITATIVE] EOSI accrual",
-        category="eosi",
+        category=ensure_ref('compliance_category', 'eosi'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
         effective_date=date(2026, 1, 1),
         inputs_schema={
             "inputs": ["basic_salary", "service_years"],
@@ -117,7 +118,7 @@ class CalculationEngineHighLevelTests(TestCase):
     def test_calculate_leave_accrual(self):
         ComplianceRule.objects.create(
             rule_id="kw-leave-test", version="2026.1", name="Leave",
-            category="leave", effective_date=date(2026, 1, 1),
+            category=ensure_ref('compliance_category', 'leave'), jurisdiction=ensure_ref('jurisdiction', 'KW'), effective_date=date(2026, 1, 1),
             inputs_schema={
                 "inputs": ["basic_salary", "service_years"],
                 "formula": {
@@ -141,7 +142,7 @@ class CalculationEngineHighLevelTests(TestCase):
     def test_calculate_overtime(self):
         ComplianceRule.objects.create(
             rule_id="kw-ot-test", version="2026.1", name="OT",
-            category="overtime", effective_date=date(2026, 1, 1),
+            category=ensure_ref('compliance_category', 'overtime'), jurisdiction=ensure_ref('jurisdiction', 'KW'), effective_date=date(2026, 1, 1),
             inputs_schema={
                 "inputs": ["hours", "overtime_rate"],
                 "formula": {"type": "multiply", "params": {"a": "hours", "b": "overtime_rate"}},
@@ -158,7 +159,7 @@ class CalculationEngineHighLevelTests(TestCase):
     def test_calculate_gross_pay(self):
         ComplianceRule.objects.create(
             rule_id="kw-gross-test", version="2026.1", name="Gross",
-            category="payroll", effective_date=date(2026, 1, 1),
+            category=ensure_ref('compliance_category', 'payroll'), jurisdiction=ensure_ref('jurisdiction', 'KW'), effective_date=date(2026, 1, 1),
             inputs_schema={
                 "inputs": ["basic", "overtime", "leave_pay"],
                 "formula": {
@@ -194,7 +195,7 @@ class CalculationEngineExpansionTests(TestCase):
             rule_id="kw-gosi-test",
             version="2026.1",
             name="[TEST ONLY — NON-AUTHORITATIVE] GOSI",
-            category="gosi",
+            category=ensure_ref('compliance_category', 'gosi'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
             effective_date=date(2026, 1, 1),
             inputs_schema={
                 "inputs": ["gross_salary", "employee_age"],
@@ -223,7 +224,7 @@ class CalculationEngineExpansionTests(TestCase):
             rule_id="kw-gosi-age-test",
             version="2026.1",
             name="[TEST ONLY] GOSI age bands",
-            category="gosi",
+            category=ensure_ref('compliance_category', 'gosi'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
             effective_date=date(2026, 1, 1),
             inputs_schema={
                 "inputs": ["gross_salary", "employee_age"],
@@ -270,7 +271,7 @@ class CalculationEngineExpansionTests(TestCase):
             rule_id="kw-wps-test",
             version="2026.1",
             name="[TEST ONLY] WPS record",
-            category="wps",
+            category=ensure_ref('compliance_category', 'wps'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
             effective_date=date(2026, 1, 1),
             inputs_schema={
                 "inputs": [
@@ -330,7 +331,7 @@ class CalculationEngineExpansionTests(TestCase):
             rule_id="kw-leave-split-test",
             version="2026.1",
             name="[TEST ONLY] Leave split",
-            category="leave",
+            category=ensure_ref('compliance_category', 'leave'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
             effective_date=date(2026, 1, 1),
             inputs_schema={
                 "inputs": ["start_date", "end_date"],
@@ -379,7 +380,7 @@ class CalculationEngineExpansionTests(TestCase):
             rule_id="kw-loan-test",
             version="2026.1",
             name="[TEST ONLY] Loan schedule",
-            category="other",
+            category=ensure_ref('compliance_category', 'other'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
             effective_date=date(2026, 1, 1),
             inputs_schema={
                 "inputs": ["principal", "interest_rate", "term_months"],
@@ -449,7 +450,7 @@ class CalculationEngineExpansionTests(TestCase):
             rule_id="kw-netpay-test",
             version="2026.1",
             name="[TEST ONLY] Net pay",
-            category="payroll",
+            category=ensure_ref('compliance_category', 'payroll'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
             effective_date=date(2026, 1, 1),
             inputs_schema={
                 "inputs": ["gross", "deductions"],
@@ -497,7 +498,7 @@ class CalculationEngineExpansionTests(TestCase):
             rule_id="kw-gross-base-test",
             version="2026.1",
             name="[TEST ONLY] Gross with base_input",
-            category="payroll",
+            category=ensure_ref('compliance_category', 'payroll'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
             effective_date=date(2026, 1, 1),
             inputs_schema={
                 "inputs": ["basic", "overtime"],

@@ -1,9 +1,10 @@
+from people.tests.ref_helpers import ensure_ref
 # File: people/tests/test_position_profile.py
 # P4 — Position lifecycle (status/FTE/job family) + employee→position
 # incumbent-link tests (design §3.3 / P4 row).
 #
 # Covers:
-#   1. status/fte/job_family_code round-trip through the API and DB.
+#   1. status/fte/job_family round-trip through the API and DB.
 #   2. Defaults on a minimal payload: status='filled', fte='1.00'.
 #   3. A status transition open→filled emits a 'position_filled' PersonnelEvent.
 #   4. Governed job_family codes validated against mdm.ReferenceSet ('job_family').
@@ -43,8 +44,7 @@ def auth(api_client, get_token_for_user):
 
 def _make_employee(org_unit, employee_no='E-1', full_name='Alice'):
     return Employee.objects.create(
-        org_unit=org_unit, employee_no=employee_no, full_name=full_name,
-        nationality='Kuwaiti', basic_salary='1000.000',
+        org_unit=org_unit, employee_no=employee_no, full_name=full_name, basic_salary='1000.000',
         join_date=date(2026, 1, 1),
     )
 
@@ -58,7 +58,6 @@ def _employee_payload(org_unit, employee_no='E-1', full_name='Alice'):
         'org_unit': org_unit.id,
         'employee_no': employee_no,
         'full_name': full_name,
-        'nationality': 'Kuwaiti',
         'basic_salary': '1000.000',
         'join_date': '2026-01-01',
     }
@@ -71,20 +70,21 @@ def test_position_round_trips_status_fte_job_family(auth, create_user, org_a):
     client = auth(create_user('position_roundtrip', is_superuser=True))
 
     payload = _position_payload(org_a)
-    payload.update({'status': 'open', 'fte': '1.50', 'job_family_code': 'JF'})
+    ensure_ref('job_family', 'JF')
+    payload.update({'status': 'open', 'fte': '1.50', 'job_family': 'JF'})
     resp = client.post(POSITIONS_URL, payload, format='json')
     assert resp.status_code == 201
 
     data = resp.json()
     assert data['status'] == 'open'
     assert data['fte'] == '1.50'
-    assert data['job_family_code'] == 'JF'
+    assert data['job_family']['code'] == 'JF'
 
     # DB round-trip: stored values match what the API returned.
     position = Position.objects.get(pk=data['id'])
     assert position.status == 'open'
     assert position.fte == Decimal('1.50')
-    assert position.job_family_code == 'JF'
+    assert position.job_family.code == 'JF'
 
 
 # ── 2. Defaults are filled / 1.00 FTE ──────────────────────────────────
@@ -100,7 +100,7 @@ def test_position_defaults_filled_and_fte_one(auth, create_user, org_a):
     assert data['status'] == 'filled'
     assert data['fte'] == '1.00'
     assert Decimal(data['fte']) == Decimal('1.00')
-    assert data['job_family_code'] == ''
+    assert data['job_family'] is None
 
 
 # ── 3. Status transition open→filled emits position_filled ─────────────
@@ -128,19 +128,19 @@ def test_position_status_transition_emits_position_filled(auth, create_user, org
 # ── 4. Governed job_family validation ──────────────────────────────────
 
 @pytest.mark.django_db
-def test_position_invalid_job_family_code_rejected(auth, create_user, org_a):
+def test_position_invalid_job_family_rejected(auth, create_user, org_a):
     ref_set = ReferenceSet.objects.create(name='job_family', slug='job_family')
     ReferenceValue.objects.create(reference_set=ref_set, code='ENG', label='Engineering')
 
     client = auth(create_user('position_rs_invalid', is_superuser=True))
 
     bad = _position_payload(org_a, code='P-BAD')
-    bad['job_family_code'] = 'NOPE'
+    bad['job_family'] = 'NOPE'
     resp = client.post(POSITIONS_URL, bad, format='json')
     assert resp.status_code == 400
     body = resp.json()
     assert body['error'] == 'ValidationError'
-    assert 'job_family_code' in body['message']
+    assert 'job_family' in body['message']
 
 
 # ── 5. Employee→position incumbent link ────────────────────────────────

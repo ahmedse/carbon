@@ -19,14 +19,17 @@ from mdm.models import OrgUnit, ReferenceSet, ReferenceValue
 
 from people.models import (
     BenefitType,
+    CompensationComponent,
     ComplianceRule,
     Employee,
     EmployeeBenefit,
+    EmployeeCompensation,
     LeaveRecord,
     PayrollRun,
     PayrollRunValidation,
     Position,
 )
+from people.tests.ref_helpers import ensure_ref
 
 PEOPLE_API = '/carbon-api/people/'
 EMPLOYEES_URL = PEOPLE_API + 'employees/'
@@ -39,29 +42,56 @@ BENEFIT_TYPES_URL = PEOPLE_API + 'benefit-types/'
 # ── Fixtures ────────────────────────────────────────────────────────────────
 
 @pytest.fixture
-def org_a(db):
-    return OrgUnit.objects.create(name='Org A', slug='org-a')
+def deployment_root(db):
+    """ADR-0028: one active parent=None root; org_a/org_b are siblings under it."""
+    return OrgUnit.objects.create(name='Deployment Root', slug='deploy-root', org_type='company')
 
 
 @pytest.fixture
-def org_b(db):
-    return OrgUnit.objects.create(name='Org B', slug='org-b')
+def org_a(deployment_root):
+    return OrgUnit.objects.create(
+        name='Org A', slug='org-a', parent=deployment_root, org_type='division',
+    )
+
+
+@pytest.fixture
+def org_b(deployment_root):
+    return OrgUnit.objects.create(
+        name='Org B', slug='org-b', parent=deployment_root, org_type='division',
+    )
 
 
 @pytest.fixture
 def employee_a(org_a):
-    return Employee.objects.create(
-        org_unit=org_a, employee_no='E-A', full_name='Alice',
-        nationality='Kuwaiti', basic_salary='1000.000',
+    emp = Employee.objects.create(
+        org_unit=org_a, employee_no='E-A', full_name='Alice', basic_salary='1000.000',
         join_date=date(2026, 1, 1),
     )
+    component, _ = CompensationComponent.objects.get_or_create(
+        code='basic',
+        defaults={
+            'name': 'Basic Salary',
+            'direction': 'earning',
+            'is_wps_relevant': True,
+            'sort_order': 10,
+            'is_active': True,
+        },
+    )
+    EmployeeCompensation.objects.create(
+        employee=emp,
+        component=component,
+        amount='1000.000',
+        frequency='monthly',
+        effective_start=date(2024, 1, 1),
+        is_verified=True,
+    )
+    return emp
 
 
 @pytest.fixture
 def employee_b(org_b):
     return Employee.objects.create(
-        org_unit=org_b, employee_no='E-B', full_name='Bob',
-        nationality='Kuwaiti', basic_salary='2000.000',
+        org_unit=org_b, employee_no='E-B', full_name='Bob', basic_salary='2000.000',
         join_date=date(2026, 1, 1),
     )
 
@@ -170,7 +200,7 @@ def test_tier1_write_gate_blocks_and_does_not_persist(auth, create_user, org_a, 
 def _gross_rule():
     return ComplianceRule.objects.create(
         rule_id="kw-gross-test", version="2026.1",
-        name="[TEST ONLY] Gross pay", category="payroll",
+        name="[TEST ONLY] Gross pay", category=ensure_ref('compliance_category', 'payroll'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
         effective_date=date(2026, 1, 1),
         inputs_schema={
             "inputs": ["basic"],
@@ -186,7 +216,7 @@ def _gross_rule():
 def _gosi_rule():
     return ComplianceRule.objects.create(
         rule_id="kw-gosi-test", version="2026.1",
-        name="[TEST ONLY] GOSI", category="gosi",
+        name="[TEST ONLY] GOSI", category=ensure_ref('compliance_category', 'gosi'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
         effective_date=date(2026, 1, 1),
         inputs_schema={
             "inputs": ["gross_salary", "employee_age"],
@@ -205,7 +235,7 @@ def _gosi_rule():
 def _loan_rule():
     return ComplianceRule.objects.create(
         rule_id="kw-loan-test", version="2026.1",
-        name="[TEST ONLY] Loan schedule", category="other",
+        name="[TEST ONLY] Loan schedule", category=ensure_ref('compliance_category', 'other'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
         effective_date=date(2026, 1, 1),
         inputs_schema={
             "inputs": ["principal", "interest_rate", "term_months"],
@@ -225,7 +255,7 @@ def _loan_rule():
 def _net_rule():
     return ComplianceRule.objects.create(
         rule_id="kw-netpay-test", version="2026.1",
-        name="[TEST ONLY] Net pay", category="other",
+        name="[TEST ONLY] Net pay", category=ensure_ref('compliance_category', 'other'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
         effective_date=date(2026, 1, 1),
         inputs_schema={
             "inputs": ["gross", "deductions"],
@@ -238,7 +268,7 @@ def _net_rule():
 def _wps_rule(authoritative=True):
     return ComplianceRule.objects.create(
         rule_id="kw-wps-test", version="2026.1",
-        name="[TEST ONLY] WPS", category="wps",
+        name="[TEST ONLY] WPS", category=ensure_ref('compliance_category', 'wps'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
         effective_date=date(2026, 1, 1),
         inputs_schema={
             "inputs": ["net"],
@@ -433,7 +463,7 @@ class TestDeleteEndpoints:
     def test_benefit_type_delete_guard(self, auth, create_user, org_a, employee_a):
         client = auth(create_user('people_del_bt', is_superuser=True))
         benefit_type = BenefitType.objects.create(
-            code='VEH', name='Vehicle', category='vehicle',
+            code='VEH', name='Vehicle', category=ensure_ref('benefit_category', 'vehicle'),
         )
         EmployeeBenefit.objects.create(
             employee=employee_a,

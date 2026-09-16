@@ -1,3 +1,4 @@
+from people.tests.ref_helpers import ensure_ref
 # File: people/tests/test_leave_policy_service.py
 # LPR-2A — leave-policy propagation service + management command tests.
 #
@@ -47,7 +48,7 @@ def female_employee(org):
     return Employee.objects.create(
         org_unit=org, employee_no='E-F', full_name='Alice Active',
         basic_salary='1000.000', join_date=date.today() - timedelta(days=400),
-        gender='female', is_active=True,
+        gender=ensure_ref('gender', 'female'), is_active=True,
     )
 
 
@@ -56,7 +57,7 @@ def male_employee(org):
     return Employee.objects.create(
         org_unit=org, employee_no='E-M', full_name='Bob Active',
         basic_salary='2000.000', join_date=date.today() - timedelta(days=400),
-        gender='male', is_active=True,
+        gender=ensure_ref('gender', 'male'), is_active=True,
     )
 
 
@@ -65,7 +66,7 @@ def inactive_employee(org):
     return Employee.objects.create(
         org_unit=org, employee_no='E-I', full_name='Carol Inactive',
         basic_salary='3000.000', join_date=date.today() - timedelta(days=400),
-        gender='female', is_active=False,
+        gender=ensure_ref('gender', 'female'), is_active=False,
     )
 
 

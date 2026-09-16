@@ -511,6 +511,21 @@ function CompensationLedger({ empId, token, canManage }) {
         )}
       </Box>
 
+      {/* NSR-2B: reflected basic is read-only — payroll SoT is verified ledger lines. */}
+      <Paper variant="outlined" sx={{ p: 1.5, mb: 1.5 }} data-testid="comp-reflected-basic">
+        <Stack spacing={1}>
+          <TextField
+            size="small"
+            label={t('compReflectedBasic')}
+            value={ledger?.basic_salary != null ? formatAmount(ledger.basic_salary) : t('compBasicNone')}
+            fullWidth
+            disabled
+            slotProps={{ htmlInput: { 'aria-readonly': true, readOnly: true } }}
+            helperText={t('compReflectedBasicHint')}
+          />
+        </Stack>
+      </Paper>
+
       {isEmpty ? (
         <EmptyState
           icon={<ReceiptLongIcon />}

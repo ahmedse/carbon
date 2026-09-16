@@ -38,14 +38,14 @@ import { useReferenceOptions } from '../../hooks/useReferenceOptions';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompensationAccess } from './useCompensationAccess';
 import RevealAmount from './RevealAmount';
-import { formatDate } from './utils';
+import { formatDate, refCode, refLabel as governedLabel } from './utils';
 import {
   fetchEmployees,
   fetchPositions,
   createEmployee,
   updateEmployee,
 } from '../../api/people';
-import { fetchOrgUnits } from '../../api/orgUnits';
+import { fetchOrgUnits, orgUnitSelectOptions } from '../../api/orgUnits';
 
 function getInitials(employee) {
   if (employee.name_en_given && employee.name_en_family) {
@@ -149,7 +149,7 @@ export default function EmployeesPage() {
   }, [employees]);
 
   const orgUnitOptions = useMemo(
-    () => orgUnits.map((u) => ({ value: String(u.id), label: u.name || u.code || String(u.id) })),
+    () => orgUnitSelectOptions(orgUnits),
     [orgUnits],
   );
   const rotationRef = useReferenceOptions('rotation_pattern');
@@ -163,6 +163,8 @@ export default function EmployeesPage() {
   const genderMap = useMemo(() => labelMapFromOptions(genderRef.options), [genderRef.options]);
   const employmentTypeMap = useMemo(() => labelMapFromOptions(employmentTypeRef.options), [employmentTypeRef.options]);
   const contractTypeMap = useMemo(() => labelMapFromOptions(contractTypeRef.options), [contractTypeRef.options]);
+  const nationalityMap = useMemo(() => labelMapFromOptions(nationalityRef.options), [nationalityRef.options]);
+  const rotationMap = useMemo(() => labelMapFromOptions(rotationRef.options), [rotationRef.options]);
 
   const filterDefs = useMemo(() => [
     {
@@ -192,24 +194,20 @@ export default function EmployeesPage() {
     const q = searchValue.trim().toLowerCase();
     return employees.filter((emp) => {
       if (q) {
-        const hay = `${emp.employee_no ?? ''} ${emp.full_name ?? ''} ${emp.nationality ?? ''} ${emp.civil_id ?? ''}`.toLowerCase();
+        const natHay = `${refCode(emp.nationality)} ${governedLabel(emp.nationality)}`;
+        const hay = `${emp.employee_no ?? ''} ${emp.full_name ?? ''} ${natHay} ${emp.civil_id ?? ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       if (filters.status === 'active' && !emp.is_active) return false;
       if (filters.status === 'inactive' && emp.is_active) return false;
       if (filters.org_unit && String(emp.org_unit) !== String(filters.org_unit)) return false;
-      if (filters.rotation && emp.rotation !== filters.rotation) return false;
+      if (filters.rotation && refCode(emp.rotation) !== filters.rotation) return false;
       if (filters.kuwaitization === 'true' && !emp.kuwaitization) return false;
       if (filters.kuwaitization === 'false' && emp.kuwaitization) return false;
-      if (filters.nationality) {
-        const nat = nationalityOptions.find((o) => o.value === filters.nationality);
-        const matches = emp.nationality_code === filters.nationality
-          || (nat && emp.nationality === nat.label);
-        if (!matches) return false;
-      }
+      if (filters.nationality && refCode(emp.nationality) !== filters.nationality) return false;
       return true;
     });
-  }, [employees, searchValue, filters, nationalityOptions]);
+  }, [employees, searchValue, filters]);
 
   const handleView = useCallback((id) => navigate(`/people/employees/${id}`), [navigate]);
 
@@ -240,7 +238,11 @@ export default function EmployeesPage() {
         });
       }
       closeDialog();
-      setSnackbar({ open: true, message: t('employeeSaved'), severity: 'success' });
+      setSnackbar({
+        open: true,
+        message: editingEmployee ? t('employeeSaved') : t('employeeOnboardReady'),
+        severity: 'success',
+      });
       await loadData();
     } catch (err) {
       setSnackbar({
@@ -289,7 +291,10 @@ export default function EmployeesPage() {
       const m = employeeMap[v];
       return m ? `${m.employee_no} — ${m.full_name}` : '—';
     };
-    const refLabel = (map, v) => (v && map[v]) || v || '—';
+    const mapLabel = (map, v) => {
+      const code = refCode(v);
+      return (code && map[code]) || governedLabel(v) || '—';
+    };
 
     return [
       { field: 'employee_no', headerName: t('colEmployeeNo'), width: 100 },
@@ -303,20 +308,21 @@ export default function EmployeesPage() {
           : <Typography variant="body2" color="text.disabled">{t('colUserUnlinked')}</Typography>),
       },
       { field: 'civil_id', headerName: t('colCivilId'), width: 120, valueGetter: (v) => v || '—' },
-      { field: 'gender', headerName: t('colGender'), width: 90, valueGetter: (v) => refLabel(genderMap, v) },
+      { field: 'gender', headerName: t('colGender'), width: 90, valueGetter: (v) => mapLabel(genderMap, v) },
       { field: 'date_of_birth', headerName: t('colDateOfBirth'), width: 110, valueGetter: (v) => formatDate(v) },
       { field: 'join_date', headerName: t('colJoinDate'), width: 110, valueGetter: (v) => formatDate(v) },
       { field: 'position', headerName: t('colPosition'), width: 140, valueGetter: (v) => positionMap[v]?.title ?? '—' },
-      { field: 'org_unit', headerName: t('colOrgUnit'), width: 140, valueGetter: (v) => orgUnitMap[v]?.name ?? '—' },
+      { field: 'org_unit', headerName: t('colOrgUnit'), width: 200, valueGetter: (v) => orgUnitMap[v]?.full_path || orgUnitMap[v]?.name || '—' },
       { field: 'manager', headerName: t('colManager'), width: 160, valueGetter: (v) => managerName(v) },
-      { field: 'employment_type_code', headerName: t('colEmploymentType'), width: 130, valueGetter: (v) => refLabel(employmentTypeMap, v) },
-      { field: 'contract_type_code', headerName: t('colContractType'), width: 130, valueGetter: (v) => refLabel(contractTypeMap, v) },
-      { field: 'nationality', headerName: t('colNationality'), width: 100, valueGetter: (v) => v || '—' },
+      { field: 'employment_type', headerName: t('colEmploymentType'), width: 130, valueGetter: (v) => mapLabel(employmentTypeMap, v) },
+      { field: 'contract_type', headerName: t('colContractType'), width: 130, valueGetter: (v) => mapLabel(contractTypeMap, v) },
+      { field: 'nationality', headerName: t('colNationality'), width: 100, valueGetter: (v) => mapLabel(nationalityMap, v) },
       {
         field: 'rotation',
         headerName: t('colRotation'),
         width: 90,
-        renderCell: (p) => (p.value
+        valueGetter: (v) => mapLabel(rotationMap, v),
+        renderCell: (p) => (p.value && p.value !== '—'
           ? <Chip size="small" variant="outlined" label={p.value} />
           : <Typography variant="body2" color="text.disabled">—</Typography>),
       },
@@ -373,7 +379,7 @@ export default function EmployeesPage() {
         },
       },
     ];
-  }, [t, orgUnitMap, positionMap, employeeMap, genderMap, employmentTypeMap, contractTypeMap, handleView, openEdit]);
+  }, [t, orgUnitMap, positionMap, employeeMap, genderMap, employmentTypeMap, contractTypeMap, nationalityMap, rotationMap, handleView, openEdit]);
 
   if (error) {
     return (

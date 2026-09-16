@@ -24,6 +24,7 @@ const listPlans = vi.fn();
 const createPlan = vi.fn();
 const startDiscoveryPlan = vi.fn();
 const advanceDiscovery = vi.fn();
+const finalizeDiscovery = vi.fn();
 const getPlan = vi.fn();
 const approvePlan = vi.fn();
 const declinePlan = vi.fn();
@@ -54,6 +55,7 @@ vi.mock('../api/aiWorkspace', () => ({
   createPlan: (...args) => createPlan(...args),
   startDiscoveryPlan: (...args) => startDiscoveryPlan(...args),
   advanceDiscovery: (...args) => advanceDiscovery(...args),
+  finalizeDiscovery: (...args) => finalizeDiscovery(...args),
   getPlan: (...args) => getPlan(...args),
   approvePlan: (...args) => approvePlan(...args),
   declinePlan: (...args) => declinePlan(...args),
@@ -102,6 +104,8 @@ const streamHandlers = {};
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
+  // Keep classic 6-tab IA for these control/Monitor/Results tests.
+  localStorage.setItem('carbon-ai-cockpit', 'off');
   currentPlan = PLAN;
   Object.keys(streamHandlers).forEach((k) => delete streamHandlers[k]);
   listPlans.mockResolvedValue({ plans: [PLAN], count: 1 });
@@ -133,9 +137,25 @@ beforeEach(() => {
 
 const openPlanForReview = async () => {
   render(<AITaskPanel conversationId="conv-1" />);
-  fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
-  // The plan card is on the Run tab (works for any plan status).
-  await screen.findByText('Task plan');
+  await ensureClassicRunTab();
+  await expectRunSurface();
+};
+
+/** Wait until classic Run shows either the graph-first surface or the plan card. */
+const expectRunSurface = async () => {
+  await waitFor(() => {
+    expect(
+      screen.queryByTestId('agent-run-surface') || screen.queryByText('Task plan'),
+    ).toBeTruthy();
+  });
+};
+
+/** Classic debug IA: wait for auto-open hydrate, then show the Run surface. */
+const ensureClassicRunTab = async () => {
+  if (localStorage.getItem('carbon-ai-cockpit') === 'off') {
+    await waitFor(() => expect(getPlan).toHaveBeenCalled());
+    fireEvent.click(await screen.findByRole('tab', { name: 'Run' }));
+  }
 };
 
 // ── Edit brief → diff consent gate (RULE_21) ─────────────────────────────
@@ -153,9 +173,9 @@ describe('AITaskPanel — edit brief with diff consent gate', () => {
       },
     };
     editPlan.mockResolvedValue(revised);
-    currentPlan = revised;
 
     await openPlanForReview();
+    currentPlan = revised;
     fireEvent.click(screen.getByRole('button', { name: 'Edit plan' }));
     const input = screen.getByLabelText('Plan brief');
     fireEvent.change(input, { target: { value: 'Audit duplicates AND triples.' } });
@@ -327,8 +347,8 @@ describe('AITaskPanel — W5-D Monitor tab', () => {
     });
 
     render(<AITaskPanel conversationId="conv-1" />);
-    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
-    await screen.findByText('Task plan');
+    await ensureClassicRunTab();
+    await expectRunSurface();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Monitor' }));
 
@@ -355,8 +375,8 @@ describe('AITaskPanel — W5-D Monitor tab', () => {
     });
 
     render(<AITaskPanel conversationId="conv-1" />);
-    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
-    await screen.findByText('Task plan');
+    await ensureClassicRunTab();
+    await expectRunSurface();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Monitor' }));
 
@@ -372,6 +392,7 @@ describe('AITaskPanel — W5-D Monitor tab', () => {
   });
 
   it('shows an empty state when no plan is selected', async () => {
+    listPlans.mockResolvedValue({ plans: [], count: 0 });
     render(<AITaskPanel conversationId="conv-1" />);
     fireEvent.click(screen.getByRole('tab', { name: 'Monitor' }));
     expect(screen.getByText('Open a task from the Tasks tab to monitor its run.')).toBeInTheDocument();
@@ -384,8 +405,8 @@ describe('AITaskPanel — W5-D Results tab', () => {
     currentPlan = { ...PLAN, status: 'approved' };
 
     render(<AITaskPanel conversationId="conv-1" />);
-    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
-    await screen.findByText('Task plan');
+    await ensureClassicRunTab();
+    await expectRunSurface();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Results' }));
 
@@ -411,8 +432,8 @@ describe('AITaskPanel — W5-D Results tab', () => {
     });
 
     render(<AITaskPanel conversationId="conv-1" />);
-    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
-    await screen.findByText('Task plan');
+    await ensureClassicRunTab();
+    await expectRunSurface();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Results' }));
 
@@ -476,12 +497,12 @@ describe('AITaskPanel — W5-D Results tab', () => {
     });
 
     render(<AITaskPanel conversationId="conv-1" />);
-    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
-    await screen.findByText('Task plan');
+    await ensureClassicRunTab();
+    // Completed plans use graph-first Run; open List for step output cards.
+    fireEvent.click(await screen.findByRole('button', { name: 'List' }));
+    await screen.findByTestId('agent-run-list');
 
-    // Step outputs render on the Run view via StepOutputRenderer. Both the
-    // plan review card and the run's step list render completed step outputs,
-    // so assert on the set rather than a single node.
+    // Step outputs render via StepOutputRenderer inside the list.
     expect((await screen.findAllByText('Row')).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('duplicate').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Rule no_dupes created.').length).toBeGreaterThanOrEqual(1);

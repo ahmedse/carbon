@@ -5,6 +5,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Chip,
@@ -38,6 +39,7 @@ import ErrorAlert from '../../components/Page/ErrorAlert';
 import EmptyState from '../../components/Page/EmptyState';
 import SystemDialog from '../../components/SystemDialog';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import { useReferenceOptions } from '../../hooks/useReferenceOptions';
 import { useAuth } from '../../auth/AuthContext';
 import {
   fetchLoans,
@@ -47,7 +49,7 @@ import {
   updateLoan,
   deleteLoan,
 } from '../../api/people';
-import { buildEmployeeLabels, formatAmount, formatDate } from './utils';
+import { buildEmployeeLabels, formatAmount, formatDate, refCode, refLabel } from './utils';
 
 const LOAN_STATUSES = ['active', 'paid_off', 'cancelled'];
 
@@ -95,6 +97,7 @@ export default function LoansPage() {
   const { t: tCommon } = useTranslation('common');
   useDocumentTitle(t('loansTitle'));
   const { token } = useAuth();
+  const loanTypeRef = useReferenceOptions('loan_type');
 
   const [loans, setLoans] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -192,7 +195,7 @@ export default function LoansPage() {
     setEditingLoan(loan);
     setForm({
       employee: loan.employee ?? '',
-      loan_type: loan.loan_type ?? '',
+      loan_type: refCode(loan.loan_type),
       principal: loan.principal != null ? String(loan.principal) : '',
       interest_rate: loan.interest_rate != null ? String(loan.interest_rate) : '0',
       term_months: loan.term_months != null ? String(loan.term_months) : '',
@@ -247,7 +250,8 @@ export default function LoansPage() {
       }
       closeDialog();
       setSnackbar({ open: true, message: t('loanSaved'), severity: 'success' });
-      await loadData();
+      // Reload loans + installments — approve→active materializes schedule (NSR-3A).
+      await Promise.all([loadData(), loadInstallments()]);
     } catch (err) {
       setSnackbar({
         open: true,
@@ -298,7 +302,7 @@ export default function LoansPage() {
     }
     if (rows.length === 0) {
       return (
-        <Typography sx={{ color: 'text.secondary', fontSize: '0.8125rem', p: 2 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
           {t('loanInstallmentsEmpty')}
         </Typography>
       );
@@ -393,7 +397,7 @@ export default function LoansPage() {
                       </Tooltip>
                     </TableCell>
                     <TableCell>{employeeName(loan.employee)}</TableCell>
-                    <TableCell>{loan.loan_type ?? '—'}</TableCell>
+                    <TableCell>{refLabel(loan.loan_type) || refCode(loan.loan_type) || '—'}</TableCell>
                     <TableCell>{formatAmount(loan.principal)}</TableCell>
                     <TableCell>{loan.interest_rate != null ? `${loan.interest_rate}%` : '—'}</TableCell>
                     <TableCell>{loan.term_months ?? '—'}</TableCell>
@@ -468,13 +472,16 @@ export default function LoansPage() {
               </MenuItem>
             ))}
           </TextField>
-          <TextField
-            label={t('colLoanType')}
-            name="loan_type"
-            value={form.loan_type}
-            onChange={handleChange}
-            fullWidth
-            required
+          <Autocomplete
+            size="small"
+            options={loanTypeRef.options}
+            value={loanTypeRef.options.find((o) => o.value === form.loan_type) || null}
+            onChange={(e, v) => setForm((prev) => ({ ...prev, loan_type: v ? v.value : '' }))}
+            getOptionLabel={(o) => o.label}
+            isOptionEqualToValue={(a, b) => a.value === b.value}
+            renderInput={(params) => (
+              <TextField {...params} label={t('colLoanType')} required />
+            )}
           />
           <TextField
             label={t('colPrincipal')}

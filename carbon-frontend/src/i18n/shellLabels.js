@@ -96,6 +96,7 @@ export const NAV_LABEL_KEYS = {
   Agents: 'nav.agents',
   Tools: 'nav.tools',
   'Skills Catalog': 'nav.skillsCatalog',
+  Capabilities: 'nav.capabilities',
   Topology: 'nav.topology',
   Archetypes: 'nav.archetypes',
   'Prompts & Playbook': 'nav.promptsAndPlaybook',
@@ -134,6 +135,9 @@ export const NAV_LABEL_KEYS = {
   'App Config': 'nav.appConfig',
   'My Leave': 'nav.myLeave',
   'My Requests': 'nav.myRequests',
+  My: 'nav.my',
+  Team: 'nav.team',
+  'Request Detail': 'nav.requestDetail',
   'Reference Data': 'nav.referenceData',
 };
 

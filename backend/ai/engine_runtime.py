@@ -205,13 +205,22 @@ async def _run_chat(
         if resp_actions:
             actions = _merge_surface_actions(actions, resp_actions)
         tool_trace = _build_tool_trace(completed_tools)
+        # ECF-3 — boundary contracts on entity tool results + answer prose.
+        # Flag-gated (ECF_ENABLED=False by default); never raises.
+        completed_tools, ecf_prose = _apply_ecf_entity_contracts(
+            completed_tools,
+            response.text or "",
+            instance_config,
+            user_capabilities=_safe_executor_capabilities(executor),
+            label_fetch_fn=getattr(executor, "entity_fetch", None),
+        )
         external_sources = _build_external_sources(completed_tools)
         code_result = _build_code_result(completed_tools)
         grounded_note = _grounded_outcome_note(completed_tools)
         # Anti-hallucination gate: strip false success claims from the LLM
         # prose BEFORE the truthful grounded note is appended, so a staged
         # "I remembered X" / "rule created" claim never reaches the user.
-        content, anti_flags = apply_anti_hallucination_gate(response.text, completed_tools)
+        content, anti_flags = apply_anti_hallucination_gate(ecf_prose, completed_tools)
         if grounded_note:
             content = f"{content}\n\n{grounded_note}" if content else grounded_note
         # Capability listing → unified rich "Your Access" document (GFM table
@@ -1023,6 +1032,97 @@ def _tool_confidence(has_error: bool, data) -> str:
     if isinstance(data, str) and data.strip():
         return "high"
     return "low"
+
+
+# Tool-name → entity-descriptor hints for ECF-3 contract application.
+_ECF_TOOL_ENTITY_HINTS: tuple[tuple[str, str], ...] = (
+    ("list_employees", "employee"),
+    ("get_employee", "employee"),
+    ("resolve_entity", "employee"),
+    ("aggregate_entity", "employee"),
+    ("analyze_employees", "employee"),
+)
+
+
+def _safe_executor_capabilities(executor) -> frozenset[str]:
+    """Best-effort CBAC capability set from the host executor (never raises)."""
+    try:
+        caps = getattr(executor, "user_capabilities", None)
+        if callable(caps):
+            return frozenset(caps() or ())
+    except Exception:  # noqa: BLE001
+        logger.debug("ECF: could not resolve user capabilities", exc_info=True)
+    return frozenset()
+
+
+def _ecf_descriptor_for_tool(tool_name: str, descriptors: dict):
+    """Map a completed-tool name to an entity descriptor, or None."""
+    name = (tool_name or "").lower()
+    bare = name.split(":", 1)[-1] if ":" in name else name
+    for hint, entity in _ECF_TOOL_ENTITY_HINTS:
+        if hint in bare or hint in name:
+            return descriptors.get(entity)
+    return None
+
+
+def _apply_ecf_entity_contracts(
+    completed_tools: list[dict],
+    prose: str,
+    instance_config: dict | None,
+    *,
+    user_capabilities: frozenset[str] | None = None,
+    label_fetch_fn=None,
+) -> tuple[list[dict], str]:
+    """Apply ECF boundary contracts to entity tool results + answer prose.
+
+    No-op when ``ECF_ENABLED`` is False (default). Never raises — a contracts
+    failure must not break the chat turn.
+    """
+    try:
+        from ai.engine.core.config import get_settings
+
+        if not getattr(get_settings(), "ECF_ENABLED", False):
+            return completed_tools, prose
+
+        from ai.engine.cognition.entity.contracts import apply_entity_contracts
+        from ai.engine.cognition.entity.registry import load_descriptors
+
+        descriptors = load_descriptors(instance_config or {})
+        if not descriptors:
+            return completed_tools, prose
+
+        out_tools: list[dict] = []
+        for item in completed_tools or []:
+            if not isinstance(item, dict) or item.get("error"):
+                out_tools.append(item)
+                continue
+            desc = _ecf_descriptor_for_tool(str(item.get("tool_name") or ""), descriptors)
+            if desc is None:
+                out_tools.append(item)
+                continue
+            raw = item.get("result")
+            try:
+                data = json.loads(raw) if isinstance(raw, str) else raw
+            except (TypeError, ValueError):
+                out_tools.append(item)
+                continue
+            if not isinstance(data, dict):
+                out_tools.append(item)
+                continue
+            cleaned, prose = apply_entity_contracts(
+                data,
+                prose,
+                desc,
+                user_capabilities,
+                label_fetch_fn=label_fetch_fn,
+            )
+            new_item = dict(item)
+            new_item["result"] = json.dumps(cleaned) if isinstance(raw, str) else cleaned
+            out_tools.append(new_item)
+        return out_tools, prose
+    except Exception:  # noqa: BLE001 — contracts must never break chat
+        logger.exception("ECF entity contracts failed; continuing without")
+        return completed_tools, prose
 
 
 def _build_tool_trace(completed_tools: list[dict]) -> list[dict]:

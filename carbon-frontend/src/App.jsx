@@ -97,6 +97,7 @@ const KnowledgeGraphPanel = React.lazy(() => import("./pages/admin/ai/KnowledgeG
 const AgentsPanel = React.lazy(() => import("./pages/admin/ai/AgentsPanel"));
 const ToolsPanel = React.lazy(() => import("./pages/admin/ai/ToolsPanel"));
 const SkillsPanel = React.lazy(() => import("./pages/admin/ai/SkillsPanel"));
+const CapabilitiesPanel = React.lazy(() => import("./pages/admin/ai/CapabilitiesPanel"));
 const SkillLearningPanel = React.lazy(() => import("./pages/admin/ai/SkillLearningPanel"));
 const PulseArchetypesPanel = React.lazy(() => import("./pages/admin/ai/PulseArchetypesPanel"));
 const BudgetUsagePanel = React.lazy(() => import("./pages/admin/ai/BudgetUsagePanel"));
@@ -309,6 +310,7 @@ export default function App() {
                 <Route path="/people/leave" element={<LeavePage />} />
                 <Route path="/people/payroll" element={<PayrollRunsPage />} />
                 <Route path="/people/payslip" element={<PayslipPage />} />
+                {/* NSR-6A Path H: attendance/rotation kept for deep-link (out of nav). */}
                 <Route path="/people/attendance" element={<AttendancePage />} />
                 <Route path="/people/config" element={<PeopleConfigPage />} />
                 <Route path="/people/loans" element={<LoansPage />} />
@@ -415,6 +417,7 @@ export default function App() {
                 <Route path="/admin/ai/agents" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AgentsPanel /></AdminRoute>} />
                 <Route path="/admin/ai/tools" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><ToolsPanel /></AdminRoute>} />
                 <Route path="/admin/ai/skills" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><SkillsPanel /></AdminRoute>} />
+                <Route path="/admin/ai/capabilities" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><CapabilitiesPanel /></AdminRoute>} />
                 <Route path="/admin/ai/archetypes" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><PulseArchetypesPanel /></AdminRoute>} />
                 <Route path="/admin/ai/budget-usage" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><BudgetUsagePanel /></AdminRoute>} />
                 <Route path="/admin/ai/engine-settings" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><EngineSettingsPanel /></AdminRoute>} />

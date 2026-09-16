@@ -2,11 +2,14 @@
 # Seeds the GOFSCO org tree (Gas and Oil Field Services Company, Kuwait — KOC client).
 # Additive + idempotent. Safe to re-run (get_or_create by slug).
 # Mirror of core/management/commands/seed_aastmt_org.py.
+# ADR-0028: instance-gated — only GOFSCO/Nibras deployments.
 
-from django.core.management.base import BaseCommand
+from django.conf import settings
+from django.core.management.base import BaseCommand, CommandError
 from django.utils.text import slugify
 
 from mdm.models import OrgUnit
+from mdm.services import is_gofsco_org_seed_allowed
 
 
 def _ou(name, org_type, parent=None, code=''):
@@ -18,10 +21,44 @@ def _ou(name, org_type, parent=None, code=''):
     return obj
 
 
+def _assert_gofsco_instance():
+    if is_gofsco_org_seed_allowed():
+        return
+    brand = getattr(settings, 'DJANGO_BRAND', None)
+    instance = getattr(settings, 'INSTANCE_NAME', None)
+    raise CommandError(
+        "seed_gofsco_org is instance-gated (ADR-0028): run only when "
+        "DJANGO_BRAND or DJANGO_INSTANCE_NAME/INSTANCE_NAME is in "
+        "{'gofsco', 'nibras'}. "
+        f"Current DJANGO_BRAND={brand!r}, INSTANCE_NAME={instance!r}."
+    )
+
+
 class Command(BaseCommand):
-    help = "Seed the GOFSCO org tree (company / base / division / yard / store / section / crew) — idempotent."
+    help = (
+        "Seed the GOFSCO org tree (company / base / division / yard / store / "
+        "section / crew) — idempotent. Allowed only on gofsco/nibras deployments."
+    )
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--dry-run',
+            action='store_true',
+            help='Print the planned root/tree actions without writing.',
+        )
 
     def handle(self, *args, **options):
+        _assert_gofsco_instance()
+        dry = options.get('dry_run', False)
+        if dry:
+            existing = OrgUnit.objects.filter(slug='gofsco').first()
+            self.stdout.write(
+                f"[dry-run] would ensure GOFSCO root "
+                f"(exists={bool(existing)}, id={getattr(existing, 'id', None)}) "
+                f"+ Ahmadi Base / divisions / crews (idempotent get_or_create)."
+            )
+            return
+
         # --- Root company ---
         gofsco = OrgUnit.objects.filter(slug='gofsco').first() or _ou('GOFSCO', 'company', code='GOFSCO')
         # Re-runs: keep the root marker stable (slug 'gofsco') even if it was

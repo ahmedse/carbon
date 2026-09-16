@@ -14,7 +14,15 @@ from datetime import date
 import pytest
 
 from people.models import ComplianceRule, Employee
-from people.tests.test_api import auth, employee_a, employee_b, org_a, org_b  # noqa: F401
+from people.tests.test_api import (  # noqa: F401
+    auth,
+    deployment_root,
+    employee_a,
+    employee_b,
+    org_a,
+    org_b,
+)
+from people.tests.ref_helpers import compliance_rule_defaults, ensure_ref
 
 PEOPLE_API = '/carbon-api/people/'
 
@@ -25,7 +33,7 @@ def _eosi_rule(authoritative=True):
         rule_id="kw-eosi-test",
         version="2026.1",
         name="[TEST ONLY] EOSI accrual",
-        category="eosi",
+        category=ensure_ref('compliance_category', 'eosi'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
         effective_date=date(2026, 1, 1),
         inputs_schema={
             "inputs": ["basic_salary", "service_years"],
@@ -52,7 +60,6 @@ def _employee(org, **kwargs):
         org_unit=org,
         employee_no='E-EOSI',
         full_name='EOSI Test',
-        nationality='Kuwaiti',
         basic_salary='780.000',
         join_date=date(2024, 3, 1),
     )

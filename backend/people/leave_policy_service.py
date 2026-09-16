@@ -31,7 +31,7 @@ def _eligible_queryset(policy):
     employees = Employee.objects.filter(is_active=True)
 
     if policy.gender_restriction in (LeavePolicy.GENDER_MALE, LeavePolicy.GENDER_FEMALE):
-        employees = employees.filter(gender__iexact=policy.gender_restriction)
+        employees = employees.filter(gender__code__iexact=policy.gender_restriction)
     if policy.min_service_days:
         min_join = timezone.localdate() - timedelta(days=policy.min_service_days)
         employees = employees.filter(join_date__lte=min_join)
@@ -41,7 +41,7 @@ def _eligible_queryset(policy):
         )
     if policy.applies_to_contract_types:
         employees = employees.filter(
-            contract_type_code__in=policy.applies_to_contract_types,
+            contract_type__code__in=policy.applies_to_contract_types,
         )
     if policy.applies_to_kuwaitization == LeavePolicy.KUWAIT_ONLY:
         employees = employees.filter(kuwaitization=True)
@@ -49,7 +49,7 @@ def _eligible_queryset(policy):
         employees = employees.filter(kuwaitization=False)
     if policy.applies_to_rotations:
         employees = employees.filter(
-            rotation__in=policy.applies_to_rotations,
+            rotation__code__in=policy.applies_to_rotations,
         )
 
     return employees
@@ -178,6 +178,54 @@ def propagate_all_active(year=None, *, dry_run=False):
         })
 
     return totals
+
+
+def propagate_for_employee(employee, year=None):
+    """Create leave entitlements for one employee from applicable active policies.
+
+    Reuses ``_eligible_queryset`` so eligibility rules stay in one place.
+    Idempotent: existing entitlements are never overwritten (days or policy FK).
+
+    Returns:
+        dict with keys ``year``, ``created``, ``already_present``, ``ineligible``.
+    """
+    if year is None:
+        year = timezone.now().year
+
+    policies = list(
+        LeavePolicy.objects.filter(status=LeavePolicy.STATUS_ACTIVE)
+        | LeavePolicy.objects.filter(status='', is_active=True)
+    )
+    policies.sort(key=lambda p: p.id)
+
+    created = 0
+    already_present = 0
+    ineligible = 0
+
+    for policy in policies:
+        if not _eligible_queryset(policy).filter(pk=employee.pk).exists():
+            ineligible += 1
+            continue
+        _, was_created = LeaveEntitlement.objects.get_or_create(
+            employee_id=employee.pk,
+            year=year,
+            leave_type=policy.leave_type,
+            defaults={
+                'entitled_days': policy.default_entitled_days,
+                'policy': policy,
+            },
+        )
+        if was_created:
+            created += 1
+        else:
+            already_present += 1
+
+    return {
+        'year': year,
+        'created': created,
+        'already_present': already_present,
+        'ineligible': ineligible,
+    }
 
 
 # ── LPR-3A — policy versioning (snapshot + fork semantics) ────────────────

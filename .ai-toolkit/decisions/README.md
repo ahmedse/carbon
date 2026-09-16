@@ -61,6 +61,6 @@ cp .ai-toolkit/decisions/0000-template.md .ai-toolkit/decisions/00NN-short-title
 | [0030](0030-eoffice-correspondence-engine.md) | e-Office Correspondence & Approval Engine | Accepted |
 | [0031](0031-pulse-unified-remediation-plan.md) | Pulse Unified Remediation Plan (D1–D12) | Accepted |
 | [0032](0032-entity-capability-framework.md) | Entity Capability Framework (ECF) | Accepted |
-| [0033](0033-pulse-identity-propagation.md) | Pulse Identity Propagation (actor-chain) | Proposed |
+| [0033](0033-pulse-identity-propagation.md) | Pulse Identity Propagation (actor-chain) | Accepted |
 
 <!-- Add a row per ADR. Keep newest at the bottom. -->

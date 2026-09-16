@@ -10,7 +10,7 @@ export default {
   name:        'People',
   version:     '1.0.0',
   description: 'Nibras HR & payroll — employees, compliance, and payroll runs',
-  icon:        'Diversity3',   // mapped in useShellState.js MANIFEST_ICON_MAP + PlatformHome APP_ICONS
+  icon:        'Groups',   // mapped in useShellState.js MANIFEST_ICON_MAP + PlatformHome APP_ICONS
 
   // ── NAMESPACE ─────────────────────────────────────────────────
   routePrefix: '/people',          // frontend People landing page
@@ -45,12 +45,12 @@ export default {
       { type: 'group', label: 'Organization' },
       { label: 'Positions', path: '/people/positions', role: '*' },
       { type: 'divider' },
+      // NSR-6A Path H: Attendance + Rotation omitted from go-live nav.
+      // Routes remain in App.jsx for deep-link / legacy URL access (not promised).
       { type: 'group', label: 'Workforce' },
       { label: 'Employees', path: '/people/employees', role: '*' },
-      { label: 'Attendance', path: '/people/attendance', role: '*' },
       { label: 'Leave', path: '/people/leave', role: '*' },
       { label: 'Certifications', path: '/people/certifications', role: '*' },
-      { label: 'Rotation', path: '/people/rotation', role: '*' },
       { type: 'divider' },
       { type: 'group', label: 'Payroll & Benefits' },
       { label: 'Payroll', path: '/people/payroll', role: '*' },

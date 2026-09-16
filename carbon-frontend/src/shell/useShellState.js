@@ -6,7 +6,9 @@ import { useAuth } from '../auth/AuthContext';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import Co2Icon from '@mui/icons-material/Co2';
 import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
-import Diversity3Icon from '@mui/icons-material/Diversity3';
+import GroupsIcon from '@mui/icons-material/Groups';
+import PersonIcon from '@mui/icons-material/Person';
+import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
 import CatalogIcon from '@mui/icons-material/LibraryBooks';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import PsychologyIcon from '@mui/icons-material/Psychology';
@@ -31,13 +33,16 @@ const PLATFORM_STUDIOS = [
   { id: 'help',     label: 'Help',            icon: HelpIcon,               path: '/help',      bottom: true },
 ];
 
-// Icon lookup for manifest-declared apps.
-// Move 3: replace with a full MUI dynamic icon loader.
+// Icon lookup for manifest-declared apps (filled glyphs preferred for activity bar).
 const MANIFEST_ICON_MAP = {
-  Co2:          Co2Icon,
-  Dashboard:    DashboardIcon,
-  MonitorHeart: MonitorHeartIcon,
-  Diversity3:   Diversity3Icon,
+  Co2:                 Co2Icon,
+  Dashboard:           DashboardIcon,
+  MonitorHeart:        MonitorHeartIcon,
+  Groups:              GroupsIcon,
+  Person:              PersonIcon,
+  SupervisorAccount:   SupervisorAccountIcon,
+  // legacy aliases still used by older manifests
+  Diversity3:          GroupsIcon,
 };
 
 function getStoredBoolean(key, defaultValue) {

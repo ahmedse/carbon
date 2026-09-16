@@ -8,6 +8,8 @@ from django.db import IntegrityError, transaction
 
 from mdm.models import OrgUnit, ReferenceSet, ReferenceValue
 
+from people.tests.ref_helpers import ensure_ref
+
 from people.models import (
     AttendancePermission,
     AttendanceRecord,
@@ -75,13 +77,13 @@ def test_leave_record_str(employee, leave_type_annual):
 
 @pytest.mark.django_db
 def test_benefit_type_str():
-    bt = BenefitType.objects.create(code='housing', name='Housing Allowance', category='accommodation')
+    bt = BenefitType.objects.create(code='housing', name='Housing Allowance', category=ensure_ref('benefit_category', 'accommodation'))
     assert str(bt) == 'housing — Housing Allowance'
 
 
 @pytest.mark.django_db
 def test_employee_benefit_str(employee):
-    bt = BenefitType.objects.create(code='housing', name='Housing Allowance', category='accommodation')
+    bt = BenefitType.objects.create(code='housing', name='Housing Allowance', category=ensure_ref('benefit_category', 'accommodation'))
     eb = EmployeeBenefit.objects.create(
         employee=employee, benefit_type=bt, monthly_amount='500.000',
         effective_start=date(2026, 1, 1),
@@ -92,7 +94,7 @@ def test_employee_benefit_str(employee):
 @pytest.mark.django_db
 def test_loan_str(employee):
     loan = Loan.objects.create(
-        employee=employee, loan_type='personal', principal='5000.000',
+        employee=employee, loan_type=ensure_ref('loan_type', 'personal'), principal='5000.000',
         term_months=24, start_date=date(2026, 1, 1),
     )
     assert str(loan) == 'E-TEST — Test Employee personal (5000.000)'
@@ -101,7 +103,7 @@ def test_loan_str(employee):
 @pytest.mark.django_db
 def test_loan_installment_str(employee):
     loan = Loan.objects.create(
-        employee=employee, loan_type='personal', principal='5000.000',
+        employee=employee, loan_type=ensure_ref('loan_type', 'personal'), principal='5000.000',
         term_months=24, start_date=date(2026, 1, 1),
     )
     inst = LoanInstallment.objects.create(
@@ -122,7 +124,7 @@ def test_attendance_record_str(employee):
 @pytest.mark.django_db
 def test_attendance_permission_str(employee):
     perm = AttendancePermission.objects.create(
-        employee=employee, date=date(2026, 1, 2), permission_type='exit', hours='2.00',
+        employee=employee, date=date(2026, 1, 2), permission_type=ensure_ref('permission_type', 'exit'), hours='2.00',
     )
     assert str(perm) == 'E-TEST — Test Employee 2026-01-02 exit (2.00h)'
 
@@ -130,7 +132,7 @@ def test_attendance_permission_str(employee):
 @pytest.mark.django_db
 def test_certification_str(employee):
     cert = Certification.objects.create(
-        employee=employee, cert_type='KOC-PTW', number='C-123',
+        employee=employee, cert_type=ensure_ref('cert_type', 'KOC-PTW'), number='C-123',
     )
     assert str(cert) == 'E-TEST — Test Employee KOC-PTW (C-123)'
 
@@ -138,7 +140,7 @@ def test_certification_str(employee):
 @pytest.mark.django_db
 def test_rotation_schedule_str(employee):
     rs = RotationSchedule.objects.create(
-        employee=employee, pattern='1/1', start_date=date(2026, 1, 1),
+        employee=employee, pattern=ensure_ref('rotation_pattern', '1/1'), start_date=date(2026, 1, 1),
     )
     assert str(rs) == 'E-TEST — Test Employee 1/1 (2026-01-01)'
 
@@ -160,7 +162,7 @@ def test_leave_entitlement_unique_together(employee, leave_type_annual):
 @pytest.mark.django_db
 def test_loan_installment_unique_together(employee):
     loan = Loan.objects.create(
-        employee=employee, loan_type='personal', principal='5000.000',
+        employee=employee, loan_type=ensure_ref('loan_type', 'personal'), principal='5000.000',
         term_months=24, start_date=date(2026, 1, 1),
     )
     LoanInstallment.objects.create(
@@ -203,7 +205,7 @@ def test_position_reports_to_self_fk(org):
 
 @pytest.mark.django_db
 def test_employee_benefit_fks(employee):
-    bt = BenefitType.objects.create(code='housing', name='Housing Allowance', category='accommodation')
+    bt = BenefitType.objects.create(code='housing', name='Housing Allowance', category=ensure_ref('benefit_category', 'accommodation'))
     eb = EmployeeBenefit.objects.create(
         employee=employee, benefit_type=bt, monthly_amount='500.000',
         effective_start=date(2026, 1, 1),
@@ -217,7 +219,7 @@ def test_employee_benefit_fks(employee):
 @pytest.mark.django_db
 def test_loan_fk(employee):
     loan = Loan.objects.create(
-        employee=employee, loan_type='personal', principal='5000.000',
+        employee=employee, loan_type=ensure_ref('loan_type', 'personal'), principal='5000.000',
         term_months=24, start_date=date(2026, 1, 1),
     )
     assert loan.employee == employee
@@ -255,6 +257,6 @@ def test_leave_record_serializer_emits_code_id_label(employee, leave_type_annual
 @pytest.mark.django_db
 def test_rotation_schedule_config_defaults_to_empty_dict(employee):
     rs = RotationSchedule.objects.create(
-        employee=employee, pattern='1/1', start_date=date(2026, 1, 1),
+        employee=employee, pattern=ensure_ref('rotation_pattern', '1/1'), start_date=date(2026, 1, 1),
     )
     assert rs.config == {}

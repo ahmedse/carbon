@@ -13,11 +13,16 @@
 #   logs       - View logs (all|backend|frontend)
 #   health     - Run health checks
 #   clean      - Deep clean (stop, clear all caches, archive logs)
+#   clean-ports - Force-free backend/frontend ports (+ stray Vite ports)
 #   migrate    - Run Django migrations
 #   shell      - Open Django shell
 #   test       - Run backend tests
 #   killall    - Emergency force kill everything
 #   help       - Show help
+#
+# Ports (fixed; Vite uses strictPort — never silently moves to 5180+)
+#   Backend:  8009
+#   Frontend: 5179
 #
 
 # Exit on undefined variables only (not on errors, we handle those)
@@ -43,9 +48,11 @@ readonly FRONTEND_DIR="$PROJECT_ROOT/carbon-frontend"
 readonly LOGS_DIR="$PROJECT_ROOT/logs"
 readonly PIDS_DIR="$PROJECT_ROOT/.pids"
 
-# Ports
+# Ports (must stay fixed — Vite strictPort:true; spillover 5180+ = orphan, kill it)
 readonly BACKEND_PORT=8009
 readonly FRONTEND_PORT=5179
+# Extra frontend ports Vite may have taken before strictPort / from orphan processes
+readonly FRONTEND_SPILL_PORTS=(5180 5181 5182 5183 5184 5185)
 
 # Load API prefix from backend .env (default to /carbon-api/ if not set)
 DJANGO_API_PREFIX=$(grep -E '^DJANGO_API_PREFIX=' "$BACKEND_DIR/.env" 2>/dev/null | cut -d'=' -f2 || true)
@@ -100,29 +107,131 @@ has_command() {
     command -v "$1" &>/dev/null
 }
 
-# Check if a port is in use
+# Check if a port is in use (lsof + ss — WSL-safe)
 port_in_use() {
     local port=$1
-    lsof -Pi ":$port" -sTCP:LISTEN -t &>/dev/null
+    if has_command lsof && lsof -Pi ":$port" -sTCP:LISTEN -t &>/dev/null; then
+        return 0
+    fi
+    if has_command ss && ss -tln "( sport = :$port )" 2>/dev/null | grep -q ":$port"; then
+        return 0
+    fi
+    if has_command fuser && fuser "$port/tcp" &>/dev/null; then
+        return 0
+    fi
+    return 1
 }
 
-# Get PIDs using a port
+# Get PIDs listening on a port (deduped). Tries lsof → ss → fuser.
 get_port_pids() {
     local port=$1
-    lsof -ti ":$port" 2>/dev/null || echo ""
+    local -a found=()
+    local line pid
+
+    if has_command lsof; then
+        while read -r pid; do
+            [[ -n "$pid" ]] && found+=("$pid")
+        done < <(lsof -ti ":$port" -sTCP:LISTEN 2>/dev/null || true)
+        if [[ ${#found[@]} -eq 0 ]]; then
+            while read -r pid; do
+                [[ -n "$pid" ]] && found+=("$pid")
+            done < <(lsof -ti ":$port" 2>/dev/null || true)
+        fi
+    fi
+
+    if [[ ${#found[@]} -eq 0 ]] && has_command ss; then
+        while read -r line; do
+            if [[ "$line" =~ pid=([0-9]+) ]]; then
+                found+=("${BASH_REMATCH[1]}")
+            fi
+        done < <(ss -tlnp "( sport = :$port )" 2>/dev/null || true)
+    fi
+
+    if [[ ${#found[@]} -eq 0 ]] && has_command fuser; then
+        while read -r pid; do
+            [[ "$pid" =~ ^[0-9]+$ ]] && found+=("$pid")
+        done < <(fuser "$port/tcp" 2>/dev/null | tr -s '[:space:]' '\n' || true)
+    fi
+
+    if [[ ${#found[@]} -eq 0 ]]; then
+        echo ""
+        return 0
+    fi
+    printf '%s\n' "${found[@]}" | sort -u | tr '\n' ' '
+    echo
 }
 
-# Kill all processes on a port
+# Kill all processes on a port. Returns 0 if port is free afterwards.
 kill_port() {
     local port=$1
     local pids
-    pids=$(get_port_pids "$port")
-    
-    if [[ -n "$pids" ]]; then
-        log_warn "Port $port occupied - killing processes: $pids"
-        echo "$pids" | xargs -r kill -9 2>/dev/null || true
-        sleep 1
+    local attempt
+    pids=$(get_port_pids "$port" | xargs || true)
+
+    if [[ -z "${pids// /}" ]]; then
+        return 0
     fi
+
+    log_warn "Port $port occupied — killing: $pids"
+    # shellcheck disable=SC2086
+    kill -9 $pids 2>/dev/null || true
+
+    for attempt in 1 2 3 4 5; do
+        sleep 0.3
+        if ! port_in_use "$port"; then
+            return 0
+        fi
+        pids=$(get_port_pids "$port" | xargs || true)
+        if [[ -n "${pids// /}" ]]; then
+            # shellcheck disable=SC2086
+            kill -9 $pids 2>/dev/null || true
+        fi
+    done
+
+    if port_in_use "$port"; then
+        log_error "Port $port still in use after kill: $(get_port_pids "$port")"
+        return 1
+    fi
+    return 0
+}
+
+# Kill Vite / runserver processes that belong to THIS repo (not other projects).
+kill_project_orphans() {
+    local pattern
+    # Match absolute paths under this workspace so we don't nuke unrelated Vite apps.
+    pkill -9 -f "${FRONTEND_DIR}/node_modules/.bin/vite" 2>/dev/null || true
+    pkill -9 -f "${FRONTEND_DIR}.*vite" 2>/dev/null || true
+    pkill -9 -f "${BACKEND_DIR}/manage.py runserver" 2>/dev/null || true
+    pkill -9 -f "manage.py runserver.*:${BACKEND_PORT}" 2>/dev/null || true
+    pkill -9 -f "manage.py runserver.*0.0.0.0:${BACKEND_PORT}" 2>/dev/null || true
+}
+
+# Free canonical + spillover ports used in local dev.
+clean_dev_ports() {
+    local port
+    local failed=0
+
+    log_step "Killing project-scoped orphan Vite/runserver processes..."
+    kill_project_orphans
+    sleep 0.5
+
+    log_step "Freeing backend port $BACKEND_PORT..."
+    kill_port "$BACKEND_PORT" || failed=1
+
+    log_step "Freeing frontend port $FRONTEND_PORT..."
+    kill_port "$FRONTEND_PORT" || failed=1
+
+    for port in "${FRONTEND_SPILL_PORTS[@]}"; do
+        if port_in_use "$port"; then
+            log_step "Freeing stray frontend spillover port $port..."
+            kill_port "$port" || failed=1
+        fi
+    done
+
+    # Stale PID files after forced kills
+    rm -f "$PIDS_DIR"/*.pid 2>/dev/null || true
+
+    return $failed
 }
 
 # Check if PID is running
@@ -483,17 +592,8 @@ cmd_stop() {
     kill_service "Frontend" "$FRONTEND_PID"
     kill_service "Backend" "$BACKEND_PID"
     
-    # Clean up any remaining processes
-    log_step "Cleaning up remaining processes..."
-    pkill -9 -f "manage.py runserver" 2>/dev/null || true
-    pkill -9 -f "vite" 2>/dev/null || true
-    
-    # Free ports
-    kill_port "$BACKEND_PORT"
-    kill_port "$FRONTEND_PORT"
-    
-    # Remove PID files
-    rm -f "$PIDS_DIR"/*.pid 2>/dev/null || true
+    # Free ports + kill orphans (WSL-safe; covers spillover 5180+)
+    clean_dev_ports || true
     
     echo ""
     log_success "All services stopped"
@@ -912,25 +1012,42 @@ cmd_clean() {
     echo ""
 }
 
+cmd_clean_ports() {
+    print_header
+    log_info "Cleaning local-dev ports (backend $BACKEND_PORT, frontend $FRONTEND_PORT + spillover)..."
+    echo ""
+
+    if clean_dev_ports; then
+        echo ""
+        log_success "Ports are free"
+        log_info "Backend  :$BACKEND_PORT  Frontend :$FRONTEND_PORT  (spillover 5180–5185 cleared if held)"
+        echo ""
+        # Show residual listeners for these ports (should be empty)
+        local port
+        for port in "$BACKEND_PORT" "$FRONTEND_PORT" "${FRONTEND_SPILL_PORTS[@]}"; do
+            if port_in_use "$port"; then
+                log_warn "Still listening on :$port → PIDs: $(get_port_pids "$port")"
+            fi
+        done
+    else
+        echo ""
+        log_error "Some ports could not be freed — see warnings above"
+        exit 1
+    fi
+}
+
 cmd_killall() {
     print_header
     log_warn "EMERGENCY: Force killing all Carbon processes..."
     echo ""
-    
-    # Kill everything
-    log_step "Killing all related processes..."
-    pkill -9 -f "manage.py runserver" 2>/dev/null || true
-    pkill -9 -f "vite" 2>/dev/null || true
-    pkill -9 -f "node.*carbon" 2>/dev/null || true
-    
-    # Force free ports
-    log_step "Freeing ports..."
-    kill_port "$BACKEND_PORT"
-    kill_port "$FRONTEND_PORT"
-    
-    # Remove all PID files
-    rm -f "$PIDS_DIR"/*.pid 2>/dev/null || true
-    
+
+    log_step "Killing tracked services..."
+    kill_service "Frontend" "$FRONTEND_PID" || true
+    kill_service "Backend" "$BACKEND_PID" || true
+
+    log_step "Cleaning ports + project orphans..."
+    clean_dev_ports || true
+
     echo ""
     log_success "All processes killed"
     log_warn "This was a force kill (SIGKILL). Use 'stop' for graceful shutdown."
@@ -956,12 +1073,14 @@ cmd_help() {
     echo "  schedules [--dry-run]  Materialize due plan schedules (W6-E F-29)"
     echo "  maintenance [--dry-run] [--loops]  Pulse heartbeat: consolidate/distill/decay"
     echo "  clean              Deep clean (stop, clear caches, archive logs)"
+    echo "  clean-ports        Force-free :$BACKEND_PORT / :$FRONTEND_PORT (+ Vite spillover 5180–5185)"
     echo "  killall            Emergency: force kill everything"
     echo "  help               Show this help"
     echo ""
     echo -e "${CYAN}Examples:${NC}"
     echo "  ./manage.sh start          # Start everything"
     echo "  ./manage.sh stop           # Stop everything"
+    echo "  ./manage.sh clean-ports    # Kill whatever is holding the ports"
     echo "  ./manage.sh status         # Check what's running"
     echo "  ./manage.sh logs backend   # View backend logs"
     echo "  ./manage.sh migrate        # Run DB migrations"
@@ -972,6 +1091,7 @@ cmd_help() {
     echo -e "${CYAN}Ports:${NC}"
     echo "  Backend:   http://localhost:$BACKEND_PORT"
     echo "  Frontend:  http://localhost:$FRONTEND_PORT/carbon/"
+    echo "  (Vite strictPort — if you see :5180, run clean-ports; do not use the spillover URL)"
     echo ""
 }
 
@@ -1005,6 +1125,7 @@ main() {
         schedules)  cmd_schedules "${2:-}" ;;
         maintenance) cmd_maintenance "${2:-}" "${3:-}" ;;
         clean)      cmd_clean ;;
+        clean-ports|clean_ports|ports) cmd_clean_ports ;;
         killall)    cmd_killall ;;
         help|-h|--help) cmd_help ;;
         *)

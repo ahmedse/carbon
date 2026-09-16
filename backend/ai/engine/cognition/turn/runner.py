@@ -1014,8 +1014,9 @@ class TurnPipelineRunner:
                 # that opt in (chat_visible=True). New tools arrive by adding a
                 # plugin + registering it — zero edits to this allow-list (G-C).
                 allow = _CHAT_STATIC_TOOLS | chat_tool_names()
+                cfg = getattr(executor, "instance_config", None)
                 self._draft_tools = [
-                    d for d in get_tool_definitions()
+                    d for d in get_tool_definitions(cfg)
                     if d.get("function", {}).get("name") in allow
                 ]
             except Exception:  # noqa: BLE001 - tools are best-effort, never fatal

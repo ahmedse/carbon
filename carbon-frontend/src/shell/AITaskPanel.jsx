@@ -22,7 +22,6 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
-  Drawer,
   IconButton,
   Paper,
   Stack,
@@ -31,7 +30,6 @@ import {
   TextField,
   Tooltip,
   Typography,
-  useMediaQuery,
 } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -50,7 +48,6 @@ import CloseIcon from '@mui/icons-material/Close';
 import PauseIcon from '@mui/icons-material/Pause';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CallSplitIcon from '@mui/icons-material/CallSplit';
-import MenuIcon from '@mui/icons-material/Menu';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
@@ -97,29 +94,30 @@ import ScheduleDialog from '../components/ai/ScheduleDialog';
 import ScheduleList from '../components/ai/ScheduleList';
 import SystemDialog from '../components/SystemDialog';
 import { buildPlanPhases, summarizePlanDiff } from '../utils/planGraph';
-import { agentRoleLabel, toolLabel } from './aiTaskStatus';
+import { agentRoleLabel, effectivePlanStatus, planStatusMeta, toolLabel } from './aiTaskStatus';
 import AITaskPlanCard from './AITaskPlanCard';
 import MarkdownMessage from './MarkdownMessage';
-import AgentCockpit from './AgentCockpit';
 import PlanDagGraph from '../components/graph/PlanDagGraph';
 import AITaskAuditCard from './AITaskAuditCard';
 import SubagentResultCard from './SubagentResultCard';
 import PlanDiffReviewDialog from './PlanDiffReviewDialog';
 import StepEditDialog from './StepEditDialog';
 import DiscoveryComposer from './DiscoveryComposer';
+import AgentTaskPicker from './AgentTaskPicker';
+import AgentStage, { stageForStatus } from './AgentStage';
+import AgentRunSurface from './AgentRunSurface';
+import AgentReviewSurface from './AgentReviewSurface';
 import StepOutputRenderer, { ArtifactCard } from '../components/ai/StepOutputRenderer';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
 const TASK_TAB_KEY = 'carbon-ai-task-tab';
-// U-1 (DESIGN-AGENT-WORKFLOW-AND-UI §6) — the single-cockpit layout is the
-// default; the legacy 6-tab layout stays reachable as a fallback via the
-// localStorage override ("Switch to classic view"). `segment` persists
-// separately from the classic `tab` so neither layout fights the other.
+// Chat-first Agent remake — single workspace (picker + stage). Classic 6-tab
+// IA is debug-only via localStorage carbon-ai-cockpit=off.
 const COCKPIT_KEY = 'carbon-ai-cockpit';
 const COCKPIT_SEGMENT_KEY = 'carbon-ai-cockpit-segment';
-const cockpitEnabled = () => {
+const chatFirstEnabled = () => {
   try {
     return localStorage.getItem(COCKPIT_KEY) !== 'off';
   } catch {
@@ -639,8 +637,8 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     }
   });
 
-  // U-1 — single-cockpit layout (default) vs. legacy 6-tab fallback.
-  const [cockpit, setCockpit] = useState(cockpitEnabled);
+  // Chat-first layout (default). Classic 6-tab only when carbon-ai-cockpit=off.
+  const [chatFirst, setChatFirst] = useState(chatFirstEnabled);
   const [segment, setSegment] = useState(() => {
     try {
       return localStorage.getItem(COCKPIT_SEGMENT_KEY) || 'steps';
@@ -648,11 +646,8 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       return 'steps';
     }
   });
-  // Library overflow (Templates / Scheduled demoted from primary nav): null | 'templates' | 'scheduled'.
+  // Library overflow (Templates / Scheduled): null | 'templates' | 'scheduled'.
   const [libraryView, setLibraryView] = useState(null);
-  // Narrow layout: the Tasks rail collapses into a drawer toggled from the cockpit header.
-  const [railOpen, setRailOpen] = useState(false);
-  const narrow = useMediaQuery('(max-width:719px)');
 
   // Task list + composer
   const [plans, setPlans] = useState([]);
@@ -735,15 +730,14 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     }
   }, []);
 
-  // "Switch to classic view" — persist the fallback preference and re-render
-  // into the 6-tab layout without a reload so nothing in flight is lost.
+  // Debug: restore classic 6-tab layout without a reload.
   const switchToClassic = useCallback(() => {
     try {
       localStorage.setItem(COCKPIT_KEY, 'off');
     } catch {
       // storage may be unavailable — still flips in-memory for this session
     }
-    setCockpit(false);
+    setChatFirst(false);
   }, []);
 
   // W5-D — the workspace activity bar (Monitor 📊 / Results 📦) drives this
@@ -890,32 +884,46 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     );
     // A paused plan reopens on the consent surface (its awaiting_approval
     // steps must be actionable), not on the idle surface.
+    const effective = effectivePlanStatus(plan);
     setPhase(
-      plan.status === 'completed'
+      effective === 'completed'
         ? 'finished'
-        : plan.status === 'cancelled'
+        : effective === 'cancelled'
           ? 'stopped'
-          : plan.status === 'failed'
+          : effective === 'failed'
             ? 'error'
-            : plan.status === 'paused'
+            : effective === 'paused'
               ? 'paused'
               : 'idle',
     );
     setLedger(null);
   }, []);
 
-  const openPlan = useCallback(async (planId) => {
+  const openPlan = useCallback(async (planId, { activateRunTab = true } = {}) => {
     setDetailLoading(true);
     try {
       const plan = await getPlan(token, planId);
       applyPlanToView(plan);
-      setTab('run');
+      if (activateRunTab) setTab('run');
     } catch (err) {
       notifyFromErrorRef.current(err, 'Could not open the plan');
     } finally {
       setDetailLoading(false);
     }
   }, [token, applyPlanToView]);
+
+  // Chat-first: open the newest active task once so the stage is never empty
+  // when history exists. User "New task" clears selection without re-auto-pick.
+  // Do not force the classic Run tab — that races Scheduled/Templates tests and
+  // activity-bar jumps (openPlan still activates Run when the user picks a task).
+  const autoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (autoOpenedRef.current || selectedPlan || plansLoading || !plans.length) return;
+    autoOpenedRef.current = true;
+    const active = ['discovering', 'pending_approval', 'approved', 'running', 'paused'];
+    const preferred = plans.find((p) => active.includes(p.status)) || plans[0];
+    if (preferred?.id) openPlan(preferred.id, { activateRunTab: false });
+  }, [plans, plansLoading, selectedPlan, openPlan]);
 
   // Chat → Tasks jump: a chat reply's "Open in Tasks" button lands here with
   // the plan id of the just-drafted plan. Open it once, then signal the
@@ -928,13 +936,33 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     onFocusPlanConsumed?.();
   }, [focusPlanId, openPlan, onFocusPlanConsumed]);
 
-  // W5-B — when discovery finishes, open the reviewable plan on the Run tab
-  // (where AITaskPlanCard renders with the consent gate) and refresh the list.
+  // Chat-first: completed plans open on Done → Output by default.
+  useEffect(() => {
+    if (!chatFirst || selectedPlan?.status !== 'completed') return;
+    if (segment === 'output') return;
+    handleSegmentChange('output');
+  }, [chatFirst, selectedPlan?.status, segment, handleSegmentChange]);
+
+  // W5-B — discovery finished → open reviewable plan in the Review stage.
   const handleDiscoveryReady = useCallback((plan) => {
     applyPlanToView(plan);
     loadPlans();
-    setTab('run');
   }, [applyPlanToView, loadPlans]);
+
+  // New discovering run started — select it so the picker + stage stay in sync.
+  // Do not GET the plan yet (list/detail may lag); hydrate from the start payload.
+  const handleDiscoveryStarted = useCallback((started) => {
+    loadPlans();
+    if (!started?.id) return;
+    applyPlanToView({
+      id: started.id,
+      status: 'discovering',
+      brief: started.brief || '',
+      discovery_turns: Array.isArray(started.turns) ? started.turns : [],
+      steps: [],
+      created_at: new Date().toISOString(),
+    });
+  }, [loadPlans, applyPlanToView]);
 
   // ── Plan-level consent gate (RULE_21) ─────────────────────────────────
   const handleApprove = async () => {
@@ -943,6 +971,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       const updated = await approvePlan(token, selectedPlan.id);
       setSelectedPlan(updated);
       setPlans((prev) => prev.map((p) => (p.id === updated.id ? { ...p, status: updated.status } : p)));
+      loadPlans();
     } catch (err) {
       notifyFromErrorRef.current(err, 'Could not approve the plan');
     }
@@ -954,6 +983,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       const updated = await declinePlan(token, selectedPlan.id);
       setSelectedPlan(updated);
       setPlans((prev) => prev.map((p) => (p.id === updated.id ? { ...p, status: updated.status } : p)));
+      loadPlans();
     } catch (err) {
       notifyFromErrorRef.current(err, 'Could not decline the plan');
     }
@@ -980,7 +1010,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     // segments — both surfaces render the ledger.
     const ledgerVisible =
       tab === 'monitor' || tab === 'results'
-      || (cockpit && (segment === 'metrics' || segment === 'output'));
+      || (chatFirst && (segment === 'metrics' || segment === 'output'));
     if (!planId || !ledgerVisible) return undefined;
     if (phase === 'working') {
       const timer = setInterval(() => loadLedger(planId), 5000);
@@ -990,16 +1020,28 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       loadLedger(planId);
     }
     return undefined;
-  }, [tab, cockpit, segment, phase, selectedPlan?.id, ledger, loadLedger]);
+  }, [tab, chatFirst, segment, phase, selectedPlan?.id, ledger, loadLedger]);
 
-  // W5-D — Results/Output loads the plan's artifacts once the run has finished.
+  // W5-D — load plan artifacts on Results/Output OR graph-first Run when settled.
   useEffect(() => {
     const planId = selectedPlan?.id;
-    const artifactsVisible = tab === 'results' || (cockpit && segment === 'output');
-    if (!artifactsVisible || !planId || phase !== 'finished') return undefined;
+    const status = selectedPlan?.status;
+    const terminal = ['completed', 'failed', 'cancelled'].includes(status)
+      || ['finished', 'stopped', 'error'].includes(phase);
+    const runStage = stageForStatus(status, phase) === 'run';
+    const artifactsVisible =
+      tab === 'results'
+      || (chatFirst && (segment === 'output' || runStage))
+      || (!chatFirst && tab === 'run' && terminal);
+    if (!artifactsVisible || !planId || !terminal) return undefined;
     let cancelled = false;
     setArtifactsLoading(true);
-    listPlanArtifacts(token, planId)
+    const pending = listPlanArtifacts(token, planId);
+    if (!pending || typeof pending.then !== 'function') {
+      setArtifactsLoading(false);
+      return undefined;
+    }
+    pending
       .then((data) => {
         if (!cancelled) setArtifacts(Array.isArray(data?.artifacts) ? data.artifacts : []);
       })
@@ -1012,7 +1054,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     return () => {
       cancelled = true;
     };
-  }, [tab, cockpit, segment, phase, selectedPlan?.id, token]);
+  }, [tab, chatFirst, segment, phase, selectedPlan?.id, selectedPlan?.status, token]);
 
   const upsertStep = useCallback((patch) => {
     setRunSteps((prev) => {
@@ -1472,78 +1514,26 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     }
   };
 
-  // ── Tasks tab: composer + list ────────────────────────────────────────
+  // ── Classic Tasks tab (debug fallback only) ───────────────────────────
   const renderTasks = () => (
     <Stack spacing={1.25}>
-      {/* New-plan composer — W5-B guided discovery (brief → Pulse questions → plan) */}
-      <DiscoveryComposer conversationId={conversationId} onPlanReady={handleDiscoveryReady} />
-
-      {/* Task list */}
-      <Stack direction="row" alignItems="center" spacing={1}>
-        <Typography variant="caption" sx={{ flex: 1, fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.secondary' }}>
-          My tasks
-        </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
-          {plans.length}
-        </Typography>
-      </Stack>
-
-      {plansLoading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={20} /></Box>
-      ) : plans.length === 0 ? (
-        <Typography variant="body2" color="text.secondary" sx={{ py: 2, fontSize: '0.75rem' }}>
-          No task plans yet — describe one above.
-        </Typography>
-      ) : (
-        <Stack spacing={0.75}>
-          {plans.map((plan) => {
-            const meta = { pending_approval: { label: 'Needs review', color: 'warning' }, approved: { label: 'Approved', color: 'primary' }, running: { label: 'Running…', color: 'primary' }, paused: { label: 'Needs approval', color: 'warning' }, completed: { label: 'Completed', color: 'success' }, failed: { label: 'Failed', color: 'error' }, cancelled: { label: 'Cancelled', color: 'default' } }[plan.status] || { label: plan.status, color: 'default' };
-            const deletable = ['cancelled', 'failed', 'completed'].includes(plan.status);
-            const confirming = deletingPlanId === plan.id;
-            return (
-              <Paper
-                key={plan.id}
-                variant="outlined"
-                sx={{ p: 1, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
-                onClick={() => { if (!confirming) openPlan(plan.id); }}
-              >
-                <Stack direction="row" alignItems="center" spacing={0.75}>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {plan.brief}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.625rem', mt: 0.25 }}>
-                      {formatWhen(plan.created_at) || ''}
-                    </Typography>
-                  </Box>
-                  <Chip size="small" variant="outlined" label={meta.label} color={meta.color} sx={{ height: 16, fontSize: '0.5625rem' }} />
-                  {deletable && !confirming && (
-                    <Tooltip title="Delete task">
-                      <IconButton
-                        size="small"
-                        onClick={(e) => { e.stopPropagation(); setDeletingPlanId(plan.id); }}
-                        sx={{ p: 0.375 }}
-                      >
-                        <DeleteOutlinedIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
-                      </IconButton>
-                    </Tooltip>
-                  )}
-                  {confirming && (
-                    <Stack direction="row" spacing={0.5} onClick={(e) => e.stopPropagation()}>
-                      <Button size="small" color="error" variant="contained" onClick={() => handleDeletePlan(plan.id)} sx={{ fontSize: '0.5625rem', textTransform: 'none', minWidth: 0, px: 0.75, height: 20 }}>Delete</Button>
-                      <Button size="small" onClick={() => setDeletingPlanId(null)} sx={{ fontSize: '0.5625rem', textTransform: 'none', minWidth: 0, px: 0.75, height: 20 }}>Cancel</Button>
-                    </Stack>
-                  )}
-                </Stack>
-              </Paper>
-            );
-          })}
-        </Stack>
-      )}
+      <DiscoveryComposer
+        conversationId={conversationId}
+        onPlanReady={handleDiscoveryReady}
+        onStarted={handleDiscoveryStarted}
+      />
+      <AgentTaskPicker
+        plans={plans}
+        loading={plansLoading}
+        selectedId={selectedPlan?.id || ''}
+        onSelect={(id) => { if (id) openPlan(id); else setSelectedPlan(null); }}
+        onDelete={handleDeletePlan}
+        deletingId={deletingPlanId}
+      />
     </Stack>
   );
 
-  // ── Run tab: plan card + streamed steps + audit ───────────────────────
+  // ── Run: graph-first surface (DAG hero; list behind toggle) ───────────
   const renderRun = () => {
     if (detailLoading) {
       return <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={22} /></Box>;
@@ -1556,7 +1546,6 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       );
     }
 
-    // step_id → phase name for step chips in the live run stream.
     const phaseView = buildPlanPhases(selectedPlan);
     const phaseNameByStep = {};
     phaseView.phases.forEach((p) => {
@@ -1566,32 +1555,12 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     });
     const phaseNameFor = (stepId) => phaseNameByStep[stepId] || null;
 
-    // F-28 — paused progress counts (runnable_state enum from W7-A).
     const completedCount = runSteps.filter((s) => s.runnable_state === 'completed').length;
     const pendingCount = runSteps.filter((s) => s.runnable_state === 'pending').length;
 
-    return (
-      <Stack spacing={1.25}>
-        <AITaskPlanCard
-          plan={selectedPlan}
-          busy={mutating}
-          running={phase === 'working'}
-          live={phase === 'working'}
-          onApprove={handleApprove}
-          onDecline={handleDecline}
-          onRun={handleRun}
-          onPause={handlePause}
-          onFork={handleFork}
-          onRetry={handleRetry}
-          onEditPlan={handleEditPlan}
-          onEditStep={(step) => setEditStepTarget({ step })}
-          onConfirmStep={handleConfirmStep}
-          onDeclineStep={handleDeclineStep}
-          onSwitchToChat={onSwitchToChat}
-          confirmingId={confirmingId}
-        />
-
-        {phase === 'paused' && (
+    const statusBanner = (() => {
+      if (phase === 'paused') {
+        return (
           <Alert
             severity="info"
             data-testid="paused-banner"
@@ -1599,11 +1568,12 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           >
             Paused — {completedCount} step{completedCount === 1 ? '' : 's'} completed, {pendingCount} to go
           </Alert>
-        )}
-
-        {phase === 'working' && (
+        );
+      }
+      if (phase === 'working') {
+        return (
           <Paper variant="outlined" sx={{ bgcolor: 'background.paper', overflow: 'hidden' }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.25, py: 0.875, borderBottom: 1, borderColor: 'divider' }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.25, py: 0.875 }}>
               <CircularProgress size={14} thickness={6} sx={{ color: 'primary.main' }} />
               <Typography variant="body2" sx={{ flex: 1, fontWeight: 600, fontSize: '0.75rem' }}>
                 Running…
@@ -1614,85 +1584,160 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
                 </IconButton>
               </Tooltip>
             </Stack>
-            <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-              {runSteps.length === 0 && (
-                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
-                  Starting…
-                </Typography>
-              )}
-              {runSteps.map((step) => (
-                <StepCard
-                  key={step.step_id}
-                  step={step}
-                  phaseName={phaseNameFor(step.step_id)}
-                  confirming={confirmingId === step.step_id}
-                  busy={mutating}
-                  onConfirm={handleConfirmStep}
-                  onDecline={handleDeclineStep}
-                  onRetry={handleStepRetry}
-                  onSkip={handleStepSkip}
-                  onCancel={handleStepCancel}
-                  onPause={handleStepPause}
-                  onResume={handleStepResume}
-                />
-              ))}
-            </Box>
           </Paper>
-        )}
-
-        {(phase === 'paused' || phase === 'finished' || phase === 'stopped' || phase === 'error') && (
+        );
+      }
+      if (phase === 'finished' || phase === 'stopped' || phase === 'error') {
+        return (
           <Paper variant="outlined" sx={{ bgcolor: 'background.paper', overflow: 'hidden' }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.25, py: 0.875, borderBottom: 1, borderColor: 'divider' }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.25, py: 0.875 }}>
               <Typography variant="body2" sx={{ flex: 1, fontWeight: 600, fontSize: '0.75rem' }}>
-                {phase === 'paused'
-                  ? 'Run paused — a step needs your approval'
-                  : phase === 'finished'
-                    ? 'Run completed'
-                    : phase === 'stopped'
-                      ? 'Run stopped'
-                      : 'Run failed'}
+                {phase === 'finished'
+                  ? 'Run completed'
+                  : phase === 'stopped'
+                    ? 'Run stopped'
+                    : 'Run failed'}
               </Typography>
               {phase === 'error' && (
                 <Chip size="small" color="error" variant="outlined" label="Failed" sx={{ height: 18, fontSize: '0.625rem' }} />
               )}
             </Stack>
-            <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-              {runSteps.map((step) => (
-                <StepCard
-                  key={step.step_id}
-                  step={step}
-                  phaseName={phaseNameFor(step.step_id)}
-                  confirming={confirmingId === step.step_id}
-                  busy={mutating}
-                  onConfirm={handleConfirmStep}
-                  onDecline={handleDeclineStep}
-                  onRetry={handleStepRetry}
-                  onSkip={handleStepSkip}
-                  onCancel={handleStepCancel}
-                  onPause={handleStepPause}
-                  onResume={handleStepResume}
-                />
-              ))}
-              {phase === 'paused' && (
-                <Typography variant="caption" color="text.secondary" sx={{ px: 0.5, fontSize: '0.6875rem' }}>
-                  Approve or decline the step above, then resume the run from the plan card.
-                </Typography>
-              )}
-              {phase === 'error' && errorMessage && (
-                <Typography variant="caption" color="error.main" sx={{ px: 0.5, fontSize: '0.6875rem' }}>
-                  {errorMessage}
-                </Typography>
-              )}
-              {phase === 'stopped' && (
-                <Typography variant="caption" color="text.secondary" sx={{ px: 0.5, fontSize: '0.6875rem' }}>
-                  Stopped — pending steps were skipped and nothing was executed without approval.
-                </Typography>
-              )}
-            </Box>
+            {phase === 'error' && errorMessage && (
+              <Typography variant="caption" color="error.main" sx={{ display: 'block', px: 1.25, pb: 1, fontSize: '0.6875rem' }}>
+                {errorMessage}
+              </Typography>
+            )}
+            {phase === 'stopped' && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', px: 1.25, pb: 1, fontSize: '0.6875rem' }}>
+                Stopped — pending steps were skipped and nothing was executed without approval.
+              </Typography>
+            )}
           </Paper>
+        );
+      }
+      return null;
+    })();
+
+    const listSteps = runSteps.length ? runSteps : (Array.isArray(selectedPlan.steps)
+      ? selectedPlan.steps.map((s) => ({
+          step_id: s.step_id,
+          intent: s.intent,
+          tool_name: s.tool_name,
+          tool_args: s.tool_args,
+          status: s.status || 'pending',
+          tool_output: s.tool_output ?? null,
+          output_type: s.output_type ?? null,
+          artifacts: s.artifacts ?? [],
+          error: s.error ?? null,
+          runnable_state: s.runnable_state,
+        }))
+      : []);
+
+    const listContent = (
+      <Stack spacing={1}>
+        {phase === 'paused' && (
+          <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>
+            Run paused — a step needs your approval
+          </Typography>
+        )}
+        {listSteps.map((step) => (
+          <StepCard
+            key={step.step_id}
+            step={step}
+            phaseName={phaseNameFor(step.step_id)}
+            confirming={confirmingId === step.step_id}
+            busy={mutating}
+            onConfirm={handleConfirmStep}
+            onDecline={handleDeclineStep}
+            onRetry={handleStepRetry}
+            onSkip={handleStepSkip}
+            onCancel={handleStepCancel}
+            onPause={handleStepPause}
+            onResume={handleStepResume}
+          />
+        ))}
+        {phase === 'paused' && (
+          <Typography variant="caption" color="text.secondary" sx={{ px: 0.5, fontSize: '0.6875rem' }}>
+            Approve or decline the step above, then resume the run from the toolbar.
+          </Typography>
+        )}
+      </Stack>
+    );
+
+    // Chat-first: Approve on Review only; Run/Pause/Resume live in the top toolbar.
+    // Classic debug tabs still need the plan card for Pause/Resume/Edit controls.
+    const needsPlanCard = chatFirst
+      ? selectedPlan.status === 'pending_approval'
+      : ['pending_approval', 'approved', 'paused', 'running', 'failed'].includes(selectedPlan.status);
+
+    return (
+      <Stack spacing={1.25}>
+        {needsPlanCard && (
+          <AITaskPlanCard
+            plan={selectedPlan}
+            busy={mutating}
+            running={phase === 'working'}
+            live={phase === 'working'}
+            onApprove={handleApprove}
+            onDecline={handleDecline}
+            onRun={handleRun}
+            onPause={handlePause}
+            onFork={handleFork}
+            onRetry={handleRetry}
+            onEditPlan={handleEditPlan}
+            onEditStep={(step) => setEditStepTarget({ step })}
+            onConfirmStep={handleConfirmStep}
+            onDeclineStep={handleDeclineStep}
+            onSwitchToChat={onSwitchToChat}
+            confirmingId={confirmingId}
+          />
         )}
 
-        {/* Audit ledger — durable record of what actually ran */}
+        {!needsPlanCard && selectedPlan.brief && (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{
+              fontSize: '0.75rem',
+              px: 0.25,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+            }}
+          >
+            {selectedPlan.brief}
+          </Typography>
+        )}
+
+        <AgentRunSurface
+          plan={selectedPlan}
+          runSteps={runSteps}
+          phase={phase}
+          live={phase === 'working'}
+          defaultListOpen={phase === 'paused'}
+          artifacts={artifacts}
+          artifactsLoading={artifactsLoading}
+          artifactsContent={
+            artifacts.length > 0 ? (
+              <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', gap: 0.75 }}>
+                {artifacts.map((artifact) => (
+                  <Box key={artifact.id ?? artifact.name} sx={{ minWidth: 200, flex: '1 1 200px', maxWidth: 320 }}>
+                    <ResultArtifactCard artifact={artifact} planId={selectedPlan.id} token={token} />
+                  </Box>
+                ))}
+              </Stack>
+            ) : null
+          }
+          banner={statusBanner}
+          listContent={listContent}
+          confirmingId={confirmingId}
+          onConfirmStep={handleConfirmStep}
+          onDeclineStep={handleDeclineStep}
+          onRetryStep={handleStepRetry}
+        />
+
         {(phase === 'finished' || (ledger && (phase === 'paused' || phase === 'stopped' || phase === 'error'))) && (
           <>
             <Stack direction="row" alignItems="center" spacing={1}>
@@ -1714,7 +1759,6 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           </>
         )}
 
-        {/* I4-F — conversation-scoped subagents, nested under this section. */}
         {conversationId && (
           <Paper variant="outlined" sx={{ bgcolor: 'background.paper', overflow: 'hidden' }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.25, py: 0.875, borderBottom: 1, borderColor: 'divider' }}>
@@ -1891,7 +1935,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       );
     }
 
-    const planMeta = { pending_approval: { label: 'Needs review', color: 'warning' }, approved: { label: 'Approved', color: 'primary' }, running: { label: 'Running…', color: 'primary' }, paused: { label: 'Needs approval', color: 'warning' }, completed: { label: 'Completed', color: 'success' }, failed: { label: 'Failed', color: 'error' }, cancelled: { label: 'Cancelled', color: 'default' } }[selectedPlan.status] || { label: selectedPlan.status, color: 'default' };
+    const planMeta = planStatusMeta(effectivePlanStatus(selectedPlan));
     const usage = ledger?.usage || {};
     const steps = Array.isArray(ledger?.steps) ? ledger.steps : runSteps;
     const total = steps.length;
@@ -2119,9 +2163,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     );
   };
 
-  // Global run toolbar — mirrors AITaskPlanCard's status gating exactly and
-  // reuses its handlers (no new logic). Run doubles as Resume for a paused
-  // plan (the plan card labels the same onRun "Resume run").
+  // Global run toolbar — one location (top bar).
   const renderRunToolbar = () => {
     const status = selectedPlan?.status;
     const running = phase === 'working';
@@ -2150,59 +2192,175 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     );
   };
 
-  const renderCockpit = () => {
-    const planMeta = selectedPlan
-      ? ({ pending_approval: { label: 'Needs review', color: 'warning' }, approved: { label: 'Approved', color: 'primary' }, running: { label: 'Running…', color: 'primary' }, paused: { label: 'Needs approval', color: 'warning' }, completed: { label: 'Completed', color: 'success' }, failed: { label: 'Failed', color: 'error' }, cancelled: { label: 'Cancelled', color: 'default' } }[selectedPlan.status] || { label: selectedPlan.status, color: 'default' })
-      : null;
+  const clarifying = selectedPlan?.status === 'discovering';
+  const showComposer = !selectedPlan || clarifying;
+  const selectedEffective = selectedPlan ? effectivePlanStatus(selectedPlan) : '';
+  // Toolbar when runnable or mid/post-run (Approve stays on Review stage).
+  const showRunToolbar = ['approved', 'running', 'paused', 'failed', 'completed'].includes(
+    selectedEffective,
+  );
 
-    const cockpitHeader = (
-      <Stack direction="row" alignItems="center" spacing={0.75} sx={{ minWidth: 0 }}>
-        {narrow && (
-          <Tooltip title="Tasks">
-            <IconButton size="small" aria-label="Toggle tasks" onClick={() => setRailOpen(true)} sx={{ p: 0.375 }}>
-              <MenuIcon sx={{ fontSize: 18 }} />
-            </IconButton>
-          </Tooltip>
-        )}
-        <Typography variant="body2" sx={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {selectedPlan ? selectedPlan.brief : 'No task selected'}
-        </Typography>
-        {planMeta && (
-          <Chip size="small" variant="outlined" label={planMeta.label} color={planMeta.color} sx={{ height: 18, fontSize: '0.625rem', flexShrink: 0 }} />
-        )}
-        {renderRunToolbar()}
-      </Stack>
-    );
-
-    const rail = (
-      <Box sx={{ overflowY: 'auto', p: 1, width: narrow ? 260 : 240 }}>
-        {renderTasks()}
-      </Box>
-    );
+  const renderChatFirst = () => {
+    const planMeta = selectedPlan ? planStatusMeta(selectedEffective) : null;
 
     return (
-      <Box sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        {narrow ? (
-          <Drawer anchor="left" open={railOpen} onClose={() => setRailOpen(false)}>
-            {rail}
-          </Drawer>
-        ) : (
-          <Box sx={{ flexShrink: 0, borderRight: 1, borderColor: 'divider', minHeight: 0 }}>
-            {rail}
+      <Box
+        data-testid="agent-workspace"
+        sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
+      >
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={1}
+          sx={{ px: 1, py: 0.75, borderBottom: 1, borderColor: 'divider' }}
+        >
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <AgentTaskPicker
+              plans={plans}
+              loading={plansLoading}
+              selectedId={selectedPlan?.id || ''}
+              onSelect={(id) => {
+                if (id) openPlan(id);
+                else {
+                  setSelectedPlan(null);
+                  setRunSteps([]);
+                  setPhase('idle');
+                }
+              }}
+              onDelete={handleDeletePlan}
+              deletingId={deletingPlanId}
+            />
+          </Box>
+          {planMeta && (
+            <Chip
+              size="small"
+              variant="outlined"
+              label={planMeta.label}
+              color={planMeta.color}
+              sx={{ height: 20, fontSize: '0.625rem', flexShrink: 0 }}
+            />
+          )}
+          {showRunToolbar && renderRunToolbar()}
+          <Tooltip title="Templates & schedules">
+            <IconButton
+              size="small"
+              aria-label="Library"
+              onClick={() => { loadTemplates(); setLibraryView('templates'); }}
+              sx={{ p: 0.375 }}
+            >
+              <HistoryOutlinedIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+
+        {showComposer && (
+          <Box sx={{ px: 1, pt: 1, borderBottom: 1, borderColor: 'divider' }}>
+            <DiscoveryComposer
+              conversationId={conversationId}
+              onPlanReady={handleDiscoveryReady}
+              onStarted={handleDiscoveryStarted}
+              resumePlanId={clarifying ? selectedPlan.id : null}
+              resumeTurns={clarifying ? (selectedPlan.discovery_turns || []) : null}
+            />
           </Box>
         )}
-        <AgentCockpit
-          segment={segment}
-          onSegment={handleSegmentChange}
-          header={cockpitHeader}
+
+        <AgentStage
           plan={selectedPlan}
-          renderPlan={renderPlanSegment}
-          renderSteps={renderRun}
-          renderOutput={renderResults}
-          renderMetrics={renderMonitor}
-          onOpenTemplates={() => { loadTemplates(); setLibraryView('templates'); }}
-          onOpenScheduled={() => { loadSchedules(); setLibraryView('scheduled'); }}
-          onSwitchToClassic={switchToClassic}
+          phase={phase}
+          detailLoading={detailLoading}
+          clarify={null}
+          review={selectedPlan ? (
+            <AgentReviewSurface
+              plan={selectedPlan}
+              busy={mutating}
+              onApprove={handleApprove}
+              onDecline={handleDecline}
+              onFork={handleFork}
+              onEditPlan={handleEditPlan}
+              onEditStep={(step) => setEditStepTarget({ step })}
+              confirmingId={confirmingId}
+              onConfirmStep={handleConfirmStep}
+              onDeclineStep={handleDeclineStep}
+            />
+          ) : null}
+          run={renderRun()}
+          done={(
+            <Stack spacing={1} data-testid="agent-done-surface">
+              <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>
+                Run completed
+              </Typography>
+              {selectedPlan && (
+                <AgentRunSurface
+                  plan={selectedPlan}
+                  runSteps={runSteps}
+                  phase={phase}
+                  live={false}
+                  artifacts={artifacts}
+                  artifactsLoading={artifactsLoading}
+                  artifactsContent={
+                    artifacts.length > 0 ? (
+                      <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', gap: 0.75 }}>
+                        {artifacts.map((artifact) => (
+                          <Box key={artifact.id ?? artifact.name} sx={{ minWidth: 200, flex: '1 1 200px', maxWidth: 320 }}>
+                            <ResultArtifactCard artifact={artifact} planId={selectedPlan.id} token={token} />
+                          </Box>
+                        ))}
+                      </Stack>
+                    ) : null
+                  }
+                  listContent={null}
+                />
+              )}
+              <Stack direction="row" spacing={0.5}>
+                <Button
+                  size="small"
+                  variant={segment !== 'metrics' && segment !== 'plan' ? 'contained' : 'outlined'}
+                  onClick={() => handleSegmentChange('output')}
+                  sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+                >
+                  Output
+                </Button>
+                <Button
+                  size="small"
+                  variant={segment === 'metrics' ? 'contained' : 'outlined'}
+                  onClick={() => handleSegmentChange('metrics')}
+                  sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+                >
+                  Metrics
+                </Button>
+                <Button
+                  size="small"
+                  variant={segment === 'plan' ? 'contained' : 'outlined'}
+                  onClick={() => handleSegmentChange('plan')}
+                  sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+                >
+                  Plan graph
+                </Button>
+              </Stack>
+              {segment === 'metrics' ? renderMonitor() : segment === 'plan' ? renderPlanSegment() : renderResults()}
+              {(ledger || phase === 'finished') && (
+                <>
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <HistoryOutlinedIcon sx={{ fontSize: 15, color: 'text.secondary' }} />
+                    <Typography variant="caption" sx={{ flex: 1, fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.secondary' }}>
+                      Audit
+                    </Typography>
+                    {!ledger && !ledgerLoading && selectedPlan && (
+                      <Button size="small" onClick={() => loadLedger(selectedPlan.id)} sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0, px: 0.75 }}>
+                        Load
+                      </Button>
+                    )}
+                  </Stack>
+                  {ledgerLoading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={20} /></Box>
+                  ) : (
+                    <AITaskAuditCard ledger={ledger} />
+                  )}
+                </>
+              )}
+            </Stack>
+          )}
         />
       </Box>
     );
@@ -2210,11 +2368,10 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, bgcolor: 'background.default' }}>
-      {cockpit ? (
-        renderCockpit()
+      {chatFirst ? (
+        renderChatFirst()
       ) : (
         <>
-          {/* Internal views — one Tasks icon, two tabs (RULE_17) */}
           <Box sx={{ px: 1, pt: 0.5, borderBottom: 1, borderColor: 'divider' }}>
             <Tabs
               value={tab}
@@ -2234,8 +2391,6 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
               <Tab value="scheduled" label="Scheduled" />
             </Tabs>
           </Box>
-
-          {/* Tab content */}
           <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 1 }}>
             {tab === 'tasks'
               ? renderTasks()
@@ -2249,6 +2404,16 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
                       ? renderTemplates()
                       : renderScheduled()}
           </Box>
+          <Button
+            size="small"
+            onClick={() => {
+              try { localStorage.setItem(COCKPIT_KEY, 'on'); } catch { /* ignore */ }
+              setChatFirst(true);
+            }}
+            sx={{ textTransform: 'none', fontSize: '0.625rem' }}
+          >
+            Back to chat-first Agent
+          </Button>
         </>
       )}
 

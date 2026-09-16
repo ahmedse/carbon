@@ -184,13 +184,13 @@ export function buildPlanPhases(plan) {
 // phase spans so the workflow stages read as execution lanes.
 
 export const EXEC_LAYOUT = {
-  nodeW: 176,
-  nodeH: 44,
-  colGap: 48,
-  rowGap: 28,
-  padX: 24,
-  padTop: 36,
-  padBottom: 20,
+  nodeW: 228,
+  nodeH: 58,
+  colGap: 64,
+  rowGap: 36,
+  padX: 28,
+  padTop: 40,
+  padBottom: 24,
 };
 
 /**

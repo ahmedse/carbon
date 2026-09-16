@@ -25,13 +25,23 @@ POSITIONS_URL = PEOPLE_API + 'positions/'
 # ── Fixtures (mirrors test_api.py) ─────────────────────────────────────────
 
 @pytest.fixture
-def org_a(db):
-    return OrgUnit.objects.create(name='Org A', slug='org-a')
+def deployment_root(db):
+    """ADR-0028: one active parent=None root; org_a/org_b are siblings under it."""
+    return OrgUnit.objects.create(name='Deployment Root', slug='deploy-root', org_type='company')
 
 
 @pytest.fixture
-def org_b(db):
-    return OrgUnit.objects.create(name='Org B', slug='org-b')
+def org_a(deployment_root):
+    return OrgUnit.objects.create(
+        name='Org A', slug='org-a', parent=deployment_root, org_type='division',
+    )
+
+
+@pytest.fixture
+def org_b(deployment_root):
+    return OrgUnit.objects.create(
+        name='Org B', slug='org-b', parent=deployment_root, org_type='division',
+    )
 
 
 @pytest.fixture
@@ -46,8 +56,7 @@ def auth(api_client, get_token_for_user):
 
 def _make_employee(org_unit, employee_no='E-1', full_name='Alice'):
     return Employee.objects.create(
-        org_unit=org_unit, employee_no=employee_no, full_name=full_name,
-        nationality='Kuwaiti', basic_salary='1000.000',
+        org_unit=org_unit, employee_no=employee_no, full_name=full_name, basic_salary='1000.000',
         join_date=date(2026, 1, 1),
     )
 
@@ -57,7 +66,6 @@ def _employee_payload(org_unit, employee_no='E-1', full_name='Alice'):
         'org_unit': org_unit.id,
         'employee_no': employee_no,
         'full_name': full_name,
-        'nationality': 'Kuwaiti',
         'basic_salary': '1000.000',
         'join_date': '2026-01-01',
     }
@@ -68,7 +76,6 @@ def _position_payload(org_unit, code='POS-1', title='Engineer'):
         'org_unit': org_unit.id,
         'code': code,
         'title': title,
-        'grade': 'G1',
     }
 
 
@@ -162,7 +169,7 @@ def test_position_create_emits_position_opened(auth, create_user, org_a):
 @pytest.mark.django_db
 def test_position_delete_emits_position_closed(auth, create_user, org_a):
     position = Position.objects.create(
-        org_unit=org_a, code='POS-1', title='Engineer', grade='G1',
+        org_unit=org_a, code='POS-1', title='Engineer',
     )
     client = auth(create_user('chronicle_pos_close', is_superuser=True))
     resp = client.delete(POSITIONS_URL + f'{position.pk}/')

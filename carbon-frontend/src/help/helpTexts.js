@@ -25,7 +25,7 @@ export const helpTexts = {
     "employee.employmentType": "Governed enum from the reference data (e.g. full_time, part_time).",
     "employee.contractType": "Governed enum from the reference data (e.g. permanent, fixed_term).",
     "employee.rotation": "Rotation pattern code from the reference data (e.g. 1/1, 2/1).",
-    "employee.basicSalary": "Monthly basic salary in KWD. Protected by compensation access control.",
+    "employee.basicSalary": "Reflected monthly basic from the compensation ledger (KWD). Payroll uses verified ledger lines only — change pay on the Pay tab, not this field.",
     
     // ...add more keys as needed
   },
@@ -40,6 +40,6 @@ export const helpTexts = {
     "employee.employmentType": "قيمة محكومة من البيانات المرجعية (مثال: دوام كامل، جزئي).",
     "employee.contractType": "قيمة محكومة من البيانات المرجعية (مثال: دائم، محدد المدة).",
     "employee.rotation": "رمز نمط المناوبة من البيانات المرجعية (مثال: 1/1، 2/1).",
-    "employee.basicSalary": "الراتب الأساسي الشهري بالدينار الكويتي. محمي بصلاحية الوصول للتعويضات.",
+    "employee.basicSalary": "الأساسي الشهري المنعكس من سجل التعويضات (د.ك). يعتمد احتساب الرواتب على البنود الموثّقة فقط — غيّر الراتب من تبويب الراتب وليس من هذا الحقل.",
   }
 };

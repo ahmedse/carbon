@@ -152,7 +152,7 @@ def _find_rule(rules, category: str):
     if rules is None:
         return None
     if hasattr(rules, "filter"):
-        return rules.filter(category=category).order_by("-effective_date", "-updated_at").first()
+        return rules.filter(category__code=category).order_by("-effective_date", "-updated_at").first()
     matching = [r for r in rules if getattr(r, "category", None) == category]
     if not matching:
         return None

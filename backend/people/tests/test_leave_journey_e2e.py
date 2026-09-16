@@ -206,9 +206,9 @@ def test_balance_pending_rises_then_falls(workflow, api_client, get_token_for_us
     after_approve = _annual_balance(api_client)
     assert _dec(after_approve['pending']) == Decimal('0')
 
-    # LeaveRecord itself stays 'draft' — the governed Correspondence holds status.
+    # NSR-1B: terminal correspondence approval mirrors onto LeaveRecord.
     record = LeaveRecord.objects.get(pk=submitted.json()['subject_id'])
-    assert record.status == 'draft'
+    assert record.status == 'approved'
 
 
 # ── 3b. approved correspondence counts days as used (F13 regression) ───────
@@ -241,9 +241,9 @@ def test_balance_used_after_approval(workflow, api_client, get_token_for_user):
     assert _dec(after['pending']) == Decimal('0')
     assert _dec(after['remaining']) == Decimal('15')
 
-    # LeaveRecord stays 'draft' — approved days still count as used (F13).
+    # NSR-1B: LeaveRecord is approved; days still count as used (F13).
     record = LeaveRecord.objects.get(pk=submitted.json()['subject_id'])
-    assert record.status == 'draft'
+    assert record.status == 'approved'
 
 
 # ── 4. reject path: rejected request no longer blocks a new overlap ────────

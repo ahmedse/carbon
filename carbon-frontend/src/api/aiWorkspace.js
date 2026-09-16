@@ -922,6 +922,21 @@ export function advanceDiscovery(token, planId, reply) {
 }
 
 /**
+ * W5-B — skip remaining clarifying questions and build the reviewable plan.
+ * POST /ai/plans/{id}/discover/finalize/
+ * @param {string} token - JWT access token
+ * @param {string} planId - UUID of a discovering plan
+ * @returns {Promise<object>} { id, status: 'plan_ready', plan, turns }
+ */
+export function finalizeDiscovery(token, planId) {
+  return apiFetch(`${PLANS_BASE}${planId}/discover/finalize/`, {
+    token,
+    method: 'POST',
+    body: {},
+  });
+}
+
+/**
  * Fetch a plan + its steps (owner-scoped).
  * @param {string} token - JWT access token
  * @param {string} planId - UUID

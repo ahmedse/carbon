@@ -103,6 +103,8 @@ def _loan_payload(**overrides):
 
 @pytest.mark.django_db
 def test_submit_loan_happy_path(workflow, api_client, get_token_for_user):
+    from people.tests.ref_helpers import ensure_ref
+    ensure_ref('loan_type', 'housing')
     wf = workflow
     _auth(api_client, wf.requester_user, get_token_for_user)
 

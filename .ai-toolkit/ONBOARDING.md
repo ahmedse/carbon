@@ -9,14 +9,17 @@ verified, non-duplicated work.
 1. You have a ROLE. If you weren't told which, ask. Roles: master-architect, researcher,
    backend-worker, frontend-worker, devops-worker, data-ml-worker, debugger-fixer, curator,
    qa-validator, product-designer.
-2. Read, in order:
+2. **If Master Architect:** declare seat **Pulse** or **Nibras** first
+   (`.ai-toolkit/shared/multi-master.md` + `masters/seats.md` + `docs/ops/MASTERS-COMMS.md`).
+   Never dispatch another seat's track (RULE_30).
+3. Read, in order:
    - `project.config.md` — this project's paths, commands, HARD RULES
    - `shared/base-rules.md` — universal rules (esp. §0 "do the right thing", ops script, verify)
    - `shared/design-patterns.md` — how we compose objects (14/23 GoF adopted)
    - `shared/compact-ui.md` — MUI density spec (fonts, spacing, sidebar, component overrides)
    - `roles/<your-role>.md` — your exact constraints + verification gate
-3. Consult before building: `registry/` (what exists — run `scripts/scan.sh`), `troubleshooting/playbook.md` (known bugs).
-4. Confirm: "Ready as <role> for <project>." Then start the task.
+4. Consult before building: `registry/` (what exists — run `scripts/scan.sh`), `troubleshooting/playbook.md` (known bugs).
+5. Confirm: "Ready as <role> for <project>." Then start the task.
 
 ## If you are the human
 

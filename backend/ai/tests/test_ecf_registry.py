@@ -1,30 +1,26 @@
 """ECF-1 — Entity Registry unit tests.
 
-No DB, no LLM, no network. Loads the nibras instance config and verifies
-the entity descriptor is parsed correctly.
+No DB, no LLM, no network. Loads the nibras instance config via
+`_instance_config("nibras", None)` and verifies the entity descriptor
+is parsed correctly.
 """
 from __future__ import annotations
 
-import pytest
-import yaml
 from pathlib import Path
+
+import pytest
 
 from ai.engine.cognition.entity import (
     EntityDescriptor,
-    LabelSource,
-    MaskPolicy,
-    MetricDef,
-    SearchField,
     get_descriptor,
     load_descriptors,
 )
-
-NIBRAS_YAML = Path(__file__).parent.parent / "engine/instances/nibras/instance.yaml"
+from ai.engine_runtime import _instance_config
 
 
 @pytest.fixture
 def nibras_config():
-    return yaml.safe_load(NIBRAS_YAML.read_text())
+    return _instance_config("nibras", None)
 
 
 class TestLoadDescriptors:

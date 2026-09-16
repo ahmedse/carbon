@@ -39,8 +39,9 @@ import PageHeader from '../../components/Page/PageHeader';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
-import { fetchMyProfile, fetchLeaveBalance, fetchInboxCount, fetchMyPayslips } from '../../api/my';
+import { fetchMyProfile, fetchLeaveBalance, fetchInboxCount, fetchMyPayslips, fetchMyLoans } from '../../api/my';
 import { FONT } from '../../theme/themeTokens';
+import MyLoansCard from './components/MyLoansCard';
 
 const NewRequestDialog = lazy(() => import('./components/NewRequestDialog'));
 
@@ -517,6 +518,10 @@ export default function MyDashboard() {
   const [payslipsLoading, setPayslipsLoading] = useState(true);
   const [payslipsError, setPayslipsError] = useState(null);
 
+  const [loans, setLoans] = useState([]);
+  const [loansLoading, setLoansLoading] = useState(true);
+  const [loansError, setLoansError] = useState(null);
+
   const loadProfile = useCallback(async () => {
     setProfileLoading(true);
     setProfileError(null);
@@ -567,13 +572,26 @@ export default function MyDashboard() {
     }
   }, [token, t]);
 
+  const loadLoans = useCallback(async () => {
+    setLoansLoading(true);
+    setLoansError(null);
+    try {
+      setLoans(await fetchMyLoans(token));
+    } catch (err) {
+      setLoansError(err?.message || t('error'));
+    } finally {
+      setLoansLoading(false);
+    }
+  }, [token, t]);
+
   // Fire the fetches in parallel.
   useEffect(() => {
     loadProfile();
     loadBalances();
     loadInbox();
     loadPayslips();
-  }, [loadProfile, loadBalances, loadInbox, loadPayslips]);
+    loadLoans();
+  }, [loadProfile, loadBalances, loadInbox, loadPayslips, loadLoans]);
 
   const handleNewRequestSubmitted = useCallback(() => {
     setDialogOpen(false);
@@ -616,6 +634,12 @@ export default function MyDashboard() {
             loading={payslipsLoading}
             error={payslipsError}
             onRetry={loadPayslips}
+          />
+          <MyLoansCard
+            loans={loans}
+            loading={loansLoading}
+            error={loansError}
+            onRetry={loadLoans}
           />
           <QuickActions onNewRequest={() => setDialogOpen(true)} />
         </Stack>

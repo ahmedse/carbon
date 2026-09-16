@@ -17,14 +17,16 @@ vi.mock('../../../components/NotificationProvider', () => ({
   useNotification: () => ({ notify: vi.fn(), notifyFromError: vi.fn(), showFeedback: vi.fn() }),
 }));
 
-const { startDiscoveryPlan, advanceDiscovery } = vi.hoisted(() => ({
+const { startDiscoveryPlan, advanceDiscovery, finalizeDiscovery } = vi.hoisted(() => ({
   startDiscoveryPlan: vi.fn(),
   advanceDiscovery: vi.fn(),
+  finalizeDiscovery: vi.fn(),
 }));
 
 vi.mock('../../../api/aiWorkspace', () => ({
   startDiscoveryPlan: (...args) => startDiscoveryPlan(...args),
   advanceDiscovery: (...args) => advanceDiscovery(...args),
+  finalizeDiscovery: (...args) => finalizeDiscovery(...args),
 }));
 
 import DiscoveryComposer from '../../../shell/DiscoveryComposer';
@@ -141,5 +143,24 @@ describe('DiscoveryComposer — guided discovery (W6-B2)', () => {
 
     expect(await screen.findByLabelText('Message input')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send message' })).toBeInTheDocument();
+  });
+
+  it('Plan now finalizes discovery without more answers', async () => {
+    finalizeDiscovery.mockResolvedValue({
+      status: 'plan_ready',
+      plan: PLAN,
+      turns: [{ question: 'Which dataset should we audit?', reply: null }],
+    });
+    render(<DiscoveryComposer conversationId="conv-1" />);
+
+    fireEvent.change(screen.getByLabelText('Message input'), { target: { value: 'Audit duplicates.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    expect(await screen.findByText('Which dataset should we audit?')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Plan now' }));
+    await waitFor(() => {
+      expect(finalizeDiscovery).toHaveBeenCalledWith('test-token', 'plan-1');
+    });
+    expect(await screen.findByText('Plan ready — review below')).toBeInTheDocument();
   });
 });

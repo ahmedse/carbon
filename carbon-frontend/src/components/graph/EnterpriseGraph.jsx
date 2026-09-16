@@ -368,6 +368,12 @@ export default function EnterpriseGraph({
     setPan({ x: 0, y: 0 });
   }, [setZoomClamped, viewW, width]);
 
+  // Graph-first Run: fit the DAG when the layout size changes so the hero
+  // isn't a tiny cluster in a sea of empty canvas.
+  useEffect(() => {
+    fitView();
+  }, [fitView, nodes.length, width, layoutHeight]);
+
   // ── Shared canvas renderer (inline + modal) ─────────────────────────────
   const renderCanvas = (canvasFill, marker = markerId) => (
     <Box
@@ -394,14 +400,14 @@ export default function EnterpriseGraph({
         <defs>
           <marker
             id={marker}
-            viewBox="0 0 10 10"
-            refX="9"
-            refY="5"
-            markerWidth="7"
-            markerHeight="7"
+            viewBox="0 0 12 12"
+            refX="10"
+            refY="6"
+            markerWidth="11"
+            markerHeight="11"
             orient="auto-start-reverse"
           >
-            <path d="M 0 1 L 9 5 L 0 9 z" fill={theme.palette.text.secondary} />
+            <path d="M 0 1.5 L 11 6 L 0 10.5 z" fill={theme.palette.text.primary} />
           </marker>
         </defs>
 
@@ -421,7 +427,7 @@ export default function EnterpriseGraph({
                   fill={bandColor}
                   opacity={0.05}
                 />
-                <text x={b.x - 12 + 6} y={16} fontSize={9} fill={bandColor} fontWeight={600} letterSpacing={0.4}>
+                <text x={b.x - 12 + 6} y={18} fontSize={11} fill={bandColor} fontWeight={650} letterSpacing={0.4}>
                   {b.name}
                   {b.strategy === 'parallel' ? ' · parallel' : ''}
                 </text>
@@ -435,9 +441,9 @@ export default function EnterpriseGraph({
               key={`e-${e.source}-${e.target}`}
               d={edgePath(e.sourceX, e.sourceY, e.targetX, e.targetY)}
               fill="none"
-              stroke={theme.palette.divider}
-              strokeWidth={1.25}
-              strokeOpacity={0.9}
+              stroke={theme.palette.text.secondary}
+              strokeWidth={2.25}
+              strokeOpacity={0.95}
               markerEnd={`url(#${marker})`}
               pointerEvents="none"
             />

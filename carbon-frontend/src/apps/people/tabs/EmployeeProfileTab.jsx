@@ -19,7 +19,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Accordion, AccordionDetails, AccordionSummary, Box, Button,
+  Accordion, AccordionDetails, AccordionSummary, Alert, Autocomplete, Box, Button,
   Grid, MenuItem, Stack, TextField, Tooltip, Typography,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -44,9 +44,15 @@ import EditNoteIcon from '@mui/icons-material/EditNote';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
+import { useReferenceOptions } from '../../../hooks/useReferenceOptions';
 import { useCompensationAccess } from '../useCompensationAccess';
 import { updateEmployee, fetchCompensationLedger } from '../../../api/people';
-import { daysUntilExpiry, expiryUrgency, formatAmount, formatDate } from '../utils';
+import { daysUntilExpiry, expiryUrgency, formatAmount, formatDate, refCode, refLabel } from '../utils';
+import {
+  orgUnitDepth,
+  orgUnitOptionLabel,
+  prepareOrgUnitsForPicker,
+} from '../../../api/orgUnits';
 
 // ── Event kind config (mirrors EmployeeTimelineTab) ────────────────────
 const EV_CFG = {
@@ -158,11 +164,12 @@ function buildInterventions(emp, certifications, leaveEntitlements) {
 
   const myCerts = certifications.filter((c) => c.employee === id);
   for (const cert of myCerts) {
+    const certName = refLabel(cert.cert_type) || refCode(cert.cert_type) || 'Certification';
     const u = expiryUrgency(cert.expiry_date);
     if (u === 'expired') {
-      list.push({ severity: 'error', message: `${cert.cert_type} expired ${Math.abs(daysUntilExpiry(cert.expiry_date))} days ago`, icon: ErrorOutlineIcon });
+      list.push({ severity: 'error', message: `${certName} expired ${Math.abs(daysUntilExpiry(cert.expiry_date))} days ago`, icon: ErrorOutlineIcon });
     } else if (u === 'critical' || u === 'warning') {
-      list.push({ severity: 'warning', message: `${cert.cert_type} expiring in ${daysUntilExpiry(cert.expiry_date)} days`, icon: WarningAmberIcon });
+      list.push({ severity: 'warning', message: `${certName} expiring in ${daysUntilExpiry(cert.expiry_date)} days`, icon: WarningAmberIcon });
     }
   }
 
@@ -269,6 +276,23 @@ function SectionActions({ editing, onEdit, onSave, onCancel, saving }) {
   );
 }
 
+// ── Governed reference Autocomplete (code stored in draft) ────────────────
+function RefAutocomplete({ label, value, onChange, options }) {
+  const selected = options.find((o) => o.value === value) || null;
+  return (
+    <Autocomplete
+      size="small"
+      fullWidth
+      options={options}
+      value={selected}
+      onChange={(e, v) => onChange(v ? v.value : '')}
+      getOptionLabel={(o) => o.label}
+      isOptionEqualToValue={(a, b) => a.value === b.value}
+      renderInput={(params) => <TextField {...params} label={label} />}
+    />
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────
 export default function EmployeeProfileTab({ entityData, additionalProps }) {
   const { t } = useTranslation('people');
@@ -277,6 +301,12 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
   const { notify } = useNotification();
   const { canViewCompensation } = useCompensationAccess();
   const emp = entityData || {};
+
+  const nationalityRef = useReferenceOptions('nationality');
+  const genderRef = useReferenceOptions('gender');
+  const employmentTypeRef = useReferenceOptions('employment_type');
+  const contractTypeRef = useReferenceOptions('contract_type');
+  const rotationRef = useReferenceOptions('rotation_pattern');
 
   const [expanded, setExpanded] = useState({ identity: true, employment: true });
   const [editing, setEditing] = useState(null); // section key currently in edit mode
@@ -292,11 +322,15 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
   const seedAllDraft = () => {
     const d = {};
     const textFields = [
-      'name_en_given', 'name_en_family', 'name_ar_given', 'name_ar_family', 'gender', 'civil_id',
-      'nationality', 'nationality_code', 'employment_type_code', 'contract_type_code', 'rotation',
-      'position', 'org_unit', 'manager', 'basic_salary',
+      'name_en_given', 'name_en_family', 'name_ar_given', 'name_ar_family', 'civil_id',
+      'position', 'org_unit', 'manager',
     ];
     for (const f of textFields) d[f] = emp[f] ?? '';
+    d.gender = refCode(emp.gender);
+    d.nationality = refCode(emp.nationality);
+    d.employment_type = refCode(emp.employment_type);
+    d.contract_type = refCode(emp.contract_type);
+    d.rotation = refCode(emp.rotation);
     d.date_of_birth = emp.date_of_birth ? String(emp.date_of_birth).slice(0, 10) : '';
     d.join_date = emp.join_date ? String(emp.join_date).slice(0, 10) : '';
     d.kuwaitization = Boolean(emp.kuwaitization);
@@ -317,11 +351,25 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
   );
 
   const positions = Array.isArray(emp.positions) ? emp.positions : [];
+  const orgUnitsForPicker = useMemo(
+    () => prepareOrgUnitsForPicker(emp.allOrgUnits || []),
+    [emp.allOrgUnits],
+  );
+  const orgUnitById = useMemo(() => {
+    const map = new Map();
+    for (const u of orgUnitsForPicker) map.set(u.id, u);
+    return map;
+  }, [orgUnitsForPicker]);
   const positionTitle = positions.find((p) => p.id === emp.position)?.title || null;
   const managerLabel = emp.managerLabel || t('managerUnassigned');
 
-  const identitySummary = [emp.civil_id, emp.nationality_code || emp.nationality].filter(Boolean).join(' · ');
-  const employmentSummary = [emp.employment_type_code, emp.contract_type_code, emp.rotation, positionTitle].filter(Boolean).join(' · ');
+  const identitySummary = [emp.civil_id, refLabel(emp.nationality) || refCode(emp.nationality)].filter(Boolean).join(' · ');
+  const employmentSummary = [
+    refLabel(emp.employment_type) || refCode(emp.employment_type),
+    refLabel(emp.contract_type) || refCode(emp.contract_type),
+    refLabel(emp.rotation) || refCode(emp.rotation),
+    positionTitle,
+  ].filter(Boolean).join(' · ');
   const orgSummary = [emp.orgUnitName, managerLabel].filter(Boolean).join(' · ');
   const compSummary = canViewCompensation
     ? (emp.basic_salary != null ? formatAmount(emp.basic_salary) : '')
@@ -329,15 +377,17 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
 
   const startEdit = (key) => {
     const fieldsBySection = {
-      identity: ['name_en_given', 'name_en_family', 'name_ar_given', 'name_ar_family', 'gender', 'civil_id', 'date_of_birth', 'nationality', 'nationality_code'],
-      employment: ['employment_type_code', 'contract_type_code', 'join_date', 'rotation', 'kuwaitization', 'position'],
+      identity: ['name_en_given', 'name_en_family', 'name_ar_given', 'name_ar_family', 'gender', 'civil_id', 'date_of_birth', 'nationality'],
+      employment: ['employment_type', 'contract_type', 'join_date', 'rotation', 'kuwaitization', 'position'],
       organization: ['org_unit', 'manager'],
-      compensation: ['basic_salary'],
+      // NSR-2B: compensation is ledger-driven — no inline edit of basic_salary.
     };
+    const governed = new Set(['gender', 'nationality', 'employment_type', 'contract_type', 'rotation']);
     const d = {};
     for (const f of fieldsBySection[key] || []) {
       const v = emp[f];
       if ((f === 'date_of_birth' || f === 'join_date') && v) d[f] = String(v).slice(0, 10);
+      else if (governed.has(f)) d[f] = refCode(v);
       else d[f] = v ?? '';
     }
     setDraft(d);
@@ -354,23 +404,32 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
     setDraft((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
+  const setDraftField = (name, value) => setDraft((prev) => ({ ...prev, [name]: value }));
+  const setEditAllField = (name, value) => setEditAllDraft((prev) => ({ ...prev, [name]: value }));
+
   const buildPayloadFrom = (source, key) => {
     const p = {};
+    const putCode = (f) => {
+      const code = String(source[f] ?? '').trim();
+      if (code) p[f] = code;
+    };
     if (key === 'identity') {
-      for (const f of ['name_en_given', 'name_en_family', 'name_ar_given', 'name_ar_family', 'gender', 'civil_id', 'nationality', 'nationality_code']) {
+      for (const f of ['name_en_given', 'name_en_family', 'name_ar_given', 'name_ar_family', 'civil_id']) {
         p[f] = String(source[f] ?? '').trim();
       }
+      putCode('gender');
+      putCode('nationality');
       p.date_of_birth = source.date_of_birth || null;
     } else if (key === 'employment') {
-      for (const f of ['employment_type_code', 'contract_type_code', 'rotation']) p[f] = String(source[f] ?? '').trim();
+      putCode('employment_type');
+      putCode('contract_type');
+      putCode('rotation');
       p.join_date = source.join_date || null;
       p.kuwaitization = Boolean(source.kuwaitization);
       p.position = source.position ? Number(source.position) : null;
     } else if (key === 'organization') {
       p.org_unit = source.org_unit ? Number(source.org_unit) : null;
       p.manager = source.manager ? Number(source.manager) : null;
-    } else if (key === 'compensation') {
-      p.basic_salary = String(source.basic_salary ?? '').trim();
     }
     return p;
   };
@@ -407,7 +466,7 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
       for (const key of ['identity', 'employment', 'organization']) {
         Object.assign(payload, buildPayloadFrom(editAllDraft, key));
       }
-      if (canViewCompensation) Object.assign(payload, buildPayloadFrom(editAllDraft, 'compensation'));
+      // NSR-2B: never PATCH basic_salary from profile — use Pay tab ledger append.
       await updateEmployee(emp.id, payload, token);
       notify({ message: t('profileSaved'), type: 'success' });
       onEditAllChange?.(false);
@@ -458,11 +517,12 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
               <TextField fullWidth size="small" label={t('formNameArFamily')} name="name_ar_family" value={editAllDraft.name_ar_family ?? ''} onChange={handleEditAllChange} />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField fullWidth size="small" select label={t('formGender')} name="gender" value={editAllDraft.gender ?? ''} onChange={handleEditAllChange}>
-                <MenuItem value="">{t('fieldOptional')}</MenuItem>
-                <MenuItem value="male">{t('genderMale')}</MenuItem>
-                <MenuItem value="female">{t('genderFemale')}</MenuItem>
-              </TextField>
+              <RefAutocomplete
+                label={t('formGender')}
+                value={editAllDraft.gender ?? ''}
+                onChange={(v) => setEditAllField('gender', v)}
+                options={genderRef.options}
+              />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth size="small" label={t('formCivilId')} name="civil_id" value={editAllDraft.civil_id ?? ''} onChange={handleEditAllChange} />
@@ -471,26 +531,43 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
               <TextField fullWidth size="small" type="date" slotProps={{ inputLabel: { shrink: true } }} label={t('formDateOfBirth')} name="date_of_birth" value={editAllDraft.date_of_birth ?? ''} onChange={handleEditAllChange} />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField fullWidth size="small" label={t('formNationality')} name="nationality" value={editAllDraft.nationality ?? ''} onChange={handleEditAllChange} />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField fullWidth size="small" label={t('formNationalityCode')} name="nationality_code" value={editAllDraft.nationality_code ?? ''} onChange={handleEditAllChange} />
+              <RefAutocomplete
+                label={t('formNationality')}
+                value={editAllDraft.nationality ?? ''}
+                onChange={(v) => setEditAllField('nationality', v)}
+                options={nationalityRef.options}
+              />
             </Grid>
           </Grid>
 
           <SectionHeading icon={WorkIcon} title={t('sectionEmployment')} />
           <Grid container spacing={1.5}>
             <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField fullWidth size="small" label={t('formEmploymentTypeCode')} name="employment_type_code" value={editAllDraft.employment_type_code ?? ''} onChange={handleEditAllChange} />
+              <RefAutocomplete
+                label={t('formEmploymentType')}
+                value={editAllDraft.employment_type ?? ''}
+                onChange={(v) => setEditAllField('employment_type', v)}
+                options={employmentTypeRef.options}
+              />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField fullWidth size="small" label={t('formContractTypeCode')} name="contract_type_code" value={editAllDraft.contract_type_code ?? ''} onChange={handleEditAllChange} />
+              <RefAutocomplete
+                label={t('formContractType')}
+                value={editAllDraft.contract_type ?? ''}
+                onChange={(v) => setEditAllField('contract_type', v)}
+                options={contractTypeRef.options}
+              />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth size="small" type="date" slotProps={{ inputLabel: { shrink: true } }} label={t('formJoinDate')} name="join_date" value={editAllDraft.join_date ?? ''} onChange={handleEditAllChange} />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField fullWidth size="small" label={t('formRotation')} name="rotation" value={editAllDraft.rotation ?? ''} onChange={handleEditAllChange} />
+              <RefAutocomplete
+                label={t('formRotation')}
+                value={editAllDraft.rotation ?? ''}
+                onChange={(v) => setEditAllField('rotation', v)}
+                options={rotationRef.options}
+              />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth size="small" select label={t('colPosition')} name="position" value={editAllDraft.position ?? ''} onChange={handleEditAllChange}>
@@ -513,8 +590,10 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth size="small" select label={t('formOrgUnit')} name="org_unit" value={editAllDraft.org_unit ?? ''} onChange={handleEditAllChange}>
                 <MenuItem value="">{t('managerUnassigned')}</MenuItem>
-                {(emp.allOrgUnits || []).map((u) => (
-                  <MenuItem key={u.id} value={u.id}>{u.name || u.code || u.id}</MenuItem>
+                {orgUnitsForPicker.map((u) => (
+                  <MenuItem key={u.id} value={u.id}>
+                    {orgUnitOptionLabel(u, { depth: orgUnitDepth(u, orgUnitById) })}
+                  </MenuItem>
                 ))}
               </TextField>
             </Grid>
@@ -531,9 +610,21 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
           {canViewCompensation && (
             <>
               <SectionHeading icon={PaidIcon} title={t('sectionCompensation')} />
+              <Alert severity="info" role="status" sx={{ mb: 1 }}>
+                {t('compPayViaLedger')}
+              </Alert>
               <Grid container spacing={1.5}>
                 <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField fullWidth size="small" type="number" inputProps={{ step: '0.001', min: '0' }} label={t('formBasicSalary')} name="basic_salary" value={editAllDraft.basic_salary ?? ''} onChange={handleEditAllChange} />
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label={t('formBasicSalaryReadonly')}
+                    value={emp.basic_salary != null ? formatAmount(emp.basic_salary) : t('compBasicNone')}
+                    disabled
+                    helperText={t('formBasicSalaryLedgerHint')}
+                    slotProps={{ htmlInput: { 'aria-readonly': true, readOnly: true } }}
+                    data-testid="profile-basic-salary-readonly"
+                  />
                 </Grid>
               </Grid>
             </>
@@ -584,11 +675,12 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
                 <TextField fullWidth size="small" label={t('formNameArFamily')} name="name_ar_family" value={draft.name_ar_family ?? ''} onChange={handleChange} />
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField fullWidth size="small" select label={t('formGender')} name="gender" value={draft.gender ?? ''} onChange={handleChange}>
-                  <MenuItem value="">{t('fieldOptional')}</MenuItem>
-                  <MenuItem value="male">{t('genderMale')}</MenuItem>
-                  <MenuItem value="female">{t('genderFemale')}</MenuItem>
-                </TextField>
+                <RefAutocomplete
+                  label={t('formGender')}
+                  value={draft.gender ?? ''}
+                  onChange={(v) => setDraftField('gender', v)}
+                  options={genderRef.options}
+                />
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField fullWidth size="small" label={t('formCivilId')} name="civil_id" value={draft.civil_id ?? ''} onChange={handleChange} />
@@ -597,10 +689,12 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
                 <TextField fullWidth size="small" type="date" slotProps={{ inputLabel: { shrink: true } }} label={t('formDateOfBirth')} name="date_of_birth" value={draft.date_of_birth ?? ''} onChange={handleChange} />
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField fullWidth size="small" label={t('formNationality')} name="nationality" value={draft.nationality ?? ''} onChange={handleChange} />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField fullWidth size="small" label={t('formNationalityCode')} name="nationality_code" value={draft.nationality_code ?? ''} onChange={handleChange} />
+                <RefAutocomplete
+                  label={t('formNationality')}
+                  value={draft.nationality ?? ''}
+                  onChange={(v) => setDraftField('nationality', v)}
+                  options={nationalityRef.options}
+                />
               </Grid>
             </Grid>
             <SectionActions editing onSave={() => save('identity')} onCancel={cancelEdit} saving={saving} />
@@ -612,11 +706,10 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
               <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formNameEnFamily')} value={emp.name_en_family} /></Grid>
               <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formNameArGiven')} value={emp.name_ar_given} /></Grid>
               <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formNameArFamily')} value={emp.name_ar_family} /></Grid>
-              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formGender')} value={emp.gender} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formGender')} value={refLabel(emp.gender) || refCode(emp.gender)} /></Grid>
               <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formCivilId')} value={emp.civil_id} /></Grid>
               <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formDateOfBirth')} value={formatDate(emp.date_of_birth)} /></Grid>
-              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formNationality')} value={emp.nationality} /></Grid>
-              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formNationalityCode')} value={emp.nationality_code} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formNationality')} value={refLabel(emp.nationality) || refCode(emp.nationality)} /></Grid>
             </Grid>
             <SectionActions onEdit={() => startEdit('identity')} />
           </Box>
@@ -635,16 +728,31 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
           <Stack spacing={1.5}>
             <Grid container spacing={1.5}>
               <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField fullWidth size="small" label={t('formEmploymentTypeCode')} name="employment_type_code" value={draft.employment_type_code ?? ''} onChange={handleChange} />
+                <RefAutocomplete
+                  label={t('formEmploymentType')}
+                  value={draft.employment_type ?? ''}
+                  onChange={(v) => setDraftField('employment_type', v)}
+                  options={employmentTypeRef.options}
+                />
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField fullWidth size="small" label={t('formContractTypeCode')} name="contract_type_code" value={draft.contract_type_code ?? ''} onChange={handleChange} />
+                <RefAutocomplete
+                  label={t('formContractType')}
+                  value={draft.contract_type ?? ''}
+                  onChange={(v) => setDraftField('contract_type', v)}
+                  options={contractTypeRef.options}
+                />
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField fullWidth size="small" type="date" slotProps={{ inputLabel: { shrink: true } }} label={t('formJoinDate')} name="join_date" value={draft.join_date ?? ''} onChange={handleChange} />
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField fullWidth size="small" label={t('formRotation')} name="rotation" value={draft.rotation ?? ''} onChange={handleChange} />
+                <RefAutocomplete
+                  label={t('formRotation')}
+                  value={draft.rotation ?? ''}
+                  onChange={(v) => setDraftField('rotation', v)}
+                  options={rotationRef.options}
+                />
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField fullWidth size="small" select label={t('colPosition')} name="position" value={draft.position ?? ''} onChange={handleChange}>
@@ -667,10 +775,10 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
           <Box>
             <Grid container spacing={1.5}>
               <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('colEmployeeNo')} value={emp.employee_no} /></Grid>
-              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formEmploymentTypeCode')} value={emp.employment_type_code} /></Grid>
-              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formContractTypeCode')} value={emp.contract_type_code} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formEmploymentType')} value={refLabel(emp.employment_type) || refCode(emp.employment_type)} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formContractType')} value={refLabel(emp.contract_type) || refCode(emp.contract_type)} /></Grid>
               <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formJoinDate')} value={formatDate(emp.join_date)} /></Grid>
-              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formRotation')} value={emp.rotation} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formRotation')} value={refLabel(emp.rotation) || refCode(emp.rotation)} /></Grid>
               <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('colPosition')} value={positionTitle} /></Grid>
               <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formKuwaitization')} value={emp.kuwaitization ? t('yes') : t('no')} /></Grid>
             </Grid>
@@ -691,8 +799,10 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
           <Stack spacing={1.5}>
             <TextField fullWidth size="small" select label={t('formOrgUnit')} name="org_unit" value={draft.org_unit ?? ''} onChange={handleChange}>
               <MenuItem value="">{t('managerUnassigned')}</MenuItem>
-              {(emp.allOrgUnits || []).map((u) => (
-                <MenuItem key={u.id} value={u.id}>{u.name || u.code || u.id}</MenuItem>
+              {orgUnitsForPicker.map((u) => (
+                <MenuItem key={u.id} value={u.id}>
+                  {orgUnitOptionLabel(u, { depth: orgUnitDepth(u, orgUnitById) })}
+                </MenuItem>
               ))}
             </TextField>
             <TextField fullWidth size="small" select label={t('formManager')} name="manager" value={draft.manager ?? ''} onChange={handleChange}>
@@ -714,7 +824,7 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
         )}
       </Section>
 
-      {/* ── Compensation (Tier-2) ── */}
+      {/* ── Compensation (Tier-2, read-only — ledger SoT via Pay tab) ── */}
       <Section
         title={t('sectionCompensation')}
         icon={PaidIcon}
@@ -722,25 +832,22 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
         expanded={Boolean(expanded.compensation)}
         onToggle={() => toggle('compensation')}
       >
-        {editing === 'compensation' ? (
-          <Stack spacing={1.5}>
+        {canViewCompensation ? (
+          <Stack spacing={1.5} data-testid="profile-compensation-readonly">
+            <Alert severity="info" role="status">
+              {t('compPayViaLedger')}
+            </Alert>
             <TextField
               fullWidth
               size="small"
-              type="number"
-              inputProps={{ step: '0.001', min: '0' }}
-              label={t('formBasicSalary')}
-              name="basic_salary"
-              value={draft.basic_salary ?? ''}
-              onChange={handleChange}
+              label={t('formBasicSalaryReadonly')}
+              value={emp.basic_salary != null ? formatAmount(emp.basic_salary) : t('compBasicNone')}
+              disabled
+              helperText={t('formBasicSalaryLedgerHint')}
+              slotProps={{ htmlInput: { 'aria-readonly': true, readOnly: true } }}
+              data-testid="profile-basic-salary-readonly"
             />
-            <SectionActions editing onSave={() => save('compensation')} onCancel={cancelEdit} saving={saving} />
           </Stack>
-        ) : canViewCompensation ? (
-          <Box>
-            <ReadField label={t('formBasicSalary')} value={emp.basic_salary != null ? formatAmount(emp.basic_salary) : '—'} />
-            <SectionActions onEdit={() => startEdit('compensation')} />
-          </Box>
         ) : (
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
             <Box>

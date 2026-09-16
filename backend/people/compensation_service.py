@@ -54,6 +54,22 @@ class CompensationService:
         )
 
     @staticmethod
+    def verified_basic_amount(employee, as_of=None) -> Decimal | None:
+        """Return amount from current monthly earning line with component.code=='basic'
+        that is_verified=True. None if missing."""
+        line = (
+            CompensationService.current_lines(employee, as_of=as_of)
+            .filter(
+                component__code='basic',
+                frequency='monthly',
+                is_verified=True,
+            )
+            .order_by('-effective_start', '-pk')
+            .first()
+        )
+        return line.amount if line is not None else None
+
+    @staticmethod
     def ledger_totals(employee, as_of=None):
         """DB-computed monthly earnings/deductions for ``employee`` (Decimal-exact).
 

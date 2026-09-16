@@ -545,6 +545,71 @@ def test_discovery_complete_transitions_to_pending_approval(
     assert RunStep.objects.filter(run_id=run.id).count() == 1
 
 
+@pytest.mark.django_db
+def test_finalize_discovery_builds_plan_without_more_questions(
+    user, patch_engine_seams, run_ids_cleanup, monkeypatch
+):
+    """Plan now — skip clarifying and land pending_approval with ≥1 step."""
+    _FakePlanner.default_plan_spec = {
+        "pattern": "root_cause",
+        "source": "llm_decompose",
+        "steps": [
+            {
+                "step_id": 0,
+                "intent": "List leave balances",
+                "tool_name": None,
+                "tool_args": {},
+                "depends_on": [],
+            },
+            {
+                "step_id": 1,
+                "intent": "Summarize results",
+                "tool_name": None,
+                "tool_args": {},
+                "depends_on": [0],
+            },
+        ],
+        "synthesis_instruction": "Summarize.",
+    }
+    monkeypatch.setattr(
+        "ai.engine.llm.router.route_chat",
+        AsyncMock(
+            return_value={
+                "content": '{"action": "ask", "question": "Which org unit?"}',
+                "tool_calls": None,
+                "finish_reason": "stop",
+                "model": "test",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cost_usd": 0.0,
+            }
+        ),
+    )
+    service = PlansService()
+    started = service.start_discovery(
+        user, brief="List leave balances for 3 employees in org unit 8"
+    )
+    run_ids_cleanup.append(started["id"])
+    assert started["run_status"] == "discovering"
+
+    # Serialize while discovering exposes discovery_turns for UI resume.
+    detail = service.get_plan(user, started["id"])
+    assert detail["status"] == "discovering"
+    assert detail["discovery_turns"]
+    assert detail["discovery_turns"][0]["question"] == "Which org unit?"
+
+    result = service.finalize_discovery(user, started["id"])
+    assert result["status"] == "plan_ready"
+    assert result["run_status"] == "pending_approval"
+    assert result["plan"]["status"] == "pending_approval"
+    assert len(result["plan"]["steps"]) >= 1
+    assert result["plan"].get("discovery_turns") is None  # not discovering
+
+    run = Run.objects.get(id=started["id"])
+    assert run.status == "pending_approval"
+    assert RunStep.objects.filter(run_id=run.id).count() >= 1
+
+
 # ── Owner scoping (CBAC) ─────────────────────────────────────────────────
 
 
@@ -559,6 +624,45 @@ def test_list_plans_is_owner_scoped(user, other_user, patch_engine_seams, run_id
 
     assert result["count"] == 1
     assert result["plans"][0]["id"] == mine.id
+
+
+@pytest.mark.django_db
+def test_list_plans_reconciles_status_when_all_steps_finished(
+    user, run_ids_cleanup,
+):
+    """When every step is terminal, list/get rewrite plan status from steps.
+
+    Stuck ``running`` → ``completed`` if all finished; lagged ``failed`` →
+    ``completed`` after retries leave every step successful; mixed outcomes
+    stay ``failed``.
+    """
+    stuck = _make_plan(user, brief="All green but status stuck", status="running")
+    failed_then_ok = _make_plan(
+        user, brief="Failed then all finished", status="failed",
+    )
+    mixed = _make_plan(user, brief="One step failed", status="running")
+    run_ids_cleanup.extend([stuck.id, failed_then_ok.id, mixed.id])
+
+    _make_step(stuck, 0, status="completed")
+    _make_step(stuck, 1, status="completed")
+    _make_step(failed_then_ok, 0, status="completed")
+    _make_step(failed_then_ok, 1, status="skipped")
+    _make_step(mixed, 0, status="completed")
+    _make_step(mixed, 1, status="failed")
+
+    result = PlansService().list_plans(user)
+    by_id = {p["id"]: p for p in result["plans"]}
+
+    assert by_id[stuck.id]["status"] == "completed"
+    assert by_id[failed_then_ok.id]["status"] == "completed"
+    assert by_id[mixed.id]["status"] == "failed"
+
+    stuck.refresh_from_db()
+    failed_then_ok.refresh_from_db()
+    mixed.refresh_from_db()
+    assert stuck.status == "completed"
+    assert failed_then_ok.status == "completed"
+    assert mixed.status == "failed"
 
 
 @pytest.mark.django_db

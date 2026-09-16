@@ -1,6 +1,6 @@
 # ADR-0033 — Pulse Identity Propagation (actor-chain attribution)
 
-- **Status:** Proposed (Master to ratify)
+- **Status:** Accepted (ratified Pulse Master 2026-09-16)
 - **Date:** 2026-09-16
 - **Deciders:** Backend Worker (draft); Master Architect (ratify)
 - **Area:** security | backend | cross-cutting

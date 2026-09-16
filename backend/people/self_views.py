@@ -68,9 +68,9 @@ def _linked_actionable_corr(record) -> bool:
 def _linked_approved_corr(record) -> bool:
     """True if this leave record has a workflow correspondence that was approved.
 
-    Leave records submitted through the correspondence engine keep a ``draft``
-    LeaveRecord status by design — the linked Correspondence holds the lifecycle
-    status. An approved leave is therefore detected via its Correspondence.
+    NSR-1B mirrors terminal correspondence onto ``LeaveRecord.status``; this
+    Correspondence lookup remains as a fallback for any pre-sync rows that
+    still show ``draft`` while their correspondence is already ``approved``.
     """
     return Correspondence.objects.filter(
         subject_type=SUBJECT_TYPE,
@@ -83,8 +83,8 @@ def _record_blocks_overlap(record) -> bool:
     """Whether an existing leave record should block a new request."""
     if record.status in ('approved', 'submitted'):
         return True
-    # Draft records submitted through the correspondence engine keep a 'draft'
-    # LeaveRecord status but their correspondence is actionable.
+    # In-flight draft records whose correspondence is still actionable block
+    # overlapping requests until the workflow resolves.
     return _linked_actionable_corr(record)
 
 
@@ -310,9 +310,24 @@ class LoanSelfCollectionView(APIView):
         data = request.data or {}
 
         loan_type = data.get('loan_type')
-        if not isinstance(loan_type, str) or not loan_type.strip():
+        if loan_type is None or (isinstance(loan_type, str) and not loan_type.strip()):
             return Response(
                 {'detail': 'loan_type is required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            from mdm.governed import resolve_reference_value
+            loan_type_rv = resolve_reference_value(
+                'loan_type',
+                loan_type.strip() if isinstance(loan_type, str) else loan_type,
+                require_current=False,
+            )
+        except Exception:
+            loan_type_rv = None
+        if loan_type_rv is None:
+            return Response(
+                {'detail': f'Unknown loan_type {loan_type!r}'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -369,7 +384,7 @@ class LoanSelfCollectionView(APIView):
             with transaction.atomic():
                 loan = Loan.objects.create(
                     employee=profile,
-                    loan_type=loan_type.strip(),
+                    loan_type=loan_type_rv,
                     principal=principal,
                     interest_rate=interest_rate,
                     term_months=term_months,
@@ -383,9 +398,9 @@ class LoanSelfCollectionView(APIView):
                     subject_id=loan.pk,
                     org_unit=profile.org_unit,
                     requester=request.user,
-                    title=f'Loan request {loan_type} {principal}',
+                    title=f'Loan request {loan_type_rv.code} {principal}',
                     payload={
-                        'loan_type': loan_type,
+                        'loan_type': loan_type_rv.code,
                         'principal': str(principal),
                         'interest_rate': str(interest_rate),
                         'term_months': term_months,

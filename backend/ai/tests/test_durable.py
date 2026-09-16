@@ -325,9 +325,10 @@ def test_resume_from_approved_preflights(user, run_ids_cleanup):
 
 @pytest.mark.django_db
 def test_resume_rejects_non_resumable_statuses(user, run_ids_cleanup):
+    # ``failed`` is intentionally resumable (see _RESUMABLE_STATUSES +
+    # test_resume_requeues_failed_keeps_consent_step) — not listed here.
     service = DurableExecutionService()
-    for status in ("pending_approval", "completed", "failed", "cancelled",
-                   "replaying"):
+    for status in ("pending_approval", "completed", "cancelled", "replaying"):
         plan = _make_plan(user, status=status)
         run_ids_cleanup.append(plan.id)
         with pytest.raises(PlanNotRunnableError):
@@ -411,7 +412,8 @@ def test_replay_preserves_step_order_and_depends_on(user, run_ids_cleanup):
     assert result["replay"]["re_run_steps"] == [0, 1]
 
     steps = {
-        s.step_index: s for s in RunStep.objects.filter(run_id=plan.id)
+        s.step_index: s
+        for s in RunStep.objects.filter(run_id=plan.id).order_by("step_index")
     }
     assert list(steps.keys()) == [0, 1]  # step_index order preserved
     assert steps[1].depends_on_json == [0]  # depends_on preserved

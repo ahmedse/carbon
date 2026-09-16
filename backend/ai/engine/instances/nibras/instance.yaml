@@ -137,8 +137,10 @@ api_catalog:
       Long tails (>15 buckets) are collapsed into "Other".
       suggested_chart_type is "pie" for balanced distributions, "bar" when one
       bucket dominates (>70%) — ALWAYS use this hint, never default to pie.
-      USE THIS (not list_employees) for ANY distribution, breakdown, count-by,
-      or "how many employees are X" question.
+      USE THIS for ANY distribution / breakdown / count-by-dimension question.
+      For TOTAL headcount or Kuwaiti count (canonical named metrics), prefer the
+      standalone aggregate_entity TOOL (metric=headcount|kuwaiti) so the filter
+      definition is fixed and cited — do not invent alternate filters.
     requires_auth: true
     requires_confirmation: false
 
@@ -155,7 +157,8 @@ api_catalog:
       "من هو X" — call the standalone resolve_entity TOOL (a function tool,
       NOT one of these REST endpoints), which scans the COMPLETE population
       and returns a matched record plus near-miss "Did you mean" suggestions.
-      For counts and breakdowns use analyze_employees.
+      For named totals (headcount, Kuwaiti count) use aggregate_entity.
+      For dimension breakdowns use analyze_employees.
     requires_auth: true
     requires_confirmation: false
 
@@ -422,8 +425,10 @@ excluded_tools:
   - create_dq_rule
   - run_ops_workflow
 
-# Slug resolution: lets the LLM find an employee by name rather than numeric id.
-# Note: superseded by ECF entity descriptors (ADR-0032) when ECF_ENABLED=True.
+# Slug resolution: legacy name→id path for get_employee / list_employees.
+# SUPERSEDED (ECF-7 cutover 2026-09-16): ECF resolve_entity is the primary
+# lookup when ECF_ENABLED=True (ADR-0032). Keep this block as fallback for
+# 30 days — do NOT delete until the fallback window closes.
 tools:
   slug_resolution:
     - detail_endpoint: get_employee
@@ -455,6 +460,22 @@ entities:
       headcount: {filter: {is_active: true},      description: "Total active employees"}
       kuwaiti:   {filter: {nationality_code: "KW"}, description: "Employees with nationality_code=KW (not the kuwaitization boolean)"}
     scope_lookup: org_unit_id__in
+
+  # Entity #2 — ECF-8 generalize proof: descriptor only, zero new algorithm code.
+  - name: leave_record
+    model: people.models.LeaveRecord
+    identifiers: [id]
+    search_fields:
+      - {field: status,     lang: any, weight: 1.0}
+      - {field: start_date, lang: any, weight: 1.5}
+      - {field: end_date,   lang: any, weight: 1.2}
+    label_map:
+      employee:   {model: people.models.Employee,        field: full_name}
+      leave_type: {model: mdm.models.ReferenceValue,     field: label}
+    metrics:
+      open_leave_count:     {filter: {status: "submitted"}, description: "Leave records awaiting decision (status=submitted)"}
+      approved_leave_count: {filter: {status: "approved"},  description: "Approved leave records"}
+    scope_lookup: employee__org_unit_id__in
 
 # Pre-LLM topic guard: patterns matched against the user's message text.
 # Any match returns a canned refusal WITHOUT calling the LLM.  This is

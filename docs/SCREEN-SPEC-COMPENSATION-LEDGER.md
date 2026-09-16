@@ -32,7 +32,14 @@ for what an employee is paid.
   the user submits, then they see an inline error and the form is NOT cleared (input preserved).
 - **Permission:** Given a user with `people:view_compensation` but NOT `people:manage`, then the
   "Add Component" / "Add First Component" buttons are NOT rendered.
-
+- **Ledger SoT (payroll honesty — NSR-2B):** Given payroll compute runs, when an employee lacks a
+  verified monthly `basic` ledger line, then compute fails closed and the Payroll Runs page
+  surfaces the API error in a SystemDialog (not a silent snackbar-only failure). Profile / wizard
+  MUST NOT present an editable `basic_salary` as if it drives payroll — they show read-only
+  reflected basic (or guidance) and direct writers to the Pay tab ledger append.
+- **Reflected basic (Pay tab):** Given a ledger response with `basic_salary`, when the Pay tab
+  loads, then the user sees a disabled/read-only reflected-basic field plus copy that payroll
+  reads verified ledger lines only.
 ---
 
 ## Artifact 2 — Journey Map
@@ -69,6 +76,7 @@ client-side guess; (3) the form must not wipe input on error.
 ```
 EmployeePayTab  (rendered inside the existing employee detail tab shell)
 ├─ Ledger header          → Typography (title + "as of <date>") + ONE Button "Add Component" [manage only]
+├─ Reflected basic        → TextField disabled (ledger.basic_salary) + helper: payroll = verified ledger
 ├─ Earnings LedgerSection → Paper + Table (component, amount, frequency, period, verified badge)
 ├─ Deductions LedgerSection → Paper + Table (same shape)
 ├─ Net Monthly bar        → Paper (Gross · Deductions · Net Monthly, tabular-nums)
@@ -110,7 +118,7 @@ EmployeePayTab  (rendered inside the existing employee detail tab shell)
 |-------|-------|
 | `default/hover/active/focus/focus-visible` | Buttons, selects, accordion summary |
 | `disabled` | "Add Component" hidden for non-manage; form buttons disabled while submitting |
-| `readonly` | Ledger table cells |
+| `readonly` | Ledger table cells; **reflected basic** TextField (disabled — never editable) |
 | `loading` | Component Select while `fetchCompensationComponents` resolves |
 | `submitting` | Dialog submit button disabled + progress; ledger enters `stale` |
 | `optimistic` | *(not required here — append is confirmed by server, not optimistic)* |
@@ -180,7 +188,8 @@ created_by_name`.
       "Compensation Ledger", "Earnings", "Deductions", "Gross Monthly"/"Total Deductions"/
       "Net Monthly", "History", "No historical lines.", "No active compensation lines.",
       "Add Component"/"Add First Component"/"Cancel"/"Add", "Component"/"Amount"/"Currency"/
-      "Frequency"/"Monthly"/"Annual"/"Effective Start"/"Reason / Note", protected-data notice.
+      "Frequency"/"Monthly"/"Annual"/"Effective Start"/"Reason / Note", protected-data notice,
+      NSR-2B: reflected basic / Pay-via-ledger / payroll ledger-missing dialog strings.
 - [x] `node scripts/check-i18n-keys.js` → 0 missing keys (no silent `fallbackLng` to en in ar).
 - [x] Directional icons mirrored in RTL (via `LanguageProvider`); `dir`/`lang` never hardcoded.
 - [x] `dir="ltr"` on amount/code/ID cells.
@@ -195,5 +204,7 @@ created_by_name`.
 - `EARNING_TYPES`/`DEDUCTION_TYPES`/`isEarning` classifier (use `component_direction`).
 - Dead `revealEmployeeCompensation` left in `src/api/people.js`.
 - Hardcoded English strings not `t()`-wrapped.
+- Editable `basic_salary` on Profile / Wizard presented as if it drives payroll (NSR-2B).
 
-*Source: `docs/SCREEN-SPEC-COMPENSATION-LEDGER.md` — authored by Master Architect under RULE_29.*
+*Source: `docs/SCREEN-SPEC-COMPENSATION-LEDGER.md` — authored by Master Architect under RULE_29;
+extended NSR-2B (ledger SoT / payroll honesty) 2026-09-16.*

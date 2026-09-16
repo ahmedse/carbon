@@ -4,11 +4,36 @@
 > My (employee self-service), and Team (manager approvals) apps, plus the
 > GOFSCO HRMS compliance verification matrix.
 >
-> **Last updated:** 2026-09-08
+> **Last updated:** 2026-09-16 (NSR-9 gate)
 >
 > **How to use:** Work top-to-bottom. Each case has a **Goal**, **Preconditions**,
 > numbered **Steps**, **Expected** result, and an explicit **PASS** criterion.
 > Mark ✅ / ❌ and log any deviation.
+
+---
+
+## NSR-9 gate results (2026-09-16)
+
+**Evidence pack:** [`docs/nibras/evidence/NSR-9-go-live-gate.md`](nibras/evidence/NSR-9-go-live-gate.md) · [`TASK-RESULTS.md`](../TASK-RESULTS.md) § NSR-9
+
+**Go-live recommendation: READY** (Playwright UI leave journey PARTIAL/BLOCKED on host — API leave journey green).
+
+| ID | Journey | Result | Notes / artifacts |
+|----|---------|--------|-------------------|
+| B2/B3 | My Leave balance + request (Vitest smoke) | **PASS** | `src/__tests__/MyLeave.test.jsx` |
+| C1 | Team Approvals Inbox (Vitest smoke) | **PASS** | `src/__tests__/TeamInbox.test.jsx` |
+| D / C2 | Leave request → manager approve (API) | **PASS** | `people/tests/test_leave_journey_e2e.py` (5) |
+| D | Leave request → manager approve (Playwright UI) | **PARTIAL** | Spec: `carbon-frontend/e2e/journeys/nibras-leave-approve.spec.ts`. Host: Chromium ran; login failed (`emp_1001`, FE/BE down). Sandbox: missing browser / historically `libnspr4.so`. |
+| A1/A8 | Hire onboard → entitlements | **PASS** | `test_employee_onboard.py` (7) |
+| A11/A16 | Payroll compute fails without verified ledger; succeeds with ledger | **PASS** | `test_compute_fails_without_verified_ledger`, `test_happy_path_draft_compute_validate_commit` |
+| A13/A15 | Attendance / Rotation UI | **N/A** | Path H — hidden from go-live nav (NSR-6A) |
+| — | `people/tests/` full suite | **PASS** | 228 passed |
+| — | Frontend production build | **PASS** | `npm run build` |
+| — | Staff Vitest pack | **PASS** | 6 files / 33 tests |
+
+**P0 residuals (product):** none.
+
+**Operational residual:** Re-run Playwright on a seeded nibras stack (`GOFSCO-ONBOARDING-RUNBOOK.md` + manager links) when FE `:5179` and BE `:8009` are up.
 
 ---
 
@@ -20,7 +45,7 @@
 | API prefix | `/carbon-api/` |
 | Frontend URL | `http://localhost:5179` |
 | Admin login (People admin) | `ahmed` / `AdminPa_132` |
-| Employee self-service (test users) | seeded GOFSCO employees `GF-001` … `GF-005` (see `seed_gofsco.py`) |
+| Employee self-service (test users) | After `import_gofsco_employees` + `link_employee_users`: users `emp_<employee_no>` (see `docs/nibras/GOFSCO-ONBOARDING-RUNBOOK.md`). `seed_gofsco` is **deprecated** — do not use GF-00X demo staff. |
 | Database | PostgreSQL `nibras_dev` (brand `nibras`) |
 
 **Login path:** frontend → sign in → JWT issued at `POST /carbon-api/token/`.
@@ -285,14 +310,27 @@
 | 7 | HR Reporting | **Not built** (dashboard/report module) | N/A — tracked as roadmap gap |
 | 8 | HR Modules (full module registry) | **Not built** (module catalog) | N/A — tracked as roadmap gap |
 
-> **Seed data:** `manage.py seed_gofsco` seeds employees/benefits/certs/loans;
-> `manage.py seed_gofsco_rules` seeds authoritative compliance rules + leave
-> policies + benefit types. Run both before starting the checklist.
+> **Seed data:** Follow `docs/nibras/GOFSCO-ONBOARDING-RUNBOOK.md`.
+> `manage.py seed_gofsco` is **deprecated** (refuses fabricated demo employees).
+> Use `seed_gofsco_org` → `seed_correspondence` → `seed_gofsco_rules` →
+> `import_gofsco_employees` → `propagate_leave_policies` → `link_employee_users`.
+> Set managers before Team approvals. Do not run production payroll on estimated salaries (NSR-2A).
 
 ---
 
 ## Sign-off
 
+### NSR-9 automated gate (2026-09-16)
+- [x] Part A (People) — hire / ledger / payroll compute evidenced by pytest (**PASS**); Attendance/Rotation **N/A** (Path H)
+- [x] Part B (My) — MyLeave Vitest smoke + leave API journey (**PASS**); Playwright UI **PARTIAL**
+- [x] Part C (Team) — TeamInbox Vitest smoke + manager approve API (**PASS**); Playwright UI **PARTIAL**
+- [x] Part D (cross-app) — API leave→approve→balance (**PASS**); UI Playwright **PARTIAL**
+- [x] GOFSCO matrix — issues 1–6 covered by prior waves + this gate pytest; 7–8 N/A roadmap
+
+**Tester:** qa-validator (NSR-9)  **Date:** 2026-09-16  
+**Recommendation:** **READY** — see NSR-9 gate results section above.
+
+### Manual sign-off (optional hand test)
 - [ ] Part A (People) — all PASS
 - [ ] Part B (My) — all PASS
 - [ ] Part C (Team) — all PASS

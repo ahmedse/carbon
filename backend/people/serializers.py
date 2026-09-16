@@ -6,12 +6,14 @@
 # read-only because status transitions live in ``services.py``.
 # ``PayslipLineSerializer`` exposes the lineage fields (``rule_id``,
 # ``rule_version``, ``inputs``) per NIBRAS-MASTER-STRATEGY.md §6.3.
-
-from django.utils import timezone
+#
+# Bucket-1 governed lookups use ``mdm.serializers.GovernedValueField``
+# (ADR-0027 / NSR-7B): read ``{id, code, label, set}``; write id or code.
 
 from rest_framework import serializers
 
 from mdm.models import ReferenceValue
+from mdm.serializers import GovernedValueField
 
 from .civil_id import validate as _validate_civil_id
 
@@ -42,6 +44,9 @@ from .models import (
 
 
 class ComplianceRuleSerializer(serializers.ModelSerializer):
+    category = GovernedValueField(set_name='compliance_category', allow_null=False)
+    jurisdiction = GovernedValueField(set_name='jurisdiction', allow_null=False)
+
     class Meta:
         model = ComplianceRule
         fields = [
@@ -51,32 +56,6 @@ class ComplianceRuleSerializer(serializers.ModelSerializer):
             'provenance', 'test_cases', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
-
-
-def _validate_reference_code(value, set_name):
-    """Validate a governed-enum code against ReferenceSet ``set_name`` current values.
-
-    Lenient by design:
-    - empty/blank -> valid (optional field)
-    - ReferenceSet named ``set_name`` does not exist yet -> skip (reference data
-      is seeded by admins, not by this code; RULE_16 no fabrication)
-    - code not in current values -> ValidationError
-    """
-    if not value:
-        return value
-    from mdm.models import ReferenceSet
-    rs = ReferenceSet.objects.filter(name__iexact=set_name).first()
-    if rs is None:
-        return value
-    current_codes = set(
-        rs.get_current_values(as_of=timezone.localdate())
-        .values_list('code', flat=True)
-    )
-    if value not in current_codes:
-        raise serializers.ValidationError(
-            f"{value!r} is not a current value of reference set {set_name!r}"
-        )
-    return value
 
 
 class EmployeeSerializer(serializers.ModelSerializer):
@@ -90,6 +69,17 @@ class EmployeeSerializer(serializers.ModelSerializer):
     # never mutates the account through the employee payload.
     user_id = serializers.IntegerField(read_only=True, default=None)
     username = serializers.CharField(source='user.username', read_only=True, default=None)
+    # NSR-4A: optional opening monthly basic for the compensation ledger.
+    # Write-only — never echoed; not an Employee model field. When provided,
+    # hire hooks append an *unverified* ledger line (verify before payroll).
+    opening_basic = serializers.DecimalField(
+        max_digits=14, decimal_places=3, required=False, allow_null=True, write_only=True,
+    )
+    nationality = GovernedValueField(set_name='nationality', required=False)
+    employment_type = GovernedValueField(set_name='employment_type', required=False)
+    contract_type = GovernedValueField(set_name='contract_type', required=False)
+    gender = GovernedValueField(set_name='gender', required=False)
+    rotation = GovernedValueField(set_name='rotation_pattern', required=False)
 
     class Meta:
         model = Employee
@@ -97,26 +87,20 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'id', 'org_unit', 'employee_no', 'full_name', 'nationality',
             'basic_salary', 'join_date', 'rotation', 'is_active', 'photo',
             'name_en_given', 'name_en_family', 'name_ar_given', 'name_ar_family',
-            'civil_id', 'date_of_birth', 'gender', 'nationality_code',
-            'employment_type_code', 'contract_type_code', 'kuwaitization',
-            'manager', 'position', 'user_id', 'username', 'created_at', 'updated_at',
+            'civil_id', 'date_of_birth', 'gender',
+            'employment_type', 'contract_type', 'kuwaitization',
+            'manager', 'position', 'user_id', 'username', 'opening_basic',
+            'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'user_id', 'username', 'created_at', 'updated_at']
 
-    def validate_nationality_code(self, value):
-        return _validate_reference_code(value, 'nationality')
+    def create(self, validated_data):
+        validated_data.pop('opening_basic', None)
+        return super().create(validated_data)
 
-    def validate_employment_type_code(self, value):
-        return _validate_reference_code(value, 'employment_type')
-
-    def validate_contract_type_code(self, value):
-        return _validate_reference_code(value, 'contract_type')
-
-    def validate_gender(self, value):
-        return _validate_reference_code(value, 'gender')
-
-    def validate_rotation(self, value):
-        return _validate_reference_code(value, 'rotation_pattern')
+    def update(self, instance, validated_data):
+        validated_data.pop('opening_basic', None)
+        return super().update(instance, validated_data)
 
     def validate_civil_id(self, value):
         """Enforce 12-digit Civil ID format (error); check-digit only when
@@ -207,6 +191,8 @@ class EmployeeCompensationSerializer(serializers.ModelSerializer):
 
 
 class PayslipLineSerializer(serializers.ModelSerializer):
+    line_type = GovernedValueField(set_name='payslip_line_type', allow_null=False)
+
     class Meta:
         model = PayslipLine
         fields = [
@@ -217,16 +203,16 @@ class PayslipLineSerializer(serializers.ModelSerializer):
 
 
 class PositionSerializer(serializers.ModelSerializer):
+    grade = GovernedValueField(set_name='grade', required=False)
+    job_family = GovernedValueField(set_name='job_family', required=False)
+
     class Meta:
         model = Position
         fields = [
             'id', 'org_unit', 'code', 'title', 'grade', 'reports_to',
-            'is_management', 'status', 'fte', 'job_family_code',
+            'is_management', 'status', 'fte', 'job_family',
         ]
         read_only_fields = ['id']
-
-    def validate_job_family_code(self, value):
-        return _validate_reference_code(value, 'job_family')
 
 
 class LeaveEntitlementSerializer(serializers.ModelSerializer):
@@ -337,6 +323,8 @@ class LeaveRecordSerializer(serializers.ModelSerializer):
 
 
 class BenefitTypeSerializer(serializers.ModelSerializer):
+    category = GovernedValueField(set_name='benefit_category', required=False)
+
     class Meta:
         model = BenefitType
         fields = [
@@ -361,6 +349,8 @@ class EmployeeBenefitSerializer(serializers.ModelSerializer):
 
 
 class LoanSerializer(serializers.ModelSerializer):
+    loan_type = GovernedValueField(set_name='loan_type', allow_null=False)
+
     class Meta:
         model = Loan
         fields = [
@@ -391,6 +381,8 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
 
 
 class AttendancePermissionSerializer(serializers.ModelSerializer):
+    permission_type = GovernedValueField(set_name='permission_type', allow_null=False)
+
     class Meta:
         model = AttendancePermission
         fields = [
@@ -401,6 +393,8 @@ class AttendancePermissionSerializer(serializers.ModelSerializer):
 
 
 class CertificationSerializer(serializers.ModelSerializer):
+    cert_type = GovernedValueField(set_name='cert_type', allow_null=False)
+
     class Meta:
         model = Certification
         fields = [
@@ -411,6 +405,8 @@ class CertificationSerializer(serializers.ModelSerializer):
 
 
 class RotationScheduleSerializer(serializers.ModelSerializer):
+    pattern = GovernedValueField(set_name='rotation_pattern', allow_null=False)
+
     class Meta:
         model = RotationSchedule
         fields = [

@@ -29,7 +29,6 @@ import RuleIcon from '@mui/icons-material/Rule';
 import Diversity3Icon from '@mui/icons-material/Diversity3';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
-import AutorenewIcon from '@mui/icons-material/Autorenew';
 import BadgeIcon from '@mui/icons-material/Badge';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import GroupsIcon from '@mui/icons-material/Groups';
@@ -419,11 +418,8 @@ const ROUTE_CONFIG = {
     icon: AccountTreeIcon,
     parent: '/people',
   },
-  '/people/attendance': {
-    label: 'Attendance',
-    icon: AssignmentIcon,
-    parent: '/people',
-  },
+  // NSR-6A Path H: /people/attendance + /people/rotation omitted from
+  // breadcrumb trail (routes kept for deep-link; not go-live nav).
   '/people/leave': {
     label: 'Leave',
     icon: EventAvailableIcon,
@@ -439,11 +435,6 @@ const ROUTE_CONFIG = {
     icon: ReceiptLongIcon,
     parent: '/people',
   },
-  '/people/benefits': {
-    label: 'Benefits',
-    icon: VerifiedUserIcon,
-    parent: '/people',
-  },
   '/people/loans': {
     label: 'Loans',
     icon: AccountBalanceWalletIcon,
@@ -452,11 +443,6 @@ const ROUTE_CONFIG = {
   '/people/certifications': {
     label: 'Certifications',
     icon: BadgeIcon,
-    parent: '/people',
-  },
-  '/people/rotation': {
-    label: 'Rotation Schedules',
-    icon: AutorenewIcon,
     parent: '/people',
   },
   '/people/config': {
@@ -473,6 +459,40 @@ const ROUTE_CONFIG = {
     label: 'Policy Detail',
     icon: PolicyIcon,
     parent: '/people/policies',
+  },
+
+  // My (employee self-service) — NSR-5C breadcrumb honesty
+  '/my': {
+    label: 'My',
+    icon: DashboardIcon,
+    parent: null,
+  },
+  '/my/leave': {
+    label: 'My Leave',
+    icon: EventAvailableIcon,
+    parent: '/my',
+  },
+  '/my/requests': {
+    label: 'My Requests',
+    icon: AssignmentIcon,
+    parent: '/my',
+  },
+  '/my/requests/:id': {
+    label: 'Request Detail',
+    icon: AssignmentIcon,
+    parent: '/my/requests',
+  },
+
+  // Team (manager approvals) — NSR-5C breadcrumb honesty
+  '/team': {
+    label: 'Team',
+    icon: GroupsIcon,
+    parent: null,
+  },
+  '/team/:id': {
+    label: 'Request Detail',
+    icon: AssignmentIcon,
+    parent: '/team',
   },
 };
 

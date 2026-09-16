@@ -5,6 +5,7 @@
 // copy only (RULE_23) — no engine class names, no transport details.
 
 export const PLAN_STATUS = {
+  discovering: { label: 'Clarifying…', color: 'info' },
   pending_approval: { label: 'Needs review', color: 'warning' },
   approved: { label: 'Approved', color: 'primary' },
   running: { label: 'Running…', color: 'primary' },
@@ -13,6 +14,34 @@ export const PLAN_STATUS = {
   failed: { label: 'Failed', color: 'error' },
   cancelled: { label: 'Cancelled', color: 'default' },
 };
+
+/** Resolve plan status chip meta; unknown statuses fall back to raw label. */
+export function planStatusMeta(status) {
+  return PLAN_STATUS[status] || { label: status || 'Unknown', color: 'default' };
+}
+
+const STEP_TERMINAL = new Set(['completed', 'failed', 'skipped']);
+const PLAN_STATUS_LOCKED = new Set(['discovering', 'pending_approval', 'cancelled']);
+
+/**
+ * Derive display/plan status from step outcomes when every step is terminal.
+ * Keeps discovering / pending_approval / cancelled untouched. If any step
+ * failed → failed; otherwise all finished → completed. Used by the picker and
+ * run chrome so list rows stay honest even when a run row lagged.
+ * @param {object|null|undefined} plan
+ * @returns {string}
+ */
+export function effectivePlanStatus(plan) {
+  if (!plan) return '';
+  const status = plan.status || '';
+  if (PLAN_STATUS_LOCKED.has(status)) return status;
+  const steps = Array.isArray(plan.steps) ? plan.steps : [];
+  if (!steps.length) return status;
+  if (steps.some((s) => s.status === 'awaiting_approval')) return 'paused';
+  if (!steps.every((s) => STEP_TERMINAL.has(s.status))) return status;
+  if (steps.some((s) => s.status === 'failed')) return 'failed';
+  return 'completed';
+}
 
 export const STEP_STATUS = {
   pending: { label: 'Pending', color: 'default' },

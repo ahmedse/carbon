@@ -191,54 +191,69 @@ class Command(BaseCommand):
         ]
         bt_map = {}
         for code, name, cat, is_eosi, is_tax in BT_DEFS:
+            cat_rv = ReferenceValue.objects.filter(
+                reference_set__name='benefit_category', code=cat,
+            ).first()
             bt, _ = BenefitType.objects.get_or_create(
-                code=code, defaults={'name': name, 'category': cat, 'is_eosi_base': is_eosi, 'is_taxable': is_tax},
+                code=code,
+                defaults={
+                    'name': name, 'category': cat_rv,
+                    'is_eosi_base': is_eosi, 'is_taxable': is_tax,
+                },
             )
             bt_map[code] = bt
 
         # ── Positions ─────────────────────────────────────────────────────
+        # Demo grades (M1/E3/…) are outside the G1–G10 catalog — leave unset.
         pos_ops_mgr, _ = Position.objects.get_or_create(
             code='POS-001', defaults={
                 'title': 'Operations Manager', 'org_unit': ops_ou,
-                'grade': 'M1', 'is_management': True, 'status': 'filled', 'fte': decimal.Decimal('1.0'),
+                'is_management': True, 'status': 'filled', 'fte': decimal.Decimal('1.0'),
             },
         )
         pos_sr_eng, _ = Position.objects.get_or_create(
             code='POS-002', defaults={
                 'title': 'Senior Field Engineer', 'org_unit': ops_ou,
-                'grade': 'E3', 'is_management': False, 'status': 'filled', 'fte': decimal.Decimal('1.0'),
+                'is_management': False, 'status': 'filled', 'fte': decimal.Decimal('1.0'),
                 'reports_to': pos_ops_mgr,
             },
         )
         pos_ops_sup, _ = Position.objects.get_or_create(
             code='POS-003', defaults={
                 'title': 'Operations Supervisor', 'org_unit': ops_ou,
-                'grade': 'E2', 'is_management': False, 'status': 'filled', 'fte': decimal.Decimal('1.0'),
+                'is_management': False, 'status': 'filled', 'fte': decimal.Decimal('1.0'),
                 'reports_to': pos_sr_eng,
             },
         )
         pos_hr_off, _ = Position.objects.get_or_create(
             code='POS-004', defaults={
                 'title': 'HR Officer', 'org_unit': hr_ou,
-                'grade': 'A2', 'is_management': False, 'status': 'filled', 'fte': decimal.Decimal('1.0'),
+                'is_management': False, 'status': 'filled', 'fte': decimal.Decimal('1.0'),
             },
         )
         pos_tech, _ = Position.objects.get_or_create(
             code='POS-005', defaults={
                 'title': 'Field Technician', 'org_unit': maint_ou,
-                'grade': 'T2', 'is_management': False, 'status': 'filled', 'fte': decimal.Decimal('1.0'),
+                'is_management': False, 'status': 'filled', 'fte': decimal.Decimal('1.0'),
                 'reports_to': pos_ops_sup,
             },
         )
         pos_field_op, _ = Position.objects.get_or_create(
             code='POS-006', defaults={
                 'title': 'Field Operator', 'org_unit': ops_ou,
-                'grade': 'T1', 'is_management': False, 'status': 'filled', 'fte': decimal.Decimal('1.0'),
+                'is_management': False, 'status': 'filled', 'fte': decimal.Decimal('1.0'),
                 'reports_to': pos_tech,
             },
         )
 
         # Backfill job-family metadata (governed enum) onto seeded positions.
+        def _rv(set_name, code):
+            if not code:
+                return None
+            return ReferenceValue.objects.filter(
+                reference_set__name=set_name, code=code,
+            ).first()
+
         for pos, fam in [
             (pos_ops_mgr, 'operations'),
             (pos_sr_eng, 'engineering'),
@@ -247,9 +262,10 @@ class Command(BaseCommand):
             (pos_tech, 'maintenance'),
             (pos_field_op, 'operations'),
         ]:
-            if pos.job_family_code != fam:
-                pos.job_family_code = fam
-                pos.save(update_fields=['job_family_code'])
+            fam_rv = _rv('job_family', fam)
+            if fam_rv and pos.job_family_id != fam_rv.pk:
+                pos.job_family = fam_rv
+                pos.save(update_fields=['job_family'])
 
         # ── Employees ─────────────────────────────────────────────────────
         # Based on GOFSCO context: mixed Kuwaiti nationals + expats,
@@ -359,9 +375,22 @@ class Command(BaseCommand):
 
         emp_map = {}
         for d in EMP_DEFS:
+            defaults = {k: v for k, v in d.items() if k != 'employee_no'}
+            # ADR-0027: resolve governed codes → ReferenceValue FKs
+            nat_code = defaults.pop('nationality_code', None) or ''
+            defaults.pop('nationality', None)  # free-text label retired
+            defaults['nationality'] = _rv('nationality', nat_code)
+            defaults['gender'] = _rv('gender', defaults.get('gender') or '')
+            defaults['employment_type'] = _rv(
+                'employment_type', defaults.pop('employment_type_code', None) or '',
+            )
+            defaults['contract_type'] = _rv(
+                'contract_type', defaults.pop('contract_type_code', None) or '',
+            )
+            defaults['rotation'] = _rv('rotation_pattern', defaults.get('rotation') or '')
             emp, created = Employee.objects.update_or_create(
                 employee_no=d['employee_no'],
-                defaults={k: v for k, v in d.items() if k != 'employee_no'},
+                defaults=defaults,
             )
             emp_map[d['employee_no']] = emp
             if created:
@@ -452,8 +481,18 @@ class Command(BaseCommand):
         for emp_no, cert_type, number, issued, expiry in CERT_DEFS:
             emp = emp_map.get(emp_no)
             if emp:
+                # Seed path may introduce cert codes not in the core catalog.
+                cert_rv = _rv('cert_type', cert_type)
+                if cert_rv is None:
+                    rs = ReferenceSet.objects.filter(name='cert_type').first()
+                    if rs is None:
+                        continue
+                    cert_rv, _ = ReferenceValue.objects.get_or_create(
+                        reference_set=rs, code=cert_type,
+                        defaults={'label': cert_type, 'is_active': True},
+                    )
                 Certification.objects.update_or_create(
-                    employee=emp, cert_type=cert_type, number=number,
+                    employee=emp, cert_type=cert_rv, number=number,
                     defaults={'issued_date': issued, 'expiry_date': expiry},
                 )
 
@@ -492,12 +531,23 @@ class Command(BaseCommand):
             ('GF-002', 'Emergency Loan', decimal.Decimal('1500.000'), decimal.Decimal('0.000'), 6, date(2026, 1, 1), 'active'),
             ('GF-004', 'Personal Loan', decimal.Decimal('1000.000'), decimal.Decimal('0.000'), 10, date(2024, 3, 1), 'paid_off'),
         ]
+        loan_label_to_code = {
+            'Personal Loan': 'personal',
+            'Emergency Loan': 'emergency',
+            'Vehicle Loan': 'vehicle',
+            'Housing Loan': 'housing',
+            'Education Loan': 'education',
+        }
         for emp_no, ltype, principal, rate, months, start, status in LOAN_DEFS:
             emp = emp_map.get(emp_no)
             if emp:
                 from people.models import Loan
+                code = loan_label_to_code.get(ltype, ltype)
+                loan_rv = _rv('loan_type', code)
+                if loan_rv is None:
+                    continue
                 loan, _ = Loan.objects.update_or_create(
-                    employee=emp, loan_type=ltype, start_date=start,
+                    employee=emp, loan_type=loan_rv, start_date=start,
                     defaults={'principal': principal, 'interest_rate': rate, 'term_months': months, 'status': status},
                 )
 

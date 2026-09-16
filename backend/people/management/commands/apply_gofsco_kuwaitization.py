@@ -79,14 +79,17 @@ class Command(BaseCommand):
             if not emp.kuwaitization:
                 emp.kuwaitization = True
                 changed = True
-            if emp.nationality_code != "KWT":
-                emp.nationality_code = "KWT"
-                changed = True
-            if not emp.nationality:
-                emp.nationality = "Kuwaiti"
-                changed = True
+            if emp.nationality_id is None or (
+                emp.nationality and emp.nationality.code != "KWT"
+            ):
+                kwt = ReferenceValue.objects.filter(
+                    reference_set__name="nationality", code="KWT",
+                ).first()
+                if kwt:
+                    emp.nationality = kwt
+                    changed = True
             if changed:
-                emp.save(update_fields=["kuwaitization", "nationality_code", "nationality"])
+                emp.save(update_fields=["kuwaitization", "nationality"])
                 updated += 1
             else:
                 already_set += 1
@@ -106,6 +109,25 @@ class Command(BaseCommand):
                 f"Medical: {reimb['medical']}; Bonus: {reimb['annual_bonus']}; "
                 f"Tickets: {reimb['annual_tickets']}"
             )
+            cat_rv, _ = ReferenceValue.objects.get_or_create(
+                reference_set=ReferenceSet.objects.get_or_create(
+                    name="compliance_category",
+                    defaults={
+                        "slug": "compliance-category",
+                        "is_active": True,
+                        "lifecycle_state": "active",
+                    },
+                )[0],
+                code="other",
+                defaults={"label": "Other", "is_active": True},
+            )
+            # Prefer a dedicated kuwaitization value when present; else 'other'.
+            kuw = ReferenceValue.objects.filter(
+                reference_set__name="compliance_category", code="kuwaitization",
+            ).first()
+            juris = ReferenceValue.objects.filter(
+                reference_set__name="jurisdiction", code="KW",
+            ).first()
             _, was_created = ComplianceRule.objects.update_or_create(
                 rule_id=rule_id,
                 version="2026.1",
@@ -117,7 +139,8 @@ class Command(BaseCommand):
                         f"Supplied: {c['supplied']}; Vacancy: {c['vacancy']}. "
                         f"Reimbursement: {reimb_note}."
                     ),
-                    "category": "kuwaitization",
+                    "category": kuw or cat_rv,
+                    "jurisdiction": juris,
                     "effective_date": date(2026, 1, 1),
                     "formula_ref": KOC_POLICY_SOURCE,
                     "source_citation": f"{KOC_POLICY_SOURCE}; {KLL_SOURCE}",

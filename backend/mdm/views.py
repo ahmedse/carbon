@@ -481,6 +481,12 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
     
     RBAC: All authenticated users can read org units — but only the ones in
     their assigned org subtree (get_visible_org_units). Only admin can write.
+
+    ADR-0028: queryset is always intersected with the deployment root subtree
+    (single active parent=None OrgUnit). There is no intentional escape hatch
+    to list a second foreign root once the invariant holds — even global
+    admins/superusers only see the deployment tree.
+
     Endpoints:
     - GET    /mdm/org-units/                List org units visible to the user (scoped)
     - POST   /mdm/org-units/                Create new org unit (admin only)
@@ -500,20 +506,36 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
     ordering = ['name']
 
     def get_queryset(self):
-        """Filter org units based on query parameters + RBAC visibility.
+        """Filter org units based on query parameters + RBAC + deployment root.
 
         RBAC (BUG-03 / F-07): non-admin users see ONLY the org units in their
         assigned subtree (via get_visible_org_units — org-scoped roles expanded
-        to descendants). Global admins and global visibility-role holders keep
-        full visibility. Users with no org scope see nothing (restrictive).
+        to descendants). Global admins keep visibility within the deployment
+        root subtree only (ADR-0028) — not a flat global multi-root list.
+        Users with no org scope see nothing (restrictive).
         """
         if getattr(self, 'swagger_fake_view', False):
             return OrgUnit.objects.none()
         user = self.request.user
         from accounts.rbac_utils import get_visible_org_units
+        from mdm.services import get_deployment_org_unit_ids
+
         visible_ids = {ou.id for ou in get_visible_org_units(user)}
         if not visible_ids:
             return OrgUnit.objects.none()
+
+        # ADR-0028: never expose units outside the deployment root subtree.
+        # If no root exists yet, fall back to RBAC-visible set only.
+        try:
+            deployment_ids = get_deployment_org_unit_ids(include_self=True)
+        except RuntimeError:
+            # Corrupt multi-root data: refuse the flat dump; empty is safer.
+            return OrgUnit.objects.none()
+        if deployment_ids:
+            visible_ids &= deployment_ids
+            if not visible_ids:
+                return OrgUnit.objects.none()
+
         # Optimize: deep select_related parent chain for full_path + nested
         # prefetch children for children_count / descendants_count (P14).
         qs = OrgUnit.objects.select_related(

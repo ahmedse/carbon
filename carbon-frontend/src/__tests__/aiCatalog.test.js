@@ -19,6 +19,7 @@ import {
   deleteAgent,
   getTopology,
   listSkills,
+  listCapabilities,
   promoteSkill,
   rejectSkill,
   getFederatedIndex,
@@ -58,6 +59,11 @@ describe('aiCatalog — read wrappers', () => {
   it('listSkills hits ai/catalog/skills/', async () => {
     await listSkills(TOKEN);
     expect(apiFetch).toHaveBeenCalledWith('ai/catalog/skills/', { token: TOKEN });
+  });
+
+  it('listCapabilities hits ai/catalog/capabilities/', async () => {
+    await listCapabilities(TOKEN);
+    expect(apiFetch).toHaveBeenCalledWith('ai/catalog/capabilities/', { token: TOKEN });
   });
 
   it('promoteSkill POSTs ai/skills/{id}/promote/', async () => {

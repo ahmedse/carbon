@@ -1,5 +1,5 @@
 """
-Unified Agent Catalog REST API (Phase W3-D).
+Unified Agent Catalog REST API (Phase W3-D + PEC-R1).
 
 Endpoints (mounted at ``{api_prefix}/ai/catalog/`` — see ``config/urls.py``):
 
@@ -10,6 +10,7 @@ Endpoints (mounted at ``{api_prefix}/ai/catalog/`` — see ``config/urls.py``):
     DELETE /carbon-api/ai/catalog/{id}/           soft-delete an agent (staff only)
     GET    /carbon-api/ai/catalog/topology/       declared handoff graph (ADR-001)
     GET    /carbon-api/ai/catalog/skills/         skill catalog + admission status
+    GET    /carbon-api/ai/catalog/capabilities/   durable Capability registry (PEC-R1, read-only)
     GET    /carbon-api/ai/catalog/index/          federated index (DB agents + plugin discovery)
 
     Literal ``agents/`` aliases match the W3-D spec paths:
@@ -17,10 +18,12 @@ Endpoints (mounted at ``{api_prefix}/ai/catalog/`` — see ``config/urls.py``):
 
 Reads: authenticated only.  Writes: staff/admin only (``IsAuthenticated`` +
 ``request.user.is_staff`` — RULE_21: registering/removing an agent is an
-explicit admin act, not a user-initiated consent flow).
+explicit admin act, not a user-initiated consent flow). Capability list is
+GET-only (RULE_21) — no create/update/delete via this surface.
 
-No engine internals are touched — everything delegates to
-:mod:`ai.catalog_service`.
+Agent catalog surfaces delegate to :mod:`ai.catalog_service`. The capabilities
+list reads durable :class:`~ai.models.capability.Capability` rows through
+``scope_ai_queryset`` (CBAC app + visibility + org).
 """
 
 from __future__ import annotations
@@ -32,7 +35,9 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from accounts.ai_scoping import scope_ai_queryset
 from ai.catalog_service import AgentNotFoundError, CatalogService
+from ai.models.capability import Capability
 
 logger = logging.getLogger("carbon.ai.catalog_api")
 
@@ -87,6 +92,25 @@ class AgentUpdateSerializer(serializers.Serializer):
     max_turns = serializers.IntegerField(
         required=False, min_value=1, max_value=100
     )
+
+
+class CapabilityListSerializer(serializers.ModelSerializer):
+    """Read-only Capability registry row (PEC-R1) — business fields only."""
+
+    class Meta:
+        model = Capability
+        fields = [
+            "capability_id",
+            "business_name",
+            "purpose",
+            "kind",
+            "host_action",
+            "owner",
+            "version",
+            "permissions",
+            "requires_confirmation",
+        ]
+        read_only_fields = fields
 
 
 class CatalogViewSet(viewsets.GenericViewSet):
@@ -235,6 +259,17 @@ class CatalogViewSet(viewsets.GenericViewSet):
         """Skill catalog + each skill's admission status."""
         try:
             return Response(self.service.list_skills())
+        except Exception as exc:
+            return self._unavailable(exc)
+
+    @action(detail=False, methods=["get"], url_path="capabilities")
+    def capabilities(self, request):
+        """Durable Capability registry — CBAC-scoped, GET-only (PEC-R1)."""
+        try:
+            qs = scope_ai_queryset(
+                Capability.objects.all(), request.user,
+            ).order_by("capability_id")
+            return Response(CapabilityListSerializer(qs, many=True).data)
         except Exception as exc:
             return self._unavailable(exc)
 

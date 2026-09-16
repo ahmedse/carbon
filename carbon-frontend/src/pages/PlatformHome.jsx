@@ -20,7 +20,10 @@ import { useTranslation } from 'react-i18next';
 import Co2Icon from '@mui/icons-material/Co2';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import LayersIcon from '@mui/icons-material/Layers';
-import Diversity3Icon from '@mui/icons-material/Diversity3';
+import GroupsIcon from '@mui/icons-material/Groups';
+import PersonIcon from '@mui/icons-material/Person';
+import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
+import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import { APP_REGISTRY } from '../apps/registry';
 import { useAuth } from '../auth/AuthContext';
 import { hasAppAccess } from '../authz';
@@ -31,12 +34,16 @@ import { FONT } from '../theme/themeTokens';
 import { PLATFORM_TITLE, PLATFORM_TAGLINE } from '../config/branding';
 
 // Icon lookup — maps manifest icon names to MUI icon components.
-// Move 3: replace with a full MUI dynamic icon loader for runtime resolution.
 const APP_ICONS = {
   Co2: Co2Icon,
   Dashboard: DashboardIcon,
   Layers: LayersIcon,
-  Diversity3: Diversity3Icon,
+  Groups: GroupsIcon,
+  Person: PersonIcon,
+  SupervisorAccount: SupervisorAccountIcon,
+  MonitorHeart: MonitorHeartIcon,
+  // legacy alias
+  Diversity3: GroupsIcon,
 };
 
 function AppCard({ app }) {
@@ -127,7 +134,7 @@ function NoAppsPlaceholder() {
 export default function PlatformHome() {
   const { t } = useTranslation('shell');
   useDocumentTitle(t('ui.platformTitle'));
-  const { availablePerspectives, user, context, loading, userCapabilities } = useAuth();
+  const { availablePerspectives, user, context, loading, userCapabilities, isGlobalAdminFlag } = useAuth();
   const { isAppEnabled } = useEnabledApps();
 
   // Filter to apps the user can access AND the admin has enabled.
@@ -135,7 +142,12 @@ export default function PlatformHome() {
   const accessibleApps = APP_REGISTRY.filter((app) => {
     if (loading) return false;
     if (!isAppEnabled(app.id)) return false;
-    return hasAppAccess(app.id, user, { perspectives: availablePerspectives, capabilities: userCapabilities, modules: context?.modules });
+    return hasAppAccess(app.id, user, {
+      perspectives: availablePerspectives,
+      capabilities: userCapabilities,
+      modules: context?.modules,
+      isGlobalAdminFlag,
+    });
   });
 
   return (

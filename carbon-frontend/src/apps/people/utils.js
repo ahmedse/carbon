@@ -81,6 +81,30 @@ export function formatDate(value) {
   return String(value).slice(0, 10);
 }
 
+/**
+ * Extract a ReferenceValue code from nested `{code}` (NSR-7B+) or a plain string.
+ * Returns '' when absent.
+ */
+export function refCode(value) {
+  if (value == null || value === '') return '';
+  if (typeof value === 'object') return String(value.code ?? '').trim();
+  return String(value).trim();
+}
+
+/**
+ * Display label for a governed value: nested `.label` / `.code`, or plain string.
+ * Returns '' when absent (callers may fall back to '—').
+ */
+export function refLabel(value) {
+  if (value == null || value === '') return '';
+  if (typeof value === 'object') {
+    const label = String(value.label ?? '').trim();
+    if (label) return label;
+    return String(value.code ?? '').trim();
+  }
+  return String(value).trim();
+}
+
 /** Human-readable service tenure from a join date to today. */
 export function tenureLabel(joinDate) {
   if (!joinDate) return null;

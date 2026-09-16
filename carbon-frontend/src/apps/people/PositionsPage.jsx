@@ -2,9 +2,10 @@
 // People & Payroll — Positions (full CRUD): create, read, update, delete.
 // All colours via theme tokens; apiFetch only; SystemDialog for the form.
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Autocomplete,
   Button,
   Chip,
   FormControlLabel,
@@ -35,6 +36,7 @@ import ErrorAlert from '../../components/Page/ErrorAlert';
 import EmptyState from '../../components/Page/EmptyState';
 import SystemDialog from '../../components/SystemDialog';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import { useReferenceOptions } from '../../hooks/useReferenceOptions';
 import { useAuth } from '../../auth/AuthContext';
 import {
   fetchPositions,
@@ -43,7 +45,8 @@ import {
   updatePosition,
   deletePosition,
 } from '../../api/people';
-import { fetchOrgUnits } from '../../api/orgUnits';
+import { fetchOrgUnits, orgUnitOptionLabel, orgUnitDepth, prepareOrgUnitsForPicker } from '../../api/orgUnits';
+import { refCode, refLabel } from './utils';
 
 const EMPTY_FORM = {
   org_unit: '',
@@ -54,7 +57,7 @@ const EMPTY_FORM = {
   is_management: false,
   status: 'filled',
   fte: '1',
-  job_family_code: '',
+  job_family: '',
 };
 
 export default function PositionsPage() {
@@ -62,6 +65,8 @@ export default function PositionsPage() {
   const { t: tCommon } = useTranslation('common');
   useDocumentTitle(t('positionsTitle'));
   const { token } = useAuth();
+  const gradeRef = useReferenceOptions('grade');
+  const jobFamilyRef = useReferenceOptions('job_family');
 
   const [positions, setPositions] = useState([]);
   const [orgUnits, setOrgUnits] = useState([]);
@@ -97,9 +102,19 @@ export default function PositionsPage() {
     loadData();
   }, [loadData]);
 
+  const orgUnitsForPicker = useMemo(
+    () => prepareOrgUnitsForPicker(orgUnits),
+    [orgUnits],
+  );
+  const orgUnitById = useMemo(() => {
+    const map = new Map();
+    for (const u of orgUnitsForPicker) map.set(u.id, u);
+    return map;
+  }, [orgUnitsForPicker]);
+
   const orgUnitName = (id) => {
-    const unit = orgUnits.find((u) => u.id === id);
-    return unit?.name || unit?.code || '—';
+    const unit = orgUnitById.get(id) || orgUnits.find((u) => u.id === id);
+    return unit?.full_path || unit?.name || unit?.code || '—';
   };
 
   const positionLabel = (id) => {
@@ -124,12 +139,12 @@ export default function PositionsPage() {
       org_unit: position.org_unit ?? '',
       code: position.code ?? '',
       title: position.title ?? '',
-      grade: position.grade ?? '',
+      grade: refCode(position.grade),
       reports_to: position.reports_to ?? '',
       is_management: Boolean(position.is_management),
       status: position.status ?? 'filled',
       fte: position.fte ?? '1',
-      job_family_code: position.job_family_code ?? '',
+      job_family: refCode(position.job_family),
     });
     setOpenDialog(true);
   };
@@ -158,8 +173,10 @@ export default function PositionsPage() {
       reports_to: form.reports_to ? Number(form.reports_to) : null,
       status: form.status || 'filled',
       fte: form.fte,
-      job_family_code: (form.job_family_code || '').trim(),
     };
+    if (form.job_family && form.job_family.trim()) {
+      payload.job_family = form.job_family.trim();
+    }
     if (form.grade && form.grade.trim()) {
       payload.grade = form.grade.trim();
     }
@@ -252,7 +269,7 @@ export default function PositionsPage() {
                   <TableCell>{position.code ?? '—'}</TableCell>
                   <TableCell>{position.title ?? '—'}</TableCell>
                   <TableCell>{orgUnitName(position.org_unit)}</TableCell>
-                  <TableCell>{position.grade ?? '—'}</TableCell>
+                  <TableCell>{refLabel(position.grade) || refCode(position.grade) || '—'}</TableCell>
                   <TableCell>
                     <Chip
                       size="small"
@@ -282,7 +299,7 @@ export default function PositionsPage() {
                     />
                   </TableCell>
                   <TableCell>{position.fte ?? '—'}</TableCell>
-                  <TableCell>{position.job_family_code || '—'}</TableCell>
+                  <TableCell>{refLabel(position.job_family) || refCode(position.job_family) || '—'}</TableCell>
                   <TableCell>{incumbentLabel(position.id)}</TableCell>
                   <TableCell>{position.reports_to ? positionLabel(position.reports_to) : '—'}</TableCell>
                   <TableCell>
@@ -335,8 +352,10 @@ export default function PositionsPage() {
             required
           >
             <MenuItem value="" disabled>{t('formOrgUnit')}</MenuItem>
-            {orgUnits.map((unit) => (
-              <MenuItem key={unit.id} value={unit.id}>{unit.name || unit.code || unit.id}</MenuItem>
+            {orgUnitsForPicker.map((unit) => (
+              <MenuItem key={unit.id} value={unit.id}>
+                {orgUnitOptionLabel(unit, { depth: orgUnitDepth(unit, orgUnitById) })}
+              </MenuItem>
             ))}
           </TextField>
           <TextField
@@ -355,12 +374,16 @@ export default function PositionsPage() {
             fullWidth
             required
           />
-          <TextField
-            label={t('formGrade')}
-            name="grade"
-            value={form.grade}
-            onChange={handleChange}
-            fullWidth
+          <Autocomplete
+            size="small"
+            options={gradeRef.options}
+            value={gradeRef.options.find((o) => o.value === form.grade) || null}
+            onChange={(e, v) => setForm((prev) => ({ ...prev, grade: v ? v.value : '' }))}
+            getOptionLabel={(o) => o.label}
+            isOptionEqualToValue={(a, b) => a.value === b.value}
+            renderInput={(params) => (
+              <TextField {...params} label={t('formGrade')} />
+            )}
           />
           <TextField
             select
@@ -385,12 +408,16 @@ export default function PositionsPage() {
             type="number"
             inputProps={{ step: '0.01', min: '0' }}
           />
-          <TextField
-            label={t('formJobFamilyCode')}
-            name="job_family_code"
-            value={form.job_family_code}
-            onChange={handleChange}
-            fullWidth
+          <Autocomplete
+            size="small"
+            options={jobFamilyRef.options}
+            value={jobFamilyRef.options.find((o) => o.value === form.job_family) || null}
+            onChange={(e, v) => setForm((prev) => ({ ...prev, job_family: v ? v.value : '' }))}
+            getOptionLabel={(o) => o.label}
+            isOptionEqualToValue={(a, b) => a.value === b.value}
+            renderInput={(params) => (
+              <TextField {...params} label={t('colJobFamily')} />
+            )}
           />
           <TextField
             select

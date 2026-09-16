@@ -12,7 +12,8 @@ import pytest
 from correspondence import fsm
 from correspondence.models import Correspondence
 from mdm.models import OrgUnit, ReferenceSet, ReferenceValue
-from people.models import Employee, Loan
+from people.models import ComplianceRule, Employee, Loan
+from people.tests.ref_helpers import compliance_rule_defaults, ensure_ref
 
 
 @pytest.fixture
@@ -36,6 +37,27 @@ def loan_workflow(db, create_user):
         basic_salary='1000.000', join_date=date(2026, 1, 1), user=requester_user,
         is_active=True,
     )
+    # Authoritative loan_schedule rule required for NSR-3A materialization
+    # on approve → active.
+    ComplianceRule.objects.create(
+        rule_id='kw-loan-sync-test',
+        version='2026.1',
+        name='[TEST ONLY] Loan schedule (status sync)',
+        category=ensure_ref('compliance_category', 'other'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
+        effective_date=date(2026, 1, 1),
+        inputs_schema={
+            'inputs': ['principal', 'interest_rate', 'term_months'],
+            'formula': {
+                'type': 'loan_schedule',
+                'params': {
+                    'method': 'flat',
+                    'rate_is_annual': True,
+                    'rate_is_percent': False,
+                },
+            },
+        },
+        is_authoritative=True,
+    )
     return SimpleNamespace(
         org=org, corr_type=loan_type, requester_user=requester_user,
         approver_user=approver_user, employee=employee,
@@ -45,7 +67,7 @@ def loan_workflow(db, create_user):
 def _make_loan(employee):
     return Loan.objects.create(
         employee=employee,
-        loan_type='housing',
+        loan_type=ensure_ref('loan_type', 'housing'),
         principal=Decimal('5000.000'),
         interest_rate=Decimal('3.500'),
         term_months=12,

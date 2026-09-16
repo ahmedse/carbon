@@ -23,21 +23,156 @@ KLL_SOURCE = "Kuwait Labour Law (Private Sector) Law No. 6 of 2010"
 GOFSCO_SOURCE = "GOFSCO HRMS Issues (Issues with Hard Task HRMS System.docx, 2026-07-28)"
 
 
-def _ensure_reference_set(name, slug, values):
-    """Idempotently create a ReferenceSet and its ReferenceValues."""
+def _ensure_reference_set(name, slug, values, description=''):
+    """Idempotently create a ReferenceSet and its ReferenceValues.
+
+    ``values`` entries are ``(code, label_en)`` or ``(code, label_en, label_ar)``.
+    When ``label_ar`` is present it is stored in ``metadata['label_ar']`` and
+    mirrored in ``description`` (same pattern as ``seed_correspondence``).
+    """
     rs, _ = ReferenceSet.objects.get_or_create(
         name=name,
-        defaults={'slug': slug, 'is_active': True, 'lifecycle_state': 'active'},
+        defaults={
+            'slug': slug,
+            'description': description,
+            'is_active': True,
+            'lifecycle_state': 'active',
+        },
     )
     ReferenceSet.objects.filter(pk=rs.pk).update(
-        name=name, slug=slug, is_active=True, lifecycle_state='active',
+        name=name,
+        slug=slug,
+        description=description or rs.description,
+        is_active=True,
+        lifecycle_state='active',
     )
-    for idx, (code, label) in enumerate(values):
+    for idx, entry in enumerate(values):
+        if len(entry) == 3:
+            code, label_en, label_ar = entry
+            defaults = {
+                'label': label_en,
+                'description': f'{label_en} ({label_ar})',
+                'is_active': True,
+                'sort_order': idx,
+                'metadata': {'label_ar': label_ar, 'sort': idx},
+            }
+        else:
+            code, label_en = entry
+            defaults = {
+                'label': label_en,
+                'is_active': True,
+                'sort_order': idx,
+            }
         ReferenceValue.objects.update_or_create(
-            reference_set=rs, code=code,
-            defaults={'label': label, 'is_active': True, 'sort_order': idx},
+            reference_set=rs, code=code, defaults=defaults,
         )
     return rs
+
+
+# ── Bucket-1 governed ReferenceSets missing from prior seeds (ADR-0027 / NIR-5C)
+# Set ``name`` is the stable identifier (ReferenceSet has no ``code`` field).
+GOVERNED_REFERENCE_SETS = [
+    (
+        'grade',
+        'grade',
+        'Job grades (GOFSCO compensation bands).',
+        [
+            ('G1', 'Grade 1', 'الدرجة 1'),
+            ('G2', 'Grade 2', 'الدرجة 2'),
+            ('G3', 'Grade 3', 'الدرجة 3'),
+            ('G4', 'Grade 4', 'الدرجة 4'),
+            ('G5', 'Grade 5', 'الدرجة 5'),
+            ('G6', 'Grade 6', 'الدرجة 6'),
+            ('G7', 'Grade 7', 'الدرجة 7'),
+            ('G8', 'Grade 8', 'الدرجة 8'),
+            ('G9', 'Grade 9', 'الدرجة 9'),
+            ('G10', 'Grade 10', 'الدرجة 10'),
+        ],
+    ),
+    (
+        'loan_type',
+        'loan-type',
+        'Employee loan categories (GOFSCO payroll deductions).',
+        [
+            ('personal', 'Personal Loan', 'سلفة شخصية'),
+            ('vehicle', 'Vehicle Loan', 'سلفة سيارة'),
+            ('housing', 'Housing Loan', 'سلفة سكن'),
+            ('education', 'Education Loan', 'سلفة تعليم'),
+            ('emergency', 'Emergency Loan', 'سلفة طارئة'),
+        ],
+    ),
+    (
+        'permission_type',
+        'permission-type',
+        'Attendance permission / short-leave reasons.',
+        [
+            ('personal', 'Personal', 'شخصي'),
+            ('medical', 'Medical', 'طبي'),
+            ('official', 'Official', 'رسمي'),
+            ('emergency', 'Emergency', 'طارئ'),
+        ],
+    ),
+    (
+        'cert_type',
+        'cert-type',
+        'Certification / competency types (field HSE and trade).',
+        [
+            ('hse', 'HSE', 'السلامة والصحة المهنية'),
+            ('first_aid', 'First Aid', 'إسعافات أولية'),
+            ('fire', 'Fire Safety', 'سلامة الحريق'),
+            ('rigging', 'Rigging', 'الرفع والتجهيز'),
+            ('welding', 'Welding', 'لحام'),
+            ('driving', 'Driving', 'قيادة'),
+            ('trade', 'Trade Certificate', 'شهادة مهنية'),
+            ('degree', 'Degree', 'شهادة جامعية'),
+        ],
+    ),
+    (
+        'payslip_line_type',
+        'payslip-line-type',
+        'Payslip line categories for payroll computation and WPS.',
+        [
+            ('gross', 'Gross', 'إجمالي'),
+            ('basic', 'Basic', 'أساسي'),
+            ('overtime', 'Overtime', 'عمل إضافي'),
+            ('leave_pay', 'Leave Pay', 'بدل إجازة'),
+            ('eosi_accrual', 'EOSI Accrual', 'استحقاق مكافأة نهاية الخدمة'),
+            ('gosi', 'GOSI / PIFSS', 'التأمينات الاجتماعية'),
+            ('wps', 'WPS', 'نظام حماية الأجور'),
+            ('deduction', 'Deduction', 'خصم'),
+            ('net', 'Net', 'صافي'),
+            ('loan_installment', 'Loan Installment', 'قسط سلفة'),
+        ],
+    ),
+    (
+        'compliance_category',
+        'compliance-category',
+        'ComplianceRule categories (Kuwait labour / payroll governance).',
+        [
+            ('leave', 'Leave', 'إجازات'),
+            ('eosi', 'EOSI', 'مكافأة نهاية الخدمة'),
+            ('gosi', 'GOSI / PIFSS', 'التأمينات الاجتماعية'),
+            ('wps', 'WPS', 'نظام حماية الأجور'),
+            ('overtime', 'Overtime', 'عمل إضافي'),
+            ('payroll', 'Payroll', 'رواتب'),
+            ('other', 'Other', 'أخرى'),
+        ],
+    ),
+    (
+        'jurisdiction',
+        'jurisdiction',
+        'Labour / payroll jurisdictions (GCC + Egypt).',
+        [
+            ('KW', 'Kuwait', 'الكويت'),
+            ('EG', 'Egypt', 'مصر'),
+            ('QA', 'Qatar', 'قطر'),
+            ('AE', 'United Arab Emirates', 'الإمارات'),
+            ('SA', 'Saudi Arabia', 'السعودية'),
+            ('OM', 'Oman', 'عمان'),
+            ('BH', 'Bahrain', 'البحرين'),
+        ],
+    ),
+]
 
 
 # ── Authoritative compliance rules ──────────────────────────────────────────
@@ -283,30 +418,47 @@ LEAVE_POLICIES = [
 
 
 class Command(BaseCommand):
-    help = "Seed AUTHORITATIVE GOFSCO compliance rules, leave policies, and benefit types (idempotent)."
+    help = (
+        "Seed AUTHORITATIVE GOFSCO compliance rules, leave policies, benefit "
+        "types, and ADR-0027 Bucket-1 ReferenceSets (idempotent)."
+    )
 
     def handle(self, *args, **options):
         # 1. Governed reference metadata (leave_type) for LeavePolicy.leave_type FK.
         leave_type_rs = _ensure_reference_set(
             "leave_type", "leave-type", [
-                ("annual", "Annual"), ("sick", "Sick"),
-                ("emergency", "Emergency"), ("maternity", "Maternity"),
-                ("unpaid", "Unpaid"),
+                ("annual", "Annual", "سنوية"),
+                ("sick", "Sick", "مرضية"),
+                ("emergency", "Emergency", "طارئة"),
+                ("maternity", "Maternity", "وضع"),
+                ("unpaid", "Unpaid", "بدون أجر"),
             ],
+            description="Leave types for LeavePolicy / entitlements.",
         )
         leave_types = {
             rv.code: rv
             for rv in ReferenceValue.objects.filter(reference_set=leave_type_rs)
         }
 
+        # 1b. ADR-0027 Bucket-1 sets not yet seeded elsewhere (NSR-7A / NIR-5C).
+        for name, slug, description, values in GOVERNED_REFERENCE_SETS:
+            _ensure_reference_set(name, slug, values, description=description)
+        self.stdout.write(self.style.SUCCESS(
+            f"✓ Governed ReferenceSets: {len(GOVERNED_REFERENCE_SETS)} sets "
+            f"({', '.join(s[0] for s in GOVERNED_REFERENCE_SETS)}) + leave_type"
+        ))
+
         # 2. Benefit types.
         bt_created = 0
         for code, name, category, is_eosi_base, is_taxable in BENEFIT_TYPES:
+            cat_rv = ReferenceValue.objects.filter(
+                reference_set__name='benefit_category', code=category,
+            ).first()
             _, was_created = BenefitType.objects.update_or_create(
                 code=code,
                 defaults={
                     "name": name,
-                    "category": category,
+                    "category": cat_rv,
                     "is_eosi_base": is_eosi_base,
                     "is_taxable": is_taxable,
                     "is_active": True,
@@ -319,14 +471,21 @@ class Command(BaseCommand):
 
         # 3. Authoritative compliance rules.
         rule_created = rule_updated = 0
+        juris_kw = ReferenceValue.objects.filter(
+            reference_set__name='jurisdiction', code='KW',
+        ).first()
         for rule_id, version, name, category, formula_ref, inputs_schema in AUTHORITATIVE_RULES:
+            cat_rv = ReferenceValue.objects.filter(
+                reference_set__name='compliance_category', code=category,
+            ).first()
             _, was_created = ComplianceRule.objects.update_or_create(
                 rule_id=rule_id,
                 version=version,
                 defaults={
                     "name": name,
                     "description": "Authoritative Kuwait compliance rule (GOFSCO configuration).",
-                    "category": category,
+                    "category": cat_rv,
+                    "jurisdiction": juris_kw,
                     "effective_date": date(2026, 1, 1),
                     "formula_ref": formula_ref,
                     "source_citation": f"{KLL_SOURCE}; {GOFSCO_SOURCE}",

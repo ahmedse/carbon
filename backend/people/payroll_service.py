@@ -7,11 +7,15 @@
 #
 # RULE_3: this module imports only the people app's own engine/models plus
 # django — never a sibling hosted app (emissions, healthy, dq, catalog,
-# accounts). The validation seam is a STUB here; NIR-3D wires
-# ``people.validation.validate_run`` into it (that is where ``dq`` enters).
+# accounts). The validation seam delegates to ``people.validation.validate_run``
+# (that is where ``dq`` enters); this module MUST NOT import ``dq`` directly.
 #
 # RULE_12: employees are selected by org scope — a run only ever includes
 # employees whose ``org_unit`` is the run's org_unit or one of its descendants.
+#
+# ADR 0029: gross basic is resolved from the verified compensation ledger
+# (``CompensationService.verified_basic_amount``), not ``Employee.basic_salary``.
+# Fail closed when no verified monthly ``basic`` line exists for the period.
 #
 # ADR 0025 lineage seam: any payslip line derived from a governed measurement
 # (an AttendanceRecord backed by a dataschema.DataRow) carries ``data_row_id`` /
@@ -26,6 +30,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from . import calculation_engine
+from .compensation_service import CompensationService
 from .models import AttendanceRecord, ComplianceRule, Employee, PayslipLine
 
 SEVERITY_ERROR = "error"
@@ -35,6 +40,28 @@ SEVERITY_INFO = "info"
 
 class PayrollServiceError(Exception):
     """Raised when a payroll run is asked to perform an illegal transition."""
+
+
+_line_type_cache: dict[str, int] = {}
+
+
+def _payslip_line_type(code: str):
+    """Resolve a payslip_line_type ReferenceValue by code (cached by pk)."""
+    cached_pk = _line_type_cache.get(code)
+    if cached_pk is not None:
+        from mdm.models import ReferenceValue
+        try:
+            return ReferenceValue.objects.get(pk=cached_pk)
+        except ReferenceValue.DoesNotExist:
+            _line_type_cache.pop(code, None)
+    from mdm.governed import resolve_reference_value
+    rv = resolve_reference_value('payslip_line_type', code, require_current=False)
+    if rv is None:
+        raise PayrollServiceError(
+            f"payslip_line_type {code!r} is not seeded (NSR-7A / NSR-7B)"
+        )
+    _line_type_cache[code] = rv.pk
+    return rv
 
 
 def make_finding(rule_key, *, severity=SEVERITY_ERROR, passed=False, checked=0,
@@ -184,9 +211,19 @@ class PayrollRunService:
         rules = ComplianceRule.objects
         created = 0
 
-        # 1. gross — carry measurement provenance for attendance-derived inputs.
+        # 1. gross — basic from verified ledger (ADR-0029); fail closed if missing.
+        basic = CompensationService.verified_basic_amount(
+            employee, as_of=run.period_end,
+        )
+        if basic is None:
+            raise PayrollServiceError(
+                f"Employee {employee.employee_no} has no verified monthly "
+                f"'basic' compensation ledger line for period ending "
+                f"{run.period_end}; refusing to compute payroll from "
+                f"Employee.basic_salary."
+            )
         measurements = self._attendance_measurements(employee, run)
-        gross_inputs = {"basic": employee.basic_salary}
+        gross_inputs = {"basic": basic, "basic_source": "ledger"}
         if measurements:
             gross_inputs["measurements"] = measurements
             if len(measurements) == 1:
@@ -203,10 +240,14 @@ class PayrollRunService:
         employee_share = gosi["lineage"].get("employee_share", Decimal("0"))
 
         # 3. loan installments due this period.
+        # Hybrid (NSR-3A): prefer persisted LoanInstallment rows due in the
+        # period when any exist for the loan; fall back to in-memory engine
+        # schedule when the loan has no materialized rows yet.
         deductions = [employee_share]
         for loan in employee.loans.filter(status="active"):
-            schedule = calculation_engine.calculate_loan_schedule(loan_rule, loan)
-            installment = self._installment_for_period(schedule, loan, run)
+            schedule, installment = self._loan_installment_for_run(
+                loan, loan_rule, run,
+            )
             if installment is None:
                 continue
             self._loan_line(run, employee, schedule, installment)
@@ -241,6 +282,8 @@ class PayrollRunService:
         )
 
     def _create_line(self, run, employee, line_type, amount, rule_id, rule_version, inputs):
+        if isinstance(line_type, str):
+            line_type = _payslip_line_type(line_type)
         PayslipLine.objects.create(
             payroll_run=run,
             employee=employee,
@@ -262,7 +305,7 @@ class PayrollRunService:
         engine's ``_guard`` enforces. Non-authoritative demo/test rows are
         skipped so they can never be selected for a live payroll run.
         """
-        qs = rules.filter(category=category, is_authoritative=True).order_by("-effective_date", "-updated_at")
+        qs = rules.filter(category__code=category, is_authoritative=True).order_by("-effective_date", "-updated_at")
         if formula_type is None:
             return qs.first()
         for rule in qs:
@@ -301,6 +344,44 @@ class PayrollRunService:
         if months < 0 or months >= len(installments):
             return None
         return installments[months]
+
+    def _loan_installment_for_run(self, loan, loan_rule, run):
+        """Resolve the due installment for ``loan`` in ``run``'s period.
+
+        Prefer a persisted ``LoanInstallment`` whose due month matches the
+        run period when the loan has any materialized rows. Otherwise
+        recompute via ``calculate_loan_schedule`` (legacy / pre-NSR-3A path).
+        """
+        if loan.installments.exists():
+            row = loan.installments.filter(
+                due_date__year=run.period_start.year,
+                due_date__month=run.period_start.month,
+            ).first()
+            if row is None:
+                return None, None
+            schedule = {
+                "lineage": {
+                    "rule_id": loan_rule.rule_id if loan_rule else "",
+                    "rule_version": loan_rule.version if loan_rule else "",
+                    "inputs": {
+                        "principal": loan.principal,
+                        "interest_rate": loan.interest_rate,
+                        "term_months": loan.term_months,
+                        "source": "persisted_loan_installment",
+                        "loan_installment_id": row.pk,
+                    },
+                },
+            }
+            installment = {
+                "installment_no": row.installment_no,
+                "amount": row.amount,
+                "principal_portion": row.principal_portion,
+                "interest_portion": row.interest_portion,
+            }
+            return schedule, installment
+
+        schedule = calculation_engine.calculate_loan_schedule(loan_rule, loan)
+        return schedule, self._installment_for_period(schedule, loan, run)
 
     # --- validate ----------------------------------------------------------
 
@@ -379,5 +460,6 @@ class PayrollRunService:
             "period_end": str(run.period_end),
         }
         for line in lines:
-            summary[line.line_type] = str(line.amount)
+            code = line.line_type.code if line.line_type_id else str(line.line_type)
+            summary[code] = str(line.amount)
         return summary

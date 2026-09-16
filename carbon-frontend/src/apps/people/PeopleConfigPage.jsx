@@ -1,9 +1,8 @@
 // src/apps/people/PeopleConfigPage.jsx
-// People & Payroll — App Config hub. Tabs split the formerly-flat page into
-// Overview (identity + roles), Reference Data (generic editable lists), and
-// Compliance Rules. Reference Data is config-managed here, NOT under MDM.
+// People & Payroll — App Config hub. Tabs: Overview (identity + roles),
+// Reference Data, Compliance Rules (CRUD), Compensation (components + plans).
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Chip,
@@ -23,15 +22,11 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import { useTranslation } from 'react-i18next';
 import PageContainer from '../../components/layout/PageContainer';
 import PageHeader from '../../components/Page/PageHeader';
-import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
-import ErrorAlert from '../../components/Page/ErrorAlert';
-import EmptyState from '../../components/Page/EmptyState';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
-import { useAuth } from '../../auth/AuthContext';
 import peopleManifest from './manifest';
-import { fetchComplianceRules } from '../../api/people';
-import { formatDate } from './utils';
 import ReferenceDataManager from './ReferenceDataManager';
+import ComplianceRulesPanel from './ComplianceRulesPanel';
+import CompensationConfigPanel from './CompensationConfigPanel';
 
 // App identity fields shown in the two-column key/value layout.
 const IDENTITY_FIELDS = [
@@ -44,32 +39,16 @@ const IDENTITY_FIELDS = [
 ];
 
 const TAB_STORAGE_KEY = 'carbon-people-config-tab';
-const TAB_KEYS = ['Overview', 'Reference', 'Compliance'];
+const TAB_KEYS = ['Overview', 'Reference', 'Compliance', 'Compensation'];
 
 export default function PeopleConfigPage() {
   const { t } = useTranslation('people');
   useDocumentTitle(t('configTitle'));
-  const { token } = useAuth();
   const [tabIndex, setTabIndex] = useState(() => {
     const saved = parseInt(localStorage.getItem(TAB_STORAGE_KEY) ?? '0', 10);
     return Number.isFinite(saved) && saved < TAB_KEYS.length ? saved : 0;
   });
   const handleTabChange = (_, v) => { setTabIndex(v); localStorage.setItem(TAB_STORAGE_KEY, String(v)); };
-
-  const [rules, setRules] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    fetchComplianceRules(token)
-      .then((rulesData) => {
-        setRules(Array.isArray(rulesData?.results) ? rulesData.results : []);
-      })
-      .catch((err) => setError(err?.message || t('configLoadError')))
-      .finally(() => setLoading(false));
-  }, [token, t]);
 
   const overviewTab = (
     <Stack spacing={2}>
@@ -124,55 +103,6 @@ export default function PeopleConfigPage() {
     </Stack>
   );
 
-  const complianceTab = (
-    <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, mb: 1 }}>{t('configComplianceRules')}</Typography>
-      {loading ? (
-        <LoadingSkeleton variant="table" />
-      ) : error ? (
-        <ErrorAlert message={error} onRetry={() => window.location.reload()} />
-      ) : rules.length === 0 ? (
-        <EmptyState icon={<SettingsIcon />} title={t('configEmpty')} description={t('configEmptyDesc')} />
-      ) : (
-        <TableContainer>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colRuleId')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colVersion')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colName')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colJurisdiction')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colCategory')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colEffectiveDate')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colAuthoritative')}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rules.map((rule) => (
-                <TableRow key={rule.id} hover>
-                  <TableCell>{rule.rule_id ?? '—'}</TableCell>
-                  <TableCell>{rule.version ?? '—'}</TableCell>
-                  <TableCell>{rule.name ?? '—'}</TableCell>
-                  <TableCell>{rule.jurisdiction ?? '—'}</TableCell>
-                  <TableCell>{rule.category ?? '—'}</TableCell>
-                  <TableCell>{formatDate(rule.effective_date)}</TableCell>
-                  <TableCell>
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      color={rule.is_authoritative ? 'success' : 'default'}
-                      label={rule.is_authoritative ? t('yes') : t('no')}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
-    </Paper>
-  );
-
   return (
     <PageContainer>
       <PageHeader icon={SettingsIcon} title={t('configTitle')} subtitle={t('configSubtitle')} />
@@ -189,7 +119,8 @@ export default function PeopleConfigPage() {
 
       {tabIndex === 0 && overviewTab}
       {tabIndex === 1 && <ReferenceDataManager />}
-      {tabIndex === 2 && complianceTab}
+      {tabIndex === 2 && <ComplianceRulesPanel />}
+      {tabIndex === 3 && <CompensationConfigPanel />}
     </PageContainer>
   );
 }

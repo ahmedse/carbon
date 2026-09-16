@@ -6,8 +6,9 @@ improvising:
 
   * ``Capability`` rows — one per governed host action in the pack's
     ``api_catalog.yaml`` ``capabilities:`` list (upserted, ``app_identifier``
-    scoped to the Nibras instance). Each is validated fail-closed against
-    ``ai.capability_registry`` at load time.
+    = brand default app via ``resolve_default_app_identifier()``, i.e.
+    ``people`` for Nibras — matches ``scope_ai_queryset``). Each is validated
+    fail-closed against ``ai.capability_registry`` at load time.
     * ``ProcessDefinition`` rows for ``payroll.run.lifecycle``,
         ``leave.request.lifecycle``, ``loan.request.lifecycle``,
         ``gosi_wps.sif.lifecycle``, and ``employee.onboarding.lifecycle``
@@ -36,7 +37,7 @@ from django.db import transaction
 from accounts.constants import AI_PROCESS_OWNER_GROUP, AI_PUBLISHER_GROUP
 from accounts.models import ScopedRole, User
 from ai.engine.ports.domain import load_domain_pack
-from ai.instance_registry import resolve_instance_id
+from ai.instance_registry import resolve_default_app_identifier, resolve_instance_id
 from ai.models.capability import Capability, load_capabilities
 from ai.models.process import STATUS_ACTIVE, STATUS_DRAFT, STATUS_REVIEW
 from ai.registry_service import ProcessRegistry, RegistryNotFoundError
@@ -91,7 +92,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--instance",
             default="nibras",
-            help="Engine instance id / app_identifier to scope rows to (default: nibras).",
+            help="Engine instance id for pack resolve (default: nibras).",
         )
 
     def handle(self, *args, **options):
@@ -112,7 +113,7 @@ class Command(BaseCommand):
         pack = load_domain_pack(pack_dir)
 
         with transaction.atomic():
-            cap_created, cap_updated = self._seed_capabilities(pack, instance_id)
+            cap_created, cap_updated = self._seed_capabilities(pack)
             process_status = self._seed_processes(pack)
 
         self.stdout.write(
@@ -125,13 +126,16 @@ class Command(BaseCommand):
 
     # ── Capabilities ──────────────────────────────────────────────────
 
-    def _seed_capabilities(self, pack, instance_id: str) -> tuple[int, int]:
+    def _seed_capabilities(self, pack) -> tuple[int, int]:
         """Upsert the pack's capabilities as ``Capability`` rows (fail-closed)."""
         created = 0
         updated = 0
+        # CBAC list API filters by resolve_default_app_identifier() (people for
+        # Nibras), not the engine instance id — same contract as seed_nibras_knowledge.
+        app_identifier = resolve_default_app_identifier()
         for cap in load_capabilities(pack):  # validates host_action fail-closed
             defaults = {field: getattr(cap, field) for field in _CAPABILITY_FIELDS}
-            defaults["app_identifier"] = instance_id
+            defaults["app_identifier"] = app_identifier
             defaults["visibility"] = "shared"
             _, was_created = Capability.objects.update_or_create(
                 capability_id=cap.capability_id, defaults=defaults,

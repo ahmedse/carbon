@@ -195,6 +195,61 @@ def _people_scope(user, qs, org_lookup: str):
     return qs.filter(**{org_lookup: ids})
 
 
+# Host-side org-scope lookups for ECF entity_fetch / entity_count (RULE_12).
+# Engine descriptors declare the same paths; the host bridge must apply them
+# even when the resolver does not pass scope_ids (current resolve_entity path).
+_PEOPLE_ENTITY_SCOPE_LOOKUP: dict[str, str] = {
+    "people.models.Employee": "org_unit_id__in",
+    "people.models.Position": "org_unit_id__in",
+    "people.models.PayrollRun": "org_unit_id__in",
+    "people.models.LeaveRecord": "employee__org_unit_id__in",
+    "people.models.LeaveEntitlement": "employee__org_unit_id__in",
+    "people.models.Loan": "employee__org_unit_id__in",
+    "people.models.LoanInstallment": "loan__employee__org_unit_id__in",
+    "people.models.AttendanceRecord": "employee__org_unit_id__in",
+}
+
+
+def _people_entity_scope_lookup(model_path: str, instance_config: dict | None = None) -> str | None:
+    """Return Django filter key for org scoping a People model path.
+
+    Prefers descriptor ``scope_lookup`` from instance_config when present
+    (same source as ECF registry); falls back to the host map so LeaveRecord
+    uses ``employee__org_unit_id__in`` even if config is empty.
+    """
+    for ent in (instance_config or {}).get("entities") or []:
+        if not isinstance(ent, dict):
+            continue
+        if ent.get("model") == model_path and ent.get("scope_lookup"):
+            return ent["scope_lookup"]
+    return _PEOPLE_ENTITY_SCOPE_LOOKUP.get(model_path)
+
+
+def _normalize_entity_row(row: dict, model_cls) -> dict:
+    """Coerce ORM values() rows into descriptor-friendly dicts.
+
+    - FK attnames (``employee_id``) also exposed under field name (``employee``)
+      so label_map / search_fields match descriptor keys.
+    - date/datetime/Decimal → str for resolver string scoring.
+    """
+    from datetime import date, datetime
+
+    out = dict(row)
+    for f in model_cls._meta.concrete_fields:
+        if getattr(f, "is_relation", False) and f.many_to_one:
+            att, name = f.attname, f.name
+            if att in out and name not in out:
+                out[name] = out[att]
+    for k, v in list(out.items()):
+        if isinstance(v, datetime):
+            out[k] = v.isoformat()
+        elif isinstance(v, date):
+            out[k] = v.isoformat()
+        elif isinstance(v, Decimal):
+            out[k] = str(v)
+    return out
+
+
 def _people_analytics(user, params: dict) -> dict:
     """Server-side analytics: GROUP BY ``dimension`` over the scoped Employee set.
 
@@ -227,24 +282,37 @@ def _people_analytics(user, params: dict) -> dict:
     from people.models import Employee
 
     ALLOWED_DIMENSIONS = {
-        "gender", "is_active", "nationality", "nationality_code",
-        "employment_type_code", "contract_type_code",
+        "gender", "is_active", "nationality",
+        "employment_type", "contract_type",
         "position", "org_unit", "kuwaitization", "rotation",
+    }
+    # Soft aliases for pre-ReferenceValue dimension names (CharField *_code era).
+    DIMENSION_ALIASES = {
+        "nationality_code": "nationality",
+        "employment_type_code": "employment_type",
+        "contract_type_code": "contract_type",
     }
     FK_LABEL_MAP = {
         "position": ("people.models.Position", "title"),
-        "org_unit": ("mdm.models.OrgUnit",     "name"),
+        "org_unit": ("mdm.models.OrgUnit", "name"),
+        # Bucket-1 governed refs (NSR-7B): Employee FKs → ReferenceValue.code
+        "gender": ("mdm.models.ReferenceValue", "code"),
+        "nationality": ("mdm.models.ReferenceValue", "code"),
+        "employment_type": ("mdm.models.ReferenceValue", "code"),
+        "contract_type": ("mdm.models.ReferenceValue", "code"),
+        "rotation": ("mdm.models.ReferenceValue", "code"),
     }
     BLANK_CAVEAT_PCT = 50.0
 
     dimension = (params.get("dimension") or "").strip().lower()
+    dimension = DIMENSION_ALIASES.get(dimension, dimension)
     if dimension not in ALLOWED_DIMENSIONS:
         return {
             "status_code": 400,
             "data": {
                 "detail": (
                     f"Unknown dimension '{dimension}'. "
-                    f"Allowed: {', '.join(sorted(ALLOWED_DIMENSIONS))}"
+                    f"Allowed: {', '.join(sorted(ALLOWED_DIMENSIONS | set(DIMENSION_ALIASES)))}"
                 )
             },
         }
@@ -272,8 +340,9 @@ def _people_analytics(user, params: dict) -> dict:
         .order_by("-count")
     )
 
-    # ── Synonym normalisation (text fields only; FK fields skip this) ──────
+    # ── Synonym normalisation + FK label resolution ─────────────────────────
     # Merge raw DB values into canonical buckets so "M" and "male" become one row.
+    # For ReferenceValue / model FKs: resolve PK → label/code, then synonym-merge.
     bucket_counts: dict[str, int] = defaultdict(int)
     bucket_merged_from: dict[str, list[str]] = defaultdict(list)
     label_resolved = False
@@ -293,8 +362,14 @@ def _people_analytics(user, params: dict) -> dict:
         label_resolved = True
         for row in raw_counts:
             raw_val = row[dimension]
-            canonical = pk_to_label.get(raw_val, "(blank)") if raw_val is not None else "(blank)"
+            displayed = (
+                pk_to_label.get(raw_val) if raw_val is not None else None
+            )
+            canonical = _normalise_value(dimension, displayed)
             bucket_counts[canonical] += row["count"]
+            if displayed and str(displayed).strip() and str(displayed).strip() != canonical:
+                bucket_merged_from[canonical].append(str(displayed).strip())
+                was_normalized = True
     else:
         for row in raw_counts:
             raw_val = row[dimension]
@@ -2213,7 +2288,11 @@ class CarbonHostExecutor(HostAPIExecutor):
     # (RULE_20). Sync by design — the engine wraps it in sync_to_async.
 
     def entity_fetch(self, model_path: str, filters: dict, fields: list, limit: int) -> list[dict]:
-        """Complete-scan ORM fetch for the ECF resolver, org-scoped (RULE_12)."""
+        """Complete-scan ORM fetch for the ECF resolver, org-scoped (RULE_12).
+
+        LeaveRecord (and other employee-linked models) use
+        ``employee__org_unit_id__in`` — not bare ``org_unit_id__in``.
+        """
         import importlib
 
         mod_name, cls_name = model_path.rsplit(".", 1)
@@ -2221,11 +2300,12 @@ class CarbonHostExecutor(HostAPIExecutor):
         qs = model_cls.objects.all()
 
         # Apply People org-unit scoping for the acting user (RULE_12).
-        if self.host_user_id and model_path.startswith("people.models"):
+        org_lookup = _people_entity_scope_lookup(model_path, getattr(self, "instance_config", None))
+        if self.host_user_id and org_lookup:
             from django.contrib.auth import get_user_model
             try:
                 user = get_user_model().objects.get(pk=self.host_user_id)
-                qs = _people_scope(user, qs, "org_unit_id__in")
+                qs = _people_scope(user, qs, org_lookup)
             except Exception:  # noqa: BLE001 — scoping best-effort; never crash a lookup
                 pass
 
@@ -2233,7 +2313,46 @@ class CarbonHostExecutor(HostAPIExecutor):
             qs = qs.filter(**filters)
         if limit and limit > 0:
             qs = qs[:limit]
-        return list(qs.values())
+
+        # Prefer requested fields (search/identifiers/label_map); empty → all.
+        # Use model field names so FKs land as ``employee`` not only ``employee_id``.
+        select: list[str] = []
+        if fields:
+            concrete = {f.name for f in model_cls._meta.concrete_fields}
+            for name in fields:
+                if name in concrete and name not in select:
+                    select.append(name)
+        if select:
+            rows = list(qs.values(*select))
+        else:
+            rows = list(qs.values())
+        return [_normalize_entity_row(r, model_cls) for r in rows]
+
+    def entity_count(self, model_path: str, filters: dict) -> int:
+        """Scoped ORM count for ECF canonical metrics (ADR-0032 / ECF-6).
+
+        Same org-scoping as :meth:`entity_fetch` (incl. LeaveRecord
+        ``employee__org_unit_id__in``). Filters come from the descriptor
+        ``metrics{}`` block — never invented by the LLM.
+        """
+        import importlib
+
+        mod_name, cls_name = model_path.rsplit(".", 1)
+        model_cls = getattr(importlib.import_module(mod_name), cls_name)
+        qs = model_cls.objects.all()
+
+        org_lookup = _people_entity_scope_lookup(model_path, getattr(self, "instance_config", None))
+        if self.host_user_id and org_lookup:
+            from django.contrib.auth import get_user_model
+            try:
+                user = get_user_model().objects.get(pk=self.host_user_id)
+                qs = _people_scope(user, qs, org_lookup)
+            except Exception:  # noqa: BLE001 — scoping best-effort
+                pass
+
+        if filters:
+            qs = qs.filter(**filters)
+        return qs.count()
 
     def user_capabilities(self) -> frozenset:
         """Return the acting user's CBAC capability keys (for honest masking)."""

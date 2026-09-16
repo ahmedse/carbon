@@ -55,7 +55,8 @@ def test_pdp_decision_values_match_plan():
     }
 
 
-def test_pdp_decide_signature_has_seven_params():
+def test_pdp_decide_signature_has_core_and_attribution_params():
+    """Core PDP args (P2-07) plus optional attribution kwargs (PEC-ID-1)."""
     hints = get_type_hints(ports.PolicyDecisionPoint.decide)
     assert list(hints) == [
         "principal",
@@ -65,5 +66,9 @@ def test_pdp_decide_signature_has_seven_params():
         "autonomy",
         "budget",
         "time",
+        "actor_chain",
+        "request_id",
+        "instance_id",
+        "host_user_id",
         "return",
     ]

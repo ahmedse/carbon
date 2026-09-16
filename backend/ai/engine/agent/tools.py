@@ -1,6 +1,7 @@
 """
 Tool definitions and execution functions for the Pulse agent.
 """
+import copy
 import json
 import logging
 import re
@@ -413,6 +414,10 @@ def _get_slug_resolution(executor, api_name: str) -> tuple[str, list[str]] | Non
     """Read slug resolution config from the executor's instance config.
 
     Returns (list_api_name, match_fields) or None if no resolution is configured.
+
+    Superseded by ECF ``resolve_entity`` when ``ECF_ENABLED`` (ECF-7 cutover
+    2026-09-16). Kept as fallback for list_employees / get_employee paths for
+    30 days — do NOT delete until the fallback window closes.
     """
     if executor is None:
         return None
@@ -481,6 +486,10 @@ async def _resolve_slug_to_id(
     If any path param value is non-numeric (a slug or name), auto-resolve it to
     the real numeric PK by fetching the corresponding list endpoint first.
     Returns a (possibly updated) copy of path_params.
+
+    Legacy list_employees / get_employee path via slug_resolution.
+    Superseded by ECF resolve_entity when ECF_ENABLED (ECF-7); kept as
+    30-day fallback — do NOT delete.
     """
     resolution = _get_slug_resolution(executor, api_name)
     if not resolution:
@@ -548,6 +557,9 @@ async def _auto_resolve_missing_params(
     When the LLM omits path_params entirely, try to auto-resolve them.
     If exactly one option exists, use it. Otherwise return an error with
     available options so the LLM can call ask_clarification.
+
+    Legacy get_employee / list_employees slug_resolution fallback (ECF-7:
+    superseded by resolve_entity when ECF_ENABLED; keep 30 days).
     """
     # Determine the right list endpoint based on the api_name's slug resolution config
     resolution = _get_slug_resolution(executor, api_name)
@@ -771,6 +783,35 @@ async def execute_call_host_api(
             instance_config=getattr(executor, "instance_config", None),
             instance_id=instance_id,
             conversation_id=conversation_id,
+        )
+
+    # ``aggregate_entity`` is a dedicated ECF capability (canonical metrics),
+    # not a REST endpoint — same call_host_api aliasing pattern as resolve.
+    if api_name == "aggregate_entity":
+        merged: dict = {}
+        merged.update(path_params or {})
+        merged.update(query_params or {})
+        merged.update(body or {})
+        entity_type = merged.get("entity_type") or "employee"
+        metric = (
+            merged.get("metric")
+            or merged.get("name")
+            or merged.get("metric_name")
+            or ""
+        )
+        if not metric:
+            return {
+                "error": (
+                    "aggregate_entity requires a metric name "
+                    "(e.g. 'headcount' or 'kuwaiti')."
+                )
+            }
+        return await execute_aggregate_entity(
+            entity_type=str(entity_type),
+            metric=str(metric),
+            explanation=explanation,
+            executor=executor,
+            instance_config=getattr(executor, "instance_config", None),
         )
 
     entry = executor.get_catalog_entry(api_name)
@@ -1627,6 +1668,11 @@ STATIC_TOOL_EXECUTORS = {
 # Generic bilingual entity resolver (ADR-0032).  Added to the tool catalog
 # only when ECF_ENABLED=True; legacy list_employees / get_employee stay live.
 
+# Fallback wording when instance_config / descriptors are unavailable at
+# catalog assembly time. Prefer dynamic names from load_descriptors().
+_ECF_ENTITY_TYPE_FALLBACK = ("employee", "leave_record")
+_ECF_METRIC_FALLBACK = ("headcount", "kuwaiti")
+
 _ECF_RESOLVE_ENTITY_DEFINITION = {
     "type": "function",
     "function": {
@@ -1634,23 +1680,27 @@ _ECF_RESOLVE_ENTITY_DEFINITION = {
         "description": (
             "Find a specific record by name, number, or identifier. "
             "Use this for 'find employee X', 'who is X', 'employee number N', "
-            "'من هو X', 'ابحث عن X'. "
+            "'من هو X', 'ابحث عن X', leave lookups by id/date/status, etc. "
             "Performs a COMPLETE scan (not capped at 100 rows) across all records, "
             "in Arabic and English. Returns a single match, a disambiguation list, "
             "or a grounded 'not found' that includes how many records were searched. "
-            "ALWAYS use this instead of list_employees for name/number lookup."
+            "ALWAYS use this instead of list_employees for name/number lookup. "
+            "Set entity_type to a registered HRMS instance descriptor name."
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "entity_type": {
                     "type": "string",
-                    "description": "The type of entity to resolve. Use 'employee' for HR lookups.",
-                    "enum": ["employee"],
+                    "description": (
+                        "Registered entity type from HRMS instance descriptors "
+                        "(e.g. employee, leave_record). Must match a descriptor name."
+                    ),
+                    "enum": list(_ECF_ENTITY_TYPE_FALLBACK),
                 },
                 "query": {
                     "type": "string",
-                    "description": "Name, employee number, or any identifier of the entity.",
+                    "description": "Name, employee number, id, date, or any identifier of the entity.",
                 },
                 "explanation": {
                     "type": "string",
@@ -1662,8 +1712,290 @@ _ECF_RESOLVE_ENTITY_DEFINITION = {
     },
 }
 
+# ── ECF — aggregate_entity (ECF_ENABLED gate) ───────────────────────────────
+# Canonical named metrics from descriptor.metrics{} (ADR-0032 / ECF-6).
+# analyze_employees (dimension breakdowns) stays unchanged — this is an
+# additional metric-named path for stable totals (headcount, kuwaiti, …).
+
+_ECF_AGGREGATE_ENTITY_DEFINITION = {
+    "type": "function",
+    "function": {
+        "name": "aggregate_entity",
+        "description": (
+            "Return a CANONICAL named metric count for an entity type. "
+            "Use for total headcount ('كم عدد الموظفين') and Kuwaiti count "
+            "('كم كويتي موظف'), and for leave metrics when leave_record is "
+            "registered. Metrics are descriptor-defined — "
+            "'headcount' ALWAYS means is_active=True; 'kuwaiti' ALWAYS means "
+            "nationality_code=KW (never the kuwaitization boolean). "
+            "Cite the filter fields in your answer. "
+            "For breakdowns BY dimension (gender, nationality, org_unit, …) "
+            "keep using analyze_employees — do NOT invent alternate filters."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "entity_type": {
+                    "type": "string",
+                    "description": (
+                        "Registered entity type from HRMS instance descriptors "
+                        "(e.g. employee, leave_record). Must match a descriptor name."
+                    ),
+                    "enum": list(_ECF_ENTITY_TYPE_FALLBACK),
+                },
+                "metric": {
+                    "type": "string",
+                    "description": (
+                        "Canonical metric name from the entity descriptor "
+                        "(e.g. 'headcount', 'kuwaiti', 'open_leave_count')."
+                    ),
+                    "enum": list(_ECF_METRIC_FALLBACK),
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "Why you are requesting this metric.",
+                },
+            },
+            "required": ["entity_type", "metric", "explanation"],
+        },
+    },
+}
+
+
+def _descriptor_entity_names(instance_config: dict | None) -> list[str]:
+    """Return sorted entity names from instance_config descriptors, or []."""
+    if not instance_config:
+        return []
+    try:
+        from ai.engine.cognition.entity.registry import load_descriptors
+
+        return sorted(load_descriptors(instance_config).keys())
+    except Exception:  # noqa: BLE001 — catalog assembly must never fail
+        logger.debug("ECF: could not load descriptors for tool schema", exc_info=True)
+        return []
+
+
+def _descriptor_metric_names(instance_config: dict | None) -> list[str]:
+    """Return sorted unique metric names across all descriptors, or []."""
+    if not instance_config:
+        return []
+    try:
+        from ai.engine.cognition.entity.registry import load_descriptors
+
+        names: set[str] = set()
+        for desc in load_descriptors(instance_config).values():
+            names.update((desc.metrics or {}).keys())
+        return sorted(names)
+    except Exception:  # noqa: BLE001 — catalog assembly must never fail
+        logger.debug("ECF: could not load metrics for tool schema", exc_info=True)
+        return []
+
+
+def _enrich_ecf_tool_definitions(
+    definitions: list[dict],
+    instance_config: dict | None,
+) -> list[dict]:
+    """Advertise registered descriptor entity types (and metrics) on ECF tools.
+
+    Deep-copies the static ECF defs so import-time templates stay untouched.
+    When descriptors are available, ``entity_type`` / ``metric`` enums and
+    descriptions list the live names. Otherwise keep the HRMS fallback wording
+    (employee + leave_record) without brand-specific engine terms.
+    """
+    entity_names = _descriptor_entity_names(instance_config)
+    metric_names = _descriptor_metric_names(instance_config)
+    advertised_entities = entity_names or list(_ECF_ENTITY_TYPE_FALLBACK)
+    entity_desc = (
+        "Registered entity type from HRMS instance descriptors: "
+        + ", ".join(advertised_entities)
+        + ". Must match a descriptor name."
+    )
+
+    enriched: list[dict] = []
+    for tool in definitions:
+        name = (tool or {}).get("function", {}).get("name", "")
+        if name not in ("resolve_entity", "aggregate_entity"):
+            enriched.append(tool)
+            continue
+        clone = copy.deepcopy(tool)
+        props = clone["function"]["parameters"]["properties"]
+        props["entity_type"]["enum"] = list(advertised_entities)
+        props["entity_type"]["description"] = entity_desc
+        if name == "aggregate_entity":
+            advertised_metrics = metric_names or list(_ECF_METRIC_FALLBACK)
+            props["metric"]["enum"] = list(advertised_metrics)
+            props["metric"]["description"] = (
+                "Canonical metric name from the entity descriptor "
+                f"(available: {', '.join(advertised_metrics)})."
+            )
+        enriched.append(clone)
+    return enriched
+
 
 _AR_SCRIPT = re.compile(r"[\u0600-\u06FF]")
+
+# Structured JSON shadow logger (no ai_shadow_log model yet — ADR-0032 parity evidence).
+_shadow_logger = logging.getLogger("pulse.ecf.shadow")
+
+
+def _compact_legacy_record(item: dict | None) -> dict | None:
+    """Keep shadow payloads small — ids/names only."""
+    if not isinstance(item, dict):
+        return None
+    keys = ("id", "employee_no", "full_name", "name_en_given", "name_en_family")
+    return {k: item.get(k) for k in keys if k in item}
+
+
+async def _legacy_resolve_via_list_get(executor, query: str) -> dict:
+    """Best-effort legacy get_employee / list_employees path for shadow parity.
+
+    Mirrors the pre-ECF slug-resolution behaviour: numeric query → detail GET;
+    otherwise scan the capped list page for exact match_fields hits. Never raises
+    to the caller — returns an error-shaped dict on failure.
+    """
+    q = (query or "").strip()
+    if not q:
+        return {"found": False, "path": "empty_query"}
+
+    resolution = _get_slug_resolution(executor, "get_employee")
+    list_api = "list_employees"
+    match_fields = ["employee_no", "name_en_given", "name_en_family"]
+    if resolution:
+        list_api, match_fields = resolution
+
+    get_entry = (
+        executor.get_catalog_entry("get_employee")
+        if hasattr(executor, "get_catalog_entry")
+        else None
+    )
+    call = getattr(executor, "call_api_direct", None)
+
+    # 1. Numeric → try get_employee detail (PK / employee_no via host path).
+    if q.lstrip("-").isdigit() and get_entry and call is not None:
+        path_tmpl = get_entry.get("path") or ""
+        detail_path = path_tmpl.replace("{id}", q)
+        try:
+            detail = await call("GET", detail_path)
+            status = detail.get("status_code", 200) if isinstance(detail, dict) else 200
+            data = detail.get("data", detail) if isinstance(detail, dict) else detail
+            if status == 200 and isinstance(data, dict) and (
+                data.get("id") is not None or data.get("employee_no") is not None
+            ):
+                return {
+                    "found": True,
+                    "path": "get_employee",
+                    "record": _compact_legacy_record(data),
+                }
+        except Exception as exc:  # noqa: BLE001 — best-effort
+            return {
+                "found": False,
+                "path": "get_employee",
+                "error": str(exc),
+            }
+
+    # 2. list_employees capped scan (legacy truncation surface).
+    if call is None or not hasattr(executor, "get_catalog_entry"):
+        return {"found": False, "path": "list_unavailable"}
+
+    list_entry = executor.get_catalog_entry(list_api)
+    if not list_entry:
+        return {"found": False, "path": "list_unavailable"}
+
+    try:
+        list_result = await call("GET", list_entry["path"])
+    except Exception as exc:  # noqa: BLE001
+        return {"found": False, "path": list_api, "error": str(exc)}
+
+    items = _extract_items(list_result)
+    meta: dict = {"path": list_api, "searched_count": len(items)}
+    if isinstance(list_result, dict):
+        inner = list_result.get("data", list_result)
+        if isinstance(inner, dict):
+            if "total" in inner:
+                meta["total"] = inner.get("total")
+            if inner.get("truncated"):
+                meta["truncated"] = True
+
+    needle = q.lower()
+    matches = [
+        item
+        for item in items
+        if isinstance(item, dict)
+        and any(str(item.get(f, "")).lower() == needle for f in match_fields)
+    ]
+    if len(matches) == 1:
+        return {
+            "found": True,
+            **meta,
+            "record": _compact_legacy_record(matches[0]),
+        }
+    if len(matches) > 1:
+        return {
+            "found": False,
+            "action": "disambiguate",
+            **meta,
+            "candidates": [_compact_legacy_record(m) for m in matches[:5]],
+        }
+    return {"found": False, **meta}
+
+
+def build_shadow_diff(new_result: dict, legacy_result: dict) -> dict:
+    """Build the shadow_diff payload logged for ECF-7 parity review."""
+    return {"new_result": new_result, "legacy_result": legacy_result}
+
+
+def log_resolve_entity_shadow(
+    *,
+    entity_type: str,
+    query: str,
+    new_result: dict,
+    legacy_result: dict,
+) -> dict:
+    """Emit structured JSON shadow_diff. Fail-open — never raises."""
+    shadow_diff = build_shadow_diff(new_result, legacy_result)
+    try:
+        record = {
+            "event": "ecf_shadow_diff",
+            "entity_type": entity_type,
+            "query": query,
+            "shadow_diff": shadow_diff,
+        }
+        _shadow_logger.info("ECF_SHADOW %s", json.dumps(record, default=str))
+    except Exception:  # noqa: BLE001 — logging must never break the tool
+        try:
+            _shadow_logger.exception("ECF shadow log emission failed")
+        except Exception:  # noqa: BLE001
+            pass
+    return shadow_diff
+
+
+async def emit_resolve_entity_shadow(
+    *,
+    executor,
+    entity_type: str,
+    query: str,
+    new_result: dict,
+) -> dict | None:
+    """When ECF_ENABLED, compare resolve_entity vs legacy list/get and log.
+
+    Fail-open: any error returns None and never propagates.
+    """
+    try:
+        if not getattr(get_settings(), "ECF_ENABLED", False):
+            return None
+        legacy_result = await _legacy_resolve_via_list_get(executor, query)
+        return log_resolve_entity_shadow(
+            entity_type=entity_type,
+            query=query,
+            new_result=new_result,
+            legacy_result=legacy_result,
+        )
+    except Exception:  # noqa: BLE001
+        try:
+            _shadow_logger.exception("ECF shadow compare failed")
+        except Exception:  # noqa: BLE001
+            pass
+        return None
 
 
 async def _llm_transliterate(query: str, instance_id: str, conversation_id: str) -> list[str]:
@@ -1810,10 +2142,82 @@ async def execute_resolve_entity(
         }
 
     try:
-        return await sync_to_async(_build, thread_sensitive=True)()
+        response = await sync_to_async(_build, thread_sensitive=True)()
     except Exception as exc:  # noqa: BLE001
         logger.exception("resolve_entity response build failed")
         return {"error": f"Resolver error: {exc}"}
+
+    # ECF-4 shadow parity: compare vs legacy list/get (fail-open, never breaks response).
+    await emit_resolve_entity_shadow(
+        executor=executor,
+        entity_type=entity_type,
+        query=query,
+        new_result=response,
+    )
+    return response
+
+
+async def execute_aggregate_entity(
+    entity_type: str,
+    metric: str,
+    explanation: str = "",
+    executor=None,
+    instance_config: dict | None = None,
+    **kwargs,
+) -> dict:
+    """Execute the aggregate_entity tool — descriptor-driven canonical metrics.
+
+    Uses host ``entity_count`` so the engine never touches Django (RULE_20).
+    Filter kwargs come only from ``descriptor.metrics[metric]`` — the caller
+    cannot invent alternate definitions (kills Kuwaiti 55-vs-5 drift).
+    """
+    from asgiref.sync import sync_to_async
+
+    from ai.engine.cognition.entity import get_descriptor
+    from ai.engine.cognition.entity.aggregate import UnknownMetricError, aggregate
+
+    if executor is None:
+        return {"error": "Host executor not available"}
+
+    cfg = instance_config or getattr(executor, "instance_config", None)
+    if not cfg:
+        return {"error": "No instance configuration available"}
+
+    descriptor = get_descriptor(cfg, entity_type)
+    if descriptor is None:
+        return {"error": f"Entity type '{entity_type}' is not registered for this instance."}
+
+    count_fn = getattr(executor, "entity_count", None)
+    if count_fn is None:
+        return {"error": "Host executor does not support entity_count"}
+
+    def _run():
+        return aggregate(descriptor, metric, count_fn=count_fn)
+
+    try:
+        result = await sync_to_async(_run, thread_sensitive=True)()
+    except UnknownMetricError as exc:
+        return {
+            "error": str(exc),
+            "available_metrics": list(exc.available),
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("aggregate_entity failed for %s.%s", entity_type, metric)
+        return {"error": f"Aggregate error: {exc}"}
+
+    # cited_fields + filter are the honest citation surface for the LLM answer.
+    return {
+        "metric": result.metric,
+        "value": result.value,
+        "filter": result.filter,
+        "description": result.description,
+        "entity_type": result.entity_type,
+        "cited_fields": list(result.cited_fields),
+        "citation": (
+            f"{result.metric} = count where "
+            + ", ".join(f"{k}={result.filter[k]!r}" for k in result.cited_fields)
+        ),
+    }
 
 
 # ── MCP (Model Context Protocol) dynamic tool injection ──────────────────
@@ -1837,13 +2241,24 @@ def _dedup_definitions(definitions: list[dict]) -> list[dict]:
     return deduped
 
 
-def get_tool_definitions() -> list[dict]:
-    """Return all tool definitions: static + plugin + MCP (name-unique)."""
+def get_tool_definitions(instance_config: dict | None = None) -> list[dict]:
+    """Return all tool definitions: static + plugin + MCP (name-unique).
+
+    When ``ECF_ENABLED``, appends ``resolve_entity`` / ``aggregate_entity``
+    with ``entity_type`` (and aggregate ``metric``) enums enriched from
+    ``instance_config`` descriptors when provided.
+    """
     plugin_defs, _ = load_plugins()
     base = list(STATIC_TOOL_DEFINITIONS)
     settings = get_settings()
     if getattr(settings, "ECF_ENABLED", False):
-        base = base + [_ECF_RESOLVE_ENTITY_DEFINITION]
+        base = base + _enrich_ecf_tool_definitions(
+            [
+                _ECF_RESOLVE_ENTITY_DEFINITION,
+                _ECF_AGGREGATE_ENTITY_DEFINITION,
+            ],
+            instance_config,
+        )
     return _dedup_definitions(base + plugin_defs + list(MCP_TOOLS))
 
 
@@ -1858,6 +2273,7 @@ async def get_tool_executors() -> dict:
     settings = get_settings()
     if getattr(settings, "ECF_ENABLED", False):
         base["resolve_entity"] = execute_resolve_entity
+        base["aggregate_entity"] = execute_aggregate_entity
     return base
 
 

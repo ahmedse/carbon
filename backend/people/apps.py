@@ -8,4 +8,4 @@ class PeopleConfig(AppConfig):
 
     def ready(self):
         import people.compliance  # noqa: registers evaluators into regulations.registry
-        import people.signals  # noqa: registers correspondence -> Loan status sync
+        import people.signals  # noqa: registers correspondence -> Loan/Leave status sync

@@ -5,6 +5,7 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from people.models import ComplianceRule
+from people.tests.ref_helpers import compliance_rule_defaults, ensure_ref
 
 
 class ComplianceRuleModelTests(TestCase):
@@ -13,7 +14,7 @@ class ComplianceRuleModelTests(TestCase):
             rule_id="t-rule",
             version="2026.1",
             name="Test rule",
-            category="other",
+            category=ensure_ref('compliance_category', 'other'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
             effective_date=date(2026, 1, 1),
         )
         self.assertFalse(rule.is_authoritative)
@@ -21,23 +22,23 @@ class ComplianceRuleModelTests(TestCase):
 
     def test_unique_together_rule_id_version(self):
         ComplianceRule.objects.create(
-            rule_id="t-eosi", version="2026.1", name="A", category="eosi",
+            rule_id="t-eosi", version="2026.1", name="A", category=ensure_ref('compliance_category', 'eosi'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
             effective_date=date(2026, 1, 1),
         )
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 ComplianceRule.objects.create(
-                    rule_id="t-eosi", version="2026.1", name="B", category="eosi",
+                    rule_id="t-eosi", version="2026.1", name="B", category=ensure_ref('compliance_category', 'eosi'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
                     effective_date=date(2026, 1, 1),
                 )
 
     def test_different_versions_of_same_rule_id_allowed(self):
         ComplianceRule.objects.create(
-            rule_id="t-eosi", version="2026.1", name="A", category="eosi",
+            rule_id="t-eosi", version="2026.1", name="A", category=ensure_ref('compliance_category', 'eosi'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
             effective_date=date(2026, 1, 1),
         )
         ComplianceRule.objects.create(
-            rule_id="t-eosi", version="2026.2", name="A", category="eosi",
+            rule_id="t-eosi", version="2026.2", name="A", category=ensure_ref('compliance_category', 'eosi'), jurisdiction=ensure_ref('jurisdiction', 'KW'),
             effective_date=date(2026, 6, 1),
         )
         self.assertEqual(ComplianceRule.objects.filter(rule_id="t-eosi").count(), 2)

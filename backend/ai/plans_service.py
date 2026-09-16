@@ -95,6 +95,65 @@ STEP_SKIPPED = "skipped"
 # step to ``pending`` so the driver re-runs it.
 STEP_PAUSED = "paused"
 
+# Terminal step statuses — when every step is in this set the plan status
+# must be completed (all success/skipped) or failed (any failed).
+_STEP_TERMINAL = frozenset({STEP_COMPLETED, STEP_FAILED, STEP_SKIPPED})
+
+# Run statuses that may be rewritten from step outcomes. Discovery /
+# pending_approval / cancelled stay operator-owned and are never clobbered.
+_RUN_STATUS_RECONCILEABLE = frozenset({
+    STATUS_APPROVED,
+    STATUS_RUNNING,
+    STATUS_PAUSED,
+    STATUS_COMPLETED,
+    STATUS_FAILED,
+})
+
+
+def _derived_status_from_steps(steps):
+    """Derive plan status from durable step rows when every step is terminal.
+
+    Returns ``None`` when steps are empty or still in flight (so callers keep
+    the stored run status). Any ``awaiting_approval`` → paused; any ``failed``
+    among a fully-settled set → failed; otherwise completed.
+    """
+    if not steps:
+        return None
+    statuses = [getattr(s, "status", None) for s in steps]
+    if any(st == STEP_AWAITING_APPROVAL for st in statuses):
+        return STATUS_PAUSED
+    if not all(st in _STEP_TERMINAL for st in statuses):
+        return None
+    if any(st == STEP_FAILED for st in statuses):
+        return STATUS_FAILED
+    return STATUS_COMPLETED
+
+
+def _reconcile_run_status_from_steps(run, steps) -> None:
+    """Persist plan status from step outcomes when all steps have finished.
+
+    Repairs stuck ``running`` / lagged ``failed`` rows after retries leave
+    every step completed, and keeps list/get payloads honest for every plan.
+    """
+    if run is None:
+        return
+    if run.status not in _RUN_STATUS_RECONCILEABLE:
+        return
+    derived = _derived_status_from_steps(steps)
+    if derived is None or derived == run.status:
+        return
+    fields = ["status", "updated_at"]
+    run.status = derived
+    if derived in (STATUS_COMPLETED, STATUS_FAILED) and not run.completed_at:
+        run.completed_at = timezone.now()
+        fields.append("completed_at")
+    run.save(update_fields=fields)
+    logger.info(
+        "reconciled plan status id=%s → %s from %d finished step(s)",
+        run.id, derived, len(steps),
+    )
+
+
 # Serialized step runnable-state enum (F-28) — the product-level lock/edit
 # contract the frontend consumes. Derived from ``RunStep.status`` so the UI
 # never has to guess from engine status strings.
@@ -1161,6 +1220,8 @@ class PlansService:
             steps = list(
                 RunStep.objects.filter(run_id=run.id).order_by("step_index")
             )
+        # When every step is terminal, keep the plan status aligned (list + get).
+        _reconcile_run_status_from_steps(run, steps)
         # Artifacts grouped by step (W5-C): one query for the whole run.
         artifacts_by_step: dict = {}
         for a in RunArtifact.objects.filter(run_id=run.id):
@@ -1189,6 +1250,11 @@ class PlansService:
                 for i, p in enumerate(plan_json.get("phases") or [])
             ],
             "conversation_id": run.conversation_id,
+            "discovery_turns": (
+                plan_json.get("discovery_turns")
+                if run.status == STATUS_DISCOVERING
+                else None
+            ),
             "created_at": run.created_at.isoformat() if run.created_at else None,
             "updated_at": run.updated_at.isoformat() if run.updated_at else None,
             "completed_at": run.completed_at.isoformat() if run.completed_at else None,
@@ -1662,8 +1728,6 @@ class PlansService:
         brief + discovery answers) is decomposed into a full plan and the Run
         transitions to ``pending_approval`` (RULE_21 — review only).
         """
-        from ai.models.core import RunStep
-
         run = self._get_owned_run(user, plan_id)
         if run.status != STATUS_DISCOVERING:
             raise PlanNotRunnableError(
@@ -1694,40 +1758,7 @@ class PlansService:
             decision = self._ask_discovery_llm(brief, turns)
 
         if decision.get("action") == "complete":
-            enriched = self._enrich_brief(brief, turns)
-            plan = self._decompose(user, enriched)
-            plan_dict = self._plan_to_dict(plan)
-            plan_dict["discovery_turns"] = turns
-            plan_dict["brief"] = brief
-
-            run.plan_json = plan_dict
-            run.status = STATUS_PENDING_APPROVAL
-            run.save(update_fields=["plan_json", "status", "updated_at"])
-
-            RunStep.objects.filter(run_id=run.id).delete()
-            for step in plan.steps:
-                RunStep.objects.create(
-                    run_id=run.id,
-                    step_index=step.step_id,
-                    intent=step.intent,
-                    tool_name=step.tool_name,
-                    tool_args_json=step.tool_args or {},
-                    depends_on_json=step.depends_on or [],
-                    status=STEP_PENDING,
-                )
-
-            logger.info(
-                "Discovery complete id=%s user=%s steps=%d",
-                run.id, str(user.pk), len(plan.steps),
-            )
-            return {
-                "id": run.id,
-                "status": "plan_ready",
-                "run_status": STATUS_PENDING_APPROVAL,
-                "question": None,
-                "plan": self.get_plan(user, run.id),
-                "turns": turns,
-            }
+            return self._finalize_discovery_run(user, run, brief, turns)
 
         next_question = decision.get("question")
         turns.append({"question": next_question, "reply": None})
@@ -1740,6 +1771,71 @@ class PlansService:
             "run_status": STATUS_DISCOVERING,
             "question": next_question,
             "plan": None,
+            "turns": turns,
+        }
+
+    def finalize_discovery(self, user, plan_id: str) -> dict:
+        """Force-complete discovery with the current brief (no more questions).
+
+        Used when the brief is already actionable or the user skips clarifying
+        questions — prevents runs stuck forever in ``discovering`` with 0 steps.
+        """
+        run = self._get_owned_run(user, plan_id)
+        if run.status != STATUS_DISCOVERING:
+            raise PlanNotRunnableError(
+                f"Only discovering plans can be finalized (status: {run.status})."
+            )
+        plan_json = run.plan_json or {}
+        turns = list(plan_json.get("discovery_turns") or [])
+        brief = plan_json.get("brief") or run.user_message or ""
+        # Keep answered turns; drop unanswered trailing questions.
+        cleaned = []
+        for t in turns:
+            q = (t.get("question") or "").strip()
+            r = (t.get("reply") or "").strip()
+            if r:
+                cleaned.append({"question": q, "reply": r})
+            elif not q:
+                continue
+            # unanswered question — omit
+        return self._finalize_discovery_run(user, run, brief, cleaned)
+
+    def _finalize_discovery_run(self, user, run, brief: str, turns: list) -> dict:
+        """Decompose enriched brief → pending_approval plan with steps."""
+        from ai.models.core import RunStep
+
+        enriched = self._enrich_brief(brief, turns)
+        plan = self._decompose(user, enriched)
+        plan_dict = self._plan_to_dict(plan)
+        plan_dict["discovery_turns"] = turns
+        plan_dict["brief"] = brief
+
+        run.plan_json = plan_dict
+        run.status = STATUS_PENDING_APPROVAL
+        run.save(update_fields=["plan_json", "status", "updated_at"])
+
+        RunStep.objects.filter(run_id=run.id).delete()
+        for step in plan.steps:
+            RunStep.objects.create(
+                run_id=run.id,
+                step_index=step.step_id,
+                intent=step.intent,
+                tool_name=step.tool_name,
+                tool_args_json=step.tool_args or {},
+                depends_on_json=step.depends_on or [],
+                status=STEP_PENDING,
+            )
+
+        logger.info(
+            "Discovery complete id=%s user=%s steps=%d",
+            run.id, str(user.pk), len(plan.steps),
+        )
+        return {
+            "id": run.id,
+            "status": "plan_ready",
+            "run_status": STATUS_PENDING_APPROVAL,
+            "question": None,
+            "plan": self.get_plan(user, run.id),
             "turns": turns,
         }
 
@@ -3045,6 +3141,11 @@ class PlansService:
         paused_step = next(
             (s for s in steps if s.status == STEP_AWAITING_APPROVAL), None
         )
+
+        # All steps finished → align plan status before the done frame so the
+        # picker / SSE consumers see completed|failed correctly.
+        await sync_to_async(_reconcile_run_status_from_steps)(run, steps)
+        await sync_to_async(run.refresh_from_db)()
 
         # W5-C: surface any artifacts produced by this run on the live frames.
         from ai.models.core import RunArtifact

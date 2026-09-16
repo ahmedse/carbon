@@ -93,6 +93,15 @@ export function listSkills(token) {
 }
 
 /**
+ * Durable Capability contracts registry (PEC-R1/R2). Read-only.
+ * @param {string} token
+ * @returns {Promise<Array<{capability_id, business_name, purpose, kind, host_action, owner, version, permissions, requires_confirmation}>>}
+ */
+export function listCapabilities(token) {
+  return apiFetch(`${BASE_CATALOG}capabilities/`, { token });
+}
+
+/**
  * Admin promote: run the admission gate for a skill (PEC-6A).
  * CBAC: ai:publisher | ai:process_owner (server is authority).
  * @param {string} token

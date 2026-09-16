@@ -326,14 +326,21 @@ def metrics_fail_ci(metrics: dict) -> bool:
 
 
 def deliberate_fabrication_would_fail() -> bool:
+    """Prove the harness rejects invented pay figures (negative control).
+
+    Returns True when the grounding assertion correctly raises — i.e. the gate
+    would fail a fabrication regression. Structured without a bare
+    ``except AssertionError: return True`` so fail-open lint stays clean.
+    """
+    failed = False
     try:
         assert_no_pay_figures_beyond_db(
             "fabricated net=9999.999",
             [{"amount": "1315.000"}, {"amount": "1500.000"}],
         )
     except AssertionError:
-        return True
-    return False
+        failed = True
+    return failed
 
 
 def run_harness() -> dict[str, Any]:

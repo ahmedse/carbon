@@ -23,6 +23,7 @@ import {
 import AddCommentOutlinedIcon from '@mui/icons-material/AddCommentOutlined';
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
+import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DataUsageIcon from '@mui/icons-material/DataUsage';
@@ -60,6 +61,7 @@ import AIUsageTab from './AIUsageTab';
 import AISettingsTab from './AISettingsTab';
 import AIProcessesTab from './AIProcessesTab';
 import SkillsPanel from '../pages/admin/ai/SkillsPanel';
+import CapabilitiesPanel from '../pages/admin/ai/CapabilitiesPanel';
 import WatchesPanel from '../pages/admin/ai/WatchesPanel';
 import AIMemoryConsole from './AIMemoryConsole';
 import AITaskPanel from './AITaskPanel';
@@ -598,6 +600,8 @@ export function AIWorkspace({ onClose }) {
                 <AIProcessesTab />
               ) : activePanel === 'skills' ? (
                 <SkillsPanel />
+              ) : activePanel === 'capabilities' ? (
+                <CapabilitiesPanel />
               ) : activePanel === 'watches' ? (
                 <WatchesPanel />
               ) : activePanel === 'settings' ? (
@@ -742,6 +746,7 @@ export function AIWorkspace({ onClose }) {
                 { id: 'usage',       icon: <DataUsageIcon sx={{ fontSize: 16 }} />,                  label: t('panel.usage')       },
                 { id: 'processes',   icon: <AccountTreeOutlinedIcon sx={{ fontSize: 16 }} />,        label: t('panel.processes')   },
                 { id: 'skills',      icon: <AutoAwesomeOutlinedIcon sx={{ fontSize: 16 }} />,         label: t('panel.skills')      },
+                { id: 'capabilities', icon: <CategoryOutlinedIcon sx={{ fontSize: 16 }} />,           label: t('panel.capabilities') },
                 { id: 'watches',     icon: <NotificationsActiveOutlinedIcon sx={{ fontSize: 16 }} />, label: t('panel.watches')     },
                 { id: 'settings',    icon: <SettingsOutlinedIcon sx={{ fontSize: 16 }} />,           label: t('panel.settings')    },
               ].map(({ id, icon, label }) => (

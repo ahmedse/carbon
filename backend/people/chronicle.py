@@ -5,16 +5,16 @@ from decimal import Decimal
 logger = logging.getLogger(__name__)
 
 TRACKED_EMPLOYEE_FIELDS = {
-    'org_unit_id', 'full_name', 'basic_salary', 'nationality',
-    'join_date', 'rotation', 'is_active',
+    'org_unit_id', 'full_name', 'basic_salary', 'nationality_id',
+    'join_date', 'rotation_id', 'is_active',
     'name_en_given', 'name_en_family', 'name_ar_given', 'name_ar_family',
-    'civil_id', 'date_of_birth', 'gender', 'nationality_code',
-    'employment_type_code', 'contract_type_code', 'kuwaitization',
+    'civil_id', 'date_of_birth', 'gender_id',
+    'employment_type_id', 'contract_type_id', 'kuwaitization',
     'manager_id', 'position_id',
 }
 TRACKED_POSITION_FIELDS = {
-    'org_unit_id', 'code', 'title', 'grade', 'reports_to_id', 'is_management',
-    'status', 'fte', 'job_family_code',
+    'org_unit_id', 'code', 'title', 'grade_id', 'reports_to_id', 'is_management',
+    'status', 'fte', 'job_family_id',
 }
 
 

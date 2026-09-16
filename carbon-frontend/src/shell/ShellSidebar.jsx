@@ -15,6 +15,21 @@ import RuleIcon from '@mui/icons-material/Rule';
 import HistoryIcon from '@mui/icons-material/History';
 import ArticleIcon from '@mui/icons-material/Article';
 import PeopleIcon from '@mui/icons-material/People';
+import GroupsIcon from '@mui/icons-material/Groups';
+import BadgeIcon from '@mui/icons-material/Badge';
+import PersonIcon from '@mui/icons-material/Person';
+import WorkIcon from '@mui/icons-material/Work';
+import AccessTimeFilledIcon from '@mui/icons-material/AccessTimeFilled';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import WorkspacePremiumIcon from '@mui/icons-material/WorkspacePremium';
+import SyncIcon from '@mui/icons-material/Sync';
+import PaymentsIcon from '@mui/icons-material/Payments';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
+import GavelIcon from '@mui/icons-material/Gavel';
+import TuneIcon from '@mui/icons-material/Tune';
+import InboxIcon from '@mui/icons-material/Inbox';
+import FactCheckIcon from '@mui/icons-material/FactCheck';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import SecurityIcon from '@mui/icons-material/Security';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
@@ -40,9 +55,9 @@ import MemoryIcon from '@mui/icons-material/Memory';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import HandymanIcon from '@mui/icons-material/Handyman';
 import ExtensionIcon from '@mui/icons-material/Extension';
+import CategoryIcon from '@mui/icons-material/Category';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
-import TuneIcon from '@mui/icons-material/Tune';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import FeedbackIcon from '@mui/icons-material/Feedback';
 import LoopIcon from '@mui/icons-material/Loop';
@@ -53,9 +68,10 @@ import SchemaIcon from '@mui/icons-material/Schema';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
-import InboxIcon from '@mui/icons-material/Inbox';
 import SearchIcon from '@mui/icons-material/Search';
 import PolicyIcon from '@mui/icons-material/Policy';
+import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
+import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import { useAuth } from '../auth/AuthContext';
 import { APP_REGISTRY } from '../apps/registry';
 import { can, hasAppAccess } from '../authz';
@@ -88,28 +104,33 @@ const CARBON_ITEM_ICONS = {
   'Inventory Coverage':       TrackChangesIcon,
 };
 
-// UI-driven icon mapping for People sidebar items (mirrors CARBON_ITEM_ICONS)
+// People HRMS — filled / distinct glyphs (avoid thin-outline twins)
 const PEOPLE_ITEM_ICONS = {
-  'People':      PeopleIcon,
-  'Positions':   AccountTreeIcon,
-  'Employees':   PeopleIcon,
-  'Attendance':  HistoryIcon,
-  'Leave':       AssignmentIcon,
-  'Payroll':     AccountBalanceWalletIcon,
-  'Payslips':    ArticleIcon,
-  'Benefits':    VerifiedUserIcon,
-  'Loans':       AccountBalanceWalletIcon,
-  'Certifications': SchoolIcon,
-  'Rotation':    AutorenewIcon,
-  'Policies':    PolicyIcon,
-  'App Config':  SettingsIcon,
+  'People':         GroupsIcon,
+  'Positions':      WorkIcon,
+  'Employees':      BadgeIcon,
+  'Attendance':     AccessTimeFilledIcon,
+  'Leave':          EventAvailableIcon,
+  'Certifications': WorkspacePremiumIcon,
+  'Rotation':       SyncIcon,
+  'Payroll':        PaymentsIcon,
+  'Payslips':       ReceiptLongIcon,
+  'Benefits':       VerifiedUserIcon,
+  'Loans':          RequestQuoteIcon,
+  'Policies':       GavelIcon,
+  'App Config':     TuneIcon,
 };
 
-// UI-driven icon mapping for My (employee self-service) sidebar items
+// My (ESS)
 const MY_ITEM_ICONS = {
-  'Dashboard':   DashboardIcon,
-  'My Leave':    AssignmentIcon,
-  'My Requests': ArticleIcon,
+  'Dashboard':   PersonIcon,
+  'My Leave':    EventAvailableIcon,
+  'My Requests': AssignmentTurnedInIcon,
+};
+
+// Team (MSS)
+const TEAM_ITEM_ICONS = {
+  'Approvals Inbox': FactCheckIcon,
 };
 
 // Define sidebar content per studio
@@ -191,6 +212,7 @@ function getSidebarItems(studioId, helpApps = []) {
         { label: 'Agents', path: '/admin/ai/agents', icon: SmartToyIcon, role: 'admin' },
         { label: 'Tools', path: '/admin/ai/tools', icon: HandymanIcon, role: 'admin' },
         { label: 'Skills Catalog', path: '/admin/ai/skills', icon: ExtensionIcon, role: 'admin' },
+        { label: 'Capabilities', path: '/admin/ai/capabilities', icon: CategoryIcon, role: 'admin' },
         { label: 'Topology', path: '/admin/ai/topology', icon: SchemaIcon, role: 'admin' },
         { label: 'Archetypes', path: '/admin/ai/archetypes', icon: AutoFixHighIcon, role: 'admin' },
         { label: 'Prompts & Playbook', path: '/admin/ai/prompts', icon: MenuBookIcon, role: 'admin' },
@@ -264,7 +286,18 @@ function getSidebarItems(studioId, helpApps = []) {
       if (myApp && myApp.navigation && myApp.navigation.items) {
         return myApp.navigation.items.map(item => ({
           ...item,
-          icon: MY_ITEM_ICONS[item.label] || DashboardIcon,
+          icon: MY_ITEM_ICONS[item.label] || PersonIcon,
+        }));
+      }
+      return [];
+    }
+
+    case 'team': {
+      const teamApp = APP_REGISTRY.find(m => m.id === 'team');
+      if (teamApp && teamApp.navigation && teamApp.navigation.items) {
+        return teamApp.navigation.items.map(item => ({
+          ...item,
+          icon: TEAM_ITEM_ICONS[item.label] || SupervisorAccountIcon,
         }));
       }
       return [];
@@ -602,7 +635,7 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
                   }}
                   title={shellLabel(t, item.label)}
                 >
-                  <Icon sx={{ fontSize: 14, flexShrink: 0, opacity: isActive ? 1 : 0.6 }} />
+                  <Icon sx={{ fontSize: 16, flexShrink: 0, opacity: isActive ? 1 : 0.85 }} />
                   <Typography
                     noWrap
                     sx={{

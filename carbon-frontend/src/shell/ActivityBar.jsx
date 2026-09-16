@@ -48,7 +48,7 @@ export function ActivityBar({ studios, activeStudio, onStudioChange }) {
             },
           }}
         >
-          <Icon sx={{ fontSize: 20 }} />
+          <Icon sx={{ fontSize: 22 }} />
         </IconButton>
       </Tooltip>
     );

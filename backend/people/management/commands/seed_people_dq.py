@@ -61,14 +61,14 @@ RULES = [
          rule_type='allowed_values', dimension='validity', severity='error',
          params=lambda: _allowed_ref('gender')),
     dict(name='nationality-code-allowed', model='people.Employee',
-         field='nationality_code', rule_type='allowed_values', dimension='validity',
+         field='nationality', rule_type='allowed_values', dimension='validity',
          severity='warn', params=lambda: _allowed_ref('nationality')),
     dict(name='employment-type-allowed', model='people.Employee',
-         field='employment_type_code', rule_type='allowed_values',
+         field='employment_type', rule_type='allowed_values',
          dimension='validity', severity='error',
          params=lambda: _allowed_ref('employment_type')),
     dict(name='contract-type-allowed', model='people.Employee',
-         field='contract_type_code', rule_type='allowed_values',
+         field='contract_type', rule_type='allowed_values',
          dimension='validity', severity='error',
          params=lambda: _allowed_ref('contract_type')),
     dict(name='rotation-allowed', model='people.Employee', field='rotation',
@@ -86,7 +86,7 @@ RULES = [
          rule_type='range', dimension='validity', severity='warn',
          params={'min': 0.05, 'max': 10}),
     dict(name='job-family-allowed', model='people.Position',
-         field='job_family_code', rule_type='allowed_values', dimension='validity',
+         field='job_family', rule_type='allowed_values', dimension='validity',
          severity='warn', params=lambda: _allowed_ref('job_family')),
 
     # ── Payroll ──
@@ -97,8 +97,7 @@ RULES = [
     dict(name='payslip-line-type-allowed', model='people.PayslipLine',
          field='line_type', rule_type='allowed_values', dimension='validity',
          severity='warn',
-         params={'values': ['gross', 'basic', 'overtime', 'leave_pay',
-                            'eosi_accrual', 'gosi', 'deduction']}),
+         params=lambda: _allowed_ref('payslip_line_type')),
 
     # ── Leave ──
     dict(name='entitled-days-non-negative', model='people.LeaveEntitlement',

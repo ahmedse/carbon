@@ -12,9 +12,35 @@ from datetime import date
 
 from django.core.management.base import BaseCommand
 
+from mdm.models import ReferenceSet, ReferenceValue
+
 from people.models import ComplianceRule
 
 _NAME_PREFIX = "[TEST ONLY — NON-AUTHORITATIVE]"
+
+
+def _ensure_cat(code):
+    rs, _ = ReferenceSet.objects.get_or_create(
+        name='compliance_category',
+        defaults={'slug': 'compliance-category', 'is_active': True, 'lifecycle_state': 'active'},
+    )
+    rv, _ = ReferenceValue.objects.get_or_create(
+        reference_set=rs, code=code,
+        defaults={'label': code, 'is_active': True},
+    )
+    return rv
+
+
+def _ensure_kw():
+    rs, _ = ReferenceSet.objects.get_or_create(
+        name='jurisdiction',
+        defaults={'slug': 'jurisdiction', 'is_active': True, 'lifecycle_state': 'active'},
+    )
+    rv, _ = ReferenceValue.objects.get_or_create(
+        reference_set=rs, code='KW',
+        defaults={'label': 'Kuwait', 'is_active': True},
+    )
+    return rv
 
 # (rule_id, version, name_suffix, category, effective_date, inputs_schema)
 TEST_RULES = [
@@ -100,6 +126,8 @@ class Command(BaseCommand):
         updated = 0
 
         for rule_id, version, name_suffix, category, effective_date, inputs_schema in TEST_RULES:
+            cat_rv = _ensure_cat(category)
+            juris_rv = _ensure_kw()
             _, was_created = ComplianceRule.objects.update_or_create(
                 rule_id=rule_id,
                 version=version,
@@ -109,7 +137,8 @@ class Command(BaseCommand):
                         "TEST-ONLY rule to exercise the Calculation Engine. "
                         "No authoritative Kuwait source — not for production use."
                     ),
-                    "category": category,
+                    "category": cat_rv,
+                    "jurisdiction": juris_rv,
                     "effective_date": effective_date,
                     "formula_ref": "TEST ONLY — no authoritative source",
                     "source_citation": "",

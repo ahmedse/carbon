@@ -86,7 +86,9 @@ class OrgUnitCRUDTestCase(TestCase):
 
     def test_delete_org_unit_no_children(self):
         """Can soft-delete org unit without children."""
-        org = OrgUnit.objects.create(name='Temp', code='TMP', org_type='other')
+        org = OrgUnit.objects.create(
+            name='Temp', code='TMP', org_type='other', parent=self.org_root,
+        )
         self.client.force_authenticate(self.admin_user)
         response = self.client.delete(f'/carbon-api/mdm/org-units/{org.id}/')
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
@@ -258,7 +260,8 @@ class OrgUnitValidationTestCase(TestCase):
     def test_soft_delete_sets_is_active_false(self):
         """Soft delete sets is_active=False."""
         org = OrgUnit.objects.create(
-            name='ToDelete', code='DEL', org_type='other', is_active=True
+            name='ToDelete', code='DEL', org_type='other', is_active=True,
+            parent=self.org_root,
         )
         self.client.force_authenticate(self.admin_user)
         response = self.client.delete(f'/carbon-api/mdm/org-units/{org.id}/')

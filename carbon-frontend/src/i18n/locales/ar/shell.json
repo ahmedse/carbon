@@ -113,6 +113,7 @@
     "mcpServers": "خوادم MCP",
     "tools": "الأدوات",
     "skillsCatalog": "فهرس المهارات",
+    "capabilities": "القدرات",
     "topology": "الطوبولوجيا",
     "archetypes": "الأنماط الأصلية",
     "promptsAndPlaybook": "التعليمات ودليل التشغيل",
@@ -151,7 +152,10 @@
     "referenceData": "البيانات المرجعية",
     "rotation": "المناوبات",
     "myLeave": "إجازاتي",
-    "myRequests": "طلباتي"
+    "myRequests": "طلباتي",
+    "my": "لوحتي",
+    "team": "الفريق",
+    "requestDetail": "تفاصيل الطلب"
   },
   "group": {
     "dataProducts": "منتجات البيانات",

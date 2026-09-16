@@ -53,7 +53,7 @@ import EmployeePayTab from './tabs/EmployeePayTab';
 import EmployeeBenefitsTab from './tabs/EmployeeBenefitsTab';
 import EmployeeCertsTab from './tabs/EmployeeCertsTab';
 import EmployeeRequestsTab from './tabs/EmployeeRequestsTab';
-import { tenureLabel, totalLeaveBalance, expiryUrgency } from './utils';
+import { tenureLabel, totalLeaveBalance, expiryUrgency, refLabel, refCode } from './utils';
 
 const STORAGE_KEY = 'carbonEmployee360';
 const TAB_KEYS = ['Profile', 'Timeline', 'Leave', 'Pay', 'Benefits', 'Certs', 'Requests'];
@@ -147,7 +147,9 @@ export default function EmployeeDetailPage() {
 
       const allOrgUnits = Array.isArray(orgUnits) ? orgUnits : [];
       const allEmployees = Array.isArray(allEmps) ? allEmps : (allEmps?.results || []);
-      const orgUnitName = allOrgUnits.find(u => u.id === emp.org_unit)?.name || null;
+      const orgUnitName = allOrgUnits.find(u => u.id === emp.org_unit)?.full_path
+        || allOrgUnits.find(u => u.id === emp.org_unit)?.name
+        || null;
       const manager = allEmployees.find(e => e.id === emp.manager);
       const managerLabel = manager
         ? `${manager.employee_no ?? '—'} — ${manager.full_name ?? ''}`
@@ -356,7 +358,7 @@ export default function EmployeeDetailPage() {
               />
             </Box>
             <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mt: 0.125 }}>
-              {[data.employee_no, data.employment_type_code || null, data.orgUnitName].filter(Boolean).join(' · ')}
+              {[data.employee_no, refLabel(data.employment_type) || refCode(data.employment_type) || null, data.orgUnitName].filter(Boolean).join(' · ')}
             </Typography>
           </Box>
 

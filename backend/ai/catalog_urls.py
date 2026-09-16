@@ -1,4 +1,4 @@
-"""URL routing for the Unified Agent Catalog API (Phase W3-D).
+"""URL routing for the Unified Agent Catalog API (Phase W3-D + PEC-R1).
 
 Mounted at ``{api_prefix}/ai/catalog/`` (see ``config/urls.py``) — paths
 below are relative to ``/carbon-api/ai/catalog/``:
@@ -7,6 +7,7 @@ below are relative to ``/carbon-api/ai/catalog/``:
     GET/POST /agents/                 literal W3-D spec alias for the root
     GET      /topology/               declared handoff graph (ADR-001)
     GET      /skills/                 skill catalog + admission status
+    GET      /capabilities/           durable Capability registry (PEC-R1, GET-only)
     GET      /index/                  federated index (DB agents + plugins)
     GET/PATCH/DELETE /{id}/           one agent
     GET/PATCH/DELETE /agents/{id}/    literal W3-D spec alias for the detail
@@ -15,8 +16,9 @@ Note: explicit ``as_view`` mappings instead of a router because the include
 mount already carries the ``catalog`` prefix — a router would double it
 (same convention as ``ai.plans_urls``).
 
-Order matters: literal ``agents/`` / ``topology/`` / ``skills/`` / ``index/``
-paths are registered BEFORE ``<str:pk>/`` so ``pk`` can never capture them.
+Order matters: literal ``agents/`` / ``topology/`` / ``skills/`` /
+``capabilities/`` / ``index/`` paths are registered BEFORE ``<str:pk>/`` so
+``pk`` can never capture them.
 """
 
 from django.urls import path
@@ -43,6 +45,11 @@ urlpatterns = [
         "skills/",
         CatalogViewSet.as_view({"get": "skills"}),
         name="ai-catalog-skills",
+    ),
+    path(
+        "capabilities/",
+        CatalogViewSet.as_view({"get": "capabilities"}),
+        name="ai-catalog-capabilities",
     ),
     path(
         "index/",

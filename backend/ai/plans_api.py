@@ -225,6 +225,26 @@ class PlanViewSet(viewsets.GenericViewSet):
             )
         return Response(result)
 
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="discover/finalize",
+        url_name="finalize-discovery",
+    )
+    def finalize_discovery(self, request, pk=None):
+        """Skip remaining clarifying questions and build the reviewable plan."""
+        try:
+            result = self.service.finalize_discovery(request.user, pk)
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+        except (PlanNotRunnableError, ValueError) as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST
+            )
+        return Response(result)
+
     def retrieve(self, request, pk=None):
         """Fetch a plan + its steps."""
         try:

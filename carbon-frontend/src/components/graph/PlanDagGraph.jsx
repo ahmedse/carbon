@@ -77,6 +77,66 @@ export function planStepStatusLabel(status) {
   }
 }
 
+/** Pretty-print JSON / values for the dock, collapsed by default. */
+function CollapsiblePayload({ label, value, testId }) {
+  const [open, setOpen] = useState(false);
+  if (value == null || value === '') return null;
+  let text;
+  try {
+    text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  } catch {
+    text = String(value);
+  }
+  if (!text || text === '{}' || text === '[]') return null;
+  const preview = text.length > 80 ? `${text.slice(0, 80)}…` : text;
+  return (
+    <Box sx={{ mt: 0.75 }} data-testid={testId}>
+      <Button
+        size="small"
+        onClick={() => setOpen((v) => !v)}
+        sx={{ fontSize: '0.625rem', textTransform: 'none', px: 0, minWidth: 0 }}
+      >
+        {open ? `Hide ${label}` : `Show ${label}`}
+      </Button>
+      {!open && (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', fontSize: '0.625rem', fontFamily: 'ui-monospace, monospace', wordBreak: 'break-word' }}
+        >
+          {preview}
+        </Typography>
+      )}
+      <Collapse in={open}>
+        <Box
+          component="pre"
+          sx={{
+            m: 0,
+            mt: 0.5,
+            p: 0.75,
+            borderRadius: 1,
+            bgcolor: 'background.default',
+            fontSize: '0.625rem',
+            fontFamily: 'ui-monospace, monospace',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            maxHeight: 180,
+            overflow: 'auto',
+          }}
+        >
+          {text}
+        </Box>
+      </Collapse>
+    </Box>
+  );
+}
+
+CollapsiblePayload.propTypes = {
+  label: PropTypes.string.isRequired,
+  value: PropTypes.any,
+  testId: PropTypes.string,
+};
+
 /** Compact UPPERCASE status label for the dense node interior. */
 const NODE_STATUS = {
   completed: 'FINISHED',
@@ -354,24 +414,24 @@ export default function PlanDagGraph({
       const rawTitle = String(n.label || `Step ${n.id}`);
       const rawTool = String(n.tool_name || 'Reasoning (LLM)');
       // Title is truncated to leave room for the right-aligned status label.
-      const titleMax = Math.max(6, Math.floor((n.w - 66) / 5.4));
+      const titleMax = Math.max(8, Math.floor((n.w - 78) / 6.6));
       const title = rawTitle.length > titleMax ? `${rawTitle.slice(0, titleMax - 1)}…` : rawTitle;
-      const toolMax = Math.max(6, Math.floor((n.w - 26) / 4.5));
+      const toolMax = Math.max(8, Math.floor((n.w - 28) / 5.6));
       const tool = rawTool.length > toolMax ? `${rawTool.slice(0, toolMax - 1)}…` : rawTool;
       return (
         <>
           {/* Status accent bar — the primary at-a-glance signal */}
-          <rect x={3} y={5} width={3} height={n.h - 10} rx={1.5} fill={color} />
+          <rect x={4} y={6} width={4} height={n.h - 12} rx={2} fill={color} />
           {/* Intent */}
-          <text x={13} y={n.h / 2 - 1} fontSize={11} fontWeight={600} fill={theme.palette.text.primary}>
+          <text x={16} y={n.h / 2 - 2} fontSize={13} fontWeight={650} fill={theme.palette.text.primary}>
             {title}
           </text>
           {/* Status — right-aligned on the title row, always visible while running */}
-          <text x={n.w - 9} y={n.h / 2 + 1.5} fontSize={8} fontWeight={700} fill={color} textAnchor="end">
+          <text x={n.w - 10} y={n.h / 2 + 1} fontSize={10} fontWeight={700} fill={color} textAnchor="end">
             {statusLabel}
           </text>
           {/* Tool / kind */}
-          <text x={13} y={n.h / 2 + 11} fontSize={9} fill={theme.palette.text.secondary}>
+          <text x={16} y={n.h / 2 + 14} fontSize={11} fill={theme.palette.text.secondary}>
             {tool}
           </text>
         </>
@@ -387,20 +447,30 @@ export default function PlanDagGraph({
 
   // ── Legend (rendered above the canvas, inline + modal) ─────────────────
   const legendEl = (
-    <Stack
-      direction="row"
-      spacing={1}
-      alignItems="center"
-      sx={{ px: 1, py: 0.5, flexWrap: 'wrap', rowGap: 0.25 }}
-    >
-      {legend.map((l) => (
-        <Stack key={l.label} direction="row" spacing={0.5} alignItems="center">
-          <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: l.color }} />
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.625rem' }}>
-            {l.label}
-          </Typography>
-        </Stack>
-      ))}
+    <Stack spacing={0.25} sx={{ px: 1, py: 0.5 }}>
+      <Stack
+        direction="row"
+        spacing={1}
+        alignItems="center"
+        sx={{ flexWrap: 'wrap', rowGap: 0.25 }}
+      >
+        {legend.map((l) => (
+          <Stack key={l.label} direction="row" spacing={0.5} alignItems="center">
+            <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: l.color }} />
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
+              {l.label}
+            </Typography>
+          </Stack>
+        ))}
+      </Stack>
+      <Typography
+        variant="caption"
+        color="text.disabled"
+        sx={{ fontSize: '0.625rem', lineHeight: 1.35 }}
+        data-testid="plan-graph-workflow-note"
+      >
+        Sequential + parallel phases today. Branches, loops, and conditions land in a later workflow pass.
+      </Typography>
     </Stack>
   );
 
@@ -553,6 +623,41 @@ export default function PlanDagGraph({
               {selectedStep.error}
             </Typography>
           </>
+        )}
+
+        {(selectedStep.tool_args != null || selectedStep.tool_output != null
+          || (Array.isArray(selectedStep.artifacts) && selectedStep.artifacts.length > 0)) && (
+          <Divider sx={{ my: 0.75 }} />
+        )}
+
+        <CollapsiblePayload
+          label="inputs"
+          value={selectedStep.tool_args}
+          testId="plan-step-tool-args"
+        />
+        <CollapsiblePayload
+          label="output"
+          value={selectedStep.tool_output}
+          testId="plan-step-tool-output"
+        />
+
+        {Array.isArray(selectedStep.artifacts) && selectedStep.artifacts.length > 0 && (
+          <Box sx={{ mt: 0.75 }} data-testid="plan-step-artifacts">
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.625rem', mb: 0.25 }}>
+              Step artifacts
+            </Typography>
+            <Stack spacing={0.25}>
+              {selectedStep.artifacts.map((a) => (
+                <Typography
+                  key={a.id ?? a.name}
+                  variant="body2"
+                  sx={{ fontSize: '0.6875rem' }}
+                >
+                  {a.name || 'artifact'}
+                </Typography>
+              ))}
+            </Stack>
+          </Box>
         )}
 
         <Button

@@ -1,15 +1,18 @@
 # core/management/commands/seed_aastmt_org.py
 # Seeds a minimal realistic AASTMT org slice + Transportation "Gas Bills" scenario.
 # Additive + idempotent. Safe to re-run.
+# ADR-0028: instance-gated — only AASTMT deployments.
 
 import os
 
-from django.core.management.base import BaseCommand
+from django.conf import settings
+from django.core.management.base import BaseCommand, CommandError
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.utils.text import slugify
 
 from mdm.models import OrgUnit
+from mdm.services import is_aastmt_org_seed_allowed
 from core.models import Module
 from dataschema.models import DataTable, DataField
 from accounts.models import ScopedRole
@@ -26,12 +29,38 @@ def _ou(name, org_type, parent=None, code=''):
     return obj
 
 
+def _assert_aastmt_instance():
+    if is_aastmt_org_seed_allowed():
+        return
+    brand = getattr(settings, 'DJANGO_BRAND', None)
+    instance = getattr(settings, 'INSTANCE_NAME', None)
+    raise CommandError(
+        "seed_aastmt_org is instance-gated (ADR-0028): run only when "
+        "DJANGO_BRAND is 'aastmt' or DJANGO_INSTANCE_NAME/INSTANCE_NAME is in "
+        "{'aastmt', 'aast'}. "
+        f"Current DJANGO_BRAND={brand!r}, INSTANCE_NAME={instance!r}."
+    )
+
+
 class Command(BaseCommand):
-    help = "Seed a minimal AASTMT org slice + Transportation Gas Bills scenario (idempotent)."
+    help = (
+        "Seed a minimal AASTMT org slice + Transportation Gas Bills scenario "
+        "(idempotent). Allowed only on AASTMT deployments."
+    )
 
     def handle(self, *args, **options):
+        _assert_aastmt_instance()
+
         # --- Org tree (campus + departments, not colleges) ---
         aast = OrgUnit.objects.filter(slug='aast').first() or _ou('AAST', 'university', code='AAST')
+        # Idempotent re-run: keep AAST as the single deployment root (ADR-0028).
+        if aast.org_type != 'university' or aast.code != 'AAST' or aast.parent_id is not None:
+            aast.org_type = 'university'
+            aast.code = 'AAST'
+            aast.parent = None
+            aast.is_active = True
+            aast.save(update_fields=['org_type', 'code', 'parent', 'is_active'])
+
         abuqir = _ou('Abu Qir Campus', 'campus', parent=aast, code='ABUQIR')
         transport = _ou('Transportation / Fleet', 'department', parent=abuqir, code='TRANS')
         facilities = _ou('Facilities & Utilities', 'department', parent=abuqir, code='FAC')
