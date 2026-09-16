@@ -3,10 +3,11 @@
 Status: ACCEPTED (ADR-0034) · Author: Master Architect (Pulse) · Date: 2026-09-14 · Updated: 2026-09-16
 Scope: (A) a real resilient workflow engine with per-step controls; (B) a full Agent UI remake.
 
-> **Implementation status (2026-09-16 evening):** Board ~**82%** weighted.
-> Engine W-1…W-7 mostly done (W-3/W-4/W-5 partial polish). UI U-1…U-3 usable
-> chat-first; **U-4** still TODO. See canvas `pulse-agent-workflow-board` and §7 table.
-> Next: cap multi-hop follow-up spam · wait timers / replay goldens · U-4 tokens.
+> **Implementation status (2026-09-16 evening):** Board ~**87%** weighted.
+> Engine W-1…W-7 mostly done (W-3 wait timers shipped; replay goldens open).
+> UI U-1…U-3 usable chat-first; **U-4** still TODO. Follow-up spam capped (UX-2).
+> See canvas `pulse-agent-workflow-board` and §7 table.
+> Next: replay goldens · U-4 tokens · live choice highlight · hard-cancel tool I/O.
 
 ---
 
@@ -250,7 +251,7 @@ build). No phase ships shallow.
 |---|---|---|---|
 | **W-1** | Graph schema + validator + compile shim | **DONE** | Schema + round-trip tests |
 | **W-2** | Guard expression evaluator | **DONE** | Grammar + injection tests |
-| **W-3** | Driver choice/parallel/map/loop + journal | **PARTIAL ~85%** | Wait timers; replay-golden fixtures |
+| **W-3** | Driver choice/parallel/map/loop + journal | **PARTIAL ~92%** | Replay-golden fixtures (wait timers shipped) |
 | **W-4** | Retry/catch/timeout + compensation | **PARTIAL ~90%** | Hard-cancel in-flight tool I/O; compensate UX |
 | **W-5** | `observe` self-heal | **PARTIAL ~85%** | Heuristic heal shipped; LLM repair optional |
 | **W-6** | `completed_with_gaps` | **DONE ~95%** | Status + UI chip; artifact stream polish |
