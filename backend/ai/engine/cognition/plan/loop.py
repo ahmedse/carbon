@@ -409,7 +409,6 @@ class ReActLoop:
             if not _wf_choice_batch or on_workflow_choice is None:
                 _wf_choice_batch.clear()
                 return
-            import inspect
             for node_id, chosen, evaluations in _wf_choice_batch:
                 try:
                     maybe = on_workflow_choice(node_id, chosen, evaluations)
@@ -973,7 +972,6 @@ class ReActLoop:
                                     plan.steps.append(_ns)
                                     _existing_ids.add(_ns.step_id)
                             if on_heal_proposed is not None:
-                                import inspect
                                 try:
                                     _maybe = on_heal_proposed(
                                         _catch_id, _proposal,
@@ -1040,7 +1038,6 @@ class ReActLoop:
                                 },
                             )
                             if on_compensation_queued is not None:
-                                import inspect
                                 try:
                                     _maybe = on_compensation_queued(
                                         step.step_id, _comp_sid, _node.compensation,
