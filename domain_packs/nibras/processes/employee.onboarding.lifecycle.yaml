@@ -1,0 +1,108 @@
+# Nibras employee onboarding lifecycle — governed ProcessDefinition (P5).
+#
+# submit → (human review) → activate → verify.
+# Autonomy dials keep this flow deterministic and admin-governed: the AI may
+# stage submit for confirmation, while review and the irreversible activate
+# (payroll-eligible hire) are explicitly human-only with consent.
+id: employee.onboarding.lifecycle
+version: "1.0"
+owner: ai
+status: active
+
+objects:
+  - type: employee.onboarding
+    selector: onboarding_id
+
+inputs:
+  onboarding_id:
+    type: string
+
+scope:
+  source: authenticated_host_context
+
+objective:
+  predicate: employee.onboarding.completed_and_payroll_eligible
+
+steps:
+  - id: submit
+    kind: command
+    capability: employee.onboarding.submit
+    depends_on: []
+    autonomy: act_confirm
+    binds_to: employee.onboarding
+    consent: true
+    idempotency_scope: onboarding_id
+    unknown_outcome: escalate
+
+  - id: review
+    kind: human_task
+    capability: employee.onboarding.review
+    depends_on:
+      - submit
+    autonomy: human_only
+    separation_of_duties:
+      - preparer
+      - approver
+    binds_to: inbox
+    consent: false
+    approval_ref: employee.onboarding.review
+
+  - id: activate
+    kind: command
+    capability: employee.onboarding.activate
+    depends_on:
+      - review
+    autonomy: human_only
+    separation_of_duties:
+      - preparer
+      - approver
+    binds_to: employee.onboarding
+    consent: true
+    idempotency_scope: onboarding_id
+    unknown_outcome: escalate
+
+  - id: verify
+    kind: assertion
+    capability: employee.onboarding.completed_and_payroll_eligible
+    depends_on:
+      - activate
+    autonomy: observe
+    binds_to: employee.onboarding
+    consent: false
+
+constraints:
+  precedence:
+    - from: submit
+      to: review
+    - from: review
+      to: activate
+    - from: activate
+      to: verify
+
+evidence:
+  - type: OnboardingRequest
+    from_step: submit
+  - type: ApprovalGrant
+    from_step: review
+  - type: EmployeeRecord
+    from_step: activate
+  - type: ContractActivation
+    from_step: activate
+
+policies:
+  refuse_if:
+    - preparer equals approver
+    - onboarding is not reviewed before activate
+    - required hire fields are incomplete
+  ask_if:
+    - join date is in the future
+    - basic salary is missing or zero
+
+exceptions: []
+
+kill_switch: false
+
+tests:
+  - name: happy-path-completed-and-payroll-eligible
+  - name: refuse-activate-when-not-reviewed
+  - name: activate-requires-human-consent

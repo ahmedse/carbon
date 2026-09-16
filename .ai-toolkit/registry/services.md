@@ -1,4 +1,4 @@
-# Registry: Backend Services & Utilities  (auto-generated 2026-09-16 15:38 — DO NOT EDIT)
+# Registry: Backend Services & Utilities  (auto-generated 2026-09-16 15:59 — DO NOT EDIT)
 
 > Business logic lives in services. Before writing a new one, check this list — extend, don't duplicate.
 

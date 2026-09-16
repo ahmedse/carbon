@@ -44,11 +44,355 @@ evidence → not done.
 
 | Track | Status | Notes |
 |-------|--------|-------|
-| **ECF** (Entity Capability Framework, ADR-0032) | ACTIVE | Specs below — current Master priority |
+| **PEC** (Pulse Enterprise Control-plane, P1–P7) | **ACTIVE — DISPATCHED** | Close metabolism/measurement gaps vs enterprise bar. Specs below §PEC. Leverage: 1→4→2→3→ID→5→6→7 |
+| **ECF** (Entity Capability Framework, ADR-0032) | ACTIVE | Specs below — parallel track; do not steal PEC P0 workers |
 | **OF-15…OF-20** (e-Office expansion) | OPEN | Leave-only vertical is live; expand types + workflow graph |
 | **NIR-5/6/7** | AUDIT | ADRs 0027/0028/0029 accepted — likely shipped; confirm Status before re-dispatch |
 | **NIR-3C** payroll orchestration | PLANNED | Keep until verified DONE |
 | Historical Pulse 0.2/0.3 waves | DONE | See archive only |
+
+---
+
+## PEC — Pulse Enterprise Control-plane (DISPATCHED 2026-09-16)
+
+**Canonical plan:** `docs/pulse/PULSE-ROADMAP.md` · **SSOT:** `docs/pulse/PULSE-CANONICAL.md`  
+**Gap map:** Cursor canvas `pulse-enterprise-control-plane.canvas.tsx`  
+**Principle:** freeze the spine (boundary/PDP/Flight Director); ship metabolism + measurement.  
+**Contracts:** `shared/ai-contract.md`, `security.md`, `api-contract.md`, `testing.md`, `definition-of-done.md`  
+**Test partitioning:** MASTER DIRECTIVE above — never full-suite pytest / never bare vitest.
+
+**Wave map (dispatch order):**
+| Wave | Phases | Parallel? |
+|------|--------|-----------|
+| **W1** | PEC-1A, PEC-4A, PEC-7A | YES — non-overlapping files |
+| **W2** | PEC-2A, PEC-3A, PEC-3B | After W1 green (3B needs Screen Spec pointer below) |
+| **W3** | PEC-ID-1, PEC-5A, PEC-5B, PEC-6A, PEC-6B | After W2; 6B needs Screen Spec |
+| **Gate** | Master reviews TASK-RESULTS; mark DoD rows in PULSE-ROADMAP |
+
+---
+
+### Phase PEC-1A — DevOps+Backend: Heartbeat metabolism proof (P1)
+**Date:** 2026-09-16  
+**Worker Role:** devops-worker (primary) + backend-worker (health surface only if missing)  
+**Recommended Model:** DeepSeek V4.1-Flash  
+**Status:** READY  
+**Depends on:** —  
+**Roadmap:** P1 Heartbeat
+
+#### Context
+Code already exists: `run_pulse_maintenance`, `PulseHeartbeat`, `deploy/instance/setup-pulse-heartbeat.sh`, compose `scheduler` / `learning-scheduler`, tests in `ai/tests/test_pulse_heartbeat.py`. Canonical still marks F5 open because **unattended nibras evidence + health “last heartbeat”** is not proven. This phase closes P1 with **runtime evidence**, not a rewrite.
+
+#### Files to Read First
+- `docs/pulse/PULSE-ROADMAP.md` §P1
+- `backend/ai/management/commands/run_pulse_maintenance.py`
+- `backend/ai/models/heartbeat.py`
+- `deploy/instance/setup-pulse-heartbeat.sh`
+- `docker-compose.yml` (scheduler services)
+- `backend/ai/sweeps_api.py` (existing heartbeat read path)
+
+#### Implementation
+1. Confirm compose schedulers actually invoke `run_pulse_maintenance` (or equivalent) with `DJANGO_BRAND` / instance isolation. Fix command wiring if wrong.
+2. Ensure a **health/read API** already exposes last heartbeat per `(instance, loop)` — extend `sweeps_api` or `healthy` only if missing; do not invent a second API.
+3. Produce acceptance evidence pack under `docs/pulse/evidence/PEC-1A-heartbeat.md`:
+   - command output of a real maintenance run for `nibras` (or local brand)
+   - SQL/ORM dump of new `PulseHeartbeat` rows (proactive, consolidation, distill, decay)
+   - health endpoint JSON showing last tick
+4. If VPS systemd is out of scope for this machine, document exact `setup-pulse-heartbeat.sh nibras` steps as the deploy handoff and prove via compose timer/cron equivalent locally.
+
+#### DO NOT TOUCH
+- `backend/ai/engine/` cognition loop internals
+- PDP / command_boundary
+- Frontend
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && \
+  ../.venv/bin/python manage.py run_pulse_maintenance --dry-run 2>&1 | tee /tmp/pec1a-dry.txt
+# Then a real run (brand=nibras if available):
+DJANGO_BRAND=nibras ../.venv/bin/python manage.py run_pulse_maintenance 2>&1 | tee /tmp/pec1a-run.txt
+../.venv/bin/python -m pytest ai/tests/test_pulse_heartbeat.py -q --maxfail=5 --disable-warnings
+./.ai-toolkit/scripts/verify.sh backend
+# Evidence file must exist and cite row ids / timestamps.
+test -f ../docs/pulse/evidence/PEC-1A-heartbeat.md
+```
+
+#### Handoff
+Write `TASK-RESULTS.md` section `## PEC-1A` with terminal proof + evidence path.
+
+---
+
+### Phase PEC-4A — Backend: Eval harness baseline + merge gate (P4)
+**Date:** 2026-09-16  
+**Worker Role:** backend-worker  
+**Recommended Model:** DeepSeek V4.1-Flash  
+**Status:** READY  
+**Depends on:** — (parallel with PEC-1A)  
+**Roadmap:** P4 Evaluation Harness
+
+#### Context
+`backend/ai/eval/` has fixtures, `golden_hrms.py`, replay, checks. Canonical: “measurably = not yet.” Need ≥20 golden scenarios for nibras, metrics (grounding-pass, deny-correctness, fabrication-rate=0, latency, tokens), and a **CI-invokable** entrypoint that fails on fabrication or deny regression.
+
+#### Files to Read First
+- `docs/pulse/PULSE-ROADMAP.md` §P4
+- `backend/ai/eval/*`
+- `backend/ai/tests/redteam/` (pattern for fail-closed)
+- `.github/workflows/` (existing CI)
+
+#### Implementation
+1. Author/expand golden scenarios to **≥20** nibras cases covering: net-pay grounding, cross-employee deny, payroll lifecycle consent, ambiguous→clarify, compound Q-1 if feasible, topic_guard out-of-scope.
+2. Add `backend/ai/eval/run_harness.py` (or pytest marker `eval_golden`) that prints pass-rate + metrics JSON.
+3. Wire CI job or document exact `pytest` invocation in workflow that already runs AI tests — prefer extend existing workflow, do not create duplicate full-suite jobs.
+4. Add one deliberate negative test proving fabrication/deny regression would fail the harness.
+5. Evidence: `docs/pulse/evidence/PEC-4A-eval-baseline.md` with first measured baseline numbers (do not invent targets).
+
+#### DO NOT TOUCH
+- Production prompt text in `instance.yaml` except if a scenario requires a fixture override
+- Frontend
+- Heartbeat code (PEC-1A owns it)
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && \
+  ../.venv/bin/python -m pytest ai/eval ai/tests/redteam -q --maxfail=8 --disable-warnings
+# Harness must print metrics; fabrication_rate must be 0.
+./.ai-toolkit/scripts/verify.sh backend
+test -f ../docs/pulse/evidence/PEC-4A-eval-baseline.md
+```
+
+---
+
+### Phase PEC-7A — Backend: Convergence — remove inert F1a/F3 paths (P7 partial)
+**Date:** 2026-09-16  
+**Worker Role:** backend-worker  
+**Recommended Model:** DeepSeek V4.1-Flash  
+**Status:** READY  
+**Depends on:** —  
+**Roadmap:** P7 (F1a/F3 decision already: REMOVE/DEFER — fold guidance into instance.yaml)
+
+#### Context
+Canonical §12: `instance.yaml` is the single prompt-config mechanism. Filesystem `domain_packs/*/skills` guidance is inert (F1a). `PlaybookBlock` empty → unused A/B (F3). Anti-drift L6: delete or defer; do not invest.
+
+#### Files to Read First
+- `docs/pulse/PULSE-CANONICAL.md` §5, §9 F1a/F3, §12
+- Grep: `guidance_skills`, `PlaybookBlock`, `build_chat_prompt`
+
+#### Implementation
+1. Confirm no live path injects `guidance_skills` from filesystem packs.
+2. Remove dead call sites / loader hooks **or** mark clearly deferred with a single `# DEFERRED(F1a)` and a verify.sh antipattern that fails if someone re-wires without ADR — prefer **delete dead imports** if unused outside tests.
+3. For `PlaybookBlock`: if zero rows and unused in hot path, add module docstring + skip/xfail only if tests assert empty; **do not** seed fake A/B. Prefer deleting unreachable A/B selection code if truly dead (ask Master via TASK-RESULTS if ambiguous — then leave `# DEFERRED(F3)` with ADR stub).
+4. Add startup or verify check notes in evidence file.
+5. Evidence: `docs/pulse/evidence/PEC-7A-convergence.md` listing deleted symbols + grep proof.
+
+#### DO NOT TOUCH
+- `instance.yaml` persona content (except typos)
+- Live ProcessDefinition / Capability seed paths
+- Frontend
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon && \
+  rg -n "guidance_skills=" backend/ai/engine/cognition/turn/runner.py || true
+cd backend && ../.venv/bin/python -m pytest ai/tests/test_provider_pulse.py ai/tests/test_adapter.py -q --maxfail=5 --disable-warnings
+./.ai-toolkit/scripts/verify.sh antipatterns
+test -f ../docs/pulse/evidence/PEC-7A-convergence.md
+```
+
+---
+
+### Phase PEC-2A — Backend: Prove learning-reuse OR cut (P2)
+**Date:** 2026-09-16  
+**Worker Role:** backend-worker  
+**Recommended Model:** DeepSeek V4.1-Flash  
+**Status:** READY  
+**Depends on:** PEC-1A (heartbeat drives consolidation)  
+**Roadmap:** P2
+
+#### Context
+SkillAwarePlanner + flywheel + gate-only promotion exist; live reuse never observed. Need reuse counter + ledger citation **or** documented cut (L6).
+
+#### Files to Read First
+- `docs/pulse/PULSE-ROADMAP.md` §P2
+- `backend/ai/feedback/skill_flywheel.py`
+- `backend/ai/engine/skills/*`, planner skill preference
+- `backend/ai/engine/cognition/plan/`
+
+#### Implementation
+1. Add/confirm per-skill `usage_count` (or equivalent) increments when a promoted skill drives a plan/turn; write ledger/telemetry row.
+2. Write an integration test that: draft→admit/promote fixture skill → later plan matches → counter +1.
+3. If the arc cannot fire on a realistic HRMS scenario after honest attempt: write `docs/pulse/evidence/PEC-2A-CUT.md` with Master decision request to remove the path — **do not leave half-dead code**.
+4. Evidence: `docs/pulse/evidence/PEC-2A-reuse.md` with counter before/after.
+
+#### DO NOT TOUCH
+- Auto-promote without gate
+- Frontend Console promote UI (PEC-6*)
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && \
+  ../.venv/bin/python -m pytest ai/tests/test_learning_trigger.py ai/tests/test_flight_learning.py -q --maxfail=5 --disable-warnings
+# Plus any new reuse test file created in this phase
+./.ai-toolkit/scripts/verify.sh backend
+```
+
+---
+
+### Phase PEC-3A — Backend: Proactive delivery path proof (P3 backend)
+**Date:** 2026-09-16  
+**Worker Role:** backend-worker  
+**Recommended Model:** DeepSeek V4.1-Flash  
+**Status:** READY  
+**Depends on:** PEC-1A  
+**Roadmap:** P3
+
+#### Context
+Delivery persists `KgProactiveInsight` + SSE exists; scheduled generation tied to heartbeat. Prove one insight reaches the API/SSE contract with provenance fields (RULE_23).
+
+#### Files to Read First
+- `backend/ai/engine/proactive/*`
+- insights API / SSE surfaces
+- `docs/pulse/PULSE-UX.md` rubric (outcomes-only copy)
+
+#### Implementation
+1. Trace proactive → persist → list/stream endpoints; fix gaps.
+2. Test: after maintenance/proactive loop (mocked OK), insight visible via API with honest confidence + no engine jargon.
+3. Evidence: `docs/pulse/evidence/PEC-3A-proactive-api.md`
+
+#### DO NOT TOUCH
+- Frontend notification chrome (PEC-3B)
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && \
+  ../.venv/bin/python -m pytest ai/tests/ -k "proactive or insight" -q --maxfail=8 --disable-warnings
+./.ai-toolkit/scripts/verify.sh backend
+```
+
+---
+
+### Phase PEC-3B — Frontend: Proactive insight surfaces in Nibras UI (P3 UI)
+**Date:** 2026-09-16  
+**Worker Role:** frontend-worker  
+**Recommended Model:** DeepSeek V4.1-Flash  
+**Status:** READY  
+**Depends on:** PEC-3A  
+**Screen Spec:** reuse `docs/pulse/PULSE-UX.md` + `PULSE-UX-DESIGN.md` (4-beat story, provenance, dismiss/act). No new full Screen Spec doc required if those cover the panel — attach deviations in TASK-RESULTS.
+
+#### Implementation
+1. Wire notification/insights panel to consume SSE/API from PEC-3A.
+2. Dismiss + act affordances; RULE_23 copy.
+3. Targeted vitest + lint + build.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/carbon-frontend && npm run lint && npx vitest run src/__tests__/*insight* src/__tests__/*notif* 2>/dev/null || npx vitest run src/__tests__/ -t "insight|proactive|notif" ; npm run build
+```
+
+---
+
+### Phase PEC-ID-1 — Backend: Identity propagation hardening
+**Date:** 2026-09-16  
+**Worker Role:** backend-worker  
+**Recommended Model:** DeepSeek V4.1-Flash  
+**Status:** READY  
+**Depends on:** — (can start W3)  
+**Contracts:** `shared/security.md`
+
+#### Context
+`engine_runtime` passes `user_token=f"inproc:{instance_id}:{host_user_id}"`. Enterprise bar (IBM): propagate/exchange, never substitute. Before MCP egress expands, introduce a **short-lived scoped host credential** (or documented actor-chain on `PolicyDecisionRow`) so every boundary hop attributes user→agent→tool.
+
+#### Implementation
+1. ADR in `.ai-toolkit/decisions/` (Master will ratify — draft ADR-00xx-pulse-identity-propagation.md).
+2. Implement minimal: persist actor_chain on policy/audit rows for host effects; keep inproc token but include stable `user_id` + `instance_id` + `request_id` in all PDP decisions.
+3. Tests for attribution presence; no behavior change to CBAC denies.
+
+#### DO NOT TOUCH
+- External IdP / OAuth exchange (out of scope — ADR only marks Phase 2)
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && \
+  ../.venv/bin/python -m pytest ai/tests/test_tenancy_isolation.py ai/tests/pilot/test_pilot_e2e.py -q --maxfail=5 --disable-warnings
+./.ai-toolkit/scripts/verify.sh backend
+```
+
+---
+
+### Phase PEC-5A — Backend: GOSI/WPS governed ProcessDefinitions (P5 slice)
+**Date:** 2026-09-16  
+**Worker Role:** backend-worker  
+**Recommended Model:** DeepSeek V4.1-Flash  
+**Status:** READY  
+**Depends on:** —  
+**Roadmap:** P5
+
+#### Implementation
+1. Add `domain_packs/nibras/processes/` YAMLs for GOSI/WPS SIF generation lifecycle with `human_only` on irreversible submit; `refuse_if`/`ask_if`/`kill_switch`.
+2. Register capabilities in `api_catalog.yaml` + `capability_registry.py` as needed.
+3. Extend `seed_nibras_processes.py` idempotently; tests mirror payroll/leave/loan process tests.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && \
+  ../.venv/bin/python -m pytest ai/tests/test_nibras_payroll_process.py ai/tests/test_nibras_leave_process.py ai/tests/test_nibras_loan_process.py -q --maxfail=5 --disable-warnings
+# Plus new gosi/wps tests
+./.ai-toolkit/scripts/verify.sh backend
+```
+
+---
+
+### Phase PEC-5B — Backend: Onboarding governed process (P5 slice)
+**Date:** 2026-09-16  
+**Worker Role:** backend-worker  
+**Recommended Model:** DeepSeek V4.1-Flash  
+**Status:** READY  
+**Depends on:** PEC-5A patterns  
+
+Same pattern as PEC-5A for employee onboarding lifecycle. Evidence + seed + tests.
+
+---
+
+### Phase PEC-6A — Backend: Admin skill promote/reject decision API (P6)
+**Date:** 2026-09-16  
+**Worker Role:** backend-worker  
+**Recommended Model:** DeepSeek V4.1-Flash  
+**Status:** READY  
+**Depends on:** —  
+
+#### Context
+Admission gate is system-side; Console needs an **admin decision endpoint** that runs gate (or records reject) under CBAC `ai:publisher` / `ai:process_owner`. No bypass of `_authority` token.
+
+#### Implementation
+1. POST endpoints: promote (calls gate `_promote_skill` / `admit_skill` path) and reject (sets deprecated/rejected with reason).
+2. CBAC-gated; audit log row.
+3. Tests: non-admin 403; admin promote increments promoted; forged path still gate-only.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && \
+  ../.venv/bin/python -m pytest ai/tests/ -k "skill and (promot or admit or gate)" -q --maxfail=8 --disable-warnings
+./.ai-toolkit/scripts/verify.sh backend
+```
+
+---
+
+### Phase PEC-6B — Frontend: Console promote/reject + Capabilities registry view (P6 UI)
+**Date:** 2026-09-16  
+**Worker Role:** frontend-worker  
+**Recommended Model:** DeepSeek V4.1-Flash  
+**Status:** READY  
+**Depends on:** PEC-6A  
+**Screen Spec:** extend existing Console shell patterns in `AIWorkspace` Processes/Skills tabs; follow `shared/frontend-ready.md` minimally (states: loading/empty/error/success; CBAC lock). Reuse `SkillsPanel` — add actions, do not duplicate.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/carbon-frontend && npm run lint && npm run build
+# targeted vitest for SkillsPanel / Console if present
+```
+
+---
+
+## End PEC track specs
+
 
 ---
 

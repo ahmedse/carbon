@@ -1,4 +1,4 @@
-# Registry: API Endpoints  (auto-generated 2026-09-16 15:38 — DO NOT EDIT)
+# Registry: API Endpoints  (auto-generated 2026-09-16 15:59 — DO NOT EDIT)
 
 > Before adding an endpoint, search here. Reuse or extend — never duplicate a route.
 

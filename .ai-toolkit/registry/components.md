@@ -1,4 +1,4 @@
-# Registry: Frontend Components  (auto-generated 2026-09-16 15:38 — DO NOT EDIT)
+# Registry: Frontend Components  (auto-generated 2026-09-16 15:59 — DO NOT EDIT)
 
 > REUSE BEFORE CREATE. Before building any component, search here first.
 

@@ -1,4 +1,4 @@
-# Registry: Data Models  (auto-generated 2026-09-16 15:38 — DO NOT EDIT)
+# Registry: Data Models  (auto-generated 2026-09-16 15:59 — DO NOT EDIT)
 
 > The data schema. Before adding a model or field, check here. Reuse existing models where possible.
 

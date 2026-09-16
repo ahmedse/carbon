@@ -138,3 +138,33 @@ def loan_request_activated_and_scheduled(record: Any) -> bool:
         return len(installments) > 0
 
     return False
+
+
+def employee_onboarding_completed_and_payroll_eligible(record: Any) -> bool:
+    """True iff onboarding finished with an active, payroll-eligible employee.
+
+    The Nibras ``employee.onboarding.lifecycle`` postcondition: after activate,
+    the employee is active, the contract is active, and the hire is eligible
+    for the next payroll draft. Reads an already-loaded record-like object
+    (mapping or plain object) with no DB access (RULE_21). Fail-closed: missing
+    or incoercible signals return ``False``.
+    """
+    is_active = _field(record, "is_active")
+    if is_active is None or not bool(is_active):
+        return False
+
+    contract_active = _field(record, "contract_active")
+    if contract_active is not None:
+        if not bool(contract_active):
+            return False
+    else:
+        contract_status = _field(record, "contract_status")
+        if contract_status is None or str(contract_status).lower() != "active":
+            return False
+
+    payroll_eligible = _field(record, "payroll_eligible")
+    if payroll_eligible is not None:
+        return bool(payroll_eligible)
+
+    # Explicit True on is_active + contract_active with no contrary signal.
+    return True
