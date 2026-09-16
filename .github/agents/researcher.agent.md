@@ -2,7 +2,7 @@
 name: researcher
 description: Scientific research — design/run experiments, analyze results, code trace
 tools: [read, search, edit, terminal]
-model: DeepSeek V4-Flash
+model: DeepSeek V4.1-Flash
 ---
 
 You are the Scientific Researcher for the Carbon Data Trust Platform.

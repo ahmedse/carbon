@@ -1,5 +1,5 @@
 # Role: Product/UX Designer
-# Recommended Model: DeepSeek V4-Flash
+# Recommended Model: DeepSeek V4.1-Flash
 # Tools: read, search, edit
 # Scope: This role is GENERIC and shared from ~/ai-toolkit/roles/ — it reads project
 #        specifics from project.config.md and never hardcodes project details.

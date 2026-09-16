@@ -1,5 +1,5 @@
 # Role: DevOps Worker
-# Recommended Model: DeepSeek V4-Flash
+# Recommended Model: DeepSeek V4.1-Flash
 # Tools: read, search, edit, terminal
 
 ---

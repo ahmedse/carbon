@@ -143,6 +143,23 @@ def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
 # retired or budget-guardrailed models are intentionally excluded.
 _CHAT_MODEL_CATALOG: tuple[dict, ...] = (
     {
+        "id": "deepseek-flash",
+        "label": "DeepSeek Flash",
+        "description": (
+            "Cheapest default (V4.1-Flash). Peak Mon–Fri 01–04 & 06–10 UTC "
+            "is 2×; still ~10× under Claude Sonnet at peak."
+        ),
+        "cost_key": "DeepSeek-Flash",
+    },
+    {
+        "id": "deepseek-v4-pro",
+        "label": "DeepSeek V4 Pro",
+        "description": (
+            "Stronger DeepSeek reasoning. Peak hours 2×; still under Sonnet."
+        ),
+        "cost_key": "DeepSeek-V4-Pro",
+    },
+    {
         "id": "gpt-4o",
         "label": "GPT-4o",
         "description": "High-quality general-purpose model for complex tasks.",

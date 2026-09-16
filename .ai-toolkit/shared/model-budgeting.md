@@ -3,7 +3,8 @@
 # Source: curated from Carbon (2026-08) — provider-agnosticizable but tuned to DeepSeek V4.
 
 > The single biggest cost lever is **not** picking a cheaper model — it's **cache
-> hits** and **tier discipline**. A $0.007/M cache hit vs $0.22/M miss is ~30x.
+> hits** and **tier discipline**. A $0.003/M cache hit vs $0.15/M miss (Flash
+> off-peak) is ~50x; peak hours are 2×.
 
 ---
 
@@ -11,18 +12,19 @@
 
 | Role | Model |
 |---|---|
-| **All workers** — backend, frontend, devops, data-ml, debugger-fixer, qa-validator, product-designer, researcher, curator | **V4-Flash** |
-| **Master Architect** (only) | **V4-Pro** |
+| **All workers** — backend, frontend, devops, data-ml, debugger-fixer, qa-validator, product-designer, researcher, curator | **V4.1-Flash** (`deepseek-flash`) |
+| **Master Architect** (only) | **V4-Pro** (`deepseek-v4-pro`) |
 | Kimi, V3, R1 | **OFF roster** (cost / retired on provider) |
 
-**Flash is ~3x cheaper than Pro.** Tier by ROLE, not task complexity — workers never
+**Flash is far cheaper than Pro.** Tier by ROLE, not task complexity — workers never
 escalate to Pro. Only the Master Architect reasons in V4-Pro.
 
 ---
 
 ## RULE 2 — Maximize cache hits (the biggest lever)
 
-DeepSeek prefix-cache: **hit ≈ $0.007/M vs miss ≈ $0.22/M (~30x).**
+DeepSeek V4.1-Flash prefix-cache (off-peak): **hit ≈ $0.003/M vs miss ≈ $0.15/M (~50x).**
+Peak (Mon–Fri 01:00–04:00 and 06:00–10:00 UTC) is **2×**.
 
 - Keep a **STABLE, long-lived system prompt + tool definitions at the FRONT** of
   every LLM call. Never rotate them between calls.
@@ -48,7 +50,7 @@ DeepSeek prefix-cache: **hit ≈ $0.007/M vs miss ≈ $0.22/M (~30x).**
 
 | Model | cache-hit (off/peak) | cache-miss (off/peak) | output (off/peak) |
 |---|---|---|---|
-| V4-Flash | $0.007 / $0.014 | $0.22 / $0.44 | $0.66 / $1.32 |
+| V4.1-Flash | $0.003 / $0.006 | $0.15 / $0.30 | $0.60 / $1.20 |
 | V4-Pro | $0.022 / $0.044 | $0.66 / $1.32 | $1.98 / $3.96 |
 
 ---

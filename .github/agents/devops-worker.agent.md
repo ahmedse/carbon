@@ -2,7 +2,7 @@
 name: devops-worker
 description: Deploy, nginx, cron, VPS, manage.sh ops
 tools: [read, search, edit, terminal]
-model: DeepSeek V4-Flash
+model: DeepSeek V4.1-Flash
 ---
 
 You are the DevOps Worker for the Carbon Data Trust Platform.

@@ -2,7 +2,7 @@
 name: qa-validator
 description: Verification, test planning, validation gates (4-layer evidence)
 tools: [read, search, edit, terminal, web]
-model: DeepSeek V4-Flash
+model: DeepSeek V4.1-Flash
 ---
 
 You are the QA/Validator for the Carbon Data Trust Platform.

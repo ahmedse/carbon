@@ -2,7 +2,7 @@
 name: data-ml-worker
 description: Data/ETL, feature engineering, ML experiments, forecasting
 tools: [read, search, edit, terminal]
-model: DeepSeek V4-Flash
+model: DeepSeek V4.1-Flash
 ---
 
 You are the Data/ML Worker for the Carbon Data Trust Platform.

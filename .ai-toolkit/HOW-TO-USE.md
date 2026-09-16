@@ -38,12 +38,12 @@ Worker (Zoo/You)  → read config + role + registry → build → verify → TAS
 You (Master)      → review proof → next phase OR done
 ```
 
-### The enforcement is available but NOT wired:
+### The enforcement hook is wired:
 
-The secret-blocking script (`scripts/guard.sh`) exists and works, but the hook
-(`.github/hooks/guard-secrets.json`) does NOT exist yet — nothing runs before edits today.
-You can test guard.sh manually (see "Testing It Works" below) and wire it into CI or a
-PreToolUse hook later (wiring pending).
+The secret-blocking script (`scripts/guard.sh`) is wired via
+`.github/hooks/guard-secrets.json` (PreToolUse). Confirm your Copilot/hook host
+enables hooks for it to run automatically; you can always test it manually
+(see "Testing It Works" below).
 
 ---
 
@@ -65,7 +65,7 @@ cd /path/to/newproject
 echo 'Read `.ai-toolkit/ONBOARDING.md` first. You are Master Architect for the Carbon Data Trust Platform.' \
   > /path/to/newproject/.github/copilot-instructions.md
 
-# Done. All 10 roles are ready. (The guard hook is NOT wired by default — see above.)
+# Done. All 10 roles are ready. Guard hook stub ships at `.github/hooks/guard-secrets.json`.
 ```
 
 The toolkit is **100% portable** — the roles/contracts/scripts don't hardcode project paths.
@@ -89,7 +89,7 @@ They read `project.config.md`, so you edit one file and everything adapts.
 
 ```bash
 # 1. Does the guard block secrets?
-python3 -c 'import json; print(json.dumps({"toolName":"create_file","toolInput":{"content":"API_KEY=\"sk-test123456789012\""}}))'  \
+python3 -c 'import json; print(json.dumps({"toolName":"create_file","toolInput":{"content":"API_KEY=\"sk-live-abcDEF1234567890\""}}))'  \
   | ./.ai-toolkit/scripts/guard.sh
 # Expect: permissionDecision: deny
 
@@ -111,7 +111,7 @@ The toolkit **captures** every lesson but doesn't auto-update rules. Here's how 
 
 ### Automatic (happens on every use)
 - **Registry** (`registry/*.md`): `scan.sh` regenerates from codebase → always current
-- **Guard script** (`scripts/guard.sh`): blocks secrets when run — manual/CI only until `.github/hooks/` is wired (pending)
+- **Guard script** (`scripts/guard.sh`): blocks secrets — wired via `.github/hooks/guard-secrets.json`; also manual/CI
 
 ### Worker-added (manual append after fixes/decisions)
 - **Playbook** (`troubleshooting/playbook.md`): Debugger appends after every confirmed bug fix

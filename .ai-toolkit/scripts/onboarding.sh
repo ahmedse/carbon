@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# QUARANTINED for this Carbon monorepo (2026-09-16 toolkit audit).
+# Requires ~/ai-toolkit central + multi-project layout — not applicable here.
+# Use scan.sh / retro.sh / activate.sh / verify.sh instead.
+# Original script body retained below for reference / future central-toolkit use.
+if [[ "${ALLOW_CENTRAL_TOOLKIT_SCRIPTS:-}" != "1" ]]; then
+  echo "quarantined: $0 is disabled in this monorepo (set ALLOW_CENTRAL_TOOLKIT_SCRIPTS=1 to override)" >&2
+  exit 2
+fi
+
 # onboarding.sh — Wire a project into the central AI toolkit with the full agent team.
 #
 # Usage:

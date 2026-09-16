@@ -38,7 +38,7 @@ fi
 ROLE="$1"
 TITLE="$2"
 DATE=$(date +%Y-%m-%d)
-MODEL=$(grep "^# Recommended Model:" "$TOOLKIT_DIR/roles/${ROLE}.md" 2>/dev/null | head -1 | sed 's/# Recommended Model: //' || echo "DeepSeek-V3 / Sonnet")
+MODEL=$(grep "^# Recommended Model:" "$TOOLKIT_DIR/roles/${ROLE}.md" 2>/dev/null | head -1 | sed 's/# Recommended Model: //' || echo "DeepSeek V4.1-Flash")
 
 # Count existing phases for auto-numbering
 if [ -f "$TASKS_FILE" ]; then

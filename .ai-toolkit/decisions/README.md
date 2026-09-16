@@ -25,23 +25,41 @@ cp .ai-toolkit/decisions/0000-template.md .ai-toolkit/decisions/00NN-short-title
 - Master Architect owns ADRs. Workers READ them before touching the relevant area.
 - Link the ADR from the relevant TASKS.md phase when it constrains the work.
 
-## Index
+## Index (0001–0032)
+
 | # | Title | Status |
 |---|-------|--------|
-| [0001](0001-pattern-architecture.md) | Pattern architecture (Strategy/Command) | Accepted |
-| [0010](0010-data-product-domain-neutral.md) | Data Product must not carry GHG `scope` (domain vocabulary stays out of the generic core) | Accepted |
-| [0011](0011-agent-catalog-graph-reuse.md) | Unified Agent Catalog + graph visualization reuse (extract `ForceGraph.jsx`; no new deps) | Accepted |
-| [0012](0012-enterprise-graph-canvas.md) | Enterprise Graph Canvas primitive — one shared surface (pan/zoom/move/resize/export/maximize/live status); thin domain adapters; no new deps | Accepted |
-| [0013](0013-ai-agent-platform-gap-closure.md) | Next-Gen AI Agent Platform gap closure — output-quality drift, bounded retry/backoff, plan templates, run comparison, non-data domain adapters | Accepted |
-| [0014](0014-pulse-chat-agent-mode-split.md) | Pulse Chat / Agent mode split — mode is workspace-level, safety contract always visible | Accepted |
-| [0015](0015-multi-instance-single-tenant-deployment.md) | Multi-instance single-tenant deployment — one codebase, N isolated deployments; no fork, no tenant_id | Accepted |
-| [0016](0016-domain-app-ai-contract.md) | Domain App AI Contract — manifest-driven extension model (`DomainAIOperations` ABC) | Accepted |
-| [0019](0019-contextual-inspector-drawer.md) | Contextual Inspector Drawer — unify Notes drawer + per-page metrics panels into one registry-driven global drawer | Proposed |
-| [0024](0024-pulse-0.2-north-star.md) | Pulse 0.2 north star, invariants I1–I8 & anti-drift rails (import-boundary gate + UX acceptance rubric) | Accepted |
-| [0030](0030-eoffice-correspondence-engine.md) | e-Office Correspondence & Approval engine — shared trust-native workflow spine; `Correspondence` (Request/Memo); config-as-data policies; `my`/`team` surfaces; e-signature seam | Accepted |
-| [0025](0025-typed-vs-dataschema-storage.md) | Typed-vs-dataschema storage — typed storage is authoritative for rule-level evaluation | Accepted |
-| [0026](0026-pulse-0.2-close-out.md) | Pulse 0.2 close-out — all 8 north-star items proven by terminal/telemetry artifact (Waves A–D, commits `69161db` + `741514a`); Nibras/People excluded | Accepted |
-| [0025](0025-typed-vs-dataschema-storage.md) | Storage pattern for hosted apps — typed tables for owned data, `dataschema` only for governed measurements; DQ binds to typed fields via `dq.ModelRuleAssignment` | Accepted |
-| [0025](0025-typed-vs-dataschema-storage.md) | Storage pattern for hosted apps — typed tables for owned data, `dataschema` for governed measurements (governance/DQ decoupled halves) | Accepted |
+| [0001](0001-pattern-architecture.md) | Design Pattern Architecture for Carbon Platform | Accepted |
+| [0002](0002-command-pattern.md) | Command Pattern for Reversible Operations | Accepted |
+| [0003](0003-drf-spectacular-migration.md) | Migrate from drf-yasg to drf-spectacular | Proposed |
+| [0004](0004-ai-multi-app-architecture.md) | Multi-App AI Heart Architecture | Accepted |
+| [0005](0005-pulse-to-ai-terminology.md) | Terminology: "Pulse" → "AI" | Accepted |
+| [0006](0006-dq-rule-standalone.md) | DQ Rules Are Standalone; Bindings Are Separate | Accepted |
+| [0007](0007-pulse-inhand-stateless-engine.md) | Pulse as In-Hand Stateless Engine; Carbon as System of Intelligence | Accepted |
+| [0008](0008-pulse-packaging-portability.md) | Pulse Packaging: Modular Monolith, Plugin/Workflow Extensibility | Accepted |
+| [0009](0009-pulse-engine-stateful-monolith.md) | Pulse Engine Is a Stateful Monolith | Accepted |
+| [0010](0010-data-product-domain-neutral.md) | Data Product must not carry GHG `scope` | Accepted |
+| [0011](0011-agent-catalog-graph-reuse.md) | Unified Agent Catalog + Graph Visualization Reuse | Accepted |
+| [0012](0012-enterprise-graph-canvas.md) | Enterprise Graph Canvas Primitive | Accepted |
+| [0013](0013-ai-agent-platform-gap-closure.md) | Next-Gen AI Agent Platform Gap Closure | Accepted |
+| [0014](0014-pulse-chat-agent-mode-split.md) | Pulse Chat / Agent Mode Split | Accepted |
+| [0015](0015-multi-instance-single-tenant-deployment.md) | Multi-instance single-tenant deployment | Accepted |
+| [0016](0016-domain-app-ai-contract.md) | Domain App AI Contract (manifest-driven) | Accepted |
+| [0017](0017-pulse-instance-yaml-seam.md) | Pulse Instance Config: YAML Seam Pattern | Accepted |
+| [0018](0018-i18n-dual-language.md) | Dual-Language i18n: English + Arabic RTL | Accepted |
+| [0019](0019-contextual-inspector-drawer.md) | Contextual Inspector Drawer | Accepted |
+| [0020](0020-inventory-coverage.md) | Inventory Coverage for GHG accounting | Accepted |
+| [0021](0021-tool-result-synthesis-stage.md) | Tool-Result Synthesis Stage | Accepted |
+| [0022](0022-live-data-grounding-directive.md) | Live-Data Grounding Directive + Insight Synthesis | Accepted |
+| [0023](0023-llm-intent-resolution.md) | LLM-Driven Intent Resolution (S1.5) | Accepted |
+| [0024](0024-pulse-0.2-north-star.md) | Pulse 0.2 North Star, Invariants & Anti-Drift Rails | Accepted |
+| [0025](0025-typed-vs-dataschema-storage.md) | Typed tables vs dataschema for hosted apps | Accepted |
+| [0026](0026-pulse-0.2-close-out.md) | Pulse 0.2 Close-Out (Waves A–D) | Accepted |
+| [0027](0027-governed-lookup-fk-to-referencevalue.md) | Governed lookups are FK to `ReferenceValue` | Accepted |
+| [0028](0028-single-root-org-unit-instance-gated-seeds.md) | Single root OrgUnit; instance-gated seeds | Accepted |
+| [0029](0029-compensation-ledger.md) | Compensation ledger (append-only, provenance) | Accepted |
+| [0030](0030-eoffice-correspondence-engine.md) | e-Office Correspondence & Approval Engine | Accepted |
+| [0031](0031-pulse-unified-remediation-plan.md) | Pulse Unified Remediation Plan (D1–D12) | Accepted |
+| [0032](0032-entity-capability-framework.md) | Entity Capability Framework (ECF) | Accepted |
 
 <!-- Add a row per ADR. Keep newest at the bottom. -->

@@ -189,6 +189,18 @@ deploy/tectona/
 raw/GOFSCO app/20260905/
 raw/GOFSCO app/*/_extracted/
 
+# Personal / non-product raw drops (keep out of the working tree noise)
+raw/my resume/
+raw/tmp/
+raw/misc/
+raw/reviews/
+raw/Insurance/
+
+# Accidental shell redirections / scratch at repo root
+, psycopg2
+tr(x) for x in r))
+backend/_test_login.py
+
 # Windows Mark-of-the-Web (downloaded-file) artifacts
 *Zone.Identifier
 ~

@@ -20,20 +20,20 @@ Tell the agent:
 
 ## Role Reference
 
-**Model policy (budget directive, 2026-08-20):** ALL worker roles (backend, frontend, devops, data-ml, debugger-fixer, qa-validator, product-designer, researcher, curator) run **DeepSeek V4-Flash**. **Only the Master Architect** runs **DeepSeek V4-Pro**. Kimi / V3 / R1 are RETIRED on the provider — never reference them.
+**Model policy (budget directive, 2026-09-16):** ALL worker roles (backend, frontend, devops, data-ml, debugger-fixer, qa-validator, product-designer, researcher, curator) run **DeepSeek V4.1-Flash** (`deepseek-flash`). **Only the Master Architect** runs **DeepSeek V4-Pro** (`deepseek-v4-pro`). Kimi / V3 / R1 are RETIRED on the provider — never reference them.
 
 | Role | File | Recommended Model | Cognitive Mode | Tools |
 |------|------|-------------------|---------------|-------|
 | **Master Architect** | `roles/master-architect.md` | DeepSeek V4 Pro | Plan + Decompose | read, search, edit, todo |
-| **Scientific Researcher** | `roles/researcher.md` | DeepSeek V4-Flash | Experiment + Analyze | read, search, edit, terminal |
-| **Backend Worker** | `roles/backend-worker.md` | DeepSeek V4-Flash | Execute (Python/Django) | read, edit, terminal |
-| **Frontend Worker** | `roles/frontend-worker.md` | DeepSeek V4-Flash | Execute (React/MUI) | read, edit, terminal |
-| **DevOps Worker** | `roles/devops-worker.md` | DeepSeek V4-Flash | Execute (Docker/VPS) | read, edit, terminal |
-| **Data/ML Worker** | `roles/data-ml-worker.md` | DeepSeek V4-Flash | Execute (Data/ETL) | read, edit, terminal |
-| **Debugger/Fixer** | `roles/debugger-fixer.md` | DeepSeek V4-Flash | Diagnose + Hotfix | read, edit, terminal |
-| **QA/Validator** | `roles/qa-validator.md` | DeepSeek V4-Flash | Validate + Evidence (4-layer) | read, search, browser, terminal |
-| **Product/UX Designer** | `roles/product-designer.md` | DeepSeek V4-Flash | Discover + Design (story/journey/acceptance) | read, search, edit |
-| **Curator** | `roles/curator.md` | DeepSeek V4-Flash | Evolve + Reason | read, search, edit (contracts) |
+| **Scientific Researcher** | `roles/researcher.md` | DeepSeek V4.1-Flash | Experiment + Analyze | read, search, edit, terminal |
+| **Backend Worker** | `roles/backend-worker.md` | DeepSeek V4.1-Flash | Execute (Python/Django) | read, edit, terminal |
+| **Frontend Worker** | `roles/frontend-worker.md` | DeepSeek V4.1-Flash | Execute (React/MUI) | read, edit, terminal |
+| **DevOps Worker** | `roles/devops-worker.md` | DeepSeek V4.1-Flash | Execute (Docker/VPS) | read, edit, terminal |
+| **Data/ML Worker** | `roles/data-ml-worker.md` | DeepSeek V4.1-Flash | Execute (Data/ETL) | read, edit, terminal |
+| **Debugger/Fixer** | `roles/debugger-fixer.md` | DeepSeek V4.1-Flash | Diagnose + Hotfix | read, edit, terminal |
+| **QA/Validator** | `roles/qa-validator.md` | DeepSeek V4.1-Flash | Validate + Evidence (4-layer) | read, search, browser, terminal |
+| **Product/UX Designer** | `roles/product-designer.md` | DeepSeek V4.1-Flash | Discover + Design (story/journey/acceptance) | read, search, edit |
+| **Curator** | `roles/curator.md` | DeepSeek V4.1-Flash | Evolve + Reason | read, search, edit (contracts) |
 
 ---
 
@@ -43,7 +43,15 @@ Tell the agent:
 |------|---------|
 | `project.config.md` | **Project-specific facts** — edit this per project |
 | `shared/base-rules.md` | Universal rules: ops script, terminal, verification, handoff protocol |
+| `shared/ai-contract.md` | Binding Pulse/AI engine contract (RULE_18) — all AI work |
+| `shared/frontend-ready.md` | Screen Spec / RULE_29 — Frontend + Product Designer |
+| `shared/compact-ui.md` | MUI density spec — Frontend Worker |
+| `shared/model-budgeting.md` | DeepSeek tiering, cache, peak/off-peak — Master + all |
+| `shared/qa-framework.md` | 4-layer validation — QA/Validator |
 | `shared/design-system.md` | Enterprise UI/UX constitution — Frontend Worker + Master (UI planning) |
+| `shared/design-principles.md` | Product/UX principles |
+| `shared/ux-patterns.md` | Recurring UX patterns |
+| `shared/user-stories.md` | Story / journey format |
 | `shared/api-contract.md` | Unified API shape — Backend Worker (writing), Frontend Worker (consuming) |
 | `shared/security.md` | Auth, access control, secrets, OWASP — Backend/DevOps/Debugger |
 | `shared/data-layer.md` | DB & data conventions — Backend/Data-ML/Debugger |
@@ -53,6 +61,8 @@ Tell the agent:
 | `shared/logging.md` | Observability & logging standard — Backend/DevOps/Debugger |
 | `shared/git-workflow.md` | Commit/branch conventions — all workers |
 | `shared/definition-of-done.md` | The universal completion gate — all workers |
+| `shared/design-patterns.md` | GoF / composition patterns |
+| `shared/uncertainty-provenance.md` | Provenance / uncertainty in AI answers |
 
 ## Troubleshooting (Never Fix the Same Bug Twice)
 
@@ -91,8 +101,9 @@ Read relevant ADRs before touching an area. Master owns them.
 | `scripts/new-task.sh <role> "<title>"` | Scaffold a TASKS.md phase |
 | `scripts/scan.sh [section]` | Regenerate the registry from the codebase |
 | `scripts/verify.sh [target]` | Verification gate: backend/frontend/tests/antipatterns/all/full |
-| `scripts/guard.sh` | Blocks hardcoded secrets — manual/CI use; PreToolUse hook (`.github/hooks/`) NOT wired yet |
+| `scripts/guard.sh` | Blocks hardcoded secrets — wired via `.github/hooks/guard-secrets.json` (PreToolUse); also manual/CI |
 | `scripts/retro.sh [since-date]` | Gather learnings for retrospective (playbook + ADRs + current warnings) |
+| `scripts/onboarding.sh` / `promote.sh` | **Quarantined** in this monorepo (need `~/ai-toolkit` central); set `ALLOW_CENTRAL_TOOLKIT_SCRIPTS=1` to override |
 
 ## Toolkit Evolution (the Learning Loop)
 
@@ -100,7 +111,7 @@ The toolkit **captures** learnings but doesn't auto-update rules. Here's the fee
 
 ### Automatic (no human needed)
 - **Registry**: `scan.sh` regenerates it from the codebase → always current
-- **Hook enforcement**: NOT wired yet (pending) — `guard.sh` runs manually/CI until `.github/hooks/` is created
+- **Hook enforcement**: Wired — `.github/hooks/guard-secrets.json` → `scripts/guard.sh` (confirm host enables PreToolUse)
 
 ### Worker-added (manual append)
 - **Playbook entries**: Debugger/Fixer adds after every confirmed fix (RULE 9 in debugging.md)
@@ -132,10 +143,10 @@ The toolkit evolves from your team's actual experience, not generic best-practic
 
 ## Enforcement (deterministic, not guidance)
 
-- **Guard hook is NOT wired yet (pending).** `.github/hooks/guard-secrets.json` does not exist,
-  so nothing runs before edits today. `scripts/guard.sh` is available for manual use and can be
-  wired into CI or a PreToolUse hook later — once wired, it **denies** writes that introduce a
-  hardcoded secret. This is the one piece that cannot be talked out of.
+- **Guard hook is wired** via `.github/hooks/guard-secrets.json` → `scripts/guard.sh`.
+  Confirm the Copilot/hook host enables PreToolUse. Once active, it **denies** writes that
+  introduce a hardcoded secret. This is the one piece that cannot be talked out of.
+  `scripts/guard.sh` remains available for manual/CI use.
 - `scripts/verify.sh` is the completion gate — see `shared/definition-of-done.md`.
 
 ---

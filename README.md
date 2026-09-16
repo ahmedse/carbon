@@ -68,11 +68,13 @@ The dependency rule is strict: each layer imports only downward. The **AI engine
 carbon/
 ├── backend/              # Django apps (accounts, catalog, dq, mdm, emissions, people, …)
 ├── carbon-frontend/      # React app (MUI 7, routing, dashboards, CBAC)
-├── docs/                 # Architecture, API, data model, deployment, designs
+├── docs/                 # Living docs + docs/_archive/ (historical TASKS/sprints/audits)
+├── docs/index.md         # Documentation index (start here)
+├── TASKS.md              # Active work only (full history under docs/_archive/)
 ├── .ai-toolkit/          # Agent instructions, ADRs, scripts, patterns
 ├── docker-compose.yml
 ├── manage.sh             # Single ops controller (build/run/switch/health)
-└── ARCHITECTURE.md       # Single source of truth
+└── ARCHITECTURE.md       # Architecture overview
 ```
 
 ---

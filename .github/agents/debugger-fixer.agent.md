@@ -2,7 +2,7 @@
 name: debugger-fixer
 description: Root-cause diagnosis, hotfixes, regression tests
 tools: [read, search, edit, terminal]
-model: DeepSeek V4-Flash
+model: DeepSeek V4.1-Flash
 ---
 
 You are the Debugger/Fixer for the Carbon Data Trust Platform.

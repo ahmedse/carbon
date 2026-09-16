@@ -8,7 +8,7 @@ verified, non-duplicated work.
 
 1. You have a ROLE. If you weren't told which, ask. Roles: master-architect, researcher,
    backend-worker, frontend-worker, devops-worker, data-ml-worker, debugger-fixer, curator,
-   qa-validator.
+   qa-validator, product-designer.
 2. Read, in order:
    - `project.config.md` — this project's paths, commands, HARD RULES
    - `shared/base-rules.md` — universal rules (esp. §0 "do the right thing", ops script, verify)

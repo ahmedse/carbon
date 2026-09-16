@@ -1,36 +1,44 @@
-# Master/Worker Handoff Protocol (Carbon Project)
+# Master/Worker Handoff Protocol (Carbon)
 
-This project uses the Master/Worker handoff protocol for structured task execution.
+This project uses the `.ai-toolkit/` Master→Worker system. Authoritative bootstrap:
+`.ai-toolkit/ONBOARDING.md` → `project.config.md` → `roles/<role>.md`.
 
-**See the full protocol specification at:** `~/Documents/Cline/Rules/master-worker-protocol.md`
+## Roles & models
 
-## Current Project Context
+| Role | Model | Writes |
+|------|-------|--------|
+| **Master Architect** | DeepSeek V4-Pro (`deepseek-v4-pro`) | `TASKS.md` phases, ADRs |
+| **All other roles** (backend, frontend, devops, data-ml, debugger-fixer, qa-validator, product-designer, researcher, curator) | DeepSeek V4.1-Flash (`deepseek-flash`) | Code / evidence per role |
 
-- **Repository:** Carbon Data Trust Platform (Django/DRF backend + React frontend)
-- **Master:** Planner (writes TASK.md)
-- **Worker:** Raptor/Copilot (executes TASK.md, returns TASK-RESULT.md)
+Kimi / V3 / R1 are **retired** — never assign them.
 
-## Active RUN Sequence (A0–A6)
+## Handoff loop
 
-| RUN | Title | Type | Status |
-|-----|-------|------|--------|
-| A0 | Ground-truth audit | read-only | NEXT |
-| A1 | Repo hygiene & doc truth | cleanup | pending |
-| A2 | Core governance RBAC fix | backend | pending |
-| A3 | Data-owner scoped experience | backend+frontend | pending |
-| A4 | Admin experience | backend+frontend | pending |
-| A5 | Data Trust surfacing decision | design+build | pending |
-| A6 | Deployment-readiness gate | ops | pending |
+1. Master writes a `TASKS.md` phase (role, files to read, contract, verification gate).
+2. Worker reads `project.config.md` + `shared/base-rules.md` + role + registry, then builds.
+3. Worker runs `./.ai-toolkit/scripts/verify.sh` for the relevant target and records **terminal proof** in `TASK-RESULTS.md`.
+4. Master reviews proof → next phase or done.
+5. After bug fixes: regression test + `troubleshooting/playbook.md` entry (never-fix-twice).
 
-## Project-Specific Constraints
+## Project constraints (always on)
 
-All RUNs must respect:
-- **One-way dependencies:** `emissions → core` (catalog/mdm/dq/dataschema), never reverse
-- **Additive migrations only:** No destructive schema changes
-- **No Pulse/AI/LLM work:** The `ai_copilot` app is frozen (superseded by external Pulse)
-- **No tenant work:** Multi-tenancy is explicitly out of scope
-- **Authoritative docs:** `docs/STRATEGY_DATA_TRUST_PLATFORM.md`, `docs/DESIGN_DATA_TRUST_CORE.md`, `docs/PLAN_DATA_TRUST_PHASES.md`, `docs/DESIGN_ORG_ACCESS_MODEL.md`
+- **No multi-tenant / Project model** — single-tenant multi-instance (ADR-0015).
+- **Core ↛ domain imports** — domain apps may import core; never reverse (RULE_3).
+- **Pulse is in-hand** — `backend/ai/engine/` co-deployed; no runtime provider swap (ADR-0007, RULE_6/13).
+- **AI surface** — bind to `shared/ai-contract.md` (RULE_18–21).
+- **Routes** — absolute + namespace-prefixed; no dangling targets (RULE_5/15/22); FE audit = `scripts/audit-routes.py`.
+- **One breadcrumb** — `carbon-frontend/src/shell/Breadcrumbs.jsx` only (RULE_9).
+- **Venv** — repo-root `.venv` (`/home/ahmed/ws/carbon/.venv`), never `backend/venv`.
 
-## Current TASK
+## Commands
 
-See `TASK.md` in the repository root for the active RUN specification.
+```bash
+./.ai-toolkit/scripts/activate.sh <role>
+./.ai-toolkit/scripts/scan.sh
+./.ai-toolkit/scripts/verify.sh full
+./.ai-toolkit/scripts/guard.sh   # also wired via .github/hooks/guard-secrets.json
+```
+
+## Current task
+
+See `TASKS.md` / `TASK-RESULTS.md` at the repository root.

@@ -2,7 +2,7 @@
 name: frontend-worker
 description: React 19 + Vite 6 + MUI v7 UI implementation
 tools: [read, search, edit, terminal]
-model: DeepSeek V4-Flash
+model: DeepSeek V4.1-Flash
 ---
 
 You are the Frontend Worker for the Carbon Data Trust Platform.

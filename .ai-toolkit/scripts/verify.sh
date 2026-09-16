@@ -29,37 +29,54 @@ pass() { echo "${GREEN}✓${NC} $1"; }
 fail() { echo "${RED}✗${NC} $1"; FAIL=1; }
 warn() { echo "${YELLOW}⚠${NC} $1"; }
 
+# Resolve project Python — NEVER backend/venv (does not exist). Root .venv only.
+_py() {
+  local PY="$ROOT/.venv/bin/python"
+  if [ -x "$PY" ]; then echo "$PY"; else command -v python3 || command -v python; fi
+}
+
 # ── BACKEND ───────────────────────────────────────────────────────────────────
 verify_backend() {
   echo "── Backend ─────────────────────────────"
   if [ ! -d "$BACKEND_DIR" ]; then warn "no backend dir"; return; fi
-  ( cd "$BACKEND_DIR" && source venv/bin/activate 2>/dev/null
-    if python manage.py check >/tmp/vb.log 2>&1; then pass "django check"; else fail "django check"; cat /tmp/vb.log; fi
-    if python manage.py makemigrations --check --dry-run >/tmp/vm.log 2>&1; then pass "no missing migrations"; else warn "unmade migrations pending (review /tmp/vm.log)"; fi
-  )
+  local PY; PY="$(_py)"
+  local _prev="$PWD"
+  cd "$BACKEND_DIR" || return
+  if "$PY" manage.py check >/tmp/vb.log 2>&1; then pass "django check"; else fail "django check"; cat /tmp/vb.log; fi
+  if "$PY" manage.py makemigrations --check --dry-run >/tmp/vm.log 2>&1; then pass "no missing migrations"; else warn "unmade migrations pending (review /tmp/vm.log)"; fi
+  cd "$_prev" || true
 }
 
 # ── TESTS ─────────────────────────────────────────────────────────────────────
 verify_tests() {
   echo "── Tests ───────────────────────────────"
   if [ ! -d "$BACKEND_DIR" ]; then warn "no backend dir"; return; fi
-  ( cd "$BACKEND_DIR" && source venv/bin/activate 2>/dev/null
-    if python manage.py test "${TEST_ARGS:-}" >/tmp/vt.log 2>&1; then
-      pass "backend tests ($(grep -oE 'Ran [0-9]+ test' /tmp/vt.log | head -1))"
-    else
-      fail "backend tests (see /tmp/vt.log)"; tail -25 /tmp/vt.log
-    fi
-  )
+  local PY; PY="$(_py)"
+  local _prev="$PWD"
+  cd "$BACKEND_DIR" || return
+  if "$PY" -m pytest ${TEST_ARGS:-ai dq accounts -q} >/tmp/vt.log 2>&1; then
+    pass "backend tests ($(grep -oE '[0-9]+ passed' /tmp/vt.log | head -1 || echo ok))"
+  else
+    fail "backend tests (see /tmp/vt.log)"; tail -25 /tmp/vt.log
+  fi
+  cd "$_prev" || true
 }
 
 # ── FRONTEND ──────────────────────────────────────────────────────────────────
 verify_frontend() {
   echo "── Frontend ────────────────────────────"
   if [ ! -d "$FRONTEND_DIR" ]; then warn "no frontend dir"; return; fi
-  ( cd "$FRONTEND_DIR"
-    if npm run lint >/tmp/vfl.log 2>&1; then pass "lint"; else fail "lint (see /tmp/vfl.log)"; tail -15 /tmp/vfl.log; fi
-    if npm run build >/tmp/vfb.log 2>&1; then pass "build"; else fail "build (see /tmp/vfb.log)"; tail -15 /tmp/vfb.log; fi
-  )
+  local _prev="$PWD"
+  cd "$FRONTEND_DIR" || return
+  if npm run lint >/tmp/vfl.log 2>&1; then pass "lint"; else fail "lint (see /tmp/vfl.log)"; tail -15 /tmp/vfl.log; fi
+  if npm run build >/tmp/vfb.log 2>&1; then pass "build"; else fail "build (see /tmp/vfb.log)"; tail -15 /tmp/vfb.log; fi
+  cd "$_prev" || true
+  # RULE_22 — dangling FE route / missing namespace-root index (distinct from audit-routes.sh registry drift)
+  if "$(_py)" "$SCRIPT_DIR/audit-routes.py" "$ROOT" >/tmp/vra.log 2>&1; then
+    pass "FE route audit (RULE_22)"
+  else
+    fail "FE route audit (RULE_22)"; cat /tmp/vra.log
+  fi
 }
 
 # ── ANTI-PATTERNS (deterministic block) ───────────────────────────────────────

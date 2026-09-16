@@ -46,7 +46,7 @@ Each pattern: **trap → correct practice → detectable?**. Stable ids `UP-NNNN
 
 ### UP-0007 — Reordering the LLM system prompt kills the prefix cache (~30x cost)
 - **Trap:** Mutating/reordering the stable system-prompt + tool-definitions prefix between calls invalidates DeepSeek's prefix cache → cache-miss ~$0.22/M instead of hit ~$0.007/M on every subsequent call.
-- **Correct:** Keep a STABLE, long-lived prefix at the FRONT; append new context AFTER it; never rotate/reorder. Version the prefix, append-only during a session. Tier by complexity: V4-Flash for routine, V4-Pro for hard reasoning.
+- **Correct:** Keep a STABLE, long-lived prefix at the FRONT; append new context AFTER it; never rotate/reorder. Version the prefix, append-only during a session. Tier by complexity: V4.1-Flash for routine, V4-Pro for hard reasoning.
 - **Seen in:** carbon (RULE_24/25/26 → shared/model-budgeting.md).
 - **Detectable:** grep for mid-session system-prompt reassignment / prefix reorder.
 

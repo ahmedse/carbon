@@ -54,15 +54,15 @@ Workers get narrow context. You hold the architecture, the history, and the cons
 
 | Work Type | Assign To | Model |
 |---|---|---|
-| Django services, ORM, API, migrations | Backend Worker | V4-Flash |
-| React components, MUI, routing, hooks | Frontend Worker | V4-Flash |
-| Docker, nginx, cron, VPS | DevOps Worker | V4-Flash |
-| Feature engineering, ML experiments | Data/ML Worker | V4-Flash |
-| Error diagnosis, root cause, hotfix | Debugger/Fixer | V4-Flash |
-| ML experiment, ablation study, model comparison | Scientific Researcher | V4-Flash |
-| Code trace, "how does X work?" | Scientific Researcher | V4-Flash |
+| Django services, ORM, API, migrations | Backend Worker | V4.1-Flash |
+| React components, MUI, routing, hooks | Frontend Worker | V4.1-Flash |
+| Docker, nginx, cron, VPS | DevOps Worker | V4.1-Flash |
+| Feature engineering, ML experiments | Data/ML Worker | V4.1-Flash |
+| Error diagnosis, root cause, hotfix | Debugger/Fixer | V4.1-Flash |
+| ML experiment, ablation study, model comparison | Scientific Researcher | V4.1-Flash |
+| Code trace, "how does X work?" | Scientific Researcher | V4.1-Flash |
 
-**Model budget principle:** ALL workers run **DeepSeek V4-Flash**. **Only the
+**Model budget principle:** ALL workers run **DeepSeek V4.1-Flash**. **Only the
 Master Architect** runs **DeepSeek V4-Pro**. Kimi / V3 / R1 are OFF roster. Full
 tiering + cache + off-peak rules: `shared/model-budgeting.md`.
 

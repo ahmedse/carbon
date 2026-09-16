@@ -2,11 +2,11 @@
 
 ## What You Built
 
-A **self-enforcing, self-learning coding system** for AI agents. 44 files, 10 roles, 11 contracts.
+A **self-enforcing, self-learning coding system** for AI agents. ~110 files, 10 roles, 23 shared contracts.
 
 **Three goals achieved:**
 1. ✅ **Minimize duplication** — Registry (auto-scan) + "read before write" rule
-2. ✅ **Unify all layers** — 11 shared contracts (API, security, data, UI, testing, etc.)
+2. ✅ **Unify all layers** — 23 shared contracts (API, security, data, UI, AI, testing, etc.)
 3. ✅ **Efficient, reliable, low-cost** — Deterministic verification gate + cheap worker models
 
 ---
@@ -49,15 +49,15 @@ echo 'Read `.ai-toolkit/ONBOARDING.md`' > /path/to/newproject/.github/copilot-in
 | Role | When to Use | Model | Mode |
 |------|-------------|-------|------|
 | **Master Architect** | Planning, decomposition, TASKS.md specs | DeepSeek V4 Pro | Plan |
-| **Scientific Researcher** | Design & run experiments, analyze results | DeepSeek V4-Flash | Experiment |
-| **Backend Worker** | Python, Django, API, services, DB | DeepSeek V4-Flash | Execute |
-| **Frontend Worker** | React, MUI, hooks, UI | DeepSeek V4-Flash | Execute |
-| **DevOps Worker** | Docker, deploy, VPS, cron | DeepSeek V4-Flash | Execute |
-| **Data/ML Worker** | Experiments, forecasting, analysis | DeepSeek V4-Flash | Execute |
-| **Debugger/Fixer** | Prod hotfixes, regression tests | DeepSeek V4-Flash | Fix |
-| **QA Validator** | Verification, test planning, validation gates | DeepSeek V4-Flash | Validate |
-| **Product Designer** | UX design, design system, wireframes | DeepSeek V4-Flash | Design |
-| **Curator** | Monthly retro, evolve contracts | DeepSeek V4-Flash | Evolve |
+| **Scientific Researcher** | Design & run experiments, analyze results | DeepSeek V4.1-Flash | Experiment |
+| **Backend Worker** | Python, Django, API, services, DB | DeepSeek V4.1-Flash | Execute |
+| **Frontend Worker** | React, MUI, hooks, UI | DeepSeek V4.1-Flash | Execute |
+| **DevOps Worker** | Docker, deploy, VPS, cron | DeepSeek V4.1-Flash | Execute |
+| **Data/ML Worker** | Experiments, forecasting, analysis | DeepSeek V4.1-Flash | Execute |
+| **Debugger/Fixer** | Prod hotfixes, regression tests | DeepSeek V4.1-Flash | Fix |
+| **QA Validator** | Verification, test planning, validation gates | DeepSeek V4.1-Flash | Validate |
+| **Product Designer** | UX design, design system, wireframes | DeepSeek V4.1-Flash | Design |
+| **Curator** | Monthly retro, evolve contracts | DeepSeek V4.1-Flash | Evolve |
 
 ---
 
@@ -108,7 +108,7 @@ Knowledge compounds. Mistakes don't repeat.
 | `activate.sh <role>` | Print worker activation prompt | Before starting a role chat |
 | `scan.sh` | Regenerate registry from codebase | After adding services/components/endpoints |
 | `verify.sh [target]` | Verification gate (backend/frontend/tests/antipatterns/all/full) | Before shipping, in DoD |
-| `guard.sh` | Deterministic secret-blocking hook (manual/CI; .github/hooks/ wiring pending) | On every commit (once wired) |
+| `guard.sh` | Deterministic secret-blocking hook (wired via `.github/hooks/guard-secrets.json`) | Before edit/write tools (when host enables hooks) |
 | `retro.sh [date]` | Gather learnings for retrospective | Monthly or after major work |
 | `new-task.sh <role> "title"` | Scaffold a TASKS.md phase | When Master writes a new task |
 
@@ -117,10 +117,10 @@ Knowledge compounds. Mistakes don't repeat.
 ## The Enforcement (Deterministic, Not Guidance)
 
 1. **Secret Hook** (`.github/hooks/guard-secrets.json` → `guard.sh`):
-   - Runs BEFORE every file edit
+   - Runs BEFORE every file edit (when the Copilot/hook host enables PreToolUse)
    - **DENIES** writes with hardcoded `API_KEY = "sk-..."` patterns
    - Cannot be talked out of (fail-open on edge cases)
-   - Available for manual/CI use (hook wiring via .github/hooks/ pending)
+   - Also runnable manually / in CI
 
 2. **Verification Gate** (`verify.sh` + `definition-of-done.md`):
    - 7-part completion checklist (correct, reuses, verified, tested, safe, clean, captured)
@@ -162,7 +162,7 @@ Result: Every confirmed bug makes the system STRONGER, not just patched.
 ### Today (activation):
 1. Run `./ai-toolkit/scripts/scan.sh` to generate the registry
 2. Try `./ai-toolkit/scripts/verify.sh full` to see current state
-3. Test the hook: try creating a file with `API_KEY = "sk-test12345"` — Copilot denies it
+3. Test the hook: pipe a create_file payload with `API_KEY="sk-live-..."` into `guard.sh` — expect deny
 4. Read `ONBOARDING.md` in any new chat to bootstrap
 
 ### This Month (first retro):

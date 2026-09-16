@@ -312,8 +312,8 @@ carbon-frontend/src/
   components/     ← shared components
   theme/          ← carbonTheme.js (MUI v7)
 
-tasks/            ← active sprint specs
-archive/          ← completed work (do not read)
+docs/_archive/sprints/ ← archived sprint specs (active work = TASKS.md)
+docs/_archive/    ← historical TASKS / audits / plans (do not dispatch from here)
 .ai-toolkit/      ← dev system (roles, contracts, decisions)
 ```
 

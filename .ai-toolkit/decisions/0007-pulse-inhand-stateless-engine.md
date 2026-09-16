@@ -1,7 +1,7 @@
 # ADR-0007: Pulse as In-Hand Stateless Engine, Carbon as System of Intelligence
 
 ## Status
-Proposed (accepted direction, pending final ratification)
+Accepted (2026-09-16 — ratified; RULE_6/13 and in-hand `backend/ai/engine/` are binding)
 
 ## Context
 

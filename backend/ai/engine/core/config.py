@@ -72,12 +72,16 @@ class Settings(BaseSettings):
 
     # ── LLM Cost Tracking ──
     LLM_DAILY_BUDGET_USD: float = 5.0            # per-instance daily spend cap
+    # DeepSeek entries use PEAK rates (Mon–Fri 01–04 & 06–10 UTC = 2× off-peak).
+    # Source: https://api-docs.deepseek.com/quick_start/pricing (2026-09).
     LLM_COST_MODELS: str = (
-        '{"Claude-Haiku-4.5": {"input": 1.0, "output": 5.0},'
-        ' "Claude-Sonnet-4.5": {"input": 3.0, "output": 5.0},'
+        '{"DeepSeek-Flash": {"input": 0.30, "output": 1.20},'
+        ' "DeepSeek-V4-Pro": {"input": 1.32, "output": 3.96},'
+        ' "Claude-Haiku-4.5": {"input": 1.0, "output": 5.0},'
+        ' "Claude-Sonnet-4.5": {"input": 3.0, "output": 15.0},'
         ' "GPT-4o": {"input": 2.5, "output": 10.0},'
         ' "GPT-4o-mini": {"input": 0.15, "output": 0.6}}'
-    )  # JSON: model → {input, output} cost per 1M tokens
+    )  # JSON: model → {input, output} cost per 1M tokens (USD)
 
     # ── Agent ──
     AGENT_UNIFIED_FINALIZE: bool = True          # collapse _wisdom_review + _enrich + _follow_ups into 1 LLM call

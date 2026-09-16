@@ -52,6 +52,32 @@ def classify_llm_error(exc: Exception) -> str:
     return "permanent"
 
 
+def _is_deepseek_endpoint(base_url: str | None = None) -> bool:
+    """True when the configured LLM endpoint is DeepSeek's OpenAI-compatible API."""
+    url = (base_url if base_url is not None else get_settings().LLM_BASE_URL) or ""
+    return "deepseek.com" in url.lower()
+
+
+def _apply_provider_kwargs(kwargs: dict) -> dict:
+    """Normalize provider-specific kwargs before the chat.completions call.
+
+    DeepSeek V4.1 enables *thinking* by default. That mode returns long
+    ``reasoning_content`` streams, often empty ``content`` on tool-call turns,
+    and routinely exceeds the old 30s client timeout — which made Pulse look
+    stuck ("working… then nothing") when Gunicorn killed the worker.
+
+    Disable thinking unless the caller explicitly set ``extra_body.thinking``.
+    """
+    out = dict(kwargs)
+    if not _is_deepseek_endpoint():
+        return out
+    extra = dict(out.get("extra_body") or {})
+    if "thinking" not in extra:
+        extra["thinking"] = {"type": "disabled"}
+    out["extra_body"] = extra
+    return out
+
+
 @_retry_decorator
 async def create_completion(client: AsyncOpenAI, **kwargs):
     """Create a completion with retry on transient errors.
@@ -59,16 +85,19 @@ async def create_completion(client: AsyncOpenAI, **kwargs):
     The single retried seam used by ``router.route_chat`` — the user-facing
     chat path previously bypassed retry by calling the raw client directly.
     """
-    return await client.chat.completions.create(**kwargs)
+    return await client.chat.completions.create(**_apply_provider_kwargs(kwargs))
 
 
 def get_llm_client() -> AsyncOpenAI:
     """Create an AsyncOpenAI client from settings."""
     settings = get_settings()
+    # DeepSeek thinking (when re-enabled) and tool loops need headroom;
+    # 30s caused APITimeoutError → retries → gunicorn WORKER TIMEOUT.
+    timeout = 120.0 if _is_deepseek_endpoint(settings.LLM_BASE_URL) else 30.0
     return AsyncOpenAI(
         api_key=settings.LLM_API_KEY,
         base_url=settings.LLM_BASE_URL,
-        timeout=30.0,
+        timeout=timeout,
         max_retries=0,
     )
 
@@ -99,7 +128,7 @@ async def _chat_completion(
     if response_format:
         kwargs["response_format"] = response_format
 
-    response = await client.chat.completions.create(**kwargs)
+    response = await client.chat.completions.create(**_apply_provider_kwargs(kwargs))
     text = response.choices[0].message.content
     logger.debug(f"_chat_completion done: {len(text or '')} chars")
     return text
@@ -132,7 +161,7 @@ async def _chat_completion_with_tools(
     if response_format:
         kwargs["response_format"] = response_format
 
-    response = await client.chat.completions.create(**kwargs)
+    response = await client.chat.completions.create(**_apply_provider_kwargs(kwargs))
     choice = response.choices[0]
     result = {
         "content": choice.message.content,

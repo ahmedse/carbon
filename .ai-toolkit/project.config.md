@@ -3,7 +3,7 @@
 # THIS IS THE ONLY FILE YOU EDIT WHEN COPYING .ai-toolkit TO A NEW PROJECT.
 # All role files read this file as Step 1. Update every section below.
 # Format: one KEY=VALUE per line. Keep it factual, concise, and up-to-date.
-# Last audited: 2026-08-02.
+# Last audited: 2026-09-16 (toolkit audit remediation).
 
 ## PROJECT IDENTITY
 PROJECT_NAME=ClearTurn Trust Platform (repo codename "Carbon")
@@ -134,7 +134,7 @@ RULE_13=Pulse engine is called in-process (in-hand), NOT over HTTP and NOT depen
 RULE_14=DQ Level 2 (nl_check rules) are evaluated by Pulse. Carbon sends row data + natural language rule → Pulse returns {passed, explanation, failed_rows}. DQ executor Phase A (deterministic: unique/threshold/reference_integrity) runs locally; Phase B (nl_check) calls Pulse.
 RULE_7=UI labels: "Data Product" = Module (in code). "Table" = DataTable. NEVER use "Schema" as a label for a table.
 RULE_8=Design tokens only — NO hardcoded hex colors, raw px spacing, or inline font sizes. Theme controls all.
-RULE_9=ONE breadcrumb — shell/src/Breadcrumbs.jsx. NEVER render breadcrumbs inside pages.
+RULE_9=ONE breadcrumb — carbon-frontend/src/shell/Breadcrumbs.jsx. NEVER render breadcrumbs inside pages.
 RULE_10=Use apiFetch (src/api/api.js) for ALL API calls — it handles JWT refresh. Never raw fetch().
 RULE_11=Every bug fix ships a regression test. Never fix the same bug twice — capture in playbook.
 RULE_12=Org-scoped RBAC: reference data (EmissionFactor, GWP, ReferenceSet) is GLOBAL. Activity data + calculations are org-scoped.
@@ -145,10 +145,10 @@ RULE_18=AI CONTRACT IS BINDING — Every AI operation MUST follow .ai-toolkit/sh
 RULE_19=DOMAIN AI ISOLATION — Adding a new domain app's AI operations: create ai/domain/{app}.py with a DomainAIOperations ABC. NEVER add domain-specific methods to ai/protocol.py (platform ABC). Guards run automatically — domain developer does NOT write scope checks.
 RULE_20=NO DATA LEAKAGE — AI provider MUST NOT use data from App A when processing App B. Scope.org_unit_ids filters ALL queries. DataIsolationGuard sanitizes responses. Cache keys include app_identifier. No cross-app embeddings or knowledge graph sharing.
 RULE_21=NO AUTO-MUTATION — AI suggests, Carbon executes. NEVER auto-apply AI-suggested fixes. Fix suggestions ALWAYS have requires_confirmation=True. AI MUST NOT execute INSERT/UPDATE/DELETE/DROP. MutationGuard validates provider responses.
-RULE_22=NO DANGLING ROUTES — every top-level route namespace MUST register an index route at its bare root (e.g. /carbon→/carbon/console, /admin→/admin/users, /settings/profile→/settings), so a bare namespace path or deployment mount path never 404s. Every navigate()/Navigate/Link/to=/href=/path: target MUST resolve to a <Route> in App.jsx. Enforce with .ai-toolkit/scripts/audit-routes.py (wired into verify.sh frontend/all/full).
+RULE_22=NO DANGLING ROUTES — every top-level route namespace MUST register an index route at its bare root (e.g. /carbon→/carbon/console, /admin→/admin/users, /settings/profile→/settings), so a bare namespace path or deployment mount path never 404s. Every navigate()/Navigate/Link/to=/href=/path: target MUST resolve to a <Route> in App.jsx. Enforce FE with .ai-toolkit/scripts/audit-routes.py (wired into verify.sh frontend/all/full). Separate: audit-routes.sh checks registry/api.md drift vs live Django urls (CI).
 RULE_23=NO IMPLEMENTATION LEAKAGE — user-facing text (UI labels, status/progress copy, empty states, error messages, AI assistant replies, docs) MUST describe OUTCOMES (WHAT the user gets / WHAT is happening), NEVER internals (HOW). Forbidden in user-facing copy: engine/pipeline mechanics ("translating to SQL", "analyzing table profile"), internal component names (Pulse, dispatch, runner), internal status codes (provider_unavailable, pulse_unavailable, skipped_unavailable), and provider/vendor jargon UNLESS a model selector is an explicit user-facing feature. Prefer "Working on your answer…" over "Translating question to SQL…"; "I couldn't reach the AI service" over "AI provider is currently unavailable".
-RULE_24=DEEPSEEK MODEL TIERING — ALL workers run V4-Flash for every task (edits, tests, classification, regex/rule synthesis, nl_check, JSON generation, CRUD, migrations, fixes). V4-Pro is reserved EXCLUSIVELY for the Master Architect role. Flash is ~3x cheaper than Pro.
-RULE_25=MAXIMIZE CACHE HITS (biggest lever) — keep a STABLE, long-lived system prompt + tool definitions at the FRONT of every LLM call; never rotate them between calls. DeepSeek prefix-cache: hit ≈ $0.007/M vs miss ≈ $0.22/M (~30x). Append new context AFTER the stable prefix, never reorder the prefix.
+RULE_24=DEEPSEEK MODEL TIERING — ALL workers run V4.1-Flash (`deepseek-flash`) for every task (edits, tests, classification, regex/rule synthesis, nl_check, JSON generation, CRUD, migrations, fixes). V4-Pro (`deepseek-v4-pro`) is reserved EXCLUSIVELY for the Master Architect role. Flash is far cheaper than Pro.
+RULE_25=MAXIMIZE CACHE HITS (biggest lever) — keep a STABLE, long-lived system prompt + tool definitions at the FRONT of every LLM call; never rotate them between calls. DeepSeek V4.1-Flash prefix-cache (off-peak): hit ≈ $0.003/M vs miss ≈ $0.15/M (~50x). Peak is 2× (Mon–Fri 01–04 & 06–10 UTC). Append new context AFTER the stable prefix, never reorder the prefix.
 RULE_26=OFF-PEAK + TOKEN DISCIPLINE — run batch/async generations outside DeepSeek peak. Egypt (UTC+3): peak = 04:00-07:00 and 09:00-13:00 Cairo; off-peak = 13:00-04:00 Cairo (half price). Cap output tokens; prefer concise structured JSON; retrieve-don't-stuff.
 RULE_27=STORAGE PATTERN (hosted apps) — owned/derived domain data = typed Django models in the app (people.Employee, emissions.Calculation); `dataschema.DataTable/DataRow` = governed measurements ONLY (inbound records whose shape another system owns). Governance audit (catalog.GovernanceEvent) is generic — fires on any entity. DQ rules+engine are decoupled; typed-field binding = `dq.ModelRuleAssignment` (model_label string, NOT ContentType/GenericForeignKey). NEVER add a generic per-row typed DQ result store — persist run-scoped summaries. See ADR 0025 + docs/STORAGE-PATTERN-HOSTED-APPS.md.
 RULE_28=NO THIN IMPLEMENTATION + NO AI-TOOLKIT VIOLATIONS (hard rule, 2026-09-02) — a phase is DONE only when the change is REAL, VERIFIED behavior: no stubs, no placeholders, no `pass`, no bare `TODO`, no `return []`/empty bodies unless the design genuinely requires it (e.g. an advisory domain with no call_host_api-backed tools), and every changed line is exercised by a test or a management-command check. A worker output that is thin/shallow OR violates any RULE_1-27 / `shared/definition-of-done.md` is REJECTED outright (not "sent back for polish"). Master Architect refuses to mark such a phase DONE.
@@ -189,14 +189,18 @@ FRONTEND_THEME=carbon-frontend/src/theme/carbonTheme.js
 FRONTEND_MANIFEST=carbon-frontend/src/apps/carbon/manifest.js
 
 ## WORKER MODEL POLICY (budget directive, updated 2026-08-18 — DeepSeek V3/R1 RETIRED)
-WORKER_MODEL_POLICY=ALL worker roles (backend, frontend, devops, data-ml, debugger-fixer, qa-validator, product-designer, researcher, curator)=DeepSeek V4-Flash; ONLY master-architect=DeepSeek V4-Pro; Kimi models OFF roster (cost). V3/R1 are RETIRED on the provider — never reference them.
+WORKER_MODEL_POLICY=ALL worker roles (backend, frontend, devops, data-ml, debugger-fixer, qa-validator, product-designer, researcher, curator)=DeepSeek V4.1-Flash (deepseek-flash); ONLY master-architect=DeepSeek V4-Pro (deepseek-v4-pro); Kimi models OFF roster (cost). V3/R1 are RETIRED on the provider — never reference them.
 WORKER_MODEL_RUNTIME=Workers run on DeepSeek via VSCode Copilot custom models.
 
-## DEEPSEEK PRICING (effective 2026-08-16, per 1M tokens — the post-hike schedule)
-DEEPSEEK_V4_FLASH=cache-hit $0.007 off / $0.014 peak · cache-miss $0.22 off / $0.44 peak · output $0.66 off / $1.32 peak
+## DEEPSEEK PRICING (effective 2026-09-10, per 1M tokens — V4.1-Flash schedule)
+# Official: https://api-docs.deepseek.com/quick_start/pricing
+# Model IDs: deepseek-flash (V4.1-Flash), deepseek-v4-pro (V4-Pro-0813). Peak = 2× off-peak.
+DEEPSEEK_FLASH=cache-hit $0.003 off / $0.006 peak · cache-miss $0.15 off / $0.30 peak · output $0.60 off / $1.20 peak
 DEEPSEEK_V4_PRO=cache-hit $0.022 off / $0.044 peak · cache-miss $0.66 off / $1.32 peak · output $1.98 off / $3.96 peak
-DEEPSEEK_PEAK_UTC=01:00-04:00 and 06:00-10:00 UTC (all else off-peak = half price). Peak = 04:00-07:00 and 09:00-13:00 Cairo.
-DEEPSEEK_CONTEXT=1M context, 384K max output. Cache hit is ~30x cheaper than miss — RULE_25 is the #1 cost lever.
+DEEPSEEK_PEAK_UTC=Mon–Fri 01:00-04:00 and 06:00-10:00 UTC (weekends entirely off-peak). Cairo ≈ 04:00-07:00 and 09:00-13:00.
+DEEPSEEK_VS_SONNET=Claude Sonnet 4.5/4.6 = $3 in / $15 out flat. Flash peak miss ($0.30/$1.20) ≈ 10× / 12× cheaper; Pro peak ($1.32/$3.96) still under Sonnet.
+DEEPSEEK_CONTEXT=1M context, 384K max output. Cache hit is ~50× cheaper than miss — RULE_25 is the #1 cost lever.
+# Catalog ModelCatalog stores PEAK rates so Pulse budget never under-estimates.
 
 ## TESTING (see .ai-toolkit/shared/testing.md for strategy)
 # NOTE: use python -m pytest (NOT ./manage.sh test) — manage.py test hits a
@@ -204,9 +208,9 @@ DEEPSEEK_CONTEXT=1M context, 384K max output. Cache hit is ~30x cheaper than mis
 BACKEND_TEST_CMD=cd backend && /home/ahmed/ws/carbon/.venv/bin/python -m pytest ai dq accounts -q
 BACKEND_TEST_SINGLE=cd backend && /home/ahmed/ws/carbon/.venv/bin/python -m pytest <app>/tests/test_x.py -q
 BACKEND_TEST_DIR=<app>/tests/test_*.py
-BACKEND_TEST_COUNT=741 passing (pytest ai dq accounts, as of 2026-08-15)
-FRONTEND_UNIT=Vitest 4 + RTL — cd carbon-frontend && npm test (330 tests, as of 2026-08-15)
-FRONTEND_E2E=Playwright — npx playwright test --config e2e/playwright.config.ts (journey-09: 4 tests)
+BACKEND_TEST_COUNT=~2852 collected for `ai dq accounts` as of 2026-09-16 — re-count with `cd backend && ../.venv/bin/python -m pytest ai dq accounts --collect-only -q`
+FRONTEND_UNIT=Vitest 4 + RTL — cd carbon-frontend && npm test (100+ test files under src/**/__tests__; re-count with npm test -- --run)
+FRONTEND_E2E=Playwright — npx playwright test --config e2e/playwright.config.ts (e2e/ + playwright.config.cjs present)
 
 ## TROUBLESHOOTING
 PLAYBOOK=.ai-toolkit/troubleshooting/playbook.md           # known issues → verified fixes
@@ -217,11 +221,12 @@ GOTCHAS_FILE=/memories/repo/carbon-gotchas.md
 # Read this before debugging. Contains verified incident forensics.
 
 ## KNOWN TECH DEBT (audit 2026-08-02)
-DEBT_SX_TOKENS=34 hex / 52 px in sx props; ~237 hardcoded hex total across 37 frontend files — cleanup pending
-DEBT_FRONTEND_TESTS=Frontend unit tests minimal (3 files / 8 tests); no e2e (no Playwright); no CI
-DEBT_GUARD_HOOK=guard.sh NOT wired (.github/hooks/ absent) — manual/CI use only, wiring pending
-DEBT_REGISTRY=Registry is auto-generated — run ./.ai-toolkit/scripts/scan.sh if stale
+DEBT_SX_TOKENS=sx hex / px cleanup still pending in places — prefer theme tokens (RULE_8)
+DEBT_FRONTEND_TESTS=RESOLVED 2026-09 — Vitest+RTL suite + Playwright e2e configs + CI workflow exist; keep expanding coverage
+DEBT_GUARD_HOOK=guard.sh wired via .github/hooks/guard-secrets.json (2026-09-16); confirm Copilot/hook host enables PreToolUse
+DEBT_REGISTRY=Registry is generated by scan.sh AND committed for CI drift gate (audit-routes.sh); regenerate before merge if urls change
 DEBT_DONE_P1_P6=2026-07-31 remediation complete: dual ORM removed, 12 unused deps removed, ai_copilot + dead dashboard pages removed, 6 services.py created, 28 backend tests added, 5 frontend hooks extracted, ADR-0002 Command pattern, SeedBuilder (seed_all.py), sx hex 90→34, Vitest+RTL scaffolding, registry regenerated
+DEBT_TOOLKIT_AUDIT=2026-09-16 — verify.sh .venv path, RULE_22 audit-routes.py, registry gitignore, pricing/V4.1 naming, ADR index, .clinerules refresh
 
 ## PATTERN SCORECARD (see shared/design-patterns.md for full audit)
 PATTERN_SCORECARD=15/23 GoF patterns actively used (Builder added P5-G1)
@@ -233,7 +238,7 @@ DECISIONS_DIR=.ai-toolkit/decisions/          # ADRs — architectural decisions
 SCAN_CMD=./.ai-toolkit/scripts/scan.sh        # regenerate the registry
 VERIFY_CMD=./.ai-toolkit/scripts/verify.sh    # verification gate (backend|frontend|tests|antipatterns|all|full)
 RETRO_CMD=./.ai-toolkit/scripts/retro.sh      # gather learnings for retrospective (playbook + ADRs + warnings)
-GUARD_HOOK=NOT WIRED — .github/hooks/guard-secrets.json does not exist; scripts/guard.sh available for manual/CI use (hook wiring pending)
+GUARD_HOOK=WIRED — .github/hooks/guard-secrets.json → scripts/guard.sh (PreToolUse); confirm Copilot/hook host enables hooks; manual pipe test still works
 ONBOARDING=.ai-toolkit/ONBOARDING.md          # start-here bootstrap for a fresh chat
 DEFINITION_OF_DONE=.ai-toolkit/shared/definition-of-done.md   # the completion gate
 INCIDENT_RUNBOOK=.ai-toolkit/troubleshooting/incident.md      # prod-down runbook
