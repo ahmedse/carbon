@@ -750,7 +750,6 @@ async def test_react_loop_wait_timer_then_continues():
 
     from ai.engine.cognition.plan.loop import ReActLoop, StepResult
     from ai.engine.cognition.plan.planner import Plan, PlanStep
-    from ai.engine.cognition.turn.witnesses import CriticVerdict, DraftResult
 
     g = WorkflowGraph(
         nodes=[
@@ -766,37 +765,31 @@ async def test_react_loop_wait_timer_then_continues():
     )
     plan = Plan(
         pattern="custom",
+        source="test",
+        synthesis_instruction="done",
         steps=[
-            PlanStep(step_id=0, intent="before", tool_name=None, tool_args={},
-                     is_mutation=False, depends_on=[], agent_role="orchestrator"),
-            PlanStep(step_id=1, intent="after", tool_name=None, tool_args={},
-                     is_mutation=False, depends_on=[0], agent_role="orchestrator"),
+            PlanStep(step_id=0, intent="before", depends_on=[]),
+            PlanStep(step_id=1, intent="after", depends_on=[0]),
         ],
-        phases=[],
     )
     executed: list[int] = []
-
-    class _Exec:
-        async def execute(self, **kwargs):
-            step = kwargs.get("step")
-            executed.append(step.step_id)
-            return MagicMock(completed_tools=[])
-
-    class _Draft:
-        async def draft(self, **kwargs):
-            return DraftResult(text="ok", tool_calls=[])
-
-    class _Critic:
-        async def review(self, **kwargs):
-            return CriticVerdict(verdict="pass", flags=[])
-
-    loop = ReActLoop(
-        llm_client=None,
-        draft_witness=_Draft(),
-        critic_witness=_Critic(),
-        executor=_Exec(),
-    )
     waits: list[str] = []
+
+    loop = ReActLoop(llm_client=None)
+
+    async def fake_execute_step(**kwargs):
+        step = kwargs["step"]
+        executed.append(step.step_id)
+        return StepResult(
+            step_id=step.step_id,
+            intent=step.intent,
+            draft_text=f"out-{step.step_id}",
+            critic_verdict="pass",
+            executed=True,
+            tokens_used=1,
+        )
+
+    loop._execute_step = fake_execute_step  # type: ignore[method-assign]
 
     async def _on_wait(node_id, decision, duration_ms=0, until=None):
         waits.append(f"{node_id}:{decision.reason}:{duration_ms}")
@@ -804,11 +797,7 @@ async def test_react_loop_wait_timer_then_continues():
     with patch(
         "ai.engine.cognition.plan.loop._get_broadcast",
         return_value=AsyncMock(),
-    ), patch(
-        "ai.engine.agent.tools.get_tool_definitions",
-        return_value=[],
     ):
-        loop._should_inject_followup = lambda *a, **k: False  # type: ignore
         result = await loop.run(
             plan=plan,
             instance_id="test",
