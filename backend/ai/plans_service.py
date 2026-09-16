@@ -3068,37 +3068,14 @@ class PlansService:
                             "workflow compensation journal failed run=%s", run.id,
                         )
 
-                async def _on_wait(node_id, decision):
+                async def _on_wait(node_id, decision, duration_ms=0, until_guard=None):
                     try:
                         await sync_to_async(PlansService.record_workflow_wait)(
                             str(run.id),
                             node_id,
-                            duration_ms=getattr(decision, "sleep_ms", 0)
-                            if False
-                            else wait_duration_from_decision(decision),
-                            reason=getattr(decision, "reason", "immediate"),
-                        )
-                    except Exception:  # noqa: BLE001
-                        logger.exception(
-                            "workflow wait journal failed run=%s node=%s",
-                            run.id, node_id,
-                        )
-
-                def wait_duration_from_decision(decision):
-                    # Prefer configured duration from decision context; fall back 0.
-                    return int(getattr(decision, "duration_ms", 0) or 0)
-
-                # duration is on the node, not WaitDecision — look up via reason only
-                async def _on_wait(node_id, decision):
-                    try:
-                        from ai.engine.workflow.wait import wait_duration_ms as _wdms
-                        # decision has no duration; journal reason + 0 and let
-                        # payload carry sleep leftover.
-                        await sync_to_async(PlansService.record_workflow_wait)(
-                            str(run.id),
-                            node_id,
-                            duration_ms=int(getattr(decision, "sleep_ms", 0) or 0),
+                            duration_ms=int(duration_ms or 0),
                             reason=str(getattr(decision, "reason", "immediate")),
+                            until_guard=until_guard,
                         )
                     except Exception:  # noqa: BLE001
                         logger.exception(

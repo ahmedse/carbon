@@ -196,7 +196,7 @@ class ReActLoop:
         on_workflow_choice=None,  # (node_id, chosen_edge|None, evaluations) -> None
         on_heal_proposed=None,    # (observe_node_id, HealProposal) -> None | awaitable
         on_compensation_queued=None,  # (failed_step_id, comp_step_id, node_id) -> ...
-        on_wait_fired=None,       # (node_id, WaitDecision) -> None | awaitable
+        on_wait_fired=None,       # (node_id, WaitDecision, duration_ms, until) -> ...
         max_heals: int | None = None,
     ) -> ReActResult:
         """Execute the plan through the ReAct loop.
@@ -672,7 +672,12 @@ class ReActLoop:
                         "duration_ms": wait_duration_ms(_wnode),
                     })
                     if on_wait_fired is not None:
-                        _maybe = on_wait_fired(_wnode.id, _decision)
+                        _maybe = on_wait_fired(
+                            _wnode.id,
+                            _decision,
+                            wait_duration_ms(_wnode),
+                            wait_until_guard(_wnode),
+                        )
                         if inspect.isawaitable(_maybe):
                             await _maybe
                     logger.info(
