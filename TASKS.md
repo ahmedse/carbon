@@ -11994,3 +11994,369 @@ cd /home/ahmed/ws/carbon/backend && /home/ahmed/ws/carbon/.venv/bin/python -m py
 cd /home/ahmed/ws/carbon && python3 .ai-toolkit/scripts/import-boundary-lint.py
 cd /home/ahmed/ws/carbon/backend && /home/ahmed/ws/carbon/.venv/bin/python -m pytest ai -q -k "not code_sandbox" -m "not live"
 ```
+
+
+---
+
+## ════════════════════════════════════════════════════════════════════
+## ECF — Entity Capability Framework (ADR-0032)  [2026-09-16]
+## Safety: all phases flag-gated (ECF_ENABLED=False default).
+## Never break: legacy list_employees / get_employee untouched until Phase ECF-7.
+## ════════════════════════════════════════════════════════════════════
+
+### Phase ECF-0 — Golden harness + baseline
+**Role:** QA-Validator · **Model:** V4-Flash  
+**Scope:** TESTS ONLY — no runtime code touched.
+
+#### Files to create
+- `backend/ai/tests/test_ecf_golden.py` — golden regression suite seeded from real failure transcript
+
+#### Exact requirements
+
+The test file must import nothing from ECF code (which doesn't exist yet).
+It defines a declarative list of `GoldenCase` entries and a helper that calls
+the live nibras instance (or a fixture version) and asserts invariants.
+
+Each case must carry:
+- `id: str` — unique slug
+- `query: str` — the user message, in the language it was asked
+- `must_find: bool` — True = a record must resolve; False = grounded-none required
+- `employee_no: str | None` — if must_find=True, the resolved employee_no
+- `invariants: list[str]` — prose invariants for the human reviewer
+
+Minimum cases to encode (from the 2026-09-05 → 2026-09-16 transcript failures):
+
+| id | query | must_find | employee_no | invariants |
+|----|-------|-----------|-------------|------------|
+| lookup_salman_en_full | `"Salman Ali Hussain Zakareya"` | False | None | grounded-none with "searched N of N"; never "not found" without count |
+| lookup_salman_ar | `"سلمان علي زكريا"` | False | None | same as above; Arabic in, Arabic response |
+| lookup_salman_partial | `"salman zakareya"` | False | None | partial match attempt; no hallucination |
+| lookup_employee_no_1046 | `"1046"` (employee_no) | True | `"1046"` | resolves via employee_no not PK; must not return "not found" |
+| lookup_employee_no_1021 | `"1021"` (employee_no) | True | `"1021"` | same |
+| lookup_pk_104 | `"104"` (internal pk) | True | `"104"` | pk fallback; must resolve if pk 104 exists |
+| lookup_reena_sekaran | `"Reena Sekaran"` | True | `"1009"` | name search returns correct emp_no |
+| lookup_ar_abrar | `"عبرار"` | True | `"1021"` | transliteration-like Arabic partial |
+| existence_over_truncated | `"is there an employee named Salman?"` | False | None | contract: must NOT produce "no such employee" without "searched N of N" |
+| headcount_stable | `"كم عدد الموظفين"` | False | None | number matches DB; consistent across calls |
+| kuwaiti_count_stable | `"كم كويتي موظف"` | False | None | single definition used; same number repeated; must cite which field |
+| position_label | `"tell me about Reena Sekaran"` | True | `"1009"` | response contains position *title* not numeric id |
+| arabic_in_arabic_out | `"كم موظف لدينا"` | False | None | response language is Arabic |
+
+For Phase ECF-0 these tests are expected to **fail** (they document the current broken baseline).
+The test runner must emit `BASELINE_FAILURE` not `ERROR` for known-bad cases —
+use `@pytest.mark.xfail(reason="baseline — ECF not yet implemented", strict=False)`.
+
+#### Contract files to read
+`.ai-toolkit/shared/qa-framework.md`, `.ai-toolkit/shared/testing.md`, `.ai-toolkit/shared/uncertainty-provenance.md`
+
+#### DO NOT TOUCH
+Any file outside `backend/ai/tests/test_ecf_golden.py`. No runtime code.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && \
+  ../.venv/bin/python -m pytest ai/tests/test_ecf_golden.py -v 2>&1 | tail -30
+# Expected: all xfail or xpass — NO ERROR / EXCEPTION
+cd /home/ahmed/ws/carbon && python3 .ai-toolkit/scripts/import-boundary-lint.py
+```
+Write results to `TASK-RESULTS.md` with the full pytest output block.
+
+---
+
+### Phase ECF-1 — Entity Registry + descriptor schema + config flag
+**Role:** Backend-Worker · **Model:** V4-Flash  
+**Depends on:** ECF-0 complete  
+**Scope:** New module + config flag + ADR-0032 descriptor in instance.yaml. NO tool wiring yet.
+
+#### Files to create / edit
+
+1. **CREATE `backend/ai/engine/cognition/entity/__init__.py`** — empty
+2. **CREATE `backend/ai/engine/cognition/entity/registry.py`** — descriptor dataclass + loader:
+
+```python
+# Descriptor fields (all optional except name/model):
+@dataclass
+class EntityDescriptor:
+    name: str                          # "employee"
+    model: str                         # "people.models.Employee"
+    identifiers: list[str]             # ["id", "employee_no", "civil_id"]
+    search_fields: list[SearchField]   # bilingual, weighted
+    label_map: dict[str, LabelSource]  # {"position": LabelSource(model=..., field="title")}
+    masking: dict[str, MaskPolicy]     # {"basic_salary": MaskPolicy(capability="people:view_compensation")}
+    metrics: dict[str, MetricDef]      # {"headcount": MetricDef(filter={"is_active": True}), "kuwaiti": MetricDef(filter={"nationality_code": "KW"})}
+    scope_lookup: str | None           # org-unit scope kwarg e.g. "org_unit_id__in"
+
+@dataclass
+class SearchField:
+    field: str
+    lang: str         # "en" | "ar" | "any"
+    weight: float = 1.0
+    normalize: str | None = None  # "arabic" | None
+
+@dataclass  
+class LabelSource:
+    model: str        # dotted Django model path
+    field: str        # field name on the related model
+
+@dataclass
+class MaskPolicy:
+    capability: str   # Django CBAC capability key; if caller lacks it → "hidden"
+
+@dataclass
+class MetricDef:
+    filter: dict      # ORM kwargs for count() filter
+    description: str = ""
+
+def load_descriptors(instance_config: dict) -> dict[str, EntityDescriptor]:
+    """Load entity descriptors from instance_config['entities'] list."""
+    ...
+
+def get_descriptor(instance_config: dict, entity_type: str) -> EntityDescriptor | None:
+    ...
+```
+
+3. **EDIT `backend/ai/engine/core/config.py`** — add ONE flag:
+```python
+ECF_ENABLED: bool = False   # Entity Capability Framework; off until ECF-7 cutover
+```
+
+4. **EDIT `backend/ai/engine/instances/nibras/instance.yaml`** — append `entities:` block:
+
+```yaml
+entities:
+  - name: employee
+    model: people.models.Employee
+    identifiers: [id, employee_no, civil_id]
+    search_fields:
+      - {field: full_name,      lang: en, weight: 1.0}
+      - {field: name_en_given,  lang: en, weight: 0.9}
+      - {field: name_en_family, lang: en, weight: 0.9}
+      - {field: name_ar_given,  lang: ar, weight: 1.0, normalize: arabic}
+      - {field: name_ar_family, lang: ar, weight: 1.0, normalize: arabic}
+      - {field: employee_no,    lang: any, weight: 2.0}
+      - {field: civil_id,       lang: any, weight: 2.0}
+    label_map:
+      position:  {model: people.models.Position,  field: title}
+      org_unit:  {model: mdm.models.OrgUnit,       field: name}
+    masking:
+      basic_salary: {capability: people:view_compensation}
+    metrics:
+      headcount: {filter: {is_active: true},  description: "Total active employees"}
+      kuwaiti:   {filter: {nationality_code: "KW"}, description: "Employees with nationality_code=KW"}
+    scope_lookup: org_unit_id__in
+```
+
+5. **CREATE `backend/ai/tests/test_ecf_registry.py`**:
+- loads nibras instance.yaml via `_instance_config("nibras", None)`
+- calls `load_descriptors(cfg)` → asserts "employee" present with correct fields
+- unit-level; no DB; no LLM
+
+#### Contract files to read
+`.ai-toolkit/shared/base-rules.md`, `.ai-toolkit/shared/ai-contract.md`, `.ai-toolkit/shared/config.md`, `ADR-0016`, `ADR-0017`, `ADR-0032`
+
+#### DO NOT TOUCH
+`tools.py` execution paths, any existing capabilities, `list_employees`/`get_employee`, frontend, `settings.py`.
+The engine must never import people/mdm/accounts directly — descriptors are pure data, model paths are strings resolved at runtime in the host layer.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && \
+  ../.venv/bin/python -m pytest ai/tests/test_ecf_registry.py ai/tests/test_instance_registry.py -v 2>&1 | tail -20
+# Must: test_ecf_registry passes; test_instance_registry still all green (no regression)
+cd /home/ahmed/ws/carbon && python3 .ai-toolkit/scripts/import-boundary-lint.py
+```
+Write results to `TASK-RESULTS.md` with full pytest output.
+
+---
+
+### Phase ECF-2 — Generic resolver (shadow, no tool wiring)
+**Role:** Backend-Worker · **Model:** V4-Flash  
+**Depends on:** ECF-1 complete  
+**Scope:** The resolver algorithm. Purely in-engine. No host imports. No tool wiring. `ECF_ENABLED` irrelevant (not yet on the hot path).
+
+#### Files to create
+
+1. **CREATE `backend/ai/engine/cognition/entity/resolver.py`**
+
+Algorithm (`resolve(descriptor, query, *, fetch_fn) -> ResolveResult`):
+```
+1. Detect language (reuse navigation.py detect_lang)
+2. Normalize query (reuse navigation.py normalize_text for Arabic; strip for English)
+3. Try identifier exact match (employee_no, civil_id) → if hits → Return match
+4. For each search_field in descriptor (filtered to detected lang or "any"):
+     score = similarity(normalize(query), normalize(stored_value))
+     Apply weight from descriptor
+5. Transliteration bridge: if Arabic query and EN search fields (or vice versa),
+   apply transliterate(query) and re-score
+6. Threshold: score >= 0.8 → candidate; score >= 0.92 → match
+7. If 0 candidates → ResolveResult(action="none", searched_total=N)
+8. If 1 match (and gap >= 0.1 from next) → ResolveResult(action="match", record=...)
+9. Otherwise → ResolveResult(action="disambiguate", candidates=[...])
+```
+
+`fetch_fn` is injected — the engine never imports Django. Signature:
+```python
+def fetch_fn(model_path: str, filters: dict, fields: list[str], limit: int) -> list[dict]: ...
+```
+
+The host layer (host_executor.py) supplies a concrete `fetch_fn` that does the ORM call.
+
+```python
+@dataclass
+class ResolveResult:
+    action: str          # "match" | "disambiguate" | "none"
+    record: dict | None = None
+    candidates: list[dict] = field(default_factory=list)
+    searched_total: int = 0  # always populated — "searched N of N"
+    lang: str = "en"
+    query_normalized: str = ""
+```
+
+2. **CREATE `backend/ai/tests/test_ecf_resolver.py`**:
+- Use an in-memory fixture of 530-ish synthetic records (no DB).
+- Must prove: "Salman Ali Hussain Zakareya" → action="none", searched_total=530; "Reena Sekaran" → action="match"; "1046" (employee_no) → action="match"; Arabic "سلمان" → action="none" or disambiguate, never a confident false-negative; transliteration bridge.
+- Must prove: Arabic query → Arabic-language result context.
+
+#### Contract files to read
+`.ai-toolkit/shared/base-rules.md`, `ADR-0032`, `ADR-0016/0017`, navigation.py (reuse pattern)
+
+#### DO NOT TOUCH
+`host_executor.py`, `tools.py`, `instance.yaml`, frontend. No DB ORM in this file.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && \
+  ../.venv/bin/python -m pytest ai/tests/test_ecf_resolver.py -v 2>&1 | tail -30
+cd /home/ahmed/ws/carbon && python3 .ai-toolkit/scripts/import-boundary-lint.py
+# CRITICAL: grep -rn "from people\|import Employee\|from mdm" backend/ai/engine/ → must be EMPTY
+```
+
+---
+
+### Phase ECF-3 — Boundary contract guards
+**Role:** Backend-Worker · **Model:** V4-Flash  
+**Depends on:** ECF-2 complete
+
+#### Files to create / edit
+
+1. **CREATE `backend/ai/engine/cognition/entity/contracts.py`** — four enforced invariants as callables hooked into the tool result pipeline:
+   - `no_truncation_as_truth(tool_result, claim)`: if source `truncated=True` and claim is existence/universal ("no such", "all", "none") → rewrite claim to "searched N of N, none found in visible page; use resolve_entity for complete search"
+   - `resolve_labels(data, descriptor)`: replace FK ids with human labels
+   - `honest_masking(data, descriptor, capabilities)`: replace `0.000` with `"(hidden — requires salary access)"` when caller lacks capability
+   - `grounded_refusal(result)`: existence-claim requires `searched_total` field populated
+
+2. **EDIT `backend/ai/engine_runtime.py`** — in `_run_chat`, after tool results are collected (after `_build_tool_trace`), add a contract-application pass: `from ai.engine.cognition.entity.contracts import apply_contracts` (gated on `ECF_ENABLED` flag).
+
+3. **CREATE `backend/ai/tests/test_ecf_contracts.py`**:
+   - `test_truncated_source_cannot_claim_nonexistence`: assert that a "not found" from a truncated list gets rewritten.
+   - `test_salary_zero_becomes_hidden_label`: assert `0.000` → `"(hidden)"` when capability absent.
+   - `test_fk_id_resolved_to_label`: assert `position=170` → `position="CT Senior Operator"`.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && \
+  ../.venv/bin/python -m pytest ai/tests/test_ecf_contracts.py -v 2>&1 | tail -20
+# Full suite still green:
+../.venv/bin/python -m pytest ai/ -q -k "not live" 2>&1 | tail -10
+```
+
+---
+
+### Phase ECF-4 — Wire resolve_entity tool (flag-gated) + fix get_employee
+**Role:** Backend-Worker · **Model:** V4-Flash  
+**Depends on:** ECF-3 complete
+
+#### Files to edit
+
+1. **EDIT `backend/ai/engine/agent/tools.py`** — add `resolve_entity` to `STATIC_TOOL_DEFINITIONS` and `STATIC_TOOL_EXECUTORS` gated on `settings.ECF_ENABLED`. Reuse `get_descriptor(instance_config, entity_type)` + resolver + host `fetch_fn` bridge.
+
+2. **EDIT `backend/ai/host_executor.py`** — in `_people_in_process` employees branch: accept `employee_no` as a lookup key in addition to PK (already has `pk` param — add `elif params.get("employee_no")` resolution).
+
+3. **EDIT `backend/ai/engine/instances/nibras/instance.yaml`** — fix `list_employees` description to say "first 100; for lookup by name/number use resolve_entity" and `get_employee` to say "accepts numeric id OR employee_no". Do NOT change the catalog entry path.
+
+4. **CREATE shadow logger** in `resolve_entity` executor: when `ECF_ENABLED` is True, log `shadow_diff = {new_result, legacy_result}` to `ai_shadow_log` table (or JSON log if table doesn't exist yet). This generates the parity evidence needed for ECF-7 cutover decision.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && \
+  ../.venv/bin/python -m pytest ai/tests/test_ecf_golden.py ai/tests/test_ecf_resolver.py ai/tests/test_ecf_contracts.py ai/tests/test_navigation_resolver.py ai/tests/test_intent_resolver.py -v 2>&1 | tail -40
+# ECF golden cases should be flipping from xfail to xpass progressively.
+# Navigation + intent tests: zero regression.
+```
+
+---
+
+### Phase ECF-5 — MAPE-K feedback loop (trajectory → golden)
+**Role:** Data/ML-Worker · **Model:** V4-Flash  
+**Depends on:** ECF-4 complete
+
+#### Files to create
+
+**CREATE `backend/ai/engine/cognition/entity/heal.py`**:
+
+```python
+# MAPE-K implementation
+# Monitor: hooks into contract-guard violations + user-correction signals
+#           (turn with text matching "wrong"/"ليس صحيح"/"غلط" shortly after a tool call)
+# Analyze: classify as Tier-1 (reversible, auto-heal) or Tier-2 (structural, propose)
+# Plan + Execute:
+#   Tier-1: re-resolve with broader normalization; abstain honestly; reindex stale entity cache
+#   Tier-2: auto-draft a GoldenCase (nominated_by="mape_k") + write to
+#            backend/ai/eval/pending_golden_nominations.json (human reviews before CI merge)
+```
+
+The pending nominations JSON is a queue; a human reviews, moves to `test_ecf_golden.py`, and runs CI. That is the "self-healing through human gate" pattern.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && \
+  ../.venv/bin/python -m pytest ai/tests/test_ecf_heal.py -v 2>&1 | tail -20
+# Prove: simulated correction → pending_golden_nominations.json gains one entry.
+```
+
+---
+
+### Phase ECF-6 — Canonical metrics
+**Role:** Backend-Worker · **Model:** V4-Flash  
+**Depends on:** ECF-5 complete
+
+Wire descriptor `metrics{}` → `aggregate_entity` capability. "headcount" always uses `is_active=True` count. "kuwaiti" always uses `nationality_code="KW"`. The `analyze_employees` dimension route is unchanged; `aggregate_entity` is an additional, metric-named path.
+
+#### Verification Gate
+```bash
+# Run golden "same question → same number":
+cd /home/ahmed/ws/carbon/backend && \
+  ../.venv/bin/python -m pytest ai/tests/test_ecf_golden.py -k "headcount_stable or kuwaiti_count_stable" -v
+```
+
+---
+
+### Phase ECF-7 — Cutover (Master Architect gates this)
+**Only triggers after:** ECF golden set fully green; shadow-diff review shows parity; human sign-off.
+
+Flip `ECF_ENABLED = True` in nibras instance config. Mark `slug_resolution` paths as superseded in `tools.py` comment. Do not delete — keep as fallback for 30 days.
+
+---
+
+### Phase ECF-8 — Generalize proof (Backend-Worker)
+**Depends on:** ECF-7  
+Onboard `LeaveRecord` as entity #2 by writing **only a descriptor entry** in instance.yaml + golden cases. Zero new algorithm code. This is the proof that the framework generalizes.
+
+---
+
+### ECF Edge-Case Matrix (CI must cover all rows)
+| Edge case | Phase | Test |
+|---|---|---|
+| Exists in rows > 100 (only in page 2+) | ECF-2 | test_ecf_resolver: record at index 150 resolves |
+| Arabic tashkeel variants | ECF-2 | "سَلمان" = "سلمان" |
+| Transliteration (Salman ↔ سلمان) | ECF-2 | near-miss candidates surfaced |
+| employee_no vs PK ambiguity | ECF-4 | "1046" → emp 1046, not pk 1046 |
+| Prompt injection in name query | ECF-2 | query treated as data, no eval |
+| Existence claim over truncated source | ECF-3 | test_ecf_contracts |
+| PII masking honest | ECF-3 | test_ecf_contracts |
+| FK id label resolution | ECF-3 | test_ecf_contracts |
+| Multi-tenant scope isolation | ECF-2 | fetch_fn applies scope; carbon sees no nibras data |
+| Language in → language out | ECF-0 | arabic_in_arabic_out golden case |
+| Canonical metric stability | ECF-6 | headcount_stable / kuwaiti_count_stable |
+| New entity (no code change) | ECF-8 | LeaveRecord descriptor only |
+

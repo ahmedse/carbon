@@ -1210,14 +1210,14 @@ function AIMessageBubble({
           ) : (
             <Typography
               variant="body2"
-              sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5 }}
+              sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5, color: 'text.primary' }}
             >
               {message.content}
             </Typography>
           )
         ) : (
           <LongContent content={message.content}>
-            <Box ref={contentRef} data-testid="message-content">
+            <Box ref={contentRef} data-testid="message-content" sx={{ color: 'text.secondary' }}>
               <EnvelopeMessage envelope={envelope} fallbackContent={message.content} />
             </Box>
           </LongContent>

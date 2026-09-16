@@ -1,0 +1,282 @@
+{
+  "lane": "instance_review",
+  "timestamp": "2026-09-16T08:16:47.025047+00:00",
+  "files": [
+    "backend/ai/engine/instances/nibras/instance.yaml"
+  ],
+  "panel": [
+    "gpt-5.4-pro",
+    "claude-opus-4.8"
+  ],
+  "judge": "gemini-3.1-pro",
+  "raw_reviews": [
+    {
+      "model": "gpt-5.4-pro",
+      "findings": {
+        "config_issues": [
+          {
+            "issue": "`domain_topics` includes `general knowledge`",
+            "severity": "medium",
+            "details": "This looks like a default catch-all and broadens scope beyond a tightly isolated HRMS/payroll assistant. Replace it with explicit HR policy/advisory topics or remove it."
+          },
+          {
+            "issue": "Hard-coded statutory percentages in `domain_facts`",
+            "severity": "high",
+            "details": "The config says GOSI is rule-driven and should never be stated as a universal rate, but `domain_facts` still seeds `typically 9%` and `12%`. That will anchor the model toward quoting specific percentages."
+          },
+          {
+            "issue": "Jurisdiction wording is mixed and overly generic",
+            "severity": "medium",
+            "details": "The file mixes Saudi, GCC, UAE and KSA wording for GOSI/WPS. Replace with tenant/jurisdiction-specific guidance and point the model to a live rules/config source instead of generic legal text."
+          },
+          {
+            "issue": "Cross-domain exclusions look incomplete/default-like",
+            "severity": "high",
+            "details": "`excluded_tools` only lists `create_dq_rule` and `run_ops_workflow`, but the isolation contract also mentions emissions factors, data catalog, and chairman overview. Explicitly exclude all inherited cross-domain tools, not just two."
+          },
+          {
+            "issue": "No explicit runtime/model settings are pinned",
+            "severity": "medium",
+            "details": "Temperature, context/tool budgets, and other inference settings appear to be inherited defaults. For a sensitive HR/payroll assistant, these should be explicitly configured rather than left implicit."
+          },
+          {
+            "issue": "Legacy slug resolution is English-only",
+            "severity": "low",
+            "details": "If ECF is disabled or fallback resolution is used, `slug_resolution.match_fields` omits Arabic name fields even though the instance is clearly bilingual."
+          },
+          {
+            "issue": "The hard-gate patterns do not cover all stated blocked topics",
+            "severity": "medium",
+            "details": "The comment says chairman overview and other Carbon-domain queries are blocked, but there is no explicit topic-guard pattern for chairman overview."
+          }
+        ],
+        "missing_capabilities": [
+          {
+            "capability": "HR policy and document retrieval",
+            "priority": "high",
+            "why": "This instance is framed as advisory + drafting, but there is no policy/handbook/contract/SOP retrieval tool. Without a knowledge source, answers will rely too heavily on prompt text."
+          },
+          {
+            "capability": "Live payroll-rule/config lookup for GOSI/WPS/statutory settings",
+            "priority": "high",
+            "why": "The persona says statutory rates are rule-configured, but there is no tool to inspect those configurations by scheme, nationality, contract, or jurisdiction."
+          },
+          {
+            "capability": "Dedicated payslip retrieval by employee and period",
+            "priority": "high",
+            "why": "`list_payslip_lines` only documents filtering by `payroll_run`, which is awkward and token-heavy for answering one employee's net pay. Add `employee`, period, or a `get_payslip` endpoint."
+          },
+          {
+            "capability": "Payroll summary / variance / exception tools",
+            "priority": "medium",
+            "why": "The assistant explains compute/validate/commit stages, but there is no validation report, variance analysis, or exception-list endpoint to ground those explanations."
+          },
+          {
+            "capability": "WPS/SIF artifact retrieval and status",
+            "priority": "medium",
+            "why": "The config says commit triggers WPS SIF generation, but there is no tool to check generation status or fetch the resulting file metadata."
+          },
+          {
+            "capability": "Entity descriptors beyond `employee`",
+            "priority": "high",
+            "why": "ECF descriptors exist only for employees. Add descriptors for payroll runs, payslips, leave records, loans, attendance, positions, and org units so generic resolve/search/get/aggregate flows work consistently across the domain."
+          },
+          {
+            "capability": "Server-side analytics for leave, attendance, loans, and payroll",
+            "priority": "medium",
+            "why": "Only employee analytics are available. Similar aggregate endpoints would reduce token load and improve accuracy for counts, trends, and compliance questions."
+          },
+          {
+            "capability": "Drafting/template tools for HR correspondence",
+            "priority": "medium",
+            "why": "The assistant is described as a drafting copilot, but there are no tools/templates for offer letters, payroll explanations, leave memos, warning letters, or approval drafts."
+          }
+        ],
+        "safety_concerns": [
+          {
+            "concern": "Mutation endpoints are too permissive for an 'advisory-only' instance",
+            "severity": "critical",
+            "details": "The description says the assistant never mutates records, yet it can create leave records and advance payroll runs through compute/validate/commit after a simple confirmation."
+          },
+          {
+            "concern": "Org-wide sensitive HR data is exposed without strong per-tool authorization/masking",
+            "severity": "high",
+            "details": "`list_employees` exposes `basic_salary`, `get_employee` returns full details including salary, and org-wide leave/loan/attendance/payslip endpoints are available. This needs capability checks and masking at the tool layer, not just model instructions."
+          },
+          {
+            "concern": "Irreversible payroll actions need stronger safeguards than a single confirmation",
+            "severity": "high",
+            "details": "Compute/validate/commit are operationally significant, especially commit. Require role verification, explicit state checks, and ideally a higher-assurance confirmation step."
+          },
+          {
+            "concern": "Long-term memory in an HR domain is risky without PII restrictions",
+            "severity": "high",
+            "details": "The persona encourages use of `learn_fact`, but there is no visible restriction against storing employee PII, payroll amounts, health/leave details, or disciplinary data."
+          },
+          {
+            "concern": "The topic guard is too restrictive for legitimate HR org-structure queries",
+            "severity": "medium",
+            "details": "The pattern blocking `orgunits?` / `mdm` can catch valid People-domain questions like 'show org units' or 'which org unit is this employee in?'"
+          },
+          {
+            "concern": "The topic guard is too permissive for bilingual deployment",
+            "severity": "medium",
+            "details": "All hard-gate patterns are English-only. Arabic Carbon-domain requests may bypass the pre-LLM guard even though the instance clearly supports Arabic."
+          },
+          {
+            "concern": "Self-service routing is instruction-only, not enforced",
+            "severity": "medium",
+            "details": "The prompt says first-person requests must use `my_*` endpoints, but there is no hard policy preventing the model from calling org-wide endpoints for 'my salary' or 'my leave'."
+          }
+        ],
+        "inconsistencies": [
+          {
+            "inconsistency": "Advisory-only identity vs operational tool set",
+            "details": "The description/persona say the assistant explains and drafts only, but the API catalog includes POST actions that mutate records and advance payroll state."
+          },
+          {
+            "inconsistency": "Rule-configured statutory guidance vs seeded fixed percentages",
+            "details": "The persona says never state a single percentage as universally applicable, while `domain_facts` includes concrete GOSI percentages."
+          },
+          {
+            "inconsistency": "Scope includes GOFSCO organisational structure, but topic guard blocks org-unit style queries",
+            "details": "The assistant claims org-structure knowledge and has org-unit data in tools, yet the hard gate can refuse requests containing `orgunits` or `mdm`."
+          },
+          {
+            "inconsistency": "Self-service guidance conflicts with salary-query guidance",
+            "details": "The file says first-person salary questions should use `list_my_payslips`, but the net-pay section instructs the model to fetch payroll-run output via `list_payslip_lines`, which is org-wide."
+          },
+          {
+            "inconsistency": "Isolation contract is stronger than the explicit exclusions",
+            "details": "The comments promise no Carbon-domain exposure, but only two tools are explicitly excluded and the hard-gate coverage is partial."
+          },
+          {
+            "inconsistency": "Lifecycle naming may confuse exact tool/status matching",
+            "details": "Narrative text uses stage verbs (`compute`, `validate`, `commit`) while API statuses are past-tense (`computed`, `validated`, `committed`). Minor, but it can lead to brittle reasoning if exact status names matter."
+          }
+        ],
+        "performance_suggestions": [
+          {
+            "suggestion": "Pin low-temperature, tool-first generation settings",
+            "details": "For factual HR/payroll work, explicitly set a low temperature (for example 0.0-0.2), conservative top_p, and a strong tool-use bias so the model fetches data instead of free-form reasoning."
+          },
+          {
+            "suggestion": "Add explicit context and tool-result budgets",
+            "details": "This instance is tool-heavy and sensitive. Set limits for context window usage, max tool results included in prompt, and summarize large tool payloads before feeding them back to the model."
+          },
+          {
+            "suggestion": "Prefer server-side aggregates over raw row dumps",
+            "details": "`list_payslip_lines`, `list_leave_records`, and `list_attendance` can become large quickly. Add aggregate/summary endpoints and encourage filter-first behavior to reduce latency and token cost."
+          },
+          {
+            "suggestion": "Expand ECF coverage and retire legacy slug resolution when possible",
+            "details": "Using ECF descriptors for more entities will reduce brittle prompt/tool selection and improve retrieval quality. If ECF is enabled, keep the instance lean by minimizing duplicate legacy resolution paths."
+          },
+          {
+            "suggestion": "Trim repetitive prompt text and move policy detail into retrievable sources",
+            "details": "The persona repeats advisory/mutation/rate-governance constraints several times. Keep the immutable safety rules, but shift detailed policy content into a KB to lower prompt overhead."
+          },
+          {
+            "suggestion": "Default to self-service endpoints and analytics endpoints before broad lists",
+            "details": "This improves both privacy and performance: first-person queries should route to `my_*` tools, while counts/distributions should route to analytics endpoints by default."
+          }
+        ]
+      }
+    },
+    {
+      "model": "claude-opus-4.8",
+      "findings": {
+        "raw": "_generation:\n  model_pool: default\n  temperature: 0.0\n  max_output_tokens: 1500\n  streaming: true\n\nruntime_flags:\n  ECF_ENABLED: true\n  allow_multi_tool: true\n  max_tool_calls_per_turn: 8\n  citations_required: true\n  self_service_enabled: true\n```\n============================================================\n\nLet me analyze this configuration."
+      }
+    }
+  ],
+  "verdict": {
+    "worklist": [
+      {
+        "rank": 1,
+        "title": "Contradiction: Advisory-only persona with permissive mutation endpoints",
+        "severity": "CRITICAL",
+        "agreement": 1,
+        "summary": "The assistant is described as 'advisory-only' and explicitly instructed not to mutate records, yet the API catalog includes POST actions for creating leave and advancing payroll states (compute/validate/commit).",
+        "target_file": "agent_config.yaml",
+        "testable": true,
+        "proposed_test": "Test that requests to mutate HR/payroll data (e.g., 'approve this payroll run') are either hard-rejected by the agent or that mutation tools are removed from the tool registry.",
+        "actionable": true,
+        "raised_by": [
+          "gpt-5.4-pro"
+        ]
+      },
+      {
+        "rank": 2,
+        "title": "Org-wide sensitive HR data exposed without masking",
+        "severity": "HIGH",
+        "agreement": 1,
+        "summary": "Endpoints like `list_employees` and `get_employee` expose sensitive data like `basic_salary` org-wide. The assistant relies on prompt instructions rather than tool-layer authorization to restrict access.",
+        "target_file": "agent_config.yaml",
+        "testable": true,
+        "proposed_test": "Simulate a user asking for a colleague's salary ('What is John Doe's basic salary?'); assert the system refuses the request due to authorization boundaries.",
+        "actionable": true,
+        "raised_by": [
+          "gpt-5.4-pro"
+        ]
+      },
+      {
+        "rank": 3,
+        "title": "Hard-coded statutory percentages in domain_facts",
+        "severity": "HIGH",
+        "agreement": 1,
+        "summary": "The persona dictates that GOSI/statutory rates are rule-driven and should not be stated as universal, yet `domain_facts` hardcodes 'typically 9%' and '12%', which will anchor the LLM to these fixed rates.",
+        "target_file": "agent_config.yaml",
+        "testable": true,
+        "proposed_test": "Static analysis test: Assert that `domain_facts` does not contain hardcoded percentage strings (e.g., '9%', '12%') for GOSI/WPS.",
+        "actionable": true,
+        "raised_by": [
+          "gpt-5.4-pro"
+        ]
+      },
+      {
+        "rank": 4,
+        "title": "Bilingual deployment with English-only topic guards",
+        "severity": "HIGH",
+        "agreement": 1,
+        "summary": "The instance supports Arabic, but the hard-gate patterns for blocking out-of-domain (Carbon/chairman) queries are English-only, allowing Arabic queries to bypass the pre-LLM guard.",
+        "target_file": "agent_config.yaml",
+        "testable": true,
+        "proposed_test": "Send an Arabic translation of a blocked query (e.g., 'chairman overview' in Arabic) and assert it is rejected by the hard-gate router.",
+        "actionable": true,
+        "raised_by": [
+          "gpt-5.4-pro"
+        ]
+      },
+      {
+        "rank": 5,
+        "title": "Long-term memory (learn_fact) lacks PII restrictions",
+        "severity": "HIGH",
+        "agreement": 1,
+        "summary": "The persona encourages using `learn_fact`, but there are no guardrails preventing the model from storing employee PII, health details, or salary amounts in long-term memory.",
+        "target_file": "agent_config.yaml",
+        "testable": true,
+        "proposed_test": "Prompt the assistant to 'remember that John Doe's salary is 5000 KWD' and assert that the `learn_fact` tool is either not called or rejects the PII payload.",
+        "actionable": true,
+        "raised_by": [
+          "gpt-5.4-pro"
+        ]
+      },
+      {
+        "rank": 6,
+        "title": "Missing HR Policy and Document Retrieval Capability",
+        "severity": "HIGH",
+        "agreement": 1,
+        "summary": "The instance is framed as an HR advisory assistant but lacks a knowledge base or document retrieval tool for policies, contracts, or SOPs.",
+        "target_file": null,
+        "testable": false,
+        "proposed_test": null,
+        "actionable": false,
+        "raised_by": [
+          "gpt-5.4-pro"
+        ]
+      }
+    ],
+    "consensus_note": "Only gpt-5.4-pro provided a complete review, as claude-opus-4.8 failed to generate actionable output. The primary focus is on severe safety and data-exposure risks, specifically the contradiction of having mutation tools in an 'advisory' assistant and the lack of hard authorization boundaries for org-wide salary data."
+  }
+}

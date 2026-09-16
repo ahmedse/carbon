@@ -6,8 +6,9 @@ import { Alert, Box, Button, Chip, Collapse, IconButton, Menu, MenuItem, Stack, 
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DownloadIcon from '@mui/icons-material/Download';
 import HistoryIcon from '@mui/icons-material/History';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import GroupIcon from '@mui/icons-material/Group';
+import TextDecreaseIcon from '@mui/icons-material/TextDecrease';
+import TextIncreaseIcon from '@mui/icons-material/TextIncrease';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { useAuth } from '../auth/AuthContext';
@@ -83,9 +84,9 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
   const [stopped, setStopped] = useState(false);
   const [workingStage, setWorkingStage] = useState(null);
   // Collapsible "AI is thinking…" timeline (VS Code Copilot-style): accumulate
-  // the narrated working stages, collapsed by default, expand on click.
+  // the narrated working stages. Expanded by default and kept after the turn.
   const [stageHistory, setStageHistory] = useState([]);
-  const [thinkingExpanded, setThinkingExpanded] = useState(false);
+  const [thinkingExpanded, setThinkingExpanded] = useState(true);
   const [sendMode, setSendMode] = useState('queue');
   // Phase 21-C — collapsed "older messages" region toggle.
   const [showOlder, setShowOlder] = useState(false);
@@ -109,6 +110,26 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
   const [selectedModel, setSelectedModel] = useState(null);
   // Phase 5B — pinned "Since your last visit" catch-up summary (null = no banner).
   const [catchUp, setCatchUp] = useState(null);
+  // Resizable content: zoom multiplier for the message area (persisted).
+  const [contentZoom, setContentZoom] = useState(() => {
+    try {
+      const saved = Number(window.localStorage.getItem('ai.contentZoom'));
+      return saved >= 0.8 && saved <= 1.4 ? saved : 1;
+    } catch {
+      return 1;
+    }
+  });
+  const adjustZoom = useCallback((delta) => {
+    setContentZoom((z) => {
+      const next = Math.min(1.4, Math.max(0.8, Math.round((z + delta) * 10) / 10));
+      try { window.localStorage.setItem('ai.contentZoom', String(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+  const resetZoom = useCallback(() => {
+    setContentZoom(1);
+    try { window.localStorage.removeItem('ai.contentZoom'); } catch { /* ignore */ }
+  }, []);
   // Guard so `resume` fires exactly once per conversation open (idempotent).
   const resumeRequestedRef = useRef(null);
   const scrollRef = useRef(null);
@@ -227,7 +248,7 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
       }
       setStreamingText(null);
       setWorkingStage(null);
-      setThinkingExpanded(false);
+      // Keep the thinking timeline visible and expanded after the answer.
       if (canonical?.status !== 'working') {
         setSending(false);
       }
@@ -284,7 +305,7 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
       setProviderOffline(false);
       setTransientError(false);
       setStageHistory([]);
-      setThinkingExpanded(false);
+      setThinkingExpanded(true);
 
       if (type === 'chat') {
         setStreamingText('');
@@ -697,7 +718,7 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
       setProviderOffline(false);
       setTransientError(false);
       setStageHistory([]);
-      setThinkingExpanded(false);
+      setThinkingExpanded(true);
       if (type === 'chat') {
         setStreamingText('');
       } else {
@@ -1167,6 +1188,7 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
         ref={scrollRef}
         onScroll={handleScroll}
         data-testid="messages-scroll"
+        style={{ zoom: contentZoom }}
         sx={{
           flex: 1,
           minHeight: 0,
@@ -1186,7 +1208,6 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
               isOwner ? (
                 <Button
                   size="small"
-                  startIcon={<AutoAwesomeIcon />}
                   onClick={() => {
                     setCatchUp(null);
                     handleSend('Summarize what changed since my last visit.');
@@ -1550,6 +1571,45 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
       >
         <AIStatusBar variant={statusVariant} label={statusLabel} onRetry={handleRetry} />
         <PulsePresence />
+        <Tooltip title="Text size">
+          <Stack direction="row" alignItems="center" spacing={0.25} sx={{ borderLeft: 1, borderColor: 'divider', pl: 0.5 }}>
+            <IconButton
+              size="small"
+              aria-label="Decrease text size"
+              disabled={contentZoom <= 0.8}
+              onClick={() => adjustZoom(-0.1)}
+              sx={{ p: 0.25 }}
+            >
+              <TextDecreaseIcon sx={{ fontSize: 13 }} />
+            </IconButton>
+            <Typography
+              variant="caption"
+              onClick={resetZoom}
+              role="button"
+              tabIndex={0}
+              aria-label="Reset text size"
+              sx={{
+                minWidth: 32,
+                textAlign: 'center',
+                fontSize: '0.6875rem',
+                lineHeight: 1,
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+            >
+              {Math.round(contentZoom * 100)}%
+            </Typography>
+            <IconButton
+              size="small"
+              aria-label="Increase text size"
+              disabled={contentZoom >= 1.4}
+              onClick={() => adjustZoom(0.1)}
+              sx={{ p: 0.25 }}
+            >
+              <TextIncreaseIcon sx={{ fontSize: 13 }} />
+            </IconButton>
+          </Stack>
+        </Tooltip>
         {isOwner && <AIModelSelect onChange={handleModelChange} />}
         {isOwner && (
           <Tooltip title={conversation.visibility === 'shared' ? 'Unshare' : 'Share'}>

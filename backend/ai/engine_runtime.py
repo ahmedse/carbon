@@ -643,35 +643,11 @@ def _build_chat_user_info(host_user_id: str | None) -> dict | None:
         display_name = (
             getattr(user, "display_name", "") or user.get_full_name() or user.username
         )
-        # Domain subject binding — who this user *is* inside the active app.
-        # Today only People links a user to a first-class subject (Employee);
-        # other apps contribute their own binding here as they gain one. This is
-        # what lets the assistant resolve "my/me/I" without interrogating the user.
-        employee = None
-        try:
-            from people.models import Employee
-
-            try:
-                emp = user.employee_profile
-            except (Employee.DoesNotExist, AttributeError):
-                emp = None
-            if emp is not None:
-                employee = {
-                    "id": emp.id,
-                    "employee_no": emp.employee_no,
-                    "full_name": emp.full_name,
-                    "job_title": emp.position.title if emp.position_id else None,
-                    "org_unit": emp.org_unit.name if emp.org_unit_id else None,
-                    "is_active": bool(emp.is_active),
-                }
-        except Exception:  # noqa: BLE001 - subject binding is best-effort
-            employee = None
         return {
             "username": user.username,
             "display_name": display_name,
             "email": user.email or "",
             "roles": roles,
-            "employee": employee,
         }
 
     try:

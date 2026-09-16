@@ -448,6 +448,9 @@ def _get_param_resolution(executor, param_name: str) -> tuple[str, str, str] | N
         entry.get("id_field", "id"),
         entry.get("display_field", "name"),
     )
+
+
+def _extract_items(api_result) -> list[dict]:
     """Extract a list of items from an API response.
 
     Handles the executor wrapper ({"status_code": ..., "data": ...}),
@@ -729,6 +732,46 @@ async def execute_call_host_api(
                 f"Please log in to {_host_name} and connect your account to Pulse first."
             )
         }
+
+    # ── ECF delegation ────────────────────────────────────────────────────
+    # ``resolve_entity`` is a dedicated Entity Capability (ADR-0032), not a
+    # REST endpoint. The instance api_catalog guides the LLM to "use
+    # resolve_entity" for name lookups alongside sibling data endpoints, so
+    # the model frequently frames it as ``call_host_api(api_name="resolve_entity")``.
+    # Delegate to the ECF resolver instead of failing with "Unknown API
+    # endpoint" — comprehension + grounding stay deterministic regardless of
+    # which tool shape the model chose.
+    if api_name == "resolve_entity":
+        merged: dict = {}
+        merged.update(path_params or {})
+        merged.update(query_params or {})
+        merged.update(body or {})
+        entity_type = merged.get("entity_type") or "employee"
+        q = (
+            merged.get("query")
+            or merged.get("name")
+            or merged.get("employee_no")
+            or merged.get("civil_id")
+            or merged.get("id")
+            or ""
+        )
+        if not q:
+            # Fall back to the first bare string value the model supplied.
+            for val in merged.values():
+                if isinstance(val, str) and val.strip():
+                    q = val.strip()
+                    break
+        if not q:
+            return {"error": "resolve_entity requires a name or employee number (query)."}
+        return await execute_resolve_entity(
+            entity_type=str(entity_type),
+            query=str(q),
+            explanation=explanation,
+            executor=executor,
+            instance_config=getattr(executor, "instance_config", None),
+            instance_id=instance_id,
+            conversation_id=conversation_id,
+        )
 
     entry = executor.get_catalog_entry(api_name)
     if not entry:
@@ -1580,6 +1623,199 @@ STATIC_TOOL_EXECUTORS = {
     "invoke_skill": execute_invoke_skill,
 }
 
+# ── ECF — resolve_entity (ECF_ENABLED gate) ─────────────────────────────────
+# Generic bilingual entity resolver (ADR-0032).  Added to the tool catalog
+# only when ECF_ENABLED=True; legacy list_employees / get_employee stay live.
+
+_ECF_RESOLVE_ENTITY_DEFINITION = {
+    "type": "function",
+    "function": {
+        "name": "resolve_entity",
+        "description": (
+            "Find a specific record by name, number, or identifier. "
+            "Use this for 'find employee X', 'who is X', 'employee number N', "
+            "'من هو X', 'ابحث عن X'. "
+            "Performs a COMPLETE scan (not capped at 100 rows) across all records, "
+            "in Arabic and English. Returns a single match, a disambiguation list, "
+            "or a grounded 'not found' that includes how many records were searched. "
+            "ALWAYS use this instead of list_employees for name/number lookup."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "entity_type": {
+                    "type": "string",
+                    "description": "The type of entity to resolve. Use 'employee' for HR lookups.",
+                    "enum": ["employee"],
+                },
+                "query": {
+                    "type": "string",
+                    "description": "Name, employee number, or any identifier of the entity.",
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "Why you are resolving this entity.",
+                },
+            },
+            "required": ["entity_type", "query", "explanation"],
+        },
+    },
+}
+
+
+_AR_SCRIPT = re.compile(r"[\u0600-\u06FF]")
+
+
+async def _llm_transliterate(query: str, instance_id: str, conversation_id: str) -> list[str]:
+    """Ask the LLM for likely Latin spellings of an Arabic name.
+
+    LLM owns comprehension (lossy transliteration); the deterministic resolver
+    still grounds every candidate against real records — the LLM never invents
+    a person, only spellings to search for.
+    """
+    prompt = (
+        "A user is searching an employee directory whose names are stored in "
+        "English (Latin letters). The user typed this name in Arabic:\n"
+        f'"{query}"\n\n'
+        "List up to 6 likely English spellings of this name, comma-separated, "
+        "names only — no numbering, no explanation. Include common variants "
+        "(Salman/Selman, Mohammed/Muhammad, Zakareya/Zakaria, Reena/Rina)."
+    )
+    try:
+        resp = await route_chat(
+            task="chat",
+            instance_id=instance_id or "",
+            conversation_id=conversation_id or "",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+            max_tokens=120,
+        )
+        text = (resp.get("content") or "").strip()
+        parts = re.split(r"[,\n]", text)
+        return [p.strip(" .\t-•") for p in parts if p.strip(" .\t-•")][:6]
+    except Exception:  # noqa: BLE001 — fallback is best-effort, never fatal
+        logger.warning("LLM transliteration failed for %r", query, exc_info=True)
+        return []
+
+
+async def execute_resolve_entity(
+    entity_type: str,
+    query: str,
+    explanation: str = "",
+    executor=None,
+    instance_config: dict | None = None,
+    instance_id: str = "",
+    conversation_id: str = "",
+    **kwargs,
+) -> dict:
+    """Execute the resolve_entity tool — bilingual complete-scan resolver.
+
+    The DB fetch is provided by the HOST executor (executor.entity_fetch) so
+    the engine never touches Django (RULE_20). Deterministic matching grounds
+    the result; on a cross-script miss the LLM proposes spellings which are
+    re-grounded — comprehension by the LLM, grounding by the resolver.
+    """
+    from asgiref.sync import sync_to_async
+
+    from ai.engine.cognition.entity import get_descriptor
+    from ai.engine.cognition.entity.resolver import resolve
+    from ai.engine.cognition.entity.contracts import (
+        grounded_refusal, resolve_labels, honest_masking,
+    )
+
+    if executor is None:
+        return {"error": "Host executor not available"}
+
+    cfg = instance_config or getattr(executor, "instance_config", None)
+    if not cfg:
+        return {"error": "No instance configuration available"}
+
+    descriptor = get_descriptor(cfg, entity_type)
+    if descriptor is None:
+        return {"error": f"Entity type '{entity_type}' is not registered for this instance."}
+
+    fetch = getattr(executor, "entity_fetch", None)
+    if fetch is None:
+        return {"error": "Host executor does not support entity_fetch"}
+
+    def _resolve_sync(q):
+        return resolve(descriptor, q, fetch_fn=fetch)
+
+    # ── 1. Deterministic resolution ─────────────────────────────────────────
+    try:
+        result = await sync_to_async(_resolve_sync, thread_sensitive=True)(query)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("resolve_entity failed for %s '%s'", entity_type, query)
+        return {"error": f"Resolver error: {exc}"}
+
+    # ── 2. LLM transliteration fallback (only on a cross-script miss) ────────
+    if result.action == "none" and _AR_SCRIPT.search(query or ""):
+        spellings = await _llm_transliterate(query, instance_id, conversation_id)
+        for cand in spellings:
+            try:
+                r = await sync_to_async(_resolve_sync, thread_sensitive=True)(cand)
+            except Exception:  # noqa: BLE001
+                continue
+            if r.action == "match":
+                result = r
+                break
+            if r.action == "disambiguate" and result.action == "none":
+                result = r  # keep first disambiguation as a fallback
+
+    # ── 3. Build the grounded response (labels + honest masking) ─────────────
+    def _build() -> dict:
+        caps = executor.user_capabilities() if hasattr(executor, "user_capabilities") else frozenset()
+        if result.action == "none":
+            suggestions = [
+                honest_masking(resolve_labels(c, descriptor, label_fetch_fn=fetch), descriptor, caps)
+                for c in (result.suggestions or [])
+            ]
+            msg = grounded_refusal(result)
+            if suggestions:
+                names = [
+                    str(s.get("full_name") or s.get("name_en_given") or "").strip()
+                    for s in suggestions
+                ]
+                names = [n for n in names if n]
+                if names:
+                    hint = ", ".join(names[:3])
+                    msg += (" هل تقصد: " if result.lang == "ar" else " Did you mean: ") + hint + "?"
+            return {
+                "found": False,
+                "message": msg,
+                "searched_total": result.searched_total,
+                "query": query,
+                "suggestions": suggestions,
+            }
+        if result.action == "match":
+            record = resolve_labels(result.record or {}, descriptor, label_fetch_fn=fetch)
+            record = honest_masking(record, descriptor, caps)
+            return {
+                "found": True,
+                "action": "match",
+                "record": record,
+                "searched_total": result.searched_total,
+                "matched_field": result.matched_field,
+            }
+        candidates = [
+            honest_masking(resolve_labels(c, descriptor, label_fetch_fn=fetch), descriptor, caps)
+            for c in (result.candidates or [])
+        ]
+        return {
+            "found": False,
+            "action": "disambiguate",
+            "candidates": candidates,
+            "searched_total": result.searched_total,
+            "message": f"Multiple records match '{query}'. Which did you mean?",
+        }
+
+    try:
+        return await sync_to_async(_build, thread_sensitive=True)()
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("resolve_entity response build failed")
+        return {"error": f"Resolver error: {exc}"}
+
+
 # ── MCP (Model Context Protocol) dynamic tool injection ──────────────────
 # Populated at startup by init_mcp_tools().  Empty by default — if no MCP
 # servers are configured or all fail to connect, Pulse uses only its built-in
@@ -1604,7 +1840,11 @@ def _dedup_definitions(definitions: list[dict]) -> list[dict]:
 def get_tool_definitions() -> list[dict]:
     """Return all tool definitions: static + plugin + MCP (name-unique)."""
     plugin_defs, _ = load_plugins()
-    return _dedup_definitions(list(STATIC_TOOL_DEFINITIONS) + plugin_defs + list(MCP_TOOLS))
+    base = list(STATIC_TOOL_DEFINITIONS)
+    settings = get_settings()
+    if getattr(settings, "ECF_ENABLED", False):
+        base = base + [_ECF_RESOLVE_ENTITY_DEFINITION]
+    return _dedup_definitions(base + plugin_defs + list(MCP_TOOLS))
 
 
 async def get_tool_executors() -> dict:
@@ -1614,7 +1854,11 @@ async def get_tool_executors() -> dict:
     collision (a plugin must not shadow a built-in).
     """
     _, plugin_execs = load_plugins()
-    return {**plugin_execs, **STATIC_TOOL_EXECUTORS, **MCP_EXECUTORS}
+    base = {**plugin_execs, **STATIC_TOOL_EXECUTORS, **MCP_EXECUTORS}
+    settings = get_settings()
+    if getattr(settings, "ECF_ENABLED", False):
+        base["resolve_entity"] = execute_resolve_entity
+    return base
 
 
 async def init_mcp_tools(registry) -> int:

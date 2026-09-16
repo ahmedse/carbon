@@ -1,0 +1,341 @@
+{
+  "lane": "domain_gaps",
+  "timestamp": "2026-09-16T08:12:27.764178+00:00",
+  "files": [
+    "domain_packs/nibras/api_catalog.yaml",
+    "domain_packs/nibras/processes/payroll.run.lifecycle.yaml",
+    "domain_packs/nibras/processes/leave.request.lifecycle.yaml",
+    "domain_packs/nibras/processes/loan.request.lifecycle.yaml"
+  ],
+  "panel": [
+    "perplexity-adv-deep-research",
+    "gpt-5.4-pro",
+    "claude-opus-4.8"
+  ],
+  "judge": "gemini-3.1-pro",
+  "raw_reviews": [
+    {
+      "model": "perplexity-adv-deep-research",
+      "findings": {
+        "raw": "## Assessment: **not production-ready**\n\nNo explicit question was included, so I reviewed the supplied Nibras capability catalog and lifecycle definitions for consistency. The lifecycle graphs are structurally coherent, but several contract mismatches could make leave and loan workflows impossible to execute, and the apparent HTML escaping may prevent correct YAML parsing.\n\n| Severity | File / area | Finding | Recommended correction |\n|---|---|---|---|\n| **Blocker** | All YAML files | Values contain literal HTML entities such as `&quot;`, `&gt;`, `&amp;`, and `&#39;`. In YAML, leading `&` can be interpreted as an anchor indicator; these files may fail parsing or produce unintended values. | Decode the files before loading: use `\"1.0\"`, `>`, `&`, and `'` as appropriate. Add a CI test that parses every domain-pack YAML file. |\n| **Blocker** | `leave.request.lifecycle.yaml` | The lifecycle accepts only `request_id`, but its first step invokes `leave.request.submit`, whose required input is a full `request: leave.request`. A new request cannot normally have a `request_id` before submission. | Make the process input a request payload and bind it to `submit`; capture the produced `request_id` for later steps. Alternatively, split submission into a separate process. |\n| **Blocker** | `loan.request.lifecycle.yaml` | The same input mismatch exists: the process accepts `request_id`, while `loan.request.submit` requires `request: loan.request`. | Accept the loan request payload initially, then bind the generated `request_id` to review and activation. |\n| **Blocker** | Leave lifecycle | `leave.request.record` requires `request_status_is_approved`, but submission sets the status to `submitted`, and the review capability only creates a `HumanTask`; no declared step or effect changes the request status to `approved`. | Define review completion as producing an approval decision and transitioning the request to `approved`, or remove the approved-status precondition and rely explicitly on a valid `ApprovalGrant`. |\n| **Blocker** | Loan lifecycle | `loan.request.activate` requires `request_status_is_approved`, but submission sets the status to `draft`, and review declares no effect that changes it to `approved`. | Add an approval transition/effect or change activation’s preconditions to consume and verify the review’s `ApprovalGrant`. |\n| **High** | `api_catalog.yaml` tool catalog | Loan capabilities are declared, but there are no agent-facing loan tools. Several governed leave capabilities—review and record in particular—also lack clearly corresponding tools. | Add tools for all intended agent-facing loan and leave operations, or document that lifecycle execution invokes capabilities directly and does not require tool entries. |\n| **High** | Leave tools versus capabilities | The tool `create_leave_record` does not clearly correspond to either `leave.request.submit` or `leave.request.record`. The names imply materially different operations. | Replace it with explicit names such as `submit_leave_request` and `record_leave_request`, each mapped to one capability. |\n| **High** | Process step binding | The process definitions say `binds_to: leave.request`, `loan.request`, or `payroll.run`, but do not declare field-level mappings between process inputs, capability inputs, and outputs. | Add explicit argument and output bindings, such as `with: {request: inputs.request}` and `capture: {request_id: result.id}`. |\n| **High** | Leave record contract | `leave.request.record` is described as recording the request, but its effect is `sets: status=approved`, not `status=recorded`. The verification predicate ambiguously accepts “approved/recorded.” | Establish one canonical terminal state—preferably `recorded`—and use it consistently in effects, verification, objective, and host implementation. |\n| **High** | Loan submit contract | `loan.request.submit` says it creates a “pending loan request,” but its effect sets `status=draft`; review also requires `draft`. | Either rename the operation to “Create loan draft” or set the status to `submitted`/`pending` and update review accordingly. |\n| **Medium** | Leave and loan idempotency | Submit steps use `idempotency_scope: request_id`, but that identifier is generated only after submission. The capability contracts instead specify request-fingerprint deduplication. | Use a client-generated idempotency key or the declared request fingerprint for submission; use `request_id` only for later steps. |\n| **Medium** | Payroll validation policy | The process says to ask when unresolved variance exists, while commit’s objective requires a variance-clean run. The contract does not state whether approval can override findings or whether commit must always reject them. | Add an explicit commit precondition such as `no_unresolved_validation_findings: true`, and define remediation/revalidation behavior. |\n| **Medium** | Payroll commit recovery | Commit is described as final and irreversible, but its recovery is `manual_reconciliation`, which could be mistaken for reversal. | Clarify that reconciliation creates compensating records or a future correction run and never mutates the committed run. |\n| **Medium** | Separation of duties | Processes declare role names such as `preparer`, `requester`, and `approver`, but do not specify how identities are derived or compared. | Define identity bindings and an enforceable predicate such as `approver_user_id != requester_user_id`. |\n| **Medium** | Approval artifacts | Review steps list `ApprovalGrant` as evidence, but review capabilities declare only `creates: HumanTask`; the grant’s schema, decision status, subject, and linkage are unspecified. | Define an `ApprovalGrant` contract containing subject ID, reviewer ID, decision, timestamp, policy/version, and task ID. |\n| **Medium** | Capability/tool mapping | Tools have no explicit `capability_id` or `host_action`, leaving mappings dependent on naming conventions that already diverge. | Add `capability_id` to every tool declaration and validate one-to-one or intentionally documented mappings in CI. |\n| **Low** | Source type | The Nibras pack uses `carbon_api` as its default and per-tool source type. This may be deliberate for compatibility, but it makes provenance and telemetry misleading. | Introduce `nibras_api`, or document `carbon_api` as a generic host-API source type rather than a Carbon-specific identifier. |\n| **Low** | Lifecycle test coverage | Named tests cover basic happy paths and consent, but not generated-ID propagation, rejected reviews, duplicate submission, unknown outcomes, entitlement limits, approval thresholds, or separation-of-duties identity resolution. | Add executable contract tests for each precondition, policy branch, idempotency rule, approval result, and recovery path. |\n\n### Minimum safe repair order\n\n1. Decode the HTML entities and prove every file parses.\n2. Redesign leave and loan process inputs so submit receives a request payload and emits a request ID.\n3. Define the review-decision state transition and `ApprovalGrant` contract.\n4. Align leave and loan status names across purpose, effects, preconditions, and verification.\n5. Add explicit tool-to-capability and process-step input/output mappings.\n6. Add registry-resolution and end-to-end lifecycle tests.\n\nThe payroll lifecycle is closest to internally consistent. Leave and loan are currently blocked by missing input propagation and missing approval-state transitions."
+      }
+    },
+    {
+      "model": "gpt-5.4-pro",
+      "findings": {
+        "raw": "{\n  \"missing_edge_cases\": [\n    {\n      \"process\": \"leave.request.lifecycle\",\n      \"edge_case\": \"The process starts with request_id, but submit needs a full leave.request payload; a brand-new request has no request_id yet, so create flow and idempotency are not actually modeled.\",\n      \"proposed_step\": \"Add collect_request_details before submit, then bind the generated request_id from leave.request.submit for downstream steps.\"\n    },\n    {\n      \"process\": \""
+      }
+    },
+    {
+      "model": "claude-opus-4.8",
+      "findings": {
+        "missing_edge_cases": [
+          {
+            "process": "payroll.run.lifecycle",
+            "edge_case": "Off-cycle / terminated employees in the run — final settlements (EOSB, unused leave payout, loan clawback) are not modeled; a run may contain leavers whose net pay must include Article 51 indemnity and Article 59 loan deduction from entitlement.",
+            "proposed_step": "Add a 'compute_final_settlements' sub-step gated before validate that reconciles termination records, computes prorated EOSB and unused-leave encashment, and nets outstanding loan balance against the settlement."
+          },
+          {
+            "process": "payroll.run.lifecycle",
+            "edge_case": "Negative or zero net pay after deductions (loan + GOSI + disciplinary fines) — no guard prevents committing a payslip where deductions exceed statutory caps and drive net pay below zero.",
+            "proposed_step": "Add a validate assertion 'net_pay_non_negative_and_deduction_caps_respected' that fails the run if any payslip net < 0 or aggregate deductions breach KLL caps."
+          },
+          {
+            "process": "payroll.run.lifecycle",
+            "edge_case": "Recompute after commit / retroactive adjustment — commit is irreversible with recovery=manual_reconciliation but there is no adjustment-run or correction-run process for post-commit errors (e.g., missed attendance, wrong rate).",
+            "proposed_step": "Define a 'payroll.run.adjustment.lifecycle' process producing a linked corrective run and a supplementary WPS SIF rather than mutating the committed run."
+          },
+          {
+            "process": "payroll.run.lifecycle",
+            "edge_case": "WPS SIF generation failure or bank rejection after commit — commit produces WpsSifFile as a side effect but there is no step to confirm SIF acceptance/transmission or handle a rejected/failed file.",
+            "proposed_step": "Add a post-commit 'wps.sif.transmit_and_confirm' step with verification that the SIF was accepted by the bank/AS'HAL portal, and an escalation path on rejection."
+          },
+          {
+            "process": "payroll.run.lifecycle",
+            "edge_case": "Payment-deadline breach — no check that commit + disbursement completes before the 5th-of-month WPS deadline (7-day legal outer limit); a late run silently becomes a labour-law offence.",
+            "proposed_step": "Add an ask_if/refuse gate keyed to the WPS due date that escalates when the projected disbursement date exceeds the statutory deadline."
+          },
+          {
+            "process": "leave.request.lifecycle",
+            "edge_case": "Overlapping / concurrent leave requests and blackout periods — no detection of date overlap with an already-recorded leave, or with unavailable staffing (oilfield rotation coverage).",
+            "proposed_step": "Add a submit precondition 'no_overlapping_recorded_leave' and an ask_if for coverage/blackout conflicts."
+          },
+          {
+            "process": "leave.request.lifecycle",
+            "edge_case": "Leave-type-specific eligibility (sick-leave graduated pay tiers, maternity 70 days, Hajj once-per-service, iddah) — the flow treats all leave uniformly and does not compute paid/unpaid split or one-time eligibility.",
+            "proposed_step": "Add a 'classify_leave_and_compute_pay_impact' step that resolves the correct KLL pay tier and one-time-eligibility flag per leave type before record."
+          },
+          {
+            "process": "leave.request.lifecycle",
+            "edge_case": "Cancellation / early return / amendment of recorded leave — no step to reverse entitlement usage when leave is cancelled or shortened.",
+            "proposed_step": "Add a 'leave.request.cancel' capability that re-credits the entitlement delta and is itself reviewed."
+          },
+          {
+            "process": "loan.request.lifecycle",
+            "edge_case": "Repayment capacity vs. statutory deduction cap — activation schedules installments without checking that monthly repayment ≤ 10% of wage (KLL Art. 59) or that it collides with existing loans/garnishments.",
+            "proposed_step": "Add a submit/validate precondition 'monthly_installment_within_deduction_cap' aggregating all active deductions against the 10% (25% alimony) ceiling."
+          },
+          {
+            "process": "loan.request.lifecycle",
+            "edge_case": "Interest charged on employer loan — schema captures interest_rate but KLL Art. 59 prohibits interest on employer debts; no rule rejects a non-zero rate.",
+            "proposed_step": "Add refuse_if 'interest_rate > 0 for employer-originated loan'."
+          },
+          {
+            "process": "loan.request.lifecycle",
+            "edge_case": "Outstanding loan at termination — no linkage to deduct the remaining balance from EOSB/final settlement (KLL Art. 51/59) before the employee leaves.",
+            "proposed_step": "Add a termination hook that closes/settles active loans against terminal indemnity."
+          }
+        ],
+        "regulatory_gaps": [
+          {
+            "regulation": "WPS",
+            "article": "PAM 5th-of-month deadline / 7-day enforcement rule (Kuwait WPS, AS'HAL Resolution 15)",
+            "gap": "No process enforces that salary transfer completes by the 5th (7-day legal outer limit), and there is no per-employee compliance check — Kuwait flags WPS violations at the individual worker level, not company aggregate.",
+            "fix": "Add a deadline-aware gate and per-payslip WPS-eligibility validation; refuse/escalate commit when disbursement would breach the statutory window or any single employee cannot be paid via the mandated banking channel."
+          },
+          {
+            "regulation": "WPS",
+            "article": "AS'HAL mandatory portal (from 1 Nov 2025)",
+            "gap": "SIF is generated but there is no requirement that approvals, transactions and working-hours data flow through the AS'HAL portal, nor confirmation of file acceptance.",
+            "fix": "Add explicit AS'HAL submission + acceptance-confirmation steps and treat unconfirmed transmission as an incomplete objective."
+          },
+          {
+            "regulation": "GOSI",
+            "article": "PIFSS Social Security Law — contribution due by 15th of following month; 1% late penalty if unpaid within 10 days",
+            "gap": "GOSI appears only as a payslip deduction line; there is no step to remit employer+employee contributions to PIFSS by the due date, nor penalty/late-payment handling.",
+            "fix": "Add a 'gosi.remittance' step producing the PIFSS contribution report and payment with a due-date gate and penalty escalation."
+          },
+          {
+            "regulation": "GOSI",
+            "article": "PIFSS registration within 10 days of hire; de-registration within 10 days of end of service",
+            "gap": "No onboarding/offboarding validation that Kuwaiti/eligible-GCC employees are registered/de-registered with PIFSS within the statutory 10-day window.",
+            "fix": "Add hire/termination preconditions verifying PIFSS registration status and timely de-registration."
+          },
+          {
+            "regulation": "GOSI",
+            "article": "PIFSS contribution rates and ceiling (employee 8%/employer 11.5%; max contributory salary KWD 2,750; basic-fund cap KWD 1,500)",
+            "gap": "compute has no validation that GOSI is applied only to eligible nationals (expats are excluded and instead accrue EOSB), at the correct rate, and capped at the ceiling.",
+            "fix": "Add a compute validation 'gosi_applied_correctly': nationality-based eligibility, correct rate split, and ceiling capping; expats routed to EOSB accrual instead."
+          },
+          {
+            "regulation": "KLL",
+            "article": "Article 51 & 53 (End-of-Service Indemnity)",
+            "gap": "No EOSB computation exists: 15 days/year first 5 years + 1 month/year thereafter (monthly-paid, cap 1.5 yrs), calculated on gross salary, with Art. 53 resignation tiering (nil <3 yrs, ½ 3–5, ⅔ 5–10, full ≥10).",
+            "fix": "Add an EOSB capability that computes indemnity on gross pay with tenure/resignation-vs-termination tiering and includes it in final settlement runs."
+          },
+          {
+            "regulation": "KLL",
+            "article": "Article 59 (wage deduction limits)",
+            "gap": "Loan installments are scheduled with no enforcement of the 10% loan-deduction cap (25% for alimony/food/employer debts) or the no-interest rule.",
+            "fix": "Enforce aggregate deduction caps at both loan activation and payroll compute, and reject interest on employer loans."
+          },
+          {
+            "regulation": "KLL",
+            "article": "Article 38 (disciplinary deductions max 5 days/month)",
+            "gap": "No handling of disciplinary fines or the 5-days-per-month cap with carryover of the excess to subsequent months.",
+            "fix": "Add a disciplinary-deduction rule capping monthly penalty at 5 days' wage and rolling the remainder forward."
+          },
+          {
+            "regulation": "KLL",
+            "article": "Annual leave (30 days after 1 year), sick-leave graduated tiers, maternity 70 days, Hajj 21 days, iddah",
+            "gap": "Leave flow does not encode statutory entitlement accrual, minimum-service eligibility, paid/unpaid tiering, or leave-encashment/carryover rules; unused leave must be paid out on termination.",
+            "fix": "Model per-type statutory entitlement, accrual and pay-tier rules, and termination encashment of accrued leave."
+          },
+          {
+            "regulation": "KLL",
+            "article": "Article 44 (notice period — 3 months monthly-paid)",
+            "gap": "No modeling of notice-period pay/pay-in-lieu in termination settlements.",
+            "fix": "Add notice-period entitlement to the final-settlement computation."
+          }
+        ],
+        "sod_gaps": [
+          {
+            "process": "payroll.run.lifecycle",
+            "gap": "SoD is declared on review/commit as roles [preparer, approver] but compute and validate (the steps that shape the numbers) have no SoD binding — the same identity can compute, validate, and then act as approver if role assignment isn't enforced across the whole chain.",
+            "fix": "Bind preparer identity at compute and enforce approver ≠ any identity that ran compute/validate; capture actor identity as evidence on every mutating step."
+          },
+          {
+            "process": "payroll.run.lifecycle",
+            "gap": "Commit requires human_reviewer but there is no independent second control for the WPS SIF disbursement (payment release) — approving the run and releasing funds should be separated.",
+            "fix": "Split payroll approval from bank/WPS disbursement authorization into distinct roles/steps."
+          },
+          {
+            "process": "loan.request.lifecycle",
+            "gap": "Requester ≠ approver is enforced but there is no separation between the approver and the party that activates/schedules and later disburses the loan; loan disbursement lacks a finance/treasury control distinct from approval.",
+            "fix": "Introduce a separate disbursement authorization role distinct from the loan approver."
+          },
+          {
+            "process": "leave.request.lifecycle",
+            "gap": "Approver may be the same person who manages the employee's entitlement balance; no control preventing the approver from also adjusting entitlement records.",
+            "fix": "Separate entitlement administration from leave approval."
+          },
+          {
+            "process": "all",
+            "gap": "No maker-checker on master-data changes (bank/IBAN, salary rate, employee status) that feed payroll — a single actor changing an IBAN before commit can redirect a WPS payment.",
+            "fix": "Add SoD-gated, reviewed master-data change flow with a cooling-off/verification before the next payroll run."
+          }
+        ],
+        "missing_rollbacks": [
+          {
+            "step": "payroll.run.commit",
+            "failure_mode": "WPS SIF file generated but bank/AS'HAL transmission fails or is rejected after status=committed (irreversible).",
+            "compensating_action": "Emit a compensating adjustment/void-and-reissue run linked to the original, flag the run as 'committed-not-disbursed', and open a reconciliation task instead of leaving an orphaned committed run."
+          },
+          {
+            "step": "payroll.run.commit",
+            "failure_mode": "GOSI remittance or WPS disbursement partially succeeds (some employees paid, some failed).",
+            "compensating_action": "Generate a supplementary SIF for the failed subset and record per-employee disbursement status; do not mark objective clean until all lines confirmed."
+          },
+          {
+            "step": "leave.request.record",
+            "failure_mode": "LeaveRecord persisted but entitlement decrement fails (partial success — verification predicate would fail).",
+            "compensating_action": "Automatically reverse the LeaveRecord (or re-credit) to keep record and entitlement atomically consistent, then re-queue; currently recovery=manual_reconciliation only."
+          },
+          {
+            "step": "loan.request.activate",
+            "failure_mode": "Loan set to active but installment schedule generation fails.",
+            "compensating_action": "Roll loan status back to approved and clear any partial schedule so no active loan exists without a schedule (avoid uncollectible/unrecorded principal)."
+          },
+          {
+            "step": "payroll.run.compute",
+            "failure_mode": "Re-compute replaces prior payslip lines but crashes mid-write, leaving mixed old/new lines.",
+            "compensating_action": "Compute into a staging set and swap atomically; on failure discard staging and retain last-good lines."
+          }
+        ],
+        "missing_ask_if_policies": [
+          {
+            "process": "payroll.run.lifecycle",
+            "condition": "run contains newly hired, terminated, or unpaid-leave employees whose prorated pay/EOSB was auto-computed",
+            "rationale": "Proration and terminal settlements are high-risk and legally sensitive; a human should confirm before commit."
+          },
+          {
+            "process": "payroll.run.lifecycle",
+            "condition": "projected disbursement date is within N days of (or past) the WPS 5th-of-month / 7-day statutory deadline",
+            "rationale": "Late payment is a legal offence with employer liability; the system should ask/escalate before it silently misses the window."
+          },
+          {
+            "process": "payroll.run.lifecycle",
+            "condition": "total run value or headcount deviates from prior period by more than a configured percentage",
+            "rationale": "Large period-over-period variance is the primary fraud/error signal and warrants explicit human confirmation, not just a passive finding."
+          },
+          {
+            "process": "payroll.run.lifecycle",
+            "condition": "any employee's bank/IBAN was changed since the last committed run",
+            "rationale": "Payment-diversion fraud control; changed payee details should trigger a confirmation before disbursement."
+          },
+          {
+            "process": "leave.request.lifecycle",
+            "condition": "leave is unpaid, is a once-per-service entitlement (Hajj), or crosses statutory sick-pay tier boundaries",
+            "rationale": "These affect pay and one-time eligibility; the requester/approver should confirm the pay impact and eligibility consumption."
+          },
+          {
+            "process": "leave.request.lifecycle",
+            "condition": "requested leave overlaps a rotation/coverage-critical period for oilfield operations",
+            "rationale": "Operational staffing risk in oilfield services requires a supervisory confirmation beyond entitlement availability."
+          },
+          {
+            "process": "loan.request.lifecycle",
+            "condition": "aggregate monthly repayment across all active loans/garnishments would exceed the KLL Art. 59 10% (or 25%) deduction ceiling",
+            "rationale": "Statutory deduction cap breach must prompt confirmation/restructuring rather than silent scheduling."
+          },
+          {
+            "process": "loan.request.lifecycle",
+            "condition": "requester has remaining tenure or contract end date shorter than the loan term",
+            "rationale": "Loan would outlast employment, creating recovery risk against EOSB; should prompt confirmation."
+          }
+        ]
+      }
+    }
+  ],
+  "verdict": {
+    "worklist": [
+      {
+        "rank": 1,
+        "title": "YAML HTML Escaping Corruption",
+        "severity": "CRITICAL",
+        "agreement": 1,
+        "summary": "YAML files contain literal HTML entities (e.g., &quot;, &gt;) which will cause parsing failures or incorrect string values, especially with leading '&' acting as YAML anchors.",
+        "target_file": "All YAML files",
+        "testable": true,
+        "proposed_test": "Write a CI script that strictly parses all domain-pack YAML files and asserts no HTML entities exist in the keys or values.",
+        "actionable": true,
+        "raised_by": [
+          "perplexity-adv-deep-research"
+        ]
+      },
+      {
+        "rank": 2,
+        "title": "Leave/Loan Lifecycle Input & Idempotency Mismatch",
+        "severity": "CRITICAL",
+        "agreement": 2,
+        "summary": "The lifecycles require a `request_id` as input, but the first step (`submit`) requires a full request payload. A new request cannot have an ID before submission, breaking the flow and idempotency.",
+        "target_file": "leave.request.lifecycle.yaml, loan.request.lifecycle.yaml",
+        "testable": true,
+        "proposed_test": "Execute a dry-run test of the lifecycle starting with a raw payload (no ID) and assert it successfully binds to the submit step and propagates the generated ID.",
+        "actionable": true,
+        "raised_by": [
+          "perplexity-adv-deep-research",
+          "gpt-5.4-pro"
+        ]
+      },
+      {
+        "rank": 3,
+        "title": "Missing Approval State Transitions",
+        "severity": "CRITICAL",
+        "agreement": 1,
+        "summary": "Downstream steps (`leave.request.record`, `loan.request.activate`) require `request_status_is_approved`, but the review step only creates a `HumanTask` and lacks an effect that transitions the status to `approved`.",
+        "target_file": "leave.request.lifecycle.yaml, loan.request.lifecycle.yaml",
+        "testable": true,
+        "proposed_test": "Simulate a completed review task and assert the request status transitions to 'approved' before the record/activate step is invoked.",
+        "actionable": true,
+        "raised_by": [
+          "perplexity-adv-deep-research"
+        ]
+      },
+      {
+        "rank": 4,
+        "title": "Kuwait WPS & AS'HAL Deadline Non-compliance",
+        "severity": "HIGH",
+        "agreement": 1,
+        "summary": "No process enforces that salary transfers complete by the statutory 5th-of-month deadline, nor is there confirmation of SIF acceptance via the mandatory AS'HAL portal.",
+        "target_file": "payroll.run.lifecycle.yaml",
+        "testable": true,
+        "proposed_test": "Add a validation step that fails the run if the projected disbursement date exceeds the 5th of the following month.",
+        "actionable": true,
+        "raised_by": [
+          "claude-opus-4.8"
+        ]
+      },
+      {
+        "rank": 5,
+        "title": "KLL Art 59 Deduction Caps & Negative Net Pay",
+        "severity": "HIGH",
+        "agreement": 1,
+        "summary": "Loan installments and disciplinary deductions are scheduled without enforcing the KLL Article 59 cap (10% of wage for loans, 25% total), risking negative or illegally low net pay.",
+        "target_file": "loan.request.lifecycle.yaml, payroll.run.lifecycle.yaml",
+        "testable": true,
+        "proposed_test": "Create a payroll compute test with a loan deduction > 10% of gross pay and assert the validation step rejects the run.",
+        "actionable": true,
+        "raised_by": [
+          "claude-opus-4.8"
+        ]
+      },
+      {
+        "rank": 6,
+        "title": "Incomplete Separation of Duties (SoD) Enforcement",
+        "severity": "HIGH",
+        "agreement": 2,
+        "summary": "Roles are declared (preparer, approver) but there is no identity binding preventing the same user from computing payroll, approving it, and releasing WPS funds.",
+        "target_file": "payroll.run.lifecycle.yaml",
+        "testable": true,
+        "proposed_test": "Attempt to execute the commit step using the same user ID that executed the compute step; assert the action is denied.",
+        "actionable": true,
+        "raised_by": [
+          "perplexity-adv-deep-research",
+          "claude-opus-4.8"
+        ]
+      }
+    ],
+    "consensus_note": "Models strongly agreed on structural flaws in the YAML lifecycles (input mismatches, state transitions) that would block execution. Claude provided deep, localized domain expertise on Kuwaiti labor law (WPS, KLL, GOSI) which is critical for a compliant enterprise deployment."
+  }
+}

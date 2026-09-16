@@ -1,0 +1,796 @@
+{
+  "lane": "architecture",
+  "timestamp": "2026-09-16T08:08:55.885264+00:00",
+  "files": [
+    "backend/ai/engine/cognition/turn/runner.py",
+    "backend/ai/engine/agent/reasoning.py",
+    "backend/ai/engine/cognition/turn/intent.py"
+  ],
+  "panel": [
+    "o3-pro",
+    "claude-opus-4.8",
+    "gpt-5.3-codex"
+  ],
+  "judge": "gemini-3.1-pro",
+  "raw_reviews": [
+    {
+      "model": "o3-pro",
+      "findings": {
+        "dependency_graph": [
+          {
+            "from": "cognition.turn.runner",
+            "to": "cognition.turn.salience",
+            "coupling": "tight"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "cognition.turn.retrieve",
+            "coupling": "tight"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "cognition.turn.draft",
+            "coupling": "tight"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "cognition.turn.critic",
+            "coupling": "tight"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "cognition.turn.execute",
+            "coupling": "tight"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "cognition.turn.verify",
+            "coupling": "tight"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "cognition.turn.intent",
+            "coupling": "tight"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "core.database",
+            "coupling": "tight"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "llm.router",
+            "coupling": "tight"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "memory.working",
+            "coupling": "loose"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "plugins.weather_extractor",
+            "coupling": "loose"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "cognition.notifier",
+            "coupling": "loose"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "agent.tools",
+            "coupling": "loose"
+          },
+          {
+            "from": "agent.reasoning",
+            "to": "llm.router",
+            "coupling": "tight"
+          },
+          {
+            "from": "agent.reasoning",
+            "to": "knowledge_graph.*",
+            "coupling": "loose"
+          },
+          {
+            "from": "cognition.turn.intent",
+            "to": "llm.router",
+            "coupling": "tight"
+          },
+          {
+            "from": "cognition.turn.intent",
+            "to": "cognition.turn.runner",
+            "coupling": "loose"
+          }
+        ],
+        "single_points_of_failure": [
+          {
+            "location": "cognition.turn.runner → await _broadcast_run(...)",
+            "risk": "_broadcast_run is lazily imported and may remain None, yielding a TypeError that aborts the whole turn.",
+            "mitigation": "Guard call with `if _broadcast_run:` or inject a no-op fallback."
+          },
+          {
+            "location": "TurnPipelineRunner._write_ledger_row()",
+            "risk": "Any DB error thrown by LedgerWitness bubbles up (no try/except) and terminates the request.",
+            "mitigation": "Wrap ledger writes in retry/`try: … except` and downgrade to warning on failure."
+          },
+          {
+            "location": "self.db.commit() calls scattered across run()",
+            "risk": "A single DB outage blocks every reply path (even clarification).",
+            "mitigation": "Use best-effort commits with `suppress(Exception)` and queue for async retry."
+          },
+          {
+            "location": "BudgetTracker.consume() inside fan-out",
+            "risk": "Null db or token-quota overflow raises and kills fan-out as well as fallback path.",
+            "mitigation": "Catch & log budget errors; never propagate."
+          },
+          {
+            "location": "execute_learn_fact in pending-confirmation short-circuit",
+            "risk": "If executor hangs, the whole conversation blocks despite this being a fast path.",
+            "mitigation": "Run the tool in a timeout-guarded task and fall back to normal pipeline on timeout."
+          }
+        ],
+        "idempotency_gaps": [
+          {
+            "operation": "Pending-confirmation fast-path (execute_learn_fact)",
+            "risk": "Re-sending the same confirmation message creates duplicate memory cards because there is no uniqueness check.",
+            "fix": "Store a deterministic idempotency key (fact hash + user) and ignore duplicates at executor level."
+          },
+          {
+            "operation": "Turn ledger writes (multiple _write_ledger_row invocations)",
+            "risk": "If run() restarts after partial failure, duplicated stage rows appear; analytics become inconsistent.",
+            "fix": "Add UNIQUE(run_id, stage_index) and use ON CONFLICT DO UPDATE."
+          },
+          {
+            "operation": "Worker-pool fan-out",
+            "risk": "No correlation key between retries; rerunning the orchestrator can enqueue the same worker task twice.",
+            "fix": "Generate deterministic worker_task_id from (run_id, step, worker_role). Reject duplicates."
+          }
+        ],
+        "missing_circuit_breakers": [
+          {
+            "location": "route_chat LLM calls (fan-out workers, verification, synthesis)",
+            "scenario": "External LLM service latency spikes and awaits forever → request never returns.",
+            "mitigation": "Wrap every route_chat in `asyncio.wait_for` with sane timeout and fallback path."
+          },
+          {
+            "location": "WorkerPool.fan_out()",
+            "scenario": "Unbounded number of parallel workers could exhaust token or connection budgets.",
+            "mitigation": "Introduce semaphore / bulkhead and configurable max_workers."
+          },
+          {
+            "location": "self.executor.execute() inside ExecuteWitness",
+            "scenario": "Downstream API becomes slow; no timeout or breaker, so turn blocks >30 s.",
+            "mitigation": "Use async timeout and open/half-open circuit after N consecutive failures."
+          }
+        ],
+        "top_architectural_risks": [
+          {
+            "decision": "Monolithic TurnPipelineRunner orchestrates >1500 lines of logic and many mutable instance variables.",
+            "cost_to_change": "HIGH",
+            "recommendation": "Separate into composable strategy objects per stage with explicit interfaces; enables unit testing and hot-swap."
+          },
+          {
+            "decision": "Heavy synchronous DB dependency in the hot path (ledger, budget, cache) without graceful degradation.",
+            "cost_to_change": "MED",
+            "recommendation": "Introduce write-behind queue or outbox pattern so chat answers are not blocked by DB."
+          },
+          {
+            "decision": "Reliance on regex heuristics for critical routing (weather, mutation detection, capability guard).",
+            "cost_to_change": "LOW",
+            "recommendation": "Move to intent classification / feature flags with ML model; keep regex as fallback."
+          },
+          {
+            "decision": "Background `ensure_future` tasks (trajectory write, AutoMemoryExtractor) are fire-and-forget.",
+            "cost_to_change": "MED",
+            "recommendation": "Attach exception handler / supervisor so unhandled errors do not crash event loop."
+          },
+          {
+            "decision": "Lazy global singleton `_broadcast_run_event` imported after first use.",
+            "cost_to_change": "LOW",
+            "recommendation": "Wire notifier via dependency injection in __init__ instead of module global."
+          }
+        ],
+        "hidden_assumptions": [
+          {
+            "assumption": "broadcast_run_event will be set before first await call.",
+            "breaks_when": "import order changes or notifier module fails; TypeError raised."
+          },
+          {
+            "assumption": "route_chat returns `input_tokens`, `output_tokens`, `model` every time.",
+            "breaks_when": "LLM router changes response schema → arithmetic on None fails."
+          },
+          {
+            "assumption": "DB commit is fast and always succeeds.",
+            "breaks_when": "RDS failover / network partition; whole turn aborts due to unhandled exception."
+          },
+          {
+            "assumption": "Weather extractor plugin exposes `is_weather_query` and `extract_weather_location` exactly.",
+            "breaks_when": "Host supplies different signature; AttributeError swallowed but feature silently disabled."
+          },
+          {
+            "assumption": "System clock monotonic/timezone consistent (used for latency, isoformat without tzinfo).",
+            "breaks_when": "Container timezone mis-configured or clock skew — latency negative, ordering wrong."
+          }
+        ]
+      }
+    },
+    {
+      "model": "claude-opus-4.8",
+      "findings": {
+        "dependency_graph": [
+          {
+            "from": "cognition.turn.runner",
+            "to": "cognition.turn.witnesses(salience/retrieve/draft/critic/execute/ledger)",
+            "coupling": "tight"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "llm.router.route_chat",
+            "coupling": "tight"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "cognition.turn.intent.IntentResolver",
+            "coupling": "loose"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "cognition.turn.navigation",
+            "coupling": "loose"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "cognition.notifier.broadcast_run_event",
+            "coupling": "loose"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "memory.working.get_working_memory (in-proc singleton)",
+            "coupling": "tight"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "cognition.dialogue.pending_action (in-proc singleton)",
+            "coupling": "tight"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "agent.budget.BudgetTracker",
+            "coupling": "tight"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "core.database.get_store/session_factory",
+            "coupling": "tight"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "cognition.plan.loop.ReActLoop",
+            "coupling": "loose"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "cognition.plan.planner.SkillAwarePlanner",
+            "coupling": "loose"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "agent.workers.WorkerPool (fan-out)",
+            "coupling": "loose"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "agent.registry.AgentRegistry",
+            "coupling": "loose"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "agent.tools.get_tool_definitions/execute_learn_fact",
+            "coupling": "tight"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "host services (weather_extractor/envelope_synthesizer/domain_context_assembler injected)",
+            "coupling": "loose"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "cognition.auto_memory.AutoMemoryExtractor",
+            "coupling": "loose"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "cognition.trajectory.write_trajectory",
+            "coupling": "loose"
+          },
+          {
+            "from": "agent.reasoning.PulseAgent",
+            "to": "llm.router.route_chat",
+            "coupling": "tight"
+          },
+          {
+            "from": "agent.reasoning.PulseAgent",
+            "to": "knowledge_graph.engine/retry/synthesis/cache_store",
+            "coupling": "tight"
+          },
+          {
+            "from": "agent.reasoning.PulseAgent",
+            "to": "knowledge_store.db (session reach-through)",
+            "coupling": "tight"
+          },
+          {
+            "from": "cognition.turn.intent.IntentResolver",
+            "to": "llm.router.route_chat",
+            "coupling": "tight"
+          },
+          {
+            "from": "cognition.turn.intent",
+            "to": "instance_config.api_catalog (ADR-0017 seam)",
+            "coupling": "loose"
+          },
+          {
+            "from": "cognition.turn.runner",
+            "to": "llm.prompts.build_chat_prompt",
+            "coupling": "tight"
+          }
+        ],
+        "single_points_of_failure": [
+          {
+            "location": "llm.router.route_chat",
+            "risk": "Every stage (intent, draft, critic, synthesis, verify, weather-normalize, clarify, fan-out, KG finalize) funnels through one LLM router. A provider outage or latency spike degrades or stalls all paths simultaneously.",
+            "mitigation": "Add per-task-lane fallback models, timeouts, bulkheads and a circuit breaker; ensure every call site already fail-soft returns to a deterministic path (most do, but weather/verify add latency)."
+          },
+          {
+            "location": "memory.working.get_working_memory() in-process singleton (pending_weather focus, anaphora entity focus)",
+            "risk": "Conversational state (pending_weather, focus entity) lives in process memory. With >1 web worker or a restart, the follow-up turn lands on a different process and loses the pending intent — weather clarification loop breaks silently.",
+            "mitigation": "Back working memory + pending_action store with a shared store (Redis/DB) keyed by conversation_id; make it a first-class witness input, not a module-global."
+          },
+          {
+            "location": "cognition.dialogue.pending_action.get_pending_action_store() singleton",
+            "risk": "Memory-card confirmation ('yes, remember X') relies on in-proc pending state; lost across workers/restarts, causing dropped or misattributed confirmations.",
+            "mitigation": "Persist pending actions with TTL in a shared store scoped by conversation_id."
+          },
+          {
+            "location": "self.db single AsyncSession threaded through the whole turn + fire-and-forget tasks",
+            "risk": "One session is reused for all ledger writes and committed multiple times; concurrent fire-and-forget tasks (trajectory, auto-memory) reusing it trigger asyncpg 'another operation in progress'. If the session dies mid-turn, all ledger rows for the turn are lost.",
+            "mitigation": "Already partially mitigated (trajectory uses own session); extend to AutoMemoryExtractor; wrap ledger writes so a failure is non-fatal to the user response; consider an outbox for ledger durability."
+          },
+          {
+            "location": "cognition.notifier.broadcast_run_event",
+            "risk": "run.started/step/completed events are awaited inline; a hung broadcaster (e.g. websocket/pubsub) can block turn progress since calls are not uniformly wrapped in try/except.",
+            "mitigation": "Make all broadcasts fire-and-forget with timeout + swallow errors; never let telemetry gate the turn."
+          },
+          {
+            "location": "Open-Meteo keyless exact-match geocoder (implicit dependency behind weather path)",
+            "risk": "External free gazetteer with no key, no SLA, exact-match only; a rename/outage breaks all weather turns and triggers extra LLM normalization calls.",
+            "mitigation": "Add caching, a fallback geocoder, and a circuit breaker; treat weather as a pluggable host capability (it is injected) rather than special-cased in the runner."
+          }
+        ],
+        "idempotency_gaps": [
+          {
+            "operation": "Pre-S1 pending-confirmation execute_learn_fact on affirmative reply",
+            "risk": "A retried request or double-tapped 'yes' calls execute_learn_fact twice, staging duplicate memory cards; pending is cleared only after the call so a mid-call failure/retry duplicates.",
+            "fix": "Derive an idempotency key from (conversation_id, fact-hash) and dedupe at the store; clear pending before/atomically with the write; make learn_fact upsert."
+          },
+          {
+            "operation": "S5 tool execution / mutations (create_dq_rule, plan_task, call_host_api writes)",
+            "risk": "No per-tool-call idempotency key; a client retry or pipeline replay re-dispatches the same mutation. Confirm-flow reduces but does not eliminate this for the confirmed step.",
+            "fix": "Attach a deterministic idempotency key (run_id + step_id + tool + arg-hash) propagated to the executor/host API; require host endpoints to honor it."
+          },
+          {
+            "operation": "_write_ledger_row per stage + final commit",
+            "risk": "On retry of the same turn_id the ledger accrues duplicate rows; turn_id is generated fresh per call so retries also fork ledger identity, making dedupe impossible.",
+            "fix": "Accept an external turn/idempotency id from the caller; upsert ledger rows on (turn_id, stage_index); make commits idempotent."
+          },
+          {
+            "operation": "AutoMemoryExtractor.try_extract (fire-and-forget, invoked on multiple return paths)",
+            "risk": "Fired on single-pass, ReAct, and pulse-loop completion; the same user_message can be extracted more than once across paths or retries, creating duplicate memories.",
+            "fix": "Idempotent extraction keyed by (conversation_id, message-hash); guard with a dedupe check before insert."
+          },
+          {
+            "operation": "Fan-out worker delegation + synthesis",
+            "risk": "Worker tasks and orchestrator synthesis have no idempotency; a partial failure/retry re-runs workers (cost + possible duplicate artifacts).",
+            "fix": "Key worker artifacts by (run_id, worker_role, task-hash); make WorkerPool.fan_out resumable/idempotent."
+          },
+          {
+            "operation": "run.started/run.completed broadcasts",
+            "risk": "Emitted on every return branch; retried or double-executed turns emit duplicate lifecycle events that downstream consumers may double-count.",
+            "fix": "Include a monotonic event id / run_id and make consumers dedupe; emit completed exactly once via a finally block."
+          }
+        ],
+        "missing_circuit_breakers": [
+          {
+            "location": "llm.router.route_chat (intent, draft, critic-LLM, synthesis, verify, weather-normalize x2, clarify, finalize, follow-ups)",
+            "scenario": "LLM provider degradation: each turn issues 5-10 sequential LLM calls with no breaker; latency multiplies and thread/connection pools saturate under load, cascading to full-service brownout."
+          },
+          {
+            "location": "executor / call_host_api tool dispatch in S5 and fan-out workers",
+            "scenario": "Host API slow or erroring: tool calls have per-tool try/except but no breaker, so every turn keeps hammering a failing host endpoint, amplifying the outage and burning token budget on retries."
+          },
+          {
+            "location": "Open-Meteo geocoder / web_research weather path",
+            "scenario": "Geocoder outage causes repeated no_match → LLM normalize → clarify → pending_weather loop, each turn re-hitting the failing external service with extra LLM cost."
+          },
+          {
+            "location": "WorkerPool.fan_out orchestration",
+            "scenario": "One slow/failing worker (or the LLM behind it) has no breaker/timeout aggregation, so a stuck worker can hold the whole turn until the pool's own timeout, with no fast-fail after repeated failures."
+          },
+          {
+            "location": "DB session (ledger writes + commits)",
+            "scenario": "Database contention/outage: writes are awaited inline with no breaker, so DB slowness directly inflates turn latency and can block the user-facing response even though the answer is already computed."
+          },
+          {
+            "location": "VerificationWitness post-answer verify",
+            "scenario": "Verification adds an extra LLM call after the answer is ready; with no breaker a verify-lane outage adds latency to every tool-bearing turn for zero user benefit (answer is not corrected on error anyway)."
+          }
+        ],
+        "top_architectural_risks": [
+          {
+            "decision": "TurnPipelineRunner.run() as a ~1000-line god-method with 7+ inline short-circuit return branches (pending-confirm, nav fast-path, off_limits, clarify/disambiguate, fan-out, pulse-loop, multi-step, single-pass)",
+            "cost_to_change": "HIGH",
+            "recommendation": "Decompose into a strategy/router pattern: each path a discrete handler with a common TurnContext and single finalize/telemetry sink. This removes duplicated ledger-write/broadcast/commit blocks (currently copy-pasted 6+ times) and makes each branch independently testable."
+          },
+          {
+            "decision": "Runtime routing decided by many independent feature flags (NAVIGATION_RESOLVER_ENABLED, INTENT_RESOLVER_ENABLED, AGENT_ORCHESTRATOR_ENABLED, PULSE_LOOP_ENABLED, KG_MULTI_STEP_ENABLED, PULSE_VERIFY_ENABLED, PULSE_ENVELOPE_ENABLED)",
+            "cost_to_change": "HIGH",
+            "recommendation": "Combinatorial path explosion makes behavior non-deterministic across environments and nearly impossible to fully test. Consolidate into a single declared 'pipeline profile' with explicit precedence, and add contract tests per profile."
+          },
+          {
+            "decision": "Conversational/session state in process-global singletons (working memory, pending_action store)",
+            "cost_to_change": "MED",
+            "recommendation": "This silently forbids horizontal scaling and breaks on restart/rolling deploy. Externalize to a shared, TTL'd store before scaling out; it is a latent correctness bug, not just a perf one."
+          },
+          {
+            "decision": "Domain-specific weather logic (detection, LLM location/question normalization, pending_weather loop, deterministic force-tool) hardwired into the generic runner",
+            "cost_to_change": "MED",
+            "recommendation": "Leaky abstraction: the generic orchestrator knows about one host feature. Move weather resolution behind the injected host capability interface (weather_extractor already exists) and express 'force a tool / clarify-loop' as a general re-ask primitive."
+          },
+          {
+            "decision": "Fire-and-forget asyncio.ensure_future for trajectory + auto-memory with shared/closing DB sessions",
+            "cost_to_change": "LOW",
+            "recommendation": "These tasks are unawaited, unmonitored, and can outlive the request/session (documented asyncpg race). Use a bounded background task manager (or outbox) with their own sessions and error capture; never leak the request session."
+          },
+          {
+            "decision": "LLM-guessed 'zone' drives whether anti-fabrication GROUNDING RULES apply, plus multiple deterministic overrides patched on top (weather, endpoint-confidence >=0.7)",
+            "cost_to_change": "MED",
+            "recommendation": "Correctness of grounding hinges on a fuzzy classifier plus ad-hoc corrections. Make zone a scored decision with explicit fallbacks and instrument misclassification rate; the growing list of overrides signals the classifier boundary is wrong."
+          },
+          {
+            "decision": "Token/LLM-call accounting scattered and reset per path (fan-out sets total_llm_calls=1, ReAct sets total_tokens=0 'tracked elsewhere')",
+            "cost_to_change": "LOW",
+            "recommendation": "Budget enforcement and cost telemetry are unreliable across paths (intent-resolver tokens dropped on fan-out). Centralize accounting in the TurnContext so every branch reports true totals."
+          }
+        ],
+        "hidden_assumptions": [
+          {
+            "assumption": "The engine runs in a single process (working memory, pending_action, and the module-global broadcast_run_event/_draft_tools cache are in-proc).",
+            "breaks_when": "Deployed with >1 worker/replica or behind a load balancer without sticky sessions — follow-up turns (weather clarification, 'yes' confirmations) land on a different process and lose state."
+          },
+          {
+            "assumption": "One DB session can be safely reused across the whole turn and committed multiple times, and no other coroutine touches it concurrently.",
+            "breaks_when": "A fire-and-forget task (auto-memory) or an overlapping await touches the same session → asyncpg 'another operation is in progress'; or a mid-turn commit failure orphans later ledger rows."
+          },
+          {
+            "assumption": "turn_id is generated fresh per call and is the sole idempotency identity.",
+            "breaks_when": "A client retries the same user request — a brand-new turn_id forks ledger/mutations, so retries are neither deduped nor detectable."
+          },
+          {
+            "assumption": "LLM returns well-formed, on-contract JSON/text (intent JSON, synthesis prose, envelope).",
+            "breaks_when": "Model drift or a new provider returns fenced/partial/verbose output; defensive parsers cover common cases but silent fall-through to weaker paths hides regressions."
+          },
+          {
+            "assumption": "conversation_id is stable and unique per user thread, and conversation_history is correctly ordered and trimmed by the caller.",
+            "breaks_when": "Caller reuses/rotates conversation_id or passes unordered history — anaphora/intent context and pending_weather focus attach to the wrong turn."
+          },
+          {
+            "assumption": "Streaming/progress callbacks and telemetry broadcasts are non-critical and their failures are absorbed.",
+            "breaks_when": "A callback blocks rather than throws (slow websocket) — several broadcast awaits are not wrapped, so a hung sink stalls the turn."
+          },
+          {
+            "assumption": "External free services (Open-Meteo geocoder, web_research) are available and exact-match resolvable via LLM normalization.",
+            "breaks_when": "The gazetteer renames/removes a place or is down — the normalize→clarify→pending_weather cycle loops and consumes extra LLM calls without resolving."
+          },
+          {
+            "assumption": "Intent resolver's read-only api_catalog and the S3 tool allow-list stay in sync, and endpoint names the LLM emits actually exist.",
+            "breaks_when": "Catalog and tool registry drift, or the model hallucinates an endpoint — the ladder validates names against the catalog but a stale catalog silently misroutes 'answer' turns."
+          },
+          {
+            "assumption": "salience.route == 'deep' reliably selects the reasoning model and LLM_REASON_MODEL is configured.",
+            "breaks_when": "No reason/escalation model is configured — knowledge_gap turns silently return honest-uncertainty instead of escalating, degrading quality invisibly."
+          },
+          {
+            "assumption": "Only one execution path fires per turn and each writes exactly one final ledger row + one run.completed.",
+            "breaks_when": "Flag combinations or an exception between a short-circuit's ledger write and its return cause a second finalize downstream — double lifecycle events / duplicate final rows."
+          }
+        ]
+      }
+    },
+    {
+      "model": "gpt-5.3-codex",
+      "findings": {
+        "dependency_graph": [
+          {
+            "from": "backend/ai/engine/cognition/turn/runner.py",
+            "to": "ai.engine.llm.router",
+            "coupling": "tight"
+          },
+          {
+            "from": "backend/ai/engine/cognition/turn/runner.py",
+            "to": "ai.engine.cognition.turn.intent",
+            "coupling": "tight"
+          },
+          {
+            "from": "backend/ai/engine/cognition/turn/runner.py",
+            "to": "ai.engine.cognition.turn.execute",
+            "coupling": "tight"
+          },
+          {
+            "from": "backend/ai/engine/cognition/turn/runner.py",
+            "to": "ai.engine.cognition.turn.draft",
+            "coupling": "tight"
+          },
+          {
+            "from": "backend/ai/engine/cognition/turn/runner.py",
+            "to": "ai.engine.cognition.turn.critic",
+            "coupling": "tight"
+          },
+          {
+            "from": "backend/ai/engine/cognition/turn/runner.py",
+            "to": "ai.engine.cognition.notifier",
+            "coupling": "tight"
+          },
+          {
+            "from": "backend/ai/engine/cognition/turn/runner.py",
+            "to": "ai.engine.agent.tools + ai.engine.agent.plugins",
+            "coupling": "loose"
+          },
+          {
+            "from": "backend/ai/engine/agent/reasoning.py",
+            "to": "ai.engine.llm.router",
+            "coupling": "tight"
+          },
+          {
+            "from": "backend/ai/engine/agent/reasoning.py",
+            "to": "ai.engine.knowledge_graph.*",
+            "coupling": "tight"
+          },
+          {
+            "from": "backend/ai/engine/cognition/turn/intent.py",
+            "to": "ai.engine.llm.router",
+            "coupling": "tight"
+          }
+        ],
+        "single_points_of_failure": [
+          {
+            "location": "TurnPipelineRunner.run() and helper functions relying on route_chat() for intent, synthesis, clarification, weather normalization",
+            "risk": "Central LLM routing dependency outage/latency can degrade most branches simultaneously and cause widespread fallback quality loss.",
+            "mitigation": "Add provider-level fallback chain, per-call timeout budgets, and cached deterministic fallbacks for intent/synthesis-critical paths."
+          },
+          {
+            "location": "Awaited notifier calls (broadcast_run_event) at each stage",
+            "risk": "If notifier backend is slow or failing, user-facing turn latency and/or completion can be impacted because step broadcasts are in-band.",
+            "mitigation": "Wrap broadcasts in fail-open try/except with short timeout and enqueue asynchronously to an event bus."
+          },
+          {
+            "location": "Shared mutable self._draft_tools modified inside run()",
+            "risk": "Per-instance excluded_tools mutates runner-level state, causing cross-tenant/tool leakage over time (tools removed for later unrelated requests).",
+            "mitigation": "Treat tool definitions as immutable; derive per-request filtered copy without mutating instance state."
+          },
+          {
+            "location": "Single DB session (self.db) used for critical writes and passed into async fire-and-forget tasks",
+            "risk": "Session lifecycle/race issues can drop memory extraction or cause commit failures under concurrent close/retry conditions.",
+            "mitigation": "Use dedicated scoped session per background task and durable outbox/job queue for post-turn writes."
+          }
+        ],
+        "idempotency_gaps": [
+          {
+            "operation": "Pending-confirmation short-circuit execute_learn_fact() + clear()",
+            "risk": "Client retries or duplicate delivery can create duplicate staged memory actions before state clear is observed.",
+            "fix": "Attach idempotency key (conversation_id + pending_action_id) and enforce dedupe at tool/executor persistence layer."
+          },
+          {
+            "operation": "S5 tool execution of planner-generated calls",
+            "risk": "Turn retries may re-run side-effecting or staging tools without dedupe guarantees.",
+            "fix": "Require per-tool-call idempotency token (run_id + tool_call_id) and executor-side exactly-once/at-least-once-safe semantics."
+          },
+          {
+            "operation": "Fire-and-forget AutoMemoryExtractor.try_extract() invoked from multiple branches",
+            "risk": "Duplicate background extraction and duplicate memory cards on branch re-entry/retry.",
+            "fix": "Persist extraction job with unique key per turn_id and enforce single-consumer processing."
+          },
+          {
+            "operation": "run.completed / run.step.* notifications",
+            "risk": "Duplicate events on retries/re-entrancy can confuse downstream consumers.",
+            "fix": "Publish with deterministic event_id and make consumers idempotent (upsert by event_id)."
+          }
+        ],
+        "missing_circuit_breakers": [
+          {
+            "location": "Multiple route_chat() calls in run() + helpers (_synthesize_tool_results, _clarify_no_matches, weather normalization, intent resolver)",
+            "scenario": "LLM provider slowdown causes cascading latency amplification from serial and nested calls in one turn."
+          },
+          {
+            "location": "Awaited broadcast_run_event calls in main execution path",
+            "scenario": "Notifier degradation blocks pipeline stage progression and increases p95/p99 latency."
+          },
+          {
+            "location": "Worker fan-out path (_try_fan_out -> WorkerPool.fan_out)",
+            "scenario": "Large/degraded worker fleet leads to resource exhaustion without explicit per-turn concurrency breaker."
+          },
+          {
+            "location": "Unbounded asyncio.ensure_future background tasks",
+            "scenario": "Under burst load, detached tasks accumulate and fail silently, causing backpressure and inconsistent side effects."
+          }
+        ],
+        "top_architectural_risks": [
+          {
+            "decision": "Monolithic TurnPipelineRunner orchestrates policy, routing, prompting, execution, persistence, and post-processing in one class.",
+            "cost_to_change": "HIGH",
+            "recommendation": "Split into composable pipeline stages with explicit contracts and an orchestration state machine to reduce regression blast radius."
+          },
+          {
+            "decision": "Heavy behavior control via many feature flags and short-circuit precedence in one flow.",
+            "cost_to_change": "MED",
+            "recommendation": "Introduce declarative routing policy table/decision graph with precedence tests and invariant checks."
+          },
+          {
+            "decision": "Runtime mutation of shared tool list (self._draft_tools) across requests.",
+            "cost_to_change": "LOW",
+            "recommendation": "Use immutable base tool registry and build request-scoped tool view."
+          },
+          {
+            "decision": "Fire-and-forget for durability-relevant actions (trajectory/memory extraction) without job supervision.",
+            "cost_to_change": "MED",
+            "recommendation": "Move to durable async job queue with retry/backoff/dead-letter and observable completion."
+          },
+          {
+            "decision": "Critical routing depends on LLM classification/normalization (intent zone, weather place normalization).",
+            "cost_to_change": "MED",
+            "recommendation": "Add deterministic guardrails and confidence-threshold fallback paths before routing decisions become binding."
+          }
+        ],
+        "hidden_assumptions": [
+          {
+            "assumption": "Pending action store and working memory are reliable across requests/processes.",
+            "breaks_when": "Deployment is multi-process/multi-node without shared durable store, causing lost confirmations/context."
+          },
+          {
+            "assumption": "LLM JSON outputs will remain parseable enough for intent/synthesis control logic.",
+            "breaks_when": "Model drift or provider changes increase malformed outputs, pushing turns into unintended fallbacks."
+          },
+          {
+            "assumption": "Regex-based capability/weather/text-transform detection adequately covers user language.",
+            "breaks_when": "Users ask in other languages/phrasing, leading to incorrect routing or tool suppression."
+          },
+          {
+            "assumption": "A single conversation-level DB session remains valid through all async side work.",
+            "breaks_when": "Request lifecycle closes session before detached tasks finish."
+          },
+          {
+            "assumption": "Tool result envelopes consistently use expected keys (status_code/data/results/items/rows).",
+            "breaks_when": "Endpoint payload shapes change, causing synthesis/table/chart generation to silently degrade."
+          },
+          {
+            "assumption": "Navigation and intent short-circuits always represent safe terminal responses.",
+            "breaks_when": "Resolver false positives bypass retrieval/execution, returning clarification/refusal where a data answer was expected."
+          }
+        ]
+      }
+    }
+  ],
+  "verdict": {
+    "worklist": [
+      {
+        "rank": 1,
+        "title": "LLM Router Single Point of Failure & Missing Circuit Breakers",
+        "severity": "CRITICAL",
+        "agreement": 3,
+        "summary": "All LLM calls funnel through `route_chat` without timeouts or circuit breakers. A provider latency spike will cause cascading failures, thread exhaustion, and stall all execution paths.",
+        "target_file": "backend/ai/engine/cognition/turn/runner.py",
+        "testable": true,
+        "proposed_test": "Mock `route_chat` to sleep for 60s; assert `TurnPipelineRunner.run()` raises a Timeout exception or falls back within an acceptable SLA (e.g., 10s).",
+        "actionable": true,
+        "raised_by": [
+          "o3-pro",
+          "claude-opus-4.8",
+          "gpt-5.3-codex"
+        ]
+      },
+      {
+        "rank": 2,
+        "title": "DB Session Race Condition in Fire-and-Forget Tasks",
+        "severity": "HIGH",
+        "agreement": 3,
+        "summary": "Background tasks (`ensure_future` for trajectory and AutoMemoryExtractor) reuse the main request's DB session. This causes asyncpg 'another operation in progress' errors or fails entirely if the main request completes and closes the session first.",
+        "target_file": "backend/ai/engine/cognition/turn/runner.py",
+        "testable": true,
+        "proposed_test": "Trigger `AutoMemoryExtractor.try_extract` as a background task while concurrently executing a DB query on the main session; assert no asyncpg concurrency exceptions are raised (requires separate scoped sessions).",
+        "actionable": true,
+        "raised_by": [
+          "o3-pro",
+          "claude-opus-4.8",
+          "gpt-5.3-codex"
+        ]
+      },
+      {
+        "rank": 3,
+        "title": "In-Process Singletons for Conversational State",
+        "severity": "HIGH",
+        "agreement": 2,
+        "summary": "Working memory and pending actions (e.g., memory confirmations) are stored in process memory. In a multi-worker or load-balanced environment, follow-up turns will land on different processes and silently lose state.",
+        "target_file": "backend/ai/engine/cognition/dialogue/pending_action.py",
+        "testable": true,
+        "proposed_test": "Simulate a confirmation turn on a new instance of the application (or clear the local dict); assert it can still retrieve the pending action from a durable store (Redis/DB).",
+        "actionable": true,
+        "raised_by": [
+          "claude-opus-4.8",
+          "gpt-5.3-codex"
+        ]
+      },
+      {
+        "rank": 4,
+        "title": "Synchronous Telemetry Broadcasts Block Execution",
+        "severity": "HIGH",
+        "agreement": 3,
+        "summary": "`broadcast_run_event` is awaited inline during the turn pipeline. If the telemetry sink (e.g., websocket) hangs or fails, it blocks the user-facing response or aborts the turn.",
+        "target_file": "backend/ai/engine/cognition/turn/runner.py",
+        "testable": true,
+        "proposed_test": "Mock `broadcast_run_event` to raise an exception or hang; assert that `TurnPipelineRunner.run()` still completes successfully and returns the user response.",
+        "actionable": true,
+        "raised_by": [
+          "o3-pro",
+          "claude-opus-4.8",
+          "gpt-5.3-codex"
+        ]
+      },
+      {
+        "rank": 5,
+        "title": "Lack of Idempotency in Memory Confirmation (execute_learn_fact)",
+        "severity": "HIGH",
+        "agreement": 3,
+        "summary": "Double-tapped 'yes' confirmations or client retries will execute `execute_learn_fact` multiple times, creating duplicate memory cards because there is no deduplication key.",
+        "target_file": "backend/ai/engine/agent/tools.py",
+        "testable": true,
+        "proposed_test": "Call the pending-confirmation fast-path twice with the same conversation and pending action ID; assert that only one memory card is created in the database.",
+        "actionable": true,
+        "raised_by": [
+          "o3-pro",
+          "claude-opus-4.8",
+          "gpt-5.3-codex"
+        ]
+      },
+      {
+        "rank": 6,
+        "title": "Shared Mutable State Leak (`_draft_tools`)",
+        "severity": "MED",
+        "agreement": 1,
+        "summary": "Modifying `self._draft_tools` inside `run()` mutates runner-level state. Tools excluded in one request may remain excluded for subsequent, unrelated requests handled by the same instance.",
+        "target_file": "backend/ai/engine/cognition/turn/runner.py",
+        "testable": true,
+        "proposed_test": "Run a request that excludes a specific tool, then run a second independent request; assert the second request still has access to the tool.",
+        "actionable": true,
+        "raised_by": [
+          "gpt-5.3-codex"
+        ]
+      },
+      {
+        "rank": 7,
+        "title": "Monolithic TurnPipelineRunner God Object",
+        "severity": "MED",
+        "agreement": 3,
+        "summary": "The runner orchestrates >1000 lines of logic with combinatorial feature flags, making it highly fragile and difficult to test comprehensively.",
+        "target_file": null,
+        "testable": false,
+        "proposed_test": null,
+        "actionable": true,
+        "raised_by": [
+          "o3-pro",
+          "claude-opus-4.8",
+          "gpt-5.3-codex"
+        ]
+      }
+    ],
+    "consensus_note": "All three models strongly agreed on the critical risks of missing LLM circuit breakers, the asyncpg race conditions caused by fire-and-forget tasks sharing the main DB session, and the lack of idempotency in memory confirmations. There was also unanimous consensus that the TurnPipelineRunner has become a monolithic 'god object' that needs architectural refactoring."
+  }
+}

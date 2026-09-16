@@ -124,6 +124,18 @@ class Settings(BaseSettings):
     INTENT_RESOLVER_MIN_CONFIDENCE: float = 0.6  # below this → disambiguate/clarify instead of answer
     INTENT_RESOLVER_AMBIGUITY_GAP: float = 0.15  # top-2 candidate gap below this → ambiguous
 
+    # ── Entity Capability Framework (ADR-0032) ──
+    # Generic resolve/search/get/aggregate/describe over registered entity descriptors.
+    # Additive: only instances with an `entities:` block (nibras) expose resolve_entity;
+    # instances without one are unaffected. Legacy list_employees/get_employee stay live.
+    ECF_ENABLED: bool = False  # off until ECF-7 cutover (ADR-0032 gate: goldens green + human sign-off)
+
+    # ── Navigation Resolution (deterministic, bilingual EN/AR pre-classifier) ──
+    # Resolves "fly to / open / take me to <area>" (and Arabic equivalents)
+    # against the instance's navigation_routes BEFORE the LLM, so navigation
+    # is exact, language-aware, and never dead-ends on "entity not found".
+    NAVIGATION_RESOLVER_ENABLED: bool = True
+
     # ── Consolidation Sweep (P4.2) ──
     CONSOLIDATION_SWEEP_MAX_LLM_CALLS: int = 10        # max LLM calls per sweep
     CONSOLIDATION_SWEEP_MIN_CONFIDENCE: float = 0.6     # min confidence to create a skill

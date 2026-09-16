@@ -1,0 +1,345 @@
+{
+  "lane": "prompt_audit",
+  "timestamp": "2026-09-16T08:06:39.644190+00:00",
+  "files": [
+    "backend/ai/engine/llm/prompts.py"
+  ],
+  "panel": [
+    "claude-opus-4.8",
+    "gpt-5.4-pro",
+    "o3-pro"
+  ],
+  "judge": "gemini-3.1-pro",
+  "raw_reviews": [
+    {
+      "model": "claude-opus-4.8",
+      "findings": [
+        {
+          "section": "Module docstring vs identity_directive",
+          "issue": "Docstring mandates 'never hardcode instance-specific content — all prompts use placeholder injection', but identity_directive hardcodes specific endpoint names (get_my_profile, list_my_leave, get_my_leave_balance, list_my_loans, list_my_payslips) and Arabic HR terms (اجازاتي/راتبي/بياناتي/قروضي). Instances without these exact endpoints will get a prompt referencing non-existent tools, and the Arabic terms bind the 'generic' builder to an HR/payroll domain.",
+          "severity": "CRITICAL_BUG",
+          "fix": "Derive self-service endpoint names from api_catalog (e.g. filter names matching /^(get|list)_my_/) and inject them; move domain/language-specific first-person keywords into instance.yaml so the module stays instance-agnostic.",
+          "line_hint": "prompts.py docstring + identity_directive block in build_chat_prompt"
+        },
+        {
+          "section": "Runtime header — current_datetime",
+          "issue": "Datetime is always formatted in UTC ('%A, %B %d, %Y %H:%M UTC'), but the deployment is Kuwait (UTC+3). For an HR/payroll assistant that reasons about leave dates, cut-offs, payroll periods and 'today', UTC will produce off-by-3-hours and potentially off-by-one-day answers near midnight.",
+          "severity": "CRITICAL_BUG",
+          "fix": "Localize to the instance timezone (from instance_config) and label it explicitly (e.g. 'Asia/Kuwait, UTC+3'); optionally show both local and UTC.",
+          "line_hint": "if not current_datetime: now_utc = datetime.now(timezone.utc) ..."
+        },
+        {
+          "section": "identity_directive — first-person scoping",
+          "issue": "'When they say \"my\"/\"me\"/\"I\" it refers to THIS person; never ask who they are ... Do NOT use org-wide list endpoints' conflicts with legitimate manager/HR use of first-person plural ('my team's leave', 'my department's payslips'). The absolute rule forces self-scoped endpoints and forbids clarification even when the reference is genuinely ambiguous.",
+          "severity": "CRITICAL_BUG",
+          "fix": "Scope the rule to singular self-reference and add: for 'my team/department/reports', use role-authorized team endpoints; when scope is ambiguous and role permits both, ask one clarifying question rather than defaulting.",
+          "line_hint": "identity_directive = (f\"**Identity**: ... never ask who they are ...\")"
+        },
+        {
+          "section": "Anonymous user context",
+          "issue": "'answers must not expose data beyond what a public user could see' is vague — 'what a public user could see' is undefined, so the model will interpret the boundary inconsistently (some models will refuse everything, others will over-share).",
+          "severity": "WEAK",
+          "fix": "State the concrete rule: 'You have no authenticated identity. Do not call any endpoint that returns employee, payroll, or personal data. You may only answer general, non-record questions about the platform's public features.'",
+          "line_hint": "user_context = ('Anonymous (no Pulse API key configured ...')"
+        },
+        {
+          "section": "API catalog confirmation instruction",
+          "issue": "The catalog section states only 'Read-only (GET) endpoints need no confirmation' and tags [requires user confirmation], but never explicitly instructs that non-GET / write endpoints MUST be confirmed before calling. In a payroll context an unconfirmed mutating call is high-risk.",
+          "severity": "CRITICAL_BUG",
+          "fix": "Add explicit positive rule: 'Any endpoint marked [requires user confirmation], and all non-GET endpoints, MUST NOT be executed until the user explicitly confirms the specific action and parameters.'",
+          "line_hint": "_build_api_catalog_section: 'Read-only (GET) endpoints need no confirmation.'"
+        },
+        {
+          "section": "Grounding directive — Aggregation Rule 1",
+          "issue": "'For ANY distribution/breakdown/how-many question use an analyze_* endpoint — NEVER count rows from a list_* result' assumes an analyze_* endpoint always exists. If the instance has no analyze_* endpoint, the model is left with no valid path (forbidden from counting, no aggregation tool), producing refusals or wrong answers.",
+          "severity": "WEAK",
+          "fix": "Make the rule conditional: 'If an analyze_* endpoint exists for the domain, use it; otherwise state that only a truncated/paginated sample is available and do not present counts as totals.'",
+          "line_hint": "AGGREGATION RULES (non-negotiable): 1. ... use an `analyze_*` endpoint"
+        },
+        {
+          "section": "Grounding directive — hardcoded pagination limit",
+          "issue": "'List endpoints are paginated and return at most 100 rows' hardcodes a magic number into the prompt. If page size differs per endpoint/instance, the model's reasoning about totals and truncation will be wrong.",
+          "severity": "WEAK",
+          "fix": "Do not assert a fixed page size; rely on the `truncated`/`total` fields in the response and instruct the model to trust those fields rather than a literal count.",
+          "line_hint": "'return at most 100 rows; counting them gives WRONG totals.'"
+        },
+        {
+          "section": "Chart-type guidance conflict (grounding Rule 5 vs RENDERING_CAPABILITIES_SUMMARY)",
+          "issue": "Grounding Rule 5 says 'NEVER default to pie — use the server's suggested_chart_type', while the rendering summary/full block tells the model to 'Use pie when values are parts of a whole' based on its own judgement. Two authorities give conflicting chart-selection logic; the model will be inconsistent, especially when suggested_chart_type is absent.",
+          "severity": "WEAK",
+          "fix": "Establish one precedence: 'If suggested_chart_type is present, it wins. Only apply the parts-of-a-whole heuristic when the server provides no suggestion.'",
+          "line_hint": "grounding '5. CHART TYPE' vs RENDERING_CAPABILITIES_SUMMARY 'Data charts'"
+        },
+        {
+          "section": "Grounding directive — domain-mismatched chart examples",
+          "issue": "The rendering examples use carbon-accounting data (Scope 1/2/3, CO₂e by Module, tonnes) — sustainability domain, not HR/payroll. In a payroll deployment these examples can prime the model toward irrelevant/hallucinated emissions framing and confuse table/column choices.",
+          "severity": "WEAK",
+          "fix": "Use domain-neutral or HR/payroll examples (e.g. headcount by department, leave-balance distribution) so few-shot priming matches Pulse's actual domain.",
+          "line_hint": "RENDERING_CAPABILITIES 'CO2e by Module', 'Scope breakdown' examples"
+        },
+        {
+          "section": "Access no-leak rules vs Grounding 'list/show me' rule",
+          "issue": "The access inventory forbids mentioning 'anything not listed — not even its existence', while the grounding directive tells the model to answer 'list'/'show me' by calling endpoints and reporting returned data. If a live endpoint returns records referencing a module/app not in the user's access inventory, the two rules directly conflict with no stated precedence.",
+          "severity": "STRONG",
+          "fix": "Add precedence: 'Returned data may be presented, but never name apps/modules/features outside the access inventory even if they appear in results; describe such references in generic terms or omit them.'",
+          "line_hint": "_build_access_section HARD RULES vs _build_grounding_directive '\"show me\", \"list\"'"
+        },
+        {
+          "section": "Access section — missing keys / KeyError risk",
+          "issue": "Rendering uses wa['label'], wa['description'], app['name'], app['description'], m['name'] with direct indexing. If instance.yaml omits any of these keys the prompt build raises KeyError and chat fails — a config typo becomes an outage.",
+          "severity": "STRONG",
+          "fix": "Use .get() with defaults and skip malformed entries, mirroring the defensive .get() used in _build_api_catalog_section.",
+          "line_hint": "lines = [f\"- {wa['label']} — {wa['description']}\" ...] etc."
+        },
+        {
+          "section": "RENDERING_CAPABILITIES (full block)",
+          "issue": "The full RENDERING_CAPABILITIES constant is defined but build_chat_prompt only ever appends RENDERING_CAPABILITIES_SUMMARY (and the skill folder holds the examples). The full block appears to be dead code in this path, and it duplicates the Tables rules twice internally, creating maintenance drift between two rendering specs.",
+          "severity": "WEAK",
+          "fix": "Remove the unused full constant from the runtime module (keep only in the skill folder) or document its single source-of-truth role; de-duplicate the repeated Tables section.",
+          "line_hint": "RENDERING_CAPABILITIES = \"\"\"## Rich content rendering ...\"\"\" (two 'Tables' bullets)"
+        },
+        {
+          "section": "RENDERING — mandatory chart rule",
+          "issue": "'when your answer holds 3+ comparable numeric records, emit a Mermaid chart IN ADDITION to a table' is too restrictive — it forces charts for trivial 3-value results and in contexts (voice, plain lists, single follow-up numbers) where a chart adds noise.",
+          "severity": "WEAK",
+          "fix": "Soften to 'consider a chart when it aids comparison of 3+ values'; suppress when the user asked for a single figure or a terse answer.",
+          "line_hint": "'when your answer holds 3+ comparable numeric records, emit a Mermaid chart IN ADDITION to a table'"
+        },
+        {
+          "section": "A/B candidate routing",
+          "issue": "The candidate path rebuilds result = header + candidate.prompt_text + context_section, but the candidate prompt_text is not guaranteed to contain the aggregation/no-leak/self-scope directives (those are appended afterward, so they survive) — yet the candidate can freely override persona/domain rules with no schema validation. A malformed or unsafe candidate silently reaches 20% of live traffic with only debug logging.",
+          "severity": "STRONG",
+          "fix": "Validate candidate prompts before activation (must contain required safety directives) and gate A/B on an explicit enabled flag; fail closed to the active prompt if validation fails.",
+          "line_hint": "if h % 100 < 20: ... result = header + candidate.prompt_text + context_section"
+        },
+        {
+          "section": "Missing rule — endpoint failure / empty-result handling",
+          "issue": "There is no instruction for what to do when call_host_api errors, times out, or returns an unexpected shape. The grounding directive covers empty rows ('say so plainly') but not API failures, so the model may fabricate data or emit raw stack traces.",
+          "severity": "STRONG",
+          "fix": "Add: 'If an endpoint call fails or returns an error/unexpected payload, tell the user plainly that the data could not be retrieved and do not invent values; never expose raw error internals.'",
+          "line_hint": "_build_grounding_directive 'Never invent values; if the data has no matching rows...'"
+        },
+        {
+          "section": "Missing rule — response language",
+          "issue": "The identity directive recognises Arabic first-person terms, but nowhere instructs the model to respond in the user's language. In a Kuwait/Arabic-English deployment the reply language will be inconsistent.",
+          "severity": "WEAK",
+          "fix": "Add an explicit rule: 'Reply in the language of the user's message (Arabic or English); mirror the user's language unless they request otherwise.'",
+          "line_hint": "identity_directive Arabic terms اجازاتي/راتبي/بياناتي/قروضي"
+        },
+        {
+          "section": "Missing rule — sensitive payroll PII beyond self-scope",
+          "issue": "Self-scoping is handled, but there is no rule governing authorized cross-employee access (e.g. HR/manager viewing salaries, national IDs, bank details). The no-leak section only covers apps/modules, not field-level PII sensitivity, so an authorized-but-broad query could over-expose sensitive fields.",
+          "severity": "STRONG",
+          "fix": "Add field-level guidance: 'Even when a user is authorized to view others' records, present only the fields relevant to the request; do not volunteer salary, bank, or ID numbers unless explicitly asked and permitted.'",
+          "line_hint": "_build_access_section HARD RULES (no field-level PII rule)"
+        },
+        {
+          "section": "SYSTEM_PROMPT_INTROSPECT_SYSTEM",
+          "issue": "Instructs 'respond ONLY with valid JSON' for an arbitrarily large tables_block with no cap; long table lists risk truncated/invalid JSON output, and there is no instruction on how to handle unknown/empty descriptions.",
+          "severity": "WEAK",
+          "fix": "Chunk large table lists across calls and add a fallback instruction ('if a table's purpose is unclear, describe it as \"Purpose unclear from schema\" rather than omitting it').",
+          "line_hint": "SYSTEM_PROMPT_INTROSPECT_SYSTEM 'You respond ONLY with valid JSON'"
+        },
+        {
+          "section": "build_sql_prompt — join-path override latitude",
+          "issue": "'do not deviate from the join paths unless you have strong reason to' and 'validate the join makes sense in context' are vague ('strong reason', 'makes sense') — the model will inconsistently follow or abandon the precomputed plan, defeating the plan's purpose.",
+          "severity": "WEAK",
+          "fix": "Replace subjective language with concrete criteria (e.g. 'Only add a join not in the plan if a required column cannot be reached via the given paths; never drop a plan join').",
+          "line_hint": "_PLAN_PREAMBLE 'unless you have strong reason to ... validate the join makes sense'"
+        }
+      ]
+    },
+    {
+      "model": "gpt-5.4-pro",
+      "findings": {
+        "raw": "[\n  {\n    \"section\": \"SYSTEM_PROMPT_INTROSPECT_*\",\n    \"issue\": \"The JSON contract is underspecified: it does not require preserving every input table name exactly once, so models may omit tables, merge them, or humanize key names. Edge cases like audit/junction/system tables are also undefined.\",\n    \"severity\": \"WEAK\",\n    \"fix\": \"Add: \\\"Include every provided table exactly once as a top-level key; preserve the exact table name spelling; do not invent tables; if a table is unclear or purely technical, still include it and say so in the description.\\\"\",\n    \"line_hint\": \"SYSTEM_PROMPT_INTROSPECT_SYSTEM / SYSTEM_PROMPT_INTROSPECT_USER\"\n  },\n  {\n    \"section\": \"build_chat_prompt runtime context\",\n    \"issue\": \"The docstring claims a runtime header with datetime, user, page, knowledge, and memories is prepended to every request, but the code only explicitly prepends `header` on the A/B candidate path. In the normal path, knowledge/memories/header presence depends on the assembler/fallback behavior, so the guarantee is ambiguous.\",\n    \"severity\": \"WEAK\",\n    \"fix\": \"After assembly, always prepend a normalized context block in this function for all paths, or change the docstring to match actual behavior.\",\n    \"line_hint\": \"build_chat_prompt(): docstring, `header = (...)`, `runtime_ctx`, A/B `context_section`\"\n  },\n  {\n    \"section\": \"Identity directive\",\n    \"issue\": \"This block hardcodes endpoint names (`get_my_profile`, `list_my_leave`, etc.) and specific Arabic examples, which conflicts with the module-level rule that prompts should avoid hardcoded instance-specific content. It will break or mislead the model if endpoint names differ, are absent, or are renamed.\",\n    \"severity\": \"CRITICAL_BUG\",\n    \"fix\": \"Derive self-scoped vs org-scoped endpoint guidance from `api_catalog` metadata (e.g. `scope=self|org`, `subject=employee`) and inject only endpoints that actually exist.\",\n    \"line_hint\": \"build_chat_prompt(): `identity_directive = (...)`\"\n  },\n  {\n    \"section\": \"Identity directive\",\n    \"issue\": \"The instruction \\\"never ask who they are\\\" is too absolute. If the employee binding is missing, stale, duplicated, or the user has multiple employments/assignments, the assistant may need a minimal clarifier before retrieving personal payroll/HR data.\",\n    \"severity\": \"WEAK\",\n    \"fix\": \"Change to: \\\"Do not ask identity when a single verified employee binding is present; if identity is missing or ambiguous, ask the smallest clarifying question or ask the user to sign in.\\\"\",\n    \"line_hint\": \"build_chat_prompt(): `never ask who they are` sentence\"\n  },\n  {\n    \"section\": \"Anonymous / unbound-user behavior\",\n    \"issue\": \"When `user_info` is absent, the prompt says answers must not expose more than public data, but it does not explicitly say how to handle first-person requests like \\\"my payslip\\\" or \\\"my leave balance\\\". Without a deny/redirect rule, the model may still attempt an org-wide live-data call.\",\n    \"severity\": \"WEAK\",\n    \"fix\": \"Add a default rule: \\\"If no verified employee identity is bound, do not fulfill first-person personal-data requests; ask the user to sign in or verify identity.\\\"\",\n    \"line_hint\": \"build_chat_prompt(): `else: user_context = (...)` and absence of `identity_directive`\"\n  },\n  {\n    \"section\": \"API catalog section\",\n    \"issue\": \"There is a direct instruction conflict: the intro says \\\"Read-only (GET) endpoints need no confirmation,\\\" but each endpoint can also be tagged `[requires user confirmation]`. A GET endpoint marked as requiring confirmation is given contradictory instructions.\",\n    \"severity\": \"CRITICAL_BUG\",\n    \"fix\": \"Replace the blanket rule with: \\\"Only endpoints explicitly marked as requiring confirmation need confirmation; method alone does not decide.\\\"\",\n    \"line_hint\": \"_build_api_catalog_section(): intro text + endpoint `confirm` tag\"\n  },\n  {\n    \"section\": \"API catalog section\",\n    \"issue\": \"The catalog exposes only name, method, and a one-line description. That is often too vague for reliable endpoint selection in HR/payroll flows because the model cannot see required parameters, self-vs-org scope, pagination behavior, or common filters.\",\n    \"severity\": \"WEAK\",\n    \"fix\": \"Include compact metadata per endpoint: required params, optional filters, pagination support, scope tags like `[self]` / `[org]`, and whether it returns aggregates vs rows.\",\n    \"line_hint\": \"_build_api_catalog_section(): catalog rendering loop\"\n  },\n  {\n    \"section\": \"Live data grounding directive\",\n    \"issue\": \"Aggregation rule #1 hardcodes a dependency on `analyze_*` endpoints even though `_build_grounding_directive` derives domains from whatever GET endpoints exist. If no matching `analyze_*` endpoint is present, the model is ordered to use a tool that may not exist.\",\n    \"severity\": \"CRITICAL_BUG\",\n    \"fix\": \"Emit the aggregation rule conditionally only when a matching `analyze_*` endpoint exists; otherwise instruct the model to say aggregation is unavailable from the current toolset or ask the user to narrow scope.\",\n    \"line_hint\": \"_build_grounding_directive(): `AGGREGATION RULES` item 1\"\n  },\n  {\n    \"section\": \"Live data grounding directive\",\n    \"issue\": \"The instruction to answer live-data questions \\\"from the returned data only\\\" is too restrictive for hybrid questions that need both live facts and explanation/policy context. It can also over-trigger on phrases like \\\"our leave policy\\\" where \\\"our\\\" does not imply database records.\",\n    \"severity\": \"WEAK\",\n    \"fix\": \"Refine to: use live endpoints as the factual source for system records, then optionally add clearly labeled interpretation/reference context when the user asks for explanation or policy.\",\n    \"line_hint\": \"_build_grounding_directive(): opening paragraphs before `AGGREGATION RULES`\"\n  },\n  {\n    \"section\": \"Live data grounding directive\",\n    \"issue\": \"Pagination rule #2 assumes a specific response shape (`truncated`, `TOTAL`, `N`). If endpoint payloads differ or omit totals, the rule becomes impossible to follow consistently.\",\n    \"severity\": \"WEAK\",\n    \"fix\": \"Generalize the rule: \\\"If the response indicates pagination/partial results, explicitly say it is partial and include returned count and total when available.\\\"\",\n    \"line_hint\": \"_build_grounding_directive(): `AGGREGATION RULES` item 2\"\n  },\n  {\n    \"section\": \"Access control section\",\n    \"issue\": \"If `user_access` is missing, `_build_access_section` returns an empty string, which removes the no-leak / least-privilege constraints entirely. In an HR/payroll setting, missing access metadata should default to conservative behavior, not unrestricted behavior.\",\n    \"severity\": \"CRITICAL_BUG\",\n    \"fix\": \"When access inventory is unavailable, append a fallback rule set: do not enumerate capabilities, do not suggest pages/features, answer only generic help, and require explicit authorization/context for scoped actions.\",\n    \"line_hint\": \"_build_access_section(): `if not access: return \\\"\\\"`\"\n  },\n  {\n    \"section\": \""
+      }
+    },
+    {
+      "model": "o3-pro",
+      "findings": [
+        {
+          "section": "SYSTEM_PROMPT_INTROSPECT_SYSTEM",
+          "issue": "Placeholder JSON example uses nested braces that can be mis-parsed by the model as literal output instead of schema; missing escape or wording.",
+          "severity": "WEAK",
+          "fix": "Clarify with wording like: Output MUST be a single JSON object, e.g. {\"table_name\": \"…\"}. Do not include the outer sample braces in your answer.",
+          "line_hint": "SYSTEM_PROMPT_INTROSPECT_SYSTEM: Output format: {{\"table_name\":"
+        },
+        {
+          "section": "Rendering vs. Live-data chart rules",
+          "issue": "Rendering summary lets the model pick chart type (pie/bar/line) based on data, whereas Live-data grounding rule 5 says NEVER default to pie and instead follow server-returned suggested_chart_type. These instructions conflict.",
+          "severity": "STRONG",
+          "fix": "State explicit precedence: “When answering from analyze_* endpoints always follow suggested_chart_type; otherwise follow general rendering guidance.”",
+          "line_hint": "RENDERING_CAPABILITIES_SUMMARY vs. _build_grounding_directive rule 5"
+        },
+        {
+          "section": "Live data grounding – blanket restriction",
+          "issue": "Directive forbids answering from general knowledge for any domain in list (\"do not answer from general knowledge or textbook reference values\"). If endpoint is temporarily unavailable or returns error, assistant is blocked from giving approximate guidance, degrading UX.",
+          "severity": "STRONG",
+          "fix": "Add exception: if the live endpoint fails or is unavailable, the assistant may provide general best-practice info clearly marked as generic.",
+          "line_hint": "_build_grounding_directive: first paragraph"
+        },
+        {
+          "section": "API catalog confirmation",
+          "issue": "Prompt tells which endpoints \"require user confirmation\" but does not instruct the assistant HOW to ask/obtain that confirmation (modal, yes/no question, etc.).",
+          "severity": "WEAK",
+          "fix": "Add rule: “For endpoints flagged ‘requires confirmation’, ask the user ‘Do you want me to proceed?’ and only call after explicit ‘yes’.”",
+          "line_hint": "_build_api_catalog_section: confirm note"
+        },
+        {
+          "section": "Access inventory hard rules",
+          "issue": "Rule blocks even acknowledging existence of capabilities the user lacks. This prevents helpful responses like ‘You don’t have access to X’ and may appear evasive.",
+          "severity": "STRONG",
+          "fix": "Allow negative acknowledgement: The assistant may state that a requested feature exists but is not in the user’s access list, then suggest requesting access.",
+          "line_hint": "_build_access_section: HARD RULES bullet 1–2"
+        },
+        {
+          "section": "Identity directive – non-employee case",
+          "issue": "Directive assumes employee object; no guidance for freelancers, job applicants, or admins querying someone else’s data, causing ambiguity in pronoun resolution.",
+          "severity": "WEAK",
+          "fix": "Add branching guidance: if user_info.employee is null or roles include HR/admin, pronoun ‘my’ should not be auto-bound and assistant must ask which employee is meant.",
+          "line_hint": "identity_directive assembly block"
+        },
+        {
+          "section": "Live data grounding rule 1",
+          "issue": "Mandates using analyze_* for ANY aggregation even when domain lacks such endpoint; blocks valid aggregations on small lists.",
+          "severity": "STRONG",
+          "fix": "Add fallback: if no analyze_* endpoint exists for that domain, it is acceptable to aggregate from list_* after fetching all pages.",
+          "line_hint": "_build_grounding_directive: AGGREGATION RULES point 1"
+        },
+        {
+          "section": "Guidance section duplication guard",
+          "issue": "Deduplication check only looks for RENDERING_CAPABILITIES_SUMMARY substring; if assembler injects full RENDERING_CAPABILITIES block first, duplication still happens.",
+          "severity": "WEAK",
+          "fix": "Search for either summary or full block, or set a flag when inserted instead of substring search.",
+          "line_hint": "build_chat_prompt: if RENDERING_CAPABILITIES_SUMMARY in (result or \"\")"
+        },
+        {
+          "section": "Rendering rule – tables",
+          "issue": "Two separate bullet lists for tables (first and last in big block) can confuse the model about required blank lines and per-line policy.",
+          "severity": "WEAK",
+          "fix": "Merge duplicate instructions into one concise bullet or reference single canonical rule.",
+          "line_hint": "RENDERING_CAPABILITIES: first & last table bullets"
+        },
+        {
+          "section": "Fallback prompt for planner failure",
+          "issue": "No instruction on how to format the final answer (SQL, narrative, both). Model may emit plain prose or SQL unexpectedly.",
+          "severity": "WEAK",
+          "fix": "Add explicit directive: ‘Generate SQL in a ```sql block followed by a short explanation.’ or similar.",
+          "line_hint": "build_fallback_prompt return string"
+        }
+      ]
+    }
+  ],
+  "verdict": {
+    "worklist": [
+      {
+        "rank": 1,
+        "title": "Hardcoded endpoints and Arabic terms in identity directive",
+        "severity": "CRITICAL",
+        "agreement": 2,
+        "summary": "The identity directive hardcodes specific endpoint names (e.g., get_my_profile) and Arabic terms, violating the module's rule against instance-specific content and risking failures if endpoints differ.",
+        "target_file": "prompts.py",
+        "testable": true,
+        "proposed_test": "Assert that `build_chat_prompt` output does not contain hardcoded endpoint names unless they are dynamically injected from the api_catalog.",
+        "actionable": true,
+        "raised_by": [
+          "claude-opus-4.8",
+          "gpt-5.4-pro"
+        ]
+      },
+      {
+        "rank": 2,
+        "title": "Aggregation Rule 1 mandates non-existent `analyze_*` endpoints",
+        "severity": "CRITICAL",
+        "agreement": 3,
+        "summary": "The grounding directive unconditionally commands the model to use `analyze_*` endpoints for aggregations. If the instance lacks these endpoints, the model is blocked from answering.",
+        "target_file": "prompts.py",
+        "testable": true,
+        "proposed_test": "Test `_build_grounding_directive` with a catalog lacking `analyze_*` endpoints; assert the aggregation rule provides a fallback or is conditionally omitted.",
+        "actionable": true,
+        "raised_by": [
+          "claude-opus-4.8",
+          "gpt-5.4-pro",
+          "o3-pro"
+        ]
+      },
+      {
+        "rank": 3,
+        "title": "API catalog confirmation instructions are contradictory and incomplete",
+        "severity": "CRITICAL",
+        "agreement": 3,
+        "summary": "The prompt states 'Read-only (GET) endpoints need no confirmation' while simultaneously tagging GET endpoints with '[requires user confirmation]'. It also fails to explicitly mandate confirmation for non-GET mutating calls.",
+        "target_file": "prompts.py",
+        "testable": true,
+        "proposed_test": "Assert that `_build_api_catalog_section` output explicitly mandates confirmation based on the tag, not just the HTTP method.",
+        "actionable": true,
+        "raised_by": [
+          "claude-opus-4.8",
+          "gpt-5.4-pro",
+          "o3-pro"
+        ]
+      },
+      {
+        "rank": 4,
+        "title": "Absolute 'never ask who they are' rule breaks multi-role/ambiguous queries",
+        "severity": "HIGH",
+        "agreement": 3,
+        "summary": "The strict rule forbidding the model from asking for identity clarification breaks down for managers, HR, or users with ambiguous/missing employee bindings.",
+        "target_file": "prompts.py",
+        "testable": true,
+        "proposed_test": "Provide a mock `user_info` with HR roles; assert the prompt allows asking for clarification when scope is ambiguous.",
+        "actionable": true,
+        "raised_by": [
+          "claude-opus-4.8",
+          "gpt-5.4-pro",
+          "o3-pro"
+        ]
+      },
+      {
+        "rank": 5,
+        "title": "Conflicting chart-type guidance",
+        "severity": "HIGH",
+        "agreement": 2,
+        "summary": "Grounding Rule 5 mandates following the server's `suggested_chart_type` and forbids defaulting to pie charts, while the rendering summary instructs the model to use pie charts for parts-of-a-whole.",
+        "target_file": "prompts.py",
+        "testable": true,
+        "proposed_test": "Assert that the combined prompt establishes clear precedence (e.g., server suggestion overrides general rendering rules).",
+        "actionable": true,
+        "raised_by": [
+          "claude-opus-4.8",
+          "o3-pro"
+        ]
+      },
+      {
+        "rank": 6,
+        "title": "KeyError risk in access section rendering",
+        "severity": "HIGH",
+        "agreement": 1,
+        "summary": "Direct dictionary indexing (e.g., `wa['label']`) in `_build_access_section` will raise KeyErrors and crash the chat if the config YAML is missing keys.",
+        "target_file": "prompts.py",
+        "testable": true,
+        "proposed_test": "Call `_build_access_section` with a malformed access dictionary (missing 'label'/'description'); assert it uses defaults and does not raise KeyError.",
+        "actionable": true,
+        "raised_by": [
+          "claude-opus-4.8"
+        ]
+      },
+      {
+        "rank": 7,
+        "title": "Hardcoded UTC timezone causes date/time reasoning errors in Kuwait",
+        "severity": "HIGH",
+        "agreement": 1,
+        "summary": "The runtime header hardcodes UTC. For a Kuwait deployment (UTC+3), this causes off-by-one-day errors near midnight for payroll and leave calculations.",
+        "target_file": "prompts.py",
+        "testable": true,
+        "proposed_test": "Assert that the runtime header datetime string respects the instance timezone (e.g., UTC+3) rather than hardcoding UTC.",
+        "actionable": true,
+        "raised_by": [
+          "claude-opus-4.8"
+        ]
+      }
+    ],
+    "consensus_note": "The panel strongly agreed on critical prompt engineering flaws: contradictory API confirmation rules, hardcoded dependencies on `analyze_*` endpoints, and overly rigid identity/scoping rules. There was also consensus that the prompt generation logic is brittle against missing data (both in config dictionaries and API payloads)."
+  }
+}

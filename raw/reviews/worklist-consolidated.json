@@ -1,0 +1,538 @@
+[
+  {
+    "lane": "prompt_audit",
+    "rank": 2,
+    "title": "Aggregation Rule 1 mandates non-existent `analyze_*` endpoints",
+    "severity": "CRITICAL",
+    "agreement": 3,
+    "summary": "The grounding directive unconditionally commands the model to use `analyze_*` endpoints for aggregations. If the instance lacks these endpoints, the model is blocked from answering.",
+    "target_file": "prompts.py",
+    "testable": true,
+    "proposed_test": "Test `_build_grounding_directive` with a catalog lacking `analyze_*` endpoints; assert the aggregation rule provides a fallback or is conditionally omitted.",
+    "actionable": true,
+    "raised_by": [
+      "claude-opus-4.8",
+      "gpt-5.4-pro",
+      "o3-pro"
+    ]
+  },
+  {
+    "lane": "prompt_audit",
+    "rank": 3,
+    "title": "API catalog confirmation instructions are contradictory and incomplete",
+    "severity": "CRITICAL",
+    "agreement": 3,
+    "summary": "The prompt states 'Read-only (GET) endpoints need no confirmation' while simultaneously tagging GET endpoints with '[requires user confirmation]'. It also fails to explicitly mandate confirmation for non-GET mutating calls.",
+    "target_file": "prompts.py",
+    "testable": true,
+    "proposed_test": "Assert that `_build_api_catalog_section` output explicitly mandates confirmation based on the tag, not just the HTTP method.",
+    "actionable": true,
+    "raised_by": [
+      "claude-opus-4.8",
+      "gpt-5.4-pro",
+      "o3-pro"
+    ]
+  },
+  {
+    "lane": "architecture",
+    "rank": 1,
+    "title": "LLM Router Single Point of Failure & Missing Circuit Breakers",
+    "severity": "CRITICAL",
+    "agreement": 3,
+    "summary": "All LLM calls funnel through `route_chat` without timeouts or circuit breakers. A provider latency spike will cause cascading failures, thread exhaustion, and stall all execution paths.",
+    "target_file": "backend/ai/engine/cognition/turn/runner.py",
+    "testable": true,
+    "proposed_test": "Mock `route_chat` to sleep for 60s; assert `TurnPipelineRunner.run()` raises a Timeout exception or falls back within an acceptable SLA (e.g., 10s).",
+    "actionable": true,
+    "raised_by": [
+      "o3-pro",
+      "claude-opus-4.8",
+      "gpt-5.3-codex"
+    ]
+  },
+  {
+    "lane": "domain_gaps",
+    "rank": 2,
+    "title": "Leave/Loan Lifecycle Input & Idempotency Mismatch",
+    "severity": "CRITICAL",
+    "agreement": 2,
+    "summary": "The lifecycles require a `request_id` as input, but the first step (`submit`) requires a full request payload. A new request cannot have an ID before submission, breaking the flow and idempotency.",
+    "target_file": "leave.request.lifecycle.yaml, loan.request.lifecycle.yaml",
+    "testable": true,
+    "proposed_test": "Execute a dry-run test of the lifecycle starting with a raw payload (no ID) and assert it successfully binds to the submit step and propagates the generated ID.",
+    "actionable": true,
+    "raised_by": [
+      "perplexity-adv-deep-research",
+      "gpt-5.4-pro"
+    ]
+  },
+  {
+    "lane": "prompt_audit",
+    "rank": 1,
+    "title": "Hardcoded endpoints and Arabic terms in identity directive",
+    "severity": "CRITICAL",
+    "agreement": 2,
+    "summary": "The identity directive hardcodes specific endpoint names (e.g., get_my_profile) and Arabic terms, violating the module's rule against instance-specific content and risking failures if endpoints differ.",
+    "target_file": "prompts.py",
+    "testable": true,
+    "proposed_test": "Assert that `build_chat_prompt` output does not contain hardcoded endpoint names unless they are dynamically injected from the api_catalog.",
+    "actionable": true,
+    "raised_by": [
+      "claude-opus-4.8",
+      "gpt-5.4-pro"
+    ]
+  },
+  {
+    "lane": "prompt_audit",
+    "rank": 1,
+    "title": "Identity directive hardcodes specific endpoint names",
+    "severity": "CRITICAL",
+    "agreement": 2,
+    "summary": "The identity directive hardcodes endpoint names (e.g., get_my_profile, list_my_leave). If the instance lacks these exact names, the model is instructed to call nonexistent endpoints, breaking self-service functionality.",
+    "target_file": "prompt_builder.py",
+    "testable": true,
+    "proposed_test": "Test build_chat_prompt with an api_catalog lacking 'get_my_profile' and assert the prompt does not instruct the model to call it.",
+    "actionable": true,
+    "raised_by": [
+      "claude-opus-4.8",
+      "gpt-5.4-pro"
+    ]
+  },
+  {
+    "lane": "domain_gaps",
+    "rank": 1,
+    "title": "YAML HTML Escaping Corruption",
+    "severity": "CRITICAL",
+    "agreement": 1,
+    "summary": "YAML files contain literal HTML entities (e.g., &quot;, &gt;) which will cause parsing failures or incorrect string values, especially with leading '&' acting as YAML anchors.",
+    "target_file": "All YAML files",
+    "testable": true,
+    "proposed_test": "Write a CI script that strictly parses all domain-pack YAML files and asserts no HTML entities exist in the keys or values.",
+    "actionable": true,
+    "raised_by": [
+      "perplexity-adv-deep-research"
+    ]
+  },
+  {
+    "lane": "domain_gaps",
+    "rank": 3,
+    "title": "Missing Approval State Transitions",
+    "severity": "CRITICAL",
+    "agreement": 1,
+    "summary": "Downstream steps (`leave.request.record`, `loan.request.activate`) require `request_status_is_approved`, but the review step only creates a `HumanTask` and lacks an effect that transitions the status to `approved`.",
+    "target_file": "leave.request.lifecycle.yaml, loan.request.lifecycle.yaml",
+    "testable": true,
+    "proposed_test": "Simulate a completed review task and assert the request status transitions to 'approved' before the record/activate step is invoked.",
+    "actionable": true,
+    "raised_by": [
+      "perplexity-adv-deep-research"
+    ]
+  },
+  {
+    "lane": "prompt_audit",
+    "rank": 2,
+    "title": "build_chat_prompt runtime header and context assembly mismatch",
+    "severity": "CRITICAL",
+    "agreement": 1,
+    "summary": "The `header` is only prepended in the A/B candidate branch. In the standard assembled/fallback path, the runtime header (current time, user, page) is omitted unless injected downstream, violating the function's contract.",
+    "target_file": "prompt_builder.py",
+    "testable": true,
+    "proposed_test": "Test build_chat_prompt without a candidate playbook and assert the returned prompt contains the runtime header (e.g., current time/user).",
+    "actionable": true,
+    "raised_by": [
+      "gpt-5.4-pro"
+    ]
+  },
+  {
+    "lane": "prompt_audit",
+    "rank": 3,
+    "title": "build_fallback_prompt omits the user question",
+    "severity": "CRITICAL",
+    "agreement": 1,
+    "summary": "The `question` parameter passed to build_fallback_prompt is never actually included in the returned string, leaving the model with schema context but no question to answer.",
+    "target_file": "prompt_builder.py",
+    "testable": true,
+    "proposed_test": "Test build_fallback_prompt(context_prose, 'Find my payslip') and assert 'Find my payslip' is in the returned string.",
+    "actionable": true,
+    "raised_by": [
+      "gpt-5.4-pro"
+    ]
+  },
+  {
+    "lane": "prompt_audit",
+    "rank": 4,
+    "title": "build_sql_prompt ROW COUNTS formatting raises ValueError",
+    "severity": "CRITICAL",
+    "agreement": 1,
+    "summary": "Applying the `,` numeric format specifier to the default string `'?'` when `row_count_actual` is missing raises a ValueError ('Cannot specify , with s'), crashing the prompt builder.",
+    "target_file": "prompt_builder.py",
+    "testable": true,
+    "proposed_test": "Test build_sql_prompt with a profile missing 'row_count_actual' and assert it does not raise a ValueError.",
+    "actionable": true,
+    "raised_by": [
+      "claude-opus-4.8"
+    ]
+  },
+  {
+    "lane": "prompt_audit",
+    "rank": 5,
+    "title": "_build_access_section dict indexing raises KeyError",
+    "severity": "CRITICAL",
+    "agreement": 1,
+    "summary": "Direct key access (e.g., wa['label']) on config-supplied data raises a KeyError if a key is missing, aborting the entire prompt build.",
+    "target_file": "prompt_builder.py",
+    "testable": true,
+    "proposed_test": "Test _build_access_section with a user_access dict missing 'label' and assert it handles it gracefully without KeyError.",
+    "actionable": true,
+    "raised_by": [
+      "claude-opus-4.8"
+    ]
+  },
+  {
+    "lane": "instance_review",
+    "rank": 1,
+    "title": "Contradiction: Advisory-only persona with permissive mutation endpoints",
+    "severity": "CRITICAL",
+    "agreement": 1,
+    "summary": "The assistant is described as 'advisory-only' and explicitly instructed not to mutate records, yet the API catalog includes POST actions for creating leave and advancing payroll states (compute/validate/commit).",
+    "target_file": "agent_config.yaml",
+    "testable": true,
+    "proposed_test": "Test that requests to mutate HR/payroll data (e.g., 'approve this payroll run') are either hard-rejected by the agent or that mutation tools are removed from the tool registry.",
+    "actionable": true,
+    "raised_by": [
+      "gpt-5.4-pro"
+    ]
+  },
+  {
+    "lane": "prompt_audit",
+    "rank": 4,
+    "title": "Absolute 'never ask who they are' rule breaks multi-role/ambiguous queries",
+    "severity": "HIGH",
+    "agreement": 3,
+    "summary": "The strict rule forbidding the model from asking for identity clarification breaks down for managers, HR, or users with ambiguous/missing employee bindings.",
+    "target_file": "prompts.py",
+    "testable": true,
+    "proposed_test": "Provide a mock `user_info` with HR roles; assert the prompt allows asking for clarification when scope is ambiguous.",
+    "actionable": true,
+    "raised_by": [
+      "claude-opus-4.8",
+      "gpt-5.4-pro",
+      "o3-pro"
+    ]
+  },
+  {
+    "lane": "architecture",
+    "rank": 2,
+    "title": "DB Session Race Condition in Fire-and-Forget Tasks",
+    "severity": "HIGH",
+    "agreement": 3,
+    "summary": "Background tasks (`ensure_future` for trajectory and AutoMemoryExtractor) reuse the main request's DB session. This causes asyncpg 'another operation in progress' errors or fails entirely if the main request completes and closes the session first.",
+    "target_file": "backend/ai/engine/cognition/turn/runner.py",
+    "testable": true,
+    "proposed_test": "Trigger `AutoMemoryExtractor.try_extract` as a background task while concurrently executing a DB query on the main session; assert no asyncpg concurrency exceptions are raised (requires separate scoped sessions).",
+    "actionable": true,
+    "raised_by": [
+      "o3-pro",
+      "claude-opus-4.8",
+      "gpt-5.3-codex"
+    ]
+  },
+  {
+    "lane": "architecture",
+    "rank": 4,
+    "title": "Synchronous Telemetry Broadcasts Block Execution",
+    "severity": "HIGH",
+    "agreement": 3,
+    "summary": "`broadcast_run_event` is awaited inline during the turn pipeline. If the telemetry sink (e.g., websocket) hangs or fails, it blocks the user-facing response or aborts the turn.",
+    "target_file": "backend/ai/engine/cognition/turn/runner.py",
+    "testable": true,
+    "proposed_test": "Mock `broadcast_run_event` to raise an exception or hang; assert that `TurnPipelineRunner.run()` still completes successfully and returns the user response.",
+    "actionable": true,
+    "raised_by": [
+      "o3-pro",
+      "claude-opus-4.8",
+      "gpt-5.3-codex"
+    ]
+  },
+  {
+    "lane": "architecture",
+    "rank": 5,
+    "title": "Lack of Idempotency in Memory Confirmation (execute_learn_fact)",
+    "severity": "HIGH",
+    "agreement": 3,
+    "summary": "Double-tapped 'yes' confirmations or client retries will execute `execute_learn_fact` multiple times, creating duplicate memory cards because there is no deduplication key.",
+    "target_file": "backend/ai/engine/agent/tools.py",
+    "testable": true,
+    "proposed_test": "Call the pending-confirmation fast-path twice with the same conversation and pending action ID; assert that only one memory card is created in the database.",
+    "actionable": true,
+    "raised_by": [
+      "o3-pro",
+      "claude-opus-4.8",
+      "gpt-5.3-codex"
+    ]
+  },
+  {
+    "lane": "domain_gaps",
+    "rank": 6,
+    "title": "Incomplete Separation of Duties (SoD) Enforcement",
+    "severity": "HIGH",
+    "agreement": 2,
+    "summary": "Roles are declared (preparer, approver) but there is no identity binding preventing the same user from computing payroll, approving it, and releasing WPS funds.",
+    "target_file": "payroll.run.lifecycle.yaml",
+    "testable": true,
+    "proposed_test": "Attempt to execute the commit step using the same user ID that executed the compute step; assert the action is denied.",
+    "actionable": true,
+    "raised_by": [
+      "perplexity-adv-deep-research",
+      "claude-opus-4.8"
+    ]
+  },
+  {
+    "lane": "prompt_audit",
+    "rank": 5,
+    "title": "Conflicting chart-type guidance",
+    "severity": "HIGH",
+    "agreement": 2,
+    "summary": "Grounding Rule 5 mandates following the server's `suggested_chart_type` and forbids defaulting to pie charts, while the rendering summary instructs the model to use pie charts for parts-of-a-whole.",
+    "target_file": "prompts.py",
+    "testable": true,
+    "proposed_test": "Assert that the combined prompt establishes clear precedence (e.g., server suggestion overrides general rendering rules).",
+    "actionable": true,
+    "raised_by": [
+      "claude-opus-4.8",
+      "o3-pro"
+    ]
+  },
+  {
+    "lane": "architecture",
+    "rank": 3,
+    "title": "In-Process Singletons for Conversational State",
+    "severity": "HIGH",
+    "agreement": 2,
+    "summary": "Working memory and pending actions (e.g., memory confirmations) are stored in process memory. In a multi-worker or load-balanced environment, follow-up turns will land on different processes and silently lose state.",
+    "target_file": "backend/ai/engine/cognition/dialogue/pending_action.py",
+    "testable": true,
+    "proposed_test": "Simulate a confirmation turn on a new instance of the application (or clear the local dict); assert it can still retrieve the pending action from a durable store (Redis/DB).",
+    "actionable": true,
+    "raised_by": [
+      "claude-opus-4.8",
+      "gpt-5.3-codex"
+    ]
+  },
+  {
+    "lane": "prompt_audit",
+    "rank": 6,
+    "title": "API catalog confirmation rule conflicts with per-endpoint flag",
+    "severity": "HIGH",
+    "agreement": 2,
+    "summary": "The catalog header asserts 'Read-only (GET) endpoints need no confirmation', contradicting the per-endpoint `requires_confirmation=True` flag and causing ambiguous model behavior.",
+    "target_file": "prompt_builder.py",
+    "testable": true,
+    "proposed_test": "Test _build_api_catalog_section with a GET endpoint requiring confirmation and assert the blanket 'GET needs no confirmation' rule is either omitted or qualified.",
+    "actionable": true,
+    "raised_by": [
+      "claude-opus-4.8",
+      "gpt-5.4-pro"
+    ]
+  },
+  {
+    "lane": "prompt_audit",
+    "rank": 7,
+    "title": "AGGREGATION RULES assume analyze_* exists",
+    "severity": "HIGH",
+    "agreement": 2,
+    "summary": "The grounding directive mandates using `analyze_*` for breakdowns, but does not verify if such endpoints exist in the catalog, forcing the model to call nonexistent tools.",
+    "target_file": "prompt_builder.py",
+    "testable": true,
+    "proposed_test": "Test _build_grounding_directive with a catalog lacking analyze_* endpoints and assert the mandate to use analyze_* is not present.",
+    "actionable": true,
+    "raised_by": [
+      "claude-opus-4.8",
+      "gpt-5.4-pro"
+    ]
+  },
+  {
+    "lane": "prompt_audit",
+    "rank": 8,
+    "title": "Anonymous user context lacks strict boundaries",
+    "severity": "HIGH",
+    "agreement": 2,
+    "summary": "The fallback for anonymous users vaguely restricts data to 'what a public user could see' without explicit rules preventing live-data calls, risking data leaks.",
+    "target_file": "prompt_builder.py",
+    "testable": true,
+    "proposed_test": "Test build_chat_prompt for an anonymous user and assert the prompt contains explicit directives to refuse non-public API calls.",
+    "actionable": true,
+    "raised_by": [
+      "claude-opus-4.8",
+      "gpt-5.4-pro"
+    ]
+  },
+  {
+    "lane": "domain_gaps",
+    "rank": 4,
+    "title": "Kuwait WPS & AS'HAL Deadline Non-compliance",
+    "severity": "HIGH",
+    "agreement": 1,
+    "summary": "No process enforces that salary transfers complete by the statutory 5th-of-month deadline, nor is there confirmation of SIF acceptance via the mandatory AS'HAL portal.",
+    "target_file": "payroll.run.lifecycle.yaml",
+    "testable": true,
+    "proposed_test": "Add a validation step that fails the run if the projected disbursement date exceeds the 5th of the following month.",
+    "actionable": true,
+    "raised_by": [
+      "claude-opus-4.8"
+    ]
+  },
+  {
+    "lane": "domain_gaps",
+    "rank": 5,
+    "title": "KLL Art 59 Deduction Caps & Negative Net Pay",
+    "severity": "HIGH",
+    "agreement": 1,
+    "summary": "Loan installments and disciplinary deductions are scheduled without enforcing the KLL Article 59 cap (10% of wage for loans, 25% total), risking negative or illegally low net pay.",
+    "target_file": "loan.request.lifecycle.yaml, payroll.run.lifecycle.yaml",
+    "testable": true,
+    "proposed_test": "Create a payroll compute test with a loan deduction > 10% of gross pay and assert the validation step rejects the run.",
+    "actionable": true,
+    "raised_by": [
+      "claude-opus-4.8"
+    ]
+  },
+  {
+    "lane": "prompt_audit",
+    "rank": 6,
+    "title": "KeyError risk in access section rendering",
+    "severity": "HIGH",
+    "agreement": 1,
+    "summary": "Direct dictionary indexing (e.g., `wa['label']`) in `_build_access_section` will raise KeyErrors and crash the chat if the config YAML is missing keys.",
+    "target_file": "prompts.py",
+    "testable": true,
+    "proposed_test": "Call `_build_access_section` with a malformed access dictionary (missing 'label'/'description'); assert it uses defaults and does not raise KeyError.",
+    "actionable": true,
+    "raised_by": [
+      "claude-opus-4.8"
+    ]
+  },
+  {
+    "lane": "prompt_audit",
+    "rank": 7,
+    "title": "Hardcoded UTC timezone causes date/time reasoning errors in Kuwait",
+    "severity": "HIGH",
+    "agreement": 1,
+    "summary": "The runtime header hardcodes UTC. For a Kuwait deployment (UTC+3), this causes off-by-one-day errors near midnight for payroll and leave calculations.",
+    "target_file": "prompts.py",
+    "testable": true,
+    "proposed_test": "Assert that the runtime header datetime string respects the instance timezone (e.g., UTC+3) rather than hardcoding UTC.",
+    "actionable": true,
+    "raised_by": [
+      "claude-opus-4.8"
+    ]
+  },
+  {
+    "lane": "instance_review",
+    "rank": 2,
+    "title": "Org-wide sensitive HR data exposed without masking",
+    "severity": "HIGH",
+    "agreement": 1,
+    "summary": "Endpoints like `list_employees` and `get_employee` expose sensitive data like `basic_salary` org-wide. The assistant relies on prompt instructions rather than tool-layer authorization to restrict access.",
+    "target_file": "agent_config.yaml",
+    "testable": true,
+    "proposed_test": "Simulate a user asking for a colleague's salary ('What is John Doe's basic salary?'); assert the system refuses the request due to authorization boundaries.",
+    "actionable": true,
+    "raised_by": [
+      "gpt-5.4-pro"
+    ]
+  },
+  {
+    "lane": "instance_review",
+    "rank": 3,
+    "title": "Hard-coded statutory percentages in domain_facts",
+    "severity": "HIGH",
+    "agreement": 1,
+    "summary": "The persona dictates that GOSI/statutory rates are rule-driven and should not be stated as universal, yet `domain_facts` hardcodes 'typically 9%' and '12%', which will anchor the LLM to these fixed rates.",
+    "target_file": "agent_config.yaml",
+    "testable": true,
+    "proposed_test": "Static analysis test: Assert that `domain_facts` does not contain hardcoded percentage strings (e.g., '9%', '12%') for GOSI/WPS.",
+    "actionable": true,
+    "raised_by": [
+      "gpt-5.4-pro"
+    ]
+  },
+  {
+    "lane": "instance_review",
+    "rank": 4,
+    "title": "Bilingual deployment with English-only topic guards",
+    "severity": "HIGH",
+    "agreement": 1,
+    "summary": "The instance supports Arabic, but the hard-gate patterns for blocking out-of-domain (Carbon/chairman) queries are English-only, allowing Arabic queries to bypass the pre-LLM guard.",
+    "target_file": "agent_config.yaml",
+    "testable": true,
+    "proposed_test": "Send an Arabic translation of a blocked query (e.g., 'chairman overview' in Arabic) and assert it is rejected by the hard-gate router.",
+    "actionable": true,
+    "raised_by": [
+      "gpt-5.4-pro"
+    ]
+  },
+  {
+    "lane": "instance_review",
+    "rank": 5,
+    "title": "Long-term memory (learn_fact) lacks PII restrictions",
+    "severity": "HIGH",
+    "agreement": 1,
+    "summary": "The persona encourages using `learn_fact`, but there are no guardrails preventing the model from storing employee PII, health details, or salary amounts in long-term memory.",
+    "target_file": "agent_config.yaml",
+    "testable": true,
+    "proposed_test": "Prompt the assistant to 'remember that John Doe's salary is 5000 KWD' and assert that the `learn_fact` tool is either not called or rejects the PII payload.",
+    "actionable": true,
+    "raised_by": [
+      "gpt-5.4-pro"
+    ]
+  },
+  {
+    "lane": "architecture",
+    "rank": 7,
+    "title": "Monolithic TurnPipelineRunner God Object",
+    "severity": "MED",
+    "agreement": 3,
+    "summary": "The runner orchestrates >1000 lines of logic with combinatorial feature flags, making it highly fragile and difficult to test comprehensively.",
+    "target_file": null,
+    "testable": false,
+    "proposed_test": null,
+    "actionable": true,
+    "raised_by": [
+      "o3-pro",
+      "claude-opus-4.8",
+      "gpt-5.3-codex"
+    ]
+  },
+  {
+    "lane": "prompt_audit",
+    "rank": 9,
+    "title": "A/B candidate routing loses context and alters composition",
+    "severity": "MED",
+    "agreement": 2,
+    "summary": "Candidate prompts are composed differently than active prompts (e.g., missing assembler context), making A/B testing noisy and potentially duplicating knowledge/memories.",
+    "target_file": "prompt_builder.py",
+    "testable": true,
+    "proposed_test": "Test build_chat_prompt with and without a candidate playbook; assert both paths use the same outer context wrapper.",
+    "actionable": true,
+    "raised_by": [
+      "claude-opus-4.8",
+      "gpt-5.4-pro"
+    ]
+  },
+  {
+    "lane": "architecture",
+    "rank": 6,
+    "title": "Shared Mutable State Leak (`_draft_tools`)",
+    "severity": "MED",
+    "agreement": 1,
+    "summary": "Modifying `self._draft_tools` inside `run()` mutates runner-level state. Tools excluded in one request may remain excluded for subsequent, unrelated requests handled by the same instance.",
+    "target_file": "backend/ai/engine/cognition/turn/runner.py",
+    "testable": true,
+    "proposed_test": "Run a request that excludes a specific tool, then run a second independent request; assert the second request still has access to the tool.",
+    "actionable": true,
+    "raised_by": [
+      "gpt-5.3-codex"
+    ]
+  }
+]

@@ -146,12 +146,16 @@ api_catalog:
     method: GET
     path: /carbon-api/people/employees/
     description: >
-      List employees (first 100 of total; check `total` and `truncated` fields).
-      Returns {total, count, truncated?, caveat?, results[]} with fields:
-      id, employee_no, name_en_given, name_en_family, position, org_unit,
-      is_active, basic_salary.
-      Use to LOOK UP a specific employee by name/number, or show a sample list.
-      Do NOT use for aggregation — use analyze_employees instead.
+      List a SAMPLE of employees (first 100 of total; check `total` and
+      `truncated`). Returns {total, count, truncated?, caveat?, results[]}.
+      Use ONLY to show a sample page or browse. NEVER use this to look up a
+      person by name or number, and NEVER conclude "no such employee" from it —
+      it is capped at 100 rows so the person may exist beyond the page.
+      For ANY lookup by name / number / "is there an employee named X" /
+      "من هو X" — call the standalone resolve_entity TOOL (a function tool,
+      NOT one of these REST endpoints), which scans the COMPLETE population
+      and returns a matched record plus near-miss "Did you mean" suggestions.
+      For counts and breakdowns use analyze_employees.
     requires_auth: true
     requires_confirmation: false
 
@@ -161,8 +165,8 @@ api_catalog:
     description: >
       Get full details for one employee: personal data, position, org unit,
       basic salary, join date, contract type, is_active. Path param {id}
-      is the employee numeric id (resolve via list_employees if you only
-      have a name or employee number).
+      is the employee numeric id (resolve via the resolve_entity TOOL if you
+      only have a name or employee number).
     requires_auth: true
     requires_confirmation: false
 
@@ -419,11 +423,38 @@ excluded_tools:
   - run_ops_workflow
 
 # Slug resolution: lets the LLM find an employee by name rather than numeric id.
+# Note: superseded by ECF entity descriptors (ADR-0032) when ECF_ENABLED=True.
 tools:
   slug_resolution:
     - detail_endpoint: get_employee
       list_endpoint: list_employees
       match_fields: [employee_no, name_en_given, name_en_family]
+
+# ECF entity descriptors (ADR-0032) — loaded when ECF_ENABLED=True.
+# Each descriptor drives the generic resolve/search/get/aggregate/describe
+# capabilities. The algorithm is engine-generic; knowledge is declared here.
+entities:
+  - name: employee
+    model: people.models.Employee
+    identifiers: [employee_no, civil_id, id]
+    search_fields:
+      - {field: full_name,      lang: en, weight: 1.0}
+      - {field: name_en_given,  lang: en, weight: 0.9}
+      - {field: name_en_family, lang: en, weight: 0.9}
+      - {field: name_ar_given,  lang: ar, weight: 1.0, normalize: arabic}
+      - {field: name_ar_family, lang: ar, weight: 1.0, normalize: arabic}
+      - {field: employee_no,    lang: any, weight: 3.0}
+      - {field: civil_id,       lang: any, weight: 2.0}
+    label_map:
+      position:  {model: people.models.Position,  field: title}
+      org_unit:  {model: mdm.models.OrgUnit,       field: name}
+    masking:
+      basic_salary: {capability: people:view_compensation}
+    metrics:
+      # ONE canonical definition each — kills the 55-vs-5 Kuwaiti inconsistency.
+      headcount: {filter: {is_active: true},      description: "Total active employees"}
+      kuwaiti:   {filter: {nationality_code: "KW"}, description: "Employees with nationality_code=KW (not the kuwaitization boolean)"}
+    scope_lookup: org_unit_id__in
 
 # Pre-LLM topic guard: patterns matched against the user's message text.
 # Any match returns a canned refusal WITHOUT calling the LLM.  This is

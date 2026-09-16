@@ -4,7 +4,6 @@
 // (RULE_8), text + icon so the meaning never rides on color alone (RULE_23).
 import PropTypes from 'prop-types';
 import { Chip } from '@mui/material';
-import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 
 function AIGeneratedBadge({ label = 'AI' }) {
   return (
@@ -12,9 +11,6 @@ function AIGeneratedBadge({ label = 'AI' }) {
       size="small"
       variant="outlined"
       color="default"
-      icon={
-        <AutoAwesomeOutlinedIcon sx={{ fontSize: 13, color: 'primary.light' }} aria-hidden="true" />
-      }
       label={label}
       aria-label={label}
     />

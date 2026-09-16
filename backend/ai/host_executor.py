@@ -398,9 +398,20 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
         if method == "GET":
             qs = _people_scope(user, Employee.objects.all(), "org_unit_id__in")
             if pk:
+                # Accept employee_no as well as numeric PK (ECF-4 fix).
+                # Try PK first, then fall back to employee_no so "1046" resolves
+                # via employee_no when no record has PK=1046.
+                employee = None
                 try:
                     employee = qs.get(pk=pk)
-                except Employee.DoesNotExist:
+                except (Employee.DoesNotExist, ValueError, TypeError):
+                    pass
+                if employee is None:
+                    try:
+                        employee = qs.get(employee_no=str(pk))
+                    except Employee.DoesNotExist:
+                        pass
+                if employee is None:
                     return {"status_code": 404, "data": {"detail": "Employee not found"}}
                 return {"status_code": 200, "data": mask_employee(S.EmployeeSerializer(employee).data, user)}
             # Count the full population before slicing — partial pages must
@@ -2196,6 +2207,45 @@ class CarbonHostExecutor(HostAPIExecutor):
             return await sync_to_async(User.objects.get)(pk=self.host_user_id)
         except User.DoesNotExist:
             return None
+
+    # ── ECF entity fetch seam (ADR-0032) ────────────────────────────────
+    # The host provides the ORM fetch so the engine resolver stays domain-free
+    # (RULE_20). Sync by design — the engine wraps it in sync_to_async.
+
+    def entity_fetch(self, model_path: str, filters: dict, fields: list, limit: int) -> list[dict]:
+        """Complete-scan ORM fetch for the ECF resolver, org-scoped (RULE_12)."""
+        import importlib
+
+        mod_name, cls_name = model_path.rsplit(".", 1)
+        model_cls = getattr(importlib.import_module(mod_name), cls_name)
+        qs = model_cls.objects.all()
+
+        # Apply People org-unit scoping for the acting user (RULE_12).
+        if self.host_user_id and model_path.startswith("people.models"):
+            from django.contrib.auth import get_user_model
+            try:
+                user = get_user_model().objects.get(pk=self.host_user_id)
+                qs = _people_scope(user, qs, "org_unit_id__in")
+            except Exception:  # noqa: BLE001 — scoping best-effort; never crash a lookup
+                pass
+
+        if filters:
+            qs = qs.filter(**filters)
+        if limit and limit > 0:
+            qs = qs[:limit]
+        return list(qs.values())
+
+    def user_capabilities(self) -> frozenset:
+        """Return the acting user's CBAC capability keys (for honest masking)."""
+        if not self.host_user_id:
+            return frozenset()
+        try:
+            from accounts.capabilities import get_user_capabilities
+            from django.contrib.auth import get_user_model
+            user = get_user_model().objects.get(pk=self.host_user_id)
+            return frozenset(get_user_capabilities(user))
+        except Exception:  # noqa: BLE001
+            return frozenset()
 
     # ── Confirmation lifecycle (Django Store-session compatible) ────────
 

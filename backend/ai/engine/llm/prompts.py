@@ -271,11 +271,20 @@ def _build_api_catalog_section(api_catalog: list | None) -> str:
     """
     if not api_catalog:
         return ""
+    any_get_needs_confirm = any(
+        (ep.get("method", "GET") or "GET").upper() == "GET" and ep.get("requires_confirmation")
+        for ep in api_catalog
+    )
+    confirm_note = (
+        "Confirmation requirements are marked per endpoint below."
+        if any_get_needs_confirm
+        else "Read-only (GET) endpoints need no confirmation."
+    )
     lines = [
         "## Available Host API Endpoints",
         "",
         "Call these live endpoints via `call_host_api(api_name, ...)` — use the "
-        "exact names below. Read-only (GET) endpoints need no confirmation.",
+        f"exact names below. {confirm_note}",
     ]
     for ep in api_catalog:
         name = ep.get("name", "unknown")
@@ -339,27 +348,43 @@ def _build_grounding_directive(api_catalog: list | None) -> str:
         "matching rows, say so plainly.",
         "",
         "AGGREGATION RULES (non-negotiable):",
-        "1. For ANY distribution, breakdown, or 'how many X are Y' question, "
-        "   use an `analyze_*` endpoint (e.g. `analyze_employees`) — NEVER count "
-        "   rows from a `list_*` result. List endpoints are paginated and return "
-        "   at most 100 rows; counting them gives WRONG totals.",
+    ]
+
+    # Only instruct the model to use analyze_* endpoints when at least one exists
+    # in the catalog — otherwise the instruction references a non-existent tool.
+    has_analyze = any(
+        ep.get("name", "").startswith("analyze_") for ep in (api_catalog or [])
+    )
+    if has_analyze:
+        lines += [
+            "1. For ANY distribution, breakdown, or 'how many X are Y' question, "
+            "   use an `analyze_*` endpoint (e.g. `analyze_employees`) — NEVER count "
+            "   rows from a `list_*` result. List endpoints are paginated and return "
+            "   at most 100 rows; counting them gives WRONG totals.",
+        ]
+    lines += [
         "2. When a list endpoint returns `truncated: true`, you MUST say explicitly "
         "   \"Showing first N of TOTAL\" — never present a partial page as the full set.",
-        "3. When `analyze_*` returns `caveats`, you MUST quote them verbatim in your "
-        "   answer before presenting any chart or table. Missing data is not an error "
-        "   to hide — it is a finding to surface.",
-        "4. Use FK-resolved `label` fields from `analyze_*` results for chart axes, "
-        "   not `raw_value` IDs. A chart labelled 'Supervisor' is correct; "
-        "   a chart labelled '182' is not.",
-        "5. CHART TYPE — use the `suggested_chart_type` field from `analyze_*` results "
-        "   to choose between pie and bar. NEVER default to pie — pie is only correct "
-        "   when the server returns `suggested_chart_type: 'pie'`. "
-        "   A 99% / 1% distribution MUST use a bar chart (the server will say 'bar').",
-        "6. NORMALIZATION — when `was_normalized: true`, you MUST explain what was merged "
-        "   in plain language (e.g. 'Note: \"M\" was merged into \"male\" — this appears "
-        "   to be a data-entry variant. Recommend standardising the source data.'). "
-        "   Quote each entry in `normalization_notes` verbatim. "
-        "   Never silently list merged values as if they were separate categories.",
+    ]
+    if has_analyze:
+        lines += [
+            "3. When `analyze_*` returns `caveats`, you MUST quote them verbatim in your "
+            "   answer before presenting any chart or table. Missing data is not an error "
+            "   to hide — it is a finding to surface.",
+            "4. Use FK-resolved `label` fields from `analyze_*` results for chart axes, "
+            "   not `raw_value` IDs. A chart labelled 'Supervisor' is correct; "
+            "   a chart labelled '182' is not.",
+            "5. CHART TYPE — use the `suggested_chart_type` field from `analyze_*` results "
+            "   to choose between pie and bar. NEVER default to pie — pie is only correct "
+            "   when the server returns `suggested_chart_type: 'pie'`. "
+            "   A 99% / 1% distribution MUST use a bar chart (the server will say 'bar').",
+            "6. NORMALIZATION — when `was_normalized: true`, you MUST explain what was merged "
+            "   in plain language (e.g. 'Note: \"M\" was merged into \"male\" — this appears "
+            "   to be a data-entry variant. Recommend standardising the source data.'). "
+            "   Quote each entry in `normalization_notes` verbatim. "
+            "   Never silently list merged values as if they were separate categories.",
+        ]
+    lines += [
         "",
         "ANSWER WITH DEPTH, NOT A DUMP. After calling the endpoint, synthesise "
         "the result into a direct, insightful answer: name the material facts "

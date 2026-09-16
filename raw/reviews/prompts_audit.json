@@ -1,0 +1,66 @@
+{
+  "task": "prompt_audit",
+  "model": "gpt-4o",
+  "files": [
+    "backend/ai/engine/llm/prompts.py"
+  ],
+  "timestamp": "2026-09-16T07:42:48.807727Z",
+  "result": [
+    {
+      "section": "SYSTEM_PROMPT_INTROSPECT_SYSTEM",
+      "issue": "The instruction 'Respond ONLY with valid JSON' does not specify behavior for partial results, empty database, or what to return in case of schema gaps.",
+      "severity": "STRONG",
+      "fix": "Add explicit instructions for cases where no schema information is provided or if gaps exist, e.g., 'Return an empty object {} if no schema is available, or clearly indicate missing data in partial keys.'",
+      "line_hint": "17-22"
+    },
+    {
+      "section": "build_chat_prompt(user_context)",
+      "issue": "The 'identity_directive' rule doesn't mention error handling for edge cases, e.g., malformed or missing 'employee' data.",
+      "severity": "STRONG",
+      "fix": "Include error handling instructions for missing or malformed 'employee' data, such as defaulting to a general advisory message.",
+      "line_hint": "85-88"
+    },
+    {
+      "section": "build_chat_prompt",
+      "issue": "The fallback prompt (_fallback_prompt) is vague about specific rules for unsupported instances or incomplete configurations.",
+      "severity": "STRONG",
+      "fix": "Define how to handle conversations where fallback routing fails or where default PlaybookBlocks are incomplete.",
+      "line_hint": "191-200"
+    },
+    {
+      "section": "Guidance Section (_build_guidance_section)",
+      "issue": "The rendering capability limitations (e.g., for charts) are not documented for extreme data outliers, exceeding row limits, or API failure.",
+      "severity": "WEAK",
+      "fix": "Specify handling for cases where data exceeds chart rendering limitations or when API fetching fails, such as suggesting error messages or summaries.",
+      "line_hint": "412-442"
+    },
+    {
+      "section": "build_api_catalog_section",
+      "issue": "The section doesn't specify behavior for APIs lacking descriptions or incorrect display fields like 'method' being None.",
+      "severity": "WEAK",
+      "fix": "Add fallback behavior such as 'Use generic descriptions or '**unknown**' values for missing fields and ensure outputs remain functional.'",
+      "line_hint": "450-465"
+    },
+    {
+      "section": "Live data grounding (_build_grounding_directive)",
+      "issue": "Lack of clarity on response for unsupported questions or when no matching endpoint exists for a user's request.",
+      "severity": "STRONG",
+      "fix": "Add fallback instructions like 'If no endpoint matches the user's question, clearly state that the system cannot retrieve this data and suggest alternative queries.'",
+      "line_hint": "480-510"
+    },
+    {
+      "section": "Rich Content Rendering (RENDERING_CAPABILITIES)",
+      "issue": "The directive does not explain what type of responses to give if rendering fails (e.g., UI fallback for charts or diagrams).",
+      "severity": "WEAK",
+      "fix": "Add fallback instructions if rendering fails, e.g., fallback to textual summaries or tabular data instead of diagrams.",
+      "line_hint": "921-955"
+    },
+    {
+      "section": "build_sql_prompt (QueryPlan)",
+      "issue": "The instruction 'Do not deviate from join paths unless you have strong reason' does not define what qualifies as a 'strong reason,' leaving room for inconsistent interpretation.",
+      "severity": "STRONG",
+      "fix": "Clarify what constitutes a 'strong reason' to deviate from join paths, e.g., higher confidence relationships or user-provided clarifications.",
+      "line_hint": "960-965"
+    }
+  ]
+}

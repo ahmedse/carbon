@@ -1,17 +1,9 @@
 // src/shell/AIWorkingIndicator.jsx
 import React from 'react';
 import PropTypes from 'prop-types';
-import { Box, Collapse, Stack, Typography, keyframes } from '@mui/material';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import { Box, CircularProgress, Collapse, Stack, Typography } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-
-const pulse = keyframes`
-  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
-  40% { opacity: 1; transform: scale(1); }
-`;
-
-const DOT_COUNT = 3;
 
 const TYPE_MESSAGES = {
   dq_suggest: 'AI is analyzing your data and generating rule suggestions…',
@@ -30,7 +22,11 @@ function AIWorkingIndicator({
   done = false,
 }) {
   const fallback = TYPE_MESSAGES[conversationType] || TYPE_MESSAGES.chat;
-  const label = stage || (done ? 'Thinking' : fallback);
+  // While working: show live stage or fallback. When done: show step count summary.
+  const steps = Array.isArray(history) ? history.filter(Boolean) : [];
+  const label = done
+    ? `Thought for ${steps.length} step${steps.length !== 1 ? 's' : ''}`
+    : (stage || fallback);
   const clickable = collapsible && typeof onToggle === 'function';
 
   const handleKeyDown = clickable
@@ -52,51 +48,30 @@ function AIWorkingIndicator({
       sx={{
         display: 'flex',
         alignItems: 'center',
-        gap: 1.5,
-        py: 1.5,
+        gap: 1,
+        py: 0.75,
         px: 2,
         cursor: clickable ? 'pointer' : 'default',
-        ...(clickable ? { '&:hover': { bgcolor: 'action.hover' } } : {}),
+        userSelect: 'none',
+        ...(clickable ? { '&:hover': { bgcolor: 'action.hover', borderRadius: 1 } } : {}),
       }}
     >
       {clickable &&
         (expanded ? (
-          <ExpandMoreIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+          <ExpandMoreIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
         ) : (
-          <ChevronRightIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+          <ChevronRightIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
         ))}
-      <AutoAwesomeIcon
-        sx={{
-          fontSize: 18,
-          color: done ? 'text.disabled' : 'primary.light',
-          animation: done ? 'none' : `${pulse} 1.4s ease-in-out infinite`,
-        }}
-      />
-      <Typography variant="caption" color="text.secondary">
+      {!done && (
+        <CircularProgress size={12} thickness={4} aria-hidden="true" sx={{ color: 'primary.light' }} />
+      )}
+      <Typography variant="caption" color={done ? 'text.disabled' : 'text.secondary'} sx={{ fontSize: '0.6875rem' }}>
         {label}
       </Typography>
-      {!done && (
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
-          {Array.from({ length: DOT_COUNT }).map((_, i) => (
-            <Box
-              key={i}
-              sx={{
-                width: 5,
-                height: 5,
-                borderRadius: '50%',
-                bgcolor: 'primary.light',
-                animation: `${pulse} 1.4s ease-in-out ${i * 0.2}s infinite`,
-              }}
-            />
-          ))}
-        </Box>
-      )}
     </Box>
   );
 
   if (!collapsible) return header;
-
-  const steps = Array.isArray(history) ? history.filter(Boolean) : [];
 
   return (
     <Box>

@@ -1173,6 +1173,51 @@ class TurnPipelineRunner:
                 turn_id[:8], exc_info=True,
             )
 
+        # ── [NAV-GATE] Deterministic zero-token navigation fast path ──
+        # The canonical comprehension path is the LLM intent classifier, but
+        # this exact-match fast path is free and injection-proof for the common
+        # case. Both paths converge on the same grounding + propose→confirm.
+        if settings.NAVIGATION_RESOLVER_ENABLED:
+            try:
+                from ai.engine.cognition.turn.navigation import resolve_navigation
+                _nav = resolve_navigation(user_message, instance_config)
+                if _nav.action in ("navigate", "disambiguate"):
+                    total_latency = (time.monotonic() - t0) * 1000
+                    await self._write_ledger_row(
+                        turn_id, instance_id, conversation_id, host_user_id,
+                        "final", 5,
+                        {
+                            "total_latency_ms": total_latency,
+                            "total_tokens": 0,
+                            "total_llm_calls": 0,
+                            "navigation_shortcircuit": _nav.action,
+                            "navigation_source": "deterministic_fast_path",
+                            "navigation_targets": [t.route for t in _nav.targets],
+                        },
+                        total_latency, verdict="pass",
+                    )
+                    if self.db is not None:
+                        await self.db.commit()
+
+                    ledger.final_response = _navigation_text(_nav)[:500]
+                    ledger.total_latency_ms = total_latency
+                    ledger.intent_zone = "platform"
+
+                    response = _navigation_response(_nav)
+                    await _broadcast_run(instance_id, "run.completed", {
+                        "run_id": turn_id,
+                        "total_latency_ms": total_latency,
+                        "total_tokens": 0,
+                        "total_llm_calls": 0,
+                        "navigation_shortcircuit": _nav.action,
+                    })
+                    return response, ledger
+            except Exception:  # noqa: BLE001 - navigation gate must never block the turn
+                logger.warning(
+                    "[%s] Navigation short-circuit failed; continuing normal pipeline",
+                    turn_id[:8], exc_info=True,
+                )
+
         # S1 — Salience
         s1_start = time.monotonic()
         await _broadcast_run(instance_id, "run.step.started", {

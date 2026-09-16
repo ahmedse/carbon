@@ -114,10 +114,14 @@ class ExecuteWitness:
             # Execute independent calls in parallel with asyncio.gather
             if independent:
                 if progress_callback:
-                    try:
-                        await progress_callback(f"Running {len(independent)} tool(s)…")
-                    except Exception:
-                        pass
+                    for tc in independent:
+                        try:
+                            await progress_callback(_narrate_tool(
+                                tc.get("function", {}).get("name", "tool"),
+                                _parse_tool_args(tc),
+                            ))
+                        except Exception:
+                            pass
 
                 # Wave 8A: broadcast tool.started for each independent tool
                 await _broadcast_tool_events("tool.started", independent, self.run_id, self.instance_id)
@@ -163,7 +167,7 @@ class ExecuteWitness:
                 tc_id = tc.get("id", "")
                 if progress_callback:
                     try:
-                        await progress_callback(f"Running {tool_name}…")
+                        await progress_callback(_narrate_tool(tool_name, _parse_tool_args(tc)))
                     except Exception:
                         pass
 
@@ -317,6 +321,43 @@ def _split_by_dependencies(tool_calls: list[dict]) -> tuple[list[dict], list[dic
         else:
             independent.append(tc)
     return independent, dependent
+
+
+def _narrate_tool(tool_name: str, args: dict | None) -> str:
+    """Human, first-person narration of what the assistant is doing right now.
+
+    Richer than "Running <tool>" so the thinking timeline reads like real
+    self-talk (VS Code Copilot style).
+    """
+    a = args or {}
+    name = tool_name or "tool"
+    if name == "resolve_entity":
+        q = (a.get("query") or "").strip()
+        return f"🔎 Searching every record for “{q}”…" if q else "🔎 Searching the records…"
+    if name.startswith("call_host_api"):
+        api = (a.get("api_name") or a.get("api") or "").strip()
+        if api == "analyze_employees":
+            dim = a.get("dimension") or (a.get("query_params") or {}).get("dimension")
+            return f"📊 Analysing employees by {dim}…" if dim else "📊 Analysing the workforce…"
+        if api.startswith("list_"):
+            return f"📇 Fetching {api.removeprefix('list_').replace('_', ' ')}…"
+        if api.startswith("get_"):
+            return f"📄 Looking up {api.removeprefix('get_').replace('_', ' ')}…"
+        return f"📊 Querying live data{f' ({api})' if api else ''}…"
+    if name == "search_knowledge":
+        q = (a.get("query") or "").strip()
+        return f"📚 Checking what I know about “{q}”…" if q else "📚 Checking what I know…"
+    if name == "get_entity_details":
+        return "🧩 Reading the entity's schema and meaning…"
+    if name in ("navigate_to", "open_entity"):
+        return "🧭 Preparing to open the right page…"
+    if name in ("learn_fact", "forget_fact"):
+        return "🧠 Preparing a memory update for your approval…"
+    if name == "inspect_case":
+        return "🔍 Inspecting the process case…"
+    if name == "ask_clarification":
+        return "🤔 Working out what to ask you…"
+    return f"Running {name}…"
 
 
 async def _execute_single_tool(
