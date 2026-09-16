@@ -33,6 +33,9 @@ GRANT_REFUSAL_REASON = "grant: no active, fully-matching ApprovalGrant"
 
 async def _record_grant_refusal(command: Any, principal: str) -> None:
     """Persist a ``stage="grant"`` refusal row so the refusal is attributed."""
+    from ai.identity_propagation import attribution_from_command
+
+    attr = attribution_from_command(command)
     await sync_to_async(PolicyDecisionRow.objects.create, thread_sensitive=True)(
         principal=principal,
         action=command.action or command.tool,
@@ -44,6 +47,10 @@ async def _record_grant_refusal(command: Any, principal: str) -> None:
         autonomy=command.autonomy,
         process_state=command.process_state,
         budget=command.budget,
+        actor_chain=attr["actor_chain"],
+        request_id=attr["request_id"],
+        instance_id=attr["instance_id"],
+        host_user_id=attr["host_user_id"],
     )
 
 

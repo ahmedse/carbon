@@ -71,6 +71,28 @@ HOST_ACTION_REGISTRY: dict[str, str] = {
     "loan.request.activated_and_scheduled": (
         "ai.predicates:loan_request_activated_and_scheduled"
     ),
+    # ── Nibras Employee onboarding lifecycle (PEC-5B) ─────────────────────
+    # submit (mutation) → review (human task) → activate (mutation, final) →
+    # verify (assertion). Binds to People employee views; review uses inbox.
+    "employee.onboarding.submit": "people.views:EmployeeListCreateView",
+    "employee.onboarding.activate": "people.views:EmployeeDetailView",
+    "employee.onboarding.list": "people.views:EmployeeListCreateView",
+    "employee.onboarding.get": "people.views:EmployeeDetailView",
+    "employee.onboarding.completed_and_payroll_eligible": (
+        "ai.predicates:employee_onboarding_completed_and_payroll_eligible"
+    ),
+    # ── Nibras GOSI/WPS SIF filing lifecycle (PEC-5A / P5) ────────────────
+    # generate (mutation) → validate (mutation) → review (human task) →
+    # submit (mutation, final/irreversible statutory filing) → verify
+    # (assertion). Generate/submit bind to the existing WPS export view;
+    # validate binds to payroll validations list; review uses the inbox
+    # sentinel. Values resolve lazily (no people import here).
+    "gosi_wps.sif.generate": "people.views:PayrollRunWPSExportView",
+    "gosi_wps.sif.validate": "people.views:PayrollRunValidationsListView",
+    "gosi_wps.sif.submit": "people.views:PayrollRunWPSExportView",
+    "gosi_wps.sif.submitted_and_reconciled": (
+        "ai.predicates:gosi_wps_sif_submitted_and_reconciled"
+    ),
     # Human-task sentinel (recognized by the loader, not importable).
     HUMAN_TASK_SENTINEL: HUMAN_TASK_SENTINEL,
 }

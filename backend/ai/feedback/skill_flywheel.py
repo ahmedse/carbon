@@ -69,7 +69,9 @@ def feed_run_feedback(run_id: str, *, instance_id: str = PLAN_INSTANCE_ID) -> di
     learning-ledger columns, never host data and never status (RULE_21).
 
     Returns ``{"skill_id", "skill_name", "success", "vetoed", "latency_ms",
-    "updated"}``, or ``None`` when there is nothing to learn from.
+    "updated", "usage_count"}``, or ``None`` when there is nothing to learn
+    from. On a successful update also writes an ``AuditLog`` row with
+    ``action="ai.skill_reused"`` citing the skill (PEC-2A ledger proof).
     """
     from ai.models.core import Run, RunStep
 
@@ -112,7 +114,10 @@ def feed_run_feedback(run_id: str, *, instance_id: str = PLAN_INSTANCE_ID) -> di
             # 0.0 when unmeasured — ``avg_latency_ms`` is NOT NULL in the
             # Django mirror and the EMA treats a 0 observation as "no time".
             await store.update_stats(skill.id, success, latency_ms or 0.0)
-            return skill
+            # Re-fetch after update_stats — that method loads its own row and
+            # the resolve_skill snapshot would otherwise report a stale count.
+            refreshed = await store.resolve_skill(instance_id, skill_name)
+            return refreshed or skill
 
     skill = _run_async(_apply())
     if skill is None:
@@ -125,8 +130,36 @@ def feed_run_feedback(run_id: str, *, instance_id: str = PLAN_INSTANCE_ID) -> di
         "vetoed": vetoed,
         "latency_ms": latency_ms,
         "updated": True,
+        "usage_count": skill.usage_count,
     }
     logger.info("skill flywheel: %s (flags=%d)", result, len(flags))
+
+    # Durable ledger citation (PEC-2A): AuditLog row naming the reused skill.
+    # Best-effort — never break the turn if audit write fails (RULE_21).
+    try:
+        from ai.audit_service import AuditService
+
+        AuditService.log(
+            action="ai.skill_reused",
+            actor="system:skill_flywheel",
+            actor_type="system",
+            target=skill.id,
+            instance_id=instance_id,
+            host_user_id=str(run.host_user_id or ""),
+            detail={
+                "skill_id": skill.id,
+                "skill_name": skill_name,
+                "run_id": str(run.id),
+                "success": success,
+                "vetoed": vetoed,
+                "usage_count": skill.usage_count,
+                "latency_ms": latency_ms,
+            },
+            visibility="shared",
+        )
+    except Exception:  # noqa: BLE001 — audit must never break learning
+        logger.exception("skill flywheel: audit ledger write failed for %s", skill.id)
+
     return result
 
 

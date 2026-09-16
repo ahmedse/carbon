@@ -318,14 +318,28 @@ class PDP:
         autonomy: str = "human_only",
         budget: dict[str, Any] | None = None,
         time: Any = None,
+        *,
+        actor_chain: list[dict[str, Any]] | None = None,
+        request_id: str = "",
+        instance_id: str = "",
+        host_user_id: str | None = None,
     ) -> PolicyDecision:
         """Return a decision for ``principal`` performing ``action``.
 
         Default-deny; forbid overrides permit; an evaluation error on a
         mandatory policy returns ``Decision.REFUSE`` (fail-closed). Every call
         is persisted.
+
+        Attribution kwargs (``actor_chain`` / ``request_id`` / ``instance_id`` /
+        ``host_user_id``) are audit-only (PEC-ID-1) and never influence matching.
         """
         objects = list(objects or [])
+        attr = {
+            "actor_chain": list(actor_chain or []),
+            "request_id": request_id or "",
+            "instance_id": instance_id or "",
+            "host_user_id": host_user_id,
+        }
 
         matched_permits: list[Policy] = []
         matched_deny: Policy | None = None
@@ -347,6 +361,7 @@ class PDP:
                         autonomy=autonomy,
                         process_state=process_state,
                         budget=budget,
+                        **attr,
                     )
                 logger.warning(
                     "non-mandatory policy %r raised and was skipped: %s",
@@ -374,6 +389,7 @@ class PDP:
                 autonomy=autonomy,
                 process_state=process_state,
                 budget=budget,
+                **attr,
             )
 
         # default deny — no permit matched.
@@ -389,6 +405,7 @@ class PDP:
                 autonomy=autonomy,
                 process_state=process_state,
                 budget=budget,
+                **attr,
             )
 
         outcome = self._resolve(matched_permits, autonomy)
@@ -401,6 +418,7 @@ class PDP:
             autonomy=autonomy,
             process_state=process_state,
             budget=budget,
+            **attr,
         )
 
     # ── internals ───────────────────────────────────────────────────────────
@@ -447,6 +465,10 @@ class PDP:
         autonomy: str,
         process_state: dict[str, Any] | None,
         budget: dict[str, Any] | None,
+        actor_chain: list[dict[str, Any]] | None = None,
+        request_id: str = "",
+        instance_id: str = "",
+        host_user_id: str | None = None,
     ) -> PolicyDecision:
         from ai.models.pdp import PolicyDecisionRow
 
@@ -461,6 +483,10 @@ class PDP:
             stage="pdp",
             process_state=process_state,
             budget=budget,
+            actor_chain=list(actor_chain or []),
+            request_id=request_id or "",
+            instance_id=instance_id or "",
+            host_user_id=host_user_id,
         )
         return {
             "decision": decision,
@@ -480,6 +506,11 @@ async def decide(
     autonomy: str = "human_only",
     budget: dict[str, Any] | None = None,
     time: Any = None,
+    *,
+    actor_chain: list[dict[str, Any]] | None = None,
+    request_id: str = "",
+    instance_id: str = "",
+    host_user_id: str | None = None,
 ) -> PolicyDecision:
     """Module-level convenience wrapper over the default :class:`PDP`."""
     return await _default_pdp.decide(
@@ -490,4 +521,8 @@ async def decide(
         autonomy=autonomy,
         budget=budget,
         time=time,
+        actor_chain=actor_chain,
+        request_id=request_id,
+        instance_id=instance_id,
+        host_user_id=host_user_id,
     )

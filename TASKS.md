@@ -44,7 +44,7 @@ evidence → not done.
 
 | Track | Status | Notes |
 |-------|--------|-------|
-| **PEC** (Pulse Enterprise Control-plane, P1–P7) | **ACTIVE — DISPATCHED** | Close metabolism/measurement gaps vs enterprise bar. Specs below §PEC. Leverage: 1→4→2→3→ID→5→6→7 |
+| **PEC** (Pulse Enterprise Control-plane, P1–P7) | **COMPLETE** | All PEC-* DONE (1A–7A, ID-1, 2A–6B, 3B). Evidence in `docs/pulse/evidence/` · handoffs in `TASK-RESULTS.md` |
 | **ECF** (Entity Capability Framework, ADR-0032) | ACTIVE | Specs below — parallel track; do not steal PEC P0 workers |
 | **OF-15…OF-20** (e-Office expansion) | OPEN | Leave-only vertical is live; expand types + workflow graph |
 | **NIR-5/6/7** | AUDIT | ADRs 0027/0028/0029 accepted — likely shipped; confirm Status before re-dispatch |
@@ -75,7 +75,7 @@ evidence → not done.
 **Date:** 2026-09-16  
 **Worker Role:** devops-worker (primary) + backend-worker (health surface only if missing)  
 **Recommended Model:** DeepSeek V4.1-Flash  
-**Status:** READY  
+**Status:** DONE  
 **Depends on:** —  
 **Roadmap:** P1 Heartbeat
 
@@ -125,7 +125,7 @@ Write `TASK-RESULTS.md` section `## PEC-1A` with terminal proof + evidence path.
 **Date:** 2026-09-16  
 **Worker Role:** backend-worker  
 **Recommended Model:** DeepSeek V4.1-Flash  
-**Status:** READY  
+**Status:** DONE  
 **Depends on:** — (parallel with PEC-1A)  
 **Roadmap:** P4 Evaluation Harness
 
@@ -165,7 +165,7 @@ test -f ../docs/pulse/evidence/PEC-4A-eval-baseline.md
 **Date:** 2026-09-16  
 **Worker Role:** backend-worker  
 **Recommended Model:** DeepSeek V4.1-Flash  
-**Status:** READY  
+**Status:** DONE  
 **Depends on:** —  
 **Roadmap:** P7 (F1a/F3 decision already: REMOVE/DEFER — fold guidance into instance.yaml)
 
@@ -203,7 +203,7 @@ test -f ../docs/pulse/evidence/PEC-7A-convergence.md
 **Date:** 2026-09-16  
 **Worker Role:** backend-worker  
 **Recommended Model:** DeepSeek V4.1-Flash  
-**Status:** READY  
+**Status:** DONE  
 **Depends on:** PEC-1A (heartbeat drives consolidation)  
 **Roadmap:** P2
 
@@ -240,7 +240,7 @@ cd /home/ahmed/ws/carbon/backend && \
 **Date:** 2026-09-16  
 **Worker Role:** backend-worker  
 **Recommended Model:** DeepSeek V4.1-Flash  
-**Status:** READY  
+**Status:** DONE  
 **Depends on:** PEC-1A  
 **Roadmap:** P3
 
@@ -273,7 +273,7 @@ cd /home/ahmed/ws/carbon/backend && \
 **Date:** 2026-09-16  
 **Worker Role:** frontend-worker  
 **Recommended Model:** DeepSeek V4.1-Flash  
-**Status:** READY  
+**Status:** DONE  
 **Depends on:** PEC-3A  
 **Screen Spec:** reuse `docs/pulse/PULSE-UX.md` + `PULSE-UX-DESIGN.md` (4-beat story, provenance, dismiss/act). No new full Screen Spec doc required if those cover the panel — attach deviations in TASK-RESULTS.
 
@@ -293,7 +293,7 @@ cd /home/ahmed/ws/carbon/carbon-frontend && npm run lint && npx vitest run src/_
 **Date:** 2026-09-16  
 **Worker Role:** backend-worker  
 **Recommended Model:** DeepSeek V4.1-Flash  
-**Status:** READY  
+**Status:** DONE  
 **Depends on:** — (can start W3)  
 **Contracts:** `shared/security.md`
 
@@ -321,7 +321,7 @@ cd /home/ahmed/ws/carbon/backend && \
 **Date:** 2026-09-16  
 **Worker Role:** backend-worker  
 **Recommended Model:** DeepSeek V4.1-Flash  
-**Status:** READY  
+**Status:** DONE  
 **Depends on:** —  
 **Roadmap:** P5
 
@@ -344,7 +344,7 @@ cd /home/ahmed/ws/carbon/backend && \
 **Date:** 2026-09-16  
 **Worker Role:** backend-worker  
 **Recommended Model:** DeepSeek V4.1-Flash  
-**Status:** READY  
+**Status:** DONE  
 **Depends on:** PEC-5A patterns  
 
 Same pattern as PEC-5A for employee onboarding lifecycle. Evidence + seed + tests.
@@ -355,7 +355,7 @@ Same pattern as PEC-5A for employee onboarding lifecycle. Evidence + seed + test
 **Date:** 2026-09-16  
 **Worker Role:** backend-worker  
 **Recommended Model:** DeepSeek V4.1-Flash  
-**Status:** READY  
+**Status:** DONE  
 **Depends on:** —  
 
 #### Context
@@ -379,7 +379,7 @@ cd /home/ahmed/ws/carbon/backend && \
 **Date:** 2026-09-16  
 **Worker Role:** frontend-worker  
 **Recommended Model:** DeepSeek V4.1-Flash  
-**Status:** READY  
+**Status:** DONE  
 **Depends on:** PEC-6A  
 **Screen Spec:** extend existing Console shell patterns in `AIWorkspace` Processes/Skills tabs; follow `shared/frontend-ready.md` minimally (states: loading/empty/error/success; CBAC lock). Reuse `SkillsPanel` — add actions, do not duplicate.
 

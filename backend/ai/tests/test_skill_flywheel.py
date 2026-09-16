@@ -176,6 +176,7 @@ def test_flywheel_promotes_successful_run(user):
     assert result["vetoed"] == 0
     assert result["latency_ms"] == 1234.5
     assert result["updated"] is True
+    assert result["usage_count"] == 1
 
     skill = _skill_from_store(skill_id)
     assert skill.usage_count == 1
@@ -183,6 +184,13 @@ def test_flywheel_promotes_successful_run(user):
     assert skill.last_executed_at is not None
     # RULE_21 — status is never mutated by the flywheel
     assert skill.status == "draft"
+
+    # PEC-2A — durable ledger citation naming the reused skill
+    from ai.models.core import AuditLog
+
+    ledger = list(AuditLog.objects.filter(action="ai.skill_reused", target=skill_id))
+    assert len(ledger) == 1
+    assert (ledger[0].detail or {}).get("skill_name") == "weekly_load_report"
 
 
 @pytest.mark.django_db(transaction=True)

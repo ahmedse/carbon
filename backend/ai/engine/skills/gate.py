@@ -560,11 +560,16 @@ async def _promote_skill(skill_id: str, db: Session, promoted_by: str = "auto") 
 
 
 async def rollback_skill(skill_id: str, db: Session, reason: str = "") -> Skill:
-    """Deprecate a skill with a rollback reason."""
+    """Deprecate a skill with a rollback reason.
+
+    Enforces the closed transition table (``assert_allowed_transition``) so a
+    skill already in ``deprecated`` cannot be re-rejected silently.
+    """
     skill = first(await db.select(Skill, ("id", skill_id)))
     if not skill:
         raise ValueError(f"Skill not found: {skill_id}")
 
+    assert_allowed_transition(skill.status, "deprecated")
     skill.status = "deprecated"
     skill.gate_status = "rejected"
 

@@ -40,7 +40,7 @@ class _StubPDP:
         self.reason = reason
 
     async def decide(self, principal, action, objects, process_state=None,
-                     autonomy="human_only", budget=None, time=None) -> dict:
+                     autonomy="human_only", budget=None, time=None, **kwargs) -> dict:
         return {
             "decision": self.decision,
             "reason": self.reason,

@@ -17,8 +17,13 @@ def scope_ai_queryset(qs, user):
     ``_check_write_capability`` steps 1-2).  Everyone else sees:
       - ``visibility`` in (global, shared) rows, plus their own ``private`` rows
       - rows in their allowed org subtree (or null-org rows if they hold no org role)
+
+    App partition follows the active brand (``resolve_default_app_identifier``)
+    so Nibras list/SSE agree on ``people`` rather than a hardcoded ``carbon``.
     """
-    qs = qs.filter(app_identifier="carbon")
+    from ai.instance_registry import resolve_default_app_identifier
+
+    qs = qs.filter(app_identifier=resolve_default_app_identifier())
     if user.is_superuser or user_is_global_admin(user):
         return qs
     uid = str(user.id)

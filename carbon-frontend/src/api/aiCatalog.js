@@ -93,6 +93,37 @@ export function listSkills(token) {
 }
 
 /**
+ * Admin promote: run the admission gate for a skill (PEC-6A).
+ * CBAC: ai:publisher | ai:process_owner (server is authority).
+ * @param {string} token
+ * @param {string} skillId
+ * @returns {Promise<{decision: string, verdict: string, skill: object}>}
+ */
+export function promoteSkill(token, skillId) {
+  return apiFetch(`ai/skills/${encodeURIComponent(skillId)}/promote/`, {
+    token,
+    method: 'POST',
+    body: {},
+  });
+}
+
+/**
+ * Admin reject: deprecate a skill with optional reason (PEC-6A).
+ * CBAC: ai:publisher | ai:process_owner (server is authority).
+ * @param {string} token
+ * @param {string} skillId
+ * @param {string} [reason]
+ * @returns {Promise<{decision: string, verdict: string, skill: object}>}
+ */
+export function rejectSkill(token, skillId, reason = '') {
+  return apiFetch(`ai/skills/${encodeURIComponent(skillId)}/reject/`, {
+    token,
+    method: 'POST',
+    body: { reason: reason || '' },
+  });
+}
+
+/**
  * Request-time federated index: DB agents (source of truth) + plugin
  * discovery. Read-only.
  * @param {string} token

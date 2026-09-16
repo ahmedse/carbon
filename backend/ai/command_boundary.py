@@ -132,6 +132,7 @@ class Command:
     instance_id: str = ""
     run_id: str | None = None
     host_user_id: str | None = None
+    request_id: str = ""  # PEC-ID-1 — per-effect correlation (minted if empty)
 
 
 @dataclass
@@ -202,6 +203,7 @@ class _DefaultDenyPDP:
         autonomy: str = "human_only",
         budget: dict[str, Any] | None = None,
         time: Any = None,
+        **_attribution: Any,
     ) -> PolicyDecision:
         return {
             "decision": Decision.REFUSE,
@@ -568,6 +570,9 @@ class CommandBoundary:
         return ""
 
     async def _decide(self, command: Command, principal: str) -> PolicyDecision:
+        from ai.identity_propagation import attribution_from_command
+
+        attr = attribution_from_command(command)
         try:
             return await self._pdp.decide(
                 principal=principal,
@@ -577,6 +582,10 @@ class CommandBoundary:
                 autonomy=command.autonomy,
                 budget=command.budget,
                 time=self._clock.utcnow() if self._clock else None,
+                actor_chain=attr["actor_chain"],
+                request_id=attr["request_id"],
+                instance_id=attr["instance_id"],
+                host_user_id=attr["host_user_id"],
             )
         except Exception:  # noqa: BLE001 — evaluation error → fail closed (P2-07)
             # C-F4a: an infra/evaluation error is an operational FAILURE, not a

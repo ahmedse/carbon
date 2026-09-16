@@ -218,14 +218,24 @@
     "noAppsAvailable": "No Applications Available",
     "noAppsSubtext": "Contact your administrator to get access to domain applications.",
     "insights": {
-      "title": "AI Insights",
-      "empty": "No insights yet…",
+      "title": "Insights from the assistant",
+      "empty": "No insights yet.",
+      "emptyHint": "The assistant reviews your data nightly and will let you know if anything needs attention.",
       "error": "Couldn't load insights",
       "retry": "Retry",
+      "loading": "Loading insights",
       "severityCritical": "Critical",
       "severityWarning": "Warning",
       "severityInfo": "Info",
-      "markAllRead": "Mark all read"
+      "markAllRead": "Mark all read",
+      "act": "View",
+      "dismiss": "Dismiss",
+      "provenanceHint": "What went into this",
+      "provenanceTitle": "What went into this",
+      "dispositionRead": "read",
+      "dispositionActed": "acted on",
+      "dispositionDismissed": "dismissed",
+      "openWithUnread": "Open insights, {{count}} unread"
     }
   },
   "devBanner": {

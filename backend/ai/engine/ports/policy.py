@@ -49,6 +49,11 @@ class PolicyDecisionPoint(Protocol):
         autonomy: str = "human_only",
         budget: dict[str, Any] | None = None,
         time: Any = None,
+        *,
+        actor_chain: list[dict[str, Any]] | None = None,
+        request_id: str = "",
+        instance_id: str = "",
+        host_user_id: str | None = None,
     ) -> PolicyDecision:
         """Return a decision for ``principal`` performing ``action``.
 
@@ -56,5 +61,8 @@ class PolicyDecisionPoint(Protocol):
         ``act_confirm`` / …), not a standing authorization (see plan §7).
         Default-deny; forbid overrides permit; an evaluation error on a
         mandatory policy must return ``Decision.REFUSE``.
+
+        Attribution kwargs are optional audit metadata (PEC-ID-1) and must not
+        change the authorization outcome.
         """
         ...

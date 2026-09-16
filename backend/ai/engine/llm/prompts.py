@@ -11,13 +11,6 @@ below are the only remaining static prompts (schema analysis, not chat).
 # build_chat_prompt() now calls llm.prompt_synthesizer.synthesize_system_prompt()
 # which uses LLM-powered prompt generation tailored to each instance.
 
-import logging
-from datetime import datetime
-
-from ai.engine.core.query import first
-
-logger = logging.getLogger("pulse.llm.prompts")
-
 SYSTEM_PROMPT_INTROSPECT_SYSTEM = """You are a database schema analyst for a {domain} platform called {instance_name}.
 {instance_description}
 You respond ONLY with valid JSON — no markdown, no explanation, no code fences.
@@ -46,25 +39,27 @@ async def build_chat_prompt(
     instance_config: dict | None = None,
     conversation_id: str = "",
     instance_id: str = "",
-    guidance_skills: list | None = None,
 ) -> str:
     """Build the system prompt for chat interactions.
 
-    Uses the PlaybookAssembler to build the instance-specific prompt from
-    versioned PlaybookBlocks (persona, domain rules, tool heuristics, lessons).
+    Prompt-config mechanism (PULSE-CANONICAL §12): ``instance.yaml`` persona /
+    domain_facts via ``_fallback_prompt``. PlaybookBlock assembly and PromptVersion
+    A/B routing are DEFERRED(F3) — not invoked on the hot path. Filesystem
+    ``domain_packs/*/skills`` guidance injection is REMOVED(F1a).
+
     Prepends a runtime header with per-conversation context (datetime, user,
     page, knowledge, memories) so that every request carries current state.
 
-    When conversation_id + instance_id are provided, checks for an A/B
-    candidate prompt (improvement_round=0, is_active=False).  20% of
-    conversations are routed to the candidate for real-world testing.
+    ``conversation_id`` / ``instance_id`` are retained for call-site compatibility;
+    they no longer drive A/B or PlaybookBlock selection.
     """
     from datetime import datetime, timezone
-    from ai.engine.core.database import get_session_factory
-    from ai.engine.llm.playbook import playbook_assembler
+    from ai.engine.llm.playbook import _fallback_prompt
+
+    # Retained for API compatibility; unused after F1a/F3 convergence.
+    _ = (conversation_id, instance_id, system_description, persona, navigation_routes, domain_topics)
 
     config = instance_config or {}
-    persona = persona or {}
 
     # ── Runtime header (per-conversation context) ──────────────────────────
     if not current_datetime:
@@ -111,14 +106,7 @@ async def build_chat_prompt(
             "answers must not expose data beyond what a public user could see)"
         )
 
-    header = (
-        f"# {instance_name}\n\n"
-        f"**Current time**: {current_datetime}\n"
-        f"**Current user**: {user_context}\n"
-        f"**Current page**: {page_context}\n"
-    )
-
-    # ── Assemble instance-specific prompt from PlaybookBlocks ──────────────
+    # ── instance.yaml-backed prompt (canonical; PlaybookBlock path DEFERRED F3)
     _cfg = instance_config or {}
     runtime_ctx = {
         "instance_name": instance_name,
@@ -127,66 +115,10 @@ async def build_chat_prompt(
         "page_context": page_context,
         "relevant_knowledge": relevant_knowledge,
         "relevant_memories": relevant_memories,
-        # YAML persona/domain_facts used by _fallback_prompt when no PlaybookBlocks exist.
         "instance_persona": (_cfg.get("persona") or "").strip(),
         "domain_facts": (_cfg.get("domain_facts") or "").strip(),
     }
-
-    if instance_id:
-        factory = get_session_factory()
-        async with factory() as _db:
-            result = await playbook_assembler.assemble(
-                db=_db,
-                instance_id=instance_id,
-                runtime_context=runtime_ctx,
-            )
-    else:
-        # No instance_id — use fallback (test/standalone path)
-        from ai.engine.llm.playbook import _fallback_prompt
-        result = _fallback_prompt(runtime_ctx)
-
-    # ── A/B candidate routing (20% traffic split) ─────────────────────────
-    if conversation_id and instance_id:
-        try:
-            from ai.engine.core.models import PromptVersion
-
-            factory2 = get_session_factory()
-            async with factory2() as _ab_db:
-                rows = await _ab_db.select(PromptVersion, {
-                    "instance_id": instance_id,
-                    "is_active": False,
-                    "improvement_round": 0,
-                })
-                rows = sorted(
-                    rows,
-                    key=lambda p: p.synthesized_at or datetime.min,
-                    reverse=True,
-                )
-                candidate = first(rows)
-
-            if candidate is not None:
-                import hashlib
-                h = int(hashlib.md5(conversation_id.encode()).hexdigest()[:8], 16)
-                if h % 100 < 20:  # 20% traffic to candidate
-                    logger.info(
-                        f"A/B split: routing conv={conversation_id[:8]} to "
-                        f"candidate prompt v{candidate.id[:8]} "
-                        f"(score={candidate.score})"
-                    )
-                    # Rebuild with candidate replacing the assembled blocks
-                    context_section = (
-                        f"\n\n## Current Context\n\n"
-                        f"**Relevant knowledge from the knowledge graph:**\n{relevant_knowledge}\n\n"
-                        f"**Relevant memories:**\n{relevant_memories}"
-                    )
-                    result = header + "\n" + candidate.prompt_text + context_section
-                else:
-                    logger.debug(
-                        f"A/B split: conv={conversation_id[:8]} stays on active prompt"
-                    )
-        except Exception as _ab_exc:
-            # Never break chat for A/B bookkeeping
-            logger.debug(f"A/B candidate check skipped: {_ab_exc}")
+    result = _fallback_prompt(runtime_ctx)
 
     # ── Host API endpoint catalog (appended to every path) — the model can
     # only discover ``call_host_api`` endpoint names here; search_knowledge
@@ -213,51 +145,21 @@ async def build_chat_prompt(
     # ── Capability-scoped access inventory (per-user, appended to every path) ──
     # The assistant may only ever mention items from this inventory — apps,
     # work areas, modules or capabilities the user cannot reach must not leak,
-    # not even their existence.  Rendered last so no path (playbook, fallback,
-    # A/B candidate) can bypass it.
+    # not even their existence.  Rendered last so no path can bypass it.
     access_section = _build_access_section(config)
     if access_section:
         result = f"{result}\n\n{access_section}" if result else access_section
 
-    # ── Guidance skills + compact rendering directive (appended to every path,
-    # even without an access inventory) — progressive disclosure: the always-on
-    # prompt carries only the skill index (name + one-line description) and the
-    # compact rendering summary.  Full skill bodies and worked examples are
-    # loaded on demand via ai.domain_skills → ai.engine.knowledge.skill_folder.
-    guidance_section = _build_guidance_section(guidance_skills)
-    if RENDERING_CAPABILITIES_SUMMARY in (result or ""):
-        # The fallback prompt already carries the compact rendering summary;
-        # append only the skill index so it is not emitted twice.
-        guidance_section = _build_guidance_index(guidance_skills)
-    if guidance_section:
-        result = f"{result}\n\n{guidance_section}" if result else guidance_section
+    # Compact rendering summary when fallback did not already include it.
+    # Filesystem domain-pack skill injection REMOVED(F1a) — do not re-wire.
+    if RENDERING_CAPABILITIES_SUMMARY not in (result or ""):
+        result = (
+            f"{result}\n\n{RENDERING_CAPABILITIES_SUMMARY}"
+            if result
+            else RENDERING_CAPABILITIES_SUMMARY
+        )
 
     return result
-
-
-def _build_guidance_index(guidance_skills: list | None) -> str:
-    """Render the compact one-line-per-skill index (progressive disclosure)."""
-    if not guidance_skills:
-        return ""
-    from ai.engine.knowledge.skill_folder import skill_index_prompt
-
-    return skill_index_prompt(guidance_skills)
-
-
-def _build_guidance_section(guidance_skills: list | None) -> str:
-    """Render the always-on guidance index + compact rendering summary.
-
-    The full ``RENDERING_CAPABILITIES`` worked examples are intentionally NOT
-    emitted here — they live in the ``rich-content-rendering`` skill folder's
-    ``references/formatting-examples.md`` and are loaded on demand.  This keeps
-    the always-on prompt measurably shorter (progressive disclosure, P4-03).
-    """
-    parts: list[str] = []
-    index = _build_guidance_index(guidance_skills)
-    if index:
-        parts.append(index)
-    parts.append(RENDERING_CAPABILITIES_SUMMARY)
-    return "\n\n".join(parts)
 
 
 def _build_api_catalog_section(api_catalog: list | None) -> str:

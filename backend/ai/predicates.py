@@ -140,6 +140,35 @@ def loan_request_activated_and_scheduled(record: Any) -> bool:
     return False
 
 
+def gosi_wps_sif_submitted_and_reconciled(record: Any) -> bool:
+    """True iff the GOSI/WPS SIF was submitted and reconciliation succeeded.
+
+    The Nibras ``gosi_wps.sif.lifecycle`` postcondition (verify step): after
+    irreversible submit the filing ``status`` must be ``submitted`` and a
+    reconciliation signal must confirm GOSI/WPS totals match the committed
+    payroll run. Reads an already-loaded record-like object (mapping or plain
+    object) with no DB access (RULE_21). Fail-closed: missing/incoercible
+    signals return ``False``.
+    """
+    status = _field(record, "status")
+    if status is None or str(status).lower() != "submitted":
+        return False
+
+    reconciled = _field(record, "reconciled")
+    if reconciled is not None:
+        return bool(reconciled)
+
+    receipt_id = _field(record, "receipt_id")
+    if receipt_id is not None and str(receipt_id).strip():
+        return True
+
+    reconciliation = _field(record, "reconciliation")
+    if isinstance(reconciliation, dict):
+        return bool(reconciliation.get("passed"))
+
+    return False
+
+
 def employee_onboarding_completed_and_payroll_eligible(record: Any) -> bool:
     """True iff onboarding finished with an active, payroll-eligible employee.
 

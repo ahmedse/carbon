@@ -32,6 +32,10 @@ class PolicyDecisionRow(AppScopeMixin):
     stage = models.TextField(default="pdp", db_index=True)
     process_state = models.JSONField(null=True, blank=True)
     budget = models.JSONField(null=True, blank=True)
+    # PEC-ID-1 / ADR-0033 — audit-only attribution (does not affect CBAC).
+    actor_chain = models.JSONField(default=list, blank=True)
+    instance_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    request_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

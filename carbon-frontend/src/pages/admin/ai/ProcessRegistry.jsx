@@ -64,7 +64,7 @@ import {
   getProcess,
   listProcesses,
   publishProcess,
-  setAutonomy,
+  setAutonomy as saveAutonomyDial,
   setKillSwitch,
   submitProcess,
   updateProcess,
@@ -254,7 +254,7 @@ export default function ProcessRegistry() {
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [diff, setDiff] = useState(null);
-  const [autonomy, setAutonomy] = useState(null);
+  const [, setAutonomy] = useState(null);
   const [autonomyDraft, setAutonomyDraft] = useState({});
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState(false);
@@ -394,7 +394,7 @@ export default function ProcessRegistry() {
   };
 
   const saveAutonomy = async () => {
-    await runAction(setAutonomy, [token, selectedId, autonomyDraft], 'Autonomy dial saved.');
+    await runAction(saveAutonomyDial, [token, selectedId, autonomyDraft], 'Autonomy dial saved.');
   };
 
   const steps = Array.isArray(detail?.definition?.steps)

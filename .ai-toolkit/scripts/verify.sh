@@ -115,6 +115,18 @@ verify_antipatterns() {
   pc=$(grep -rn $EX "^[[:space:]]*print(" "$BACKEND_DIR" --include="*.py" 2>/dev/null \
        | grep -vc "management/commands\|/scripts/\|experiment_\|/tests/" || true)
   [ "$pc" -gt 0 ] && warn "$pc print() calls in backend app code (use logger)" || pass "no stray print()"
+
+  # 7. PEC-7A / F1a: do not re-wire filesystem guidance_skills into chat hot path
+  m=$(grep -rnE "guidance_skills\s*[=:]" \
+        "$BACKEND_DIR/ai/engine/cognition/turn/runner.py" \
+        "$BACKEND_DIR/ai/engine/llm/prompts.py" \
+        --include="*.py" 2>/dev/null || true)
+  if [ -n "$m" ]; then
+    fail "guidance_skills re-wired on chat hot path (F1a REMOVED — need ADR):"
+    echo "$m" | sed "s|$ROOT/||" | head -5
+  else
+    pass "no guidance_skills on chat hot path (F1a)"
+  fi
 }
 
 # ── INTELLIGENCE (P2-11): engine boundary + replay gates ──────────────────────

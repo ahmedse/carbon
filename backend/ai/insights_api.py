@@ -70,7 +70,14 @@ def _parse_json(value, default):
 
 
 def _serialize_insight(insight) -> dict:
-    """Serialize a ``KgProactiveInsight`` row to the OUTCOME shape (RULE_23)."""
+    """Serialize a ``KgProactiveInsight`` row to the OUTCOME shape (RULE_23).
+
+    Lifts honest ``confidence`` / ``confidence_label`` / ``provenance`` that
+    delivery persisted inside ``context_json`` so the UI never invents them.
+    """
+    from ai.engine.proactive.delivery import extract_outcome_fields
+
+    outcome = extract_outcome_fields(_parse_json(insight.context_json, {}))
     return {
         "id": str(insight.id),
         "title": insight.title,
@@ -78,7 +85,10 @@ def _serialize_insight(insight) -> dict:
         "severity": insight.severity,
         "insight_type": insight.insight_type,
         "recommended_actions": _parse_json(insight.recommended_actions_json, []),
-        "context": _parse_json(insight.context_json, {}),
+        "context": outcome["context"],
+        "confidence": outcome["confidence"],
+        "confidence_label": outcome["confidence_label"],
+        "provenance": outcome["provenance"],
         "disposition": insight.disposition,
         "created_at": insight.created_at.isoformat(),
     }
@@ -134,8 +144,29 @@ def _insight_stream_frames(user):
                 continue
             payload = frame.get("payload") or {}
             if _frame_visible(user, payload):
+                from ai.engine.proactive.delivery import extract_outcome_fields
+
                 payload = dict(payload)
                 payload["narrative"] = PIIGuard.redact(payload.get("narrative") or "")
+                # Legacy frames may lack epistemic fields — derive honestly.
+                if "confidence" not in payload or "provenance" not in payload:
+                    outcome = extract_outcome_fields(payload.get("context") or {})
+                    payload.setdefault("confidence", outcome["confidence"])
+                    payload.setdefault(
+                        "confidence_label", outcome["confidence_label"]
+                    )
+                    payload.setdefault("provenance", outcome["provenance"])
+                    # Prefer sanitized context when deriving from a raw blob.
+                    if outcome["context"]:
+                        payload["context"] = outcome["context"]
+                # Drop CBAC filter keys from the client-facing OUTCOME.
+                for key in (
+                    "visibility",
+                    "org_unit_id",
+                    "host_user_id",
+                    "app_identifier",
+                ):
+                    payload.pop(key, None)
                 q.put(payload)
 
     def _run() -> None:

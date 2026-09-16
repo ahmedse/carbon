@@ -313,3 +313,65 @@ def assert_scoped_empty_for_denied(rows):
     if rows:
         raise AssertionError(f"denied scope returned {len(rows)} row(s): {rows[:3]!r}")
 
+
+# ── Compound Q-1 (formula + figures) ─────────────────────────────────────────
+
+_NET_PAY_FORMULA_MARKERS = ("gross", "gosi", "loan", "net")
+
+
+def assert_compound_net_pay_answer(rendered, db_rows):
+    """Assert compound net-pay answer includes formula language AND grounded figures.
+
+    Guards Q-1: must not return run metadata alone — needs gross − GOSI − loan = net
+    formula *and* amounts that are a subset of DB payslip lines (no fabrication).
+    """
+    texts: list[str] = []
+    if isinstance(rendered, str):
+        texts.append(rendered)
+    elif isinstance(rendered, dict):
+        texts.extend(str(v) for v in rendered.values())
+    elif isinstance(rendered, (list, tuple)):
+        texts.extend(str(v) for v in rendered)
+    else:
+        texts.append(str(rendered))
+    joined = " ".join(texts)
+    blob = joined.lower()
+    missing = [m for m in _NET_PAY_FORMULA_MARKERS if m not in blob]
+    if missing:
+        raise AssertionError(
+            f"compound net-pay answer missing formula markers {missing}; text={blob[:200]!r}"
+        )
+    has_arith = (
+        "-" in blob
+        or "−" in joined
+        or "minus" in blob
+        or "=" in joined
+        or "equals" in blob
+    )
+    if not has_arith:
+        raise AssertionError(
+            "compound net-pay answer lacks arithmetic formula shape "
+            "(expected gross - gosi - loan = net)"
+        )
+    assert_no_pay_figures_beyond_db(rendered, db_rows)
+    db_amounts = {_to_decimal(row.get("amount")) for row in db_rows}
+    rendered_amounts = [
+        _to_decimal(m.group(1)) for t in texts for m in _MONEY_RE.finditer(t)
+    ]
+    if not rendered_amounts:
+        raise AssertionError("compound net-pay answer has formula but no numeric figures")
+    if not any(a in db_amounts for a in rendered_amounts):
+        raise AssertionError(
+            f"compound figures {rendered_amounts} share no values with DB amounts"
+        )
+
+
+def assert_topic_guard_fires(refusal: str | None, *, expect_refuse: bool):
+    """Assert topic_guard outcome matches expectation (refuse vs allow)."""
+    if expect_refuse:
+        if not refusal or not str(refusal).strip():
+            raise AssertionError("expected topic_guard refusal, got None/empty")
+        return
+    if refusal:
+        raise AssertionError(f"expected topic_guard allow, got refusal={refusal!r}")
+

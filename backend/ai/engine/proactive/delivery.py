@@ -5,7 +5,13 @@ persists them as KgProactiveInsight records, and pushes to WebSocket subscribers
 Channel routing:
   - critical → immediate WebSocket push + notification + banner
   - warning  → WebSocket push + notification panel
-  - info     → queued for digest / next shift briefing
+  - info     → digest urgency for notifications; still published on the bus
+               so list/SSE subscribers see it (PEC-3A)
+
+OUTCOME contract (RULE_23): every persisted insight and bus frame carries
+honest ``confidence`` / ``confidence_label`` plus outcome-shaped ``provenance``.
+Engine jargon (trigger_id, delivery_channel, SQL, condition JSON) never crosses
+the HTTP/SSE surface.
 """
 import json
 import logging
@@ -20,6 +26,227 @@ from ai.engine.core.models import Notification, generate_uuid
 from ai.engine.knowledge_graph.models import KgProactiveInsight
 
 logger = logging.getLogger("pulse.proactive.delivery")
+
+# Severity → prior confidence. Conserved downward when measured evidence is thin
+# (uncertainty-provenance: never amplify certainty).
+_SEVERITY_CONFIDENCE = {
+    "critical": 0.95,
+    "warning": 0.80,
+    "info": 0.60,
+}
+
+# Raw context keys that stay internal (never on the public OUTCOME surface).
+_INTERNAL_CONTEXT_KEYS = frozenset(
+    {
+        "trigger_summary",
+        "recent_history",
+        "system_context",
+        "related_alerts",
+        "condition",
+        "condition_json",
+        "sql",
+        "data_sources",
+        "trigger_id",
+        "delivery_channel",
+    }
+)
+
+
+def _confidence_label(score: float) -> str:
+    """Map 0.0–1.0 → ``high|medium|low|uncertain`` (mirrors Faculty 7 ladder)."""
+    if score >= 0.8:
+        return "high"
+    if score >= 0.6:
+        return "medium"
+    if score >= 0.35:
+        return "low"
+    return "uncertain"
+
+
+def _resolve_app_identifier(instance_id: str, insight_data: dict) -> str:
+    """Brand-aware app partition for CBAC (list + SSE must agree)."""
+    explicit = insight_data.get("app_identifier")
+    if explicit:
+        return str(explicit)
+    try:
+        from ai.instance_registry import default_app_for_instance
+
+        return default_app_for_instance(instance_id)
+    except Exception:
+        return instance_id or "carbon"
+
+
+def build_outcome_fields(insight_data: dict) -> dict:
+    """Derive honest confidence + outcome-shaped provenance from insight_data.
+
+    Returns keys suitable for both persistence (inside ``context_json``) and the
+    public API/SSE payload: ``confidence``, ``confidence_label``, ``provenance``,
+    and a sanitized ``context`` (no engine jargon).
+    """
+    severity = (insight_data.get("severity") or "info").lower()
+    raw_context = insight_data.get("context") or {}
+    if not isinstance(raw_context, dict):
+        raw_context = {}
+
+    base = float(_SEVERITY_CONFIDENCE.get(severity, 0.60))
+    measured = raw_context.get("measured_data")
+    has_measured = bool(measured)
+    # No live reading → degrade (honest uncertainty); never invent high confidence.
+    if not has_measured:
+        base = min(base, 0.55)
+    if "confidence" in insight_data and insight_data["confidence"] is not None:
+        try:
+            base = min(base, float(insight_data["confidence"]))
+        except (TypeError, ValueError):
+            pass
+    confidence = round(max(0.0, min(1.0, base)), 2)
+    label = _confidence_label(confidence)
+
+    sources: list[dict] = []
+    if has_measured:
+        sources.append(
+            {
+                "label": "Live reading",
+                "detail": _summarize_measured(measured),
+            }
+        )
+    related = raw_context.get("related_alerts") or []
+    if isinstance(related, list) and related:
+        sources.append(
+            {
+                "label": "Recent alerts",
+                "detail": f"{len(related)} related alert(s) in the last day",
+            }
+        )
+    for key in ("notification_count", "episode_count", "proactive_alert_count"):
+        if key in raw_context and raw_context[key]:
+            sources.append(
+                {
+                    "label": key.replace("_", " ").title(),
+                    "detail": str(raw_context[key]),
+                }
+            )
+    if insight_data.get("insight_type") == "daily_briefing" and not sources:
+        sources.append(
+            {
+                "label": "Daily summary",
+                "detail": "Aggregated from recent activity",
+            }
+        )
+    if not sources:
+        sources.append(
+            {
+                "label": "Scheduled check",
+                "detail": "No supporting readings attached — treat as provisional",
+            }
+        )
+
+    provenance = {
+        "sources": sources,
+        "basis": (
+            "Based on live readings and recent alerts"
+            if has_measured
+            else "Best available — supporting readings were thin"
+        ),
+    }
+
+    public_context = {
+        k: v
+        for k, v in raw_context.items()
+        if k not in _INTERNAL_CONTEXT_KEYS
+        and k
+        not in (
+            "confidence",
+            "confidence_label",
+            "provenance",
+            "measured_data",  # mirrored as outcome-shaped ``measured``
+        )
+    }
+    if has_measured and "measured" not in public_context:
+        public_context["measured"] = measured
+    if "related_alert_count" not in public_context and isinstance(related, list):
+        public_context["related_alert_count"] = len(related)
+
+    # Persist epistemic fields inside context so the Django JSON column carries
+    # them without a schema migration; the read layer lifts them to top-level.
+    public_context["confidence"] = confidence
+    public_context["confidence_label"] = label
+    public_context["provenance"] = provenance
+
+    return {
+        "confidence": confidence,
+        "confidence_label": label,
+        "provenance": provenance,
+        "context": public_context,
+    }
+
+
+def _summarize_measured(measured) -> str:
+    if isinstance(measured, dict):
+        parts = []
+        for key in ("value", "metric", "name", "unit", "threshold"):
+            if key in measured and measured[key] is not None:
+                parts.append(f"{key}={measured[key]}")
+        if parts:
+            return ", ".join(parts[:6])
+        return ", ".join(f"{k}={v}" for k, v in list(measured.items())[:4])
+    return str(measured)[:200]
+
+
+def extract_outcome_fields(context) -> dict:
+    """Lift confidence / provenance from a stored context blob (dict or JSON)."""
+    ctx = context
+    if isinstance(ctx, str):
+        try:
+            ctx = json.loads(ctx)
+        except (json.JSONDecodeError, TypeError):
+            ctx = {}
+    if not isinstance(ctx, dict):
+        ctx = {}
+
+    confidence = ctx.get("confidence")
+    try:
+        confidence = float(confidence) if confidence is not None else None
+    except (TypeError, ValueError):
+        confidence = None
+    label = ctx.get("confidence_label") or (
+        _confidence_label(confidence) if confidence is not None else "uncertain"
+    )
+    provenance = ctx.get("provenance")
+    if not isinstance(provenance, dict):
+        provenance = {
+            "sources": [
+                {
+                    "label": "Scheduled check",
+                    "detail": "No supporting readings attached — treat as provisional",
+                }
+            ],
+            "basis": "Best available — supporting readings were thin",
+        }
+        if confidence is None:
+            confidence = 0.55
+            label = _confidence_label(confidence)
+
+    public_context = {
+        k: v
+        for k, v in ctx.items()
+        if k
+        not in (
+            "confidence",
+            "confidence_label",
+            "provenance",
+            "measured_data",
+            *_INTERNAL_CONTEXT_KEYS,
+        )
+    }
+    if "measured" not in public_context and ctx.get("measured_data"):
+        public_context["measured"] = ctx["measured_data"]
+    return {
+        "confidence": confidence if confidence is not None else 0.55,
+        "confidence_label": label,
+        "provenance": provenance,
+        "context": public_context,
+    }
 
 
 async def deliver_insight(
@@ -40,6 +267,8 @@ async def deliver_insight(
       - narrative: str
       - context: dict (optional)
       - recommended_actions: list[str] (optional)
+      - confidence: float (optional; conserved downward, never amplified)
+      - app_identifier: str (optional; defaults via brand map)
 
     Returns the insight ID.
     """
@@ -47,6 +276,8 @@ async def deliver_insight(
     severity = insight_data.get("severity", "info")
     channel = _route_channel(severity)
     expiry_hours = settings.KG_PROACTIVE_EXPIRY_HOURS if severity == "info" else None
+    outcome = build_outcome_fields(insight_data)
+    app_identifier = _resolve_app_identifier(instance_id, insight_data)
 
     insight = KgProactiveInsight(
         instance_id=instance_id,
@@ -54,12 +285,13 @@ async def deliver_insight(
         # platform users. The Django store copies this onto the persisted row so
         # the read boundary (scope_ai_queryset) admits it (Phase A3).
         visibility="shared",
+        app_identifier=app_identifier,
         trigger_id=trigger_id,
         insight_type=insight_data.get("insight_type", "threshold_alert"),
         severity=severity,
         title=insight_data.get("title", "Proactive Insight"),
         narrative=insight_data.get("narrative", ""),
-        context_json=json.dumps(insight_data.get("context", {})),
+        context_json=json.dumps(outcome["context"]),
         recommended_actions_json=json.dumps(insight_data.get("recommended_actions", [])),
         disposition="pending",
         group_id=group_id,
@@ -127,8 +359,10 @@ async def _deliver(
     """
 
     async def _deliver_effect(command=None):
-        if channel in ("websocket", "banner"):
-            await _push_websocket(db, instance_id, insight)
+        # Always publish the OUTCOME frame to the event bus so list/SSE
+        # subscribers see every severity (including digest/info). Channel only
+        # gates notification urgency, not bus visibility (PEC-3A).
+        await _push_websocket(db, instance_id, insight)
         if severity in ("warning", "critical"):
             await _create_notification(db, instance_id, insight_data, severity)
         return {
@@ -259,6 +493,12 @@ def _build_insight_frame(instance_id: str, insight: KgProactiveInsight) -> dict:
     needs to filter — never engine internals (trigger_id, delivery_channel,
     channel names, instance_id, etc.).
     """
+    outcome = extract_outcome_fields(
+        _parse_json_field(insight.context_json, {})
+    )
+    app_identifier = getattr(insight, "app_identifier", None)
+    if not app_identifier:
+        app_identifier = _resolve_app_identifier(instance_id, {})
     return build_event_frame(
         "insight.new",
         instance_id,
@@ -271,7 +511,10 @@ def _build_insight_frame(instance_id: str, insight: KgProactiveInsight) -> dict:
             "recommended_actions": _parse_json_field(
                 insight.recommended_actions_json, []
             ),
-            "context": _parse_json_field(insight.context_json, {}),
+            "context": outcome["context"],
+            "confidence": outcome["confidence"],
+            "confidence_label": outcome["confidence_label"],
+            "provenance": outcome["provenance"],
             "disposition": insight.disposition,
             "created_at": (
                 insight.created_at.isoformat()
@@ -283,7 +526,7 @@ def _build_insight_frame(instance_id: str, insight: KgProactiveInsight) -> dict:
             "visibility": getattr(insight, "visibility", None) or "shared",
             "org_unit_id": getattr(insight, "org_unit_id", None),
             "host_user_id": getattr(insight, "host_user_id", None),
-            "app_identifier": getattr(insight, "app_identifier", None) or instance_id,
+            "app_identifier": app_identifier,
         },
     )
 

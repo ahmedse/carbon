@@ -209,8 +209,14 @@ Effort: **S** ≤2d · **M** ≤1wk · **L** >1wk. Each phase: Goal · Why · Sc
 
 ## Definition of done for "enterprise coworker" (the finish line)
 All true, each proven by a telemetry/ledger artifact:
-1. Background cognition runs unattended (P1). 2. A learned skill is reused on the hot path with a
-counter (P2). 3. A proactive insight reaches the user in the UI (P3). 4. A reliability baseline exists
-and gates merges (P4). 5. The HRMS lifecycle is governed with correct autonomy dials (P5). 6. An AI
-admin manages processes/skills from a console (P6). 7. One prompt-config mechanism, zero inert
-subsystems (P7). 8. The boundary contract still holds — zero upward imports, RULE_21 intact.
+1. Background cognition runs unattended (P1). ✅ PEC-1A (`docs/pulse/evidence/PEC-1A-heartbeat.md`)
+2. A learned skill is reused on the hot path with a counter (P2). ✅ PEC-2A (`PEC-2A-reuse.md`)
+3. A proactive insight reaches the user in the UI (P3). ✅ PEC-3A + PEC-3B
+4. A reliability baseline exists and gates merges (P4). ✅ PEC-4A (`PEC-4A-eval-baseline.md`, CI harness)
+5. The HRMS lifecycle is governed with correct autonomy dials (P5). ✅ PEC-5A/5B (GOSI/WPS + onboarding; payroll/leave/loan pre-existed)
+6. An AI admin manages processes/skills from a console (P6). ✅ PEC-6A/6B (promote/retire; Capabilities list deferred)
+7. One prompt-config mechanism, zero inert subsystems (P7). ✅ PEC-7A (`PEC-7A-convergence.md`)
+8. The boundary contract still holds — zero upward imports, RULE_21 intact. ✅ (unchanged spine; PEC-ID-1 attribution additive)
+
+**Track closed 2026-09-16** — see `TASKS.md` §PEC + `TASK-RESULTS.md` PEC-* sections.
+Follow-ups (non-blocking): Capabilities registry list API; seed django_db tests when Postgres up; ratify ADR-0033.

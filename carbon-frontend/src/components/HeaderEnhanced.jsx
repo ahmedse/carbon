@@ -188,7 +188,11 @@ export default function HeaderEnhanced() {
           <Tooltip title={t('ui.insights.title')}>
             <IconButton
               size="small"
-              aria-label={t('ui.insights.title')}
+              aria-label={
+                insightUnreadCount > 0
+                  ? t('ui.insights.openWithUnread', { count: insightUnreadCount })
+                  : t('ui.insights.title')
+              }
               sx={{ color: "text.secondary" }}
               onClick={(e) => setInsightAnchor(e.currentTarget)}
             >

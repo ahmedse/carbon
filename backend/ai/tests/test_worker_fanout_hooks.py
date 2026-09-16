@@ -78,7 +78,7 @@ class _OfflinePDP:
     _MUTATE = frozenset({"create", "update", "upsert", "write", "send", "execute", "run", "archive", "delete"})
 
     async def decide(self, principal, action, objects, process_state=None,
-                     autonomy="human_only", budget=None, time=None) -> dict:
+                     autonomy="human_only", budget=None, time=None, **kwargs) -> dict:
         if action in self._READ:
             return {"decision": Decision.ALLOW, "reason": "read-only action is permitted", "policy_version": "offline-v1"}
         if action in self._MUTATE:

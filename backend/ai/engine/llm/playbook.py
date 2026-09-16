@@ -1,18 +1,15 @@
 """
-Playbook Assembler — assembles system prompts from versioned PlaybookBlocks.
+Playbook Assembler — DEFERRED(F3).
 
-Each instance's system prompt is built from individually-versioned blocks
-(persona, domain rules, tool heuristics, lessons, etc.).  This replaces
-the monolithic LLM-prompt-synthesis approach with a composable, surgically
-editable playbook.
+PULSE-CANONICAL §12: ``instance.yaml`` is the single prompt-config mechanism.
+``PlaybookBlock`` tables are empty in live instances; chat hot path uses
+``_fallback_prompt`` (YAML persona/domain_facts) via ``build_chat_prompt``.
+Do NOT seed fake A/B playbooks. Do NOT re-wire assembly into the hot path
+without an ADR.
 
-Design:
-  - Blocks are loaded by instance_id, filtered to is_active=True.
-  - Assembly order is _priority_ (descending) within each block_type group.
-  - The block_type groups themselves have a canonical ordering (persona first,
-    tone_voice last).
-  - Runtime context (datetime, user, page, knowledge, memories) is NOT a
-    PlaybookBlock — it is prepended separately by build_chat_prompt().
+This module remains for store/ops surfaces and surgical block CRUD if an ADR
+revives versioned playbooks. ``PlaybookAssembler.assemble`` is not called from
+``build_chat_prompt`` after PEC-7A.
 """
 from __future__ import annotations
 
@@ -312,9 +309,8 @@ def _fallback_prompt(ctx: dict) -> str:
         if domain_facts:
             body += f"\n\n## Domain Knowledge\n\n{domain_facts}"
     else:
-        # Domain rules / scope boundaries / tool heuristics now live in the
-        # domain-pack guidance skill folders (progressive disclosure, P4-03) and
-        # are surfaced via the always-on index rather than hardcoded here.
+        # Domain rules / scope: fold into instance.yaml when needed (F1a packs
+        # are not injected on the live path). Keep a minimal generic identity.
         body = (
             f"## Identity & Role\n\n"
             f"You are the assistant for {instance_name}. "

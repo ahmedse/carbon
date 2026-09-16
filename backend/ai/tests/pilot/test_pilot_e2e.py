@@ -101,7 +101,7 @@ def _clear_capability_cache(user) -> None:
 
 class _AllowPDP:
     async def decide(self, principal, action, objects, process_state=None,
-                     autonomy="human_only", budget=None, time=None) -> dict:
+                     autonomy="human_only", budget=None, time=None, **kwargs) -> dict:
         return {"decision": Decision.ALLOW, "reason": "test allow",
                 "policy_version": "v1"}
 

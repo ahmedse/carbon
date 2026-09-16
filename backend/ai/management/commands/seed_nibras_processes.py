@@ -9,10 +9,11 @@ improvising:
     scoped to the Nibras instance). Each is validated fail-closed against
     ``ai.capability_registry`` at load time.
     * ``ProcessDefinition`` rows for ``payroll.run.lifecycle``,
-        ``leave.request.lifecycle``, and ``loan.request.lifecycle`` — each
-        created as a draft and driven
-        draft → review → active through ``ai.registry_service`` (the governed
-        lifecycle: an author submits, a distinct publisher publishes).
+        ``leave.request.lifecycle``, ``loan.request.lifecycle``,
+        ``gosi_wps.sif.lifecycle``, and ``employee.onboarding.lifecycle``
+        (via ``pec5b_onboarding_process_ids``) — each created as a draft and
+        driven draft → review → active through ``ai.registry_service``
+        (author submits, a distinct publisher publishes).
 
 Idempotent: re-running upserts capabilities and leaves already-active process
 definitions untouched; partially-seeded processes are driven the rest of the
@@ -45,11 +46,17 @@ from ai.registry_service import ProcessRegistry, RegistryNotFoundError
 AUTHOR_USERNAME = "nibras-process-seed"
 PUBLISHER_USERNAME = "nibras-process-publisher"
 
+def pec5b_onboarding_process_ids() -> tuple[str, ...]:
+    """PEC-5B additive process ids (keep separate from PEC-5A edits)."""
+    return ("employee.onboarding.lifecycle",)
+
+
 PROCESS_IDS = (
     "payroll.run.lifecycle",
     "leave.request.lifecycle",
     "loan.request.lifecycle",
-)
+    "gosi_wps.sif.lifecycle",
+) + pec5b_onboarding_process_ids()
 
 # Fields copied onto each upserted Capability row (mirrors the pack spec).
 _CAPABILITY_FIELDS = (
@@ -75,8 +82,9 @@ _CAPABILITY_FIELDS = (
 
 class Command(BaseCommand):
     help = (
-        "Seed Nibras payroll/leave/loan ProcessDefinition + Capability rows from "
-        "domain_packs/nibras (idempotent). Run with DJANGO_BRAND=nibras."
+        "Seed Nibras payroll/leave/loan/GOSI-WPS/onboarding ProcessDefinition + "
+        "Capability rows from domain_packs/nibras (idempotent). "
+        "Run with DJANGO_BRAND=nibras."
     )
 
     def add_arguments(self, parser):

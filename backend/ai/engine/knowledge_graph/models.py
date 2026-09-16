@@ -332,6 +332,11 @@ class KgProactiveInsight:
     id: str = field(default_factory=_kg_uuid)
     instance_id: Optional[str] = None
     visibility: str = "shared"
+    # CBAC partition (mirrored onto Django AppScopeMixin). Prefer the brand's
+    # default app (e.g. ``people`` for nibras) over falling back to instance_id.
+    app_identifier: Optional[str] = None
+    org_unit_id: Optional[int] = None
+    host_user_id: Optional[str] = None
     trigger_id: Optional[str] = None
     insight_type: Optional[str] = None
     severity: str = "info"

@@ -57,10 +57,28 @@ tools:
     requires_confirmation: true
     source_type: carbon_api
 
+  # ── GOSI/WPS SIF filing (staged + confirmed; RULE_21) ─────────────────
+  - name: generate_gosi_wps_sif
+    kind: confirm
+    requires_confirmation: true
+    source_type: carbon_api
+
+  - name: validate_gosi_wps_sif
+    kind: confirm
+    requires_confirmation: true
+    source_type: carbon_api
+
+  - name: submit_gosi_wps_sif
+    kind: confirm
+    requires_confirmation: true
+    source_type: carbon_api
+
 # Governed host-action capabilities (P3-01). Pilot process:
 #   domain_packs/nibras/processes/payroll.run.lifecycle.yaml
 #   compute (mutation) → validate (mutation) → review (human_task) →
 #   commit (mutation, final) → verify (assertion)
+#   + gosi_wps.sif.lifecycle (PEC-5A): generate → validate → review →
+#   submit (human_only, irreversible) → verify
 capabilities:
   # ── Reads ─────────────────────────────────────────────────────────────
   - capability_id: payroll.run.list
@@ -621,3 +639,330 @@ capabilities:
     owner: ai
     version: "1.0"
     host_action: loan.request.activated_and_scheduled
+
+  # ── GOSI/WPS SIF filing lifecycle (PEC-5A / P5) ─────────────────────────
+  # generate (mutation) → validate (mutation) → review (human_task) →
+  # submit (mutation, FINAL/irreversible statutory filing) → verify
+
+  - capability_id: gosi_wps.sif.generate
+    business_name: Generate GOSI/WPS SIF file
+    purpose: >
+      Build the Wage Protection System (WPS) SIF file for a committed payroll
+      run from the authoritative WPS rule, including GOSI contribution lines
+      already present on the payslips.
+    kind: mutation
+    inputs:
+      run_id:
+        type: string
+    preconditions:
+      run_status_is_committed: true
+      authoritative_wps_rule_exists: true
+    permissions:
+      - gosi_wps.sif.generate
+    effects:
+      mutates: gosi_wps.sif
+      sets: status=generated
+      produces: WpsSifFile
+    side_effects:
+      - wps_sif_generated
+    approval_requirements:
+      requires_grant: true
+    requires_confirmation: true
+    idempotency: dedupe by run_id (re-generate replaces prior SIF draft)
+    verification:
+      predicate: gosi_wps.sif.status_is_generated
+    failure_semantics: abort
+    recovery: retry_after_fix
+    owner: ai
+    version: "1.0"
+    host_action: gosi_wps.sif.generate
+
+  - capability_id: gosi_wps.sif.validate
+    business_name: Validate GOSI/WPS SIF file
+    purpose: >
+      Check the generated SIF against GOSI contribution totals and WPS record
+      integrity (headcount, net pay columns) before human review.
+    kind: mutation
+    inputs:
+      run_id:
+        type: string
+    preconditions:
+      sif_status_is_generated: true
+    permissions:
+      - gosi_wps.sif.validate
+    effects:
+      mutates: gosi_wps.sif
+      sets: status=validated
+      produces: GosiWpsValidations
+    side_effects:
+      - sif_validation_findings_persisted
+    approval_requirements:
+      requires_grant: true
+    requires_confirmation: true
+    idempotency: dedupe by run_id (re-validate refreshes findings)
+    verification:
+      predicate: gosi_wps.sif.status_is_validated
+    failure_semantics: abort
+    recovery: retry_after_fix
+    owner: ai
+    version: "1.0"
+    host_action: gosi_wps.sif.validate
+
+  - capability_id: gosi_wps.sif.review
+    business_name: Review GOSI/WPS SIF filing
+    purpose: >
+      Create a durable human review task so an approver (distinct from the
+      preparer) signs off on the validated SIF before irreversible submit.
+    kind: human_task
+    inputs:
+      run_id:
+        type: string
+    preconditions:
+      sif_status_is_validated: true
+    permissions:
+      - gosi_wps.sif.review
+    effects:
+      creates: HumanTask
+    side_effects:
+      - inbox_task
+    approval_requirements:
+      human_reviewer: true
+    requires_confirmation: false
+    idempotency: dedupe by run_id
+    verification:
+      predicate: gosi_wps.sif.review_completed
+    failure_semantics: suspend
+    recovery: human_decision
+    owner: ai
+    version: "1.0"
+    host_action: human_task:inbox
+
+  - capability_id: gosi_wps.sif.submit
+    business_name: Submit GOSI/WPS SIF filing
+    purpose: >
+      Dispatch a validated and reviewed SIF as final and irreversible to the
+      Wage Protection System / bank channel. Statutory filing — never auto-run.
+    kind: mutation
+    inputs:
+      run_id:
+        type: string
+    preconditions:
+      sif_status_is_validated: true
+      review_approved: true
+    permissions:
+      - gosi_wps.sif.submit
+    effects:
+      mutates: gosi_wps.sif
+      sets: status=submitted
+      produces: GosiWpsSubmissionReceipt
+    side_effects:
+      - wps_sif_submitted
+      - irreversible
+    approval_requirements:
+      requires_grant: true
+      human_reviewer: true
+    requires_confirmation: true
+    idempotency: dedupe by run_id (a submitted SIF cannot be re-submitted)
+    verification:
+      predicate: gosi_wps.sif.submitted_and_reconciled
+    failure_semantics: abort
+    recovery: manual_reconciliation
+    owner: ai
+    version: "1.0"
+    host_action: gosi_wps.sif.submit
+
+  - capability_id: gosi_wps.sif.submitted_and_reconciled
+    business_name: Verify GOSI/WPS SIF submitted and reconciled
+    purpose: >
+      Assert the SIF reached submitted status and reconciliation against the
+      committed payroll run / GOSI totals succeeded.
+    kind: assertion
+    inputs:
+      sif:
+        type: gosi_wps.sif
+    preconditions: {}
+    permissions:
+      - gosi_wps.sif.submitted_and_reconciled
+    effects: {}
+    side_effects: []
+    approval_requirements: {}
+    requires_confirmation: false
+    idempotency: "true (read-only)"
+    verification: {}
+    failure_semantics: fail
+    recovery: escalate
+    owner: ai
+    version: "1.0"
+    host_action: gosi_wps.sif.submitted_and_reconciled
+
+  # ── Employee onboarding reads (PEC-5B) ─────────────────────────────────
+  - capability_id: employee.onboarding.list
+    business_name: List employees (onboarding context)
+    purpose: List employees visible to the requester during onboarding
+    kind: read_only
+    inputs: {}
+    preconditions: {}
+    permissions:
+      - employee.onboarding.list
+    effects: {}
+    side_effects: []
+    approval_requirements: {}
+    requires_confirmation: false
+    idempotency: "true (read-only)"
+    verification:
+      predicate: employee.onboarding.results_returned
+    failure_semantics: abort
+    recovery: retry
+    owner: ai
+    version: "1.0"
+    host_action: employee.onboarding.list
+
+  - capability_id: employee.onboarding.get
+    business_name: Get employee onboarding record
+    purpose: Return one employee record used by the onboarding lifecycle
+    kind: read_only
+    inputs:
+      onboarding_id:
+        type: string
+    preconditions:
+      employee_exists: true
+    permissions:
+      - employee.onboarding.get
+    effects: {}
+    side_effects: []
+    approval_requirements: {}
+    requires_confirmation: false
+    idempotency: "true (read-only)"
+    verification:
+      predicate: employee.onboarding.detail_returned
+    failure_semantics: abort
+    recovery: retry
+    owner: ai
+    version: "1.0"
+    host_action: employee.onboarding.get
+
+  # ── Submit (stage hire package) ─────────────────────────────────────────
+  - capability_id: employee.onboarding.submit
+    business_name: Submit employee onboarding
+    purpose: >
+      Stage a pending employee onboarding package capturing personal data,
+      position, org unit, basic salary, join date, and contract type.
+    kind: mutation
+    inputs:
+      request:
+        type: employee.onboarding
+    preconditions:
+      preparer_is_authorized: true
+      required_hire_fields_present: true
+    permissions:
+      - employee.onboarding.submit
+    effects:
+      mutates: employee.onboarding
+      sets: status=submitted
+      produces: OnboardingRequest
+    side_effects:
+      - onboarding_request_created
+    approval_requirements:
+      requires_grant: true
+    requires_confirmation: true
+    idempotency: dedupe by onboarding fingerprint (employee_no+join_date)
+    verification:
+      predicate: employee.onboarding.status_is_submitted
+    failure_semantics: abort
+    recovery: retry_after_fix
+    owner: ai
+    version: "1.0"
+    host_action: employee.onboarding.submit
+
+  # ── Review (human task, preparer ≠ approver) ────────────────────────────
+  - capability_id: employee.onboarding.review
+    business_name: Review employee onboarding
+    purpose: >
+      Create a durable human review task so an approver distinct from the
+      preparer signs off before the hire is activated as payroll-eligible.
+    kind: human_task
+    inputs:
+      onboarding_id:
+        type: string
+    preconditions:
+      onboarding_status_is_submitted: true
+    permissions:
+      - employee.onboarding.review
+    effects:
+      creates: HumanTask
+    side_effects:
+      - inbox_task
+    approval_requirements:
+      human_reviewer: true
+    requires_confirmation: false
+    idempotency: dedupe by onboarding_id
+    verification:
+      predicate: employee.onboarding.review_completed
+    failure_semantics: suspend
+    recovery: human_decision
+    owner: ai
+    version: "1.0"
+    host_action: human_task:inbox
+
+  # ── Activate (approved onboarding → active employee + contract) ─────────
+  - capability_id: employee.onboarding.activate
+    business_name: Activate employee onboarding
+    purpose: >
+      Finalize an approved onboarding package as an active employee with an
+      active contract, making the hire eligible for the next payroll draft.
+      Irreversible for payroll eligibility purposes.
+    kind: mutation
+    inputs:
+      onboarding_id:
+        type: string
+    preconditions:
+      onboarding_status_is_approved: true
+      review_approved: true
+    permissions:
+      - employee.onboarding.activate
+    effects:
+      mutates: employee.onboarding
+      sets: status=active
+      produces: EmployeeRecord
+    side_effects:
+      - employee_activated
+      - contract_activated
+      - irreversible
+    approval_requirements:
+      requires_grant: true
+      human_reviewer: true
+    requires_confirmation: true
+    idempotency: dedupe by onboarding_id (an activated hire cannot be re-activated)
+    verification:
+      predicate: employee.onboarding.completed_and_payroll_eligible
+    failure_semantics: abort
+    recovery: manual_reconciliation
+    owner: ai
+    version: "1.0"
+    host_action: employee.onboarding.activate
+
+  # ── Verify (assertion — objective postcondition) ───────────────────────
+  - capability_id: employee.onboarding.completed_and_payroll_eligible
+    business_name: Verify onboarding completed and payroll-eligible
+    purpose: >
+      Assert the employee is active, the contract is active, and the hire is
+      eligible for the next payroll run draft.
+    kind: assertion
+    inputs:
+      employee:
+        type: employee.onboarding
+    preconditions: {}
+    permissions:
+      - employee.onboarding.completed_and_payroll_eligible
+    effects: {}
+    side_effects: []
+    approval_requirements: {}
+    requires_confirmation: false
+    idempotency: "true (read-only)"
+    verification: {}
+    failure_semantics: fail
+    recovery: escalate
+    owner: ai
+    version: "1.0"
+    host_action: employee.onboarding.completed_and_payroll_eligible
+

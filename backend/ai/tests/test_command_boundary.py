@@ -41,7 +41,7 @@ class _StubPDP:
         self.calls: list[dict] = []
 
     async def decide(self, principal, action, objects, process_state=None,
-                     autonomy="human_only", budget=None, time=None) -> dict:
+                     autonomy="human_only", budget=None, time=None, **kwargs) -> dict:
         self.calls.append({"principal": principal, "action": action, "objects": objects})
         return {
             "decision": self.decision,

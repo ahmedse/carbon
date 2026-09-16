@@ -90,6 +90,7 @@ urlpatterns = [
     path(f'{api_prefix}/ai/plans/', include('ai.plans_urls')),
     path(f'{api_prefix}/ai/catalog/', include('ai.catalog_urls')),
     path(f'{api_prefix}/ai/registry/', include('ai.registry_urls')),
+    path(f'{api_prefix}/ai/skills/', include('ai.skills_decision_urls')),
     path(f'{api_prefix}/ai/inbox/', include('ai.task_inbox_urls')),
     path(f'{api_prefix}/ai/runs/', include('ai.durable_urls')),
     path(f'{api_prefix}/ai/usage/', include('ai.usage_urls')),

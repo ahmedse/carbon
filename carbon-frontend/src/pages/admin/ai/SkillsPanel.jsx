@@ -1,20 +1,28 @@
 // src/pages/admin/ai/SkillsPanel.jsx
-// Route /admin/ai/skills — W3-G UPGRADE: real skill catalog + admission
-// status. Table (CarbonDataGrid) of skills with verdict chips (admitted /
-// rejected — passed-flag breakdown) + usage stats (usage_count, success_rate,
-// avg_latency_ms) + a detail drawer with the full admission-gate record.
-// Read-only — skill admission is engine-owned. RULE_8 tokens only; RULE_10
-// apiFetch only (via src/api/aiCatalog.js); RULE_16 grounded states.
+// Route /admin/ai/skills — skill catalog + admission status + admin
+// promote/reject decisions (PEC-6B). Reused by AIWorkspace Console Skills
+// tab (single source of truth — no duplicate panel).
+//
+// CBAC: promote/reject require ai:publisher | ai:process_owner. The backend
+// is the authority — we disable + tooltip missing caps and lock on 403.
+// RULE_8 tokens only; RULE_10 apiFetch only; RULE_23 outcome copy only.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Button,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   Divider,
   Drawer,
   IconButton,
   Paper,
   Stack,
+  TextField,
+  Tooltip,
   Typography,
   useTheme,
 } from '@mui/material';
@@ -25,13 +33,24 @@ import useDocumentTitle from '../../../hooks/useDocumentTitle';
 import PageContainer from '../../../components/layout/PageContainer';
 import CarbonDataGrid from '../../../components/DataGrid/CarbonDataGrid';
 import { useAuth } from '../../../auth/AuthContext';
-import { listSkills } from '../../../api/aiCatalog';
+import { useNotification } from '../../../components/NotificationProvider';
+import { AI_PROCESS_OWNER, AI_PUBLISHER, hasAnyCap } from '../../../capabilities';
+import { listSkills, promoteSkill, rejectSkill } from '../../../api/aiCatalog';
 
 /** Admission verdict → theme token (RULE_8). */
 function verdictColor(verdict, theme) {
   if (verdict === 'admitted') return theme.palette.success.main;
   if (verdict === 'rejected') return theme.palette.error.main;
   return theme.palette.text.disabled;
+}
+
+/** Status → outcome label (RULE_23 — never engine tokens). */
+export function statusLabel(status) {
+  if (status === 'instance_promoted') return 'Promoted';
+  if (status === 'user_approved') return 'Approved';
+  if (status === 'deprecated') return 'Retired';
+  if (status === 'draft') return 'Draft';
+  return status || '—';
 }
 
 /** "73%" / "412 ms" style formatting for usage stats. */
@@ -45,15 +64,55 @@ function formatLatency(value) {
   return `${value} ms`;
 }
 
+export function capabilityKeys(caps) {
+  if (!Array.isArray(caps)) return [];
+  return caps
+    .map((c) =>
+      typeof c === 'string' ? c : c?.key || c?.capability || c?.code || ''
+    )
+    .filter(Boolean);
+}
+
+/** Button disabled + tooltipped when the caller lacks a capability. */
+function GatedButton({ allowed, reason, children, ...props }) {
+  const button = (
+    <Button {...props} disabled={props.disabled || !allowed}>
+      {children}
+    </Button>
+  );
+  if (!allowed) {
+    return (
+      <Tooltip title={reason}>
+        <span>{button}</span>
+      </Tooltip>
+    );
+  }
+  return button;
+}
+
+const PROMOTE_STATUSES = new Set(['draft', 'user_approved']);
+const REJECT_STATUSES = new Set(['draft', 'user_approved', 'instance_promoted']);
+
 export default function SkillsPanel() {
   useDocumentTitle('Skills Catalog');
   const theme = useTheme();
-  const { token } = useAuth();
+  const { token, userCapabilities } = useAuth();
+  const { notify, notifyFromError } = useNotification();
+
+  const caps = useMemo(() => capabilityKeys(userCapabilities), [userCapabilities]);
+  const canDecide = useMemo(
+    () => hasAnyCap(caps, [AI_PUBLISHER, AI_PROCESS_OWNER]),
+    [caps],
+  );
 
   const [skills, setSkills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [acting, setActing] = useState('');
+  const [denied, setDenied] = useState({});
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,6 +120,11 @@ export default function SkillsPanel() {
       const rows = await listSkills(token);
       setSkills(Array.isArray(rows) ? rows : []);
       setOffline(false);
+      setSelected((prev) => {
+        if (!prev) return null;
+        const next = (Array.isArray(rows) ? rows : []).find((r) => r.id === prev.id);
+        return next || null;
+      });
     } catch {
       setSkills([]);
       setOffline(true);
@@ -72,6 +136,70 @@ export default function SkillsPanel() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const skillDenied = selected?.id ? Boolean(denied[selected.id]) : false;
+  const status = selected?.status || '';
+  const canPromote =
+    canDecide && !skillDenied && PROMOTE_STATUSES.has(status) && acting !== 'promote';
+  const canReject =
+    canDecide && !skillDenied && REJECT_STATUSES.has(status) && acting !== 'reject';
+
+  const promoteReason = skillDenied
+    ? 'You do not have permission for this action.'
+    : !canDecide
+      ? 'Requires ai:publisher or ai:process_owner'
+      : !PROMOTE_STATUSES.has(status)
+        ? 'Only draft or approved skills can be promoted.'
+        : '';
+
+  const rejectReasonTip = skillDenied
+    ? 'You do not have permission for this action.'
+    : !canDecide
+      ? 'Requires ai:publisher or ai:process_owner'
+      : !REJECT_STATUSES.has(status)
+        ? 'This skill is already retired.'
+        : '';
+
+  const doPromote = async () => {
+    if (!selected?.id) return;
+    setActing('promote');
+    try {
+      await promoteSkill(token, selected.id);
+      notify({ message: `Promoted “${selected.name}”.`, type: 'success' });
+      await load();
+    } catch (err) {
+      if (err?.status === 403) {
+        setDenied((prev) => ({ ...prev, [selected.id]: true }));
+        notify({ message: "You don't have permission for this action.", type: 'warning' });
+      } else {
+        notifyFromError(err, 'Could not promote skill');
+      }
+    } finally {
+      setActing('');
+    }
+  };
+
+  const doReject = async () => {
+    if (!selected?.id) return;
+    setActing('reject');
+    try {
+      await rejectSkill(token, selected.id, rejectReason.trim());
+      notify({ message: `Retired “${selected.name}”.`, type: 'success' });
+      setRejectOpen(false);
+      setRejectReason('');
+      await load();
+    } catch (err) {
+      if (err?.status === 403) {
+        setDenied((prev) => ({ ...prev, [selected.id]: true }));
+        setRejectOpen(false);
+        notify({ message: "You don't have permission for this action.", type: 'warning' });
+      } else {
+        notifyFromError(err, 'Could not retire skill');
+      }
+    } finally {
+      setActing('');
+    }
+  };
 
   const columns = useMemo(
     () => [
@@ -110,6 +238,7 @@ export default function SkillsPanel() {
         field: 'status',
         headerName: 'Status',
         width: 110,
+        valueFormatter: (value) => statusLabel(value),
       },
       {
         field: 'usage_count',
@@ -143,6 +272,7 @@ export default function SkillsPanel() {
     : [];
 
   const signature = selected?.signature ?? {};
+  const showActions = selected && status !== 'deprecated';
 
   return (
     <PageContainer>
@@ -163,8 +293,8 @@ export default function SkillsPanel() {
         </Stack>
 
         <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
-          Admitted skills and their admission-gate verdicts (structural / harmlessness /
-          consistency / marginal gain). Read-only — admission is engine-owned.
+          Skill catalog with admission-gate verdicts. Publishers and process owners can
+          promote a skill after the gate admits it, or retire one with a reason.
         </Typography>
 
         {loading && (
@@ -202,13 +332,12 @@ export default function SkillsPanel() {
               pageSize={10}
               pageSizeOptions={[10, 25, 50]}
               density="compact"
-              emptyMessage="No skills admitted yet."
+              emptyMessage="No skills in the catalog yet."
               onRowClick={(params) => setSelected(params.row)}
             />
           </Paper>
         )}
 
-        {/* ── Detail drawer: full admission record ───────────────────────── */}
         <Drawer
           anchor="right"
           open={Boolean(selected)}
@@ -226,8 +355,12 @@ export default function SkillsPanel() {
                 </IconButton>
               </Stack>
               <Stack direction="row" spacing={1} alignItems="center">
-                <Chip size="small" label={selected.kind} sx={{ fontSize: '0.625rem', height: 2.25 }} />
-                <Chip size="small" label={selected.status} sx={{ fontSize: '0.625rem', height: 2.25 }} />
+                <Chip size="small" label={selected.kind} sx={{ fontSize: '0.625rem', height: 18 }} />
+                <Chip
+                  size="small"
+                  label={statusLabel(selected.status)}
+                  sx={{ fontSize: '0.625rem', height: 18 }}
+                />
                 {admission && (
                   <Chip
                     size="small"
@@ -247,6 +380,40 @@ export default function SkillsPanel() {
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
                 {selected.description || 'No description.'}
               </Typography>
+
+              {showActions && (
+                <>
+                  <Divider />
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                    <GatedButton
+                      allowed={canPromote}
+                      reason={promoteReason}
+                      size="small"
+                      variant="contained"
+                      onClick={doPromote}
+                      disabled={Boolean(acting)}
+                      data-testid="skill-promote"
+                    >
+                      {acting === 'promote' ? 'Promoting…' : 'Promote'}
+                    </GatedButton>
+                    <GatedButton
+                      allowed={canReject}
+                      reason={rejectReasonTip}
+                      size="small"
+                      variant="outlined"
+                      color="error"
+                      onClick={() => {
+                        setRejectReason('');
+                        setRejectOpen(true);
+                      }}
+                      disabled={Boolean(acting)}
+                      data-testid="skill-reject"
+                    >
+                      Retire
+                    </GatedButton>
+                  </Stack>
+                </>
+              )}
 
               <Divider />
 
@@ -307,7 +474,7 @@ export default function SkillsPanel() {
                 </Stack>
               ) : (
                 <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
-                  No admission record yet — pending engine review.
+                  No admission record yet — pending review.
                 </Typography>
               )}
 
@@ -324,6 +491,48 @@ export default function SkillsPanel() {
             </Stack>
           )}
         </Drawer>
+
+        <Dialog
+          open={rejectOpen}
+          onClose={() => !acting && setRejectOpen(false)}
+          maxWidth="xs"
+          fullWidth
+        >
+          <DialogTitle sx={{ fontSize: '0.9375rem', fontWeight: 600 }}>
+            Retire skill?
+          </DialogTitle>
+          <DialogContent>
+            <DialogContentText sx={{ fontSize: '0.8125rem', mb: 1.5 }}>
+              “{selected?.name}” will leave the active catalog. You can add an optional reason.
+            </DialogContentText>
+            <TextField
+              autoFocus
+              fullWidth
+              size="small"
+              multiline
+              minRows={2}
+              label="Reason (optional)"
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              inputProps={{ maxLength: 2000, 'data-testid': 'skill-reject-reason' }}
+            />
+          </DialogContent>
+          <DialogActions sx={{ px: 2, pb: 1.5 }}>
+            <Button size="small" onClick={() => setRejectOpen(false)} disabled={Boolean(acting)}>
+              Cancel
+            </Button>
+            <Button
+              size="small"
+              color="error"
+              variant="contained"
+              onClick={doReject}
+              disabled={Boolean(acting)}
+              data-testid="skill-reject-confirm"
+            >
+              {acting === 'reject' ? 'Retiring…' : 'Retire'}
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Stack>
     </PageContainer>
   );

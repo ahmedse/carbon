@@ -122,6 +122,7 @@ function SearchSelect({
       }
       groupBy={groupBy}
       loading={loading}
+      disabled={disabled}
       disableClearable={!clearable}
       autoHighlight={autoHighlight}
       size={size}

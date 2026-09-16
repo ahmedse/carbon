@@ -43,6 +43,7 @@ class _StubPDP:
         autonomy="human_only",
         budget=None,
         time=None,
+        **kwargs,
     ) -> dict:
         return {
             "decision": self.decision,

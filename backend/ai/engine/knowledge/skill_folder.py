@@ -1,19 +1,13 @@
-"""Guidance-skill folder loader (P4-03).
+"""Guidance-skill folder loader — DEFERRED(F1a).
+
+PULSE-CANONICAL §12: filesystem ``domain_packs/*/skills`` guidance is NOT
+injected on the live chat path. Host wiring (``ai.domain_skills``) was removed
+in PEC-7A. This module remains as a stdlib-only parser for offline/tests and
+possible future ADR-backed use; do not re-wire into ``build_chat_prompt``
+without an ADR.
 
 A "guidance skill" is a folder containing a ``SKILL.md`` with ``---``-delimited
-YAML frontmatter (metadata: name, description, allowed-tools, when_to_use)
-followed by a Markdown body, plus optional ``references/*.md`` files that are
-loaded on demand.
-
-Progressive disclosure:
-  * :func:`skill_index_prompt` renders a compact one-line-per-skill index that
-    is cheap to keep in the always-on system prompt.
-  * :func:`skill_body` / :func:`skill_references` return the full content on
-    demand, so large worked examples stay out of the always-on prompt.
-
-This module is domain-agnostic and stdlib-only: no Django, no host imports, no
-brand/tenant vocabulary.  The host layer (``ai.domain_skills``) resolves WHERE
-the folders live and delegates parsing to this module.
+YAML frontmatter followed by a Markdown body, plus optional ``references/*.md``.
 """
 from __future__ import annotations
 

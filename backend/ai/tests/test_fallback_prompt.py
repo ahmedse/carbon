@@ -1,7 +1,10 @@
-from ai.domain_skills import get_guidance_skills
-from ai.engine.knowledge.skill_folder import skill_body
+from pathlib import Path
+
+from ai.engine.knowledge.skill_folder import load_skill_folders, skill_body
 from ai.engine.llm.playbook import _fallback_prompt
 from ai.engine.llm.prompts import RENDERING_CAPABILITIES_SUMMARY
+
+_CARBON_SKILLS = Path(__file__).resolve().parents[3] / "domain_packs" / "carbon" / "skills"
 
 
 def _ctx():
@@ -21,10 +24,11 @@ def test_no_prohibition_language():
     assert "never " not in lower and "do not" not in lower
 
 
-def test_positive_statements_present_in_domain_guidance_skill():
-    # The domain-rule bullets were migrated out of _fallback_prompt into the
-    # domain-guidance skill folder (progressive disclosure, P4-03).
-    body = skill_body("domain-guidance", get_guidance_skills("carbon"))
+def test_positive_statements_present_in_domain_guidance_pack():
+    # DEFERRED(F1a): packs are not injected live; content retained for possible
+    # instance.yaml fold. Locks pack body text only.
+    skills = load_skill_folders(_CARBON_SKILLS)
+    body = skill_body("domain-guidance", skills)
     assert "Lead with the answer" in body
     assert "Ground every claim" in body
     assert "time-aware" in body

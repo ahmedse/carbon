@@ -19,6 +19,8 @@ import {
   deleteAgent,
   getTopology,
   listSkills,
+  promoteSkill,
+  rejectSkill,
   getFederatedIndex,
   getRunTimeline,
   resumeRun,
@@ -56,6 +58,24 @@ describe('aiCatalog — read wrappers', () => {
   it('listSkills hits ai/catalog/skills/', async () => {
     await listSkills(TOKEN);
     expect(apiFetch).toHaveBeenCalledWith('ai/catalog/skills/', { token: TOKEN });
+  });
+
+  it('promoteSkill POSTs ai/skills/{id}/promote/', async () => {
+    await promoteSkill(TOKEN, 'skill-1');
+    expect(apiFetch).toHaveBeenCalledWith('ai/skills/skill-1/promote/', {
+      token: TOKEN,
+      method: 'POST',
+      body: {},
+    });
+  });
+
+  it('rejectSkill POSTs ai/skills/{id}/reject/ with reason', async () => {
+    await rejectSkill(TOKEN, 'skill-1', 'not ready');
+    expect(apiFetch).toHaveBeenCalledWith('ai/skills/skill-1/reject/', {
+      token: TOKEN,
+      method: 'POST',
+      body: { reason: 'not ready' },
+    });
   });
 
   it('getFederatedIndex hits ai/catalog/index/ with role query', async () => {

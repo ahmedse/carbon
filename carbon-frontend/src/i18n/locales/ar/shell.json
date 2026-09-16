@@ -218,14 +218,24 @@
     "noAppsAvailable": "لا توجد تطبيقات متاحة",
     "noAppsSubtext": "تواصل مع المسؤول للحصول على حق الوصول إلى تطبيقات المجال.",
     "insights": {
-      "title": "رؤى الذكاء الاصطناعي",
-      "empty": "لا توجد رؤى بعد…",
+      "title": "رؤى من المساعد",
+      "empty": "لا توجد رؤى بعد.",
+      "emptyHint": "يراجع المساعد بياناتك ليلاً ويخبرك إذا احتاج شيء إلى انتباهك.",
       "error": "تعذّر تحميل الرؤى",
       "retry": "إعادة المحاولة",
+      "loading": "جاري تحميل الرؤى",
       "severityCritical": "حرِج",
       "severityWarning": "تحذير",
       "severityInfo": "معلومة",
-      "markAllRead": "وضع الكل كمقروء"
+      "markAllRead": "وضع الكل كمقروء",
+      "act": "عرض",
+      "dismiss": "تجاهل",
+      "provenanceHint": "ما الذي دخل في هذا",
+      "provenanceTitle": "ما الذي دخل في هذا",
+      "dispositionRead": "مقروء",
+      "dispositionActed": "تم اتخاذ إجراء",
+      "dispositionDismissed": "مُتجاهَل",
+      "openWithUnread": "فتح الرؤى، {{count}} غير مقروءة"
     }
   },
   "devBanner": {

@@ -1,0 +1,122 @@
+# Nibras GOSI/WPS SIF filing lifecycle — governed ProcessDefinition (PEC-5A / P5).
+#
+# generate → validate → (human review) → submit → verify.
+# Autonomy dials keep statutory filing deterministic and admin-governed: the AI
+# may stage generate/validate for confirmation, while review and the irreversible
+# external submit are human-only, and submit additionally requires consent.
+id: gosi_wps.sif.lifecycle
+version: "1.0"
+owner: ai
+status: active
+
+objects:
+  - type: gosi_wps.sif
+    selector: run_id
+
+inputs:
+  run_id:
+    type: string
+
+scope:
+  source: authenticated_host_context
+
+objective:
+  predicate: gosi_wps.sif.submitted_and_reconciled
+
+steps:
+  - id: generate
+    kind: command
+    capability: gosi_wps.sif.generate
+    depends_on: []
+    autonomy: act_confirm
+    binds_to: gosi_wps.sif
+    consent: true
+    idempotency_scope: run_id
+    unknown_outcome: escalate
+
+  - id: validate
+    kind: command
+    capability: gosi_wps.sif.validate
+    depends_on:
+      - generate
+    autonomy: act_confirm
+    binds_to: gosi_wps.sif
+    consent: true
+    idempotency_scope: run_id
+    unknown_outcome: escalate
+
+  - id: review
+    kind: human_task
+    capability: gosi_wps.sif.review
+    depends_on:
+      - validate
+    autonomy: human_only
+    separation_of_duties:
+      - preparer
+      - approver
+    binds_to: inbox
+    consent: false
+    approval_ref: gosi_wps.sif.review
+
+  - id: submit
+    kind: command
+    capability: gosi_wps.sif.submit
+    depends_on:
+      - review
+    autonomy: human_only
+    separation_of_duties:
+      - preparer
+      - approver
+    binds_to: gosi_wps.sif
+    consent: true
+    idempotency_scope: run_id
+    unknown_outcome: escalate
+
+  - id: verify
+    kind: assertion
+    capability: gosi_wps.sif.submitted_and_reconciled
+    depends_on:
+      - submit
+    autonomy: observe
+    binds_to: gosi_wps.sif
+    consent: false
+
+constraints:
+  precedence:
+    - from: generate
+      to: validate
+    - from: validate
+      to: review
+    - from: review
+      to: submit
+    - from: submit
+      to: verify
+
+evidence:
+  - type: WpsSifFile
+    from_step: generate
+  - type: GosiWpsValidations
+    from_step: validate
+  - type: ApprovalGrant
+    from_step: review
+  - type: GosiWpsSubmissionReceipt
+    from_step: submit
+
+policies:
+  refuse_if:
+    - payroll run is not committed before generate
+    - sif is not validated before submit
+    - review approval is missing before submit
+    - preparer equals approver
+  ask_if:
+    - gosi contribution totals diverge from payslip gosi lines
+    - wps record count does not match committed payslip headcount
+
+exceptions: []
+
+kill_switch: false
+
+tests:
+  - name: happy-path-submitted-and-reconciled
+  - name: refuse-submit-when-not-validated
+  - name: submit-requires-human-consent

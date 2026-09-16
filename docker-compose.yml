@@ -81,6 +81,32 @@ services:
       sh -c "python manage.py migrate --noinput &&
              python manage.py run_learning_loop"
 
+  # PEC-1A / P1 — Pulse metabolism heartbeat (proactive/consolidation/distill/decay).
+  # Local/dev equivalent of deploy/instance/setup-pulse-heartbeat.sh (VPS systemd).
+  # Brand isolation comes from env_file DJANGO_BRAND (same as backend).
+  pulse-heartbeat:
+    build: ./backend
+    container_name: carbon-pulse-heartbeat
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      - PULSE_HEARTBEAT_INTERVAL=${PULSE_HEARTBEAT_INTERVAL:-86400}
+    depends_on:
+      - backend
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./backend:/app
+      - carbon_static:/static
+      - carbon_media:/media
+    stop_grace_period: 30s
+    command: >
+      sh -c "python manage.py ensure_pulse_instance &&
+             while true; do
+               python manage.py run_pulse_maintenance;
+               sleep $${PULSE_HEARTBEAT_INTERVAL:-86400};
+             done"
+
 volumes:
   carbon_static:
   carbon_media:            
