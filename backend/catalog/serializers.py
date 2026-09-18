@@ -31,6 +31,9 @@ class AssetProfileSerializer(serializers.ModelSerializer):
     asset_type = serializers.SerializerMethodField()
     title = serializers.SerializerMethodField()
     tags = serializers.PrimaryKeyRelatedField(many=True, queryset=Tag.objects.all(), required=False)
+    trust_index = serializers.SerializerMethodField()
+    trust_tier = serializers.SerializerMethodField()
+    trust_breakdown = serializers.SerializerMethodField()
 
     class Meta:
         model = AssetProfile
@@ -38,11 +41,15 @@ class AssetProfileSerializer(serializers.ModelSerializer):
             'id', 'asset_type', 'title', 'data_table', 'data_field',
             'description', 'domain', 'owner', 'steward', 'classification',
             'semantic_type', 'glossary_term', 'tags',
-            'quality_status', 'quality_score', 'updated_at', 'updated_by',
+            'quality_status', 'quality_score',
+            'trust_index', 'trust_tier', 'trust_breakdown',
+            'updated_at', 'updated_by',
         ]
         read_only_fields = [
             'id', 'asset_type', 'title', 'data_table', 'data_field',
-            'quality_status', 'quality_score', 'updated_at', 'updated_by',
+            'quality_status', 'quality_score',
+            'trust_index', 'trust_tier', 'trust_breakdown',
+            'updated_at', 'updated_by',
         ]
 
     def get_asset_type(self, obj):
@@ -52,6 +59,38 @@ class AssetProfileSerializer(serializers.ModelSerializer):
         if obj.data_field_id:
             return f"{obj.data_field.label} ({obj.data_field.data_table.title})"
         return obj.data_table.title if obj.data_table_id else ''
+
+    def _trust(self, obj):
+        from .trust_index import (
+            batch_freshness_for_table_ids,
+            compute_trust_index,
+            table_id_for_asset,
+        )
+        cache = getattr(self, '_trust_cache', None)
+        if cache is None:
+            cache = {}
+            setattr(self, '_trust_cache', cache)
+        key = obj.pk
+        if key not in cache:
+            fmap = self.context.get('freshness_by_table')
+            if fmap is None:
+                # Lazy one-shot batch for the current page when list didn't pre-seed.
+                tid = table_id_for_asset(obj)
+                fmap = batch_freshness_for_table_ids([tid] if tid else [])
+                self.context['freshness_by_table'] = fmap
+            tid = table_id_for_asset(obj)
+            freshness = fmap.get(tid) if tid else None
+            cache[key] = compute_trust_index(obj, freshness=freshness)
+        return cache[key]
+
+    def get_trust_index(self, obj):
+        return self._trust(obj)['score']
+
+    def get_trust_tier(self, obj):
+        return self._trust(obj)['tier']
+
+    def get_trust_breakdown(self, obj):
+        return self._trust(obj)['breakdown']
 
 
 class GovernanceEventSerializer(serializers.ModelSerializer):

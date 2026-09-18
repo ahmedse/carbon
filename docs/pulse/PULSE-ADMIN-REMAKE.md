@@ -1,6 +1,7 @@
 # Pulse Admin Remake — Control Plane
 
-**Status:** Phases 0–6 implemented (2026-09-17); Phase 7 harden ongoing  
+**Status:** Phases 0–7 complete (2026-09-18) — steward pack green; thin-grid deepen done  
+**QA gate plan:** [PULSE-ADMIN-QA-GATE.md](./PULSE-ADMIN-QA-GATE.md) (L0–L5 enterprise release gate)  
 **ADR:** [0036 — Pulse Control Plane IA](../../.ai-toolkit/decisions/0036-pulse-control-plane-ia.md)  
 **Extends:** ADR-0031 D8 · ADR-0011 engage/observe split
 
@@ -134,7 +135,7 @@ itself; e2e that expected Jobs-only must use `?tab=jobs`).
 - [x] **4** Memory revoke (`POST …/facts/<id>/revoke/`) + Assets Memory governance UI  
 - [x] **5** Learning candidates (`control/candidates/`) + learning freeze blocks skill promote  
 - [x] **6** Budget override (`control/budget/`) wired into usage + LLM router  
-- [x] **7** Control API tests green (6); e2e headings updated; remaining: full steward Playwright pack + delete unused thin panel files when redirects retire  
+- [x] **7** Steward API pack J1–J7 (`test_steward_journeys.py`) + Playwright journey-17/18; thin-grid deepen done  
 
 ### APIs (mounted under `/carbon-api/ai/pulse/control/`)
 
@@ -156,13 +157,23 @@ Also: `POST …/registry/processes/<id>/reject/`, `POST …/memory/facts/<id>/re
 - Tabs: Overview · Steps & autonomy · Scope (structured) · Diff · Advanced JSON
 - Scope editor fields: source, org unit, roles, approval validity + objective (draft-only write)
 
+### Shipped — Phase 7 continue (2026-09-18)
+
+- Prompt activate/rollback: `GET/POST …/control/prompts/versions/…` + Assets → Prompts UI (PEC-7A note)
+- KnowledgeItem CRUD: `/carbon-api/ai/knowledge/items/` + Assets → Knowledge UI (create/revoke)
+- Platform → Roles: CBAC capability matrix (`accounts/capability-matrix/`)
+- Deleted orphaned `MemoryPanel.jsx`
+- Steward journeys: `backend/ai/tests/test_steward_journeys.py` (J1–J7 API) + `e2e/journeys/journey-17-steward-control-plane.spec.ts`
+- Journey-09 headings updated for Command Center + Curated knowledge
+- Thin tabs deepened: Tools / Monitoring / Feedback / Jobs / Logs — curated columns, type filter, Refresh, Evidence row deep-link + Explorer `?run_id=` auto-trace
+
 ### Remaining gaps (honest)
 
-- Prompt version activate/rollback UI  
-- KnowledgeItem REST CRUD  
-- Roles matrix UI (Django admin / groups still used)  
-- Steward e2e journeys J1–J7 still thin  
-- Delete unused thin PulseDataPanel wrappers when unused
+- Evidence/learning product depth still partial vs full regulator / closed-loop measure (engine/product, not admin IA)
+- Live chat prompts still `instance.yaml` (by design, PEC-7A) — PromptVersion is ops/optimizer
+
+**Steward pack:** `pytest` steward + governance + control — **16 passed** (2026-09-18).  
+**Thin tabs:** Tools / Monitoring / Feedback / Jobs / Logs — curated columns, `_type` filter chips, Refresh, and Evidence deep-link (`run_id` / `conversation_id` → Explorer auto-trace).
 
 ---
 
@@ -179,6 +190,8 @@ View never implies publish.
 
 J1 Contain → J2 Publish SoD → J3 Reject persisted → J4 Evidence PDP → J5 Skill promote/reuse →
 J6 Memory revoke → J7 Budget trip.
+
+**Acceptance:** J1–J7 = L2 API (`test_steward_journeys.py`) + L4 UI (`journey-17` + `journey-18-steward-admin-depth`) green. See `docs/pulse/PULSE-ADMIN-QA-GATE.md` and `docs/pulse/evidence/ADMIN-QA-2026-09-18.md`.
 
 ---
 

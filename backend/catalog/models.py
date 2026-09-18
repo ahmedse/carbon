@@ -205,7 +205,8 @@ class GovernancePolicy(models.Model):
 
 # ════════════════════════════════════════════════════════════════════════════
 # Dataset Hub (Phase P1C — adopted from the former datahub app).
-# Governed, versioned data products. Governance METADATA only — the rows
+# Governed, versioned Dataset artifacts (ADR-0040) — NOT Catalog Studio
+# "Data Products" (those are Modules). Governance METADATA only — the rows
 # themselves stay in ``dataschema.DataTable/DataRow`` (never duplicated here).
 # ════════════════════════════════════════════════════════════════════════════
 
@@ -224,12 +225,13 @@ VERSION_STATUSES = [
 
 
 class Dataset(models.Model):
-    """Governed, versioned semantic data product.
+    """Dataset Hub artifact — governed, versioned collection (ADR-0040).
 
-    A Dataset is a named collection of data (backed by DataTable(s) in
-    dataschema) with full governance: domain, classification, owner, module
-    scope (CBAC anchor), lifecycle state, and a current approved version
-    pointer.
+    NOT a Catalog Studio "Data Product" (that label is reserved for ``core.Module``
+    per RULE_7 / ADR-0010). A Dataset is a named collection of data (backed by
+    DataTable(s) in dataschema) with Hub governance: domain, classification,
+    owner, module scope (CBAC anchor), lifecycle state, contracts, and a current
+    approved version pointer.
 
     The ``module`` FK is the primary CBAC scope anchor. ScopedRole(module=X)
     controls access to all Datasets with module=X. Explicit
@@ -257,7 +259,7 @@ class Dataset(models.Model):
     steward = models.ForeignKey(
         User, null=True, blank=True, on_delete=models.SET_NULL,
         related_name='stewarded_datasets',
-        help_text='Data steward accountable for this data product (advisory).',
+        help_text='Data steward accountable for this Dataset Hub artifact (advisory).',
     )
     source = models.ForeignKey(
         DataSource, null=True, blank=True, on_delete=models.SET_NULL,

@@ -1,6 +1,7 @@
 // src/pages/admin/ai/control/EvidenceExplorerPanel.jsx
 // ADR-0036 Phase 2 — unified evidence spine by run_id / conversation_id.
-import React, { useState } from 'react';
+// Deep-links from thin grids: ?run_id= / ?conversation_id= auto-fill + Trace.
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   Button,
@@ -11,6 +12,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { useSearchParams } from 'react-router-dom';
 import useDocumentTitle from '../../../../hooks/useDocumentTitle';
 import PageContainer from '../../../../components/layout/PageContainer';
 import { useAuth } from '../../../../auth/AuthContext';
@@ -19,6 +21,7 @@ import { getEvidence } from '../../../../api/aiControlPlane';
 export default function EvidenceExplorerPanel() {
   useDocumentTitle('Evidence Explorer');
   const { token } = useAuth();
+  const [searchParams] = useSearchParams();
   const [runId, setRunId] = useState('');
   const [conversationId, setConversationId] = useState('');
   const [loading, setLoading] = useState(false);
@@ -26,12 +29,15 @@ export default function EvidenceExplorerPanel() {
   const [error, setError] = useState('');
 
   const onSearch = async () => {
+    const rid = runId.trim();
+    const cid = conversationId.trim();
+    if (!rid && !cid) return;
     setLoading(true);
     setError('');
     try {
       const data = await getEvidence(token, {
-        runId: runId.trim() || undefined,
-        conversationId: conversationId.trim() || undefined,
+        runId: rid || undefined,
+        conversationId: cid || undefined,
       });
       setPayload(data);
     } catch (err) {
@@ -41,6 +47,39 @@ export default function EvidenceExplorerPanel() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const qRun = (searchParams.get('run_id') || '').trim();
+    const qConv = (searchParams.get('conversation_id') || '').trim();
+    if (!qRun && !qConv) return undefined;
+
+    setRunId(qRun);
+    setConversationId(qConv);
+
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const data = await getEvidence(token, {
+          runId: qRun || undefined,
+          conversationId: qConv || undefined,
+        });
+        if (!cancelled) setPayload(data);
+      } catch (err) {
+        if (!cancelled) {
+          setPayload(null);
+          setError(err?.detail || err?.message || 'Evidence lookup failed');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, token]);
 
   return (
     <PageContainer>

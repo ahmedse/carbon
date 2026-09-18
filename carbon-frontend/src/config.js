@@ -98,6 +98,7 @@ export const API_ROUTES = {
   groups: "accounts/groups/",
   scopedRoles: "accounts/scoped-roles/",
   roleRegistry: "accounts/role-registry/",
+  capabilityMatrix: "accounts/capability-matrix/",
   auditLogs: "core/audit-logs/",
   platformApps: "accounts/platform-apps/",
 
@@ -109,6 +110,7 @@ export const API_ROUTES = {
   governance: "catalog/governance-events/",
   governancePolicies: "catalog/governance-policies/",
   catalogSearch: "catalog/search/",
+  datasets: "catalog/datasets/",
   
   // MDM (reference data & org hierarchy)
   referenceSets: "mdm/reference-sets/",

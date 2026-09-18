@@ -11,11 +11,13 @@ PROJECT_TYPE=Modular monolith (Django + React) — ONE codebase deployed as MULT
 WORKSPACE_ROOT=/home/ahmed/ws/carbon
 DESCRIPTION=One ClearTurn Trust Platform + Pulse (in-hand AI engine). Core (shared): Catalog, MDM, DQ, Evidence, Connections, RBAC/OrgUnit, dataschema, AI/Pulse. Pulse = in-hand stateless reasoning engine (backend/ai/engine/); the platform owns ALL durable AI state. Canonical topology: docs/CLEARTURN-PLATFORM-ARCHITECTURE.md + docs/NIBRAS-MASTER-STRATEGY.md.
 
-## INSTANCES (PRODUCT LINE) — 3 separate platforms, one codebase
-# Do NOT conflate. Nibras is NOT the university; the university is AASTMT.
+## INSTANCES (PRODUCT LINE) — separate platforms, one codebase
+# Do NOT conflate. Nibras ≠ university ≠ EduOS ≠ Tectona.
 INSTANCE_AASTMT=CUSTOMER Arab Academy (AASTMT, academic). Brand "AASTMT · Data Trust Platform". Apps: Carbon (GHG emissions, LIVE), Performarc/Research Lifecycler/Facilities/Sustainability (future).
 INSTANCE_NIBRAS=CUSTOMER GOFSCO (Kuwait oilfield services, ~500 emp) — anchor customer + DESIGN PARTNER. Brand "Nibras / نبراس". ClearTurn's AI-native ERP product (mid-market GCC oilfield/manufacturing). Apps: People/HRMS (KLL/GOSI/WPS payroll, wedge), Stores, Finance.
-INSTANCE_TECTONA=OWNER ClearTurn (flagship AI showcase). Brand "ClearTurn Tectona". Apps: Healthy (factory AI).
+INSTANCE_MEDOS=OWNER ClearTurn healthcare line. Brand "ClearTurn · medOS". Clinical/ops apps (future). Canonical medos.clearturn.tech.
+INSTANCE_EDUOS=OWNER ClearTurn education line. Brand "ClearTurn · EduOS" (locked spelling). Education Operating System. Flagship app: GradeVance — MULTI-DOMAIN assessment + coaching (medicine OSCE/OSPE/CBL, articles, reflection, other faculties via config packs). NAA reflective English = first gold pack ONLY, not product identity. Canonical eduos.clearturn.tech. NOT Nibras (ERP) and NOT Tectona (AI showcase). Design: docs/eduos/GRADEVANCE-DESIGN.md · ADR-0038.
+INSTANCE_TECTONA=OWNER ClearTurn (flagship AI showcase). Brand "ClearTurn Tectona". Hosts AI product surfaces (Healthy + future AI apps). Separate from EduOS. Canonical tectona.clearturn.tech.
 
 ## OPS SCRIPT (Universal — how to run/stop/inspect services)
 OPS_SCRIPT=./manage.sh
@@ -96,6 +98,8 @@ DEPLOY_VERIFY=docker exec <container> grep -c <marker> /app/<path>  ← must be 
 ARCH_CORE_APPS=accounts, core, catalog, mdm, dq, dataschema, connections, evidence, importexport
 # Hosted apps (may import core apps, never the reverse):
 ARCH_HOSTED_APPS=emissions, people, healthy
+# Planned hosted apps (design / scaffold):
+ARCH_HOSTED_APPS_PLANNED=gradevance (EduOS — docs/eduos/GRADEVANCE-DESIGN.md)
 # Superseded / out of active scope:
 ARCH_SUPERSEDED=ai_copilot (superseded by backend/ai/)
 # ── AI Architecture ─────────────────────────────────────────────────
@@ -135,7 +139,7 @@ RULE_5=Frontend routes are ABSOLUTE and namespace-prefixed (/people/*, /my/*, /t
 RULE_6=Pulse is IN-HAND, vendored under backend/ai/engine/ (stateless engine only — agent/llm/cognition/core). Pulse holds NO memory, does NO learning, stores NO graphs. All durable AI state (conversations, knowledge, memory, feedback, graphs) is Carbon-owned via Django apps in backend/ai/. NO separate AI database: durable state → Carbon Postgres; transient/queue state → Redis.
 RULE_13=Pulse engine is called in-process (in-hand), NOT over HTTP and NOT dependent on being online. The task envelope (docs/PULSE_CONTRACT_SPEC.md) remains the internal async job contract carried over Redis, not a network boundary. Graceful degradation: timeout 10s sync, 60s async; fall back to deterministic path on failure.
 RULE_14=DQ Level 2 (nl_check rules) are evaluated by Pulse. Carbon sends row data + natural language rule → Pulse returns {passed, explanation, failed_rows}. DQ executor Phase A (deterministic: unique/threshold/reference_integrity) runs locally; Phase B (nl_check) calls Pulse.
-RULE_7=UI labels: "Data Product" = Module (in code). "Table" = DataTable. NEVER use "Schema" as a label for a table.
+RULE_7=UI labels: "Data Product" = Module (in code). "Table" = DataTable. NEVER use "Schema" as a label for a table. "Dataset" = catalog.Dataset (Dataset Hub — versions/contracts/health); NEVER label a Dataset as a "Data Product".
 RULE_8=Design tokens only — NO hardcoded hex colors, raw px spacing, or inline font sizes. Theme controls all.
 RULE_9=ONE breadcrumb — carbon-frontend/src/shell/Breadcrumbs.jsx. NEVER render breadcrumbs inside pages.
 RULE_10=Use apiFetch (src/api/api.js) for ALL API calls — it handles JWT refresh. Never raw fetch().
@@ -156,7 +160,9 @@ RULE_26=OFF-PEAK + TOKEN DISCIPLINE — run batch/async generations outside Deep
 RULE_27=STORAGE PATTERN (hosted apps) — owned/derived domain data = typed Django models in the app (people.Employee, emissions.Calculation); `dataschema.DataTable/DataRow` = governed measurements ONLY (inbound records whose shape another system owns). Governance audit (catalog.GovernanceEvent) is generic — fires on any entity. DQ rules+engine are decoupled; typed-field binding = `dq.ModelRuleAssignment` (model_label string, NOT ContentType/GenericForeignKey). NEVER add a generic per-row typed DQ result store — persist run-scoped summaries. See ADR 0025 + docs/STORAGE-PATTERN-HOSTED-APPS.md.
 RULE_28=NO THIN IMPLEMENTATION + NO AI-TOOLKIT VIOLATIONS (hard rule, 2026-09-02) — a phase is DONE only when the change is REAL, VERIFIED behavior: no stubs, no placeholders, no `pass`, no bare `TODO`, no `return []`/empty bodies unless the design genuinely requires it (e.g. an advisory domain with no call_host_api-backed tools), and every changed line is exercised by a test or a management-command check. A worker output that is thin/shallow OR violates any RULE_1-27 / `shared/definition-of-done.md` is REJECTED outright (not "sent back for polish"). Master Architect refuses to mark such a phase DONE.
 RULE_29=FRONTEND DEFINITION OF READY (hard rule, 2026-09-03) — NO page/view/component is coded until its Screen Spec is complete (`shared/frontend-ready.md`, 9 artifacts: story + journey + acceptance + composition + COMPLETE state matrix + data contract + a11y + performance + i18n). A frontend phase dispatched WITHOUT the attached spec is REJECTED. Product/UX authors Artifacts 1–3; Master Architect authors Artifacts 4–9; the Frontend Worker does NOT code before the spec exists.
-RULE_30=MULTI-MASTER OWNERSHIP (hard rule, 2026-09-16) — Every Master session declares a seat (Pulse|Nibras) per `.ai-toolkit/shared/multi-master.md` + `.ai-toolkit/masters/seats.md`. Never dispatch/edit/DONE a track you do not own. Cross-seat needs go to `docs/ops/MASTERS-COMMS.md` (REQUEST/ACK). TASKS.md Active focus must name Owner.
+RULE_30=MULTI-MASTER OWNERSHIP (hard rule, 2026-09-16) — Every Master session declares a seat (Pulse|Nibras|EduOS) per `.ai-toolkit/shared/multi-master.md` + `.ai-toolkit/masters/seats.md`. Never dispatch/edit/DONE a track you do not own. Cross-seat needs go to `docs/ops/MASTERS-COMMS.md` (REQUEST/ACK). TASKS.md Active focus must name Owner.
+RULE_31=EDUOS ≠ NIBRAS ≠ TECTONA (hard rule, 2026-09-18) — GradeVance and education assessment work belong to instance brand **EduOS** (`eduos`, `eduos.clearturn.tech`). Do NOT enable GradeVance on Nibras or treat Nibras as the education product home. Nibras = GOFSCO ERP. Tectona = AI showcase (Healthy + AI apps). Working in this monorepo while Nibras masters are active is logistics only. Canonical design: `docs/eduos/GRADEVANCE-DESIGN.md` · ADR-0038.
+RULE_32=GRADEVANCE HITL + ENGINE LEARNING (hard rule, 2026-09-18) — GradeVance summative paths require human accountability (review/release). Expert corrections MUST be typed events that can promote into versioned LCT/Rubric config packs (anchors, boundary pairs, disambiguations). No silent model/pack activation that rewrites released cohorts. Learning loop (mine → propose → κ/canary → activate) is part of the product definition — see GRADEVANCE-DESIGN §9.
 
 ## KEY ARCHITECTURE FILES
 # Workers should read these files first when working in related areas.

@@ -32,96 +32,256 @@ from ai.plans_service import (
     PlansService,
     STATUS_COMPLETED,
     STEP_COMPLETED,
+    STEP_SKIPPED,
     set_current_plan_run,
 )
 from ai.plugins.export_document import ExportDocument
 
 logger = logging.getLogger("carbon.ai.seed_complex_agent_demos")
 
+# Host-call resilience (W-4) — demos declare retry; driver enforces when live.
+_HOST_RETRY = {"max_attempts": 3, "backoff_ms": 400, "on": ["timeout", "transient"]}
+
+
+def build_payroll_board_pack_plan_json() -> dict:
+    """Branched + resilient payroll board-pack plan (ADR-0034 workflow_graph).
+
+    Flow::
+
+        fetch → variance → {choice}
+            ├─ guard: variance_pct <= 2.0 → summarize → critic → export
+            └─ default: escalate Finance (human) → block export
+
+        critic.catch → observe_repair → export | fail (no silent pack)
+
+    Linear ``steps`` remain for RunStep materialization; ``workflow_graph``
+    drives the DAG (choice / catch / retry) on the Run surface.
+    """
+    export_args = {
+        "format": "pack",
+        "title": "October Payroll Variance Board Pack",
+        "content": (
+            "## Executive summary\n"
+            "October payroll closed within tolerance after variance review.\n\n"
+            "### Branch taken\n"
+            "- Variance **1.8%** ≤ 2.0% band → continue (escalate path skipped)\n\n"
+            "### GOSI Exposure\n"
+            "- **Total GOSI Exposure**: KWD 184,220\n"
+            "- Employer share within policy band\n\n"
+            "### Outstanding Loans\n"
+            "- 42 active loans · KWD 312,400 outstanding\n\n"
+            "### Compliance Risk Flags\n"
+            "- 2 late enrollment cases — HR to close by month-end\n"
+            "- Critic passed; export allowed only after review\n"
+        ),
+        "table": {
+            "headers": ["Metric", "Value"],
+            "rows": [
+                ["Headcount", "529"],
+                ["Payroll total (KWD)", "1,204,550"],
+                ["Variance vs prior (%)", "1.8"],
+                ["Variance band", "<= 2.0"],
+                ["Branch", "within_band"],
+                ["GOSI exposure (KWD)", "184220"],
+                ["Outstanding loans (KWD)", "312400"],
+            ],
+        },
+    }
+    steps = [
+        {
+            "step_id": 0,
+            "intent": "Fetch headcount and payroll totals for the period",
+            "tool_name": "call_host_api",
+            "tool_args": {"path": "/api/analyze_employees", "method": "GET"},
+            "depends_on": [],
+            "agent_role": "domain_specialist",
+        },
+        {
+            "step_id": 1,
+            "intent": "Compute payroll variance vs prior month",
+            "tool_name": "call_host_api",
+            "tool_args": {"path": "/api/payroll/variance", "method": "GET"},
+            "depends_on": [0],
+            "agent_role": "domain_specialist",
+        },
+        {
+            "step_id": 2,
+            "intent": "Summarize GOSI exposure and outstanding loans",
+            "tool_name": None,
+            "tool_args": {},
+            "depends_on": [1],
+            "agent_role": "researcher",
+        },
+        {
+            "step_id": 3,
+            "intent": "Critic review: flag compliance risks before export",
+            "tool_name": None,
+            "tool_args": {},
+            "depends_on": [2],
+            "agent_role": "critic",
+        },
+        {
+            "step_id": 4,
+            "intent": "Export board pack as Word, Excel, PDF, and PNG chart",
+            "tool_name": "export_document",
+            "tool_args": export_args,
+            "depends_on": [3],
+            "agent_role": "orchestrator",
+            "is_mutation": True,
+        },
+        {
+            "step_id": 5,
+            "intent": "Escalate variance to Finance (human gate) — block silent export",
+            "tool_name": None,
+            "tool_args": {},
+            "depends_on": [1],
+            "agent_role": "orchestrator",
+            "branch": "escalate",
+        },
+    ]
+    workflow_graph = {
+        "version": "1",
+        "entry": "t0",
+        "nodes": [
+            {
+                "id": "t0",
+                "node_type": "task",
+                "intent": steps[0]["intent"],
+                "tool_name": "call_host_api",
+                "tool_args": steps[0]["tool_args"],
+                "retry": dict(_HOST_RETRY),
+                "timeout_ms": 15_000,
+                "meta": {"step_id": 0, "agent_role": "domain_specialist"},
+            },
+            {
+                "id": "t1",
+                "node_type": "task",
+                "intent": steps[1]["intent"],
+                "tool_name": "call_host_api",
+                "tool_args": steps[1]["tool_args"],
+                "retry": dict(_HOST_RETRY),
+                "timeout_ms": 15_000,
+                "meta": {"step_id": 1, "agent_role": "domain_specialist"},
+            },
+            {
+                "id": "choice_variance",
+                "node_type": "choice",
+                "intent": "Variance within policy band?",
+                "meta": {"agent_role": "orchestrator"},
+            },
+            {
+                "id": "t2",
+                "node_type": "task",
+                "intent": steps[2]["intent"],
+                "meta": {"step_id": 2, "agent_role": "researcher"},
+            },
+            {
+                "id": "t5",
+                "node_type": "human",
+                "intent": steps[5]["intent"],
+                "meta": {"step_id": 5, "agent_role": "orchestrator"},
+            },
+            {
+                "id": "t3",
+                "node_type": "task",
+                "intent": steps[3]["intent"],
+                "catch": [
+                    {
+                        "on": ["timeout", "permanent", "tool_error", "veto"],
+                        "next": "observe_repair",
+                    }
+                ],
+                "timeout_ms": 30_000,
+                "meta": {"step_id": 3, "agent_role": "critic"},
+            },
+            {
+                "id": "observe_repair",
+                "node_type": "observe",
+                "intent": "Repair critic findings before export (no silent pack)",
+                "meta": {"agent_role": "critic"},
+            },
+            {
+                "id": "t4",
+                "node_type": "task",
+                "intent": steps[4]["intent"],
+                "tool_name": "export_document",
+                "tool_args": export_args,
+                "is_mutation": True,
+                "meta": {"step_id": 4, "agent_role": "orchestrator"},
+            },
+            {
+                "id": "fail_block_export",
+                "node_type": "fail",
+                "intent": "Block export — unresolved critic or Finance escalation",
+            },
+        ],
+        "edges": [
+            {"source": "t0", "target": "t1", "label": "next"},
+            {"source": "t1", "target": "choice_variance", "label": "next"},
+            {
+                "source": "choice_variance",
+                "target": "t2",
+                "guard": "variance_pct <= 2.0",
+                "label": "within band",
+            },
+            {
+                "source": "choice_variance",
+                "target": "t5",
+                "is_default": True,
+                "label": "escalate",
+            },
+            {"source": "t2", "target": "t3", "label": "next"},
+            {"source": "t3", "target": "t4", "label": "critic ok"},
+            {
+                "source": "observe_repair",
+                "target": "t4",
+                "guard": "critic_healed == true",
+                "label": "healed",
+            },
+            {
+                "source": "observe_repair",
+                "target": "fail_block_export",
+                "is_default": True,
+                "label": "unresolved",
+            },
+            {
+                "source": "t5",
+                "target": "fail_block_export",
+                "label": "await Finance",
+            },
+        ],
+    }
+    return {
+        "pattern": "payroll_board_pack",
+        "brief": "October payroll variance board pack",
+        "steps": steps,
+        "workflow_graph": workflow_graph,
+        "demo_branch": {
+            "choice_id": "choice_variance",
+            "taken": "within_band",
+            "skipped_step_ids": [5],
+            "variance_pct": 1.8,
+        },
+    }
+
+
 # Stable template names — upsert by name+user.
 TEMPLATE_SPECS = [
     {
         "name": "Payroll variance board pack",
         "description": (
-            "Multi-agent payroll controller workflow: headcount → variance → "
-            "GOSI exposure → export Word/Excel/PDF/PNG pack."
+            "Multi-agent branched payroll pack: headcount → variance → "
+            "choice (within band vs Finance escalate) → GOSI summarize → "
+            "critic (catch→observe repair) → export Word/Excel/PDF/PNG. "
+            "Host fetches declare retry/timeout."
         ),
         "brief": (
-            "Run October payroll variance for GOFSCO. Summarize headcount, "
-            "GOSI exposure, and outstanding loans. Export a board pack "
-            "(Word + Excel + PDF + PNG chart)."
+            "Run October payroll variance for GOFSCO. If variance is within "
+            "band, summarize GOSI/loans, pass critic, then export a board pack "
+            "(Word + Excel + PDF + PNG). If over band, escalate to Finance and "
+            "do not export silently."
         ),
-        "plan_json": {
-            "pattern": "payroll_board_pack",
-            "brief": "October payroll variance board pack",
-            "steps": [
-                {
-                    "step_id": 0,
-                    "intent": "Fetch headcount and payroll totals for the period",
-                    "tool_name": "call_host_api",
-                    "tool_args": {"path": "/api/analyze_employees", "method": "GET"},
-                    "depends_on": [],
-                    "agent_role": "domain_specialist",
-                },
-                {
-                    "step_id": 1,
-                    "intent": "Compute payroll variance vs prior month",
-                    "tool_name": "call_host_api",
-                    "tool_args": {"path": "/api/payroll/variance", "method": "GET"},
-                    "depends_on": [0],
-                    "agent_role": "domain_specialist",
-                },
-                {
-                    "step_id": 2,
-                    "intent": "Summarize GOSI exposure and outstanding loans",
-                    "tool_name": None,
-                    "tool_args": {},
-                    "depends_on": [0, 1],
-                    "agent_role": "researcher",
-                },
-                {
-                    "step_id": 3,
-                    "intent": "Critic review: flag compliance risks before export",
-                    "tool_name": None,
-                    "tool_args": {},
-                    "depends_on": [2],
-                    "agent_role": "critic",
-                },
-                {
-                    "step_id": 4,
-                    "intent": "Export board pack as Word, Excel, PDF, and PNG chart",
-                    "tool_name": "export_document",
-                    "tool_args": {
-                        "format": "pack",
-                        "title": "October Payroll Variance Board Pack",
-                        "content": (
-                            "## Executive summary\n"
-                            "October payroll closed within tolerance after variance review.\n\n"
-                            "### GOSI Exposure\n"
-                            "- **Total GOSI Exposure**: KWD 184,220\n"
-                            "- Employer share within policy band\n\n"
-                            "### Outstanding Loans\n"
-                            "- 42 active loans · KWD 312,400 outstanding\n\n"
-                            "### Compliance Risk Flags\n"
-                            "- 2 late enrollment cases — HR to close by month-end\n"
-                        ),
-                        "table": {
-                            "headers": ["Metric", "Value"],
-                            "rows": [
-                                ["Headcount", "529"],
-                                ["Payroll total (KWD)", "1,204,550"],
-                                ["Variance vs prior (%)", "1.8"],
-                                ["GOSI exposure (KWD)", "184220"],
-                                ["Outstanding loans (KWD)", "312400"],
-                            ],
-                        },
-                    },
-                    "depends_on": [2, 3],
-                    "agent_role": "orchestrator",
-                    "is_mutation": True,
-                },
-            ],
-        },
+        "plan_json": build_payroll_board_pack_plan_json(),
     },
     {
         "name": "Leave & attendance compliance brief",
@@ -465,6 +625,18 @@ class Command(BaseCommand):
         """Create a completed Run + run export_document pack → real artifacts."""
         plan_json = json.loads(json.dumps(template.plan_json or {}))
         steps = [s for s in plan_json.get("steps", []) if isinstance(s, dict)]
+        demo_branch = plan_json.get("demo_branch") or {}
+        skipped_ids = {
+            int(x) for x in (demo_branch.get("skipped_step_ids") or [])
+        }
+        # Happy-path demo: mark escalate branch as skipped so the choice
+        # gateway annotates "within band" as chosen on the Run graph.
+        for step in steps:
+            sid = int(step.get("step_id", -1))
+            if sid in skipped_ids:
+                step["status"] = STEP_SKIPPED
+            else:
+                step["status"] = STEP_COMPLETED
         run_id = generate_uuid()
         Run.objects.create(
             id=run_id,
@@ -478,10 +650,13 @@ class Command(BaseCommand):
                 "from_template": template.id,
                 "demo_seed": True,
                 "seeded_at": now().isoformat(),
+                "demo_branch": demo_branch,
             },
             final_response=(
                 "### Demo board pack ready\n\n"
-                "Specialized agents prepared the payroll variance pack. "
+                "Specialized agents ran a **branched** payroll variance workflow "
+                "(within-band path taken; Finance escalate skipped). "
+                "Critic passed with catch→observe repair declared for failures. "
                 "Download Word, Excel, PDF, and the PNG chart from **Artifacts**.\n\n"
                 "Use **Discuss in Chat** to challenge the findings or refine the workflow."
             ),
@@ -489,6 +664,8 @@ class Command(BaseCommand):
         export_step_index = 0
         for step in steps:
             idx = int(step.get("step_id", 0))
+            step_status = STEP_SKIPPED if idx in skipped_ids else STEP_COMPLETED
+            step_state = "skipped" if idx in skipped_ids else "succeeded"
             RunStep.objects.create(
                 run_id=run_id,
                 step_index=idx,
@@ -496,9 +673,9 @@ class Command(BaseCommand):
                 tool_name=step.get("tool_name"),
                 tool_args_json=step.get("tool_args") or {},
                 depends_on_json=step.get("depends_on") or [],
-                status=STEP_COMPLETED,
+                status=step_status,
                 step_id=str(idx),
-                step_state="succeeded",
+                step_state=step_state,
             )
             if step.get("tool_name") == "export_document":
                 export_step_index = idx
@@ -533,6 +710,6 @@ class Command(BaseCommand):
         arts = PlansService().list_artifacts(user, run_id)
         self.stdout.write(
             f"  artifacts={arts.get('count', 0)} export_step={export_step_index} "
-            f"ids={result.get('artifact_ids')}"
+            f"ids={result.get('artifact_ids')} skipped={sorted(skipped_ids)}"
         )
         return run_id

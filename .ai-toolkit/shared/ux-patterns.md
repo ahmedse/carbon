@@ -22,6 +22,7 @@ Primary action is ONE button, top-right, semantic color. Secondary actions are s
 ## Forms
 - **Label above field.** Inline validation on blur, not only on submit.
 - **Every dropdown is searchable** — use `SearchSelect` (RULE 13), never a raw `<Select>`
+  or bare MUI `Autocomplete` for Catalog Studio pickers (ADR-0039)
   with hardcoded options for enums/entities. A picker must always show one of the 4 states
   (loading spinner / error+retry / "no matches" guidance / loaded options); a silently
   empty listbox is a bug, not a valid empty state.

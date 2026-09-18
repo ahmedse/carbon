@@ -27,7 +27,7 @@ import useDocumentTitle from '../../hooks/useDocumentTitle';
 import StorageIcon from '@mui/icons-material/Storage';
 import AIDomainEntryPoints from '../../shell/AIDomainEntryPoints';
 import { fetchDataSchemaTable, fetchDataSchemaFields, updateDataSchemaTable } from '../../api/dataschema';
-import { fetchTableRelations } from '../../api/catalog';
+import { fetchTableRelations, fetchTableAssetProfile } from '../../api/catalog';
 import BaseDetailPage from '../../components/detail/BaseDetailPage';
 import DetailHeader from '../../components/detail/DetailHeader';
 import DQRulesTab from './tabs/DQRulesTab';
@@ -38,6 +38,13 @@ import SchemaStructureTab from './tabs/SchemaStructureTab';
 import TableProfileTab from './tabs/TableProfileTab';
 import DQScorecardTab from './tabs/DQScorecardTab';
 import FreshnessChip from './tabs/FreshnessChip';
+import TrustChip from './tabs/TrustChip';
+
+function unwrapList(data) {
+  if (Array.isArray(data)) return data;
+  if (data && Array.isArray(data.results)) return data.results;
+  return [];
+}
 
 export default function SchemaDetailPage() {
   useDocumentTitle("Table Schema");
@@ -52,6 +59,7 @@ export default function SchemaDetailPage() {
   const [table, setTable] = useState(null);
   const [fields, setFields] = useState([]);
   const [relations, setRelations] = useState([]);
+  const [tableAssetId, setTableAssetId] = useState(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editFormData, setEditFormData] = useState({ title: '', description: '' });
   const [saving, setSaving] = useState(false);
@@ -79,6 +87,13 @@ export default function SchemaDetailPage() {
       // CB-09: list endpoints are paginated ({results:[...]}) — always unwrap
       setFields(Array.isArray(fieldsData) ? fieldsData : (fieldsData?.results || []));
       setRelations(Array.isArray(relationsData) ? relationsData : (relationsData?.results || []));
+
+      fetchTableAssetProfile(token, tableId)
+        .then((raw) => {
+          const tableAsset = unwrapList(raw).find((a) => !a.data_field) || null;
+          setTableAssetId(tableAsset?.id ?? null);
+        })
+        .catch(() => setTableAssetId(null));
     } catch (err) {
       const msg = err.message || t('schemaLoadError');
       setError(msg);
@@ -164,6 +179,16 @@ export default function SchemaDetailPage() {
       actions={
         <>
           <FreshnessChip tableId={table?.id ?? tableId} />
+          <TrustChip tableId={table?.id ?? tableId} />
+          {tableAssetId && (
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => navigate(`/catalog/assets/${tableAssetId}`)}
+            >
+              {t('openAssetProfile', { defaultValue: 'Open asset profile' })}
+            </Button>
+          )}
           <AIDomainEntryPoints
             entityType="table"
             entityId={table?.id ?? tableId}

@@ -33,6 +33,7 @@ import BadgeIcon from '@mui/icons-material/Badge';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import GroupsIcon from '@mui/icons-material/Groups';
 import PolicyIcon from '@mui/icons-material/Policy';
+import SearchIcon from '@mui/icons-material/Search';
 
 // Breadcrumb configuration based on routes
 const ROUTE_CONFIG = {
@@ -277,6 +278,11 @@ const ROUTE_CONFIG = {
     icon: DashboardIcon,
     parent: null,
   },
+  '/catalog/search': {
+    label: 'Search',
+    icon: SearchIcon,
+    parent: '/catalog',
+  },
   '/catalog/products': {
     label: 'Data Products',
     icon: StorageIcon,
@@ -303,33 +309,38 @@ const ROUTE_CONFIG = {
     parent: '/catalog/products',
   },
   '/catalog/metadata': {
-    label: 'Metadata Management',
+    label: 'Domains & Glossary',
     icon: LocationOnIcon,
     parent: '/catalog',
   },
   '/catalog/domains': {
     label: 'Domains',
     icon: LocationOnIcon,
-    parent: '/catalog',
+    parent: '/catalog/metadata',
   },
   '/catalog/glossary': {
     label: 'Glossary',
     icon: AssessmentIcon,
-    parent: '/catalog',
+    parent: '/catalog/metadata',
   },
   '/catalog/assets': {
-    label: 'Assets',
+    label: 'Asset Profiles',
     icon: AssignmentIcon,
     parent: '/catalog',
   },
   '/catalog/tags': {
     label: 'Tags',
     icon: LabelIcon,
-    parent: '/catalog',
+    parent: '/catalog/metadata',
   },
   '/catalog/mdm': {
-    label: 'MDM',
+    label: 'Reference Sets',
     icon: AccountTreeIcon,
+    parent: '/catalog',
+  },
+  '/catalog/datasets': {
+    label: 'Datasets',
+    icon: StorageIcon,
     parent: '/catalog',
   },
   '/catalog/connections': {
@@ -358,17 +369,17 @@ const ROUTE_CONFIG = {
     parent: '/catalog',
   },
   '/catalog/governance': {
-    label: 'Governance',
+    label: 'Audit Log',
     icon: VerifiedUserIcon,
     parent: '/catalog',
   },
   '/catalog/policies': {
-    label: 'Governance Policies',
+    label: 'Access Policies',
     icon: VerifiedUserIcon,
-    parent: '/catalog/governance',
+    parent: '/catalog',
   },
   '/dq': {
-    label: 'DQ Workspace',
+    label: 'Data Quality',
     icon: RuleIcon,
     parent: null,
   },

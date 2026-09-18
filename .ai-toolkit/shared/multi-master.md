@@ -9,7 +9,7 @@
 
 ## Why this exists
 
-Multiple Master Architect sessions may run in parallel (e.g. **Pulse** vs **Nibras**).
+Multiple Master Architect sessions may run in parallel (e.g. **Pulse** vs **Nibras** vs **EduOS**).
 `TASKS.md` alone is not enough: a row marked “MASTER PRIORITY” without an **Owner**
 causes track theft. This protocol makes ownership hard law.
 
@@ -20,7 +20,9 @@ causes track theft. This protocol makes ownership hard law.
 | Seat ID | Owns (summary) | Must not touch |
 |---------|----------------|----------------|
 | `Pulse` | AI/Pulse, ECF, PEC residuals, `backend/ai/**`, Pulse docs/ops | NSR people/my/team thickening, GOFSCO staff product UI |
-| `Nibras` | NSR, people/my/team/correspondence staff circuits | Pulse engine/host AI phases, ECF cutover |
+| `Nibras` | NSR, people/my/team/correspondence staff circuits | Pulse engine/host AI phases, ECF cutover; EduOS/GradeVance |
+| `EduOS` | GradeVance, LCT/Rubric packs, EduOS brand (`docs/eduos/**`) | Nibras ERP tracks; Tectona Healthy product |
+| `Catalog` | Data Trust platform — catalog/DQ/MDM/dataschema metadata plane | Pulse engine internals; Nibras staff UI; EduOS |
 
 Full path map: `.ai-toolkit/masters/seats.md`.
 
@@ -30,7 +32,7 @@ Full path map: `.ai-toolkit/masters/seats.md`.
 
 Before planning or dispatch:
 
-1. Declare aloud: **`I am Master: <Seat ID>`** (Pulse or Nibras).
+1. Declare aloud: **`I am Master: <Seat ID>`** (Pulse, Nibras, or EduOS).
 2. Read `.ai-toolkit/masters/seats.md`.
 3. Read `TASKS.md` → **Active focus** → only rows where **Owner = your Seat**.
 4. Read open items in `docs/ops/MASTERS-COMMS.md` addressed **TO: your Seat**.

@@ -17,6 +17,7 @@ import { getBudgetControl, patchBudgetControl } from '../../../../api/aiControlP
 import BudgetUsagePanel from '../BudgetUsagePanel';
 import EngineSettingsPanel from '../EngineSettingsPanel';
 import ControlHub from './ControlHub';
+import RolesMatrixPanel from './RolesMatrixPanel';
 
 function BudgetEditor() {
   useDocumentTitle('Platform Spend');
@@ -113,6 +114,7 @@ export default function PlatformHubPage() {
       tabs={[
         { id: 'spend', label: 'Spend', element: <BudgetEditor /> },
         { id: 'engine', label: 'Engine', element: <EngineSettingsPanel /> },
+        { id: 'roles', label: 'Roles', element: <RolesMatrixPanel /> },
       ]}
     />
   );

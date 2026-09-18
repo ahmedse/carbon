@@ -1,7 +1,8 @@
 // src/components/FilteredDataGrid.jsx
 // Shared grid page shell with search, a collapsible "Filters" panel, and a
-// standard data grid. Unified filter UX (matches DQ RulesTab): search is always
-// visible; filters collapse behind a Tune button and surface as removable chips.
+// standard data grid. Unified filter UX: search always visible; filters collapse
+// behind a Tune button and surface as removable chips.
+// RULE 13: filter pickers use platform SearchSelect (not raw MUI Select).
 
 import React, { useState } from 'react';
 import {
@@ -12,10 +13,6 @@ import {
   Paper,
   TextField,
   Typography,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Chip,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
@@ -24,6 +21,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 import StandardDataGrid from './StandardDataGrid';
 import PageContainer from './layout/PageContainer';
 import PageHeader from './Page/PageHeader';
+import { SearchSelect } from './Form';
 
 export default function FilteredDataGrid({
   title,
@@ -44,6 +42,7 @@ export default function FilteredDataGrid({
   rowsPerPageOptions = [25, 50, 100],
   emptyMessage,
   emptySubtext,
+  getRowId,
   _toolbar = false,
 }) {
   const { t } = useTranslation('common');
@@ -69,8 +68,8 @@ export default function FilteredDataGrid({
     <PageContainer>
       <PageHeader title={title} subtitle={subtitle} description={description} actions={actions} />
 
-      <Paper sx={{ p: 2, mb: 3, bgcolor: 'background.dark' }}>
-        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+      <Paper sx={{ p: 2, mb: 3, bgcolor: 'background.paper' }}>
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
           <TextField
             placeholder={t('searchByName')}
             value={searchValue}
@@ -116,27 +115,26 @@ export default function FilteredDataGrid({
 
         {showFilters && filterDefs.length > 0 && (
           <Grid container spacing={2} sx={{ mt: 2 }}>
-            {filterDefs.map((def) => (
-              <Grid size={{ xs: 12, sm: 6, md: 3 }} key={def.key}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>{def.label}</InputLabel>
-                  <Select
-                    value={filterValues[def.key] || ''}
+            {filterDefs.map((def) => {
+              const options = [
+                { value: '', label: def.emptyLabel || t('allX', { label: def.label }) },
+                ...(Array.isArray(def.options) ? def.options : []),
+              ];
+              return (
+                <Grid size={{ xs: 12, sm: 6, md: 3 }} key={def.key}>
+                  <SearchSelect
+                    options={options}
+                    valueKey="value"
+                    labelKey="label"
                     label={def.label}
-                    onChange={(e) => onFilterChange?.(def.key, e.target.value)}
-                  >
-                    <MenuItem value="">{def.emptyLabel || t('allX', { label: def.label })}</MenuItem>
-                    {Array.isArray(def.options)
-                      ? def.options.map((option) => (
-                          <MenuItem key={option.value} value={option.value}>
-                            {option.label}
-                          </MenuItem>
-                        ))
-                      : null}
-                  </Select>
-                </FormControl>
-              </Grid>
-            ))}
+                    value={filterValues[def.key] ?? ''}
+                    onChange={(v) => onFilterChange?.(def.key, v?.value ?? '')}
+                    clearable={false}
+                    size="small"
+                  />
+                </Grid>
+              );
+            })}
           </Grid>
         )}
       </Paper>
@@ -156,6 +154,7 @@ export default function FilteredDataGrid({
           rowsPerPageOptions={rowsPerPageOptions}
           hideFooterSelectedRowCount
           toolbar
+          getRowId={getRowId}
         />
 
         {rows.length === 0 && !loading && (

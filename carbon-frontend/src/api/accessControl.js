@@ -33,3 +33,8 @@ export function deleteScopedRole(token, id) {
 export function updateScopedRole(token, id, data) {
   return apiFetch(`${API_ROUTES.scopedRoles}${id}/`, { method: "PATCH", token, body: data });
 }
+
+/** Full group → capabilities matrix for Platform Roles tab. */
+export function fetchCapabilityMatrix(token) {
+  return apiFetch(API_ROUTES.capabilityMatrix, { token });
+}

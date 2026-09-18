@@ -13,11 +13,12 @@ Prints per-scenario PASS/FAIL plus a metrics JSON blob. Exits non-zero when:
 
 * any scenario fails, OR
 * ``fabrication_rate`` is not exactly 0, OR
-* scenario count < 20
+* scenario count < 20, OR
+* ``pass^k`` (default k=3) is not 100% identical green runs
 
 Also importable::
 
-    from ai.eval.run_harness import run_harness, metrics_fail_ci
+    from ai.eval.run_harness import run_harness, run_harness_pass_k, metrics_fail_ci
 """
 
 from __future__ import annotations
@@ -45,6 +46,7 @@ from ai.eval.scenarios_nibras import GOLDEN_NIBRAS_SCENARIOS, assert_scenario_co
 
 PROCESS_ID = "payroll.run.lifecycle"
 MINIMUM_SCENARIOS = 20
+DEFAULT_PASS_K = 3
 
 # Repo-relative paths (engine + domain packs live beside backend/)
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -322,7 +324,54 @@ def metrics_fail_ci(metrics: dict) -> bool:
         return True
     if float(metrics.get("fabrication_rate", 1.0)) != 0.0:
         return True
+    # pass^k gate — absent key means single-run mode (unit helpers); when
+    # present it must be True (k identical green runs).
+    if "pass_k_ok" in metrics and metrics.get("pass_k_ok") is not True:
+        return True
     return False
+
+
+def _outcome_fingerprint(results: list[dict]) -> tuple:
+    """Stable (id, passed) pairs — flaky if fingerprints diverge across runs."""
+    return tuple((r["id"], bool(r["passed"])) for r in results)
+
+
+def run_harness_pass_k(k: int = DEFAULT_PASS_K) -> dict[str, Any]:
+    """Run the full golden suite ``k`` independent times (pass^k).
+
+    Exit criteria (QA-FRAMEWORK / scenario bank S3):
+    * every run has ``failed == 0`` and ``fabrication_rate == 0``
+    * outcome fingerprints are identical across all runs (no flakes)
+    """
+    if k < 1:
+        raise ValueError(f"pass^k requires k>=1, got {k}")
+
+    runs: list[dict[str, Any]] = []
+    fingerprints: list[tuple] = []
+    for i in range(k):
+        report = run_harness()
+        runs.append(report)
+        fingerprints.append(_outcome_fingerprint(report["results"]))
+
+    base = runs[0]["metrics"]
+    identical = all(fp == fingerprints[0] for fp in fingerprints[1:])
+    all_green = all(
+        r["metrics"]["failed"] == 0
+        and float(r["metrics"]["fabrication_rate"]) == 0.0
+        for r in runs
+    )
+    pass_k_ok = identical and all_green
+
+    metrics = dict(base)
+    metrics["pass_k"] = k
+    metrics["pass_k_ok"] = pass_k_ok
+    metrics["pass_k_identical"] = identical
+    metrics["pass_k_all_green"] = all_green
+    metrics["pass_k_failed_runs"] = [
+        i for i, r in enumerate(runs) if r["metrics"]["failed"] > 0
+        or float(r["metrics"]["fabrication_rate"]) != 0.0
+    ]
+    return {"results": runs[0]["results"], "metrics": metrics, "runs": runs}
 
 
 def deliberate_fabrication_would_fail() -> bool:
@@ -386,7 +435,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    report = run_harness()
+    k = int(os.environ.get("EVAL_PASS_K", str(DEFAULT_PASS_K)))
+    report = run_harness_pass_k(k=k)
     metrics = report["metrics"]
 
     for row in report["results"]:
@@ -396,12 +446,19 @@ def main(argv: list[str] | None = None) -> int:
 
     print("---")
     print(f"pass_rate={metrics['passed']}/{metrics['scenario_count']}")
+    print(
+        f"pass^{metrics['pass_k']}="
+        f"{'OK' if metrics['pass_k_ok'] else 'FAIL'} "
+        f"(identical={metrics['pass_k_identical']} "
+        f"all_green={metrics['pass_k_all_green']})"
+    )
     print("METRICS_JSON=" + json.dumps(metrics, sort_keys=True))
 
     if metrics_fail_ci(metrics):
         print(
             "HARNESS GATE FAILED "
             f"(fabrication_rate={metrics['fabrication_rate']}, "
+            f"pass_k_ok={metrics.get('pass_k_ok')}, "
             f"failed={metrics['failed_ids']})",
             file=sys.stderr,
         )

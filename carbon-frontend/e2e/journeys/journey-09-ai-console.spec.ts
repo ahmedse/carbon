@@ -5,9 +5,8 @@
  *  1. Every gated /carbon-api/ai/pulse/* read path rejects anonymous (401).
  *  2. A global admin (admins_group) can read every panel (200).
  *  3. A plain branch data owner (no capability) is forbidden (403) — CBAC gating.
- *  4. Admin opens the Pulse console in-browser and sees the Overview heading.
- *  5. Admin drills into a PulseDataPanel-backed route (Knowledge Base) and the
- *     panel renders without crashing (no "Not authorized", no hard error).
+ *  4. Admin opens the Pulse console in-browser and sees the Command Center heading.
+ *  5. Admin drills into Assets → Knowledge and the curated knowledge panel renders.
  *
  * Serial execution + one-time auth to stay under the 5-logins/min throttle.
  */
@@ -102,14 +101,12 @@ test.describe.serial('Journey 9: AI Admin Console — Pulse + CBAC', () => {
     // Same browser context throughout: the SPA keeps its auth in localStorage,
     // so client-side (and same-context) navigation must not drop the session.
     await navigateTo(page, '/admin/ai');
-    await assertVisible(page, 'Pulse Overview', 8000);
+    await assertVisible(page, 'Command Center', 8000);
 
-    // Drill into a PulseDataPanel-backed route (Knowledge Base) — still the
-    // same authenticated session, so the read-only panel must render and must
-    // NOT hard-error into the "Not authorized" state.
-    await navigateTo(page, '/admin/ai/knowledge');
-    await assertVisible(page, 'Knowledge Base', 8000);
+    // Assets → Knowledge (legacy /admin/ai/knowledge redirects here)
+    await navigateTo(page, '/admin/ai/assets?tab=knowledge');
+    await assertVisible(page, 'Curated knowledge', 8000);
     await expect(page.getByText(/not authorized/i).first()).not.toBeVisible({ timeout: 5000 });
-    console.log('  ✅ /admin/ai renders the Overview and /admin/ai/knowledge renders the panel');
+    console.log('  ✅ /admin/ai renders Command Center and Assets Knowledge renders');
   });
 });

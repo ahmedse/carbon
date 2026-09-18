@@ -42,10 +42,6 @@ import {
   Tabs,
   Tab,
   Chip,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Card,
   CardContent,
   CardActions,
@@ -58,6 +54,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import DownloadIcon from '@mui/icons-material/Download';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import { SearchSelect } from '../../components/Form';
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -318,44 +315,39 @@ export default function ImportExportPage() {
         <Card sx={{ mb: 3 }}>
           <CardContent>
             <Typography variant="h6" sx={{ mb: 2 }}>{t('uploadDataFile')}</Typography>
-            <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-              <FormControl sx={{ minWidth: 200 }}>
-                <InputLabel>{t('targetTable')}</InputLabel>
-                <Select
-                  value={formData.data_table || ''}
-                  onChange={(e) => setFormData({ ...formData, data_table: e.target.value })}
+            <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+              <Box sx={{ minWidth: 200, flex: 1 }}>
+                <SearchSelect
+                  options={tables}
+                  valueKey="id"
+                  labelKey="title"
                   label={t('targetTable')}
-                >
-                  {tables.map((tbl) => (
-                    <MenuItem key={tbl.id} value={tbl.id}>{tbl.title}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <FormControl sx={{ minWidth: 150 }}>
-                <InputLabel>{t('format')}</InputLabel>
-                <Select
-                  value={formData.format || 'csv'}
-                  onChange={(e) => setFormData({ ...formData, format: e.target.value })}
+                  value={formData.data_table || ''}
+                  onChange={(v) => setFormData({ ...formData, data_table: v?.id ?? '' })}
+                />
+              </Box>
+              <Box sx={{ minWidth: 150, flex: 1 }}>
+                <SearchSelect
+                  options={formats}
+                  valueKey="value"
+                  labelKey="label"
                   label={t('format')}
-                >
-                  {formats.map((fmt) => (
-                    <MenuItem key={fmt.value} value={fmt.value}>{fmt.label}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <FormControl sx={{ minWidth: 150 }}>
-                <InputLabel>{t('dataSource')}</InputLabel>
-                <Select
-                  value={formData.source || ''}
-                  onChange={(e) => setFormData({ ...formData, source: e.target.value })}
+                  value={formData.format || 'csv'}
+                  onChange={(v) => setFormData({ ...formData, format: v?.value ?? 'csv' })}
+                  clearable={false}
+                />
+              </Box>
+              <Box sx={{ minWidth: 150, flex: 1 }}>
+                <SearchSelect
+                  options={dataSources}
+                  valueKey="id"
+                  labelKey="name"
                   label={t('dataSource')}
-                >
-                  <MenuItem value="">{t('noneShort')}</MenuItem>
-                  {dataSources.map((src) => (
-                    <MenuItem key={src.id} value={src.id}>{src.name}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+                  value={formData.source || ''}
+                  onChange={(v) => setFormData({ ...formData, source: v?.id ?? '' })}
+                  noOptionsText={t('noneShort')}
+                />
+              </Box>
             </Box>
             <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
               <Input
@@ -486,42 +478,32 @@ export default function ImportExportPage() {
             margin="normal"
             autoFocus
           />
-          <FormControl fullWidth margin="normal" size="small">
-            <InputLabel>{t('dataTable')}</InputLabel>
-            <Select
-              value={formData.data_table || ''}
-              onChange={(e) => setFormData({ ...formData, data_table: e.target.value })}
-              label={t('dataTable')}
-            >
-              {tables.map((tbl) => (
-                <MenuItem key={tbl.id} value={tbl.id}>{tbl.title}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl fullWidth margin="normal" size="small">
-            <InputLabel>{t('format')}</InputLabel>
-            <Select
-              value={formData.format || 'csv'}
-              onChange={(e) => setFormData({ ...formData, format: e.target.value })}
-              label={t('format')}
-            >
-              {formats.map((fmt) => (
-                <MenuItem key={fmt.value} value={fmt.value}>{fmt.label}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl fullWidth margin="normal" size="small">
-            <InputLabel>{t('schedule')}</InputLabel>
-            <Select
-              value={formData.schedule || 'manual'}
-              onChange={(e) => setFormData({ ...formData, schedule: e.target.value })}
-              label={t('schedule')}
-            >
-              {schedules.map((sch) => (
-                <MenuItem key={sch.value} value={sch.value}>{sch.label}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <SearchSelect
+            options={tables}
+            valueKey="id"
+            labelKey="title"
+            label={t('dataTable')}
+            value={formData.data_table || ''}
+            onChange={(v) => setFormData({ ...formData, data_table: v?.id ?? '' })}
+          />
+          <SearchSelect
+            options={formats}
+            valueKey="value"
+            labelKey="label"
+            label={t('format')}
+            value={formData.format || 'csv'}
+            onChange={(v) => setFormData({ ...formData, format: v?.value ?? 'csv' })}
+            clearable={false}
+          />
+          <SearchSelect
+            options={schedules}
+            valueKey="value"
+            labelKey="label"
+            label={t('schedule')}
+            value={formData.schedule || 'manual'}
+            onChange={(v) => setFormData({ ...formData, schedule: v?.value ?? 'manual' })}
+            clearable={false}
+          />
           <TextField
             label={t('description')}
             size="small"

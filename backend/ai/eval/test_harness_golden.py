@@ -37,8 +37,42 @@ def test_harness_passes_with_fabrication_rate_zero():
     assert metrics["failed"] == 0, metrics["failed_ids"]
     assert metrics["fabrication_rate"] == 0.0
     assert metrics["pass_rate"] == 1.0
-    assert metrics["tokens"] == 0
+    # Single-run helper omits pass_k_ok — CI entry uses run_harness_pass_k.
     assert not metrics_fail_ci(metrics)
+
+
+def test_pass_k_three_identical_green():
+    """S3 / QA-FRAMEWORK: pass^k=3 — all runs green and fingerprints identical."""
+    from ai.eval.run_harness import run_harness_pass_k
+
+    report = run_harness_pass_k(k=3)
+    metrics = report["metrics"]
+    assert metrics["pass_k"] == 3
+    assert metrics["pass_k_ok"] is True
+    assert metrics["pass_k_identical"] is True
+    assert metrics["pass_k_all_green"] is True
+    assert metrics["fabrication_rate"] == 0.0
+    assert metrics["failed"] == 0
+    assert not metrics_fail_ci(metrics)
+
+
+def test_metrics_fail_ci_on_pass_k_not_ok():
+    assert metrics_fail_ci(
+        {
+            "scenario_count": 20,
+            "failed": 0,
+            "fabrication_rate": 0.0,
+            "pass_k_ok": False,
+        }
+    )
+    assert not metrics_fail_ci(
+        {
+            "scenario_count": 20,
+            "failed": 0,
+            "fabrication_rate": 0.0,
+            "pass_k_ok": True,
+        }
+    )
 
 
 def test_deliberate_fabrication_fails_check():

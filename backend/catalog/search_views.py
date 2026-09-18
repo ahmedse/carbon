@@ -101,8 +101,19 @@ class CatalogSearchView(APIView):
         if 'glossary' in requested_types:
             all_results.extend(self._search_glossary(q))
 
-        # Sort by rank (descending) and paginate
+        # Sort by rank (descending)
         all_results.sort(key=lambda x: (-x['rank'], x['id']))
+
+        # Attach trust before trust_tier filter + pagination (ADR-0039 / DTR FE)
+        self._attach_trust(all_results)
+
+        trust_tier = (request.query_params.get('trust_tier') or '').strip().lower()
+        if trust_tier in ('trusted', 'limited', 'untrustworthy'):
+            all_results = [
+                r for r in all_results
+                if r.get('type') in ('table', 'field') and r.get('trust_tier') == trust_tier
+            ]
+
         total = len(all_results)
         offset = (page - 1) * self.PAGE_SIZE
         paginated_results = all_results[offset:offset + self.PAGE_SIZE]
@@ -114,6 +125,7 @@ class CatalogSearchView(APIView):
         return Response({
             'query': q,
             'total': total,
+            'trust_tier': trust_tier or None,
             'results': paginated_results
         })
 
@@ -135,7 +147,7 @@ class CatalogSearchView(APIView):
                 'id': table['id'],
                 'name': table['title'],
                 'description': table['description'] or '',
-                'url_hint': f'/catalog/schema/{table["module_id"]}?table={table["id"]}',
+                'url_hint': f'/catalog/tables/{table["id"]}',
                 'rank': table['rank'],
             })
         return results
@@ -176,7 +188,8 @@ class CatalogSearchView(APIView):
                 'id': field['id'],
                 'name': field['label'],
                 'description': field['description'] or '',
-                'url_hint': f'/catalog/schema/{field["data_table__module_id"]}?table={field["data_table_id"]}&field={field["id"]}',
+                'data_table_id': field['data_table_id'],
+                'url_hint': f'/catalog/tables/{field["data_table_id"]}?field={field["id"]}',
                 'rank': 0.0,  # icontains results ranked below FTS
             })
         return results
@@ -194,7 +207,55 @@ class CatalogSearchView(APIView):
                 'id': term['id'],
                 'name': term['term'],
                 'description': term['definition'] or '',
-                'url_hint': f'/catalog/glossary/{term["id"]}',
+                'url_hint': f'/catalog/metadata#glossary',
                 'rank': 0.0,  # icontains results ranked below FTS
             })
         return results
+
+    def _attach_trust(self, results):
+        """Attach trust_index / trust_tier to table and field search hits (ADR-0039 + DTR-5)."""
+        from .models import AssetProfile
+        from .trust_index import (
+            batch_freshness_for_table_ids,
+            compute_trust_index,
+            table_id_for_asset,
+        )
+
+        table_ids = [r['id'] for r in results if r.get('type') == 'table']
+        field_ids = [r['id'] for r in results if r.get('type') == 'field']
+        by_table = {}
+        by_field = {}
+
+        if table_ids:
+            for profile in AssetProfile.objects.filter(
+                data_table_id__in=table_ids, data_field__isnull=True
+            ).prefetch_related('tags'):
+                by_table[profile.data_table_id] = profile
+        if field_ids:
+            for profile in AssetProfile.objects.filter(
+                data_field_id__in=field_ids
+            ).select_related('data_field').prefetch_related('tags'):
+                by_field[profile.data_field_id] = profile
+
+        freshness_table_ids = list(table_ids)
+        for profile in by_field.values():
+            tid = table_id_for_asset(profile)
+            if tid:
+                freshness_table_ids.append(tid)
+        freshness_map = batch_freshness_for_table_ids(freshness_table_ids)
+
+        for result in results:
+            profile = None
+            if result.get('type') == 'table':
+                profile = by_table.get(result['id'])
+            elif result.get('type') == 'field':
+                profile = by_field.get(result['id'])
+            if profile is None:
+                result['trust_index'] = None
+                result['trust_tier'] = None
+                continue
+            tid = table_id_for_asset(profile)
+            freshness = freshness_map.get(tid) if tid else None
+            trust = compute_trust_index(profile, freshness=freshness)
+            result['trust_index'] = trust['score']
+            result['trust_tier'] = trust['tier']

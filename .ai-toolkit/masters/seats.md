@@ -50,6 +50,66 @@ Shared = either Master may read; write only when your track owns the change.
 
 ### Must not touch
 - ECF / PEC / Pulse engine phases; `backend/ai/engine/**` internals; Pulse Console/AI workspace product work
+- EduOS / GradeVance product tracks (unless COMMS ACK)
+
+---
+
+## Seat: EduOS
+
+**Tracks:** GradeVance design + scaffold, LCT/Rubric config engines, EduOS brand,
+education assessment/coaching product. Canonical design:
+`docs/eduos/GRADEVANCE-DESIGN.md` · ADR-0038.
+
+### Exclusive write
+- `docs/eduos/**`
+- `backend/gradevance/**` (when created)
+- `carbon-frontend/src/apps/gradevance/**` (when created)
+- `carbon-frontend/src/brands/eduos.js`
+- `backend/ai/engine/instances/eduos/**`
+- `domain_packs/eduos/**` / GradeVance engine packs (when created)
+- ADR-0038 and future EduOS/GradeVance ADRs
+
+### Shared (coordinate via COMMS if touching)
+- Local `./manage.sh` stack — **stack lease** (`shared/multi-master.md`)
+- Root `TASKS.md` / `TASK-RESULTS.md` — **only EduOS / GradeVance sections**
+- Pulse HITL/eval hooks used by GradeVance — REQUEST to Pulse seat
+
+### Must not touch
+- Nibras People/Payroll product UI or payroll correctness tracks
+- Tectona Healthy product tracks (except shared platform bugs via COMMS)
+
+### Logistics note
+Coding may occur in this monorepo while Nibras masters are active. That does
+**not** place GradeVance on the Nibras instance. Product home = EduOS.
+
+---
+
+## Seat: Catalog
+
+**Tracks:** Data Trust platform — `catalog` / `dq` / `mdm` / `dataschema` metadata plane,
+Data Trust Index, glossary, lineage, freshness, Dataset Hub contracts. Domain-agnostic
+(RULE: catalog must not import emissions/hosted apps).
+
+### Exclusive write
+- `backend/catalog/**`
+- `backend/dq/**` (DQ rules, scorecards, catalog write-back)
+- `backend/mdm/**` (reference data / org units as trust producers)
+- `carbon-frontend/src/pages/catalog/**`
+- `carbon-frontend/src/pages/admin/catalog/**`
+- `carbon-frontend/src/api/{catalog,dq,mdm}*.js` (when present)
+- `docs/catalog/**`, `docs/data-trust/**` (when created)
+- ADRs amending catalog/DQ/MDM Data Trust (e.g. future Trust Index ADR)
+
+### Shared (coordinate via COMMS if touching)
+- `backend/dataschema/**` when FieldAccessPolicy / PII masking couples to catalog
+- Pulse `api_catalog` / AI grounding that consumes catalog trust — REQUEST to Pulse
+- Local `./manage.sh` stack — **stack lease**
+- Root `TASKS.md` / `TASK-RESULTS.md` — **only Catalog / Data Trust sections**
+
+### Must not touch
+- Pulse engine/host AI phases (`backend/ai/engine/**`) except COMMS ACK for grounding
+- Nibras people/my/team product UI
+- EduOS / GradeVance product tracks
 
 ---
 

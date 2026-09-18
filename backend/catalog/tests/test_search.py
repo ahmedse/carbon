@@ -420,13 +420,52 @@ class TestCatalogSearchResults:
         for result in data['results']:
             url_hint = result['url_hint']
             if result['type'] == 'table':
-                assert '/catalog/schema/' in url_hint
-                assert '?table=' in url_hint
+                assert url_hint.startswith('/catalog/tables/')
             elif result['type'] == 'domain':
                 assert '/catalog/domains/' in url_hint
             elif result['type'] == 'field':
-                assert '/catalog/schema/' in url_hint
-                assert '?table=' in url_hint
-                assert '&field=' in url_hint
+                assert url_hint.startswith('/catalog/tables/')
+                assert 'field=' in url_hint
+                assert result.get('data_table_id') is not None
             elif result['type'] == 'glossary':
-                assert '/catalog/glossary/' in url_hint
+                assert '/catalog/metadata' in url_hint
+
+    def test_search_includes_trust_fields(self, db, api_client_superuser, table_1):
+        """Table/field hits expose trust_index and trust_tier (ADR-0039)."""
+        from catalog.models import AssetProfile
+        AssetProfile.objects.create(
+            data_table=table_1,
+            description='Revenue facts',
+            quality_score=80,
+        )
+        response = api_client_superuser.get('/carbon-api/catalog/search/?q=revenue&types=table')
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data['total'] >= 1
+        hit = next(r for r in data['results'] if r['type'] == 'table' and r['id'] == table_1.id)
+        assert 'trust_index' in hit
+        assert 'trust_tier' in hit
+        assert hit['trust_index'] is not None
+        assert hit['trust_tier'] in ('trusted', 'limited', 'untrustworthy')
+
+    def test_search_trust_tier_filter(self, db, api_client_superuser, table_1):
+        """trust_tier query param keeps only matching table/field hits."""
+        from catalog.models import AssetProfile
+        # Minimal profile → untrustworthy (freshness unknown = 5 pts only)
+        AssetProfile.objects.create(data_table=table_1)
+
+        resp_u = api_client_superuser.get(
+            '/carbon-api/catalog/search/?q=revenue&types=table&trust_tier=untrustworthy'
+        )
+        assert resp_u.status_code == status.HTTP_200_OK
+        data_u = resp_u.json()
+        assert data_u.get('trust_tier') == 'untrustworthy'
+        assert any(r['id'] == table_1.id for r in data_u['results'])
+        for hit in data_u['results']:
+            assert hit['trust_tier'] == 'untrustworthy'
+
+        resp_t = api_client_superuser.get(
+            '/carbon-api/catalog/search/?q=revenue&types=table&trust_tier=trusted'
+        )
+        assert resp_t.status_code == status.HTTP_200_OK
+        assert all(r['id'] != table_1.id for r in resp_t.json()['results'])

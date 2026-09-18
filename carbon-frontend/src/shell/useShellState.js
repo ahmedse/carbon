@@ -26,7 +26,7 @@ import { useEnabledApps } from '../hooks/useEnabledApps';
 const PLATFORM_STUDIOS = [
   { id: 'home',     label: 'Home',            icon: DashboardIcon,          path: '/'               },
   // ── App studios injected here at runtime ──
-  { id: 'catalog',  label: 'Catalog Studio', icon: CatalogIcon,            path: '/catalog/domains' },
+  { id: 'catalog',  label: 'Catalog Studio', icon: CatalogIcon,            path: '/catalog' },
   { id: 'admin',    label: 'Platform Admin', icon: AdminPanelSettingsIcon, path: '/admin/users'     },
   { id: 'ai-admin', label: 'Pulse Control',  icon: PsychologyIcon,          path: '/admin/ai'         },
   { id: 'settings', label: 'Settings',        icon: SettingsIcon,           path: '/settings',  bottom: true },

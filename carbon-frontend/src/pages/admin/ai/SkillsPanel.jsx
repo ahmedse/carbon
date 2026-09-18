@@ -8,6 +8,7 @@
 // RULE_8 tokens only; RULE_10 apiFetch only; RULE_23 outcome copy only.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Button,
   Chip,
   CircularProgress,
@@ -36,6 +37,7 @@ import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
 import { AI_PROCESS_OWNER, AI_PUBLISHER, hasAnyCap } from '../../../capabilities';
 import { listSkills, promoteSkill, rejectSkill } from '../../../api/aiCatalog';
+import { getCommandCenter } from '../../../api/aiControlPlane';
 
 /** Admission verdict → theme token (RULE_8). */
 function verdictColor(verdict, theme) {
@@ -113,11 +115,22 @@ export default function SkillsPanel() {
   const [denied, setDenied] = useState({});
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [learningFrozen, setLearningFrozen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const rows = await listSkills(token);
+      const [rows, command] = await Promise.all([
+        listSkills(token),
+        getCommandCenter(token).catch(() => null),
+      ]);
+      const frozen = Boolean(
+        command?.containment?.learning_admissions_frozen
+          || ['learning_freeze', 'full_stop'].includes(
+            command?.containment?.containment_level,
+          ),
+      );
+      setLearningFrozen(frozen);
       setSkills(Array.isArray(rows) ? rows : []);
       setOffline(false);
       setSelected((prev) => {
@@ -128,6 +141,7 @@ export default function SkillsPanel() {
     } catch {
       setSkills([]);
       setOffline(true);
+      setLearningFrozen(false);
     } finally {
       setLoading(false);
     }
@@ -140,17 +154,23 @@ export default function SkillsPanel() {
   const skillDenied = selected?.id ? Boolean(denied[selected.id]) : false;
   const status = selected?.status || '';
   const canPromote =
-    canDecide && !skillDenied && PROMOTE_STATUSES.has(status) && acting !== 'promote';
+    canDecide
+    && !skillDenied
+    && !learningFrozen
+    && PROMOTE_STATUSES.has(status)
+    && acting !== 'promote';
   const canReject =
     canDecide && !skillDenied && REJECT_STATUSES.has(status) && acting !== 'reject';
 
-  const promoteReason = skillDenied
-    ? 'You do not have permission for this action.'
-    : !canDecide
-      ? 'Requires ai:publisher or ai:process_owner'
-      : !PROMOTE_STATUSES.has(status)
-        ? 'Only draft or approved skills can be promoted.'
-        : '';
+  const promoteReason = learningFrozen
+    ? 'Learning admissions are frozen — promote is locked.'
+    : skillDenied
+      ? 'You do not have permission for this action.'
+      : !canDecide
+        ? 'Requires ai:publisher or ai:process_owner'
+        : !PROMOTE_STATUSES.has(status)
+          ? 'Only draft or approved skills can be promoted.'
+          : '';
 
   const rejectReasonTip = skillDenied
     ? 'You do not have permission for this action.'
@@ -296,6 +316,13 @@ export default function SkillsPanel() {
           Skill catalog with admission-gate verdicts. Publishers and process owners can
           promote a skill after the gate admits it, or retire one with a reason.
         </Typography>
+
+        {learningFrozen && (
+          <Alert severity="warning" data-testid="skills-learning-freeze">
+            Learning admissions are frozen. Promote is disabled until containment returns
+            to normal.
+          </Alert>
+        )}
 
         {loading && (
           <Paper variant="outlined" sx={{ p: 4, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>

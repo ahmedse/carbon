@@ -36,7 +36,7 @@ function dockedPulseMaxSize() {
 const STUDIO_PATHS = {
   home: '/',
   carbon: '/carbon/dashboard',
-  catalog: '/catalog/domains',
+  catalog: '/catalog',
   admin: '/admin/users',
   'ai-admin': '/admin/ai',
   settings: '/settings',

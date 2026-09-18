@@ -45,6 +45,11 @@ from ai.control_plane_api import (
     LearningCandidatesView,
     PdpDryRunView,
 )
+from ai.prompt_governance_api import (
+    PromptVersionActivateView,
+    PromptVersionListView,
+    PromptVersionRollbackView,
+)
 from ai.sweeps_api import SweepsStatusView
 
 urlpatterns = [
@@ -71,6 +76,21 @@ urlpatterns = [
     path("control/candidates/", LearningCandidatesView.as_view(), name="ai-control-candidates"),
     path("control/pdp/dry-run/", PdpDryRunView.as_view(), name="ai-control-pdp-dry-run"),
     path("control/budget/", BudgetControlView.as_view(), name="ai-control-budget"),
+    path(
+        "control/prompts/versions/",
+        PromptVersionListView.as_view(),
+        name="ai-control-prompt-versions",
+    ),
+    path(
+        "control/prompts/versions/<str:version_id>/activate/",
+        PromptVersionActivateView.as_view(),
+        name="ai-control-prompt-activate",
+    ),
+    path(
+        "control/prompts/versions/<str:version_id>/rollback/",
+        PromptVersionRollbackView.as_view(),
+        name="ai-control-prompt-rollback",
+    ),
     # Domain app manifest API — available to all authenticated users
     path("apps/", DomainAppManifestListView.as_view(), name="ai-domain-apps"),
     path("apps/<str:app_identifier>/", DomainAppManifestDetailView.as_view(), name="ai-domain-app-detail"),

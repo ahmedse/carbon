@@ -12,12 +12,8 @@ import {
   Button,
   Chip,
   CircularProgress,
-  FormControl,
   IconButton,
-  InputLabel,
-  MenuItem,
   Paper,
-  Select,
   Table,
   TableBody,
   TableCell,
@@ -37,6 +33,7 @@ import StorageIcon from '@mui/icons-material/Storage';
 import { fetchDataSources, createDataSource, updateDataSource, deleteDataSource, testDataSource } from '../../api/catalog';
 import BaseDetailPage from '../../components/detail/BaseDetailPage';
 import DetailHeader from '../../components/detail/DetailHeader';
+import { SearchSelect } from '../../components/Form';
 import HomeIcon from '@mui/icons-material/Home';
 import { useNotes } from '../../notes/NotesContext';
 import { registerDataSourceInspectorTabs } from '../../inspector/tabs/collectionTabs';
@@ -296,18 +293,15 @@ export default function DataSourcesDetailPage() {
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             margin="normal"
           />
-          <FormControl fullWidth margin="normal" size="small">
-            <InputLabel>{t('sourceType')}</InputLabel>
-            <Select
-              value={formData.source_type}
-              label={t('sourceType')}
-              onChange={(e) => setFormData({ ...formData, source_type: e.target.value })}
-            >
-              {SOURCE_TYPES.map((type) => (
-                <MenuItem key={type} value={type}>{type}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <SearchSelect
+            options={SOURCE_TYPES.map((type) => ({ value: type, label: type }))}
+            valueKey="value"
+            labelKey="label"
+            label={t('sourceType')}
+            value={formData.source_type}
+            onChange={(v) => setFormData({ ...formData, source_type: v?.value ?? 'database' })}
+            clearable={false}
+          />
           <TextField
             fullWidth
             size="small"

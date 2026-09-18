@@ -1,39 +1,43 @@
 // src/apps/my/components/WorkflowGraph.jsx
-// Presentational — horizontal node-edge DAG for the approver chain.
-// One node per `approver_chain` step (ordered by `order`) plus a terminal
-// "Completed" node. Node color encodes state, but every node ALSO carries
-// text (role / intent / decision chip), so the graph is never color-only.
-// Pure function of props (React.memo, no effects, no fetch). RTL mirrors the
-// flow arrows via theme.direction.
-import React, { Fragment, memo, useMemo } from 'react';
+// Thin domain adapter over EnterpriseGraph (ADR-0012) — same Pulse agent
+// canvas used by PlanDagGraph. Maps correspondence `approver_chain` to a
+// linear left→right DAG. Presentational only (no fetch).
+import React, { memo, useCallback, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
-import { Box, Card, CardContent, Chip, Stack, Typography, useTheme } from '@mui/material';
-import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import { Box, Stack, Typography, useTheme } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { SectionTitle } from './myRequestsCommon';
+import EnterpriseGraph from '../../../components/graph/EnterpriseGraph';
 import { codeLabel, ROLE_SUFFIX, INTENT_SUFFIX } from './myRequestsLabels';
-import { useIsMobile } from '../../../hooks/useIsMobile';
-import { FONT } from '../../../theme/themeTokens';
 
-/**
- * Node state → theme color token (RULE_8 — never raw hex), MUI Chip color,
- * and localized label key. `skipped_auto` = auto-approve / empty-approver
- * steps; `skipped_condition` = condition-failed steps (visibly distinct from
- * approved/rejected, and labelled in TEXT — never color-only).
- */
-const STATE_META = {
-  current: { color: 'primary.main', chip: 'primary', label: 'graphNodeCurrent' },
-  approved: { color: 'success.main', chip: 'success', label: 'graphNodeApproved' },
-  acknowledged: { color: 'info.main', chip: 'info', label: 'graphNodeAcknowledged' },
-  reviewed: { color: 'secondary.main', chip: 'secondary', label: 'graphNodeReviewed' },
-  rejected: { color: 'error.main', chip: 'error', label: 'graphNodeRejected' },
-  sent_back: { color: 'warning.main', chip: 'warning', label: 'graphNodeSentBack' },
-  skipped_auto: { color: 'text.disabled', chip: 'default', label: 'graphNodeSkippedAuto' },
-  skipped_condition: { color: 'text.disabled', chip: 'default', label: 'graphNodeSkippedCondition' },
-  pending: { color: 'text.disabled', chip: 'default', label: 'graphNodePending' },
+/** Layout mirrors EXEC_LAYOUT density (ADR-0012 / planGraph.js). */
+const LAYOUT = {
+  nodeW: 200,
+  nodeH: 58,
+  colGap: 56,
+  padX: 28,
+  padY: 32,
 };
 
-/** Canonical display order for the legend (matches flow progression). */
+/**
+ * Approver decision / position → EnterpriseGraph node.status (drives pulse +
+ * border accent via nodeColor). Labels stay in text (RULE_5).
+ */
+const STATE_META = {
+  current: { status: 'running', colorToken: 'primary.main', label: 'graphNodeCurrent' },
+  approved: { status: 'completed', colorToken: 'success.main', label: 'graphNodeApproved' },
+  acknowledged: { status: 'completed', colorToken: 'info.main', label: 'graphNodeAcknowledged' },
+  reviewed: { status: 'completed', colorToken: 'secondary.main', label: 'graphNodeReviewed' },
+  rejected: { status: 'failed', colorToken: 'error.main', label: 'graphNodeRejected' },
+  sent_back: { status: 'awaiting_approval', colorToken: 'warning.main', label: 'graphNodeSentBack' },
+  skipped_auto: { status: 'skipped', colorToken: 'text.disabled', label: 'graphNodeSkippedAuto' },
+  skipped_condition: {
+    status: 'skipped',
+    colorToken: 'text.disabled',
+    label: 'graphNodeSkippedCondition',
+  },
+  pending: { status: 'pending', colorToken: 'text.disabled', label: 'graphNodePending' },
+};
+
 const STATE_ORDER = [
   'current',
   'approved',
@@ -46,14 +50,12 @@ const STATE_ORDER = [
   'pending',
 ];
 
-/** Resolve a `palette` token path (e.g. "success.main") to a concrete color. */
-function tokenColor(theme, token) {
+function resolveToken(theme, token) {
   if (!token || typeof token !== 'string') return theme.palette.text.disabled;
-  const value = token.split('.').reduce((acc, part) => (acc == null ? acc : acc[part]), theme.palette);
-  return value || theme.palette.text.disabled;
+  return token.split('.').reduce((acc, part) => (acc == null ? acc : acc[part]), theme.palette)
+    || theme.palette.text.disabled;
 }
 
-/** Derive a node state from a chain step + the current step index. */
 function stepState(step, order, currentStep) {
   const decision = step?.decision;
   if (decision === 'skip') return 'skipped_condition';
@@ -67,266 +69,218 @@ function stepState(step, order, currentStep) {
   return 'pending';
 }
 
-/** Terminal "Completed" node is reached only when the flow approved. */
 function terminalState(status) {
-  return status === 'approved' ? 'approved' : 'pending';
+  if (status === 'approved') return 'approved';
+  if (status === 'rejected') return 'rejected';
+  return 'pending';
 }
-
-/** Horizontal arrow connector (SVG). Flips direction under RTL. */
-function FlowArrow({ rtl }) {
-  return (
-    <Box
-      aria-hidden="true"
-      sx={{ flexShrink: 0, px: 0.5, alignSelf: 'center', color: 'text.disabled' }}
-    >
-      <svg
-        width="18"
-        height="12"
-        viewBox="0 0 18 12"
-        focusable="false"
-        style={{ display: 'block', transform: rtl ? 'scaleX(-1)' : undefined }}
-      >
-        <line x1="0" y1="6" x2="14" y2="6" stroke="currentColor" strokeWidth="1.5" />
-        <polygon points="14,2 18,6 14,10" fill="currentColor" />
-      </svg>
-    </Box>
-  );
-}
-
-FlowArrow.propTypes = {
-  rtl: PropTypes.bool,
-};
-
-FlowArrow.defaultProps = {
-  rtl: false,
-};
-
-/** One workflow node — a focusable button with role/intent/decision text. */
-function NodeBox({ node, meta, color, filled, fullWidth }) {
-  const muted = node.state === 'pending' || node.state === 'skipped_auto' || node.state === 'skipped_condition';
-  return (
-    <Box
-      component="button"
-      type="button"
-      tabIndex={0}
-      aria-label={node.ariaLabel}
-      aria-current={node.state === 'current' ? 'step' : undefined}
-      sx={{
-        flexShrink: 0,
-        width: fullWidth ? '100%' : 150,
-        minHeight: 76,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'stretch',
-        textAlign: 'start',
-        gap: 0.5,
-        p: 1,
-        bgcolor: filled ? 'primary.main' : 'background.paper',
-        color: filled ? 'primary.contrastText' : 'text.primary',
-        border: '1px solid',
-        borderColor: filled ? 'primary.main' : muted ? 'divider' : color,
-        borderInlineStart: '4px solid',
-        borderInlineStartColor: color,
-        borderRadius: 1.5,
-        cursor: 'default',
-        '&:hover': { bgcolor: filled ? 'primary.dark' : 'action.hover' },
-        '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
-      }}
-    >
-      <Typography sx={{ ...FONT.body2, fontWeight: 600, lineHeight: 1.3, color: 'inherit' }} noWrap>
-        {node.role}
-      </Typography>
-      {node.intent ? (
-        <Typography
-          sx={{
-            ...FONT.bodySmall,
-            lineHeight: 1.3,
-            color: filled ? 'primary.contrastText' : 'text.secondary',
-            opacity: filled ? 0.85 : 1,
-          }}
-          noWrap
-        >
-          {node.intent}
-        </Typography>
-      ) : null}
-      <Chip
-        size="small"
-        variant="outlined"
-        color={filled ? 'default' : meta.chip}
-        label={node.stateLabel}
-        sx={{
-          alignSelf: 'flex-start',
-          height: 16,
-          fontSize: '0.5625rem',
-          '& .MuiChip-label': { px: 0.75 },
-          ...(filled ? { color: 'primary.contrastText', borderColor: 'primary.contrastText' } : {}),
-        }}
-      />
-      {node.metaText ? (
-        <Typography
-          sx={{
-            ...FONT.bodySmall,
-            lineHeight: 1.3,
-            color: filled ? 'primary.contrastText' : 'text.secondary',
-            opacity: filled ? 0.85 : 1,
-          }}
-          noWrap
-        >
-          {node.metaText}
-        </Typography>
-      ) : null}
-    </Box>
-  );
-}
-
-NodeBox.propTypes = {
-  node: PropTypes.shape({
-    state: PropTypes.string.isRequired,
-    role: PropTypes.string.isRequired,
-    intent: PropTypes.string,
-    stateLabel: PropTypes.string.isRequired,
-    metaText: PropTypes.string,
-    ariaLabel: PropTypes.string.isRequired,
-  }).isRequired,
-  meta: PropTypes.object.isRequired,
-  color: PropTypes.string,
-  filled: PropTypes.bool.isRequired,
-  fullWidth: PropTypes.bool,
-};
-
-NodeBox.defaultProps = {
-  fullWidth: false,
-};
 
 /**
- * Approver-chain workflow graph.
- * @param {Array} props.chain - `approver_chain` from the detail serializer
- * @param {number} [props.currentStep] - `current_step` index
- * @param {string} [props.status] - correspondence status (for the terminal node)
+ * Approver-chain workflow graph — EnterpriseGraph adapter.
+ * @param {Array} props.chain
+ * @param {number} [props.currentStep]
+ * @param {string} [props.status]
+ * @param {number} [props.height]
  */
-function WorkflowGraph({ chain, currentStep, status }) {
+function WorkflowGraph({ chain, currentStep, status, height }) {
   const { t } = useTranslation('my');
   const theme = useTheme();
-  const isRtl = theme.direction === 'rtl';
-  const isMobile = useIsMobile();
+  const [selected, setSelected] = useState(null);
 
   const steps = useMemo(() => {
     const list = Array.isArray(chain) ? chain : [];
     return [...list].sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0));
   }, [chain]);
 
-  const nodes = useMemo(() => {
-    if (steps.length === 0) return [];
-    const built = steps.map((step, index) => {
+  const { nodes, edges, width, layoutHeight, presentStates, live } = useMemo(() => {
+    if (steps.length === 0) {
+      return {
+        nodes: [],
+        edges: [],
+        width: 480,
+        layoutHeight: 160,
+        presentStates: new Set(),
+        live: false,
+      };
+    }
+
+    const L = LAYOUT;
+    const built = [];
+    const present = new Set();
+    let hasCurrent = false;
+
+    steps.forEach((step, index) => {
       const order = Number(step.order ?? 0);
       const state = stepState(step, order, currentStep);
+      const meta = STATE_META[state];
+      present.add(state);
+      if (state === 'current') hasCurrent = true;
       const role = codeLabel(t, 'role', ROLE_SUFFIX, step.role);
       const intent = codeLabel(t, 'intent', INTENT_SUFFIX, step.intent);
-      const stateLabel = t(STATE_META[state].label);
+      const statusLabel = t(meta.label);
       const approverCount = Array.isArray(step.user_ids) ? step.user_ids.length : 0;
       const isSkipped = state === 'skipped_auto' || state === 'skipped_condition';
-      return {
-        key: `step-${index}`,
-        state,
-        role,
-        intent,
-        stateLabel,
-        metaText: isSkipped ? null : t('stepperApprovers', { count: approverCount }),
-        ariaLabel: `${role} — ${intent} — ${stateLabel}`,
-      };
+      built.push({
+        id: `step-${index}`,
+        label: role,
+        subtitle: intent,
+        status: meta.status,
+        statusKey: state,
+        statusLabel,
+        metaText: isSkipped ? '' : t('stepperApprovers', { count: approverCount }),
+        colorToken: meta.colorToken,
+        x: L.padX + index * (L.nodeW + L.colGap),
+        y: L.padY,
+        w: L.nodeW,
+        h: L.nodeH,
+      });
     });
+
     const terminal = terminalState(status);
+    const tMeta = STATE_META[terminal];
+    present.add(terminal);
+    const termIndex = built.length;
     built.push({
-      key: 'terminal',
-      state: terminal,
-      role: t('graphNodeCompleted'),
-      intent: '',
-      stateLabel: t(STATE_META[terminal].label),
-      metaText: null,
-      ariaLabel: `${t('graphNodeCompleted')} — ${t(STATE_META[terminal].label)}`,
+      id: 'terminal',
+      label: t('graphNodeCompleted'),
+      subtitle: '',
+      status: tMeta.status,
+      statusKey: terminal,
+      statusLabel: t(tMeta.label),
+      metaText: '',
+      colorToken: tMeta.colorToken,
+      x: L.padX + termIndex * (L.nodeW + L.colGap),
+      y: L.padY,
+      w: L.nodeW,
+      h: L.nodeH,
     });
-    return built;
+
+    const linkEdges = [];
+    for (let i = 0; i < built.length - 1; i += 1) {
+      const s = built[i];
+      const tgt = built[i + 1];
+      linkEdges.push({
+        source: s.id,
+        target: tgt.id,
+        sourceX: s.x + s.w,
+        sourceY: s.y + s.h / 2,
+        targetX: tgt.x,
+        targetY: tgt.y + tgt.h / 2,
+      });
+    }
+
+    const graphW = L.padX * 2 + built.length * L.nodeW + (built.length - 1) * L.colGap;
+    const graphH = L.padY * 2 + L.nodeH;
+
+    return {
+      nodes: built,
+      edges: linkEdges,
+      width: graphW,
+      layoutHeight: graphH,
+      presentStates: present,
+      live: hasCurrent,
+    };
   }, [steps, currentStep, status, t]);
 
-  const legendStates = useMemo(() => {
-    const present = new Set(nodes.map((n) => n.state));
-    return STATE_ORDER.filter((s) => present.has(s));
-  }, [nodes]);
+  const nodeColor = useCallback(
+    (n) => resolveToken(theme, n.colorToken || 'text.disabled'),
+    [theme],
+  );
+
+  const renderNode = useCallback(
+    (n) => {
+      const color = nodeColor(n);
+      const titleMax = Math.max(8, Math.floor((n.w - 78) / 6.6));
+      const rawTitle = String(n.label || '');
+      const title = rawTitle.length > titleMax ? `${rawTitle.slice(0, titleMax - 1)}…` : rawTitle;
+      const statusText = String(n.statusLabel || '').toUpperCase();
+      const sub = n.subtitle || n.metaText || '';
+      const subMax = Math.max(8, Math.floor((n.w - 28) / 5.6));
+      const subShown = sub.length > subMax ? `${sub.slice(0, subMax - 1)}…` : sub;
+      return (
+        <>
+          <rect x={4} y={6} width={3} height={n.h - 12} rx={1.5} fill={color} />
+          <text x={16} y={n.h / 2 - 2} fontSize={13} fontWeight={650} fill={theme.palette.text.primary}>
+            {title}
+          </text>
+          <text x={n.w - 10} y={n.h / 2 + 1} fontSize={10} fontWeight={700} fill={color} textAnchor="end">
+            {statusText}
+          </text>
+          {subShown ? (
+            <text x={16} y={n.h / 2 + 14} fontSize={11} fill={theme.palette.text.secondary}>
+              {subShown}
+            </text>
+          ) : null}
+        </>
+      );
+    },
+    [nodeColor, theme],
+  );
+
+  const nodeAriaLabel = useCallback(
+    (n) => `${n.label}${n.subtitle ? ` — ${n.subtitle}` : ''} — ${n.statusLabel}`,
+    [],
+  );
+
+  const legendEl = useMemo(() => {
+    const items = STATE_ORDER.filter((s) => presentStates.has(s)).map((s) => ({
+      key: s,
+      label: t(STATE_META[s].label),
+      color: resolveToken(theme, STATE_META[s].colorToken),
+    }));
+    if (items.length === 0) return null;
+    return (
+      <Stack
+        direction="row"
+        spacing={1}
+        alignItems="center"
+        sx={{ flexWrap: 'wrap', rowGap: 0.25, px: 1, py: 0.5 }}
+      >
+        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem', mr: 0.5 }}>
+          {t('graphLegend')}
+        </Typography>
+        {items.map((l) => (
+          <Stack key={l.key} direction="row" spacing={0.5} alignItems="center">
+            <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: l.color }} />
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
+              {l.label}
+            </Typography>
+          </Stack>
+        ))}
+      </Stack>
+    );
+  }, [presentStates, t, theme]);
+
+  const summary = `${nodes.length} step${nodes.length !== 1 ? 's' : ''} · ${edges.length} link${edges.length !== 1 ? 's' : ''}`;
 
   return (
-    <Card variant="outlined" data-testid="workflow-graph">
-      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
-        <SectionTitle icon={AccountTreeIcon} title={t('graphTitle')} />
-        {nodes.length === 0 ? (
-          <Typography sx={{ ...FONT.body2, color: 'text.secondary' }}>{t('graphEmpty')}</Typography>
-        ) : isMobile ? (
-          <Stack role="group" aria-label={t('graphTitle')} spacing={1}>
-            {nodes.map((node) => {
-              const meta = STATE_META[node.state];
-              const color = tokenColor(theme, meta.color);
-              return (
-                <NodeBox
-                  key={node.key}
-                  node={node}
-                  meta={meta}
-                  color={color}
-                  filled={node.state === 'current'}
-                  fullWidth
-                />
-              );
-            })}
-          </Stack>
-        ) : (
-          <Box role="group" aria-label={t('graphTitle')} sx={{ overflowX: 'auto', pb: 0.5 }}>
-            <Stack direction="row" alignItems="center" sx={{ minWidth: 'max-content' }}>
-              {nodes.map((node, index) => {
-                const meta = STATE_META[node.state];
-                const color = tokenColor(theme, meta.color);
-                return (
-                  <Fragment key={node.key}>
-                    {index > 0 ? <FlowArrow rtl={isRtl} /> : null}
-                    <NodeBox
-                      node={node}
-                      meta={meta}
-                      color={color}
-                      filled={node.state === 'current'}
-                    />
-                  </Fragment>
-                );
-              })}
-            </Stack>
-          </Box>
-        )}
-        {legendStates.length > 0 ? (
-          <Box sx={{ mt: 1 }}>
-            <Typography
-              sx={{
-                ...FONT.bodySmall,
-                color: 'text.secondary',
-                textTransform: 'uppercase',
-                letterSpacing: '0.04em',
-                mb: 0.5,
-              }}
-            >
-              {t('graphLegend')}
-            </Typography>
-            <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-              {legendStates.map((state) => (
-                <Stack key={state} direction="row" alignItems="center" spacing={0.5}>
-                  <Box
-                    aria-hidden="true"
-                    sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: tokenColor(theme, STATE_META[state].color) }}
-                  />
-                  <Typography sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>
-                    {t(STATE_META[state].label)}
-                  </Typography>
-                </Stack>
-              ))}
-            </Stack>
-          </Box>
-        ) : null}
-      </CardContent>
-    </Card>
+    <EnterpriseGraph
+      nodes={nodes}
+      edges={edges}
+      width={width}
+      layoutHeight={layoutHeight}
+      height={height}
+      phaseBands={[]}
+      nodeColor={nodeColor}
+      renderNode={renderNode}
+      selected={selected}
+      onSelect={setSelected}
+      legend={legendEl}
+      title={t('graphTitle')}
+      modalTitle={t('graphTitle')}
+      summary={summary}
+      live={live}
+      emptyMessage={t('graphEmpty')}
+      nodeAriaLabel={nodeAriaLabel}
+      markerId="workflow-arrow"
+      modalMarkerId="workflow-arrow-modal"
+      testId="workflow-graph"
+      modalTestId="workflow-graph-modal"
+      modalCloseTestId="workflow-graph-modal-close"
+      expandTestId="workflow-graph-expand"
+      exportFileName="approval-workflow"
+      fill={false}
+    />
   );
 }
 
@@ -334,12 +288,14 @@ WorkflowGraph.propTypes = {
   chain: PropTypes.array,
   currentStep: PropTypes.number,
   status: PropTypes.string,
+  height: PropTypes.number,
 };
 
 WorkflowGraph.defaultProps = {
   chain: [],
   currentStep: null,
   status: null,
+  height: 220,
 };
 
 export default memo(WorkflowGraph);

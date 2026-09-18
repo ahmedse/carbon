@@ -17,11 +17,12 @@ import {
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 import { fetchUsers } from '../../api/users';
-import { Box } from '@mui/material';
+import { Box, Button } from '@mui/material';
 import BaseDetailPage from '../../components/detail/BaseDetailPage';
 import DetailHeader from '../../components/detail/DetailHeader';
 import StorageIcon from '@mui/icons-material/Storage';
 import ViewWeekIcon from '@mui/icons-material/ViewWeek';
+import TrustChip from './tabs/TrustChip';
 
 // Tab components
 import AssetOverviewTab from './tabs/AssetOverviewTab';
@@ -138,6 +139,24 @@ export default function AssetDetailPage() {
       description={asset.description}
       icon={iconComponent}
       onClose={() => navigate(-1)}
+      actions={
+        <>
+          <TrustChip
+            score={asset.trust_index}
+            tier={asset.trust_tier}
+            breakdown={asset.trust_breakdown}
+          />
+          {asset.data_table && (
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => navigate(`/catalog/tables/${asset.data_table}`)}
+            >
+              {t('openTable', { defaultValue: 'Open table' })}
+            </Button>
+          )}
+        </>
+      }
     />
   ) : (
     <DetailHeader

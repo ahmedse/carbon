@@ -13,12 +13,8 @@ import {
   Button,
   Chip,
   CircularProgress,
-  FormControl,
   IconButton,
-  InputLabel,
-  MenuItem,
   Paper,
-  Select,
   Table,
   TableBody,
   TableCell,
@@ -38,6 +34,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import { fetchExportProjects, createExportProject, updateExportProject, deleteExportProject, runExportProject, fetchExportJobs, getExportJobDownloadUrl } from '../../api/catalog';
 import BaseDetailPage from '../../components/detail/BaseDetailPage';
 import DetailHeader from '../../components/detail/DetailHeader';
+import { SearchSelect } from '../../components/Form';
 import HomeIcon from '@mui/icons-material/Home';
 import { useNotes } from '../../notes/NotesContext';
 import { registerExportInspectorTabs } from '../../inspector/tabs/collectionTabs';
@@ -356,26 +353,24 @@ export default function ExportsDetailPage() {
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             margin="normal"
           />
-          <FormControl fullWidth margin="normal" size="small">
-            <InputLabel>{t('format')}</InputLabel>
-            <Select
-              value={formData.format}
-              label={t('format')}
-              onChange={(e) => setFormData({ ...formData, format: e.target.value })}
-            >
-              {FORMATS.map((f) => <MenuItem key={f} value={f}>{f}</MenuItem>)}
-            </Select>
-          </FormControl>
-          <FormControl fullWidth margin="normal" size="small">
-            <InputLabel>{t('schedule')}</InputLabel>
-            <Select
-              value={formData.schedule}
-              label={t('schedule')}
-              onChange={(e) => setFormData({ ...formData, schedule: e.target.value })}
-            >
-              {SCHEDULES.map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
-            </Select>
-          </FormControl>
+          <SearchSelect
+            options={FORMATS.map((f) => ({ value: f, label: f }))}
+            valueKey="value"
+            labelKey="label"
+            label={t('format')}
+            value={formData.format}
+            onChange={(v) => setFormData({ ...formData, format: v?.value ?? 'excel' })}
+            clearable={false}
+          />
+          <SearchSelect
+            options={SCHEDULES.map((s) => ({ value: s, label: s }))}
+            valueKey="value"
+            labelKey="label"
+            label={t('schedule')}
+            value={formData.schedule}
+            onChange={(v) => setFormData({ ...formData, schedule: v?.value ?? 'manual' })}
+            clearable={false}
+          />
           <TextField
             fullWidth
             size="small"

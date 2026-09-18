@@ -19,7 +19,7 @@ import AIDomainEntryPoints from '../../shell/AIDomainEntryPoints';
 
 import { fetchModule, fetchModuleQualitySummary, fetchModuleAuditTrail } from '../../api/modules';
 import { fetchDataSchemaTables } from '../../api/dataschema';
-import { fetchAssetProfiles } from '../../api/catalog';
+import { fetchAssetProfiles, fetchDatasetsByModule } from '../../api/catalog';
 import { fetchOrgUnits } from '../../api/orgUnits';
 
 import DataProductOverviewTab from './tabs/DataProductOverviewTab';
@@ -50,6 +50,7 @@ export default function DataProductDetailPage() {
   const [orgUnits, setOrgUnits] = useState([]);
   const [qualitySummary, setQualitySummary] = useState(null);
   const [auditEvents, setAuditEvents] = useState([]);
+  const [relatedDatasets, setRelatedDatasets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -76,19 +77,22 @@ export default function DataProductDetailPage() {
       // Fetch it first: if the product no longer exists (re-seeded DB / stale
       // link) we fail fast instead of firing pointless dependent 404s.
       const moduleData = await fetchModule(token, moduleId);
-      const [tablesData, assetsData, orgUnitsData, qualityData, auditData] =
+      const [tablesData, assetsData, orgUnitsData, qualityData, auditData, datasetsData] =
         await Promise.all([
           fetchDataSchemaTables(token, null, moduleId).catch(() => []),
           fetchAssetProfiles(token).catch(() => []),
           fetchOrgUnits(token).catch(() => []),
           fetchModuleQualitySummary(token, moduleId).catch(() => null),
           fetchModuleAuditTrail(token, moduleId).catch(() => []),
+          // ADR-0040 soft-link — never fail the product page if Dataset Hub errors
+          fetchDatasetsByModule(token, moduleId).catch(() => []),
         ]);
 
       setProduct(moduleData);
       setTables(unwrap(tablesData));
       setOrgUnits(unwrap(orgUnitsData));
       setQualitySummary(qualityData || null);
+      setRelatedDatasets(unwrap(datasetsData));
 
       const assetMap = {};
       unwrap(assetsData).forEach((a) => {
@@ -188,6 +192,7 @@ export default function DataProductDetailPage() {
         orgUnits,
         qualitySummary,
         auditEvents,
+        relatedDatasets,
         isAdmin,
         onDataChanged: handleDataChanged,
       }}

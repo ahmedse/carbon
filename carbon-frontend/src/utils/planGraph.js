@@ -47,7 +47,8 @@ export function buildPlanGraph(plan) {
     const wgToStep = new Map();
     wg.nodes.forEach((wn) => {
       const sid = wn?.meta?.step_id;
-      if (wn?.node_type === 'task' && sid !== undefined && sid !== null) {
+      // task + human (and any typed node pinned to a plan step)
+      if (sid !== undefined && sid !== null && ['task', 'human'].includes(wn?.node_type)) {
         wgToStep.set(wn.id, sid);
       }
     });
@@ -55,12 +56,14 @@ export function buildPlanGraph(plan) {
       const wn = wg.nodes.find((x) => x?.meta?.step_id === n.id);
       if (wn?.node_type) n.node_type = wn.node_type;
     });
-    // Synthetic gateways (choice / parallel / observe / map / loop / wait)
+    // Synthetic gateways (choice / parallel / observe / map / loop / wait / fail)
     wg.nodes.forEach((wn) => {
-      if (!wn || !['choice', 'parallel', 'observe', 'map', 'loop', 'wait'].includes(wn.node_type)) {
+      if (!wn || !['choice', 'parallel', 'observe', 'map', 'loop', 'wait', 'fail', 'succeed'].includes(wn.node_type)) {
         return;
       }
       if (ids.has(wn.id)) return;
+      // Skip if this gateway is already bound to a step id via meta.
+      if (wn.meta?.step_id !== undefined && wn.meta?.step_id !== null) return;
       nodes.push({
         id: wn.id,
         label: wn.intent || wn.node_type,

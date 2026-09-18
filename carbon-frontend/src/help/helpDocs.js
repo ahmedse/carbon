@@ -41,7 +41,7 @@ export function getPlatformHelpDoc() {
         icon: "workspace",
         title: "Unified Workspace",
         description:
-          "All your data products, modules, tables, and domain apps in one governed place. Switch between apps with a single click.",
+          "All your Data Products (Modules), tables, and domain apps in one governed place. Switch between apps with a single click. Datasets (versioned contracts) are a separate Dataset Hub path.",
       },
       {
         icon: "data",
@@ -92,7 +92,7 @@ export function getPlatformHelpDoc() {
     faqs: [
       {
         q: "How do I create a new table or module?",
-        a: "If you have admin permissions, open a Data Product in Catalog Studio to add tables. Define fields, types, and access controls so your team can start entering data immediately.",
+        a: "If you have admin permissions, open a Data Product (Module) in Catalog Studio to add tables. Define fields, types, and access controls so your team can start entering data. Versioned Dataset Hub contracts are separate from Data Products.",
       },
       {
         q: "Can I edit or delete data after saving?",
@@ -190,7 +190,7 @@ const APP_HELP_DOCS = {
     faqs: [
       {
         q: "How do I create a new table or module?",
-        a: "If you have admin permissions, open a Data Product in Catalog Studio to add tables. Define fields, types, and access controls so your team can start entering data immediately.",
+        a: "If you have admin permissions, open a Data Product (Module) in Catalog Studio to add tables. Define fields, types, and access controls so your team can start entering data. Versioned Dataset Hub contracts are separate from Data Products.",
       },
       {
         q: "Can I edit or delete data after saving?",

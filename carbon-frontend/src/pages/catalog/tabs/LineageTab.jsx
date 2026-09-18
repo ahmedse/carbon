@@ -9,16 +9,11 @@ import { fetchDataSchemaTables } from "../../../api/dataschema";
 import { getTableLineage, getTableImpact, createLineageEdge } from "../../../api/lineage";
 import {
   Alert,
-  Autocomplete,
   Box,
   Button,
   ButtonGroup,
   CircularProgress,
   Chip,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
   Stack,
   TextField,
   ToggleButton,
@@ -26,6 +21,7 @@ import {
   Typography,
   useTheme,
 } from "@mui/material";
+import { SearchSelect } from "../../../components/Form";
 
 const GRAPH_VIEW = "graph";
 const IMPACT_VIEW = "impact";
@@ -413,36 +409,31 @@ function LineageTab({ tableId, isAdmin }) {
         }
       >
         <Stack spacing={2} sx={{ py: 1 }}>
-          <Autocomplete
+          <SearchSelect
             options={allTables}
+            valueKey="id"
             getOptionLabel={(option) => option.title || option.name || String(option.id)}
-            value={allTables.find((table) => String(table.id) === String(edgeForm.source_table)) || null}
-            onChange={(_, value) => setEdgeForm((current) => ({ ...current, source_table: value?.id || "" }))}
-            renderInput={(params) => <TextField {...params} size="small" label={t("sourceTable")} />}
-            fullWidth
+            label={t("sourceTable")}
+            value={edgeForm.source_table}
+            onChange={(value) => setEdgeForm((current) => ({ ...current, source_table: value?.id || "" }))}
           />
-          <Autocomplete
+          <SearchSelect
             options={allTables}
+            valueKey="id"
             getOptionLabel={(option) => option.title || option.name || String(option.id)}
-            value={allTables.find((table) => String(table.id) === String(edgeForm.target_table)) || null}
-            onChange={(_, value) => setEdgeForm((current) => ({ ...current, target_table: value?.id || "" }))}
-            renderInput={(params) => <TextField {...params} size="small" label={t("targetTable")} />}
-            fullWidth
+            label={t("targetTable")}
+            value={edgeForm.target_table}
+            onChange={(value) => setEdgeForm((current) => ({ ...current, target_table: value?.id || "" }))}
           />
-          <FormControl fullWidth size="small">
-            <InputLabel>{t("edgeType")}</InputLabel>
-            <Select
-              label={t("edgeType")}
-              value={edgeForm.edge_type}
-              onChange={(event) => setEdgeForm((current) => ({ ...current, edge_type: event.target.value }))}
-            >
-              {EDGE_TYPES.map((item) => (
-                <MenuItem key={item.value} value={item.value}>
-                  {t(item.labelKey)}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <SearchSelect
+            options={EDGE_TYPES.map((item) => ({ value: item.value, label: t(item.labelKey) }))}
+            valueKey="value"
+            labelKey="label"
+            label={t("edgeType")}
+            value={edgeForm.edge_type}
+            onChange={(value) => setEdgeForm((current) => ({ ...current, edge_type: value?.value || "" }))}
+            clearable={false}
+          />
           <TextField
             fullWidth
             size="small"

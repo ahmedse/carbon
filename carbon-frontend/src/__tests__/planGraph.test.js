@@ -74,6 +74,57 @@ describe('buildPlanGraph', () => {
     expect(edges.some((e) => e.guard === "status == 'ok'")).toBe(true);
   });
 
+  it('annotates payroll board-pack choice: within-band chosen, escalate unchosen', () => {
+    const plan = {
+      id: 'board-pack',
+      status: 'completed',
+      steps: [
+        { step_id: 0, intent: 'Fetch', tool_name: 'call_host_api', status: 'completed', depends_on: [], agent_role: 'domain_specialist' },
+        { step_id: 1, intent: 'Variance', tool_name: 'call_host_api', status: 'completed', depends_on: [0], agent_role: 'domain_specialist' },
+        { step_id: 2, intent: 'Summarize', tool_name: null, status: 'completed', depends_on: [1], agent_role: 'researcher' },
+        { step_id: 3, intent: 'Critic', tool_name: null, status: 'completed', depends_on: [2], agent_role: 'critic' },
+        { step_id: 4, intent: 'Export', tool_name: 'export_document', status: 'completed', depends_on: [3], agent_role: 'orchestrator' },
+        { step_id: 5, intent: 'Escalate Finance', tool_name: null, status: 'skipped', depends_on: [1], agent_role: 'orchestrator' },
+      ],
+      workflow_graph: {
+        version: '1',
+        entry: 't0',
+        nodes: [
+          { id: 't0', node_type: 'task', meta: { step_id: 0 } },
+          { id: 't1', node_type: 'task', meta: { step_id: 1 } },
+          { id: 'choice_variance', node_type: 'choice', intent: 'Variance within policy band?' },
+          { id: 't2', node_type: 'task', meta: { step_id: 2 } },
+          { id: 't5', node_type: 'human', meta: { step_id: 5 } },
+          { id: 't3', node_type: 'task', meta: { step_id: 3 } },
+          { id: 'observe_repair', node_type: 'observe', intent: 'Repair critic findings' },
+          { id: 't4', node_type: 'task', meta: { step_id: 4 } },
+          { id: 'fail_block_export', node_type: 'fail', intent: 'Block export' },
+        ],
+        edges: [
+          { source: 't0', target: 't1' },
+          { source: 't1', target: 'choice_variance' },
+          { source: 'choice_variance', target: 't2', guard: 'variance_pct <= 2.0', label: 'within band' },
+          { source: 'choice_variance', target: 't5', is_default: true, label: 'escalate' },
+          { source: 't2', target: 't3' },
+          { source: 't3', target: 't4' },
+          { source: 'observe_repair', target: 't4', guard: 'critic_healed == true' },
+          { source: 'observe_repair', target: 'fail_block_export', is_default: true },
+          { source: 't5', target: 'fail_block_export' },
+        ],
+      },
+    };
+    const { nodes, edges } = buildPlanGraph(plan);
+    const choice = nodes.find((n) => n.id === 'choice_variance');
+    expect(choice).toBeTruthy();
+    expect(choice.is_gateway).toBe(true);
+    expect(choice.status).toBe('completed');
+    const within = edges.find((e) => e.source === 'choice_variance' && e.target === 2);
+    const escalate = edges.find((e) => e.source === 'choice_variance' && e.target === 5);
+    expect(within?.branch).toBe('chosen');
+    expect(escalate?.branch).toBe('unchosen');
+    expect(nodes.some((n) => n.id === 'observe_repair' && n.node_type === 'observe')).toBe(true);
+  });
+
   it('keeps depends_on edges when workflow_graph is sparse', () => {
     const plan = {
       steps: [

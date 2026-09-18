@@ -154,28 +154,31 @@ function getSidebarItems(studioId, helpApps = []) {
     }
     
     case 'catalog':
+      // Catalog Studio IA — Discover → Browse → Govern → Reference → Integrate
       return [
-        { label: 'Catalog Home', path: '/catalog', icon: DashboardIcon },
+        { type: 'group', label: 'Discover' },
+        { label: 'Home', path: '/catalog', icon: DashboardIcon },
         { label: 'Search', path: '/catalog/search', icon: SearchIcon },
         { type: 'divider' },
-        { type: 'group', label: 'Data Products' },
+        { type: 'group', label: 'Browse' },
         { label: 'Data Products', path: '/catalog/products', icon: TableChartIcon },
-        { type: 'divider' },
-        { type: 'group', label: 'Governance' },
-        { label: 'Metadata', path: '/catalog/metadata', icon: EditIcon },
         { label: 'Asset Profiles', path: '/catalog/assets', icon: AssignmentIcon },
-        { label: 'DQ Workspace', path: '/dq', icon: RuleIcon },
-        { label: 'Governance Policies', path: '/catalog/policies', icon: RuleIcon },
-        { label: 'Governance Audit', path: '/catalog/governance', icon: VerifiedUserIcon },
         { type: 'divider' },
-        { type: 'group', label: 'Master Data' },
-        { label: 'Master Data', path: '/catalog/mdm', icon: AccountTreeIcon },
+        { type: 'group', label: 'Govern' },
+        { label: 'Domains & Glossary', path: '/catalog/metadata', icon: EditIcon },
+        { label: 'Data Quality', path: '/dq', icon: RuleIcon },
+        { label: 'Access Policies', path: '/catalog/policies', icon: RuleIcon },
+        { label: 'Audit Log', path: '/catalog/governance', icon: VerifiedUserIcon },
         { type: 'divider' },
-        { type: 'group', label: 'Data Integration' },
+        { type: 'group', label: 'Reference data' },
+        { label: 'Reference Sets', path: '/catalog/mdm', icon: AccountTreeIcon },
+        { label: 'Datasets', path: '/catalog/datasets', icon: StorageIcon },
+        { type: 'divider' },
+        { type: 'group', label: 'Connect & move' },
         { label: 'Connections', path: '/catalog/connections', icon: SecurityIcon },
         { label: 'Data Sources', path: '/catalog/sources', icon: StorageIcon },
-        { label: 'Exports', path: '/catalog/exports', icon: DownloadIcon },
         { label: 'Imports', path: '/catalog/imports', icon: UploadIcon },
+        { label: 'Exports', path: '/catalog/exports', icon: DownloadIcon },
       ];
     
     case 'admin':

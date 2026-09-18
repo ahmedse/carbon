@@ -189,9 +189,13 @@ without search, and every picker needs to signal its async state.
   entity's list endpoint; pass `loading`/`error`/`onRetry` to `SearchSelect`. Never render
   a picker before its options resolve into one of the 4 states (a silent empty listbox is a
   defect — it reads as "no choices" when the real problem is a failed fetch).
-- **A raw `<Select>` is acceptable ONLY for** a fixed, ≤~5 option, purely-local enum that
-  cannot grow (e.g. log level: DEBUG/INFO/WARN/ERROR). Anything data-driven or open-ended →
-  `SearchSelect`.
+- **Catalog Studio:** use `SearchSelect` for every entity/enum picker (domains, owners,
+  stewards, tags, glossary, connection types, lineage edges, classifications) — same
+  standard as `FilteredDataGrid` for lists. Do not leave bare MUI `Autocomplete` or
+  raw `<Select>` walls in `src/pages/catalog/**`.
+- **Elsewhere, a raw `<Select>` is acceptable ONLY for** a fixed, ≤~5 option, purely-local
+  enum that cannot grow (e.g. log level: DEBUG/INFO/WARN/ERROR). Anything data-driven or
+  open-ended → `SearchSelect`.
 
 ---
 

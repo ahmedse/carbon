@@ -1,9 +1,7 @@
 // src/apps/team/TeamRequestDetail.jsx
 // Team (manager approvals inbox) — Approval detail page (route /team/:id).
-// Fetches a single correspondence record (events + approver chain), reuses the
-// my-app SummaryCard / ApproverChainStepper / RequestTimeline, and adds the
-// manager act bar (approve / reject / send back). Reject and send-back require
-// a non-empty comment (client-side validation + localized inline error).
+// Layout: Summary → Stepper|Graph toggle → Timeline → full-width act bar.
+// Graph = WorkflowGraph → EnterpriseGraph (same Pulse agent canvas).
 
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -82,7 +80,7 @@ export default function TeamRequestDetail() {
   const [comment, setComment] = useState('');
   const [validation, setValidation] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  const [view, setView] = useState('stepper');
+  const [view, setView] = useState('graph');
 
   const isTerminal = Boolean(data && TERMINAL_STATUSES.includes(data.status));
 
@@ -215,11 +213,14 @@ export default function TeamRequestDetail() {
             {view === 'stepper' ? (
               <ApproverChainStepper chain={data.approver_chain} currentStep={data.current_step} />
             ) : (
-              <WorkflowGraph chain={data.approver_chain} currentStep={data.current_step} status={data.status} />
+              <WorkflowGraph
+                chain={data.approver_chain}
+                currentStep={data.current_step}
+                status={data.status}
+              />
             )}
             <RequestTimeline events={data.events} />
 
-            {/* Manager act bar — approve / reject / send back, or archive for terminal requests */}
             <Card variant="outlined">
               <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
                 <SectionTitle icon={HowToVoteIcon} title={t('actionsTitle')} />

@@ -1,8 +1,9 @@
 // src/pages/catalog/tabs/DataProductOverviewTab.jsx
 // Data Product Overview Tab: read-only metadata + governance info.
 // Follows AssetOverviewTab pattern (theme tokens, size="small", Chip values).
+// ADR-0040: soft-link related Dataset Hub artifacts (not the same as Data Product).
 import React from 'react';
-import { Box, Table, TableRow, TableCell, TableBody, Typography, Chip } from '@mui/material';
+import { Box, Table, TableRow, TableCell, TableBody, Typography, Chip, Stack } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import LockIcon from '@mui/icons-material/Lock';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
@@ -17,7 +18,7 @@ function formatDate(value, locale) {
 
 export default function DataProductOverviewTab({ entityData, additionalProps = {} }) {
   const { t, i18n } = useTranslation('catalog');
-  const { qualitySummary = null } = additionalProps;
+  const { qualitySummary = null, relatedDatasets = null } = additionalProps;
 
   if (!entityData) {
     return (
@@ -107,6 +108,8 @@ export default function DataProductOverviewTab({ entityData, additionalProps = {
     </Box>
   );
 
+  const datasets = Array.isArray(relatedDatasets) ? relatedDatasets : null;
+
   return (
     <DetailTabContent>
       <Box sx={{ maxWidth: '100%' }}>
@@ -114,6 +117,43 @@ export default function DataProductOverviewTab({ entityData, additionalProps = {
         {renderTable(governanceAttributes, t('governance'))}
         {renderTable(statisticsAttributes, t('statistics'))}
         {renderTable(timestampAttributes, t('timestamps'))}
+
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="subtitle2" sx={{ mb: 0.5, fontWeight: 600 }}>
+            {t('relatedDatasets')}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+            {t('relatedDatasetsHint')}
+          </Typography>
+          {datasets == null ? (
+            <Typography variant="body2" color="text.secondary">—</Typography>
+          ) : datasets.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">{t('noRelatedDatasets')}</Typography>
+          ) : (
+            <Stack spacing={1}>
+              {datasets.map((ds) => (
+                <Box
+                  key={ds.id}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    flexWrap: 'wrap',
+                    py: 0.5,
+                    borderBottom: 1,
+                    borderColor: 'divider',
+                  }}
+                >
+                  <Typography variant="body2" fontWeight={500}>{ds.name || ds.slug || ds.id}</Typography>
+                  {ds.status && <Chip size="small" label={ds.status} variant="outlined" />}
+                  {ds.classification && (
+                    <Chip size="small" label={ds.classification} color="default" variant="outlined" />
+                  )}
+                </Box>
+              ))}
+            </Stack>
+          )}
+        </Box>
       </Box>
     </DetailTabContent>
   );

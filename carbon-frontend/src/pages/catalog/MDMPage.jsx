@@ -30,11 +30,6 @@ import {
   Tab,
   TextField,
   InputAdornment,
-  Select,
-  MenuItem,
-  Autocomplete,
-  FormControl,
-  InputLabel,
   Chip,
   IconButton,
   Tooltip,
@@ -61,6 +56,7 @@ import ErrorAlert from '../../components/Page/ErrorAlert';
 import StandardDataGrid from '../../components/StandardDataGrid';
 import SystemDialog from '../../components/SystemDialog';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { SearchSelect } from '../../components/Form';
 import {
   LIFECYCLE_COLORS,
   LIFECYCLE_LABELS,
@@ -646,55 +642,37 @@ export default function MDMPage() {
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-              <FormControl fullWidth size="small">
-                <InputLabel>{t('domain')}</InputLabel>
-                <Select
-                  value={filterDomain}
-                  onChange={(e) => setFilterDomain(e.target.value)}
-                  label={t('domain')}
-                >
-                  <MenuItem value="">{t('allDomains')}</MenuItem>
-                  {domains.map((d) => (
-                    <MenuItem key={d.id} value={d.id}>
-                      {d.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <SearchSelect
+                options={domains}
+                valueKey="id"
+                labelKey="name"
+                label={t('domain')}
+                value={filterDomain}
+                onChange={(v) => setFilterDomain(v?.id ?? '')}
+                noOptionsText={t('allDomains')}
+              />
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-              <FormControl fullWidth size="small">
-                <InputLabel>{t('steward')}</InputLabel>
-                <Select
-                  value={filterSteward}
-                  onChange={(e) => setFilterSteward(e.target.value)}
-                  label={t('steward')}
-                >
-                  <MenuItem value="">{t('allStewards')}</MenuItem>
-                  {users.map((u) => (
-                    <MenuItem key={u.id} value={u.id}>
-                      {u.username}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <SearchSelect
+                options={users}
+                valueKey="id"
+                getOptionLabel={(u) => u.username || u.email || String(u.id)}
+                label={t('steward')}
+                value={filterSteward}
+                onChange={(v) => setFilterSteward(v?.id ?? '')}
+                noOptionsText={t('allStewards')}
+              />
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 2 }}>
-              <FormControl fullWidth size="small">
-                <InputLabel>{t('lifecycle')}</InputLabel>
-                <Select
-                  value={filterLifecycle}
-                  onChange={(e) => setFilterLifecycle(e.target.value)}
-                  label={t('lifecycle')}
-                >
-                  <MenuItem value="">{t('all')}</MenuItem>
-                  {(LIFECYCLE_STATES || []).map((state) => (
-                    <MenuItem key={state.value} value={state.value}>
-                      {state.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <SearchSelect
+                options={LIFECYCLE_STATES || []}
+                valueKey="value"
+                labelKey="label"
+                label={t('lifecycle')}
+                value={filterLifecycle}
+                onChange={(v) => setFilterLifecycle(v?.value ?? '')}
+                noOptionsText={t('all')}
+              />
             </Grid>
             <Grid size={{ xs: 12, md: 1.5 }}>
               <Button
@@ -752,21 +730,15 @@ export default function MDMPage() {
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-              <FormControl fullWidth size="small">
-                <InputLabel>{t('type')}</InputLabel>
-                <Select
-                  value={filterOrgType}
-                  onChange={(e) => setFilterOrgType(e.target.value)}
-                  label={t('type')}
-                >
-                  <MenuItem value="">{t('allTypes')}</MenuItem>
-                  {ORG_TYPES.map((t) => (
-                    <MenuItem key={t.value} value={t.value}>
-                      {t.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <SearchSelect
+                options={ORG_TYPES}
+                valueKey="value"
+                labelKey="label"
+                label={t('type')}
+                value={filterOrgType}
+                onChange={(v) => setFilterOrgType(v?.value ?? '')}
+                noOptionsText={t('allTypes')}
+              />
             </Grid>
             <Grid size={{ xs: 12, md: 2 }}>
               <Button
@@ -846,25 +818,27 @@ export default function MDMPage() {
             error={Boolean(refSetFieldErrors.description)}
             helperText={refSetFieldErrors.description}
           />
-          <Autocomplete
-            value={domains.find((d) => d.id === refSetForm.domain) || null}
+          <SearchSelect
             options={domains}
-            getOptionLabel={(o) => o.name || ''}
-            isOptionEqualToValue={(o, v) => o.id === v.id}
-            onChange={(_, v) => setRefSetForm({ ...refSetForm, domain: v ? v.id : '' })}
-            renderInput={(params) => (
-              <TextField {...params} label={t('domain')} error={Boolean(refSetFieldErrors.domain)} helperText={refSetFieldErrors.domain} />
-            )}
+            valueKey="id"
+            labelKey="name"
+            label={t('domain')}
+            value={refSetForm.domain}
+            onChange={(v) => setRefSetForm({ ...refSetForm, domain: v?.id ?? '' })}
+            error={refSetFieldErrors.domain || false}
+            helperText={refSetFieldErrors.domain}
+            noOptionsText={t('noDomains') || 'No domains'}
           />
-          <Autocomplete
-            value={users.find((u) => u.id === refSetForm.steward) || null}
+          <SearchSelect
             options={users}
-            getOptionLabel={(o) => o.username || ''}
-            isOptionEqualToValue={(o, v) => o.id === v.id}
-            onChange={(_, v) => setRefSetForm({ ...refSetForm, steward: v ? v.id : '' })}
-            renderInput={(params) => (
-              <TextField {...params} label={t('steward')} error={Boolean(refSetFieldErrors.steward)} helperText={refSetFieldErrors.steward} />
-            )}
+            valueKey="id"
+            getOptionLabel={(o) => o.username || o.email || String(o.id)}
+            label={t('steward')}
+            value={refSetForm.steward}
+            onChange={(v) => setRefSetForm({ ...refSetForm, steward: v?.id ?? '' })}
+            error={refSetFieldErrors.steward || false}
+            helperText={refSetFieldErrors.steward}
+            noOptionsText={t('noUsers') || 'No users'}
           />
         </Stack>
       </SystemDialog>
@@ -910,35 +884,25 @@ export default function MDMPage() {
             error={Boolean(orgUnitFieldErrors.code)}
             helperText={orgUnitFieldErrors.code}
           />
-          <FormControl fullWidth error={Boolean(orgUnitFieldErrors.org_type)}>
-            <InputLabel>{t('type')}</InputLabel>
-            <Select
-              value={orgUnitForm.org_type}
-              label={t('type')}
-              onChange={(e) => setOrgUnitForm({ ...orgUnitForm, org_type: e.target.value })}
-            >
-              <MenuItem value="">{t('none')}</MenuItem>
-              {ORG_TYPES.map((t) => (
-                <MenuItem key={t.value} value={t.value}>
-                  {t.label}
-                </MenuItem>
-              ))}
-            </Select>
-            {orgUnitFieldErrors.org_type && (
-              <Typography variant="caption" color="error">
-                {orgUnitFieldErrors.org_type}
-              </Typography>
-            )}
-          </FormControl>
-          <Autocomplete
-            value={parentOptions.find((o) => o.id === orgUnitForm.parent) || null}
+          <SearchSelect
+            options={ORG_TYPES}
+            valueKey="value"
+            labelKey="label"
+            label={t('type')}
+            value={orgUnitForm.org_type}
+            onChange={(v) => setOrgUnitForm({ ...orgUnitForm, org_type: v?.value ?? '' })}
+            error={orgUnitFieldErrors.org_type || false}
+            helperText={orgUnitFieldErrors.org_type}
+          />
+          <SearchSelect
             options={parentOptions}
-            getOptionLabel={(o) => o.full_path || o.name || ''}
-            isOptionEqualToValue={(o, v) => o.id === v.id}
-            onChange={(_, v) => setOrgUnitForm({ ...orgUnitForm, parent: v ? v.id : '' })}
-            renderInput={(params) => (
-              <TextField {...params} label={t('parent')} error={Boolean(orgUnitFieldErrors.parent)} helperText={orgUnitFieldErrors.parent} />
-            )}
+            valueKey="id"
+            getOptionLabel={(o) => o.full_path || o.name || String(o.id)}
+            label={t('parent')}
+            value={orgUnitForm.parent}
+            onChange={(v) => setOrgUnitForm({ ...orgUnitForm, parent: v?.id ?? '' })}
+            error={orgUnitFieldErrors.parent || false}
+            helperText={orgUnitFieldErrors.parent}
           />
           <TextField
             fullWidth

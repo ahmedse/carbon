@@ -5,10 +5,10 @@ import React, { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { 
   Box, TextField, Button, CircularProgress, Alert, 
-  MenuItem, Chip, FormControl, InputLabel, Select,
-  FormHelperText, Typography
+  Chip, Typography
 } from '@mui/material';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
+import { SearchSelect } from '../../../components/Form';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
 import { apiFetch } from '../../../api/api';
@@ -85,11 +85,6 @@ export default function AssetEditTab({ entityData, additionalProps = {} }) {
   }, [selectOptions.tags, t]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSelectChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
@@ -199,82 +194,57 @@ export default function AssetEditTab({ entityData, additionalProps = {} }) {
 
         <Typography variant="subtitle2" sx={{ mb: 2, mt: 3, fontWeight: 600 }}>{t('governance')}</Typography>
 
-        <FormControl fullWidth margin="normal" variant="outlined">
-          <InputLabel>{t('domain')}</InputLabel>
-          <Select
-            name="domain"
-            value={formData.domain}
-            onChange={handleSelectChange}
+        <Box sx={{ mt: 2 }}>
+          <SearchSelect
+            options={domainOptions}
+            valueKey="id"
+            labelKey="label"
             label={t('domain')}
-          >
-            <MenuItem value="">
-              <em>{t('none')}</em>
-            </MenuItem>
-            {domainOptions.map((domain) => (
-              <MenuItem key={domain.id} value={domain.id}>
-                {domain.label}
-              </MenuItem>
-            ))}
-          </Select>
-          <FormHelperText>{t('domainSelectHelper')}</FormHelperText>
-        </FormControl>
+            helperText={t('domainSelectHelper')}
+            value={formData.domain}
+            onChange={(v) => setFormData((prev) => ({ ...prev, domain: v?.id ?? '' }))}
+            noOptionsText={t('noDomains') || 'No domains'}
+          />
+        </Box>
 
-        <FormControl fullWidth margin="normal" variant="outlined">
-          <InputLabel>{t('classification')}</InputLabel>
-          <Select
-            name="classification"
-            value={formData.classification}
-            onChange={handleSelectChange}
+        <Box sx={{ mt: 2 }}>
+          <SearchSelect
+            options={classificationOptions}
+            valueKey="value"
+            labelKey="label"
             label={t('classification')}
-          >
-            {classificationOptions.map((opt) => (
-              <MenuItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </MenuItem>
-            ))}
-          </Select>
-          <FormHelperText>{t('classificationHelper')}</FormHelperText>
-        </FormControl>
+            helperText={t('classificationHelper')}
+            value={formData.classification}
+            onChange={(v) => setFormData((prev) => ({ ...prev, classification: v?.value ?? 'internal' }))}
+            clearable={false}
+          />
+        </Box>
 
-        <FormControl fullWidth margin="normal" variant="outlined">
-          <InputLabel>{t('owner')}</InputLabel>
-          <Select
-            name="owner"
-            value={formData.owner}
-            onChange={handleSelectChange}
+        <Box sx={{ mt: 2 }}>
+          <SearchSelect
+            options={userOptions}
+            valueKey="id"
+            labelKey="label"
             label={t('owner')}
-          >
-            <MenuItem value="">
-              <em>{t('none')}</em>
-            </MenuItem>
-            {userOptions.map((user) => (
-              <MenuItem key={user.id} value={user.id}>
-                {user.label}
-              </MenuItem>
-            ))}
-          </Select>
-          <FormHelperText>{t('ownerBusinessHelper')}</FormHelperText>
-        </FormControl>
+            helperText={t('ownerBusinessHelper')}
+            value={formData.owner}
+            onChange={(v) => setFormData((prev) => ({ ...prev, owner: v?.id ?? '' }))}
+            noOptionsText={t('noUsers') || 'No users'}
+          />
+        </Box>
 
-        <FormControl fullWidth margin="normal" variant="outlined">
-          <InputLabel>{t('steward')}</InputLabel>
-          <Select
-            name="steward"
-            value={formData.steward}
-            onChange={handleSelectChange}
+        <Box sx={{ mt: 2 }}>
+          <SearchSelect
+            options={userOptions}
+            valueKey="id"
+            labelKey="label"
             label={t('steward')}
-          >
-            <MenuItem value="">
-              <em>{t('none')}</em>
-            </MenuItem>
-            {userOptions.map((user) => (
-              <MenuItem key={user.id} value={user.id}>
-                {user.label}
-              </MenuItem>
-            ))}
-          </Select>
-          <FormHelperText>{t('stewardGovernanceHelper')}</FormHelperText>
-        </FormControl>
+            helperText={t('stewardGovernanceHelper')}
+            value={formData.steward}
+            onChange={(v) => setFormData((prev) => ({ ...prev, steward: v?.id ?? '' }))}
+            noOptionsText={t('noUsers') || 'No users'}
+          />
+        </Box>
 
         <Typography variant="subtitle2" sx={{ mb: 2, mt: 3, fontWeight: 600 }}>{t('semanticAndClassification')}</Typography>
 
@@ -290,25 +260,18 @@ export default function AssetEditTab({ entityData, additionalProps = {} }) {
           helperText={t('entityTypeHelper')}
         />
 
-        <FormControl fullWidth margin="normal" variant="outlined">
-          <InputLabel>{t('glossaryTerm')}</InputLabel>
-          <Select
-            name="glossary_term"
-            value={formData.glossary_term}
-            onChange={handleSelectChange}
+        <Box sx={{ mt: 2 }}>
+          <SearchSelect
+            options={glossaryOptions}
+            valueKey="id"
+            labelKey="label"
             label={t('glossaryTerm')}
-          >
-            <MenuItem value="">
-              <em>{t('none')}</em>
-            </MenuItem>
-            {glossaryOptions.map((term) => (
-              <MenuItem key={term.id} value={term.id}>
-                {term.label}
-              </MenuItem>
-            ))}
-          </Select>
-          <FormHelperText>{t('glossaryTermLinkHelper')}</FormHelperText>
-        </FormControl>
+            helperText={t('glossaryTermLinkHelper')}
+            value={formData.glossary_term}
+            onChange={(v) => setFormData((prev) => ({ ...prev, glossary_term: v?.id ?? '' }))}
+            noOptionsText={t('noGlossaryTerms') || 'No glossary terms'}
+          />
+        </Box>
 
         <Box sx={{ mt: 2, mb: 2 }}>
           <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>{t('tags')}</Typography>

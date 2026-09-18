@@ -40,6 +40,15 @@ import {
 } from '../my/components/myRequestsLabels';
 import { FONT } from '../../theme/themeTokens';
 
+/** Parse DRF throttle wait hint ("Expected available in N seconds"). */
+function throttleWaitMs(err) {
+  const msg = String(err?.message || err?.feedback?.detail || '');
+  const match = msg.match(/available in (\d+)\s*seconds?/i);
+  if (match) return (Number(match[1]) + 1) * 1000;
+  if (err?.status === 429 || err?.isRateLimited || err?.type === 'rate_limit') return 5000;
+  return null;
+}
+
 // Governed correspondence codes (mirrors backend/seed_correspondence.py).
 const CORR_TYPE_SUFFIX = {
   leave_request: 'leaveRequest',
@@ -85,13 +94,20 @@ export default function TeamInbox() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (attempt = 0) => {
     setLoading(true);
     setError(null);
     try {
       const result = await fetchInbox(token);
       setItems(Array.isArray(result?.items) ? result.items : []);
     } catch (err) {
+      const wait = attempt < 2 ? throttleWaitMs(err) : null;
+      if (wait != null) {
+        await new Promise((resolve) => {
+          setTimeout(resolve, wait);
+        });
+        return load(attempt + 1);
+      }
       setError(err?.message || t('error'));
     } finally {
       setLoading(false);

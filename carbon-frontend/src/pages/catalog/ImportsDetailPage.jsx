@@ -10,17 +10,12 @@ import {
   Button,
   Chip,
   CircularProgress,
-  FormControl,
-  InputLabel,
-  MenuItem,
   Paper,
-  Select,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
-  TextField,
   Typography,
 } from '@mui/material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
@@ -32,6 +27,7 @@ import { fetchImportJobs, createImportJob } from '../../api/catalog';
 import { fetchDataSchemaTables } from '../../api/dataschema';
 import BaseDetailPage from '../../components/detail/BaseDetailPage';
 import DetailHeader from '../../components/detail/DetailHeader';
+import { SearchSelect } from '../../components/Form';
 import HomeIcon from '@mui/icons-material/Home';
 import { useNotes } from '../../notes/NotesContext';
 import { registerImportInspectorTabs } from '../../inspector/tabs/collectionTabs';
@@ -114,30 +110,27 @@ export default function ImportsDetailPage() {
 
   const UploadTab = () => (
     <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <FormControl fullWidth>
-              <InputLabel>{t('targetTable')}</InputLabel>
-              <Select
-                value={uploadForm.table_id}
-                label={t('targetTable')}
-                onChange={(e) => setUploadForm({ ...uploadForm, table_id: e.target.value })}
-              >
-                {tables.map((t) => (
-                  <MenuItem key={t.id} value={t.id}>{t.title}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <SearchSelect
+              options={tables}
+              valueKey="id"
+              labelKey="title"
+              label={t('targetTable')}
+              value={uploadForm.table_id}
+              onChange={(v) => setUploadForm({ ...uploadForm, table_id: v?.id ?? '' })}
+            />
 
-            <FormControl fullWidth>
-              <InputLabel>{t('format')}</InputLabel>
-              <Select
-                value={uploadForm.format}
-                label={t('format')}
-                onChange={(e) => setUploadForm({ ...uploadForm, format: e.target.value })}
-              >
-                <MenuItem value="excel">{t('excel')}</MenuItem>
-                <MenuItem value="csv">{t('csv')}</MenuItem>
-              </Select>
-            </FormControl>
+            <SearchSelect
+              options={[
+                { value: 'excel', label: t('excel') },
+                { value: 'csv', label: t('csv') },
+              ]}
+              valueKey="value"
+              labelKey="label"
+              label={t('format')}
+              value={uploadForm.format}
+              onChange={(v) => setUploadForm({ ...uploadForm, format: v?.value ?? 'excel' })}
+              clearable={false}
+            />
 
             <Box>
               <input

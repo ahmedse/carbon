@@ -3,11 +3,7 @@ import { useTranslation } from 'react-i18next';
 import {
   Box,
   Button,
-  FormControl,
   IconButton,
-  InputLabel,
-  MenuItem,
-  Select,
   Stack,
   Switch,
   TextField,
@@ -16,6 +12,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SystemDialog from '../../../components/SystemDialog';
+import { SearchSelect } from '../../../components/Form';
 
 const FIELD_TYPES = ['string', 'text', 'number', 'date', 'boolean', 'select', 'multiselect', 'file', 'reference'];
 
@@ -156,20 +153,15 @@ export default function FieldEditorDialog({ open, onClose, onSave, field = null,
             helperText={errors.label}
           />
           <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
-            <FormControl fullWidth>
-              <InputLabel>{t('type')}</InputLabel>
-              <Select
-                value={formData.type}
-                label={t('type')}
-                onChange={(event) => setFormData((prev) => ({ ...prev, type: event.target.value }))}
-              >
-                {FIELD_TYPES.map((fieldType) => (
-                  <MenuItem key={fieldType} value={fieldType}>
-                    {fieldType}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <SearchSelect
+              options={FIELD_TYPES.map((fieldType) => ({ value: fieldType, label: fieldType }))}
+              valueKey="value"
+              labelKey="label"
+              label={t('type')}
+              value={formData.type}
+              onChange={(v) => setFormData((prev) => ({ ...prev, type: v?.value ?? 'string' }))}
+              clearable={false}
+            />
             <TextField
               label={t('order')}
               type="number"

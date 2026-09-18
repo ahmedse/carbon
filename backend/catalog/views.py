@@ -240,6 +240,19 @@ class AssetProfileViewSet(viewsets.ModelViewSet):
             qs = qs.filter(data_table_id=p['data_table'])
         return qs.distinct().order_by('id')
 
+    def get_serializer(self, *args, **kwargs):
+        """Seed freshness_by_table so Trust Index (DTR-5) does not N+1."""
+        serializer = super().get_serializer(*args, **kwargs)
+        instance = args[0] if args else kwargs.get('instance')
+        if instance is None:
+            return serializer
+        from .trust_index import batch_freshness_for_table_ids, table_id_for_asset
+        many = kwargs.get('many', False)
+        objs = list(instance) if many else [instance]
+        tids = [table_id_for_asset(o) for o in objs]
+        serializer.context['freshness_by_table'] = batch_freshness_for_table_ids(tids)
+        return serializer
+
     def perform_update(self, serializer):
         instance = self.get_object()
         before = {

@@ -147,23 +147,26 @@ export default function CatalogHome() {
           </Card>
         </Grid>
 
-        {/* Quality Score */}
+        {/* Metadata coverage — not Trust Index / DQ (ADR-0039) */}
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Card sx={{ height: '100%' }}>
             <CardHeader
-              title={t('qualityIndex')}
+              title={t('metadataCoveragePct', { defaultValue: 'Metadata coverage' })}
               titleTypographyProps={{ variant: 'subtitle2', fontWeight: 600 }}
               sx={{ pb: 1 }}
             />
             <CardContent sx={{ pt: 0 }}>
               <Typography variant="h3" fontWeight={700}>{stats.qualityScore}%</Typography>
               <LinearProgress variant="determinate" value={stats.qualityScore} sx={{ mt: 1 }} />
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                {t('metadataCoveragePctHint', { defaultValue: 'Share of tables with a description — not the Trust Index' })}
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      {/* Quick Access Cards */}
+      {/* Quick Access Cards — aligned with Catalog Studio sidebar */}
       <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>{t('quickAccess')}</Typography>
       <Grid container spacing={2} sx={{ mb: 4 }}>
         <Grid size={{ xs: 12, md: 6 }}>
@@ -187,61 +190,51 @@ export default function CatalogHome() {
           <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <CheckCircleIcon sx={{ color: 'success.main' }} />
-              <Typography variant="subtitle1" fontWeight={600}>{t('governanceAudit')}</Typography>
+              <Typography variant="subtitle1" fontWeight={600}>{t('assetProfiles')}</Typography>
             </Box>
             <Typography variant="body2" color="text.secondary">
-              {t('governanceAuditHint')}
+              {t('assetsDescription')}
             </Typography>
             <Box>
-              <Button variant="outlined" size="small" onClick={() => navigate('/catalog/governance')}>
-                {t('openGovernanceAudit')}
+              <Button variant="outlined" size="small" onClick={() => navigate('/catalog/assets')}>
+                {t('assetProfiles')}
               </Button>
             </Box>
           </Paper>
         </Grid>
       </Grid>
 
-      {/* Governance & Metadata */}
+      {/* Discover & govern shortcuts */}
       <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>{t('governanceAndMetadata')}</Typography>
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
           <Button
             fullWidth
             variant="outlined"
-            onClick={() => navigate('/catalog/metadata#domains')}
+            onClick={() => navigate('/catalog/metadata')}
             sx={{ py: 1.5 }}
           >
-            {t('domains')}
+            {t('nav.domainsGlossary')}
           </Button>
         </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Button
-            fullWidth
-            variant="outlined"
-            onClick={() => navigate('/catalog/metadata#glossary')}
-            sx={{ py: 1.5 }}
-          >
-            {t('glossary')}
-          </Button>
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Button
-            fullWidth
-            variant="outlined"
-            onClick={() => navigate('/catalog/metadata#tags')}
-            sx={{ py: 1.5 }}
-          >
-            {t('tags')}
-          </Button>
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
           <Button
             fullWidth
             variant="outlined"
             onClick={() => navigate('/catalog/mdm')}
             sx={{ py: 1.5 }}
           >
-            {t('masterData')}
+            {t('referenceSets')}
+          </Button>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+          <Button
+            fullWidth
+            variant="outlined"
+            onClick={() => navigate('/catalog/search')}
+            sx={{ py: 1.5 }}
+          >
+            {t('search.title')}
           </Button>
         </Grid>
       </Grid>

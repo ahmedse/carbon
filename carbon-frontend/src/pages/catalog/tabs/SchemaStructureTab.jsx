@@ -6,11 +6,8 @@ import {
   Box,
   Button,
   Chip,
-  FormControl,
   IconButton,
-  MenuItem,
   Paper,
-  Select,
   Stack,
   Table,
   TableBody,
@@ -31,6 +28,7 @@ import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
 import ConfirmDialog from '../../../components/ConfirmDialog';
+import { SearchSelect } from '../../../components/Form';
 import {
   createDataSchemaField,
   deleteDataSchemaField,
@@ -263,23 +261,20 @@ export default function SchemaStructureTab({ _entityData, tableId, table, fields
                         <Chip label={field.type || 'string'} size="small" variant="outlined" sx={muted} />
                       </TableCell>
                       {effectiveIsAdmin && (
-                        <TableCell sx={muted}>
-                          <FormControl size="small" variant="standard">
-                            <Select
-                              value={field.masking_strategy ?? 'none'}
-                              onChange={(e) => handleMaskingChange(field, e.target.value)}
-                              size="small"
-                              variant="standard"
-                              disabled={working || denied}
-                              sx={{ minWidth: 96 }}
-                            >
-                              {MASKING_STRATEGIES.map((strategy) => (
-                                <MenuItem key={strategy.value} value={strategy.value}>
-                                  {t(strategy.labelKey)}
-                                </MenuItem>
-                              ))}
-                            </Select>
-                          </FormControl>
+                        <TableCell sx={{ ...muted, minWidth: 140 }}>
+                          <SearchSelect
+                            options={MASKING_STRATEGIES.map((strategy) => ({
+                              value: strategy.value,
+                              label: t(strategy.labelKey),
+                            }))}
+                            valueKey="value"
+                            labelKey="label"
+                            value={field.masking_strategy ?? 'none'}
+                            onChange={(v) => handleMaskingChange(field, v?.value ?? 'none')}
+                            clearable={false}
+                            disabled={working || denied}
+                            size="small"
+                          />
                         </TableCell>
                       )}
                       <TableCell sx={muted}>{field.required ? t('yes') : t('no')}</TableCell>

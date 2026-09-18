@@ -11,6 +11,10 @@ function NoRowsOverlay({ message }) {
   );
 }
 
+NoRowsOverlay.propTypes = {
+  message: PropTypes.string,
+};
+
 // MUI X DataGrid does not re-measure its width when a grid is mounted inside a
 // `display:none` tab panel (e.g. MUI Tabs) — it renders at 0px and stays
 // collapsed when the tab is revealed. We observe the container and only mount
@@ -33,20 +37,20 @@ function useContainerWidth() {
 
 function CarbonDataGrid({
   columns,
-  rows,
-  loading,
-  getRowId,
-  checkboxSelection,
+  rows = [],
+  loading = false,
+  getRowId = (row) => row.id,
+  checkboxSelection = false,
   onSelectionChange,
-  pageSize,
-  pageSizeOptions,
-  stickyHeader,
-  density,
-  height,
-  emptyMessage,
+  pageSize = 25,
+  pageSizeOptions = [10, 25, 50, 100],
+  stickyHeader = true,
+  density = 'compact',
+  height = 'auto',
+  emptyMessage = 'No data found',
   onRowClick,
   highlightRow,
-  showColumnToggle,
+  showColumnToggle = true,
 }) {
   const theme = useTheme();
   const [containerRef, containerWidth] = useContainerWidth();
@@ -54,6 +58,20 @@ function CarbonDataGrid({
   const usesAutoHeight = !height || height === 'auto';
   const stripedBg = theme.palette.mode === 'dark' ? theme.palette.grey[900] : theme.palette.grey[50];
   const stripedAlt = theme.palette.mode === 'dark' ? theme.palette.grey[800] : theme.palette.grey[100];
+
+  // React 19 dropped defaultProps for function components — coerce here so
+  // pagination never becomes NaN-NaN of N (empty body, broken footer).
+  const safePageSize = Number.isFinite(Number(pageSize)) && Number(pageSize) > 0
+    ? Number(pageSize)
+    : 25;
+  const safeOptions = Array.isArray(pageSizeOptions) && pageSizeOptions.length > 0
+    ? pageSizeOptions
+    : [10, 25, 50, 100];
+
+  const [paginationModel, setPaginationModel] = useState({
+    page: 0,
+    pageSize: safePageSize,
+  });
 
   return (
     <Box
@@ -73,8 +91,9 @@ function CarbonDataGrid({
           getRowId={getRowId}
           checkboxSelection={checkboxSelection}
           onRowSelectionModelChange={(model) => onSelectionChange?.(Array.from(model?.ids || []))}
-          initialState={{ pagination: { paginationModel: { pageSize } } }}
-          pageSizeOptions={pageSizeOptions}
+          paginationModel={paginationModel}
+          onPaginationModelChange={setPaginationModel}
+          pageSizeOptions={safeOptions}
           density={density}
           onRowClick={onRowClick}
           disableRowSelectionOnClick
@@ -116,7 +135,7 @@ function CarbonDataGrid({
 
 CarbonDataGrid.propTypes = {
   columns: PropTypes.arrayOf(PropTypes.object).isRequired,
-  rows: PropTypes.arrayOf(PropTypes.object).isRequired,
+  rows: PropTypes.arrayOf(PropTypes.object),
   loading: PropTypes.bool,
   getRowId: PropTypes.func,
   checkboxSelection: PropTypes.bool,
@@ -130,22 +149,6 @@ CarbonDataGrid.propTypes = {
   onRowClick: PropTypes.func,
   highlightRow: PropTypes.func,
   showColumnToggle: PropTypes.bool,
-};
-
-CarbonDataGrid.defaultProps = {
-  loading: false,
-  getRowId: (row) => row.id,
-  checkboxSelection: false,
-  onSelectionChange: undefined,
-  pageSize: 25,
-  pageSizeOptions: [10, 25, 50, 100],
-  stickyHeader: true,
-  density: 'compact',
-  height: 'auto',
-  emptyMessage: 'No data found',
-  onRowClick: undefined,
-  highlightRow: undefined,
-  showColumnToggle: true,
 };
 
 export default React.memo(CarbonDataGrid);

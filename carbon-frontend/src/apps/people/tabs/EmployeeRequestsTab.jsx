@@ -84,7 +84,7 @@ export default function EmployeeRequestsTab({ entityData }) {
   const [rowsPerPage, setRowsPerPage] = useState(25);
 
   const [selected, setSelected] = useState(null);
-  const [view, setView] = useState('stepper');
+  const [view, setView] = useState('graph');
   const [events, setEvents] = useState([]);
   const [detailLoading, setDetailLoading] = useState(false);
 
@@ -171,7 +171,7 @@ export default function EmployeeRequestsTab({ entityData }) {
   const closeDetail = () => {
     setSelected(null);
     setEvents([]);
-    setView('stepper');
+    setView('graph');
     setDetailLoading(false);
   };
 

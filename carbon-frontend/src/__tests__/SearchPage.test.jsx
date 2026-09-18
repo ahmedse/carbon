@@ -53,7 +53,7 @@ describe('SearchPage', () => {
     fireEvent.change(input, { target: { value: 'ta' } });
 
     await waitFor(() => {
-      expect(searchCatalog).toHaveBeenCalledWith('test-token', 'ta', [], 1);
+      expect(searchCatalog).toHaveBeenCalledWith('test-token', 'ta', [], 1, null);
     });
   });
 
@@ -91,14 +91,14 @@ describe('SearchPage', () => {
     fireEvent.change(input, { target: { value: 'field' } });
 
     await waitFor(() => {
-      expect(searchCatalog).toHaveBeenCalledWith('test-token', 'field', [], 1);
+      expect(searchCatalog).toHaveBeenCalledWith('test-token', 'field', [], 1, null);
     });
 
     const fieldsChip = screen.getByRole('button', { name: 'Fields' });
     fireEvent.click(fieldsChip);
 
     await waitFor(() => {
-      expect(searchCatalog).toHaveBeenLastCalledWith('test-token', 'field', ['field'], 1);
+      expect(searchCatalog).toHaveBeenLastCalledWith('test-token', 'field', ['field'], 1, null);
     });
   });
 
@@ -125,8 +125,21 @@ describe('SearchPage', () => {
     );
 
     await waitFor(() => {
-      expect(searchCatalog).toHaveBeenCalledWith('test-token', 'alpha', ['table'], 1);
+      expect(searchCatalog).toHaveBeenCalledWith('test-token', 'alpha', ['table'], 1, null);
     });
     expect(screen.getByDisplayValue('alpha')).toBeInTheDocument();
+  });
+
+  it('passes trust_tier from URL to the search API', async () => {
+    searchCatalog.mockResolvedValue({ total: 0, results: [] });
+    render(
+      <MemoryRouter initialEntries={['/catalog/search?q=alpha&trust_tier=trusted']}>
+        <SearchPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(searchCatalog).toHaveBeenCalledWith('test-token', 'alpha', [], 1, 'trusted');
+    });
   });
 });

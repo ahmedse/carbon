@@ -5,13 +5,15 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Box, Table, TableHead, TableRow, TableCell, TableBody, Typography, Chip, Grid, Paper } from '@mui/material';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
+import TrustChip from './TrustChip';
+import TrustStewardshipNudge from './TrustStewardshipNudge';
 
 export default function AssetOverviewTab({ entityData }) {
   const { t } = useTranslation('catalog');
   if (!entityData) {
     return (
       <DetailTabContent>
-        <Typography color="textSecondary">{t('noDataAvailable')}</Typography>
+        <Typography color="text.secondary">{t('noDataAvailable')}</Typography>
       </DetailTabContent>
     );
   }
@@ -42,6 +44,13 @@ export default function AssetOverviewTab({ entityData }) {
 
   // Governance attributes (from AssetProfile model)
   const governanceAttributes = [
+    { label: t('trustIndex'), value: (
+      <TrustChip
+        score={entityData.trust_index}
+        tier={entityData.trust_tier}
+        breakdown={entityData.trust_breakdown}
+      />
+    ) },
     { label: t('domain'), value: entityData.domain_name || '—' },
     { label: t('classification'), value: entityData.classification ? (
       <Chip 
@@ -107,6 +116,11 @@ export default function AssetOverviewTab({ entityData }) {
   return (
     <DetailTabContent>
       <Box sx={{ maxWidth: '100%' }}>
+        <TrustStewardshipNudge
+          tier={entityData.trust_tier}
+          score={entityData.trust_index}
+          breakdown={entityData.trust_breakdown}
+        />
         {renderTable(primaryAttributes, t('basicInformation'))}
         {renderTable(governanceAttributes, t('governanceQuality'))}
         {renderTable(ownershipAttributes, t('ownership'))}

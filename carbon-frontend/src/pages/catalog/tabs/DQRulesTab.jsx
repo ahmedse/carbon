@@ -6,11 +6,12 @@ import { useTranslation } from 'react-i18next';
 import {
   Box, Button, Table, TableHead, TableBody, TableRow, TableCell,
   IconButton, Chip, CircularProgress, Alert, Typography, Tooltip, Stack,
-  TextField, FormControl, InputLabel, Select, MenuItem, List, ListItemButton,
-  ListItemText, ListItemIcon, Radio, InputAdornment, FormHelperText,
+  TextField, List, ListItemButton,
+  ListItemText, ListItemIcon, Radio, InputAdornment,
 } from '@mui/material';
 import SystemDialog from '../../../components/SystemDialog';
 import ConfirmDialog from '../../../components/ConfirmDialog';
+import { SearchSelect } from '../../../components/Form';
 import AddIcon from '@mui/icons-material/Add';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
 import ToggleOnIcon from '@mui/icons-material/ToggleOn';
@@ -428,25 +429,30 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
             }}
           />
           <Stack direction="row" spacing={1}>
-            <FormControl size="small" fullWidth>
-              <InputLabel>{t('scope')}</InputLabel>
-              <Select
-                label={t('scope')}
-                value={scopeFilter}
-                onChange={(e) => { setScopeFilter(e.target.value); setSelectedFieldId(''); }}
-              >
-                <MenuItem value="all">{t('allScopes')}</MenuItem>
-                <MenuItem value="table">{t('tableBusinessRule')}</MenuItem>
-                <MenuItem value="field">{t('fieldValidation')}</MenuItem>
-              </Select>
-            </FormControl>
-            <FormControl size="small" fullWidth>
-              <InputLabel>{t('dimension')}</InputLabel>
-              <Select label={t('dimension')} value={dimensionFilter} onChange={(e) => setDimensionFilter(e.target.value)}>
-                <MenuItem value="">{t('allDimensions')}</MenuItem>
-                {Object.entries(DIMENSION_LABEL_KEYS).map(([v, key]) => <MenuItem key={v} value={v}>{tDq(key)}</MenuItem>)}
-              </Select>
-            </FormControl>
+            <SearchSelect
+              options={[
+                { value: 'all', label: t('allScopes') },
+                { value: 'table', label: t('tableBusinessRule') },
+                { value: 'field', label: t('fieldValidation') },
+              ]}
+              valueKey="value"
+              labelKey="label"
+              label={t('scope')}
+              value={scopeFilter}
+              onChange={(v) => { setScopeFilter(v?.value ?? 'all'); setSelectedFieldId(''); }}
+              clearable={false}
+            />
+            <SearchSelect
+              options={Object.entries(DIMENSION_LABEL_KEYS).map(([v, key]) => ({
+                value: v,
+                label: tDq(key),
+              }))}
+              valueKey="value"
+              labelKey="label"
+              label={t('dimension')}
+              value={dimensionFilter}
+              onChange={(v) => setDimensionFilter(v?.value ?? '')}
+            />
           </Stack>
 
           {candidatesLoading ? (
@@ -487,29 +493,21 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
           )}
 
           {selectedRule && selectedRule.rule_level === 'field_validation' && (
-            <FormControl size="small" fullWidth>
-              <InputLabel>{t('field')}</InputLabel>
-              <Select
+            <>
+              <SearchSelect
+                options={fields}
+                valueKey="id"
+                getOptionLabel={(f) => {
+                  const compatible = isRuleCompatibleWithField(selectedRule.rule_type, f.type);
+                  const base = f.label || f.name || String(f.id);
+                  const typePart = fieldTypeLabel(tDq, f.type);
+                  return compatible ? `${base} (${typePart})` : `${base} (${typePart} · ${t('incompatible')})`;
+                }}
                 label={t('field')}
                 value={selectedFieldId}
-                onChange={(e) => setSelectedFieldId(e.target.value)}
-              >
-                {fields.map((f) => {
-                  const compatible = isRuleCompatibleWithField(selectedRule.rule_type, f.type);
-                  return (
-                    <MenuItem key={f.id} value={f.id} disabled={!compatible}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', gap: 2 }}>
-                        <span>{f.label || f.name || f.id}</span>
-                        <Typography component="span" variant="caption" color="text.secondary">
-                          {fieldTypeLabel(tDq, f.type)}{compatible ? '' : ` · ${t('incompatible')}`}
-                        </Typography>
-                      </Box>
-                    </MenuItem>
-                  );
-                })}
-              </Select>
-              <FormHelperText>
-                {(() => {
+                onChange={(v) => setSelectedFieldId(v?.id ?? '')}
+                getOptionDisabled={(f) => !isRuleCompatibleWithField(selectedRule.rule_type, f.type)}
+                helperText={(() => {
                   const allowed = RULE_FIELD_TYPE_COMPAT[selectedRule.rule_type];
                   const typeLabel = ruleTypeLabel(tDq, selectedRule.rule_type);
                   const target = !allowed
@@ -517,8 +515,8 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
                     : allowed.map((ft) => fieldTypeLabel(tDq, ft)).join(', ');
                   return t('rulesApplyTo', { type: typeLabel, target });
                 })()}
-              </FormHelperText>
-            </FormControl>
+              />
+            </>
           )}
         </Stack>
       </SystemDialog>

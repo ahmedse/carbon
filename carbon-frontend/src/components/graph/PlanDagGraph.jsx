@@ -3,8 +3,8 @@
 //
 // This is now a THIN domain adapter over the shared `EnterpriseGraph`
 // primitive (see `./EnterpriseGraph.jsx`). It supplies the plan-specific
-// domain data — laid nodes/edges + phase lanes, the node interior (status dot,
-// intent, tool, status pill), and the docked inspection pane — while
+// domain data — laid nodes/edges + phase lanes, the node interior (status bar,
+// intent, agent role + tool, status label), and the docked inspection pane — while
 // `EnterpriseGraph` owns ALL the interaction: movable canvas (pan), movable +
 // resizable nodes, wheel zoom, zoom-to-fit, redraw, reset, PNG export, and the
 // full-screen maximize modal. This guarantees every graph in the platform
@@ -36,7 +36,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
 import EnterpriseGraph from './EnterpriseGraph';
 import { layoutExecutionGraph } from '../../utils/planGraph';
-import { NODE_STATUS_DENSE, STEP_STATUS, stepStatusMeta } from '../../shell/aiTaskStatus';
+import { NODE_STATUS_DENSE, STEP_STATUS, agentRoleLabel, stepStatusMeta } from '../../shell/aiTaskStatus';
 import { FONT } from '../../theme/themeTokens';
 
 /**
@@ -374,21 +374,28 @@ export default function PlanDagGraph({
   // ── Node interior (drawn inside the EnterpriseGraph rect) ──────────────
   // Linear/Temporal-style compact node: a 3px status accent bar on the left,
   // the intent on the title row with the status label right-aligned, and the
-  // tool/kind on the meta row. The running pulse outline is drawn by
-  // EnterpriseGraph from the node status.
+  // agent role + tool/kind on the meta row (enterprise multi-agent cast).
+  // The running pulse outline is drawn by EnterpriseGraph from the node status.
   const renderNode = useCallback(
     (n) => {
       const color = colorFor(n.status);
       const statusLabel = NODE_STATUS[n.status] || 'PENDING';
       const rawTitle = String(n.label || `Step ${n.id}`);
-      const kind = n.is_gateway || ['choice', 'parallel', 'observe', 'map', 'loop', 'wait'].includes(n.node_type)
+      const isGateway = n.is_gateway
+        || ['choice', 'parallel', 'observe', 'map', 'loop', 'wait', 'fail', 'succeed'].includes(n.node_type);
+      const toolKind = isGateway
         ? String(n.node_type || 'gateway').toUpperCase()
         : String(n.tool_name || 'Reasoning (LLM)');
+      const roleLabel = isGateway
+        ? null
+        : agentRoleLabel(n.agent_role || 'orchestrator');
+      // Meta row: "Critic · Reasoning (LLM)" / "Domain specialist · call_host_api"
+      const metaRaw = roleLabel ? `${roleLabel} · ${toolKind}` : toolKind;
       // Title is truncated to leave room for the right-aligned status label.
       const titleMax = Math.max(8, Math.floor((n.w - 78) / 6.6));
       const title = rawTitle.length > titleMax ? `${rawTitle.slice(0, titleMax - 1)}…` : rawTitle;
-      const toolMax = Math.max(8, Math.floor((n.w - 28) / 5.6));
-      const tool = kind.length > toolMax ? `${kind.slice(0, toolMax - 1)}…` : kind;
+      const metaMax = Math.max(8, Math.floor((n.w - 28) / 5.6));
+      const meta = metaRaw.length > metaMax ? `${metaRaw.slice(0, metaMax - 1)}…` : metaRaw;
       return (
         <>
           {/* Status accent bar — the primary at-a-glance signal */}
@@ -401,9 +408,9 @@ export default function PlanDagGraph({
           <text x={n.w - 10} y={n.h / 2 + 1} fontSize={10} fontWeight={700} fill={color} textAnchor="end">
             {statusLabel}
           </text>
-          {/* Tool / gateway kind */}
+          {/* Agent role · tool / gateway kind */}
           <text x={16} y={n.h / 2 + 14} fontSize={11} fill={theme.palette.text.secondary}>
-            {tool}
+            {meta}
           </text>
         </>
       );
@@ -412,7 +419,12 @@ export default function PlanDagGraph({
   );
 
   const nodeAriaLabel = useCallback(
-    (n) => `Step ${n.id}: ${n.label} — ${planStepStatusLabel(n.status)}`,
+    (n) => {
+      const role = n.is_gateway
+        ? ''
+        : ` · ${agentRoleLabel(n.agent_role || 'orchestrator')}`;
+      return `Step ${n.id}: ${n.label}${role} — ${planStepStatusLabel(n.status)}`;
+    },
     [],
   );
 
@@ -504,7 +516,7 @@ export default function PlanDagGraph({
           Agent role
         </Typography>
         <Typography variant="body2" sx={{ fontSize: '0.6875rem', mb: 0.5 }}>
-          {selectedStep.agent_role || 'orchestrator'}
+          {agentRoleLabel(selectedStep.agent_role || 'orchestrator')}
         </Typography>
 
         {typeof selectedStep.latency_ms === 'number' && (

@@ -100,6 +100,23 @@ export function deleteTag(token, id) {
 // ----- Asset Profiles -----
 
 /**
+ * Fetch Dataset Hub artifacts (optional module scope). ADR-0040.
+ */
+export function fetchDatasets(token, moduleId = null) {
+  const url = moduleId
+    ? `${API_ROUTES.datasets}?module=${moduleId}`
+    : API_ROUTES.datasets;
+  return apiFetch(url, { token });
+}
+
+/**
+ * Fetch Dataset Hub artifacts scoped to a Module (Data Product). ADR-0040 soft-link.
+ */
+export function fetchDatasetsByModule(token, moduleId) {
+  return fetchDatasets(token, moduleId);
+}
+
+/**
  * Fetch all asset profiles (optionally filtered by asset type).
  */
 export function fetchAssetProfiles(token, assetType = null) {

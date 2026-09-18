@@ -9,7 +9,6 @@ import { useNotification } from '../../components/NotificationProvider';
 import SystemDialog from '../../components/SystemDialog';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import {
-  Autocomplete,
   Box,
   Button,
   Card,
@@ -17,7 +16,6 @@ import {
   CircularProgress,
   IconButton,
   Paper,
-  Select,
   Tab,
   Table,
   TableBody,
@@ -31,6 +29,7 @@ import {
 } from '@mui/material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import PageContainer from '../../components/layout/PageContainer';
+import { SearchSelect } from '../../components/Form';
 import { useTheme } from '@mui/material/styles';
 
 import AddIcon from '@mui/icons-material/Add';
@@ -448,13 +447,14 @@ export default function MetadataManagementPage() {
                 multiline
                 rows={3}
               />
-              <Autocomplete
-                value={domains.find((d) => d.id === (formData.domain || null)) || null}
+              <SearchSelect
                 options={domains}
-                getOptionLabel={(d) => d.name}
-                isOptionEqualToValue={(opt, val) => opt.id === val.id}
-                onChange={(e, val) => setFormData({ ...formData, domain: val?.id || '' })}
-                renderInput={(params) => <TextField {...params} label={t('domain')} size="small" margin="normal" />}
+                valueKey="id"
+                labelKey="name"
+                label={t('domain')}
+                value={formData.domain || ''}
+                onChange={(v) => setFormData({ ...formData, domain: v?.id ?? '' })}
+                noOptionsText={t('noDomains') || 'No domains'}
               />
             </>
           )}

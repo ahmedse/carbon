@@ -163,6 +163,23 @@ _WORK_AREAS_PEOPLE: list[dict[str, Any]] = [
     },
 ]
 
+#: EduOS (GradeVance) work areas — selected via BRAND_WORK_AREA_KEYS.
+_WORK_AREAS_EDUOS: list[dict[str, Any]] = [
+    {
+        "key": "gradevance",
+        "label": "GradeVance Assessment",
+        "description": "Multi-domain assessment, LCT measurement, rubrics, coaching, and HITL review.",
+        "route": "/apps/gradevance",
+        "capabilities": [
+            "gradevance:view",
+            "gradevance:manage",
+            "gradevance:mark",
+            "gradevance:submit",
+            "gradevance:qa",
+        ],
+    },
+]
+
 #: Backward-compat alias — Carbon brand uses the full list.
 _WORK_AREAS: list[dict[str, Any]] = _WORK_AREAS_CARBON
 
@@ -179,8 +196,8 @@ def _active_work_areas() -> list[dict[str, Any]]:
         allowed_keys = None
     if allowed_keys is None:
         return _WORK_AREAS_CARBON
-    # People-domain keys come from _WORK_AREAS_PEOPLE; carbon keys from _WORK_AREAS_CARBON.
-    all_areas = _WORK_AREAS_CARBON + _WORK_AREAS_PEOPLE
+    # People / EduOS / carbon keys are unioned then filtered by brand allow-list.
+    all_areas = _WORK_AREAS_CARBON + _WORK_AREAS_PEOPLE + _WORK_AREAS_EDUOS
     seen: set[str] = set()
     result: list[dict[str, Any]] = []
     for wa in all_areas:

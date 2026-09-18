@@ -17,12 +17,10 @@ import {
 } from '../../api/catalog';
 import { fetchUsers } from '../../api/users';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
-import PageContainer from '../../components/layout/PageContainer';
 import SystemDialog from '../../components/SystemDialog';
 import ConfirmDialog from '../../components/ConfirmDialog';
 
 import {
-  Autocomplete,
   Box,
   Button,
   TextField,
@@ -32,7 +30,6 @@ import {
   CircularProgress,
   Alert,
   Typography,
-  MenuItem,
   Chip,
   useTheme,
   useMediaQuery,
@@ -42,7 +39,8 @@ import {
   LinearProgress,
 } from '@mui/material';
 import FilteredDataGrid from '../../components/FilteredDataGrid';
-import { DataGrid } from '@mui/x-data-grid';
+import { SearchSelect } from '../../components/Form';
+import TrustChip from './tabs/TrustChip';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
@@ -158,6 +156,7 @@ export default function AssetsPage() {
   const [filterClassification, setFilterClassification] = useState('');
   const [filterQuality, setFilterQuality] = useState('');
   const [filterAssetType, setFilterAssetType] = useState('');
+  const [filterTrustTier, setFilterTrustTier] = useState('');
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -217,8 +216,13 @@ export default function AssetsPage() {
       filtered = filtered.filter(a => a.asset_type === filterAssetType);
     }
 
+    // Trust tier filter (ADR-0039)
+    if (filterTrustTier) {
+      filtered = filtered.filter(a => a.trust_tier === filterTrustTier);
+    }
+
     return filtered;
-  }, [assets, searchText, filterDomain, filterClassification, filterQuality, filterAssetType]);
+  }, [assets, searchText, filterDomain, filterClassification, filterQuality, filterAssetType, filterTrustTier]);
 
   // Handle delete
   const confirmDelete = async () => {
@@ -290,6 +294,16 @@ export default function AssetsPage() {
       ),
     },
     {
+      field: 'trust_index',
+      headerName: t('trustIndex'),
+      flex: 1,
+      minWidth: 160,
+      sortable: true,
+      renderCell: (params) => (
+        <TrustChip score={params.value} tier={params.row.trust_tier} />
+      ),
+    },
+    {
       field: 'quality_status',
       headerName: t('quality'),
       flex: 1,
@@ -353,6 +367,7 @@ export default function AssetsPage() {
     setFilterClassification('');
     setFilterQuality('');
     setFilterAssetType('');
+    setFilterTrustTier('');
   };
 
   // --- Create dialog handlers ---
@@ -419,11 +434,39 @@ export default function AssetsPage() {
   };
 
   const hasActiveFilters = 
-    searchText || filterDomain || filterClassification || filterQuality || filterAssetType;
+    searchText || filterDomain || filterClassification || filterQuality || filterAssetType || filterTrustTier;
+
+  const lowTrustCount = useMemo(
+    () => assets.filter((a) => a.trust_tier && a.trust_tier !== 'trusted').length,
+    [assets],
+  );
 
   return (
-    <PageContainer sx={{ overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       {error && <Alert severity="error" sx={{ mx: 2, mt: 2, flexShrink: 0 }}>{error}</Alert>}
+
+      {lowTrustCount > 0 && !loading && (
+        <Alert
+          severity="warning"
+          sx={{ mx: 2, mt: 2, flexShrink: 0 }}
+          action={(
+            <Button
+              color="inherit"
+              size="small"
+              onClick={() => {
+                setFilterTrustTier('limited');
+              }}
+            >
+              {t('stewardship.filterLimited', { defaultValue: 'Show limited' })}
+            </Button>
+          )}
+        >
+          {t('stewardship.listBanner', {
+            count: lowTrustCount,
+            defaultValue: `${lowTrustCount} asset(s) are below Trusted — assign owners, glossary, and DQ to raise the Trust Index.`,
+          })}
+        </Alert>
+      )}
 
       <FilteredDataGrid
         title={t('assetProfiles')}
@@ -483,18 +526,30 @@ export default function AssetsPage() {
               { value: 'field', label: t('field') },
             ],
           },
+          {
+            key: 'trustTier',
+            label: t('trustIndex'),
+            emptyLabel: t('allTrustTiers', { defaultValue: 'All trust tiers' }),
+            options: [
+              { value: 'trusted', label: t('trustTier.trusted') },
+              { value: 'limited', label: t('trustTier.limited') },
+              { value: 'untrustworthy', label: t('trustTier.untrustworthy') },
+            ],
+          },
         ]}
         filterValues={{
           domain: filterDomain,
           classification: filterClassification,
           quality: filterQuality,
           assetType: filterAssetType,
+          trustTier: filterTrustTier,
         }}
         onFilterChange={(key, value) => {
           if (key === 'domain') setFilterDomain(value);
           if (key === 'classification') setFilterClassification(value);
           if (key === 'quality') setFilterQuality(value);
           if (key === 'assetType') setFilterAssetType(value);
+          if (key === 'trustTier') setFilterTrustTier(value);
         }}
         onClearFilters={handleClearFilters}
         pageSize={25}
@@ -542,73 +597,71 @@ export default function AssetsPage() {
             onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
             autoFocus
           />
-          <Autocomplete
-            value={domains.find((d) => d.id === createForm.domain) || null}
+          <SearchSelect
             options={domains}
-            getOptionLabel={(d) => d.name}
-            isOptionEqualToValue={(opt, val) => opt.id === val.id}
-            onChange={(e, val) => setCreateForm({ ...createForm, domain: val?.id || '' })}
-            renderInput={(params) => <TextField {...params} label={t('domain')} margin="normal" />}
+            valueKey="id"
+            labelKey="name"
+            label={t('domain')}
+            value={createForm.domain}
+            onChange={(v) => setCreateForm({ ...createForm, domain: v?.id || '' })}
+            noOptionsText={t('noDomains') || 'No domains'}
           />
-          <TextField
-            select
-            fullWidth
+          <SearchSelect
+            options={[
+              { value: '', label: t('none') },
+              { value: 'public', label: t('public') },
+              { value: 'internal', label: t('internal') },
+              { value: 'confidential', label: t('confidential') },
+              { value: 'pii', label: t('pii') },
+              { value: 'sensitive', label: t('sensitive') },
+            ]}
+            valueKey="value"
+            labelKey="label"
             label={t('classification')}
-            margin="normal"
             value={createForm.classification}
-            onChange={(e) => setCreateForm({ ...createForm, classification: e.target.value })}
-          >
-            <MenuItem value="">{t('none')}</MenuItem>
-            <MenuItem value="public">{t('public')}</MenuItem>
-            <MenuItem value="internal">{t('internal')}</MenuItem>
-            <MenuItem value="confidential">{t('confidential')}</MenuItem>
-            <MenuItem value="pii">{t('pii')}</MenuItem>
-            <MenuItem value="sensitive">{t('sensitive')}</MenuItem>
-          </TextField>
-          <Autocomplete
-            value={createFormUsers.find((u) => u.id === createForm.owner) || null}
-            options={createFormUsers}
-            getOptionLabel={(u) => u.username || u.email || String(u.id)}
-            isOptionEqualToValue={(opt, val) => opt.id === val.id}
-            onChange={(e, val) => setCreateForm({ ...createForm, owner: val?.id || '' })}
-            renderInput={(params) => <TextField {...params} label={t('owner')} margin="normal" />}
+            onChange={(v) => setCreateForm({ ...createForm, classification: v?.value ?? '' })}
+            clearable={false}
           />
-          <Autocomplete
-            value={createFormUsers.find((u) => u.id === createForm.steward) || null}
+          <SearchSelect
             options={createFormUsers}
+            valueKey="id"
             getOptionLabel={(u) => u.username || u.email || String(u.id)}
-            isOptionEqualToValue={(opt, val) => opt.id === val.id}
-            onChange={(e, val) => setCreateForm({ ...createForm, steward: val?.id || '' })}
-            renderInput={(params) => <TextField {...params} label={t('steward')} margin="normal" />}
+            label={t('owner')}
+            value={createForm.owner}
+            onChange={(v) => setCreateForm({ ...createForm, owner: v?.id || '' })}
+          />
+          <SearchSelect
+            options={createFormUsers}
+            valueKey="id"
+            getOptionLabel={(u) => u.username || u.email || String(u.id)}
+            label={t('steward')}
+            value={createForm.steward}
+            onChange={(v) => setCreateForm({ ...createForm, steward: v?.id || '' })}
           />
           <TextField
             fullWidth
+            size="small"
             label={t('semanticType')}
             margin="normal"
             value={createForm.semantic_type}
             onChange={(e) => setCreateForm({ ...createForm, semantic_type: e.target.value })}
           />
-          <Autocomplete
-            value={createFormGlossary.find((g) => g.id === createForm.glossary_term) || null}
+          <SearchSelect
             options={createFormGlossary}
+            valueKey="id"
             getOptionLabel={(g) => g.term || g.name || String(g.id)}
-            isOptionEqualToValue={(opt, val) => opt.id === val.id}
-            onChange={(e, val) => setCreateForm({ ...createForm, glossary_term: val?.id || '' })}
-            renderInput={(params) => <TextField {...params} label={t('glossaryTerm')} margin="normal" />}
+            label={t('glossaryTerm')}
+            value={createForm.glossary_term}
+            onChange={(v) => setCreateForm({ ...createForm, glossary_term: v?.id || '' })}
           />
-          <Autocomplete
+          <SearchSelect
             multiple
-            value={createFormAllTags.filter((t) => createFormTags.includes(t.id))}
             options={createFormAllTags}
-            getOptionLabel={(t) => t.name}
-            isOptionEqualToValue={(opt, val) => opt.id === val.id}
-            onChange={(e, val) => setCreateFormTags(val.map((t) => t.id))}
-            renderInput={(params) => <TextField {...params} label={t('tags')} margin="normal" />}
-            renderTags={(value, getTagProps) =>
-              value.map((option, index) => (
-                <Chip key={option.id} label={option.name} size="small" {...getTagProps({ index })} />
-              ))
-            }
+            valueKey="id"
+            labelKey="name"
+            label={t('tags')}
+            value={createFormTags}
+            onChange={(v) => setCreateFormTags((v || []).map((tag) => tag.id))}
           />
         </Box>
       </SystemDialog>
@@ -622,6 +675,6 @@ export default function AssetsPage() {
         onConfirm={confirmDelete}
         onCancel={() => setDeleteConfirm(null)}
       />
-    </PageContainer>
+    </Box>
   );
 }

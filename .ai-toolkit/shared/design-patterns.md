@@ -57,10 +57,13 @@ grep this file for the pattern you need and follow the EXACT local convention.
   `GlassCard` wraps MUI `Card` — leaf/composite treated identically.
   Design System 3-Layer model (Tokens → Primitives → Composed) IS the Composite pattern.
   `EnterpriseGraph` (ADR-0012) is the composite graph *surface* — every graph/chart
-  (plan DAG, agent topology, run timeline) is a thin adapter that supplies domain
-  data + a `renderNode` interior, never a re-implementation of pan/zoom/export.
+  (plan DAG, agent topology, approval workflow, run timeline) is a thin adapter
+  that supplies domain data + a `renderNode` interior, never a re-implementation
+  of pan/zoom/export. Domain adapter examples: `PlanDagGraph`, `WorkflowGraph`
+  (approver chain → same canvas as Pulse agent plans).
 - Backend: ViewSets compose `@action` methods with inherited CRUD.
 - **Rule:** Every UI component must compose existing primitives. NEVER fork/duplicate.
+  Do not hand-roll a second SVG flow — adapt `EnterpriseGraph`.
 
 ### Decorator — ✅ USED
 **Convention:** Python decorators add behavior without modifying the decorated class.

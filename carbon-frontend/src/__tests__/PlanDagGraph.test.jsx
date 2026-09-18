@@ -97,6 +97,50 @@ describe('PlanDagGraph', () => {
     expect(x2).toBeGreaterThan(x0);
   });
 
+  it('renders agent role · tool on each DAG node (not tool alone)', () => {
+    const multiAgentPlan = {
+      id: 'plan-agents',
+      status: 'completed',
+      brief: 'Board pack',
+      steps: [
+        {
+          step_id: 0,
+          intent: 'Fetch headcount and payroll totals',
+          tool_name: 'call_host_api',
+          agent_role: 'domain_specialist',
+          status: 'completed',
+          depends_on: [],
+        },
+        {
+          step_id: 1,
+          intent: 'Critic review: flag compliance risks',
+          tool_name: null,
+          agent_role: 'critic',
+          status: 'completed',
+          depends_on: [0],
+        },
+        {
+          step_id: 2,
+          intent: 'Export board pack',
+          tool_name: 'export_document',
+          agent_role: 'orchestrator',
+          status: 'completed',
+          depends_on: [1],
+        },
+      ],
+    };
+    renderGraph({ plan: multiAgentPlan });
+
+    expect(screen.getByText(/Domain specialist · call_host_api/)).toBeInTheDocument();
+    expect(screen.getByText(/Critic · Reasoning \(LLM\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Orchestrator · export_document/)).toBeInTheDocument();
+
+    // Aria includes the cast so screen readers hear the agent, not only the tool.
+    expect(
+      screen.getByRole('button', { name: /Step 1:.*Critic/ }),
+    ).toBeInTheDocument();
+  });
+
   it('opens a detailed inspection pane when a node is clicked', () => {
     renderGraph({ plan: PLAN });
 

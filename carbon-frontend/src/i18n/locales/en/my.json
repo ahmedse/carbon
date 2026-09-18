@@ -183,7 +183,7 @@
   "viewToggleLabel": "View",
   "workflowStepper": "Stepper",
   "workflowGraph": "Graph",
-  "graphTitle": "Workflow Graph",
+  "graphTitle": "Approval workflow",
   "graphEmpty": "No approver chain",
   "graphLegend": "Legend",
   "graphNodePending": "Pending",

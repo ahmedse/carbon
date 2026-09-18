@@ -1,12 +1,13 @@
 // src/pages/catalog/GovernancePage.jsx
 // Governance: Read-only audit log of governance events
 import React, { useEffect, useState, useCallback } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import {
   Box, Typography, Table, TableHead, TableRow, TableCell, TableBody,
-  CircularProgress, Alert, Chip, Paper, Button
+  CircularProgress, Alert, Chip, Paper, Button, Link as MuiLink,
 } from '@mui/material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 
@@ -14,8 +15,21 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import { fetchGovernanceEvents } from '../../api/catalog';
 
+function summarizeChange(before, after) {
+  const b = before && typeof before === 'object' ? before : {};
+  const a = after && typeof after === 'object' ? after : {};
+  const keys = [...new Set([...Object.keys(b), ...Object.keys(a)])];
+  if (keys.length === 0) return '—';
+  const parts = keys.slice(0, 4).map((k) => {
+    const from = b[k] == null || b[k] === '' ? '—' : String(b[k]);
+    const to = a[k] == null || a[k] === '' ? '—' : String(a[k]);
+    return `${k}: ${from} → ${to}`;
+  });
+  return parts.join('; ') + (keys.length > 4 ? '…' : '');
+}
+
 export default function GovernancePage() {
-  useDocumentTitle("Governance");
+  useDocumentTitle("Audit Log");
   const { t } = useTranslation('catalog');
   const { token } = useAuth();
   const { notify } = useNotification();
@@ -24,13 +38,15 @@ export default function GovernancePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const loadEvents = useCallback(async () => {
+  const loadEvents = useCallback(async ({ announce = false } = {}) => {
     setLoading(true);
     setError(null);
     try {
       const data = await fetchGovernanceEvents(token);
       setEvents(Array.isArray(data) ? data : data?.results || []);
-      notify({ message: t('eventsLoaded'), type: 'success' });
+      if (announce) {
+        notify({ message: t('eventsLoaded'), type: 'success' });
+      }
     } catch (err) {
       const msg = err.message || t('governanceLoadError');
       setError(msg);
@@ -41,7 +57,7 @@ export default function GovernancePage() {
   }, [token, notify, t]);
 
   useEffect(() => {
-    loadEvents();
+    loadEvents({ announce: false });
   }, [loadEvents]);
 
   if (loading) {
@@ -62,7 +78,7 @@ export default function GovernancePage() {
             <Typography variant="body2" color="text.secondary">{t('governanceSubtitle')}</Typography>
           </Box>
         </Box>
-        <Button variant="outlined" startIcon={<RefreshIcon />} onClick={loadEvents}>
+        <Button variant="outlined" startIcon={<RefreshIcon />} onClick={() => loadEvents({ announce: true })}>
           {t('refresh')}
         </Button>
       </Box>
@@ -87,14 +103,16 @@ export default function GovernancePage() {
                 </TableCell>
               </TableRow>
             ) : (
-              events.map(event => {
+              events.map((event) => {
                 const eventType = event.action || event.entity_type || '—';
-                const assetName = event.asset 
-                  ? t('assetNumber', { id: event.asset }) 
-                  : t('entityNumber', { entity: event.entity_type || t('entity'), id: event.entity_id || '?' });
-                const details = event.before || event.after
-                  ? `${JSON.stringify(event.before || {})} → ${JSON.stringify(event.after || {})}`.substring(0, 80)
-                  : '—';
+                const assetId = event.asset;
+                const assetLabel = assetId
+                  ? t('assetNumber', { id: assetId })
+                  : t('entityNumber', {
+                    entity: event.entity_type || t('entity'),
+                    id: event.entity_id || '?',
+                  });
+                const details = summarizeChange(event.before, event.after);
                 const when = event.timestamp
                   ? new Date(event.timestamp).toLocaleString()
                   : '—';
@@ -103,9 +121,21 @@ export default function GovernancePage() {
                     <TableCell>
                       <Chip label={eventType} size="small" color="primary" variant="outlined" />
                     </TableCell>
-                    <TableCell>{assetName}</TableCell>
-                    <TableCell sx={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      <Typography variant="caption">{details}</Typography>
+                    <TableCell>
+                      {assetId ? (
+                        <MuiLink
+                          component={RouterLink}
+                          to={`/catalog/assets/${assetId}`}
+                          underline="hover"
+                        >
+                          {assetLabel}
+                        </MuiLink>
+                      ) : (
+                        assetLabel
+                      )}
+                    </TableCell>
+                    <TableCell sx={{ maxWidth: 360 }}>
+                      <Typography variant="caption" sx={{ whiteSpace: 'pre-wrap' }}>{details}</Typography>
                     </TableCell>
                     <TableCell>
                       <Typography variant="caption">{when}</Typography>

@@ -1,12 +1,15 @@
 // src/__tests__/PulseDataPanel.test.jsx — drill-down helper unit tests.
 // Covers the pure formatters powering the Pulse read-only console's row
 // detail drawer: defensive cell formatting, scope label collapse, and the
-// field list that excludes internal _type / scope helper columns.
+// thin-grid deepen helpers (type filter, evidence href, column presets).
 import { describe, it, expect } from 'vitest';
 import {
   formatCellValue,
   buildScopeLabel,
   buildDetailFields,
+  listRowTypes,
+  buildEvidenceHref,
+  resolveColumnFields,
 } from '../pages/admin/ai/pulseFormat';
 
 describe('formatCellValue', () => {
@@ -78,5 +81,59 @@ describe('buildDetailFields', () => {
       { key: 'name', value: '—' },
       { key: 'count', value: '5' },
     ]);
+  });
+});
+
+describe('listRowTypes', () => {
+  it('returns sorted distinct _type values', () => {
+    expect(
+      listRowTypes([
+        { _type: 'ToolExecution' },
+        { _type: 'TaskExecution' },
+        { _type: 'ToolExecution' },
+        {},
+      ]),
+    ).toEqual(['TaskExecution', 'ToolExecution']);
+  });
+
+  it('returns empty for empty input', () => {
+    expect(listRowTypes([])).toEqual([]);
+    expect(listRowTypes(null)).toEqual([]);
+  });
+});
+
+describe('buildEvidenceHref', () => {
+  it('prefers run_id then conversation_id', () => {
+    expect(buildEvidenceHref({ run_id: 'r1' })).toBe(
+      '/admin/ai/evidence?tab=explorer&run_id=r1',
+    );
+    expect(buildEvidenceHref({ plan_id: 'p1' })).toBe(
+      '/admin/ai/evidence?tab=explorer&run_id=p1',
+    );
+    expect(buildEvidenceHref({ conversation_id: 'c1' })).toBe(
+      '/admin/ai/evidence?tab=explorer&conversation_id=c1',
+    );
+  });
+
+  it('returns null when no reconstructable id', () => {
+    expect(buildEvidenceHref({})).toBeNull();
+    expect(buildEvidenceHref(null)).toBeNull();
+  });
+});
+
+describe('resolveColumnFields', () => {
+  it('orders preset fields first for tools', () => {
+    const fields = resolveColumnFields('tools', [
+      { status: 'ok', run_id: 'r1', noise: 1, tool_name: 'x' },
+    ]);
+    expect(fields[0]).toBe('tool_name');
+    expect(fields).toContain('status');
+    expect(fields).toContain('run_id');
+    expect(fields).toContain('noise');
+  });
+
+  it('falls back to dynamic keys when no preset match', () => {
+    const fields = resolveColumnFields('unknown', [{ foo: 1, bar: 2 }]);
+    expect(fields).toEqual(['bar', 'foo']);
   });
 });

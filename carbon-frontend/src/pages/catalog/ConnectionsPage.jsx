@@ -40,10 +40,6 @@ import {
   Tabs,
   Tab,
   Chip,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Card,
   CardContent,
 } from '@mui/material';
@@ -54,6 +50,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import StorageIcon from '@mui/icons-material/Storage';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
+import { SearchSelect } from '../../components/Form';
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -426,22 +423,18 @@ export default function ConnectionsPage() {
             onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
             margin="normal"
           />
-          <FormControl fullWidth margin="normal" size="small">
-            <InputLabel>{dialogType === 'datasource' ? t('sourceType') : t('systemType')}</InputLabel>
-            <Select
-              size="small"
-              value={dialogType === 'datasource' ? (formData.source_type || 'api') : (formData.system_type || 'custom')}
-              onChange={(e) => setFormData({ 
-                ...formData, 
-                [dialogType === 'datasource' ? 'source_type' : 'system_type']: e.target.value 
-              })}
-              label={dialogType === 'datasource' ? t('sourceType') : t('systemType')}
-            >
-              {(dialogType === 'datasource' ? sourceTypes : systemTypes).map((type) => (
-                <MenuItem key={type.value} value={type.value}>{type.label}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <SearchSelect
+            options={dialogType === 'datasource' ? sourceTypes : systemTypes}
+            valueKey="value"
+            labelKey="label"
+            label={dialogType === 'datasource' ? t('sourceType') : t('systemType')}
+            value={dialogType === 'datasource' ? (formData.source_type || 'api') : (formData.system_type || 'custom')}
+            onChange={(v) => setFormData({
+              ...formData,
+              [dialogType === 'datasource' ? 'source_type' : 'system_type']: v?.value ?? '',
+            })}
+            clearable={false}
+          />
           <TextField
             label={t('description')}
             size="small"

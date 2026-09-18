@@ -4,25 +4,30 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Box, Button, TextField, FormControl, InputLabel, Select, MenuItem,
-  Paper, Typography, Grid, Chip, CircularProgress, Alert, Autocomplete,
+  Box, Button, TextField,
+  Paper, Typography, Grid, Chip, CircularProgress, Alert,
   Stack,
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
+import { SearchSelect } from '../../../components/Form';
 import {
   fetchTableAssetProfile, patchAssetProfile, fetchDataDomains, fetchTags, fetchGlossaryTerms,
 } from '../../../api/catalog';
 import { fetchUsers } from '../../../api/users';
+import TrustChip from './TrustChip';
+import TrustStewardshipNudge from './TrustStewardshipNudge';
 
 // Matches backend catalog CLASSIFICATION_CHOICES / QUALITY_STATUS_CHOICES.
-const CLASSIFICATIONS = ['public', 'internal', 'confidential', 'pii', 'sensitive'];
-const CLASSIFICATION_LABELS = {
-  public: 'Public', internal: 'Internal', confidential: 'Confidential',
-  pii: 'PII', sensitive: 'Sensitive',
-};
+const CLASSIFICATIONS = [
+  { value: 'public', label: 'Public' },
+  { value: 'internal', label: 'Internal' },
+  { value: 'confidential', label: 'Confidential' },
+  { value: 'pii', label: 'PII' },
+  { value: 'sensitive', label: 'Sensitive' },
+];
 const QUALITY_COLOR = { passing: 'success', warning: 'warning', failing: 'error', unknown: 'default' };
 
 const EMPTY_FORM = {
@@ -185,96 +190,134 @@ export default function GovernanceTab({ tableId }) {
         </Paper>
       ) : (
         <Grid container spacing={3}>
+          <Grid size={{ xs: 12 }}>
+            <TrustStewardshipNudge
+              tier={asset.trust_tier}
+              score={asset.trust_index}
+              breakdown={asset.trust_breakdown}
+            />
+          </Grid>
           <Grid size={{ xs: 12, md: 7 }}>
             <Paper variant="outlined" sx={{ p: 3 }}>
               <Typography variant="subtitle2" fontWeight={600} gutterBottom>
                 {t('classificationAndOwnership')}
               </Typography>
 
-              <FormControl fullWidth margin="normal">
-                <InputLabel>{t('classification')}</InputLabel>
-                <Select value={form.classification} label={t('classification')}
-                  onChange={(e) => set('classification', e.target.value)}>
-                  {CLASSIFICATIONS.map((c) => (
-                    <MenuItem key={c} value={c}>{CLASSIFICATION_LABELS[c]}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <Stack spacing={2} sx={{ mt: 1 }}>
+                <SearchSelect
+                  options={CLASSIFICATIONS}
+                  valueKey="value"
+                  labelKey="label"
+                  label={t('classification')}
+                  value={form.classification}
+                  onChange={(v) => set('classification', v?.value || 'internal')}
+                />
 
-              <Autocomplete
-                value={domains.find((d) => d.id === form.domain) || null}
-                options={domains}
-                getOptionLabel={(d) => d.name}
-                isOptionEqualToValue={(opt, val) => opt.id === val.id}
-                onChange={(e, val) => set('domain', val?.id || '')}
-                renderInput={(params) => <TextField {...params} label={t('domain')} margin="normal" />}
-              />
+                <SearchSelect
+                  options={domains}
+                  valueKey="id"
+                  labelKey="name"
+                  label={t('domain')}
+                  value={form.domain}
+                  onChange={(v) => set('domain', v?.id || '')}
+                  noOptionsText={t('noDomains') || 'No domains'}
+                />
 
-              <Autocomplete
-                value={users.find((u) => u.id === form.owner) || null}
-                options={users}
-                getOptionLabel={userLabel}
-                isOptionEqualToValue={(opt, val) => opt.id === val.id}
-                onChange={(e, val) => set('owner', val?.id || '')}
-                renderInput={(params) => <TextField {...params} label={t('owner')} margin="normal"
-                  helperText={t('ownerHelper')} />}
-              />
+                <SearchSelect
+                  options={users}
+                  valueKey="id"
+                  getOptionLabel={userLabel}
+                  label={t('owner')}
+                  helperText={t('ownerHelper')}
+                  value={form.owner}
+                  onChange={(v) => set('owner', v?.id || '')}
+                  noOptionsText={t('noUsers') || 'No users'}
+                />
 
-              <Autocomplete
-                value={users.find((u) => u.id === form.steward) || null}
-                options={users}
-                getOptionLabel={userLabel}
-                isOptionEqualToValue={(opt, val) => opt.id === val.id}
-                onChange={(e, val) => set('steward', val?.id || '')}
-                renderInput={(params) => <TextField {...params} label={t('steward')} margin="normal"
-                  helperText={t('stewardCustodianHelper')} />}
-              />
+                <SearchSelect
+                  options={users}
+                  valueKey="id"
+                  getOptionLabel={userLabel}
+                  label={t('steward')}
+                  helperText={t('stewardCustodianHelper')}
+                  value={form.steward}
+                  onChange={(v) => set('steward', v?.id || '')}
+                  noOptionsText={t('noUsers') || 'No users'}
+                />
 
-              <Autocomplete
-                multiple
-                options={tags}
-                getOptionLabel={(o) => o.name}
-                value={tags.filter((t) => form.tags.includes(t.id))}
-                onChange={(e, val) => set('tags', val.map((t) => t.id))}
-                renderInput={(params) => <TextField {...params} label={t('tags')} margin="normal" />}
-                renderTags={(value, getTagProps) =>
-                  value.map((option, index) => (
-                    <Chip label={option.name} size="small" {...getTagProps({ index })} />
-                  ))
-                }
-              />
+                <SearchSelect
+                  multiple
+                  options={tags}
+                  valueKey="id"
+                  labelKey="name"
+                  label={t('tags')}
+                  value={form.tags}
+                  onChange={(v) => set('tags', (v || []).map((tag) => tag.id))}
+                  noOptionsText={t('noTags') || 'No tags'}
+                />
 
-              <TextField
-                label={t('semanticType')} value={form.semantic_type}
-                onChange={(e) => set('semantic_type', e.target.value)}
-                fullWidth margin="normal" helperText={t('semanticTypeHelper')}
-              />
+                <TextField
+                  label={t('semanticType')} value={form.semantic_type}
+                  onChange={(e) => set('semantic_type', e.target.value)}
+                  fullWidth size="small" helperText={t('semanticTypeHelper')}
+                />
 
-              <Autocomplete
-                value={glossaryTerms.find((g) => g.id === form.glossary_term) || null}
-                options={glossaryTerms}
-                getOptionLabel={(g) => g.term || g.name}
-                isOptionEqualToValue={(opt, val) => opt.id === val.id}
-                onChange={(e, val) => set('glossary_term', val?.id || '')}
-                renderInput={(params) => <TextField {...params} label={t('glossaryTerm')} margin="normal"
-                  helperText={t('glossaryTermHelper')} />}
-              />
+                <SearchSelect
+                  options={glossaryTerms}
+                  valueKey="id"
+                  getOptionLabel={(g) => g.term || g.name || String(g.id)}
+                  label={t('glossaryTerm')}
+                  helperText={t('glossaryTermHelper')}
+                  value={form.glossary_term}
+                  onChange={(v) => set('glossary_term', v?.id || '')}
+                  noOptionsText={t('noGlossaryTerms') || 'No glossary terms'}
+                />
 
-              <TextField
-                label={t('description')} value={form.description}
-                onChange={(e) => set('description', e.target.value)}
-                fullWidth margin="normal" multiline rows={3}
-              />
+                <TextField
+                  label={t('description')} value={form.description}
+                  onChange={(e) => set('description', e.target.value)}
+                  fullWidth size="small" multiline rows={3}
+                />
+              </Stack>
             </Paper>
           </Grid>
 
           <Grid size={{ xs: 12, md: 5 }}>
             <Paper variant="outlined" sx={{ p: 3 }}>
               <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-                {t('qualityReadOnly')}
+                {t('trustAndQuality')}
               </Typography>
 
               <Box sx={{ mt: 2 }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  {t('trustIndex')}
+                </Typography>
+                <TrustChip
+                  score={asset.trust_index}
+                  tier={asset.trust_tier}
+                  breakdown={asset.trust_breakdown}
+                  size="medium"
+                />
+              </Box>
+
+              {asset.trust_breakdown?.freshness && (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    {t('freshness', { defaultValue: 'Freshness' })}
+                  </Typography>
+                  <Chip
+                    size="small"
+                    color={
+                      asset.trust_breakdown.freshness.status === 'fresh' ? 'success'
+                        : asset.trust_breakdown.freshness.status === 'stale' ? 'warning'
+                          : 'default'
+                    }
+                    label={`${asset.trust_breakdown.freshness.status || 'unknown'} · ${asset.trust_breakdown.freshness.points ?? 0}/10`}
+                  />
+                </Box>
+              )}
+
+              <Box sx={{ mt: 3 }}>
                 <Typography variant="body2" color="text.secondary">{t('qualityScore')}</Typography>
                 <Typography variant="h4"
                   color={asset.quality_score >= 80 ? 'success.main' : asset.quality_score != null ? 'warning.main' : 'text.secondary'}>

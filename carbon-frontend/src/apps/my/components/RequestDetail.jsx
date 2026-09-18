@@ -1,9 +1,7 @@
 // src/apps/my/components/RequestDetail.jsx
 // My (employee self-service) — Request detail page (route /my/requests/:id).
-// Fetches a single correspondence record (with events + approver chain) and
-// composes SummaryCard + ApproverChainStepper + RequestTimeline. Handles the
-// full state matrix: loading / 404 / error / loaded.
-// Requester actions: cancel (non-terminal) · resubmit (sent_back) — J-LV-03/04.
+// Layout: Summary → Stepper|Graph toggle → Timeline.
+// Graph = WorkflowGraph → EnterpriseGraph (same Pulse agent canvas).
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Box, Button, Skeleton, Stack, ToggleButton, ToggleButtonGroup } from '@mui/material';
@@ -42,7 +40,7 @@ export default function RequestDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [notFound, setNotFound] = useState(false);
-  const [view, setView] = useState('stepper');
+  const [view, setView] = useState('graph');
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -191,7 +189,11 @@ export default function RequestDetail() {
             {view === 'stepper' ? (
               <ApproverChainStepper chain={data.approver_chain} currentStep={data.current_step} />
             ) : (
-              <WorkflowGraph chain={data.approver_chain} currentStep={data.current_step} status={data.status} />
+              <WorkflowGraph
+                chain={data.approver_chain}
+                currentStep={data.current_step}
+                status={data.status}
+              />
             )}
             <RequestTimeline events={data.events} />
           </Stack>

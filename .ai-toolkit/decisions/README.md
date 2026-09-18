@@ -66,5 +66,8 @@ cp .ai-toolkit/decisions/0000-template.md .ai-toolkit/decisions/00NN-short-title
 | [0035](0035-responsive-shell-mobile-ia.md) | Responsive Shell IA + Mobile Density Exceptions | Accepted |
 | [0036](0036-pulse-control-plane-ia.md) | Pulse Control Plane IA (admin remake) | Accepted |
 | [0037](0037-modest-typography-bump.md) | Modest global typography bump (compact readability) | Accepted |
+| [0038](0038-eduos-gradevance.md) | EduOS instance + GradeVance + LCT/Rubric config engines | Accepted |
+| [0039](0039-data-trust-index.md) | Data Trust Index (35Q+20O+35C+10F) + Catalog SearchSelect | Accepted |
+| [0040](0040-product-identity-module-vs-dataset.md) | Product identity: Module (Data Product) vs Dataset Hub | Accepted |
 
 <!-- Add a row per ADR. Keep newest at the bottom. -->

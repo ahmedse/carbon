@@ -7,11 +7,11 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { 
   Box, TextField, Button, CircularProgress, Alert, 
-  MenuItem, FormControl, InputLabel, Select,
-  FormHelperText, Typography, Switch, FormControlLabel, Chip,
+  Typography, Switch, FormControlLabel, Chip,
   Stack
 } from '@mui/material';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
+import { SearchSelect } from '../../../components/Form';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
 import { apiFetch } from '../../../api/api';
@@ -165,45 +165,31 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
 
         <Typography variant="subtitle2" sx={{ mb: 2, mt: 3, fontWeight: 600 }}>{t('governance')}</Typography>
 
-        <FormControl fullWidth margin="normal" variant="outlined">
-          <InputLabel>{t('domain')}</InputLabel>
-          <Select
-            name="domain"
-            value={formData.domain}
-            onChange={handleChange}
+        <Box sx={{ mt: 2 }}>
+          <SearchSelect
+            options={selectOptions.domains || []}
+            valueKey="id"
+            labelKey="name"
             label={t('domain')}
-          >
-            <MenuItem value="">
-              <em>{t('none')}</em>
-            </MenuItem>
-            {(selectOptions.domains || []).map((domain) => (
-              <MenuItem key={domain.id} value={domain.id}>
-                {domain.name}
-              </MenuItem>
-            ))}
-          </Select>
-          <FormHelperText>{t('domainHelper')}</FormHelperText>
-        </FormControl>
+            helperText={t('domainHelper')}
+            value={formData.domain}
+            onChange={(v) => setFormData((prev) => ({ ...prev, domain: v?.id ?? '' }))}
+            noOptionsText={t('noDomains') || 'No domains'}
+          />
+        </Box>
 
-        <FormControl fullWidth margin="normal" variant="outlined">
-          <InputLabel>{t('steward')}</InputLabel>
-          <Select
-            name="steward"
-            value={formData.steward}
-            onChange={handleChange}
+        <Box sx={{ mt: 2 }}>
+          <SearchSelect
+            options={selectOptions.users || []}
+            valueKey="id"
+            getOptionLabel={(user) => user.username || user.email || String(user.id)}
             label={t('steward')}
-          >
-            <MenuItem value="">
-              <em>{t('none')}</em>
-            </MenuItem>
-            {(selectOptions.users || []).map((user) => (
-              <MenuItem key={user.id} value={user.id}>
-                {user.username || user.email}
-              </MenuItem>
-            ))}
-          </Select>
-          <FormHelperText>{t('stewardHelper')}</FormHelperText>
-        </FormControl>
+            helperText={t('stewardHelper')}
+            value={formData.steward}
+            onChange={(v) => setFormData((prev) => ({ ...prev, steward: v?.id ?? '' }))}
+            noOptionsText={t('noUsers') || 'No users'}
+          />
+        </Box>
 
         {/* Lifecycle */}
         <Typography variant="subtitle2" sx={{ mb: 1, mt: 2, fontWeight: 600 }}>{t('lifecycle')}</Typography>

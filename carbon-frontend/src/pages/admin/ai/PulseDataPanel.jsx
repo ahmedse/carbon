@@ -2,11 +2,13 @@
 // Generic read-only Pulse console panel — renders model-backed rows from the
 // /ai/pulse/data/<key>/ read API. Never fabricates data: loading spinner,
 // offline paper, grounded empty state, then the real rows in a DataGrid.
+// Thin-grid deepen: curated columns, type filter, refresh, Evidence deep-link.
 // RULE_8 tokens only; RULE_10 apiFetch only (via src/api/aiPulse.js); RULE_16.
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   Box,
+  Button,
   Chip,
   CircularProgress,
   Divider,
@@ -19,17 +21,22 @@ import {
 } from '@mui/material';
 import CloudOffIcon from '@mui/icons-material/CloudOff';
 import CloseIcon from '@mui/icons-material/Close';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import TravelExploreIcon from '@mui/icons-material/TravelExplore';
+import { Link as RouterLink } from 'react-router-dom';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
 import PageContainer from '../../../components/layout/PageContainer';
 import CarbonDataGrid from '../../../components/DataGrid/CarbonDataGrid';
 import { useAuth } from '../../../auth/AuthContext';
 import { getPulseData } from '../../../api/aiPulse';
 import {
-  SCOPE_FIELDS,
   formatCellValue,
   buildScopeLabel,
   buildDetailFields,
+  listRowTypes,
+  buildEvidenceHref,
+  resolveColumnFields,
 } from './pulseFormat';
 
 /** Read-only detail drawer — the full record of the clicked Pulse row. */
@@ -37,6 +44,7 @@ function PulseDetailDrawer({ row, onClose }) {
   if (!row) return null;
   const fields = buildDetailFields(row);
   const rawJson = JSON.stringify(row, null, 2);
+  const evidenceHref = buildEvidenceHref(row);
 
   return (
     <Drawer
@@ -56,6 +64,20 @@ function PulseDetailDrawer({ row, onClose }) {
           <CloseIcon />
         </IconButton>
       </Stack>
+
+      {evidenceHref ? (
+        <Button
+          size="small"
+          component={RouterLink}
+          to={evidenceHref}
+          variant="outlined"
+          startIcon={<TravelExploreIcon />}
+          sx={{ mb: 2, alignSelf: 'flex-start' }}
+          onClick={onClose}
+        >
+          Open in Evidence
+        </Button>
+      ) : null}
 
       <Divider sx={{ mb: 2 }} />
 
@@ -120,7 +142,7 @@ PulseDetailDrawer.defaultProps = {
   row: null,
 };
 
-export default function PulseDataPanel({ title, description, dataKey, emptyHint }) {
+export default function PulseDataPanel({ title, description, dataKey, emptyHint, links }) {
   useDocumentTitle(title);
   const { token } = useAuth();
 
@@ -128,6 +150,21 @@ export default function PulseDataPanel({ title, description, dataKey, emptyHint 
   const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [typeFilter, setTypeFilter] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const payload = await getPulseData(token, dataKey);
+      setData(payload);
+      setOffline(false);
+    } catch {
+      setData(null);
+      setOffline(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, dataKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -153,34 +190,59 @@ export default function PulseDataPanel({ title, description, dataKey, emptyHint 
     };
   }, [token, dataKey]);
 
+  useEffect(() => {
+    setTypeFilter('');
+  }, [dataKey]);
+
   const rows = useMemo(() => data?.results ?? [], [data?.results]);
+  const types = useMemo(() => listRowTypes(rows), [rows]);
+  const filteredRows = useMemo(() => {
+    if (!typeFilter) return rows;
+    return rows.filter((row) => String(row._type) === typeFilter);
+  }, [rows, typeFilter]);
 
   const columns = useMemo(() => {
-    if (!rows.length) return [];
-    const keys = new Set();
-    rows.forEach((row) => Object.keys(row).forEach((key) => keys.add(key)));
-    const dynamic = [...keys].filter((key) => key !== '_type' && !SCOPE_FIELDS.includes(key));
+    if (!filteredRows.length && !rows.length) return [];
+    const fieldKeys = resolveColumnFields(dataKey, filteredRows.length ? filteredRows : rows);
     return [
       {
         field: '_actions',
         headerName: '',
-        width: 52,
+        width: 88,
         sortable: false,
         filterable: false,
-        renderCell: ({ row }) => (
-          <Tooltip title="Inspect record">
-            <IconButton
-              size="small"
-              aria-label="Inspect record"
-              onClick={(event) => {
-                event.stopPropagation();
-                setSelected(row);
-              }}
-            >
-              <VisibilityOutlinedIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        ),
+        renderCell: ({ row }) => {
+          const href = buildEvidenceHref(row);
+          return (
+            <Stack direction="row" spacing={0}>
+              <Tooltip title="Inspect record">
+                <IconButton
+                  size="small"
+                  aria-label="Inspect record"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setSelected(row);
+                  }}
+                >
+                  <VisibilityOutlinedIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              {href ? (
+                <Tooltip title="Open in Evidence">
+                  <IconButton
+                    size="small"
+                    aria-label="Open in Evidence"
+                    component={RouterLink}
+                    to={href}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <TravelExploreIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              ) : null}
+            </Stack>
+          );
+        },
       },
       {
         field: '_type',
@@ -192,7 +254,7 @@ export default function PulseDataPanel({ title, description, dataKey, emptyHint 
       {
         field: 'scope',
         headerName: 'Scope',
-        width: 220,
+        width: 200,
         sortable: false,
         renderCell: ({ row }) => (
           <Typography
@@ -203,10 +265,10 @@ export default function PulseDataPanel({ title, description, dataKey, emptyHint 
           </Typography>
         ),
       },
-      ...dynamic.map((key) => ({
+      ...fieldKeys.map((key) => ({
         field: key,
         headerName: key,
-        minWidth: 160,
+        minWidth: 140,
         flex: 1,
         renderCell: (params) => (
           <Typography
@@ -218,7 +280,7 @@ export default function PulseDataPanel({ title, description, dataKey, emptyHint 
         ),
       })),
     ];
-  }, [rows]);
+  }, [dataKey, filteredRows, rows]);
 
   return (
     <PageContainer>
@@ -226,14 +288,59 @@ export default function PulseDataPanel({ title, description, dataKey, emptyHint 
         <Stack direction="row" spacing={1} alignItems="center">
           <Typography variant="h5" fontWeight={700} sx={{ flex: 1 }}>{title}</Typography>
           {data && !offline && (
-            <Chip size="small" variant="outlined" label={`${data.count} rows`} />
+            <Chip size="small" variant="outlined" label={`${filteredRows.length} / ${data.count} rows`} />
           )}
+          <Button
+            size="small"
+            startIcon={<RefreshIcon />}
+            onClick={load}
+            disabled={loading}
+          >
+            Refresh
+          </Button>
         </Stack>
         {description && (
           <Typography variant="body2" color="text.secondary">
             {description}
           </Typography>
         )}
+        {Array.isArray(links) && links.length > 0 ? (
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            {links.map((link) => (
+              <Button
+                key={link.to}
+                size="small"
+                component={RouterLink}
+                to={link.to}
+                variant="outlined"
+              >
+                {link.label}
+              </Button>
+            ))}
+          </Stack>
+        ) : null}
+
+        {types.length > 1 ? (
+          <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+            <Chip
+              size="small"
+              label="All types"
+              color={typeFilter === '' ? 'primary' : 'default'}
+              variant={typeFilter === '' ? 'filled' : 'outlined'}
+              onClick={() => setTypeFilter('')}
+            />
+            {types.map((t) => (
+              <Chip
+                key={t}
+                size="small"
+                label={t}
+                color={typeFilter === t ? 'primary' : 'default'}
+                variant={typeFilter === t ? 'filled' : 'outlined'}
+                onClick={() => setTypeFilter(t)}
+              />
+            ))}
+          </Stack>
+        ) : null}
 
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
@@ -249,18 +356,18 @@ export default function PulseDataPanel({ title, description, dataKey, emptyHint 
               Data unavailable — the Pulse read API is offline
             </Typography>
           </Paper>
-        ) : rows.length === 0 ? (
+        ) : filteredRows.length === 0 ? (
           <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
             <Typography variant="subtitle1" fontWeight={600}>{title}</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              {emptyHint}
+              {typeFilter ? `No rows of type “${typeFilter}”.` : emptyHint}
             </Typography>
           </Paper>
         ) : (
           <Paper variant="outlined" sx={{ flex: 1, minHeight: 0 }}>
             <CarbonDataGrid
               columns={columns}
-              rows={rows}
+              rows={filteredRows}
               loading={false}
               getRowId={(row) => `${row._type}:${row.id ?? row.conversation_id ?? JSON.stringify(row)}`}
               emptyMessage={emptyHint}
@@ -279,8 +386,15 @@ PulseDataPanel.propTypes = {
   description: PropTypes.string,
   dataKey: PropTypes.string.isRequired,
   emptyHint: PropTypes.string.isRequired,
+  links: PropTypes.arrayOf(
+    PropTypes.shape({
+      label: PropTypes.string.isRequired,
+      to: PropTypes.string.isRequired,
+    }),
+  ),
 };
 
 PulseDataPanel.defaultProps = {
   description: '',
+  links: [],
 };

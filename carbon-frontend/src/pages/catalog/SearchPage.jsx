@@ -20,6 +20,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthContext";
 import PageContainer from "../../components/layout/PageContainer";
 import { searchCatalog } from "../../api/catalogSearch";
+import TrustChip from "./tabs/TrustChip";
 
 const TYPE_OPTIONS = [
   { key: "all", labelKey: "search.typeAll", icon: SearchIcon },
@@ -36,12 +37,23 @@ const TYPE_CHIP_META = {
   glossary: { icon: MenuBookIcon, labelKey: "search.glossary" },
 };
 
+const TRUST_TIER_OPTIONS = [
+  { key: "", labelKey: "allTrustTiers" },
+  { key: "trusted", labelKey: "trustTier.trusted" },
+  { key: "limited", labelKey: "trustTier.limited" },
+  { key: "untrustworthy", labelKey: "trustTier.untrustworthy" },
+];
+
 function getResultLink(result) {
   if (result.type === "table") return `/catalog/tables/${result.id}`;
   if (result.type === "domain") return `/catalog/domains/${result.id}`;
   if (result.type === "field") {
     const tableId = result.data_table_id || result.table_id || result.parent_table_id;
-    return tableId ? `/catalog/tables/${tableId}` : null;
+    if (!tableId) return null;
+    return `/catalog/tables/${tableId}?field=${result.id}`;
+  }
+  if (result.type === "glossary") {
+    return result.url_hint || `/catalog/metadata#glossary`;
   }
   return null;
 }
@@ -50,11 +62,10 @@ export default function SearchPage() {
   const { t } = useTranslation("catalog");
   const { token } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  // URL is the single source of truth for query + type filter — no local
-  // mirror state, so back/forward navigation and the debounced fetch can never
-  // fight over stale copies.
+  // URL is the single source of truth for query + type + trust filter.
   const query = searchParams.get("q") || "";
   const typeFilter = searchParams.get("types") || "all";
+  const trustFilter = searchParams.get("trust_tier") || "";
   const [results, setResults] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -88,7 +99,7 @@ export default function SearchPage() {
       setLoading(true);
       setErrorHint("");
       try {
-        const data = await searchCatalog(token, query, effectiveTypes, 1);
+        const data = await searchCatalog(token, query, effectiveTypes, 1, trustFilter || null);
         setResults(Array.isArray(data.results) ? data.results : []);
         setTotal(typeof data.total === "number" ? data.total : 0);
       } catch (error) {
@@ -108,7 +119,7 @@ export default function SearchPage() {
       clearTimeout(timeout);
       controller.abort();
     };
-  }, [query, effectiveTypes, token, t]);
+  }, [query, effectiveTypes, trustFilter, token, t]);
 
   const handleQueryChange = (event) => {
     updateParam("q", event.target.value);
@@ -116,6 +127,10 @@ export default function SearchPage() {
 
   const handleTypeChange = (typeKey) => {
     updateParam("types", typeKey === "all" ? "" : typeKey);
+  };
+
+  const handleTrustChange = (tierKey) => {
+    updateParam("trust_tier", tierKey || "");
   };
 
   return (
@@ -162,6 +177,22 @@ export default function SearchPage() {
           })}
         </Stack>
 
+        <Stack direction="row" flexWrap="wrap" gap={1} alignItems="center">
+          <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
+            {t("trustIndex")}
+          </Typography>
+          {TRUST_TIER_OPTIONS.map((option) => (
+            <Chip
+              key={option.key || "all-trust"}
+              label={t(option.labelKey, { defaultValue: option.key || "All" })}
+              onClick={() => handleTrustChange(option.key)}
+              color={trustFilter === option.key ? "primary" : "default"}
+              size="small"
+              variant={trustFilter === option.key ? "filled" : "outlined"}
+            />
+          ))}
+        </Stack>
+
         {errorHint ? (
           <Typography variant="body2" color="text.secondary">
             {errorHint}
@@ -204,20 +235,25 @@ export default function SearchPage() {
                       size="small"
                     />
                     <Box sx={{ flex: 1 }}>
-                      <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 0.5 }}>
-                        {link ? (
-                          <MuiLink
-                            component={RouterLink}
-                            to={link}
-                            underline="hover"
-                            sx={{ p: 0, textTransform: 'none' }}
-                          >
-                            {result.name}
-                          </MuiLink>
-                        ) : (
-                          result.name
+                      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
+                        <Typography variant="subtitle2" fontWeight={600}>
+                          {link ? (
+                            <MuiLink
+                              component={RouterLink}
+                              to={link}
+                              underline="hover"
+                              sx={{ p: 0, textTransform: 'none' }}
+                            >
+                              {result.name}
+                            </MuiLink>
+                          ) : (
+                            result.name
+                          )}
+                        </Typography>
+                        {(result.type === 'table' || result.type === 'field') && (
+                          <TrustChip score={result.trust_index} tier={result.trust_tier} />
                         )}
-                      </Typography>
+                      </Stack>
                       <Typography
                         variant="body2"
                         color="text.secondary"

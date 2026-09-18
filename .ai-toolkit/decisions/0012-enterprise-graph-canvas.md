@@ -38,8 +38,8 @@ Three forces required a decision before dispatch:
 2. **Domain adapters, not forks.** A graph of a plan is a *thin adapter*
    (`PlanDagGraph.jsx`) that supplies domain data + a `renderNode` interior +
    an optional docked `sidebar` + `nodeColor`/`nodeAriaLabel`. The primitive stays
-   presentational (no fetching). Future graphs (topology, run timeline, charts)
-   add adapters — they never re-implement pan/zoom/export.
+   presentational (no fetching). Future graphs (topology, run timeline, charts,
+   approval workflows) add adapters — they never re-implement pan/zoom/export.
 3. **Node geometry rides the layout.** `layoutExecutionGraph` emits `w`/`h` on each
    laid node so the primitive can render and (re)size nodes generically without
    re-deriving `EXEC_LAYOUT`. Resize/move are per-node overrides that `redraw`
@@ -72,7 +72,7 @@ Three forces required a decision before dispatch:
   domain data; no new deps; dense, scannable nodes that show live status.
 - **Negative / trade-off:** the primitive is a single chokepoint — any change to
   interaction must be backward-compatible with existing adapters (`PlanDagGraph`,
-  `ForceGraph` is intentionally left on its own d3 path for now).
+  `WorkflowGraph`; `ForceGraph` is intentionally left on its own d3 path for now).
 - **Do NOT re-try:** a second hand-rolled SVG pan/zoom/export implementation
   outside `EnterpriseGraph.jsx`; a fat status pill / thick colored node border;
   per-graph hardcoded layout constants (ride `EXEC_LAYOUT` output instead);
@@ -81,9 +81,19 @@ Three forces required a decision before dispatch:
 ## References
 
 - `carbon-frontend/src/components/graph/EnterpriseGraph.jsx` — the primitive
-- `carbon-frontend/src/components/graph/PlanDagGraph.jsx` — thin domain adapter
+- `carbon-frontend/src/components/graph/PlanDagGraph.jsx` — thin domain adapter (AI plans)
+- `carbon-frontend/src/apps/my/components/WorkflowGraph.jsx` — thin domain adapter (approver chain)
 - `carbon-frontend/src/components/graph/ForceGraph.jsx` — d3-force primitive (kept)
 - `carbon-frontend/src/utils/planGraph.js` — `EXEC_LAYOUT` + `layoutExecutionGraph`
 - `.ai-toolkit/shared/compact-ui.md`, `.ai-toolkit/shared/design-system.md`
 - `.ai-toolkit/decisions/0011-agent-catalog-graph-reuse.md` — no-new-deps lineage
 - TASKS.md W3-F / W4-F
+
+## Amendment (2026-09-18)
+
+**Approval workflows reuse the same canvas.** Correspondence approver-chain UI
+(`WorkflowGraph`) is a thin `EnterpriseGraph` adapter — identical pan / zoom /
+maximize / export / live pulse as Pulse agent plan graphs (`PlanDagGraph`).
+Do **not** fork a separate linear SVG component; map chain steps → nodes/edges
+and supply `renderNode` + `nodeColor`. Page layout (Summary / Stepper|Graph
+toggle / Timeline / Actions) stays domain-owned.
