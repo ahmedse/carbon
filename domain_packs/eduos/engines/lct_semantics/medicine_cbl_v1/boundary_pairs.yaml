@@ -1,0 +1,13 @@
+device_id: medicine_cbl_semantics
+version: 1
+pairs:
+- id: bp_case_vs_principle
+  left:
+    dimension: semantic_gravity
+    value: SG+
+    span_text: In this patient McBurney's point was exquisitely tender.
+  right:
+    dimension: semantic_gravity
+    value: SG-
+    span_text: Focal peritoneal signs localise inflammation to the parietal peritoneum.
+  contrast: Particular bedside finding vs general principle of peritonism.

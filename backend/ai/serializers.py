@@ -65,7 +65,9 @@ class ArtifactSerializer(serializers.Serializer):
     conversation_id = serializers.UUIDField()
     message_id = serializers.UUIDField(required=False, allow_null=True, default=None)
     title = serializers.CharField(max_length=255)
-    artifact_type = serializers.ChoiceField(choices=["report", "rule_set", "query", "analysis"])
+    artifact_type = serializers.ChoiceField(
+        choices=["report", "rule_set", "query", "analysis", "job_map"]
+    )
     content_json = serializers.JSONField()
     visibility = serializers.ChoiceField(choices=["private", "shared"], default="private")
     created_by_id = serializers.UUIDField(read_only=True)
@@ -76,7 +78,9 @@ class ArtifactCreateSerializer(serializers.Serializer):
     conversation_id = serializers.UUIDField()
     message_id = serializers.UUIDField(required=False, allow_null=True, default=None)
     title = serializers.CharField(max_length=255)
-    artifact_type = serializers.ChoiceField(choices=["report", "rule_set", "query", "analysis"])
+    artifact_type = serializers.ChoiceField(
+        choices=["report", "rule_set", "query", "analysis", "job_map"]
+    )
     content_json = serializers.JSONField()
     visibility = serializers.ChoiceField(choices=["private", "shared"], required=False, default="private")
 
@@ -84,7 +88,10 @@ class ArtifactCreateSerializer(serializers.Serializer):
 class ArtifactUpdateSerializer(serializers.Serializer):
     message_id = serializers.UUIDField(required=False, allow_null=True)
     title = serializers.CharField(max_length=255, required=False)
-    artifact_type = serializers.ChoiceField(choices=["report", "rule_set", "query", "analysis"], required=False)
+    artifact_type = serializers.ChoiceField(
+        choices=["report", "rule_set", "query", "analysis", "job_map"],
+        required=False,
+    )
     content_json = serializers.JSONField(required=False)
     visibility = serializers.ChoiceField(choices=["private", "shared"], required=False)
 

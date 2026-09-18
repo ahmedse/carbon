@@ -1,0 +1,26 @@
+templates:
+- id: d_sowhat_descriptive
+  criterion: task_achievement
+  diagnosis: SO WHAT is too descriptive / not reflective enough.
+  action: 'Plan with the reflective model: how did the change feel? What evidence?
+    How did it influence similar tasks?'
+- id: d_nowwhat_missing
+  criterion: task_achievement
+  diagnosis: NOW WHAT is missing, unsignaled, or too generic.
+  action: Add a clear future plan with specific steps and ≥2 perspectives (teacher/peers/family).
+- id: d_too_short
+  criterion: task_achievement
+  diagnosis: Reflection under word band.
+  action: Plan to write within 200–300 words with developed stages.
+- id: d_informal
+  criterion: lexis_grammar_academic_style
+  diagnosis: Too much informal language / academic style lapses.
+  action: Replace informal phrases with academic alternatives; check dictionary /
+    academic style guide.
+- id: d_cohesion
+  criterion: coherence_cohesion
+  diagnosis: Weak or repetitive linking (so/when/and/but).
+  action: Use varied academic linkers (therefore, however, moreover); signal each
+    reflective stage.
+source: gradevance2/raw/FEEDBACK.docx themes
+hitl_note: Templates improve via ExpertEdit → ProposalMiner → pack bump (RULE_32).

@@ -1,0 +1,38 @@
+id: naa_cycle1_exam_prep
+version: 1
+name: NAA Cycle 1 — Exam preparation reflection (formative)
+status: validated
+discipline: academic_english
+genre: academic_reflection
+level: ug_foundation
+mode: formative
+lct_device:
+  id: naa_reflective_semantics
+  version: 1
+  pack_path: engines/lct_semantics/naa_reflective_v1
+rubric_pack:
+  id: naa_reflective_analytic
+  version: 1
+  pack_path: engines/rubric/naa_reflective_analytic_v1
+kb: null
+pipeline:
+  lct_enabled: true
+  stages:
+  - preprocess
+  - chunk
+  - segment
+  - code_lct
+  - profile_wave
+  - rubric_score
+  - gate
+  - coach
+  notes: LCT on; coaching enabled; summative release not required in formative mode.
+hitl:
+  summative_requires_release: true
+  learning_loop_enabled: true
+  confidence_review_threshold: 0.7
+brief:
+  brief_id: naa_reflection_1_exam_prep
+  word_band:
+  - 200
+  - 300

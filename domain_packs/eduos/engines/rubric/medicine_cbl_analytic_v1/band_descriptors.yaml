@@ -1,0 +1,22 @@
+criterion_bands:
+  problem_representation:
+    Excellent: Concise illness script naming syndrome, acuity, and key risk factors; grounded in this case's timeline.
+    Good: Clear problem statement with main presenting features; minor omissions of acuity or risk.
+    Satisfactory: Identifies the main problem but vague or incomplete illness script.
+    Unsatisfactory: No coherent problem representation; lists symptoms without synthesis.
+  differential_diagnosis:
+    Excellent: Ranked ≥3 differentials with discriminating features for each; notes what would change ranking.
+    Good: Ranked 2–3 differentials with some discriminating features; minor gaps.
+    Satisfactory: Lists differentials without clear ranking or weak discriminators.
+    Unsatisfactory: Missing key differentials or incorrect primary diagnosis without reasoning.
+  evidence_linking:
+    Excellent: Each key finding linked to support/rule-out of differentials; uncertainty stated explicitly.
+    Good: Most findings linked; occasional unsupported leap.
+    Satisfactory: Partial linking; findings listed separately from differentials.
+    Unsatisfactory: No linking between findings and differentials.
+  plan_and_reflection:
+    Excellent: Specific next steps (ix/management) plus metacognitive note on reasoning gap.
+    Good: Reasonable plan with some reflective insight.
+    Satisfactory: Generic plan or thin reflection.
+    Unsatisfactory: No plan or no reflection.
+source: scaffold — faculty refine before status=published

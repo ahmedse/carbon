@@ -1,0 +1,132 @@
+{
+  "generated": "2026-09-18T16:09:23",
+  "seat": "EduOS",
+  "loop": "expert_edit \u2192 proposal \u2192 accept \u2192 bump \u2192 re-pin",
+  "run_id": "ef78d051-609b-412e-a1c1-1447cd9bbf51",
+  "edit_id": "e55f2c7b-a4a5-465f-9fc8-d1fe732c9cc3",
+  "proposal_id": "68eb185a-0baa-4e1d-8fb8-0d02995d4d39",
+  "before": {
+    "value": "SG+",
+    "numeric": 2,
+    "dimension": "semantic_gravity",
+    "segment_id": "baa923a8-066a-42fb-ac39-b3e4ed518b7b"
+  },
+  "after": {
+    "value": "SG-",
+    "numeric": 3,
+    "dimension": "semantic_gravity",
+    "span_text": "When I was doing my pre-Gaokao exam, For example, the Chinese exam, I always spent most of my time doing the right thing by reading a certain article, therefore",
+    "segment_id": "baa923a8-066a-42fb-ac39-b3e4ed518b7b"
+  },
+  "rationale": "HITL QA: this clause is mid-level gravity \u2014 a specific exam episode framed as a generalised strategy, not fully concrete SG+ nor abstract SG--.",
+  "lct_after_edit": {
+    "value": "SG+",
+    "source": "engine"
+  },
+  "proposal_kind": "anchor",
+  "proposal_status": "accepted",
+  "proposal_payload": {
+    "kind": "anchor",
+    "mined_at": "2026-09-18T16:08:58.633769+00:00",
+    "pack_bump": {
+      "dest_rel": "engines/lct_semantics/naa_reflective_v1_bump_v2_20260918160923",
+      "anchor_id": "promoted_68eb185a",
+      "bumped_at": "2026-09-18T16:09:23.831753+00:00",
+      "new_version": 2,
+      "base_profile_id": "naa_cycle1_exam_prep",
+      "source_pack_rel": "engines/lct_semantics/naa_reflective_v1"
+    },
+    "activation": "requires_professor_accept_and_kappa_gate",
+    "edit_count": 1,
+    "cluster_key": [
+      "anchor",
+      "semantic_gravity",
+      "SG-"
+    ],
+    "sample_after": {
+      "value": "SG-",
+      "numeric": 3,
+      "dimension": "semantic_gravity",
+      "span_text": "When I was doing my pre-Gaokao exam, For example, the Chinese exam, I always spent most of my time doing the right thing by reading a certain article, therefore",
+      "segment_id": "baa923a8-066a-42fb-ac39-b3e4ed518b7b"
+    },
+    "accepted_note": "Activate for new runs only \u2014 never silent cohort rewrite.",
+    "accepted_by_qa": "ahmed",
+    "sample_rationale": "HITL QA: this clause is mid-level gravity \u2014 a specific exam episode framed as a generalised strategy, not fully concrete SG+ nor abstract SG--.",
+    "profile_repin": {
+      "profile_pack_id": "naa_cycle1_exam_prep_bump",
+      "profile_version": 2,
+      "profile_file": "naa_cycle1_exam_prep_bump_v2_20260918160923.yaml",
+      "draft_assignments_updated": [
+        "16252538-fdb5-4ae6-b818-f5b20748c028"
+      ],
+      "repinned_at": "2026-09-18T16:09:23.861035+00:00"
+    }
+  },
+  "bump": {
+    "dest_rel": "engines/lct_semantics/naa_reflective_v1_bump_v2_20260918160923",
+    "new_version": 2,
+    "anchor_id": "promoted_68eb185a",
+    "note": "Draft bump written \u2014 wire AssignmentProfile to activate for new runs only."
+  },
+  "repin": {
+    "profile_pack_id": "naa_cycle1_exam_prep_bump",
+    "profile_version": 2,
+    "profile_file": "naa_cycle1_exam_prep_bump_v2_20260918160923.yaml",
+    "record_id": "b394cba0-809e-4701-a8c5-beb0a1c9d97f",
+    "draft_assignments_updated": [
+      "16252538-fdb5-4ae6-b818-f5b20748c028"
+    ],
+    "note": "Published assignments unchanged \u2014 new runs must select the new profile."
+  },
+  "draft_assignment": {
+    "id": "16252538-fdb5-4ae6-b818-f5b20748c028",
+    "profile_pack_id": "naa_cycle1_exam_prep_bump",
+    "profile_version": 2,
+    "status": "draft"
+  },
+  "calibration": {
+    "device": "engines/lct_semantics/naa_reflective_v1",
+    "held_out_n": 5,
+    "expert_sg": [
+      "SG--",
+      "SG-",
+      "SG+",
+      "SG--",
+      "SG+"
+    ],
+    "engine_sg": [
+      "SG--",
+      "SG-",
+      "SG+",
+      "SG--",
+      "SG+"
+    ],
+    "cohen_kappa": 1.0,
+    "publish_gate_formative": {
+      "required": false,
+      "passed": true,
+      "reason": "Gate not required (formative or LCT off).",
+      "mode": "formative"
+    },
+    "publish_gate_summative": {
+      "required": true,
+      "passed": true,
+      "reason": "Canary passed \u2014 activate for new runs only; no cohort rewrite.",
+      "reliability": {
+        "metric": "cohen_kappa",
+        "value": 1.0,
+        "minimum": 0.6,
+        "passed": true
+      },
+      "held_out_n": 5,
+      "minimum_kappa": 0.6,
+      "mode": "summative"
+    }
+  },
+  "counts": {
+    "expert_edits": 1,
+    "proposals": 2,
+    "open_reviews": 3
+  }
+}

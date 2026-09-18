@@ -57,6 +57,9 @@ function studioFromPath(pathname) {
   if (pathname.startsWith('/people')) return 'people';
   if (pathname.startsWith('/my')) return 'my';
   if (pathname.startsWith('/team')) return 'team';
+  // Domain apps live under /apps/<appId>/… — studio id is the app id (healthy, gradevance, …)
+  const appsMatch = pathname.match(/^\/apps\/([^/]+)/);
+  if (appsMatch) return appsMatch[1];
   if (pathname.startsWith('/apps')) return 'apps';
   if (pathname.startsWith('/admin/ai')) return 'ai-admin';
   if (pathname.startsWith('/admin')) return 'admin';

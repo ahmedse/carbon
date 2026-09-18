@@ -35,6 +35,7 @@ import {
   IMPORTEXPORT_VIEW, IMPORTEXPORT_MANAGE,
   DATASCHEMA_VIEW, DATASCHEMA_MANAGE,
   EVIDENCE_VIEW, EVIDENCE_MANAGE,
+  GRADEVANCE_VIEW, GRADEVANCE_MANAGE,
   // Utility
   expandCapabilities, hasCap, hasAnyCap, hasAllCaps,
   initCapabilities, getCapableApps,
@@ -60,6 +61,7 @@ const APP_VIEW_CAP = {
   importexport: IMPORTEXPORT_VIEW,
   dataschema:  DATASCHEMA_VIEW,
   evidence:    EVIDENCE_VIEW,
+  gradevance:  GRADEVANCE_VIEW,
 };
 
 // Which capability is needed to manage an app's admin area
@@ -72,6 +74,7 @@ const APP_ADMIN_CAP = {
   importexport: IMPORTEXPORT_MANAGE,
   dataschema:  DATASCHEMA_MANAGE,
   evidence:    EVIDENCE_MANAGE,
+  gradevance:  GRADEVANCE_MANAGE,
 };
 
 // Route → action → capability (auto-resolved from ROUTE_CAPABILITIES + known patterns)
@@ -170,23 +173,39 @@ function checkCapabilities(action, resource, rawCapabilities) {
       // Check specific route capability first
       const routeCap = ROUTE_ACTION_CAP[resource];
       if (routeCap) return hasCap(expanded, routeCap);
-      // Check from ROUTE_CAPABILITIES map
       const fromMap = ROUTE_CAPABILITIES[resource];
       if (fromMap) return hasCap(expanded, fromMap);
-      // Try prefix match
+      // Longest prefix wins (avoid weak parent caps unlocking child routes)
+      let bestCap = null;
+      let bestLen = -1;
       for (const [pattern, cap] of Object.entries(ROUTE_CAPABILITIES)) {
-        if (resource.startsWith(pattern) && hasCap(expanded, cap)) return true;
+        if (
+          (resource === pattern || resource.startsWith(`${pattern}/`))
+          && pattern.length > bestLen
+        ) {
+          bestLen = pattern.length;
+          bestCap = cap;
+        }
       }
-      return null; // no capability requirement → fall through
+      if (bestCap) return hasCap(expanded, bestCap);
+      return null;
     }
 
     case 'access_route': {
-      // Exact or prefix match from ROUTE_CAPABILITIES
       const exact = ROUTE_CAPABILITIES[resource];
       if (exact) return hasCap(expanded, exact);
+      let bestCap = null;
+      let bestLen = -1;
       for (const [pattern, cap] of Object.entries(ROUTE_CAPABILITIES)) {
-        if (resource.startsWith(pattern) && hasCap(expanded, cap)) return true;
+        if (
+          (resource === pattern || resource.startsWith(`${pattern}/`))
+          && pattern.length > bestLen
+        ) {
+          bestLen = pattern.length;
+          bestCap = cap;
+        }
       }
+      if (bestCap) return hasCap(expanded, bestCap);
       return null;
     }
 

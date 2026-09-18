@@ -9,14 +9,21 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  IconButton,
   Paper,
   Stack,
   Typography,
 } from '@mui/material';
+import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
+import CloseIcon from '@mui/icons-material/Close';
 import PlanDagGraph from '../components/graph/PlanDagGraph';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { FONT } from '../theme/themeTokens';
 import { useTranslation } from 'react-i18next';
+import OpsCanvasShelf from './OpsCanvasShelf';
 
 function formatDuration(ms) {
   if (ms == null || !Number.isFinite(ms)) return null;
@@ -74,6 +81,7 @@ function AgentRunSurface({
   banner = null,
   defaultListOpen = false,
   confirmingId = null,
+  conversationId = null,
   onConfirmStep,
   onDeclineStep,
   onRetryStep,
@@ -82,6 +90,7 @@ function AgentRunSurface({
   const isMobile = useIsMobile();
   const [showList, setShowList] = useState(Boolean(defaultListOpen) || isMobile);
   const [showGraph, setShowGraph] = useState(!isMobile);
+  const [jobMapOpen, setJobMapOpen] = useState(false);
 
   useEffect(() => {
     if (defaultListOpen || isMobile) setShowList(true);
@@ -162,6 +171,18 @@ function AgentRunSurface({
           Click a step for tool, inputs, and output
         </Typography>
         <Box sx={{ flex: 1 }} />
+        {conversationId && (
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<MapOutlinedIcon sx={{ fontSize: '0.875rem !important' }} />}
+            onClick={() => setJobMapOpen(true)}
+            data-testid="agent-run-job-map"
+            sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0, minHeight: { xs: 40, sm: 'auto' } }}
+          >
+            Job Map
+          </Button>
+        )}
         {listContent != null && (
           <Button
             size="small"
@@ -247,6 +268,24 @@ function AgentRunSurface({
           Starting… the graph will fill as steps begin.
         </Alert>
       )}
+
+      <Dialog
+        open={jobMapOpen}
+        onClose={() => setJobMapOpen(false)}
+        fullWidth
+        maxWidth="md"
+        PaperProps={{ sx: { height: '80vh' } }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center' }}>
+          Job Map
+          <IconButton onClick={() => setJobMapOpen(false)} sx={{ ml: 'auto' }} aria-label="Close">
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: 0 }}>
+          <OpsCanvasShelf conversationId={conversationId} />
+        </DialogContent>
+      </Dialog>
     </Stack>
   );
 }
@@ -263,6 +302,7 @@ AgentRunSurface.propTypes = {
   banner: PropTypes.node,
   defaultListOpen: PropTypes.bool,
   confirmingId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+  conversationId: PropTypes.string,
   onConfirmStep: PropTypes.func,
   onDeclineStep: PropTypes.func,
   onRetryStep: PropTypes.func,

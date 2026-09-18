@@ -51,12 +51,13 @@ def get_env(name, default=None, required=False):
 DJANGO_BRAND = get_env("DJANGO_BRAND", "aastmt")
 
 # Per-brand database name (dev isolation). Each brand gets its OWN database so
-# dev data for aastmt/nibras/medos/tectona never mingles. `DB_NAME` env var is
+# dev data for aastmt/nibras/medos/eduos/tectona never mingles. `DB_NAME` env var is
 # an explicit override (used by prod/staging where one DB serves the brand).
 BRAND_DB_NAMES = {
     "aastmt": "carbon_dev",
     "nibras": "nibras_dev",
     "medos": "medos_dev",
+    "eduos": "eduos_dev",
     "tectona": "tectona_dev",
 }
 DB_NAME = get_env("DB_NAME", None) or BRAND_DB_NAMES.get(
@@ -221,6 +222,21 @@ APP_REGISTRY = [
         "description": "Legacy ERP analytics: rep health, load-out demand, AR aging",
         "roles": [],
     },
+    {
+        "id": "gradevance",
+        "kind": "domain",
+        "name": "GradeVance",
+        "version": "0.1.0",
+        "description": "Multi-domain assessment, LCT measurement, rubrics, coaching, and HITL learning",
+        "roles": [
+            {"key": "gradevance:manage", "label": "GradeVance Lead", "scoped": False,
+             "description": "Author assignments, publish, manage proposals"},
+            {"key": "gradevance:mark", "label": "Marker", "scoped": False,
+             "description": "Review queue and expert edits"},
+            {"key": "gradevance:submit", "label": "Student", "scoped": False,
+             "description": "Submit work and view formative coaching"},
+        ],
+    },
 ]
 
 # Application definition
@@ -240,6 +256,7 @@ INSTALLED_APPS = [
     'evidence',
     'healthy',
     'people',
+    'gradevance',
     'correspondence',
     'regulations',
     'rest_framework_simplejwt.token_blacklist',
@@ -557,8 +574,13 @@ BRAND_APP_PRESETS = {
     "medos": {
         # Medical/clinical instance — no first-party domain apps yet.
     },
+    "eduos": {
+        "gradevance": True,
+    },
     "tectona": {
-        "healthy": True,   # + future first-party AI apps (open set)
+        "healthy": True,
+        # GradeVance enablement after EduOS LMS soak (same packs; brand gate only).
+        "gradevance": get_env("TECTONA_GRADEVANCE", "false").lower() in ("1", "true", "yes"),
     },
 }
 
@@ -570,7 +592,35 @@ BRAND_WORK_AREA_KEYS: dict[str, list[str] | None] = {
     "nibras": ["people", "ai"],
     "tectona": ["healthy", "ai"],
     "medos": ["ai"],
+    "eduos": ["gradevance", "ai"],
 }
+
+# ── GradeVance LTI 1.3 (EduOS) — disabled until JWKS configured ─────
+GRADEVANCE_LTI_ENABLED = get_env("GRADEVANCE_LTI_ENABLED", "false").lower() in (
+    "1", "true", "yes",
+)
+GRADEVANCE_LTI_ISSUER = get_env("GRADEVANCE_LTI_ISSUER", "")
+GRADEVANCE_LTI_CLIENT_ID = get_env("GRADEVANCE_LTI_CLIENT_ID", "")
+GRADEVANCE_LTI_AUTH_LOGIN_URL = get_env("GRADEVANCE_LTI_AUTH_LOGIN_URL", "")
+GRADEVANCE_LTI_JWKS_URL = get_env("GRADEVANCE_LTI_JWKS_URL", "")
+GRADEVANCE_LTI_REDIRECT_URI = get_env("GRADEVANCE_LTI_REDIRECT_URI", "")
+GRADEVANCE_LTI_DEPLOYMENT_IDS = [
+    x.strip()
+    for x in get_env("GRADEVANCE_LTI_DEPLOYMENT_IDS", "").split(",")
+    if x.strip()
+]
+GRADEVANCE_LTI_TOKEN_URL = get_env("GRADEVANCE_LTI_TOKEN_URL", "")
+GRADEVANCE_LTI_CLIENT_SECRET = get_env("GRADEVANCE_LTI_CLIENT_SECRET", "")
+# Default true: never hit LMS from CI/dev unless explicitly disabled.
+GRADEVANCE_LTI_AGS_DRY_RUN = get_env("GRADEVANCE_LTI_AGS_DRY_RUN", "true").lower() in (
+    "1", "true", "yes",
+)
+# Opt-in Pulse path for llm_assist coder (default off — fails closed to heuristic).
+GRADEVANCE_LLM_CODER_ENABLED = get_env("GRADEVANCE_LLM_CODER_ENABLED", "false").lower() in (
+    "1", "true", "yes",
+)
+# Optional PEM for signing Deep Linking JWT responses (RS256).
+GRADEVANCE_LTI_TOOL_PRIVATE_KEY_PEM = get_env("GRADEVANCE_LTI_TOOL_PRIVATE_KEY_PEM", "")
 
 # ── Django admin exposure (ADR-0015 multi-instance) ──────────────────────
 # The raw Django admin (/admin/) is a PLATFORM-level ops surface. Because

@@ -269,6 +269,7 @@ class AIArtifact(models.Model):
         ("rule_set", "Rule Set"),
         ("query", "Query"),
         ("analysis", "Analysis"),
+        ("job_map", "Ops Canvas Job Map"),  # ADR-0041
     ]
 
     VISIBILITY_CHOICES = [

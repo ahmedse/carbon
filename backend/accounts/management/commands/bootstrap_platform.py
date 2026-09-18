@@ -24,6 +24,7 @@ from accounts.constants import (
     MDM_LEAD_GROUP, DQ_LEAD_GROUP, DATAHUB_LEAD_GROUP, TURNKEY_LEAD_GROUP,
     PEOPLE_LEAD_GROUP, PEOPLE_DATA_OWNERS_GROUP, PEOPLE_ANALYSTS_GROUP,
     FINANCE_GROUP,
+    GRADEVANCE_LEAD_GROUP, GRADEVANCE_MARKERS_GROUP, GRADEVANCE_STUDENTS_GROUP,
     GROUP_BRAND_SCOPE,
     PROTECTED_GROUPS,
     DOMAIN_LEAD_GROUPS,
@@ -80,6 +81,21 @@ GROUP_DEFS = {
         "app",
         "People domain lead — manage employees, compliance rules, and payroll runs within org scope",
         True, True,
+    ),
+    GRADEVANCE_LEAD_GROUP: (
+        "app",
+        "GradeVance domain lead — manage profiles, packs, assignments, and release within org scope",
+        True, True,
+    ),
+    GRADEVANCE_MARKERS_GROUP: (
+        "app",
+        "GradeVance markers — review queue, edit codes/scores, HITL learning edits",
+        False, True,
+    ),
+    GRADEVANCE_STUDENTS_GROUP: (
+        "app",
+        "GradeVance students — submit drafts and view formative coaching",
+        False, False,
     ),
     PEOPLE_DATA_OWNERS_GROUP: (
         "app",
@@ -152,6 +168,7 @@ APP_DEFS = [
     {"app_id": "my", "domain": True, "display_order": 21},
     {"app_id": "team", "domain": True, "display_order": 22},
     {"app_id": "healthy", "domain": True, "display_order": 30},
+    {"app_id": "gradevance", "domain": True, "display_order": 40},
 ]
 
 

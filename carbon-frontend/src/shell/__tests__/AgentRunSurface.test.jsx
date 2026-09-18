@@ -17,6 +17,12 @@ vi.mock('../../components/graph/PlanDagGraph', () => ({
   },
 }));
 
+vi.mock('../OpsCanvasShelf', () => ({
+  default: function MockShelf() {
+    return <div data-testid="ops-canvas-shelf-mock" />;
+  },
+}));
+
 const PLAN = {
   id: 'plan-1',
   status: 'completed',
@@ -51,6 +57,17 @@ describe('mergePlanWithRunSteps', () => {
 });
 
 describe('AgentRunSurface', () => {
+  it('shows Job Map control when conversationId is set', () => {
+    render(
+      <AgentRunSurface
+        plan={PLAN}
+        runSteps={[]}
+        phase="finished"
+        conversationId="conv-1"
+      />,
+    );
+    expect(screen.getByTestId('agent-run-job-map')).toBeTruthy();
+  });
   it('renders the plan DAG as the hero with a progress strip', () => {
     render(
       <AgentRunSurface

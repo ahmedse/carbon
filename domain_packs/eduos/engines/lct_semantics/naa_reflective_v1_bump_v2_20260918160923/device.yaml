@@ -1,0 +1,52 @@
+id: naa_reflective_semantics
+version: 2
+engine: lct_semantics
+name: NAA Reflective Writing — Semantics (SG×SD) (bump v2)
+description: 'First gold TranslationDevice from gradevance2/raw LCT Reflective Wave
+  criteria (Maton & Chen 2016 adapted). Academic English reflection genre ONLY — not
+  product identity.
+
+  Promoted from proposal 68eb185a-0baa-4e1d-8fb8-0d02995d4d39 at 2026-09-18T16:09:23.830869+00:00
+  — activate for NEW runs only.'
+discipline: academic_english
+genre: academic_reflection
+level: ug_foundation
+status: draft
+dimension_set:
+- semantic_gravity
+- semantic_density
+scale:
+  semantic_gravity:
+    type: ordinal
+    levels:
+    - SG++
+    - SG+
+    - SG-
+    - SG--
+    numeric:
+    - 1
+    - 2
+    - 3
+    - 4
+    axis_note: 'Expert gold Y-axis: 4=SG-- (most abstract/general), 1=SG++ (most concrete/specific).'
+  semantic_density:
+    type: binary
+    levels:
+    - SD-
+    - SD+
+    map:
+      descriptive: SD-
+      reflective: SD+
+    axis_note: In this genre SD+ = reflective/evaluative; SD- = descriptive/report.
+reliability_gate:
+  metric: cohen_kappa
+  minimum: 0.6
+  required_for_summative: true
+hitl:
+  learning_enabled: true
+  promote_edits_to_anchors: true
+  require_review_below_confidence: 0.7
+anchors_file: anchors.yaml
+boundary_pairs_file: boundary_pairs.yaml
+segmentation_file: segmentation.yaml
+held_out_file: held_out.jsonl

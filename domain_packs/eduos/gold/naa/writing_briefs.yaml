@@ -1,0 +1,22 @@
+briefs:
+- id: naa_reflection_1_exam_prep
+  words:
+  - 200
+  - 300
+  prompt: Write an academic reflection between 200 and 300 words about the most difficult
+    aspect of preparing for a chosen academic exams (e.g. Gaokao, university exam).
+- id: naa_reflection_2_questionnaire
+  words:
+  - 200
+  - 300
+  prompt: Write an academic reflection between 200 and 300 words about the most difficult
+    aspect of the questionnaire creation (within the context of the puzzle – your
+    Exploratory Practice research).
+- id: naa_reflection_3_transferable_skill
+  words:
+  - 200
+  - 300
+  prompt: Write an academic reflection between 200 and 300 words about one particular
+    skill/skill set that you have improved during this NAA programme which can be
+    used in other modules at the university.
+source: gradevance2/raw/Writing briefs for both Cycles

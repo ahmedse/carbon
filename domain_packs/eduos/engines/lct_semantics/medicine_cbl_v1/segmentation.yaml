@@ -1,0 +1,16 @@
+device_id: medicine_cbl_semantics
+version: 1
+policy:
+  unit: epistemic_move
+  prefer_within_paragraph_splits: true
+  target_median_words: 30
+  min_words: 10
+  max_words: 70
+  split_on_discourse_markers: true
+  markers:
+  - therefore
+  - however
+  - differentially
+  - in this case
+  - classically
+  acceptance: Draft — replace with CBL gold offsets before summative publish.

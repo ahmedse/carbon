@@ -27,6 +27,7 @@ host; only the Django/Gunicorn backend is containerized.
 | carbon   | 8006          | carbon_prod | `…:6379/0` |
 | nibras   | 8008          | nibras_prod | `…:6379/1` |
 | medos    | 8009          | medos_prod  | `…:6379/2` |
+| eduos    | 8011          | eduos_prod  | `…:6379/4` |
 | tectona  | 8010          | tectona_prod| `…:6379/3` |
 
 `deploy-instance.sh` refuses to start if `BACKEND_PORT` is already listening or
@@ -94,7 +95,7 @@ git push origin nibras-v0.1.0
 ```
 
 Within 2 minutes the VPS pulls the tag and auto-deploys **that instance only**.
-`nibras-v*` never triggers `aastmt`/`medos`/`tectona`, and vice-versa.
+`nibras-v*` never triggers `aastmt`/`medos`/`eduos`/`tectona`, and vice-versa.
 
 ### Tag naming convention
 

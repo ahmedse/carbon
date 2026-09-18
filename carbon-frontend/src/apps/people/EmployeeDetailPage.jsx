@@ -48,6 +48,7 @@ import PageContainer from '../../components/layout/PageContainer';
 import SystemDialog from '../../components/SystemDialog';
 import EmployeeProfileTab from './tabs/EmployeeProfileTab';
 import EmployeeTimelineTab from './tabs/EmployeeTimelineTab';
+import OpsCanvasAttachButton from './OpsCanvasAttachButton';
 import EmployeeLeaveTab from './tabs/EmployeeLeaveTab';
 import EmployeePayTab from './tabs/EmployeePayTab';
 import EmployeeBenefitsTab from './tabs/EmployeeBenefitsTab';
@@ -378,6 +379,11 @@ export default function EmployeeDetailPage() {
             <Button size="small" startIcon={<EditIcon sx={{ fontSize: '0.9375rem' }} />} onClick={enterEditAll} sx={{ minHeight: { xs: 40, sm: 'auto' } }}>
               {t('editProfile')}
             </Button>
+            <OpsCanvasAttachButton
+              relatedType="people.Employee"
+              relatedId={data.id}
+              relatedLabel={data.full_name || data.employee_no || ''}
+            />
             {data.is_active ? (
               <Button size="small" color="error" startIcon={<BlockIcon sx={{ fontSize: '0.9375rem' }} />} onClick={openDeactivate} sx={{ minHeight: { xs: 40, sm: 'auto' } }}>
                 {t('deactivate')}

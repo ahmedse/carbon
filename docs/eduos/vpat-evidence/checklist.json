@@ -1,0 +1,33 @@
+{
+  "standard": "WCAG 2.2 AA toward VPAT 2.5",
+  "product": "GradeVance / EduOS",
+  "status": "in_progress",
+  "generated_note": "Seed evidence pack — update after axe/manual passes.",
+  "routes": [
+    "/apps/gradevance",
+    "/apps/gradevance/library",
+    "/apps/gradevance/authoring",
+    "/apps/gradevance/student",
+    "/apps/gradevance/marking",
+    "/apps/gradevance/proposals"
+  ],
+  "automated": {
+    "api_checklist": "/api/v1/gradevance/accessibility/",
+    "playwright_smoke": "carbon-frontend/e2e/journeys/journey-gradevance-a11y.spec.ts",
+    "write_evidence_env": "GRADEVANCE_A11Y_WRITE_EVIDENCE=1"
+  },
+  "criteria": [
+    {"id": "2.4.1", "name": "Bypass Blocks", "status": "pass", "evidence": "SkipToMain on all studios"},
+    {"id": "1.3.1", "name": "Info and Relationships", "status": "pass", "evidence": "main landmarks, captions, labelled forms"},
+    {"id": "2.4.6", "name": "Headings and Labels", "status": "pass", "evidence": "PageHeader + section h2 on Home/Marking/Authoring/Library/Proposals"},
+    {"id": "4.1.2", "name": "Name Role Value", "status": "partial", "evidence": "MUI + aria-labels on queue actions"},
+    {"id": "1.4.3", "name": "Contrast Minimum", "status": "pending", "evidence": "Theme-dependent — brand contrast audit TBD"},
+    {"id": "2.1.1", "name": "Keyboard", "status": "pass", "evidence": "Skip link + WaveChart text alternative"},
+    {"id": "3.3.1", "name": "Error Identification", "status": "partial", "evidence": "ErrorAlert + form messages"}
+  ],
+  "manual_todo": [
+    "Run axe DevTools on each route under EduOS theme",
+    "Keyboard-only pass of Authoring publish + Marking Accept/Release",
+    "Screen reader spot-check (NVDA/VoiceOver) of Student desk results"
+  ]
+}

@@ -1,0 +1,45 @@
+id: medicine_clinical_reflection_semantics
+version: 1
+engine: lct_semantics
+name: Medicine — Clinical reflection Semantics
+description: OSCE/CBL reflective clauses. SD = clinical condensation vs unpacking.
+  SG+ = this patient/episode; SG- = generalisable clinical principle.
+discipline: medicine
+genre: clinical_reflection
+level: ug_clinical
+status: draft
+dimension_set:
+- semantic_gravity
+- semantic_density
+scale:
+  semantic_gravity:
+    type: ordinal
+    levels:
+    - SG++
+    - SG+
+    - SG-
+    - SG--
+    numeric:
+    - 1
+    - 2
+    - 3
+    - 4
+    axis_note: SG+ = this patient/episode; SG- = generalisable clinical principle.
+  semantic_density:
+    type: binary
+    levels:
+    - SD-
+    - SD+
+    axis_note: SD+ = condensed clinical concepts; SD- = unpacked plain narration.
+reliability_gate:
+  metric: cohen_kappa
+  minimum: 0.55
+  required_for_summative: true
+hitl:
+  learning_enabled: true
+  promote_edits_to_anchors: true
+  require_review_below_confidence: 0.7
+anchors_file: anchors.yaml
+boundary_pairs_file: boundary_pairs.yaml
+segmentation_file: segmentation.yaml
+held_out_file: held_out.jsonl

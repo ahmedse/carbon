@@ -1,0 +1,40 @@
+id: naa_cycle1_exam_prep_bump
+version: 2
+name: NAA Cycle 1 — Exam preparation reflection (formative) (device bump 2)
+status: draft
+discipline: academic_english
+genre: academic_reflection
+level: ug_foundation
+mode: formative
+lct_device:
+  id: naa_reflective_semantics
+  version: 2
+  pack_path: engines/lct_semantics/naa_reflective_v1_bump_v2_20260918160923
+rubric_pack:
+  id: naa_reflective_analytic
+  version: 1
+  pack_path: engines/rubric/naa_reflective_analytic_v1
+kb: null
+pipeline:
+  lct_enabled: true
+  stages:
+  - preprocess
+  - chunk
+  - segment
+  - code_lct
+  - profile_wave
+  - rubric_score
+  - gate
+  - coach
+  notes: Re-pinned to engines/lct_semantics/naa_reflective_v1_bump_v2_20260918160923
+    from proposal 68eb185a-0baa-4e1d-8fb8-0d02995d4d39 at 2026-09-18T16:09:23.855833+00:00.
+    Activate for NEW runs only.
+hitl:
+  summative_requires_release: true
+  learning_loop_enabled: true
+  confidence_review_threshold: 0.7
+brief:
+  brief_id: naa_reflection_1_exam_prep
+  word_band:
+  - 200
+  - 300

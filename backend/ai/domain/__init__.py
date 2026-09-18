@@ -55,3 +55,5 @@ def register_builtin_domains() -> None:
         from .customer import CustomerOpsDomainAI  # noqa: F401
     if not has_domain("people"):
         from .people import PeopleDomainAI  # noqa: F401
+    if not has_domain("gradevance"):
+        from .gradevance import GradeVanceDomainAI  # noqa: F401

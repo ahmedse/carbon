@@ -1,0 +1,34 @@
+id: medicine_cbl_appendicitis
+version: 1
+name: Medicine CBL — appendicitis case discussion (draft)
+status: draft
+discipline: medicine
+genre: case_based_learning
+level: ug_y3
+mode: formative
+lct_device:
+  id: medicine_cbl_semantics
+  version: 1
+  pack_path: engines/lct_semantics/medicine_cbl_v1
+rubric_pack:
+  id: medicine_cbl_analytic
+  version: 1
+  pack_path: engines/rubric/medicine_cbl_analytic_v1
+kb: null
+pipeline:
+  lct_enabled: true
+  stages:
+  - preprocess
+  - chunk
+  - segment
+  - code_lct
+  - profile_wave
+  - rubric_score
+  - gate
+  - coach
+hitl:
+  summative_requires_release: true
+  learning_loop_enabled: true
+  confidence_review_threshold: 0.7
+brief:
+  brief_id: cbl_appendicitis_v1

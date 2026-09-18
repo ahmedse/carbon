@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clearturn.tech/schemas/gradevance/rubric_pack.schema.json",
+  "title": "GradeVance RubricPack",
+  "type": "object",
+  "required": [
+    "id",
+    "version",
+    "engine",
+    "discipline",
+    "genre",
+    "mode",
+    "criteria",
+    "status"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "engine": {
+      "const": "rubric"
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "discipline": {
+      "type": "string"
+    },
+    "genre": {
+      "type": "string"
+    },
+    "level": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "validated",
+        "published",
+        "archived"
+      ]
+    },
+    "mode": {
+      "enum": [
+        "analytic",
+        "holistic",
+        "hybrid"
+      ]
+    },
+    "aggregation": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": [
+            "weighted_mean",
+            "min_band_cap",
+            "custom"
+          ]
+        },
+        "word_count_penalty": {
+          "type": "object",
+          "properties": {
+            "outside": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "delta": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "weight",
+          "scoring"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "weight": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1
+          },
+          "scoring": {
+            "enum": [
+              "qualitative",
+              "quantitative"
+            ]
+          },
+          "bands": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "checklist_items": {
+            "type": "array"
+          },
+          "evidence_bindings": {
+            "type": "object"
+          },
+          "gates": {
+            "type": "object"
+          },
+          "lct_optional": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "fairness_variants": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "action_templates_file": {
+      "type": "string"
+    },
+    "band_descriptors_file": {
+      "type": "string"
+    },
+    "hitl": {
+      "type": "object",
+      "properties": {
+        "learning_enabled": {
+          "type": "boolean"
+        },
+        "promote_disambiguation_notes": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

@@ -85,7 +85,7 @@ is listed** (unknown ids default to visible). So "disable" must set the flag on 
 Frontend (`carbon-frontend/.env`):
 
 ```
-VITE_BRAND=nibras          # aastmt | nibras | medos | tectona
+VITE_BRAND=nibras          # aastmt | nibras | medos | eduos | tectona
 ```
 
 Backend (`backend/.env` / instance env):
@@ -105,6 +105,7 @@ src/brands/
   aastmt.js
   nibras.js
   medos.js
+  eduos.js
   tectona.js
 ```
 
@@ -197,8 +198,8 @@ platform-wide so status semantics never flip (red stays error, green stays succe
   `procurement`, `assets`, `projects`.
 - **Enabled:** `['people']` today.
 
-### 3.3 ClearTurn medOS *(assumption — confirm)*
-- **Customer:** ClearTurn's healthcare/medical-operations line (name implies "medical OS").
+### 3.3 ClearTurn medOS
+- **Customer:** ClearTurn's healthcare/medical-operations line.
 - **Brand:** "ClearTurn · medOS".
 - **Palette:** teal/cyan `#0d9488` → `#06b6d4` (clinical + OS/tech).
 - **Logo concept:** a rounded **cross** fused with a **circuit node/terminal** — health +
@@ -206,16 +207,30 @@ platform-wide so status semantics never flip (red stays error, green stays succe
 - **Apps:** none in codebase yet (future `clinical`, `claims`, `ops`…). Brand slot ships
   **empty** (only platform shell) until first app lands.
 
-### 3.4 ClearTurn Tectona / Healthy AI
-- **Customer:** ClearTurn's own flagship AI instance (showcase + first-party apps).
+### 3.4 ClearTurn EduOS
+- **Customer / line:** ClearTurn education (Education Operating System).
+- **Brand:** "ClearTurn · EduOS" (locked spelling — not EdOS / Eduos).
+- **Canonical:** `eduos.clearturn.tech`.
+- **Palette:** academic blue `#1d4ed8` + teal secondary (learning + OS).
+- **Logo:** open book + circuit node (education + operating system).
+- **Apps:** **GradeVance** — multi-domain assessment + coaching (medicine OSCE/OSPE/
+  case-based, articles, reflection, other faculties via LCT + Rubric config packs).
+  NAA reflective English = first gold pack only. Future education apps may join the
+  same instance.
+- **Not Nibras / not Tectona.** Nibras is ERP; Tectona is the AI showcase instance.
+- **Design:** `docs/eduos/GRADEVANCE-DESIGN.md` · ADR-0038.
+
+### 3.5 ClearTurn Tectona / Healthy AI
+- **Customer:** ClearTurn's own flagship **AI** instance (showcase + first-party AI apps).
 - **Brand:** "ClearTurn · Tectona" (*Tectona grandis* = teak).
 - **Palette:** green `#059669` → `#10b981` (growth/teak).
 - **Logo concept:** a **teak leaf** whose veins are **circuit traces** — nature + intelligence.
 - **Apps:** `healthy` (factory AI); future first-party AI apps.
 - **Enabled:** `['healthy']`.
+- **Separate from EduOS** — Tectona hosts AI products; EduOS hosts education apps.
 
-### 3.5 (Parent) ClearTurn
-- Optional 5th brand for ClearTurn's own umbrella site. Logo: a **turning arrow/spiral**
+### 3.6 (Parent) ClearTurn
+- Optional umbrella site. Logo: a **turning arrow/spiral**
   (the "turn"). Palette: neutral zinc + one accent. Not required now — listed for completeness.
 
 ---

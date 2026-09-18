@@ -1006,7 +1006,31 @@ class WorkspaceArtifactViewSet(viewsets.GenericViewSet):
         return self._intelligence
 
     def list(self, request):
-        return Response(self.intelligence.list_artifacts(user=request.user))
+        artifacts = self.intelligence.list_artifacts(user=request.user)
+        atype = (request.query_params.get("artifact_type") or "").strip()
+        if atype:
+            artifacts = [a for a in artifacts if a.get("artifact_type") == atype]
+        # ADR-0041: filter Job Maps by related_object type/id (ops attach).
+        rel_type = (request.query_params.get("related_type") or "").strip()
+        rel_id = (request.query_params.get("related_id") or "").strip()
+        if rel_type or rel_id:
+            filtered = []
+            for a in artifacts:
+                content = a.get("content_json") or {}
+                rel = content.get("related_object") or {}
+                if rel_type and str(rel.get("type") or "") != rel_type:
+                    continue
+                if rel_id and str(rel.get("id") or "") != rel_id:
+                    continue
+                filtered.append(a)
+            artifacts = filtered
+        limit = request.query_params.get("limit")
+        if limit:
+            try:
+                artifacts = artifacts[: max(1, min(int(limit), 200))]
+            except (TypeError, ValueError):
+                pass
+        return Response(artifacts)
 
     def create(self, request):
         serializer = ArtifactCreateSerializer(data=request.data)
@@ -1022,6 +1046,114 @@ class WorkspaceArtifactViewSet(viewsets.GenericViewSet):
             return Response({"error": str(exc)}, status=status.HTTP_403_FORBIDDEN)
         except ValueError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=True, methods=["post"], url_path="share", url_name="artifact-share")
+    def share(self, request, pk=None):
+        """CBAC-gated share snapshot for job_map (ADR-0041 Phase 5).
+
+        Owner always may share their own. Stewards with ``ai:manage_console``
+        may share any accessible artifact.
+        """
+        from ai.models import AIArtifact
+        from ai.ops_canvas import ARTIFACT_TYPE, issue_share_token
+
+        try:
+            art = self.intelligence.get_artifact(request.user, pk)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_404_NOT_FOUND)
+
+        is_owner = str(art.get("created_by") or "") in (
+            str(request.user.pk),
+            getattr(request.user, "username", ""),
+        )
+        # Fallback: conversation ownership checked inside get_artifact already.
+        steward = has_capability(request.user, "ai:manage_console")
+        if not steward and art.get("artifact_type") != ARTIFACT_TYPE:
+            # Non-job_map share still allowed for owner via visibility update.
+            pass
+
+        try:
+            row = AIArtifact.objects.select_related("conversation").get(id=pk)
+        except AIArtifact.DoesNotExist:
+            return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        owns = row.conversation.user_id == request.user.pk or (
+            row.created_by_id == request.user.pk
+        )
+        if not owns and not steward:
+            return Response(
+                {"error": "Not authorized to share this canvas."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        token = issue_share_token(row)
+        return Response(
+            {
+                "id": str(row.id),
+                "share_token": token,
+                "visibility": "shared",
+                "artifact_type": row.artifact_type,
+            }
+        )
+
+    @action(detail=False, methods=["get"], url_path="shared/(?P<token>[^/.]+)", url_name="artifact-shared")
+    def shared_snapshot(self, request, token=None):
+        """Public-read snapshot by share token (authenticated users only)."""
+        from ai.ops_canvas import get_by_share_token
+
+        row = get_by_share_token(token or "")
+        if row is None:
+            return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(self.intelligence._serialize_artifact(row))
+
+    @action(detail=False, methods=["post"], url_path="job-maps", url_name="create-job-map")
+    def create_job_map(self, request):
+        """Create/upsert an Ops Canvas Job Map for a conversation (ADR-0041)."""
+        from ai.ops_canvas import (
+            MODE_AGENT,
+            MODE_CHAT,
+            build_payload,
+            upsert_job_map_artifact,
+        )
+
+        data = request.data if isinstance(request.data, dict) else {}
+        conversation_id = str(data.get("conversation_id") or "").strip()
+        if not conversation_id:
+            return Response(
+                {"error": "conversation_id required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        mode = str(data.get("mode") or MODE_CHAT)
+        if mode not in (MODE_CHAT, MODE_AGENT):
+            mode = MODE_CHAT
+        ask = str(data.get("ask") or data.get("title") or "")
+        title = str(data.get("title") or ask or "Job Map")[:255]
+        payload = build_payload(
+            mode=mode,
+            ask=ask,
+            layers=data.get("layers") if isinstance(data.get("layers"), dict) else None,
+            related_object=data.get("related_object")
+            if isinstance(data.get("related_object"), dict)
+            else None,
+            plan_id=data.get("plan_id"),
+            conversation_id=conversation_id,
+            objective_id=data.get("objective_id"),
+            title=title,
+        )
+        try:
+            art = upsert_job_map_artifact(
+                user=request.user,
+                conversation_id=conversation_id,
+                title=title,
+                payload=payload,
+                message_id=data.get("message_id"),
+                visibility=str(data.get("visibility") or "private"),
+            )
+            return Response(art, status=status.HTTP_201_CREATED)
+        except PermissionDenied as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
     def retrieve(self, request, pk=None):
         try:

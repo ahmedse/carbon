@@ -1,0 +1,15 @@
+templates:
+- id: d_cbl_diff_thin
+  criterion: differential_diagnosis
+  diagnosis: Differential is incomplete or unranked.
+  action: List ≥3 ranked differentials with one discriminating feature each.
+- id: d_cbl_link_weak
+  criterion: evidence_linking
+  diagnosis: Findings not linked to differentials.
+  action: For each key finding, state which differential it supports or rules out.
+- id: d_cbl_plan_generic
+  criterion: plan_and_reflection
+  diagnosis: Plan is generic / reflection missing.
+  action: Name immediate next investigation and one reasoning improvement for next case.
+source: scaffold
+hitl_note: Promote via ExpertEdit → ProposalMiner → pack bump.

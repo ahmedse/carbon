@@ -1823,6 +1823,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           phase={phase}
           live={phase === 'working'}
           defaultListOpen={phase === 'paused'}
+          conversationId={conversationId}
           artifacts={artifacts}
           artifactsLoading={artifactsLoading}
           artifactsContent={
@@ -2461,6 +2462,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
                     phase={phase}
                     live={false}
                     defaultListOpen={actionable}
+                    conversationId={conversationId}
                     artifacts={artifacts}
                     artifactsLoading={artifactsLoading}
                     artifactsContent={

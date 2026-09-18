@@ -1,0 +1,301 @@
+id: medicine_osce_abdominal
+version: 1
+engine: rubric
+name: 'OSCE Station: Abdominal Examination'
+description: Clinical examination station assessing the student's ability to perform
+  a systematic abdominal examination on a standardized patient presenting with right
+  iliac fossa pain. Students must document their findings in a structured clinical
+  reflection. Ported from gradevance2 OSCE fixture — multi-domain proof pack.
+discipline: medicine
+genre: osce_station
+level: ug_clinical
+status: draft
+mode: hybrid
+aggregation:
+  type: weighted_mean
+criteria:
+- id: patient_preparation_and_consent
+  name: Patient Preparation & Consent
+  description: Student demonstrates proper patient preparation including introduction,
+    consent, positioning, and exposure.
+  weight: 0.1
+  scoring: quantitative
+  checklist_items:
+  - id: pp1
+    label: Self-introduction
+    description: Introduces self with name and role
+    keywords:
+    - introduced
+    - my name
+    - introduction
+    - greeted
+    points: 1.0
+  - id: pp2
+    label: Explains procedure
+    description: Explains what will be done and why
+    keywords:
+    - explained
+    - procedure
+    - going to examine
+    - what I will do
+    points: 1.0
+  - id: pp3
+    label: Obtains consent
+    description: Asks for permission before starting
+    keywords:
+    - consent
+    - permission
+    - is that okay
+    - may I
+    - agreed
+    points: 1.0
+  - id: pp4
+    label: Appropriate positioning
+    description: Patient supine with one pillow, arms by sides
+    keywords:
+    - supine
+    - lying flat
+    - positioned
+    - pillow
+    - arms by sides
+    points: 1.0
+  - id: pp5
+    label: Adequate exposure
+    description: Exposes abdomen from xiphisternum to symphysis pubis
+    keywords:
+    - exposed
+    - exposure
+    - xiphisternum
+    - symphysis
+    - uncovered abdomen
+    points: 1.0
+  - id: pp6
+    label: Hand washing/hygiene
+    description: Washes hands or uses sanitiser
+    keywords:
+    - washed hands
+    - hand hygiene
+    - sanitiser
+    - sanitizer
+    - clean hands
+    points: 1.0
+- id: inspection
+  name: Inspection
+  description: Systematic visual inspection of the abdomen documented appropriately.
+  weight: 0.15
+  scoring: quantitative
+  checklist_items:
+  - id: in1
+    label: General inspection
+    description: Notes patient appearance, distress level
+    keywords:
+    - general appearance
+    - distress
+    - comfortable
+    - uncomfortable
+    - pain
+    - lying still
+    points: 1.0
+  - id: in2
+    label: Abdominal contour
+    description: Notes shape - flat, distended, scaphoid
+    keywords:
+    - contour
+    - distended
+    - distension
+    - flat
+    - scaphoid
+    - shape of abdomen
+    points: 1.0
+  - id: in3
+    label: Scars
+    description: Comments on presence/absence of scars
+    keywords:
+    - scars
+    - scarring
+    - no scars
+    - surgical scars
+    - no previous
+    points: 1.0
+  - id: in4
+    label: Visible masses/hernias
+    description: Notes any masses, organomegaly, or hernias visible
+    keywords:
+    - masses
+    - hernia
+    - organomegaly
+    - visible
+    - swelling
+    - no masses
+    points: 1.0
+  - id: in5
+    label: Skin changes
+    description: Notes any skin changes, bruising, spider naevi
+    keywords:
+    - skin
+    - bruising
+    - erythema
+    - skin changes
+    - normal skin
+    - spider naevi
+    points: 1.0
+- id: palpation_technique
+  name: Palpation Technique
+  description: Correct sequence and technique for abdominal palpation including light
+    and deep palpation.
+  weight: 0.25
+  scoring: quantitative
+  checklist_items:
+  - id: pa1
+    label: Asks about pain first
+    description: Asks where it hurts before palpating
+    keywords:
+    - asked about pain
+    - where does it hurt
+    - point to the pain
+    - tender area
+    - asked before
+    points: 1.0
+  - id: pa2
+    label: Starts away from pain
+    description: Begins palpation in non-tender quadrant
+    keywords:
+    - started away
+    - began away from
+    - non-tender
+    - opposite quadrant
+    - left iliac
+    points: 1.0
+  - id: pa3
+    label: Light palpation all quadrants
+    description: Performs light palpation systematically
+    keywords:
+    - light palpation
+    - superficial palpation
+    - gentle palpation
+    - all four quadrants
+    - all quadrants
+    points: 1.0
+  - id: pa4
+    label: Deep palpation all quadrants
+    description: Performs deep palpation systematically
+    keywords:
+    - deep palpation
+    - deeper palpation
+    - firm pressure
+    - bimanual
+    points: 1.0
+  - id: pa5
+    label: RIF tenderness identified
+    description: Identifies right iliac fossa tenderness
+    keywords:
+    - right iliac fossa
+    - RIF
+    - tenderness
+    - McBurney
+    - tender in right
+    points: 2.0
+  - id: pa6
+    label: Guarding assessed
+    description: Checks for voluntary/involuntary guarding
+    keywords:
+    - guarding
+    - rigidity
+    - voluntary guarding
+    - involuntary
+    - muscle tension
+    points: 1.0
+  - id: pa7
+    label: Rebound tenderness
+    description: Tests for rebound tenderness (peritonism)
+    keywords:
+    - rebound
+    - rebound tenderness
+    - Blumberg
+    - peritonism
+    - peritoneal
+    points: 2.0
+  - id: pa8
+    label: Rovsing's sign
+    description: Tests Rovsing's sign (LLQ pressure → RIF pain)
+    keywords:
+    - Rovsing
+    - left pressure
+    - referred pain
+    - contralateral
+    points: 1.0
+- id: percussion_and_auscultation
+  name: Percussion & Auscultation
+  description: Appropriate percussion and auscultation technique.
+  weight: 0.1
+  scoring: quantitative
+  checklist_items:
+  - id: pe1
+    label: Percussion performed
+    description: Percusses abdomen systematically
+    keywords:
+    - percussion
+    - percussed
+    - tympanic
+    - dull
+    - resonant
+    points: 1.0
+  - id: pe2
+    label: Bowel sounds auscultated
+    description: Listens for bowel sounds with stethoscope
+    keywords:
+    - bowel sounds
+    - auscultation
+    - auscultated
+    - stethoscope
+    - listened
+    points: 1.0
+  - id: pe3
+    label: Bowel sounds characterised
+    description: Describes bowel sounds quality
+    keywords:
+    - normal bowel sounds
+    - present
+    - absent
+    - hyperactive
+    - tinkling
+    - reduced
+    points: 1.0
+- id: clinical_reasoning_and_differential
+  name: Clinical Reasoning & Differential
+  description: Quality of clinical reasoning linking findings to differential diagnosis.
+  weight: 0.25
+  scoring: qualitative
+  bands:
+  - Excellent
+  - Good
+  - Satisfactory
+  - Unsatisfactory
+  evidence_bindings:
+    wave_features_hint:
+    - SG-
+    - SD+
+  lct_optional: true
+- id: reflective_practice
+  name: Reflective Practice
+  description: Quality of self-reflection on performance, including identification
+    of strengths and areas for improvement.
+  weight: 0.15
+  scoring: qualitative
+  bands:
+  - Excellent
+  - Good
+  - Satisfactory
+  - Unsatisfactory
+  evidence_bindings:
+    wave_features_hint:
+    - SG+
+    - SG-
+  lct_optional: true
+fairness_variants:
+- extended_time
+band_descriptors_file: band_descriptors.yaml
+action_templates_file: action_templates.yaml
+hitl:
+  learning_enabled: true
+  promote_disambiguation_notes: true

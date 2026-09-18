@@ -1,6 +1,6 @@
 # ClearTurn Trust Platform — Documentation Index
 
-Modular monolith (Django + React) deployed as isolated brand instances (AASTMT · Nibras · Tectona).
+Modular monolith (Django + React) deployed as isolated brand instances (AASTMT · Nibras · medOS · EduOS · Tectona).
 
 > **Tasks:** repo-root [`TASKS.md`](../TASKS.md) (active only).  
 > **ADRs:** [`.ai-toolkit/decisions/`](../.ai-toolkit/decisions/).  
@@ -13,6 +13,7 @@ Modular monolith (Django + React) deployed as isolated brand instances (AASTMT �
 | Doc | Role |
 |-----|------|
 | [CLEARTURN-PLATFORM-ARCHITECTURE.md](./CLEARTURN-PLATFORM-ARCHITECTURE.md) | Product-line / multi-instance model |
+| [eduos/GRADEVANCE-DESIGN.md](./eduos/GRADEVANCE-DESIGN.md) | GradeVance + LCT/Rubric engines on EduOS (ADR-0038) |
 | [NIBRAS-MASTER-STRATEGY.md](./NIBRAS-MASTER-STRATEGY.md) | Nibras product + commercial north star |
 | [DESIGN-PLATFORM.md](./DESIGN-PLATFORM.md) | Platform design (canonical deep dive) |
 | [STORAGE-PATTERN-HOSTED-APPS.md](./STORAGE-PATTERN-HOSTED-APPS.md) | Typed models vs dataschema (ADR-0025) |

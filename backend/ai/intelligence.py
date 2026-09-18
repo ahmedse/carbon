@@ -438,6 +438,17 @@ class CarbonIntelligence:
             )
             raise
 
+        # ADR-0041 Phase 3 — Chat Job Brief when multi-hop / envelope-worthy.
+        try:
+            self._maybe_emit_chat_job_brief(
+                user=user,
+                conversation=conversation,
+                ask=content,
+                assistant_message=response if isinstance(response, dict) else {},
+            )
+        except Exception:  # noqa: BLE001 — canvas emit must never break Chat
+            logger.debug("ops_canvas chat brief emit failed", exc_info=True)
+
         return {
             "conversation": _serialize_conversation(conversation),
             "user_message": _serialize_message(user_msg),
@@ -1384,6 +1395,71 @@ class CarbonIntelligence:
             }
 
         raise ValueError(f"Unsupported export format: {fmt}")
+
+    def _maybe_emit_chat_job_brief(
+        self,
+        *,
+        user,
+        conversation,
+        ask: str,
+        assistant_message: dict[str, Any],
+    ) -> None:
+        """Upsert a Chat Job Brief canvas when the turn is multi-hop (ADR-0041)."""
+        from ai.ops_canvas import (
+            MODE_CHAT,
+            build_payload,
+            layers_from_envelope_and_tools,
+            should_emit_chat_brief,
+            upsert_job_map_artifact,
+        )
+
+        meta = {}
+        if isinstance(assistant_message, dict):
+            meta = assistant_message.get("metadata") or assistant_message.get("metadata_json") or {}
+            if not isinstance(meta, dict):
+                meta = {}
+        tool_trace = (
+            meta.get("tool_trace")
+            or assistant_message.get("tool_trace")
+            or []
+        )
+        if not isinstance(tool_trace, list):
+            tool_trace = []
+        envelope = meta.get("envelope") or assistant_message.get("envelope")
+        ask_l = (ask or "").lower()
+        user_asked = any(
+            phrase in ask_l
+            for phrase in ("job map", "ops canvas", "show the plan", "task map")
+        )
+        if not should_emit_chat_brief(
+            tool_count=len(tool_trace),
+            has_envelope=bool(envelope),
+            multi_hop=len(tool_trace) >= 2,
+            user_asked_map=user_asked,
+        ):
+            return
+
+        layers = layers_from_envelope_and_tools(
+            ask=ask,
+            envelope=envelope if isinstance(envelope, dict) else None,
+            tool_trace=tool_trace,
+            contract="advisory",
+        )
+        title = (layers.get("evidence") or {}).get("headline") or (ask[:80] if ask else "Job Brief")
+        payload = build_payload(
+            mode=MODE_CHAT,
+            ask=ask,
+            layers=layers,
+            conversation_id=str(conversation.id),
+            title=title,
+        )
+        upsert_job_map_artifact(
+            user=user,
+            conversation_id=str(conversation.id),
+            title=str(title)[:255],
+            payload=payload,
+            message_id=str(assistant_message.get("id")) if assistant_message.get("id") else None,
+        )
 
     def list_artifacts(self, user) -> list[dict[str, Any]]:
         from ai.models import AIArtifact

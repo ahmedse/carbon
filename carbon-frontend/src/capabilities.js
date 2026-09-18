@@ -41,6 +41,13 @@ export const PEOPLE_VIEW   = 'people:view';
 export const PEOPLE_MANAGE = 'people:manage';
 export const PEOPLE_VIEW_COMPENSATION = 'people:view_compensation';
 
+// ── GradeVance (EduOS) ────────────────────────────────────────────
+export const GRADEVANCE_VIEW   = 'gradevance:view';
+export const GRADEVANCE_MANAGE = 'gradevance:manage';
+export const GRADEVANCE_MARK   = 'gradevance:mark';
+export const GRADEVANCE_SUBMIT = 'gradevance:submit';
+export const GRADEVANCE_QA     = 'gradevance:qa';
+
 // ── Correspondence ─────────────────────────────────────────────────
 export const CORRESPONDENCE_SUBMIT = 'correspondence:submit';
 export const CORRESPONDENCE_ACT    = 'correspondence:act';
@@ -151,6 +158,18 @@ export const ROUTE_CAPABILITIES = {
   // Team (manager approvals inbox)
   '/team':       TEAM_ACCESS,
   '/team/*':     TEAM_ACCESS,
+
+  // GradeVance (EduOS) — longest-prefix wins in authz
+  '/apps/gradevance':             GRADEVANCE_VIEW,
+  '/apps/gradevance/courses':     GRADEVANCE_MANAGE,
+  '/apps/gradevance/assignments': GRADEVANCE_MANAGE,
+  '/apps/gradevance/calibration': GRADEVANCE_MANAGE,
+  '/apps/gradevance/library':     GRADEVANCE_VIEW,
+  '/apps/gradevance/marking':     GRADEVANCE_MARK,
+  '/apps/gradevance/runs':        GRADEVANCE_MARK,
+  '/apps/gradevance/proposals':   GRADEVANCE_MANAGE,
+  '/apps/gradevance/student':     GRADEVANCE_SUBMIT,
+  '/apps/gradevance/authoring':   GRADEVANCE_MANAGE,
 };
 
 // ── Menu item manifest role → capability ───────────────────────────
@@ -180,6 +199,14 @@ export const MENU_ITEM_CAPABILITIES = {
   'Organizational Boundaries': CARBON_MANAGE_REPORTING_PERIODS,
   'Base Years':               CARBON_MANAGE_REPORTING_PERIODS,
   'Inventory Coverage':       CARBON_MANAGE_INVENTORY_COVERAGE,
+
+  // GradeVance (unique labels — do not reuse Carbon "Overview")
+  'Courses & stems':      GRADEVANCE_MANAGE,
+  'Calibration':          GRADEVANCE_MANAGE,
+  'Pack library':         GRADEVANCE_VIEW,
+  'Marking queue':        GRADEVANCE_MARK,
+  'Proposals':            GRADEVANCE_MANAGE,
+  'Student desk':         GRADEVANCE_SUBMIT,
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -222,6 +249,12 @@ export const CAPABILITY_INHERITANCE = {
   [AI_MANAGE_CONSOLE]: [AI_VIEW_CONSOLE],
   [PEOPLE_MANAGE]: [PEOPLE_VIEW],
   [CORRESPONDENCE_ADMIN]: [CORRESPONDENCE_ACT, CORRESPONDENCE_SUBMIT, MY_ACCESS, TEAM_ACCESS],
+
+  // GradeVance — mirrors backend CAPABILITY_IMPLIES
+  [GRADEVANCE_MANAGE]: [GRADEVANCE_VIEW, GRADEVANCE_MARK, GRADEVANCE_SUBMIT, GRADEVANCE_QA],
+  [GRADEVANCE_MARK]: [GRADEVANCE_VIEW],
+  [GRADEVANCE_QA]: [GRADEVANCE_VIEW],
+  [GRADEVANCE_SUBMIT]: [GRADEVANCE_VIEW],
 };
 
 
@@ -357,5 +390,7 @@ export function getCapableApps(expandedCaps) {
   if (hasCap(expandedCaps, CATALOG_VIEW)) apps.push('catalog');
   if (hasCap(expandedCaps, DQ_VIEW)) apps.push('dq');
   if (hasCap(expandedCaps, MDM_VIEW)) apps.push('mdm');
+  if (hasCap(expandedCaps, PEOPLE_VIEW)) apps.push('people');
+  if (hasCap(expandedCaps, GRADEVANCE_VIEW)) apps.push('gradevance');
   return apps;
 }

@@ -1,0 +1,13 @@
+criterion_bands:
+  interpretation:
+    Excellent: Links all key findings to clinical significance; notes false positives/negatives and next steps.
+    Good: Interprets main findings with clinical relevance; minor gaps.
+    Satisfactory: Correct reading of results but limited clinical linkage.
+    Unsatisfactory: Misreads results or no clinical interpretation.
+  documentation:
+    Excellent: Complete documentation with reflective note on technique or uncertainty.
+    Good: Adequate documentation; brief reflection.
+    Satisfactory: Documentation present but incomplete or generic reflection.
+    Unsatisfactory: Missing documentation or no reflection.
+source: scaffold — specialize with station gold before publish
+note: Quantitative checklist criteria (specimen_handling, dipstick_technique) score via keywords; bands above cover qualitative criteria only.

@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clearturn.tech/schemas/gradevance/assignment_profile.schema.json",
+  "title": "GradeVance AssignmentProfile",
+  "type": "object",
+  "required": [
+    "id",
+    "version",
+    "status",
+    "discipline",
+    "genre",
+    "mode",
+    "pipeline"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "name": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "validated",
+        "published",
+        "archived"
+      ]
+    },
+    "discipline": {
+      "type": "string"
+    },
+    "genre": {
+      "type": "string"
+    },
+    "level": {
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "formative",
+        "summative",
+        "calibration"
+      ]
+    },
+    "lct_device": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        },
+        "pack_path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "pack_path"
+      ]
+    },
+    "rubric_pack": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        },
+        "pack_path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "pack_path"
+      ]
+    },
+    "kb": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "pipeline": {
+      "type": "object",
+      "required": [
+        "stages"
+      ],
+      "properties": {
+        "stages": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "preprocess",
+              "chunk",
+              "segment",
+              "ground",
+              "code_lct",
+              "profile_wave",
+              "rubric_score",
+              "gate",
+              "coach"
+            ]
+          }
+        },
+        "lct_enabled": {
+          "type": "boolean"
+        },
+        "coder": {
+          "type": "string",
+          "description": "Coder strategy registry key (heuristic_anchor | gold_oracle | llm_assist)"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "hitl": {
+      "type": "object",
+      "properties": {
+        "summative_requires_release": {
+          "type": "boolean"
+        },
+        "learning_loop_enabled": {
+          "type": "boolean"
+        },
+        "confidence_review_threshold": {
+          "type": "number"
+        }
+      }
+    },
+    "brief": {
+      "type": "object"
+    }
+  }
+}

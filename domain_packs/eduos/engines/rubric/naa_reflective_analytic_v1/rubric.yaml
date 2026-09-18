@@ -1,0 +1,73 @@
+id: naa_reflective_analytic
+version: 1
+engine: rubric
+name: NAA Reflective Writing — Analytic (TA / C&C / LGAS)
+description: First gold rubric from gradevance2/raw reflective pack. WHAT–SO WHAT–NOW
+  WHAT model. Not product identity.
+discipline: academic_english
+genre: academic_reflection
+level: ug_foundation
+status: validated
+mode: analytic
+aggregation:
+  type: weighted_mean
+  word_count_penalty:
+    outside:
+    - 200
+    - 300
+    delta: -0.05
+criteria:
+- id: task_achievement
+  name: Task Achievement
+  weight: 0.4
+  scoring: qualitative
+  bands:
+  - F
+  - E
+  - D
+  - C
+  - B
+  - A
+  description: Reflective model stages WHAT / SO WHAT / NOW WHAT; specificity; perspectives.
+  evidence_bindings:
+    wave_features_required:
+    - stages_present
+    - specificity
+    - perspectives_count
+    segment_codes:
+    - dim: SG
+      prefer_range: true
+  gates:
+    fail_if_missing_stage: true
+- id: coherence_cohesion
+  name: Coherence and Cohesion
+  weight: 0.3
+  scoring: qualitative
+  bands:
+  - F
+  - E
+  - D
+  - C
+  - B
+  - A
+  description: Linking devices, logical flow, signposting of reflective stages.
+- id: lexis_grammar_academic_style
+  name: Lexis, Grammar and Academic Style
+  weight: 0.3
+  scoring: qualitative
+  bands:
+  - F
+  - E
+  - D
+  - C
+  - B
+  - A
+  description: Range/accuracy of lexis and grammar; academic style (avoid informal).
+fairness_variants:
+- l2_english
+- extended_time
+band_descriptors_file: band_descriptors.yaml
+action_templates_file: action_templates.yaml
+hitl:
+  learning_enabled: true
+  promote_disambiguation_notes: true

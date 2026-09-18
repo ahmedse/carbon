@@ -1,0 +1,10 @@
+templates:
+- id: osce_consent
+  criterion: patient_preparation_and_consent
+  diagnosis: Consent / preparation steps missing in write-up.
+  action: Document introduction, explanation, consent, positioning, exposure, hygiene.
+- id: osce_diff
+  criterion: clinical_reasoning_and_differential
+  diagnosis: Differential incomplete or unlinked to findings.
+  action: Rank differentials and link each to specific positive/negative findings.
+source: seeded for HITL learning

@@ -1,0 +1,42 @@
+id: article_analytic_generic
+version: 1
+engine: rubric
+name: Article / essay — generic analytic (draft)
+description: Discipline-agnostic article rubric scaffold. Clone and specialize per
+  faculty via packs only — never hardcode in app code.
+discipline: general
+genre: argumentative_article
+level: ug
+status: draft
+mode: analytic
+aggregation:
+  type: weighted_mean
+  word_count_penalty:
+    outside: [800, 2500]
+    delta: -0.05
+criteria:
+- id: argument_structure
+  name: Argument structure
+  weight: 0.35
+  scoring: qualitative
+  bands: [F, E, D, C, B, A]
+  description: Thesis, claims, warrants, counter-argument.
+  evidence_bindings:
+    wave_features_required: [sg_range, transitions]
+- id: evidence_use
+  name: Evidence use
+  weight: 0.35
+  scoring: qualitative
+  bands: [F, E, D, C, B, A]
+  description: Sources, grounding, citation discipline.
+- id: clarity_style
+  name: Clarity and academic style
+  weight: 0.3
+  scoring: qualitative
+  bands: [F, E, D, C, B, A]
+fairness_variants: [l2_english, extended_time]
+band_descriptors_file: band_descriptors.yaml
+action_templates_file: action_templates.yaml
+hitl:
+  learning_enabled: true
+  promote_disambiguation_notes: true

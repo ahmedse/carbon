@@ -1,0 +1,23 @@
+criterion_bands:
+  argument_structure:
+    F: No clear thesis; claims unconnected; counter-argument absent.
+    E: Thesis present but weak; claims loosely ordered; little warrant.
+    D: Thesis + claims with basic warrants; counter-argument thin or missing.
+    C: Clear thesis; claims mostly warranted; counter-argument acknowledged.
+    B: Strong thesis; coherent claim–warrant chain; counter-argument engaged.
+    A: Precise thesis; sophisticated warrants; counter-argument integrated and resolved.
+  evidence_use:
+    F: No evidence or invented/unsupported claims.
+    E: Anecdote only; sources vague.
+    D: Some evidence but weakly tied to claims.
+    C: Relevant evidence for main claims; citation discipline uneven.
+    B: Strong evidence mix; claims grounded; citations mostly disciplined.
+    A: Excellent grounding; evidence discriminated by strength; citation discipline consistent.
+  clarity_style:
+    F: Hard to follow; non-academic register dominates.
+    E: Frequent clarity issues; style inconsistent.
+    D: Mostly readable; style lapses common.
+    C: Clear enough; academic style with occasional lapses.
+    B: Clear and mostly polished academic style.
+    A: Precise, fluent academic prose without distracting lapses.
+source: scaffold — specialize per faculty before publish

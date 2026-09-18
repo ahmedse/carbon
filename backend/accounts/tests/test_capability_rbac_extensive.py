@@ -336,6 +336,7 @@ class TestGroupCapabilityMappings:
             "turnkey_lead",
             "people_lead", "people_data_owners_group", "people_analysts_group",
             "employee_group", "manager_group", "finance_group",
+            "gradevance_lead", "gradevance_markers", "gradevance_students",
             "dataowners_group", "analysts_group", "viewers_group", "auditors_group",
             "ai_process_owner_group", "ai_policy_owner_group", "ai_publisher_group",
             "ai_operator_group", "ai_auditor_group",

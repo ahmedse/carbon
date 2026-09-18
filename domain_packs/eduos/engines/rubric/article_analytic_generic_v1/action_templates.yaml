@@ -1,0 +1,11 @@
+templates:
+- id: d_thesis_weak
+  criterion: argument_structure
+  diagnosis: Thesis is implicit or unfocused.
+  action: State a contestable claim in one sentence; preview two supporting reasons.
+- id: d_evidence_thin
+  criterion: evidence_use
+  diagnosis: Claims lack grounded evidence.
+  action: Attach at least two cited sources to each major claim; note limitations.
+source: scaffold
+hitl_note: Specialize per faculty pack; promote via ExpertEdit → ProposalMiner.

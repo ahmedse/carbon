@@ -1,17 +1,19 @@
 // src/brands/index.js
 // Brand registry — the single source of truth for per-instance identity.
-// ONE SWITCH: VITE_BRAND (aastmt | nibras | medos | tectona).
+// ONE SWITCH: VITE_BRAND (aastmt | nibras | medos | eduos | tectona).
 // Adding a new brand = add a file here + an entry in BRANDS. No shell edits.
 
 import aastmt from './aastmt';
 import nibras from './nibras';
 import medos from './medos';
+import eduos from './eduos';
 import tectona from './tectona';
 
 export const BRANDS = {
   aastmt,
   nibras,
   medos,
+  eduos,
   tectona,
 };
 

@@ -1,0 +1,7 @@
+device_id: medicine_clinical_reflection_semantics
+version: 1
+policy:
+  unit: epistemic_move
+  target_median_words: 30
+  min_words: 10
+  max_words: 80

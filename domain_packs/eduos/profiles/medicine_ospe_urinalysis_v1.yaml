@@ -1,0 +1,28 @@
+id: medicine_ospe_urinalysis
+version: 1
+name: Medicine OSPE — Urinalysis (draft)
+status: draft
+discipline: medicine
+genre: ospe_station
+level: ug_clinical
+mode: formative
+lct_device: null
+rubric_pack:
+  id: medicine_ospe_urinalysis
+  version: 1
+  pack_path: engines/rubric/medicine_ospe_urinalysis_v1
+kb: null
+pipeline:
+  lct_enabled: false
+  stages:
+  - preprocess
+  - rubric_score
+  - gate
+  - coach
+  notes: Checklist-first OSPE — LCT off (proves profile can bind LCT-off).
+hitl:
+  summative_requires_release: true
+  learning_loop_enabled: true
+  confidence_review_threshold: 0.7
+brief:
+  brief_id: ospe_urinalysis_v1

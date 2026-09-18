@@ -1,0 +1,16 @@
+device_id: naa_reflective_semantics
+version: 1
+boundary_pairs:
+- id: bp_i_learned
+  dimension: semantic_gravity
+  anchor_a_id: a_sgp_narrative
+  anchor_b_id: a_sgm_general_claim
+  contrast_rationale: First-person alone does not make SG+. Narrating a particular
+    event/action is SG+; stating a general lesson or generalised claim is SG-/SG--
+    even with "I".
+- id: bp_desc_vs_refl
+  dimension: semantic_density
+  anchor_a_id: a_sdm_descriptive
+  anchor_b_id: a_sdp_reflective
+  contrast_rationale: SD- reports/illustrates; SD+ evaluates effectiveness for self-development
+    (critical/self-analytic move).

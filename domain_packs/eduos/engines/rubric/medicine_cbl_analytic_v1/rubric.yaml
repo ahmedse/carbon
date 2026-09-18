@@ -1,0 +1,47 @@
+id: medicine_cbl_analytic
+version: 1
+engine: rubric
+name: Medicine CBL — analytic clinical reasoning (draft)
+description: Case-based learning analytic rubric — differentials, evidence linking,
+  management plan. Separate from OSCE checklist packs.
+discipline: medicine
+genre: case_based_learning
+level: ug_y3
+status: draft
+mode: analytic
+aggregation:
+  type: weighted_mean
+criteria:
+- id: problem_representation
+  name: Problem representation
+  weight: 0.25
+  scoring: qualitative
+  bands: [Unsatisfactory, Satisfactory, Good, Excellent]
+  description: Concise illness script / problem representation of the case.
+  evidence_bindings:
+    wave_features_hint: [SG+, SD+]
+- id: differential_diagnosis
+  name: Differential diagnosis
+  weight: 0.3
+  scoring: qualitative
+  bands: [Unsatisfactory, Satisfactory, Good, Excellent]
+  description: Ranked differentials with discriminating features.
+- id: evidence_linking
+  name: Evidence linking
+  weight: 0.25
+  scoring: qualitative
+  bands: [Unsatisfactory, Satisfactory, Good, Excellent]
+  description: Links findings to differentials; notes uncertainty.
+  evidence_bindings:
+    wave_features_hint: [SG-, SD+]
+- id: plan_and_reflection
+  name: Plan and reflection
+  weight: 0.2
+  scoring: qualitative
+  bands: [Unsatisfactory, Satisfactory, Good, Excellent]
+  description: Next steps and reflective insight on reasoning gaps.
+band_descriptors_file: band_descriptors.yaml
+action_templates_file: action_templates.yaml
+hitl:
+  learning_enabled: true
+  promote_disambiguation_notes: true

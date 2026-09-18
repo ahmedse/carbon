@@ -1800,7 +1800,38 @@ class PlansService:
             "Plan created id=%s user=%s steps=%d source=%s",
             run_id, user_pk, len(plan.steps), plan.source,
         )
-        return self.get_plan(user, run_id)
+        result = self.get_plan(user, run_id)
+
+        # ADR-0041 Phase 2 — Agent Job Map on plan create.
+        if conversation_id:
+            try:
+                from ai.ops_canvas import (
+                    MODE_AGENT,
+                    build_payload,
+                    layers_from_plan,
+                    upsert_job_map_artifact,
+                )
+
+                plan_dict = self._plan_to_dict(plan)
+                layers = layers_from_plan(plan_dict)
+                payload = build_payload(
+                    mode=MODE_AGENT,
+                    ask=brief,
+                    layers=layers,
+                    plan_id=run_id,
+                    conversation_id=conversation_id,
+                    title=(brief[:80] or "Agent Job Map"),
+                )
+                upsert_job_map_artifact(
+                    user=user,
+                    conversation_id=conversation_id,
+                    title=(brief[:80] or "Agent Job Map"),
+                    payload=payload,
+                )
+            except Exception:  # noqa: BLE001
+                logger.debug("ops_canvas agent job map emit failed", exc_info=True)
+
+        return result
 
     # ── W5-B: guided discovery conversation ───────────────────────────────
 

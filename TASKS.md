@@ -55,8 +55,10 @@ evidence → not done.
 | **NIR-3C / NIR-7A/B** | **Nibras** | DONE | Code+tests shipped |
 | **NIR-5 / NIR-6** | **Nibras** | DONE via NSR-7/8 | Governed FKs + single-root org shipped |
 | **DTR** (Data Trust / Catalog Index) | **Catalog** | **ACTIVE** | Stewardship nudges + FilteredDataGrid→SearchSelect · DTR-3 = Pulse (other master) |
+| **GradeVance E2E QA** | **EduOS** | **DONE** | Seed 6 runs + LCT report · `docs/eduos/qa-evidence/E2E-SUMMARY.json` |
+| **GradeVance HITL P2** | **EduOS** | **ACTIVE** | Learning loop proven: edit→proposal→accept→bump→repin · `docs/eduos/qa-evidence/HITL-LEARNING-LOOP.json` · next: UI path + Phase C depth |
 
-**Multi-Master:** `.ai-toolkit/shared/multi-master.md` · seats · `docs/ops/MASTERS-COMMS.md` · RULE_30.
+**Multi-Master:** `.ai-toolkit/shared/multi-master.md` · seats · `docs/ops/MASTERS-COMMS.md` · RULE_30. · **This session seat: EduOS.**
 
 **NSR principle (Nibras seat only):** every nav item under people/my/team is either architecture-thick + tested + E2E-QA’d for GOFSCO staff use, or demoted/hidden until it is.
 

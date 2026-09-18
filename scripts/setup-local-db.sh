@@ -1,7 +1,7 @@
 #!/bin/bash
 # One-time local Postgres setup for Carbon dev.
-# Creates the `carbon_user` role + the two per-brand dev databases
-# (carbon_dev, nibras_dev). Idempotent — safe to re-run.
+# Creates the `carbon_user` role + per-brand dev databases.
+# Idempotent — safe to re-run.
 #
 # Run as:  sudo bash scripts/setup-local-db.sh
 # (you'll type your own sudo password in the terminal)
@@ -28,7 +28,8 @@ else
   echo "    role created"
 fi
 
-for db in carbon_dev nibras_dev; do
+# Keep in sync with BRAND_DB_NAMES in backend/config/settings.py
+for db in carbon_dev nibras_dev medos_dev tectona_dev eduos_dev; do
   echo "==> Ensuring database '$db'"
   if [ "$(psql_su "SELECT 1 FROM pg_database WHERE datname='$db'")" = "1" ]; then
     echo "    database exists"
@@ -40,5 +41,8 @@ done
 
 echo ""
 echo "Done. Local dev databases ready:"
-echo "  carbon_dev  (brand=aastmt)"
-echo "  nibras_dev  (brand=nibras)"
+echo "  carbon_dev   (brand=aastmt)"
+echo "  nibras_dev   (brand=nibras)"
+echo "  medos_dev    (brand=medos)"
+echo "  tectona_dev  (brand=tectona)"
+echo "  eduos_dev    (brand=eduos)"

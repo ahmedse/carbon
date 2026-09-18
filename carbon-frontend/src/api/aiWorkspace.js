@@ -685,10 +685,18 @@ export function rejectSuggestion(token, suggestionId, reason) {
 
 // ── Artifacts ─────────────────────────────────────────────────────────
 
-export function listArtifacts(token, { conversation_id, artifact_type, limit = 50 } = {}) {
+export function listArtifacts(token, {
+  conversation_id,
+  artifact_type,
+  related_type,
+  related_id,
+  limit = 50,
+} = {}) {
   const params = new URLSearchParams();
   if (conversation_id) params.append('conversation_id', conversation_id);
   if (artifact_type) params.append('artifact_type', artifact_type);
+  if (related_type) params.append('related_type', related_type);
+  if (related_id) params.append('related_id', String(related_id));
   if (limit) params.append('limit', String(limit));
   const qs = params.toString();
   return apiFetch(`${BASE}artifacts/${qs ? `?${qs}` : ''}`, { token });
@@ -700,6 +708,28 @@ export function createArtifact(token, { conversation_id, message_id, title, arti
     method: 'POST',
     body: { conversation_id, message_id, title, artifact_type, content_json },
   });
+}
+
+/** ADR-0041 — create/upsert Ops Canvas Job Map. */
+export function createJobMap(token, body) {
+  return apiFetch(`${BASE}artifacts/job-maps/`, {
+    token,
+    method: 'POST',
+    body,
+  });
+}
+
+/** ADR-0041 — CBAC-gated share token for a canvas/artifact. */
+export function shareArtifact(token, artifactId) {
+  return apiFetch(`${BASE}artifacts/${artifactId}/share/`, {
+    token,
+    method: 'POST',
+    body: {},
+  });
+}
+
+export function getSharedArtifact(token, shareToken) {
+  return apiFetch(`${BASE}artifacts/shared/${encodeURIComponent(shareToken)}/`, { token });
 }
 
 export function deleteArtifact(token, artifactId) {

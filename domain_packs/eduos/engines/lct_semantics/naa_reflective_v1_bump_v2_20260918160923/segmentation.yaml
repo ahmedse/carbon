@@ -1,0 +1,18 @@
+device_id: naa_reflective_semantics
+version: 1
+policy:
+  unit: epistemic_move
+  prefer_within_paragraph_splits: true
+  target_median_words: 25
+  min_words: 8
+  max_words: 60
+  split_on_discourse_markers: true
+  markers:
+  - so I
+  - therefore
+  - later
+  - for example
+  - however
+  - thus
+  acceptance: Must recover expert wave oscillation; fail if flat single-code run on
+    gold AR-CYCLE1-18 week1.

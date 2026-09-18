@@ -57,7 +57,7 @@ import AIConversationTabs from './AIConversationTabs';
 import AIConversationView from './AIConversationView';
 import AIEmptyState from './AIEmptyState';
 import AIOfflineBanner from './AIOfflineBanner';
-import AIArtifactBrowser from './AIArtifactBrowser';
+import OpsCanvasShelf from './OpsCanvasShelf';
 import AISuggestionRail from './AISuggestionRail';
 import AIUsageTab from './AIUsageTab';
 import AISettingsTab from './AISettingsTab';
@@ -623,7 +623,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
               ) : activePanel === 'investigate' ? (
                 <InvestigateTab conversations={investigateConversations} onSelect={handleOpenInvestigation} onNew={handleNewInvestigation} />
               ) : activePanel === 'artifacts' ? (
-                <AIArtifactBrowser />
+                <OpsCanvasShelf conversationId={effectiveActiveId} />
               ) : !hasAny ? (
                 <AIEmptyState onStartChat={handleNewChat} manifests={manifests} onStartStarter={handleStartStarter} />
               ) : activeConversation ? (

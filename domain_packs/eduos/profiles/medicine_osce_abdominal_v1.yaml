@@ -1,0 +1,53 @@
+id: medicine_osce_abdominal
+version: 1
+name: Medicine OSCE — Abdominal examination (draft)
+status: draft
+discipline: medicine
+genre: osce_station
+level: ug_clinical
+mode: formative
+lct_device:
+  id: medicine_clinical_reflection_semantics
+  version: 1
+  pack_path: engines/lct_semantics/medicine_clinical_reflection_v1
+rubric_pack:
+  id: medicine_osce_abdominal
+  version: 1
+  pack_path: engines/rubric/medicine_osce_abdominal_v1
+kb: null
+pipeline:
+  lct_enabled: true
+  stages:
+  - preprocess
+  - chunk
+  - segment
+  - code_lct
+  - profile_wave
+  - rubric_score
+  - gate
+  - coach
+  notes: Quantitative checklist criteria dominate; LCT informs qualitative clinical
+    reasoning / reflective practice criteria when device is published.
+hitl:
+  summative_requires_release: true
+  learning_loop_enabled: true
+  confidence_review_threshold: 0.75
+brief:
+  title: 'OSCE Station: Abdominal Examination'
+  instructions: 'You have just completed an abdominal examination on a 22-year-old
+    male presenting with right iliac fossa pain, nausea, and low-grade fever (37.8°C).
+    Write a structured clinical reflection (250-400 words) that:
+
+    1. Describes the systematic approach you used in examining the patient
+
+    2. Reports your clinical findings for each stage of the examination
+
+    3. Identifies the key positive and negative findings
+
+    4. Discusses the differential diagnosis based on your findings
+
+    5. Reflects on any procedural steps you may have missed or could improve
+
+
+    Your reflection should demonstrate both clinical knowledge (what you found) and
+    metacognitive awareness (how well you performed the examination).'

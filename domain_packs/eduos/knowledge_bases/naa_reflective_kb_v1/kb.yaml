@@ -1,0 +1,10 @@
+id: naa_reflective_kb_v1
+version: 1
+name: NAA Reflective — grounding corpus (stub)
+description: >
+  Placeholder KnowledgeBase pin for GradeVance Phase C. Chunks live in git;
+  runtime grounding wires later. Professors can pin this on draft stems.
+discipline: academic_english
+genre: academic_reflection
+status: draft
+chunk_count: 0

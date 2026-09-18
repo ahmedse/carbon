@@ -29,8 +29,20 @@ DQ_LEAD_GROUP = "dq_lead"
 DATAHUB_LEAD_GROUP = "datahub_lead"
 TURNKEY_LEAD_GROUP = "turnkey_lead"
 PEOPLE_LEAD_GROUP = "people_lead"
+GRADEVANCE_LEAD_GROUP = "gradevance_lead"
+GRADEVANCE_MARKERS_GROUP = "gradevance_markers"
+GRADEVANCE_STUDENTS_GROUP = "gradevance_students"
 
-DOMAIN_LEAD_GROUPS = {CARBON_LEAD_GROUP, CATALOG_LEAD_GROUP, MDM_LEAD_GROUP, DQ_LEAD_GROUP, DATAHUB_LEAD_GROUP, TURNKEY_LEAD_GROUP, PEOPLE_LEAD_GROUP}
+DOMAIN_LEAD_GROUPS = {
+    CARBON_LEAD_GROUP,
+    CATALOG_LEAD_GROUP,
+    MDM_LEAD_GROUP,
+    DQ_LEAD_GROUP,
+    DATAHUB_LEAD_GROUP,
+    TURNKEY_LEAD_GROUP,
+    PEOPLE_LEAD_GROUP,
+    GRADEVANCE_LEAD_GROUP,
+}
 
 # ── AI governance roles (P3-05b) ───────────────────────────────────
 # Five durable governance roles for the Pulse AI control plane. Each maps to a
@@ -104,6 +116,8 @@ ALL_CANONICAL_GROUPS = {
     PEOPLE_DATA_OWNERS_GROUP,
     PEOPLE_ANALYSTS_GROUP,
     FINANCE_GROUP,
+    GRADEVANCE_MARKERS_GROUP,
+    GRADEVANCE_STUDENTS_GROUP,
     *DOMAIN_LEAD_GROUPS,
     *AI_GOVERNANCE_GROUPS,
 }
@@ -122,4 +136,7 @@ GROUP_BRAND_SCOPE = {
     PEOPLE_DATA_OWNERS_GROUP: {"nibras"},
     PEOPLE_ANALYSTS_GROUP: {"nibras"},
     FINANCE_GROUP: {"nibras"},
+    GRADEVANCE_LEAD_GROUP: {"eduos", "tectona"},
+    GRADEVANCE_MARKERS_GROUP: {"eduos", "tectona"},
+    GRADEVANCE_STUDENTS_GROUP: {"eduos", "tectona"},
 }

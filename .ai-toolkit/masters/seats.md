@@ -58,7 +58,9 @@ Shared = either Master may read; write only when your track owns the change.
 
 **Tracks:** GradeVance design + scaffold, LCT/Rubric config engines, EduOS brand,
 education assessment/coaching product. Canonical design:
-`docs/eduos/GRADEVANCE-DESIGN.md` · ADR-0038.
+`docs/eduos/GRADEVANCE-DESIGN.md` · professor journey
+`docs/eduos/GRADEVANCE-PROFESSOR-JOURNEY.md` ·
+`docs/eduos/GRADEVANCE-PROFESSOR-LIFECYCLE.md` · ADR-0038.
 
 ### Exclusive write
 - `docs/eduos/**`

@@ -1,0 +1,51 @@
+device_id: medicine_clinical_reflection_semantics
+version: 1
+anchors:
+- id: a_sgp_consent_intro
+  dimension: semantic_gravity
+  value: SG+
+  numeric: 2
+  span_text: I introduced myself and explained the procedure, obtained consent, and washed hands.
+  rationale: Concrete first-person episode — this patient encounter.
+  source: OSCE abdominal formative sample
+- id: a_sgp_positioning
+  dimension: semantic_gravity
+  value: SG+
+  numeric: 2
+  span_text: Patient was positioned supine with one pillow. I exposed the abdomen from xiphisternum to symphysis.
+  rationale: Specific procedural steps on this patient.
+  source: OSCE abdominal formative sample
+- id: a_sgp_rif_findings
+  dimension: semantic_gravity
+  value: SG+
+  numeric: 2
+  span_text: Right iliac fossa tenderness identified near McBurney point; guarding and rebound tenderness present
+  rationale: Localised physical findings from this exam.
+  source: OSCE abdominal formative sample
+- id: a_sgm_differential
+  dimension: semantic_gravity
+  value: SG-
+  numeric: 3
+  span_text: Differential includes appendicitis.
+  rationale: Generalisable clinical category beyond the singular narrative beat.
+  source: OSCE abdominal formative sample
+- id: a_sgmm_principle_reflection
+  dimension: semantic_gravity
+  value: SG--
+  numeric: 4
+  span_text: On reflection I will slow down consent next time and check for hernia more carefully.
+  rationale: Abstracted improvement principle decontextualised from the episode.
+  source: OSCE abdominal formative sample
+- id: a_sdp_clinical_condensation
+  dimension: semantic_density
+  value: SD+
+  span_text: Rovsing sign negative. Percussion was tympanic; bowel sounds present and normal on auscultation.
+  rationale: Condensed clinical signs / exam language.
+  source: OSCE abdominal formative sample
+- id: a_sdm_unpacked_appearance
+  dimension: semantic_density
+  value: SD-
+  span_text: On general appearance the patient looked uncomfortable with RIF pain. Abdominal contour was flat; no scars or masses; skin normal.
+  rationale: Unpacked observational narration.
+  source: OSCE abdominal formative sample
+note: Seeded from OSCE abdominal formative sample; expand via HITL promotions before summative.

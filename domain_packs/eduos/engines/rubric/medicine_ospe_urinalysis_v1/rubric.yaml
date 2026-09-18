@@ -1,0 +1,63 @@
+id: medicine_ospe_urinalysis
+version: 1
+engine: rubric
+name: 'OSPE Station: Urinalysis (draft)'
+description: Quantitative checklist OSPE scaffold ported conceptually from gradevance2
+  OSPE fixtures. Multi-domain proof — medicine vertical, not English writing.
+discipline: medicine
+genre: ospe_station
+level: ug_clinical
+status: draft
+mode: hybrid
+aggregation:
+  type: weighted_mean
+criteria:
+- id: specimen_handling
+  name: Specimen handling & safety
+  weight: 0.25
+  scoring: quantitative
+  checklist_items:
+  - id: sh1
+    label: PPE / gloves
+    keywords: [gloves, PPE, hand hygiene, washed hands]
+    points: 1.0
+  - id: sh2
+    label: Labels checked
+    keywords: [label, patient identity, verified, checked name]
+    points: 1.0
+  - id: sh3
+    label: Spill / biohazard awareness
+    keywords: [biohazard, spill, discard, sharps]
+    points: 1.0
+- id: dipstick_technique
+  name: Dipstick technique
+  weight: 0.35
+  scoring: quantitative
+  checklist_items:
+  - id: ds1
+    label: Mix specimen
+    keywords: [mixed, invert, swirled]
+    points: 1.0
+  - id: ds2
+    label: Correct immersion time
+    keywords: [immersed, dipstick, seconds, timing]
+    points: 1.0
+  - id: ds3
+    label: Reads against chart
+    keywords: [colour chart, color chart, compared, read results]
+    points: 1.0
+- id: interpretation
+  name: Result interpretation
+  weight: 0.25
+  scoring: qualitative
+  bands: [Unsatisfactory, Satisfactory, Good, Excellent]
+  description: Links findings to clinical significance.
+- id: documentation
+  name: Documentation & reflection
+  weight: 0.15
+  scoring: qualitative
+  bands: [Unsatisfactory, Satisfactory, Good, Excellent]
+band_descriptors_file: band_descriptors.yaml
+action_templates_file: action_templates.yaml
+hitl:
+  learning_enabled: true

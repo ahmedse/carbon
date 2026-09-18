@@ -20,7 +20,7 @@ Three nouns, kept strictly distinct:
 | Noun | Definition | Examples |
 |------|-----------|----------|
 | **Platform** | The shared, app-agnostic core: Catalog, MDM, DQ, Evidence, Connections, RBAC/OrgUnit, AI/Pulse, shell. Owned by ClearTurn. | one, shared |
-| **Instance** | A deployment for a customer/brand: its own env config, branding, enabled apps, isolated DB. | AASTMT · GOFSCO Nibras · ClearTurn Tectona |
+| **Instance** | A deployment for a customer/brand: its own env config, branding, enabled apps, isolated DB. | AASTMT · GOFSCO Nibras · ClearTurn medOS · ClearTurn EduOS · ClearTurn Tectona |
 | **App** | A hosted domain app that plugs into the platform (imports core, never imported by it, never imports a sibling app). | Carbon, Nibras HRMS, Healthy, … |
 
 **Customers get a deployed instance, not the codebase.** Co-locating all apps in one repo
@@ -57,9 +57,31 @@ Brand: "Nibras / نبراس". Anchor customer for the commercial product.
 
 See `docs/NIBRAS-MASTER-STRATEGY.md` for the full Nibras strategy.
 
+### Instance: **ClearTurn medOS**
+Owner: ClearTurn healthcare / clinical operations line.
+Brand: "ClearTurn · medOS". Canonical: `medos.clearturn.tech`.
+
+| App | Purpose | Status |
+|-----|---------|--------|
+| **(future)** | Clinical / claims / ops apps | PLANNED |
+
+### Instance: **ClearTurn EduOS**
+Owner: ClearTurn education line (Education Operating System).
+Brand: "ClearTurn · EduOS". Canonical: `eduos.clearturn.tech`.
+**Not Nibras.** EduOS is the home of GradeVance. Development may occur in this
+monorepo while other masters work Nibras; that is logistics, not product home.
+
+| App | Purpose | Status |
+|-----|---------|--------|
+| **GradeVance** | Multi-domain assessment + coaching (OSCE/OSPE, case-based, articles, …; LCT + Rubric packs) | DESIGN |
+| **(later)** | Additional education apps (e.g. banks, logistics) | FUTURE |
+
+Canonical design: `docs/eduos/GRADEVANCE-DESIGN.md` · ADR-0038.
+
 ### Instance: **ClearTurn Tectona**
-Owner: ClearTurn's own flagship AI-platform instance (showcase + first-party apps).
-Brand: "ClearTurn Tectona".
+Owner: ClearTurn's own flagship **AI** platform instance (showcase + first-party AI apps).
+Brand: "ClearTurn Tectona". Canonical: `tectona.clearturn.tech`.
+**Separate from EduOS** — Tectona hosts AI product surfaces (e.g. Healthy), not education apps.
 
 | App | Purpose | Status |
 |-----|---------|--------|
@@ -72,6 +94,18 @@ enabled apps + isolated DB — **no fork, no new codebase.**
 
 ---
 
+## 2.1 Naming lock (do not conflate)
+
+| Name | Kind | Role |
+|------|------|------|
+| ClearTurn Trust Platform | Platform (codebase) | Shared core |
+| Pulse | AI engine | Shared in-hand reasoning (not an instance) |
+| **EduOS** | Instance brand | Education OS — GradeVance home |
+| **medOS** | Instance brand | Healthcare OS |
+| **Tectona** | Instance brand | AI showcase / AI apps host |
+| **Nibras** | Instance brand | GOFSCO ERP (People/Payroll) |
+| **GradeVance** | Domain app | Multi-domain assessment + coaching on EduOS |
+| LCT / Rubric engines | Config packs | Pluggable plugins under GradeVance |
 ## 3. WHY ONE CODEBASE (AND NOT FORKS)
 
 - **Shared platform evolves once.** Every Pulse fix, DQ engine improvement, and catalog
@@ -95,7 +129,7 @@ enabled apps + isolated DB — **no fork, no new codebase.**
 | **App registration** | `carbon-frontend/src/apps/registry.js` (`APP_REGISTRY`) + `src/apps/<app>/manifest.js` | ✅ Register-all + enable-per-instance (`carbon`, `healthy`, `stub` registered; visibility gated by `PlatformAppConfig.is_enabled`) |
 | **Data** | Separate database per deployment | ✅ By deployment (see `docs/` deployment notes) |
 | **Code boundaries** | Core never imports apps (RULE_3); apps never import sibling apps | ✅ Both gates in `.ai-toolkit/scripts/audit-imports.sh` — engine boundary (I1) + app-to-app boundary (I2); excludes tests/management tooling |
-| **Instance .env presets** | Per-instance preset files deployers copy to `.env` | ✅ `carbon-frontend/.env.instance.{aastmt,nibras,tectona}` |
+| **Instance .env presets** | Per-instance preset files deployers copy to `.env` | ✅ `carbon-frontend/.env.instance.{aastmt,nibras,medos,eduos,tectona}` |
 | **Theme** | `theme/carbonTheme.js` (name is cosmetic; palette is config) | ⚠️ Optional: generalize name/palette per instance |
 
 ---
@@ -107,7 +141,7 @@ None are blockers; the model works today. Items marked ✅ are already done.
 1. ✅ **App-to-app import guard.** Extended `audit-imports.sh` with gate I2: hosted apps
    may not import sibling apps; core apps may not import hosted apps. Tests and management
    commands are excluded (tooling exemption). Wired into `verify.sh`.
-2. ✅ **Per-instance branding presets.** `carbon-frontend/.env.instance.{aastmt,nibras,tectona}`
+2. ✅ **Per-instance branding presets.** `carbon-frontend/.env.instance.{aastmt,nibras,medos,eduos,tectona}`
    — deployers `cp` the relevant preset to `.env` and adjust API URL/ports.
 3. ✅ **Instance-aware app registration.** Decision: register-all + enable-per-instance.
    `apps/registry.js` registers every installed manifest (`carbon`, `healthy`, `stub`);
@@ -150,6 +184,8 @@ None are blockers; the model works today. Items marked ✅ are already done.
 |-----|-------|
 | **This doc** | ClearTurn platform product line — instances, apps, isolation |
 | `docs/NIBRAS-MASTER-STRATEGY.md` | The Nibras instance (GOFSCO) — strategy, compliance, roadmap |
+| `docs/eduos/GRADEVANCE-DESIGN.md` | GradeVance + LCT/Rubric engines on EduOS |
+| `.ai-toolkit/decisions/0038-eduos-gradevance.md` | Naming + topology ADR |
 | `ARCHITECTURE.md` / `.ai-toolkit/` | Platform internals, rules, conventions |
 | `backend/appregistry/` | The app registry implementation |
 | `carbon-frontend/src/config/branding.js` | Per-instance branding source of truth |

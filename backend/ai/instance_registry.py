@@ -16,6 +16,7 @@ _BRAND_INSTANCE_MAP = {
     "aastmt": ("carbon", "carbon"),
     "nibras": ("nibras", "people"),
     "medos": ("medos", "medos"),
+    "eduos": ("eduos", "gradevance"),
     "tectona": ("tectona", "healthy"),
 }
 

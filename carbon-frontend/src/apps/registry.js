@@ -9,6 +9,7 @@ import peopleManifest from './people/manifest.js';
 import myManifest from './my/manifest.js';
 import teamManifest from './team/manifest.js';
 import stubManifest from './stub/manifest.js';
+import gradevanceManifest from './gradevance/manifest.js';
 
 // Registration policy: REGISTER-ALL + ENABLE-PER-INSTANCE.
 // Every installed app manifest is imported and registered here so the shell,
@@ -24,6 +25,7 @@ export const APP_REGISTRY = [
   myManifest,
   teamManifest,
   stubManifest,
+  gradevanceManifest,
 ];
 
 /** Look up a manifest by app id. */

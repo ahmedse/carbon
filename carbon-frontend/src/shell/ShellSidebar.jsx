@@ -72,6 +72,12 @@ import SearchIcon from '@mui/icons-material/Search';
 import PolicyIcon from '@mui/icons-material/Policy';
 import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
+import CreateIcon from '@mui/icons-material/Create';
+import EditNoteIcon from '@mui/icons-material/EditNote';
+import RateReviewIcon from '@mui/icons-material/RateReview';
+import LightbulbIcon from '@mui/icons-material/Lightbulb';
+import ClassIcon from '@mui/icons-material/Class';
+import VerifiedIcon from '@mui/icons-material/Verified';
 import { useAuth } from '../auth/AuthContext';
 import { APP_REGISTRY } from '../apps/registry';
 import { can, hasAppAccess } from '../authz';
@@ -79,6 +85,47 @@ import { useEnabledApps } from '../hooks/useEnabledApps';
 import { MENU_ITEM_CAPABILITIES } from '../capabilities';
 import { useTranslation } from 'react-i18next';
 import { shellLabel, STUDIO_TITLE_KEYS } from '../i18n/shellLabels';
+
+/** Resolve MUI icon component from manifest `icon` name (or label fallback). */
+const MANIFEST_NAV_ICONS = {
+  Dashboard: DashboardIcon,
+  MenuBook: MenuBookIcon,
+  Create: CreateIcon,
+  EditNote: EditNoteIcon,
+  RateReview: RateReviewIcon,
+  Lightbulb: LightbulbIcon,
+  School: SchoolIcon,
+  Class: ClassIcon,
+  Verified: VerifiedIcon,
+  MonitorHeart: MonitorHeartIcon,
+  Assessment: AssessmentIcon,
+  TableChart: TableChartIcon,
+  People: PeopleIcon,
+  AccountBalanceWallet: AccountBalanceWalletIcon,
+  Storage: StorageIcon,
+};
+
+const GRADEVANCE_ITEM_ICONS = {
+  Overview: DashboardIcon,
+  'Courses & stems': ClassIcon,
+  Calibration: VerifiedIcon,
+  'Pack library': MenuBookIcon,
+  Library: MenuBookIcon,
+  Authoring: CreateIcon,
+  'Student desk': EditNoteIcon,
+  'Marking queue': RateReviewIcon,
+  Proposals: LightbulbIcon,
+};
+
+function resolveNavIcon(item, labelFallbackMap = {}) {
+  if (item?.icon && MANIFEST_NAV_ICONS[item.icon]) {
+    return MANIFEST_NAV_ICONS[item.icon];
+  }
+  if (item?.label && labelFallbackMap[item.label]) {
+    return labelFallbackMap[item.label];
+  }
+  return DashboardIcon;
+}
 
 // UI-driven icon mapping for Carbon sidebar items
 // This allows icons to be chosen at runtime without hardcoding
@@ -235,6 +282,15 @@ function getSidebarItems(studioId, helpApps = []) {
       ];
     
     case 'apps':
+    case 'healthy': {
+      // Legacy 'apps' studio + Healthy Foods Factory — prefer manifest when present
+      const healthyApp = APP_REGISTRY.find((m) => m.id === 'healthy');
+      if (healthyApp?.navigation?.items?.length) {
+        return healthyApp.navigation.items.map((item) => ({
+          ...item,
+          icon: DashboardIcon,
+        }));
+      }
       return [
         { label: 'Healthy Dashboard', path: '/apps/healthy', icon: DashboardIcon },
         { type: 'divider' },
@@ -244,7 +300,18 @@ function getSidebarItems(studioId, helpApps = []) {
         { label: 'AR Queue', path: '/apps/healthy/collections', icon: AccountBalanceWalletIcon },
         { label: 'Slow Movers', path: '/apps/healthy/inventory', icon: StorageIcon },
       ];
-    
+    }
+
+    case 'gradevance': {
+      const gv = APP_REGISTRY.find((m) => m.id === 'gradevance');
+      if (gv?.navigation?.items?.length) {
+        return gv.navigation.items.map((item) => ({
+          ...item,
+          icon: resolveNavIcon(item, GRADEVANCE_ITEM_ICONS),
+        }));
+      }
+      return [];
+    }    
     case 'people': {
       // People app — read from manifest, resolve icons by label (mirrors case 'carbon')
       const peopleApp = APP_REGISTRY.find(m => m.id === 'people');
@@ -287,7 +354,7 @@ function getSidebarItems(studioId, helpApps = []) {
       if (manifest) {
         return manifest.navigation.items.map(item => ({
           ...item,
-          icon: DashboardIcon,   // Future: add iconName to manifest nav items for dynamic resolution
+          icon: resolveNavIcon(item),
         }));
       }
       return [];

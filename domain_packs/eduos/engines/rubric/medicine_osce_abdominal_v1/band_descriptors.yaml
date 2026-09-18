@@ -1,0 +1,21 @@
+criterion_bands:
+  clinical_reasoning_and_differential:
+    Excellent: Synthesises findings into coherent clinical picture. Provides ranked
+      differential with clear reasoning for each. Links specific signs to pathology.
+      Considers red flags and alternative diagnoses.
+    Good: Connects main findings to likely diagnosis. Lists 2-3 differentials with
+      some reasoning. Shows understanding of key signs (e.g. McBurney's point significance).
+    Satisfactory: Identifies appendicitis as likely but reasoning is incomplete. Limited
+      differential. Some findings mentioned but not clearly linked to pathology.
+    Unsatisfactory: Poor clinical reasoning. Fails to link findings to differential.
+      Missing key diagnoses or incorrect reasoning.
+  reflective_practice:
+    Excellent: Deep metacognitive reflection. Identifies specific procedural steps
+      performed well and those needing improvement. References clinical standards.
+      Plans concrete improvement actions.
+    Good: Genuine reflection with some self-awareness. Notes key areas of strength
+      and weakness. Some specificity about what could improve.
+    Satisfactory: Surface-level reflection. Generic statements about doing better.
+      Limited insight into specific procedural gaps.
+    Unsatisfactory: No meaningful reflection. Purely descriptive without self-evaluation.
+source: gradevance2/tests/fixtures/sample_assignments/osce_abdominal_exam.json

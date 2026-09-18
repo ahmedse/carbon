@@ -19,6 +19,7 @@ import GroupsIcon from '@mui/icons-material/Groups';
 import PersonIcon from '@mui/icons-material/Person';
 import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
 import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
+import SchoolIcon from '@mui/icons-material/School';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { APP_REGISTRY } from '../apps/registry';
 import { useAuth } from '../auth/AuthContext';
@@ -38,6 +39,7 @@ const APP_ICONS = {
   SupervisorAccount: SupervisorAccountIcon,
   MonitorHeart: MonitorHeartIcon,
   Diversity3: GroupsIcon,
+  School: SchoolIcon,
 };
 
 function DomainStrip({ app }) {

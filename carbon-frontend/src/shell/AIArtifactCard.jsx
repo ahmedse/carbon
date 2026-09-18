@@ -15,6 +15,7 @@ const TYPE_META = {
   query:     { label: 'Query',     icon: QueryStatsIcon,  color: 'info' },
   rule_set:  { label: 'Rule set',  icon: RuleIcon,        color: 'warning' },
   analysis:  { label: 'Analysis',  icon: AnalyticsIcon,   color: 'secondary' },
+  job_map:   { label: 'Job Map',   icon: AssessmentIcon,  color: 'success' },
 };
 
 function typeIcon(artifactType) {

@@ -50,6 +50,7 @@ const RowDetailPage = React.lazy(() => import("./pages/dataschema/RowDetailPage"
 const MetadataManagementPage = React.lazy(() => import("./pages/catalog/MetadataManagementPage"));
 const AssetsPage = React.lazy(() => import("./pages/catalog/AssetsPage"));
 const MDMPage = React.lazy(() => import("./pages/catalog/MDMPage"));
+const DatasetsPage = React.lazy(() => import("./pages/catalog/DatasetsPage"));
 const ConnectionsPage = React.lazy(() => import("./pages/catalog/ConnectionsPage"));
 const ImportExportPage = React.lazy(() => import("./pages/catalog/ImportExportPage"));
 const CatalogHome = React.lazy(() => import("./pages/catalog/CatalogHome"));
@@ -115,6 +116,15 @@ const LoadoutSheetPage = React.lazy(() => import("./apps/healthy/LoadoutSheetPag
 const RepHealthPage = React.lazy(() => import("./apps/healthy/RepHealthPage"));
 const ARQueuePage = React.lazy(() => import("./apps/healthy/ARQueuePage"));
 const SlowMoversPage = React.lazy(() => import("./apps/healthy/SlowMoversPage"));
+const GradeVanceHome = React.lazy(() => import("./apps/gradevance/GradeVanceHome"));
+const GradeVanceLibraryPage = React.lazy(() => import("./apps/gradevance/LibraryPage"));
+const GradeVanceStudentDeskPage = React.lazy(() => import("./apps/gradevance/StudentDeskPage"));
+const GradeVanceMarkingPage = React.lazy(() => import("./apps/gradevance/MarkingPage"));
+const GradeVanceProposalsPage = React.lazy(() => import("./apps/gradevance/ProposalsPage"));
+const GradeVanceCoursesPage = React.lazy(() => import("./apps/gradevance/CoursesPage"));
+const GradeVanceAssignmentHubPage = React.lazy(() => import("./apps/gradevance/AssignmentHubPage"));
+const GradeVanceRunWorkbenchPage = React.lazy(() => import("./apps/gradevance/RunWorkbenchPage"));
+const GradeVanceCalibrationPage = React.lazy(() => import("./apps/gradevance/CalibrationPage"));
 const PeopleHome = React.lazy(() => import("./apps/people/PeopleHome"));
 const EmployeesPage = React.lazy(() => import("./apps/people/EmployeesPage"));
 const EmployeeDetailPage = React.lazy(() => import("./apps/people/EmployeeDetailPage"));
@@ -296,6 +306,17 @@ export default function App() {
                 <Route path="/apps/healthy/reps" element={<RepHealthPage />} />
                 <Route path="/apps/healthy/collections" element={<ARQueuePage />} />
                 <Route path="/apps/healthy/inventory" element={<SlowMoversPage />} />
+                {/* GradeVance — EduOS multi-domain assessment (enabled via PlatformAppConfig) */}
+                <Route path="/apps/gradevance" element={<AppEnabledRoute appId="gradevance"><GradeVanceHome /></AppEnabledRoute>} />
+                <Route path="/apps/gradevance/courses" element={<AppEnabledRoute appId="gradevance"><GradeVanceCoursesPage /></AppEnabledRoute>} />
+                <Route path="/apps/gradevance/assignments/:assignmentId" element={<AppEnabledRoute appId="gradevance"><GradeVanceAssignmentHubPage /></AppEnabledRoute>} />
+                <Route path="/apps/gradevance/runs/:runId" element={<AppEnabledRoute appId="gradevance"><GradeVanceRunWorkbenchPage /></AppEnabledRoute>} />
+                <Route path="/apps/gradevance/calibration" element={<AppEnabledRoute appId="gradevance"><GradeVanceCalibrationPage /></AppEnabledRoute>} />
+                <Route path="/apps/gradevance/library" element={<AppEnabledRoute appId="gradevance"><GradeVanceLibraryPage /></AppEnabledRoute>} />
+                <Route path="/apps/gradevance/authoring" element={<Navigate to="/apps/gradevance/courses" replace />} />
+                <Route path="/apps/gradevance/student" element={<AppEnabledRoute appId="gradevance"><GradeVanceStudentDeskPage /></AppEnabledRoute>} />
+                <Route path="/apps/gradevance/marking" element={<AppEnabledRoute appId="gradevance"><GradeVanceMarkingPage /></AppEnabledRoute>} />
+                <Route path="/apps/gradevance/proposals" element={<AppEnabledRoute appId="gradevance"><GradeVanceProposalsPage /></AppEnabledRoute>} />
                 {/* People app — Nibras HR & payroll. Bare namespace root resolves to PeopleHome. RULE_22. */}
                 <Route path="/people" element={<PeopleHome />} />
                 <Route path="/people/positions" element={<PositionsPage />} />
@@ -480,6 +501,7 @@ export default function App() {
                   <Route path="/catalog/dq-dashboard" element={<Navigate to="/dq" replace />} />
                   <Route path="/catalog/dq-rules" element={<Navigate to="/dq" replace />} />
                   <Route path="/catalog/mdm" element={<MDMPage />} />
+                  <Route path="/catalog/datasets" element={<DatasetsPage />} />
                   <Route path="/catalog/mdm/reference-sets/:setId" element={<ReferenceSetDetailPage />} />
                   <Route path="/catalog/connections" element={<ConnectionsPage />} />
                   <Route path="/catalog/importexport" element={<ImportExportPage />} />

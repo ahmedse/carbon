@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clearturn.tech/schemas/gradevance/translation_device.schema.json",
+  "title": "GradeVance TranslationDevice",
+  "type": "object",
+  "required": [
+    "id",
+    "version",
+    "engine",
+    "discipline",
+    "genre",
+    "dimension_set",
+    "scale",
+    "status"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "engine": {
+      "const": "lct_semantics"
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "discipline": {
+      "type": "string"
+    },
+    "genre": {
+      "type": "string"
+    },
+    "level": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "validated",
+        "published",
+        "archived"
+      ]
+    },
+    "dimension_set": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "enum": [
+          "semantic_gravity",
+          "semantic_density"
+        ]
+      }
+    },
+    "scale": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "type",
+          "levels"
+        ],
+        "properties": {
+          "type": {
+            "enum": [
+              "binary",
+              "ordinal"
+            ]
+          },
+          "levels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 2
+          },
+          "numeric": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "map": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "axis_note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "reliability_gate": {
+      "type": "object",
+      "properties": {
+        "metric": {
+          "enum": [
+            "cohen_kappa",
+            "krippendorff_alpha"
+          ]
+        },
+        "minimum": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "required_for_summative": {
+          "type": "boolean"
+        }
+      }
+    },
+    "hitl": {
+      "type": "object",
+      "properties": {
+        "learning_enabled": {
+          "type": "boolean"
+        },
+        "promote_edits_to_anchors": {
+          "type": "boolean"
+        },
+        "require_review_below_confidence": {
+          "type": "number"
+        }
+      }
+    },
+    "anchors_file": {
+      "type": "string"
+    },
+    "boundary_pairs_file": {
+      "type": "string"
+    },
+    "segmentation_file": {
+      "type": "string"
+    },
+    "held_out_file": {
+      "type": "string"
+    }
+  }
+}

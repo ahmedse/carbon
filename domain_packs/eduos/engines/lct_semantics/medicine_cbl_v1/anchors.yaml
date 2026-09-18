@@ -1,0 +1,25 @@
+device_id: medicine_cbl_semantics
+version: 1
+anchors:
+- id: a_sgp_case
+  dimension: semantic_gravity
+  value: SG+
+  numeric: 2
+  span_text: The 22-year-old reported migratory pain to the right iliac fossa overnight.
+  rationale: Case-particular narrative grounded in this patient.
+- id: a_sgm_principle
+  dimension: semantic_gravity
+  value: SG-
+  numeric: 3
+  span_text: Appendicitis classically progresses from visceral to somatic peritoneal irritation.
+  rationale: Pathophysiological principle decontextualised from a single bedside moment.
+- id: a_sdp_condensed
+  dimension: semantic_density
+  value: SD+
+  span_text: Guarding and rebound suggest localised peritonism; Rovsing was negative.
+  rationale: Condensed clinical concepts.
+- id: a_sdm_narrative
+  dimension: semantic_density
+  value: SD-
+  span_text: She said the pain started around the belly button and later moved to the right side.
+  rationale: Plain narrative retelling without condensed clinical lexicon.

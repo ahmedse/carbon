@@ -664,6 +664,53 @@ PEOPLE_VIEW_COMPENSATION = Capability(
     category="data",
 )
 
+# ── GradeVance (EduOS) ─────────────────────────────────────────────
+
+GRADEVANCE_VIEW = Capability(
+    key="gradevance:view",
+    domain="gradevance",
+    action="view",
+    label="View GradeVance",
+    description="Browse GradeVance profiles, assignments, runs, and coaching outputs",
+    category="data",
+)
+
+GRADEVANCE_MANAGE = Capability(
+    key="gradevance:manage",
+    domain="gradevance",
+    action="manage",
+    label="Manage GradeVance",
+    description="Author assignments, publish profiles, configure packs, and administer GradeVance",
+    category="admin",
+)
+
+GRADEVANCE_MARK = Capability(
+    key="gradevance:mark",
+    domain="gradevance",
+    action="mark",
+    label="Mark GradeVance",
+    description="Work the review queue, edit LCT codes and rubric scores, release summative marks",
+    category="data",
+)
+
+GRADEVANCE_SUBMIT = Capability(
+    key="gradevance:submit",
+    domain="gradevance",
+    action="submit",
+    label="Submit GradeVance",
+    description="Submit drafts and receive formative coaching",
+    category="general",
+)
+
+GRADEVANCE_QA = Capability(
+    key="gradevance:qa",
+    domain="gradevance",
+    action="qa",
+    label="GradeVance QA",
+    description="Reliability, bias, canary, and accreditation exports",
+    category="data",
+)
+
 CORRESPONDENCE_SUBMIT = Capability(
     key="correspondence:submit",
     domain="correspondence",
@@ -804,6 +851,12 @@ ALL_CAPABILITIES: Dict[str, Capability] = {
     PEOPLE_VIEW.key: PEOPLE_VIEW,
     PEOPLE_MANAGE.key: PEOPLE_MANAGE,
     PEOPLE_VIEW_COMPENSATION.key: PEOPLE_VIEW_COMPENSATION,
+    # GradeVance (EduOS)
+    GRADEVANCE_VIEW.key: GRADEVANCE_VIEW,
+    GRADEVANCE_MANAGE.key: GRADEVANCE_MANAGE,
+    GRADEVANCE_MARK.key: GRADEVANCE_MARK,
+    GRADEVANCE_SUBMIT.key: GRADEVANCE_SUBMIT,
+    GRADEVANCE_QA.key: GRADEVANCE_QA,
     # e-Office Correspondence + Self-Service
     CORRESPONDENCE_SUBMIT.key: CORRESPONDENCE_SUBMIT,
     CORRESPONDENCE_ACT.key: CORRESPONDENCE_ACT,
@@ -896,6 +949,17 @@ IMPLIES: Dict[str, Set[str]] = {
     # ── People manage → view (+ compensation) ──
     PEOPLE_MANAGE.key: {PEOPLE_VIEW.key, PEOPLE_VIEW_COMPENSATION.key},
 
+    # ── GradeVance manage/mark → view ──
+    GRADEVANCE_MANAGE.key: {
+        GRADEVANCE_VIEW.key,
+        GRADEVANCE_MARK.key,
+        GRADEVANCE_SUBMIT.key,
+        GRADEVANCE_QA.key,
+    },
+    GRADEVANCE_MARK.key: {GRADEVANCE_VIEW.key},
+    GRADEVANCE_QA.key: {GRADEVANCE_VIEW.key},
+    GRADEVANCE_SUBMIT.key: {GRADEVANCE_VIEW.key},
+
     # ── Correspondence admin → act/submit + self-service ──
     CORRESPONDENCE_ADMIN.key: {
         CORRESPONDENCE_ACT.key,
@@ -985,6 +1049,18 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         MY_ACCESS.key,
         TEAM_ACCESS.key,
     },
+
+    # ── GradeVance (EduOS) ──
+    "gradevance_lead": {
+        GRADEVANCE_MANAGE.key,
+    },
+    "gradevance_markers": {
+        GRADEVANCE_MARK.key,
+    },
+    "gradevance_students": {
+        GRADEVANCE_SUBMIT.key,
+    },
+
     # Every linked employee (global scope) → self-service "my" app baseline.
     "employee_group": {
         MY_ACCESS.key,

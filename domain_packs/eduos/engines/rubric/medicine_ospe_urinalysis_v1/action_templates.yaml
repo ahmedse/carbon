@@ -1,0 +1,11 @@
+templates:
+- id: d_ospe_timing
+  criterion: dipstick_technique
+  diagnosis: Dipstick timing or chart reading incomplete.
+  action: State immersion duration and which pad values you recorded.
+- id: d_ospe_safety
+  criterion: specimen_handling
+  diagnosis: Safety / identity steps missing.
+  action: Explicitly document PPE, label check, and disposal.
+source: scaffold
+hitl_note: Promote via ExpertEdit → ProposalMiner.

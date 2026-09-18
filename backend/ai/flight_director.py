@@ -1129,6 +1129,15 @@ class FlightDirector:
                 "flight acceptance summary persistence failed run=%s", run.id
             )
 
+        # ADR-0041 — mirror FlightDirector acceptance into Agent Job Map live_run.
+        try:
+            notes = dict(run.working_notes or {})
+            acceptance = (notes.get("flight") or {}).get("acceptance")
+            if acceptance:
+                self._patch_job_map_live_run(run, acceptance)
+        except Exception:  # noqa: BLE001
+            logger.debug("ops_canvas live_run patch failed", exc_info=True)
+
         row = (
             AcceptanceReport.objects.filter(run_id=run.id)
             .order_by("-created_at")
@@ -1155,6 +1164,16 @@ class FlightDirector:
             run.id, status, len(results),
         )
         return serialize_acceptance_report(run, row)
+
+    def _patch_job_map_live_run(self, run: Any, acceptance: dict) -> None:
+        """ADR-0041 — push FlightDirector QoS onto Agent Job Map live_run."""
+        from ai.ops_canvas import patch_live_run_qos
+
+        patch_live_run_qos(
+            conversation_id=getattr(run, "conversation_id", None),
+            plan_id=str(getattr(run, "id", "") or ""),
+            acceptance=acceptance or {},
+        )
 
 
 # ── Grow loop: outcome → learning + playbook (spec §3.6) ────────────────

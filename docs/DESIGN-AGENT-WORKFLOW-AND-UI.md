@@ -279,3 +279,13 @@ phase is demoable.
 Backend: `manage.py check` · targeted + full `ai` pytest · `import-boundary`, `failopen`,
 `forbidden-term` lints · replay-golden fixtures. Frontend: `vitest` unit/interaction ·
 `npm run build` · targeted Playwright e2e for retry/skip/branch.
+
+---
+
+## 10. Follow-on — Pulse Ops Canvas (Job Map)
+
+**ADR-0041** accepts a durable Job Map board beside Chat/Agent (closed typed kit;
+WorkObjectives + FlightDirector surfaced; optional attach to People/EduOS records).
+Does **not** replace ADR-0014 mode split or the Agent cockpit lifecycle — canvas is
+the reopenable artifact host. Research: `pulse-ops-canvas-research.canvas.tsx`.
+Implementation starts at ADR-0041 Phase 1 (host shell + canvas shelf).

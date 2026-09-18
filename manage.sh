@@ -739,11 +739,11 @@ cmd_health() {
 
 # ── Brand switch (multi-DB dev isolation) ─────────────────────────────────
 # Each brand has its OWN Postgres DB (aastmt→carbon_dev, nibras→nibras_dev,
-# medos→medos_dev, tectona→tectona_dev), derived in config/settings.py from
-# DJANGO_BRAND. The frontend has per-instance env files (.env.instance.<id>).
+# medos→medos_dev, tectona→tectona_dev, eduos→eduos_dev), derived in
+# config/settings.py from DJANGO_BRAND. Frontend: .env.instance.<id>.
 cmd_brand() {
     local brand="${1:-}"
-    local -a BRAND_IDS=(aastmt nibras medos tectona)
+    local -a BRAND_IDS=(aastmt nibras medos tectona eduos)
 
     # Mirrors BRAND_DB_NAMES in backend/config/settings.py
     local -A BRAND_DB=(
@@ -751,6 +751,7 @@ cmd_brand() {
         [nibras]=nibras_dev
         [medos]=medos_dev
         [tectona]=tectona_dev
+        [eduos]=eduos_dev
     )
 
     # Per-brand Redis DB index (isolates Django cache + Pulse ephemeral memory).
@@ -759,6 +760,7 @@ cmd_brand() {
         [nibras]=1
         [medos]=2
         [tectona]=3
+        [eduos]=4
     )
 
     # Backend branding — mirrors carbon-frontend/src/brands/*.js (single source
@@ -768,18 +770,21 @@ cmd_brand() {
         [nibras]="Nibras"
         [medos]="medOS"
         [tectona]="Tectona"
+        [eduos]="EduOS"
     )
     local -A BRAND_PLATFORM_SHORT=(
         [aastmt]="Data Trust"
         [nibras]="نبراس"
         [medos]="medOS"
         [tectona]="Tectona"
+        [eduos]="EduOS"
     )
     local -A BRAND_INSTANCE_NAME=(
         [aastmt]="AASTMT"
         [nibras]="Nibras"
         [medos]="ClearTurn"
         [tectona]="ClearTurn"
+        [eduos]="ClearTurn"
     )
 
     local current
@@ -1083,7 +1088,7 @@ cmd_help() {
     echo "  migrate            Run Django migrations"
     echo "  shell              Open Django shell"
     echo "  createsuperuser    Create a Django superuser (interactive)"
-    echo "  brand [id]         Show current brand, or switch (aastmt|nibras|medos|tectona)"
+    echo "  brand [id]         Show current brand, or switch (aastmt|nibras|medos|tectona|eduos)"
     echo "  test               Run backend tests (pytest)"
     echo "  schedules [--dry-run]  Materialize due plan schedules (W6-E F-29)"
     echo "  maintenance [--dry-run] [--loops]  Pulse heartbeat: consolidate/distill/decay"

@@ -1,0 +1,22 @@
+criterion_bands:
+  task_achievement:
+    F: At least one reflective stage missing (WHAT and/or SO WHAT and/or NOW WHAT);
+      or answer lacks relevant focus.
+    E: All stages present but WHAT lacks depth; SO WHAT superficial; NOW WHAT one
+      perspective only.
+    D: All stages; WHAT/SO WHAT generic; NOW WHAT one perspective.
+    C: WHAT specific/personal; SO WHAT some insight from ≥1 perspective; NOW WHAT
+      may be generic but linked (≥2 perspectives).
+    B: WHAT specific/personal; SO WHAT insight from >1 perspective; NOW WHAT linked
+      to examples (≥2 perspectives).
+    A: WHAT specific/personal; SO WHAT deep insight from >2 perspectives; NOW WHAT
+      insightful and excellently linked (≥3 perspectives).
+  coherence_cohesion:
+    F: Significant cohesive problems; hard to follow.
+    C: Ideas mostly linked; minor issues or overreliance on few cohesive phrases.
+    A: Accurate varied linking; cohesive problems not evident.
+  lexis_grammar_academic_style:
+    F: Very limited lexis/grammar; little academic style.
+    C: Adequate range; academic style with some lapses.
+    A: Wide accurate lexis/grammar; flawless academic style.
+source: gradevance2/raw Reflective writing pack (summarised)
