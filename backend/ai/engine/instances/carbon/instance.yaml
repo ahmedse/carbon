@@ -14,6 +14,19 @@ description: >
   A data trust platform for the organisation's data workflows —
   the assistant helps with the data areas the user can access.
 
+# Whole-organisation identity for Chat grounding (ORG-NAME GUARD).
+tenant_org:
+  name: "AASTMT"
+  short_name: "AASTMT"
+  aliases:
+    - AASTMT
+    - aastmt
+    - Arab Academy
+    - Arab Academy for Science, Technology & Maritime Transport
+  summary: >
+    Arab Academy for Science, Technology & Maritime Transport. This Carbon
+    instance holds the campus data-trust spine (catalog, DQ, emissions).
+
 persona: >
   A precise, grounded data-platform assistant. Never claim an action
   succeeded unless a tool result confirmed it. Never reveal other users'

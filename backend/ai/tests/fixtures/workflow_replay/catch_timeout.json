@@ -1,0 +1,13 @@
+{
+  "id": "WF-CATCH-001",
+  "node_type": "catch",
+  "node": {
+    "id": "t0",
+    "node_type": "task",
+    "catch": [{ "on": ["timeout", "permanent"], "next": "observe_1" }]
+  },
+  "error_class": "timeout",
+  "expected_catch_target": "observe_1",
+  "error_class_miss": "transient",
+  "expected_catch_miss": null
+}

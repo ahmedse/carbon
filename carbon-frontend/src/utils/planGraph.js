@@ -55,9 +55,9 @@ export function buildPlanGraph(plan) {
       const wn = wg.nodes.find((x) => x?.meta?.step_id === n.id);
       if (wn?.node_type) n.node_type = wn.node_type;
     });
-    // Synthetic gateways (choice / parallel / observe)
+    // Synthetic gateways (choice / parallel / observe / map / loop / wait)
     wg.nodes.forEach((wn) => {
-      if (!wn || !['choice', 'parallel', 'observe', 'map', 'loop'].includes(wn.node_type)) {
+      if (!wn || !['choice', 'parallel', 'observe', 'map', 'loop', 'wait'].includes(wn.node_type)) {
         return;
       }
       if (ids.has(wn.id)) return;
@@ -91,15 +91,74 @@ export function buildPlanGraph(plan) {
       });
     });
     if (resolved.length) {
+      // Prefer workflow_graph edges, but KEEP depends_on edges that the
+      // compiled graph does not cover (runtime follow-ups, heal inserts).
+      // Replacing wholesale caused "7 steps · 1 link" orphan graphs.
+      const keyOf = (e) => `${e.source}->${e.target}`;
+      const seen = new Set(resolved.map(keyOf));
+      const merged = [...resolved];
+      edges.forEach((e) => {
+        const k = keyOf(e);
+        if (seen.has(k)) return;
+        seen.add(k);
+        merged.push(e);
+      });
       edges.length = 0;
-      edges.push(...resolved);
+      edges.push(...merged);
     }
   }
+
+  annotateChoiceBranches(nodes, edges);
 
   // Deterministic ordering (source, then target) for stable renders + tests.
   edges.sort((a, b) => String(a.source).localeCompare(String(b.source), undefined, { numeric: true })
     || String(a.target).localeCompare(String(b.target), undefined, { numeric: true }));
   return { nodes, edges };
+}
+
+const _ACTIVE = new Set(['completed', 'running', 'awaiting_approval', 'failed']);
+
+/**
+ * Mark outgoing edges from ``choice`` gateways as chosen / unchosen / pending
+ * using live step statuses (skipped ⇒ unchosen; active ⇒ chosen).
+ * Also flips the choice gateway status to ``completed`` once a branch is taken.
+ *
+ * @param {Array<object>} nodes
+ * @param {Array<object>} edges
+ */
+export function annotateChoiceBranches(nodes, edges) {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const outBySource = new Map();
+  edges.forEach((e) => {
+    if (!outBySource.has(e.source)) outBySource.set(e.source, []);
+    outBySource.get(e.source).push(e);
+  });
+
+  nodes.forEach((n) => {
+    if (n.node_type !== 'choice') return;
+    const outs = outBySource.get(n.id) || [];
+    let anyChosen = false;
+    outs.forEach((e) => {
+      const target = byId.get(e.target);
+      const st = target?.status || 'pending';
+      if (st === 'skipped') {
+        e.branch = 'unchosen';
+      } else if (_ACTIVE.has(st)) {
+        e.branch = 'chosen';
+        anyChosen = true;
+      } else {
+        e.branch = 'pending';
+      }
+    });
+    if (anyChosen) {
+      n.status = 'completed';
+      // Remaining pending siblings are still waiting on the engine to skip them;
+      // treat as unchosen visually once a winner exists.
+      outs.forEach((e) => {
+        if (e.branch === 'pending') e.branch = 'unchosen';
+      });
+    }
+  });
 }
 
 /**
@@ -335,6 +394,10 @@ export function layoutExecutionGraph(plan) {
       return {
         source: e.source,
         target: e.target,
+        label: e.label || null,
+        guard: e.guard || null,
+        is_default: Boolean(e.is_default),
+        branch: e.branch || null,
         sourceX: s.x + L.nodeW,
         sourceY: s.y + L.nodeH / 2,
         targetX: t.x,

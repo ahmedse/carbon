@@ -365,8 +365,59 @@ class MemoryFactRestoreView(_MemoryBaseView):
                 status=status.HTTP_403_FORBIDDEN,
             )
         fact.archived = False
-        fact.save(update_fields=["archived"])
+        fact.valid_to = None
+        fact.save(update_fields=["archived", "valid_to"])
         return Response({"id": fact.pk, "archived": False})
+
+
+class MemoryFactRevokeView(_MemoryBaseView):
+    """POST /facts/{pk}/revoke/ — soft revoke for stewards (ADR-0036 Assets).
+
+    Keeps the row for provenance (unlike hard forget), sets ``archived=True``
+    and ``valid_to=now`` so retrieval stops using it.
+    """
+
+    def post(self, request, pk):
+        qs = self._scoped(
+            MemoryLongTerm.objects.filter(archived=False, superseded_by__isnull=True),
+            request,
+        )
+        fact = qs.filter(pk=pk).first()
+        if fact is None:
+            return Response({"detail": "Fact not found."}, status=status.HTTP_404_NOT_FOUND)
+        # Owner OR manage_console may revoke (org stewardship).
+        if not _can_forget(request.user, fact) and not has_capability(
+            request.user, "ai:manage_console"
+        ):
+            return Response(
+                {"detail": "You can only revoke facts you own (or with ai:manage_console)."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        reason = str(request.data.get("reason") or "").strip()
+        now = timezone.now()
+        fact.archived = True
+        fact.valid_to = now
+        fact.save(update_fields=["archived", "valid_to"])
+        AuditService.log(
+            action="ai.memory.revoke",
+            actor=request.user.username,
+            host_user_id=str(request.user.pk),
+            target=str(fact.pk),
+            detail={
+                "category": fact.category,
+                "reason": reason,
+                "valid_to": now.isoformat(),
+            },
+            visibility="shared",
+        )
+        return Response(
+            {
+                "id": fact.pk,
+                "archived": True,
+                "valid_to": now.isoformat(),
+                "revoked": True,
+            }
+        )
 
 
 class MemoryOrgFactsView(_MemoryBaseView):

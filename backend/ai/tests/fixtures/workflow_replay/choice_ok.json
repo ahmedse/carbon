@@ -1,0 +1,24 @@
+{
+  "id": "WF-CHOICE-001",
+  "node_type": "choice",
+  "context": { "status": "ok" },
+  "graph": {
+    "version": "1",
+    "entry": "t0",
+    "nodes": [
+      { "id": "t0", "node_type": "task", "intent": "probe", "meta": { "step_id": 0 } },
+      { "id": "c", "node_type": "choice", "intent": "pick" },
+      { "id": "t1", "node_type": "task", "intent": "ok", "meta": { "step_id": 1 } },
+      { "id": "t2", "node_type": "task", "intent": "bad", "meta": { "step_id": 2 } }
+    ],
+    "edges": [
+      { "source": "t0", "target": "c" },
+      { "source": "c", "target": "t1", "guard": "status == 'ok'" },
+      { "source": "c", "target": "t2", "is_default": true }
+    ]
+  },
+  "completed_step_ids": [0],
+  "expected_ready_tasks": [1],
+  "expected_skipped_steps": [2],
+  "expected_chosen_target": "t1"
+}

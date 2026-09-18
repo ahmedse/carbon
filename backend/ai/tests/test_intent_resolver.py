@@ -11,10 +11,13 @@ from ai.engine.cognition.turn.intent import (
     IntentCandidate,
     IntentResolution,
     IntentResolver,
+    _apply_compensation_override,
     _apply_ladder,
+    _apply_tenant_org_override,
     _build_label_set,
     _endpoint_to_domain_phrase,
     _is_mutation_request,
+    _message_mentions_tenant_org,
     _parse_json,
     _to_resolution,
 )
@@ -350,3 +353,125 @@ async def test_resolve_mocked_llm_error_returns_none(monkeypatch):
         api_catalog=[{"name": "list_emission_factors", "method": "GET", "description": "x"}],
     )
     assert result is None
+
+
+# ── Tenant-org clarify override (GOFSCO / company loop) ─────────────────────
+
+_GOFSCO_TENANT = {
+    "name": "GOFSCO — Gas & Oil Field Services Company",
+    "short_name": "GOFSCO",
+    "aliases": ["GOFSCO", "gofsco"],
+}
+
+
+def test_message_mentions_tenant_org_aliases_and_company():
+    assert _message_mentions_tenant_org("tell me more about gofsco", _GOFSCO_TENANT)
+    assert _message_mentions_tenant_org("data about the company", _GOFSCO_TENANT)
+    assert not _message_mentions_tenant_org("tell me about Abrar", _GOFSCO_TENANT)
+    assert not _message_mentions_tenant_org("the company", None)
+
+
+def test_tenant_org_override_rewrites_clarify_to_answer_with_employees_endpoint():
+    res = IntentResolution(
+        action="clarify",
+        clarification="What specifically about GOFSCO?",
+        confidence=0.7,
+    )
+    labels = _build_label_set([
+        {"name": "list_employees", "method": "GET", "description": "employees"},
+        {"name": "analyze_employees", "method": "GET", "description": "analyze"},
+    ])
+    out = _apply_tenant_org_override(
+        res,
+        user_message="tell me more about gofsco — the company and data in the system",
+        tenant_org=_GOFSCO_TENANT,
+        labels=labels,
+    )
+    assert out.action == "answer"
+    assert out.clarification == ""
+    assert out.candidates[0].name == "analyze_employees"
+
+
+def test_tenant_org_override_leaves_unrelated_clarify_alone():
+    res = IntentResolution(
+        action="clarify",
+        clarification="Which employee?",
+        confidence=0.7,
+    )
+    labels = _build_label_set([
+        {"name": "list_employees", "method": "GET", "description": "employees"},
+    ])
+    out = _apply_tenant_org_override(
+        res,
+        user_message="who is employee 1416?",
+        tenant_org=_GOFSCO_TENANT,
+        labels=labels,
+    )
+    assert out.action == "clarify"
+    assert out.clarification == "Which employee?"
+
+
+# ── B5 compensation routing override ────────────────────────────────────────
+
+_COMP_LABELS = _build_label_set([
+    {"name": "list_my_payslips", "method": "GET", "description": "payslips"},
+    {"name": "get_my_profile", "method": "GET", "description": "profile"},
+    {"name": "get_employee", "method": "GET", "description": "employee"},
+])
+
+
+def test_compensation_override_rewrites_my_salary_away_from_payslips():
+    res = IntentResolution(
+        action="answer",
+        delivery="lookup",
+        candidates=[IntentCandidate(name="list_my_payslips", confidence=0.88)],
+        confidence=0.88,
+        needs_host_data=True,
+    )
+    out = _apply_compensation_override(
+        res, user_message="What is my salary?", labels=_COMP_LABELS,
+    )
+    assert out.action == "answer"
+    assert out.candidates[0].name == "get_my_profile"
+    assert out.confidence >= 0.9
+
+
+def test_compensation_override_coworker_prefers_get_employee():
+    res = IntentResolution(
+        action="answer",
+        candidates=[IntentCandidate(name="list_payslip_lines", confidence=0.8)],
+        confidence=0.8,
+    )
+    labels = _build_label_set([
+        {"name": "list_payslip_lines", "method": "GET", "description": "payslips"},
+        {"name": "get_employee", "method": "GET", "description": "employee"},
+        {"name": "get_my_profile", "method": "GET", "description": "profile"},
+    ])
+    out = _apply_compensation_override(
+        res, user_message="What is Abrar's basic salary?", labels=labels,
+    )
+    assert out.candidates[0].name == "get_employee"
+
+
+def test_compensation_override_leaves_explicit_payslip_ask():
+    res = IntentResolution(
+        action="answer",
+        candidates=[IntentCandidate(name="list_my_payslips", confidence=0.9)],
+        confidence=0.9,
+    )
+    out = _apply_compensation_override(
+        res, user_message="Show my payslip lines", labels=_COMP_LABELS,
+    )
+    assert out.candidates[0].name == "list_my_payslips"
+
+
+def test_compensation_override_arabic_self_salary():
+    res = IntentResolution(
+        action="answer",
+        candidates=[IntentCandidate(name="list_my_payslips", confidence=0.85)],
+        confidence=0.85,
+    )
+    out = _apply_compensation_override(
+        res, user_message="كم راتبي؟", labels=_COMP_LABELS,
+    )
+    assert out.candidates[0].name == "get_my_profile"

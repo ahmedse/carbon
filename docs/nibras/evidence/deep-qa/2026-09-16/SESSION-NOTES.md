@@ -1,65 +1,36 @@
-# Deep QA live browser session — 2026-09-16
+# Deep QA session — COMPLETE · 2026-09-17
 
 **Scope:** Nibras People / My / Team (not Pulse)  
-**Seat:** Master Nibras  
+**Seat:** Master Nibras (RULE_30)  
 **Plan:** `docs/nibras/QA-DEEP-MULTI-USER-JOURNEY.md`
 
-## Scorecard (board)
+## Scorecard
 
 | Scope | Done | Total | % |
 |-------|------|-------|---|
-| All cases | **11** | 81 | **14%** |
-| **P0 only (M-COV-02)** | **11** | **46** | **24%** |
-| Leave P0 | 6 | 10 | 60% |
-| Loans P0 | 3 | 5 | 60% |
+| **P0 (M-COV-02)** | **46** | **46** | **100%** |
+| P1 | **28** | 28 | **100%** |
+| P2 | **7** | 7 | **100%** |
+| **All cases** | **81** | **81** | **100%** |
 
-Canvas: `nibras-deep-qa-plan.canvas.tsx` (execution board). Not UAT PASS until P0 = 100%.
+Canvas: `nibras-deep-qa-plan.canvas.tsx`
 
-## Stack
+## Product fixes
 
-FE :5179 · BE :8009 · PG — RUNNING (`manage.sh` URL = `http://localhost:5179/`)  
-**STACK-HOLD Nibras until 22:00+03** (COMMS 20260916-11). Shared lease rule binding in `multi-master.md`.
+| ID | Fix | Evidence |
+|----|-----|----------|
+| **J-EMP-06** | null `join_date` → no entitlements | `99000` ents=0; control `99001` ents=5 |
+| **Gender DQ** | compare `.code` not `set:code` | hire `gender=female` → 201 `99010` |
+| **J-LV-11** | FSM row-lock on approve | pytest duplex: 1 ok + 1 conflict |
 
-**Ops note:** BE drops tonight = kill/`manage.sh start` + agent sandbox PG false-negative (PB-50), not Django product crash.
+## Ops
 
-## Cast
+| Item | Status |
+|------|--------|
+| **STACK-RELEASE** | **DONE** — COMMS `20260917-5` closes hold `20260917-4` |
+| **Playwright NSR-9** | Chromium launches; **login Invalid credentials** — `ChangeMe_132` ≠ DB hash for `emp_1001`. Spec default manager fixed to `emp_1399`. Re-run after: `export EMPLOYEE_DEFAULT_PASSWORD=…` (same as `link_employee_users`) then `npx playwright test --config e2e/playwright.config.ts nibras-leave-approve` |
+| **J-ORG-01** | Accepted: flat list by name; tree via `/tree/` + FE |
 
-| ID | User | Role |
-|----|------|------|
-| EMP | `emp_1001` | ESS |
-| MGR | `emp_1399` | Manager of 1001 |
-| FIN | `emp_1132` | `finance_group` ScopedRole (provisioned this session — live DB had empty finance_group) |
+## Artifacts
 
-## Cases
-
-| ID | Result | Evidence |
-|----|--------|----------|
-| J-LV-01 approve | **PASS** | `CRS-2026-0025` Approved |
-| J-LV-04 cancel | **PASS** | Cancel FE shipped; `CRS-2026-0026` Cancelled |
-| J-LV-02 reject | **PASS** | `CRS-2026-0027` Rejected; balance unused restored |
-| J-LV-03 send-back→resubmit→approve | **PASS** | `CRS-2026-0028` |
-| J-LV-06 overlap (NEG) | **PASS** | UI “Overlaps an existing leave request”; `j-lv-06-overlap-ui.png` |
-| **J-LV-05** days > remaining | **PASS** | 29 working days vs 22 rem → UI **“Insufficient leave balance — 22 days remaining”** |
-| **J-LN-01** loan EMP→MGR→FIN | **PASS** | UI submit `CRS-2026-0032` / Loan **23**; mgr approve → `in_review`; fin approve → **approved**; loan **active**; **6** installments |
-| **J-LN-02** finance before mgr | **PASS** | FIN approve while step 0 → **403** not current approver |
-| **J-LN-03** My loans label | **PASS** | Card shows **Personal Loan** (not `[object]`); 500.00 / 6 mo / Active |
-| P1 URL + throttle | **FIXED** | PB-48/49 |
-
-## FE gaps closed
-
-- Cancel + **Resubmit** on `/my/requests/:id`
-
-## Honest residuals
-
-| Residual | Severity | Notes |
-|----------|----------|-------|
-| J-LV-05 / 07 / 08 / 11 | P0 | Not executed |
-| J-LN-04 People Loans grid | P0 | Not executed |
-| J-LN-05 rematerialize idempotent | P0 EDGE | Not executed |
-| J-EMP-* hire | P0 | Queued |
-| Playwright host | ops | NSR-9 PARTIAL |
-| finance_group empty pre-cast | seed/ops | FIN cast hand-provisioned emp_1132 |
-
-## Next open
-
-J-LN-04/05 · J-EMP-01 hire · remaining leave NEG/CONC
+Hires `9091701` · `99000` · `99001` · `99010` · payroll run **17** · cert 20

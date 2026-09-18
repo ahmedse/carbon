@@ -12,6 +12,7 @@ import {
   Box,
   Button,
   Dialog,
+  Drawer,
   DialogActions,
   DialogContent,
   DialogContentText,
@@ -39,6 +40,7 @@ import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import TaskAltOutlinedIcon from '@mui/icons-material/TaskAltOutlined';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../i18n/useLanguage';
+import { useIsMobile } from '../hooks/useIsMobile';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
 import {
@@ -76,9 +78,10 @@ const MODE_STORAGE_KEY = 'carbon-ai-mode';
 
 // RULE_17: Memory console persists its own tab internally (AIMemoryConsole).
 
-export function AIWorkspace({ onClose }) {
+export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   const { t } = useTranslation('ai');
   const { isRtl } = useLanguage();
+  const isMobile = useIsMobile();
   const { token } = useAuth();
   const { notifyFromError } = useNotification();
   const { pendingTransferId, clearPendingTransfer } = useAITaskTransfer();
@@ -119,6 +122,8 @@ export function AIWorkspace({ onClose }) {
   // the workspace switches to the Agent mode and the panel auto-opens the
   // created plan (consumed by AITaskPanel via onFocusPlanConsumed).
   const [tasksFocusPlanId, setTasksFocusPlanId] = useState(null);
+  // Agent Done → Chat: prefill composer with plan outcome context.
+  const [chatSeedDraft, setChatSeedDraft] = useState(null);
 
   const [drawerWidth, setDrawerWidth] = useState(200);
   const dragRef = useRef(null);
@@ -552,12 +557,14 @@ export function AIWorkspace({ onClose }) {
 
   return (
     <ExecuteModeProvider>
-      <Box sx={{ display: 'flex', height: '100%', bgcolor: 'background.default' }}>
+      <Box sx={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100%', bgcolor: 'background.default' }}>
 
         {/* Main content — leftmost, flex:1 */}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden', order: isMobile ? 1 : 0 }}>
           <AIWorkspaceHeader
             onClose={onClose}
+            expanded={expanded}
+            onToggleExpand={onToggleExpand}
             conversationId={activeConversation?.id ?? null}
             onConversationUpdated={handleConversationUpdated}
             onForked={handleForked}
@@ -588,7 +595,12 @@ export function AIWorkspace({ onClose }) {
               focusPlanId={tasksFocusPlanId}
               onFocusPlanConsumed={() => setTasksFocusPlanId(null)}
               onLifecycleStateChange={handleLifecycleStateChange}
-              onSwitchToChat={() => setMode('chat')}
+              onSwitchToChat={(draft) => {
+                if (typeof draft === 'string' && draft.trim()) {
+                  setChatSeedDraft(draft.trim());
+                }
+                setMode('chat');
+              }}
               externalTab={agentView}
             />
           ) : (
@@ -622,6 +634,8 @@ export function AIWorkspace({ onClose }) {
                   onOpenPanel={handleOpenPanel}
                   onForked={handleForked}
                   onConversationUpdated={handleConversationUpdated}
+                  seedDraft={chatSeedDraft}
+                  onSeedDraftConsumed={() => setChatSeedDraft(null)}
                 />
               ) : (
                 <AIEmptyState onStartChat={handleNewChat} manifests={manifests} onStartStarter={handleStartStarter} />
@@ -630,12 +644,80 @@ export function AIWorkspace({ onClose }) {
           )}
         </Box>
 
-        {/* Drawer — sessions or context; pushes chat area, never overlays */}
+        {/* Drawer — sessions/context: bottom sheet on mobile; push pane on desktop (ADR-0035) */}
         {(activePanel === 'sessions' || activePanel === 'context') && (
+          isMobile ? (
+          <Drawer
+            anchor="bottom"
+            open
+            onClose={() => setActivePanel(null)}
+            PaperProps={{ sx: { maxHeight: '75vh', borderTopLeftRadius: 2, borderTopRightRadius: 2 } }}
+          >
+            <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 280, overflow: 'hidden' }}>
+            {activePanel === 'sessions' ? (
+              <>
+                <Box sx={{ display: 'flex', alignItems: 'center', px: 1.25, py: 0.625, borderBottom: 1, borderColor: 'divider' }}>
+                  <Typography variant="caption" sx={{ flex: 1, fontWeight: 600, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'text.secondary' }}>
+                    {t('sessions')}
+                  </Typography>
+                  {archivedIds.length > 0 && (
+                    <Button size="small" variant={showArchived ? 'outlined' : 'text'} onClick={() => setShowArchived((v) => !v)} sx={{ fontSize: '0.65rem', minWidth: 0, px: 0.75, py: 0 }}>
+                      {t('archivedCount', { count: archivedIds.length })}
+                    </Button>
+                  )}
+                  <Tooltip title={t('collapse')}>
+                    <IconButton size="small" onClick={() => setActivePanel(null)} sx={{ p: 0.25, ml: 0.25, minWidth: 40, minHeight: 40 }} aria-label={t('collapseSessions')}>
+                      <ChevronRightIcon sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+                {effectiveActiveId && <AISuggestionRail conversationId={effectiveActiveId} />}
+                <Box sx={{ flex: 1, overflowY: 'auto' }}>
+                  <AIConversationTabs
+                    compact
+                    conversations={visibleConversations}
+                    activeId={effectiveActiveId}
+                    onSelect={handleSelect}
+                    onNew={handleNewChat}
+                    onClose={handleArchive}
+                    onRename={handleRename}
+                    onPin={handlePin}
+                    onArchive={handleToggleArchive}
+                    onDelete={(id) => setDeleteTarget(id)}
+                  />
+                </Box>
+              </>
+            ) : (
+              <Box sx={{ flex: 1, overflowY: 'auto' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', px: 1.25, py: 0.625, borderBottom: 1, borderColor: 'divider', position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1 }}>
+                  <Typography variant="caption" sx={{ flex: 1, fontWeight: 600, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'text.secondary' }}>
+                    {t('context')}
+                  </Typography>
+                  <Tooltip title={t('collapse')}>
+                    <IconButton size="small" onClick={() => setActivePanel(null)} sx={{ p: 0.25, minWidth: 40, minHeight: 40 }} aria-label={t('collapseContext')}>
+                      <ChevronRightIcon sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+                {activeConversation ? (
+                  <AIContextPanel
+                    conversation={activeConversation}
+                    mentions={[]}
+                    onSummarized={(updated) => setById((prev) => ({ ...prev, [updated.id]: { ...prev[updated.id], ...updated } }))}
+                    defaultOpen
+                  />
+                ) : (
+                  <Typography variant="caption" color="text.disabled" sx={{ display: 'block', p: 1.5, fontSize: '0.75rem' }}>
+                    {t('openConversationForContext')}
+                  </Typography>
+                )}
+              </Box>
+            )}
+            </Box>
+          </Drawer>
+          ) : (
           <Box sx={{ width: drawerWidth, flexShrink: 0, display: 'flex', flexDirection: 'column', ...(isRtl ? { borderRight: 1 } : { borderLeft: 1 }), borderColor: 'divider', overflow: 'hidden', position: 'relative' }}>
-            {/* Drag handle */}
             <Box onMouseDown={startDrawerResize} sx={{ position: 'absolute', ...(isRtl ? { right: 0 } : { left: 0 }), top: 0, bottom: 0, width: 4, cursor: 'col-resize', zIndex: 10, '&:hover': { bgcolor: 'primary.main', opacity: 0.4 } }} />
-
             {activePanel === 'sessions' ? (
               <>
                 <Box sx={{ display: 'flex', alignItems: 'center', px: 1.25, py: 0.625, borderBottom: 1, borderColor: 'divider' }}>
@@ -670,7 +752,6 @@ export function AIWorkspace({ onClose }) {
                 </Box>
               </>
             ) : (
-              /* Context drawer */
               <Box sx={{ flex: 1, overflowY: 'auto' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', px: 1.25, py: 0.625, borderBottom: 1, borderColor: 'divider', position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1 }}>
                   <Typography variant="caption" sx={{ flex: 1, fontWeight: 600, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'text.secondary' }}>
@@ -697,6 +778,7 @@ export function AIWorkspace({ onClose }) {
               </Box>
             )}
           </Box>
+          )
         )}
 
         {/* Activity bar — rightmost edge. W5-A (ADR-0014): each mode shows
@@ -705,15 +787,20 @@ export function AIWorkspace({ onClose }) {
             Results icons route into AITaskPanel's internal tabs. */}
         <Box
           sx={{
-            width: 32,
+            width: isMobile ? '100%' : 32,
+            height: isMobile ? 48 : 'auto',
             flexShrink: 0,
             display: 'flex',
-            flexDirection: 'column',
+            flexDirection: isMobile ? 'row' : 'column',
             alignItems: 'center',
-            borderLeft: 1,
+            justifyContent: isMobile ? 'space-around' : 'flex-start',
+            borderLeft: isMobile ? 0 : 1,
+            borderTop: isMobile ? 1 : 0,
             borderColor: 'divider',
             bgcolor: 'background.paper',
             py: 0.5,
+            order: isMobile ? 2 : 0,
+            overflowX: isMobile ? 'auto' : 'visible',
           }}
         >
           {mode === 'agent'

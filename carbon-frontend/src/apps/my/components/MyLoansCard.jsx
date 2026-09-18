@@ -20,6 +20,7 @@ import {
 } from '@mui/material';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import { useTranslation } from 'react-i18next';
+import ResponsiveList from '../../../components/layout/ResponsiveList';
 import { FONT } from '../../../theme/themeTokens';
 
 /** Nested governed value or plain string → display text. */
@@ -153,59 +154,72 @@ export default function MyLoansCard({ loans, loading, error, onRetry }) {
     <Card variant="outlined" data-testid="my-loans-card">
       <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
         <SectionTitle icon={AccountBalanceWalletIcon} title={t('loansTitle')} />
-        <TableContainer>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
-                  {t('loansType')}
-                </TableCell>
-                <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
-                  {t('loansPrincipal')}
-                </TableCell>
-                <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
-                  {t('loansTerm')}
-                </TableCell>
-                <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
-                  {t('loansStartDate')}
-                </TableCell>
-                <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
-                  {t('loansStatus')}
-                </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {loans.map((loan) => (
-                <TableRow key={loan.id} hover>
-                  <TableCell sx={{ ...FONT.body2 }}>
-                    {loanTypeLabel(loan.loan_type)}
-                  </TableCell>
-                  <TableCell
-                    align="right"
-                    sx={{ ...FONT.body2, fontVariantNumeric: 'tabular-nums' }}
-                    dir="ltr"
-                  >
-                    {formatAmount(loan.principal)}
-                  </TableCell>
-                  <TableCell align="right" sx={{ ...FONT.body2 }} dir="ltr">
-                    {loan.term_months ?? '—'}
-                  </TableCell>
-                  <TableCell sx={{ ...FONT.body2 }} dir="ltr">
-                    {loan.start_date ? String(loan.start_date).slice(0, 10) : '—'}
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      color={loanStatusColor(loan.status)}
-                      label={loanStatusLabel(loan.status, t)}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <ResponsiveList
+          items={loans}
+          getKey={(loan) => loan.id}
+          emptyLabel={t('loansEmpty')}
+          renderCard={(loan) => ({
+            title: loanTypeLabel(loan.loan_type),
+            status: loanStatusLabel(loan.status, t),
+            statusColor: loanStatusColor(loan.status),
+            meta: formatAmount(loan.principal),
+          })}
+          table={
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
+                      {t('loansType')}
+                    </TableCell>
+                    <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
+                      {t('loansPrincipal')}
+                    </TableCell>
+                    <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
+                      {t('loansTerm')}
+                    </TableCell>
+                    <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
+                      {t('loansStartDate')}
+                    </TableCell>
+                    <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
+                      {t('loansStatus')}
+                    </TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {loans.map((loan) => (
+                    <TableRow key={loan.id} hover>
+                      <TableCell sx={{ ...FONT.body2 }}>
+                        {loanTypeLabel(loan.loan_type)}
+                      </TableCell>
+                      <TableCell
+                        align="right"
+                        sx={{ ...FONT.body2, fontVariantNumeric: 'tabular-nums' }}
+                        dir="ltr"
+                      >
+                        {formatAmount(loan.principal)}
+                      </TableCell>
+                      <TableCell align="right" sx={{ ...FONT.body2 }} dir="ltr">
+                        {loan.term_months ?? '—'}
+                      </TableCell>
+                      <TableCell sx={{ ...FONT.body2 }} dir="ltr">
+                        {loan.start_date ? String(loan.start_date).slice(0, 10) : '—'}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          color={loanStatusColor(loan.status)}
+                          label={loanStatusLabel(loan.status, t)}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          }
+        />
       </CardContent>
     </Card>
   );

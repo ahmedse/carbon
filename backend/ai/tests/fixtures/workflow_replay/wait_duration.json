@@ -1,0 +1,16 @@
+{
+  "id": "WF-WAIT-001",
+  "node_type": "wait",
+  "context": {},
+  "node": {
+    "id": "w",
+    "node_type": "wait",
+    "meta": { "wait_ms": 50 }
+  },
+  "elapsed_ms": 0,
+  "expected_satisfied": false,
+  "expected_reason": "pending",
+  "elapsed_ms_done": 50,
+  "expected_satisfied_done": true,
+  "expected_reason_done": "duration"
+}

@@ -50,7 +50,7 @@ function DevelopmentBanner() {
       }
       sx={{
         position: 'sticky',
-        top: 56,
+        top: { xs: 48, sm: 56 },
         zIndex: theme.zIndex.appBar - 1,
         borderRadius: 0,
         borderLeft: 'none',
@@ -58,15 +58,16 @@ function DevelopmentBanner() {
         borderTop: 'none',
         py: 0,
         minHeight: 30,
-        '& .MuiAlert-icon': { py: 0, alignItems: 'center' },
+        '& .MuiAlert-icon': { py: 0, alignItems: 'center', display: { xs: 'none', sm: 'flex' } },
         '& .MuiAlert-message': {
           flex: 1,
           minWidth: 0,
           py: 0,
           display: 'flex',
           alignItems: 'center',
-          flexWrap: 'wrap',
+          flexWrap: 'nowrap',
           gap: 1,
+          overflow: 'hidden',
         },
         '& .MuiAlert-action': { alignItems: 'center', mr: 0, pl: 0, py: 0 },
       }}
@@ -82,10 +83,22 @@ function DevelopmentBanner() {
           fontWeight: 700,
           letterSpacing: '0.05em',
           textTransform: 'uppercase',
+          flexShrink: 0,
           '& .MuiChip-label': { px: 0.75 },
         }}
       />
-      <Typography component="span" variant="caption" sx={{ color: 'inherit', lineHeight: 1.3 }}>
+      <Typography
+        component="span"
+        variant="caption"
+        sx={{
+          color: 'inherit',
+          lineHeight: 1.3,
+          display: { xs: 'none', sm: 'inline' },
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
         {t('devBanner.message')}
       </Typography>
     </Alert>

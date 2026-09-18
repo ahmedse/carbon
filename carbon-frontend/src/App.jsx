@@ -87,35 +87,29 @@ const VerificationPage = React.lazy(() => import("./pages/carbon/VerificationPag
 const AuditLogPage = React.lazy(() => import("./pages/admin/AuditLogPage"));
 const LogViewerPage = React.lazy(() => import("./pages/admin/LogViewerPage"));
 const PlatformConfigPage = React.lazy(() => import("./pages/admin/PlatformConfigPage"));
-const PulseOverviewPage = React.lazy(() => import("./pages/admin/ai/PulseOverviewPage"));
-const AIExpertisePanel = React.lazy(() => import("./pages/admin/ai/AIExpertisePanel"));
+// ADR-0036 Pulse Control Plane — six hubs + engage routes + legacy redirects
+const CommandCenterPage = React.lazy(() =>
+  import("./pages/admin/ai/control/hubPages").then((m) => ({ default: m.CommandCenterPage })),
+);
+const DomainHubPage = React.lazy(() =>
+  import("./pages/admin/ai/control/hubPages").then((m) => ({ default: m.DomainHubPage })),
+);
+const AssetsHubPage = React.lazy(() =>
+  import("./pages/admin/ai/control/hubPages").then((m) => ({ default: m.AssetsHubPage })),
+);
+const EvidenceHubPage = React.lazy(() =>
+  import("./pages/admin/ai/control/hubPages").then((m) => ({ default: m.EvidenceHubPage })),
+);
+const LearningHubPage = React.lazy(() =>
+  import("./pages/admin/ai/control/hubPages").then((m) => ({ default: m.LearningHubPage })),
+);
+const PlatformHubPage = React.lazy(() =>
+  import("./pages/admin/ai/control/hubPages").then((m) => ({ default: m.PlatformHubPage })),
+);
+const LegacyAiRedirect = React.lazy(() => import("./pages/admin/ai/control/LegacyAiRedirect"));
+const ProcessObjectPage = React.lazy(() => import("./pages/admin/ai/control/ProcessObjectPage"));
 const AIWorkspacePage = React.lazy(() => import("./pages/admin/ai/AIWorkspacePage"));
 const AIConversationsPage = React.lazy(() => import("./pages/admin/ai/AIConversationsPage"));
-const KnowledgeBasePanel = React.lazy(() => import("./pages/admin/ai/KnowledgeBasePanel"));
-const MemoryPanel = React.lazy(() => import("./pages/admin/ai/MemoryPanel"));
-const KnowledgeGraphPanel = React.lazy(() => import("./pages/admin/ai/KnowledgeGraphPanel"));
-const AgentsPanel = React.lazy(() => import("./pages/admin/ai/AgentsPanel"));
-const ToolsPanel = React.lazy(() => import("./pages/admin/ai/ToolsPanel"));
-const SkillsPanel = React.lazy(() => import("./pages/admin/ai/SkillsPanel"));
-const CapabilitiesPanel = React.lazy(() => import("./pages/admin/ai/CapabilitiesPanel"));
-const SkillLearningPanel = React.lazy(() => import("./pages/admin/ai/SkillLearningPanel"));
-const PulseArchetypesPanel = React.lazy(() => import("./pages/admin/ai/PulseArchetypesPanel"));
-const BudgetUsagePanel = React.lazy(() => import("./pages/admin/ai/BudgetUsagePanel"));
-const EngineSettingsPanel = React.lazy(() => import("./pages/admin/ai/EngineSettingsPanel"));
-const PromptsPanel = React.lazy(() => import("./pages/admin/ai/PromptsPanel"));
-const FeedbackPanel = React.lazy(() => import("./pages/admin/ai/FeedbackPanel"));
-const LearningJobsPanel = React.lazy(() => import("./pages/admin/ai/LearningJobsPanel"));
-const LearningFlywheelPanel = React.lazy(() => import("./pages/admin/ai/LearningFlywheelPanel"));
-const MonitoringPanel = React.lazy(() => import("./pages/admin/ai/MonitoringPanel"));
-const OutputQualityPanel = React.lazy(() => import("./pages/admin/ai/OutputQualityPanel"));
-const AuditPanel = React.lazy(() => import("./pages/admin/ai/AuditPanel"));
-const WatchesPanel = React.lazy(() => import("./pages/admin/ai/WatchesPanel"));
-const AILogsPanel = React.lazy(() => import("./pages/admin/ai/AILogsPanel"));
-const AgentTopologyPanel = React.lazy(() => import("./pages/admin/ai/AgentTopologyPanel"));
-const RunTimelinePanel = React.lazy(() => import("./pages/admin/ai/RunTimelinePanel"));
-const HumanTaskInbox = React.lazy(() => import("./pages/admin/ai/HumanTaskInbox"));
-const ProcessRegistry = React.lazy(() => import("./pages/admin/ai/ProcessRegistry"));
-const ReviewQueue = React.lazy(() => import("./pages/admin/ai/ReviewQueue"));
 const HealthyDashboard = React.lazy(() => import("./apps/healthy/HealthyDashboard"));
 const LoadoutSheetPage = React.lazy(() => import("./apps/healthy/LoadoutSheetPage"));
 const RepHealthPage = React.lazy(() => import("./apps/healthy/RepHealthPage"));
@@ -407,35 +401,43 @@ export default function App() {
                 />
                 <Route path="/admin/logs" element={<AdminRoute><LogViewerPage /></AdminRoute>} />
                 <Route path="/admin/config" element={<AdminRoute><PlatformConfigPage /></AdminRoute>} />
-                <Route path="/admin/ai" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><PulseOverviewPage /></AdminRoute>} />
-                <Route path="/admin/ai/expertise" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AIExpertisePanel /></AdminRoute>} />
+                {/* Pulse Control Plane (ADR-0036) — six destinations */}
+                <Route path="/admin/ai" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><CommandCenterPage /></AdminRoute>} />
+                <Route path="/admin/ai/domain" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><DomainHubPage /></AdminRoute>} />
+                <Route path="/admin/ai/domain/processes/:processId" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><ProcessObjectPage /></AdminRoute>} />
+                <Route path="/admin/ai/assets" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AssetsHubPage /></AdminRoute>} />
+                <Route path="/admin/ai/evidence" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><EvidenceHubPage /></AdminRoute>} />
+                <Route path="/admin/ai/learning" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LearningHubPage /></AdminRoute>} />
+                <Route path="/admin/ai/platform" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><PlatformHubPage /></AdminRoute>} />
+                {/* Engage — not Control Plane nav; routes kept for migration */}
                 <Route path="/admin/ai/workspace" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AIWorkspacePage /></AdminRoute>} />
                 <Route path="/admin/ai/conversations" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AIConversationsPage /></AdminRoute>} />
-                <Route path="/admin/ai/knowledge" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><KnowledgeBasePanel /></AdminRoute>} />
-                <Route path="/admin/ai/memory" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><MemoryPanel /></AdminRoute>} />
-                <Route path="/admin/ai/graph" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><KnowledgeGraphPanel /></AdminRoute>} />
-                <Route path="/admin/ai/agents" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AgentsPanel /></AdminRoute>} />
-                <Route path="/admin/ai/tools" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><ToolsPanel /></AdminRoute>} />
-                <Route path="/admin/ai/skills" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><SkillsPanel /></AdminRoute>} />
-                <Route path="/admin/ai/capabilities" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><CapabilitiesPanel /></AdminRoute>} />
-                <Route path="/admin/ai/archetypes" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><PulseArchetypesPanel /></AdminRoute>} />
-                <Route path="/admin/ai/budget-usage" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><BudgetUsagePanel /></AdminRoute>} />
-                <Route path="/admin/ai/engine-settings" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><EngineSettingsPanel /></AdminRoute>} />
-                <Route path="/admin/ai/prompts" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><PromptsPanel /></AdminRoute>} />
-                <Route path="/admin/ai/feedback" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><FeedbackPanel /></AdminRoute>} />
-                <Route path="/admin/ai/learning" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LearningJobsPanel /></AdminRoute>} />
-                <Route path="/admin/ai/learning-flywheel" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LearningFlywheelPanel /></AdminRoute>} />
-                <Route path="/admin/ai/skill-learning" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><SkillLearningPanel /></AdminRoute>} />
-                <Route path="/admin/ai/monitoring" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><MonitoringPanel /></AdminRoute>} />
-                <Route path="/admin/ai/output-quality" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><OutputQualityPanel /></AdminRoute>} />
-                <Route path="/admin/ai/audit" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AuditPanel /></AdminRoute>} />
-                <Route path="/admin/ai/watches" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><WatchesPanel /></AdminRoute>} />
-                <Route path="/admin/ai/logs" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AILogsPanel /></AdminRoute>} />
-                <Route path="/admin/ai/topology" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AgentTopologyPanel /></AdminRoute>} />
-                <Route path="/admin/ai/runs" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><RunTimelinePanel /></AdminRoute>} />
-                <Route path="/admin/ai/inbox" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><HumanTaskInbox /></AdminRoute>} />
-                <Route path="/admin/ai/registry" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><ProcessRegistry /></AdminRoute>} />
-                <Route path="/admin/ai/review-queue" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><ReviewQueue /></AdminRoute>} />
+                {/* Legacy panel URLs → hub?tab= (see pulseControlIa.js) */}
+                <Route path="/admin/ai/expertise" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/monitoring" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/knowledge" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/memory" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/graph" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/agents" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/tools" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/skills" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/capabilities" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/archetypes" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/budget-usage" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/engine-settings" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/prompts" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/feedback" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/learning-flywheel" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/skill-learning" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/output-quality" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/audit" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/watches" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/logs" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/topology" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/runs" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/inbox" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/registry" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
+                <Route path="/admin/ai/review-queue" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LegacyAiRedirect /></AdminRoute>} />
                 <Route path="/admin/policies" element={<Navigate to="/catalog/policies" replace />} />
                 {/* Namespace root redirects — bare /modules and /scopes roots. RULE_22. */}
                 <Route path="/modules" element={<Navigate to="/carbon/my-data" replace />} />

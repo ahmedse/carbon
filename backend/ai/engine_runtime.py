@@ -515,7 +515,52 @@ def _instance_config(
         config.get("api_catalog") or [], host_user_id
     )
 
+    # Enrich tenant_org aliases from the live deployment root (ADR-0028) so
+    # Chat ORG-NAME grounding matches the seeded OrgUnit even when YAML
+    # aliases drift. Best-effort — never fatal to the turn.
+    config["tenant_org"] = _enrich_tenant_org(config.get("tenant_org"))
+
     return config
+
+
+def _enrich_tenant_org(tenant_org: dict | None) -> dict | None:
+    """Merge live deployment-root name/code/slug into tenant_org aliases."""
+    tenant: dict[str, Any] = dict(tenant_org) if isinstance(tenant_org, dict) else {}
+    try:
+        from asgiref.sync import sync_to_async
+        from mdm.services import get_deployment_root
+
+        def _load_root():
+            return get_deployment_root()
+
+        root = _run_async(sync_to_async(_load_root, thread_sensitive=True)())
+    except Exception:  # noqa: BLE001 - enrichment is best-effort
+        logger.debug("tenant_org enrichment skipped", exc_info=True)
+        return tenant or None
+
+    if root is None:
+        return tenant or None
+
+    aliases = [
+        str(a).strip()
+        for a in (tenant.get("aliases") or [])
+        if str(a).strip()
+    ]
+    for candidate in (
+        getattr(root, "name", None),
+        getattr(root, "code", None),
+        getattr(root, "slug", None),
+    ):
+        text = (str(candidate).strip() if candidate is not None else "")
+        if text and text not in aliases:
+            aliases.append(text)
+    if not tenant.get("name") and getattr(root, "name", None):
+        tenant["name"] = root.name
+    if not tenant.get("short_name") and getattr(root, "code", None):
+        tenant["short_name"] = root.code
+    if aliases:
+        tenant["aliases"] = aliases
+    return tenant or None
 
 
 def _carbon_instance_config(host_user_id: str | None = None) -> dict[str, Any]:

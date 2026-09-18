@@ -6,6 +6,7 @@ from ai.memory_api import (
     MemoryEpisodesView,
     MemoryFactDeleteView,
     MemoryFactRestoreView,
+    MemoryFactRevokeView,
     MemoryFactsView,
     MemoryFactUpdateView,
     MemoryOrgFactsView,
@@ -34,6 +35,11 @@ urlpatterns = [
         "facts/<str:pk>/restore/",
         MemoryFactRestoreView.as_view(),
         name="ai-memory-fact-restore",
+    ),
+    path(
+        "facts/<str:pk>/revoke/",
+        MemoryFactRevokeView.as_view(),
+        name="ai-memory-fact-revoke",
     ),
     path("org/", MemoryOrgFactsView.as_view(), name="ai-memory-org"),
 ]

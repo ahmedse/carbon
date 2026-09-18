@@ -28,6 +28,19 @@ def _is_empty(v: Any) -> bool:
     return v is None or v == '' or v == []
 
 
+def _as_compare_token(v: Any) -> str:
+    """Normalize a cell value for set membership (allowed_values / ref integrity).
+
+    Typed-model FKs to ``ReferenceValue`` arrive as model instances whose
+    ``__str__`` is ``"{set}:{code}"`` (e.g. ``gender:male``). Allowed sets are
+    codes only — use ``.code`` when present so hire/write gates match.
+    """
+    code = getattr(v, 'code', None)
+    if code is not None and code != '':
+        return str(code)
+    return str(v)
+
+
 def evaluate(rule_def: Dict[str, Any], rows: List[Any], *,
              field: Optional[Any] = None) -> EvalResult:
     """Evaluate a DQ rule definition against a list of DataRow objects.
@@ -79,7 +92,7 @@ def evaluate(rule_def: Dict[str, Any], rows: List[Any], *,
             if _is_empty(v):
                 continue
             checked += 1
-            if str(v) not in allowed:
+            if _as_compare_token(v) not in allowed:
                 failures.append({'row': r.id, 'value': v})
 
     elif rule_type == 'range':
@@ -133,7 +146,7 @@ def evaluate(rule_def: Dict[str, Any], rows: List[Any], *,
             if _is_empty(v):
                 continue
             checked += 1
-            if str(v) not in allowed:
+            if _as_compare_token(v) not in allowed:
                 failures.append({'row': r.id, 'value': v})
 
     elif rule_type == 'threshold':

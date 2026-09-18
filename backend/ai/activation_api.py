@@ -74,7 +74,17 @@ class PulseUsageView(APIView):
             from ai.models.core import LLMCallLog
 
             settings = get_settings()
-            budget_usd = float(settings.LLM_DAILY_BUDGET_USD)
+            env_budget = float(settings.LLM_DAILY_BUDGET_USD)
+            budget_usd = env_budget
+            try:
+                from ai.instance_registry import resolve_instance_id
+                from ai.models.control_state import get_or_create_control_state
+
+                state = get_or_create_control_state(resolve_instance_id())
+                if state.daily_budget_usd is not None:
+                    budget_usd = float(state.daily_budget_usd)
+            except Exception:  # noqa: BLE001
+                pass
             today = timezone.localdate()
 
             base = scope_ai_queryset(LLMCallLog.objects, request.user)

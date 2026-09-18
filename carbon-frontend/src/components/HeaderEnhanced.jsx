@@ -2,7 +2,7 @@
 // Enhanced header with user menu (based on Gigacast pattern)
 
 import React, { useState } from "react";
-import { AppBar, Toolbar, Typography, IconButton, Menu, MenuItem, Tooltip, Box, Avatar, Divider, Popover, Tabs, Tab, useTheme, Badge, Chip } from "@mui/material";
+import { AppBar, Toolbar, Typography, IconButton, Menu, MenuItem, Tooltip, Box, Avatar, Divider, Popover, Tabs, Tab, useTheme, Badge, Chip, ListItemIcon, ListItemText } from "@mui/material";
 import { useAuth } from "../auth/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { INSTANCE_LOGO, PLATFORM_TITLE } from "../config/branding";
@@ -17,15 +17,21 @@ import {
   Person as PersonIcon,
   Keyboard as KeyboardIcon,
   DarkMode,
-  LightMode
+  LightMode,
+  Menu as MenuIcon,
+  Close as CloseIcon,
+  Apps as AppsIcon,
+  Translate as TranslateIcon,
 } from "@mui/icons-material";
 import { useThemeMode } from "../theme/useThemeMode";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "./LanguageSwitcher";
+import { useLanguage } from "../i18n/useLanguage";
 import { useNotifications } from "../hooks/useNotifications";
 import { NotificationCenter } from "./notifications/NotificationCenter";
 import { useInsightStream } from "../hooks/useInsightStream";
 import { InsightNotificationPanel } from "./notifications/InsightNotificationPanel";
+import { STUDIO_LABEL_KEYS } from "../i18n/shellLabels";
 
 // Perspective tab labels -> shell.nav.* keys (translated at render time).
 const PERSPECTIVE_LABEL_KEYS = {
@@ -78,18 +84,27 @@ function RoleBadge({ role, theme }) {
   );
 }
 
-export default function HeaderEnhanced() {
+export default function HeaderEnhanced({
+  showNavButton = false,
+  navOpen = false,
+  onToggleNav,
+  studios,
+  activeStudio,
+  onStudioChange,
+}) {
   const { t } = useTranslation('shell');
   const { t: tAuth } = useTranslation('auth');
   const { user, logout, availablePerspectives } = useAuth();
   const { unreadCount } = useNotifications();
   const { unreadCount: insightUnreadCount } = useInsightStream();
   const { mode, toggle } = useThemeMode();
+  const { lang, setLanguage } = useLanguage();
   const theme = useTheme();
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState(null);
   const [notifAnchor, setNotifAnchor] = useState(null);
   const [insightAnchor, setInsightAnchor] = useState(null);
+  const [studioAnchor, setStudioAnchor] = useState(null);
 
   const initials = user?.username?.slice(0, 2).toUpperCase() || "U";
   const primaryRole = user?.roles?.[0]?.role;
@@ -112,9 +127,19 @@ export default function HeaderEnhanced() {
         color: "text.primary",
       }}
     >
-      <Toolbar sx={{ minHeight: 56, px: 2 }}>
+      <Toolbar sx={{ minHeight: { xs: 48, sm: 56 }, px: { xs: 1, sm: 2 }, gap: 0.5 }}>
+        {showNavButton && (
+          <IconButton
+            onClick={onToggleNav}
+            aria-label={navOpen ? t('ui.hideSidebar') : t('ui.showSidebar')}
+            aria-expanded={navOpen}
+            sx={{ minWidth: 40, minHeight: 40, color: "text.secondary" }}
+          >
+            {navOpen ? <CloseIcon /> : <MenuIcon />}
+          </IconButton>
+        )}
         {/* Logo and title — clickable, navigates home */}
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
           <Box
             component="button"
             type="button"
@@ -135,8 +160,8 @@ export default function HeaderEnhanced() {
               '&:focus-visible': { outline: `2px solid ${theme.palette.primary.main}`, outlineOffset: 2 },
             }}
           >
-            <img src={INSTANCE_LOGO} alt={t('ui.logo')} style={{ height: 32, borderRadius: 6 }} />
-            <Typography fontWeight={600} fontSize="1rem" color="text.primary">
+            <img src={INSTANCE_LOGO} alt={t('ui.logo')} style={{ height: 28, borderRadius: 6, flexShrink: 0 }} />
+            <Typography fontWeight={600} fontSize="1rem" color="text.primary" noWrap sx={{ display: { xs: 'none', md: 'block' } }}>
               {PLATFORM_TITLE}
             </Typography>
           </Box>
@@ -146,6 +171,7 @@ export default function HeaderEnhanced() {
             variant="outlined"
             color="info"
             sx={{
+              display: { xs: 'none', sm: 'inline-flex' },
               height: 18,
               fontSize: '0.5625rem',
               fontWeight: 700,
@@ -159,15 +185,57 @@ export default function HeaderEnhanced() {
         <Box sx={{ flexGrow: 1 }} />
 
         {/* Right side controls */}
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
+          {studios && onStudioChange && (
+            <>
+              <Tooltip title={t('ui.studioNavigation')}>
+                <IconButton
+                  aria-label={t('ui.studioNavigation')}
+                  onClick={(e) => setStudioAnchor(e.currentTarget)}
+                  sx={{ minWidth: 40, minHeight: 40, color: "text.secondary" }}
+                >
+                  <AppsIcon />
+                </IconButton>
+              </Tooltip>
+              <Menu
+                anchorEl={studioAnchor}
+                open={Boolean(studioAnchor)}
+                onClose={() => setStudioAnchor(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+              >
+                {studios.map((studio) => {
+                  const Icon = studio.icon;
+                  const label = STUDIO_LABEL_KEYS[studio.id]
+                    ? t(STUDIO_LABEL_KEYS[studio.id])
+                    : studio.label;
+                  return (
+                    <MenuItem
+                      key={studio.id}
+                      selected={activeStudio === studio.id}
+                      onClick={() => {
+                        setStudioAnchor(null);
+                        onStudioChange(studio.id);
+                      }}
+                      sx={{ minHeight: 40 }}
+                    >
+                      <ListItemIcon><Icon fontSize="small" /></ListItemIcon>
+                      <ListItemText primary={label} />
+                    </MenuItem>
+                  );
+                })}
+              </Menu>
+            </>
+          )}
           <Tooltip title={mode === "light" ? t('ui.darkMode') : t('ui.lightMode')}>
             <IconButton size="small" onClick={toggle} sx={{ color: "text.secondary" }}>
               {mode === "light" ? <DarkMode sx={{ fontSize: '1.25rem' }} /> : <LightMode sx={{ fontSize: '1.25rem' }} />}
             </IconButton>
           </Tooltip>
 
+          {/* ADR-0035: hide secondary chrome under sm — keep theme, notifs, avatar */}
           <Tooltip title={t('nav.help')}>
-            <IconButton size="small" sx={{ color: "text.secondary" }}>
+            <IconButton size="small" sx={{ color: "text.secondary", display: { xs: 'none', sm: 'inline-flex' } }}>
               <HelpOutline sx={{ fontSize: '1.25rem' }} />
             </IconButton>
           </Tooltip>
@@ -193,7 +261,7 @@ export default function HeaderEnhanced() {
                   ? t('ui.insights.openWithUnread', { count: insightUnreadCount })
                   : t('ui.insights.title')
               }
-              sx={{ color: "text.secondary" }}
+              sx={{ color: "text.secondary", display: { xs: 'none', sm: 'inline-flex' } }}
               onClick={(e) => setInsightAnchor(e.currentTarget)}
             >
               <Badge badgeContent={insightUnreadCount} color="error" max={99} showZero={false}>
@@ -202,8 +270,9 @@ export default function HeaderEnhanced() {
             </IconButton>
           </Tooltip>
 
-          <Divider orientation="vertical" flexItem sx={{ mx: 1, height: 24, alignSelf: "center" }} />
+          <Divider orientation="vertical" flexItem sx={{ mx: 1, height: 24, alignSelf: "center", display: { xs: 'none', sm: 'block' } }} />
 
+          {/* Always visible — GOFSCO staff primarily use Arabic; mobile must switch locale */}
           <LanguageSwitcher />
 
           {/* User menu trigger - styled as profile card for clarity */}
@@ -216,8 +285,8 @@ export default function HeaderEnhanced() {
                 gap: 1,
                 cursor: "pointer",
                 borderRadius: 2,
-                px: 1.25,
-                py: 0.625,
+                px: { xs: 0.5, sm: 1.25 },
+                py: { xs: 0.25, sm: 0.625 },
                 bgcolor: "action.hover",
                 border: `1px solid ${theme.palette.divider}`,
                 transition: "all 0.15s ease",
@@ -338,6 +407,14 @@ export default function HeaderEnhanced() {
             label={t('ui.keyboardShortcuts')}
             onClick={() => {
               navigate("/settings?tab=shortcuts");
+              handleMenuClose();
+            }}
+          />
+          <MenuRow
+            icon={TranslateIcon}
+            label={lang === 'ar' ? 'English' : 'العربية'}
+            onClick={() => {
+              setLanguage(lang === 'ar' ? 'en' : 'ar');
               handleMenuClose();
             }}
           />

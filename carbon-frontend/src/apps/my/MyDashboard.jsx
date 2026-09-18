@@ -35,6 +35,7 @@ import AddIcon from '@mui/icons-material/Add';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageContainer from '../../components/layout/PageContainer';
+import ResponsiveList from '../../components/layout/ResponsiveList';
 import PageHeader from '../../components/Page/PageHeader';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
@@ -224,97 +225,114 @@ function LeaveBalanceCard({ balances, loading, error, onRetry }) {
             {t('leaveBalanceEmpty')}
           </Typography>
         ) : (
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
-                    {t('leaveBalanceLeaveType')}
-                  </TableCell>
-                  <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
-                    {t('leaveBalanceEntitled')}
-                  </TableCell>
-                  <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
-                    {t('leaveBalanceUsed')}
-                  </TableCell>
-                  <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
-                    {t('leaveBalancePending')}
-                  </TableCell>
-                  <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
-                    {t('leaveBalanceRemaining')}
-                  </TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {balances.map((balance, index) => {
-                  const pending = balance.pending ?? 0;
-                  const remaining = balance.remaining ?? 0;
-                  const hasPending = pending > 0;
-                  const hasRemaining = remaining > 0;
-                  return (
-                    <TableRow key={`${balance.leave_type}-${index}`} hover>
-                      <TableCell sx={{ ...FONT.body2 }}>
-                        {balance.leave_type || t('profileNotAvailable')}
+          <ResponsiveList
+            items={balances}
+            getKey={(balance) => balance.leave_type || String(balance.id ?? balance.entitled)}
+            emptyLabel={t('leaveBalanceEmpty')}
+            renderCard={(balance) => ({
+              title: balance.leave_type
+                ? t(`leaveType.${balance.leave_type}`, { defaultValue: balance.leave_type })
+                : t('profileNotAvailable'),
+              meta: `${t('leaveBalanceRemaining')}: ${balance.remaining ?? 0}`,
+              status: String(balance.remaining ?? 0),
+              statusColor: (balance.remaining ?? 0) > 0 ? 'success' : 'default',
+            })}
+            table={
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
+                        {t('leaveBalanceLeaveType')}
                       </TableCell>
-                      <TableCell align="right" sx={{ ...FONT.body2 }}>
-                        {balance.entitled ?? 0}
+                      <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
+                        {t('leaveBalanceEntitled')}
                       </TableCell>
-                      <TableCell align="right" sx={{ ...FONT.body2 }}>
-                        {balance.used ?? 0}
+                      <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
+                        {t('leaveBalanceUsed')}
                       </TableCell>
-                      <TableCell align="right" sx={{ ...FONT.body2 }}>
-                        {/* Text label (value) + status color — color is NOT the sole indicator */}
-                        <Stack
-                          direction="row"
-                          alignItems="center"
-                          justifyContent="flex-end"
-                          spacing={0.5}
-                        >
-                          {hasPending && (
-                            <Box
-                              sx={{
-                                width: 8,
-                                height: 8,
-                                borderRadius: '50%',
-                                bgcolor: 'warning.main',
-                                flexShrink: 0,
-                              }}
-                            />
-                          )}
-                          <Typography
-                            sx={{
-                              ...FONT.body2,
-                              color: hasPending ? 'warning.main' : 'text.secondary',
-                            }}
-                          >
-                            {pending}
-                          </Typography>
-                        </Stack>
+                      <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
+                        {t('leaveBalancePending')}
                       </TableCell>
-                      <TableCell align="right" sx={{ ...FONT.body2 }}>
-                        <Stack
-                          direction="row"
-                          alignItems="center"
-                          justifyContent="flex-end"
-                          spacing={0.5}
-                        >
-                          <Typography
-                            sx={{
-                              ...FONT.body2,
-                              fontWeight: 600,
-                              color: hasRemaining ? 'success.main' : 'text.primary',
-                            }}
-                          >
-                            {remaining}
-                          </Typography>
-                        </Stack>
+                      <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
+                        {t('leaveBalanceRemaining')}
                       </TableCell>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                  </TableHead>
+                  <TableBody>
+                    {balances.map((balance, index) => {
+                      const pending = balance.pending ?? 0;
+                      const remaining = balance.remaining ?? 0;
+                      const hasPending = pending > 0;
+                      const hasRemaining = remaining > 0;
+                      return (
+                        <TableRow key={`${balance.leave_type}-${index}`} hover>
+                          <TableCell sx={{ ...FONT.body2 }}>
+                            {balance.leave_type
+                              ? t(`leaveType.${balance.leave_type}`, { defaultValue: balance.leave_type })
+                              : t('profileNotAvailable')}
+                          </TableCell>
+                          <TableCell align="right" sx={{ ...FONT.body2 }}>
+                            {balance.entitled ?? 0}
+                          </TableCell>
+                          <TableCell align="right" sx={{ ...FONT.body2 }}>
+                            {balance.used ?? 0}
+                          </TableCell>
+                          <TableCell align="right" sx={{ ...FONT.body2 }}>
+                            {/* Text label (value) + status color — color is NOT the sole indicator */}
+                            <Stack
+                              direction="row"
+                              alignItems="center"
+                              justifyContent="flex-end"
+                              spacing={0.5}
+                            >
+                              {hasPending && (
+                                <Box
+                                  sx={{
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: '50%',
+                                    bgcolor: 'warning.main',
+                                    flexShrink: 0,
+                                  }}
+                                />
+                              )}
+                              <Typography
+                                sx={{
+                                  ...FONT.body2,
+                                  color: hasPending ? 'warning.main' : 'text.secondary',
+                                }}
+                              >
+                                {pending}
+                              </Typography>
+                            </Stack>
+                          </TableCell>
+                          <TableCell align="right" sx={{ ...FONT.body2 }}>
+                            <Stack
+                              direction="row"
+                              alignItems="center"
+                              justifyContent="flex-end"
+                              spacing={0.5}
+                            >
+                              <Typography
+                                sx={{
+                                  ...FONT.body2,
+                                  fontWeight: 600,
+                                  color: hasRemaining ? 'success.main' : 'text.primary',
+                                }}
+                              >
+                                {remaining}
+                              </Typography>
+                            </Stack>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            }
+          />
         )}
       </CardContent>
     </Card>
@@ -411,36 +429,46 @@ function PayslipsCard({ payslips, loading, error, onRetry }) {
               <Typography sx={{ ...FONT.body, fontWeight: 600 }}>
                 {t('payslipRunLabel', { id: run.id })}
               </Typography>
-              <TableContainer>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
-                        {t('payslipLineType')}
-                      </TableCell>
-                      <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
-                        {t('payslipAmount')}
-                      </TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {run.lines.map((line) => (
-                      <TableRow key={line.id} hover>
-                        <TableCell sx={{ ...FONT.body2 }}>
-                          {payslipLineLabel(line.line_type, t)}
-                        </TableCell>
-                        <TableCell
-                          align="right"
-                          sx={{ ...FONT.body2, fontVariantNumeric: 'tabular-nums' }}
-                          dir="ltr"
-                        >
-                          {formatPayslipAmount(line.amount)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+              <ResponsiveList
+                items={run.lines}
+                getKey={(line) => line.id}
+                renderCard={(line) => ({
+                  title: payslipLineLabel(line.line_type, t),
+                  meta: formatPayslipAmount(line.amount),
+                })}
+                table={
+                  <TableContainer>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
+                            {t('payslipLineType')}
+                          </TableCell>
+                          <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
+                            {t('payslipAmount')}
+                          </TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {run.lines.map((line) => (
+                          <TableRow key={line.id} hover>
+                            <TableCell sx={{ ...FONT.body2 }}>
+                              {payslipLineLabel(line.line_type, t)}
+                            </TableCell>
+                            <TableCell
+                              align="right"
+                              sx={{ ...FONT.body2, fontVariantNumeric: 'tabular-nums' }}
+                              dir="ltr"
+                            >
+                              {formatPayslipAmount(line.amount)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                }
+              />
             </Stack>
           ))}
         </Stack>

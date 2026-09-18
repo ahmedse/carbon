@@ -73,6 +73,58 @@ describe('buildPlanGraph', () => {
     expect(nodes.some((n) => n.node_type === 'choice' && n.is_gateway)).toBe(true);
     expect(edges.some((e) => e.guard === "status == 'ok'")).toBe(true);
   });
+
+  it('keeps depends_on edges when workflow_graph is sparse', () => {
+    const plan = {
+      steps: [
+        { step_id: 0, intent: 'a', status: 'completed', depends_on: [] },
+        { step_id: 1, intent: 'b', status: 'completed', depends_on: [0] },
+        { step_id: 2, intent: 'follow-up', status: 'pending', depends_on: [1] },
+      ],
+      workflow_graph: {
+        version: '1',
+        entry: 't0',
+        nodes: [
+          { id: 't0', node_type: 'task', intent: 'a', meta: { step_id: 0 } },
+          { id: 't1', node_type: 'task', intent: 'b', meta: { step_id: 1 } },
+        ],
+        edges: [
+          { source: 't0', target: 't1' },
+        ],
+      },
+    };
+    const { edges } = buildPlanGraph(plan);
+    expect(edges.some((e) => e.source === 0 && e.target === 1)).toBe(true);
+    expect(edges.some((e) => e.source === 1 && e.target === 2)).toBe(true);
+  });
+
+  it('annotates live choice branches from step status', () => {
+    const plan = {
+      steps: [
+        { step_id: 0, intent: 'ok path', status: 'completed', depends_on: [] },
+        { step_id: 1, intent: 'bad path', status: 'skipped', depends_on: [] },
+      ],
+      workflow_graph: {
+        version: '1',
+        entry: 'c',
+        nodes: [
+          { id: 'c', node_type: 'choice', intent: 'Pick', meta: {} },
+          { id: 't0', node_type: 'task', intent: 'ok', meta: { step_id: 0 } },
+          { id: 't1', node_type: 'task', intent: 'bad', meta: { step_id: 1 } },
+        ],
+        edges: [
+          { source: 'c', target: 't0', guard: "status == 'ok'" },
+          { source: 'c', target: 't1', is_default: true },
+        ],
+      },
+    };
+    const { nodes, edges } = buildPlanGraph(plan);
+    const chosen = edges.find((e) => e.target === 0);
+    const unchosen = edges.find((e) => e.target === 1);
+    expect(chosen.branch).toBe('chosen');
+    expect(unchosen.branch).toBe('unchosen');
+    expect(nodes.find((n) => n.id === 'c')?.status).toBe('completed');
+  });
 });
 
 describe('summarizePlanDiff', () => {

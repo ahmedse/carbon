@@ -4,6 +4,8 @@
 import React, { useState } from 'react';
 import { Paper } from '@mui/material';
 import { DataGrid, GridToolbar } from '@mui/x-data-grid';
+import { arSD, enUS } from '@mui/x-data-grid/locales';
+import { useLanguage } from '../i18n/useLanguage';
 
 export default function StandardDataGrid({
   rows = [],
@@ -21,7 +23,9 @@ export default function StandardDataGrid({
   sx = {},
   ...props
 }) {
+  const { lang } = useLanguage();
   const [paginationModel, setPaginationModel] = useState({ pageSize, page: 0 });
+  const localeText = (lang === 'ar' ? arSD : enUS).components.MuiDataGrid.defaultProps.localeText;
 
   return (
     <Paper
@@ -47,6 +51,7 @@ export default function StandardDataGrid({
         disableRowSelectionOnClick
         checkboxSelection={checkboxSelection}
         hideFooterSelectedRowCount={hideFooterSelectedRowCount}
+        localeText={localeText}
         slots={toolbar ? { toolbar: GridToolbar } : undefined}
         slotProps={toolbar ? { toolbar: { showQuickFilter: true, quickFilterProps: { debounceMs: 250 } } } : undefined}
         sx={{ border: 'none', flex: 1, '& .MuiDataGrid-cell': { outline: 'none', display: 'flex', alignItems: 'center' } }}

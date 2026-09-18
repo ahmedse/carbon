@@ -53,6 +53,11 @@ urlpatterns = [
         name="ai-registry-autonomy",
     ),
     path(
+        "processes/<str:pk>/reject/",
+        RegistryViewSet.as_view({"post": "reject"}),
+        name="ai-registry-reject",
+    ),
+    path(
         "processes/<str:pk>/kill/",
         RegistryViewSet.as_view({"post": "kill"}),
         name="ai-registry-kill",

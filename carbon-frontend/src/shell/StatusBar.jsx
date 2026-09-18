@@ -16,6 +16,7 @@ export function StatusBar({
   copilotVisible,
   onToggleSidebar,
   onToggleCopilot,
+  compact = false,
 }) {
   const location = useLocation();
   const { context, token } = useAuth();
@@ -100,8 +101,8 @@ export function StatusBar({
       component="footer"
       role="contentinfo"
       sx={{
-        height: 22,
-        minHeight: 22,
+        height: compact ? 32 : 22,
+        minHeight: compact ? 32 : 22,
         bgcolor: 'primary.main',
         color: 'primary.contrastText',
         display: 'flex',
@@ -109,10 +110,11 @@ export function StatusBar({
         px: 1.5,
         flexShrink: 0,
         gap: 1,
+        overflow: 'hidden',
       }}
     >
       {/* System status indicator */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
         <Box
           sx={{
             width: 7,
@@ -132,8 +134,8 @@ export function StatusBar({
         </Typography>
       </Box>
 
-      {/* Context info (module/table) */}
-      {contextInfo && (
+      {/* Context info (module/table) — hide on compact mobile */}
+      {!compact && contextInfo && (
         <>
           <Box
             sx={{
@@ -154,56 +156,60 @@ export function StatusBar({
         </>
       )}
 
-      {/* Copyright and footer links */}
-      <Typography sx={{
-        fontSize: '0.6875rem',
-        opacity: 0.7,
-        userSelect: 'none',
-        ml: contextInfo ? 2 : 1,
-      }}>
-        © {new Date().getFullYear()} {PLATFORM_TITLE}
-      </Typography>
+      {/* Copyright and footer links — overflow on compact */}
+      {!compact && (
+        <>
+          <Typography sx={{
+            fontSize: '0.6875rem',
+            opacity: 0.7,
+            userSelect: 'none',
+            ml: contextInfo ? 2 : 1,
+          }}>
+            © {new Date().getFullYear()} {PLATFORM_TITLE}
+          </Typography>
 
-      <Box sx={{ display: 'flex', gap: 1, ml: 1 }}>
-        <Link
-          href="/help"
-          sx={{
-            fontSize: '0.6875rem',
-            color: 'rgba(255,255,255,0.8)',
-            textDecoration: 'none',
-            '&:hover': { color: '#fff', textDecoration: 'underline' }
-          }}
-        >
-          {t('ui.privacy')}
-        </Link>
-        <Link
-          href="/help"
-          sx={{
-            fontSize: '0.6875rem',
-            color: 'rgba(255,255,255,0.8)',
-            textDecoration: 'none',
-            '&:hover': { color: '#fff', textDecoration: 'underline' }
-          }}
-        >
-          {t('ui.terms')}
-        </Link>
-        <Link
-          href="/feedback"
-          sx={{
-            fontSize: '0.6875rem',
-            color: 'rgba(255,255,255,0.8)',
-            textDecoration: 'none',
-            '&:hover': { color: '#fff', textDecoration: 'underline' }
-          }}
-        >
-          {t('ui.support')}
-        </Link>
-      </Box>
+          <Box sx={{ display: 'flex', gap: 1, ml: 1 }}>
+            <Link
+              href="/help"
+              sx={{
+                fontSize: '0.6875rem',
+                color: 'rgba(255,255,255,0.8)',
+                textDecoration: 'none',
+                '&:hover': { color: '#fff', textDecoration: 'underline' }
+              }}
+            >
+              {t('ui.privacy')}
+            </Link>
+            <Link
+              href="/help"
+              sx={{
+                fontSize: '0.6875rem',
+                color: 'rgba(255,255,255,0.8)',
+                textDecoration: 'none',
+                '&:hover': { color: '#fff', textDecoration: 'underline' }
+              }}
+            >
+              {t('ui.terms')}
+            </Link>
+            <Link
+              href="/feedback"
+              sx={{
+                fontSize: '0.6875rem',
+                color: 'rgba(255,255,255,0.8)',
+                textDecoration: 'none',
+                '&:hover': { color: '#fff', textDecoration: 'underline' }
+              }}
+            >
+              {t('ui.support')}
+            </Link>
+          </Box>
+        </>
+      )}
 
       <Box sx={{ flex: 1 }} />
 
       {/* Toggle buttons */}
-      <Box sx={{ display: 'flex', gap: 0.25 }}>
+      <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
         <Tooltip title={sidebarMode === 'pinned' ? t('ui.hideSidebarShortcut') : sidebarMode === 'peek' ? t('ui.pinSidebar') : t('ui.showSidebarShortcut')} placement="top">
           <IconButton
             size="small"
@@ -211,7 +217,9 @@ export function StatusBar({
             aria-label={sidebarMode === 'pinned' ? t('ui.hideSidebar') : t('ui.showSidebar')}
             aria-pressed={sidebarMode !== 'hidden'}
             sx={{
-              p: 0.25,
+              p: compact ? 0.75 : 0.25,
+              minWidth: compact ? 40 : undefined,
+              minHeight: compact ? 40 : undefined,
               color: 'inherit',
               opacity: sidebarMode !== 'hidden' ? 1 : 0.5,
               borderRadius: 0.5,
@@ -226,7 +234,7 @@ export function StatusBar({
               },
             }}
           >
-            <ViewSidebarIcon sx={{ fontSize: 13 }} aria-hidden="true" />
+            <ViewSidebarIcon sx={{ fontSize: compact ? 18 : 13 }} aria-hidden="true" />
           </IconButton>
         </Tooltip>
 
@@ -244,7 +252,9 @@ export function StatusBar({
               aria-label={copilotVisible ? t('ui.hidePulse') : t('ui.showPulse')}
               aria-pressed={copilotVisible}
               sx={{
-                p: 0.25,
+                p: compact ? 0.75 : 0.25,
+                minWidth: compact ? 40 : undefined,
+                minHeight: compact ? 40 : undefined,
                 color: 'inherit',
                 opacity: copilotVisible ? 1 : 0.5,
                 borderRadius: 0.5,
@@ -259,21 +269,23 @@ export function StatusBar({
                 },
               }}
             >
-              <AutoAwesomeIcon sx={{ fontSize: 13 }} aria-hidden="true" />
+              <AutoAwesomeIcon sx={{ fontSize: compact ? 18 : 13 }} aria-hidden="true" />
             </IconButton>
           </Badge>
         </Tooltip>
       </Box>
 
       {/* Version */}
-      <Typography sx={{
-        fontSize: '0.6875rem',
-        opacity: 0.6,
-        userSelect: 'none',
-        ml: 0.5
-      }}>
-        v1.0
-      </Typography>
+      {!compact && (
+        <Typography sx={{
+          fontSize: '0.6875rem',
+          opacity: 0.6,
+          userSelect: 'none',
+          ml: 0.5
+        }}>
+          v1.0
+        </Typography>
+      )}
     </Box>
   );
 }

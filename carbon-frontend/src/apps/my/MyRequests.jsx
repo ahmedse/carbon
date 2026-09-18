@@ -7,13 +7,24 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
-import { Box, Chip, CircularProgress, Stack, Typography } from '@mui/material';
+import {
+  Box,
+  Chip,
+  CircularProgress,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  Stack,
+  Typography,
+} from '@mui/material';
 import ArticleIcon from '@mui/icons-material/Article';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageContainer from '../../components/layout/PageContainer';
 import PageHeader from '../../components/Page/PageHeader';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { useAuth } from '../../auth/AuthContext';
 import { fetchMyCorrespondence } from '../../api/my';
 import { FONT } from '../../theme/themeTokens';
@@ -21,6 +32,32 @@ import RequestTable from './components/RequestTable';
 import { STATUS_CODES, STATUS_SUFFIX, codeLabel, CORR_TYPES, corrTypeLabel } from './components/myRequestsLabels';
 
 function FilterChips({ label, options, value, onChange }) {
+  const isMobile = useIsMobile();
+
+  // ADR-0035: selects instead of wrapped chip rows under sm.
+  if (isMobile) {
+    const selectId = `filter-${label.replace(/\s+/g, '-').toLowerCase()}`;
+    return (
+      <FormControl size="small" sx={{ minWidth: 140, flex: 1 }}>
+        <InputLabel id={`${selectId}-label`}>{label}</InputLabel>
+        <Select
+          labelId={`${selectId}-label`}
+          id={selectId}
+          value={value}
+          label={label}
+          onChange={(e) => onChange(e.target.value)}
+          sx={{ minHeight: 40 }}
+        >
+          {options.map((option) => (
+            <MenuItem key={option.value || 'all'} value={option.value}>
+              {option.label}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+    );
+  }
+
   return (
     <Stack direction="row" alignItems="center" spacing={0.5} useFlexGap flexWrap="wrap">
       <Typography sx={{ ...FONT.body, color: 'text.secondary' }}>{label}</Typography>

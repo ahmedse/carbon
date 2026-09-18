@@ -141,3 +141,12 @@ def test_multihop_call_host_api_get_only_and_hard_cap():
     assert loop._should_inject_followup(post_bad, 0, 10) is False
     assert loop._should_inject_followup(paused, 0, 10) is False
     assert loop._should_inject_followup(get_ok, _MAX_AUTO_FOLLOWUPS, 10) is False
+
+
+def test_followup_signature_coalesce_key():
+    loop = ReActLoop()
+    a = loop._followup_signature("call_host_api", {"method": "GET", "endpoint": "/x"})
+    b = loop._followup_signature("call_host_api", {"endpoint": "/x", "method": "GET"})
+    c = loop._followup_signature("call_host_api", {"method": "GET", "endpoint": "/y"})
+    assert a == b
+    assert a != c

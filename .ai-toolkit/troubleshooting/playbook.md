@@ -580,3 +580,48 @@ Append a new entry every time you confirm+fix a non-trivial bug (see `shared/deb
 - Best practice note: Never report scoped-empty as brand total. Never chart unauthorized aggregates. Chat identity ≠ compensation disclosure.
 - Regression guard: `test_unauthorized_when_people_metric_access_denied` · `TestHonestMasking.test_real_salary_hidden_without_capability` · UI ESS headcount → unauthorized not 0.
 - First seen: 2026-09-16 (Pulse Chat Wave A).
+
+### PB-55 — Chat clarify-loops forever on "tell me about GOFSCO / the company"
+- Symptom: User asks about GOFSCO → "the company" → "data in the system"; Chat replies three times with "What specifically would you like to know…?" and never calls tools. DB already has org root + 530 employees.
+- Layer: backend (IntentResolver short-circuit + missing tenant_org grounding)
+- Root cause: Intent returned `action=clarify` (no endpoint) for the tenant org name; runner short-circuited before draft/tools. ORG-NAME GUARD existed only on synthesis (after tools). Clarification policy over-applied to the whole institution.
+- Fix: `tenant_org` in `instance.yaml`; `_build_tenant_org_directive`; `_apply_tenant_org_override` (clarify→answer → `analyze_employees`); pass `tenant_org` into IntentResolver; unblock org-unit list from Nibras `topic_guard`.
+- Best practice note: Whole-organisation aliases are instance knowledge (ADR-0017) — never hardcode brand names in engine prompts. Intent must not treat tenant org as an ambiguous person.
+- Regression guard: `ai/tests/test_tenant_org_directive.py` · `test_tenant_org_override_*` · evidence `CHAT-GOFSCO-CLARIFY-LOOP-2026-09-17.md` (530 headcount).
+- First seen: 2026-09-17 (Pulse Chat QA).
+
+### PB-56 — Compensation ask soft "no salary data" instead of CBAC deny (B5)
+- Symptom: ESS asks "What is my salary?" / coworker salary → Chat says salary "not available" / "no records" instead of `people:view_compensation` deny.
+- Layer: backend (Intent routing + host mask + resolve soft-miss + synthesis)
+- Root cause: Intent routed to empty `list_my_payslips`; host silently stripped `basic_salary`; resolve soft-miss on scoped name lookup looked like absence; synthesis paraphrased empty as missing data.
+- Fix: compensation intent override → profile/employee; host unauthorized on strip/empty payslips; resolve compensation-ask soft-miss → deny; `stamp_compensation_deny_on_soft_empty`; inject `user_message` into tool kwargs; AUTHZ GUARD in synthesis.
+- Best practice note: Authorization failure ≠ missing data. Never let empty payslips answer a basic-pay question without capability.
+- Regression guard: `TestCompensationUnauthorizedAsk` · compensation intent overrides · evidence `CHAT-B5-COMPENSATION-DENY-2026-09-17.md`.
+- First seen: 2026-09-16/17 (Pulse Chat Wave B B5).
+
+### PB-57 — Leave follow-up mislabeled "Employee 333" / truncated 100 rows (B1)
+- Symptom: After focusing employee_no 1416, leave entitlements UI shows correct balances but title "Employee 333" and `call_host_api · 100 rows · Truncated`.
+- Layer: backend (host list endpoints + focus injection)
+- Root cause: `leave-entitlements` ignored `?employee=` / `employee_no`; returned first org page; serializer left bare FK pk; model invented `Employee {pk}` labels.
+- Fix: honour employee filter on leave/loan lists; annotate `employee_no`/`employee_name`; inject WM focus into person-scoped lists; catalog requires filter for single-person follow-up.
+- Best practice note: Person follow-ups must never use unfiltered org list pages.
+- Regression guard: `ai/tests/test_b1_leave_employee_filter.py` · evidence `CHAT-B1-LEAVE-LABEL-2026-09-17.md`.
+- First seen: 2026-09-16 (Pulse Chat Wave B B1).
+
+### PB-58 — Instruction-shaped "employee name" clarifies modes (C1)
+- Symptom: User looks up a control-instruction string as a person name → Chat asks which mode / clarifies instead of honest no_match (PC-070).
+- Layer: backend (resolve_entity + IntentResolver)
+- Root cause: Instruction text treated as ambiguous referent → clarify ladder; not short-circuited as data-as-data.
+- Fix: instruction-shaped query → resolve `found=false` + `data_as_data`; intent override kills clarify → `resolve_entity`.
+- Best practice note: Control text in a name slot is data, not a mode switch — never dump salaries.
+- Regression guard: `ai/tests/test_c1_instruction_shaped_name.py` · evidence `CHAT-C1-DATA-AS-DATA-2026-09-17.md`.
+- First seen: 2026-09-16 (Pulse Chat Wave C C1).
+
+### PB-59 — "Back to Abrar" loses focus after topic switch (C7)
+- Symptom: Abrar (1021) → switch to 1416 → "Back to Abrar" asks who Abrar is.
+- Layer: backend (WorkingMemory + AnaphoraResolver)
+- Root cause: Single-slot focus; anaphora only rewrote "it"; no stack / named restore with stable id.
+- Fix: focus stack (last 5) with `entity_id` + aliases; "back to X" / again cues restore + rewrite with employee_no; `update_focus_from_resolve_results` after tools.
+- Best practice note: Session memory must retain prior people by stable id, not only the latest surface name.
+- Regression guard: `ai/tests/test_c7_focus_restore.py` · evidence `CHAT-C7-FOCUS-RESTORE-2026-09-17.md`.
+- First seen: 2026-09-16 (Pulse Chat Wave C C7).

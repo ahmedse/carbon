@@ -31,6 +31,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import FilteredDataGrid from '../../components/FilteredDataGrid';
 import PageContainer from '../../components/layout/PageContainer';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import ErrorAlert from '../../components/Page/ErrorAlert';
 import EmployeeWizard from './EmployeeWizard';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
@@ -84,6 +85,7 @@ export default function EmployeesPage() {
   const { token } = useAuth();
   const { canViewCompensation } = useCompensationAccess();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
   const [employees, setEmployees] = useState([]);
   const [orgUnits, setOrgUnits] = useState([]);
@@ -424,6 +426,7 @@ export default function EmployeesPage() {
           closeDialog();
         }}
         disableEscapeKeyDown
+        fullScreen={isMobile}
         fullWidth
         maxWidth="lg"
       >
@@ -435,7 +438,7 @@ export default function EmployeesPage() {
             </Typography>
           ) : null}
         </DialogTitle>
-        <DialogContent sx={{ height: '70vh', minHeight: 480, p: 2 }}>
+        <DialogContent sx={{ height: isMobile ? 'auto' : '70vh', flex: isMobile ? 1 : undefined, minHeight: isMobile ? 0 : 480, p: 2 }}>
           <EmployeeWizard
             key={editingEmployee?.id ?? 'new'}
             employee={editingEmployee}

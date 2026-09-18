@@ -24,6 +24,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import UndoIcon from '@mui/icons-material/Undo';
 import HowToVoteIcon from '@mui/icons-material/HowToVote';
 import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined';
+import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import PageContainer from '../../components/layout/PageContainer';
@@ -65,6 +66,8 @@ function extractErrorMessage(err, fallback) {
 
 export default function TeamRequestDetail() {
   const { t } = useTranslation('team');
+  const theme = useTheme();
+  const isRtl = theme.direction === 'rtl';
   const { token } = useAuth();
   const { id } = useParams();
   const navigate = useNavigate();
@@ -155,7 +158,9 @@ export default function TeamRequestDetail() {
             <Button
               size="small"
               variant="outlined"
-              startIcon={<ArrowBackIcon />}
+              startIcon={
+                <ArrowBackIcon sx={isRtl ? { transform: 'scaleX(-1)' } : undefined} />
+              }
               onClick={() => navigate('/team')}
             >
               {t('backToInbox')}

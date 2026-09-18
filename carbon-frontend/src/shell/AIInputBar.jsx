@@ -148,6 +148,8 @@ function AIInputBar({
   onMentionsChange,
   onCommand,
   conversationId,
+  seedDraft = null,
+  onSeedDraftConsumed,
 }) {
   const { token } = useAuth();
   const { executeMode } = useExecuteMode();
@@ -175,6 +177,20 @@ function AIInputBar({
   const [entityLoading, setEntityLoading] = useState(false);
   // Resolved mention objects: { kind, id, name }
   const [resolvedMentions, setResolvedMentions] = useState([]);
+
+  // Agent Done → Discuss: inject plan context into the composer once.
+  useEffect(() => {
+    if (!seedDraft || typeof seedDraft !== 'string') return undefined;
+    const text = seedDraft.trim();
+    if (!text) return undefined;
+    setValue(text);
+    persist(text);
+    try {
+      inputRef.current?.focus?.();
+    } catch { /* ignore */ }
+    onSeedDraftConsumed?.();
+    return undefined;
+  }, [seedDraft, onSeedDraftConsumed, persist]);
 
   const visibleKinds = useMemo(
     () => MENTION_KINDS.filter((k) => k.startsWith(kindQuery)),
@@ -657,6 +673,8 @@ AIInputBar.propTypes = {
   onMentionsChange: PropTypes.func,
   onCommand: PropTypes.func,
   conversationId: PropTypes.string,
+  seedDraft: PropTypes.string,
+  onSeedDraftConsumed: PropTypes.func,
 };
 
 export default AIInputBar;

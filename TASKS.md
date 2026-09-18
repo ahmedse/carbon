@@ -44,12 +44,13 @@ evidence → not done.
 
 | Track | Owner | Status | Notes |
 |-------|-------|--------|-------|
+| **MOB** (Mobile-friendly FE, ADR-0035) | **Pulse + Nibras** | **READY→DONE** | Spec `docs/mobile/SCREEN-SPECS-MOB.md` · A–E implemented 2026-09-17 · build+vitest green |
 | **ECF** (Entity Capability Framework, ADR-0032) | **Pulse** | **COMPLETE** | ECF-8 DONE — LeaveRecord descriptor-only generalize proof |
 | **PEC** (Pulse Enterprise Control-plane) | **Pulse** | COMPLETE | Core P1–P7 closed |
 | **PEC-R** (Pulse residuals) | **Pulse** | **COMPLETE** | R4 journey-16 **3/3 PASS** · R5–R7 · leave fetch |
-| **Pulse Chat QA** | **Pulse** | **ACTIVE** | Deep journey ~**86%** PASS (25/29) · Wave A closed · C4–C9 run · open PARTIAL: B1/B5/C1/C7 |
+| **Pulse Chat QA** | **Pulse** | **ACTIVE** | Deep journey ~**86%** · **GOFSCO clarify-loop CLOSED** (530 headcount) · open PARTIAL: B1/B5/C1/C7 |
 | **NSR** (Nibras Staff-Ready) | **Nibras** | **COMPLETE** (W9 PARTIAL) | Staff go-live **READY**; Playwright UI leave journey ops residual — `docs/nibras/evidence/NSR-9-go-live-gate.md` |
-| **Nibras Deep QA** | **Nibras** | **ACTIVE** | **11/46 P0 (24%)** · Leave 6/10 · Loans 3/5 · board `nibras-deep-qa-plan.canvas.tsx` · next J-LV-14 / J-LN-04 |
+| **Nibras Deep QA** | **Nibras** | **COMPLETE** | **P0 46/46** · all-case **80/81** · only FAIL J-EMP-06 (ents w/o join_date) · Playwright ops residual · board |
 | **OF-15…OF-20** | **Nibras** | DONE | Leave vertical live |
 | **NIR-3C / NIR-7A/B** | **Nibras** | DONE | Code+tests shipped |
 | **NIR-5 / NIR-6** | **Nibras** | DONE via NSR-7/8 | Governed FKs + single-root org shipped |

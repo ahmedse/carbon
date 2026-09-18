@@ -316,7 +316,7 @@ describe('planStepStatusColor', () => {
 describe('planStepStatusLabel', () => {
   it('labels statuses in outcome terms (RULE_23)', () => {
     expect(planStepStatusLabel('completed')).toBe('Finished');
-    expect(planStepStatusLabel('running')).toBe('Running');
+    expect(planStepStatusLabel('running')).toBe('Running…');
     expect(planStepStatusLabel('awaiting_approval')).toBe('Needs approval');
     expect(planStepStatusLabel('failed')).toBe('Failed');
     expect(planStepStatusLabel('skipped')).toBe('Skipped');

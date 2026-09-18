@@ -1,13 +1,13 @@
 # DESIGN — Resilient Agent Workflow Engine + Agent UI Remake
 
-Status: ACCEPTED (ADR-0034) · Author: Master Architect (Pulse) · Date: 2026-09-14 · Updated: 2026-09-16
+Status: ACCEPTED (ADR-0034) · Author: Master Architect (Pulse) · Date: 2026-09-14 · Updated: 2026-09-17
 Scope: (A) a real resilient workflow engine with per-step controls; (B) a full Agent UI remake.
 
-> **Implementation status (2026-09-16 evening):** Board ~**87%** weighted.
-> Engine W-1…W-7 mostly done (W-3 wait timers shipped; replay goldens open).
-> UI U-1…U-3 usable chat-first; **U-4** still TODO. Follow-up spam capped (UX-2).
-> See canvas `pulse-agent-workflow-board` and §7 table.
-> Next: replay goldens · U-4 tokens · live choice highlight · hard-cancel tool I/O.
+> **Implementation status (2026-09-17):** Board ~**92%** weighted (W+U).
+> Engine W-1…W-7 shipped (wait timers, replay goldens, hard-cancel mid-step).
+> UI U-1…U-4 largely done (token/status consolidation + journey-12 retry/skip e2e).
+> See canvas `pulse-agent-workflow-board` and §7.
+> Remaining polish: classic-tab fallback removal · SSE edge badge · compensate UX.
 
 ---
 
@@ -251,15 +251,15 @@ build). No phase ships shallow.
 |---|---|---|---|
 | **W-1** | Graph schema + validator + compile shim | **DONE** | Schema + round-trip tests |
 | **W-2** | Guard expression evaluator | **DONE** | Grammar + injection tests |
-| **W-3** | Driver choice/parallel/map/loop + journal | **PARTIAL ~92%** | Replay-golden fixtures (wait timers shipped) |
-| **W-4** | Retry/catch/timeout + compensation | **PARTIAL ~90%** | Hard-cancel in-flight tool I/O; compensate UX |
+| **W-3** | Driver choice/parallel/map/loop + journal | **DONE ~98%** | Replay goldens + wait timers shipped |
+| **W-4** | Retry/catch/timeout + compensation | **DONE ~95%** | Hard-cancel mid-step I/O; compensate UX polish |
 | **W-5** | `observe` self-heal | **PARTIAL ~85%** | Heuristic heal shipped; LLM repair optional |
 | **W-6** | `completed_with_gaps` | **DONE ~95%** | Status + UI chip; artifact stream polish |
 | **W-7** | Per-step control endpoints | **DONE ~95%** | Endpoints + StepToolbar (+ Done List) |
-| **U-1** | Chat-first cockpit | **PARTIAL ~80%** | AgentStage shipped; classic 6-tab fallback remains |
-| **U-2** | StepToolbar + live controls | **DONE ~90%** | Vitest; Playwright e2e still open |
-| **U-3** | PlanDagGraph branches/guards + segments | **PARTIAL ~75%** | Live choice highlight during run |
-| **U-4** | Design-token consistency pass | **TODO ~15%** | Spacing/type/status audit |
+| **U-1** | Chat-first cockpit | **PARTIAL ~85%** | AgentStage shipped; classic 6-tab fallback remains |
+| **U-2** | StepToolbar + live controls | **DONE ~98%** | Vitest + journey-12 Playwright retry/skip |
+| **U-3** | PlanDagGraph branches/guards + segments | **DONE ~92%** | Live chosen/unchosen edge tint |
+| **U-4** | Design-token consistency pass | **DONE ~90%** | STEP_STATUS single source + FONT chips |
 
 **Sequencing:** W-1→W-2→W-3 are the engine core (blocking). W-4..W-7 build on W-3. UI
 U-1 can start after W-7 endpoints exist (or against mocks). Ship in vertical slices so each

@@ -28,7 +28,7 @@ const PLATFORM_STUDIOS = [
   // ── App studios injected here at runtime ──
   { id: 'catalog',  label: 'Catalog Studio', icon: CatalogIcon,            path: '/catalog/domains' },
   { id: 'admin',    label: 'Platform Admin', icon: AdminPanelSettingsIcon, path: '/admin/users'     },
-  { id: 'ai-admin', label: 'AI Admin',       icon: PsychologyIcon,          path: '/admin/ai'         },
+  { id: 'ai-admin', label: 'Pulse Control',  icon: PsychologyIcon,          path: '/admin/ai'         },
   { id: 'settings', label: 'Settings',        icon: SettingsIcon,           path: '/settings',  bottom: true },
   { id: 'help',     label: 'Help',            icon: HelpIcon,               path: '/help',      bottom: true },
 ];
@@ -132,6 +132,10 @@ export function useShellState() {
   const [sidebarMode, setSidebarModeRaw] = useState(() => getStoredString('carbon-sidebar-mode', 'pinned'));
   const [panelVisible, setPanelVisible] = useState(() => getStoredBoolean('carbon-panel-visible', false));
   const [copilotVisible, setCopilotVisible] = useState(() => getStoredBoolean('carbon-copilot-visible', false));
+  // Dual-workspace focus: Expanded Pulse owns the main stage; Docked sits beside traditional.
+  const [copilotExpanded, setCopilotExpanded] = useState(() =>
+    getStoredBoolean('carbon-copilot-expanded', false),
+  );
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   // Persist sidebar mode
@@ -150,6 +154,10 @@ export function useShellState() {
     setStoredBoolean('carbon-copilot-visible', copilotVisible);
   }, [copilotVisible]);
 
+  useEffect(() => {
+    setStoredBoolean('carbon-copilot-expanded', copilotExpanded);
+  }, [copilotExpanded]);
+
   const changeStudio = useCallback((studioId) => {
     setActiveStudio(studioId);
   }, []);
@@ -163,16 +171,25 @@ export function useShellState() {
     });
   }, [setSidebarMode]);
 
-  // Open sidebar as peek (from studio click when hidden)
+  // Open sidebar as peek (from studio click when hidden).
+  // When already pinned/peek, leave visible mode alone (desktop).
   const openSidebarPeek = useCallback(() => {
     setSidebarModeRaw(prev => {
-      if (prev === 'hidden') {
-        try { localStorage.setItem('carbon-sidebar-mode', 'peek'); } catch { /* ignore */ }
-        return 'peek';
-      }
-      return prev;
+      if (prev === 'peek' || prev === 'pinned') return prev;
+      try { localStorage.setItem('carbon-sidebar-mode', 'peek'); } catch { /* ignore */ }
+      return 'peek';
     });
   }, []);
+
+  // Force peek even if underlying mode is pinned (ADR-0035 mobile: pinned maps to closed).
+  const forceSidebarPeek = useCallback(() => {
+    setSidebarMode('peek');
+  }, [setSidebarMode]);
+
+  // Force hidden (mobile hamburger close / dismiss overlay).
+  const forceSidebarHidden = useCallback(() => {
+    setSidebarMode('hidden');
+  }, [setSidebarMode]);
 
   // Dismiss peek back to hidden
   const dismissSidebarPeek = useCallback(() => {
@@ -195,13 +212,31 @@ export function useShellState() {
   }, []);
 
   const toggleCopilot = useCallback(() => {
-    setCopilotVisible(prev => !prev);
+    setCopilotVisible((prev) => {
+      if (prev) setCopilotExpanded(false); // closing returns to Focus Traditional next open as docked
+      return !prev;
+    });
   }, []);
 
   // Explicitly OPEN the copilot pane (used by task transfer to auto-open when hidden).
   // Unlike toggleCopilot, this never closes an already-open pane.
   const openCopilot = useCallback(() => {
     setCopilotVisible(true);
+  }, []);
+
+  const toggleCopilotExpanded = useCallback(() => {
+    setCopilotVisible(true);
+    setCopilotExpanded((prev) => !prev);
+  }, []);
+
+  const expandCopilot = useCallback(() => {
+    setCopilotVisible(true);
+    setCopilotExpanded(true);
+  }, []);
+
+  const dockCopilot = useCallback(() => {
+    setCopilotVisible(true);
+    setCopilotExpanded(false);
   }, []);
 
   return {
@@ -211,12 +246,18 @@ export function useShellState() {
     sidebarMode,
     toggleSidebar,
     openSidebarPeek,
+    forceSidebarPeek,
+    forceSidebarHidden,
     dismissSidebarPeek,
     pinSidebar,
     panelVisible,
     togglePanel,
     copilotVisible,
+    copilotExpanded,
     toggleCopilot,
+    toggleCopilotExpanded,
+    expandCopilot,
+    dockCopilot,
     openCopilot,
     commandPaletteOpen,
     setCommandPaletteOpen,

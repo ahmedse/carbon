@@ -20,6 +20,8 @@ def _eligible_queryset(policy):
 
     Mirrors the LPR-1A eligibility filter:
       - active employees only;
+      - known ``join_date`` (null = unknown service start; no entitlements until
+        enriched — J-EMP-06 / GOFSCO onboard);
       - gender restriction (male/female → ``gender__iexact``);
       - minimum service days (``join_date`` before the threshold date);
       - org-unit scope (``applies_to_org_units``; empty = all);
@@ -28,7 +30,7 @@ def _eligible_queryset(policy):
         / any — GOFSCO 42-day vs 30-day leave);
       - rotation-pattern scope (``applies_to_rotations``; empty = all).
     """
-    employees = Employee.objects.filter(is_active=True)
+    employees = Employee.objects.filter(is_active=True, join_date__isnull=False)
 
     if policy.gender_restriction in (LeavePolicy.GENDER_MALE, LeavePolicy.GENDER_FEMALE):
         employees = employees.filter(gender__code__iexact=policy.gender_restriction)

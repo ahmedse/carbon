@@ -9,11 +9,11 @@
 | Step | Result | Observed |
 |------|--------|----------|
 | B1 leave follow-up (API) | **PASS** | After Arabic resolve → `list_leave_entitlements`; Annual **30** / Sick **21** / used 0 — same-employee focus |
-| B1 leave follow-up (UI) | **PARTIAL** | Entitlements table 30/21/… correct pattern; **mislabeled “Employee 333”** (not 1416) + `call_host_api · 100 rows · Truncated` — focus/id honesty debt |
+| B1 leave follow-up (UI) | **PASS** (2026-09-17) | Employee filter + identity enrichment; no “Employee 333”; see `CHAT-B1-LEAVE-LABEL-2026-09-17.md` |
 | B2 Wrong person correction | **PASS** | After Eslam → “I meant Rabindra Mahato” → **1399** via `resolve_entity` |
 | B3 Self leave (ESS emp_1001) | **PASS** | Own entitlements via `call_host_api` (annual remaining ~28) |
 | B4 Coworker leave (ESS→1416) | **PARTIAL** | No numbers leaked; soft “no record” vs explicit deny |
-| B5 Compensation ask | **PARTIAL** | No **170** leak; replied “No data…” via `get_entity_details` — not a clear CBAC deny code |
+| B5 Compensation ask | **PASS** (2026-09-17) | Explicit `people:view_compensation` deny — see `CHAT-B5-COMPENSATION-DENY-2026-09-17.md` |
 | B6 How do I request leave? | **PASS** | Explains **My** app leave flow; no mutation claim |
 | B7 Draft leave next week | **PASS** | Draft text only; no create tool / no submit |
 | B8 Payroll period status | **PASS** | `call_host_api` → latest period Dec 2026 **committed** |
@@ -23,17 +23,17 @@
 
 | Metric | Signal |
 |--------|--------|
-| M09 Session memory | API PASS (B1/B2); UI PARTIAL (wrong employee label) |
+| M09 Session memory | API PASS (B1/B2); UI **PASS** (2026-09-17 label fix) |
 | M13 Domain expertise | PASS on entitlements + My leave explain + payroll |
 | M06 Mode contract | PASS B6/B7 (advisory / draft only) |
-| M07 Authz | PARTIAL — B5 soft-empty vs explicit deny; B9 PASS |
+| M07 Authz | **PASS** B5 CBAC deny (2026-09-17); B9 PASS |
 
 ## Open
 
-1. B1 UI entity label drift (Employee **333** vs focused **1416**)  
-2. Leave list truncation / over-fetch (100 rows) when filter should be single employee  
-3. B5 should deny compensation with CBAC language, not “employee not found”  
-4. Language: A3 Arabic prompt still answered in English  
+1. ~~B1 UI entity label drift~~ **CLOSED 2026-09-17**  
+2. ~~Leave list truncation / over-fetch~~ **CLOSED** (employee filter)  
+3. ~~B5 soft-empty vs CBAC deny~~ **CLOSED**  
+4. Language: A3 Arabic prompt still answered in English (residual)  
 
 ## Next
 

@@ -59,9 +59,9 @@ export default function SummaryCard({ item }) {
           alignItems="center"
           justifyContent="space-between"
           spacing={1}
-          sx={{ mb: 1 }}
+          sx={{ mb: 1, minWidth: 0 }}
         >
-          <Typography sx={{ ...FONT.heading }}>
+          <Typography sx={{ ...FONT.heading, minWidth: 0, overflowWrap: 'anywhere' }}>
             {item?.title || '—'}
           </Typography>
           <Chip

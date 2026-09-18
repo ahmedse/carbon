@@ -63,6 +63,19 @@ export const STEP_STATUS = {
   skipped: { label: 'Skipped', color: 'default' },
 };
 
+/** Resolve step status chip meta; unknown statuses fall back to raw label. */
+export function stepStatusMeta(status) {
+  return STEP_STATUS[status] || { label: status || 'Pending', color: 'default' };
+}
+
+/** Dense UPPERCASE labels for DAG node interiors (same vocabulary as STEP_STATUS). */
+export const NODE_STATUS_DENSE = Object.fromEntries(
+  Object.entries(STEP_STATUS).map(([k, v]) => [
+    k,
+    String(v.label).replace(/…/g, '').toUpperCase().replace('NEEDS APPROVAL', 'APPROVAL'),
+  ]),
+);
+
 // W3-G — human-facing tool names (RULE_23 outcome copy). The engine exposes
 // snake_case function names (e.g. `create_dq_rule`); the console shows a
 // friendly label instead. Unknown tools fall back to a title-cased rewrite

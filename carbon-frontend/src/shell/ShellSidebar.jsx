@@ -197,41 +197,15 @@ function getSidebarItems(studioId, helpApps = []) {
       ];
 
     case 'ai-admin':
+      // ADR-0036 — Pulse Control Plane. Freeze: no new top-level peers.
+      // Plan: docs/pulse/PULSE-ADMIN-REMAKE.md
       return [
-        { label: 'Overview', path: '/admin/ai', icon: AutoAwesomeIcon, role: 'admin' },
-        { label: 'AI Expertise', path: '/admin/ai/expertise', icon: SchoolIcon, role: 'admin' },
-        { label: 'Pulse', path: '/admin/ai/workspace', icon: ChatIcon, role: 'admin' },
-        { label: 'Conversations', path: '/admin/ai/conversations', icon: ForumIcon, role: 'admin' },
-        { type: 'group', label: 'Intelligence Core' },
-        { label: 'Knowledge Base', path: '/admin/ai/knowledge', icon: PsychologyIcon, role: 'admin' },
-        { label: 'Memory', path: '/admin/ai/memory', icon: MemoryIcon, role: 'admin' },
-        { label: 'Knowledge Graph', path: '/admin/ai/graph', icon: AccountTreeIcon, role: 'admin' },
-        { label: 'Budget & Usage', path: '/admin/ai/budget-usage', icon: AccountBalanceWalletIcon, role: 'admin' },
-        { label: 'Engine Settings', path: '/admin/ai/engine-settings', icon: TuneIcon, role: 'admin' },
-        { type: 'group', label: 'Agents & Tooling' },
-        { label: 'Agents', path: '/admin/ai/agents', icon: SmartToyIcon, role: 'admin' },
-        { label: 'Tools', path: '/admin/ai/tools', icon: HandymanIcon, role: 'admin' },
-        { label: 'Skills Catalog', path: '/admin/ai/skills', icon: ExtensionIcon, role: 'admin' },
-        { label: 'Capabilities', path: '/admin/ai/capabilities', icon: CategoryIcon, role: 'admin' },
-        { label: 'Topology', path: '/admin/ai/topology', icon: SchemaIcon, role: 'admin' },
-        { label: 'Archetypes', path: '/admin/ai/archetypes', icon: AutoFixHighIcon, role: 'admin' },
-        { label: 'Prompts & Playbook', path: '/admin/ai/prompts', icon: MenuBookIcon, role: 'admin' },
-        { type: 'group', label: 'Feedback & Learning' },
-        { label: 'Feedback Review', path: '/admin/ai/feedback', icon: FeedbackIcon, role: 'admin' },
-        { label: 'Learning Jobs', path: '/admin/ai/learning', icon: LoopIcon, role: 'admin' },
-        { label: 'Learning Flywheel', path: '/admin/ai/learning-flywheel', icon: AutorenewIcon, role: 'admin' },
-        { label: 'Skill Learning', path: '/admin/ai/skill-learning', icon: SchoolIcon, role: 'admin' },
-        { type: 'group', label: 'Observability' },
-        { label: 'Monitoring', path: '/admin/ai/monitoring', icon: MonitorHeartIcon, role: 'admin' },
-        { label: 'Output Quality', path: '/admin/ai/output-quality', icon: TrendingDownIcon, role: 'admin' },
-        { label: 'Watches', path: '/admin/ai/watches', icon: NotificationsActiveIcon, role: 'admin' },
-        { label: 'Audit Trail', path: '/admin/ai/audit', icon: HistoryIcon, role: 'admin' },
-        { label: 'Run Timeline', path: '/admin/ai/runs', icon: TimelineIcon, role: 'admin' },
-        { label: 'Human Task Inbox', path: '/admin/ai/inbox', icon: InboxIcon, role: 'admin' },
-        { type: 'group', label: 'Governance' },
-        { label: 'Process Registry', path: '/admin/ai/registry', icon: RuleIcon, role: 'admin' },
-        { label: 'Review Queue', path: '/admin/ai/review-queue', icon: AccountTreeIcon, role: 'admin' },
-        { label: 'Logs', path: '/admin/ai/logs', icon: ArticleIcon, role: 'admin' },
+        { label: 'Command Center', path: '/admin/ai', icon: AutoAwesomeIcon, role: 'admin' },
+        { label: 'Domain', path: '/admin/ai/domain', icon: RuleIcon, role: 'admin' },
+        { label: 'Assets', path: '/admin/ai/assets', icon: PsychologyIcon, role: 'admin' },
+        { label: 'Evidence', path: '/admin/ai/evidence', icon: HistoryIcon, role: 'admin' },
+        { label: 'Learning', path: '/admin/ai/learning', icon: LoopIcon, role: 'admin' },
+        { label: 'Platform', path: '/admin/ai/platform', icon: TuneIcon, role: 'admin' },
       ];
     
     case 'settings':
@@ -323,7 +297,7 @@ function getStudioTitle(studioId) {
     home:    'Dashboard',
     catalog: 'Catalog Studio',
     admin:   'Platform Admin',
-    'ai-admin': 'AI Admin',
+    'ai-admin': 'Pulse Control',
     settings:'Settings',
     help:    'Help & Support',
     apps:    'Apps',
@@ -577,7 +551,7 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
                   <Typography
                     key={`group-${item.label}`}
                     sx={{
-                      fontSize: '0.575rem',
+                      fontSize: '0.6875rem',
                       fontWeight: 500,
                       color: 'text.disabled',
                       letterSpacing: '0.04em',
@@ -594,10 +568,20 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
                 return;
               }
 
-              // Regular navigation items
+              // Regular navigation items — prefer longest matching path so
+              // `/admin/ai` does not stay active on `/admin/ai/domain` (ADR-0036).
               const Icon = item.icon;
               const itemPath = item.path ? item.path.replace(/\/+$|^\/+/, '') : '';
-              const isActive = itemPath && (normalizedLocation === itemPath || normalizedLocation.startsWith(`${itemPath}/`));
+              const pathMatches = (candidate) =>
+                candidate
+                && (normalizedLocation === candidate
+                  || normalizedLocation.startsWith(`${candidate}/`));
+              const longerSiblingWins = items.some((other) => {
+                if (!other.path || other.path === item.path) return false;
+                const otherPath = other.path.replace(/\/+$|^\/+/, '');
+                return otherPath.length > itemPath.length && pathMatches(otherPath);
+              });
+              const isActive = pathMatches(itemPath) && !longerSiblingWins;
 
               rendered.push(
                 <Box
@@ -607,7 +591,7 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 0.75,
-                    height: 28,
+                    height: 30,
                     px: 0.75,
                     borderRadius: '5px',
                     cursor: 'pointer',
@@ -639,7 +623,7 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
                   <Typography
                     noWrap
                     sx={{
-                      fontSize: '0.65rem',
+                      fontSize: '0.75rem',
                       fontWeight: isActive ? 600 : 400,
                       lineHeight: 1,
                     }}
@@ -678,10 +662,10 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
               bgcolor: (t) => t.palette.mode === 'light' ? 'rgba(14,165,233,0.05)' : 'rgba(56,189,248,0.08)',
             }}
           >
-            <LocationOnIcon sx={{ fontSize: 10, color: 'primary.main', flexShrink: 0 }} />
+            <LocationOnIcon sx={{ fontSize: 12, color: 'primary.main', flexShrink: 0 }} />
             <Typography
               noWrap
-              sx={{ fontSize: '0.575rem', fontWeight: 500, color: 'text.secondary', lineHeight: 1 }}
+              sx={{ fontSize: '0.6875rem', fontWeight: 500, color: 'text.secondary', lineHeight: 1 }}
               title={userOrgUnit}
             >
               {userOrgUnit}

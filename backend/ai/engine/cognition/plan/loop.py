@@ -500,6 +500,7 @@ class ReActLoop:
                     advance_and_ready_tasks,
                     incoming,
                     node_for_step,
+                    step_id_for_node,
                 )
                 from ai.engine.workflow.loops import (
                     body_step_ids,
@@ -727,6 +728,23 @@ class ReActLoop:
                             "intent": _ss.intent,
                             "reason": "unchosen_branch",
                         })
+                # Runtime follow-ups / heal inserts are not in the compiled
+                # workflow_graph. Promote them when depends_on are met so the
+                # graph path cannot leave Pending orphans under Completed.
+                _graph_sids: set[int] = set()
+                for _gn in _wf_graph.nodes:
+                    _gsid = step_id_for_node(_gn)
+                    if _gsid is not None:
+                        _graph_sids.add(_gsid)
+                _ready_set = set(ready_ids)
+                for _s in remaining:
+                    if _s.step_id in _ready_set or _s.step_id in newly_skipped:
+                        continue
+                    if _s.step_id in _graph_sids:
+                        continue
+                    if all(d in completed_ids for d in (_s.depends_on or [])):
+                        ready_ids.append(_s.step_id)
+                        _ready_set.add(_s.step_id)
                 ready_id_set = set(ready_ids)
                 by_remaining = {s.step_id: s for s in remaining}
                 ready = [
@@ -830,21 +848,82 @@ class ReActLoop:
                     host_user_id=host_user_id,
                     retry_policy=_retry_policy,
                 )
+                # Hard-cancel: race step I/O against operator Stop (cancel_plan).
+                _task = asyncio.create_task(_exec_coro)
+
+                async def _poll_cancel():
+                    while not _task.done():
+                        if _db is not None and run_id is not None:
+                            if await self._run_is_cancelled(_db, run_id):
+                                return True
+                        await asyncio.sleep(0.25)
+                    return False
+
+                _watcher = asyncio.create_task(_poll_cancel())
+                _waiters = {_task, _watcher}
+                _timeout_s = (
+                    float(_timeout_ms) / 1000.0
+                    if _timeout_ms and int(_timeout_ms) > 0
+                    else None
+                )
                 try:
-                    if _timeout_ms and int(_timeout_ms) > 0:
-                        _res = await asyncio.wait_for(
-                            _exec_coro, timeout=float(_timeout_ms) / 1000.0,
+                    _done, _pending = await asyncio.wait(
+                        _waiters,
+                        return_when=asyncio.FIRST_COMPLETED,
+                        timeout=_timeout_s,
+                    )
+                    if _task in _done:
+                        _watcher.cancel()
+                        try:
+                            await _watcher
+                        except asyncio.CancelledError:
+                            pass
+                        try:
+                            _res = _task.result()
+                        except asyncio.CancelledError:
+                            _res = StepResult(
+                                step_id=step.step_id,
+                                intent=step.intent,
+                                critic_verdict="veto",
+                                executed=False,
+                                error="[cancelled] operator stop",
+                            )
+                    elif _watcher in _done and _watcher.result():
+                        _task.cancel()
+                        try:
+                            await _task
+                        except asyncio.CancelledError:
+                            pass
+                        _res = StepResult(
+                            step_id=step.step_id,
+                            intent=step.intent,
+                            critic_verdict="veto",
+                            executed=False,
+                            error="[cancelled] operator stop",
                         )
                     else:
-                        _res = await _exec_coro
-                except asyncio.TimeoutError:
-                    _res = StepResult(
-                        step_id=step.step_id,
-                        intent=step.intent,
-                        critic_verdict="veto",
-                        executed=False,
-                        error=f"[timeout] exceeded timeout_ms={_timeout_ms}",
-                    )
+                        # Overall step timeout
+                        _task.cancel()
+                        _watcher.cancel()
+                        try:
+                            await _task
+                        except asyncio.CancelledError:
+                            pass
+                        try:
+                            await _watcher
+                        except asyncio.CancelledError:
+                            pass
+                        _res = StepResult(
+                            step_id=step.step_id,
+                            intent=step.intent,
+                            critic_verdict="veto",
+                            executed=False,
+                            error=f"[timeout] exceeded timeout_ms={_timeout_ms}",
+                        )
+                except Exception:
+                    _task.cancel()
+                    _watcher.cancel()
+                    raise
                 return step, _res, (time.monotonic() - _t0) * 1000
 
             if len(ready) == 1:
@@ -1065,6 +1144,9 @@ class ReActLoop:
                     )
 
                 if result.critic_verdict == "veto" and not _catch_healed:
+                    if result.error and "[cancelled]" in str(result.error):
+                        stopped_for_cancel = True
+                        break
                     if replans_used < self.MAX_REPLANS:
                         logger.info(
                             "ReActLoop: step %d vetoed, replanning (%d/%d)",
@@ -1124,25 +1206,39 @@ class ReActLoop:
                 if self._should_inject_followup(
                     result, followup_steps_used, _max_followup_steps
                 ):
-                    followup_steps_used += 1
                     _fu = result.followup
-                    _fid = _next_step_id
-                    _next_step_id += 1
-                    _followup_step = PlanStep(
-                        step_id=_fid,
-                        intent=f"Fetch {_fu.followup_tool} to complete the answer",
-                        tool_name=_fu.followup_tool,
-                        tool_args=_fu.followup_args or {},
-                        is_mutation=False,
-                        depends_on=[step.step_id],
-                        agent_role="orchestrator",
+                    _sig = self._followup_signature(
+                        _fu.followup_tool, _fu.followup_args,
                     )
-                    plan.steps.append(_followup_step)
-                    remaining.append(_followup_step)
-                    logger.info(
-                        "ReActLoop: multi-hop follow-up step=%d tool=%s (%d/%d)",
-                        _fid, _fu.followup_tool, followup_steps_used, _max_followup_steps,
+                    _dup = any(
+                        self._followup_signature(s.tool_name, s.tool_args) == _sig
+                        for s in list(remaining) + list(plan.steps)
+                        if getattr(s, "tool_name", None)
                     )
+                    if _dup:
+                        logger.info(
+                            "ReActLoop: coalesce duplicate follow-up tool=%s",
+                            _fu.followup_tool,
+                        )
+                    else:
+                        followup_steps_used += 1
+                        _fid = _next_step_id
+                        _next_step_id += 1
+                        _followup_step = PlanStep(
+                            step_id=_fid,
+                            intent=f"Fetch {_fu.followup_tool} to complete the answer",
+                            tool_name=_fu.followup_tool,
+                            tool_args=_fu.followup_args or {},
+                            is_mutation=False,
+                            depends_on=[step.step_id],
+                            agent_role="orchestrator",
+                        )
+                        plan.steps.append(_followup_step)
+                        remaining.append(_followup_step)
+                        logger.info(
+                            "ReActLoop: multi-hop follow-up step=%d tool=%s (%d/%d)",
+                            _fid, _fu.followup_tool, followup_steps_used, _max_followup_steps,
+                        )
 
                 # ── Phase completed? (all steps in the phase are done) ──
                 # Runs AFTER completed_ids.update so single-step phases fire.
@@ -1160,7 +1256,7 @@ class ReActLoop:
                             "step_ids": _phase_steps.get(_pid, []),
                         })
 
-            if stopped_for_pause:
+            if stopped_for_pause or stopped_for_cancel:
                 break  # stop the entire loop (outer while)
 
         # ── Check for pause (consent gate hit) / operator cancel ──────────
@@ -1168,6 +1264,30 @@ class ReActLoop:
         is_cancelled = stopped_for_cancel
         if not is_cancelled and _db is not None and run_id is not None:
             is_cancelled = await self._run_is_cancelled(_db, run_id)
+
+        # Truthful Done: never leave Pending steps under a Completed run.
+        # Skip anything still queued (stuck deps, orphan follow-ups, barrier).
+        if remaining and not is_paused and not is_cancelled:
+            for _ss in list(remaining):
+                step_results.append(StepResult(
+                    step_id=_ss.step_id,
+                    intent=_ss.intent,
+                    critic_verdict="pass",
+                    executed=False,
+                    error=None,
+                ))
+                completed_ids.add(_ss.step_id)
+                if _db is not None and run_id is not None:
+                    await self._persist_skipped_step(
+                        _db, run_id, _ss, reason="unrun_at_finalize",
+                    )
+                await _get_broadcast()(instance_id, "run.step.skipped", {
+                    "run_id": run_id,
+                    "step_index": _ss.step_id,
+                    "intent": _ss.intent,
+                    "reason": "unrun_at_finalize",
+                })
+            remaining = []
 
         if is_paused:
             # Don't synthesize — return the confirmation prompt
@@ -1214,7 +1334,7 @@ class ReActLoop:
 
         # ── P1.1: Update Run row with final status ────────────────────────
         if _db is not None and run_id is not None:
-            total_latency = (time.monotonic() - t0) * 1000
+            total_latency = round((time.monotonic() - t0) * 1000, 1)
             if is_paused or is_cancelled:
                 # Pause/cancel already own the Run status — never clobber via
                 # _finalize_run (that path wrote completed/failed and hid Stop).
@@ -1244,7 +1364,7 @@ class ReActLoop:
                 )
 
         if not is_paused and not is_cancelled:
-            _total_latency = (time.monotonic() - t0) * 1000
+            _total_latency = round((time.monotonic() - t0) * 1000, 1)
             _evt = (
                 "run.completed"
                 if final_status in ("completed", "completed_with_gaps")
@@ -1871,6 +1991,15 @@ class ReActLoop:
         if len(text) > 20:
             return ObservationResult(answer=text, needs_followup=False)
         return None
+
+    @staticmethod
+    def _followup_signature(tool_name: str | None, tool_args: dict | None) -> tuple:
+        """Stable key for coalescing identical follow-up requests."""
+        try:
+            args_key = json.dumps(tool_args or {}, sort_keys=True, default=str)
+        except (TypeError, ValueError):
+            args_key = str(tool_args)
+        return (tool_name or "", args_key)
 
     def _should_inject_followup(
         self,

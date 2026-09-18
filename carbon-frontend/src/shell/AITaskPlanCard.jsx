@@ -576,12 +576,10 @@ function AITaskPlanCard({
           </Stack>
         )}
 
-        {plan.status === 'completed' && plan.final_response && (
-          <Tooltip title={plan.final_response}>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.6875rem' }}>
-              Completed — see the audit ledger for the outcome.
-            </Typography>
-          </Tooltip>
+        {plan.status === 'completed' && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.6875rem' }}>
+            Completed — open Output for the answer and downloads.
+          </Typography>
         )}
         {plan.status === 'cancelled' && (
           <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>

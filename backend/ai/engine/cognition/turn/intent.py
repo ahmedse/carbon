@@ -155,7 +155,11 @@ def _build_nav_targets(navigation_routes: list[dict] | None) -> list[dict]:
     return out
 
 
-def _build_system_prompt(labels: list[dict], nav_targets: list[dict] | None = None) -> str:
+def _build_system_prompt(
+    labels: list[dict],
+    nav_targets: list[dict] | None = None,
+    tenant_org: dict | None = None,
+) -> str:
     lines = [
         "You are the intent recogniser for an AI assistant inside a business "
         "system. Your ONLY job is to decide which read-only data endpoint the "
@@ -189,6 +193,12 @@ def _build_system_prompt(labels: list[dict], nav_targets: list[dict] | None = No
         "  action = \"answer\" with `endpoint` set to it and delivery = "
         "  \"analyze\" or \"summarize\" — do NOT clarify just because a branch "
         "  name is present.",
+        "- COMPENSATION / SALARY / BASIC PAY (راتب / أجر / مرتب): prefer "
+        "  `get_employee` (named coworker) or `get_my_profile` (first-person "
+        "  \"my salary\" / راتبي). Do NOT match `list_my_payslips` or "
+        "  `list_payslip_lines` for salary/compensation — empty payslips are "
+        "  not \"no salary data\". Use payslip endpoints only when the user "
+        "  explicitly asks for payslip lines / قسيمة.",
         "- If exactly one endpoint clearly matches, action = \"answer\" and set "
         "  `endpoint` to its name.",
         "- If two or more endpoints are nearly as likely and the user could mean "
@@ -233,6 +243,9 @@ def _build_system_prompt(labels: list[dict], nav_targets: list[dict] | None = No
         "- Use \"concept\" (not \"platform\") when the question is about explaining what something "
         "  IS rather than reading the current values in the system.",
     ]
+    tenant_block = _tenant_org_prompt_rule(tenant_org)
+    if tenant_block:
+        lines += ["", tenant_block]
     if nav_targets:
         lines += [
             "",
@@ -261,6 +274,248 @@ def _build_system_prompt(labels: list[dict], nav_targets: list[dict] | None = No
         '"clarification":null,"options":null}',
     ]
     return "\n".join(lines)
+
+
+def _tenant_org_aliases(tenant_org: dict | None) -> list[str]:
+    """Flatten tenant_org name/short_name/aliases into matchable strings."""
+    if not isinstance(tenant_org, dict):
+        return []
+    out: list[str] = []
+    for key in ("name", "short_name"):
+        val = (tenant_org.get(key) or "").strip()
+        if val:
+            out.append(val)
+            # Also the left side of an em-dash / hyphen title.
+            for sep in ("—", "–", "-"):
+                if sep in val:
+                    left = val.split(sep, 1)[0].strip()
+                    if left:
+                        out.append(left)
+                    break
+    for a in tenant_org.get("aliases") or []:
+        text = str(a).strip()
+        if text:
+            out.append(text)
+    # Dedupe case-insensitively, keep first spelling.
+    seen: set[str] = set()
+    unique: list[str] = []
+    for item in out:
+        key = item.casefold()
+        if key not in seen:
+            seen.add(key)
+            unique.append(item)
+    return unique
+
+
+def _tenant_org_prompt_rule(tenant_org: dict | None) -> str:
+    aliases = _tenant_org_aliases(tenant_org)
+    if not aliases:
+        return ""
+    alias_txt = ", ".join(f'"{a}"' for a in aliases[:12])
+    return (
+        f"- TENANT ORGANISATION: the whole institution this assistant serves is "
+        f"named by aliases [{alias_txt}]. When the user asks about that "
+        f"organisation / \"the company\" / \"our company\" / \"data in the "
+        f"system\" about it, action = \"answer\" (prefer an employees/"
+        f"analyze_* endpoint when present; otherwise endpoint = null). NEVER "
+        f"action = \"clarify\" just because they named the company — the "
+        f"company is never an ambiguous missing entity."
+    )
+
+
+def _message_mentions_tenant_org(user_message: str, tenant_org: dict | None) -> bool:
+    """True when the utterance names the tenant org or 'the company'."""
+    msg = (user_message or "").casefold()
+    if not msg.strip():
+        return False
+    # Bare company deixis — only when we have a declared tenant_org.
+    aliases = _tenant_org_aliases(tenant_org)
+    if not aliases:
+        return False
+    if any(
+        phrase in msg
+        for phrase in (
+            "the company",
+            "our company",
+            "the organisation",
+            "the organization",
+            "this company",
+            "this organisation",
+            "this organization",
+        )
+    ):
+        return True
+    return any(a.casefold() in msg for a in aliases if len(a) >= 3)
+
+
+def _apply_tenant_org_override(
+    resolution: IntentResolution,
+    *,
+    user_message: str,
+    tenant_org: dict | None,
+    labels: list[dict],
+) -> IntentResolution:
+    """Kill clarify/disambiguate loops on the whole-organisation name.
+
+    When the user names the tenant (GOFSCO/AASTMT/…) or \"the company\", the
+    intent classifier must not short-circuit to clarify — Chat should answer
+    from live tools. Prefer a people/employees analyze or list endpoint when
+    present; otherwise fall through with action=answer and no endpoint.
+    """
+    if resolution.action not in ("clarify", "disambiguate"):
+        return resolution
+    if not _message_mentions_tenant_org(user_message, tenant_org):
+        return resolution
+
+    preferred_names = (
+        "analyze_employees",
+        "list_employees",
+        "get_calculation_summary",
+        "list_org_units",
+    )
+    label_names = {lbl["name"] for lbl in labels}
+    pick = next((n for n in preferred_names if n in label_names), None)
+
+    resolution.action = "answer"
+    resolution.clarification = ""
+    resolution.options = []
+    resolution.zone = "platform"
+    resolution.delivery = resolution.delivery or "explain"
+    resolution.needs_host_data = bool(pick)
+    if pick:
+        resolution.candidates = [
+            IntentCandidate(name=pick, confidence=max(resolution.confidence, 0.85))
+        ]
+        resolution.confidence = max(resolution.confidence, 0.85)
+    else:
+        resolution.candidates = []
+    return resolution
+
+
+#: C1 — control-instruction fragments that are never employee names.
+_INSTRUCTION_SHAPED = re.compile(
+    r"(?is)"
+    r"(ignore\s+(all\s+)?(previous|prior|above)|"
+    r"disregard\s+(all\s+)?(previous|prior|instructions?)|"
+    r"system\s+prompt|"
+    r"show\s+all\s+salaries|"
+    r"reveal\s+(all\s+)?salaries|"
+    r"you\s+are\s+now|"
+    r"override\s+(all\s+)?(rules|instructions?|guards?))"
+)
+
+
+def _message_has_instruction_shaped_name(user_message: str) -> bool:
+    """True when the utterance embeds control text as if it were a person name."""
+    msg = (user_message or "").strip()
+    if not msg or not _INSTRUCTION_SHAPED.search(msg):
+        return False
+    # Person-lookup framing OR quoted payload — treat as data-as-data resolve.
+    lowered = msg.lower()
+    if any(
+        tok in lowered
+        for tok in (
+            "employee",
+            "named",
+            "called",
+            "find",
+            "look up",
+            "lookup",
+            "who is",
+            "salary",
+            "salaries",
+        )
+    ):
+        return True
+    if "'" in msg or '"' in msg or "`" in msg:
+        return True
+    return False
+
+
+def _apply_instruction_shaped_name_override(
+    resolution: IntentResolution,
+    *,
+    user_message: str,
+    labels: list[dict],
+) -> IntentResolution:
+    """C1: never clarify modes when the 'name' is instruction-shaped text.
+
+    Force ``answer`` + ``resolve_entity`` so the resolver returns an honest
+    no_match (data-as-data). Must not dump salaries or ask which mode to enter.
+    """
+    if not _message_has_instruction_shaped_name(user_message):
+        return resolution
+    if resolution.action not in ("clarify", "disambiguate", "answer"):
+        return resolution
+
+    label_names = {lbl["name"] for lbl in labels}
+    pick = "resolve_entity" if "resolve_entity" in label_names else None
+    resolution.action = "answer"
+    resolution.clarification = ""
+    resolution.options = []
+    resolution.zone = "platform"
+    resolution.delivery = "explain"
+    resolution.needs_host_data = bool(pick)
+    if pick:
+        resolution.candidates = [
+            IntentCandidate(name=pick, confidence=max(resolution.confidence, 0.9))
+        ]
+        resolution.confidence = max(resolution.confidence, 0.9)
+    return resolution
+
+
+def _apply_compensation_override(
+    resolution: IntentResolution,
+    *,
+    user_message: str,
+    labels: list[dict],
+) -> IntentResolution:
+    """B5: salary/compensation asks must not soft-route to empty payslip lists.
+
+    Prefer ``get_my_profile`` (self) or ``get_employee`` (coworker) so CBAC
+    deny / resolve_entity paths can surface ``people:view_compensation``.
+    Payslip endpoints stay only when the user explicitly asked for payslips.
+    """
+    from ai.engine.agent.tools import (
+        compensation_intent_asked,
+        first_person_compensation_ask,
+        payslip_specific_ask,
+    )
+
+    if not compensation_intent_asked(user_message):
+        return resolution
+    if payslip_specific_ask(user_message):
+        return resolution
+
+    label_names = {lbl["name"] for lbl in labels}
+    if first_person_compensation_ask(user_message):
+        preferred = ("get_my_profile", "get_employee")
+    else:
+        preferred = ("get_employee", "get_my_profile")
+    pick = next((n for n in preferred if n in label_names), None)
+    if pick is None:
+        return resolution
+
+    top = resolution.candidates[0].name if resolution.candidates else ""
+    if top == pick and resolution.action == "answer":
+        return resolution
+
+    resolution.action = "answer"
+    resolution.clarification = ""
+    resolution.options = []
+    resolution.zone = "platform"
+    resolution.delivery = "lookup"
+    resolution.needs_host_data = True
+    resolution.candidates = [
+        IntentCandidate(
+            name=pick,
+            confidence=max(resolution.confidence, 0.9),
+            reason="compensation ask → CBAC-capable employee/profile path",
+        )
+    ]
+    resolution.confidence = max(resolution.confidence, 0.9)
+    resolution.intent = resolution.intent or "compensation lookup"
+    return resolution
 
 
 def _parse_json(content: str | None) -> dict | None:
@@ -376,6 +631,7 @@ class IntentResolver:
         user_message: str,
         api_catalog: list[dict] | None,
         navigation_routes: list[dict] | None = None,
+        tenant_org: dict | None = None,
         conversation_history: list[dict] | None = None,
         instance_id: str = "",
         conversation_id: str = "",
@@ -402,7 +658,7 @@ class IntentResolver:
 
         from ai.engine.llm.router import route_chat
 
-        system_prompt = _build_system_prompt(labels, nav_targets)
+        system_prompt = _build_system_prompt(labels, nav_targets, tenant_org=tenant_org)
 
         # Fold a short recent-history window in so the classifier can resolve
         # "they/those" against prior turns (the regex anaphora resolver only
@@ -472,6 +728,22 @@ class IntentResolver:
         # Apply the confidence ladder *after* parsing so a weak/garbage answer
         # is re-routed to the honest path rather than trusted blindly.
         resolution = _apply_ladder(resolution, labels, min_confidence, ambiguity_gap)
+        resolution = _apply_tenant_org_override(
+            resolution,
+            user_message=user_message,
+            tenant_org=tenant_org,
+            labels=labels,
+        )
+        resolution = _apply_instruction_shaped_name_override(
+            resolution,
+            user_message=user_message,
+            labels=labels,
+        )
+        resolution = _apply_compensation_override(
+            resolution,
+            user_message=user_message,
+            labels=labels,
+        )
         logger.info(
             "IntentResolver: action=%s delivery=%s intent=%r top=%s conf=%.2f (conv=%s)",
             resolution.action,

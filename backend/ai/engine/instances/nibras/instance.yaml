@@ -18,6 +18,21 @@ description: >
   loan schedules, GOSI/WPS compliance, and attendance. It advises and
   drafts — it never mutates records and never invents figures.
 
+# Whole-organisation identity for Chat grounding (ORG-NAME GUARD).
+# When the user names these aliases / "the company", treat as all-data —
+# never as an ambiguous person or a missing entity that needs clarifying.
+tenant_org:
+  name: "GOFSCO — Gas & Oil Field Services Company"
+  short_name: "GOFSCO"
+  aliases:
+    - GOFSCO
+    - gofsco
+    - Gas and Oil Field Services Company
+    - Gas & Oil Field Services Company
+  summary: >
+    Gas and Oil Field Services Company (Kuwait). This Nibras instance holds
+    its People & Payroll spine: org tree, employees, leave, loans, and payroll.
+
 persona: >
   You are the Nibras People & Payroll assistant for GOFSCO and connected
   organisations. Your role is advisory and drafting: you explain, guide,
@@ -25,6 +40,15 @@ persona: >
   loans, attendance, or HR data, and you never state an ungrounded figure
   as fact. Mark placeholders explicitly and ask for actual values when you
   do not have them.
+
+  ## Company / GOFSCO questions
+  GOFSCO is the organisation you serve — not an ambiguous entity. When the
+  user asks about GOFSCO, "the company", or "data in the system" about the
+  company: answer immediately. State what Nibras is for GOFSCO, then call
+  aggregate_entity (metric=headcount) and, when useful, analyze_employees
+  for a short org picture. Do NOT ask repeated clarifying questions
+  ("what specifically…?") for the company itself — only clarify when they
+  name a specific person, run, or leave record that is still ambiguous.
 
   ## Your expertise
   You are expert in the full HR lifecycle: employee onboarding and records,
@@ -169,7 +193,9 @@ api_catalog:
       Get full details for one employee: personal data, position, org unit,
       basic salary, join date, contract type, is_active. Path param {id}
       is the employee numeric id (resolve via the resolve_entity TOOL if you
-      only have a name or employee number).
+      only have a name or employee number). Prefer this (or resolve_entity)
+      for salary / compensation / basic pay questions about a named coworker —
+      CBAC may deny with people:view_compensation; never invent "no salary data".
     requires_auth: true
     requires_confirmation: false
 
@@ -244,10 +270,11 @@ api_catalog:
     requires_confirmation: true
 
   # ── Self-service ("my …") — resolves to the LOGGED-IN employee only ──
-  # Use these for ANY first-person request ("my leave", "اجازاتي", "my salary",
-  # "who am I"). They are scoped server-side to the caller's own record and can
-  # never expose another employee — never use the org-wide list_* endpoints for
-  # a first-person question.
+  # Use these for ANY first-person request ("my leave", "اجازاتي", "who am I").
+  # They are scoped server-side to the caller's own record and can never expose
+  # another employee — never use the org-wide list_* endpoints for a
+  # first-person question. For salary / compensation / راتبي use get_my_profile
+  # (CBAC may deny people:view_compensation) — NOT list_my_payslips.
 
   - name: get_my_profile
     method: GET
@@ -255,7 +282,9 @@ api_catalog:
     description: >
       The logged-in employee's OWN profile: id, employee_no, full_name,
       job_title, org_unit, manager, is_active. Use for "who am I", "my
-      profile/department/manager", "بياناتي".
+      profile/department/manager", "بياناتي", and first-person salary /
+      compensation / basic pay / "راتبي" (authorization is enforced server-side;
+      do not treat a deny as missing salary data).
     requires_auth: true
     requires_confirmation: false
 
@@ -294,7 +323,9 @@ api_catalog:
     description: >
       The logged-in employee's OWN payslip lines from committed/validated
       payroll runs only: id, line_type (gross | gosi | loan_installment | net),
-      amount, payroll_run. Use for "my payslip", "my salary", "راتبي".
+      amount, payroll_run. Use ONLY for explicit "my payslip" / "قسيمة" asks —
+      NOT for salary / compensation / basic pay / "راتبي" (those use
+      get_my_profile or get_employee / resolve_entity so CBAC deny is explicit).
     requires_auth: true
     requires_confirmation: false
 
@@ -305,7 +336,11 @@ api_catalog:
     path: /carbon-api/people/leave-entitlements/
     description: >
       List leave entitlements for employees visible to the user. Fields:
-      id, employee, leave_type, days_entitled, days_used, days_remaining.
+      id, employee, employee_no, employee_name, leave_type, entitled_days,
+      used_days, carried_forward. ALWAYS pass query_params.employee or
+      employee_no when asking about one person (use the focused employee_no
+      from resolve_entity). Unfiltered calls return a truncated org page and
+      must not be used for a single-person leave follow-up.
     requires_auth: true
     requires_confirmation: false
 
@@ -314,8 +349,9 @@ api_catalog:
     path: /carbon-api/people/leave-records/
     description: >
       List leave records (approved, pending, rejected). Fields: id,
-      employee, leave_type, start_date, end_date, status, days.
-      Filter by query param employee=<id> or status=<value>.
+      employee, employee_no, employee_name, leave_type, start_date, end_date,
+      status, days. Filter by query_params.employee / employee_no (required
+      for a specific person) or status=<value>.
     requires_auth: true
     requires_confirmation: false
 
@@ -496,5 +532,6 @@ topic_guard:
     - "(?i)(list|show|get|retrieve|display|give)\\s+.{0,40}(data\\s+quality|\\bDQ\\b)\\s+(rule|check)"
     - "(?i)data\\s+catalog\\s+(content|table|asset|schema)"
     - "(?i)show\\s+.{0,40}\\bDQ\\s+rule|\\bDQ\\s+rule.{0,40}system"
-    - "(?i)(check|show|list|get|retrieve)\\s+.{0,50}\\b(catalog|mdm|orgunits?|org.units?|data.schema|dataschema|connection|emission)\\b"
+    # org units are IN SCOPE for Nibras (GOFSCO org tree) — do not block them.
+    - "(?i)(check|show|list|get|retrieve)\\s+.{0,50}\\b(catalog|mdm|data.schema|dataschema|connection|emission)\\b"
     - "(?i)data\\s+trust|carbon\\s+platform|carbon\\s+instance"

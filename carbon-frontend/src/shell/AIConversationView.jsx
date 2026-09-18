@@ -65,7 +65,7 @@ function normalizeConversationShape(payload) {
   };
 }
 
-function AIConversationView({ conversationId, onOpenPanel, onForked, onConversationUpdated }) {
+function AIConversationView({ conversationId, onOpenPanel, onForked, onConversationUpdated, seedDraft = null, onSeedDraftConsumed }) {
   const { token, user, userCapabilities, isGlobalAdminFlag } = useAuth();
   const { notify, notifyFromError } = useNotification();
   const { executeMode, setExecuteMode } = useExecuteMode();
@@ -1542,6 +1542,9 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
           conversationStatus={convStatus}
           onMentionsChange={setMentions}
           onCommand={handleCommand}
+          conversationId={conversationId}
+          seedDraft={seedDraft}
+          onSeedDraftConsumed={onSeedDraftConsumed}
           mode={sendMode === 'steer' ? 'agent' : 'ask'}
           onModeChange={(nextMode) => {
             setSendMode(nextMode === 'agent' ? 'steer' : 'queue');
@@ -1657,6 +1660,8 @@ AIConversationView.propTypes = {
   conversationId: PropTypes.string.isRequired,
   onForked: PropTypes.func,
   onConversationUpdated: PropTypes.func,
+  seedDraft: PropTypes.string,
+  onSeedDraftConsumed: PropTypes.func,
 };
 
 export default AIConversationView;

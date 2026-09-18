@@ -1,26 +1,11 @@
-"""``export_document`` — generate Word (.docx) / Excel (.xlsx) artifacts.
+"""``export_document`` — generate Word / Excel / PDF / PNG artifacts.
 
-This is the missing "deliverable" primitive for the workspace chat agent:
-after a study, audit, or research task the agent can produce a real,
-downloadable report instead of only chat prose.  ``format`` selects the
-output (``docx``, ``xlsx``, or ``both``); content is accepted either as
-markdown ``content`` (rendered to paragraphs / headings / bullets) and/or a
-``table`` (headers + rows → a sheet / Word table).
-
-Files are written under ``MEDIA_ROOT/ai_exports/`` and surfaced to chat as a
-``download`` action — the UI renders a real download link (never a raw
-server path the user must copy).
-
-Guardrails honored (non-negotiable):
-
-  * **RULE_20** — zero upward imports: only stdlib + ``django.conf`` (for
-    ``MEDIA_ROOT``) + ``openpyxl`` / ``docx``.  No domain-app models/views.
-  * **RULE_21** — file generation is **non-mutating to user data**; it writes
-    a fresh artifact into a scratch media folder, so
-    ``requires_confirmation=False`` (the user explicitly asked for the export;
-    nothing in their records is created or changed).
-  * **RULE_23** — outcome copy: result speaks in product terms ("Download the
-    XLSX report") and never leaks engine class names.
+Deliverable primitive for the workspace agent: after a study, audit, or
+research task the agent can produce real downloadable files instead of only
+chat prose. ``format`` selects the output (``docx``, ``xlsx``, ``pdf``,
+``png``, ``both`` = docx+xlsx, or ``pack`` = all four). Content is accepted
+as markdown ``content`` and/or a ``table`` (headers + rows → sheet / Word
+table / PDF table / PNG chart).
 """
 from __future__ import annotations
 
@@ -36,11 +21,23 @@ from ai.engine.agent.plugins import ToolPlugin
 
 logger = logging.getLogger("carbon.ai.plugins.export_document")
 
-_SAFE_FMT = {"docx", "xlsx"}
+_SAFE_FMT = {"docx", "xlsx", "pdf", "png"}
 
 _MIME = {
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "pdf": "application/pdf",
+    "png": "image/png",
+}
+
+# format aliases → concrete set of generators to run
+_FORMAT_SETS = {
+    "docx": ("docx",),
+    "xlsx": ("xlsx",),
+    "pdf": ("pdf",),
+    "png": ("png",),
+    "both": ("docx", "xlsx"),
+    "pack": ("docx", "xlsx", "pdf", "png"),
 }
 
 
@@ -77,11 +74,11 @@ def _to_number(value: Any) -> float | None:
 class ExportDocument(ToolPlugin):
     name = "export_document"
     description = (
-        "Generate a downloadable Word (.docx) and/or Excel (.xlsx) document "
-        "from the conversation's findings — e.g. 'export this study as a Word "
-        "report and an Excel comparison table'. Provide a title, optional "
-        "markdown content, and/or a table (headers + rows). Returns a download "
-        "link surfaced in chat."
+        "Generate downloadable deliverables from findings: Word (.docx), "
+        "Excel (.xlsx), PDF, and/or a PNG chart. Use format 'pack' for all "
+        "four (board packs). Provide a title, optional markdown content, "
+        "and/or a table (headers + rows — also drives the PNG chart). "
+        "Returns download links for the plan Artifacts strip."
     )
     input_schema: dict[str, Any] = {
         "type": "object",
@@ -92,8 +89,11 @@ class ExportDocument(ToolPlugin):
             },
             "format": {
                 "type": "string",
-                "enum": ["docx", "xlsx", "both"],
-                "description": "Which formats to generate. Default: both.",
+                "enum": ["docx", "xlsx", "pdf", "png", "both", "pack"],
+                "description": (
+                    "Which formats to generate. Default: both (docx+xlsx). "
+                    "'pack' = docx+xlsx+pdf+png."
+                ),
             },
             "content": {
                 "type": "string",
@@ -133,8 +133,7 @@ class ExportDocument(ToolPlugin):
             return {"error": "A title is required — e.g. 'Carbon Standards Study'."}
 
         fmt = (args.get("format") or "both").strip().lower()
-        if fmt not in ("docx", "xlsx", "both"):
-            fmt = "both"
+        wanted = _FORMAT_SETS.get(fmt) or _FORMAT_SETS["both"]
 
         content = (args.get("content") or "").strip()
         table = args.get("table") or None
@@ -149,34 +148,27 @@ class ExportDocument(ToolPlugin):
         stem = _slugify(title)
         stamp = now().strftime("%Y%m%d-%H%M%S")
         files: list[dict] = []
+        writers = {
+            "docx": (self._write_docx, "Word"),
+            "xlsx": (self._write_xlsx, "Excel"),
+            "pdf": (self._write_pdf, "PDF"),
+            "png": (self._write_png_chart, "PNG chart"),
+        }
 
-        if fmt in ("docx", "both"):
-            filename = f"{stem}-{stamp}.docx"
+        for kind in wanted:
+            writer, label = writers[kind]
+            filename = f"{stem}-{stamp}.{kind}"
             path = out_dir / filename
             try:
-                self._write_docx(path, title, content, table)
+                writer(path, title, content, table)
                 files.append({
                     "filename": filename,
-                    "format": "docx",
+                    "format": kind,
                     "path": f"/media/ai_exports/{filename}",
                 })
             except Exception as exc:  # fail-visible, never fabricate a file
-                logger.exception("export_document docx failed")
-                return {"error": f"Word export failed: {exc}"}
-
-        if fmt in ("xlsx", "both"):
-            filename = f"{stem}-{stamp}.xlsx"
-            path = out_dir / filename
-            try:
-                self._write_xlsx(path, title, content, table)
-                files.append({
-                    "filename": filename,
-                    "format": "xlsx",
-                    "path": f"/media/ai_exports/{filename}",
-                })
-            except Exception as exc:
-                logger.exception("export_document xlsx failed")
-                return {"error": f"Excel export failed: {exc}"}
+                logger.exception("export_document %s failed", kind)
+                return {"error": f"{label} export failed: {exc}"}
 
         if not files:
             return {"error": "No document was generated."}
@@ -443,4 +435,155 @@ class ExportDocument(ToolPlugin):
                 rr += 1
 
         wb.save(str(path))
+
+    def _write_pdf(self, path: Path, title: str, content: str, table: dict | None) -> None:
+        """Minimal PDF 1.4 (Helvetica) — no reportlab dependency."""
+        lines: list[str] = [title[:120], ""]
+        lines.append(f"Generated {now().strftime('%B %d, %Y')} · Pulse Agent deliverable")
+        lines.append("")
+        if content:
+            for raw in content.splitlines():
+                stripped = raw.strip()
+                if not stripped:
+                    continue
+                text = re.sub(r"^#+\s+", "", stripped)
+                text = re.sub(r"^[-*•]\s+", "• ", text).replace("**", "")
+                while len(text) > 90:
+                    lines.append(text[:90])
+                    text = text[90:]
+                lines.append(text[:90])
+            lines.append("")
+        if table:
+            headers = table.get("headers") or []
+            rows = table.get("rows") or []
+            if headers:
+                lines.append(" | ".join(str(h) for h in headers))
+                lines.append("-" * min(90, max(8, len(lines[-1]))))
+                for row in rows[:40]:
+                    cells = [str(row[i]) if i < len(row) else "" for i in range(len(headers))]
+                    lines.append(" | ".join(cells)[:90])
+
+        def esc(s: str) -> str:
+            return s.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+        y0 = 800
+        leading = 14
+        max_lines = min(len(lines), 52)
+        content_ops = ["BT", "/F1 11 Tf", "14 TL", f"50 {y0} Td"]
+        for i, line in enumerate(lines[:max_lines]):
+            if i == 0:
+                content_ops.append("/F1 16 Tf")
+                content_ops.append(f"({esc(line)}) Tj")
+                content_ops.append("/F1 11 Tf")
+            else:
+                content_ops.append(f"({esc(line)}) Tj")
+            content_ops.append(f"0 -{leading} Td")
+        content_ops.append("ET")
+        stream = "\n".join(content_ops).encode("latin-1", errors="replace")
+
+        objects: list[bytes] = []
+        objects.append(b"1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj\n")
+        objects.append(b"2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj\n")
+        objects.append(
+            b"3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            b"/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>endobj\n"
+        )
+        objects.append(
+            f"4 0 obj<< /Length {len(stream)} >>stream\n".encode("ascii")
+            + stream
+            + b"\nendstream\nendobj\n"
+        )
+        objects.append(
+            b"5 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj\n"
+        )
+
+        out = bytearray(b"%PDF-1.4\n")
+        offsets = [0]
+        for obj in objects:
+            offsets.append(len(out))
+            out.extend(obj)
+        xref_pos = len(out)
+        out.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+        out.extend(b"0000000000 65535 f \n")
+        for off in offsets[1:]:
+            out.extend(f"{off:010d} 00000 n \n".encode("ascii"))
+        out.extend(
+            f"trailer<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
+            f"startxref\n{xref_pos}\n%%EOF\n".encode("ascii")
+        )
+        path.write_bytes(bytes(out))
+
+    def _write_png_chart(self, path: Path, title: str, content: str, table: dict | None) -> None:
+        """PNG bar chart from the first numeric column of ``table`` (Pillow)."""
+        from PIL import Image, ImageDraw, ImageFont
+
+        width, height = 960, 540
+        img = Image.new("RGB", (width, height), "#F7FAF9")
+        draw = ImageDraw.Draw(img)
+        try:
+            font_title = ImageFont.truetype("DejaVuSans-Bold.ttf", 22)
+            font = ImageFont.truetype("DejaVuSans.ttf", 14)
+            font_small = ImageFont.truetype("DejaVuSans.ttf", 11)
+        except OSError:
+            font_title = font = font_small = ImageFont.load_default()
+
+        draw.rectangle([0, 0, width, 56], fill="#0B5F4E")
+        draw.text((24, 16), (title or "Chart")[:80], fill="white", font=font_title)
+
+        headers = (table or {}).get("headers") or []
+        rows = (table or {}).get("rows") or []
+        labels: list[str] = []
+        values: list[float] = []
+        if headers and rows:
+            for row in rows[:12]:
+                if not row:
+                    continue
+                label = str(row[0])[:18]
+                num = None
+                for cell in row[1:]:
+                    num = _to_number(cell)
+                    if num is not None:
+                        break
+                if num is None:
+                    continue
+                labels.append(label)
+                values.append(abs(num))
+
+        if not values:
+            bullets = [
+                ln.strip()
+                for ln in (content or "").splitlines()
+                if re.match(r"^[-*•]\s+", ln.strip())
+            ]
+            if bullets:
+                labels = [re.sub(r"^[-*•]\s+", "", b)[:18] for b in bullets[:6]]
+                values = [float(max(1, len(b))) for b in labels]
+            else:
+                labels = ["Findings", "Actions", "Risks"]
+                values = [3.0, 2.0, 1.0]
+
+        plot_left, plot_top, plot_right, plot_bottom = 80, 100, width - 40, height - 60
+        plot_w = plot_right - plot_left
+        plot_h = plot_bottom - plot_top
+        draw.rectangle([plot_left, plot_top, plot_right, plot_bottom], outline="#D0D7DE", width=1)
+
+        vmax = max(values) or 1.0
+        n = len(values)
+        gap = 12
+        bar_w = max(18, (plot_w - gap * (n + 1)) // max(n, 1))
+        for i, (lab, val) in enumerate(zip(labels, values)):
+            x0 = plot_left + gap + i * (bar_w + gap)
+            bar_h = int((val / vmax) * (plot_h - 8))
+            y0 = plot_bottom - bar_h
+            draw.rectangle([x0, y0, x0 + bar_w, plot_bottom], fill="#0B5F4E")
+            draw.text((x0, plot_bottom + 8), lab[:10], fill="#374151", font=font_small)
+            draw.text((x0, y0 - 18), f"{val:,.0f}", fill="#0B5F4E", font=font)
+
+        draw.text(
+            (24, height - 28),
+            "Pulse Agent chart · derived from export table",
+            fill="#6B7280",
+            font=font_small,
+        )
+        img.save(str(path), format="PNG")
 

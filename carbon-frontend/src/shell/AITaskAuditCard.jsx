@@ -19,7 +19,16 @@ import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
 import TokenOutlinedIcon from '@mui/icons-material/TokenOutlined';
 
-import { PLAN_STATUS, STEP_STATUS } from './aiTaskStatus';
+import { PLAN_STATUS, STEP_STATUS, stepStatusMeta } from './aiTaskStatus';
+import { FONT } from '../theme/themeTokens';
+
+/** Human-readable duration — never dump raw float ms. */
+function formatLatency(ms) {
+  if (ms == null || !Number.isFinite(Number(ms))) return '—';
+  const n = Number(ms);
+  if (n < 1000) return `${Math.round(n)} ms`;
+  return `${(n / 1000).toFixed(1)} s`;
+}
 
 // ── Small labelled value row ──────────────────────────────────────────────
 function Stat({ icon, label, value }) {
@@ -27,10 +36,10 @@ function Stat({ icon, label, value }) {
     <Stack direction="row" alignItems="center" spacing={0.75}>
       {icon}
       <Box sx={{ minWidth: 0 }}>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ...FONT.statLabel }}>
           {label}
         </Typography>
-        <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>
+        <Typography variant="body2" sx={{ fontWeight: 600, ...FONT.body2 }}>
           {value}
         </Typography>
       </Box>
@@ -93,7 +102,7 @@ function AITaskAuditCard({ ledger }) {
 
         {/* Usage */}
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-          <Stat icon={<ScheduleOutlinedIcon sx={{ fontSize: 15, color: 'text.secondary' }} />} label="Latency" value={usage.total_latency_ms != null ? `${usage.total_latency_ms} ms` : '—'} />
+          <Stat icon={<ScheduleOutlinedIcon sx={{ fontSize: 15, color: 'text.secondary' }} />} label="Latency" value={formatLatency(usage.total_latency_ms)} />
           <Stat icon={<FactCheckOutlinedIcon sx={{ fontSize: 15, color: 'text.secondary' }} />} label="LLM calls" value={usage.total_llm_calls ?? 0} />
           <Stat icon={<TokenOutlinedIcon sx={{ fontSize: 15, color: 'text.secondary' }} />} label="Tokens" value={usage.total_tokens ?? 0} />
         </Box>
@@ -106,24 +115,22 @@ function AITaskAuditCard({ ledger }) {
         </Typography>
         <Stack spacing={0.5}>
           {steps.map((step) => {
-            const stepMeta = STEP_STATUS[step.status]
-              || PLAN_STATUS[step.status]
-              || STEP_STATUS.pending;
+            const stepMeta = stepStatusMeta(step.status);
             return (
               <Stack key={step.step_id} direction="row" alignItems="center" spacing={0.75} sx={{ px: 0.75, py: 0.375, borderRadius: 1, bgcolor: 'action.hover' }}>
                 <CheckCircleOutlineIcon sx={{ fontSize: 14, color: step.confirmed || step.status === 'completed' ? 'success.main' : 'text.disabled' }} />
-                <Typography variant="body2" sx={{ flex: 1, minWidth: 0, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <Typography variant="body2" sx={{ flex: 1, minWidth: 0, ...FONT.body2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {step.intent || `Step ${step.step_id}`}
                 </Typography>
                 {step.latency_ms != null && (
-                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.625rem' }}>
-                    {step.latency_ms} ms
+                  <Typography variant="caption" color="text.secondary" sx={{ ...FONT.caption }}>
+                    {formatLatency(step.latency_ms)}
                   </Typography>
                 )}
                 {step.skipped && (
-                  <Chip size="small" variant="outlined" label="Skipped" sx={{ height: 16, fontSize: '0.5625rem' }} />
+                  <Chip size="small" variant="outlined" label={STEP_STATUS.skipped.label} sx={{ height: 16, ...FONT.chip }} />
                 )}
-                <Chip size="small" variant="outlined" label={stepMeta.label} color={stepMeta.color} sx={{ height: 16, fontSize: '0.5625rem' }} />
+                <Chip size="small" variant="outlined" label={stepMeta.label} color={stepMeta.color} sx={{ height: 16, ...FONT.chip }} />
               </Stack>
             );
           })}
@@ -150,17 +157,8 @@ function AITaskAuditCard({ ledger }) {
           </Typography>
         )}
 
-        {ledger.final_response && (
-          <>
-            <Divider sx={{ my: 0.25 }} />
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Final response
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem', whiteSpace: 'pre-wrap' }}>
-              {ledger.final_response}
-            </Typography>
-          </>
-        )}
+        {/* Answer prose lives on Output/Results (MarkdownMessage) — Audit stays
+            control-plane facts only so Done never dumps raw markdown here. */}
       </Stack>
     </Paper>
   );

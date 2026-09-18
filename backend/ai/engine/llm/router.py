@@ -216,6 +216,19 @@ async def _check_budget(instance_id: str, db) -> float | None:
 
     settings = get_settings()
     budget = settings.LLM_DAILY_BUDGET_USD
+    # Host control-plane override (ADR-0036) — best-effort; never breaks routing.
+    try:
+        from asgiref.sync import sync_to_async
+        from ai.models.control_state import PulseControlState
+
+        state = await sync_to_async(
+            PulseControlState.objects.filter(instance_id=instance_id).first,
+            thread_sensitive=True,
+        )()
+        if state is not None and state.daily_budget_usd is not None:
+            budget = float(state.daily_budget_usd)
+    except Exception:  # noqa: BLE001
+        pass
     if budget <= 0:
         return 0.0  # unlimited
 

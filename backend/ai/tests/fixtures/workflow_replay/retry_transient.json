@@ -1,0 +1,10 @@
+{
+  "id": "WF-RETRY-001",
+  "node_type": "retry",
+  "policy": { "max_attempts": 3, "backoff": "exponential_jitter", "base_ms": 10, "max_ms": 100, "retry_on": ["transient"] },
+  "error": { "error_kind": "transient" },
+  "attempt": 1,
+  "expected_should_retry": true,
+  "attempt_exhausted": 2,
+  "expected_should_retry_exhausted": false
+}

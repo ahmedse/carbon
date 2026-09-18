@@ -93,12 +93,18 @@ async def build_chat_prompt(
                 "\"my\", \"me\", \"mine\", or \"I\" — or the Arabic اجازاتي / "
                 "راتبي / بياناتي / قروضي — it refers to THIS person; never ask "
                 "who they are. For first-person questions about their own leave, "
-                "leave balance, loans, payslips, or profile, call the "
+                "leave balance, loans, or profile, call the "
                 "self-service endpoints (get_my_profile, list_my_leave, "
-                "get_my_leave_balance, list_my_loans, list_my_payslips). Do NOT "
-                "use the organisation-wide list endpoints (list_employees, "
-                "list_leave_records, …) for a first-person request — they return "
-                "the whole population and would expose other employees' data.\n"
+                "get_my_leave_balance, list_my_loans). For salary / compensation "
+                "/ basic pay / راتبي call get_my_profile (or resolve_entity / "
+                "get_employee for a named coworker) — NEVER list_my_payslips for "
+                "a salary figure; empty payslips are not \"no salary data\", and "
+                "a CBAC deny (people:view_compensation) must be stated plainly. "
+                "Use list_my_payslips only when they explicitly ask for payslip "
+                "lines. Do NOT use the organisation-wide list endpoints "
+                "(list_employees, list_leave_records, …) for a first-person "
+                "request — they return the whole population and would expose "
+                "other employees' data.\n"
             )
     else:
         user_context = (
@@ -133,6 +139,13 @@ async def build_chat_prompt(
     # self-scoped endpoints instead of org-wide lists.
     if identity_directive:
         result = f"{result}\n\n{identity_directive}" if result else identity_directive
+
+    # ── Tenant organisation grounding — names the whole institution so Chat
+    # never treats "GOFSCO" / "AASTMT" / "the company" as an ambiguous person
+    # or a missing filter (clarification-loop bug).
+    tenant_section = _build_tenant_org_directive(config)
+    if tenant_section:
+        result = f"{result}\n\n{tenant_section}" if result else tenant_section
 
     # ── Live-data grounding directive (derived from the catalog) — bridges the
     # semantic gap between "tell me about the live data here" and the
@@ -204,6 +217,55 @@ def _endpoint_to_domain_phrase(name: str) -> str:
             name = name[len(prefix):]
             break
     return name.replace("_", " ").strip()
+
+
+def _build_tenant_org_directive(instance_config: dict | None) -> str:
+    """Render whole-organisation identity so Chat does not clarify-loop on it.
+
+    Declared in ``instance.yaml`` as ``tenant_org:`` (name + aliases). When the
+    user names the tenant / "the company" / asks for "data in the system" about
+    it, the model must answer from live tools — never treat the org name as an
+    ambiguous identity that needs "what specifically…?".
+    """
+    tenant = (instance_config or {}).get("tenant_org") if instance_config else None
+    if not isinstance(tenant, dict):
+        return ""
+    name = (tenant.get("name") or "").strip()
+    if not name:
+        return ""
+    short = (tenant.get("short_name") or "").strip()
+    aliases = [
+        str(a).strip() for a in (tenant.get("aliases") or []) if str(a).strip()
+    ]
+    # Ensure short_name and primary name are always listed as aliases.
+    for extra in (short, name.split("—")[0].strip(), name.split("-")[0].strip()):
+        if extra and extra not in aliases:
+            aliases.append(extra)
+    alias_line = ", ".join(f'"{a}"' for a in aliases) if aliases else f'"{name}"'
+    summary = (tenant.get("summary") or "").strip()
+    summary_line = f"\n{summary}\n" if summary else "\n"
+
+    return (
+        "## Tenant organisation (non-negotiable)\n\n"
+        f"You serve **{name}**"
+        + (f" (short name: **{short}**)" if short else "")
+        + f". Aliases: {alias_line}. "
+        "This is the WHOLE organisation / company / institution — NOT a "
+        "filterable sub-entity, NOT an employee, NOT a missing record.\n"
+        f"{summary_line}"
+        "When the user asks about this organisation, \"the company\", \"our "
+        "company\", \"the organisation\", or \"data in the system\" / \"what "
+        "data do we have\" about it:\n"
+        "1. Answer immediately — do NOT ask clarifying questions in a loop "
+        "(\"What specifically would you like to know…?\").\n"
+        "2. For identity (\"what is the company\"): use the summary above plus "
+        "persona/domain facts — never invent external corporate trivia.\n"
+        "3. For data-in-system: call live tools right away "
+        "(`aggregate_entity` metric=headcount, and when useful "
+        "`analyze_employees` or list endpoints) and answer from the results.\n"
+        "4. Only ask a clarifying question when they name a specific person, "
+        "payroll run, leave record, or other sub-item that is still ambiguous."
+    )
 
 
 def _build_grounding_directive(api_catalog: list | None) -> str:

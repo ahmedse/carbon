@@ -7,6 +7,9 @@
 # Enterprise UIs pack information. Consumer whitespace ≠ enterprise.
 # Palantir Foundry, Ataccama, Linear, VS Code — all use tight, scannable layouts.
 # This file ensures EVERY worker produces identically dense output.
+#
+# ADR-0037 (2026-09-17): modest readability bump (~+2px). Still compact — not
+# consumer-scale. Do not re-shrink below this scale without a new ADR.
 
 ---
 
@@ -14,10 +17,11 @@
 
 | Axis | Value | Where |
 |------|-------|-------|
-| Base font | `fontSize: 10, htmlFontSize: 14` | theme.typography |
-| Body text | `body1: 0.75rem, body2: 0.6875rem` | theme.typography |
-| Headings | `h1: 1.4rem` → `h6: 0.8125rem` | theme.typography |
-| Caption | `0.625rem` | theme.typography |
+| Base font | `fontSize: 12, htmlFontSize: 15` | theme.typography |
+| Body text | `body1: 0.875rem, body2: 0.8125rem` | theme.typography |
+| Headings | `h1: 1.5rem` → `h6: 0.875rem` | theme.typography |
+| Caption | `0.75rem` | theme.typography |
+| CssBaseline body | `13px` | theme components.MuiCssBaseline |
 | Border radius | `shape.borderRadius: 8` (use `borderRadius: 1` for 8px) | theme.shape |
 | Spacing unit | `spacing: 8` (use `p:1` for 8px, `p:0.75` for 6px) | theme.spacing |
 
@@ -27,36 +31,36 @@
 
 ### Buttons
 ```
-padding: '3px 8px'
-fontSize: '0.6875rem'
-minHeight: '24px'
+padding: '4px 10px'
+fontSize: '0.8125rem'
+minHeight: '28px'
 borderRadius: 3
 textTransform: 'none'
-sizeSmall: padding '2px 6px', fontSize '0.7rem'
-sizeLarge: padding '6px 14px', fontSize '0.8125rem', minHeight '30px'
+sizeSmall: padding '2px 8px', fontSize '0.75rem', minHeight '26px'
+sizeLarge: padding '6px 14px', fontSize '0.875rem', minHeight '32px'
 ```
 - NEVER create custom-sized buttons — use `size="small"` or theme defaults.
 - NEVER increase button padding for "emphasis" — use variant (contained/outlined).
 
 ### DataGrid
 ```
-fontSize: '0.65rem'
-rowHeight: 36 (theme defaultProps)
-columnHeaderHeight: 32 (theme defaultProps)
+fontSize: '0.75rem'
+rowHeight: 40 (theme defaultProps)
+columnHeaderHeight: 36 (theme defaultProps)
 columnHeaders: bg background.dark, borderBottom 2px solid divider
 cell: borderBottom 1px solid divider, padding '4px 8px', lineHeight 1.3
 row hover: primary 4% opacity
 ```
 - Use `density="compact"` on all DataGrids.
-- Column headers are 0.625rem uppercase (theme columnHeaderTitle).
+- Column headers are 0.75rem uppercase (theme columnHeaderTitle).
 - Pagination text is body2 size.
 - **ROW CLICK = HIGHLIGHT ONLY.** Never navigate on row click. The user must deliberately click an action button (eye icon, etc.) to navigate. Set `highlightRow` and `onRowClick` for selection state.
 
 ### Chips / Badges
 ```
 borderRadius: 3
-fontSize: '0.65rem'
-height: '18px'
+fontSize: '0.75rem'
+height: '20px'
 fontWeight: 500
 ```
 - Semantic colors: success/error/warning/info/primary use the theme chip overrides.
@@ -65,15 +69,15 @@ fontWeight: 500
 
 ### Table (MuiTable)
 ```
-TableHead: padding '6px 8px', fontSize '0.625rem', uppercase, letterSpacing '0.05em'
-TableCell: padding '4px 8px', fontSize '0.6875rem'
+TableHead: padding '6px 8px', fontSize '0.75rem', uppercase, letterSpacing '0.05em'
+TableCell: padding '4px 8px', fontSize '0.8125rem'
 TableRow: hover primary 4%, last-child no border
 ```
 
 ### Tabs
 ```
-MuiTabs: minHeight 36
-MuiTab: minHeight 36, padding '6px 12px', fontSize '0.8125rem', fontWeight 500
+MuiTabs: minHeight 40
+MuiTab: minHeight 40, padding '6px 12px', fontSize '0.875rem', fontWeight 500
 indicator: height 2
 ```
 
@@ -121,13 +125,13 @@ sizeSmall: padding 4, fontSize '1.125rem'
 ```
 borderRadius: 4
 padding: '6px 12px'
-fontSize: '0.8125rem'
+fontSize: '0.875rem'
 border: 1px solid semantic-color
 ```
 
 ### Tooltips
 ```
-fontSize: '0.75rem'
+fontSize: '0.8125rem'
 padding: '4px 8px'
 borderRadius: 4
 ```
@@ -141,10 +145,10 @@ This is Carbon's signature navigation pattern. Every sidebar MUST follow this.
 ```
 Container: full height, flex column, bg background.paper, overflow hidden
 List: disablePadding, flex 1, overflow auto, py 0.5, px 0.75
-Nav row: height 28px, px 0.75, gap 0.75, borderRadius 5px, cursor pointer
-Icon: fontSize 14, opacity 0.6 (1.0 when active)
-Label: fontSize '0.65rem', fontWeight 400 (600 when active), lineHeight 1
-Group header: fontSize '0.575rem', fontWeight 500, color text.disabled
+Nav row: height 30px, px 0.75, gap 0.75, borderRadius 5px, cursor pointer
+Icon: fontSize 16, opacity 0.6 (1.0 when active)
+Label: fontSize '0.75rem', fontWeight 400 (600 when active), lineHeight 1
+Group header: fontSize '0.6875rem', fontWeight 500, color text.disabled
               LETTER-SPACING 0.04em, px 0.75, pt 0.75, pb 0.25
               NEVER uppercase, NEVER bold, NEVER colored
 Dividers: REPLACED with 6px spacing gaps (Box height:6)
@@ -163,7 +167,7 @@ NO uppercase text
 - Only visible for org-scoped users (data-owner/steward).
 - Hidden for superusers and global admins (`!(user?.is_superuser || isGlobalAdminFlag)`).
 - Compact: px 0.75, py 0.375, borderRadius 5, bg primary 5-8% opacity.
-- Icon: LocationOnIcon fontSize 10, label fontSize 0.575rem.
+- Icon: LocationOnIcon fontSize 12, label fontSize 0.6875rem.
 
 ---
 
@@ -178,10 +182,10 @@ px: 1, py: 0.75
 ### PageHeader
 ```
 Icon: 1rem
-Title: 0.875rem (h5 variant)
-Subtitle: 0.6875rem (subtitle2)
+Title: 0.95rem (h5 variant)
+Subtitle: 0.8125rem (subtitle2)
 Description: body2 variant
-Badge: Chip height 16px
+Badge: Chip height 20px
 Actions: gap 0.75
 Bottom border: pb 0.5, mb 1, borderBottom 1px solid divider
 ```
@@ -193,21 +197,22 @@ Bottom border: pb 0.5, mb 1, borderBottom 1px solid divider
 
 | Variant | Size | Weight | Use |
 |---------|------|--------|-----|
-| h1 | 1.4rem | 700 | Page hero (rarely used) |
-| h2 | 1.25rem | 700 | Section title |
-| h3 | 1.1rem | 600 | Card title |
-| h4 | 0.95rem | 600 | Dialog title alternative |
-| h5 | 0.875rem | 600 | Panel header, PageHeader title |
-| h6 | 0.8125rem | 600 | Widget title, small header |
-| subtitle1 | 0.75rem | 500 | Secondary headings |
-| subtitle2 | 0.6875rem | 500 | Compact subhead |
-| body1 | 0.75rem | 400 | Primary body text |
-| body2 | 0.6875rem | 400 | Secondary body, metadata |
-| caption | 0.625rem | 400 | Fine print, timestamps |
-| button | 0.6875rem | 500 | Button labels |
+| h1 | 1.5rem | 700 | Page hero (rarely used) |
+| h2 | 1.35rem | 700 | Section title |
+| h3 | 1.2rem | 600 | Card title |
+| h4 | 1.05rem | 600 | Dialog title alternative |
+| h5 | 0.95rem | 600 | Panel header, PageHeader title |
+| h6 | 0.875rem | 600 | Widget title, small header |
+| subtitle1 | 0.875rem | 500 | Secondary headings |
+| subtitle2 | 0.8125rem | 500 | Compact subhead |
+| body1 | 0.875rem | 400 | Primary body text |
+| body2 | 0.8125rem | 400 | Secondary body, metadata |
+| caption | 0.75rem | 400 | Fine print, timestamps |
+| button | 0.8125rem | 500 | Button labels |
 
 - NEVER set fontSize/lineHeight as raw sx inline — use `variant="body1"` etc.
 - Hierarchy comes from variant, not random sizes.
+- Do not shrink below this scale without a new ADR (ADR-0037 floor).
 
 ---
 
@@ -255,13 +260,31 @@ Bottom border: pb 0.5, mb 1, borderBottom 1px solid divider
 
 ---
 
+## Mobile (&lt; `sm`, ADR-0035)
+
+Desktop compact density remains binding from `md` up. Under `theme.breakpoints.down('sm')`:
+
+| Axis | Mobile rule |
+|------|-------------|
+| Touch targets | IconButtons / primary actions min **40px** hit area (`minWidth`/`minHeight` via theme spacing, not raw px inventing per page) |
+| Dialogs | Prefer `fullScreen` / `100dvh` sheets; sticky bottom actions; no drag/resize chrome |
+| Shell | Temporary nav drawer; no permanent pinned sidebar; no fixed ActivityBar rail; Pulse/Notes overlay fullscreen |
+| Lists | Card/list rows for ESS; DataGrid/Table OK only when card alternate exists or admin accepts H-scroll |
+| StatusBar | Collapse legal/version into overflow — do not pack a 22px footer with many links |
+| Density | May use `size="medium"` on primary CTA only under `sm`; inputs stay `size="small"` |
+| Tokens | Still RULE_8 — theme tokens only; no hardcoded hex |
+
+Hook: `useMediaQuery(theme.breakpoints.down('sm'))` (or shared `useIsMobile`).
+
+---
+
 ## The Hard Rules (enforceable)
 
 1. **NEVER hardcode hex colors, rgb(), or raw px spacing in sx.** Use theme tokens.
 2. **NEVER override font sizes inline.** Use `variant` — if you need a different size, use a DIFFERENT variant.
 3. **NEVER add padding to dialogs/cards beyond theme defaults.** Compact is intentional.
-4. **NEVER build a custom sidebar item.** Use the ShellSidebar pattern (28px rows, left-bar active indicator).
-5. **NEVER uppercase group headers.** 0.575rem muted, sentence case.
+4. **NEVER build a custom sidebar item.** Use the ShellSidebar pattern (30px rows, left-bar active indicator).
+5. **NEVER uppercase group headers.** 0.6875rem muted, sentence case.
 6. **NEVER show org unit context to superusers/global admins.** It's meaningless noise.
 7. **ALWAYS use `size="small"`** on inputs — it's the theme default.
 8. **ALWAYS wrap pages in PageContainer** (px:1, py:0.75) — no ad-hoc Box padding.
@@ -276,8 +299,8 @@ Bottom border: pb 0.5, mb 1, borderBottom 1px solid divider
 [ ] No raw hex colors in my new code
 [ ] No raw font sizes — all via variant or theme component overrides
 [ ] No ad-hoc padding on pages — using PageContainer
-[ ] Nav items follow 28px row / 0.65rem label pattern
-[ ] Group labels are 0.575rem sentence case, not uppercase
+[ ] Nav items follow 30px row / 0.75rem label pattern
+[ ] Group labels are 0.6875rem sentence case, not uppercase
 [ ] Dialogs use theme defaults (no extra padding)
 [ ] DataGrid uses density="compact"
 ```
@@ -291,3 +314,4 @@ Bottom border: pb 0.5, mb 1, borderBottom 1px solid divider
 - Raw `<Breadcrumbs>` in a page header
 - `<TextField>` without `size="small"` (already default, but don't override with `size="medium"`)
 - Org unit info visible to admin/superuser accounts
+- Shrinking typography below ADR-0037 values without a new ADR

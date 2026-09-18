@@ -8,6 +8,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Box, Button, Skeleton, Stack, ToggleButton, ToggleButtonGroup } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import PageContainer from '../../../components/layout/PageContainer';
@@ -29,6 +30,8 @@ const CANCELLABLE = new Set(['draft', 'submitted', 'in_review', 'sent_back']);
 
 export default function RequestDetail() {
   const { t } = useTranslation('my');
+  const theme = useTheme();
+  const isRtl = theme.direction === 'rtl';
   const { token } = useAuth();
   const { notify } = useNotification();
   const { id } = useParams();
@@ -130,7 +133,9 @@ export default function RequestDetail() {
               <Button
                 size="small"
                 variant="outlined"
-                startIcon={<ArrowBackIcon />}
+                startIcon={
+                  <ArrowBackIcon sx={isRtl ? { transform: 'scaleX(-1)' } : undefined} />
+                }
                 onClick={() => navigate('/my/requests')}
               >
                 {t('backToRequests')}

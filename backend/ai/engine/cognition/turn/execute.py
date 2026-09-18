@@ -494,6 +494,10 @@ async def _execute_single_tool(
             _call_args["instance_id"] = _hook_defaults["instance_id"]
         if _hook_defaults.get("conversation_id") and "conversation_id" not in _call_args:
             _call_args["conversation_id"] = _hook_defaults["conversation_id"]
+        if _hook_defaults.get("user_message") and "user_message" not in _call_args:
+            _call_args["user_message"] = _hook_defaults["user_message"]
+        if _hook_defaults.get("instance_config") is not None and "instance_config" not in _call_args:
+            _call_args["instance_config"] = _hook_defaults["instance_config"]
         # S-PROC-01: inject a knowledge store so ``search_knowledge`` /
         # ``get_entity_details`` ground answers in indexed process docs. Use
         # the threaded store when present; otherwise lazily build one from the
@@ -687,7 +691,9 @@ def _build_tool_result_summary(completed_tools: list[dict]) -> str:
 
         Also unwraps the host-executor envelope ``{"status_code": 200,
         "data": ...}`` and nests one level (``data: {"results": [...]}``).
+        Preserves top-level authz signals so CBAC denies are not lost (B5).
         """
+        authz_meta = {}
         if isinstance(raw, str):
             try:
                 parsed = json.loads(raw)
@@ -696,7 +702,20 @@ def _build_tool_result_summary(completed_tools: list[dict]) -> str:
             except (TypeError, ValueError):
                 pass
         if isinstance(raw, dict) and "status_code" in raw and "data" in raw:
+            for key in (
+                "unauthorized", "capability", "message",
+                "unauthorized_fields", "status_code",
+            ):
+                if key in raw and raw[key] is not None:
+                    authz_meta[key] = raw[key]
             raw = raw.get("data")
+            if authz_meta and isinstance(raw, dict):
+                merged = dict(raw)
+                for k, v in authz_meta.items():
+                    merged.setdefault(k, v)
+                raw = merged
+            elif authz_meta and not isinstance(raw, dict):
+                raw = {"data": raw, **authz_meta}
         if isinstance(raw, dict):
             for key in ("data", "results", "items", "rows"):
                 if key in raw and isinstance(raw[key], list):
@@ -713,7 +732,21 @@ def _build_tool_result_summary(completed_tools: list[dict]) -> str:
     tool_summaries: list[str] = []
     for tool_result in completed_tools:
         tool_name = tool_result.get("tool_name", "unknown")
+        raw_result = tool_result.get("result", {})
+        if isinstance(raw_result, str):
+            try:
+                raw_result = json.loads(raw_result)
+            except (TypeError, ValueError):
+                pass
+        if isinstance(raw_result, dict) and raw_result.get("unauthorized"):
+            msg = raw_result.get("message") or "Not authorized for that lookup."
+            tool_summaries.append(f"**{tool_name}**: {msg}")
+            continue
         result_data = _normalize(tool_result.get("result", {}))
+        if isinstance(result_data, dict) and result_data.get("unauthorized"):
+            msg = result_data.get("message") or "Not authorized for that lookup."
+            tool_summaries.append(f"**{tool_name}**: {msg}")
+            continue
         error = tool_result.get("error")
         # no_match is an escalation signal, never data — render an honest
         # clarification, never the raw `status=no_match, reason=..., hint=...`.

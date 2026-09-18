@@ -20,6 +20,8 @@ import {
 } from '@mui/material';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import CloseIcon from '@mui/icons-material/Close';
+import OpenInFullIcon from '@mui/icons-material/OpenInFull';
+import CloseFullscreenIcon from '@mui/icons-material/CloseFullscreen';
 import RestoreOutlinedIcon from '@mui/icons-material/RestoreOutlined';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
@@ -42,6 +44,8 @@ const CONTRACT_TEXT_KEYS = {
 
 function AIWorkspaceHeader({
   onClose,
+  expanded = false,
+  onToggleExpand,
   conversationId,
   onConversationUpdated,
   onForked,
@@ -68,9 +72,9 @@ function AIWorkspaceHeader({
       + now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
     try {
       await createCheckpoint(token, conversationId, name);
-      setSnackbar({ message: `Checkpoint saved · ${name}` });
+      setSnackbar({ message: t('checkpointSaved', { name }) });
     } catch (err) {
-      notifyFromError(err, 'Could not save checkpoint');
+      notifyFromError(err, t('checkpointSaveFailed'));
     }
   };
 
@@ -117,26 +121,26 @@ function AIWorkspaceHeader({
             🤖 {t('modeAgent')}
           </ToggleButton>
         </ToggleButtonGroup>
-        <Tooltip title="Save checkpoint">
+        <Tooltip title={t('saveCheckpoint')}>
           <span>
             <IconButton
               size="small"
               onClick={handleSaveCheckpoint}
               disabled={!conversationId}
-              aria-label="Save checkpoint"
+              aria-label={t('saveCheckpoint')}
               sx={{ p: 0.5 }}
             >
               <AddCircleOutlineIcon sx={{ fontSize: 15 }} />
             </IconButton>
           </span>
         </Tooltip>
-        <Tooltip title="Checkpoints">
+        <Tooltip title={t('checkpoints')}>
           <span>
             <IconButton
               size="small"
               onClick={() => setPickerOpen(true)}
               disabled={!conversationId}
-              aria-label="Open checkpoints"
+              aria-label={t('openCheckpoints')}
               sx={{ p: 0.5 }}
             >
               <RestoreOutlinedIcon sx={{ fontSize: 15 }} />
@@ -148,6 +152,23 @@ function AIWorkspaceHeader({
           onConversationUpdated={onConversationUpdated}
           onForked={onForked}
         />
+        {typeof onToggleExpand === 'function' && (
+          <Tooltip title={expanded ? t('dockPulseShortcut') : t('expandPulseShortcut')}>
+            <IconButton
+              size="small"
+              onClick={onToggleExpand}
+              aria-label={expanded ? t('dockPulse') : t('expandPulse')}
+              aria-pressed={expanded}
+              sx={{ p: 0.5 }}
+            >
+              {expanded ? (
+                <CloseFullscreenIcon sx={{ fontSize: 15 }} />
+              ) : (
+                <OpenInFullIcon sx={{ fontSize: 15 }} />
+              )}
+            </IconButton>
+          </Tooltip>
+        )}
         <Tooltip title={t('closePulseShortcut')}>
           <IconButton size="small" onClick={onClose} aria-label={t('closePulse')}>
             <CloseIcon fontSize="small" />
@@ -173,6 +194,8 @@ function AIWorkspaceHeader({
 
 AIWorkspaceHeader.propTypes = {
   onClose: PropTypes.func.isRequired,
+  expanded: PropTypes.bool,
+  onToggleExpand: PropTypes.func,
   conversationId: PropTypes.string,
   onConversationUpdated: PropTypes.func,
   onForked: PropTypes.func,

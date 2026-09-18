@@ -127,6 +127,27 @@ class CheckInstancesRuleTests(TestCase):
         self.assertEqual(result['summary']['blocked'], 1)
         self.assertEqual(result['summary']['passed'], 1)
 
+    def test_allowed_values_accepts_reference_value_fk(self):
+        """J-EMP-01 residual: FK instances stringify as set:code; compare on .code."""
+        class _FakeRef:
+            def __init__(self, code):
+                self.code = code
+
+            def __str__(self):
+                return f'gender:{self.code}'
+
+        _bind_rule(
+            'gender-allowed-fk', 'allowed_values', 'validity',
+            {'values': ['male', 'female']}, 'gender',
+        )
+        instances = [
+            SimpleNamespace(gender=_FakeRef('female')),
+            SimpleNamespace(gender=_FakeRef('unknown')),
+        ]
+        result = check_instances(MODEL_LABEL, instances)
+        self.assertEqual(result['summary']['passed'], 1)
+        self.assertEqual(result['summary']['blocked'], 1)
+
     def test_inactive_assignment_skipped(self):
         _rule, mra = _bind_rule('inactive-rule', 'not_null', 'completeness', {}, 'code')
         mra.is_active = False

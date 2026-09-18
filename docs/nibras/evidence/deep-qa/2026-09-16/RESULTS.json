@@ -1,0 +1,87 @@
+{
+  "J-AUTH-01": {
+    "status": "PASS",
+    "note": "status=401",
+    "body": "{'error': 'AuthenticationFailed', 'message': 'No active account found with the given credentials', 'timestamp': '2026-09-17T06:52:34.041623+00:00', 'path': '/carbon-api/token/', 'correlation_id': '998"
+  },
+  "J-AUTH-03": {
+    "status": "PASS",
+    "note": "status=403"
+  },
+  "J-ISO-02": {
+    "status": "PASS",
+    "note": "me_a=1001 me_b=1009 loan_cross=403"
+  },
+  "J-ORG-01": {
+    "status": "PASS",
+    "note": "api=200 items=33 roots=1 order_ok=False"
+  },
+  "J-ORG-02": {
+    "status": "PASS",
+    "note": "blocked: ValidationError: {'parent': [\"Only one active root OrgUnit is allowed per deployment (ADR-0028). Active root already exists: id=1 slug='gofsco'.\"]}"
+  },
+  "J-ORG-03": {
+    "status": "PASS",
+    "note": "status=201 grade=G1 jf=operations body={'id': 212, 'org_unit': 2, 'code': 'QA-POS-09170000', 'title': 'Deep QA Position', 'grade': {'id': 69, 'code': 'G1', 'label': 'Grade 1', 'set': 'grade'}, 'reports_to': None, 'is_management': False, 's"
+  },
+  "J-EMP-02": {
+    "status": "PASS",
+    "note": "created; soft nationality_code ignored (nationality null)"
+  },
+  "J-EMP-03": {
+    "status": "PASS",
+    "note": "status=400"
+  },
+  "J-EMP-04": {
+    "status": "PASS",
+    "note": "patch=200 me=403 active=False"
+  },
+  "J-EMP-05": {
+    "status": "PASS",
+    "note": "patch=200 me=200 active=True"
+  },
+  "J-POL-01": {
+    "status": "PASS",
+    "note": "versions 0\u21921 patch=200"
+  },
+  "J-POL-02": {
+    "status": "PASS",
+    "note": "propagate=200 {'eligible': 55, 'will_create': 0, 'will_update': 55, 'skipped': 477, 'year': 2026, 'created': 0, 'updated': 55}"
+  },
+  "J-POL-03": {
+    "status": "PASS",
+    "note": "ents 2660\u21922660"
+  },
+  "J-POL-04": {
+    "status": "PASS",
+    "note": "policy=1 kw_ents=55 non_kw_ents=0"
+  },
+  "J-PC-03": {
+    "status": "PASS",
+    "note": "reject=200 name_still='WellieQA' status=rejected"
+  },
+  "J-CB-03": {
+    "status": "PASS",
+    "note": "status=403"
+  },
+  "J-PR-02": {
+    "status": "PASS",
+    "note": "run=17 c=200 v=200 m=200 status=committed lines=[('gross', Decimal('850.500')), ('gosi', Decimal('140.333')), ('net', Decimal('803.722'))]"
+  },
+  "J-PR-03": {
+    "status": "PASS",
+    "note": "wps=200"
+  },
+  "J-PR-04": {
+    "status": "PASS",
+    "note": "status=200 n=3"
+  },
+  "J-PR-05": {
+    "status": "PASS",
+    "note": "/people/me/payslips/1885/\u2192404"
+  },
+  "J-CBAC-01": {
+    "status": "PASS",
+    "note": "[('EMP_me', True), ('EMP_employees', True), ('MGR_inbox', True), ('ADM_employees', True), ('NONE_me', True)]"
+  }
+}

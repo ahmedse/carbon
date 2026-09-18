@@ -37,6 +37,14 @@ from ai.ops_api import (
     PulseTaskStatusView,
     SkillsTelemetryView,
 )
+from ai.control_plane_api import (
+    BudgetControlView,
+    CommandCenterView,
+    ContainmentView,
+    EvidenceExplorerView,
+    LearningCandidatesView,
+    PdpDryRunView,
+)
 from ai.sweeps_api import SweepsStatusView
 
 urlpatterns = [
@@ -56,6 +64,13 @@ urlpatterns = [
     path("sweeps/", SweepsStatusView.as_view(), name="ai-pulse-sweeps"),
     path("learning-status/", LearningStatusView.as_view(), name="ai-pulse-learning-status"),
     path("learning-status/run/", LearningRunView.as_view(), name="ai-pulse-learning-status-run"),
+    # Pulse Control Plane (ADR-0036)
+    path("control/command/", CommandCenterView.as_view(), name="ai-control-command"),
+    path("control/evidence/", EvidenceExplorerView.as_view(), name="ai-control-evidence"),
+    path("control/containment/", ContainmentView.as_view(), name="ai-control-containment"),
+    path("control/candidates/", LearningCandidatesView.as_view(), name="ai-control-candidates"),
+    path("control/pdp/dry-run/", PdpDryRunView.as_view(), name="ai-control-pdp-dry-run"),
+    path("control/budget/", BudgetControlView.as_view(), name="ai-control-budget"),
     # Domain app manifest API — available to all authenticated users
     path("apps/", DomainAppManifestListView.as_view(), name="ai-domain-apps"),
     path("apps/<str:app_identifier>/", DomainAppManifestDetailView.as_view(), name="ai-domain-app-detail"),

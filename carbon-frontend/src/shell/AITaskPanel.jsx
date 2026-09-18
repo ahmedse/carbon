@@ -48,6 +48,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import PauseIcon from '@mui/icons-material/Pause';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CallSplitIcon from '@mui/icons-material/CallSplit';
+import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
@@ -95,7 +96,7 @@ import ScheduleDialog from '../components/ai/ScheduleDialog';
 import ScheduleList from '../components/ai/ScheduleList';
 import SystemDialog from '../components/SystemDialog';
 import { buildPlanPhases, summarizePlanDiff } from '../utils/planGraph';
-import { agentRoleLabel, effectivePlanStatus, planStatusMeta, toolLabel } from './aiTaskStatus';
+import { agentRoleLabel, effectivePlanStatus, planStatusMeta, stepStatusMeta, toolLabel } from './aiTaskStatus';
 import AITaskPlanCard from './AITaskPlanCard';
 import MarkdownMessage from './MarkdownMessage';
 import PlanDagGraph from '../components/graph/PlanDagGraph';
@@ -153,6 +154,14 @@ function formatDuration(startIso, endIso) {
   return `${hours}h ${mins % 60}m`;
 }
 
+/** Compact step latency — never dump raw float milliseconds. */
+function formatLatencyMs(ms) {
+  if (ms == null || !Number.isFinite(Number(ms))) return '—';
+  const n = Number(ms);
+  if (n < 1000) return `${Math.round(n)} ms`;
+  return `${(n / 1000).toFixed(1)} s`;
+}
+
 // W5-D — compact USD rendering for estimated cost.
 function formatCost(usd) {
   if (usd == null || Number.isNaN(usd)) return '—';
@@ -165,7 +174,9 @@ function artifactIcon(mime) {
   const m = (mime || '').toLowerCase();
   if (m.includes('spreadsheet') || m.includes('excel') || m.includes('xlsx') || m.includes('csv')) return '📊';
   if (m.includes('json')) return '🗄';
-  if (m.includes('pdf') || m.includes('word') || m.includes('doc')) return '📄';
+  if (m.includes('png') || m.includes('jpeg') || m.includes('jpg') || m.includes('image/')) return '🖼';
+  if (m.includes('pdf')) return '📕';
+  if (m.includes('word') || m.includes('doc')) return '📄';
   return '📁';
 }
 
@@ -173,6 +184,11 @@ function artifactIcon(mime) {
 function isPreviewableMime(mime) {
   const m = (mime || '').toLowerCase();
   return /json|csv|text|plain|markdown|xml|yaml|yml/.test(m);
+}
+
+function isImageMime(mime) {
+  const m = (mime || '').toLowerCase();
+  return /image\/|png|jpeg|jpg|gif|webp/.test(m);
 }
 
 // W5-D — human file size for the Results artifact cards.
@@ -221,11 +237,12 @@ function deriveLifecycleState(phase, planStatus) {
 
 // ── Step card — one planned step, live status, consent gate ──────────────
 const STEP_STATUS_ICON = {
-  running: { label: 'Running…', color: 'primary', icon: 'spinner' },
-  completed: { label: 'Finished', color: 'success', icon: 'done' },
-  failed: { label: 'Failed', color: 'error', icon: 'error' },
-  skipped: { label: 'Skipped', color: 'default', icon: 'stopped' },
-  awaiting_approval: { label: 'Needs approval', color: 'warning', icon: 'help' },
+  running: { icon: 'spinner' },
+  completed: { icon: 'done' },
+  failed: { icon: 'error' },
+  skipped: { icon: 'stopped' },
+  awaiting_approval: { icon: 'help' },
+  pending: { icon: 'stopped' },
 };
 
 function StepStatusIcon({ status }) {
@@ -362,7 +379,7 @@ function StepCard({
   step, phaseName, confirming, busy, onConfirm, onDecline, onRetry, onSkip, onCancel, onPause, onResume, onEdit,
 }) {
   const [open, setOpen] = useState(true);
-  const meta = STEP_STATUS_ICON[step.status] || { label: 'Pending', color: 'default' };
+  const meta = stepStatusMeta(step.status);
   const showBody = open || step.status === 'awaiting_approval' || step.status === 'failed';
 
   return (
@@ -525,6 +542,8 @@ function ResultArtifactCard({ artifact, planId, token }) {
   const name = artifact.name || 'artifact';
   const mime = artifact.mime_type || '';
   const previewable = isPreviewableMime(mime);
+  const imageable = isImageMime(mime);
+  const [imageUrl, setImageUrl] = useState(null);
 
   const fetchBlobUrl = async () => downloadArtifact(token, planId, artifact.id);
 
@@ -549,6 +568,21 @@ function ResultArtifactCard({ artifact, planId, token }) {
   const handlePreview = async () => {
     if (previewOpen) {
       setPreviewOpen(false);
+      return;
+    }
+    if (imageable) {
+      if (!imageUrl) {
+        setPreviewLoading(true);
+        try {
+          const url = await fetchBlobUrl();
+          setImageUrl(url);
+        } catch (err) {
+          notifyFromError(err, 'Could not preview the artifact');
+        } finally {
+          setPreviewLoading(false);
+        }
+      }
+      setPreviewOpen(true);
       return;
     }
     if (previewLines.length === 0) {
@@ -591,7 +625,7 @@ function ResultArtifactCard({ artifact, planId, token }) {
           >
             {busy ? '…' : 'Download'}
           </Button>
-          {previewable && (
+          {(previewable || imageable) && (
             <Button
               size="small"
               variant="outlined"
@@ -606,7 +640,14 @@ function ResultArtifactCard({ artifact, planId, token }) {
       </Stack>
       <Collapse in={previewOpen}>
         <Box sx={{ mt: 0.75, p: 0.75, borderRadius: 1, bgcolor: 'background.default', maxHeight: 220, overflowY: 'auto' }}>
-          {previewLines.length === 0 ? (
+          {imageable && imageUrl ? (
+            <Box
+              component="img"
+              src={imageUrl}
+              alt={name}
+              sx={{ maxWidth: '100%', maxHeight: 200, display: 'block', borderRadius: 0.5 }}
+            />
+          ) : previewLines.length === 0 ? (
             <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
               No text to preview.
             </Typography>
@@ -626,6 +667,20 @@ ResultArtifactCard.propTypes = {
   planId: PropTypes.string.isRequired,
   token: PropTypes.string,
 };
+
+/** Prefill chat composer when jumping Agent Done → Discuss in Chat. */
+function buildDiscussDraft(plan, finalResponse) {
+  const brief = (plan?.brief || '').trim() || 'this agent run';
+  const id = plan?.id ? ` (plan ${plan.id})` : '';
+  const body = (finalResponse || '').trim();
+  const clipped = body.length > 1800 ? `${body.slice(0, 1800)}\n…` : body;
+  const parts = [
+    `Let's discuss the outcome of: ${brief}${id}.`,
+    clipped ? `\n---\n${clipped}\n---` : '',
+    '\nAsk me about the findings, downloads, steps, or how to refine the agents/workflow.',
+  ];
+  return parts.join('').trim();
+}
 
 /**
  * Agentic task orchestration panel.
@@ -1730,7 +1785,16 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             onEditStep={(step) => setEditStepTarget({ step })}
             onConfirmStep={handleConfirmStep}
             onDeclineStep={handleDeclineStep}
-            onSwitchToChat={onSwitchToChat}
+            onSwitchToChat={
+              onSwitchToChat
+                ? () => onSwitchToChat(
+                  buildDiscussDraft(
+                    selectedPlan,
+                    ledger?.final_response || selectedPlan.final_response,
+                  ),
+                )
+                : undefined
+            }
             confirmingId={confirmingId}
           />
         )}
@@ -2031,7 +2095,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           ) : (
             <Stack sx={{ maxHeight: 320, overflowY: 'auto' }}>
               {steps.map((step) => {
-                const stepMeta = STEP_STATUS_ICON[step.status] || { label: step.status || 'Pending', color: 'default' };
+                const stepMeta = stepStatusMeta(step.status);
                 return (
                   <Stack key={step.step_id} direction="row" alignItems="center" spacing={0.75} sx={{ px: 1.25, py: 0.5, borderBottom: 1, borderColor: 'divider' }}>
                     <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.625rem', minWidth: 52, fontFamily: 'monospace' }}>
@@ -2041,7 +2105,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
                       {step.intent || `Step ${step.step_id}`}
                     </Typography>
                     <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.625rem' }}>
-                      {step.latency_ms != null ? `${step.latency_ms} ms` : '—'}
+                      {formatLatencyMs(step.latency_ms)}
                     </Typography>
                     <Chip size="small" variant="outlined" label={stepMeta.label} color={stepMeta.color} sx={{ height: 16, fontSize: '0.5625rem' }} />
                   </Stack>
@@ -2177,6 +2241,17 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             >
               Response .md
             </Button>
+            {onSwitchToChat && (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 14 }} />}
+                onClick={() => onSwitchToChat(buildDiscussDraft(selectedPlan, finalResponse))}
+                sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+              >
+                Discuss in Chat
+              </Button>
+            )}
           </Stack>
         </Paper>
       </Stack>
@@ -2224,11 +2299,11 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     );
     return (
       <Stack direction="row" spacing={0.25} alignItems="center" sx={{ flexShrink: 0 }}>
-        {btn(paused ? 'Resume run' : 'Run plan', !showRun || busy, handleRun, PlayArrowIcon, 'primary.main')}
-        {btn('Pause run', !running || busy, handlePause, PauseIcon, 'warning.main')}
-        {btn('Stop the run', !running, handleStop, StopIcon, 'error.main')}
-        {btn('Retry failed steps', !failed || busy, handleRetry, ReplayIcon, 'warning.main')}
-        {btn('Fork into a reviewable copy', !selectedPlan || busy, handleFork, CallSplitIcon)}
+        {btn(paused ? t('resumeRun') : t('runPlan'), !showRun || busy, handleRun, PlayArrowIcon, 'primary.main')}
+        {btn(t('pauseRun'), !running || busy, handlePause, PauseIcon, 'warning.main')}
+        {btn(t('stopRun'), !running, handleStop, StopIcon, 'error.main')}
+        {btn(t('retryFailedSteps'), !failed || busy, handleRetry, ReplayIcon, 'warning.main')}
+        {btn(t('forkReviewable'), !selectedPlan || busy, handleFork, CallSplitIcon)}
       </Stack>
     );
   };
@@ -2414,7 +2489,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
                   onClick={() => handleSegmentChange('output')}
                   sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
                 >
-                  Output
+                  {t('output')}
                 </Button>
                 <Button
                   size="small"
@@ -2422,7 +2497,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
                   onClick={() => handleSegmentChange('metrics')}
                   sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
                 >
-                  Metrics
+                  {t('metrics')}
                 </Button>
                 <Button
                   size="small"
@@ -2430,11 +2505,12 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
                   onClick={() => handleSegmentChange('plan')}
                   sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
                 >
-                  Plan graph
+                  {t('planGraph')}
                 </Button>
               </Stack>
               {segment === 'metrics' ? renderMonitor() : segment === 'plan' ? renderPlanSegment() : renderResults()}
-              {(ledger || phase === 'finished') && (
+              {/* Audit is control-plane only — keep it on Metrics, not under the answer. */}
+              {segment === 'metrics' && (ledger || phase === 'finished') && (
                 <>
                   <Stack direction="row" alignItems="center" spacing={1}>
                     <HistoryOutlinedIcon sx={{ fontSize: 15, color: 'text.secondary' }} />

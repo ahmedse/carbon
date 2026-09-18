@@ -9,18 +9,19 @@ export const SPACING = {
 };
 
 export const FONT = {
-  pageTitle:   { fontSize: '1rem', fontWeight: 700, lineHeight: 1.3 },
-  sectionTitle:{ fontSize: '0.6875rem', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' },
-  cardTitle:   { fontSize: '0.75rem', fontWeight: 600, lineHeight: 1.3 },
-  body:        { fontSize: '0.6875rem', lineHeight: 1.5 },
-  body2:       { fontSize: '0.75rem', lineHeight: 1.4 },
-  bodySmall:   { fontSize: '0.625rem', lineHeight: 1.5 },
-  heading:     { fontSize: '0.875rem', fontWeight: 600, lineHeight: 1.3 },
-  caption:     { fontSize: '0.5625rem', lineHeight: 1.4 },
-  statValue:   { fontSize: '1.125rem', fontWeight: 700, lineHeight: 1.2 },
-  statLabel:   { fontSize: '0.5625rem', fontWeight: 500, letterSpacing: '0.02em', textTransform: 'uppercase' },
-  chip:        { fontSize: '0.5625rem', fontWeight: 500 },
-  tab:         { fontSize: '0.625rem', fontWeight: 600 },
+  // ADR-0037 modest readability bump — keep in sync with compact-ui.md
+  pageTitle:   { fontSize: '1.125rem', fontWeight: 700, lineHeight: 1.3 },
+  sectionTitle:{ fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' },
+  cardTitle:   { fontSize: '0.875rem', fontWeight: 600, lineHeight: 1.3 },
+  body:        { fontSize: '0.8125rem', lineHeight: 1.5 },
+  body2:       { fontSize: '0.875rem', lineHeight: 1.4 },
+  bodySmall:   { fontSize: '0.75rem', lineHeight: 1.5 },
+  heading:     { fontSize: '0.95rem', fontWeight: 600, lineHeight: 1.3 },
+  caption:     { fontSize: '0.6875rem', lineHeight: 1.4 },
+  statValue:   { fontSize: '1.25rem', fontWeight: 700, lineHeight: 1.2 },
+  statLabel:   { fontSize: '0.6875rem', fontWeight: 500, letterSpacing: '0.02em', textTransform: 'uppercase' },
+  chip:        { fontSize: '0.6875rem', fontWeight: 500 },
+  tab:         { fontSize: '0.75rem', fontWeight: 600 },
 };
 
 export const BORDER = {

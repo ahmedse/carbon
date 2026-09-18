@@ -21,6 +21,7 @@ const SHORTCUTS = [
       { keys: ['Ctrl', 'K'], description: 'Open Command Palette' },
       { keys: ['Ctrl', 'B'], description: 'Toggle Sidebar' },
       { keys: ['Ctrl', '\\'], description: 'Toggle Pulse' },
+      { keys: ['Ctrl', 'Shift', '\\'], description: 'Expand / dock Pulse' },
       { keys: ['Esc'], description: 'Close dialogs/modals' },
     ],
   },

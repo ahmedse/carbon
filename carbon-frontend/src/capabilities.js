@@ -90,6 +90,7 @@ export const AI_PROCESS_OWNER = 'ai:process_owner';
 export const AI_PUBLISHER     = 'ai:publisher';
 export const AI_OPERATOR      = 'ai:operator';
 export const AI_AUDITOR       = 'ai:auditor';
+export const AI_POLICY_OWNER  = 'ai:policy_owner';
 export const AI_INSPECT_CASE  = 'ai:inspect_case';
 
 // ── Manifest role → capability mapping ─────────────────────────────

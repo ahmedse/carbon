@@ -35,7 +35,7 @@ const EMPLOYEE = {
 };
 
 const MANAGER = {
-  username: process.env.NIBRAS_MANAGER_USER || 'emp_1000',
+  username: process.env.NIBRAS_MANAGER_USER || 'emp_1399',
   password: process.env.NIBRAS_MANAGER_PASSWORD || process.env.EMPLOYEE_DEFAULT_PASSWORD || 'ChangeMe_132',
   role: 'manager',
   isGlobalAdmin: false,

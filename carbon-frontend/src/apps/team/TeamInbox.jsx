@@ -26,6 +26,7 @@ import InboxIcon from '@mui/icons-material/Inbox';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageContainer from '../../components/layout/PageContainer';
+import ResponsiveList from '../../components/layout/ResponsiveList';
 import PageHeader from '../../components/Page/PageHeader';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
@@ -119,8 +120,8 @@ export default function TeamInbox() {
     >
       <PageContainer>
         <PageHeader icon={InboxIcon} title={t('inboxTitle')} subtitle={t('inboxSubtitle')} />
-        <Card variant="outlined">
-          <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+        <Card variant="outlined" sx={{ minWidth: 0, overflow: 'hidden' }}>
+          <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 }, minWidth: 0 }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
               <SectionTitle icon={InboxIcon} title={t('inboxTitle')} />
               {loading && <CircularProgress size={12} aria-label={t('loading')} />}
@@ -138,68 +139,89 @@ export default function TeamInbox() {
                 {t('inboxEmpty')}
               </Typography>
             ) : (
-              <TableContainer>
-                <Table size="small" aria-busy={loading}>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
-                        {t('tableReferenceNo')}
-                      </TableCell>
-                      <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
-                        {t('tableTitle')}
-                      </TableCell>
-                      <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
-                        {t('tableRequester')}
-                      </TableCell>
-                      <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
-                        {t('tableType')}
-                      </TableCell>
-                      <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
-                        {t('tableStatus')}
-                      </TableCell>
-                      <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
-                        {t('tableDate')}
-                      </TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {items.map((row) => (
-                      <TableRow
-                        key={row.id}
-                        hover
-                        onClick={() => handleOpen(row.id)}
-                        onKeyDown={(event) => handleKeyDown(event, row.id)}
-                        role="button"
-                        tabIndex={0}
-                        aria-label={t('openItem', { ref: row.reference_no || row.id })}
-                        sx={{ cursor: 'pointer', opacity: loading ? 0.6 : 1 }}
-                      >
-                        <TableCell sx={{ ...FONT.body2 }}>
-                          {row.reference_no || '—'}
-                        </TableCell>
-                        <TableCell sx={{ ...FONT.body2 }}>{row.title || '—'}</TableCell>
-                        <TableCell sx={{ ...FONT.body2 }}>
-                          {row.requester_name || requesterLabel(row.requester)}
-                        </TableCell>
-                        <TableCell sx={{ ...FONT.body2 }}>
-                          {row.corr_type_label || row.corr_type_code || corrTypeLabel(t, row.corr_type)}
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            size="small"
-                            variant="outlined"
-                            color={STATUS_COLOR[row.status] || 'default'}
-                            label={codeLabel(t, 'status', STATUS_SUFFIX, row.status)}
-                          />
-                        </TableCell>
-                        <TableCell sx={{ ...FONT.body2 }}>
-                          {formatDateTime(row.created_at, i18n.language)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+              <ResponsiveList
+                items={items}
+                getKey={(row) => row.id}
+                emptyLabel={t('inboxEmpty')}
+                renderCard={(row) => {
+                  const requester = row.requester_name || requesterLabel(row.requester);
+                  const type =
+                    row.corr_type_label || row.corr_type_code || corrTypeLabel(t, row.corr_type);
+                  return {
+                    title: requester !== '—' ? requester : type,
+                    status: codeLabel(t, 'status', STATUS_SUFFIX, row.status),
+                    statusColor: STATUS_COLOR[row.status] || 'default',
+                    meta: formatDateTime(row.created_at, i18n.language),
+                    onClick: () => handleOpen(row.id),
+                  };
+                }}
+                table={
+                  <TableContainer sx={{ overflowX: 'auto', maxWidth: '100%' }}>
+                    <Table size="small" aria-busy={loading} sx={{ minWidth: 640 }}>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
+                            {t('tableReferenceNo')}
+                          </TableCell>
+                          <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
+                            {t('tableTitle')}
+                          </TableCell>
+                          <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
+                            {t('tableRequester')}
+                          </TableCell>
+                          <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
+                            {t('tableType')}
+                          </TableCell>
+                          <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
+                            {t('tableStatus')}
+                          </TableCell>
+                          <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
+                            {t('tableDate')}
+                          </TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {items.map((row) => (
+                          <TableRow
+                            key={row.id}
+                            hover
+                            onClick={() => handleOpen(row.id)}
+                            onKeyDown={(event) => handleKeyDown(event, row.id)}
+                            role="button"
+                            tabIndex={0}
+                            aria-label={t('openItem', { ref: row.reference_no || row.id })}
+                            sx={{ cursor: 'pointer', opacity: loading ? 0.6 : 1 }}
+                          >
+                            <TableCell sx={{ ...FONT.body2 }}>
+                              {row.reference_no || '—'}
+                            </TableCell>
+                            <TableCell sx={{ ...FONT.body2 }}>{row.title || '—'}</TableCell>
+                            <TableCell sx={{ ...FONT.body2 }}>
+                              {row.requester_name || requesterLabel(row.requester)}
+                            </TableCell>
+                            <TableCell sx={{ ...FONT.body2 }}>
+                              {row.corr_type_label ||
+                                row.corr_type_code ||
+                                corrTypeLabel(t, row.corr_type)}
+                            </TableCell>
+                            <TableCell>
+                              <Chip
+                                size="small"
+                                variant="outlined"
+                                color={STATUS_COLOR[row.status] || 'default'}
+                                label={codeLabel(t, 'status', STATUS_SUFFIX, row.status)}
+                              />
+                            </TableCell>
+                            <TableCell sx={{ ...FONT.body2 }}>
+                              {formatDateTime(row.created_at, i18n.language)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                }
+              />
             )}
           </CardContent>
         </Card>

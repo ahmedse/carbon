@@ -310,7 +310,7 @@ export default function EmployeeDetailPage() {
 
       {/* ── Hero ── */}
       <Box sx={{ bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', px: 2, pt: 1.25, pb: 1, flexShrink: 0 }}>
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, flexWrap: 'wrap' }}>
           <IconButton size="small" onClick={() => navigate('/people/employees')} sx={{ mt: 0.375, flexShrink: 0 }}>
             <ArrowBackIcon sx={{ fontSize: '1rem' }} />
           </IconButton>
@@ -362,17 +362,28 @@ export default function EmployeeDetailPage() {
             </Typography>
           </Box>
 
-          {/* Header actions — lifecycle & edit (governed, moved off the grid) */}
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.5, flexShrink: 0 }}>
-            <Button size="small" startIcon={<EditIcon sx={{ fontSize: '0.9375rem' }} />} onClick={enterEditAll}>
+          {/* Header actions — stack under sm (ADR-0035) */}
+          <Box sx={{
+            display: 'flex',
+            flexDirection: { xs: 'row', sm: 'column' },
+            alignItems: { xs: 'center', sm: 'flex-end' },
+            gap: 0.5,
+            flexShrink: 0,
+            flexWrap: 'wrap',
+            width: { xs: '100%', sm: 'auto' },
+            mt: { xs: 1, sm: 0 },
+            ml: { xs: 0, sm: 0 },
+            pl: { xs: 7, sm: 0 },
+          }}>
+            <Button size="small" startIcon={<EditIcon sx={{ fontSize: '0.9375rem' }} />} onClick={enterEditAll} sx={{ minHeight: { xs: 40, sm: 'auto' } }}>
               {t('editProfile')}
             </Button>
             {data.is_active ? (
-              <Button size="small" color="error" startIcon={<BlockIcon sx={{ fontSize: '0.9375rem' }} />} onClick={openDeactivate}>
+              <Button size="small" color="error" startIcon={<BlockIcon sx={{ fontSize: '0.9375rem' }} />} onClick={openDeactivate} sx={{ minHeight: { xs: 40, sm: 'auto' } }}>
                 {t('deactivate')}
               </Button>
             ) : (
-              <Button size="small" color="success" startIcon={<RestoreIcon sx={{ fontSize: '0.9375rem' }} />} onClick={openReactivate}>
+              <Button size="small" color="success" startIcon={<RestoreIcon sx={{ fontSize: '0.9375rem' }} />} onClick={openReactivate} sx={{ minHeight: { xs: 40, sm: 'auto' } }}>
                 {t('reactivate')}
               </Button>
             )}

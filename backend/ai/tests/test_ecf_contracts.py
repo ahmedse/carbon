@@ -203,3 +203,155 @@ class TestRuntimeHook:
         out_tools, out_prose = _apply_ecf_entity_contracts(tools, prose, nibras_cfg)
         assert out_prose == prose
         assert out_tools[0]["result"] == tools[0]["result"]
+
+
+class TestCompensationUnauthorizedAsk:
+    def test_payload_denies_when_asked_without_capability(self):
+        from types import SimpleNamespace
+        from ai.engine.agent.tools import _compensation_unauthorized_payload
+
+        desc = SimpleNamespace(
+            masking={
+                "basic_salary": SimpleNamespace(capability="people:view_compensation"),
+            }
+        )
+        record = {
+            "id": 1,
+            "full_name": "Alice",
+            "basic_salary": "(hidden — salary access required)",
+        }
+        denied = _compensation_unauthorized_payload(
+            record=record,
+            descriptor=desc,
+            caps=frozenset(),
+            intent_text="what is Alice's salary?",
+        )
+        assert denied is not None
+        assert denied["unauthorized"] is True
+        assert denied["status_code"] == 403
+        assert "people:view_compensation" in denied["message"]
+        assert "basic_salary" not in denied["record"]
+
+    def test_payload_none_when_not_asking_compensation(self):
+        from types import SimpleNamespace
+        from ai.engine.agent.tools import _compensation_unauthorized_payload
+
+        desc = SimpleNamespace(
+            masking={
+                "basic_salary": SimpleNamespace(capability="people:view_compensation"),
+            }
+        )
+        assert (
+            _compensation_unauthorized_payload(
+                record={"id": 1, "basic_salary": "x"},
+                descriptor=desc,
+                caps=frozenset(),
+                intent_text="who is Alice?",
+            )
+            is None
+        )
+
+    def test_stamp_empty_payslips_when_salary_asked_without_capability(self):
+        from ai.engine.agent.tools import stamp_compensation_deny_on_soft_empty
+
+        tools = [{
+            "tool_name": "call_host_api",
+            "tool_args": {"api_name": "list_my_payslips"},
+            "result": {
+                "status_code": 200,
+                "data": {"count": 0, "results": []},
+            },
+        }]
+        out = stamp_compensation_deny_on_soft_empty(
+            tools,
+            user_message="What is my salary?",
+            caps=frozenset(),
+        )
+        stamped = out[0]["result"]
+        assert stamped["unauthorized"] is True
+        assert stamped["capability"] == "people:view_compensation"
+        assert "view_compensation" in stamped["message"]
+        soft = (stamped.get("message") or "").lower()
+        assert "no data" not in soft
+        assert "not found" not in soft
+
+    def test_stamp_skips_when_capability_present(self):
+        from ai.engine.agent.tools import stamp_compensation_deny_on_soft_empty
+
+        tools = [{
+            "tool_name": "call_host_api",
+            "tool_args": {"api_name": "list_my_payslips"},
+            "result": {"status_code": 200, "data": {"count": 0, "results": []}},
+        }]
+        out = stamp_compensation_deny_on_soft_empty(
+            tools,
+            user_message="What is my salary?",
+            caps=frozenset({"people:view_compensation"}),
+        )
+        assert out[0]["result"].get("unauthorized") is not True
+
+    def test_stamp_profile_on_first_person_salary_ask(self):
+        from ai.engine.agent.tools import stamp_compensation_deny_on_soft_empty
+
+        tools = [{
+            "tool_name": "call_host_api",
+            "tool_args": {"api_name": "get_my_profile"},
+            "result": {
+                "status_code": 200,
+                "data": {"id": 1, "full_name": "Self", "employee_no": "1001"},
+            },
+        }]
+        out = stamp_compensation_deny_on_soft_empty(
+            tools,
+            user_message="What is my salary?",
+            caps=frozenset({"my:access"}),
+        )
+        assert out[0]["result"]["unauthorized"] is True
+        assert "people:view_compensation" in out[0]["result"]["message"]
+
+    def test_deterministic_deny_message_from_unauthorized_tool(self):
+        from ai.engine.agent.tools import compensation_authz_deny_message
+
+        text = compensation_authz_deny_message([{
+            "tool_name": "call_host_api",
+            "result": {
+                "unauthorized": True,
+                "capability": "people:view_compensation",
+                "message": (
+                    "Not authorized to view compensation "
+                    "(people:view_compensation required)."
+                ),
+            },
+        }])
+        assert text is not None
+        assert "view_compensation" in text
+        assert "authorization deny" in text.lower()
+        assert "no salary data" not in text.lower()
+        assert "no records" not in text.lower()
+        assert "not available" not in text.lower()
+
+    def test_deterministic_deny_none_without_unauthorized(self):
+        from ai.engine.agent.tools import compensation_authz_deny_message
+
+        assert compensation_authz_deny_message([{
+            "tool_name": "call_host_api",
+            "result": {"status_code": 200, "data": {"count": 0, "results": []}},
+        }]) is None
+
+    def test_stamp_leaves_non_compensation_profile_alone(self):
+        from ai.engine.agent.tools import stamp_compensation_deny_on_soft_empty
+
+        tools = [{
+            "tool_name": "call_host_api",
+            "tool_args": {"api_name": "get_my_profile"},
+            "result": {
+                "status_code": 200,
+                "data": {"id": 1, "full_name": "Self"},
+            },
+        }]
+        out = stamp_compensation_deny_on_soft_empty(
+            tools,
+            user_message="Who am I?",
+            caps=frozenset(),
+        )
+        assert out[0]["result"].get("unauthorized") is not True

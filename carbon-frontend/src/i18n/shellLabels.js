@@ -173,6 +173,8 @@ export const STUDIO_LABEL_KEYS = {
   settings: 'studio.settings',
   help: 'studio.help',
   my: 'studio.my',
+  people: 'studio.people',
+  team: 'studio.team',
 };
 
 // Sidebar header titles -> shell.studio.* (keyed by studio id)

@@ -71,6 +71,7 @@ from .process import ProcessDefinition
 from .process_interview import ProcessInterview
 from .autonomy import AutonomyOverride
 from .heartbeat import PulseHeartbeat
+from .control_state import PulseControlState
 from .knowledge_graph import (
     KgBootstrapRun,
     KgCacheEntry,

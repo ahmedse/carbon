@@ -1,19 +1,14 @@
 // File: src/pages/PlatformHome.jsx
-// Platform Home — single entry page showing accessible domain apps as cards.
-// Replaces the old ExecutiveSummary/Analytics/Targets dashboard trio.
+// Platform Home — full-bleed domain entry surface for the traditional workspace.
+// Dual-workspace model: domains here; Pulse beside/expanded for AI.
 // RULE: Never add emissions-specific dashboards here; they live inside domain apps.
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
-  Card,
-  CardContent,
-  CardActionArea,
   Typography,
-  Grid,
-  Avatar,
-  Chip,
+  Stack,
   useTheme,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
@@ -24,6 +19,7 @@ import GroupsIcon from '@mui/icons-material/Groups';
 import PersonIcon from '@mui/icons-material/Person';
 import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
 import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { APP_REGISTRY } from '../apps/registry';
 import { useAuth } from '../auth/AuthContext';
 import { hasAppAccess } from '../authz';
@@ -33,7 +29,6 @@ import PageContainer from '../components/layout/PageContainer';
 import { FONT } from '../theme/themeTokens';
 import { PLATFORM_TITLE, PLATFORM_TAGLINE } from '../config/branding';
 
-// Icon lookup — maps manifest icon names to MUI icon components.
 const APP_ICONS = {
   Co2: Co2Icon,
   Dashboard: DashboardIcon,
@@ -42,78 +37,119 @@ const APP_ICONS = {
   Person: PersonIcon,
   SupervisorAccount: SupervisorAccountIcon,
   MonitorHeart: MonitorHeartIcon,
-  // legacy alias
   Diversity3: GroupsIcon,
 };
 
-function AppCard({ app }) {
+function DomainStrip({ app }) {
   const navigate = useNavigate();
   const theme = useTheme();
+  const { t } = useTranslation('shell');
+  const isRtl = theme.direction === 'rtl';
   const Icon = APP_ICONS[app.icon] || DashboardIcon;
+  const name = t(`ui.apps.${app.id}.name`, { defaultValue: app.name });
+  const description = t(`ui.apps.${app.id}.description`, { defaultValue: app.description });
+  const accent = app.color || theme.palette.primary.main;
 
-  const handleClick = () => {
+  const handleOpen = () => {
     navigate(app.routePrefix || `/${app.id}`);
   };
 
+  const handleKeyDown = (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      handleOpen();
+    }
+  };
+
   return (
-    <Card
+    <Box
+      role="button"
+      tabIndex={0}
+      onClick={handleOpen}
+      onKeyDown={handleKeyDown}
+      aria-label={t('ui.openDomain', { name })}
       sx={{
-        height: '100%',
         display: 'flex',
-        flexDirection: 'column',
-        borderTop: `4px solid ${app.color || theme.palette.primary.main}`,
-        transition: 'box-shadow 0.2s, transform 0.15s',
-        '&:hover': {
-          boxShadow: 6,
-          transform: 'translateY(-3px)',
+        alignItems: 'center',
+        gap: 2,
+        width: '100%',
+        minHeight: 72,
+        px: { xs: 1.5, sm: 2 },
+        py: 1.75,
+        cursor: 'pointer',
+        borderBottom: 1,
+        borderColor: 'divider',
+        bgcolor: 'transparent',
+        transition: 'background-color 140ms ease',
+        '&:hover': { bgcolor: 'action.hover' },
+        '&:focus-visible': {
+          outline: '2px solid',
+          outlineColor: 'primary.main',
+          outlineOffset: -2,
         },
       }}
     >
-      <CardActionArea onClick={handleClick} sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
-        <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-            <Avatar
-              sx={{
-                bgcolor: app.color || 'primary.main',
-                width: 40,
-                height: 40,
-              }}
-            >
-              <Icon />
-            </Avatar>
-            <Typography variant="h6" fontWeight={600} noWrap>
-              {app.name}
-            </Typography>
-          </Box>
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{ flex: 1, mb: 1.5 }}
-          >
-            {app.description}
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-            {(app.roles || []).slice(0, 3).map((role) => (
-              <Chip
-                key={role.key}
-                label={role.label}
-                size="small"
-                variant="outlined"
-                sx={{ ...FONT.bodySmall, height: 2.5 }}
-              />
-            ))}
-            {(app.roles || []).length > 3 && (
-              <Chip
-                label={`+${app.roles.length - 3}`}
-                size="small"
-                variant="outlined"
-                sx={{ ...FONT.bodySmall, height: 2.5 }}
-              />
-            )}
-          </Box>
-        </CardContent>
-      </CardActionArea>
-    </Card>
+      <Box
+        aria-hidden
+        sx={{
+          width: 4,
+          alignSelf: 'stretch',
+          borderRadius: 1,
+          bgcolor: accent,
+          flexShrink: 0,
+        }}
+      />
+      <Box
+        sx={{
+          width: 40,
+          height: 40,
+          borderRadius: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          bgcolor: 'action.selected',
+          color: accent,
+          flexShrink: 0,
+        }}
+      >
+        <Icon sx={{ fontSize: 22 }} />
+      </Box>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography
+          component="span"
+          sx={{
+            ...FONT.heading,
+            display: 'block',
+            fontWeight: 650,
+            color: 'text.primary',
+            mb: 0.25,
+          }}
+        >
+          {name}
+        </Typography>
+        <Typography
+          sx={{
+            ...FONT.body2,
+            color: 'text.secondary',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}
+        >
+          {description}
+        </Typography>
+      </Box>
+      <ArrowForwardIcon
+        sx={{
+          fontSize: 18,
+          color: 'text.secondary',
+          flexShrink: 0,
+          opacity: 0.55,
+          transform: isRtl ? 'scaleX(-1)' : undefined,
+        }}
+      />
+    </Box>
   );
 }
 
@@ -137,8 +173,6 @@ export default function PlatformHome() {
   const { availablePerspectives, user, context, loading, userCapabilities, isGlobalAdminFlag } = useAuth();
   const { isAppEnabled } = useEnabledApps();
 
-  // Filter to apps the user can access AND the admin has enabled.
-  // Uses centralized hasAppAccess (perspectives + modules + capabilities) + admin enable/disable from PlatformAppConfig.
   const accessibleApps = APP_REGISTRY.filter((app) => {
     if (loading) return false;
     if (!isAppEnabled(app.id)) return false;
@@ -153,32 +187,62 @@ export default function PlatformHome() {
   return (
     <PageContainer
       sx={{
-        maxWidth: 1100,
-        mx: 'auto',
+        maxWidth: 'none',
+        width: '100%',
+        mx: 0,
+        px: { xs: 1.5, sm: 2.5, md: 3 },
+        py: { xs: 2, md: 3 },
       }}
     >
-      {/* Platform header */}
-      <Box sx={{ mb: 4 }}>
+      <Box sx={{ mb: { xs: 2.5, md: 3.5 }, maxWidth: 720 }}>
         <Typography
-          variant="h4"
-          sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}
+          component="h1"
+          sx={{
+            fontWeight: 700,
+            fontSize: { xs: '1.5rem', md: '1.75rem' },
+            letterSpacing: '-0.02em',
+            color: 'text.primary',
+            mb: 0.75,
+          }}
         >
           {PLATFORM_TITLE}
         </Typography>
-        <Typography variant="body1" color="text.secondary">
+        <Typography sx={{ ...FONT.body, color: 'text.secondary', mb: 1.5 }}>
           {PLATFORM_TAGLINE}
+        </Typography>
+        <Typography
+          sx={{
+            ...FONT.bodySmall,
+            color: 'text.secondary',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            fontWeight: 600,
+            mb: 0.5,
+          }}
+        >
+          {t('ui.domainsHeading')}
+        </Typography>
+        <Typography sx={{ ...FONT.body2, color: 'text.secondary' }}>
+          {t('ui.domainsSubheading')}
         </Typography>
       </Box>
 
-      {/* App cards */}
       {accessibleApps.length > 0 ? (
-        <Grid container spacing={3}>
+        <Stack
+          component="nav"
+          aria-label={t('ui.domainsHeading')}
+          spacing={0}
+          sx={{
+            width: '100%',
+            borderTop: 1,
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
+          }}
+        >
           {accessibleApps.map((app) => (
-            <Grid size={{ xs: 12, sm: 6, md: 4 }} key={app.id}>
-              <AppCard app={app} />
-            </Grid>
+            <DomainStrip key={app.id} app={app} />
           ))}
-        </Grid>
+        </Stack>
       ) : (
         <NoAppsPlaceholder />
       )}

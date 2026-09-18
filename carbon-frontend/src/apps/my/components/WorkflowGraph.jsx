@@ -12,6 +12,7 @@ import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import { useTranslation } from 'react-i18next';
 import { SectionTitle } from './myRequestsCommon';
 import { codeLabel, ROLE_SUFFIX, INTENT_SUFFIX } from './myRequestsLabels';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 import { FONT } from '../../../theme/themeTokens';
 
 /**
@@ -101,7 +102,7 @@ FlowArrow.defaultProps = {
 };
 
 /** One workflow node — a focusable button with role/intent/decision text. */
-function NodeBox({ node, meta, color, filled }) {
+function NodeBox({ node, meta, color, filled, fullWidth }) {
   const muted = node.state === 'pending' || node.state === 'skipped_auto' || node.state === 'skipped_condition';
   return (
     <Box
@@ -112,7 +113,7 @@ function NodeBox({ node, meta, color, filled }) {
       aria-current={node.state === 'current' ? 'step' : undefined}
       sx={{
         flexShrink: 0,
-        width: 150,
+        width: fullWidth ? '100%' : 150,
         minHeight: 76,
         display: 'flex',
         flexDirection: 'column',
@@ -190,6 +191,11 @@ NodeBox.propTypes = {
   meta: PropTypes.object.isRequired,
   color: PropTypes.string,
   filled: PropTypes.bool.isRequired,
+  fullWidth: PropTypes.bool,
+};
+
+NodeBox.defaultProps = {
+  fullWidth: false,
 };
 
 /**
@@ -202,6 +208,7 @@ function WorkflowGraph({ chain, currentStep, status }) {
   const { t } = useTranslation('my');
   const theme = useTheme();
   const isRtl = theme.direction === 'rtl';
+  const isMobile = useIsMobile();
 
   const steps = useMemo(() => {
     const list = Array.isArray(chain) ? chain : [];
@@ -252,6 +259,23 @@ function WorkflowGraph({ chain, currentStep, status }) {
         <SectionTitle icon={AccountTreeIcon} title={t('graphTitle')} />
         {nodes.length === 0 ? (
           <Typography sx={{ ...FONT.body2, color: 'text.secondary' }}>{t('graphEmpty')}</Typography>
+        ) : isMobile ? (
+          <Stack role="group" aria-label={t('graphTitle')} spacing={1}>
+            {nodes.map((node) => {
+              const meta = STATE_META[node.state];
+              const color = tokenColor(theme, meta.color);
+              return (
+                <NodeBox
+                  key={node.key}
+                  node={node}
+                  meta={meta}
+                  color={color}
+                  filled={node.state === 'current'}
+                  fullWidth
+                />
+              );
+            })}
+          </Stack>
         ) : (
           <Box role="group" aria-label={t('graphTitle')} sx={{ overflowX: 'auto', pb: 0.5 }}>
             <Stack direction="row" alignItems="center" sx={{ minWidth: 'max-content' }}>

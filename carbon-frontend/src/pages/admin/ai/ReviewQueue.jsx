@@ -7,9 +7,8 @@
 //   5. Permissions delta (derived) 6. Tests
 //   7. Affected runs (current user only)
 //
-// Reject-by-note is explicitly NOTE-ONLY — there is no backend reject
-// endpoint, so the note is never persisted server-side. Publish maps to
-// ai:publisher (server refuses self-publish with 403 {error, detail}).
+// Reject returns review → draft with a persisted reason (ADR-0036).
+// Publish maps to ai:publisher (server refuses self-publish with 403).
 // RULE_8 tokens only; RULE_10 apiFetch only.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -28,8 +27,14 @@ import useDocumentTitle from '../../../hooks/useDocumentTitle';
 import PageContainer from '../../../components/layout/PageContainer';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
-import { AI_PUBLISHER, hasAnyCap } from '../../../capabilities';
-import { getDiff, getProcess, listProcesses, publishProcess } from '../../../api/aiRegistry';
+import { AI_PROCESS_OWNER, AI_PUBLISHER, hasAnyCap } from '../../../capabilities';
+import {
+  getDiff,
+  getProcess,
+  listProcesses,
+  publishProcess,
+  rejectProcess,
+} from '../../../api/aiRegistry';
 import { listPlans } from '../../../api/aiWorkspace';
 
 function formatTimestamp(value) {
@@ -182,6 +187,10 @@ export default function ReviewQueue() {
 
   const caps = useMemo(() => capabilityKeys(userCapabilities), [userCapabilities]);
   const isPublisher = useMemo(() => hasAnyCap(caps, [AI_PUBLISHER]), [caps]);
+  const canReject = useMemo(
+    () => hasAnyCap(caps, [AI_PUBLISHER, AI_PROCESS_OWNER]),
+    [caps],
+  );
 
   const [items, setItems] = useState([]);
   const [plans, setPlans] = useState([]);
@@ -189,7 +198,6 @@ export default function ReviewQueue() {
   const [offline, setOffline] = useState(false);
   const [acting, setActing] = useState(false);
   const [notes, setNotes] = useState({});
-  const [savedNotes, setSavedNotes] = useState({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -242,9 +250,23 @@ export default function ReviewQueue() {
     }
   };
 
-  const saveNote = (id) => {
-    setSavedNotes((prev) => ({ ...prev, [id]: true }));
-    notify({ message: 'Note saved (local only — no server state change).', type: 'info' });
+  const doReject = async (id) => {
+    const reason = (notes[id] || '').trim();
+    if (!reason) {
+      notify({ message: 'A reject reason is required.', type: 'warning' });
+      return;
+    }
+    setActing(true);
+    try {
+      await rejectProcess(token, id, reason);
+      notify({ message: `Rejected ${id} — returned to draft.`, type: 'success' });
+      setNotes((prev) => ({ ...prev, [id]: '' }));
+      await load();
+    } catch (err) {
+      notifyFromError(err, 'Reject failed');
+    } finally {
+      setActing(false);
+    }
   };
 
   return (
@@ -457,7 +479,7 @@ export default function ReviewQueue() {
                       </Button>
                       <TextField
                         size="small"
-                        label="Reject note (note only — no server state change)"
+                        label="Reject reason (persisted)"
                         value={notes[item.process_id] || ''}
                         onChange={(e) =>
                           setNotes((prev) => ({ ...prev, [item.process_id]: e.target.value }))
@@ -467,10 +489,12 @@ export default function ReviewQueue() {
                       <Button
                         size="small"
                         variant="outlined"
-                        onClick={() => saveNote(item.process_id)}
-                        disabled={!notes[item.process_id]}
+                        color="warning"
+                        onClick={() => doReject(item.process_id)}
+                        disabled={acting || !canReject || !(notes[item.process_id] || '').trim()}
+                        title={canReject ? '' : 'Requires ai:publisher or ai:process_owner'}
                       >
-                        {savedNotes[item.process_id] ? 'Note saved (local only)' : 'Save note'}
+                        Reject → draft
                       </Button>
                     </Stack>
                   </Stack>

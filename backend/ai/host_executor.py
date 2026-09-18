@@ -90,6 +90,76 @@ def _canonical_endpoint(endpoint: str) -> str:
 #: mistake a partial page for the full population.
 _PEOPLE_LIST_PAGE_CAP = 100
 
+
+def _employee_param_from_query(params: dict | None) -> str:
+    """Pull employee identity from common query-param aliases (pk or employee_no)."""
+    if not params:
+        return ""
+    for key in ("employee", "employee_id", "employee_no", "employeeNo"):
+        raw = params.get(key)
+        if raw is None or raw == "":
+            continue
+        return str(raw).strip()
+    return ""
+
+
+def _filter_qs_by_employee_param(qs, params: dict | None, *, emp_field: str = "employee"):
+    """Narrow an employee-linked queryset by pk or employee_no.
+
+    B1: leave/loan list endpoints must honour ``?employee=`` / ``?employee_no=``
+    so a focused-person follow-up never returns the first page of org-wide rows
+    (which the model then mislabels as e.g. ``Employee 333``).
+    """
+    key = _employee_param_from_query(params)
+    if not key:
+        return qs
+    from django.db.models import Q
+
+    # Accept pk or employee_no interchangeably (same contract as get_employee).
+    if key.isdigit():
+        return qs.filter(
+            Q(**{f"{emp_field}_id": int(key)})
+            | Q(**{f"{emp_field}__employee_no": key})
+        )
+    return qs.filter(**{f"{emp_field}__employee_no": key})
+
+
+def _annotate_employee_identity(results: list, qs) -> list:
+    """Attach employee_no + full_name next to the FK id for honest table titles.
+
+    Serializer leaves ``employee`` as a bare pk; without identity fields the
+    model invents ``Employee {pk}`` labels (B1 drift).
+    """
+    if not results:
+        return results
+    ids = {r.get("employee") for r in results if isinstance(r, dict) and r.get("employee") is not None}
+    if not ids:
+        return results
+    # Prefer already-joined relation when present; else one lookup.
+    id_to_identity: dict = {}
+    try:
+        from people.models import Employee
+
+        for emp in Employee.objects.filter(pk__in=ids).only("id", "employee_no", "full_name"):
+            id_to_identity[emp.pk] = {
+                "employee_no": emp.employee_no,
+                "employee_name": emp.full_name,
+            }
+    except Exception:  # noqa: BLE001 — enrichment is best-effort
+        return results
+    enriched = []
+    for row in results:
+        if not isinstance(row, dict):
+            enriched.append(row)
+            continue
+        clone = dict(row)
+        ident = id_to_identity.get(clone.get("employee"))
+        if ident:
+            clone.setdefault("employee_no", ident["employee_no"])
+            clone.setdefault("employee_name", ident["employee_name"])
+        enriched.append(clone)
+    return enriched
+
 #: After normalization, collapse the tail into an "Other" bucket so the model
 #: never receives a 200-row breakdown it can't interpret.
 _ANALYTICS_MAX_BUCKETS = 15
@@ -516,7 +586,27 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
                         pass
                 if employee is None:
                     return {"status_code": 404, "data": {"detail": "Employee not found"}}
-                return {"status_code": 200, "data": mask_employee(S.EmployeeSerializer(employee).data, user)}
+                raw = S.EmployeeSerializer(employee).data
+                masked = mask_employee(raw, user)
+                payload: dict = {"status_code": 200, "data": masked}
+                # B5: when compensation was stripped, say unauthorized — never
+                # leave a silent hole the LLM paraphrases as "no salary data".
+                stripped = [
+                    f for f in ("basic_salary",)
+                    if f in raw and f not in masked
+                ]
+                if stripped:
+                    from people.sensitivity import can_view_compensation
+                    if not can_view_compensation(user):
+                        payload["unauthorized"] = True
+                        payload["status_code"] = 403
+                        payload["capability"] = "people:view_compensation"
+                        payload["unauthorized_fields"] = stripped
+                        payload["message"] = (
+                            "Not authorized to view compensation "
+                            "(people:view_compensation required)."
+                        )
+                return payload
             # Count the full population before slicing — partial pages must
             # carry total+truncated so the LLM never mistakes 100 for 535.
             total = qs.count()
@@ -605,10 +695,15 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
 
         if method == "GET":
             qs = _people_scope(user, LeaveEntitlement.objects.all(), "employee__org_unit_id__in")
+            qs = _filter_qs_by_employee_param(qs, params)
             total = qs.count()
             page = qs[:_PEOPLE_LIST_PAGE_CAP]
-            results = S.LeaveEntitlementSerializer(page, many=True).data
+            results = _annotate_employee_identity(
+                S.LeaveEntitlementSerializer(page, many=True).data, page,
+            )
             data = {"total": total, "count": len(results), "results": results}
+            if _employee_param_from_query(params):
+                data["filtered_by_employee"] = _employee_param_from_query(params)
             if total > _PEOPLE_LIST_PAGE_CAP:
                 data["truncated"] = True
                 data["caveat"] = f"Showing first {len(results)} of {total} leave entitlements."
@@ -620,10 +715,15 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
 
         if method == "GET":
             qs = _people_scope(user, LeaveRecord.objects.all(), "employee__org_unit_id__in")
+            qs = _filter_qs_by_employee_param(qs, params)
             total = qs.count()
             page = qs[:_PEOPLE_LIST_PAGE_CAP]
-            results = S.LeaveRecordSerializer(page, many=True).data
+            results = _annotate_employee_identity(
+                S.LeaveRecordSerializer(page, many=True).data, page,
+            )
             data = {"total": total, "count": len(results), "results": results}
+            if _employee_param_from_query(params):
+                data["filtered_by_employee"] = _employee_param_from_query(params)
             if total > _PEOPLE_LIST_PAGE_CAP:
                 data["truncated"] = True
                 data["caveat"] = f"Showing first {len(results)} of {total} leave records."
@@ -658,10 +758,15 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
 
         if method == "GET":
             qs = _people_scope(user, Loan.objects.all(), "employee__org_unit_id__in")
+            qs = _filter_qs_by_employee_param(qs, params)
             total = qs.count()
             page = qs[:_PEOPLE_LIST_PAGE_CAP]
-            results = S.LoanSerializer(page, many=True).data
+            results = _annotate_employee_identity(
+                S.LoanSerializer(page, many=True).data, page,
+            )
             data = {"total": total, "count": len(results), "results": results}
+            if _employee_param_from_query(params):
+                data["filtered_by_employee"] = _employee_param_from_query(params)
             if total > _PEOPLE_LIST_PAGE_CAP:
                 data["truncated"] = True
                 data["caveat"] = f"Showing first {len(results)} of {total} loans."
@@ -774,12 +879,27 @@ def _people_me(user, sub, method) -> dict:
         from people.models import PayslipLine
         from people.self_views import COMMITTED_RUN_STATUSES
         from people import serializers as S
+        from people.sensitivity import can_view_compensation
 
         qs = PayslipLine.objects.filter(
             employee=profile, payroll_run__status__in=COMMITTED_RUN_STATUSES,
         )
         results = S.PayslipLineSerializer(qs, many=True).data
-        return {"status_code": 200, "data": {"count": len(results), "results": results}}
+        payload: dict = {
+            "status_code": 200,
+            "data": {"count": len(results), "results": results},
+        }
+        # B5: empty payslips must not become soft "no salary data" when the
+        # caller lacks compensation access — surface an explicit CBAC deny.
+        if not results and not can_view_compensation(user):
+            payload["unauthorized"] = True
+            payload["status_code"] = 403
+            payload["capability"] = "people:view_compensation"
+            payload["message"] = (
+                "Not authorized to view compensation "
+                "(people:view_compensation required)."
+            )
+        return payload
 
     return {"status_code": 404, "data": {"detail": f"Unknown self-service resource: me/{sub}"}}
 

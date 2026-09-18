@@ -168,9 +168,44 @@ def _render_tool_results_for_synthesis(
             except (TypeError, ValueError):
                 data = raw
 
-        # Unwrap the host executor envelope.
+        # Unwrap the host executor envelope — keep authz signals on the payload
+        # so synthesis never paraphrases CBAC deny as "no data" (B5).
         if isinstance(data, dict) and "status_code" in data and "data" in data:
-            data = data["data"]
+            authz_meta = {
+                k: data[k]
+                for k in (
+                    "unauthorized", "capability", "message",
+                    "unauthorized_fields", "status_code",
+                )
+                if k in data and data[k] is not None
+            }
+            inner = data["data"]
+            if authz_meta and isinstance(inner, dict):
+                data = {**inner, **{k: v for k, v in authz_meta.items() if k not in inner}}
+            elif authz_meta:
+                data = {"data": inner, **authz_meta}
+            else:
+                data = inner
+
+        if isinstance(data, dict) and data.get("unauthorized"):
+            deny = {
+                "unauthorized": True,
+                "capability": data.get("capability"),
+                "message": data.get("message"),
+                "unauthorized_fields": data.get("unauthorized_fields"),
+                "status_code": data.get("status_code"),
+            }
+            header = f"### {name}\n"
+            body = _json.dumps(deny, ensure_ascii=False, indent=2, default=str)
+            section = header + body
+            if used + len(section) > max_chars:
+                remaining = max_chars - used
+                section = section[:remaining] + "\n…(truncated)"
+            sections.append(section)
+            used += len(section)
+            if used >= max_chars:
+                break
+            continue
 
         list_payload = None
         list_key = None
@@ -743,6 +778,21 @@ async def _synthesize_tool_results(
             continue
         usable.append(tr)
 
+    # B5: compensation CBAC deny → fixed prose (never LLM soft-empty mix).
+    try:
+        from ai.engine.agent.tools import compensation_authz_deny_message
+
+        _deny_text = compensation_authz_deny_message(completed_tools)
+    except Exception:  # noqa: BLE001
+        _deny_text = None
+    if _deny_text:
+        await _stream_final_text(
+            _deny_text,
+            stream_callback=stream_callback,
+            progress_callback=progress_callback,
+        )
+        return {"text": _deny_text, "tokens": 0, "model": model or ""}
+
     hints = _no_match_hints(no_matches)
 
     # Precedence 1: nothing usable but some no_match → the tool could not
@@ -870,6 +920,11 @@ async def _synthesize_tool_results(
         "— when the user names the whole organisation, treat it as 'all data' "
         "and show the full breakdown, never as a missing entity. A named "
         "year or period is a TIME WINDOW, not an entity filter.\n"
+        "AUTHZ GUARD: when a tool result includes `unauthorized: true`, a "
+        "`capability` denial, or a message that access/permission is required, "
+        "state that clearly (name the capability when present). NEVER "
+        "paraphrase an authorization failure as 'no data', 'not found', or "
+        "'missing salary record'.\n"
         "NON-EMPTY GUARD: if the tool results contain ANY calculations or rows "
         "(a non-zero total, count, or breakdown), you MUST report those values "
         "— NEVER say 'no data is available' when the tool returned data. Only "
@@ -1327,6 +1382,7 @@ class TurnPipelineRunner:
                     user_message=_resolved_for_intent,
                     api_catalog=(instance_config or {}).get("api_catalog"),
                     navigation_routes=(instance_config or {}).get("navigation_routes"),
+                    tenant_org=(instance_config or {}).get("tenant_org"),
                     conversation_history=conversation_history,
                     instance_id=instance_id,
                     conversation_id=conversation_id,
@@ -1757,6 +1813,19 @@ class TurnPipelineRunner:
                 from types import SimpleNamespace
                 ledger.execution = SimpleNamespace(completed_tools=_react_completed_tools)
 
+            try:
+                from ai.engine.memory.working import update_focus_from_resolve_results
+
+                update_focus_from_resolve_results(
+                    _wm, conversation_id, _react_completed_tools
+                )
+            except Exception:  # noqa: BLE001
+                logger.debug(
+                    "[%s] resolve_entity focus update skipped (pulse_loop)",
+                    turn_id[:8],
+                    exc_info=True,
+                )
+
             ledger.final_response = final_text[:500]
             ledger.total_latency_ms = total_latency
             ledger.total_tokens = total_tokens
@@ -1871,6 +1940,19 @@ class TurnPipelineRunner:
             else:
                 from types import SimpleNamespace
                 ledger.execution = SimpleNamespace(completed_tools=_react_completed_tools)
+
+            try:
+                from ai.engine.memory.working import update_focus_from_resolve_results
+
+                update_focus_from_resolve_results(
+                    _wm, conversation_id, _react_completed_tools
+                )
+            except Exception:  # noqa: BLE001
+                logger.debug(
+                    "[%s] resolve_entity focus update skipped (react)",
+                    turn_id[:8],
+                    exc_info=True,
+                )
 
             ledger.final_response = final_text[:500]
             ledger.total_latency_ms = total_latency
@@ -2050,7 +2132,13 @@ class TurnPipelineRunner:
                 "or source data is missing, or if your authority to perform "
                 "the requested action is unclear, ASK one clarifying question "
                 "instead of guessing. Never assume or guess authority — when "
-                "in doubt about permission, ask."
+                "in doubt about permission, ask.\n"
+                "- TENANT-ORG EXCEPTION: the platform's own organisation / "
+                "company name (see Tenant organisation above — aliases from "
+                "instance tenant_org) is NEVER an ambiguous object. Questions "
+                "about the company, or \"data in the system\" for that "
+                "company, must be answered with live tools immediately — do "
+                "not ask \"what specifically…?\" in a loop."
             )
 
         # [GAP-3] Resolve anaphora: substitute pronouns with active entity
@@ -2414,6 +2502,9 @@ class TurnPipelineRunner:
             "agent_role": "orchestrator",
             "is_worker": False,
             "instance_config": instance_config,
+            # B5: resolve_entity / compensation stamping need the turn utterance
+            # (tool query may be only a name like "Abrar").
+            "user_message": _resolved_user_message,
         }
         execute_witness = ExecuteWitness(
             executor=self.executor,
@@ -2448,6 +2539,21 @@ class TurnPipelineRunner:
             s5_latency, verdict="pass",
         )
 
+        # [C7] Promote resolve_entity matches into working-memory focus with a
+        # stable id (employee_no) + name aliases so "Back to Abrar" can restore.
+        try:
+            from ai.engine.memory.working import update_focus_from_resolve_results
+
+            update_focus_from_resolve_results(
+                _wm, conversation_id, execution.completed_tools
+            )
+        except Exception:  # noqa: BLE001 — focus update must never block the turn
+            logger.debug(
+                "[%s] resolve_entity focus update skipped",
+                turn_id[:8],
+                exc_info=True,
+            )
+
         # [GAP-W8/W9] Tool-result grounding: when the planner executed tools, the
         # pre-tool draft is either empty or a short "I'll fetch …" promise — the
         # fetched data is otherwise discarded. Re-synthesize the final answer from
@@ -2455,6 +2561,25 @@ class TurnPipelineRunner:
         # fall back to a deterministic summary (GAP-W8) only when synthesis is
         # unavailable. Order matters: the LLM synthesis produces the values the
         # user asked for; the deterministic summary is the "never blank" net.
+        # B5: stamp CBAC deny onto empty payslip / profile soft-empties before
+        # synthesis so the LLM cannot paraphrase absence for salary asks.
+        try:
+            from ai.engine.agent.tools import stamp_compensation_deny_on_soft_empty
+
+            _caps = frozenset()
+            if self.executor is not None and hasattr(self.executor, "user_capabilities"):
+                try:
+                    _caps = frozenset(self.executor.user_capabilities() or ())
+                except Exception:  # noqa: BLE001
+                    _caps = frozenset()
+            execution.completed_tools = stamp_compensation_deny_on_soft_empty(
+                execution.completed_tools,
+                user_message=_resolved_user_message,
+                caps=_caps,
+            )
+        except Exception:  # noqa: BLE001 — never block synthesis
+            logger.debug("B5 compensation soft-empty stamp skipped", exc_info=True)
+
         _synth = await _synthesize_tool_results(
             instance_id=instance_id,
             conversation_id=conversation_id,

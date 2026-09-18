@@ -26,6 +26,7 @@ from correspondence.fsm import (
 )
 from correspondence.models import (
     Correspondence,
+    CorrespondenceEvent,
     Notification,
     WorkflowPolicy,
     WorkflowPolicyStep,
@@ -128,6 +129,78 @@ def test_approve_by_non_approver_raises(leave_workflow, create_user):
 
     with pytest.raises(NotActorError):
         approve(corr, outsider)
+
+
+@pytest.mark.django_db
+def test_second_approve_raises_invalid_transition(leave_workflow):
+    """Sequential duplex approve: second call is 409-class InvalidTransition."""
+    wf = leave_workflow
+    corr = _draft(wf.corr_type, wf.org, wf.requester_user)
+    corr = submit_correspondence(corr=corr, by=wf.requester_user)
+    approve(corr, wf.manager_user)
+
+    fresh = Correspondence.objects.get(pk=corr.pk)
+    with pytest.raises(InvalidTransition, match="Cannot approve from status 'approved'"):
+        approve(fresh, wf.manager_user)
+
+    assert (
+        CorrespondenceEvent.objects
+        .filter(correspondence_id=corr.pk, event_type='approved')
+        .count()
+    ) == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_double_approve_one_wins(leave_workflow):
+    """J-LV-11: concurrent duplex approve — one succeeds, one conflicts;
+    only a single ``approved`` timeline event is written."""
+    import threading
+
+    from django.db import connection
+
+    wf = leave_workflow
+    corr = _draft(wf.corr_type, wf.org, wf.requester_user)
+    corr = submit_correspondence(corr=corr, by=wf.requester_user)
+    corr_id = corr.pk
+    manager = wf.manager_user
+
+    barrier = threading.Barrier(2)
+    outcomes = []
+    lock = threading.Lock()
+
+    def _worker():
+        try:
+            barrier.wait(timeout=5)
+            local = Correspondence.objects.get(pk=corr_id)
+            approve(local, manager)
+            with lock:
+                outcomes.append(('ok', None))
+        except Exception as exc:
+            with lock:
+                outcomes.append(('err', exc))
+        finally:
+            connection.close()
+
+    threads = [threading.Thread(target=_worker) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=15)
+
+    oks = [o for o in outcomes if o[0] == 'ok']
+    errs = [o for o in outcomes if o[0] == 'err']
+    assert len(outcomes) == 2
+    assert len(oks) == 1
+    assert len(errs) == 1
+    assert isinstance(errs[0][1], InvalidTransition)
+
+    corr.refresh_from_db()
+    assert corr.status == 'approved'
+    assert (
+        CorrespondenceEvent.objects
+        .filter(correspondence_id=corr_id, event_type='approved')
+        .count()
+    ) == 1
 
 
 # ── reject ──────────────────────────────────────────────────────────────────

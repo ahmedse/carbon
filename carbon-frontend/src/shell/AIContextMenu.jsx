@@ -17,6 +17,7 @@ import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import BookmarkAddIcon from '@mui/icons-material/BookmarkAdd';
 import RestoreIcon from '@mui/icons-material/Restore';
 import CallSplitIcon from '@mui/icons-material/CallSplit';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -29,6 +30,7 @@ import {
 
 // ── Header kebab menu ─────────────────────────────────────────────────────
 function AIContextMenu({ conversationId, onConversationUpdated, onForked }) {
+  const { t } = useTranslation('ai');
   const { token } = useAuth();
   const { notify, notifyFromError } = useNotification();
 
@@ -48,15 +50,15 @@ function AIContextMenu({ conversationId, onConversationUpdated, onForked }) {
     setClearing(true);
     try {
       const updated = await clearContext(token, conversationId);
-      notify({ message: 'Working context cleared — chat history kept', type: 'success' });
+      notify({ message: t('contextCleared'), type: 'success' });
       onConversationUpdated?.(updated);
       setClearOpen(false);
     } catch (err) {
-      notifyFromError(err, 'Could not clear context');
+      notifyFromError(err, t('contextClearFailed'));
     } finally {
       setClearing(false);
     }
-  }, [conversationId, clearing, token, notify, notifyFromError, onConversationUpdated]);
+  }, [conversationId, clearing, token, notify, notifyFromError, onConversationUpdated, t]);
 
   // Save checkpoint — name + note (handled by SaveCheckpointDialog).
 
@@ -70,14 +72,14 @@ function AIContextMenu({ conversationId, onConversationUpdated, onForked }) {
       }
       try {
         const updated = await restoreConversation(token, conversationId, checkpoint.id);
-        notify({ message: 'Working context restored from checkpoint', type: 'success' });
+        notify({ message: t('contextRestored'), type: 'success' });
         onConversationUpdated?.(updated);
         setPickerOpen(false);
       } catch (err) {
-        notifyFromError(err, 'Could not restore checkpoint');
+        notifyFromError(err, t('contextRestoreFailed'));
       }
     },
-    [pickerMode, token, conversationId, notify, notifyFromError, onConversationUpdated],
+    [pickerMode, token, conversationId, notify, notifyFromError, onConversationUpdated, t],
   );
 
   // Fork confirm — creates a NEW chat; the current one is untouched.
@@ -85,22 +87,22 @@ function AIContextMenu({ conversationId, onConversationUpdated, onForked }) {
     if (!forkTarget || !conversationId) return;
     try {
       const forked = await forkConversation(token, conversationId, forkTarget.id);
-      notify({ message: 'Forked a new chat from this point', type: 'success' });
+      notify({ message: t('forkedChat'), type: 'success' });
       onForked?.(forked);
       setForkTarget(null);
     } catch (err) {
-      notifyFromError(err, 'Could not fork conversation');
+      notifyFromError(err, t('forkFailed'));
     }
-  }, [forkTarget, conversationId, token, notify, notifyFromError, onForked]);
+  }, [forkTarget, conversationId, token, notify, notifyFromError, onForked, t]);
 
   return (
     <>
-      <Tooltip title="Context actions">
+      <Tooltip title={t('contextActions')}>
         {/* span wrapper: Tooltips don't fire on disabled IconButton */}
         <span>
           <IconButton
             size="small"
-            aria-label="Context actions"
+            aria-label={t('contextActions')}
             disabled={!conversationId}
             onClick={(e) => setMenuAnchor(e.currentTarget)}
           >
@@ -126,7 +128,7 @@ function AIContextMenu({ conversationId, onConversationUpdated, onForked }) {
           <ListItemIcon>
             <DeleteSweepIcon fontSize="small" />
           </ListItemIcon>
-          Clear context
+          {t('clearContext')}
         </MenuItem>
         <MenuItem
           sx={{ fontSize: '0.8125rem' }}
@@ -138,7 +140,7 @@ function AIContextMenu({ conversationId, onConversationUpdated, onForked }) {
           <ListItemIcon>
             <BookmarkAddIcon fontSize="small" />
           </ListItemIcon>
-          Save checkpoint
+          {t('saveCheckpoint')}
         </MenuItem>
         <MenuItem
           sx={{ fontSize: '0.8125rem' }}
@@ -151,7 +153,7 @@ function AIContextMenu({ conversationId, onConversationUpdated, onForked }) {
           <ListItemIcon>
             <RestoreIcon fontSize="small" />
           </ListItemIcon>
-          Restore
+          {t('restoreCheckpoint')}
         </MenuItem>
         <MenuItem
           sx={{ fontSize: '0.8125rem' }}
@@ -164,16 +166,16 @@ function AIContextMenu({ conversationId, onConversationUpdated, onForked }) {
           <ListItemIcon>
             <CallSplitIcon fontSize="small" />
           </ListItemIcon>
-          Fork from here
+          {t('forkFromHere')}
         </MenuItem>
       </Menu>
 
       {/* Clear context — destructive-ish; the durable conversation is kept. */}
       <ConfirmDialog
         open={clearOpen}
-        title="Clear working context?"
-        message="This clears the AI's working context (summary and memory snapshot) for this chat. Your conversation history and learned facts are kept — nothing is deleted."
-        confirmLabel="Clear context"
+        title={t('clearWorkingContextTitle')}
+        message={t('clearWorkingContextBody')}
+        confirmLabel={t('clearContext')}
         destructive
         onCancel={() => setClearOpen(false)}
         onConfirm={handleClearConfirm}
@@ -198,9 +200,11 @@ function AIContextMenu({ conversationId, onConversationUpdated, onForked }) {
       {/* Fork confirm — a new chat is created; the current one stays as is. */}
       <ConfirmDialog
         open={Boolean(forkTarget)}
-        title="Fork a new chat?"
-        message={`A new chat will be created from the “${forkTarget?.name || 'selected'}” checkpoint. Your current chat stays exactly as it is — nothing is deleted.`}
-        confirmLabel="Fork"
+        title={t('forkNewChatTitle')}
+        message={t('forkNewChatBody', {
+          name: forkTarget?.name || t('selectedCheckpoint'),
+        })}
+        confirmLabel={t('forkConfirm')}
         destructive
         onCancel={() => setForkTarget(null)}
         onConfirm={handleForkConfirm}

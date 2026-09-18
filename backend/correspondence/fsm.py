@@ -73,6 +73,20 @@ def _compare(op, actual, expected) -> bool:
 
 # ── timeline / audit helpers ───────────────────────────────────────────────
 
+def _lock_correspondence(corr):
+    """Lock and refresh ``corr`` in place. Must run inside ``transaction.atomic()``.
+
+    Serializes concurrent step decisions on the same correspondence so a
+    duplex approve cannot both pass the actionable-status guard and emit
+    duplicate timeline events (J-LV-11). Preserves the caller's instance
+    identity so ignored return values of approve()/reject()/… still see
+    the post-transition state.
+    """
+    Correspondence.objects.select_for_update().get(pk=corr.pk)
+    corr.refresh_from_db()
+    return corr
+
+
 def _add_event(corr, by, event_type, from_status, to_status, payload=None):
     """Create + save the next-seeded ``CorrespondenceEvent``. Caller owns the
     transaction."""
@@ -269,6 +283,7 @@ def _decide(corr, by, *, decision, event_type, governance_action, action_label,
     exactly like ``approve`` — but never sets ``decision='approved'`` on the step
     for non-approval intents (an internal memo is *acknowledged*, not approved)."""
     with transaction.atomic():
+        corr = _lock_correspondence(corr)
         if corr.status not in ACTIONABLE:
             raise InvalidTransition(
                 f'Cannot {action_label} from status {corr.status!r}'

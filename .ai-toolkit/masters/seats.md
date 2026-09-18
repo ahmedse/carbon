@@ -17,7 +17,7 @@ Shared = either Master may read; write only when your track owns the change.
 - `backend/ai/engine/**`
 - `domain_packs/**/processes/**` when seeded for Pulse Capability/Process governance
 - `docs/pulse/**`
-- `.ai-toolkit/decisions/00{04,05,07,08,09,11,13,14,16,17,21,22,23,24,26,31,32,33,34}*` (Pulse/AI ADRs — prefer Pulse to amend)
+- `.ai-toolkit/decisions/00{04,05,07,08,09,11,13,14,16,17,21,22,23,24,26,31,32,33,34,35}*` (Pulse/AI ADRs — prefer Pulse to amend)
 - AI admin frontend under `carbon-frontend/src/pages/admin/ai/**`, `carbon-frontend/src/shell/AI*.jsx`, `carbon-frontend/src/api/ai*.js`
 
 ### Shared (coordinate via COMMS if touching)

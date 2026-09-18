@@ -1087,4 +1087,64 @@ test.describe.serial('Journey 12: Task + Run view — exhaustive interaction', (
       await expect(page.getByText('No steps were planned.')).toBeVisible();
     });
   });
+
+  test.describe('10. StepToolbar retry / skip', () => {
+    test('S10.1 — Retry on a failed step POSTs retry and clears failed status', async () => {
+      mock.reset([
+        makePlan({
+          id: 'p-retry',
+          status: 'failed',
+          brief: 'Retry toolbar plan',
+          steps: [
+            step({ step_id: 0, intent: 'Broken lookup', status: 'failed', tool_name: 'call_host_api', error: 'boom' }),
+            step({ step_id: 1, intent: 'Next', status: 'pending', depends_on: [0] }),
+          ],
+        }),
+      ]);
+      await gotoTasks(page);
+      await openPlan(page, 'Retry toolbar plan');
+      // Open List so StepToolbar is visible on the failed step card
+      const listToggle = page.getByRole('button', { name: /List/i });
+      if (await listToggle.isVisible().catch(() => false)) {
+        await listToggle.click();
+      }
+      const retryBtn = page.getByRole('button', { name: 'Retry' }).first();
+      await expect(retryBtn).toBeVisible({ timeout: 10000 });
+      await retryBtn.click();
+      const retryReq = mock.requests.find(
+        (r) => r.method === 'POST' && /\/steps\/0\/retry\/?$/.test(r.path || r.url || ''),
+      );
+      expect(retryReq).toBeTruthy();
+      const plan = mock.plans.find((p) => p.id === 'p-retry');
+      expect(plan?.steps?.[0]?.status).toBe('pending');
+    });
+
+    test('S10.2 — Skip on a pending step POSTs skip and marks Skipped', async () => {
+      mock.reset([
+        makePlan({
+          id: 'p-skip',
+          status: 'paused',
+          brief: 'Skip toolbar plan',
+          steps: [
+            step({ step_id: 0, intent: 'Optional fetch', status: 'pending', tool_name: 'web_research' }),
+          ],
+        }),
+      ]);
+      await gotoTasks(page);
+      await openPlan(page, 'Skip toolbar plan');
+      const listToggle = page.getByRole('button', { name: /List/i });
+      if (await listToggle.isVisible().catch(() => false)) {
+        await listToggle.click();
+      }
+      const skipBtn = page.getByRole('button', { name: 'Skip' }).first();
+      await expect(skipBtn).toBeVisible({ timeout: 10000 });
+      await skipBtn.click();
+      const skipReq = mock.requests.find(
+        (r) => r.method === 'POST' && /\/steps\/0\/skip\/?$/.test(r.path || r.url || ''),
+      );
+      expect(skipReq).toBeTruthy();
+      const plan = mock.plans.find((p) => p.id === 'p-skip');
+      expect(plan?.steps?.[0]?.status).toBe('skipped');
+    });
+  });
 });

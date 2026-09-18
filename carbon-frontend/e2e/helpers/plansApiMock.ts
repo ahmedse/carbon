@@ -467,6 +467,42 @@ export class PlansApiMock {
       }
     }
 
+    // POST /ai/plans/{id}/steps/{stepId}/retry|skip|cancel|pause|resume/
+    if (segs.length === 4 && segs[1] === 'steps' && method === 'POST') {
+      const stepId = Number(segs[2]);
+      const action = segs[3];
+      const s = plan.steps.find((x) => x.step_id === stepId);
+      if (!s) return PlansApiMock.fail(route, 404, 'Step not found.');
+      if (action === 'retry') {
+        if (s.status !== 'failed') {
+          return PlansApiMock.fail(route, 409, 'Only failed steps can be retried.');
+        }
+        s.status = 'pending';
+        s.retry_count = (s.retry_count || 0) + 1;
+        s.error = null;
+        return PlansApiMock.ok(route, { status: 'retried', plan_id: plan.id, step_id: stepId });
+      }
+      if (action === 'skip') {
+        if (['completed', 'skipped', 'cancelled'].includes(s.status)) {
+          return PlansApiMock.fail(route, 409, 'Step already terminal.');
+        }
+        s.status = 'skipped';
+        return PlansApiMock.ok(route, { status: 'skipped', plan_id: plan.id, step_id: stepId });
+      }
+      if (action === 'cancel') {
+        s.status = 'cancelled';
+        return PlansApiMock.ok(route, { status: 'cancelled', plan_id: plan.id, step_id: stepId });
+      }
+      if (action === 'pause') {
+        s.status = 'paused';
+        return PlansApiMock.ok(route, { status: 'paused', plan_id: plan.id, step_id: stepId });
+      }
+      if (action === 'resume') {
+        s.status = 'pending';
+        return PlansApiMock.ok(route, { status: 'resumed', plan_id: plan.id, step_id: stepId });
+      }
+    }
+
     // PATCH /ai/plans/{id}/steps/{stepId}/  → editStep
     if (segs.length === 3 && segs[1] === 'steps' && method === 'PATCH') {
       const stepId = Number(segs[2]);

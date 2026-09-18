@@ -13,14 +13,16 @@
     "dashboard": "Dashboard",
     "catalog": "Catalog Studio",
     "admin": "Platform Admin",
-    "aiAdmin": "AI Admin",
+    "aiAdmin": "Pulse Control",
     "settings": "Settings",
     "help": "Help",
     "helpSupport": "Help & Support",
     "apps": "Apps",
     "carbonFootprint": "Carbon Footprint",
     "carbon": "Carbon",
-    "my": "My"
+    "my": "My",
+    "people": "People",
+    "team": "Team"
   },
   "nav": {
     "home": "Home",
@@ -203,6 +205,11 @@
     "hidePulse": "Hide Pulse",
     "showPulseShortcut": "Show Pulse (Ctrl+\\)",
     "hidePulseShortcut": "Hide Pulse (Ctrl+\\)",
+    "expandPulse": "Expand Pulse",
+    "dockPulse": "Dock Pulse",
+    "domainsHeading": "Domain applications",
+    "domainsSubheading": "Open a domain to work in the traditional workspace. Use Pulse alongside for AI.",
+    "openDomain": "Open {{name}}",
     "ready": "Ready",
     "error": "Error",
     "processing": "Processing",
@@ -219,8 +226,24 @@
     "studioNavigation": "Studio navigation",
     "version": "v1.0",
     "platformTitle": "Platform",
+    "notes": "Notes",
+    "close": "Close",
     "noAppsAvailable": "No Applications Available",
     "noAppsSubtext": "Contact your administrator to get access to domain applications.",
+    "apps": {
+      "people": {
+        "name": "People",
+        "description": "Nibras HR & payroll — employees, compliance, and payroll runs"
+      },
+      "my": {
+        "name": "My",
+        "description": "Employee self-service — profile, leave balance, and requests"
+      },
+      "team": {
+        "name": "Team",
+        "description": "Manager approvals inbox — act on team requests"
+      }
+    },
     "insights": {
       "title": "Insights from the assistant",
       "empty": "No insights yet.",

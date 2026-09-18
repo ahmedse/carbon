@@ -93,7 +93,7 @@ function countWorkingDays(startValue, endValue) {
 function leaveTypeLabel(i18n, t, code) {
   if (!code) return t('profileNotAvailable');
   const key = `leaveType.${code}`;
-  return i18n.exists(key) ? t(key) : code;
+  return t(key, { defaultValue: code });
 }
 
 /** Map a backend/network error to a localized, human-readable message. */

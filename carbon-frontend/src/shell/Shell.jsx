@@ -1,8 +1,9 @@
 // File: src/shell/Shell.jsx
 // Root IDE shell layout with activity bar, resizable sidebar, editor area, and copilot pane
+// ADR-0035: under sm — temporary nav, no ActivityBar rail, Pulse fullscreen overlay
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Drawer, IconButton, Tooltip, Typography } from '@mui/material';
+import { Box, Dialog, Drawer, IconButton, Tooltip, Typography } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
 import { Allotment } from 'allotment';
@@ -24,43 +25,39 @@ import { AIWorkspace } from './AIWorkspace';
 import { AITaskTransferProvider } from './AITaskTransferContext';
 import { NotesProvider, useNotes } from '../notes/NotesContext';
 import { NotesDrawer } from '../notes/NotesDrawer';
-import { LoadingSpinner } from './LoadingFallback';
+import { useIsMobile } from '../hooks/useIsMobile';
 
-// Default path per studio
+/** Docked Pulse may grow until traditional still has ~320px (editor min). */
+function dockedPulseMaxSize() {
+  if (typeof window === 'undefined') return 720;
+  return Math.max(400, window.innerWidth - 320);
+}
+
 const STUDIO_PATHS = {
-  home:    '/',
-  carbon:  '/carbon/dashboard',   // app studio: default to carbon dashboard
+  home: '/',
+  carbon: '/carbon/dashboard',
   catalog: '/catalog/domains',
-  admin:   '/admin/users',
+  admin: '/admin/users',
   'ai-admin': '/admin/ai',
-  settings:'/settings',
-  help:    '/help',
-  apps:    '/apps/healthy',
-  people:  '/people',
-  my:      '/my',
-  team:    '/team',
+  settings: '/settings',
+  help: '/help',
+  apps: '/apps/healthy',
+  people: '/people',
+  my: '/my',
+  team: '/team',
 };
 
-// Infer active studio from current URL
 function studioFromPath(pathname) {
-  if (pathname.startsWith('/carbon')) return 'carbon';  // app studio — checked first
+  if (pathname.startsWith('/carbon')) return 'carbon';
   if (pathname.startsWith('/emissions') || pathname.startsWith('/dataschema')) return 'carbon';
   if (pathname.startsWith('/catalog')) return 'catalog';
-  // DQ Workspace lives under Catalog Studio in the sidebar (Governance section)
   if (pathname.startsWith('/dq')) return 'catalog';
-  // Module landing is part of Catalog (Data Products)
   if (pathname.startsWith('/modules')) return 'catalog';
-  // Scopes belong to Carbon app
   if (pathname.startsWith('/scopes')) return 'carbon';
-  // People app (Nibras HR & payroll)
   if (pathname.startsWith('/people')) return 'people';
-  // My app (employee self-service)
   if (pathname.startsWith('/my')) return 'my';
-  // Team app (manager approvals inbox)
   if (pathname.startsWith('/team')) return 'team';
-  // Apps namespace (Healthy Foods Factory + future domain apps)
   if (pathname.startsWith('/apps')) return 'apps';
-  // AI admin (Pulse console) — checked before generic /admin
   if (pathname.startsWith('/admin/ai')) return 'ai-admin';
   if (pathname.startsWith('/admin')) return 'admin';
   if (pathname.startsWith('/settings')) return 'settings';
@@ -68,11 +65,35 @@ function studioFromPath(pathname) {
   return 'home';
 }
 
+function NotesShortcutBridge() {
+  const { toggleOpen } = useNotes();
+  return <NotesShortcutHandler toggleOpen={toggleOpen} />;
+}
+
+function NotesShortcutHandler({ toggleOpen }) {
+  const toggleRef = React.useRef(toggleOpen);
+  toggleRef.current = toggleOpen;
+
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'N' || e.key === 'n')) {
+        e.preventDefault();
+        toggleRef.current();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  return null;
+}
+
 export function Shell() {
   const { t } = useTranslation('shell');
   const { isRtl } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
+  const isMobile = useIsMobile();
 
   const [drawerWidth, setDrawerWidth] = useState(() => {
     const stored = Number(localStorage.getItem('carbon-drawer-width'));
@@ -99,55 +120,65 @@ export function Shell() {
     sidebarMode,
     toggleSidebar,
     openSidebarPeek,
+    forceSidebarPeek,
+    forceSidebarHidden,
     dismissSidebarPeek,
     pinSidebar,
     copilotVisible,
+    copilotExpanded,
     toggleCopilot,
+    toggleCopilotExpanded,
     openCopilot,
   } = useShellState();
 
-  // Sync active studio with current URL
+  // ADR-0035: under sm, ignore pinned — only peek (temporary open) or hidden.
+  // Desktop localStorage preference is preserved for md+.
+  const effectiveSidebarMode = isMobile
+    ? (sidebarMode === 'peek' ? 'peek' : 'hidden')
+    : sidebarMode;
+
+  // ADR-0035: pinned is treated as closed on mobile, so peek/dismiss helpers
+  // that only act on hidden↔peek never flip the drawer. Force the mode.
+  const handleMobileNavToggle = React.useCallback(() => {
+    if (effectiveSidebarMode === 'hidden') forceSidebarPeek();
+    else forceSidebarHidden();
+  }, [effectiveSidebarMode, forceSidebarPeek, forceSidebarHidden]);
+
   useEffect(() => {
     const inferred = studioFromPath(location.pathname);
     if (inferred !== activeStudio) changeStudio(inferred);
   }, [location.pathname, activeStudio, changeStudio]);
 
-  // Persist drawer width
   useEffect(() => {
     try {
       localStorage.setItem('carbon-drawer-width', String(drawerWidthClamped));
     } catch {
-      // ignore
+      /* ignore */
     }
   }, [drawerWidthClamped]);
 
-  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Escape — dismiss peek sidebar
-      if (e.key === 'Escape' && sidebarMode === 'peek') {
+      if (e.key === 'Escape' && effectiveSidebarMode === 'peek') {
         e.preventDefault();
-        dismissSidebarPeek();
-      }
-      // Ctrl+B or Cmd+B - Cycle sidebar hidden→peek→pinned→hidden
-      else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'B') {
+        if (isMobile) forceSidebarHidden();
+        else dismissSidebarPeek();
+      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'B') {
         e.preventDefault();
-        // Ctrl+Shift+B: toggle peek ↔ pinned
-        if (sidebarMode === 'peek') pinSidebar();
-        else if (sidebarMode === 'pinned') dismissSidebarPeek(); // pinned→hidden; then openSidebarPeek set peek
+        if (isMobile) {
+          handleMobileNavToggle();
+        } else if (sidebarMode === 'peek') pinSidebar();
+        else if (sidebarMode === 'pinned') dismissSidebarPeek();
         else toggleSidebar();
-      }
-      else if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
         e.preventDefault();
-        toggleSidebar();
-      }
-      // Ctrl+\ or Cmd+\ - Toggle Copilot
-      else if ((e.ctrlKey || e.metaKey) && e.key === '\\') {
+        if (isMobile) handleMobileNavToggle();
+        else toggleSidebar();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === '\\' || e.code === 'Backslash')) {
         e.preventDefault();
-        toggleCopilot();
-      }
-      // Ctrl+K or Cmd+K - Command Palette
-      else if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        if (e.shiftKey) toggleCopilotExpanded();
+        else toggleCopilot();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
         setCommandPaletteOpen(true);
       }
@@ -155,57 +186,35 @@ export function Shell() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleSidebar, toggleCopilot, sidebarMode, dismissSidebarPeek, pinSidebar]);
+  }, [
+    toggleSidebar,
+    toggleCopilot,
+    toggleCopilotExpanded,
+    openCopilot,
+    sidebarMode,
+    effectiveSidebarMode,
+    dismissSidebarPeek,
+    forceSidebarHidden,
+    pinSidebar,
+    isMobile,
+    openSidebarPeek,
+    handleMobileNavToggle,
+  ]);
 
   const handleSidebarNavigate = (item) => {
     navigate(item.path);
+    if (isMobile) forceSidebarHidden();
   };
 
-  // Click on studio icon → auto-navigate to studio's default path, open sidebar peek if hidden
   const handleStudioChange = (studioId) => {
     changeStudio(studioId);
-    openSidebarPeek();
+    if (isMobile) forceSidebarPeek();
+    else openSidebarPeek();
     const path = STUDIO_PATHS[studioId];
     if (path) navigate(path);
   };
 
-// Notes drawer shortcut bridge (provider is mounted inside the content area)
-function NotesShortcutBridge() {
-  const { toggleOpen } = useNotes();
-  return (
-    <NotesShortcutHandler toggleOpen={toggleOpen} />
-  );
-}
-
-function NotesShortcutHandler({ toggleOpen }) {
-  const toggleRef = React.useRef(toggleOpen);
-  toggleRef.current = toggleOpen;
-
-  React.useEffect(() => {
-    const onKey = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'N' || e.key === 'n')) {
-        e.preventDefault();
-        toggleRef.current();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  return null;
-}
-
-  // Content pane = EditorArea + docked side panes.
-  // Notes drawer today; future panes (e.g. governance info tabs) can be appended
-  // to DOCKED_PANES in order — each pane renders as a fixed-width, flexShrink:0
-  // column (see NotesDrawer) and the editor absorbs the remaining width.
-  // NOTE: the wrapper MUST fill the available width (flex: 1 + width: '100%').
-  // When Pulse is closed this Box is a direct flex child of the content row and
-  // without flex:1 it collapses to its content width (~344px), breaking the layout.
-  const DOCKED_PANES = [
-    <NotesDrawer key="notes" />,
-    // Future panes — e.g. <GovernanceInfoDrawer key="governance" />, <DataQualityTabs key="dq" />
-  ];
+  const DOCKED_PANES = isMobile ? [] : [<NotesDrawer key="notes" />];
   const renderContentPane = () => (
     <Box sx={{ display: 'flex', height: '100%', minWidth: 0, flex: 1, width: '100%' }}>
       <Box sx={{ flex: 1, minWidth: 0, height: '100%' }}>
@@ -215,35 +224,104 @@ function NotesShortcutHandler({ toggleOpen }) {
     </Box>
   );
 
+  const renderPulseWorkspace = () => (
+    <ErrorBoundary>
+      <AIWorkspace
+        onClose={toggleCopilot}
+        expanded={copilotExpanded}
+        onToggleExpand={toggleCopilotExpanded}
+      />
+    </ErrorBoundary>
+  );
+
+  const renderCopilotDesktop = () => {
+    if (copilotExpanded) {
+      return (
+        <Box sx={{ display: 'flex', flex: 1, minWidth: 0, height: '100%' }}>
+          <Box sx={{ flex: 1, minWidth: 0, height: '100%', display: 'flex', flexDirection: 'column' }}>
+            {renderPulseWorkspace()}
+          </Box>
+          {DOCKED_PANES}
+        </Box>
+      );
+    }
+
+    const pulseMax = dockedPulseMaxSize();
+    return (
+      <Allotment
+        onChange={(sizes) => {
+          if (sizes.length >= 2) {
+            const w = isRtl ? sizes[0] : sizes[sizes.length - 1];
+            setCopilotPaneSize(w);
+            try {
+              localStorage.setItem('carbon-copilot-pane-size', String(w));
+            } catch {
+              /* ignore */
+            }
+          }
+        }}
+      >
+        {isRtl && (
+          <Allotment.Pane
+            key="copilot"
+            minSize={280}
+            preferredSize={copilotPaneSize}
+            maxSize={pulseMax}
+          >
+            {renderPulseWorkspace()}
+          </Allotment.Pane>
+        )}
+        <Allotment.Pane key="editor" minSize={320} preferredSize={1}>
+          {renderContentPane()}
+        </Allotment.Pane>
+        {!isRtl && (
+          <Allotment.Pane
+            key="copilot"
+            minSize={280}
+            preferredSize={copilotPaneSize}
+            maxSize={pulseMax}
+          >
+            {renderPulseWorkspace()}
+          </Allotment.Pane>
+        )}
+      </Allotment>
+    );
+  };
+
   return (
     <Box
       sx={{
         display: 'flex',
         flexDirection: 'column',
         height: '100vh',
-        width: '100vw',
+        width: '100%',
+        maxWidth: '100vw',
         overflow: 'hidden',
       }}
       role="application"
       aria-label={PLATFORM_TITLE}
     >
-      {/* Header */}
-      <HeaderEnhanced />
+      <HeaderEnhanced
+        showNavButton={isMobile}
+        navOpen={effectiveSidebarMode !== 'hidden'}
+        onToggleNav={handleMobileNavToggle}
+        studios={isMobile ? studios : undefined}
+        activeStudio={activeStudio}
+        onStudioChange={isMobile ? handleStudioChange : undefined}
+      />
 
-      {/* Early-access notice — dismissible, appears once; see DevelopmentBanner */}
       <DevelopmentBanner />
 
-      {/* Main Content Area */}
-      <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        {/* Activity Bar */}
-        <ActivityBar
-          studios={studios}
-          activeStudio={activeStudio}
-          onStudioChange={handleStudioChange}
-        />
+      <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', minWidth: 0 }}>
+        {!isMobile && (
+          <ActivityBar
+            studios={studios}
+            activeStudio={activeStudio}
+            onStudioChange={handleStudioChange}
+          />
+        )}
 
-        {/* Collapsed-sidebar reopen handle — shown only when hidden */}
-        {sidebarMode === 'hidden' && (
+        {!isMobile && effectiveSidebarMode === 'hidden' && (
           <Box
             role="button"
             tabIndex={0}
@@ -287,21 +365,22 @@ function NotesShortcutHandler({ toggleOpen }) {
           </Box>
         )}
 
-        {/* Drawer Sidebar — hidden: not rendered, peek: overlay, pinned: in-flow */}
-        {sidebarMode !== 'hidden' && (
+        {effectiveSidebarMode !== 'hidden' && (
           <Drawer
             anchor={isRtl ? 'right' : 'left'}
             open
-            onClose={dismissSidebarPeek}
-            variant={sidebarMode === 'peek' ? 'temporary' : 'permanent'}
+            onClose={isMobile ? forceSidebarHidden : dismissSidebarPeek}
+            variant={effectiveSidebarMode === 'peek' || isMobile ? 'temporary' : 'permanent'}
+            ModalProps={{ keepMounted: true }}
             sx={{
-              width: sidebarMode === 'pinned' ? drawerWidthClamped : undefined,
-              flexShrink: sidebarMode === 'pinned' ? 0 : undefined,
+              width: !isMobile && effectiveSidebarMode === 'pinned' ? drawerWidthClamped : undefined,
+              flexShrink: !isMobile && effectiveSidebarMode === 'pinned' ? 0 : undefined,
               '& .MuiDrawer-paper': {
-                width: drawerWidthClamped,
+                width: isMobile ? 'min(85vw, 320px)' : drawerWidthClamped,
                 boxSizing: 'border-box',
-                position: 'relative',
+                position: isMobile || effectiveSidebarMode === 'peek' ? 'fixed' : 'relative',
                 height: '100%',
+                top: isMobile ? 0 : undefined,
                 ...(isRtl ? { borderLeft: '1px solid' } : { borderRight: '1px solid' }),
                 borderColor: 'divider',
                 overflow: 'hidden',
@@ -309,8 +388,7 @@ function NotesShortcutHandler({ toggleOpen }) {
               },
             }}
           >
-            {/* Pin/Unpin + Collapse header bar (peek mode) */}
-            {sidebarMode === 'peek' && (
+            {effectiveSidebarMode === 'peek' && !isMobile && (
               <Box
                 sx={{
                   display: 'flex',
@@ -334,8 +412,7 @@ function NotesShortcutHandler({ toggleOpen }) {
               </Box>
             )}
 
-            {/* Resize handle — only in pinned mode */}
-            {sidebarMode === 'pinned' && (
+            {!isMobile && effectiveSidebarMode === 'pinned' && (
               <Box
                 sx={{
                   position: 'absolute',
@@ -346,27 +423,21 @@ function NotesShortcutHandler({ toggleOpen }) {
                   cursor: 'col-resize',
                   zIndex: 2,
                   bgcolor: 'transparent',
-                  '&:hover': {
-                    bgcolor: 'action.hover',
-                  },
+                  '&:hover': { bgcolor: 'action.hover' },
                 }}
                 onMouseDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-
                   const startX = e.clientX;
                   const startWidth = drawerWidthClamped;
-
                   const onMove = (moveEvent) => {
-                    const delta = isRtl ? (startX - moveEvent.clientX) : (moveEvent.clientX - startX);
+                    const delta = isRtl ? startX - moveEvent.clientX : moveEvent.clientX - startX;
                     setDrawerWidth(startWidth + delta);
                   };
-
                   const onUp = () => {
                     window.removeEventListener('mousemove', onMove);
                     window.removeEventListener('mouseup', onUp);
                   };
-
                   window.addEventListener('mousemove', onMove);
                   window.addEventListener('mouseup', onUp);
                 }}
@@ -376,81 +447,48 @@ function NotesShortcutHandler({ toggleOpen }) {
             <ShellSidebar
               activeStudio={activeStudio}
               onNavigate={handleSidebarNavigate}
-              onCollapse={toggleSidebar}
+              onCollapse={isMobile ? forceSidebarHidden : toggleSidebar}
             />
           </Drawer>
         )}
 
-        {/* Resizable Main + Copilot Panes */}
         <NotesProvider>
           <NotesShortcutBridge />
           <AITaskTransferProvider onRequestOpen={openCopilot}>
             <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', minWidth: 0 }}>
-              {copilotVisible ? (
-                <Allotment
-                  onChange={(sizes) => {
-                    if (sizes.length >= 2) {
-                      const w = sizes[sizes.length - 1];
-                      setCopilotPaneSize(w);
-                      try {
-                        localStorage.setItem('carbon-copilot-pane-size', String(w));
-                      } catch {
-                        /* ignore */
-                      }
-                    }
-                  }}
-                >
-                  {/* In RTL mode, render copilot pane first (left side), editor second (right side) */}
-                  {isRtl && (
-                    <Allotment.Pane
-                      key="copilot"
-                      minSize={280}
-                      preferredSize={copilotPaneSize}
-                      maxSize={Math.floor(window.innerWidth / 2)}
-                    >
-                      <ErrorBoundary>
-                        <AIWorkspace onClose={toggleCopilot} />
-                      </ErrorBoundary>
-                    </Allotment.Pane>
-                  )}
-
-                  {/* Main Editor Area — content + notes drawer docked at its right edge */}
-                  <Allotment.Pane key="editor" minSize={320} preferredSize={1}>
-                    {renderContentPane()}
-                  </Allotment.Pane>
-
-                  {/* In LTR mode, render copilot pane second (right side) */}
-                  {!isRtl && (
-                    <Allotment.Pane
-                      key="copilot"
-                      minSize={280}
-                      preferredSize={copilotPaneSize}
-                      maxSize={Math.floor(window.innerWidth / 2)}
-                    >
-                      <ErrorBoundary>
-                        <AIWorkspace onClose={toggleCopilot} />
-                      </ErrorBoundary>
-                    </Allotment.Pane>
-                  )}
-                </Allotment>
-              ) : (
-                /* When copilot is closed, just render editor without Allotment wrapper */
-                renderContentPane()
-              )}
+              {copilotVisible && !isMobile ? renderCopilotDesktop() : renderContentPane()}
             </Box>
+
+            {isMobile && (
+              <Dialog
+                fullScreen
+                open={copilotVisible}
+                onClose={toggleCopilot}
+                PaperProps={{ sx: { bgcolor: 'background.paper' } }}
+              >
+                <ErrorBoundary>
+                  <AIWorkspace
+                    onClose={toggleCopilot}
+                    expanded
+                    onToggleExpand={undefined}
+                  />
+                </ErrorBoundary>
+              </Dialog>
+            )}
+
+            {isMobile && <NotesDrawer mobileFullscreen />}
           </AITaskTransferProvider>
         </NotesProvider>
       </Box>
 
-      {/* Status Bar with integrated Footer */}
       <StatusBar
-        sidebarMode={sidebarMode}
+        sidebarMode={effectiveSidebarMode}
         copilotVisible={copilotVisible}
-        onToggleSidebar={toggleSidebar}
+        onToggleSidebar={isMobile ? handleMobileNavToggle : toggleSidebar}
         onToggleCopilot={toggleCopilot}
+        compact={isMobile}
       />
 
-      {/* Command Palette — isolated ErrorBoundary so a render failure doesn't crash the shell */}
       <ErrorBoundary>
         <CommandPalette
           open={commandPaletteOpen}

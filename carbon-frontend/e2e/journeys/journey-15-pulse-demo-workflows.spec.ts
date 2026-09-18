@@ -1100,7 +1100,7 @@ test('Admin: process registry + run timeline + inbox show demo artefacts', async
   });
 
   const panels: Array<[string, string]> = [
-    ['/admin/ai',              'Pulse Overview'],
+    ['/admin/ai',              'Command Center'],
     ['/admin/ai/agents',       'Agents'],
     ['/admin/ai/topology',     'Agent Topology'],
     ['/admin/ai/registry',     'Process Registry'],

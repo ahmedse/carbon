@@ -52,6 +52,28 @@ class SkillPromoteView(APIView):
     permission_classes = [IsAuthenticated, SkillDecisionPermission]
 
     def post(self, request, pk):
+        try:
+            from ai.instance_registry import resolve_instance_id
+            from ai.models.control_state import get_or_create_control_state
+
+            state = get_or_create_control_state(resolve_instance_id())
+            if state.learning_admissions_frozen or state.containment_level in (
+                "learning_freeze",
+                "full_stop",
+            ):
+                return Response(
+                    {
+                        "error": "learning_frozen",
+                        "detail": (
+                            "Learning admissions are frozen by Control Plane "
+                            f"containment ({state.containment_level})."
+                        ),
+                    },
+                    status=status.HTTP_423_LOCKED,
+                )
+        except Exception:  # noqa: BLE001 — never block promote on control-state read failure
+            logger.exception("containment check failed; continuing promote")
+
         result = promote_skill(user=request.user, skill_id=str(pk))
         return Response(result, status=status.HTTP_200_OK)
 

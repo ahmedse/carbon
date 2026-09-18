@@ -1,9 +1,8 @@
 // src/__tests__/ProcessRegistry.test.jsx
-// P3-05c — Process Registry screen spec: list rendering, status filter,
-// structured diff (added/removed/changed + no-active-version), and CBAC
-// capability gating (buttons disabled without the required capability).
+// Process Registry list: status filter, CBAC gating, navigate to object page.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import ProcessRegistry, { flattenDiff } from '../pages/admin/ai/ProcessRegistry';
 
 const state = vi.hoisted(() => ({ capabilities: [] }));
@@ -22,30 +21,23 @@ vi.mock('../components/NotificationProvider', () => ({
 }));
 
 const listProcesses = vi.fn();
-const getProcess = vi.fn();
-const getDiff = vi.fn();
-const getAutonomy = vi.fn();
 const createProcess = vi.fn();
-const updateProcess = vi.fn();
-const submitProcess = vi.fn();
-const publishProcess = vi.fn();
-const deprecateProcess = vi.fn();
-const setAutonomy = vi.fn();
 const setKillSwitch = vi.fn();
 
 vi.mock('../api/aiRegistry', () => ({
   listProcesses: (...a) => listProcesses(...a),
-  getProcess: (...a) => getProcess(...a),
-  getDiff: (...a) => getDiff(...a),
-  getAutonomy: (...a) => getAutonomy(...a),
   createProcess: (...a) => createProcess(...a),
-  updateProcess: (...a) => updateProcess(...a),
-  submitProcess: (...a) => submitProcess(...a),
-  publishProcess: (...a) => publishProcess(...a),
-  deprecateProcess: (...a) => deprecateProcess(...a),
-  setAutonomy: (...a) => setAutonomy(...a),
   setKillSwitch: (...a) => setKillSwitch(...a),
 }));
+
+const navigate = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => navigate,
+  };
+});
 
 const ROWS = [
   {
@@ -66,53 +58,25 @@ const ROWS = [
   },
 ];
 
-const DETAIL = {
-  process_id: 'proc-1',
-  version: '0.2.0',
-  owner: 'alice',
-  status: 'draft',
-  kill_switch: false,
-  definition: {
-    id: 'proc-1',
-    version: '0.2.0',
-    owner: 'alice',
-    status: 'draft',
-    objective: 'new objective',
-    steps: [
-      { id: 'step-1', kind: 'command', capability: 'carbon:query', autonomy: 'human_only' },
-    ],
-    evidence: [],
-    tests: [],
-  },
-};
-
-const DIFF = {
-  process_id: 'proc-1',
-  from_version: '0.1.0',
-  to_version: '0.2.0',
-  added: { objects: [{}] },
-  removed: { old_field: 'x' },
-  changed: { objective: { from: 'old objective', to: 'new objective' } },
-};
-
 beforeEach(() => {
   vi.clearAllMocks();
   state.capabilities = [];
   listProcesses.mockResolvedValue(ROWS);
-  getProcess.mockResolvedValue(DETAIL);
-  getDiff.mockResolvedValue(DIFF);
-  getAutonomy.mockResolvedValue({ 'step-1': 'human_only' });
-  createProcess.mockResolvedValue(DETAIL);
-  submitProcess.mockResolvedValue(DETAIL);
-  publishProcess.mockResolvedValue(DETAIL);
-  deprecateProcess.mockResolvedValue(DETAIL);
+  createProcess.mockResolvedValue({ process_id: 'proc-1' });
   setKillSwitch.mockResolvedValue({ process_id: 'proc-1', kill_switch: true });
-  setAutonomy.mockResolvedValue({ 'step-1': 'observe' });
 });
+
+function renderRegistry() {
+  return render(
+    <MemoryRouter>
+      <ProcessRegistry />
+    </MemoryRouter>,
+  );
+}
 
 describe('ProcessRegistry', () => {
   it('renders the registry list', async () => {
-    render(<ProcessRegistry />);
+    renderRegistry();
 
     expect(await screen.findByText('proc-1')).toBeInTheDocument();
     expect(screen.getByText('proc-2')).toBeInTheDocument();
@@ -122,8 +86,8 @@ describe('ProcessRegistry', () => {
     expect(screen.getByText('active')).toBeInTheDocument();
   });
 
-  it('drives the ?status= param from the status tabs', async () => {
-    render(<ProcessRegistry />);
+  it('drives the status filter from the status tabs', async () => {
+    renderRegistry();
     await screen.findByText('proc-1');
 
     fireEvent.click(screen.getByRole('tab', { name: 'Review' }));
@@ -131,57 +95,30 @@ describe('ProcessRegistry', () => {
     await waitFor(() =>
       expect(listProcesses).toHaveBeenLastCalledWith('test-token', {
         status: 'review',
-      })
+      }),
     );
   });
 
-  it('renders a structured diff (added / removed / changed)', async () => {
-    render(<ProcessRegistry />);
+  it('navigates to the process object page on row click', async () => {
+    renderRegistry();
     await screen.findByText('proc-1');
 
     fireEvent.click(screen.getByText('proc-1'));
 
-    expect(await screen.findByText('Process Detail')).toBeInTheDocument();
-    expect(screen.getByText(/old objective → new objective/)).toBeInTheDocument();
-    expect(screen.getByText(/^\+ objects:/)).toBeInTheDocument();
-    expect(screen.getByText(/^- old_field:/)).toBeInTheDocument();
+    expect(navigate).toHaveBeenCalledWith('/admin/ai/domain/processes/proc-1');
   });
 
-  it('shows the no-active-version message when the diff is null', async () => {
-    getDiff.mockResolvedValue({ diff: null, reason: 'no_active_version' });
-    render(<ProcessRegistry />);
+  it('disables New draft when the caller lacks the capability', async () => {
+    renderRegistry();
     await screen.findByText('proc-1');
-
-    fireEvent.click(screen.getByText('proc-1'));
-
-    expect(
-      await screen.findByText('No active version to diff against.')
-    ).toBeInTheDocument();
-  });
-
-  it('disables write buttons when the caller lacks the capability', async () => {
-    render(<ProcessRegistry />);
-    await screen.findByText('proc-1');
-
-    // New draft (requires ai:process_owner) is disabled + rendered.
     expect(screen.getByRole('button', { name: 'New draft' })).toBeDisabled();
-
-    // Open a draft detail → Submit (requires ai:process_owner) disabled.
-    fireEvent.click(screen.getByText('proc-1'));
-    await screen.findByText('Process Detail');
-    expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled();
   });
 
-  it('enables owner actions when ai:process_owner is present', async () => {
+  it('enables New draft when ai:process_owner is present', async () => {
     state.capabilities = ['ai:process_owner'];
-    render(<ProcessRegistry />);
+    renderRegistry();
     await screen.findByText('proc-1');
-
     expect(screen.getByRole('button', { name: 'New draft' })).not.toBeDisabled();
-
-    fireEvent.click(screen.getByText('proc-1'));
-    await screen.findByText('Process Detail');
-    expect(screen.getByRole('button', { name: 'Submit' })).not.toBeDisabled();
   });
 });
 
@@ -190,7 +127,7 @@ describe('flattenDiff', () => {
     const lines = flattenDiff(
       { objects: [{}] },
       { old_field: 'x' },
-      { objective: { from: 'a', to: 'b' } }
+      { objective: { from: 'a', to: 'b' } },
     );
     expect(lines).toEqual([
       { kind: 'added', label: 'objects', value: [{}] },

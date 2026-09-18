@@ -120,3 +120,12 @@ export function setKillSwitch(token, id, enabled) {
     body: { enabled: Boolean(enabled) },
   });
 }
+
+/** Reject a review → draft with persisted reason. */
+export function rejectProcess(token, id, reason) {
+  return apiFetch(`${BASE}${encodeURIComponent(id)}/reject/`, {
+    token,
+    method: 'POST',
+    body: { reason },
+  });
+}

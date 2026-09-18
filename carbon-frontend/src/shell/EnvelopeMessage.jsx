@@ -23,6 +23,7 @@
 import PropTypes from 'prop-types';
 import { useTranslation } from 'react-i18next';
 import { alpha, useTheme } from '@mui/material/styles';
+import { useIsMobile } from '../hooks/useIsMobile';
 import {
   Box,
   Chip,
@@ -250,6 +251,7 @@ const centerTextPlugin = {
 
 function EnvelopeChart({ chart, t }) {
   const theme = useTheme();
+  const isMobile = useIsMobile();
   if (!chart || typeof chart !== 'object') return null;
 
   const { chart_type: type = 'bar', title } = chart;
@@ -299,7 +301,7 @@ function EnvelopeChart({ chart, t }) {
       cutout: '62%',
       plugins: {
         legend: {
-          position: 'right',
+          position: isMobile ? 'bottom' : 'right',
           labels: {
             usePointStyle: true,
             pointStyle: 'circle',

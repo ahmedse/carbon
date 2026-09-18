@@ -39,7 +39,7 @@
 2. ~~**P0 A10 ESS soft-zero headcount**~~ — **CLOSED** (unauthorized, not 0)
 3. ~~**P1 A5 salary on identity lookup**~~ — **CLOSED** (omit unless asked + always-mask without capability)
 4. **P1 Language fidelity (M12)** — AR fail-path stubs still EN
-5. **B1** UI entity label drift (Employee 333 vs 1416) — still open
+5. ~~**B1** UI entity label drift (Employee 333 vs 1416)~~ **CLOSED 2026-09-17**
 
 ## Evidence pointers
 

@@ -811,3 +811,80 @@ async def test_react_loop_wait_timer_then_continues():
     assert executed == [0, 1]
     assert any(w.startswith("w:duration:50") for w in waits)
     assert result.succeeded is True
+
+
+@pytest.mark.asyncio
+async def test_react_loop_followup_orphan_runs_under_workflow_graph():
+    """Follow-ups not in workflow_graph must still run (not stuck Pending)."""
+    from unittest.mock import AsyncMock, patch
+
+    from ai.engine.cognition.plan.loop import ObservationResult, ReActLoop, StepResult
+    from ai.engine.cognition.plan.planner import Plan, PlanStep
+
+    g = WorkflowGraph(
+        nodes=[
+            WorkflowNode(id="t0", node_type="task", intent="probe", meta={"step_id": 0}),
+        ],
+        edges=[],
+        entry="t0",
+    )
+    plan = Plan(
+        pattern="custom",
+        source="test",
+        synthesis_instruction="done",
+        steps=[PlanStep(step_id=0, intent="probe", depends_on=[])],
+    )
+    executed: list[int] = []
+    loop = ReActLoop(llm_client=None)
+
+    async def fake_execute_step(**kwargs):
+        step = kwargs["step"]
+        executed.append(step.step_id)
+        if step.step_id == 0:
+            return StepResult(
+                step_id=0,
+                intent=step.intent,
+                draft_text="need more",
+                critic_verdict="pass",
+                executed=True,
+                tokens_used=1,
+                followup=ObservationResult(
+                    needs_followup=True,
+                    followup_tool="web_research",
+                    followup_args={"query": "nibras"},
+                    answer="interim",
+                ),
+            )
+        return StepResult(
+            step_id=step.step_id,
+            intent=step.intent,
+            draft_text="fetched",
+            critic_verdict="pass",
+            executed=True,
+            tokens_used=1,
+        )
+
+    loop._execute_step = fake_execute_step  # type: ignore[method-assign]
+    loop._synthesise = AsyncMock(return_value="final")  # type: ignore[method-assign]
+
+    with patch(
+        "ai.engine.cognition.plan.loop._get_broadcast",
+        return_value=AsyncMock(),
+    ):
+        result = await loop.run(
+            plan=plan,
+            instance_id="test",
+            conversation_id="c1",
+            user_message="go",
+            system_prompt="sys",
+            workflow_graph=g,
+        )
+
+    assert 0 in executed
+    assert any(i != 0 for i in executed), "follow-up orphan must execute"
+    assert result.succeeded is True
+    # No Pending leftovers in results
+    assert all(
+        r.executed or r.error is None
+        for r in result.step_results
+    )

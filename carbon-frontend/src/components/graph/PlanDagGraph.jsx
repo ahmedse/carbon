@@ -36,6 +36,8 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
 import EnterpriseGraph from './EnterpriseGraph';
 import { layoutExecutionGraph } from '../../utils/planGraph';
+import { NODE_STATUS_DENSE, STEP_STATUS, stepStatusMeta } from '../../shell/aiTaskStatus';
+import { FONT } from '../../theme/themeTokens';
 
 /**
  * Step status → theme color token (RULE_8 — never raw hex).
@@ -61,20 +63,7 @@ export function planStepStatusColor(status, theme) {
 
 /** Human label for a step status (outcome terms, RULE_23). */
 export function planStepStatusLabel(status) {
-  switch (status) {
-    case 'completed':
-      return 'Finished';
-    case 'running':
-      return 'Running';
-    case 'awaiting_approval':
-      return 'Needs approval';
-    case 'failed':
-      return 'Failed';
-    case 'skipped':
-      return 'Skipped';
-    default:
-      return 'Pending';
-  }
+  return stepStatusMeta(status).label;
 }
 
 /** Pretty-print JSON / values for the dock, collapsed by default. */
@@ -138,31 +127,11 @@ CollapsiblePayload.propTypes = {
 };
 
 /** Compact UPPERCASE status label for the dense node interior. */
-const NODE_STATUS = {
-  completed: 'FINISHED',
-  running: 'RUNNING',
-  awaiting_approval: 'APPROVAL',
-  failed: 'FAILED',
-  skipped: 'SKIPPED',
-  pending: 'PENDING',
-};
+const NODE_STATUS = NODE_STATUS_DENSE;
 
 /** Step status → MUI Chip color (RULE 5 — chip carries a text label too). */
 export function planStepStatusChipColor(status) {
-  switch (status) {
-    case 'completed':
-      return 'success';
-    case 'running':
-      return 'primary';
-    case 'awaiting_approval':
-      return 'warning';
-    case 'failed':
-      return 'error';
-    case 'skipped':
-      return 'default';
-    default:
-      return 'default';
-  }
+  return stepStatusMeta(status).color;
 }
 
 /**
@@ -412,7 +381,7 @@ export default function PlanDagGraph({
       const color = colorFor(n.status);
       const statusLabel = NODE_STATUS[n.status] || 'PENDING';
       const rawTitle = String(n.label || `Step ${n.id}`);
-      const kind = n.is_gateway || ['choice', 'parallel', 'observe', 'map', 'loop'].includes(n.node_type)
+      const kind = n.is_gateway || ['choice', 'parallel', 'observe', 'map', 'loop', 'wait'].includes(n.node_type)
         ? String(n.node_type || 'gateway').toUpperCase()
         : String(n.tool_name || 'Reasoning (LLM)');
       // Title is truncated to leave room for the right-aligned status label.
@@ -465,15 +434,6 @@ export default function PlanDagGraph({
           </Stack>
         ))}
       </Stack>
-      <Typography
-        variant="caption"
-        color="text.disabled"
-        sx={{ fontSize: '0.625rem', lineHeight: 1.35 }}
-        data-testid="plan-graph-workflow-note"
-      >
-        Graph schema + guards ready (ADR-0034). Choice/parallel render when
-        ``workflow_graph`` is on the plan; ReActLoop drives live branch eligibility.
-      </Typography>
     </Stack>
   );
 
@@ -553,7 +513,9 @@ export default function PlanDagGraph({
               Latency
             </Typography>
             <Typography variant="body2" sx={{ fontSize: '0.6875rem', mb: 0.5 }}>
-              {selectedStep.latency_ms} ms
+              {selectedStep.latency_ms < 1000
+                ? `${Math.round(selectedStep.latency_ms)} ms`
+                : `${(selectedStep.latency_ms / 1000).toFixed(1)} s`}
             </Typography>
           </>
         )}

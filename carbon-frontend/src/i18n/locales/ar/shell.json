@@ -13,14 +13,16 @@
     "dashboard": "لوحة التحكم",
     "catalog": "استوديو الفهرس",
     "admin": "إدارة المنصة",
-    "aiAdmin": "إدارة الذكاء الاصطناعي",
+    "aiAdmin": "تحكم Pulse",
     "settings": "الإعدادات",
     "help": "المساعدة",
     "helpSupport": "المساعدة والدعم",
     "apps": "التطبيقات",
     "carbonFootprint": "البصمة الكربونية",
     "carbon": "كربون",
-    "my": "لوحتي"
+    "my": "لوحتي",
+    "people": "الموارد البشرية",
+    "team": "الفريق"
   },
   "nav": {
     "home": "الرئيسية",
@@ -203,6 +205,11 @@
     "hidePulse": "إخفاء Pulse",
     "showPulseShortcut": "إظهار Pulse (Ctrl+\\)",
     "hidePulseShortcut": "إخفاء Pulse (Ctrl+\\)",
+    "expandPulse": "توسيع Pulse",
+    "dockPulse": "إرساء Pulse",
+    "domainsHeading": "تطبيقات النطاق",
+    "domainsSubheading": "افتح نطاقاً للعمل في مساحة العمل التقليدية. استخدم Pulse بجانبها للذكاء الاصطناعي.",
+    "openDomain": "فتح {{name}}",
     "ready": "جاهز",
     "error": "خطأ",
     "processing": "جارٍ المعالجة",
@@ -219,8 +226,24 @@
     "studioNavigation": "التنقل بين الأستوديوهات",
     "version": "v1.0",
     "platformTitle": "المنصة",
+    "notes": "الملاحظات",
+    "close": "إغلاق",
     "noAppsAvailable": "لا توجد تطبيقات متاحة",
     "noAppsSubtext": "تواصل مع المسؤول للحصول على حق الوصول إلى تطبيقات المجال.",
+    "apps": {
+      "people": {
+        "name": "الموارد البشرية",
+        "description": "نبراس للموارد البشرية والرواتب — الموظفون والامتثال وتشغيلات الرواتب"
+      },
+      "my": {
+        "name": "لوحتي",
+        "description": "الخدمة الذاتية للموظف — الملف الشخصي ورصيد الإجازات والطلبات"
+      },
+      "team": {
+        "name": "الفريق",
+        "description": "صندوق موافقات المدير — اتخاذ إجراء على طلبات الفريق"
+      }
+    },
     "insights": {
       "title": "رؤى من المساعد",
       "empty": "لا توجد رؤى بعد.",

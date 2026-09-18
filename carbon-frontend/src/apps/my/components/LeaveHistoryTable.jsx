@@ -25,6 +25,7 @@ import {
 } from '@mui/material';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import { useTranslation } from 'react-i18next';
+import ResponsiveList from '../../../components/layout/ResponsiveList';
 import { FONT } from '../../../theme/themeTokens';
 
 // ── Display status mapping ────────────────────────────────────────────
@@ -86,7 +87,7 @@ function InlineError({ message, onRetry }) {
 function leaveTypeLabel(i18n, t, code) {
   if (!code) return t('profileNotAvailable');
   const key = `leaveType.${code}`;
-  return i18n.exists(key) ? t(key) : code;
+  return t(key, { defaultValue: code });
 }
 
 /** Localized date formatting, robust to ISO datetimes and timezone shift. */
@@ -135,65 +136,82 @@ export default function LeaveHistoryTable({ records, loading, error, onRetry }) 
             {t('historyEmpty')}
           </Typography>
         ) : (
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
-                    {t('historyReferenceNo')}
-                  </TableCell>
-                  <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
-                    {t('historyType')}
-                  </TableCell>
-                  <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
-                    {t('historyStart')}
-                  </TableCell>
-                  <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
-                    {t('historyEnd')}
-                  </TableCell>
-                  <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
-                    {t('historyDays')}
-                  </TableCell>
-                  <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
-                    {t('historyStatus')}
-                  </TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {sorted.map((record) => {
-                  const status = record.correspondence_status ?? record.status ?? 'draft';
-                  const meta = STATUS_META[status] || STATUS_META.draft;
-                  return (
-                    <TableRow key={record.id} hover>
-                      <TableCell sx={{ ...FONT.body2 }}>
-                        {record.reference_no || '—'}
+          <ResponsiveList
+            items={sorted}
+            getKey={(record) => record.id}
+            emptyLabel={t('historyEmpty')}
+            renderCard={(record) => {
+              const status = record.correspondence_status ?? record.status ?? 'draft';
+              const statusMeta = STATUS_META[status] || STATUS_META.draft;
+              return {
+                title: leaveTypeLabel(i18n, t, record.leave_type),
+                status: t(statusMeta.labelKey),
+                statusColor: statusMeta.color,
+                meta: formatDate(record.start_date, i18n.language),
+              };
+            }}
+            table={
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
+                        {t('historyReferenceNo')}
                       </TableCell>
-                      <TableCell sx={{ ...FONT.body2 }}>
-                        {leaveTypeLabel(i18n, t, record.leave_type)}
+                      <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
+                        {t('historyType')}
                       </TableCell>
-                      <TableCell sx={{ ...FONT.body2 }}>
-                        {formatDate(record.start_date, i18n.language)}
+                      <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
+                        {t('historyStart')}
                       </TableCell>
-                      <TableCell sx={{ ...FONT.body2 }}>
-                        {formatDate(record.end_date, i18n.language)}
+                      <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
+                        {t('historyEnd')}
                       </TableCell>
-                      <TableCell align="right" sx={{ ...FONT.body2 }}>
-                        {record.days ?? '—'}
+                      <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
+                        {t('historyDays')}
                       </TableCell>
-                      <TableCell align="right">
-                        <Chip
-                          size="small"
-                          variant="outlined"
-                          color={meta.color}
-                          label={t(meta.labelKey)}
-                        />
+                      <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
+                        {t('historyStatus')}
                       </TableCell>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                  </TableHead>
+                  <TableBody>
+                    {sorted.map((record) => {
+                      const status = record.correspondence_status ?? record.status ?? 'draft';
+                      const meta = STATUS_META[status] || STATUS_META.draft;
+                      return (
+                        <TableRow key={record.id} hover>
+                          <TableCell sx={{ ...FONT.body2 }}>
+                            {record.reference_no || '—'}
+                          </TableCell>
+                          <TableCell sx={{ ...FONT.body2 }}>
+                            {leaveTypeLabel(i18n, t, record.leave_type)}
+                          </TableCell>
+                          <TableCell sx={{ ...FONT.body2 }}>
+                            {formatDate(record.start_date, i18n.language)}
+                          </TableCell>
+                          <TableCell sx={{ ...FONT.body2 }}>
+                            {formatDate(record.end_date, i18n.language)}
+                          </TableCell>
+                          <TableCell align="right" sx={{ ...FONT.body2 }}>
+                            {record.days ?? '—'}
+                          </TableCell>
+                          <TableCell align="right">
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              color={meta.color}
+                              label={t(meta.labelKey)}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            }
+          />
         )}
       </CardContent>
     </Card>

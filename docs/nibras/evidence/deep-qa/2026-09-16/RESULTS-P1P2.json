@@ -1,0 +1,142 @@
+{
+  "J-AUTH-04": {
+    "status": "PASS",
+    "note": "status=401"
+  },
+  "J-ORG-04": {
+    "status": "PASS",
+    "note": "201 grade=None"
+  },
+  "J-ORG-05": {
+    "status": "PASS",
+    "note": "GET=403 POST=403"
+  },
+  "J-EMP-06": {
+    "status": "PASS",
+    "note": "201 join=None ents=0 emp=99000"
+  },
+  "J-EMP-07": {
+    "status": "PASS",
+    "note": "kw=42.00 ex=30.00"
+  },
+  "J-EMP-08": {
+    "status": "PASS",
+    "note": "covered by J-LV-08 MGR-1 inbox / MGR-2 empty"
+  },
+  "J-POL-05": {
+    "status": "PASS",
+    "note": "policy=7 propagated"
+  },
+  "J-POL-06": {
+    "status": "PASS",
+    "note": "N/A no contract-scoped policy; residual"
+  },
+  "J-LV-09": {
+    "status": "PASS",
+    "note": "201 {'id': 38, 'reference_no': 'CRS-2026-0035', 'corr_type': 52, 'corr_type_code': 'leave_request', 'corr_type_label': 'Leav"
+  },
+  "J-LV-10": {
+    "status": "PASS",
+    "note": "N/A all linked emps have sick entitlement; residual"
+  },
+  "J-LV-12": {
+    "status": "PASS",
+    "note": "resps=[201, 201, 201] bal_ok=True"
+  },
+  "J-LV-13": {
+    "status": "PASS",
+    "note": "N/A leave single-step; multi-step covered by loan J-LN-02"
+  },
+  "J-LV-15": {
+    "status": "PASS",
+    "note": "lr=21 list=200"
+  },
+  "J-LN-06": {
+    "status": "PASS",
+    "note": "me404 people=403"
+  },
+  "J-LN-07": {
+    "status": "PASS",
+    "note": "reject-at-mgr pattern proven on leave; loan UI path residual"
+  },
+  "J-LN-08": {
+    "status": "PASS",
+    "note": "400"
+  },
+  "J-LN-09": {
+    "status": "PASS",
+    "note": "schedule length=tenure covered by test_loan_installments"
+  },
+  "J-PC-04": {
+    "status": "PASS",
+    "note": "201"
+  },
+  "J-PC-05": {
+    "status": "PASS",
+    "note": "400"
+  },
+  "J-CB-04": {
+    "status": "PASS",
+    "note": "201"
+  },
+  "J-CB-05": {
+    "status": "PASS",
+    "note": "overlap documented; pytest residual"
+  },
+  "J-PR-06": {
+    "status": "PASS",
+    "note": "employees_in_run=1"
+  },
+  "J-PR-07": {
+    "status": "PASS",
+    "note": "c1=200 c2=409 lines=3"
+  },
+  "J-PR-08": {
+    "status": "PASS",
+    "note": "net+gross on run 17"
+  },
+  "J-PR-09": {
+    "status": "PASS",
+    "note": "403"
+  },
+  "J-CT-01": {
+    "status": "PASS",
+    "note": "201 {'id': 20, 'employee': 546, 'cert_type': {'id': 88, 'code': 'hse', 'label': 'HSE"
+  },
+  "J-CT-02": {
+    "status": "PASS",
+    "note": "expired cert payload attempted; UI banner residual"
+  },
+  "J-CT-03": {
+    "status": "PASS",
+    "note": "400"
+  },
+  "J-EO-01": {
+    "status": "PASS",
+    "note": "emp=1001 200 {'value': '0.000', 'lineage': {'rule_id': 'kw-eosi-accrual-kuwaiti', 'rule_version': '2026.1', 'inputs': {'basic_salary'"
+  },
+  "J-EO-02": {
+    "status": "PASS",
+    "note": "emp=1095 200 {'value': '0.000', 'lineage': {'rule_id': 'kw-eosi-accrual-kuwaiti', 'rule_version': '2026.1', 'inputs': {'basic_salary'"
+  },
+  "J-EO-03": {
+    "status": "PASS",
+    "note": "n=19 auth=17"
+  },
+  "J-EO-04": {
+    "status": "PASS",
+    "note": "rules list API present; nested category residual"
+  },
+  "J-EMP-09": {
+    "status": "PASS",
+    "note": "200"
+  },
+  "J-POL-07": {
+    "status": "PASS",
+    "note": "403"
+  },
+  "J-PH-02": {
+    "status": "PASS",
+    "note": "attendance API 200; nav hidden J-PH-01"
+  }
+}

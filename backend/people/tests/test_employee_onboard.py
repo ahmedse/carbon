@@ -108,6 +108,22 @@ def test_onboard_skips_ineligible_policies(org, leave_type):
     assert LeaveEntitlement.objects.filter(employee=employee).count() == 0
 
 
+@pytest.mark.django_db
+def test_onboard_without_join_date_creates_no_entitlements(org, leave_type):
+    """J-EMP-06: null join_date = unknown service start → zero entitlements."""
+    _make_policy(leave_type)
+    employee = Employee.objects.create(
+        org_unit=org, employee_no='E-ONB-NULL-JOIN', full_name='No Join Date',
+        basic_salary='1000.000', join_date=None,
+        gender=ensure_ref('gender', 'female'), is_active=True,
+    )
+
+    result = onboard_employee(employee)
+
+    assert result['leave']['created'] == 0
+    assert LeaveEntitlement.objects.filter(employee=employee).count() == 0
+
+
 # ── Service: opening_basic → unverified ledger line ───────────────────────
 
 @pytest.mark.django_db

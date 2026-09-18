@@ -124,62 +124,63 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
       ...colors,
     },
 
+    // ADR-0037 — modest readability bump (~+2px). Still compact; see compact-ui.md.
     typography: {
       fontFamily,
-      fontSize: 10,
-      htmlFontSize: 14,
+      fontSize: 12,
+      htmlFontSize: 15,
       h1: {
-        fontSize: '1.4rem',
+        fontSize: '1.5rem',
         fontWeight: 700,
         letterSpacing: '-0.02em',
         color: colors.text.primary,
       },
       h2: {
-        fontSize: '1.25rem',
+        fontSize: '1.35rem',
         fontWeight: 700,
         letterSpacing: '-0.01em',
         color: colors.text.primary,
       },
       h3: {
-        fontSize: '1.1rem',
+        fontSize: '1.2rem',
         fontWeight: 600,
         letterSpacing: '-0.01em',
         color: colors.text.primary,
       },
       h4: {
-        fontSize: '0.95rem',
+        fontSize: '1.05rem',
         fontWeight: 600,
         color: colors.text.primary,
       },
       h5: {
-        fontSize: '0.875rem',
+        fontSize: '0.95rem',
         fontWeight: 600,
         color: colors.text.primary,
       },
       h6: {
-        fontSize: '0.8125rem',
+        fontSize: '0.875rem',
         fontWeight: 600,
         color: colors.text.primary,
       },
       subtitle1: {
-        fontSize: '0.75rem',
+        fontSize: '0.875rem',
         fontWeight: 500,
         letterSpacing: '0.01em',
         color: colors.text.secondary,
       },
       subtitle2: {
-        fontSize: '0.6875rem',
+        fontSize: '0.8125rem',
         fontWeight: 500,
         letterSpacing: '0.01em',
         color: colors.text.secondary,
       },
       body1: {
-        fontSize: '0.75rem',
+        fontSize: '0.875rem',
         lineHeight: bodyLineHeight,
         color: colors.text.primary,
       },
       body2: {
-        fontSize: '0.6875rem',
+        fontSize: '0.8125rem',
         lineHeight: bodyLineHeight,
         color: colors.text.secondary,
       },
@@ -187,10 +188,10 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
         textTransform: 'none',
         fontWeight: 500,
         letterSpacing: '0.01em',
-        fontSize: '0.6875rem',
+        fontSize: '0.8125rem',
       },
       caption: {
-        fontSize: '0.625rem',
+        fontSize: '0.75rem',
         color: colors.text.secondary,
       },
     },
@@ -241,7 +242,7 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
             height: '100%',
           },
           body: {
-            fontSize: 11,
+            fontSize: 13,
             lineHeight: isRtl ? 1.6 : 1.4,
             letterSpacing: '-0.008em',
             WebkitFontSmoothing: 'antialiased',
@@ -269,12 +270,12 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
         styleOverrides: {
           root: {
             borderRadius: 3,
-            padding: '3px 8px',
-            fontSize: '0.6875rem',
+            padding: '4px 10px',
+            fontSize: '0.8125rem',
             fontWeight: 500,
             textTransform: 'none',
             boxShadow: 'none',
-            minHeight: '24px',
+            minHeight: '28px',
             transition: 'all 150ms ease',
             '&:hover': {
               boxShadow: '0 2px 4px rgba(0, 0, 0, 0.08)',
@@ -299,13 +300,13 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
           },
           sizeLarge: {
             padding: '6px 14px',
-            fontSize: '0.8125rem',
-            minHeight: '30px',
+            fontSize: '0.875rem',
+            minHeight: '32px',
           },
           sizeSmall: {
-            padding: '2px 6px',
-            fontSize: '0.7rem',
-            minHeight: '24px',
+            padding: '2px 8px',
+            fontSize: '0.75rem',
+            minHeight: '26px',
           },
         },
         defaultProps: { disableElevation: true },
@@ -390,8 +391,8 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
           root: {
             borderRadius: 3,
             fontWeight: 500,
-            fontSize: '0.65rem',
-            height: '18px',
+            fontSize: '0.75rem',
+            height: '20px',
           },
           colorSuccess: {
             backgroundColor: mode === 'light' ? '#e7f9f3' : 'rgba(16, 185, 129, 0.15)',
@@ -427,7 +428,7 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
               backgroundColor: colors.background.dark,
               color: colors.text.primary,
               fontWeight: 600,
-              fontSize: '0.625rem',
+              fontSize: '0.75rem',
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
               padding: '6px 8px',
@@ -440,7 +441,7 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
         styleOverrides: {
           root: {
             padding: '4px 8px',
-            fontSize: '0.6875rem',
+            fontSize: '0.8125rem',
             borderBottom: `1px solid ${colors.divider}`,
           },
         },
@@ -503,7 +504,7 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
           root: {
             borderRadius: 4,
             padding: '6px 12px',
-            fontSize: '0.8125rem',
+            fontSize: '0.875rem',
             border: `1px solid`,
           },
           standardSuccess: {
@@ -559,7 +560,7 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
         styleOverrides: {
           tooltip: {
             backgroundColor: mode === 'light' ? colors.text.primary : colors.background.dark,
-            fontSize: '0.75rem',
+            fontSize: '0.8125rem',
             padding: '4px 8px',
             borderRadius: 4,
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12)',
@@ -587,15 +588,15 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
       },
       MuiListItemText: {
         styleOverrides: {
-          primary: { fontSize: '0.8125rem', fontWeight: 500 },
-          secondary: { fontSize: '0.75rem' },
+          primary: { fontSize: '0.875rem', fontWeight: 500 },
+          secondary: { fontSize: '0.8125rem' },
         },
       },
       MuiDataGrid: {
         styleOverrides: {
           root: {
             border: 'none',
-            fontSize: '0.65rem',
+            fontSize: '0.75rem',
             '& .MuiDataGrid-columnHeaders': {
               backgroundColor: colors.background.dark,
               borderBottom: `2px solid ${colors.divider}`,
@@ -604,7 +605,7 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
               padding: '0 8px',
             },
             '& .MuiDataGrid-columnHeaderTitle': {
-              fontSize: '0.625rem',
+              fontSize: '0.75rem',
               fontWeight: 600,
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
@@ -620,14 +621,14 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
           },
         },
         defaultProps: {
-          rowHeight: 36,
-          columnHeaderHeight: 32,
+          rowHeight: 40,
+          columnHeaderHeight: 36,
         },
       },
       MuiTabs: {
         styleOverrides: {
           root: {
-            minHeight: 36,
+            minHeight: 40,
           },
           indicator: {
             height: 2,
@@ -638,9 +639,9 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
         styleOverrides: {
           root: {
             textTransform: 'none',
-            fontSize: '0.8125rem',
+            fontSize: '0.875rem',
             fontWeight: 500,
-            minHeight: 36,
+            minHeight: 40,
             padding: '6px 12px',
           },
         },
@@ -659,22 +660,22 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
       MuiFormLabel: {
         styleOverrides: {
           root: {
-            fontSize: '0.6875rem',
+            fontSize: '0.8125rem',
           },
         },
       },
       MuiInputBase: {
         styleOverrides: {
           root: {
-            fontSize: '0.75rem',
+            fontSize: '0.875rem',
           },
         },
       },
       MuiMenuItem: {
         styleOverrides: {
           root: {
-            fontSize: '0.75rem',
-            minHeight: 32,
+            fontSize: '0.875rem',
+            minHeight: 34,
             padding: '4px 8px',
           },
         },

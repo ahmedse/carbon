@@ -14,6 +14,133 @@ from ai.engine.llm.router import route_chat
 
 logger = logging.getLogger("pulse.agent.tools")
 
+#: Person-scoped list APIs that must carry employee filter when WM has focus (B1).
+_FOCUS_SCOPED_HOST_APIS = frozenset({
+    "list_leave_entitlements",
+    "list_leave_records",
+    "list_loans",
+})
+
+#: Resolve queries that are instruction / mode text, not person names (C1).
+#: Matched as data-as-data → honest no_match; never clarify modes / dump salaries.
+_INSTRUCTION_SHAPED_QUERY = re.compile(
+    r"(?is)"
+    r"(ignore\s+(all\s+)?(previous|prior|above)|"
+    r"disregard\s+(all\s+)?(previous|prior|instructions?)|"
+    r"system\s+prompt|"
+    r"show\s+all\s+salaries|"
+    r"reveal\s+(all\s+)?salaries|"
+    r"you\s+are\s+now|"
+    r"new\s+instructions?\s*:|"
+    r"override\s+(all\s+)?(rules|instructions?|guards?))"
+)
+
+
+def _is_instruction_shaped_query(query: str) -> bool:
+    """True when ``query`` looks like control text, not a person name (C1)."""
+    q = (query or "").strip()
+    if len(q) < 8:
+        return False
+    if _INSTRUCTION_SHAPED_QUERY.search(q):
+        return True
+    # Semicolon / newline packed directives are never employee names.
+    if (";" in q or "\n" in q) and len(q.split()) >= 4:
+        lowered = q.lower()
+        if any(tok in lowered for tok in ("ignore", "prompt", "salary", "salaries", "override")):
+            return True
+    return False
+
+
+def _focus_employee_no(conversation_id: str) -> str:
+    """Return employee_no from working-memory focus when present."""
+    if not conversation_id:
+        return ""
+    try:
+        from ai.engine.memory.working import get_working_memory
+
+        focus = get_working_memory().get_focus(conversation_id)
+    except Exception:  # noqa: BLE001
+        return ""
+    if focus is None:
+        return ""
+    # Prefer stable entity_id (C7 focus stack).
+    eid = getattr(focus, "entity_id", None)
+    if eid and str(eid).strip().isdigit():
+        return str(eid).strip()
+    entity = (focus.entity or "").strip()
+    if not entity:
+        return ""
+    # Formats: "1416", "1416|Full Name", legacy bare name (skip).
+    if "|" in entity:
+        left = entity.split("|", 1)[0].strip()
+        return left if left.isdigit() else ""
+    if entity.isdigit():
+        return entity
+    return ""
+
+
+def _inject_focus_employee_params(
+    api_name: str,
+    query_params: dict | None,
+    conversation_id: str,
+) -> dict | None:
+    """When listing leave/loans without an employee filter, use WM focus (B1)."""
+    if api_name not in _FOCUS_SCOPED_HOST_APIS:
+        return query_params
+    qp = dict(query_params or {})
+    if any(qp.get(k) not in (None, "") for k in ("employee", "employee_id", "employee_no")):
+        return qp
+    no = _focus_employee_no(conversation_id)
+    if not no:
+        return query_params
+    qp["employee_no"] = no
+    logger.info(
+        "B1: injected employee_no=%s into %s from working-memory focus",
+        no,
+        api_name,
+    )
+    return qp
+
+
+def _remember_resolved_employee(conversation_id: str, record: dict | None) -> None:
+    """Store employee focus (entity_id=employee_no) after a resolve match."""
+    if not conversation_id or not isinstance(record, dict):
+        return
+    no = str(record.get("employee_no") or "").strip()
+    if not no:
+        return
+    name = str(record.get("full_name") or "").strip() or no
+    given = str(record.get("name_en_given") or "").strip()
+    family = str(record.get("name_en_family") or "").strip()
+    aliases = [a for a in (name, given, family, no) if a]
+    # First token of given/full name so "Abrar" restores "Abrar Alam …"
+    for source in (given, name):
+        tok = (source.split() or [""])[0].strip()
+        if len(tok) >= 3 and tok not in aliases:
+            aliases.append(tok)
+    try:
+        from ai.engine.memory.working import get_working_memory
+
+        get_working_memory().set_focus(
+            conversation_id,
+            name,
+            "employee",
+            entity_id=no,
+            aliases=aliases,
+        )
+    except TypeError:
+        # Older set_focus signature without entity_id kwargs.
+        try:
+            from ai.engine.memory.working import get_working_memory
+
+            get_working_memory().set_focus(
+                conversation_id, f"{no}|{name}", "employee"
+            )
+        except Exception:  # noqa: BLE001
+            logger.debug("working-memory set_focus failed", exc_info=True)
+    except Exception:  # noqa: BLE001 — focus persist is best-effort
+        logger.debug("working-memory set_focus failed", exc_info=True)
+
 STATIC_TOOL_DEFINITIONS = [
     {
         "type": "function",
@@ -817,6 +944,9 @@ async def execute_call_host_api(
     entry = executor.get_catalog_entry(api_name)
     if not entry:
         return {"error": f"Unknown API endpoint: '{api_name}'. Check the api_catalog."}
+
+    # B1: person-scoped leave/loan lists inherit focused employee_no when omitted.
+    query_params = _inject_focus_employee_params(api_name, query_params, conversation_id)
 
     method = entry["method"]
     path_template = entry["path"]
@@ -2033,8 +2163,215 @@ async def _llm_transliterate(query: str, instance_id: str, conversation_id: str)
 # Compensation fields: omit from Chat identity lookups unless the user asked
 # about pay (A5 minimize-disclosure — even when CBAC allows the amount).
 _COMPENSATION_INTENT_RE = re.compile(
-    r"(?i)\b(salary|compensation|pay\b|wage|payroll|راتب|أجر|مرتب|تعويض)",
+    r"(?i)\b(salary|compensation|pay\b|wage|payroll|basic\s*pay|basic\s*salary|"
+    r"راتب|أجر|مرتب|تعويض)",
 )
+
+_PAYSLIP_SPECIFIC_RE = re.compile(
+    r"(?i)\b(payslip|pay[\s_-]*slip|قسيمة(?:\s*الراتب)?)",
+)
+
+_FIRST_PERSON_COMP_RE = re.compile(
+    r"(?i)\b(my|mine)\b|راتبي|أجري|مرتبي|تعويضي",
+)
+
+_COMP_DENY_MESSAGE = (
+    "Not authorized to view compensation (people:view_compensation required)."
+)
+
+_PAYSLIP_API_NAMES = frozenset({
+    "list_my_payslips",
+    "list_payslip_lines",
+})
+
+_PROFILE_API_NAMES = frozenset({
+    "get_my_profile",
+})
+
+
+def compensation_intent_asked(text: str | None) -> bool:
+    """True when the utterance asks about salary / compensation (EN/AR)."""
+    return bool(_COMPENSATION_INTENT_RE.search(text or ""))
+
+
+def payslip_specific_ask(text: str | None) -> bool:
+    """True when the user explicitly asked for payslip lines (not basic pay)."""
+    return bool(_PAYSLIP_SPECIFIC_RE.search(text or ""))
+
+
+def first_person_compensation_ask(text: str | None) -> bool:
+    """True for first-person salary asks (my salary / راتبي)."""
+    return compensation_intent_asked(text) and bool(
+        _FIRST_PERSON_COMP_RE.search(text or "")
+    )
+
+
+def _compensation_intent_text(*parts: str | None) -> str:
+    return " ".join(p for p in parts if p)
+
+
+def _compensation_deny_dict() -> dict:
+    return {
+        "unauthorized": True,
+        "status_code": 403,
+        "capability": "people:view_compensation",
+        "message": _COMP_DENY_MESSAGE,
+    }
+
+
+def _payload_is_empty_list(data: dict) -> bool:
+    """True when a host/list payload has zero rows."""
+    if not isinstance(data, dict):
+        return False
+    if data.get("unauthorized"):
+        return False
+    inner = data.get("data") if isinstance(data.get("data"), dict) else data
+    if not isinstance(inner, dict):
+        return False
+    for key in ("results", "items", "rows"):
+        if key in inner and isinstance(inner[key], list):
+            return len(inner[key]) == 0
+    count = inner.get("count")
+    if count is not None:
+        try:
+            return int(count) == 0
+        except (TypeError, ValueError):
+            pass
+    return False
+
+
+def _tool_api_name(item: dict) -> str:
+    args = item.get("tool_args") if isinstance(item, dict) else None
+    if isinstance(args, dict):
+        name = args.get("api_name") or args.get("name") or ""
+        if name:
+            return str(name)
+    raw_name = str((item or {}).get("tool_name") or "")
+    if ":" in raw_name:
+        return raw_name.split(":", 1)[-1]
+    return raw_name
+
+
+def stamp_compensation_deny_on_soft_empty(
+    completed_tools: list[dict],
+    *,
+    user_message: str,
+    caps: frozenset[str] | None = None,
+) -> list[dict]:
+    """B5: never let empty payslips / bare profile look like 'no salary data'.
+
+    When the user asked about compensation and lacks ``people:view_compensation``,
+    stamp an explicit CBAC deny onto empty payslip results and self-profile
+    lookups so synthesis cannot invent absence.
+    """
+    if not completed_tools or not compensation_intent_asked(user_message):
+        return completed_tools
+    if caps and "people:view_compensation" in caps:
+        return completed_tools
+
+    deny = _compensation_deny_dict()
+    out: list[dict] = []
+    for item in completed_tools:
+        if not isinstance(item, dict) or item.get("error"):
+            out.append(item)
+            continue
+        api = _tool_api_name(item).lower()
+        raw = item.get("result")
+        data = raw
+        if isinstance(raw, str):
+            try:
+                data = json.loads(raw)
+            except (TypeError, ValueError):
+                out.append(item)
+                continue
+        if not isinstance(data, dict):
+            out.append(item)
+            continue
+        if data.get("unauthorized") and "view_compensation" in str(
+            data.get("capability") or data.get("message") or ""
+        ):
+            out.append(item)
+            continue
+
+        is_payslip = (
+            api in _PAYSLIP_API_NAMES
+            or "payslip" in api
+            or "payslip" in str(data.get("endpoint") or "").lower()
+        )
+        is_profile = api in _PROFILE_API_NAMES or api in {"me", "get_my_profile"}
+        should_stamp = False
+        if is_payslip and _payload_is_empty_list(data):
+            should_stamp = True
+        elif is_profile and first_person_compensation_ask(user_message):
+            should_stamp = True
+        elif is_profile and compensation_intent_asked(user_message) and not payslip_specific_ask(
+            user_message
+        ):
+            # First-person routing often lands on get_my_profile for "my salary".
+            should_stamp = True
+
+        if not should_stamp:
+            out.append(item)
+            continue
+
+        merged = dict(data)
+        for k, v in deny.items():
+            merged[k] = v
+        # Preserve list shape under data when host-enveloped.
+        if "status_code" in merged and "data" in merged and isinstance(merged["data"], dict):
+            inner = dict(merged["data"])
+            for k, v in deny.items():
+                if k != "status_code":
+                    inner.setdefault(k, v)
+            merged["data"] = inner
+        new_item = dict(item)
+        new_item["result"] = (
+            json.dumps(merged, ensure_ascii=False, default=str)
+            if isinstance(raw, str)
+            else merged
+        )
+        out.append(new_item)
+    return out
+
+
+def compensation_authz_deny_message(completed_tools: list[dict] | None) -> str | None:
+    """Return fixed CBAC deny prose when any tool denied view_compensation.
+
+    B5: skip LLM paraphrasing that mixes deny with soft \"no salary data\".
+    """
+    for item in completed_tools or []:
+        if not isinstance(item, dict) or item.get("error"):
+            continue
+        raw = item.get("result")
+        data = raw
+        if isinstance(raw, str):
+            try:
+                data = json.loads(raw)
+            except (TypeError, ValueError):
+                continue
+        if not isinstance(data, dict):
+            continue
+        # Unwrap host envelope
+        if "status_code" in data and "data" in data and isinstance(data.get("data"), dict):
+            inner = dict(data["data"])
+            for k in ("unauthorized", "capability", "message"):
+                if k in data and k not in inner:
+                    inner[k] = data[k]
+            data = inner
+        if not data.get("unauthorized"):
+            continue
+        cap = str(data.get("capability") or "")
+        msg = str(data.get("message") or "")
+        if "view_compensation" not in cap and "view_compensation" not in msg:
+            continue
+        body = msg.strip() or _COMP_DENY_MESSAGE
+        return (
+            f"**Not authorized to view compensation.** {body}\n\n"
+            "**Key takeaways:**\n"
+            "- Access requires the `people:view_compensation` capability.\n"
+            "- This is an authorization deny, not an empty payroll result."
+        )
+    return None
 
 
 def _omit_compensation_unless_asked(
@@ -2051,6 +2388,49 @@ def _omit_compensation_unless_asked(
     for field_name in descriptor.masking:
         out.pop(field_name, None)
     return out
+
+
+def _compensation_unauthorized_payload(
+    *,
+    record: dict,
+    descriptor,
+    caps: frozenset[str],
+    intent_text: str,
+) -> dict | None:
+    """When compensation is asked without capability, return an explicit CBAC deny.
+
+    B5: never soft-empty / \"No data\" for salary — surface unauthorized +
+    ``people:view_compensation`` so Chat does not invent absence.
+    """
+    if not record or not getattr(descriptor, "masking", None):
+        return None
+    if not _COMPENSATION_INTENT_RE.search(intent_text or ""):
+        return None
+    missing: list[str] = []
+    required_cap = None
+    for field_name, policy in descriptor.masking.items():
+        if policy.capability in caps:
+            continue
+        missing.append(field_name)
+        required_cap = required_cap or policy.capability
+    if not missing:
+        return None
+    scrubbed = dict(record)
+    for field_name in missing:
+        scrubbed.pop(field_name, None)
+    cap = required_cap or "people:view_compensation"
+    return {
+        "found": True,
+        "action": "match",
+        "unauthorized": True,
+        "status_code": 403,
+        "capability": cap,
+        "message": (
+            f"Not authorized to view compensation ({cap} required)."
+        ),
+        "record": scrubbed,
+        "unauthorized_fields": missing,
+    }
 
 
 async def execute_resolve_entity(
@@ -2080,6 +2460,18 @@ async def execute_resolve_entity(
 
     if executor is None:
         return {"error": "Host executor not available"}
+
+    # C1: instruction-shaped "names" are data, not people — honest miss, no clarify.
+    if entity_type == "employee" and _is_instruction_shaped_query(query):
+        return {
+            "found": False,
+            "action": "none",
+            "message": "No matching employee for that query.",
+            "searched_total": 0,
+            "query": query,
+            "suggestions": [],
+            "data_as_data": True,
+        }
 
     cfg = instance_config or getattr(executor, "instance_config", None)
     if not cfg:
@@ -2125,6 +2517,31 @@ async def execute_resolve_entity(
                 honest_masking(resolve_labels(c, descriptor, label_fetch_fn=fetch), descriptor, caps)
                 for c in (result.suggestions or [])
             ]
+            intent_text = _compensation_intent_text(
+                query, explanation, kwargs.get("user_message"),
+            )
+            # B5: salary/compensation ask without capability must NEVER soft
+            # "no matching record" — scoped misses look like absence. Deny.
+            if (
+                entity_type == "employee"
+                and compensation_intent_asked(intent_text)
+                and "people:view_compensation" not in caps
+            ):
+                ar = (result.lang or "") == "ar"
+                return {
+                    "found": False,
+                    "unauthorized": True,
+                    "status_code": 403,
+                    "capability": "people:view_compensation",
+                    "message": (
+                        "غير مصرح بعرض بيانات التعويض (مطلوب صلاحية people:view_compensation)."
+                        if ar
+                        else _COMP_DENY_MESSAGE
+                    ),
+                    "searched_total": result.searched_total,
+                    "query": query,
+                    "suggestions": [],
+                }
             # ESS / no people:view: if the identity exists outside the caller's
             # org scope, say unauthorized — never "no matching record" (B4).
             exists_elsewhere = False
@@ -2143,6 +2560,15 @@ async def execute_resolve_entity(
                             break
                     except Exception:  # noqa: BLE001
                         continue
+                # Also probe common name fields (B4/B5 name lookups).
+                if not exists_elsewhere:
+                    for field in ("full_name", "name_en_given", "name_en_family"):
+                        try:
+                            if exists_fn(descriptor.model, {field: q}):
+                                exists_elsewhere = True
+                                break
+                        except Exception:  # noqa: BLE001
+                            continue
             if (
                 entity_type == "employee"
                 and "people:view" not in caps
@@ -2182,7 +2608,20 @@ async def execute_resolve_entity(
         if result.action == "match":
             record = resolve_labels(result.record or {}, descriptor, label_fetch_fn=fetch)
             record = honest_masking(record, descriptor, caps)
-            record = _omit_compensation_unless_asked(record, descriptor, query)
+            intent_text = _compensation_intent_text(
+                query, explanation, kwargs.get("user_message"),
+            )
+            denied = _compensation_unauthorized_payload(
+                record=record,
+                descriptor=descriptor,
+                caps=caps,
+                intent_text=intent_text,
+            )
+            if denied is not None:
+                denied["searched_total"] = result.searched_total
+                denied["matched_field"] = result.matched_field
+                return denied
+            record = _omit_compensation_unless_asked(record, descriptor, intent_text)
             return {
                 "found": True,
                 "action": "match",
@@ -2219,6 +2658,15 @@ async def execute_resolve_entity(
         query=query,
         new_result=response,
     )
+    # B1/C7: remember stable employee_no focus after a successful match
+    # (including unauthorized-but-identified — the person was resolved).
+    if (
+        entity_type == "employee"
+        and isinstance(response, dict)
+        and isinstance(response.get("record"), dict)
+        and (response.get("found") or response.get("action") == "match")
+    ):
+        _remember_resolved_employee(conversation_id, response.get("record"))
     return response
 
 

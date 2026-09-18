@@ -14,6 +14,9 @@ import {
   Typography,
 } from '@mui/material';
 import PlanDagGraph from '../components/graph/PlanDagGraph';
+import { useIsMobile } from '../hooks/useIsMobile';
+import { FONT } from '../theme/themeTokens';
+import { useTranslation } from 'react-i18next';
 
 function formatDuration(ms) {
   if (ms == null || !Number.isFinite(ms)) return null;
@@ -75,11 +78,18 @@ function AgentRunSurface({
   onDeclineStep,
   onRetryStep,
 }) {
-  const [showList, setShowList] = useState(Boolean(defaultListOpen));
+  const { t } = useTranslation('ai');
+  const isMobile = useIsMobile();
+  const [showList, setShowList] = useState(Boolean(defaultListOpen) || isMobile);
+  const [showGraph, setShowGraph] = useState(!isMobile);
 
   useEffect(() => {
-    if (defaultListOpen) setShowList(true);
-  }, [defaultListOpen]);
+    if (defaultListOpen || isMobile) setShowList(true);
+  }, [defaultListOpen, isMobile]);
+
+  useEffect(() => {
+    if (isMobile) setShowGraph(false);
+  }, [isMobile]);
 
   const mergedPlan = useMemo(
     () => mergePlanWithRunSteps(plan, runSteps),
@@ -132,17 +142,17 @@ function AgentRunSurface({
             size="small"
             color="primary"
             label="Live"
-            sx={{ height: 18, fontSize: '0.5625rem' }}
+            sx={{ height: 18, ...FONT.chip }}
           />
         )}
         {phase === 'finished' && (
-          <Chip size="small" color="success" variant="outlined" label="Done" sx={{ height: 18, fontSize: '0.5625rem' }} />
+          <Chip size="small" color="success" variant="outlined" label="Done" sx={{ height: 18, ...FONT.chip }} />
         )}
         {phase === 'stopped' && (
-          <Chip size="small" variant="outlined" label="Stopped" sx={{ height: 18, fontSize: '0.5625rem' }} />
+          <Chip size="small" variant="outlined" label="Stopped" sx={{ height: 18, ...FONT.chip }} />
         )}
         {phase === 'error' && (
-          <Chip size="small" color="error" variant="outlined" label="Failed" sx={{ height: 18, fontSize: '0.5625rem' }} />
+          <Chip size="small" color="error" variant="outlined" label="Failed" sx={{ height: 18, ...FONT.chip }} />
         )}
         <Typography
           variant="caption"
@@ -158,17 +168,29 @@ function AgentRunSurface({
             variant={showList ? 'contained' : 'outlined'}
             onClick={() => setShowList((v) => !v)}
             aria-pressed={showList}
-            sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0 }}
+            sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0, minHeight: { xs: 40, sm: 'auto' } }}
           >
-            {showList ? 'Hide list' : 'List'}
+            {showList ? t('hideList') : t('list')}
+          </Button>
+        )}
+        {isMobile && (
+          <Button
+            size="small"
+            variant={showGraph ? 'contained' : 'outlined'}
+            onClick={() => setShowGraph((v) => !v)}
+            aria-pressed={showGraph}
+            sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0, minHeight: 40 }}
+          >
+            {showGraph ? t('hideGraph') : t('viewGraph')}
           </Button>
         )}
       </Stack>
 
+      {(!isMobile || showGraph) && (
       <Paper variant="outlined" sx={{ overflow: 'hidden', bgcolor: 'background.paper' }}>
         <PlanDagGraph
           plan={mergedPlan}
-          height={Math.min(typeof window !== 'undefined' ? window.innerHeight * 0.52 : 420, 480)}
+          height={Math.min(typeof window !== 'undefined' ? window.innerHeight * (isMobile ? 0.4 : 0.52) : 420, isMobile ? 320 : 480)}
           live={live}
           onConfirmStep={onConfirmStep}
           onDeclineStep={onDeclineStep}
@@ -176,6 +198,13 @@ function AgentRunSurface({
           confirmingId={confirmingId}
         />
       </Paper>
+      )}
+
+      {(showList || isMobile) && listContent && (
+        <Box data-testid="agent-run-list">
+          {listContent}
+        </Box>
+      )}
 
       {(artifactsLoading || artCount > 0 || artifactsContent) && (
         <Box data-testid="agent-run-artifacts">
@@ -210,12 +239,6 @@ function AgentRunSurface({
               ))}
             </Stack>
           )}
-        </Box>
-      )}
-
-      {showList && listContent && (
-        <Box data-testid="agent-run-list">
-          {listContent}
         </Box>
       )}
 

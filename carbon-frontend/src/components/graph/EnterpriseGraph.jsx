@@ -405,14 +405,15 @@ export default function EnterpriseGraph({
         <defs>
           <marker
             id={marker}
-            viewBox="0 0 12 12"
-            refX="10"
-            refY="6"
-            markerWidth="11"
-            markerHeight="11"
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            markerUnits="userSpaceOnUse"
             orient="auto-start-reverse"
           >
-            <path d="M 0 1.5 L 11 6 L 0 10.5 z" fill={theme.palette.text.primary} />
+            <path d="M 0 0 L 10 5 L 0 10 z" fill={theme.palette.text.secondary} />
           </marker>
         </defs>
 
@@ -440,19 +441,38 @@ export default function EnterpriseGraph({
             );
           })}
 
-          {/* Edges — always left→right with arrowheads */}
-          {effectiveEdges.map((e) => (
-            <path
-              key={`e-${e.source}-${e.target}`}
-              d={edgePath(e.sourceX, e.sourceY, e.targetX, e.targetY)}
-              fill="none"
-              stroke={theme.palette.text.secondary}
-              strokeWidth={2.25}
-              strokeOpacity={0.95}
-              markerEnd={`url(#${marker})`}
-              pointerEvents="none"
-            />
-          ))}
+          {/* Edges — always left→right with arrowheads; choice branches tinted */}
+          {effectiveEdges.map((e) => {
+            const branch = e.branch || 'pending';
+            let stroke = theme.palette.text.secondary;
+            let strokeWidth = 2.25;
+            let strokeOpacity = 0.95;
+            let dash = undefined;
+            if (branch === 'chosen') {
+              stroke = theme.palette.primary.main;
+              strokeWidth = 3;
+              strokeOpacity = 1;
+            } else if (branch === 'unchosen') {
+              stroke = theme.palette.text.disabled;
+              strokeWidth = 1.5;
+              strokeOpacity = 0.4;
+              dash = '6 4';
+            }
+            return (
+              <path
+                key={`e-${e.source}-${e.target}`}
+                d={edgePath(e.sourceX, e.sourceY, e.targetX, e.targetY)}
+                fill="none"
+                stroke={stroke}
+                strokeWidth={strokeWidth}
+                strokeOpacity={strokeOpacity}
+                strokeDasharray={dash}
+                markerEnd={`url(#${marker})`}
+                pointerEvents="none"
+                data-branch={branch}
+              />
+            );
+          })}
 
           {/* Nodes */}
           {effectiveNodes.map((n) => {

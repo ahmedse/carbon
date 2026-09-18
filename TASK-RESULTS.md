@@ -1,3 +1,67 @@
+## [2026-09-17] master-architect (Pulse) — MOB mobile FE program (ADR-0035)
+
+- **MOB-0:** ADR-0035 Accepted; compact-ui §Mobile; COMMS 20260917-1…3; Screen Specs `docs/mobile/SCREEN-SPECS-MOB.md`; TASKS Active focus MOB row.
+- **MOB-A:** Shell under `sm` — hamburger temporary nav, no ActivityBar rail, Pulse fullscreen Dialog, StatusBar compact, Notes fullscreen.
+- **MOB-B:** `SystemDialog` `fullScreen` under `sm` (no drag/resize).
+- **MOB-C:** `ResponsiveList` on RequestTable / TeamInbox / LeaveHistory / dashboard tables; WorkflowGraph vertical under `sm`.
+- **MOB-D:** AIWorkspace bottom sheets + bottom activity rail; AgentRun list-first + graph toggle; pie legend bottom.
+- **MOB-E:** Employee detail header wrap; Employees create Dialog `fullScreen` on mobile.
+- **Verify:** vitest ResponsiveList + useIsMobile **4 passed**; `npm run build` **OK**.
+
+## [2026-09-17] master-architect (Nibras) — Deep QA FULL CATALOG
+
+- **P0:** **46/46 (100%)** — M-COV-02 gate PASS.
+- **P1/P2:** **34/35 PASS** · only **J-EMP-06 FAIL** (hire without join_date still got 5 entitlements).
+- **All-case:** **80/81 (99%)**.
+- Evidence: `RESULTS.json`, `RESULTS-P1P2.json`, SESSION-NOTES, board canvas.
+- Residuals: LV-11 duplex 200; gender DQ; org tree order; Playwright ops.
+- Optional: fix J-EMP-06 product gap; STACK-RELEASE; P1 polish.
+
+## [2026-09-17] master-architect (Nibras) — Deep QA P0 GATE COMPLETE
+
+- **M-COV-02 = 100%** — all **46/46 P0** PASS.
+- Final batch: AUTH-01/03 · ISO-02 · ORG-01/02/03 · EMP-02…05 · POL-01…04 · PC-03 · CB-03 · PR-02…05 · CBAC-01.
+- Payroll happy path: leaf org `qa-payroll-leaf` · hire `9091701` · run **17** compute→validate→**committed** · WPS 200 · me payslips n=3 · cross 404.
+- Evidence: `docs/nibras/evidence/deep-qa/2026-09-16/{SESSION-NOTES.md,RESULTS.json,run_remaining_p0.py}`
+- Board: `nibras-deep-qa-plan.canvas.tsx`
+- Residuals (honest): LV-11 duplex 200; gender DQ; org tree order; Playwright ops.
+- Next optional: P1 pack / STACK-RELEASE.
+
+## [2026-09-17] master-architect (Nibras) — Deep QA J-CB-01/02 + J-PR-01
+
+- **Coverage:** **25/46 P0 (54%)**.
+- **J-CB-01 PASS:** hire `9091701` ledger basic 850.500 unverified; Employee.basic_salary 0.
+- **J-CB-02 PASS:** verify line 22 → verified.
+- **J-PR-01 PASS:** draft run 15 compute → **409** fail-closed (no verified basic for emp 1001).
+- Next: **J-PR-02** compute success path after verify.
+
+## [2026-09-17] master-architect (Nibras) — Deep QA J-PC-01/02 + ISO-01
+
+- **Coverage:** **22/46 P0 (48%)**.
+- **J-PC-01/02 PASS:** `CRS-2026-0033` — name_en_* applied; forbidden salary/org/manager/civil_id/kuwaitization ignored. Approver `admin`.
+- **J-ISO-01 PASS:** credited from J-LV-08 MGR-1 vs MGR-2 inbox isolation.
+- pytest `test_profile_change_apply.py` **6 passed**.
+- Next: **J-CB-01/02** · **J-PR-01**.
+
+## [2026-09-17] master-architect (Nibras) — Deep QA leave closeout + hire + auth
+
+- **Coverage:** **19/81** (**23%**); **19/46 P0 (41%)**. Leave **10/10**; Loans **5/5**.
+- **J-LV-08 PASS:** wrong mgr `emp_1009` → inbox empty + approve **403**.
+- **J-LV-11 PASS:** `CRS-2026-0030` race used **+2 once**; residual both POST **200** + duplicate `approved` events.
+- **J-EMP-01 PASS:** emp `9091701` + `opening_basic` 850.500 **unverified**; entitlements created. Residuals: gender DQ shape; 7-digit eno warn-only.
+- **J-AUTH-05 PASS:** unauth 401 matrix on me/leave/inbox/employees/loans.
+- pytest `test_employee_onboard.py` **7 passed** (corroboration).
+- Next: **J-PC-01** profile allowlist.
+
+## [2026-09-17] master-architect (Nibras) — Deep QA J-LV-08 + overnight closeout
+
+- **Coverage:** **16/81** (**20%**); **16/46 P0 (35%)**. Leave **9/10**; Loans **5/5**.
+- **Overnight PASS (logged):** J-LV-14 timeline; J-LV-07 self-approve 403 on `CRS-2026-0031`; J-LN-04 HR=My loan 23 + 6 installments; J-LN-05 rematerialize 6→6.
+- **J-LV-08 PASS:** Cast MGR-2 `emp_1009` (session report emp_1021 → `team:access`); inbox **0** / no `CRS-2026-0031`; approve → **403** “not the current approver”; MGR-1 inbox still has id 34; status stays `submitted`. Report manager restored.
+- **Cast note:** live DB had only one wired manager (1399); MGR-2 session-provisioned for isolation NEG.
+- Next: **J-LV-11** double-approve concurrency.
+- Evidence: `docs/nibras/evidence/deep-qa/2026-09-16/SESSION-NOTES.md`
+
 ## [2026-09-16] master-architect (Nibras) — Deep QA board + J-LV-05
 
 - **Coverage:** **11/81** cases (**14%**); **11/46 P0 (24%)** — board updated.

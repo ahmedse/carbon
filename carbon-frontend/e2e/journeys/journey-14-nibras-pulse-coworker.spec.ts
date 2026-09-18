@@ -530,7 +530,7 @@ test('Part D: Nibras agent + process management console', async ({ page }) => {
   });
 
   const panels: Array<[string, string, string]> = [
-    ['/admin/ai', 'Pulse Overview', 'Pulse Overview'],
+    ['/admin/ai', 'Command Center', 'Command Center'],
     ['/admin/ai/agents', 'Agents', 'Agents'],
     ['/admin/ai/topology', 'Agent Topology', 'Agent Topology'],
     ['/admin/ai/registry', 'Process Registry', 'Process Registry'],

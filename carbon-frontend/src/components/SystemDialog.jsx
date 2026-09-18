@@ -1,10 +1,10 @@
-// src/components/SystemDialog.jsx
-// Standard system-wide dialog with drag, resize, explicit close, and modal focus.
+// SystemDialog — desktop: draggable/resizable window; mobile (sm): fullScreen (ADR-0035)
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, Dialog, DialogTitle, DialogContent, DialogActions, Paper, IconButton, Button } from '@mui/material';
+import { Box, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Button } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import { useTranslation } from 'react-i18next';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 const MIN_WIDTH = 420;
 const MIN_HEIGHT = 320;
@@ -31,6 +31,7 @@ export default function SystemDialog({
   ...props
 }) {
   const { t } = useTranslation('common');
+  const isMobile = useIsMobile();
   const [size, setSize] = useState({ width, height });
   const [position, setPosition] = useState({ top: 80, left: 0 });
   const [dragging, setDragging] = useState(false);
@@ -40,13 +41,14 @@ export default function SystemDialog({
   const contentRef = useRef(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || isMobile) return;
     const viewportWidth = window.innerWidth;
     const initialLeft = Math.max(24, Math.round((viewportWidth - size.width) / 2));
     setPosition((prev) => ({ top: 80, left: prev.left || initialLeft }));
-  }, [open, size.width]);
+  }, [open, size.width, isMobile]);
 
   useEffect(() => {
+    if (isMobile) return undefined;
     const handleMove = (event) => {
       if (dragging && dragStartRef.current) {
         event.preventDefault();
@@ -82,10 +84,10 @@ export default function SystemDialog({
     }
 
     return undefined;
-  }, [dragging, resizing, minWidth, minHeight, maxWidth, maxHeight, position.left, position.top, size.height, size.width]);
+  }, [dragging, resizing, minWidth, minHeight, maxWidth, maxHeight, position.left, position.top, size.height, size.width, isMobile]);
 
   const handleDragStart = (event) => {
-    if (event.button !== 0) return;
+    if (isMobile || event.button !== 0) return;
     event.preventDefault();
     dragStartRef.current = {
       startX: event.clientX,
@@ -97,7 +99,7 @@ export default function SystemDialog({
   };
 
   const handleResizeStart = (event) => {
-    if (event.button !== 0) return;
+    if (isMobile || event.button !== 0) return;
     event.preventDefault();
     resizeStartRef.current = {
       startX: event.clientX,
@@ -124,29 +126,40 @@ export default function SystemDialog({
     <Dialog
       open={open}
       onClose={handleCloseRequest}
+      fullScreen={isMobile}
       fullWidth={fullWidth}
       maxWidth={false}
       PaperProps={{
-        sx: {
-          position: 'absolute',
-          top: position.top,
-          left: position.left,
-          width: size.width,
-          height: size.height,
-          minWidth,
-          minHeight,
-          maxWidth,
-          maxHeight,
-          m: 0,
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
-        },
+        sx: isMobile
+          ? {
+              m: 0,
+              width: '100%',
+              height: '100%',
+              maxWidth: '100%',
+              maxHeight: '100%',
+              borderRadius: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }
+          : {
+              position: 'absolute',
+              top: position.top,
+              left: position.left,
+              width: size.width,
+              height: size.height,
+              minWidth,
+              minHeight,
+              maxWidth,
+              maxHeight,
+              m: 0,
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+            },
       }}
       BackdropProps={{
-        sx: {
-          bgcolor: 'rgba(0,0,0,0.32)',
-        },
+        sx: { bgcolor: 'rgba(0,0,0,0.32)' },
       }}
       disableEscapeKeyDown
       {...props}
@@ -154,22 +167,23 @@ export default function SystemDialog({
       <DialogTitle
         onMouseDown={handleDragStart}
         sx={{
-          cursor: 'move',
+          cursor: isMobile ? 'default' : 'move',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           userSelect: 'none',
           mb: 0,
           pr: 1,
+          flexShrink: 0,
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-          <Box component='span' sx={{ fontWeight: 700, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <Box component="span" sx={{ fontWeight: 700, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {title}
           </Box>
         </Box>
-        <IconButton size='small' onClick={handleCancel} aria-label={t('closeDialog')}>
-          <CloseIcon fontSize='small' />
+        <IconButton size="small" onClick={handleCancel} aria-label={t('closeDialog')} sx={{ minWidth: 40, minHeight: 40 }}>
+          <CloseIcon fontSize="small" />
         </IconButton>
       </DialogTitle>
 
@@ -177,27 +191,42 @@ export default function SystemDialog({
         {children}
       </DialogContent>
 
-      <DialogActions sx={{ px: 2, py: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
+      <DialogActions
+        sx={{
+          px: 2,
+          py: 1.5,
+          borderTop: '1px solid',
+          borderColor: 'divider',
+          flexShrink: 0,
+          position: isMobile ? 'sticky' : 'relative',
+          bottom: 0,
+          bgcolor: 'background.paper',
+          gap: 1,
+          '& .MuiButton-root': isMobile ? { minHeight: 40 } : undefined,
+        }}
+      >
         {showCancel && (
-          <Button onClick={handleCancel} color='inherit'>
+          <Button onClick={handleCancel} color="inherit">
             {cancelLabel}
           </Button>
         )}
         {actions}
       </DialogActions>
 
-      <Box
-        onMouseDown={handleResizeStart}
-        sx={{
-          position: 'absolute',
-          right: 6,
-          bottom: 6,
-          width: 18,
-          height: 18,
-          cursor: 'nwse-resize',
-          zIndex: 10,
-        }}
-      />
+      {!isMobile && (
+        <Box
+          onMouseDown={handleResizeStart}
+          sx={{
+            position: 'absolute',
+            right: 6,
+            bottom: 6,
+            width: 18,
+            height: 18,
+            cursor: 'nwse-resize',
+            zIndex: 10,
+          }}
+        />
+      )}
     </Dialog>
   );
 }

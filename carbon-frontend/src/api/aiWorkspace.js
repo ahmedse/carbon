@@ -859,6 +859,15 @@ export function restoreMemoryFact(token, pk) {
   });
 }
 
+/** Soft-revoke a fact (keeps row for provenance). */
+export function revokeMemoryFact(token, pk, reason = '') {
+  return apiFetch(`ai/memory/facts/${encodeURIComponent(pk)}/revoke/`, {
+    token,
+    method: 'POST',
+    body: { reason },
+  });
+}
+
 export function listOrgMemory(token) {
   return apiFetch('ai/memory/org/', { token });
 }

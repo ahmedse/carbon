@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import logging
 
+from django.utils import timezone
 from rest_framework import serializers, status, viewsets
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
@@ -44,6 +45,7 @@ from accounts.capabilities import (
     AI_VIEW_CONSOLE,
     has_any_capability,
 )
+from ai.audit_service import AuditService
 from ai.models.process import (
     STATUS_ACTIVE,
     STATUS_DEPRECATED,
@@ -134,6 +136,10 @@ class KillSwitchSerializer(serializers.Serializer):
     enabled = serializers.BooleanField(required=True)
 
 
+class RejectSerializer(serializers.Serializer):
+    reason = serializers.CharField(required=True, allow_blank=False, max_length=2000)
+
+
 class ProcessDefinitionSerializer(serializers.ModelSerializer):
     """Output serializer — includes the effective ``kill_switch`` flag."""
 
@@ -209,6 +215,7 @@ class RegistryViewSet(viewsets.GenericViewSet):
         "autonomy": [RegistryReadPermission],
         "set_autonomy": [ProcessOwnerPermission],
         "kill": [OperatorOrOwnerPermission],
+        "reject": [OwnerOrPublisherPermission],
     }
 
     def get_permissions(self):
@@ -390,6 +397,46 @@ class RegistryViewSet(viewsets.GenericViewSet):
                 f"Process {obj.process_id!r} is {obj.status!r}; only active documents can be deprecated."
             )
         return Response(_serialize(self._set_status(obj, STATUS_DEPRECATED)))
+
+    def reject(self, request, pk=None):
+        """Return a review document to draft with a persisted reason (ADR-0036)."""
+        obj = self._latest(self._process_id(self))
+        if obj is None:
+            return self._not_found(self._process_id(self))
+        if obj.status != STATUS_REVIEW:
+            return self._invalid(
+                f"Process {obj.process_id!r} is {obj.status!r}; only review documents can be rejected."
+            )
+        serializer = RejectSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        reason = serializer.validated_data["reason"]
+
+        doc = dict(obj.definition or {})
+        history = list(doc.get("review_history") or [])
+        history.append(
+            {
+                "action": "rejected",
+                "reason": reason,
+                "by": request.user.username,
+                "at": timezone.now().isoformat(),
+            }
+        )
+        doc["review_history"] = history
+        doc["last_reject_reason"] = reason
+        doc["status"] = STATUS_DRAFT
+        obj.definition = doc
+        obj.status = STATUS_DRAFT
+        obj.save()
+
+        AuditService.log(
+            action="ai.process.rejected",
+            actor=request.user.username,
+            target=obj.process_id,
+            detail={"reason": reason, "version": obj.version},
+            host_user_id=str(request.user.pk),
+            visibility="shared",
+        )
+        return Response(_serialize(obj))
 
     # ── diff ─────────────────────────────────────────────────────────
 

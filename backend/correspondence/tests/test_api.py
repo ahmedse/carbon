@@ -154,6 +154,31 @@ def test_approve_by_manager(workflow, api_client, get_token_for_user):
 
 
 @pytest.mark.django_db
+def test_second_approve_returns_4xx(workflow, api_client, get_token_for_user):
+    """J-LV-11 sequential: second approve is not a second 200.
+
+    After terminal approve, ``current_approver_ids`` is cleared so CBAC returns
+    403 before the FSM. Concurrent duplex is covered by the FSM row-lock test
+    (second caller reaches InvalidTransition → 409).
+    """
+    wf = workflow
+    corr = _draft(wf.corr_type, wf.org, wf.requester_user)
+    submit_correspondence(corr=corr, by=wf.requester_user)
+
+    _auth(api_client, wf.manager_user, get_token_for_user)
+    first = api_client.post(
+        f'{PREFIX}/correspondence/{corr.id}/approve/', {}, format='json',
+    )
+    second = api_client.post(
+        f'{PREFIX}/correspondence/{corr.id}/approve/', {}, format='json',
+    )
+    assert first.status_code == 200
+    assert first.json()['status'] == 'approved'
+    assert second.status_code in (403, 409)
+    assert second.status_code != 200
+
+
+@pytest.mark.django_db
 def test_approve_by_non_approver_403(
     workflow, api_client, get_token_for_user, create_user,
 ):
