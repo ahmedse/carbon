@@ -169,89 +169,6 @@ def _best_anchor(
     return best, best_score
 
 
-def _heuristic_sd(seg_text: str) -> tuple[str, float]:
-    """SD+ = condensed evaluation / interpretation; SD- = descriptive narration / emotion report.
-
-    Aligns with NAA expert audit: narrating feelings or habits ≠ evaluating them.
-    """
-    low = seg_text.lower()
-
-    # Explicit evaluation / condensed judgment (SD+)
-    eval_cues = (
-        "switched my strateg",
-        "i realized",
-        "i learnt",
-        "i learned",
-        "i found that",
-        "not good enough",
-        "so many",
-        "normal problem",
-        "normal and",
-        "was often critical",
-        "become bad",
-        "became bad",
-        "self-critical",
-        "reflect on",
-        "reflection",
-        "evaluat",
-        "in general",
-        "a general",
-        "general principle",
-        "clearer concept",
-    )
-    eval_hits = sum(1 for c in eval_cues if c in low)
-
-    # Descriptive narration / affect without analysis (SD-)
-    narrative_cues = (
-        "when i preparing",
-        "when i only",
-        "when i was",
-        "i don't write",
-        "i often write",
-        "ignore the",
-        "i completed",
-        "i spent",
-        "i always recorded",
-        "timed speaking drills",
-        "i want to improve",
-        "i want to study",
-        "feel very boring",
-        "feel afraid",
-        "feel regret",
-        "feel more confident",
-    )
-    # Emotion report alone is SD- unless paired with evaluative framing
-    emotion_only = bool(
-        re.search(r"\bi feel\b", low)
-        and not any(
-            c in low
-            for c in (
-                "because it",
-                "realized",
-                "learned that",
-                "switched",
-                "critical",
-                "reflect",
-            )
-        )
-    )
-    narr_hits = sum(1 for c in narrative_cues if c in low)
-
-    if eval_hits >= 1 and not emotion_only:
-        return "SD+", min(0.55 + 0.08 * eval_hits, 0.9)
-    if emotion_only or narr_hits >= 1:
-        return "SD-", 0.55
-    # Legacy soft reflective markers (exclude bare "i feel" / lone "because")
-    soft = ("i realized", "i learnt", "i learned", "so what", "now what", "next time")
-    # Bare "on reflection" / "reflect on timing" framing is often SD- narrative wrap — need condensed cues for SD+
-    soft_hits = sum(1 for m in soft if m in low)
-    if soft_hits >= 1:
-        return "SD+", 0.55
-    if "reflect" in low and eval_hits >= 1:
-        return "SD+", 0.55
-    return "SD-", 0.45
-
-
 _ABSTRACT_CUES = (
     "aspect",
     "general",
@@ -285,44 +202,246 @@ _STRATEGY_FRAME_CUES = (
 )
 
 
-def _heuristic_sg(seg_text: str, stage: str) -> tuple[str, int, float]:
+_SG_GLOSS = {
+    "SG+": "specific / personal (stronger gravity — lived episode)",
+    "SG-": "general (weaker gravity — transferable claim / others’ examples)",
+}
+_SD_GLOSS = {
+    "SD+": "reflective (condensed evaluation / self-analysis)",
+    "SD-": "descriptive (report / depict without deeper evaluation)",
+}
+
+
+def _matched_cues(low: str, cues: tuple[str, ...], limit: int = 5) -> list[str]:
+    out = []
+    for c in cues:
+        if c in low and c not in out:
+            out.append(c)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _heuristic_sg_detail(seg_text: str, stage: str) -> dict[str, Any]:
+    """Maton binary SG± — SG+ concrete/context; SG- abstract/principle."""
     low = seg_text.lower()
-    abstract_hits = sum(1 for c in _ABSTRACT_CUES if c in low)
-    concrete_hits = sum(1 for c in _CONCRETE_CUES if c in low)
-    strategy_frame = any(c in low for c in _STRATEGY_FRAME_CUES)
+    abstract = _matched_cues(low, _ABSTRACT_CUES)
+    concrete = _matched_cues(low, _CONCRETE_CUES)
+    strategy = _matched_cues(low, _STRATEGY_FRAME_CUES)
     first_person = bool(re.search(r"\b(i|my)\b", low))
     past_action = bool(
         re.search(r"\b(completed|spent|was doing|always spent|left a short)\b", low)
     )
+    abstract_hits = len(abstract)
+    concrete_hits = len(concrete)
+    strategy_frame = bool(strategy)
 
-    # Explicit strategy/meta framing without a concrete episode → SG--
+    def pack(value: str, numeric: int, conf: float, why: str) -> dict[str, Any]:
+        cues = concrete + abstract + strategy
+        if past_action:
+            cues = list(dict.fromkeys([*cues, "past action"]))
+        if first_person:
+            cues = list(dict.fromkeys([*cues, "first person"]))
+        return {
+            "value": value,
+            "numeric": numeric,
+            "confidence": conf,
+            "cues": cues[:6],
+            "justification": why,
+            "gloss": _SG_GLOSS.get(value, ""),
+            "method": "heuristic",
+        }
+
     if strategy_frame and concrete_hits == 0:
-        return "SG--", 4, 0.7
+        return pack(
+            "SG-", 2, 0.7,
+            "Strategy/meta framing without a concrete episode → weaker gravity (SG−).",
+        )
     if strategy_frame and "seldom" in low and not past_action:
-        return "SG--", 4, 0.65
-
-    # Strong concrete narrative (episode)
+        return pack(
+            "SG-", 2, 0.65,
+            "Strategy talk with generalised ‘seldom’ and no past episode → SG−.",
+        )
     if concrete_hits >= 2 or (concrete_hits >= 1 and past_action):
-        return "SG+", 2, min(0.55 + 0.1 * concrete_hits, 0.9)
+        return pack(
+            "SG+", 1, min(0.55 + 0.1 * concrete_hits, 0.9),
+            f"Concrete episode cues ({', '.join(concrete[:3]) or 'past action'}) "
+            "→ stronger gravity (SG+).",
+        )
     if concrete_hits >= 1 and first_person and abstract_hits == 0:
-        return "SG+", 2, 0.6
-
-    # Strong abstract / generalised framing
+        return pack(
+            "SG+", 1, 0.6,
+            f"First-person concrete cue ({concrete[0]}) without abstract framing → SG+.",
+        )
     if abstract_hits >= 2 and concrete_hits == 0:
-        return "SG--", 4, min(0.5 + 0.08 * abstract_hits, 0.85)
+        return pack(
+            "SG-", 2, min(0.5 + 0.08 * abstract_hits, 0.85),
+            f"Generalised/principle cues ({', '.join(abstract[:3])}) → weaker gravity (SG−).",
+        )
     if abstract_hits >= 1 and concrete_hits == 0:
-        if "normal" in low or "general" in low:
-            return "SG-", 3, 0.6
-        return "SG--", 4, 0.55
-
-    # Mixed: past action wins toward concrete
+        return pack(
+            "SG-", 2, 0.55,
+            f"Abstract cue “{abstract[0]}” without concrete episode → SG−.",
+        )
     if past_action and first_person:
-        return "SG+", 2, 0.55
+        return pack("SG+", 1, 0.55, "First-person past action → stronger gravity (SG+).")
     if stage == "now_what" and concrete_hits == 0:
-        return "SG-", 3, 0.5
+        return pack(
+            "SG-", 2, 0.5,
+            "NOW WHAT stage without concrete episode → transferable/abstract (SG−).",
+        )
     if first_person:
-        return "SG+", 2, 0.42
-    return "SG-", 3, 0.4
+        return pack("SG+", 1, 0.42, "First-person voice without strong cues → lean SG+.")
+    return pack("SG-", 2, 0.4, "No strong concrete cues → default weaker gravity (SG−).")
+
+
+def _heuristic_sg(seg_text: str, stage: str) -> tuple[str, int, float]:
+    d = _heuristic_sg_detail(seg_text, stage)
+    return d["value"], d["numeric"], d["confidence"]
+
+
+def _heuristic_sd_detail(seg_text: str) -> dict[str, Any]:
+    """SD+ condensed evaluation; SD- descriptive narration / emotion report."""
+    low = seg_text.lower()
+    eval_cues = (
+        "switched my strateg",
+        "i realized",
+        "i learnt",
+        "i learned",
+        "i found that",
+        "not good enough",
+        "so many",
+        "normal problem",
+        "normal and",
+        "was often critical",
+        "become bad",
+        "became bad",
+        "self-critical",
+        "reflect on",
+        "reflection",
+        "evaluat",
+        "in general",
+        "a general",
+        "general principle",
+        "clearer concept",
+    )
+    narrative_cues = (
+        "when i preparing",
+        "when i only",
+        "when i was",
+        "i don't write",
+        "i often write",
+        "ignore the",
+        "i completed",
+        "i spent",
+        "i always recorded",
+        "timed speaking drills",
+        "i want to improve",
+        "i want to study",
+        "feel very boring",
+        "feel afraid",
+        "feel regret",
+        "feel more confident",
+    )
+    eval_matched = _matched_cues(low, eval_cues)
+    narr_matched = _matched_cues(low, narrative_cues)
+    emotion_only = bool(
+        re.search(r"\bi feel\b", low)
+        and not any(
+            c in low
+            for c in (
+                "because it",
+                "realized",
+                "learned that",
+                "switched",
+                "critical",
+                "reflect",
+            )
+        )
+    )
+    soft = ("i realized", "i learnt", "i learned", "so what", "now what", "next time")
+    soft_matched = _matched_cues(low, soft)
+
+    def pack(value: str, conf: float, why: str, cues: list[str]) -> dict[str, Any]:
+        return {
+            "value": value,
+            "confidence": conf,
+            "cues": cues[:6],
+            "justification": why,
+            "gloss": _SD_GLOSS.get(value, ""),
+            "method": "heuristic",
+        }
+
+    if eval_matched and not emotion_only:
+        return pack(
+            "SD+",
+            min(0.55 + 0.08 * len(eval_matched), 0.9),
+            f"Evaluative/condensed cues ({', '.join(eval_matched[:3])}) → denser packing (SD+).",
+            eval_matched,
+        )
+    if emotion_only or narr_matched:
+        cues = (["i feel"] if emotion_only else []) + narr_matched
+        return pack(
+            "SD-",
+            0.55,
+            f"Narrative/affect report ({', '.join(cues[:3]) or 'emotion'}) "
+            "without condensed judgment → SD−.",
+            cues,
+        )
+    if soft_matched:
+        return pack(
+            "SD+",
+            0.55,
+            f"Reflective framing ({soft_matched[0]}) → lean denser (SD+).",
+            soft_matched,
+        )
+    if "reflect" in low and eval_matched:
+        return pack("SD+", 0.55, "Reflection + evaluation cues → SD+.", eval_matched)
+    return pack(
+        "SD-",
+        0.45,
+        "No condensed evaluation cues → default looser packing (SD−).",
+        [],
+    )
+
+
+def _heuristic_sd(seg_text: str) -> tuple[str, float]:
+    d = _heuristic_sd_detail(seg_text)
+    return d["value"], d["confidence"]
+
+
+def _anchor_evidence(
+    *,
+    dimension: str,
+    value: str,
+    anchor: dict[str, Any],
+    overlap: float,
+    heur: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    gloss = _SG_GLOSS.get(value) if dimension == "semantic_gravity" else _SD_GLOSS.get(value)
+    span = (anchor.get("span_text") or "")[:160]
+    anchor_why = (anchor.get("rationale") or "").strip()
+    why = (
+        f"Matched device anchor “{anchor.get('id')}” "
+        f"(overlap {overlap:.2f}) → {value}."
+    )
+    if anchor_why:
+        why = f"{why} Anchor note: {anchor_why[:180]}"
+    elif gloss:
+        why = f"{why} {gloss}."
+    return {
+        "method": "anchor",
+        "anchor_id": anchor.get("id"),
+        "overlap": round(overlap, 3),
+        "span": span,
+        "anchor_rationale": anchor_why[:240] if anchor_why else None,
+        "cues": (heur or {}).get("cues") or [],
+        "justification": why,
+        "gloss": gloss or "",
+        "heuristic_agree": (
+            (heur or {}).get("value") == value if heur else None
+        ),
+    }
 
 
 def code_segment(
@@ -332,93 +451,191 @@ def code_segment(
         return []
     codes: list[dict[str, Any]] = []
     sg_anchor, sg_score = _best_anchor(seg.text, anchors, "semantic_gravity")
-    heur_value, heur_numeric, heur_conf = _heuristic_sg(seg.text, seg.stage_guess)
+    heur_sg = _heuristic_sg_detail(seg.text, seg.stage_guess)
     # Trust anchors only when overlap is strong; weak matches mislead (held-out S4/S5).
     use_sg_anchor = bool(sg_anchor) and (
         sg_score >= 0.5
-        or (sg_score >= 0.25 and sg_anchor.get("value") == heur_value)
+        or (sg_score >= 0.25 and sg_anchor.get("value") == heur_sg["value"])
     )
     if use_sg_anchor:
+        from gradevance.services.lct_scale import canonicalize_sg, sg_numeric_for
+
+        sg_val = canonicalize_sg(sg_anchor.get("value")) or sg_anchor.get("value")
         codes.append(
             {
                 "dimension": "semantic_gravity",
-                "value": sg_anchor.get("value"),
-                "numeric": sg_anchor.get("numeric"),
+                "value": sg_val,
+                "numeric": sg_anchor.get("numeric")
+                if sg_anchor.get("numeric") is not None
+                else sg_numeric_for(sg_val),
                 "confidence": min(0.45 + sg_score, 0.95),
-                "evidence": {"anchor_id": sg_anchor.get("id"), "overlap": round(sg_score, 3)},
+                "evidence": _anchor_evidence(
+                    dimension="semantic_gravity",
+                    value=sg_val,
+                    anchor=sg_anchor,
+                    overlap=sg_score,
+                    heur=heur_sg,
+                ),
             }
         )
     else:
+        evidence = {
+            **{k: heur_sg[k] for k in ("method", "cues", "justification", "gloss")},
+            "rejected_anchor": (sg_anchor or {}).get("id"),
+            "rejected_overlap": round(sg_score, 3) if sg_anchor else None,
+        }
         codes.append(
             {
                 "dimension": "semantic_gravity",
-                "value": heur_value,
-                "numeric": heur_numeric,
-                "confidence": heur_conf,
-                "evidence": {
-                    "method": "heuristic",
-                    "rejected_anchor": (sg_anchor or {}).get("id"),
-                    "rejected_overlap": round(sg_score, 3) if sg_anchor else None,
-                },
+                "value": heur_sg["value"],
+                "numeric": heur_sg["numeric"],
+                "confidence": heur_sg["confidence"],
+                "evidence": evidence,
             }
         )
 
     sd_anchor, sd_score = _best_anchor(seg.text, anchors, "semantic_density")
+    heur_sd = _heuristic_sd_detail(seg.text)
     if sd_anchor and sd_score >= 0.35:
+        from gradevance.services.lct_scale import canonicalize_sd
+
+        sd_val = canonicalize_sd(sd_anchor.get("value")) or sd_anchor.get("value")
         codes.append(
             {
                 "dimension": "semantic_density",
-                "value": sd_anchor.get("value"),
-                "numeric": None,
+                "value": sd_val,
+                "numeric": 2 if sd_val == "SD+" else 1,
                 "confidence": min(0.45 + sd_score, 0.95),
-                "evidence": {"anchor_id": sd_anchor.get("id"), "overlap": round(sd_score, 3)},
+                "evidence": _anchor_evidence(
+                    dimension="semantic_density",
+                    value=sd_val,
+                    anchor=sd_anchor,
+                    overlap=sd_score,
+                    heur=heur_sd,
+                ),
             }
         )
     else:
-        value, conf = _heuristic_sd(seg.text)
         codes.append(
             {
                 "dimension": "semantic_density",
-                "value": value,
-                "numeric": None,
-                "confidence": conf,
-                "evidence": {"method": "heuristic"},
+                "value": heur_sd["value"],
+                "numeric": 2 if heur_sd["value"] == "SD+" else 1,
+                "confidence": heur_sd["confidence"],
+                "evidence": {
+                    k: heur_sd[k] for k in ("method", "cues", "justification", "gloss")
+                },
             }
         )
     return codes
 
 
+def _profile_level_4(
+    sg_value: str | None,
+    sd_value: str | None = None,
+    *,
+    confidence: float | None = None,
+    numeric: int | None = None,
+) -> int:
+    """Semantic-wave Y from the SG×SD plane (Maton 2×2), not gravity-only.
+
+    Level 4 (top): SG+ SD+  specific + reflective
+    Level 3:       SG- SD+  general + reflective
+    Level 2:       SG+ SD-  specific + descriptive
+    Level 1 (bot): SG- SD-  general + descriptive
+    """
+    from gradevance.services.lct_scale import canonicalize_sd, canonicalize_sg
+
+    sg = canonicalize_sg(sg_value) or (sg_value or "").strip()
+    sd = canonicalize_sd(sd_value) or (sd_value or "").strip()
+    # Collapse legacy doubles onto ±
+    if sg in ("SG++",):
+        sg = "SG+"
+    if sg in ("SG--",):
+        sg = "SG-"
+    sg_plus = sg == "SG+"
+    sd_plus = sd == "SD+"
+    if sg_plus and sd_plus:
+        return 4
+    if (not sg_plus) and sd_plus:
+        return 3
+    if sg_plus and (not sd_plus):
+        return 2
+    return 1
+
+
+def _sd_numeric(value: str | None) -> int:
+    """Wave helper: 1=SD− (descriptive), 2=SD+ (reflective)."""
+    v = (value or "").strip()
+    if v == "SD+":
+        return 2
+    return 1
+
+
 def build_wave(segments: list[_SegDraft], codes_by_ord: dict[int, list[dict]]) -> dict[str, Any]:
     points = []
-    sg_vals = []
+    profile_levels = []
     stages = set()
     for seg in segments:
         stages.add(seg.stage_guess)
         sg = next((c for c in codes_by_ord.get(seg.ordinal, []) if c["dimension"] == "semantic_gravity"), None)
         sd = next((c for c in codes_by_ord.get(seg.ordinal, []) if c["dimension"] == "semantic_density"), None)
         mid = (seg.start_word + seg.end_word) // 2
-        numeric = (sg or {}).get("numeric") or 3
+        sg_n = (sg or {}).get("numeric") or 1
+        sd_n = (sd or {}).get("numeric")
+        if sd_n is None:
+            sd_n = _sd_numeric((sd or {}).get("value"))
+        sg_label = (sg or {}).get("value")
+        sd_label = (sd or {}).get("value")
+        conf = float((sg or {}).get("confidence") or 0.5)
+        level = _profile_level_4(sg_label, sd_label, confidence=conf, numeric=sg_n)
         points.append(
             {
                 "word_offset": mid,
-                "sg_numeric": numeric,
-                "sg": (sg or {}).get("value"),
-                "sd": (sd or {}).get("value"),
+                "start_word": seg.start_word,
+                "end_word": seg.end_word,
+                "progress": seg.end_word,
+                "sg_numeric": sg_n,
+                "sd_numeric": sd_n,
+                "profile_level": level,
+                "sg_confidence": round(conf, 3),
+                "sg": sg_label,
+                "sd": sd_label,
                 "ordinal": seg.ordinal,
+                "stage_guess": seg.stage_guess,
+                "text": seg.text or "",
+                "quadrant": f"{sg_label or '?'} / {sd_label or '?'}",
             }
         )
-        sg_vals.append(numeric)
-    sg_range = (max(sg_vals) - min(sg_vals)) if sg_vals else 0
-    transitions = sum(1 for i in range(1, len(sg_vals)) if sg_vals[i] != sg_vals[i - 1])
+        profile_levels.append(level)
+
+    for i, p in enumerate(points):
+        if i == 0:
+            p["sg_move"] = "start"
+            continue
+        prev = points[i - 1]
+        d = (p["profile_level"] or 0) - (prev["profile_level"] or 0)
+        p["sg_move"] = "up" if d > 0 else ("down" if d < 0 else "flat")
+
+    level_range = (max(profile_levels) - min(profile_levels)) if profile_levels else 0
+    transitions = sum(
+        1 for i in range(1, len(profile_levels)) if profile_levels[i] != profile_levels[i - 1]
+    )
     return {
         "points": points,
         "metrics": {
             "stages_present": sorted(stages),
-            "sg_range": sg_range,
+            "sg_range": level_range,
             "transitions": transitions,
-            "specificity": "high" if sg_range >= 2 else "low",
+            "specificity": "high" if level_range >= 1 or transitions >= 1 else "low",
             "perspectives_count": 1 if "so_what" in stages or "now_what" in stages else 0,
             "segment_count": len(segments),
+            "profile_levels": [1, 2, 3, 4],
+            "levels": ["SG- SD-", "SG+ SD-", "SG- SD+", "SG+ SD+"],
+            "axis": {
+                "x": "time / number of words",
+                "y": "SG×SD quadrant (1=general+descriptive … 4=specific+reflective)",
+            },
         },
     }
 
@@ -775,6 +992,109 @@ class FormativePipelineService:
             raise
 
 
+def _apply_expert_segmentation(run: AnalysisRun, new_segs: list[dict]) -> None:
+    """Replace run segments from expert spans, re-code, rebuild wave (HITL)."""
+    from gradevance.services.lct_scale import sg_numeric_for
+    from gradevance.services.packs import load_device
+
+    if not new_segs:
+        return
+    Segment.objects.filter(run=run).delete()
+    WaveProfile.objects.filter(run=run).delete()
+
+    pack_rel = ((run.pipeline_snapshot or {}).get("lct_device") or {}).get("pack_path")
+    anchors: list = []
+    if pack_rel:
+        try:
+            anchors = load_device(pack_rel).anchors or []
+        except Exception:  # noqa: BLE001
+            anchors = []
+
+    wave_pts: list[dict] = []
+    for i, raw in enumerate(new_segs):
+        draft = _SegDraft(
+            ordinal=int(raw.get("ordinal", i)),
+            start_word=int(raw.get("start_word") or 0),
+            end_word=int(raw.get("end_word") or 0),
+            text=(raw.get("text") or "").strip(),
+            stage_guess=(raw.get("stage_guess") or "what")[:32],
+        )
+        seg = Segment.objects.create(
+            run=run,
+            ordinal=draft.ordinal,
+            start_word=draft.start_word,
+            end_word=draft.end_word,
+            text=draft.text,
+            stage_guess=draft.stage_guess,
+        )
+        sg_val = "SG-"
+        sg_num = 2
+        sd_val = "SD-"
+        sd_num = 1
+        sg_conf = 0.5
+        for code in code_segment(draft, anchors, True):
+            LCTCode.objects.create(
+                segment=seg,
+                dimension=code["dimension"],
+                value=code.get("value") or "",
+                numeric=code.get("numeric"),
+                confidence=float(code.get("confidence") or 0.5),
+                evidence={**(code.get("evidence") or {}), "after_expert_segmentation": True},
+                source=LCTCode.SOURCE_ENGINE,
+            )
+            if code["dimension"] == "semantic_gravity":
+                sg_val = code.get("value") or "SG-"
+                sg_num = code.get("numeric") if code.get("numeric") is not None else sg_numeric_for(sg_val)
+                sg_conf = float(code.get("confidence") or 0.5)
+            if code["dimension"] == "semantic_density":
+                sd_val = code.get("value") or "SD-"
+                sd_num = int(code.get("numeric") or (2 if sd_val == "SD+" else 1))
+        wave_pts.append(
+            {
+                "word_offset": (draft.start_word + draft.end_word) // 2,
+                "start_word": draft.start_word,
+                "end_word": draft.end_word,
+                "progress": draft.end_word,
+                "sg": sg_val,
+                "sd": sd_val,
+                "sg_numeric": sg_num,
+                "sd_numeric": sd_num,
+                "sg_confidence": round(sg_conf, 3),
+                "profile_level": _profile_level_4(sg_val, sd_val, confidence=sg_conf),
+                "quadrant": f"{sg_val} / {sd_val}",
+                "stage": draft.stage_guess,
+                "stage_guess": draft.stage_guess,
+                "text": draft.text or "",
+                "ordinal": draft.ordinal,
+            }
+        )
+
+    levels = [p.get("profile_level") or p.get("sg_numeric") or 0 for p in wave_pts]
+    for i, p in enumerate(wave_pts):
+        if i == 0:
+            p["sg_move"] = "start"
+            continue
+        d = (p.get("profile_level") or 0) - (wave_pts[i - 1].get("profile_level") or 0)
+        p["sg_move"] = "up" if d > 0 else ("down" if d < 0 else "flat")
+    WaveProfile.objects.create(
+        run=run,
+        points=wave_pts,
+        metrics={
+            "sg_range": (max(levels) - min(levels)) if levels else 0,
+            "transitions": sum(
+                1
+                for i in range(1, len(wave_pts))
+                if wave_pts[i].get("profile_level") != wave_pts[i - 1].get("profile_level")
+            ),
+            "stages_present": list(dict.fromkeys(p.get("stage") for p in wave_pts if p.get("stage"))),
+            "expert_segmentation": True,
+            "profile_levels": [1, 2, 3, 4],
+        },
+    )
+    run.status = AnalysisRun.STATUS_NEEDS_REVIEW
+    run.save(update_fields=["status"])
+
+
 class ReviewService:
     """Apply expert edits (append-only) and optionally resolve review items."""
 
@@ -800,21 +1120,34 @@ class ReviewService:
             after=after or {},
             rationale=rationale or "",
         )
-        # Apply LCT / rubric overrides when structured after payload present.
+        # Apply LCT / rubric / segmentation overrides when structured after present.
         if edit_kind == ExpertEdit.KIND_LCT and after.get("segment_id") and after.get("dimension"):
+            from gradevance.services.lct_scale import canonicalize_sg, canonicalize_sd, sg_numeric_for
+
             seg = Segment.objects.filter(run=run, id=after["segment_id"]).first()
             if seg:
+                raw_val = after.get("value") or ""
+                if after["dimension"] == "semantic_gravity":
+                    value = canonicalize_sg(raw_val) or raw_val
+                    numeric = after.get("numeric")
+                    if numeric is None:
+                        numeric = sg_numeric_for(value)
+                else:
+                    value = canonicalize_sd(raw_val) or raw_val
+                    numeric = after.get("numeric")
                 LCTCode.objects.update_or_create(
                     segment=seg,
                     dimension=after["dimension"],
                     source=LCTCode.SOURCE_EXPERT,
                     defaults={
-                        "value": after.get("value") or "",
-                        "numeric": after.get("numeric"),
+                        "value": value,
+                        "numeric": numeric,
                         "confidence": 1.0,
                         "evidence": {"expert_edit_id": str(edit.id)},
                     },
                 )
+        if edit_kind == ExpertEdit.KIND_SEGMENT and isinstance(after.get("segments"), list):
+            _apply_expert_segmentation(run, after["segments"])
         if edit_kind == ExpertEdit.KIND_RUBRIC and after.get("criterion_id"):
             RubricEvaluation.objects.update_or_create(
                 run=run,

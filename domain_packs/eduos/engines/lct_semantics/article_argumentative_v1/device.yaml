@@ -13,10 +13,10 @@ dimension_set:
 - semantic_density
 scale:
   semantic_gravity:
-    type: ordinal
-    levels: [SG++, SG+, SG-, SG--]
-    numeric: [1, 2, 3, 4]
-    axis_note: SG+ = concrete evidence/example; SG- = abstract claim/warrant.
+    type: binary
+    levels: [SG+, SG-]
+    numeric: [1, 2]
+    axis_note: 'Maton SG± — SG+ stronger gravity (concrete/context); SG- weaker (abstract/principle).'
   semantic_density:
     type: binary
     levels: [SD-, SD+]

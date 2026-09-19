@@ -202,22 +202,29 @@ optional or off. PipelineConfig selects stages per profile.
   vs descriptive in NAA; technical condensation in clinical/science writing).  
 - Pedagogic object when enabled: **semantic wave / profile** — not a single cell.
 
+**Product coding standard (Maton pedagogic grid):** **SG± × SD±** — plus/minus only.
+Double-plus / double-minus was a wave-measurement extension tutors rarely use;
+devices and HITL default to binary. Legacy gold labels `SG++`/`SG--` collapse to
+`SG+`/`SG-` at reliability load time. Devices that truly need ordinal must declare
+it explicitly with faculty gold that uses those levels — never silently.
+
 **First gold — NAA reflective** (`gradevance2/raw`) uses a **4-cell reflective grid**:
 
 | | SD− descriptive | SD+ reflective |
 |--|-----------------|----------------|
-| **SG− general** | General & descriptive | General & reflective |
-| **SG+ specific** | Specific & descriptive | Specific & reflective |
+| **SG− weaker gravity (more abstract)** | General & descriptive | General & reflective |
+| **SG+ stronger gravity (more concrete)** | Specific & descriptive | Specific & reflective |
 
-Expert coding uses **4-point ordinal SG** at **word-offset boundaries** with wave
-charts. Scales are **per device**, not global:
+Expert coding uses **binary SG±** at **word-offset boundaries** with wave charts.
+**Segmentation is also calibrated** (expert spans vs engine re-segment F1) — coding κ
+alone is not enough. Scales are **per device**, not global:
 
 ```yaml
 # device.yaml (excerpt) — reflective pack
 id: naa_reflective_semantics
 dimension_set: [semantic_gravity, semantic_density]
 scale:
-  semantic_gravity: { type: ordinal, levels: [SG++, SG+, SG-, SG--], numeric: [1,2,3,4] }
+  semantic_gravity: { type: binary, levels: [SG+, SG-], numeric: [1, 2] }
   semantic_density: { type: binary, levels: [SD-, SD+], map: { descriptive: SD-, reflective: SD+ } }
 genre: academic_reflection
 discipline: academic_english   # ONE pack — not the product
@@ -233,8 +240,9 @@ level: ug_y3
 # SD = clinical concept condensation; SG = case-particular vs principle
 ```
 
-Binary SG+/− packs remain valid for lighter formative use; **NAA summative
-acceptance uses 4-point gold**. Medicine packs use their own held-out sets.
+Medicine packs use their own held-out sets. **Pulse** advises (explain κ, draft coaching,
+triage notes) — Teach owns Calibration / Run workbench / Proposals (no duplicate UIs).
+
 ### 6.2 Stages (LCT pack owns policy; runtime owns code)
 
 | Stage | Responsibility | Pack configures |
@@ -473,7 +481,7 @@ Wave visualization must match raw pack charts (ordinal Y, word-offset X).
 3. One global SG/SD prompt for all genres / disciplines  
 4. Treating GradeVance as “Academic English Writing” product  
 5. Coarse paragraph segmentation that flattens waves (when LCT on)  
-6. Binary codes when gold is 4-point without an explicit pack choice  
+6. Declaring ordinal SG++…SG-- when tutors and gold only use Maton SG± (prefer binary; collapse legacy doubles at load)  
 7. Score-only feedback (no Diagnosis→Action) on formative paths  
 8. Ignoring published `pipeline_config_snapshot`  
 9. Auto-release summative AI marks  

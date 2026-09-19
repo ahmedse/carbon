@@ -4,6 +4,14 @@
 **Automated:** `pytest gradevance/tests/test_learn_trust_smoke.py` (no live passwords).  
 **Manual:** browser on **EduOS** brand (`./manage.sh brand eduos`) — ports backend `8009`, frontend `5179`. If login lands on Nibras, switch brand first.
 
+**Playwright (full professor journey):** from `carbon-frontend` with services up:
+
+```bash
+CI=1 npx playwright test journeys/journey-eduos-professor-lifecycle.spec.ts --config=e2e/playwright.config.ts
+```
+
+Covers KB pin → course/stem → calibration → publish → analyze → run workbench (shell breadcrumbs, rich LCT, SystemDialog ExpertEdit) → audit → marking → proposals → Learn.
+
 ---
 
 ## Automated (CI / local)

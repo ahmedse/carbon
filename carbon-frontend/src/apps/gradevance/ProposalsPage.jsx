@@ -54,7 +54,16 @@ export default function ProposalsPage() {
     setInfo(null);
     try {
       const result = await bumpProposal(token, id, { require_canary: false });
-      setInfo(`Pack bump → ${result.dest_rel} (anchor ${result.anchor_id})`);
+      if (result.bump_kind === 'segmentation_policy' || result.markers_added) {
+        const n = (result.markers_added || []).length;
+        setInfo(
+          `Segmentation bump → ${result.dest_rel}`
+          + (n ? ` (+${n} markers)` : '')
+          + ' — re-pin profile for NEW runs only',
+        );
+      } else {
+        setInfo(`Pack bump → ${result.dest_rel} (anchor ${result.anchor_id})`);
+      }
       load();
     } catch (err) {
       setError(err?.message || 'Bump failed');
@@ -142,8 +151,17 @@ export default function ProposalsPage() {
                     <Button size="small" onClick={() => decide(r.id, 'propose')}>Propose</Button>
                     <Button size="small" color="success" onClick={() => decide(r.id, 'accept')}>Accept</Button>
                     <Button size="small" color="inherit" onClick={() => decide(r.id, 'reject')}>Reject</Button>
-                    {r.status === 'accepted' && r.kind === 'anchor' && !r.payload?.pack_bump && (
-                      <Button size="small" variant="outlined" onClick={() => bump(r.id)}>Bump pack</Button>
+                    {r.status === 'accepted'
+                      && (r.kind === 'anchor' || r.kind === 'segmentation_policy')
+                      && !r.payload?.pack_bump && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => bump(r.id)}
+                        data-testid={`bump-proposal-${r.id}`}
+                      >
+                        {r.kind === 'segmentation_policy' ? 'Bump segmentation' : 'Bump pack'}
+                      </Button>
                     )}
                     {r.payload?.pack_bump && !r.payload?.profile_repin && (
                       <Button size="small" variant="contained" onClick={() => repin(r.id)}>Re-pin profile</Button>

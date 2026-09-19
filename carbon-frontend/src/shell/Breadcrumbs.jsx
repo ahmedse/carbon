@@ -34,6 +34,14 @@ import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import GroupsIcon from '@mui/icons-material/Groups';
 import PolicyIcon from '@mui/icons-material/Policy';
 import SearchIcon from '@mui/icons-material/Search';
+import SchoolIcon from '@mui/icons-material/School';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
+import ScienceIcon from '@mui/icons-material/Science';
+import RateReviewIcon from '@mui/icons-material/RateReview';
+import TuneIcon from '@mui/icons-material/Tune';
+import LightbulbIcon from '@mui/icons-material/Lightbulb';
+import GavelIcon from '@mui/icons-material/Gavel';
+import AccessibilityNewIcon from '@mui/icons-material/AccessibilityNew';
 
 // Breadcrumb configuration based on routes
 const ROUTE_CONFIG = {
@@ -504,6 +512,102 @@ const ROUTE_CONFIG = {
     label: 'Request Detail',
     icon: AssignmentIcon,
     parent: '/team',
+  },
+
+  // ── Teach (GradeVance professor) — RULE_9 shell crumbs ──────────
+  '/teach': {
+    label: 'Teach',
+    icon: SchoolIcon,
+    parent: null,
+  },
+  '/teach/stems': {
+    label: 'Stems',
+    icon: MenuBookIcon,
+    parent: '/teach',
+  },
+  '/teach/stems/:assignmentId': {
+    label: 'Assignment hub',
+    icon: AssignmentIcon,
+    parent: '/teach/stems',
+  },
+  '/teach/stems/:assignmentId/submissions/:submissionId': {
+    label: 'Submission',
+    icon: EditIcon,
+    parent: '/teach/stems/:assignmentId',
+  },
+  '/teach/runs/:runId': {
+    label: 'Run workbench',
+    icon: ScienceIcon,
+    parent: '/teach/stems',
+  },
+  '/teach/calibration': {
+    label: 'Calibration',
+    icon: TuneIcon,
+    parent: '/teach',
+  },
+  '/teach/marking': {
+    label: 'Marking',
+    icon: RateReviewIcon,
+    parent: '/teach',
+  },
+  '/teach/appeals': {
+    label: 'Appeals',
+    icon: GavelIcon,
+    parent: '/teach',
+  },
+  '/teach/proposals': {
+    label: 'Proposals',
+    icon: LightbulbIcon,
+    parent: '/teach',
+  },
+
+  // ── Learn (student) ─────────────────────────────────────────────
+  '/learn': {
+    label: 'Learn',
+    icon: SchoolIcon,
+    parent: null,
+  },
+  '/learn/assignments': {
+    label: 'Assignments',
+    icon: MenuBookIcon,
+    parent: '/learn',
+  },
+  '/learn/assignments/:assignmentId': {
+    label: 'Assignment',
+    icon: AssignmentIcon,
+    parent: '/learn/assignments',
+  },
+  '/learn/progress': {
+    label: 'Progress',
+    icon: AssessmentIcon,
+    parent: '/learn',
+  },
+
+  // ── GradeVance engine room ──────────────────────────────────────
+  '/apps/gradevance': {
+    label: 'GradeVance',
+    icon: ScienceIcon,
+    parent: null,
+  },
+  '/apps/gradevance/library': {
+    label: 'Pack library',
+    icon: MenuBookIcon,
+    parent: '/apps/gradevance',
+  },
+  '/apps/gradevance/qa': {
+    label: 'QA console',
+    icon: VerifiedUserIcon,
+    parent: '/apps/gradevance',
+  },
+  '/apps/gradevance/accessibility': {
+    label: 'Accessibility',
+    icon: AccessibilityNewIcon,
+    parent: '/apps/gradevance',
+  },
+  '/apps/gradevance/lti': {
+    label: 'LTI',
+    icon: CloudUploadIcon,
+    parent: '/apps/gradevance',
   },
 };
 

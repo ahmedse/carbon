@@ -144,6 +144,20 @@ export const releaseRun = (token, runId) =>
 export const fetchCalibration = (token, params = {}) =>
   apiFetch(`${ROOT}calibration/${qs(params)}`, { token });
 
+export const proposeCalibrationSegmentation = (token, body) =>
+  apiFetch(`${ROOT}calibration/segmentation-propose/`, {
+    method: 'POST',
+    body,
+    token,
+  });
+
+export const suggestSegmentationSplits = (token, body) =>
+  apiFetch(`${ROOT}calibration/suggest-splits/`, {
+    method: 'POST',
+    body,
+    token,
+  });
+
 export const fetchLtiStatus = (token) =>
   apiFetch(`${ROOT}lti/status/`, { token });
 
@@ -197,6 +211,13 @@ export const fetchPublishGate = (token, packId, version = 1, params = {}) =>
     })}`,
     { token },
   );
+
+export const publishAssignment = (token, assignmentId, body = {}) =>
+  apiFetch(`${ROOT}assignments/${encodeURIComponent(assignmentId)}/publish/`, {
+    method: 'POST',
+    body,
+    token,
+  });
 
 export const fetchProposals = (token) =>
   apiFetch(`${ROOT}proposals/`, { token });

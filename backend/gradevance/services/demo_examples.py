@@ -56,6 +56,124 @@ NAA_SD_EXAMPLE = {
     ),
 }
 
+# Long reflective essay with 10 explicit epistemic moves — for rich wave demos.
+# Texts alternate concrete (SG+) and abstract (SG−) so the 4-level profile oscillates.
+WAVE_10_SEGMENTS: list[dict[str, str]] = [
+    {
+        "stage_guess": "what",
+        "text": (
+            "In my first week on the ward I felt overwhelmed by the pace of handover "
+            "and the noise of monitors. I spent hours describing what happened to me "
+            "on each shift rather than asking why the protocols existed."
+        ),
+    },
+    {
+        "stage_guess": "so_what",
+        "text": (
+            "Later I noticed a general principle: junior voices were discounted when "
+            "they questioned routines, which is a normal aspect of hierarchy that "
+            "makes practice-based knowing difficult to legitimize."
+        ),
+    },
+    {
+        "stage_guess": "what",
+        "text": (
+            "For example, when I raised a missed observation about a patient I had "
+            "just completed checks on, a senior smiled and moved on without recording "
+            "my concern in the notes that afternoon."
+        ),
+    },
+    {
+        "stage_guess": "so_what",
+        "text": (
+            "However I began to connect this to epistemic injustice as a concept: "
+            "some knowers are treated as less credible because of status, a strategy "
+            "of silencing that transfers across wards and specialties."
+        ),
+    },
+    {
+        "stage_guess": "what",
+        "text": (
+            "Therefore I started writing short notes after each shift. I always "
+            "recorded whose knowledge counted in the room and which claims were "
+            "treated as optional when I was doing evening handover."
+        ),
+    },
+    {
+        "stage_guess": "so_what",
+        "text": (
+            "Thus the concrete incident of being ignored became a theoretical claim "
+            "about how semantic gravity moves from feelings toward transferable "
+            "ideas about justice and knowledge principles."
+        ),
+    },
+    {
+        "stage_guess": "what",
+        "text": (
+            "Later I realized my earlier diary entries were almost all narration. "
+            "For example in week three I only wrote that I feel tired and that "
+            "handover was scary, with no evaluation of why."
+        ),
+    },
+    {
+        "stage_guess": "now_what",
+        "text": (
+            "So I designed a tiny experiment: ask one clarifying question in every "
+            "handover for five days. I completed the drills and tracked whether my "
+            "contribution was taken up by the team on each occasion."
+        ),
+    },
+    {
+        "stage_guess": "so_what",
+        "text": (
+            "Later I reflected that legitimation codes helped me see the wave as a "
+            "general strategy: from concrete incident, through theory, back to "
+            "action. Naming weaker gravity made tutoring feedback sharper in principle."
+        ),
+    },
+    {
+        "stage_guess": "now_what",
+        "text": (
+            "Therefore next month I will keep a two-column notebook: episode on the "
+            "left, principle and next action on the right, so the reflective wave "
+            "stays intentional rather than accidental when I am tired after nights."
+        ),
+    },
+]
+
+
+def wave_10_essay_text() -> str:
+    return " ".join(s["text"].strip() for s in WAVE_10_SEGMENTS)
+
+
+def wave_10_segment_spans() -> list[dict]:
+    """Word-span ExpertEdit payload for the 10-move wave essay."""
+    words: list[str] = []
+    spans: list[dict] = []
+    for i, s in enumerate(WAVE_10_SEGMENTS):
+        toks = (s["text"] or "").split()
+        start = len(words)
+        words.extend(toks)
+        end = len(words)
+        spans.append(
+            {
+                "ordinal": i,
+                "start_word": start,
+                "end_word": end,
+                "stage_guess": s["stage_guess"],
+                "text": " ".join(toks),
+            }
+        )
+    return spans
+
+
+WAVE_10_EXAMPLE = {
+    "id": "DEMO-WAVE-10",
+    "source": "gradevance.services.demo_examples.WAVE_10_SEGMENTS",
+    "text": wave_10_essay_text(),
+    "segments": WAVE_10_SEGMENTS,
+}
+
 
 def collect_demo_texts(spec: dict) -> list[dict]:
     root = eduos_pack_root()
@@ -94,6 +212,15 @@ def collect_demo_texts(spec: dict) -> list[dict]:
         t = NAA_SD_EXAMPLE["text"]
         if t not in seen:
             out.append(dict(NAA_SD_EXAMPLE))
+        w10 = WAVE_10_EXAMPLE["text"]
+        if w10 not in seen:
+            out.append(
+                {
+                    "id": WAVE_10_EXAMPLE["id"],
+                    "source": WAVE_10_EXAMPLE["source"],
+                    "text": w10,
+                }
+            )
 
     return out
 

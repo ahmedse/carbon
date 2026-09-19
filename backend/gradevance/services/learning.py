@@ -70,6 +70,11 @@ class ProposalMiner:
             )
         if edit.edit_kind == ExpertEdit.KIND_COACHING:
             return ("action_template", after.get("id") or "coaching")
+        if edit.edit_kind == ExpertEdit.KIND_SEGMENT:
+            # Cluster by segment count + stage set — promote to segmentation policy.
+            segs = after.get("segments") or []
+            stages = tuple(sorted({(s.get("stage_guess") or "what") for s in segs}))
+            return ("segmentation_policy", len(segs), stages)
         return None
 
     def _payload_for(self, key: tuple, group: list[ExpertEdit]) -> dict:

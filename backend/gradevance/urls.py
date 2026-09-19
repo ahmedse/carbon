@@ -91,6 +91,16 @@ urlpatterns = [
     path("publish-gate/", views.PublishGatePreviewView.as_view(), name="gradevance-publish-gate"),
     path("calibration/", views.CalibrationPreviewView.as_view(), name="gradevance-calibration"),
     path(
+        "calibration/segmentation-propose/",
+        views.CalibrationSegmentationProposeView.as_view(),
+        name="gradevance-calibration-seg-propose",
+    ),
+    path(
+        "calibration/suggest-splits/",
+        views.SuggestSplitsView.as_view(),
+        name="gradevance-suggest-splits",
+    ),
+    path(
         "assignments/<uuid:assignment_id>/publish/",
         views.AssignmentPublishView.as_view(),
         name="gradevance-assignment-publish",

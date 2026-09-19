@@ -45,8 +45,13 @@ class PackBumpService:
     ) -> dict[str, Any]:
         if proposal.status != Proposal.STATUS_ACCEPTED:
             raise PackBumpError("Proposal must be accepted before pack bump")
-        if proposal.kind != "anchor":
+        if proposal.kind not in ("anchor", "segmentation_policy"):
             raise PackBumpError(f"Unsupported bump kind: {proposal.kind}")
+
+        if proposal.kind == "segmentation_policy":
+            return self.bump_segmentation_from_proposal(
+                proposal, source_pack_rel=source_pack_rel
+            )
 
         if require_canary:
             labels_a = expert_labels or []
@@ -131,6 +136,94 @@ class PackBumpService:
             "new_version": new_version,
             "anchor_id": new_anchor["id"],
             "note": "Draft bump written — wire AssignmentProfile to activate for new runs only.",
+        }
+
+    def bump_segmentation_from_proposal(
+        self,
+        proposal: Proposal,
+        *,
+        source_pack_rel: str = "engines/lct_semantics/naa_reflective_v1",
+    ) -> dict[str, Any]:
+        """Fork device pack and merge discourse cues from expert segments into segmentation.yaml."""
+        if proposal.status != Proposal.STATUS_ACCEPTED:
+            raise PackBumpError("Proposal must be accepted before pack bump")
+        if proposal.kind != "segmentation_policy":
+            raise PackBumpError(f"Unsupported bump kind: {proposal.kind}")
+
+        root = eduos_pack_root()
+        src = (root / source_pack_rel).resolve()
+        if not src.is_dir():
+            raise PackBumpError(f"Source pack missing: {src}")
+
+        loaded = load_device(source_pack_rel)
+        device = dict(loaded.device)
+        new_version = int(device.get("version") or 1) + 1
+        stamp = timezone.now().strftime("%Y%m%d%H%M%S")
+        dest_rel = f"{source_pack_rel}_bump_v{new_version}_{stamp}"
+        dest = root / dest_rel
+        if dest.exists():
+            raise PackBumpError(f"Destination already exists: {dest}")
+
+        shutil.copytree(src, dest)
+
+        seg_name = device.get("segmentation_file", "segmentation.yaml")
+        seg_path = dest / seg_name
+        seg_doc = yaml.safe_load(seg_path.read_text(encoding="utf-8")) if seg_path.is_file() else {}
+        policy = dict(seg_doc.get("policy") or {})
+        markers = list(policy.get("markers") or [])
+
+        # Extract short discourse cues from segment starts (2–3 word windows).
+        segs = (proposal.payload or {}).get("segments") or []
+        added = []
+        for s in segs:
+            text = (s.get("text") or "").strip()
+            if not text:
+                continue
+            toks = text.split()
+            for n in (2, 3):
+                if len(toks) >= n:
+                    cue = " ".join(toks[:n]).lower().strip(".,;:!?\"'")
+                    if len(cue) >= 4 and cue not in markers and cue not in added:
+                        added.append(cue)
+        markers.extend(added)
+        policy["markers"] = markers
+        seg_doc["policy"] = policy
+        seg_doc["version"] = new_version
+        seg_doc["device_id"] = device.get("id") or seg_doc.get("device_id")
+        _write_yaml(seg_path, seg_doc)
+
+        device["version"] = new_version
+        device["status"] = "draft"
+        device["name"] = f"{device.get('name', device.get('id'))} (seg bump v{new_version})"
+        device["description"] = (
+            f"{device.get('description', '')}\nSegmentation promoted from proposal "
+            f"{proposal.id} at {timezone.now().isoformat()} — NEW runs only."
+        ).strip()
+        _write_yaml(dest / "device.yaml", device)
+
+        proposal.payload = {
+            **(proposal.payload or {}),
+            "pack_bump": {
+                "dest_rel": dest_rel,
+                "source_pack_rel": source_pack_rel,
+                "new_version": new_version,
+                "markers_added": added,
+                "bumped_at": timezone.now().isoformat(),
+                "bump_kind": "segmentation_policy",
+                "base_profile_id": (
+                    (proposal.payload or {}).get("base_profile_id")
+                    or _default_profile_for_device(source_pack_rel)
+                ),
+            },
+        }
+        proposal.save(update_fields=["payload"])
+        clear_pack_caches()
+        return {
+            "dest_rel": dest_rel,
+            "new_version": new_version,
+            "markers_added": added,
+            "bump_kind": "segmentation_policy",
+            "note": "Segmentation draft bump written — re-pin profile for new assignments only.",
         }
 
 

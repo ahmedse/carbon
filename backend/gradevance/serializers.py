@@ -190,6 +190,7 @@ class AnalysisRunSerializer(serializers.ModelSerializer):
     segments = SegmentSerializer(many=True, read_only=True)
     wave = WaveProfileSerializer(read_only=True)
     rubric_scores = RubricEvaluationSerializer(many=True, read_only=True)
+    expert_edits = serializers.SerializerMethodField()
 
     class Meta:
         model = AnalysisRun
@@ -212,7 +213,12 @@ class AnalysisRunSerializer(serializers.ModelSerializer):
             "segments",
             "wave",
             "rubric_scores",
+            "expert_edits",
         )
+
+    def get_expert_edits(self, obj):
+        qs = obj.expert_edits.all().order_by("-created_at")[:50]
+        return ExpertEditSerializer(qs, many=True).data
 
 
 class AnalysisRunListSerializer(serializers.ModelSerializer):

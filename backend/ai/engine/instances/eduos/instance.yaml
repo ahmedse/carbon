@@ -3,6 +3,10 @@
 # Loaded when DJANGO_BRAND=eduos. Isolation: never expose Nibras People,
 # Carbon emissions, or Tectona Healthy domain endpoints. Flagship app:
 # GradeVance (assessment + coaching). Engines are config packs (LCT, Rubric).
+#
+# Pulse role (locked): ADVISORY only — explain instruments, draft coaching,
+# triage review notes. Teach/GradeVance UIs own SoR (Calibration, Run workbench,
+# Proposals, Release). Never auto-release or silent pack bumps.
 
 display_name: "EduOS — Education Operating System"
 
@@ -31,16 +35,28 @@ persona: >
   You are the EduOS assistant for ClearTurn education deployments. You help
   professors, markers, students, and QA with GradeVance assessment and
   coaching workflows. You explain criteria, devices, queues, and feedback
-  patterns.   You never invent grades, never auto-release summative marks,
+  patterns. You never invent grades, never auto-release summative marks,
   and never mutate assessment records without an explicit confirmed action
   through the host. Prefer formative coaching language (strengths,
   diagnosis, action) over score-only replies. Treat HITL as core: help
-  markers triage, draft feedback, and propose device/rubric improvements
-  from corrections — never silently activate new pack versions.
+  markers triage, draft feedback, and propose device/rubric/segmentation
+  improvements from corrections — never silently activate new pack versions.
+
+  ## LCT coding (Maton)
+  Semantic Gravity and Semantic Density use plus/minus codes only: SG+, SG-,
+  SD+, SD-. SG+ = stronger gravity (more concrete / context-dependent);
+  SG- = weaker gravity (more abstract / transferable). Do not invent SG++ or SG--.
+
+  ## Segmentation
+  Coding κ is measured on expert-presegmented atoms. Boundary fidelity is a
+  separate calibration (span-overlap F1). When segmentation looks wrong, direct
+  the user to Teach → Calibration → Resegment (held-out) or Run workbench →
+  Resegment — do not invent spans. You may call suggest_splits for draft cue
+  hints only; the professor must confirm splits in the Teach painter.
 
   ## Scope
   In scope: GradeVance assignments, profiles, LCT/rubric packs, submissions,
-  review, appeals, reliability/fairness concepts, coaching drafts.
+  review, appeals, reliability/fairness concepts, coaching drafts, calibration κ.
   Out of scope: Nibras payroll/HR, Carbon emissions, Healthy factory ops,
   inventing student PII, changing published profile versions silently.
 
@@ -50,3 +66,48 @@ capabilities:
   - gradevance.explain
   - gradevance.coach_draft
   - gradevance.review_triage
+  - gradevance:view
+  - gradevance:manage
+
+# Read-only host APIs Pulse may call (CBAC still applies). Mutations stay in Teach UI.
+api_catalog:
+  - name: get_calibration
+    method: GET
+    path: /carbon-api/gradevance/calibration/
+    description: Held-out coding κ + segmentation fidelity for a profile pack.
+    confirmation_message: null
+  - name: list_review_queue
+    method: GET
+    path: /carbon-api/gradevance/review-queue/
+    description: Open HITL review items for triage.
+  - name: get_qa_summary
+    method: GET
+    path: /carbon-api/gradevance/qa/summary/
+    description: QA console summary (gates, gold status).
+  - name: list_proposals
+    method: GET
+    path: /carbon-api/gradevance/proposals/
+    description: Draft/open learning-loop proposals (anchors, segmentation policy).
+  - name: get_run
+    method: GET
+    path: /carbon-api/gradevance/runs/{run_id}/
+    description: Analysis run detail including LCT segments and ExpertEdits.
+  - name: suggest_splits
+    method: POST
+    path: /carbon-api/gradevance/calibration/suggest-splits/
+    description: >
+      Draft-only discourse-cue split suggestions for an essay (advisory).
+      Never mutates packs or ExpertEdits — professor confirms in Teach Resegment.
+    confirmation_message: null
+
+navigation_routes:
+  - label: Teach
+    path: /teach
+  - label: Calibration
+    path: /teach/calibration
+  - label: Marking
+    path: /teach/marking
+  - label: Proposals
+    path: /teach/proposals
+  - label: Learn
+    path: /learn

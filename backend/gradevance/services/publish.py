@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from gradevance.services.canary import evaluate_canary
+from gradevance.services.lct_scale import canonicalize_sd, canonicalize_sg
 from gradevance.services.packs import LoadedProfile, eduos_pack_root, load_device, load_profile
 from gradevance.services.pipeline import _SegDraft, code_segment
 from gradevance.services.reliability import passes_reliability_gate
@@ -48,9 +49,11 @@ def _engine_dim_labels_for_held_out(
     for row in rows:
         for seg in row.get("segments") or []:
             if dimension == "semantic_gravity":
-                expert_lab = seg.get("sg_label") or f"N{seg.get('sg_numeric')}"
+                expert_lab = canonicalize_sg(
+                    seg.get("sg_label") or f"N{seg.get('sg_numeric')}"
+                ) or "SG-"
             else:
-                expert_lab = seg.get("sd_label")
+                expert_lab = canonicalize_sd(seg.get("sd_label"))
                 if not expert_lab:
                     continue
             draft = _SegDraft(
@@ -63,8 +66,13 @@ def _engine_dim_labels_for_held_out(
             codes = code_segment(draft, device.anchors, True)
             hit = next((c for c in codes if c["dimension"] == dimension), None)
             default = "SG-" if dimension == "semantic_gravity" else "SD-"
+            eng_val = (hit or {}).get("value") or default
+            if dimension == "semantic_gravity":
+                eng_val = canonicalize_sg(eng_val) or default
+            else:
+                eng_val = canonicalize_sd(eng_val) or default
             expert.append(expert_lab)
-            engine.append((hit or {}).get("value") or default)
+            engine.append(eng_val)
     return expert, engine
 
 

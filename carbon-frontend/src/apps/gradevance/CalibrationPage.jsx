@@ -2,8 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  Alert, Box, Button, Chip, FormControl, InputLabel, MenuItem, Paper, Select,
+import { Alert, Box, Button, Chip, FormControl, InputLabel, MenuItem, Paper, Select,
   Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography,
 } from '@mui/material';
 import VerifiedIcon from '@mui/icons-material/Verified';
@@ -11,9 +10,11 @@ import PageContainer from '../../components/layout/PageContainer';
 import PageHeader from '../../components/Page/PageHeader';
 import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
 import ErrorAlert from '../../components/Page/ErrorAlert';
+import SystemDialog from '../../components/SystemDialog';
+import SegmentationEditor, { suggestSplitPoints, buildSegDraft } from '../../components/gradevance/SegmentationEditor';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
-import { fetchCalibration, fetchProfiles } from '../../api/gradevance';
+import { fetchCalibration, fetchProfiles, proposeCalibrationSegmentation, suggestSegmentationSplits } from '../../api/gradevance';
 import SkipToMain from './SkipToMain';
 
 export default function CalibrationPage() {
@@ -29,6 +30,14 @@ export default function CalibrationPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [msg, setMsg] = useState(null);
+  const [essayOpen, setEssayOpen] = useState(false);
+  const [essay, setEssay] = useState(null);
+  const [segDraft, setSegDraft] = useState(null);
+  const [segRationale, setSegRationale] = useState('');
+  const [segKey, setSegKey] = useState(0);
+  const [segSuggestions, setSegSuggestions] = useState(null);
+  const [busy, setBusy] = useState(false);
 
   const loadProfiles = useCallback(() => {
     fetchProfiles(token)
@@ -61,6 +70,41 @@ export default function CalibrationPage() {
       return next;
     }, { replace: true });
   }, [packId, setParams]);
+
+  const openEssayResegment = (row) => {
+    setEssay(row);
+    setSegDraft(row.expert_segments || []);
+    setSegRationale('');
+    setSegSuggestions(null);
+    setSegKey((k) => k + 1);
+    setEssayOpen(true);
+  };
+
+  const saveEssayResegment = async () => {
+    if (!essay || !segRationale.trim() || !segDraft?.length) {
+      setError('Rationale and segments required');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setMsg(null);
+    try {
+      const res = await proposeCalibrationSegmentation(token, {
+        example_id: essay.example_id,
+        segments: segDraft,
+        rationale: segRationale.trim(),
+        source_pack_rel: data?.lct_device_pack_path,
+        profile_pack_id: packId,
+      });
+      setMsg(`Draft proposal ${res.id} (${res.kind}) — Accept → Bump on Proposals`);
+      setEssayOpen(false);
+      navigate('/teach/proposals');
+    } catch (e) {
+      setError(e?.message || 'Failed to propose segmentation');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const gate = data?.publish_gate || {};
   const rel = gate.reliability;
@@ -145,7 +189,84 @@ export default function CalibrationPage() {
             />
           )}
           <Chip size="small" label={`${data?.pair_count ?? 0} segment pairs`} variant="outlined" />
+          {data?.lct_scale?.semantic_gravity?.type && (
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`SG ${data.lct_scale.semantic_gravity.type}: ${(data.lct_scale.semantic_gravity.levels || []).join('/')}`}
+            />
+          )}
+          {data?.segmentation_fidelity?.mean_f1 != null && (
+            <Chip
+              size="small"
+              color={data.segmentation_fidelity.mean_f1 >= 0.5 ? 'success' : 'warning'}
+              label={`Seg F1 ${Number(data.segmentation_fidelity.mean_f1).toFixed(2)}`}
+            />
+          )}
         </Stack>
+
+        {data?.segmentation_fidelity && !data.segmentation_fidelity.error && (
+          <Paper sx={{ p: 2, mb: 2 }} component="section" aria-label="Segmentation calibration" data-testid="seg-calibration">
+            <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Segmentation calibration</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              {data.segmentation_fidelity.note}
+            </Typography>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
+              <Chip size="small" label={`${data.segmentation_fidelity.essay_count} essays`} />
+              <Chip size="small" label={`mean F1 ${data.segmentation_fidelity.mean_f1}`} />
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`|Δ count| ${data.segmentation_fidelity.mean_abs_count_delta}`}
+              />
+            </Stack>
+            <Table size="small" aria-label="Held-out essays for resegmentation">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Essay</TableCell>
+                  <TableCell>F1</TableCell>
+                  <TableCell>Expert segs</TableCell>
+                  <TableCell>Engine segs</TableCell>
+                  <TableCell>Action</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(data.segmentation_fidelity.essays || []).map((row) => (
+                  <TableRow key={row.example_id} hover selected={row.f1 < 0.6}>
+                    <TableCell>
+                      <Typography variant="caption">{row.example_id}</Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        size="small"
+                        color={row.f1 >= 0.6 ? 'success' : 'warning'}
+                        label={Number(row.f1).toFixed(2)}
+                      />
+                    </TableCell>
+                    <TableCell>{(row.expert_segments || []).length}</TableCell>
+                    <TableCell>{row.engine_segment_count}</TableCell>
+                    <TableCell>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => openEssayResegment(row)}
+                        data-testid={`resegment-essay-${row.example_id}`}
+                      >
+                        Resegment
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Paper>
+        )}
+        {msg && <Alert severity="success" sx={{ mb: 2 }} role="status">{msg}</Alert>}
+        {data?.segmentation_fidelity?.error && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Segmentation fidelity unavailable: {data.segmentation_fidelity.error}
+          </Alert>
+        )}
 
         {gate.expert_trusted === false && (
           <Alert severity="info" sx={{ mb: 2 }}>
@@ -228,6 +349,51 @@ export default function CalibrationPage() {
           </Table>
         </Paper>
       </Box>
+
+      <SystemDialog
+        open={essayOpen}
+        title={essay ? `Resegment · ${essay.example_id}` : 'Resegment held-out essay'}
+        onClose={() => setEssayOpen(false)}
+        onCancel={() => setEssayOpen(false)}
+        cancelLabel="Cancel"
+        width={780}
+        height={620}
+        actions={(
+          <Button
+            variant="contained"
+            onClick={saveEssayResegment}
+            disabled={busy || !segRationale.trim() || !segDraft?.length}
+            data-testid="save-cal-resegment"
+          >
+            Propose segmentation_policy
+          </Button>
+        )}
+      >
+        <SegmentationEditor
+          key={segKey}
+          segments={essay?.expert_segments || []}
+          fullText={essay?.text || ''}
+          rationale={segRationale}
+          onRationaleChange={setSegRationale}
+          onChange={setSegDraft}
+          suggestedSplits={segSuggestions}
+          onRequestSuggestions={async () => {
+            const full = essay?.text || '';
+            const segs = segDraft || essay?.expert_segments || [];
+            try {
+              const res = await suggestSegmentationSplits(token, { text: full, segments: segs });
+              if (res?.suggestions?.length) {
+                setSegSuggestions(res.suggestions);
+                return;
+              }
+            } catch {
+              /* local fallback */
+            }
+            const { words, draft } = buildSegDraft(segs, full);
+            setSegSuggestions(suggestSplitPoints(words, draft, 6));
+          }}
+        />
+      </SystemDialog>
     </PageContainer>
   );
 }

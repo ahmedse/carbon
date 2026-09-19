@@ -17,18 +17,14 @@ dimension_set:
 - semantic_density
 scale:
   semantic_gravity:
-    type: ordinal
+    type: binary
     levels:
-    - SG++
     - SG+
     - SG-
-    - SG--
     numeric:
     - 1
     - 2
-    - 3
-    - 4
-    axis_note: 'Expert gold Y-axis: 4=SG-- (most abstract/general), 1=SG++ (most concrete/specific).'
+    axis_note: 'Maton pedagogic codes — SG+ = stronger gravity (more concrete/context-dependent); SG- = weaker gravity (more abstract/transferable). Wave Y uses numeric 1=SG+, 2=SG-.'
   semantic_density:
     type: binary
     levels:

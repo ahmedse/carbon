@@ -589,7 +589,7 @@ class RunDetailView(APIView):
                 AnalysisRun.objects.select_related(
                     "wave", "submission", "submission__assignment", "submission__assignment__course"
                 )
-                .prefetch_related("segments__codes", "rubric_scores")
+                .prefetch_related("segments__codes", "rubric_scores", "expert_edits")
                 .get(pk=run_id)
             )
         except AnalysisRun.DoesNotExist:
@@ -601,6 +601,17 @@ class RunDetailView(APIView):
             asg_data["course_detail"] = CourseSerializer(asg.course).data
         payload["assignment"] = asg_data
         payload["submission_detail"] = SubmissionSerializer(run.submission).data
+        # Device scale for HITL UI (Maton SG± × SD± by default).
+        from gradevance.services.lct_scale import scale_from_device
+        from gradevance.services.packs import load_device
+
+        pack_rel = ((run.pipeline_snapshot or {}).get("lct_device") or {}).get("pack_path")
+        try:
+            payload["lct_scale"] = scale_from_device(
+                load_device(pack_rel).device if pack_rel else {}
+            )
+        except Exception:  # noqa: BLE001
+            payload["lct_scale"] = scale_from_device({})
         return Response(payload)
 
 
@@ -650,6 +661,7 @@ class CalibrationPreviewView(APIView):
         )
 
         pairs = []
+        segmentation = None
         if device_rel:
             expert, engine = engine_sg_labels_for_held_out(device_rel)
             expert_sd, engine_sd = engine_sd_labels_for_held_out(device_rel)
@@ -675,6 +687,66 @@ class CalibrationPreviewView(APIView):
                         }
                     )
                     flat_i += 1
+            # Segmentation fidelity — re-segment full text vs expert spans (boundary F1).
+            try:
+                from gradevance.services.packs import load_device as _ld
+                from gradevance.services.pipeline import segment_text
+                from gradevance.services.segmentation_metrics import align_segment_f1
+
+                device_loaded = _ld(device_rel)
+                seg_policy = device_loaded.segmentation or {}
+                f1s = []
+                count_deltas = []
+                essays = []
+                for row in rows:
+                    full = (row.get("text") or "").strip()
+                    if not full:
+                        full = " ".join(
+                            (s.get("text") or "").strip() for s in (row.get("segments") or [])
+                        )
+                    if not full:
+                        continue
+                    eng = segment_text(full, seg_policy)
+                    expert_segs = row.get("segments") or []
+                    align = align_segment_f1(expert_segs, eng)
+                    f1s.append(align["f1"])
+                    count_deltas.append(abs(len(eng) - len(expert_segs)))
+                    essays.append(
+                        {
+                            "example_id": row.get("id"),
+                            "text": full,
+                            "expert_segments": [
+                                {
+                                    "ordinal": int(s.get("segment_index") or i),
+                                    "start_word": int(s.get("word_start") or 0),
+                                    "end_word": int(s.get("word_end") or 0),
+                                    "stage_guess": s.get("stage_guess") or "what",
+                                    "text": s.get("text") or "",
+                                    "sg_label": s.get("sg_label"),
+                                    "sd_label": s.get("sd_label"),
+                                }
+                                for i, s in enumerate(expert_segs)
+                            ],
+                            "engine_segment_count": len(eng),
+                            "f1": align["f1"],
+                            "precision": align["precision"],
+                            "recall": align["recall"],
+                        }
+                    )
+                if f1s:
+                    segmentation = {
+                        "method": "span_overlap_f1",
+                        "essay_count": len(f1s),
+                        "mean_f1": round(sum(f1s) / len(f1s), 4),
+                        "mean_abs_count_delta": round(sum(count_deltas) / len(count_deltas), 2),
+                        "essays": essays,
+                        "note": (
+                            "Boundary calibration: expert spans vs engine re-segmentation. "
+                            "Open Resegment on a weak essay → propose segmentation_policy."
+                        ),
+                    }
+            except Exception as exc:  # noqa: BLE001 — coding κ still returned
+                segmentation = {"error": str(exc)[:200]}
         # Surface both dimensions on gate for Calibration / QA UI
         if isinstance(gate, dict) and gate.get("reliability") and isinstance(gate["reliability"], dict):
             gate = {
@@ -682,17 +754,140 @@ class CalibrationPreviewView(APIView):
                 "kappa": gate.get("kappa") or gate["reliability"].get("value"),
                 "kappa_sd": gate.get("kappa_sd"),
             }
+        from gradevance.services.lct_scale import scale_from_device
+        from gradevance.services.packs import load_device as _load_dev
+
+        lct_scale = {}
+        if device_rel:
+            try:
+                lct_scale = scale_from_device(_load_dev(device_rel).device)
+            except Exception:  # noqa: BLE001
+                lct_scale = scale_from_device({})
         return Response(
             {
                 "profile_pack_id": pack_id,
                 "profile_version": version,
                 "profile_name": loaded.profile.get("name"),
                 "lct_device": device,
+                "lct_device_pack_path": device_rel,
+                "lct_scale": lct_scale,
                 "rubric_pack": loaded.profile.get("rubric_pack"),
                 "pipeline": loaded.profile.get("pipeline"),
                 "publish_gate": gate,
                 "segment_pairs": pairs,
                 "pair_count": len(pairs),
+                "segmentation_fidelity": segmentation,
+            }
+        )
+
+
+class CalibrationSegmentationProposeView(APIView):
+    """Save a held-out resegmentation as a draft segmentation_policy Proposal."""
+
+    permission_classes = [IsAuthenticated, GradevanceManageAccess]
+
+    def post(self, request):
+        data = request.data or {}
+        example_id = (data.get("example_id") or "").strip()
+        segments = data.get("segments")
+        rationale = (data.get("rationale") or "").strip()
+        pack_path = (
+            data.get("source_pack_rel")
+            or data.get("lct_device_pack_path")
+            or "engines/lct_semantics/naa_reflective_v1"
+        )
+        profile_pack_id = data.get("profile_pack_id") or "naa_cycle1_exam_prep"
+        if not example_id:
+            return Response({"detail": "example_id required"}, status=400)
+        if not isinstance(segments, list) or not segments:
+            return Response({"detail": "segments required"}, status=400)
+        if not rationale:
+            return Response({"detail": "rationale required"}, status=400)
+
+        prop = Proposal.objects.create(
+            kind="segmentation_policy",
+            status=Proposal.STATUS_DRAFT,
+            payload={
+                "kind": "segmentation_policy",
+                "example_id": example_id,
+                "segments": segments,
+                "sample_rationale": rationale,
+                "source_pack_rel": pack_path,
+                "base_profile_id": profile_pack_id,
+                "edit_count": 1,
+                "proposed_by": getattr(request.user, "username", None),
+            },
+            source_edit_ids=[],
+        )
+        return Response(
+            {
+                "id": str(prop.id),
+                "kind": prop.kind,
+                "status": prop.status,
+                "note": "Draft segmentation_policy — Accept → Bump pack to write segmentation.yaml.",
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class SuggestSplitsView(APIView):
+    """Pulse/HITL assist — suggest split points (draft only; never mutates SoR)."""
+
+    permission_classes = [IsAuthenticated, GradevanceViewAccess]
+
+    def post(self, request):
+        data = request.data or {}
+        text = data.get("text") or ""
+        segments = data.get("segments") or []
+        words = (text or "").split()
+        if not words and segments:
+            words = []
+            for s in segments:
+                words.extend((s.get("text") or "").split())
+        markers = {
+            "however", "therefore", "later", "thus", "because", "example",
+            "next", "now", "so", "then", "finally", "first",
+        }
+        # Build draft spans
+        draft = []
+        if segments:
+            for i, s in enumerate(segments):
+                draft.append(
+                    {
+                        "ordinal": i,
+                        "start_word": int(s.get("start_word") or 0),
+                        "end_word": int(s.get("end_word") or 0),
+                    }
+                )
+        else:
+            draft = [{"ordinal": 0, "start_word": 0, "end_word": len(words)}]
+
+        suggestions = []
+        for seg in draft:
+            for wi in range(seg["start_word"] + 1, max(seg["start_word"] + 1, seg["end_word"])):
+                if wi >= len(words):
+                    break
+                w = words[wi].lower().strip(".,;:!?\"'")
+                prev = words[wi - 1].lower().strip(".,;:!?\"'") if wi else ""
+                if w in markers or prev in markers or (words[wi - 1].endswith((".", "!", "?"))):
+                    suggestions.append(
+                        {
+                            "after_word": wi,
+                            "segment_ordinal": seg["ordinal"],
+                            "cue": words[wi - 1],
+                            "preview": " ".join(
+                                words[max(seg["start_word"], wi - 3) : min(seg["end_word"], wi + 3)]
+                            ),
+                        }
+                    )
+                if len(suggestions) >= 8:
+                    break
+            if len(suggestions) >= 8:
+                break
+        return Response(
+            {
+                "suggestions": suggestions,
+                "note": "Draft only — apply in Teach Resegment editor; never auto-writes packs.",
             }
         )
 
@@ -847,16 +1042,24 @@ class ProposalBumpView(APIView):
             return Response({"detail": "Not found"}, status=404)
         data = request.data or {}
         try:
-            result = PackBumpService().bump_device_from_proposal(
-                prop,
-                source_pack_rel=data.get("source_pack_rel")
-                or "engines/lct_semantics/naa_reflective_v1",
-                expert_labels=data.get("expert_labels"),
-                engine_labels=data.get("engine_labels"),
-                held_out_n=data.get("held_out_n"),
-                minimum_kappa=float(data.get("minimum_kappa") or 0.6),
-                require_canary=bool(data.get("require_canary", False)),
-            )
+            if prop.kind == "segmentation_policy":
+                result = PackBumpService().bump_segmentation_from_proposal(
+                    prop,
+                    source_pack_rel=data.get("source_pack_rel")
+                    or (prop.payload or {}).get("source_pack_rel")
+                    or "engines/lct_semantics/naa_reflective_v1",
+                )
+            else:
+                result = PackBumpService().bump_device_from_proposal(
+                    prop,
+                    source_pack_rel=data.get("source_pack_rel")
+                    or "engines/lct_semantics/naa_reflective_v1",
+                    expert_labels=data.get("expert_labels"),
+                    engine_labels=data.get("engine_labels"),
+                    held_out_n=data.get("held_out_n"),
+                    minimum_kappa=float(data.get("minimum_kappa") or 0.6),
+                    require_canary=bool(data.get("require_canary", False)),
+                )
         except PackBumpError as exc:
             return Response({"detail": str(exc)}, status=400)
         return Response(result, status=status.HTTP_201_CREATED)

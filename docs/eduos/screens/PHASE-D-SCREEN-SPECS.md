@@ -3,7 +3,7 @@
 **Status:** Approved for implementation — 2026-09-19 (Master Architect / EduOS)
 **Scope:** Complete remaining Phase D + ADR-0042 product commitments that were thin or missing.
 **Primitives (reuse only):** `PageContainer`, `PageHeader`, `LoadingSkeleton`, `ErrorAlert`, `EmptyState`, MUI `size="small"`, compact-ui density for teach/engine; learn uses same primitives with slightly larger tap targets (`minHeight` via `size="small"` buttons still).
-**No raw `alert()`.** Mid-flow errors: `ErrorAlert` or inline `Alert` with retry. Forms: no new Drawer invent; use MUI Drawer only where RunWorkbench already does for HITL edit.
+**No raw `alert()`.** Mid-flow errors: `ErrorAlert` or inline `Alert` with retry. Forms: **SystemDialog** (never raw Drawer/Dialog). HITL ExpertEdit on Run workbench uses SystemDialog.
 
 ---
 

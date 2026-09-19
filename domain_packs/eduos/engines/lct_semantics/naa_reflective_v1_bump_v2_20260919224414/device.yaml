@@ -1,13 +1,13 @@
 id: naa_reflective_semantics
 version: 2
 engine: lct_semantics
-name: NAA Reflective Writing — Semantics (SG×SD) (bump v2)
+name: NAA Reflective Writing — Semantics (SG×SD) (seg bump v2)
 description: 'First gold TranslationDevice from gradevance2/raw LCT Reflective Wave
   criteria (Maton & Chen 2016 adapted). Academic English reflection genre ONLY — not
   product identity.
 
-  Promoted from proposal 6f48f2f5-d133-446f-b78c-00cd59fecca9 at 2026-09-18T22:20:13.554872+00:00
-  — activate for NEW runs only.'
+  Segmentation promoted from proposal 0b8dfb3a-3e34-427d-b83d-13c3a6c8ed2a at 2026-09-19T22:44:14.891714+00:00
+  — NEW runs only.'
 discipline: academic_english
 genre: academic_reflection
 level: ug_foundation
@@ -24,7 +24,9 @@ scale:
     numeric:
     - 1
     - 2
-    axis_note: 'Maton pedagogic codes — SG+ = stronger gravity (more concrete/context-dependent); SG- = weaker gravity (more abstract/transferable). Wave Y uses numeric 1=SG+, 2=SG-.'
+    axis_note: Maton pedagogic codes — SG+ = stronger gravity (more concrete/context-dependent);
+      SG- = weaker gravity (more abstract/transferable). Wave Y uses numeric 1=SG+,
+      2=SG-.
   semantic_density:
     type: binary
     levels:
@@ -37,7 +39,9 @@ scale:
 reliability_gate:
   metric: cohen_kappa
   minimum: 0.6
+  minimum_sd: 0.4
   required_for_summative: true
+  held_out_status: expert_disjoint
 hitl:
   learning_enabled: true
   promote_edits_to_anchors: true

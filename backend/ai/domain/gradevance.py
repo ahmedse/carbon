@@ -56,6 +56,10 @@ class GradeVanceDomainAI(DomainAIOperations):
         "release; formative coaching may be advisory with an explicit watermark. "
         "Engine intelligence improves via versioned pack promotions from ExpertEdit "
         "events — never silent fine-tunes or silent cohort regrades. "
+        "LCT codes are Maton SG± and SD± only (plus/minus). Do not invent SG++/SG--. "
+        "Segmentation calibration (boundary F1) is separate from coding κ — point "
+        "users to Teach Calibration → Resegment or Run workbench Resegment. "
+        "suggest_splits is draft assist only; never claim spans were written. "
         "You are advisory only: never release marks, never publish devices/rubrics, "
         "and never invent κ statistics. Packs are discipline×genre specific — do not "
         "treat GradeVance as an Academic English-only product."
@@ -81,12 +85,16 @@ class GradeVanceDomainAI(DomainAIOperations):
                     "analysis_run",
                     "semantic_gravity",
                     "semantic_density",
+                    "maton_sg_sd_binary",
+                    "segmentation_calibration",
                     "expert_edit",
                     "proposal",
                     "formative_coaching",
                 ],
                 "modes": ["formative", "summative", "calibration"],
                 "hitl": "mandatory_for_summative_release",
+                "lct_codes": ["SG+", "SG-", "SD+", "SD-"],
+                "pulse_role": "advisory_only",
             },
             domain_config={
                 "packs_root": "domain_packs/eduos",
@@ -95,7 +103,85 @@ class GradeVanceDomainAI(DomainAIOperations):
         )
 
     def get_tools(self) -> list[ToolDef]:
-        return []
+        """Read-only GradeVance host tools — Teach UIs own mutations."""
+        return [
+            ToolDef(
+                id="gradevance.get_calibration",
+                description=(
+                    "Fetch held-out coding κ (SG/SD) and segmentation span-overlap F1 "
+                    "for a GradeVance profile pack. Use before advising on publish readiness."
+                ),
+                required_capability="gradevance:view",
+                is_mutation=False,
+                domain="gradevance",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "profile_pack_id": {
+                            "type": "string",
+                            "description": "Profile pack id (e.g. naa_cycle1_exam_prep).",
+                        },
+                        "profile_version": {
+                            "type": "integer",
+                            "description": "Profile version (default 1).",
+                        },
+                    },
+                },
+                output_description="Publish gate, SG/SD κ, segmentation_fidelity, segment_pairs sample.",
+            ),
+            ToolDef(
+                id="gradevance.list_review_queue",
+                description="List open HITL review items for marker triage.",
+                required_capability="gradevance:view",
+                is_mutation=False,
+                domain="gradevance",
+                input_schema={"type": "object", "properties": {}},
+                output_description="Open ReviewItem rows with run ids and reasons.",
+            ),
+            ToolDef(
+                id="gradevance.get_qa_summary",
+                description="QA console summary — gold status, gates, fairness notes.",
+                required_capability="gradevance:view",
+                is_mutation=False,
+                domain="gradevance",
+                input_schema={"type": "object", "properties": {}},
+                output_description="QA summary payload for the EduOS GradeVance instance.",
+            ),
+            ToolDef(
+                id="gradevance.list_proposals",
+                description="List learning-loop proposals (anchors, rubric notes, segmentation policy).",
+                required_capability="gradevance:manage",
+                is_mutation=False,
+                domain="gradevance",
+                input_schema={"type": "object", "properties": {}},
+                output_description="Draft/proposed Proposal rows awaiting accept/bump/repin.",
+            ),
+            ToolDef(
+                id="gradevance.suggest_splits",
+                description=(
+                    "Suggest draft split points (discourse cues) for an essay. "
+                    "Advisory only — professor must apply in Teach Resegment painter."
+                ),
+                required_capability="gradevance:view",
+                is_mutation=False,
+                domain="gradevance",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "text": {
+                            "type": "string",
+                            "description": "Full essay text to analyze.",
+                        },
+                        "segments": {
+                            "type": "array",
+                            "description": "Optional current segments with start_word/end_word.",
+                        },
+                    },
+                    "required": ["text"],
+                },
+                output_description="suggestions[] with after_word, cue, preview — draft only.",
+            ),
+        ]
 
 
 register_domain("gradevance", GradeVanceDomainAI)
