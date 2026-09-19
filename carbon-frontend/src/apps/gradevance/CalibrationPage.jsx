@@ -1,7 +1,7 @@
 // Calibration — held-out expert vs engine + κ (prove the instrument).
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Alert, Box, Button, Chip, FormControl, InputLabel, MenuItem, Paper, Select,
   Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography,
@@ -17,7 +17,9 @@ import { fetchCalibration, fetchProfiles } from '../../api/gradevance';
 import SkipToMain from './SkipToMain';
 
 export default function CalibrationPage() {
-  useDocumentTitle('GradeVance · Calibration');
+  const { pathname } = useLocation();
+  const titlePrefix = pathname.startsWith('/teach') ? 'Teach' : 'GradeVance';
+  useDocumentTitle(`${titlePrefix} · Calibration`);
   const { token } = useAuth();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -66,7 +68,8 @@ export default function CalibrationPage() {
     gate.kappa
     ?? gate.cohen_kappa
     ?? gate.held_out_kappa
-    ?? (typeof rel === 'object' ? rel?.kappa : rel);
+    ?? (typeof rel === 'object' ? (rel?.value ?? rel?.kappa) : rel);
+  const kappaSd = gate.kappa_sd ?? gate.reliability_sd?.value;
   const allowed = gate.passed ?? gate.allowed ?? null;
 
   if (loading && !data) {
@@ -85,12 +88,12 @@ export default function CalibrationPage() {
         <PageHeader
           icon={VerifiedIcon}
           title="Calibration"
-          subtitle="Held-out expert vs engine SG — κ gate before summative publish."
+          subtitle="Held-out expert vs engine SG/SD — summative κ gate (seeded packs stay blocked)."
           actions={(
             <Button
               size="small"
               variant="contained"
-              onClick={() => navigate(`/apps/gradevance/courses?pack=${encodeURIComponent(packId)}`)}
+              onClick={() => navigate(`/teach/stems?tab=author&pack=${encodeURIComponent(packId)}`)}
             >
               Use in stem
             </Button>
@@ -114,7 +117,7 @@ export default function CalibrationPage() {
               ))}
             </Select>
           </FormControl>
-          <Button size="small" variant="outlined" onClick={() => navigate('/apps/gradevance/proposals')}>
+          <Button size="small" variant="outlined" onClick={() => navigate('/teach/proposals')}>
             Proposals
           </Button>
         </Stack>
@@ -126,16 +129,40 @@ export default function CalibrationPage() {
             color={allowed === true ? 'success' : allowed === false ? 'warning' : 'default'}
             label={
               kappa != null
-                ? `κ ${Number(kappa).toFixed(3)} · ${allowed === false ? 'gate blocked' : allowed === true ? 'gate ok' : 'gate'}`
+                ? `SG κ ${Number(kappa).toFixed(3)} · ${allowed === false ? 'gate blocked' : allowed === true ? 'gate ok' : 'gate'}`
                 : (gate.detail || gate.reason || 'publish gate')
             }
           />
+          {kappaSd != null && (
+            <Chip size="small" variant="outlined" label={`SD κ ${Number(kappaSd).toFixed(3)}`} />
+          )}
+          {gate.gold_status && (
+            <Chip
+              size="small"
+              color={gate.expert_trusted ? 'success' : 'warning'}
+              variant="outlined"
+              label={gate.expert_trusted ? `gold: ${gate.gold_status}` : `gold: ${gate.gold_status} (not expert)`}
+            />
+          )}
           <Chip size="small" label={`${data?.pair_count ?? 0} segment pairs`} variant="outlined" />
         </Stack>
 
-        {allowed === false && (
+        {gate.expert_trusted === false && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Held-out is seeded or overlaps anchors — κ is informational only. Summative publish stays blocked until faculty expert gold (Instrument Trust B4).
+            {gate.reason ? ` ${gate.reason}` : ''}
+          </Alert>
+        )}
+
+        {allowed === false && gate.expert_trusted !== false && (
           <Alert severity="warning" sx={{ mb: 2 }}>
             Summative publish fails closed for this profile. Fix packs via Proposals — do not lower the bar silently.
+          </Alert>
+        )}
+
+        {allowed === false && gate.expert_trusted === false && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            Summative publish blocked: instrument not expert-proven yet. Do not lower κ floors to force green.
           </Alert>
         )}
 
@@ -151,6 +178,7 @@ export default function CalibrationPage() {
                 <TableCell>Expert SG</TableCell>
                 <TableCell>Engine SG</TableCell>
                 <TableCell>Expert SD</TableCell>
+                <TableCell>Engine SD</TableCell>
                 <TableCell>Excerpt</TableCell>
               </TableRow>
             </TableHead>
@@ -171,10 +199,14 @@ export default function CalibrationPage() {
                         size="small"
                         label={row.engine_sg || '—'}
                         color={mismatch ? 'warning' : 'default'}
-                        variant="outlined"
                       />
                     </TableCell>
-                    <TableCell>{row.expert_sd || '—'}</TableCell>
+                    <TableCell>
+                      <Chip size="small" label={row.expert_sd || '—'} variant="outlined" />
+                    </TableCell>
+                    <TableCell>
+                      <Chip size="small" label={row.engine_sd || '—'} variant="outlined" />
+                    </TableCell>
                     <TableCell>
                       <Typography variant="caption" color="text.secondary">
                         {(row.text || '').slice(0, 100)}{(row.text || '').length > 100 ? '…' : ''}
@@ -185,7 +217,7 @@ export default function CalibrationPage() {
               })}
               {!(data?.segment_pairs || []).length && (
                 <TableRow>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={7}>
                     <Typography color="text.secondary">
                       No held-out pairs for this profile — check device held_out.jsonl.
                     </Typography>

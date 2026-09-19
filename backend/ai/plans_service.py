@@ -73,6 +73,30 @@ logger = logging.getLogger("carbon.ai.plans_service")
 PLAN_INSTANCE_ID = resolve_instance_id()
 
 
+def _coerce_plan_json(raw) -> dict:
+    """Normalize ``Run.plan_json`` to a dict for Django JSONField reads.
+
+    The engine SQLAlchemy layer stores ``plan_json`` as a JSON *string*
+    (``json.dumps(asdict(plan))``). Django's JSONField then surfaces that as
+    a Python ``str``, which crashes list/get serialization. Accept dicts,
+    JSON strings, and junk → always return a dict.
+    """
+    if raw is None:
+        return {}
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        text = raw.strip()
+        if not text:
+            return {}
+        try:
+            parsed = json.loads(text)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
 def _plan_instance_config(host_user_id: str | None = None) -> dict:
     """Brand-resolved instance config for plan execution (not hard-coded carbon).
 
@@ -703,6 +727,16 @@ class PlansService:
                 event_type,
                 payload={"outcome": outcome} if outcome else {},
             )
+        # ADR-0041 — keep Agent Job Map live_run in sync with execution.
+        try:
+            from ai.ops_canvas import sync_agent_job_map_from_run
+            from ai.models.core import Run
+
+            run = Run.objects.filter(id=step.run_id).first()
+            if run is not None:
+                sync_agent_job_map_from_run(run)
+        except Exception:  # noqa: BLE001
+            logger.debug("ops_canvas step sync failed", exc_info=True)
         return step
 
     @staticmethod
@@ -1223,7 +1257,7 @@ class PlansService:
         """Product-facing plan payload (RULE_23 — outcome terms only)."""
         from ai.models.core import RunArtifact, RunStep
 
-        plan_json = run.plan_json or {}
+        plan_json = _coerce_plan_json(run.plan_json)
         # Service-owned per-step metadata (e.g. ``instructions`` from step
         # edits) rides in plan_json — engine fields stay untouched. Legacy
         # rows may carry string reprs, so guard with isinstance.
@@ -1401,7 +1435,9 @@ class PlansService:
         from ai.step_journal import StepJournal
 
         run = Run.objects.filter(id=run_id).first()
-        graph_raw = (run.plan_json or {}).get("workflow_graph") if run else None
+        graph_raw = (
+            _coerce_plan_json(run.plan_json).get("workflow_graph") if run else None
+        )
         if not graph_raw:
             return {"chosen": None, "evaluations": []}
         graph = WorkflowGraph.from_dict(graph_raw)
@@ -1611,16 +1647,42 @@ class PlansService:
 
         Steps are matched by ``key`` (``"intent"`` for replans where step ids
         are regenerated, ``"step_id"`` for in-place step edits where the id is
-        stable). ``changed`` entries carry ``{"old": ..., "new": ...}`` pairs.
+        stable). When lengths match on a replan, prefer **positional** pairing
+        so the same slot with reworded intent shows as ``changed`` instead of
+        remove+add. ``changed`` entries carry ``{"old": ..., "new": ...}``.
         """
-        def _key(s):
-            s = s if isinstance(s, dict) else {}
-            if key == "step_id":
+        old_list = [s for s in old_steps if isinstance(s, dict)]
+        new_list = [s for s in new_steps if isinstance(s, dict)]
+
+        if key == "step_id":
+            def _sid(s):
                 return s.get("step_id")
+
+            old = {_sid(s): s for s in old_list if _sid(s) is not None}
+            new = {_sid(s): s for s in new_list if _sid(s) is not None}
+            added = [s for k, s in new.items() if k not in old]
+            removed = [s for k, s in old.items() if k not in new]
+            changed = [
+                {"old": old[k], "new": new[k]}
+                for k in old.keys() & new.keys()
+                if cls._step_key(old[k]) != cls._step_key(new[k])
+            ]
+            return {"added": added, "removed": removed, "changed": changed}
+
+        # Same-length replan: pair by position (stable workflow spine).
+        if len(old_list) == len(new_list) and old_list:
+            changed = [
+                {"old": o, "new": n}
+                for o, n in zip(old_list, new_list)
+                if cls._step_key(o) != cls._step_key(n)
+            ]
+            return {"added": [], "removed": [], "changed": changed}
+
+        def _intent_key(s):
             return cls._normalize_intent(s.get("intent"))
 
-        old = {_key(s): s for s in old_steps if isinstance(s, dict)}
-        new = {_key(s): s for s in new_steps if isinstance(s, dict)}
+        old = {_intent_key(s): s for s in old_list}
+        new = {_intent_key(s): s for s in new_list}
         added = [s for k, s in new.items() if k not in old]
         removed = [s for k, s in old.items() if k not in new]
         changed = [
@@ -1629,6 +1691,119 @@ class PlansService:
             if cls._step_key(old[k]) != cls._step_key(new[k])
         ]
         return {"added": added, "removed": removed, "changed": changed}
+
+    _PRE_EDIT_SNAPSHOT = "pre_edit_snapshot"
+
+    def _stash_pre_edit_snapshot(self, run) -> None:
+        """Capture plan + step rows so discard-edit can restore after Cancel."""
+        from ai.models.core import RunStep
+
+        steps = list(
+            RunStep.objects.filter(run_id=run.id).order_by("step_index")
+        )
+        notes = dict(run.working_notes or {})
+        notes[self._PRE_EDIT_SNAPSHOT] = {
+            "user_message": run.user_message,
+            "plan_json": json.loads(json.dumps(_coerce_plan_json(run.plan_json))),
+            "status": run.status,
+            "final_response": run.final_response,
+            "completed_at": (
+                run.completed_at.isoformat() if run.completed_at else None
+            ),
+            "steps": [
+                {
+                    "step_index": s.step_index,
+                    "intent": s.intent,
+                    "tool_name": s.tool_name,
+                    "tool_args_json": s.tool_args_json or {},
+                    "depends_on_json": s.depends_on_json or [],
+                    "status": s.status,
+                    "error": s.error,
+                    "last_error": getattr(s, "last_error", "") or "",
+                    "critic_verdict": s.critic_verdict,
+                    "draft_text": s.draft_text,
+                    "tool_output_json": s.tool_output_json,
+                    "latency_ms": s.latency_ms,
+                    "retry_count": s.retry_count or 0,
+                    "confirmation_token": s.confirmation_token,
+                }
+                for s in steps
+            ],
+        }
+        run.working_notes = notes
+
+    def _clear_pre_edit_snapshot(self, run) -> None:
+        notes = dict(run.working_notes or {})
+        if self._PRE_EDIT_SNAPSHOT not in notes:
+            return
+        notes.pop(self._PRE_EDIT_SNAPSHOT, None)
+        run.working_notes = notes or None
+        run.save(update_fields=["working_notes", "updated_at"])
+
+    def confirm_plan_edit(self, user, plan_id: str) -> dict:
+        """Keep the applied edit — drop the Cancel rollback snapshot."""
+        run = self._get_owned_run(user, plan_id)
+        self._clear_pre_edit_snapshot(run)
+        return self.get_plan(user, plan_id)
+
+    def discard_plan_edit(self, user, plan_id: str) -> dict:
+        """Restore the pre-edit snapshot (diff-dialog Cancel). Idempotent."""
+        from ai.models.core import RunStep
+        from django.utils.dateparse import parse_datetime
+
+        run = self._get_owned_run(user, plan_id)
+        notes = dict(run.working_notes or {})
+        snap = notes.get(self._PRE_EDIT_SNAPSHOT)
+        if not snap:
+            return self.get_plan(user, plan_id)
+
+        run.user_message = snap.get("user_message") or run.user_message
+        run.plan_json = snap.get("plan_json") or run.plan_json
+        run.status = snap.get("status") or run.status
+        run.final_response = snap.get("final_response")
+        completed_raw = snap.get("completed_at")
+        run.completed_at = parse_datetime(completed_raw) if completed_raw else None
+        notes.pop(self._PRE_EDIT_SNAPSHOT, None)
+        run.working_notes = notes or None
+        run.save(
+            update_fields=[
+                "user_message",
+                "plan_json",
+                "status",
+                "final_response",
+                "completed_at",
+                "working_notes",
+                "updated_at",
+            ]
+        )
+
+        RunStep.objects.filter(run_id=run.id).delete()
+        for row in snap.get("steps") or []:
+            if not isinstance(row, dict):
+                continue
+            RunStep.objects.create(
+                run_id=run.id,
+                step_index=int(row.get("step_index", 0)),
+                intent=row.get("intent") or "",
+                tool_name=row.get("tool_name"),
+                tool_args_json=row.get("tool_args_json") or {},
+                depends_on_json=row.get("depends_on_json") or [],
+                status=row.get("status") or STEP_PENDING,
+                error=row.get("error"),
+                last_error=row.get("last_error") or "",
+                critic_verdict=row.get("critic_verdict"),
+                draft_text=row.get("draft_text"),
+                tool_output_json=row.get("tool_output_json"),
+                latency_ms=row.get("latency_ms"),
+                retry_count=int(row.get("retry_count") or 0),
+                confirmation_token=row.get("confirmation_token"),
+            )
+
+        logger.info(
+            "Plan edit discarded id=%s user=%s restored_status=%s",
+            plan_id, str(user.pk), run.status,
+        )
+        return self.get_plan(user, plan_id)
 
     @staticmethod
     def _apply_step_deltas(steps, step_deltas) -> list:
@@ -1716,7 +1891,7 @@ class PlansService:
         """
         from ai.engine.cognition.plan.planner import Plan, PlanPhase, PlanStep
 
-        plan_json = run.plan_json or {}
+        plan_json = _coerce_plan_json(run.plan_json)
         steps = [
             PlanStep(
                 step_id=int(s.get("step_id", 0)),
@@ -1987,7 +2162,7 @@ class PlansService:
         if not reply:
             raise ValueError("reply is required.")
 
-        plan_json = run.plan_json or {}
+        plan_json = _coerce_plan_json(run.plan_json)
         turns = list(plan_json.get("discovery_turns") or [])
         brief = plan_json.get("brief") or run.user_message or ""
 
@@ -2034,7 +2209,7 @@ class PlansService:
             raise PlanNotRunnableError(
                 f"Only discovering plans can be finalized (status: {run.status})."
             )
-        plan_json = run.plan_json or {}
+        plan_json = _coerce_plan_json(run.plan_json)
         turns = list(plan_json.get("discovery_turns") or [])
         brief = plan_json.get("brief") or run.user_message or ""
         # Keep answered turns; drop unanswered trailing questions.
@@ -2196,27 +2371,62 @@ class PlansService:
 
     # ── W3-C: edit / pause / resume / fork ────────────────────────────────
 
-    def edit_plan(self, user, plan_id: str, brief=None, step_deltas=None) -> dict:
-        """Re-plan from a (possibly new) brief and return the step diff.
+    def edit_plan(
+        self,
+        user,
+        plan_id: str,
+        brief=None,
+        step_deltas=None,
+        mode: str = "replan",
+    ) -> dict:
+        """Edit a plan — ``mode=rename`` (label only) or ``mode=replan``.
 
-        Always re-runs ``SkillAwarePlanner.decompose`` and returns
+        **rename** updates ``user_message`` only: no decompose, no step wipe,
+        no status change.
+
+        **replan** re-runs ``SkillAwarePlanner.decompose`` and returns
         ``{added, removed, changed}`` for review — editing NEVER auto-approves
-        (RULE_21). Any plan that is not ``pending_approval`` (approved,
-        running, paused, completed, …) drops back to ``pending_approval`` so
-        the user explicitly re-approves the revised plan before execution.
+        (RULE_21). Non-``pending_approval`` plans drop back to
+        ``pending_approval``. A ``pre_edit_snapshot`` is stashed so Cancel can
+        restore via ``discard_plan_edit``.
         """
         run = self._get_owned_run(user, plan_id)
+        mode = (mode or "replan").strip().lower()
+        if mode not in ("rename", "replan"):
+            raise ValueError("mode must be 'rename' or 'replan'.")
 
-        new_brief = (brief or run.user_message or "").strip()
+        new_brief = (brief if brief is not None else run.user_message or "").strip()
         if not new_brief:
             raise ValueError("brief is required.")
         if len(new_brief) > 4000:
             raise ValueError("brief is too long (max 4000 characters).")
 
-        old_plan_json = run.plan_json or {}
+        if mode == "rename":
+            run.user_message = new_brief
+            plan_json = dict(_coerce_plan_json(run.plan_json))
+            if plan_json:
+                plan_json["brief"] = new_brief
+                run.plan_json = plan_json
+                run.save(
+                    update_fields=["user_message", "plan_json", "updated_at"]
+                )
+            else:
+                run.save(update_fields=["user_message", "updated_at"])
+            logger.info(
+                "Plan renamed id=%s user=%s", plan_id, str(user.pk),
+            )
+            result = self.get_plan(user, plan_id)
+            result["diff"] = {"added": [], "removed": [], "changed": []}
+            result["replan_gate"] = False
+            result["edit_mode"] = "rename"
+            return result
+
+        old_plan_json = _coerce_plan_json(run.plan_json)
         old_steps = [
             s for s in old_plan_json.get("steps", []) if isinstance(s, dict)
         ]
+
+        self._stash_pre_edit_snapshot(run)
 
         plan = self._decompose(user, new_brief)
         steps = self._plan_to_dict(plan)["steps"]
@@ -2232,7 +2442,13 @@ class PlansService:
         if replan_gate:
             run.status = STATUS_PENDING_APPROVAL
         run.save(
-            update_fields=["user_message", "plan_json", "status", "updated_at"]
+            update_fields=[
+                "user_message",
+                "plan_json",
+                "status",
+                "working_notes",
+                "updated_at",
+            ]
         )
         self._replace_run_steps(run.id, steps)
 
@@ -2244,6 +2460,7 @@ class PlansService:
         result = self.get_plan(user, plan_id)
         result["diff"] = diff
         result["replan_gate"] = replan_gate
+        result["edit_mode"] = "replan"
         return result
 
     def edit_step(self, user, plan_id: str, step_id, title=None,
@@ -2264,7 +2481,7 @@ class PlansService:
         from ai.models.core import RunStep
 
         run = self._get_owned_run(user, plan_id)
-        plan_json = dict(run.plan_json or {})
+        plan_json = dict(_coerce_plan_json(run.plan_json))
         old_steps = [
             dict(s) for s in plan_json.get("steps", []) if isinstance(s, dict)
         ]
@@ -2317,8 +2534,15 @@ class PlansService:
         else:
             replan_gate = run.status != STATUS_PENDING_APPROVAL
             if replan_gate:
+                self._stash_pre_edit_snapshot(run)
                 run.status = STATUS_PENDING_APPROVAL
-            run.save(update_fields=["plan_json", "status", "updated_at"])
+                run.save(
+                    update_fields=[
+                        "plan_json", "status", "working_notes", "updated_at",
+                    ]
+                )
+            else:
+                run.save(update_fields=["plan_json", "updated_at"])
 
             # Reset execution state — the edited plan goes back to review.
             RunStep.objects.filter(run_id=run.id).update(
@@ -4018,20 +4242,25 @@ class PlansService:
     def rerun_plan(self, user, plan_id: str) -> dict:
         """Re-run an already-executed plan from a clean slate (workspace convenience).
 
-        Allowed for a ``completed`` / ``failed`` / ``cancelled`` run. Every step
-        is reset to ``pending`` (outputs, verdicts, tokens and errors cleared)
-        while ``step_index`` order and ``depends_on`` are preserved, and the run
-        is returned to ``approved`` — a runnable status — so the existing
-        ``run_plan_stream`` re-executes it. Nothing executes here (RULE_21): the
-        fail-closed boundary + consent still apply when the caller triggers the
-        run. Distinct from durable ``replay_run`` (which stages to ``replaying``
-        for the admin audit surface).
+        Allowed for a ``completed`` / ``completed_with_gaps`` / ``failed`` /
+        ``cancelled`` run. Every step is reset to ``pending`` (outputs, verdicts,
+        tokens and errors cleared) while ``step_index`` order and ``depends_on``
+        are preserved, and the run is returned to ``approved`` — a runnable
+        status — so the existing ``run_plan_stream`` re-executes it. Nothing
+        executes here (RULE_21): the fail-closed boundary + consent still apply
+        when the caller triggers the run. Distinct from durable ``replay_run``
+        (which stages to ``replaying`` for the admin audit surface).
         """
         run = self._get_owned_run(user, plan_id)
-        if run.status not in (STATUS_COMPLETED, STATUS_FAILED, STATUS_CANCELLED):
+        if run.status not in (
+            STATUS_COMPLETED,
+            STATUS_COMPLETED_WITH_GAPS,
+            STATUS_FAILED,
+            STATUS_CANCELLED,
+        ):
             raise PlanNotRunnableError(
                 f"Only an executed plan can be re-run (status: {run.status}). "
-                "Re-run a completed, failed, or cancelled plan."
+                "Re-run a completed, failed, cancelled, or completed-with-gaps plan."
             )
         from ai.models.core import RunStep
 
@@ -4127,7 +4356,7 @@ class PlansService:
 
         run = self._get_owned_run(user, plan_id)
         steps = list(RunStep.objects.filter(run_id=run.id).order_by("step_index"))
-        plan_json = run.plan_json or {}
+        plan_json = _coerce_plan_json(run.plan_json)
 
         actor_name = str(user)
         try:

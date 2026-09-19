@@ -15,6 +15,8 @@ import PsychologyIcon from '@mui/icons-material/Psychology';
 import SettingsIcon from '@mui/icons-material/Settings';
 import HelpIcon from '@mui/icons-material/Help';
 import SchoolIcon from '@mui/icons-material/School';
+import ClassIcon from '@mui/icons-material/Class';
+import EditNoteIcon from '@mui/icons-material/EditNote';
 import { APP_REGISTRY } from '../apps/registry';
 import { isGlobalAdmin, isCatalogAdmin, hasAppAccess, hasCap, expandCapabilities } from '../authz';
 import { AI_VIEW_CONSOLE } from '../capabilities';
@@ -43,6 +45,8 @@ const MANIFEST_ICON_MAP = {
   Person:              PersonIcon,
   SupervisorAccount:   SupervisorAccountIcon,
   School:              SchoolIcon,
+  Class:               ClassIcon,
+  EditNote:            EditNoteIcon,
   // legacy aliases still used by older manifests
   Diversity3:          GroupsIcon,
 };

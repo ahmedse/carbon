@@ -65,9 +65,9 @@ export default function GradeVanceHome() {
 
   const cards = [
     { label: 'Profiles on disk', value: summary?.profiles_on_disk ?? 0, path: '/apps/gradevance/library' },
-    { label: 'Assignments', value: summary?.assignments ?? 0, path: '/apps/gradevance/courses' },
-    { label: 'Analysis runs', value: summary?.runs ?? 0, path: '/apps/gradevance/marking' },
-    { label: 'Open reviews', value: summary?.open_reviews ?? 0, path: '/apps/gradevance/marking' },
+    { label: 'Stems', value: summary?.assignments ?? 0, path: '/teach/stems' },
+    { label: 'Analysis runs', value: summary?.runs ?? 0, path: '/teach/marking' },
+    { label: 'Open reviews', value: summary?.open_reviews ?? 0, path: '/teach/marking' },
   ];
 
   return (
@@ -77,7 +77,7 @@ export default function GradeVanceHome() {
       <PageHeader
         icon={SchoolIcon}
         title="GradeVance"
-        subtitle="Design intention → prove instrument → measure meaning → release with ceremony."
+        subtitle="Engine room — pack library, proposals, and cross-course QA."
       />
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 3 }} role="list" aria-label="GradeVance summary metrics">
         {cards.map((c) => (
@@ -95,23 +95,17 @@ export default function GradeVanceHome() {
         ))}
       </Stack>
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 3 }} role="group" aria-label="Primary GradeVance actions">
-        <Button variant="contained" endIcon={<ArrowForwardIcon />} onClick={() => navigate('/apps/gradevance/courses')}>
-          Courses & stems
-        </Button>
-        <Button variant="outlined" endIcon={<ArrowForwardIcon />} onClick={() => navigate('/apps/gradevance/calibration')}>
-          Calibration
-        </Button>
-        <Button variant="outlined" endIcon={<ArrowForwardIcon />} onClick={() => navigate('/apps/gradevance/marking')}>
-          Marking queue
+        <Button variant="contained" endIcon={<ArrowForwardIcon />} onClick={() => navigate('/apps/gradevance/library')}>
+          Pack library
         </Button>
         <Button variant="outlined" endIcon={<ArrowForwardIcon />} onClick={() => navigate('/apps/gradevance/proposals')}>
           Proposals
         </Button>
-        <Button variant="text" endIcon={<ArrowForwardIcon />} onClick={() => navigate('/apps/gradevance/library')}>
-          Pack library
+        <Button variant="text" endIcon={<ArrowForwardIcon />} onClick={() => navigate('/teach')}>
+          Teach (my classes)
         </Button>
-        <Button variant="text" endIcon={<ArrowForwardIcon />} onClick={() => navigate('/apps/gradevance/student')}>
-          Student desk
+        <Button variant="text" endIcon={<ArrowForwardIcon />} onClick={() => navigate('/learn')}>
+          Learn (my studies)
         </Button>
       </Box>
       {lti && (

@@ -10,6 +10,8 @@ import myManifest from './my/manifest.js';
 import teamManifest from './team/manifest.js';
 import stubManifest from './stub/manifest.js';
 import gradevanceManifest from './gradevance/manifest.js';
+import learnManifest from './learn/manifest.js';
+import teachManifest from './teach/manifest.js';
 
 // Registration policy: REGISTER-ALL + ENABLE-PER-INSTANCE.
 // Every installed app manifest is imported and registered here so the shell,
@@ -26,6 +28,8 @@ export const APP_REGISTRY = [
   teamManifest,
   stubManifest,
   gradevanceManifest,
+  learnManifest,
+  teachManifest,
 ];
 
 /** Look up a manifest by app id. */

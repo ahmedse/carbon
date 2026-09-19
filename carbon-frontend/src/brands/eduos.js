@@ -9,6 +9,8 @@ export default {
   platformShort: 'EduOS',
   instanceName: 'ClearTurn',
   title: 'ClearTurn · EduOS',
+  // Early-preview strip names the flagship app (default brands use platformName).
+  devBannerPlatform: 'EduOS and GradeVance',
   tagline: 'Education Operating System',
   description:
     'EduOS is ClearTurn\'s education platform — multi-domain assessment, coaching, ' +
@@ -21,8 +23,8 @@ export default {
     primary: { main: '#1d4ed8', light: '#3b82f6', dark: '#1e40af', contrastText: '#FFFFFF' },
     secondary: { main: '#0f766e', light: '#14b8a6', dark: '#115e59', contrastText: '#FFFFFF' },
   },
-  // Backend BRAND_APP_PRESETS.eduos.gradevance + PlatformAppConfig is SoT;
+  // Backend BRAND_APP_PRESETS.eduos.{gradevance,learn,teach} + PlatformAppConfig is SoT.
   // this list is a brand-side hint for shell tooling.
-  enabledAppIds: ['gradevance'],
+  enabledAppIds: ['gradevance', 'learn', 'teach'],
   pulseInstanceId: 'eduos',
 };

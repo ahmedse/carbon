@@ -43,6 +43,7 @@ import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
 import StopIcon from '@mui/icons-material/Stop';
 import ReplayIcon from '@mui/icons-material/Replay';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import SkipNextIcon from '@mui/icons-material/SkipNext';
 import CloseIcon from '@mui/icons-material/Close';
 import PauseIcon from '@mui/icons-material/Pause';
@@ -69,6 +70,8 @@ import {
   editPlan,
   editPlanStep,
   editSchedule,
+  confirmPlanEdit,
+  discardPlanEdit,
   forkPlan,
   rerunPlan,
   getPlan,
@@ -96,10 +99,18 @@ import ScheduleDialog from '../components/ai/ScheduleDialog';
 import ScheduleList from '../components/ai/ScheduleList';
 import SystemDialog from '../components/SystemDialog';
 import { buildPlanPhases, summarizePlanDiff } from '../utils/planGraph';
-import { agentRoleLabel, effectivePlanStatus, planStatusMeta, stepStatusMeta, toolLabel } from './aiTaskStatus';
+import {
+  agentRoleLabel,
+  effectivePlanStatus,
+  isRerunnableStatus,
+  isSettledPhase,
+  planStatusMeta,
+  runHeaderStatusChip,
+  stepStatusMeta,
+  toolLabel,
+} from './aiTaskStatus';
 import AITaskPlanCard from './AITaskPlanCard';
 import MarkdownMessage from './MarkdownMessage';
-import PlanDagGraph from '../components/graph/PlanDagGraph';
 import AITaskAuditCard from './AITaskAuditCard';
 import SubagentResultCard from './SubagentResultCard';
 import PlanDiffReviewDialog from './PlanDiffReviewDialog';
@@ -109,6 +120,8 @@ import AgentTaskPicker from './AgentTaskPicker';
 import AgentStage, { stageForStatus } from './AgentStage';
 import AgentRunSurface, { mergePlanWithRunSteps } from './AgentRunSurface';
 import AgentReviewSurface from './AgentReviewSurface';
+import AgentCockpit, { defaultCockpitSegment, normalizeCockpitSegment } from './AgentCockpit';
+import AgentCanvasSurface from './AgentCanvasSurface';
 import StepOutputRenderer, { ArtifactCard } from '../components/ai/StepOutputRenderer';
 
 dayjs.extend(utc);
@@ -255,6 +268,33 @@ function StepStatusIcon({ status }) {
 }
 
 StepStatusIcon.propTypes = { status: PropTypes.string };
+
+/** Collapsed tool/JSON dumps peeled from Output Answer (default closed). */
+function AnswerTechnicalDetails({ appendix }) {
+  const [open, setOpen] = useState(false);
+  if (!appendix) return null;
+  return (
+    <Box>
+      <Button
+        size="small"
+        color="inherit"
+        onClick={() => setOpen((v) => !v)}
+        endIcon={open ? <ExpandLessIcon sx={{ fontSize: 14 }} /> : <ExpandMoreIcon sx={{ fontSize: 14 }} />}
+        sx={{ fontSize: '0.6875rem', textTransform: 'none', px: 0, minWidth: 0, color: 'text.secondary' }}
+        aria-expanded={open}
+      >
+        Technical details
+      </Button>
+      <Collapse in={open} unmountOnExit>
+        <Box sx={{ mt: 0.5, fontSize: '0.75rem', wordBreak: 'break-word' }}>
+          <MarkdownMessage content={appendix} />
+        </Box>
+      </Collapse>
+    </Box>
+  );
+}
+
+AnswerTechnicalDetails.propTypes = { appendix: PropTypes.string };
 
 // W5-C — collapsible "Input parameters" section (key→value rows, not raw JSON).
 function InputParams({ value }) {
@@ -668,19 +708,8 @@ ResultArtifactCard.propTypes = {
   token: PropTypes.string,
 };
 
-/** Prefill chat composer when jumping Agent Done → Discuss in Chat. */
-function buildDiscussDraft(plan, finalResponse) {
-  const brief = (plan?.brief || '').trim() || 'this agent run';
-  const id = plan?.id ? ` (plan ${plan.id})` : '';
-  const body = (finalResponse || '').trim();
-  const clipped = body.length > 1800 ? `${body.slice(0, 1800)}\n…` : body;
-  const parts = [
-    `Let's discuss the outcome of: ${brief}${id}.`,
-    clipped ? `\n---\n${clipped}\n---` : '',
-    '\nAsk me about the findings, downloads, steps, or how to refine the agents/workflow.',
-  ];
-  return parts.join('').trim();
-}
+import { buildDiscussDraft } from './buildDiscussDraft';
+import { splitAnswerAppendix } from './splitAnswerAppendix';
 
 /**
  * Agentic task orchestration panel.
@@ -714,13 +743,17 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
 
   // Chat-first layout (default). Classic 6-tab only when carbon-ai-cockpit=off.
   const [chatFirst, setChatFirst] = useState(chatFirstEnabled);
+  // ADR-0043 — Plan · Run · Canvas · Output (migrate legacy steps/metrics).
   const [segment, setSegment] = useState(() => {
     try {
-      return localStorage.getItem(COCKPIT_SEGMENT_KEY) || 'steps';
+      return normalizeCockpitSegment(localStorage.getItem(COCKPIT_SEGMENT_KEY) || 'run');
     } catch {
-      return 'steps';
+      return 'run';
     }
   });
+  // Soft lifecycle defaults: after the user picks a segment for a plan, keep it.
+  const segmentOverrideRef = useRef(null);
+  const [runHealthOpen, setRunHealthOpen] = useState(false);
   // Library overflow (Templates / Scheduled): null | 'templates' | 'scheduled'.
   const [libraryView, setLibraryView] = useState(null);
 
@@ -793,17 +826,19 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     }
   }, []);
 
-  // U-1 — cockpit segment (Plan · Steps · Output · Metrics), persisted like the
-  // classic tab so a reload restores the last view (RULE_17).
-  const handleSegmentChange = useCallback((value) => {
+  // ADR-0043 — cockpit segment (Plan · Run · Canvas · Output), RULE_17 persist.
+  // Manual switches pin the choice for the current plan (soft lifecycle defaults).
+  const handleSegmentChange = useCallback((value, { user = true } = {}) => {
     if (!value) return;
-    setSegment(value);
+    const next = normalizeCockpitSegment(value);
+    setSegment(next);
+    if (user) segmentOverrideRef.current = selectedPlan?.id ?? true;
     try {
-      localStorage.setItem(COCKPIT_SEGMENT_KEY, value);
+      localStorage.setItem(COCKPIT_SEGMENT_KEY, next);
     } catch {
       // storage may be unavailable — segment still switches in-memory
     }
-  }, []);
+  }, [selectedPlan?.id]);
 
   // Debug: restore classic 6-tab layout without a reload.
   const switchToClassic = useCallback(() => {
@@ -827,16 +862,40 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     }
   }, [externalTab]);
 
-  // U-1 — the same activity-bar view drives the cockpit segment in parallel:
-  // monitor → Metrics, results → Output, tasks/run → Steps. Runs alongside the
-  // classic `tab` effect so neither layout loses the external-jump behaviour.
+  // ADR-0043 — activity-bar drives cockpit: monitor→Run, results→Output.
+  // Tasks/run follow soft lifecycle defaults (do NOT force Run on completed).
+  const selectedPlanRef = useRef(selectedPlan);
+  const phaseRef = useRef(phase);
+  const runStepsRef = useRef(runSteps);
+  selectedPlanRef.current = selectedPlan;
+  phaseRef.current = phase;
+  runStepsRef.current = runSteps;
   const prevExternalSegRef = useRef(externalTab);
   useEffect(() => {
     if (prevExternalSegRef.current === externalTab) return;
     prevExternalSegRef.current = externalTab;
-    if (externalTab === 'monitor') handleSegmentChange('metrics');
-    else if (externalTab === 'results') handleSegmentChange('output');
-    else if (externalTab === 'tasks' || externalTab === 'run') handleSegmentChange('steps');
+    if (externalTab === 'monitor') {
+      handleSegmentChange('run', { user: true });
+      return;
+    }
+    if (externalTab === 'results') {
+      handleSegmentChange('output', { user: true });
+      return;
+    }
+    if (externalTab === 'tasks' || externalTab === 'run') {
+      const plan = selectedPlanRef.current;
+      if (!plan || plan.status === 'discovering') {
+        handleSegmentChange('run', { user: false });
+        return;
+      }
+      const effective = effectivePlanStatus(
+        runStepsRef.current.length
+          ? { ...plan, steps: mergePlanWithRunSteps(plan, runStepsRef.current).steps }
+          : plan,
+      );
+      const next = defaultCockpitSegment(effective, phaseRef.current);
+      handleSegmentChange(next, { user: false });
+    }
   }, [externalTab, handleSegmentChange]);
 
   const loadPlans = useCallback(async () => {
@@ -935,6 +994,8 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   }, [selectedPlan?.id, phase, refreshPlan]);
 
   const applyPlanToView = useCallback((plan) => {
+    // New plan → allow lifecycle default to re-apply (ADR-0043 soft defaults).
+    segmentOverrideRef.current = null;
     setSelectedPlan(plan);
     setRunSteps(
       Array.isArray(plan.steps)
@@ -960,17 +1021,18 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
         : [],
     );
     // A paused plan reopens on the consent surface (its awaiting_approval
-    // steps must be actionable), not on the idle surface.
+    // steps must be actionable), not on the idle surface. Trust server
+    // `paused` even when step rows look terminal (race / steer edge).
     const effective = effectivePlanStatus(plan);
     setPhase(
-      effective === 'completed'
-        ? 'finished'
-        : effective === 'cancelled'
-          ? 'stopped'
-          : effective === 'failed'
-            ? 'error'
-            : effective === 'paused'
-              ? 'paused'
+      plan.status === 'paused' || effective === 'paused'
+        ? 'paused'
+        : effective === 'completed' || effective === 'completed_with_gaps'
+          ? 'finished'
+          : effective === 'cancelled'
+            ? 'stopped'
+            : effective === 'failed'
+              ? 'error'
               : 'idle',
     );
     setLedger(null);
@@ -1013,19 +1075,29 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     onFocusPlanConsumed?.();
   }, [focusPlanId, openPlan, onFocusPlanConsumed]);
 
-  // Chat-first: when a plan first becomes completed, land on Done → Output once.
-  // Do not re-force on every segment change — otherwise Metrics / Plan graph /
-  // bottom Monitor never stick (user click → effect snaps back to Output).
-  const autoOutputPlanRef = useRef(null);
+  // ADR-0043 — soft lifecycle defaults for Plan · Run · Canvas · Output.
+  // Manual segment choice for this plan wins until another plan is opened.
   useEffect(() => {
-    if (!chatFirst || selectedPlan?.status !== 'completed' || !selectedPlan?.id) {
-      if (selectedPlan?.status !== 'completed') autoOutputPlanRef.current = null;
-      return;
-    }
-    if (autoOutputPlanRef.current === selectedPlan.id) return;
-    autoOutputPlanRef.current = selectedPlan.id;
-    if (segment !== 'output') handleSegmentChange('output');
-  }, [chatFirst, selectedPlan?.id, selectedPlan?.status, segment, handleSegmentChange]);
+    if (!chatFirst || !selectedPlan?.id || selectedPlan.status === 'discovering') return;
+    if (segmentOverrideRef.current === selectedPlan.id) return;
+    const effective = effectivePlanStatus(
+      runSteps.length
+        ? { ...selectedPlan, steps: mergePlanWithRunSteps(selectedPlan, runSteps).steps }
+        : selectedPlan,
+    );
+    const next = defaultCockpitSegment(effective, phase);
+    if (segment !== next) handleSegmentChange(next, { user: false });
+  }, [
+    chatFirst,
+    selectedPlan?.id,
+    selectedPlan?.status,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: step status drives consent→Run
+    runSteps,
+    phase,
+    segment,
+    handleSegmentChange,
+    selectedPlan,
+  ]);
 
   // W5-B — discovery finished → open reviewable plan in the Review stage.
   const handleDiscoveryReady = useCallback((plan) => {
@@ -1087,24 +1159,32 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   }, [token]);
 
   // W5-D — Monitor/Results auto-load the ledger. Poll every 5s while a run is
-  // live; load once when the run has settled and no ledger is present yet.
+  // live; load once when the run has settled (prefetch so Output/Run health
+  // are ready without an extra click).
   useEffect(() => {
     const planId = selectedPlan?.id;
-    // Fires on the classic Monitor/Results tabs OR the cockpit Metrics/Output
-    // segments — both surfaces render the ledger.
+    const settled = isSettledPhase(phase)
+      || isRerunnableStatus(selectedPlan?.status)
+      || isRerunnableStatus(effectivePlanStatus(selectedPlan));
     const ledgerVisible =
       tab === 'monitor' || tab === 'results'
-      || (chatFirst && (segment === 'metrics' || segment === 'output'));
+      || (chatFirst && (segment === 'output' || runHealthOpen || settled));
     if (!planId || !ledgerVisible) return undefined;
     if (phase === 'working') {
       const timer = setInterval(() => loadLedger(planId), 5000);
       return () => clearInterval(timer);
     }
-    if (['finished', 'paused', 'stopped', 'error'].includes(phase) && !ledger) {
+    if (settled && !ledger) {
       loadLedger(planId);
     }
     return undefined;
-  }, [tab, chatFirst, segment, phase, selectedPlan?.id, ledger, loadLedger]);
+  }, [tab, chatFirst, segment, runHealthOpen, phase, selectedPlan, ledger, loadLedger]);
+
+  // Settled runs: open Run health by default so audit is not a hidden click
+  // (Screen Spec — completed-plan actions).
+  useEffect(() => {
+    if (isSettledPhase(phase)) setRunHealthOpen(true);
+  }, [phase, selectedPlan?.id]);
 
   // W5-D — load plan artifacts on Results/Output OR graph-first Run when settled.
   useEffect(() => {
@@ -1361,27 +1441,50 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     }
   };
 
-  // ── W3-F — plan controls (edit / pause / fork) ─────────────────────────
-  // Edits never auto-approve (RULE_21): the PATCH returns the revised plan +
-  // diff; a diff with real changes opens the consent gate; an empty diff is
-  // applied directly (nothing changed beyond the plan state).
-  const handleEditPlan = async (newBrief) => {
+  // ── W3-F — plan controls (rename / replan / pause / fork) ──────────────
+  // Rename = label only. Replan = decompose + diff (RULE_21); Cancel restores
+  // the pre-edit snapshot via discardPlanEdit.
+  const handleRenamePlan = async (newBrief) => {
     if (!selectedPlan || !newBrief) return;
     setMutating(true);
     try {
-      const updated = await editPlan(token, selectedPlan.id, { brief: newBrief });
-      if (summarizePlanDiff(updated?.diff).count > 0) {
-        setDiffReview({ diff: updated.diff, plan: updated });
-      } else {
-        applyPlanToView(updated);
-        notifyRef.current('Plan updated.', 'success');
-      }
+      const updated = await editPlan(token, selectedPlan.id, {
+        brief: newBrief,
+        mode: 'rename',
+      });
+      applyPlanToView(updated);
+      notifyRef.current(t('titleUpdated'), 'success');
     } catch (err) {
-      notifyFromErrorRef.current(err, 'Could not update the plan');
+      notifyFromErrorRef.current(err, 'Could not rename the plan');
     } finally {
       setMutating(false);
     }
   };
+
+  const handleReplanPlan = async (newBrief) => {
+    if (!selectedPlan || !newBrief) return;
+    setMutating(true);
+    try {
+      const updated = await editPlan(token, selectedPlan.id, {
+        brief: newBrief,
+        mode: 'replan',
+      });
+      if (summarizePlanDiff(updated?.diff).count > 0) {
+        setDiffReview({ diff: updated.diff, plan: updated, kind: 'replan' });
+      } else {
+        await confirmPlanEdit(token, selectedPlan.id).catch(() => null);
+        applyPlanToView(updated);
+        notifyRef.current(t('planUpdated'), 'success');
+      }
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not replan');
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  /** @deprecated Prefer handleRenamePlan / handleReplanPlan — kept for step card wiring. */
+  const handleEditPlan = handleReplanPlan;
 
   const saveStepEdit = async (fields) => {
     if (!selectedPlan || !editStepTarget) return;
@@ -1391,10 +1494,10 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     try {
       const updated = await editPlanStep(token, selectedPlan.id, stepId, fields);
       if (summarizePlanDiff(updated?.diff).count > 0) {
-        setDiffReview({ diff: updated.diff, plan: updated });
+        setDiffReview({ diff: updated.diff, plan: updated, kind: 'step' });
       } else {
         applyPlanToView(updated);
-        notifyRef.current('Step updated.', 'success');
+        notifyRef.current(t('planUpdated'), 'success');
       }
     } catch (err) {
       notifyFromErrorRef.current(err, 'Could not update the step');
@@ -1403,24 +1506,49 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     }
   };
 
-  // User reviewed the diff and keeps the revised plan. For a paused run the
-  // plan stays paused (only the edited step is re-approved server-side, so the
-  // user still controls when to resume). For a reviewable plan it returns to
-  // pending_approval and needs the plan consent gate again before running.
-  const confirmDiff = () => {
+  const confirmDiff = async () => {
     if (!diffReview) return;
-    applyPlanToView(diffReview.plan);
-    setPlans((prev) =>
-      prev.map((p) => (p.id === diffReview.plan.id ? { ...p, status: diffReview.plan.status } : p)),
-    );
-    const isPaused = diffReview.plan.status === 'paused';
-    notifyRef.current(
-      isPaused
-        ? 'Step updated — the run stays paused. Resume when ready.'
-        : 'Changes kept — the plan needs your approval again.',
-      'info',
-    );
-    setDiffReview(null);
+    setMutating(true);
+    try {
+      await confirmPlanEdit(token, selectedPlan.id);
+      applyPlanToView(diffReview.plan);
+      setPlans((prev) =>
+        prev.map((p) => (p.id === diffReview.plan.id ? { ...p, status: diffReview.plan.status } : p)),
+      );
+      const isPaused = diffReview.plan.status === 'paused';
+      notifyRef.current(
+        isPaused
+          ? 'Step updated — the run stays paused. Resume when ready.'
+          : t('changesKeptNeedApproval'),
+        'info',
+      );
+      setDiffReview(null);
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not confirm the changes');
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  const cancelDiff = async () => {
+    if (!selectedPlan) {
+      setDiffReview(null);
+      return;
+    }
+    setMutating(true);
+    try {
+      const restored = await discardPlanEdit(token, selectedPlan.id);
+      applyPlanToView(restored);
+      setPlans((prev) =>
+        prev.map((p) => (p.id === restored.id ? { ...p, ...restored } : p)),
+      );
+      notifyRef.current(t('changesDiscarded'), 'info');
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not discard the changes');
+    } finally {
+      setDiffReview(null);
+      setMutating(false);
+    }
   };
 
   const handlePause = async () => {
@@ -1472,19 +1600,40 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     }
   };
 
-  // Re-run an executed (completed/failed/cancelled) plan from a clean slate:
-  // reset it server-side to ``approved`` then stream the run.
+  // Re-run an executed plan from a clean slate: refresh → POST rerun (when
+  // terminal) → stream. Aligns toolbar `selectedEffective` with API status
+  // (including completed_with_gaps) so Play-on-stale-status never skips reset.
   const handleRerun = async () => {
     if (!selectedPlan) return;
-    const executed = ['completed', 'failed', 'cancelled'].includes(selectedPlan.status);
-    if (!executed) {
-      handleRun();
-      return;
-    }
     setMutating(true);
     try {
-      await rerunPlan(token, selectedPlan.id);
-      await refreshPlan(selectedPlan.id);
+      const fresh = (await refreshPlan(selectedPlan.id)) || selectedPlan;
+      const apiStatus = fresh.status;
+      const effective = effectivePlanStatus(fresh);
+      const alreadyRunnable = apiStatus === 'approved' || apiStatus === 'paused';
+      const apiTerminal = isRerunnableStatus(apiStatus);
+      const effectiveTerminal = isRerunnableStatus(effective);
+
+      if (!alreadyRunnable) {
+        if (!apiTerminal && effectiveTerminal) {
+          notifyRef.current(
+            'Plan status is still updating — try Rerun again in a moment.',
+            'info',
+          );
+          setMutating(false);
+          return;
+        }
+        if (!apiTerminal) {
+          notifyRef.current(
+            'Approve the plan before running, or wait until the run has finished.',
+            'info',
+          );
+          setMutating(false);
+          return;
+        }
+        await rerunPlan(token, selectedPlan.id);
+        await refreshPlan(selectedPlan.id);
+      }
     } catch (err) {
       notifyFromErrorRef.current(err, 'Could not re-run the plan');
       setMutating(false);
@@ -1823,29 +1972,24 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           phase={phase}
           live={phase === 'working'}
           defaultListOpen={phase === 'paused'}
-          conversationId={conversationId}
           artifacts={artifacts}
-          artifactsLoading={artifactsLoading}
-          artifactsContent={
-            artifacts.length > 0 ? (
-              <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', gap: 0.75 }}>
-                {artifacts.map((artifact) => (
-                  <Box key={artifact.id ?? artifact.name} sx={{ minWidth: 200, flex: '1 1 200px', maxWidth: 320 }}>
-                    <ResultArtifactCard artifact={artifact} planId={selectedPlan.id} token={token} />
-                  </Box>
-                ))}
-              </Stack>
-            ) : null
-          }
           banner={statusBanner}
           listContent={listContent}
-          confirmingId={confirmingId}
-          onConfirmStep={handleConfirmStep}
-          onDeclineStep={handleDeclineStep}
-          onRetryStep={handleStepRetry}
+          onOpenOutput={() => handleSegmentChange('output', { user: true })}
+          onRerun={handleRerun}
+          onOpenPlan={() => handleSegmentChange('plan', { user: true })}
+          canRerun={
+            isRerunnableStatus(selectedPlan.status)
+            || isRerunnableStatus(effectivePlanStatus(
+              runSteps.length
+                ? { ...selectedPlan, steps: mergePlanWithRunSteps(selectedPlan, runSteps).steps }
+                : selectedPlan,
+            ))
+          }
+          busy={mutating}
         />
 
-        {(phase === 'finished' || (ledger && (phase === 'paused' || phase === 'stopped' || phase === 'error'))) && (
+        {!chatFirst && (phase === 'finished' || (ledger && (phase === 'paused' || phase === 'stopped' || phase === 'error'))) && (
           <>
             <Stack direction="row" alignItems="center" spacing={1}>
               <HistoryOutlinedIcon sx={{ fontSize: 15, color: 'text.secondary' }} />
@@ -2144,29 +2288,41 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       );
     }
 
-    if (phase !== 'finished') {
-      return (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
-            Run the plan to see results.
-          </Typography>
-        </Box>
-      );
+    if (phase !== 'finished' && phase !== 'stopped' && phase !== 'error') {
+      const effective = effectivePlanStatus(selectedPlan);
+      if (!isRerunnableStatus(effective) && !isRerunnableStatus(selectedPlan.status)) {
+        return (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+              Run the plan to see results.
+            </Typography>
+          </Box>
+        );
+      }
     }
 
-    const finalResponse = ledger?.final_response;
-    const rerunnable = ['approved', 'completed', 'failed', 'cancelled'].includes(selectedPlan.status);
+    const finalResponse = ledger?.final_response || selectedPlan.final_response;
+    const { prose: answerProse, appendix: answerAppendix, hasAppendix } = splitAnswerAppendix(finalResponse);
+    const effective = effectivePlanStatus(selectedPlan);
+    const rerunnable = isRerunnableStatus(selectedPlan.status)
+      || isRerunnableStatus(effective)
+      || selectedPlan.status === 'approved';
 
     return (
       <Stack spacing={1.25}>
         <Paper variant="outlined" sx={{ p: 1.25, bgcolor: 'background.paper' }}>
           <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.secondary', mb: 0.5 }}>
-            Final response
+            Answer
           </Typography>
           {finalResponse ? (
-            <Box sx={{ fontSize: '0.8125rem', wordBreak: 'break-word' }}>
-              <MarkdownMessage content={finalResponse} />
-            </Box>
+            <Stack spacing={1}>
+              <Box sx={{ fontSize: '0.8125rem', wordBreak: 'break-word' }}>
+                <MarkdownMessage content={answerProse || finalResponse} />
+              </Box>
+              {hasAppendix && (
+                <AnswerTechnicalDetails appendix={answerAppendix} />
+              )}
+            </Stack>
           ) : (
             <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
               No final response recorded for this run.
@@ -2187,7 +2343,8 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={20} /></Box>
         ) : artifacts.length === 0 ? (
           <Typography variant="body2" color="text.secondary" sx={{ py: 2, fontSize: '0.75rem' }}>
-            This run produced no artifacts.
+            No downloadable files for this run. Artifacts appear when a step exports a document
+            (Word/Excel/PDF). Use Replan or Discuss in Chat and ask for an export.
           </Typography>
         ) : (
           <Stack spacing={0.75}>
@@ -2202,7 +2359,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             Actions
           </Typography>
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
-            <Tooltip title={rerunnable ? 'Run the plan again from a clean slate' : 'Approve the plan to run it'}>
+            <Tooltip title={rerunnable ? t('rerunPlan') : 'Approve the plan to run it'}>
               <span>
                 <Button
                   size="small"
@@ -2211,7 +2368,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
                   onClick={handleRerun}
                   sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
                 >
-                  Rerun
+                  {t('rerunPlanShort')}
                 </Button>
               </span>
             </Tooltip>
@@ -2224,6 +2381,18 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             >
               Fork
             </Button>
+            {chatFirst && (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<EditOutlinedIcon sx={{ fontSize: 14 }} />}
+                disabled={mutating || selectedPlan.status === 'running' || phase === 'working'}
+                onClick={() => handleSegmentChange('plan', { user: true })}
+                sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+              >
+                {t('openPlanToEdit')}
+              </Button>
+            )}
             <Button
               size="small"
               variant="outlined"
@@ -2247,10 +2416,10 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
                 size="small"
                 variant="outlined"
                 startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 14 }} />}
-                onClick={() => onSwitchToChat(buildDiscussDraft(selectedPlan, finalResponse))}
+                onClick={() => onSwitchToChat(buildDiscussDraft(selectedPlan, finalResponse, { refine: true }))}
                 sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
               >
-                Discuss in Chat
+                {t('discussInChat')}
               </Button>
             )}
           </Stack>
@@ -2259,27 +2428,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     );
   };
 
-  // ── U-1 cockpit — Plan segment: reuse the live plan DAG (already fed by
-  // `plan`, so wiring is trivial and lower-risk than re-deriving phases).
-  const renderPlanSegment = () => {
-    if (!selectedPlan) {
-      return (
-        <Typography variant="body2" color="text.secondary" sx={{ py: 3, fontSize: '0.75rem' }}>
-          Open a task from the rail to see its plan graph.
-        </Typography>
-      );
-    }
-    return (
-      <PlanDagGraph
-        plan={selectedPlan}
-        height={420}
-        live={phase === 'working'}
-        onConfirmStep={handleConfirmStep}
-        onDeclineStep={handleDeclineStep}
-        confirmingId={confirmingId}
-      />
-    );
-  };
+  // ── U-1 cockpit — Plan segment handled by AgentReviewSurface (review + inspect).
 
   // Global run toolbar — one location (top bar).
   const renderRunToolbar = () => {
@@ -2288,6 +2437,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     const runnable = selectedEffective === 'approved' || selectedEffective === 'paused';
     const paused = selectedEffective === 'paused';
     const failed = selectedEffective === 'failed';
+    const rerunnable = isRerunnableStatus(selectedEffective);
     const showRun = runnable && !running;
     const btn = (title, disabled, onClick, Icon, color) => (
       <Tooltip title={title}>
@@ -2303,6 +2453,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
         {btn(paused ? t('resumeRun') : t('runPlan'), !showRun || busy, handleRun, PlayArrowIcon, 'primary.main')}
         {btn(t('pauseRun'), !running || busy, handlePause, PauseIcon, 'warning.main')}
         {btn(t('stopRun'), !running, handleStop, StopIcon, 'error.main')}
+        {btn(t('rerunPlan'), !rerunnable || busy || running, handleRerun, RefreshIcon, 'primary.main')}
         {btn(t('retryFailedSteps'), !failed || busy, handleRetry, ReplayIcon, 'warning.main')}
         {btn(t('forkReviewable'), !selectedPlan || busy, handleFork, CallSplitIcon)}
       </Stack>
@@ -2322,12 +2473,157 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     : '';
   // Toolbar when runnable or mid/post-run (Approve stays on Review stage).
   // Retry affordance keys off effective status (all finished → completed).
-  const showRunToolbar = ['approved', 'running', 'paused', 'failed', 'completed'].includes(
+  const showRunToolbar = ['approved', 'running', 'paused', 'failed', 'completed', 'cancelled', 'completed_with_gaps'].includes(
     selectedEffective,
   );
 
   const renderChatFirst = () => {
-    const planMeta = selectedPlan ? planStatusMeta(selectedEffective) : null;
+    const statusChip = selectedPlan
+      ? runHeaderStatusChip(selectedPlan, runSteps, phase)
+      : null;
+    const showCockpit = Boolean(selectedPlan) && selectedPlan.status !== 'discovering';
+
+    const renderCockpitPlan = () => {
+      if (!selectedPlan) {
+        return (
+          <Typography variant="body2" color="text.secondary" sx={{ py: 3, fontSize: '0.75rem' }}>
+            {t('openPlanGraph')}
+          </Typography>
+        );
+      }
+      const reviewMode = selectedPlan.status === 'pending_approval' || selectedPlan.status === 'cancelled';
+      return (
+        <AgentReviewSurface
+          plan={selectedPlan}
+          mode={reviewMode ? 'review' : 'inspect'}
+          busy={mutating}
+          live={phase === 'working'}
+          onApprove={handleApprove}
+          onDecline={handleDecline}
+          onFork={handleFork}
+          onRenamePlan={handleRenamePlan}
+          onReplanPlan={handleReplanPlan}
+          onDiscuss={
+            onSwitchToChat
+              ? () => onSwitchToChat(
+                buildDiscussDraft(
+                  selectedPlan,
+                  ledger?.final_response || selectedPlan.final_response,
+                  { refine: true },
+                ),
+              )
+              : undefined
+          }
+          onEditStep={(step) => setEditStepTarget({ step })}
+          confirmingId={confirmingId}
+          onConfirmStep={handleConfirmStep}
+          onDeclineStep={handleDeclineStep}
+        />
+      );
+    };
+
+    const renderCockpitRun = () => renderRun();
+
+    const renderCockpitCanvas = () => (
+      <AgentCanvasSurface
+        planId={selectedPlan?.id || null}
+        conversationId={conversationId}
+        live={phase === 'working'}
+      />
+    );
+
+    const renderCockpitOutput = () => (
+      <Stack spacing={1.25}>
+        {(phase === 'finished' || phase === 'stopped' || phase === 'error') && (
+          <Paper variant="outlined" sx={{ bgcolor: 'background.paper', overflow: 'hidden' }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.25, py: 0.875 }}>
+              <Typography variant="body2" sx={{ flex: 1, fontWeight: 600, fontSize: '0.75rem' }}>
+                {phase === 'finished'
+                  ? t('runCompleted')
+                  : phase === 'stopped'
+                    ? 'Run stopped'
+                    : 'Run failed'}
+              </Typography>
+              {phase === 'error' && (
+                <Chip size="small" color="error" variant="outlined" label={t('failedWord')} sx={{ height: 18, fontSize: '0.625rem' }} />
+              )}
+            </Stack>
+            {phase === 'error' && errorMessage && (
+              <Typography variant="caption" color="error.main" sx={{ display: 'block', px: 1.25, pb: 1, fontSize: '0.6875rem' }}>
+                {errorMessage}
+              </Typography>
+            )}
+            {phase === 'stopped' && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', px: 1.25, pb: 1, fontSize: '0.6875rem' }}>
+                Stopped — pending steps were skipped and nothing was executed without approval.
+              </Typography>
+            )}
+          </Paper>
+        )}
+        {renderResults()}
+        <Paper variant="outlined" sx={{ bgcolor: 'background.paper', overflow: 'hidden' }}>
+          <Button
+            fullWidth
+            size="small"
+            onClick={() => setRunHealthOpen((v) => !v)}
+            endIcon={runHealthOpen ? <ExpandLessIcon sx={{ fontSize: 16 }} /> : <ExpandMoreIcon sx={{ fontSize: 16 }} />}
+            sx={{
+              justifyContent: 'space-between',
+              textTransform: 'none',
+              fontSize: '0.6875rem',
+              fontWeight: 600,
+              px: 1.25,
+              py: 0.875,
+              color: 'text.secondary',
+            }}
+            aria-expanded={runHealthOpen}
+          >
+            {t('runHealth')}
+          </Button>
+          <Collapse in={runHealthOpen} unmountOnExit>
+            <Box sx={{ px: 1, pb: 1 }}>
+              {renderMonitor()}
+              {(ledger || phase === 'finished' || phase === 'error' || phase === 'stopped') && (
+                <Stack spacing={1} sx={{ mt: 1 }}>
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <HistoryOutlinedIcon sx={{ fontSize: 15, color: 'text.secondary' }} />
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        flex: 1,
+                        fontWeight: 600,
+                        fontSize: '0.6875rem',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                        color: 'text.secondary',
+                      }}
+                    >
+                      Audit
+                    </Typography>
+                    {!ledger && !ledgerLoading && selectedPlan && (
+                      <Button
+                        size="small"
+                        onClick={() => loadLedger(selectedPlan.id)}
+                        sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0, px: 0.75 }}
+                      >
+                        Load
+                      </Button>
+                    )}
+                  </Stack>
+                  {ledgerLoading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+                      <CircularProgress size={20} />
+                    </Box>
+                  ) : (
+                    <AITaskAuditCard ledger={ledger} />
+                  )}
+                </Stack>
+              )}
+            </Box>
+          </Collapse>
+        </Paper>
+      </Stack>
+    );
 
     return (
       <Box
@@ -2348,6 +2644,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
               onSelect={(id) => {
                 if (id) openPlan(id);
                 else {
+                  segmentOverrideRef.current = null;
                   setSelectedPlan(null);
                   setRunSteps([]);
                   setPhase('idle');
@@ -2357,26 +2654,17 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
               deletingId={deletingPlanId}
             />
           </Box>
-          {planMeta && (
+          {statusChip && (
             <Chip
               size="small"
               variant="outlined"
-              label={planMeta.label}
-              color={planMeta.color}
-              sx={{ height: 20, fontSize: '0.625rem', flexShrink: 0 }}
+              label={statusChip.label}
+              color={statusChip.color}
+              data-testid="agent-status-chip"
+              sx={{ height: 20, fontSize: '0.625rem', flexShrink: 0, maxWidth: 200 }}
             />
           )}
           {showRunToolbar && renderRunToolbar()}
-          <Tooltip title="Templates & schedules">
-            <IconButton
-              size="small"
-              aria-label="Library"
-              onClick={() => { loadTemplates(); setLibraryView('templates'); }}
-              sx={{ p: 0.375 }}
-            >
-              <HistoryOutlinedIcon sx={{ fontSize: 18 }} />
-            </IconButton>
-          </Tooltip>
         </Stack>
 
         {showComposer && (
@@ -2391,150 +2679,31 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           </Box>
         )}
 
-        <AgentStage
-          plan={selectedPlan}
-          phase={phase}
-          detailLoading={detailLoading}
-          clarify={null}
-          review={selectedPlan ? (
-            <AgentReviewSurface
-              plan={selectedPlan}
-              busy={mutating}
-              onApprove={handleApprove}
-              onDecline={handleDecline}
-              onFork={handleFork}
-              onEditPlan={handleEditPlan}
-              onEditStep={(step) => setEditStepTarget({ step })}
-              confirmingId={confirmingId}
-              onConfirmStep={handleConfirmStep}
-              onDeclineStep={handleDeclineStep}
-            />
-          ) : null}
-          run={renderRun()}
-          done={(
-            <Stack spacing={1} data-testid="agent-done-surface">
-              <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>
-                {effectivePlanStatus(selectedPlan) === 'paused'
-                  ? 'Run paused — a step still needs approval'
-                  : 'Run completed'}
-              </Typography>
-              {selectedPlan && (() => {
-                const doneSteps = (runSteps.length ? runSteps : (selectedPlan.steps || [])).map((s) => ({
-                  step_id: s.step_id,
-                  intent: s.intent,
-                  tool_name: s.tool_name,
-                  tool_args: s.tool_args,
-                  status: s.status || 'pending',
-                  tool_output: s.tool_output ?? null,
-                  output_type: s.output_type ?? null,
-                  artifacts: s.artifacts ?? [],
-                  error: s.error ?? null,
-                  agent_role: s.agent_role,
-                  runnable_state: s.runnable_state,
-                }));
-                const actionable = doneSteps.some(
-                  (s) => s.status === 'awaiting_approval' || s.status === 'failed' || s.status === 'paused',
-                );
-                const doneList = (
-                  <Stack spacing={1}>
-                    {doneSteps.map((step) => (
-                      <StepCard
-                        key={step.step_id}
-                        step={step}
-                        confirming={confirmingId === step.step_id}
-                        busy={mutating}
-                        onConfirm={handleConfirmStep}
-                        onDecline={handleDeclineStep}
-                        onRetry={handleStepRetry}
-                        onSkip={handleStepSkip}
-                        onCancel={handleStepCancel}
-                        onPause={handleStepPause}
-                        onResume={handleStepResume}
-                        onEdit={(s) => setEditStepTarget({ step: s })}
-                      />
-                    ))}
-                  </Stack>
-                );
-                return (
-                  <AgentRunSurface
-                    plan={selectedPlan}
-                    runSteps={runSteps}
-                    phase={phase}
-                    live={false}
-                    defaultListOpen={actionable}
-                    conversationId={conversationId}
-                    artifacts={artifacts}
-                    artifactsLoading={artifactsLoading}
-                    artifactsContent={
-                      artifacts.length > 0 ? (
-                        <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', gap: 0.75 }}>
-                          {artifacts.map((artifact) => (
-                            <Box key={artifact.id ?? artifact.name} sx={{ minWidth: 200, flex: '1 1 200px', maxWidth: 320 }}>
-                              <ResultArtifactCard artifact={artifact} planId={selectedPlan.id} token={token} />
-                            </Box>
-                          ))}
-                        </Stack>
-                      ) : null
-                    }
-                    listContent={doneList}
-                    confirmingId={confirmingId}
-                    onConfirmStep={handleConfirmStep}
-                    onDeclineStep={handleDeclineStep}
-                    onRetryStep={handleStepRetry}
-                  />
-                );
-              })()}
-              <Stack direction="row" spacing={0.5}>
-                <Button
-                  size="small"
-                  variant={segment !== 'metrics' && segment !== 'plan' ? 'contained' : 'outlined'}
-                  onClick={() => handleSegmentChange('output')}
-                  sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
-                >
-                  {t('output')}
-                </Button>
-                <Button
-                  size="small"
-                  variant={segment === 'metrics' ? 'contained' : 'outlined'}
-                  onClick={() => handleSegmentChange('metrics')}
-                  sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
-                >
-                  {t('metrics')}
-                </Button>
-                <Button
-                  size="small"
-                  variant={segment === 'plan' ? 'contained' : 'outlined'}
-                  onClick={() => handleSegmentChange('plan')}
-                  sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
-                >
-                  {t('planGraph')}
-                </Button>
-              </Stack>
-              {segment === 'metrics' ? renderMonitor() : segment === 'plan' ? renderPlanSegment() : renderResults()}
-              {/* Audit is control-plane only — keep it on Metrics, not under the answer. */}
-              {segment === 'metrics' && (ledger || phase === 'finished') && (
-                <>
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    <HistoryOutlinedIcon sx={{ fontSize: 15, color: 'text.secondary' }} />
-                    <Typography variant="caption" sx={{ flex: 1, fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.secondary' }}>
-                      Audit
-                    </Typography>
-                    {!ledger && !ledgerLoading && selectedPlan && (
-                      <Button size="small" onClick={() => loadLedger(selectedPlan.id)} sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0, px: 0.75 }}>
-                        Load
-                      </Button>
-                    )}
-                  </Stack>
-                  {ledgerLoading ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={20} /></Box>
-                  ) : (
-                    <AITaskAuditCard ledger={ledger} />
-                  )}
-                </>
-              )}
-            </Stack>
-          )}
-        />
+        {showCockpit ? (
+          <AgentCockpit
+            segment={segment}
+            onSegment={(value) => handleSegmentChange(value, { user: true })}
+            plan={selectedPlan}
+            header={null}
+            renderPlan={renderCockpitPlan}
+            renderRun={renderCockpitRun}
+            renderCanvas={renderCockpitCanvas}
+            renderOutput={renderCockpitOutput}
+            onOpenTemplates={() => { loadTemplates(); setLibraryView('templates'); }}
+            onOpenScheduled={() => { loadSchedules(); setLibraryView('scheduled'); }}
+            onSwitchToClassic={switchToClassic}
+          />
+        ) : (
+          <AgentStage
+            plan={selectedPlan}
+            phase={phase}
+            detailLoading={detailLoading}
+            clarify={null}
+            review={null}
+            run={null}
+            done={null}
+          />
+        )}
       </Box>
     );
   };
@@ -2617,7 +2786,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
         diff={diffReview?.diff}
         busy={mutating}
         onConfirm={confirmDiff}
-        onCancel={() => setDiffReview(null)}
+        onCancel={cancelDiff}
       />
       <StepEditDialog
         open={!!editStepTarget}

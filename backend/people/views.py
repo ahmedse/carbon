@@ -177,6 +177,29 @@ class ComplianceRuleDetailView(APIView):
 class EmployeeListCreateView(APIView):
     permission_classes = [IsAuthenticated, PeopleAccess]
 
+    # List serialization must stay O(1) queries / row (N+1 here timed out the
+    # FE at ~537 employees on nibras_dev — SIM-QA N-HR-UI-01).
+    _LIST_SELECT_RELATED = (
+        'user',
+        'manager',
+        'position',
+        'org_unit',
+        'nationality',
+        'nationality__reference_set',
+        'employment_type',
+        'employment_type__reference_set',
+        'contract_type',
+        'contract_type__reference_set',
+        'gender',
+        'gender__reference_set',
+        'rotation',
+        'rotation__reference_set',
+    )
+    # Always paginate — unbounded list ignored page_size and bloated the FE
+    # past apiFetch's 15s timeout (SIM-QA N-HR-UI-01 / NB-P0-EMP-PAGE).
+    _DEFAULT_PAGE_SIZE = 100
+    _MAX_PAGE_SIZE = 200
+
     def get(self, request):
         if is_global_admin(request.user):
             qs = Employee.objects.all()
@@ -184,10 +207,31 @@ class EmployeeListCreateView(APIView):
             qs = Employee.objects.filter(
                 org_unit_id__in=_visible_org_unit_ids(request.user),
             )
+        qs = (
+            qs.select_related(*self._LIST_SELECT_RELATED)
+            .defer('photo')
+            .order_by('id')
+        )
+        total = qs.count()
+        try:
+            page = max(1, int(request.query_params.get('page', 1)))
+        except (TypeError, ValueError):
+            page = 1
+        try:
+            page_size = int(
+                request.query_params.get('page_size', self._DEFAULT_PAGE_SIZE),
+            )
+        except (TypeError, ValueError):
+            page_size = self._DEFAULT_PAGE_SIZE
+        page_size = max(1, min(page_size, self._MAX_PAGE_SIZE))
+        start = (page - 1) * page_size
+        page_qs = qs[start:start + page_size]
         return Response({
-            'count': qs.count(),
+            'count': total,
+            'page': page,
+            'page_size': page_size,
             'results': mask_employee_list(
-                EmployeeSerializer(qs, many=True).data, request.user,
+                EmployeeSerializer(page_qs, many=True).data, request.user,
             ),
         })
 

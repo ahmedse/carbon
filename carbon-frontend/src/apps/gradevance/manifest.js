@@ -1,12 +1,13 @@
 // apps/gradevance/manifest.js
-// GradeVance — EduOS multi-domain assessment + coaching app.
+// GradeVance — EduOS engine room (packs, proposals, QA).
+// Professor/student surfaces: Teach (/teach) and Learn (/learn) — ADR-0042.
 // Nav icons: MUI icon *names* resolved in ShellSidebar (ADR compact UI — no emoji).
 
 export default {
   id:          'gradevance',
   name:        'GradeVance',
   version:     '0.1.0',
-  description: 'Multi-domain assessment, LCT measurement, rubrics, coaching, and HITL learning',
+  description: 'Multi-domain assessment engine room — packs, proposals, and QA',
   icon:        'School',
 
   routePrefix: '/apps/gradevance',
@@ -18,13 +19,12 @@ export default {
   navigation: {
     section: 'GradeVance',
     items: [
-      { label: 'Overview',        path: '/apps/gradevance',             role: '*', icon: 'Dashboard' },
-      { label: 'Courses & stems', path: '/apps/gradevance/courses',     role: '*', icon: 'Class' },
-      { label: 'Calibration',     path: '/apps/gradevance/calibration', role: '*', icon: 'Verified' },
-      { label: 'Pack library',    path: '/apps/gradevance/library',     role: '*', icon: 'MenuBook' },
-      { label: 'Marking queue',   path: '/apps/gradevance/marking',     role: '*', icon: 'RateReview' },
-      { label: 'Proposals',       path: '/apps/gradevance/proposals',   role: '*', icon: 'Lightbulb' },
-      { label: 'Student desk',    path: '/apps/gradevance/student',     role: '*', icon: 'EditNote' },
+      { label: 'Overview',      path: '/apps/gradevance',               role: '*', icon: 'Dashboard' },
+      { label: 'Pack library',  path: '/apps/gradevance/library',       role: '*', icon: 'MenuBook' },
+      { label: 'Proposals',     path: '/apps/gradevance/proposals',     role: '*', icon: 'Lightbulb' },
+      { label: 'QA',            path: '/apps/gradevance/qa',            role: '*', icon: 'Science' },
+      { label: 'Accessibility', path: '/apps/gradevance/accessibility', role: '*', icon: 'AccessibilityNew' },
+      { label: 'LTI',           path: '/apps/gradevance/lti',           role: '*', icon: 'Link' },
     ],
   },
 

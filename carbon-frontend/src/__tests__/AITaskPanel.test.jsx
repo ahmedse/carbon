@@ -287,14 +287,12 @@ describe('AITaskPanel — streamed run and step consent', () => {
     streamHandlers.onDone({ type: 'done', plan_id: 'plan-1', status: 'completed', final_response: 'Found 3 duplicate rows.' });
 
     expect(await screen.findByText('Run completed')).toBeInTheDocument();
-    // PD-02: Audit lives under Metrics, not under the Answer/Output hero.
-    fireEvent.click(screen.getByRole('button', { name: 'Metrics' }));
+    // ADR-0043: Audit demoted under Output → Run health (not a Metrics peer segment).
+    fireEvent.click(screen.getByRole('button', { name: 'Run health' }));
     expect(await screen.findByText('Audit ledger')).toBeInTheDocument();
     await waitFor(() => expect(getPlanLedger).toHaveBeenCalledWith('test-token', 'plan-1'));
     expect(screen.getByText('12000')).toBeInTheDocument();
     expect(screen.getByText('1.2 s')).toBeInTheDocument();
-    // PD-02: Audit card must not re-print the answer under a Final response label.
-    expect(screen.queryByText('Final response')).not.toBeInTheDocument();
   });
 
   it('pauses on a consent step and confirms it via the step gate', async () => {

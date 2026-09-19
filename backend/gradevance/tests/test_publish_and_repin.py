@@ -25,6 +25,42 @@ def test_summative_lct_gate_runs_held_out():
     # Heuristic coder may or may not pass κ — just ensure structure.
     assert "passed" in result
     assert "reliability" in result
+    assert result.get("expert_trusted") is True
+    assert result.get("gold_status") in {"expert_disjoint", "expert", "faculty_coded_disjoint", "unspecified"}
+
+
+def test_medicine_seeded_held_out_blocks_summative():
+    """Clinical reflection OSCE fixture remains seeded — summative blocked."""
+    loaded = load_profile(find_profile_file_for_id("medicine_osce_abdominal", 1))
+    result = evaluate_publish_gate(loaded, as_mode="summative", min_held_out=1)
+    assert result["required"] is True
+    assert result["passed"] is False
+    assert result.get("expert_trusted") is False
+    assert result.get("gold_status") == "seeded_draft"
+
+
+def test_medicine_cbl_disjoint_held_out_trusted_soft():
+    """B4+: CBL disjoint instrument coding — no anchor overlap; soft κ may unlock summative."""
+    from gradevance.services.publish import held_out_anchor_overlap
+
+    assert held_out_anchor_overlap("engines/lct_semantics/medicine_cbl_v1") == []
+    loaded = load_profile(find_profile_file_for_id("medicine_cbl_appendicitis", 1))
+    result = evaluate_publish_gate(loaded, as_mode="summative", min_held_out=5)
+    assert result["required"] is True
+    assert result.get("expert_trusted") is True
+    assert result.get("gold_status") == "instrument_coded_disjoint"
+    assert result.get("held_out_anchor_overlaps", 0) == 0
+    # Soft floor — κ should pass at device minimum 0.4
+    assert result.get("kappa") is not None
+    assert result["kappa"] >= 0.4
+
+
+def test_article_seeded_held_out_blocks_summative():
+    loaded = load_profile(find_profile_file_for_id("article_generic_formative", 1))
+    result = evaluate_publish_gate(loaded, as_mode="summative", min_held_out=1)
+    assert result["required"] is True
+    assert result["passed"] is False
+    assert result.get("expert_trusted") is False
 
 
 def test_as_mode_summative_overrides_formative_pack():

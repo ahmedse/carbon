@@ -227,7 +227,7 @@ APP_REGISTRY = [
         "kind": "domain",
         "name": "GradeVance",
         "version": "0.1.0",
-        "description": "Multi-domain assessment, LCT measurement, rubrics, coaching, and HITL learning",
+        "description": "Multi-domain assessment engine room — packs, proposals, QA (EduOS)",
         "roles": [
             {"key": "gradevance:manage", "label": "GradeVance Lead", "scoped": False,
              "description": "Author assignments, publish, manage proposals"},
@@ -236,6 +236,22 @@ APP_REGISTRY = [
             {"key": "gradevance:submit", "label": "Student", "scoped": False,
              "description": "Submit work and view formative coaching"},
         ],
+    },
+    {
+        "id": "learn",
+        "kind": "domain",
+        "name": "Learn",
+        "version": "0.1.0",
+        "description": "Student self-service — my assignments, coaching, released results (EduOS)",
+        "roles": [],
+    },
+    {
+        "id": "teach",
+        "kind": "domain",
+        "name": "Teach",
+        "version": "0.1.0",
+        "description": "Professor / marker — courses, stems, marking, calibration (EduOS)",
+        "roles": [],
     },
 ]
 
@@ -576,6 +592,8 @@ BRAND_APP_PRESETS = {
     },
     "eduos": {
         "gradevance": True,
+        "learn": True,
+        "teach": True,
     },
     "tectona": {
         "healthy": True,
@@ -592,7 +610,7 @@ BRAND_WORK_AREA_KEYS: dict[str, list[str] | None] = {
     "nibras": ["people", "ai"],
     "tectona": ["healthy", "ai"],
     "medos": ["ai"],
-    "eduos": ["gradevance", "ai"],
+    "eduos": ["gradevance", "learn", "teach", "ai"],
 }
 
 # ── GradeVance LTI 1.3 (EduOS) — disabled until JWKS configured ─────

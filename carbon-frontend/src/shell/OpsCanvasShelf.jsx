@@ -58,7 +58,14 @@ export default function OpsCanvasShelf({
       ]);
       const mapList = Array.isArray(maps) ? maps : (maps?.results ?? []);
       const artList = Array.isArray(arts) ? arts : (arts?.results ?? []);
-      setJobMaps(mapList);
+      // Agent Job Maps first — canvas is the execution board, Chat briefs secondary.
+      const sorted = [...mapList].sort((a, b) => {
+        const am = a?.content_json?.mode === 'agent' ? 0 : 1;
+        const bm = b?.content_json?.mode === 'agent' ? 0 : 1;
+        if (am !== bm) return am - bm;
+        return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+      });
+      setJobMaps(sorted);
       setArtifacts(artList.filter((a) => a.artifact_type !== 'job_map'));
       setObjectives(Array.isArray(objs) ? objs : (objs?.results ?? []));
     } catch (err) {
@@ -87,7 +94,7 @@ export default function OpsCanvasShelf({
     }
   }, [token, notify, notifyFromError, load]);
 
-  const handleNewBrief = useCallback(async () => {
+  const handleNewJobMap = useCallback(async () => {
     if (!conversationId) {
       notify({ message: 'Open a conversation first', type: 'warning' });
       return;
@@ -95,15 +102,15 @@ export default function OpsCanvasShelf({
     try {
       const art = await createJobMap(token, {
         conversation_id: conversationId,
-        mode: 'chat',
-        title: 'Job Brief',
-        ask: 'Manual Job Brief',
+        mode: 'agent',
+        title: 'Agent Job Map',
+        ask: 'Agent plan / execution board',
         related_object: relatedType
           ? { type: relatedType, id: relatedId || '', label: '' }
           : undefined,
       });
       setOpenMap(art);
-      notify({ message: 'Job Map created', type: 'success' });
+      notify({ message: 'Agent Job Map created', type: 'success' });
       load();
     } catch (err) {
       notifyFromError(err, 'Could not create Job Map');
@@ -117,8 +124,8 @@ export default function OpsCanvasShelf({
         <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1 }}>
           Ops Canvas
         </Typography>
-        <Button size="small" variant="outlined" onClick={handleNewBrief} disabled={!conversationId}>
-          New brief
+        <Button size="small" variant="outlined" onClick={handleNewJobMap} disabled={!conversationId}>
+          New Job Map
         </Button>
         <Button size="small" startIcon={<RefreshIcon />} onClick={load} variant="text">
           Refresh
@@ -135,6 +142,11 @@ export default function OpsCanvasShelf({
         <Tab label={`Objectives (${objectives.length})`} />
       </Tabs>
 
+      {!loading && tab === 0 && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+          Agent Job Maps = plan · execution · outputs. Chat briefs are advisory only.
+        </Typography>
+      )}
       {loading && (
         <Typography variant="caption" color="text.secondary">Loading…</Typography>
       )}

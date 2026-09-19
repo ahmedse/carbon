@@ -111,6 +111,9 @@ multiple tool calls. Decompose it into phases (workflow stages) and steps.
 Available tools:
 {tools_list}
 
+Host API catalog (live data — use call_host_api with api_name=…):
+{host_api_list}
+
 Registered skills (for invoke_skill only — exact names):
 {skills_list}
 
@@ -142,6 +145,14 @@ Return ONLY valid JSON (no markdown, no fences):
 
 Rules:
 - Each step must use one of the available tools listed above.
+- Live host data / self-service reads and writes (leave balance, leave
+  records, payslips, profile, employees, payroll, …) MUST use
+  tool_name "call_host_api" with tool_args.api_name set to an exact name
+  from the Host API catalog. NEVER put a catalog name in
+  get_entity_details.entity_name — that tool is knowledge-schema only.
+- Person / org identity lookups by name or employee number use
+  resolve_entity (ECF), not get_entity_details and not a catalog name as
+  an entity.
 - invoke_skill may ONLY reference an exact name from the Registered skills
   list. NEVER invent a skill name — if no skill matches, do not use
   invoke_skill at all.
@@ -231,6 +242,28 @@ _ACTION_VERBS: list[str] = [
 ]
 
 
+# Agent Done → Discuss in Chat seeds the composer with these markers so Chat
+# stays prose-only (no skill match / invoke_skill / ReAct) until Fork/Replan.
+_AGENT_DISCUSS_MARKERS: tuple[str, ...] = (
+    "discussion only",
+    "i'd like to refine plan",
+    "let's discuss the outcome of",
+    "do not change the agent plan until i say to fork or replan",
+)
+
+
+def _is_agent_discuss_turn(utterance: str) -> bool:
+    """True when Chat was seeded from Agent → Discuss (refine / outcome talk).
+
+    These turns must stay single-step prose: pasting a prior brief/outcome
+    otherwise matches skills and trips invoke_skill / ReAct.
+    """
+    if not utterance:
+        return False
+    lower = utterance.lower()
+    return any(m in lower for m in _AGENT_DISCUSS_MARKERS)
+
+
 def _looks_agent_multi_step(utterance: str) -> bool:
     """Does this utterance likely benefit from multi-step decomposition?
 
@@ -239,7 +272,10 @@ def _looks_agent_multi_step(utterance: str) -> bool:
     sequential connective, or (d) stacks two or more imperative action verbs.
     A bare factual question ("what is X?") stays single-step so it answers
     with prose instead of burning an LLM decompose.
+    Agent Discuss turns never look multi-step (prose refine only).
     """
+    if _is_agent_discuss_turn(utterance):
+        return False
     lower = utterance.lower()
     if any(s in lower for s in _MULTI_SIGNALS):
         return True
@@ -446,6 +482,68 @@ def _coerce_export_steps(steps: list[PlanStep]) -> None:
         )
 
 
+def _catalog_api_names(instance_config: dict | None) -> set[str]:
+    """Exact host API names from brand ``api_catalog`` (not ECF entity types)."""
+    catalog = (instance_config or {}).get("api_catalog") or []
+    return {ep.get("name") for ep in catalog if isinstance(ep, dict) and ep.get("name")}
+
+
+def _coerce_host_api_steps(
+    steps: list[PlanStep], catalog_names: set[str] | None,
+) -> None:
+    """Rewrite mistaken knowledge-entity bindings to ``call_host_api``.
+
+    Live Agent QA (N-AG-LV-01): the decomposer often set
+    ``get_entity_details(entity_name="get_my_leave_balance")`` because the
+    tool description said "API endpoint" and the prompt listed no catalog.
+    That tool only searches the knowledge store → soft miss
+    ``Entity '…' not found``. Chat uses ``call_host_api`` with the same
+    catalog names. Mutates ``steps`` in place.
+    """
+    if not catalog_names:
+        return
+    for step in steps:
+        args = dict(step.tool_args or {})
+        # tool_name was itself a catalog name (invalid executor key → stripped
+        # earlier, or still present if it somehow passed validation).
+        if step.tool_name in catalog_names:
+            api = step.tool_name
+            step.tool_name = "call_host_api"
+            args = {"api_name": api, **{k: v for k, v in args.items() if k != "api_name"}}
+            step.tool_args = args
+            logger.info(
+                "Coerced step %d tool_name=%r → call_host_api",
+                step.step_id, api,
+            )
+            continue
+
+        if step.tool_name not in ("get_entity_details", "resolve_entity", "call_host_api"):
+            continue
+
+        candidate = (
+            args.get("api_name")
+            or args.get("entity_name")
+            or args.get("entity_type")
+            or args.get("name")
+            or args.get("query")
+        )
+        if not isinstance(candidate, str) or candidate not in catalog_names:
+            continue
+        if step.tool_name == "call_host_api" and args.get("api_name") == candidate:
+            continue
+        step.tool_name = "call_host_api"
+        step.tool_args = {
+            "api_name": candidate,
+            **{k: v for k, v in args.items() if k not in (
+                "api_name", "entity_name", "entity_type", "name", "query",
+            )},
+        }
+        logger.info(
+            "Coerced step %d → call_host_api(api_name=%r)",
+            step.step_id, candidate,
+        )
+
+
 def _ensure_export_deliverable(utterance: str, steps: list[PlanStep]) -> None:
     """Append an export_document step when the brief asks for a file deliverable.
 
@@ -521,6 +619,21 @@ class SkillAwarePlanner:
         client = llm_client or self.llm_client
         model_name = model or self.model or ""
 
+        # Agent → Discuss in Chat: never skill-match or LLM-decompose. The
+        # seeded brief/outcome would otherwise route to invoke_skill.
+        if _is_agent_discuss_turn(utterance) and not force_decompose:
+            logger.info("SkillAwarePlanner: Agent discuss turn — single-step prose")
+            return Plan(
+                pattern="custom",
+                steps=[PlanStep(step_id=0, intent=utterance)],
+                synthesis_instruction="Respond directly to the user.",
+                source="single_step",
+                phases=[PlanPhase(
+                    phase_id=0, name="All steps", goal="",
+                    strategy="sequential", step_ids=[0],
+                )],
+            )
+
         # ── Step 1: search skills ───────────────────────────────────────────
         skills = await self._search_skills(skill_registry, instance_id, user_id)
         logger.debug(
@@ -584,7 +697,7 @@ class SkillAwarePlanner:
         if should_decompose and client is not None:
             plan = await self._llm_decompose(
                 utterance, client, model_name,
-                instance_id=instance_id, skills=skills,
+                instance_id=instance_id, skills=skills, user_id=user_id,
             )
             if plan and plan.steps:
                 logger.info("SkillAwarePlanner: LLM decomposition returned %d steps", len(plan.steps))
@@ -668,7 +781,7 @@ class SkillAwarePlanner:
 
     async def _llm_decompose(
         self, utterance: str, llm_client, model: str, instance_id: str = "",
-        skills: list | None = None,
+        skills: list | None = None, user_id: str = "",
     ) -> Plan | None:
         """Use LLM to decompose utterance into agentic steps."""
         from ai.engine.llm.router import route_chat
@@ -677,6 +790,21 @@ class SkillAwarePlanner:
         _execs = await get_tool_executors()
         tool_names = sorted(_execs.keys())
         tools_list = "\n".join(f"- {n}" for n in tool_names)
+
+        # Brand host API catalog — without this the model binds live endpoints
+        # to get_entity_details (knowledge store) and Agent leave/balance
+        # steps soft-miss (N-AG-LV-01 / SIM-20260919-N10).
+        catalog_names: set[str] = set()
+        host_api_list = "- (none configured for this instance)"
+        try:
+            from ai.engine_runtime import _instance_config
+
+            cfg = _instance_config(instance_id or "", user_id or None) if instance_id else {}
+            catalog_names = _catalog_api_names(cfg)
+            if catalog_names:
+                host_api_list = "\n".join(f"- {n}" for n in sorted(catalog_names))
+        except Exception as exc:  # noqa: BLE001 - planning must still run
+            logger.warning("api_catalog load failed for plan decompose: %s", exc)
 
         # Only advertise real, registered skills — the LLM must never invent
         # a skill name for invoke_skill (reasoning is the LLM's job, not a
@@ -688,7 +816,10 @@ class SkillAwarePlanner:
             else "- (none registered — do NOT use invoke_skill)"
         )
         prompt = _DECOMPOSE_AGENT_PROMPT.format(
-            tools_list=tools_list, skills_list=skills_list, task=utterance,
+            tools_list=tools_list,
+            host_api_list=host_api_list,
+            skills_list=skills_list,
+            task=utterance,
         )
 
         try:
@@ -742,7 +873,11 @@ class SkillAwarePlanner:
             )
             steps.append(step)
 
-        # Validate tool names
+        # Validate tool names — catalog names are not executors; rewrite via
+        # _coerce_host_api_steps after stripping unknown tools would lose the
+        # name, so coerce FIRST while the catalog name is still on the step.
+        _coerce_host_api_steps(steps, catalog_names)
+
         from ai.engine.agent.tools import get_tool_executors
         _vexecs = await get_tool_executors()
         _skill_names = {s.name for s in (skills or [])}
@@ -779,6 +914,9 @@ class SkillAwarePlanner:
         # from the prior findings that flow in via depends_on.
         _coerce_export_steps(steps)
         _ensure_export_deliverable(utterance, steps)
+        # Second pass after arg strip — entity_name may remain on
+        # get_entity_details when the tool_name was already valid.
+        _coerce_host_api_steps(steps, catalog_names)
 
         # Deterministic mutation classification — a capability fact of the
         # tool, NOT the LLM's judgment. The LLM routinely under-marks mutation

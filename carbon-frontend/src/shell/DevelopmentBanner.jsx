@@ -12,6 +12,7 @@ import { Alert, Button, Chip, Typography, useTheme } from '@mui/material';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { DEV_BANNER_PLATFORM } from '../config/branding';
 
 function DevelopmentBanner() {
   const { t } = useTranslation('shell');
@@ -99,7 +100,7 @@ function DevelopmentBanner() {
           whiteSpace: 'nowrap',
         }}
       >
-        {t('devBanner.message')}
+        {t('devBanner.message', { platform: DEV_BANNER_PLATFORM })}
       </Typography>
     </Alert>
   );

@@ -690,6 +690,7 @@ export function listArtifacts(token, {
   artifact_type,
   related_type,
   related_id,
+  plan_id,
   limit = 50,
 } = {}) {
   const params = new URLSearchParams();
@@ -697,6 +698,7 @@ export function listArtifacts(token, {
   if (artifact_type) params.append('artifact_type', artifact_type);
   if (related_type) params.append('related_type', related_type);
   if (related_id) params.append('related_id', String(related_id));
+  if (plan_id) params.append('plan_id', String(plan_id));
   if (limit) params.append('limit', String(limit));
   const qs = params.toString();
   return apiFetch(`${BASE}artifacts/${qs ? `?${qs}` : ''}`, { token });
@@ -1167,17 +1169,36 @@ export function getPlanLedger(token, planId) {
 // review gate before the revised plan is re-approved.
 
 /**
- * Edit a plan's brief (replan). Returns the plan + `diff` + `replan_gate`.
+ * Edit a plan brief: `mode=rename` (label only) or `mode=replan` (decompose + diff).
+ * Replan never auto-approves (RULE_21); Cancel must call discardPlanEdit.
  * @param {string} token - JWT access token
  * @param {string} planId - UUID
- * @param {object} params - { brief?, step_deltas? }
- * @returns {Promise<object>} Plan payload with { diff, replan_gate }
+ * @param {object} params - { brief?, step_deltas?, mode?: 'rename'|'replan' }
+ * @returns {Promise<object>} Plan payload with { diff, replan_gate, edit_mode }
  */
-export function editPlan(token, planId, { brief, step_deltas } = {}) {
-  const body = {};
+export function editPlan(token, planId, { brief, step_deltas, mode = 'replan' } = {}) {
+  const body = { mode };
   if (brief !== undefined) body.brief = brief;
   if (step_deltas !== undefined) body.step_deltas = step_deltas;
   return apiFetch(`${PLANS_BASE}${planId}/`, { token, method: 'PATCH', body });
+}
+
+/**
+ * Keep an applied replan — clears the Cancel rollback snapshot.
+ * @param {string} token
+ * @param {string} planId
+ */
+export function confirmPlanEdit(token, planId) {
+  return apiFetch(`${PLANS_BASE}${planId}/confirm-edit/`, { token, method: 'POST' });
+}
+
+/**
+ * Cancel a replan — restores the pre-edit snapshot.
+ * @param {string} token
+ * @param {string} planId
+ */
+export function discardPlanEdit(token, planId) {
+  return apiFetch(`${PLANS_BASE}${planId}/discard-edit/`, { token, method: 'POST' });
 }
 
 /**

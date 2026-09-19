@@ -1,4 +1,4 @@
-# Registry: Backend Services & Utilities  (auto-generated 2026-09-16 19:49 — DO NOT EDIT)
+# Registry: Backend Services & Utilities  (auto-generated 2026-09-19 10:12 — DO NOT EDIT)
 
 > Business logic lives in services. Before writing a new one, check this list — extend, don't duplicate.
 
@@ -10,7 +10,7 @@ backend/accounts/services.py:61:class AppManifestService:
 backend/ai/audit_service.py:23:class AuditService:
 backend/ai/catalog_service.py:60:class CatalogService:
 backend/ai/durable_service.py:101:class DurableExecutionService:
-backend/ai/plans_service.py:567:class PlansService:
+backend/ai/plans_service.py:582:class PlansService:
 backend/ai/subagent_service.py:68:class SubagentService:
 backend/appregistry/services.py:13:class AppRegistryService:
 backend/connections/services.py:22:class ConnectionService:
@@ -52,6 +52,10 @@ backend/emissions/tests/test_services.py:376:class TargetServiceExtendedTests(Te
 backend/emissions/tests/test_services.py:76:class TargetServiceTests(TestCase):
 backend/emissions/tests/test_services.py:95:class DashboardServiceTests(TestCase):
 backend/evidence/services.py:9:class EvidenceService:
+backend/gradevance/services/pack_bump.py:32:class PackBumpService:
+backend/gradevance/services/pipeline.py:553:class FormativePipelineService:
+backend/gradevance/services/pipeline.py:703:class ReviewService:
+backend/gradevance/services/repin.py:33:class ProfileRepinService:
 backend/healthy/services.py:134:class ERPSnapshotService:
 backend/healthy/services.py:249:class HealthyPipelineService:
 backend/healthy/services.py:408:class LoadoutService:
@@ -73,6 +77,7 @@ backend/people/tests/test_payroll_service.py:161:class PayrollRunServiceTests(Te
 backend/accounts/management/commands/apply_brand.py
 backend/accounts/management/commands/backfill_scoped_roles.py
 backend/accounts/management/commands/bootstrap_platform.py
+backend/accounts/management/commands/ensure_eduos_admins.py
 backend/accounts/management/commands/ensure_nibras_admins.py
 backend/accounts/management/commands/populate_demo_users.py
 backend/accounts/management/commands/provision_alamein_rbac.py
@@ -89,8 +94,10 @@ backend/ai/management/commands/run_learning_loop.py
 backend/ai/management/commands/run_pulse_maintenance.py
 backend/ai/management/commands/seed_ai_demo.py
 backend/ai/management/commands/seed_catalog_skills.py
+backend/ai/management/commands/seed_complex_agent_demos.py
 backend/ai/management/commands/seed_nibras_knowledge.py
 backend/ai/management/commands/seed_nibras_processes.py
+backend/ai/management/commands/seed_ops_canvas_examples.py
 backend/ai/management/commands/simulate_agent_workflows.py
 backend/appregistry/management/commands/activate_apps.py
 backend/appregistry/management/commands/register_app.py
@@ -112,6 +119,13 @@ backend/emissions/management/commands/seed_emission_factors.py
 backend/emissions/management/commands/setup_carbon_app.py
 backend/emissions/management/commands/sync_carbon_catalog.py
 backend/emissions/management/commands/unlock_tables.py
+backend/gradevance/management/commands/bump_gradevance_pack.py
+backend/gradevance/management/commands/gradevance_lti_readiness.py
+backend/gradevance/management/commands/mine_gradevance_proposals.py
+backend/gradevance/management/commands/register_gradevance_app.py
+backend/gradevance/management/commands/seed_gradevance_demo.py
+backend/gradevance/management/commands/soak_gradevance_lti.py
+backend/gradevance/management/commands/sync_eduos_packs.py
 backend/healthy/management/commands/register_healthy_app.py
 backend/mdm/management/commands/seed_gofsco_org.py
 backend/people/management/commands/apply_gofsco_kuwaitization.py

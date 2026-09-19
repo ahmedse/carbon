@@ -96,6 +96,11 @@ PipelineConfig**. No hardcoded “English writing product.” New field = new pa
 
 One app, five roles (ScopedRole / groups — not five apps):
 
+> **Accepted (ADR-0042, 2026-09-19):** three persona surfaces over this one engine —
+> `learn` (student), `teach` (professor + marker), `gradevance` (engine room) — mirroring
+> Nibras `my`/`team`/`people`. Roles live on course `Enrollment`. See
+> [GRADEVANCE-PERSONA-APPS.md](./GRADEVANCE-PERSONA-APPS.md).
+
 | Role | Capabilities |
 |------|----------------|
 | **Admin** | Org/instance setup, LMS/SSO, retention/erasure, pack library enablement, global QA dashboards |
@@ -499,9 +504,14 @@ backend/ai/domain/gradevance.py  # Pulse domain adapter ✅
 backend/ai/engine/instances/eduos/instance.yaml   # ✅
 domain_packs/eduos/           # ✅ P0 schemas + NAA gold + OSCE packs
 carbon-frontend/src/brands/eduos.js               # ✅
-carbon-frontend/src/apps/gradevance/              # ✅ studios (home/library/student/marking/proposals)
+carbon-frontend/src/apps/gradevance/              # ✅ engine room
+carbon-frontend/src/apps/learn/                   # ✅ student (ADR-0042)
+carbon-frontend/src/apps/teach/                   # ✅ professor (ADR-0042)
 docs/eduos/GRADEVANCE-DESIGN.md                   # this file
+docs/eduos/GRADEVANCE-PERSONA-APPS.md             # Learn · Teach · Engine
+docs/eduos/GRADEVANCE-PROFESSOR-LIFECYCLE.md      # professor UX plan
 .ai-toolkit/decisions/0038-eduos-gradevance.md    # ✅
+.ai-toolkit/decisions/0042-gradevance-persona-apps.md  # ✅
 ```
 
 ---

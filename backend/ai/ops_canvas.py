@@ -115,11 +115,15 @@ def layers_from_plan(plan: dict | None) -> dict:
         for i, step in enumerate(raw_steps):
             if not isinstance(step, dict):
                 continue
+            sid = step.get("id")
+            if sid is None:
+                sid = step.get("step_id", i)
             steps_out.append(
                 {
-                    "id": str(step.get("id") or f"s{i}"),
+                    "id": str(sid),
                     "title": str(
                         step.get("title")
+                        or step.get("intent")
                         or step.get("name")
                         or step.get("description")
                         or f"Step {i + 1}"
@@ -133,7 +137,11 @@ def layers_from_plan(plan: dict | None) -> dict:
     return {
         "intent": {
             "ask": brief,
-            "success_criteria": str(plan.get("acceptance_criteria") or ""),
+            "success_criteria": str(
+                plan.get("acceptance_criteria")
+                or plan.get("synthesis_instruction")
+                or ""
+            ),
             "contract": "agent",
         },
         "job_map": {
@@ -156,6 +164,133 @@ def layers_from_plan(plan: dict | None) -> dict:
             "pending_consent": None,
         },
     }
+
+
+def sync_agent_job_map_from_run(run) -> int:
+    """Refresh Agent Job Map steps + live_run from durable RunStep rows.
+
+    Called as steps advance so the canvas tracks plan execution (not Chat).
+    Matches artifacts by ``content_json.plan_id == run.id``. Returns patched count.
+    """
+    from ai.models import AIArtifact
+    from ai.models.core import RunStep
+
+    run_id = str(getattr(run, "id", "") or "")
+    if not run_id:
+        return 0
+
+    rows = list(RunStep.objects.filter(run_id=run_id).order_by("step_index"))
+    terminal = {"completed", "failed", "skipped"}
+    settled = sum(1 for r in rows if (r.status or "") in terminal)
+    total = len(rows) or 1
+    progress = int(round(100 * settled / total)) if rows else 0
+
+    awaiting = next(
+        (r for r in rows if (r.status or "") == "awaiting_approval"),
+        None,
+    )
+    failed = any((r.status or "") == "failed" for r in rows)
+    all_done = rows and settled == len(rows)
+
+    if awaiting:
+        live_status = "blocked"
+        blockers = [f"Consent required: step {awaiting.step_index} — {awaiting.intent or awaiting.tool_name or ''}"]
+        pending_consent = {
+            "step_id": awaiting.step_index,
+            "tool": awaiting.tool_name,
+            "intent": awaiting.intent,
+        }
+    elif failed and all_done:
+        live_status = "failed"
+        blockers = []
+        pending_consent = None
+    elif all_done:
+        live_status = "completed"
+        blockers = []
+        pending_consent = None
+        progress = 100
+    elif settled > 0:
+        live_status = "running"
+        blockers = []
+        pending_consent = None
+    else:
+        live_status = "planned"
+        blockers = []
+        pending_consent = None
+
+    step_payload = [
+        {
+            "id": str(r.step_index),
+            "title": str(r.intent or r.tool_name or f"Step {r.step_index}")[:200],
+            "tool": str(r.tool_name or ""),
+            "status": str(r.status or "pending"),
+            "deps": list(r.depends_on_json or []),
+        }
+        for r in rows
+    ]
+
+    # Evidence: pull tool outputs briefly from completed steps.
+    evidence_rows = []
+    for r in rows:
+        if (r.status or "") != "completed":
+            continue
+        out = r.tool_output_json
+        if isinstance(out, dict) and out:
+            evidence_rows.append(
+                [
+                    str(r.step_index),
+                    str(r.tool_name or ""),
+                    str(out.get("summary") or out.get("ok") or "ok")[:120],
+                ]
+            )
+
+    patched = 0
+    for art in AIArtifact.objects.filter(artifact_type=ARTIFACT_TYPE).order_by(
+        "-created_at"
+    )[:80]:
+        content = dict(art.content_json or {})
+        if content.get("plan_id") != run_id:
+            continue
+        if content.get("mode") != MODE_AGENT:
+            continue
+        layers = dict(content.get("layers") or {})
+        job = dict(layers.get("job_map") or {})
+        if step_payload:
+            job["steps"] = step_payload
+            job["tools"] = sorted({s["tool"] for s in step_payload if s.get("tool")})
+        layers["job_map"] = job
+        live = dict(layers.get("live_run") or {})
+        live["progress_pct"] = progress
+        live["status"] = live_status
+        live["blockers"] = blockers
+        live["pending_consent"] = pending_consent
+        layers["live_run"] = live
+        if evidence_rows:
+            ev = dict(layers.get("evidence") or {})
+            ev["tables"] = [
+                {
+                    "title": "Step outputs",
+                    "columns": ["Step", "Tool", "Result"],
+                    "rows": evidence_rows[:12],
+                }
+            ] + [t for t in (ev.get("tables") or []) if t.get("title") != "Step outputs"]
+            if live_status == "completed" and not ev.get("headline"):
+                ev["headline"] = f"Run finished · {settled}/{total} steps settled"
+            layers["evidence"] = ev
+        if live_status == "completed":
+            outcome = dict(layers.get("outcome") or {})
+            if not outcome.get("summary"):
+                outcome["summary"] = (
+                    f"Plan {run_id[:8]}… completed ({settled}/{total} steps)."
+                )
+            layers["outcome"] = outcome
+        content["layers"] = layers
+        art.content_json = content
+        art.save(update_fields=["content_json"])
+        patched += 1
+        if patched >= 3:
+            break
+    return patched
 
 
 def layers_from_envelope_and_tools(

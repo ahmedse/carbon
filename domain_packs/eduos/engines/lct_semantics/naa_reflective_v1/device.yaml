@@ -38,7 +38,9 @@ scale:
 reliability_gate:
   metric: cohen_kappa
   minimum: 0.6
+  minimum_sd: 0.4
   required_for_summative: true
+  held_out_status: expert_disjoint
 hitl:
   learning_enabled: true
   promote_edits_to_anchors: true

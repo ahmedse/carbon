@@ -1,4 +1,9 @@
-from ai.engine.cognition.plan.planner import _looks_agent_multi_step
+import pytest
+
+from ai.engine.cognition.plan.planner import (
+    _is_agent_discuss_turn,
+    _looks_agent_multi_step,
+)
 
 
 def test_emissions_by_supplier():
@@ -19,6 +24,60 @@ def test_simple_lookup_stays_single():
 
 def test_greeting_stays_single():
     assert _looks_agent_multi_step("hello") is False
+
+
+def test_agent_discuss_refine_is_not_multi_step():
+    """Agent → Discuss seed must not trip ReAct / invoke_skill."""
+    draft = (
+        'I\'d like to refine plan (plan 74a5e6a6-942c-4185-a986-8f895601d5ca): '
+        '"Count Nibras employees by employment status and list the top 3 statuses with counts.".\n\n'
+        "DISCUSSION ONLY — reply in Chat with one improved brief and a short numbered step list.\n"
+        "Do not call tools, invoke_skill, plan_task, or re-run the analysis.\n"
+        "Do not change the Agent plan until I say to Fork or Replan."
+    )
+    assert _is_agent_discuss_turn(draft) is True
+    assert _looks_agent_multi_step(draft) is False
+
+
+def test_agent_discuss_outcome_with_analyze_verb_stays_single():
+    """Pasted prior outcome often contains 'analyze' — still discuss-only."""
+    draft = (
+        "Let's discuss the outcome of: Count Nibras employees (plan abc).\n"
+        "---\n"
+        "Prior outcome (context only — do not re-execute):\n"
+        "I will analyze the employee population based on is_active.\n"
+        "---\n"
+        "DISCUSSION ONLY — answer in Chat about findings.\n"
+        "Do not change the Agent plan until I say to Fork or Replan."
+    )
+    assert _is_agent_discuss_turn(draft) is True
+    assert _looks_agent_multi_step(draft) is False
+
+
+@pytest.mark.asyncio
+async def test_decompose_skips_skill_match_on_discuss_turn():
+    """Matching skills must not route discuss seeds to invoke_skill."""
+    from ai.engine.cognition.plan.planner import SkillAwarePlanner
+
+    class _Skill:
+        name = "count_employees"
+        kind = "procedure"
+        body = {}
+
+    class _Reg:
+        async def search(self, *a, **k):
+            return [_Skill()]
+
+    draft = (
+        'I\'d like to refine plan (plan abc): "Count Nibras employees".\n\n'
+        "DISCUSSION ONLY — reply in Chat.\n"
+        "Do not change the Agent plan until I say to Fork or Replan."
+    )
+    plan = await SkillAwarePlanner().decompose(
+        draft, _Reg(), instance_id="i", user_id="u",
+    )
+    assert plan.source == "single_step"
+    assert plan.steps[0].tool_name is None
 
 
 # ── export-step coercion (document-generation reliability) ──────────────────

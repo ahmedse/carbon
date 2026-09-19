@@ -16,6 +16,12 @@ class Course(models.Model):
     code = models.CharField(max_length=64, db_index=True)
     name = models.CharField(max_length=255)
     discipline = models.CharField(max_length=80, blank=True, default="")
+    entry_code = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="Optional join code for manual student enrollment.",
+    )
     org_unit = models.ForeignKey(
         "mdm.OrgUnit",
         null=True,
@@ -31,6 +37,52 @@ class Course(models.Model):
 
     def __str__(self) -> str:
         return f"{self.code} — {self.name}"
+
+
+class Enrollment(models.Model):
+    """Per-course roster role (Gradescope pattern) — not a global user role."""
+
+    ROLE_STUDENT = "student"
+    ROLE_TA = "ta"
+    ROLE_INSTRUCTOR = "instructor"
+    ROLE_CHOICES = [
+        (ROLE_STUDENT, "Student"),
+        (ROLE_TA, "Teaching assistant"),
+        (ROLE_INSTRUCTOR, "Instructor"),
+    ]
+    SOURCE_MANUAL = "manual"
+    SOURCE_CODE = "code"
+    SOURCE_NRPS = "nrps"
+    SOURCE_CHOICES = [
+        (SOURCE_MANUAL, "Manual"),
+        (SOURCE_CODE, "Entry code"),
+        (SOURCE_NRPS, "NRPS"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="enrollments")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="gradevance_enrollments",
+    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default=SOURCE_MANUAL)
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["course", "user"],
+                name="gradevance_enrollment_course_user_uniq",
+            ),
+        ]
+        ordering = ["course_id", "role", "user_id"]
+
+    def __str__(self) -> str:
+        return f"{self.user_id}@{self.course_id} ({self.role})"
 
 
 class Assignment(models.Model):
@@ -67,6 +119,7 @@ class Assignment(models.Model):
         blank=True,
         help_text="Frozen at publish — runtime MUST honor (RULE_32).",
     )
+    due_at = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -372,3 +425,44 @@ class Proposal(models.Model):
 
     def __str__(self) -> str:
         return f"Proposal {self.kind} [{self.status}]"
+
+
+class Appeal(models.Model):
+    """Student review request after release (summative) or complete formative run."""
+
+    STATUS_OPEN = "open"
+    STATUS_ACCEPTED = "accepted"
+    STATUS_REJECTED = "rejected"
+    STATUS_WITHDRAWN = "withdrawn"
+    STATUS_CHOICES = [
+        (STATUS_OPEN, "Open"),
+        (STATUS_ACCEPTED, "Accepted"),
+        (STATUS_REJECTED, "Rejected"),
+        (STATUS_WITHDRAWN, "Withdrawn"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    run = models.ForeignKey(AnalysisRun, on_delete=models.CASCADE, related_name="appeals")
+    student_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="gradevance_appeals",
+    )
+    reason = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_OPEN)
+    resolution = models.TextField(blank=True, default="")
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Appeal {self.id} [{self.status}]"

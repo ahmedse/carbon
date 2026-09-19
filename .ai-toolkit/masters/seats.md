@@ -57,19 +57,22 @@ Shared = either Master may read; write only when your track owns the change.
 ## Seat: EduOS
 
 **Tracks:** GradeVance design + scaffold, LCT/Rubric config engines, EduOS brand,
-education assessment/coaching product. Canonical design:
-`docs/eduos/GRADEVANCE-DESIGN.md` · professor journey
+education assessment/coaching product. Persona apps Learn / Teach (ADR-0042).
+Canonical design: `docs/eduos/GRADEVANCE-DESIGN.md` ·
+`docs/eduos/GRADEVANCE-PERSONA-APPS.md` · professor journey
 `docs/eduos/GRADEVANCE-PROFESSOR-JOURNEY.md` ·
-`docs/eduos/GRADEVANCE-PROFESSOR-LIFECYCLE.md` · ADR-0038.
+`docs/eduos/GRADEVANCE-PROFESSOR-LIFECYCLE.md` · ADR-0038 · ADR-0042.
 
 ### Exclusive write
 - `docs/eduos/**`
-- `backend/gradevance/**` (when created)
-- `carbon-frontend/src/apps/gradevance/**` (when created)
+- `backend/gradevance/**`
+- `carbon-frontend/src/apps/gradevance/**`
+- `carbon-frontend/src/apps/learn/**`
+- `carbon-frontend/src/apps/teach/**`
 - `carbon-frontend/src/brands/eduos.js`
 - `backend/ai/engine/instances/eduos/**`
-- `domain_packs/eduos/**` / GradeVance engine packs (when created)
-- ADR-0038 and future EduOS/GradeVance ADRs
+- `domain_packs/eduos/**` / GradeVance engine packs
+- ADR-0038, ADR-0042 and future EduOS/GradeVance ADRs
 
 ### Shared (coordinate via COMMS if touching)
 - Local `./manage.sh` stack — **stack lease** (`shared/multi-master.md`)

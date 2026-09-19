@@ -1,0 +1,17 @@
+{
+  "frozen_at": "2026-09-19",
+  "instrument_trust": "B4",
+  "packs": [
+    {
+      "device_rel": "engines/lct_semantics/article_argumentative_v1",
+      "gold_status": "seeded_draft",
+      "held_out_file": "held_out.jsonl",
+      "notes": "Seeded argumentative sample; overlaps anchors. Soft floors; summative blocked until expert gold."
+    }
+  ],
+  "runtime_pdf_parsing": false,
+  "promotion_criteria": [
+    "Faculty-coded held_out disjoint from anchors",
+    "device.reliability_gate.held_out_status = expert_disjoint"
+  ]
+}

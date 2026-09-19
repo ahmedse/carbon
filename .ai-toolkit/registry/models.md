@@ -1,4 +1,4 @@
-# Registry: Data Models  (auto-generated 2026-09-16 19:49 — DO NOT EDIT)
+# Registry: Data Models  (auto-generated 2026-09-19 10:12 — DO NOT EDIT)
 
 > The data schema. Before adding a model or field, check here. Reuse existing models where possible.
 
@@ -22,33 +22,34 @@ backend/ai/engine/knowledge/vector_store.py:139:class PgVectorStore(AbstractVect
 backend/ai/engine/knowledge/vector_store.py:88:class ChromaDbVectorStore(AbstractVectorStore):
 backend/ai/models/base.py:28:class AppScopeMixin(models.Model):
 backend/ai/models/catalog.py:26:class ModelCatalog(models.Model):
+backend/ai/models/control_state.py:29:class PulseControlState(models.Model):
 backend/ai/models/core.py:456:class RunArtifact(models.Model):
 backend/ai/models/core.py:501:class RunSchedule(models.Model):
 backend/ai/models/feedback.py:44:class DqFeedbackEvent(models.Model):
 backend/ai/models/workspace.py:149:class AIMessage(models.Model):
 backend/ai/models/workspace.py:24:class AIConversation(models.Model):
 backend/ai/models/workspace.py:264:class AIArtifact(models.Model):
-backend/ai/models/workspace.py:318:class AIGeneration(models.Model):
-backend/ai/models/workspace.py:382:class ConversationCheckpoint(models.Model):
-backend/ai/models/workspace.py:455:class AIUserProfile(models.Model):
+backend/ai/models/workspace.py:319:class AIGeneration(models.Model):
+backend/ai/models/workspace.py:383:class ConversationCheckpoint(models.Model):
+backend/ai/models/workspace.py:456:class AIUserProfile(models.Model):
 backend/appregistry/models.py:21:class AppManifest(models.Model):
 backend/appregistry/models.py:64:class AppActivation(models.Model):
 backend/catalog/models.py:104:class GovernanceEvent(models.Model):
 backend/catalog/models.py:127:class GovernancePolicy(models.Model):
-backend/catalog/models.py:226:class Dataset(models.Model):
-backend/catalog/models.py:288:class DatasetVersion(models.Model):
+backend/catalog/models.py:227:class Dataset(models.Model):
+backend/catalog/models.py:290:class DatasetVersion(models.Model):
 backend/catalog/models.py:32:class DataDomain(models.Model):
-backend/catalog/models.py:350:class DatasetVersionMember(models.Model):
-backend/catalog/models.py:377:class DataContract(models.Model):
-backend/catalog/models.py:414:class DataContractViolation(models.Model):
-backend/catalog/models.py:440:class DatasetAccessPolicy(models.Model):
-backend/catalog/models.py:468:class LineageEdge(models.Model):
+backend/catalog/models.py:352:class DatasetVersionMember(models.Model):
+backend/catalog/models.py:379:class DataContract(models.Model):
+backend/catalog/models.py:416:class DataContractViolation(models.Model):
+backend/catalog/models.py:442:class DatasetAccessPolicy(models.Model):
+backend/catalog/models.py:470:class LineageEdge(models.Model):
 backend/catalog/models.py:51:class GlossaryTerm(models.Model):
-backend/catalog/models.py:537:class FreshnessPolicy(models.Model):
-backend/catalog/models.py:560:class Note(models.Model):
-backend/catalog/models.py:595:class NoteAnchor(models.Model):
-backend/catalog/models.py:627:class NoteComment(models.Model):
-backend/catalog/models.py:650:class NoteReaction(models.Model):
+backend/catalog/models.py:539:class FreshnessPolicy(models.Model):
+backend/catalog/models.py:562:class Note(models.Model):
+backend/catalog/models.py:597:class NoteAnchor(models.Model):
+backend/catalog/models.py:629:class NoteComment(models.Model):
+backend/catalog/models.py:652:class NoteReaction(models.Model):
 backend/catalog/models.py:66:class Tag(models.Model):
 backend/catalog/models.py:75:class AssetProfile(models.Model):
 backend/connections/models.py:11:class DataSource(models.Model):
@@ -104,6 +105,20 @@ backend/emissions/models.py:322:class GWP(models.Model):
 backend/emissions/models.py:389:class Calculation(models.Model):
 backend/emissions/models.py:636:class CalculationRule(models.Model):
 backend/evidence/models.py:18:class Evidence(models.Model):
+backend/gradevance/models.py:140:class AssignmentProfileRecord(models.Model):
+backend/gradevance/models.py:14:class Course(models.Model):
+backend/gradevance/models.py:176:class Submission(models.Model):
+backend/gradevance/models.py:210:class AnalysisRun(models.Model):
+backend/gradevance/models.py:258:class Segment(models.Model):
+backend/gradevance/models.py:275:class LCTCode(models.Model):
+backend/gradevance/models.py:296:class WaveProfile(models.Model):
+backend/gradevance/models.py:306:class RubricEvaluation(models.Model):
+backend/gradevance/models.py:328:class ReviewItem(models.Model):
+backend/gradevance/models.py:360:class ExpertEdit(models.Model):
+backend/gradevance/models.py:401:class Proposal(models.Model):
+backend/gradevance/models.py:42:class Enrollment(models.Model):
+backend/gradevance/models.py:430:class Appeal(models.Model):
+backend/gradevance/models.py:88:class Assignment(models.Model):
 backend/healthy/models.py:112:class LoadoutLine(models.Model):
 backend/healthy/models.py:129:class MaterializationCheckpoint(models.Model):
 backend/healthy/models.py:19:class ERPSnapshot(models.Model):

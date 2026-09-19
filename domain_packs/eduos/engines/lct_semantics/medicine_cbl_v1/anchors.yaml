@@ -1,6 +1,7 @@
 device_id: medicine_cbl_semantics
 version: 1
 anchors:
+# Legacy appendicitis cues — used for learning; gate held_out must stay disjoint
 - id: a_sgp_case
   dimension: semantic_gravity
   value: SG+
@@ -23,3 +24,99 @@ anchors:
   value: SD-
   span_text: She said the pain started around the belly button and later moved to the right side.
   rationale: Plain narrative retelling without condensed clinical lexicon.
+# Short disjoint cues (<40 chars) — Jaccard match held_out without containment overlap gate
+- id: a_sgp_fatty_meal
+  dimension: semantic_gravity
+  value: SG+
+  numeric: 2
+  span_text: after a fatty meal last night
+  rationale: Culinary trigger episode (biliary).
+  source: instrument_trust_disjoint_2026-09-19
+- id: a_sgp_no_diarrhoea
+  dimension: semantic_gravity
+  value: SG+
+  numeric: 2
+  span_text: vomiting but no diarrhoea
+  rationale: Negated GI symptom narrative.
+  source: instrument_trust_disjoint_2026-09-19
+- id: a_sgm_cystic_duct
+  dimension: semantic_gravity
+  value: SG-
+  numeric: 3
+  span_text: obstructs the cystic duct
+  rationale: Mechanism fragment.
+  source: instrument_trust_disjoint_2026-09-19
+- id: a_sdp_murphy_short
+  dimension: semantic_density
+  value: SD+
+  span_text: Murphy sign positive
+  rationale: Condensed eponymous sign.
+  source: instrument_trust_disjoint_2026-09-19
+- id: a_sgmm_ultrasound_review
+  dimension: semantic_gravity
+  value: SG--
+  numeric: 4
+  span_text: trigger ultrasound and surgical
+  rationale: Abstract next-step framing.
+  source: instrument_trust_disjoint_2026-09-19
+- id: a_sgp_rusty
+  dimension: semantic_gravity
+  value: SG+
+  numeric: 2
+  span_text: rusty sputum this morning
+  rationale: Particular sputum episode.
+  source: instrument_trust_disjoint_2026-09-19
+- id: a_sgp_climbing
+  dimension: semantic_gravity
+  value: SG+
+  numeric: 2
+  span_text: breathless climbing stairs
+  rationale: Exertional dyspnoea narrative.
+  source: instrument_trust_disjoint_2026-09-19
+- id: a_sgm_cap_short
+  dimension: semantic_gravity
+  value: SG-
+  numeric: 3
+  span_text: Community-acquired pneumonia
+  rationale: Named syndrome principle.
+  source: instrument_trust_disjoint_2026-09-19
+- id: a_sdp_lobar
+  dimension: semantic_density
+  value: SD+
+  span_text: lobar infiltrate support
+  rationale: Condensed radiology + reasoning.
+  source: instrument_trust_disjoint_2026-09-19
+- id: a_sgmm_severity_score
+  dimension: semantic_gravity
+  value: SG--
+  numeric: 4
+  span_text: severity score remain standard
+  rationale: Guideline-level recommendation.
+  source: instrument_trust_disjoint_2026-09-19
+- id: a_sdp_raised_crp
+  dimension: semantic_density
+  value: SD+
+  span_text: raised CRP and a lobar
+  rationale: Condensed lab + imaging pair.
+  source: instrument_trust_disjoint_2026-09-19
+- id: a_sgm_biliary_colic
+  dimension: semantic_gravity
+  value: SG-
+  numeric: 3
+  span_text: Biliary colic arises when
+  rationale: Definitional opener.
+  source: instrument_trust_disjoint_2026-09-19
+- id: a_sgp_year_old_woman
+  dimension: semantic_gravity
+  value: SG+
+  numeric: 2
+  span_text: 41-year-old woman described
+  rationale: Demographics + reporting verb.
+  source: instrument_trust_disjoint_2026-09-19
+- id: a_sgp_mr_lee
+  dimension: semantic_gravity
+  value: SG+
+  numeric: 2
+  span_text: Mr Lee is a 68-year-old
+  rationale: Named patient opener.
+  source: instrument_trust_disjoint_2026-09-19

@@ -3,15 +3,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import AgentReviewSurface from '../AgentReviewSurface';
 
-vi.mock('../AgentRunSurface', () => ({
-  default: function MockRunSurface({ listContent }) {
-    return (
-      <div data-testid="agent-run-surface">
-        <div data-testid="plan-dag-graph">graph</div>
-        <button type="button" onClick={() => {}}>List</button>
-        {listContent}
-      </div>
-    );
+vi.mock('../../components/graph/PlanDagGraph', () => ({
+  default: function MockPlanDagGraph() {
+    return <div data-testid="plan-dag-graph">graph</div>;
   },
 }));
 
@@ -46,5 +40,37 @@ describe('AgentReviewSurface', () => {
     expect(onApprove).toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Decline' }));
     expect(onDecline).toHaveBeenCalled();
+  });
+
+  it('shows Rename / Replan / Fork / Discuss on inspect mode for completed plans', () => {
+    const onRename = vi.fn();
+    const onReplan = vi.fn();
+    const onDiscuss = vi.fn();
+    render(
+      <AgentReviewSurface
+        plan={{ ...PLAN, status: 'completed' }}
+        mode="inspect"
+        onApprove={vi.fn()}
+        onDecline={vi.fn()}
+        onFork={vi.fn()}
+        onRenamePlan={onRename}
+        onReplanPlan={onReplan}
+        onDiscuss={onDiscuss}
+      />,
+    );
+    expect(screen.getByTestId('agent-review-inspect')).toBeInTheDocument();
+    expect(screen.queryByTestId('agent-review-consent')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rename' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Replan…' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Fork/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Discuss in Chat/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    expect(screen.getByTestId('agent-brief-editor-rename')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Rename'), {
+      target: { value: 'Payroll variance board pack 2026' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save title' }));
+    expect(onRename).toHaveBeenCalledWith('Payroll variance board pack 2026');
   });
 });

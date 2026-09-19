@@ -25,7 +25,7 @@ cp .ai-toolkit/decisions/0000-template.md .ai-toolkit/decisions/00NN-short-title
 - Master Architect owns ADRs. Workers READ them before touching the relevant area.
 - Link the ADR from the relevant TASKS.md phase when it constrains the work.
 
-## Index (0001–0041)
+## Index (0001–0043)
 
 | # | Title | Status |
 |---|-------|--------|
@@ -70,5 +70,7 @@ cp .ai-toolkit/decisions/0000-template.md .ai-toolkit/decisions/00NN-short-title
 | [0039](0039-data-trust-index.md) | Data Trust Index (35Q+20O+35C+10F) + Catalog SearchSelect | Accepted |
 | [0040](0040-product-identity-module-vs-dataset.md) | Product identity: Module (Data Product) vs Dataset Hub | Accepted |
 | [0041](0041-pulse-ops-canvas-job-map.md) | Pulse Ops Canvas (Job Map) — durable agent/ops artifact | Accepted |
+| [0042](0042-gradevance-persona-apps.md) | GradeVance persona apps: Learn · Teach · Engine (three surfaces, one engine) | Accepted |
+| [0043](0043-agent-four-view-cockpit.md) | Agent Four-View Cockpit (Plan · Run · Canvas · Output) | Implemented |
 
 <!-- Add a row per ADR. Keep newest at the bottom. -->

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://carbon.local/schemas/eduos/gold_essay.schema.json",
+  "title": "EduOS gold essay / held_out row (Instrument Trust)",
+  "type": "object",
+  "required": ["id", "text", "segments"],
+  "properties": {
+    "id": { "type": "string" },
+    "participant_id": { "type": "string" },
+    "brief_id": { "type": "string" },
+    "source": { "type": "string" },
+    "provenance_note": { "type": "string" },
+    "device_id": { "type": "string" },
+    "word_count": { "type": "integer" },
+    "text": { "type": "string", "minLength": 1 },
+    "segments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["text", "sg_label"],
+        "properties": {
+          "segment_index": { "type": "integer" },
+          "text": { "type": "string" },
+          "sg_label": { "type": "string" },
+          "sd_label": { "type": "string" }
+        }
+      }
+    },
+    "expected_wave_pattern": { "type": "string" },
+    "expert_rubric_bands": {
+      "type": "object",
+      "description": "Human faculty bands keyed by rubric criterion_id (e.g. task_achievement). Required for T4 agreement; optional until faculty coding pass.",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["F", "E", "D", "C", "B", "A"]
+      }
+    },
+    "expert_rubric_meta": {
+      "type": "object",
+      "description": "Coding protocol metadata — excluded from agreement metrics.",
+      "properties": {
+        "_protocol": { "type": "string" },
+        "_coder": { "type": "string" },
+        "_note": { "type": "string" },
+        "_date": { "type": "string" }
+      }
+    }
+  }
+}

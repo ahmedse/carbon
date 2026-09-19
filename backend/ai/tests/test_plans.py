@@ -627,6 +627,57 @@ def test_list_plans_is_owner_scoped(user, other_user, patch_engine_seams, run_id
 
 
 @pytest.mark.django_db
+def test_list_plans_tolerates_string_plan_json(user, run_ids_cleanup):
+    """Engine ReActLoop stores plan_json as a JSON string — must not 500 list."""
+    import json as _json
+
+    from ai.plans_service import PLAN_INSTANCE_ID
+
+    run = Run.objects.create(
+        id=str(uuid.uuid4()),
+        instance_id=PLAN_INSTANCE_ID,
+        conversation_id=f"conv-{uuid.uuid4().hex[:8]}",
+        host_user_id=str(user.pk),
+        user_message="string plan_json regression",
+        status="failed",
+        plan_json=_json.dumps({
+            "pattern": "custom",
+            "source": "skill",
+            "steps": [{"step_id": 0, "intent": "x", "tool_name": None}],
+            "synthesis_instruction": "Respond.",
+        }),
+    )
+    run_ids_cleanup.append(run.id)
+    # Django JSONField may already decode; force a string the way SQLAlchemy writes.
+    Run.objects.filter(pk=run.id).update(
+        plan_json=_json.dumps({
+            "pattern": "custom",
+            "source": "skill",
+            "steps": [{"step_id": 0, "intent": "x", "tool_name": None}],
+            "synthesis_instruction": "Respond.",
+        }),
+    )
+    run.refresh_from_db()
+    # If the DB/driver still returns a dict, coerce path is still covered below.
+    result = PlansService().list_plans(user)
+    by_id = {p["id"]: p for p in result["plans"]}
+    assert run.id in by_id
+    assert by_id[run.id]["pattern"] == "custom"
+    assert by_id[run.id]["brief"] == "string plan_json regression"
+
+
+def test_coerce_plan_json_accepts_dict_string_and_junk():
+    from ai.plans_service import _coerce_plan_json
+    import json as _json
+
+    assert _coerce_plan_json({"a": 1}) == {"a": 1}
+    assert _coerce_plan_json(_json.dumps({"pattern": "custom"}))["pattern"] == "custom"
+    assert _coerce_plan_json(None) == {}
+    assert _coerce_plan_json("not-json") == {}
+    assert _coerce_plan_json([1, 2]) == {}
+
+
+@pytest.mark.django_db
 def test_list_plans_reconciles_status_when_all_steps_finished(
     user, run_ids_cleanup,
 ):
@@ -1000,6 +1051,84 @@ _REVISED_PLAN_SPEC = {
 
 
 @pytest.mark.django_db
+def test_edit_plan_rename_does_not_replan(user, patch_engine_seams, run_ids_cleanup):
+    plan = _make_plan(user, status="completed", brief="Payroll variance board pack")
+    _make_step(plan, step_index=0, status="completed")
+    _make_step(plan, step_index=1, status="completed")
+    run_ids_cleanup.append(plan.id)
+    before_steps = list(
+        RunStep.objects.filter(run_id=plan.id).order_by("step_index")
+    )
+
+    service = PlansService()
+    result = service.edit_plan(
+        user,
+        plan.id,
+        brief="Payroll variance board pack 2026",
+        mode="rename",
+    )
+
+    assert result["edit_mode"] == "rename"
+    assert result["status"] == "completed"
+    assert result["brief"] == "Payroll variance board pack 2026"
+    assert result["diff"] == {"added": [], "removed": [], "changed": []}
+    assert result["replan_gate"] is False
+    run = Run.objects.get(id=plan.id)
+    assert run.status == "completed"
+    assert run.user_message == "Payroll variance board pack 2026"
+    after = list(RunStep.objects.filter(run_id=plan.id).order_by("step_index"))
+    assert len(after) == len(before_steps)
+    assert after[0].status == "completed"
+    assert after[1].status == "completed"
+
+
+@pytest.mark.django_db
+def test_edit_plan_discard_restores_snapshot(user, patch_engine_seams, run_ids_cleanup):
+    _FakePlanner.plan_specs = {
+        "Revised brief: compute quarterly totals": _REVISED_PLAN_SPEC
+    }
+    plan = _make_plan(user, status="completed", brief="Original brief")
+    s0 = _make_step(plan, step_index=0, status="completed")
+    run_ids_cleanup.append(plan.id)
+
+    service = PlansService()
+    result = service.edit_plan(
+        user, plan.id, brief="Revised brief: compute quarterly totals", mode="replan",
+    )
+    assert result["status"] == "pending_approval"
+    assert result["replan_gate"] is True
+    assert Run.objects.get(id=plan.id).status == "pending_approval"
+
+    restored = service.discard_plan_edit(user, plan.id)
+    assert restored["status"] == "completed"
+    assert restored["brief"] == "Original brief"
+    run = Run.objects.get(id=plan.id)
+    assert run.status == "completed"
+    restored_step = RunStep.objects.get(run_id=plan.id, step_index=0)
+    assert restored_step.status == "completed"
+    assert (run.working_notes or {}).get("pre_edit_snapshot") is None
+
+
+@pytest.mark.django_db
+def test_edit_plan_confirm_clears_snapshot(user, patch_engine_seams, run_ids_cleanup):
+    _FakePlanner.plan_specs = {
+        "Revised brief: compute quarterly totals": _REVISED_PLAN_SPEC
+    }
+    plan = _make_plan(user, status="completed")
+    _make_step(plan, step_index=0, status="completed")
+    run_ids_cleanup.append(plan.id)
+
+    service = PlansService()
+    service.edit_plan(
+        user, plan.id, brief="Revised brief: compute quarterly totals", mode="replan",
+    )
+    assert (Run.objects.get(id=plan.id).working_notes or {}).get("pre_edit_snapshot")
+    service.confirm_plan_edit(user, plan.id)
+    assert (Run.objects.get(id=plan.id).working_notes or {}).get("pre_edit_snapshot") is None
+    assert Run.objects.get(id=plan.id).status == "pending_approval"
+
+
+@pytest.mark.django_db
 def test_edit_plan_replans_and_returns_diff(user, patch_engine_seams, run_ids_cleanup):
     plan = _make_plan(user)
     _make_step(plan, step_index=0)
@@ -1018,6 +1147,7 @@ def test_edit_plan_replans_and_returns_diff(user, patch_engine_seams, run_ids_cl
     assert result["status"] == "pending_approval"
     assert result["replan_gate"] is False
     assert result["brief"] == "Revised brief: compute quarterly totals"
+    assert result.get("edit_mode") == "replan"
 
     diff = result["diff"]
     assert [s["intent"] for s in diff["added"]] == [
@@ -1273,6 +1403,51 @@ def test_api_patch_plan_returns_diff_for_review(
     assert body["replan_gate"] is True
     assert body["diff"]["added"] and body["diff"]["removed"]
     assert Run.objects.get(id=plan.id).status == "pending_approval"
+
+
+@pytest.mark.django_db
+def test_api_confirm_and_discard_edit_routes_exist(
+    api_client, get_token_for_user, user, patch_engine_seams, run_ids_cleanup
+):
+    """Keep/Cancel must hit wired paths (not Django 404) — as_view, not @action."""
+    token = get_token_for_user(user)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+    plan = _make_plan(user, status="approved")
+    _make_step(plan, step_index=0)
+    run_ids_cleanup.append(plan.id)
+    _FakePlanner.plan_specs = {
+        "Revised brief: compute quarterly totals": _REVISED_PLAN_SPEC
+    }
+
+    patch = api_client.patch(
+        f"/carbon-api/ai/plans/{plan.id}/",
+        {"brief": "Revised brief: compute quarterly totals", "mode": "replan"},
+        format="json",
+    )
+    assert patch.status_code == 200, patch.content
+    assert (Run.objects.get(id=plan.id).working_notes or {}).get("pre_edit_snapshot")
+
+    confirm = api_client.post(f"/carbon-api/ai/plans/{plan.id}/confirm-edit/")
+    assert confirm.status_code == 200, confirm.content
+    assert (Run.objects.get(id=plan.id).working_notes or {}).get("pre_edit_snapshot") is None
+
+    # Second replan → discard restores prior brief/steps.
+    plan2 = _make_plan(user, status="approved", brief="Keep this brief")
+    _make_step(plan2, step_index=0)
+    run_ids_cleanup.append(plan2.id)
+    _FakePlanner.plan_specs = {
+        "Other brief": _REVISED_PLAN_SPEC
+    }
+    api_client.patch(
+        f"/carbon-api/ai/plans/{plan2.id}/",
+        {"brief": "Other brief", "mode": "replan"},
+        format="json",
+    )
+    discard = api_client.post(f"/carbon-api/ai/plans/{plan2.id}/discard-edit/")
+    assert discard.status_code == 200, discard.content
+    restored = Run.objects.get(id=plan2.id)
+    assert restored.user_message == "Keep this brief"
+    assert (restored.working_notes or {}).get("pre_edit_snapshot") is None
 
 
 @pytest.mark.django_db

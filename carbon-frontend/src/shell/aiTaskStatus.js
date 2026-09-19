@@ -68,6 +68,24 @@ export function stepStatusMeta(status) {
   return STEP_STATUS[status] || { label: status || 'Pending', color: 'default' };
 }
 
+/** Terminal plan statuses that may be reset via POST …/rerun/ then streamed. */
+export const RERUNNABLE_STATUSES = Object.freeze([
+  'completed',
+  'completed_with_gaps',
+  'failed',
+  'cancelled',
+]);
+
+/** True when a plan may be wiped and re-executed from a clean slate. */
+export function isRerunnableStatus(status) {
+  return RERUNNABLE_STATUSES.includes(status);
+}
+
+/** Session/UI phases that mean the run has settled (ledger + Output CTAs). */
+export function isSettledPhase(phase) {
+  return phase === 'finished' || phase === 'stopped' || phase === 'error';
+}
+
 /** Dense UPPERCASE labels for DAG node interiors (same vocabulary as STEP_STATUS). */
 export const NODE_STATUS_DENSE = Object.fromEntries(
   Object.entries(STEP_STATUS).map(([k, v]) => [
@@ -127,4 +145,55 @@ export function agentRoleLabel(role) {
   return String(role)
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * ADR-0043 status chip copy for the run header (progress + blocker).
+ * @param {object|null} plan
+ * @param {Array} [runSteps]
+ * @param {string} [phase]
+ * @returns {{ label: string, color: string }}
+ */
+export function runHeaderStatusChip(plan, runSteps = [], phase = 'idle') {
+  const steps = (Array.isArray(runSteps) && runSteps.length)
+    ? runSteps
+    : (Array.isArray(plan?.steps) ? plan.steps : []);
+  const total = steps.length;
+  const settled = steps.filter((s) => STEP_TERMINAL.has(s.status)).length;
+  const awaiting = steps.some((s) => s.status === 'awaiting_approval');
+  const failed = steps.some((s) => s.status === 'failed');
+  const effective = effectivePlanStatus(plan);
+  const meta = planStatusMeta(effective);
+
+  if (awaiting || phase === 'paused' || effective === 'paused') {
+    return {
+      label: total ? `${settled}/${total} · consent needed` : meta.label,
+      color: 'warning',
+    };
+  }
+  if (phase === 'working' || effective === 'running') {
+    return {
+      label: total ? `${settled}/${total} · running` : meta.label,
+      color: 'primary',
+    };
+  }
+  if (phase === 'error' || effective === 'failed' || failed) {
+    return {
+      label: total ? `${settled}/${total} · failed` : meta.label,
+      color: 'error',
+    };
+  }
+  if (phase === 'stopped' || effective === 'cancelled') {
+    return {
+      label: total ? `${settled}/${total} · stopped` : (meta.label || 'Stopped'),
+      color: 'default',
+    };
+  }
+  if (effective === 'completed' || effective === 'completed_with_gaps' || phase === 'finished') {
+    return {
+      label: total ? `${settled}/${total} · done` : meta.label,
+      color: effective === 'completed_with_gaps' ? 'warning' : 'success',
+    };
+  }
+  return { label: meta.label, color: meta.color };
 }

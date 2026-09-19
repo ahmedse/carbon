@@ -1,7 +1,7 @@
-// Run workbench — LCT results + HITL code edit + release (professor review plane).
+// Run workbench — LCT results + HITL code edit + release + audit export (Phase D).
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   Alert, Box, Button, Chip, Drawer, FormControl, InputLabel, MenuItem, Paper,
   Select, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography,
@@ -14,7 +14,7 @@ import ErrorAlert from '../../components/Page/ErrorAlert';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
 import {
-  fetchAgsPreview, fetchRun, postAgsPassback, postExpertEdit, releaseRun,
+  fetchAgsPreview, fetchAuditExport, fetchRun, postAgsPassback, postExpertEdit, releaseRun,
 } from '../../api/gradevance';
 import SkipToMain from './SkipToMain';
 import WaveChart from './WaveChart';
@@ -30,13 +30,26 @@ function codeFor(seg, dimension) {
   return codes.find((c) => c.dimension === dimension) || null;
 }
 
+function downloadJson(filename, data) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function RunWorkbenchPage() {
-  useDocumentTitle('GradeVance · Run');
+  const { pathname } = useLocation();
+  const titlePrefix = pathname.startsWith('/teach') ? 'Teach' : 'GradeVance';
+  useDocumentTitle(`${titlePrefix} · Run`);
   const { runId } = useParams();
   const { token } = useAuth();
   const navigate = useNavigate();
 
   const [run, setRun] = useState(null);
+  const [fairness, setFairness] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [msg, setMsg] = useState(null);
@@ -63,6 +76,23 @@ export default function RunWorkbenchPage() {
         }));
         setAgsInfo(preview);
         if (preview.lineitem_url) setLineitem(preview.lineitem_url);
+
+        const fromRun = data.fairness || null;
+        if (fromRun) {
+          setFairness(fromRun);
+        } else {
+          try {
+            const audit = await fetchAuditExport(token, runId);
+            setFairness(audit.fairness || null);
+          } catch {
+            setFairness({
+              mode: data.assignment?.mode || data.mode,
+              released: data.released,
+              advisory_only: data.coaching?.watermark === 'advisory' && !data.released,
+              watermark: data.coaching?.watermark,
+            });
+          }
+        }
       })
       .catch((e) => setError(e?.message || 'Failed to load run'))
       .finally(() => setLoading(false));
@@ -131,6 +161,21 @@ export default function RunWorkbenchPage() {
     }
   };
 
+  const onExportAudit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const payload = await fetchAuditExport(token, runId);
+      if (payload.fairness) setFairness(payload.fairness);
+      downloadJson(`audit-run-${runId}.json`, payload);
+      setMsg('Audit export downloaded');
+    } catch (e) {
+      setError(e?.message || 'Audit export failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const onAgsPassback = async () => {
     if (!lineitem.trim()) {
       setError('Lineitem URL required for AGS passback');
@@ -169,6 +214,7 @@ export default function RunWorkbenchPage() {
   }
 
   const levels = editDim === 'semantic_density' ? SD_LEVELS : SG_LEVELS;
+  const fair = fairness || {};
 
   return (
     <PageContainer>
@@ -180,14 +226,17 @@ export default function RunWorkbenchPage() {
           subtitle="Measure meaning → edit with rationale → release with ceremony."
           badge={run?.released ? { label: 'released', color: 'success' } : { label: 'unreleased', color: 'default' }}
           actions={(
-            <Stack direction="row" spacing={0.75} alignItems="center">
+            <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
               <OpsCanvasAttachButton
                 relatedType="gradevance.AssessmentRun"
                 relatedId={runId}
                 relatedLabel={assignment?.title || `Run ${runId}`}
               />
+              <Button size="small" variant="outlined" onClick={onExportAudit} disabled={busy} aria-busy={busy}>
+                Export audit
+              </Button>
               {assignmentId && (
-                <Button size="small" variant="outlined" onClick={() => navigate(`/apps/gradevance/assignments/${assignmentId}`)}>
+                <Button size="small" variant="outlined" onClick={() => navigate(`/teach/stems/${assignmentId}`)}>
                   Assignment hub
                 </Button>
               )}
@@ -202,14 +251,28 @@ export default function RunWorkbenchPage() {
         {error && <ErrorAlert message={error} onRetry={load} />}
         {msg && <Alert severity="success" sx={{ mb: 1.5 }} role="status">{msg}</Alert>}
 
-        <Stack direction="row" spacing={1} sx={{ mb: 1.5, flexWrap: 'wrap' }}>
+        <Stack direction="row" spacing={1} sx={{ mb: 1.5, flexWrap: 'wrap' }} useFlexGap aria-label="Run and fairness status">
           <Chip size="small" label={run?.status || '—'} />
           <Chip size="small" label={`gate ${run?.gate_decision || '—'}`} variant="outlined" />
           <Chip
             size="small"
             label={run?.mean_confidence != null ? `conf ${Number(run.mean_confidence).toFixed(2)}` : 'conf —'}
           />
-          <Button size="small" onClick={() => navigate('/apps/gradevance/marking')}>
+          {(fair.mode || assignment?.mode) && (
+            <Chip size="small" label={`mode: ${fair.mode || assignment?.mode}`} variant="outlined" />
+          )}
+          <Chip
+            size="small"
+            color={(fair.released ?? run?.released) ? 'success' : 'default'}
+            label={(fair.released ?? run?.released) ? 'released' : 'unreleased'}
+          />
+          {(fair.advisory_only || fair.watermark === 'advisory') && (
+            <Chip size="small" color="warning" label="advisory" />
+          )}
+          {fair.watermark && fair.watermark !== 'advisory' && (
+            <Chip size="small" label={fair.watermark} />
+          )}
+          <Button size="small" onClick={() => navigate('/teach/marking')}>
             Marking queue
           </Button>
         </Stack>

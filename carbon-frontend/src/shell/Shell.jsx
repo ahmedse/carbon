@@ -45,6 +45,8 @@ const STUDIO_PATHS = {
   people: '/people',
   my: '/my',
   team: '/team',
+  learn: '/learn',
+  teach: '/teach',
 };
 
 function studioFromPath(pathname) {
@@ -57,6 +59,8 @@ function studioFromPath(pathname) {
   if (pathname.startsWith('/people')) return 'people';
   if (pathname.startsWith('/my')) return 'my';
   if (pathname.startsWith('/team')) return 'team';
+  if (pathname.startsWith('/learn')) return 'learn';
+  if (pathname.startsWith('/teach')) return 'teach';
   // Domain apps live under /apps/<appId>/… — studio id is the app id (healthy, gradevance, …)
   const appsMatch = pathname.match(/^\/apps\/([^/]+)/);
   if (appsMatch) return appsMatch[1];
@@ -373,8 +377,17 @@ export function Shell() {
             anchor={isRtl ? 'right' : 'left'}
             open
             onClose={isMobile ? forceSidebarHidden : dismissSidebarPeek}
-            variant={effectiveSidebarMode === 'peek' || isMobile ? 'temporary' : 'permanent'}
-            ModalProps={{ keepMounted: true }}
+            // Desktop peek must NOT use temporary Modal (orphaned backdrop after
+            // pin/hide — NB-P2-BACKDROP / SIM-20260919-N5). Match RightPanel:
+            // temporary only on mobile; persistent for desktop peek; permanent when pinned.
+            variant={
+              isMobile
+                ? 'temporary'
+                : effectiveSidebarMode === 'peek'
+                  ? 'persistent'
+                  : 'permanent'
+            }
+            ModalProps={isMobile ? { keepMounted: true } : undefined}
             sx={{
               width: !isMobile && effectiveSidebarMode === 'pinned' ? drawerWidthClamped : undefined,
               flexShrink: !isMobile && effectiveSidebarMode === 'pinned' ? 0 : undefined,
@@ -388,6 +401,10 @@ export function Shell() {
                 borderColor: 'divider',
                 overflow: 'hidden',
                 bgcolor: 'background.paper',
+                // Persistent peek overlays content without Modal backdrop.
+                ...(effectiveSidebarMode === 'peek' && !isMobile
+                  ? { zIndex: (theme) => theme.zIndex.drawer + 1 }
+                  : {}),
               },
             }}
           >

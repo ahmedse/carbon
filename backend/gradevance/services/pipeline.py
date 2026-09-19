@@ -170,10 +170,85 @@ def _best_anchor(
 
 
 def _heuristic_sd(seg_text: str) -> tuple[str, float]:
+    """SD+ = condensed evaluation / interpretation; SD- = descriptive narration / emotion report.
+
+    Aligns with NAA expert audit: narrating feelings or habits ≠ evaluating them.
+    """
     low = seg_text.lower()
-    reflective_hits = sum(1 for m in _REFLECTIVE_MARKERS if m in low)
-    if reflective_hits >= 2 or "i feel" in low or "i realized" in low:
-        return "SD+", min(0.55 + 0.1 * reflective_hits, 0.85)
+
+    # Explicit evaluation / condensed judgment (SD+)
+    eval_cues = (
+        "switched my strateg",
+        "i realized",
+        "i learnt",
+        "i learned",
+        "i found that",
+        "not good enough",
+        "so many",
+        "normal problem",
+        "normal and",
+        "was often critical",
+        "become bad",
+        "became bad",
+        "self-critical",
+        "reflect on",
+        "reflection",
+        "evaluat",
+        "in general",
+        "a general",
+        "general principle",
+        "clearer concept",
+    )
+    eval_hits = sum(1 for c in eval_cues if c in low)
+
+    # Descriptive narration / affect without analysis (SD-)
+    narrative_cues = (
+        "when i preparing",
+        "when i only",
+        "when i was",
+        "i don't write",
+        "i often write",
+        "ignore the",
+        "i completed",
+        "i spent",
+        "i always recorded",
+        "timed speaking drills",
+        "i want to improve",
+        "i want to study",
+        "feel very boring",
+        "feel afraid",
+        "feel regret",
+        "feel more confident",
+    )
+    # Emotion report alone is SD- unless paired with evaluative framing
+    emotion_only = bool(
+        re.search(r"\bi feel\b", low)
+        and not any(
+            c in low
+            for c in (
+                "because it",
+                "realized",
+                "learned that",
+                "switched",
+                "critical",
+                "reflect",
+            )
+        )
+    )
+    narr_hits = sum(1 for c in narrative_cues if c in low)
+
+    if eval_hits >= 1 and not emotion_only:
+        return "SD+", min(0.55 + 0.08 * eval_hits, 0.9)
+    if emotion_only or narr_hits >= 1:
+        return "SD-", 0.55
+    # Legacy soft reflective markers (exclude bare "i feel" / lone "because")
+    soft = ("i realized", "i learnt", "i learned", "so what", "now what", "next time")
+    # Bare "on reflection" / "reflect on timing" framing is often SD- narrative wrap — need condensed cues for SD+
+    soft_hits = sum(1 for m in soft if m in low)
+    if soft_hits >= 1:
+        return "SD+", 0.55
+    if "reflect" in low and eval_hits >= 1:
+        return "SD+", 0.55
     return "SD-", 0.45
 
 
@@ -687,8 +762,10 @@ class FormativePipelineService:
                     ),
                 )
 
-            submission.status = Submission.STATUS_ANALYZED
-            submission.save(update_fields=["status", "updated_at"])
+            # Preserve draft so formative coaching does not force submit.
+            if submission.status != Submission.STATUS_DRAFT:
+                submission.status = Submission.STATUS_ANALYZED
+                submission.save(update_fields=["status", "updated_at"])
             return run
         except Exception as exc:  # noqa: BLE001 — persist failure on run
             run.status = AnalysisRun.STATUS_FAILED

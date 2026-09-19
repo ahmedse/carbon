@@ -7,9 +7,42 @@ import { apiFetch } from './api';
 
 const ROOT = 'people/';
 
-/** List employees. */
-export function fetchEmployees(token) {
-  return apiFetch(`${ROOT}employees/`, { token });
+/**
+ * List employees (paginated on the server).
+ * Without `page`, walks every page under the server max (200) so directory
+ * screens still get the full scoped population — never a single unbounded
+ * response (SIM-QA N-HR-UI-01).
+ */
+export async function fetchEmployees(token, params = {}) {
+  const pageSize = Math.min(Math.max(Number(params.page_size) || 100, 1), 200);
+  if (params.page != null) {
+    const qs = new URLSearchParams({
+      page: String(params.page),
+      page_size: String(pageSize),
+    });
+    return apiFetch(`${ROOT}employees/?${qs}`, { token });
+  }
+  const first = await apiFetch(
+    `${ROOT}employees/?page=1&page_size=${pageSize}`,
+    { token },
+  );
+  const results = [...(first?.results || [])];
+  const total = Number(first?.count ?? results.length);
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  if (pages > 1) {
+    const rest = await Promise.all(
+      Array.from({ length: pages - 1 }, (_, i) =>
+        apiFetch(
+          `${ROOT}employees/?page=${i + 2}&page_size=${pageSize}`,
+          { token },
+        ),
+      ),
+    );
+    for (const chunk of rest) {
+      results.push(...(chunk?.results || []));
+    }
+  }
+  return { count: total, page_size: pageSize, results };
 }
 
 /** List payroll runs. */

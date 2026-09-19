@@ -6,10 +6,19 @@
   "routes": [
     "/apps/gradevance",
     "/apps/gradevance/library",
-    "/apps/gradevance/authoring",
-    "/apps/gradevance/student",
-    "/apps/gradevance/marking",
-    "/apps/gradevance/proposals"
+    "/apps/gradevance/proposals",
+    "/apps/gradevance/qa",
+    "/apps/gradevance/accessibility",
+    "/apps/gradevance/lti",
+    "/learn",
+    "/learn/assignments",
+    "/teach",
+    "/teach/stems",
+    "/teach/stems/:assignmentId",
+    "/teach/stems/:assignmentId/submissions/:submissionId",
+    "/teach/courses",
+    "/teach/marking",
+    "/teach/appeals"
   ],
   "automated": {
     "api_checklist": "/api/v1/gradevance/accessibility/",

@@ -169,6 +169,8 @@ APP_DEFS = [
     {"app_id": "team", "domain": True, "display_order": 22},
     {"app_id": "healthy", "domain": True, "display_order": 30},
     {"app_id": "gradevance", "domain": True, "display_order": 40},
+    {"app_id": "learn", "domain": True, "display_order": 41},
+    {"app_id": "teach", "domain": True, "display_order": 42},
 ]
 
 

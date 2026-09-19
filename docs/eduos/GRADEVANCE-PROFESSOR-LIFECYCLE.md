@@ -239,16 +239,17 @@ Shared rules (`.ai-toolkit` compact UI + design principles):
 
 | Area | Backend today | UI today | Target |
 |------|---------------|----------|--------|
-| Course CRUD | ✅ | ✅ Courses & stems | Done Phase A |
-| Stem authoring | `brief` JSON | ✅ stem + instructions on create | PATCH draft = Phase C |
-| Assignment hub | ✅ detail API | ✅ hub page | Done Phase A |
-| Evaluate | Pipeline solid | ✅ hub Analyze | Done Phase A |
-| LCT results | Serializer solid | ✅ Run workbench | Done Phase A |
-| HITL code edit | `ReviewService.apply_edit` | ✅ SG/SD editors | Done Phase A |
-| Calibration | held_out + κ services | ✅ Calibration page | Done Phase A |
+| Course CRUD | ✅ | ✅ Courses tab on Stems console | Done |
+| Stem authoring | `brief` JSON | ✅ Author tab + draft PATCH | Done |
+| Assignment hub | ✅ detail API | ✅ Stem master-detail multitab | Done — stems first-class |
+| Evaluate | Pipeline solid | ✅ Ingest + Analyze | Done |
+| LCT results | Serializer solid | ✅ Run workbench | Done |
+| HITL code edit | `ReviewService.apply_edit` | ✅ SG/SD editors | Done |
+| Calibration | held_out + κ services | ✅ Calibration page | Done |
 | Proposals | API + page | ✅ linked from Cal/Marking | Done |
-| KB | Design only | — | Pin + browse P1; CRUD later |
-| File upload | — | — | P1 |
+| Submissions cohort UI | hub.submissions | ✅ FilteredDataGrid + group/filter | Done 2026-09-19 |
+| KB | Design only | ✅ Pin picker | Phase C |
+| File upload | ✅ | ✅ Ingest tab | Phase C |
 
 ---
 
@@ -275,16 +276,22 @@ Shared rules (`.ai-toolkit` compact UI + design principles):
 4. Batch analyze cohort. ✅
 5. Role-gated nav (`gradevance:manage` vs `submit` vs `mark`). ✅
 
-### Phase D — Enterprise (P2+)
-1. Appeals, fairness, audit UI.
-2. Live LMS soak.
-3. Optional in-app pack proposal diffs beyond bump/repin.
+### Phase D — Enterprise ✅ shipped 2026-09-19
+1. Appeals, fairness, audit UI — Appeal model + learn request + teach resolve; Run workbench Export audit + fairness chips; QA console.
+2. Live LMS soak — LTI admin read-only UI + existing AGS/NRPS/deep-link APIs (ops checklist in LMS-SOAK.md).
+3. Preview as student — Assignment hub embeds real Learn AssignmentDesk (no Test Student).
+4. Learn completeness — draft autosave, submit for marking, progress waves, released results on home.
+5. RULE_29 specs — `docs/eduos/screens/PHASE-D-SCREEN-SPECS.md`.
+
+**Note (2026-09-19):** Persona apps **Learn** (`/learn`) and **Teach** (`/teach`)
+shipped (ADR-0042). Professor acceptance below uses `/teach`, not the Student desk.
+Roster list/add + student join-by-code are on the teach Courses page and learn home.
 
 ---
 
 ## 11. Acceptance criteria (professor happy path)
 
-A professor on EduOS can, in the UI only:
+A professor on EduOS can, in the UI only (**Teach** app `/teach`):
 
 1. Create a course and an assignment with a **non-empty stem**, pinned to `naa_cycle1_exam_prep` (or medicine/article profile).
 2. Paste a gold/held_out example as a submission and **analyze**.
@@ -292,17 +299,19 @@ A professor on EduOS can, in the UI only:
 4. Change an SG or SD code with rationale; see ExpertEdit land and optionally a draft Proposal.
 5. Open **Calibration** for that profile and read κ / expert–engine pairs.
 6. From **Proposals**, accept → bump → re-pin without CLI.
-7. Never need Student desk to administer the cohort.
+7. Never need **Learn** (`/learn`) to administer the cohort — that surface is student-only.
+8. Open **Roster** on a course, add a student by username, and confirm they can join via entry code on Learn.
 
 ---
 
 ## 12. Related docs
 
+- [GRADEVANCE-PERSONA-APPS.md](./GRADEVANCE-PERSONA-APPS.md) — Learn · Teach · Engine (ADR-0042)  
+- [GRADEVANCE-DESIGN.md](./GRADEVANCE-DESIGN.md) — product thesis & engines (actors/RBAC §3)  
 - [GRADEVANCE-PROFESSOR-JOURNEY.md](./GRADEVANCE-PROFESSOR-JOURNEY.md) — enterprise wisdom + amazing journey narrative  
-- [GRADEVANCE-DESIGN.md](./GRADEVANCE-DESIGN.md) — product thesis & engines  
 - [LMS-SOAK.md](./LMS-SOAK.md) — LTI integration  
 - [ENTERPRISE-INTEGRATION.md](./ENTERPRISE-INTEGRATION.md) — SSO/LMS enterprise  
-- ADR-0038 EduOS + GradeVance · RULE_33 professor journey IA  
+- ADR-0038 EduOS + GradeVance · ADR-0042 persona apps · RULE_33 professor journey IA  
 
 ---
 
@@ -314,3 +323,6 @@ A professor on EduOS can, in the UI only:
 | 2026-09-18 | Linked amazing-journey doc; Phase A continuity UI (Courses → hub → Run workbench → Calibration) |
 | 2026-09-18 | Phase B2: summative publish-gate on stem form; removed in-page breadcrumbs; PageHeader actions |
 | 2026-09-18 | Phase C: draft stem PATCH, .txt upload, KB pin, pack drawer, batch analyze, role-gated nav |
+| 2026-09-19 | ADR-0042: Learn (/learn) + Teach (/teach) + GradeVance engine room; Enrollment + me/* API; legacy routes redirect |
+| 2026-09-19 | Phase D: Appeals E2E, draft/submit lifecycle, preview-as-student, audit export UI, QA/A11y/LTI pages, RULE_29 specs |
+| 2026-09-19 | Roster API (`courses/<id>/enrollments/`) + learn join-by-code (`me/join/`); seed `gv_student` + DEMO-LCT entry code; teach Roster UI |

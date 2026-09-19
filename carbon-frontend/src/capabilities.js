@@ -48,6 +48,10 @@ export const GRADEVANCE_MARK   = 'gradevance:mark';
 export const GRADEVANCE_SUBMIT = 'gradevance:submit';
 export const GRADEVANCE_QA     = 'gradevance:qa';
 
+// ── Learn / Teach (persona surfaces over GradeVance — ADR-0042) ───
+export const LEARN_ACCESS = 'learn:access';
+export const TEACH_ACCESS = 'teach:access';
+
 // ── Correspondence ─────────────────────────────────────────────────
 export const CORRESPONDENCE_SUBMIT = 'correspondence:submit';
 export const CORRESPONDENCE_ACT    = 'correspondence:act';
@@ -159,17 +163,28 @@ export const ROUTE_CAPABILITIES = {
   '/team':       TEAM_ACCESS,
   '/team/*':     TEAM_ACCESS,
 
+  // Learn (student persona — ADR-0042)
+  '/learn':      LEARN_ACCESS,
+  '/learn/*':    LEARN_ACCESS,
+
+  // Teach (professor / marker persona — ADR-0042)
+  '/teach':      TEACH_ACCESS,
+  '/teach/*':    TEACH_ACCESS,
+
   // GradeVance (EduOS) — longest-prefix wins in authz
-  '/apps/gradevance':             GRADEVANCE_VIEW,
-  '/apps/gradevance/courses':     GRADEVANCE_MANAGE,
-  '/apps/gradevance/assignments': GRADEVANCE_MANAGE,
-  '/apps/gradevance/calibration': GRADEVANCE_MANAGE,
-  '/apps/gradevance/library':     GRADEVANCE_VIEW,
-  '/apps/gradevance/marking':     GRADEVANCE_MARK,
-  '/apps/gradevance/runs':        GRADEVANCE_MARK,
-  '/apps/gradevance/proposals':   GRADEVANCE_MANAGE,
-  '/apps/gradevance/student':     GRADEVANCE_SUBMIT,
-  '/apps/gradevance/authoring':   GRADEVANCE_MANAGE,
+  '/apps/gradevance':                 GRADEVANCE_VIEW,
+  '/apps/gradevance/courses':         GRADEVANCE_MANAGE,
+  '/apps/gradevance/assignments':     GRADEVANCE_MANAGE,
+  '/apps/gradevance/calibration':     GRADEVANCE_MANAGE,
+  '/apps/gradevance/library':         GRADEVANCE_VIEW,
+  '/apps/gradevance/marking':         GRADEVANCE_MARK,
+  '/apps/gradevance/runs':            GRADEVANCE_MARK,
+  '/apps/gradevance/proposals':       GRADEVANCE_MANAGE,
+  '/apps/gradevance/student':         GRADEVANCE_SUBMIT,
+  '/apps/gradevance/authoring':       GRADEVANCE_MANAGE,
+  '/apps/gradevance/qa':              GRADEVANCE_QA,
+  '/apps/gradevance/accessibility':   GRADEVANCE_VIEW,
+  '/apps/gradevance/lti':             GRADEVANCE_MANAGE,
 };
 
 // ── Menu item manifest role → capability ───────────────────────────
@@ -200,13 +215,22 @@ export const MENU_ITEM_CAPABILITIES = {
   'Base Years':               CARBON_MANAGE_REPORTING_PERIODS,
   'Inventory Coverage':       CARBON_MANAGE_INVENTORY_COVERAGE,
 
-  // GradeVance (unique labels — do not reuse Carbon "Overview")
+  // GradeVance / Teach (unique labels — do not reuse Carbon "Overview")
+  'Stems':                GRADEVANCE_MANAGE,
   'Courses & stems':      GRADEVANCE_MANAGE,
   'Calibration':          GRADEVANCE_MANAGE,
   'Pack library':         GRADEVANCE_VIEW,
   'Marking queue':        GRADEVANCE_MARK,
+  'Appeals':              GRADEVANCE_MARK,
   'Proposals':            GRADEVANCE_MANAGE,
   'Student desk':         GRADEVANCE_SUBMIT,
+  'QA':                   GRADEVANCE_QA,
+  'Accessibility':        GRADEVANCE_VIEW,
+  'LTI':                  GRADEVANCE_MANAGE,
+
+  // Learn
+  'My assignments':       LEARN_ACCESS,
+  'Progress':             LEARN_ACCESS,
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -250,11 +274,11 @@ export const CAPABILITY_INHERITANCE = {
   [PEOPLE_MANAGE]: [PEOPLE_VIEW],
   [CORRESPONDENCE_ADMIN]: [CORRESPONDENCE_ACT, CORRESPONDENCE_SUBMIT, MY_ACCESS, TEAM_ACCESS],
 
-  // GradeVance — mirrors backend CAPABILITY_IMPLIES
-  [GRADEVANCE_MANAGE]: [GRADEVANCE_VIEW, GRADEVANCE_MARK, GRADEVANCE_SUBMIT, GRADEVANCE_QA],
-  [GRADEVANCE_MARK]: [GRADEVANCE_VIEW],
+  // GradeVance — mirrors backend IMPLIES
+  [GRADEVANCE_MANAGE]: [GRADEVANCE_VIEW, GRADEVANCE_MARK, GRADEVANCE_SUBMIT, GRADEVANCE_QA, TEACH_ACCESS, LEARN_ACCESS],
+  [GRADEVANCE_MARK]: [GRADEVANCE_VIEW, TEACH_ACCESS],
   [GRADEVANCE_QA]: [GRADEVANCE_VIEW],
-  [GRADEVANCE_SUBMIT]: [GRADEVANCE_VIEW],
+  [GRADEVANCE_SUBMIT]: [GRADEVANCE_VIEW, LEARN_ACCESS],
 };
 
 
@@ -392,5 +416,7 @@ export function getCapableApps(expandedCaps) {
   if (hasCap(expandedCaps, MDM_VIEW)) apps.push('mdm');
   if (hasCap(expandedCaps, PEOPLE_VIEW)) apps.push('people');
   if (hasCap(expandedCaps, GRADEVANCE_VIEW)) apps.push('gradevance');
+  if (hasCap(expandedCaps, LEARN_ACCESS)) apps.push('learn');
+  if (hasCap(expandedCaps, TEACH_ACCESS)) apps.push('teach');
   return apps;
 }

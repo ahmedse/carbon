@@ -6,10 +6,14 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from django.contrib.auth import get_user_model
+
 from gradevance.models import (
     AnalysisRun,
+    Appeal,
     Assignment,
     Course,
+    Enrollment,
     ExpertEdit,
     Proposal,
     ReviewItem,
@@ -18,14 +22,17 @@ from gradevance.models import (
 from gradevance.permissions import (
     GradevanceManageAccess,
     GradevanceMarkAccess,
+    GradevanceQaAccess,
     GradevanceReadOrSubmit,
     GradevanceViewAccess,
 )
 from gradevance.serializers import (
     AnalysisRunListSerializer,
     AnalysisRunSerializer,
+    AppealSerializer,
     AssignmentSerializer,
     CourseSerializer,
+    EnrollmentSerializer,
     ExpertEditSerializer,
     ReviewItemSerializer,
     SubmissionSerializer,
@@ -117,8 +124,14 @@ class CourseListCreateView(APIView):
     permission_classes = [IsAuthenticated, GradevanceViewAccess]
 
     def get(self, request):
-        qs = Course.objects.all()[:200]
-        return Response({"count": Course.objects.count(), "results": CourseSerializer(qs, many=True).data})
+        from gradevance.services.scope import teach_course_scope_ids
+
+        qs = Course.objects.all()
+        scope = teach_course_scope_ids(request.user)
+        if scope is not None:
+            qs = qs.filter(id__in=scope)
+        rows = list(qs[:200])
+        return Response({"count": qs.count(), "results": CourseSerializer(rows, many=True).data})
 
     def post(self, request):
         if not GradevanceManageAccess().has_permission(request, self):
@@ -159,11 +172,140 @@ class CourseDetailView(APIView):
         return Response(ser.data)
 
 
+class CourseEnrollmentListCreateView(APIView):
+    """Teach roster — list (mark/manage) + add/update (manage) enrollments."""
+
+    permission_classes = [IsAuthenticated, GradevanceMarkAccess]
+
+    def _get_course(self, request, course_id):
+        from gradevance.services.scope import teach_course_scope_ids
+
+        try:
+            course = Course.objects.get(pk=course_id)
+        except Course.DoesNotExist:
+            return None, Response({"detail": "Not found"}, status=404)
+        scope = teach_course_scope_ids(request.user)
+        if scope is not None and course.id not in scope:
+            return None, Response({"detail": "Not found"}, status=404)
+        return course, None
+
+    def get(self, request, course_id):
+        course, err = self._get_course(request, course_id)
+        if err is not None:
+            return err
+        qs = Enrollment.objects.select_related("user").filter(course=course).order_by(
+            "role", "user__username"
+        )
+        rows = list(qs[:500])
+        return Response(
+            {"count": qs.count(), "results": EnrollmentSerializer(rows, many=True).data}
+        )
+
+    def post(self, request, course_id):
+        if not GradevanceManageAccess().has_permission(request, self):
+            return Response({"detail": "gradevance:manage required"}, status=403)
+        course, err = self._get_course(request, course_id)
+        if err is not None:
+            return err
+
+        from gradevance.lti.roster_sync import ensure_enrollment
+
+        role = (request.data.get("role") or "").strip()
+        if role not in {
+            Enrollment.ROLE_STUDENT,
+            Enrollment.ROLE_TA,
+            Enrollment.ROLE_INSTRUCTOR,
+        }:
+            return Response(
+                {"detail": "role must be student, ta, or instructor"},
+                status=400,
+            )
+
+        User = get_user_model()
+        user = None
+        user_id = request.data.get("user_id")
+        username = (request.data.get("username") or "").strip()
+        if user_id not in (None, ""):
+            try:
+                user = User.objects.get(pk=user_id)
+            except (User.DoesNotExist, ValueError, TypeError):
+                return Response({"detail": "user_id not found"}, status=400)
+        elif username:
+            try:
+                user = User.objects.get(username=username)
+            except User.DoesNotExist:
+                return Response({"detail": "username not found"}, status=400)
+        else:
+            return Response(
+                {"detail": "username or user_id required"},
+                status=400,
+            )
+
+        ens = ensure_enrollment(
+            course, user, role, source=Enrollment.SOURCE_MANUAL
+        )
+        return Response(
+            EnrollmentSerializer(ens).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class CourseEnrollmentDetailView(APIView):
+    """PATCH enrollment active/role — manage only, teach-scoped."""
+
+    permission_classes = [IsAuthenticated, GradevanceManageAccess]
+
+    def patch(self, request, course_id, enrollment_id):
+        from gradevance.services.scope import teach_course_scope_ids
+
+        try:
+            course = Course.objects.get(pk=course_id)
+        except Course.DoesNotExist:
+            return Response({"detail": "Not found"}, status=404)
+        scope = teach_course_scope_ids(request.user)
+        if scope is not None and course.id not in scope:
+            return Response({"detail": "Not found"}, status=404)
+        try:
+            ens = Enrollment.objects.select_related("user").get(
+                pk=enrollment_id, course=course
+            )
+        except Enrollment.DoesNotExist:
+            return Response({"detail": "Not found"}, status=404)
+
+        data = {}
+        if "active" in request.data:
+            data["active"] = request.data.get("active")
+        if "role" in request.data:
+            role = (request.data.get("role") or "").strip()
+            if role not in {
+                Enrollment.ROLE_STUDENT,
+                Enrollment.ROLE_TA,
+                Enrollment.ROLE_INSTRUCTOR,
+            }:
+                return Response(
+                    {"detail": "role must be student, ta, or instructor"},
+                    status=400,
+                )
+            data["role"] = role
+        if not data:
+            return Response({"detail": "active and/or role required"}, status=400)
+
+        ser = EnrollmentSerializer(ens, data=data, partial=True)
+        ser.is_valid(raise_exception=True)
+        ser.save()
+        return Response(EnrollmentSerializer(ens).data)
+
+
 class AssignmentListCreateView(APIView):
     permission_classes = [IsAuthenticated, GradevanceViewAccess]
 
     def get(self, request):
+        from gradevance.services.scope import teach_course_scope_ids
+
         qs = Assignment.objects.select_related("course").all()
+        scope = teach_course_scope_ids(request.user)
+        if scope is not None:
+            qs = qs.filter(course_id__in=scope)
         course_id = request.query_params.get("course")
         if course_id:
             qs = qs.filter(course_id=course_id)
@@ -227,7 +369,7 @@ class AssignmentDetailView(APIView):
             asg = Assignment.objects.select_related("course").get(pk=assignment_id)
         except Assignment.DoesNotExist:
             return Response({"detail": "Not found"}, status=404)
-        subs = Submission.objects.filter(assignment=asg).order_by("-created_at")[:100]
+        subs = Submission.objects.filter(assignment=asg).select_related("student_user").order_by("-created_at")[:100]
         runs = (
             AnalysisRun.objects.filter(submission__assignment=asg)
             .select_related("submission")
@@ -296,11 +438,20 @@ class AssignmentDetailView(APIView):
         return Response(ser.data)
 
 
+def _is_course_staff(request, view) -> bool:
+    """Marker/manager (or admin) — may read cohort submissions. Students may not."""
+    return GradevanceMarkAccess().has_permission(request, view)
+
+
 class SubmissionListCreateView(APIView):
     permission_classes = [IsAuthenticated, GradevanceReadOrSubmit]
 
     def get(self, request):
         qs = Submission.objects.select_related("assignment").all()
+        if not _is_course_staff(request, self):
+            # P0 privacy scope (GRADEVANCE-PERSONA-APPS §2.2): submit-only callers
+            # see only their own rows — never another student's reflective text.
+            qs = qs.filter(student_user=request.user)
         assignment_id = request.query_params.get("assignment")
         if assignment_id:
             qs = qs.filter(assignment_id=assignment_id)
@@ -327,8 +478,11 @@ class SubmissionAnalyzeView(APIView):
     permission_classes = [IsAuthenticated, GradevanceReadOrSubmit]
 
     def post(self, request, submission_id):
+        qs = Submission.objects.select_related("assignment")
+        if not _is_course_staff(request, self):
+            qs = qs.filter(student_user=request.user)
         try:
-            sub = Submission.objects.select_related("assignment").get(pk=submission_id)
+            sub = qs.get(pk=submission_id)
         except Submission.DoesNotExist:
             return Response({"detail": "Not found"}, status=404)
         run = FormativePipelineService().analyze_submission(sub)
@@ -454,7 +608,12 @@ class RunListView(APIView):
     permission_classes = [IsAuthenticated, GradevanceViewAccess]
 
     def get(self, request):
+        from gradevance.services.scope import teach_course_scope_ids
+
         qs = AnalysisRun.objects.select_related("submission", "submission__assignment").all()
+        scope = teach_course_scope_ids(request.user)
+        if scope is not None:
+            qs = qs.filter(submission__assignment__course_id__in=scope)
         assignment_id = request.query_params.get("assignment")
         submission_id = request.query_params.get("submission")
         if assignment_id:
@@ -479,18 +638,30 @@ class CalibrationPreviewView(APIView):
             loaded = load_profile(find_profile_file_for_id(pack_id, version))
         except FileNotFoundError as exc:
             return Response({"detail": str(exc)}, status=404)
-        gate = evaluate_publish_gate(loaded)
+        # Calibration proves the instrument before stakes — always evaluate summative gate
+        # even when the pack file defaults to formative (Instrument Trust smoke).
+        gate = evaluate_publish_gate(loaded, as_mode="summative")
         device = (loaded.profile.get("lct_device") or {})
         device_rel = device.get("pack_path") or ""
-        from gradevance.services.publish import engine_sg_labels_for_held_out, load_held_out_rows
+        from gradevance.services.publish import (
+            engine_sd_labels_for_held_out,
+            engine_sg_labels_for_held_out,
+            load_held_out_rows,
+        )
 
         pairs = []
         if device_rel:
             expert, engine = engine_sg_labels_for_held_out(device_rel)
+            expert_sd, engine_sd = engine_sd_labels_for_held_out(device_rel)
             rows = load_held_out_rows(device_rel)
             flat_i = 0
+            sd_i = 0
             for row in rows:
                 for seg in row.get("segments") or []:
+                    eng_sd = None
+                    if seg.get("sd_label"):
+                        eng_sd = engine_sd[sd_i] if sd_i < len(engine_sd) else None
+                        sd_i += 1
                     pairs.append(
                         {
                             "example_id": row.get("id"),
@@ -500,9 +671,17 @@ class CalibrationPreviewView(APIView):
                             or (expert[flat_i] if flat_i < len(expert) else None),
                             "engine_sg": engine[flat_i] if flat_i < len(engine) else None,
                             "expert_sd": seg.get("sd_label"),
+                            "engine_sd": eng_sd,
                         }
                     )
                     flat_i += 1
+        # Surface both dimensions on gate for Calibration / QA UI
+        if isinstance(gate, dict) and gate.get("reliability") and isinstance(gate["reliability"], dict):
+            gate = {
+                **gate,
+                "kappa": gate.get("kappa") or gate["reliability"].get("value"),
+                "kappa_sd": gate.get("kappa_sd"),
+            }
         return Response(
             {
                 "profile_pack_id": pack_id,
@@ -522,17 +701,18 @@ class ReviewQueueView(APIView):
     permission_classes = [IsAuthenticated, GradevanceMarkAccess]
 
     def get(self, request):
-        qs = (
-            ReviewItem.objects.select_related("run")
-            .filter(status__in=[ReviewItem.STATUS_OPEN, ReviewItem.STATUS_IN_PROGRESS])
-            .order_by("-priority", "created_at")[:100]
-        )
+        from gradevance.services.scope import teach_course_scope_ids
+
+        open_statuses = [ReviewItem.STATUS_OPEN, ReviewItem.STATUS_IN_PROGRESS]
+        qs = ReviewItem.objects.select_related("run").filter(status__in=open_statuses)
+        scope = teach_course_scope_ids(request.user)
+        if scope is not None:
+            qs = qs.filter(run__submission__assignment__course_id__in=scope)
+        rows = list(qs.order_by("-priority", "created_at")[:100])
         return Response(
             {
-                "count": ReviewItem.objects.filter(
-                    status__in=[ReviewItem.STATUS_OPEN, ReviewItem.STATUS_IN_PROGRESS]
-                ).count(),
-                "results": ReviewItemSerializer(qs, many=True).data,
+                "count": qs.count(),
+                "results": ReviewItemSerializer(rows, many=True).data,
             }
         )
 
@@ -781,3 +961,145 @@ class AssignmentPublishView(APIView):
         if gate:
             payload["publish_gate"] = gate
         return Response(payload)
+
+
+class AppealListView(APIView):
+    """Teach appeals inbox — scoped via teach_course_scope_ids."""
+
+    permission_classes = [IsAuthenticated, GradevanceMarkAccess]
+
+    def get(self, request):
+        from gradevance.services.scope import teach_course_scope_ids
+
+        qs = Appeal.objects.select_related(
+            "run",
+            "run__submission",
+            "run__submission__assignment",
+            "run__submission__assignment__course",
+            "student_user",
+            "resolved_by",
+        )
+        scope = teach_course_scope_ids(request.user)
+        if scope is not None:
+            qs = qs.filter(run__submission__assignment__course_id__in=scope)
+        status_f = request.query_params.get("status")
+        if status_f:
+            qs = qs.filter(status=status_f)
+        rows = list(qs.order_by("-created_at")[:200])
+        return Response(
+            {"count": qs.count(), "results": AppealSerializer(rows, many=True).data}
+        )
+
+
+class AppealResolveView(APIView):
+    permission_classes = [IsAuthenticated, GradevanceMarkAccess]
+
+    def post(self, request, appeal_id):
+        from gradevance.services.scope import teach_course_scope_ids
+
+        try:
+            appeal = Appeal.objects.select_related(
+                "run__submission__assignment"
+            ).get(pk=appeal_id)
+        except Appeal.DoesNotExist:
+            return Response({"detail": "Not found"}, status=404)
+
+        scope = teach_course_scope_ids(request.user)
+        course_id = appeal.run.submission.assignment.course_id
+        if scope is not None and (course_id is None or course_id not in scope):
+            return Response({"detail": "Not found"}, status=404)
+
+        if appeal.status != Appeal.STATUS_OPEN:
+            return Response({"detail": "Appeal is not open"}, status=400)
+
+        resolution = (request.data.get("resolution") or "").strip()
+        new_status = (request.data.get("status") or "").strip()
+        if new_status not in (Appeal.STATUS_ACCEPTED, Appeal.STATUS_REJECTED):
+            return Response(
+                {"detail": "status must be accepted or rejected"},
+                status=400,
+            )
+        if not resolution:
+            return Response({"detail": "resolution required"}, status=400)
+
+        appeal.resolution = resolution
+        appeal.status = new_status
+        appeal.resolved_by = request.user
+        appeal.save(update_fields=["resolution", "status", "resolved_by", "updated_at"])
+        return Response(AppealSerializer(appeal).data)
+
+
+class QaSummaryView(APIView):
+    """QA console summary — open appeals/reviews + calibration hint + gold eval."""
+
+    permission_classes = [IsAuthenticated, GradevanceQaAccess]
+
+    def get(self, request):
+        open_appeals = Appeal.objects.filter(status=Appeal.STATUS_OPEN).count()
+        open_reviews = ReviewItem.objects.filter(
+            status__in=[ReviewItem.STATUS_OPEN, ReviewItem.STATUS_IN_PROGRESS]
+        ).count()
+        profiles_on_disk = len(list_profiles())
+
+        gold_eval = None
+        try:
+            import json
+            from pathlib import Path
+
+            # views.py lives at backend/gradevance/views.py → parents[2] = repo root
+            latest = (
+                Path(__file__).resolve().parents[2]
+                / "docs"
+                / "eduos"
+                / "qa-evidence"
+                / "GOLD-EVAL-LATEST.json"
+            )
+            if latest.is_file():
+                payload = json.loads(latest.read_text(encoding="utf-8"))
+                pre = (payload.get("presegmented_gate") or {}).get("sg") or {}
+                gold_eval = {
+                    "generated_at": payload.get("generated_at"),
+                    "sg_kappa": pre.get("value"),
+                    "sd_kappa": ((payload.get("presegmented_gate") or {}).get("sd") or {}).get(
+                        "value"
+                    ),
+                    "essay_count": len(payload.get("essays") or []),
+                    "artifact": "docs/eduos/qa-evidence/GOLD-EVAL-LATEST.json",
+                }
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            gold_eval = None
+
+        kappa = None
+        kappa_sd = None
+        try:
+            from gradevance.services.packs import find_profile_file_for_id, load_profile
+            from gradevance.services.publish import evaluate_publish_gate
+
+            loaded = load_profile(find_profile_file_for_id("naa_cycle1_exam_prep", 1))
+            gate = evaluate_publish_gate(loaded, as_mode="summative")
+            rel = gate.get("reliability") or {}
+            kappa = gate.get("kappa") or (rel.get("value") if isinstance(rel, dict) else None)
+            kappa_sd = gate.get("kappa_sd")
+        except Exception:  # noqa: BLE001 — QA summary is best-effort
+            pass
+
+        return Response(
+            {
+                "open_appeals": open_appeals,
+                "open_reviews": open_reviews,
+                "profiles_on_disk": profiles_on_disk,
+                "profiles_hint": (
+                    f"{profiles_on_disk} assignment profile(s) available — "
+                    "open Calibration for held-out κ."
+                ),
+                "fairness_note": (
+                    "Summative bands stay withheld until release; sample audit exports "
+                    "from the run workbench before accreditation review."
+                ),
+                "calibration_path": "calibration/",
+                "kappa": kappa,
+                "kappa_sd": kappa_sd,
+                "gold_eval": gold_eval,
+                "default_pack_id": "naa_cycle1_exam_prep",
+            }
+        )

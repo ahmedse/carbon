@@ -200,34 +200,36 @@ user is looking.
 
 ### 6.2 New information architecture
 
+> **Amended 2026-09-19 — ADR-0043.** Segments are **Plan · Run · Canvas · Output**
+> (exclusive hero). Prior draft used Plan · Steps · Output · Metrics; Metrics demotes
+> into Run header / Output; Steps renames to **Run**; **Canvas** hosts ADR-0041 Job Map.
+> Do **not** stack DAG + Job Map on one scroll.
+
 Collapse **6 tabs → a 2-pane cockpit + a secondary Library**:
 
 ```
 ┌ Agent ─────────────────────────────────────────────────────────────┐
 │  [Chat] [Agent]                                   ⚙  ⋯  ✕           │
 ├──────────────┬──────────────────────────────────────────────────────┤
-│ TASKS (rail) │  RUN COCKPIT (single, contextual)                     │
-│  • search    │  ┌ Run header: title · status · global toolbar ─────┐ │
-│  • new task  │  │  ▶ Run  ⏸ Pause  ⤾ Resume  ■ Stop  ↻ Retry  ⑂ Fork│ │
-│  ▸ task A ✓  │  └──────────────────────────────────────────────────┘ │
-│  ▸ task B ⟳  │  [ Plan ]  [ Steps ]  [ Output ]  [ Metrics ]  (seg.) │
-│  ▸ task C ✗  │  ── Steps (default) ─────────────────────────────────  │
-│              │   ① Search benchmarks      ✓  done    ⋯(toolbar)      │
-│              │   ② Fetch AASHE PDF        ⟳  running ⏸ ■             │
-│              │   ③ Extract figures        �ದ  pending  ⏭ ✕            │
-│              │      └ guard: if ② has results                        │
-│              │   ✗ ④ Compare peers        ✗  failed   ↻ ⏭ ⚑         │
-│              │  ── live output streams inline under the active step ─ │
+│ TASKS (rail) │  RUN HEADER: title · status chip · global toolbar     │
+│  • search    │  ▶ Run  ⏸ Pause  ⤾ Resume  ■ Stop  ↻ Retry  ⑂ Fork   │
+│  • new task  │  [ Plan ] [ Run ] [ Canvas ] [ Output ]   ← exclusive │
+│  ▸ task A ✓  │                                                       │
+│  ▸ task B ⟳  │  ── ONE hero body (default by lifecycle) ─────────── │
+│  ▸ task C ✗  │   Plan   → PlanDagGraph (edit / approve)              │
+│              │   Run    → progress · consent CTA · StepToolbar       │
+│              │   Canvas → OpsCanvasHost Job Map (ADR-0041)           │
+│              │   Output → artifacts · envelope · SoR links           │
 └──────────────┴──────────────────────────────────────────────────────┘
 ```
 
-- **Top-level tabs drop from 6 → the cockpit’s segmented control (Plan / Steps / Output /
-  Metrics).** "Monitor" and "Results" become the **Metrics** and **Output** segments of the
-  same run — no separate tabs.
-- **Templates** and **Scheduled** move into a **Library** overflow menu (⋯) — they are
-  power features, not primary navigation.
-- **Per-step toolbar** appears on hover/selection of each step row, driven by §5.1.
-- **Plan** segment renders the graph (`PlanDagGraph` upgraded to show branches/loops/guards).
+- **Top-level tabs drop from 6 → the cockpit’s segmented control (Plan / Run / Canvas /
+  Output).** Classic Monitor/Results map to Run QoS chips + Output — no separate tabs.
+- **Templates** and **Scheduled** stay in **Library** overflow (⋯).
+- **Per-step toolbar** appears on **Run** (hover/selection), driven by §5.1 / RULE_21.
+- **Plan** segment renders the graph (`PlanDagGraph` — branches/loops/guards).
+- **Canvas** is the durable Job Map only — never the operator chrome.
+- Lifecycle defaults: pending→Plan · running/consent→Run · done→Output (ADR-0043 §2).
 - One design-token pass for spacing/typography/status colors (consistent chips: done=success,
   running=primary+spinner, pending=neutral, failed=error, skipped=muted, awaiting=warning).
 
@@ -256,7 +258,7 @@ build). No phase ships shallow.
 | **W-5** | `observe` self-heal | **PARTIAL ~85%** | Heuristic heal shipped; LLM repair optional |
 | **W-6** | `completed_with_gaps` | **DONE ~95%** | Status + UI chip; artifact stream polish |
 | **W-7** | Per-step control endpoints | **DONE ~95%** | Endpoints + StepToolbar (+ Done List) |
-| **U-1** | Chat-first cockpit | **PARTIAL ~85%** | AgentStage shipped; classic 6-tab fallback remains |
+| **U-1** | Chat-first cockpit | **DONE ~98%** | ADR-0043 Plan·Run·Canvas·Output exclusive heroes |
 | **U-2** | StepToolbar + live controls | **DONE ~98%** | Vitest + journey-12 Playwright retry/skip |
 | **U-3** | PlanDagGraph branches/guards + segments | **DONE ~92%** | Live chosen/unchosen edge tint |
 | **U-4** | Design-token consistency pass | **DONE ~90%** | STEP_STATUS single source + FONT chips |
@@ -282,10 +284,13 @@ Backend: `manage.py check` · targeted + full `ai` pytest · `import-boundary`, 
 
 ---
 
-## 10. Follow-on — Pulse Ops Canvas (Job Map)
+## 10. Follow-on — Pulse Ops Canvas (Job Map) + Four-View placement
 
 **ADR-0041** accepts a durable Job Map board beside Chat/Agent (closed typed kit;
 WorkObjectives + FlightDirector surfaced; optional attach to People/EduOS records).
-Does **not** replace ADR-0014 mode split or the Agent cockpit lifecycle — canvas is
-the reopenable artifact host. Research: `pulse-ops-canvas-research.canvas.tsx`.
-Implementation starts at ADR-0041 Phase 1 (host shell + canvas shelf).
+Does **not** replace ADR-0014 mode split or the Agent cockpit lifecycle.
+
+**ADR-0043** places that board as the Agent **Canvas** view (exclusive hero with
+Plan / Run / Output). Do **not** glue Job Map under the live DAG. Artifacts shelf +
+record attach remain valid hosts. Research: `pulse-ops-canvas-research.canvas.tsx`.
+IA board: `pulse-agent-four-view-ia.canvas.tsx`.

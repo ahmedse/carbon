@@ -724,21 +724,19 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
         )
         return Response({"status": "declined"})
 
-    @action(detail=True, methods=["get"], url_path="subagents", url_name="list-subagents")
-    def list_subagents(self, request, pk=None):
-        """List this conversation's subagents (CBAC-scoped), newest first."""
-        conversation = self.intelligence._get_accessible_conversation(request.user, pk)
-        if conversation is None:
-            return Response({"error": f"Conversation {pk} not found."}, status=status.HTTP_404_NOT_FOUND)
-        subs = SubagentService().list_subagents(request.user, pk)
-        return Response([serialize_subagent(s) for s in subs])
+    @action(detail=True, methods=["get", "post"], url_path="subagents", url_name="subagents")
+    def subagents(self, request, pk=None):
+        """GET: list this conversation's subagents. POST: dispatch one.
 
-    @action(detail=True, methods=["post"], url_path="subagents", url_name="dispatch-subagent")
-    def dispatch_subagent(self, request, pk=None):
-        """Dispatch a named read-only subagent against this conversation."""
+        Combined into a single ``@action`` — two actions sharing ``url_path``
+        leave only POST registered (DRF overwrite) and GET returns 405.
+        """
         conversation = self.intelligence._get_accessible_conversation(request.user, pk)
         if conversation is None:
             return Response({"error": f"Conversation {pk} not found."}, status=status.HTTP_404_NOT_FOUND)
+        if request.method == "GET":
+            subs = SubagentService().list_subagents(request.user, pk)
+            return Response([serialize_subagent(s) for s in subs])
         serializer = SubagentDispatchSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         sub = SubagentService().dispatch_subagent(request.user, conversation, **serializer.validated_data)
@@ -1024,6 +1022,13 @@ class WorkspaceArtifactViewSet(viewsets.GenericViewSet):
                     continue
                 filtered.append(a)
             artifacts = filtered
+        plan_id = (request.query_params.get("plan_id") or "").strip()
+        if plan_id:
+            artifacts = [
+                a
+                for a in artifacts
+                if str((a.get("content_json") or {}).get("plan_id") or "") == plan_id
+            ]
         limit = request.query_params.get("limit")
         if limit:
             try:

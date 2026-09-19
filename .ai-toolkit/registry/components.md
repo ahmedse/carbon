@@ -1,4 +1,4 @@
-# Registry: Frontend Components  (auto-generated 2026-09-16 19:49 — DO NOT EDIT)
+# Registry: Frontend Components  (auto-generated 2026-09-19 10:12 — DO NOT EDIT)
 
 > REUSE BEFORE CREATE. Before building any component, search here first.
 
@@ -68,6 +68,8 @@ carbon-frontend//src/components/graph/PlanMermaidPreview.jsx
 carbon-frontend//src/components/graph/RunTimeline.jsx
 carbon-frontend//src/components/import/BulkImportWizard.jsx
 carbon-frontend//src/components/layout/PageContainer.jsx
+carbon-frontend//src/components/layout/ResponsiveList.jsx
+carbon-frontend//src/components/layout/__tests__/ResponsiveList.test.jsx
 carbon-frontend//src/components/notifications/InsightNotificationPanel.jsx
 carbon-frontend//src/components/notifications/NotificationCenter.jsx
 carbon-frontend//src/components/panel/PanelConfigDialog.jsx
@@ -83,6 +85,7 @@ carbon-frontend//src/hooks/useDocumentTitle.js
 carbon-frontend//src/hooks/useDraftPersistence.js
 carbon-frontend//src/hooks/useEnabledApps.js
 carbon-frontend//src/hooks/useInsightStream.js
+carbon-frontend//src/hooks/useIsMobile.js
 carbon-frontend//src/hooks/useNotifications.js
 carbon-frontend//src/hooks/useOperationProgress.js
 carbon-frontend//src/hooks/useOptimisticItem.js
@@ -95,7 +98,10 @@ carbon-frontend//src/hooks/useReferenceOptions.js
 ```
 carbon-frontend//src/api/accessControl.js
 carbon-frontend//src/api/aiCatalog.js
+carbon-frontend//src/api/aiControlPlane.js
 carbon-frontend//src/api/aiInbox.js
+carbon-frontend//src/api/aiKnowledge.js
+carbon-frontend//src/api/aiPromptGovernance.js
 carbon-frontend//src/api/aiPulse.js
 carbon-frontend//src/api/aiRegistry.js
 carbon-frontend//src/api/aiWorkspace.js
@@ -107,6 +113,7 @@ carbon-frontend//src/api/dq.js
 carbon-frontend//src/api/emissions-extended.js
 carbon-frontend//src/api/emissions.js
 carbon-frontend//src/api/fieldPolicies.js
+carbon-frontend//src/api/gradevance.js
 carbon-frontend//src/api/groups.js
 carbon-frontend//src/api/healthy.js
 carbon-frontend//src/api/insights.js

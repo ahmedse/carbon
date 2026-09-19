@@ -61,6 +61,8 @@ vi.mock('../api/aiWorkspace', () => ({
   dispatchSubagent: (...a) => dispatchSubagent(...a),
   forkPlan: (...a) => forkPlan(...a),
   rerunPlan: (...a) => rerunPlan(...a),
+  confirmPlanEdit: vi.fn().mockResolvedValue({}),
+  discardPlanEdit: vi.fn().mockResolvedValue({}),
   listPlanTemplates: (...a) => listPlanTemplates(...a),
   listSchedules: (...a) => listSchedules(...a),
   instantiatePlanTemplate: vi.fn(),
@@ -134,6 +136,7 @@ describe('PD-02 — AITaskAuditCard never dumps answer markdown', () => {
   it('shows confirmations but not final_response prose', () => {
     render(<AITaskAuditCard ledger={LEDGER} />);
     expect(screen.getByText(/Confirmations/i)).toBeInTheDocument();
+    expect(screen.queryByText('Answer')).not.toBeInTheDocument();
     expect(screen.queryByText('Final response')).not.toBeInTheDocument();
     expect(screen.queryByText(/### GOSI Exposure/)).not.toBeInTheDocument();
     expect(screen.queryByText(/\*\*Total\*\*/)).not.toBeInTheDocument();
@@ -178,7 +181,8 @@ describe('PD-01/03/04/05 — Done Output Answer · Discuss · Artifacts · PNG',
     listPlanTemplates.mockResolvedValue({ templates: [], count: 0 });
     listSchedules.mockResolvedValue({ schedules: [], count: 0 });
     forkPlan.mockResolvedValue(COMPLETED);
-    rerunPlan.mockResolvedValue(COMPLETED);
+    rerunPlan.mockResolvedValue({ ...COMPLETED, status: 'approved' });
+    runPlanStream.mockResolvedValue(undefined);
   });
 
   it('PD-01: Output renders answer via MarkdownMessage (not raw ###)', async () => {
@@ -195,19 +199,17 @@ describe('PD-01/03/04/05 — Done Output Answer · Discuss · Artifacts · PNG',
     expect(await screen.findByTestId('markdown-message')).toBeInTheDocument();
     expect(screen.getByTestId('markdown-message')).toHaveTextContent('### GOSI Exposure');
     // Raw pre-wrap dump of ### must not appear outside the markdown mock.
-    expect(screen.queryByText('Final response')).toBeInTheDocument();
+    expect(screen.queryByText('Answer')).toBeInTheDocument();
   });
 
-  it('PD-02: Audit is Metrics-only; Output has no Audit ledger', async () => {
+  it('PD-02: Audit under Run health opens by default when the run is settled', async () => {
     render(
       <AITaskPanel conversationId="conv-1" focusPlanId="plan-done-1" onSwitchToChat={onSwitchToChat} />,
     );
     await screen.findByTestId('markdown-message');
-    expect(screen.queryByText('Audit ledger')).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Metrics' }));
+    // Settled → Run health auto-opens so audit is not a hidden click (Screen Spec).
     expect(await screen.findByText('Audit ledger')).toBeInTheDocument();
-    expect(screen.queryByText(/### GOSI Exposure/)).not.toBeInTheDocument();
+    expect(getPlanLedger).toHaveBeenCalled();
   });
 
   it('PD-03: Discuss in Chat seeds onSwitchToChat with plan context', async () => {
@@ -219,8 +221,11 @@ describe('PD-01/03/04/05 — Done Output Answer · Discuss · Artifacts · PNG',
     await waitFor(() => expect(onSwitchToChat).toHaveBeenCalled());
     const draft = onSwitchToChat.mock.calls[0][0];
     expect(draft).toMatch(/October payroll variance board pack/);
-    expect(draft).toMatch(/GOSI Exposure/);
     expect(draft).toMatch(/plan plan-done-1/);
+    expect(draft).toMatch(/DISCUSSION ONLY/);
+    expect(draft).toMatch(/Fork or Replan/);
+    // Refine seed must not paste the prior answer body (avoids invoke_skill).
+    expect(draft).not.toMatch(/GOSI Exposure/);
   });
 
   it('PD-04/05: pack artifacts list + PNG Preview affordance', async () => {
@@ -235,5 +240,26 @@ describe('PD-01/03/04/05 — Done Output Answer · Discuss · Artifacts · PNG',
     expect(screen.getAllByText('board-pack.png').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByRole('button', { name: 'Preview' }).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByRole('button', { name: 'Download' }).length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('PD-06: Output Actions include Rerun, Fork, and Open Plan for completed', async () => {
+    render(
+      <AITaskPanel conversationId="conv-1" focusPlanId="plan-done-1" onSwitchToChat={onSwitchToChat} />,
+    );
+    await screen.findByTestId('markdown-message');
+    expect(screen.getByRole('button', { name: 'Rerun' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Fork' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Open Plan to rename or replan/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Rerun' }));
+    await waitFor(() => expect(rerunPlan).toHaveBeenCalledWith(expect.anything(), 'plan-done-1'));
+  });
+
+  it('PD-07: header Rerun aria control is enabled when completed', async () => {
+    render(
+      <AITaskPanel conversationId="conv-1" focusPlanId="plan-done-1" onSwitchToChat={onSwitchToChat} />,
+    );
+    await screen.findByTestId('markdown-message');
+    const rerunBtn = screen.getByRole('button', { name: 'Rerun from a clean slate' });
+    expect(rerunBtn).toBeEnabled();
   });
 });

@@ -118,13 +118,22 @@ const ARQueuePage = React.lazy(() => import("./apps/healthy/ARQueuePage"));
 const SlowMoversPage = React.lazy(() => import("./apps/healthy/SlowMoversPage"));
 const GradeVanceHome = React.lazy(() => import("./apps/gradevance/GradeVanceHome"));
 const GradeVanceLibraryPage = React.lazy(() => import("./apps/gradevance/LibraryPage"));
-const GradeVanceStudentDeskPage = React.lazy(() => import("./apps/gradevance/StudentDeskPage"));
 const GradeVanceMarkingPage = React.lazy(() => import("./apps/gradevance/MarkingPage"));
 const GradeVanceProposalsPage = React.lazy(() => import("./apps/gradevance/ProposalsPage"));
-const GradeVanceCoursesPage = React.lazy(() => import("./apps/gradevance/CoursesPage"));
-const GradeVanceAssignmentHubPage = React.lazy(() => import("./apps/gradevance/AssignmentHubPage"));
 const GradeVanceRunWorkbenchPage = React.lazy(() => import("./apps/gradevance/RunWorkbenchPage"));
 const GradeVanceCalibrationPage = React.lazy(() => import("./apps/gradevance/CalibrationPage"));
+const GradeVanceQaConsolePage = React.lazy(() => import("./apps/gradevance/QaConsolePage"));
+const GradeVanceAccessibilityPage = React.lazy(() => import("./apps/gradevance/AccessibilityPage"));
+const GradeVanceLtiAdminPage = React.lazy(() => import("./apps/gradevance/LtiAdminPage"));
+const LearnHome = React.lazy(() => import("./apps/learn/LearnHome"));
+const MyAssignmentsPage = React.lazy(() => import("./apps/learn/MyAssignmentsPage"));
+const LearnAssignmentPage = React.lazy(() => import("./apps/learn/AssignmentPage"));
+const LearnProgressPage = React.lazy(() => import("./apps/learn/ProgressPage"));
+const TeachHome = React.lazy(() => import("./apps/teach/TeachHome"));
+const TeachAppealsPage = React.lazy(() => import("./apps/teach/AppealsPage"));
+const TeachStemsPage = React.lazy(() => import("./apps/teach/StemsPage"));
+const TeachStemDetailPage = React.lazy(() => import("./apps/teach/StemDetailPage"));
+const TeachSubmissionDetailPage = React.lazy(() => import("./apps/teach/SubmissionDetailPage"));
 const PeopleHome = React.lazy(() => import("./apps/people/PeopleHome"));
 const EmployeesPage = React.lazy(() => import("./apps/people/EmployeesPage"));
 const EmployeeDetailPage = React.lazy(() => import("./apps/people/EmployeeDetailPage"));
@@ -164,6 +173,22 @@ function RedirectLegacyEntry() {
 function RedirectLegacyRow() {
   const { tableId, rowId } = useParams();
   return <Navigate to={`/carbon/my-data/row/${tableId}/${rowId}`} replace />;
+}
+
+/** Legacy GradeVance professor routes → Teach stems (ADR-0042). */
+function RedirectTeachAssignment() {
+  const { assignmentId } = useParams();
+  return <Navigate to={`/teach/stems/${assignmentId}`} replace />;
+}
+
+function RedirectTeachAssignmentAlias() {
+  const { assignmentId } = useParams();
+  return <Navigate to={`/teach/stems/${assignmentId}`} replace />;
+}
+
+function RedirectTeachRun() {
+  const { runId } = useParams();
+  return <Navigate to={`/teach/runs/${runId}`} replace />;
 }
 
 /**
@@ -306,17 +331,38 @@ export default function App() {
                 <Route path="/apps/healthy/reps" element={<RepHealthPage />} />
                 <Route path="/apps/healthy/collections" element={<ARQueuePage />} />
                 <Route path="/apps/healthy/inventory" element={<SlowMoversPage />} />
-                {/* GradeVance — EduOS multi-domain assessment (enabled via PlatformAppConfig) */}
+                {/* GradeVance — EduOS engine room (enabled via PlatformAppConfig) */}
                 <Route path="/apps/gradevance" element={<AppEnabledRoute appId="gradevance"><GradeVanceHome /></AppEnabledRoute>} />
-                <Route path="/apps/gradevance/courses" element={<AppEnabledRoute appId="gradevance"><GradeVanceCoursesPage /></AppEnabledRoute>} />
-                <Route path="/apps/gradevance/assignments/:assignmentId" element={<AppEnabledRoute appId="gradevance"><GradeVanceAssignmentHubPage /></AppEnabledRoute>} />
-                <Route path="/apps/gradevance/runs/:runId" element={<AppEnabledRoute appId="gradevance"><GradeVanceRunWorkbenchPage /></AppEnabledRoute>} />
-                <Route path="/apps/gradevance/calibration" element={<AppEnabledRoute appId="gradevance"><GradeVanceCalibrationPage /></AppEnabledRoute>} />
                 <Route path="/apps/gradevance/library" element={<AppEnabledRoute appId="gradevance"><GradeVanceLibraryPage /></AppEnabledRoute>} />
-                <Route path="/apps/gradevance/authoring" element={<Navigate to="/apps/gradevance/courses" replace />} />
-                <Route path="/apps/gradevance/student" element={<AppEnabledRoute appId="gradevance"><GradeVanceStudentDeskPage /></AppEnabledRoute>} />
-                <Route path="/apps/gradevance/marking" element={<AppEnabledRoute appId="gradevance"><GradeVanceMarkingPage /></AppEnabledRoute>} />
                 <Route path="/apps/gradevance/proposals" element={<AppEnabledRoute appId="gradevance"><GradeVanceProposalsPage /></AppEnabledRoute>} />
+                <Route path="/apps/gradevance/qa" element={<AppEnabledRoute appId="gradevance"><GradeVanceQaConsolePage /></AppEnabledRoute>} />
+                <Route path="/apps/gradevance/accessibility" element={<AppEnabledRoute appId="gradevance"><GradeVanceAccessibilityPage /></AppEnabledRoute>} />
+                <Route path="/apps/gradevance/lti" element={<AppEnabledRoute appId="gradevance"><GradeVanceLtiAdminPage /></AppEnabledRoute>} />
+                <Route path="/apps/gradevance/authoring" element={<Navigate to="/teach/stems" replace />} />
+                {/* Legacy GradeVance professor/student routes → Learn / Teach (ADR-0042) */}
+                <Route path="/apps/gradevance/student" element={<Navigate to="/learn" replace />} />
+                <Route path="/apps/gradevance/courses" element={<Navigate to="/teach/stems?tab=courses" replace />} />
+                <Route path="/apps/gradevance/assignments/:assignmentId" element={<RedirectTeachAssignment />} />
+                <Route path="/apps/gradevance/runs/:runId" element={<RedirectTeachRun />} />
+                <Route path="/apps/gradevance/calibration" element={<Navigate to="/teach/calibration" replace />} />
+                <Route path="/apps/gradevance/marking" element={<Navigate to="/teach/marking" replace />} />
+                {/* Learn — student persona (mirrors /my; no AppEnabledRoute until P4 platform-apps) */}
+                <Route path="/learn" element={<LearnHome />} />
+                <Route path="/learn/assignments" element={<MyAssignmentsPage />} />
+                <Route path="/learn/assignments/:assignmentId" element={<LearnAssignmentPage />} />
+                <Route path="/learn/progress" element={<LearnProgressPage />} />
+                {/* Teach — professor / marker persona (mirrors /team) */}
+                <Route path="/teach" element={<TeachHome />} />
+                <Route path="/teach/stems" element={<TeachStemsPage />} />
+                <Route path="/teach/stems/:assignmentId" element={<TeachStemDetailPage />} />
+                <Route path="/teach/stems/:assignmentId/submissions/:submissionId" element={<TeachSubmissionDetailPage />} />
+                <Route path="/teach/courses" element={<Navigate to="/teach/stems" replace />} />
+                <Route path="/teach/assignments/:assignmentId" element={<RedirectTeachAssignmentAlias />} />
+                <Route path="/teach/runs/:runId" element={<GradeVanceRunWorkbenchPage />} />
+                <Route path="/teach/calibration" element={<GradeVanceCalibrationPage />} />
+                <Route path="/teach/marking" element={<GradeVanceMarkingPage />} />
+                <Route path="/teach/appeals" element={<TeachAppealsPage />} />
+                <Route path="/teach/proposals" element={<GradeVanceProposalsPage />} />
                 {/* People app — Nibras HR & payroll. Bare namespace root resolves to PeopleHome. RULE_22. */}
                 <Route path="/people" element={<PeopleHome />} />
                 <Route path="/people/positions" element={<PositionsPage />} />

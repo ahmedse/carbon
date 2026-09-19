@@ -31,7 +31,7 @@ class DeepLinkPreviewView(APIView):
         base = getattr(settings, "FRONTEND_BASE_URL", "") or "https://eduos.example"
         url = (
             request.data.get("return_url")
-            or f"{base.rstrip('/')}/apps/gradevance/student?assignment={asg.id}"
+            or f"{base.rstrip('/')}/learn/assignments/{asg.id}"
         )
         item = deep_link_assignment_content_item(
             title=asg.title,

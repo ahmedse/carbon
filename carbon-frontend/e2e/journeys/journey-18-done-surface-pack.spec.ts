@@ -232,9 +232,9 @@ test('PD-01 UI: Agent Done Output shows Discuss + rendered answer path', async (
     await outputBtn.click();
   }
 
-  // Soft UI asserts — pass if Discuss or Final response chrome is visible.
+  // Soft UI asserts — pass if Discuss or Answer chrome is visible.
   const discussVisible = await discuss.isVisible({ timeout: 20_000 }).catch(() => false);
-  const finalChrome = await page.getByText(/Final response/i).first().isVisible({ timeout: 5_000 }).catch(() => false);
+  const finalChrome = await page.getByText(/Answer|Final response/i).first().isVisible({ timeout: 5_000 }).catch(() => false);
   console.log(`  J18-UI: discuss=${discussVisible} finalChrome=${finalChrome}`);
   expect(discussVisible || finalChrome).toBeTruthy();
 });

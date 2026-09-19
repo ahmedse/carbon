@@ -1,0 +1,79 @@
+{
+  "id": "AR-CYCLE1-03-week1",
+  "participant_id": "AR-CYCLE1-03",
+  "brief_id": "naa_reflection_1_exam_prep",
+  "source": "gradevance2/raw/Reflective writing - 2 cycles (ss writing and LCT visualisation).docx",
+  "expert_ref": "gradevance2/docs/audit-sonnet-vs-expert-cycle1.md",
+  "device_id": "naa_reflective_semantics",
+  "word_count": 137,
+  "text": "When I preparing for Gaokao, I feel very boring, my English is not good, and I decide to study hard for it. But there are so many tasks about math, Chinese, chemistry and physical, so ignore the English study for a long time. I don't write the English homework, and i often write all the subjects homework when i listen to my English teacher talks some important knowledges, so my English become bad and my English teacher was often critical to class because of the bad scores we had. When I only have two weeks to prepare Gaokao, I feel afraid because my English is so bad. I want to study English immediately, but it's too late. So when I write the English test in Gaokao, I feel regret. I want to improve my English in university.",
+  "segments": [
+    {
+      "segment_index": 1,
+      "word_start": 0,
+      "word_end": 22,
+      "sg_numeric": 2,
+      "sg_label": "SG+",
+      "sd_label": "SD-",
+      "text": "When I preparing for Gaokao, I feel very boring, my English is not good, and I decide to study hard for it."
+    },
+    {
+      "segment_index": 2,
+      "word_start": 22,
+      "word_end": 34,
+      "sg_numeric": 3,
+      "sg_label": "SG-",
+      "sd_label": "SD+",
+      "text": "But there are so many tasks about math, Chinese, chemistry and physical,"
+    },
+    {
+      "segment_index": 3,
+      "word_start": 34,
+      "word_end": 68,
+      "sg_numeric": 2,
+      "sg_label": "SG+",
+      "sd_label": "SD-",
+      "text": "so ignore the English study for a long time. I don't write the English homework, and i often write all the subjects homework when i listen to my English teacher talks some important knowledges,"
+    },
+    {
+      "segment_index": 4,
+      "word_start": 68,
+      "word_end": 89,
+      "sg_numeric": 3,
+      "sg_label": "SG-",
+      "sd_label": "SD+",
+      "text": "so my English become bad and my English teacher was often critical to class because of the bad scores we had."
+    },
+    {
+      "segment_index": 5,
+      "word_start": 89,
+      "word_end": 129,
+      "sg_numeric": 2,
+      "sg_label": "SG+",
+      "sd_label": "SD-",
+      "text": "When I only have two weeks to prepare Gaokao, I feel afraid because my English is so bad. I want to study English immediately, but it's too late. So when I write the English test in Gaokao, I feel regret."
+    },
+    {
+      "segment_index": 6,
+      "word_start": 129,
+      "word_end": 137,
+      "sg_numeric": 2,
+      "sg_label": "SG+",
+      "sd_label": "SD-",
+      "text": "I want to improve my English in university."
+    }
+  ],
+  "expert_rubric_bands": {
+    "task_achievement": "D",
+    "coherence_cohesion": "E",
+    "lexis_grammar_academic_style": "F"
+  },
+  "expert_rubric_meta": {
+    "_protocol": "faculty_mark_sheet_cycle1_week1",
+    "_coder": "NAA_tutor_FFe",
+    "_source": "gold/naa/faculty_mark_sheet_cycle1_week1.json",
+    "_date": "2026-09-19",
+    "_status": "tutor_letter_bands",
+    "_note": "Week 1/2 Tutor’s mark TA/CC/Gr from reflective writing workbook"
+  }
+}

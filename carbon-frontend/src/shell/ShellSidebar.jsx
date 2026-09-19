@@ -78,11 +78,13 @@ import RateReviewIcon from '@mui/icons-material/RateReview';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import ClassIcon from '@mui/icons-material/Class';
 import VerifiedIcon from '@mui/icons-material/Verified';
+import AccessibilityNewIcon from '@mui/icons-material/AccessibilityNew';
+import LinkIcon from '@mui/icons-material/Link';
 import { useAuth } from '../auth/AuthContext';
 import { APP_REGISTRY } from '../apps/registry';
 import { can, hasAppAccess } from '../authz';
 import { useEnabledApps } from '../hooks/useEnabledApps';
-import { MENU_ITEM_CAPABILITIES } from '../capabilities';
+import { MENU_ITEM_CAPABILITIES, LEARN_ACCESS, TEACH_ACCESS } from '../capabilities';
 import { useTranslation } from 'react-i18next';
 import { shellLabel, STUDIO_TITLE_KEYS } from '../i18n/shellLabels';
 
@@ -103,17 +105,38 @@ const MANIFEST_NAV_ICONS = {
   People: PeopleIcon,
   AccountBalanceWallet: AccountBalanceWalletIcon,
   Storage: StorageIcon,
+  Home: HomeIcon,
+  Assignment: AssignmentIcon,
+  Timeline: TimelineIcon,
+  Gavel: GavelIcon,
+  Science: ScienceIcon,
+  AccessibilityNew: AccessibilityNewIcon,
+  Link: LinkIcon,
 };
 
 const GRADEVANCE_ITEM_ICONS = {
   Overview: DashboardIcon,
-  'Courses & stems': ClassIcon,
-  Calibration: VerifiedIcon,
   'Pack library': MenuBookIcon,
   Library: MenuBookIcon,
-  Authoring: CreateIcon,
-  'Student desk': EditNoteIcon,
+  Proposals: LightbulbIcon,
+  QA: ScienceIcon,
+  Accessibility: AccessibilityNewIcon,
+  LTI: LinkIcon,
+};
+
+const LEARN_ITEM_ICONS = {
+  Home: HomeIcon,
+  'My assignments': AssignmentIcon,
+  Progress: TimelineIcon,
+};
+
+const TEACH_ITEM_ICONS = {
+  Overview: DashboardIcon,
+  Stems: ClassIcon,
+  'Courses & stems': ClassIcon,
+  Calibration: VerifiedIcon,
   'Marking queue': RateReviewIcon,
+  Appeals: GavelIcon,
   Proposals: LightbulbIcon,
 };
 
@@ -342,6 +365,30 @@ function getSidebarItems(studioId, helpApps = []) {
         return teamApp.navigation.items.map(item => ({
           ...item,
           icon: TEAM_ITEM_ICONS[item.label] || SupervisorAccountIcon,
+        }));
+      }
+      return [];
+    }
+
+    case 'learn': {
+      const learnApp = APP_REGISTRY.find((m) => m.id === 'learn');
+      if (learnApp?.navigation?.items?.length) {
+        return learnApp.navigation.items.map((item) => ({
+          ...item,
+          capability: LEARN_ACCESS,
+          icon: resolveNavIcon(item, LEARN_ITEM_ICONS),
+        }));
+      }
+      return [];
+    }
+
+    case 'teach': {
+      const teachApp = APP_REGISTRY.find((m) => m.id === 'teach');
+      if (teachApp?.navigation?.items?.length) {
+        return teachApp.navigation.items.map((item) => ({
+          ...item,
+          capability: TEACH_ACCESS,
+          icon: resolveNavIcon(item, TEACH_ITEM_ICONS),
         }));
       }
       return [];

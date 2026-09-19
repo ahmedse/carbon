@@ -3,26 +3,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import AgentRunSurface, { mergePlanWithRunSteps } from '../AgentRunSurface';
 
-vi.mock('../../components/graph/PlanDagGraph', () => ({
-  default: function MockPlanDagGraph({ plan, live }) {
-    const step = plan?.steps?.[0];
-    return (
-      <div data-testid="plan-dag-graph" data-live={live ? '1' : '0'}>
-        {step?.tool_name || 'no-tool'}
-        {step?.tool_output != null && (
-          <span data-testid="merged-output">{JSON.stringify(step.tool_output)}</span>
-        )}
-      </div>
-    );
-  },
-}));
-
-vi.mock('../OpsCanvasShelf', () => ({
-  default: function MockShelf() {
-    return <div data-testid="ops-canvas-shelf-mock" />;
-  },
-}));
-
 const PLAN = {
   id: 'plan-1',
   status: 'completed',
@@ -57,18 +37,22 @@ describe('mergePlanWithRunSteps', () => {
 });
 
 describe('AgentRunSurface', () => {
-  it('shows Job Map control when conversationId is set', () => {
+  it('does not stack Job Map or DAG on the Run surface', () => {
     render(
       <AgentRunSurface
         plan={PLAN}
         runSteps={[]}
         phase="finished"
         conversationId="conv-1"
+        listContent={<div>Step list body</div>}
       />,
     );
-    expect(screen.getByTestId('agent-run-job-map')).toBeTruthy();
+    expect(screen.queryByTestId('agent-run-job-map')).toBeNull();
+    expect(screen.queryByTestId('agent-run-job-map-board')).toBeNull();
+    expect(screen.queryByTestId('plan-dag-graph')).toBeNull();
   });
-  it('renders the plan DAG as the hero with a progress strip', () => {
+
+  it('renders progress strip and step list as the Run hero — no artifact cards', () => {
     render(
       <AgentRunSurface
         plan={PLAN}
@@ -80,14 +64,53 @@ describe('AgentRunSurface', () => {
     );
 
     expect(screen.getByTestId('agent-run-surface')).toBeInTheDocument();
-    expect(screen.getByTestId('plan-dag-graph')).toBeInTheDocument();
-    expect(screen.getByTestId('agent-run-progress')).toHaveTextContent(/2\/2 steps/);
-    expect(screen.getByTestId('agent-run-progress')).toHaveTextContent(/2 tools/);
-    expect(screen.getByTestId('agent-run-progress')).toHaveTextContent(/1 artifact/);
-    expect(screen.queryByTestId('agent-run-list')).not.toBeInTheDocument();
+    expect(screen.getByTestId('agent-run-progress')).toHaveTextContent(/2\/2/);
+    expect(screen.getByTestId('agent-run-progress')).toHaveTextContent(/1 artifacts/);
+    expect(screen.getByTestId('agent-run-list')).toHaveTextContent('Step list body');
+    // ADR-0043: deliverable cards belong on Output, not Run.
+    expect(screen.queryByTestId('agent-run-artifacts')).toBeNull();
+    expect(screen.queryByText('report.csv')).toBeNull();
   });
 
-  it('reveals the step list only after List is clicked', () => {
+  it('hands off to Output when deliverables exist after a finished run', () => {
+    const onOpenOutput = vi.fn();
+    render(
+      <AgentRunSurface
+        plan={PLAN}
+        runSteps={[]}
+        phase="finished"
+        artifacts={[{ id: 1, name: 'report.csv' }, { id: 2, name: 'chart.png' }]}
+        listContent={<div>Step list body</div>}
+        onOpenOutput={onOpenOutput}
+      />,
+    );
+    expect(screen.getByTestId('agent-run-output-handoff')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Open Output' }));
+    expect(onOpenOutput).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows post-done Rerun and Edit on Plan CTAs when settled', () => {
+    const onRerun = vi.fn();
+    const onOpenPlan = vi.fn();
+    render(
+      <AgentRunSurface
+        plan={PLAN}
+        runSteps={[]}
+        phase="finished"
+        listContent={<div>Step list body</div>}
+        onRerun={onRerun}
+        onOpenPlan={onOpenPlan}
+        canRerun
+      />,
+    );
+    expect(screen.getByTestId('agent-run-post-done')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Rerun' }));
+    expect(onRerun).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit on Plan' }));
+    expect(onOpenPlan).toHaveBeenCalled();
+  });
+
+  it('hides the step list when List is toggled off', () => {
     render(
       <AgentRunSurface
         plan={PLAN}
@@ -97,21 +120,9 @@ describe('AgentRunSurface', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'List' }));
-    expect(screen.getByTestId('agent-run-list')).toHaveTextContent('Step list body');
     fireEvent.click(screen.getByRole('button', { name: 'Hide list' }));
     expect(screen.queryByTestId('agent-run-list')).not.toBeInTheDocument();
-  });
-
-  it('merges live runSteps into the graph plan', () => {
-    render(
-      <AgentRunSurface
-        plan={PLAN}
-        runSteps={[{ step_id: 0, tool_output: { count: 3 }, status: 'completed' }]}
-        phase="finished"
-        live={false}
-      />,
-    );
-    expect(screen.getByTestId('merged-output')).toHaveTextContent('{"count":3}');
+    fireEvent.click(screen.getByRole('button', { name: 'List' }));
+    expect(screen.getByTestId('agent-run-list')).toHaveTextContent('Step list body');
   });
 });

@@ -298,10 +298,12 @@ export default function PlanDagGraph({
   const theme = useTheme();
   const [selected, setSelected] = useState(null);
 
-  const { nodes, edges, width, height: layoutHeight, phaseBands } = useMemo(
+  const { nodes, edges, width, height: layoutHeight, phaseBands, direction } = useMemo(
     () => layoutExecutionGraph(plan),
     [plan],
   );
+
+  const visibleNodes = useMemo(() => nodes.filter((n) => !n.is_dummy), [nodes]);
 
   const steps = useMemo(() => (Array.isArray(plan?.steps) ? plan.steps : []), [plan]);
 
@@ -649,7 +651,9 @@ export default function PlanDagGraph({
     );
   };
 
-  const summary = `${nodes.length} step${nodes.length !== 1 ? 's' : ''} · ${edges.length} link${edges.length !== 1 ? 's' : ''}${
+  const summary = `${visibleNodes.length} step${visibleNodes.length !== 1 ? 's' : ''} · ${
+    edges.filter((e) => !String(e.source).startsWith('__d')).length
+  } link${edges.filter((e) => !String(e.source).startsWith('__d')).length !== 1 ? 's' : ''}${
     attentionSummary ? ` · ${attentionSummary}` : ''
   }`;
 
@@ -699,6 +703,7 @@ export default function PlanDagGraph({
         expandTestId="plan-graph-expand"
         exportFileName="plan-graph"
         fill={fill}
+        direction={direction || 'lr'}
       />
     </>
   );

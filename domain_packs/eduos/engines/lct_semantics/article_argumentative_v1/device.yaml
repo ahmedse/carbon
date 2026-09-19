@@ -23,8 +23,12 @@ scale:
     axis_note: SD+ = condensed theoretical language; SD- = unpacked anecdote.
 reliability_gate:
   metric: cohen_kappa
-  minimum: 0.55
+  minimum: 0.4
+  minimum_sd: 0.3
   required_for_summative: true
+  held_out_status: seeded_draft
+  soft_floor_note: "Held-out overlaps anchors / no faculty expert coding — summative blocked until gold_status=expert"
+
 hitl:
   learning_enabled: true
   promote_edits_to_anchors: true

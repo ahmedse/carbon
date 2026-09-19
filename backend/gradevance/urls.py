@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import include, path
 
 from gradevance import views
 from gradevance.audit import RunAuditExportView
@@ -11,6 +11,7 @@ from gradevance.lti.tool_jwks import ToolJwksView
 from gradevance.lti.views import LtiStatusView
 
 urlpatterns = [
+    path("me/", include("gradevance.me_urls")),
     path("summary/", views.SummaryView.as_view(), name="gradevance-summary"),
     path("profiles/", views.ProfileCatalogView.as_view(), name="gradevance-profiles"),
     path(
@@ -22,6 +23,16 @@ urlpatterns = [
     path("examples/", views.DemoExamplesView.as_view(), name="gradevance-examples"),
     path("courses/", views.CourseListCreateView.as_view(), name="gradevance-courses"),
     path("courses/<uuid:course_id>/", views.CourseDetailView.as_view(), name="gradevance-course-detail"),
+    path(
+        "courses/<uuid:course_id>/enrollments/",
+        views.CourseEnrollmentListCreateView.as_view(),
+        name="gradevance-course-enrollments",
+    ),
+    path(
+        "courses/<uuid:course_id>/enrollments/<uuid:enrollment_id>/",
+        views.CourseEnrollmentDetailView.as_view(),
+        name="gradevance-course-enrollment-detail",
+    ),
     path("assignments/", views.AssignmentListCreateView.as_view(), name="gradevance-assignments"),
     path(
         "assignments/<uuid:assignment_id>/",
@@ -54,6 +65,13 @@ urlpatterns = [
         name="gradevance-audit-export",
     ),
     path("review-queue/", views.ReviewQueueView.as_view(), name="gradevance-review-queue"),
+    path("appeals/", views.AppealListView.as_view(), name="gradevance-appeals"),
+    path(
+        "appeals/<uuid:appeal_id>/resolve/",
+        views.AppealResolveView.as_view(),
+        name="gradevance-appeal-resolve",
+    ),
+    path("qa/summary/", views.QaSummaryView.as_view(), name="gradevance-qa-summary"),
     path("proposals/", views.ProposalListView.as_view(), name="gradevance-proposals"),
     path(
         "proposals/<uuid:proposal_id>/decide/",

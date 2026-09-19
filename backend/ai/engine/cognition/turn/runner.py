@@ -1737,6 +1737,7 @@ class TurnPipelineRunner:
                     instance_config=instance_config, user_info=user_info,
                     retrieval=retrieval, progress_callback=progress_callback,
                     stream_callback=stream_callback, turn_id=turn_id,
+                    intent_resolution=_intent_resolution,
                 )
             except Exception:
                 logger.exception("[%s] Pulse loop attempt failed; falling back to single-pass", turn_id[:8])
@@ -2045,6 +2046,12 @@ class TurnPipelineRunner:
         # [GAP-M7] Salience guard: only surface list_my_capabilities when the
         # user is asking about identity/access, never as a confusion fallback.
         draft_tools = _filter_draft_tools(draft_tools, user_message, salience.domain)
+        # Agent → Discuss: strip tools entirely — prose refine only until
+        # Fork / Replan / explicit re-run. Mirrors SkillAwarePlanner gate.
+        from ai.engine.cognition.plan.planner import _is_agent_discuss_turn
+        _discuss_turn = _is_agent_discuss_turn(user_message)
+        if _discuss_turn:
+            draft_tools = None
         # Zone-aware grounding: the anti-fabrication GROUNDING RULES are for
         # Zone 1 (platform-grounded) only. Zones concept/real_time/general get
         # a lighter directive (or the web_research mandate) instead.
@@ -2052,7 +2059,20 @@ class TurnPipelineRunner:
             _intent_resolution is None             # resolver didn't run → safe default
             or _intent_resolution.zone in ("platform", "off_limits")
         )
-        if draft_tools and _is_platform_zone:
+        if _discuss_turn:
+            system_prompt = (
+                f"{system_prompt}\n\n"
+                "AGENT DISCUSS MODE — follow exactly:\n"
+                "- The user is refining or discussing an existing Agent plan in Chat.\n"
+                "- Reply in prose only: improved brief and/or numbered steps.\n"
+                "- Do NOT call any tools (no invoke_skill, call_host_api, "
+                "resolve_entity, aggregate_entity, plan_task, edit_plan, "
+                "approve_plan, web_research, export_document).\n"
+                "- Do NOT re-run the prior analysis or fetch live data.\n"
+                "- Do NOT mutate the Agent plan. Wait until the user says "
+                "Fork, Replan, or explicitly asks to convert/run.\n"
+            )
+        elif draft_tools and _is_platform_zone:
             system_prompt = (
                 f"{system_prompt}\n\n"
                 "GROUNDING RULES — follow them exactly:\n"
@@ -2812,6 +2832,7 @@ class TurnPipelineRunner:
         progress_callback,
         stream_callback,
         turn_id,
+        intent_resolution=None,
     ):
         """Pulse v2 Phase 1: run the adaptive ReAct loop for tool-bearing turns.
 
@@ -2873,6 +2894,36 @@ class TurnPipelineRunner:
                 conversation_id=conversation_id,
                 instance_id=instance_id,
             )
+
+            # N7 / SIM-20260919-N7: mirror single-pass S1.5 INTENT injection so
+            # Pulse loop Chat does not stop after resolve_entity on named leave.
+            if (
+                intent_resolution is not None
+                and intent_resolution.action == "answer"
+                and intent_resolution.candidates
+            ):
+                from ai.engine.cognition.turn.intent import _endpoint_to_domain_phrase
+                _top_cand = intent_resolution.candidates[0]
+                _phrases = [
+                    _endpoint_to_domain_phrase(c.name)
+                    for c in intent_resolution.candidates[:3]
+                ]
+                _delivery_phrase = _DELIVERY_INJECTION.get(
+                    intent_resolution.delivery, _DELIVERY_INJECTION["explain"]
+                )
+                system_prompt = (
+                    f"{system_prompt}\n\n"
+                    "INTENT (already recognised): the user is asking about "
+                    f"\"{_phrases[0]}\" and wants to {_delivery_phrase}. The "
+                    f"intent resolver matched `{_top_cand.name}` with confidence "
+                    f"{_top_cand.confidence:.2f}. Call `{_top_cand.name}` via "
+                    "call_host_api right away to answer from real data in the "
+                    "system — do NOT give a generic or textbook answer, and do "
+                    "NOT re-ask what the user means. Synthesise the result into a "
+                    "direct answer: do not dump the raw rows, name the material "
+                    "facts and cite real values inline, and only render a table "
+                    "if the user asked to see everything."
+                )
 
             draft_witness = DraftWitness(
                 llm_client=self.llm_client,
@@ -2956,6 +3007,12 @@ class TurnPipelineRunner:
         from ai.engine.core.config import get_settings
 
         settings = get_settings()
+
+        # Agent → Discuss seeds must never enter ReAct (skill/invoke path).
+        from ai.engine.cognition.plan.planner import _is_agent_discuss_turn
+        if _is_agent_discuss_turn(user_message):
+            logger.info("TurnPipelineRunner: Agent discuss turn — skip ReAct")
+            return None
 
         # Build skill registry from self.db
         skill_registry = SkillRegistry(self.db)

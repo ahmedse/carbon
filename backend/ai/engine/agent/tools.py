@@ -163,7 +163,12 @@ STATIC_TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_entity_details",
-            "description": "Get detailed schema and business description for a specific database table or API endpoint.",
+            "description": (
+                "Get detailed schema and business description for a knowledge-store "
+                "entity (database table / documented concept). For live host data "
+                "(leave balance, employees, payslips, …) use call_host_api with an "
+                "api_name from the Host API catalog — do not pass catalog names here."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -507,7 +512,38 @@ async def execute_search_knowledge(
 async def execute_get_entity_details(
     entity_name: str, knowledge_store=None, instance_id: str = "", **kwargs
 ) -> dict:
-    """Lookup entity by name from knowledge store. Returns schema + description."""
+    """Lookup entity by name from knowledge store. Returns schema + description.
+
+    Safety net (SIM-20260919-N10): if ``entity_name`` is a brand ``api_catalog``
+    endpoint, delegate to ``call_host_api`` — Agent plans historically mistook
+    catalog names for knowledge entities and soft-missed with
+    ``Entity '…' not found``.
+    """
+    executor = kwargs.get("executor")
+    if executor is not None and entity_name:
+        cfg = getattr(executor, "instance_config", None) or {}
+        catalog_names = {
+            ep.get("name")
+            for ep in (cfg.get("api_catalog") or [])
+            if isinstance(ep, dict) and ep.get("name")
+        }
+        if entity_name in catalog_names:
+            return await execute_call_host_api(
+                api_name=entity_name,
+                explanation=(
+                    f"Aliased get_entity_details → call_host_api "
+                    f"(catalog name {entity_name!r})"
+                ),
+                executor=executor,
+                instance_id=instance_id,
+                conversation_id=kwargs.get("conversation_id", ""),
+                llm_client=kwargs.get("llm_client"),
+                model=kwargs.get("model", ""),
+                path_params=kwargs.get("path_params"),
+                query_params=kwargs.get("query_params"),
+                body=kwargs.get("body"),
+            )
+
     if knowledge_store is None:
         return {"entity": None, "message": "Knowledge store not available"}
 
@@ -2204,6 +2240,57 @@ def first_person_compensation_ask(text: str | None) -> bool:
     return compensation_intent_asked(text) and bool(
         _FIRST_PERSON_COMP_RE.search(text or "")
     )
+
+
+_LEAVE_BALANCE_INTENT_RE = re.compile(
+    r"("
+    r"leave\s+balance|remaining\s+leave|leave\s+remaining|"
+    r"days?\s+(?:of\s+)?leave\s+(?:left|remaining)|"
+    r"how\s+much\s+leave|annual\s+leave(?:\s+remaining)?|"
+    r"leave\s+entitlement|sick\s+leave\s+remaining|"
+    r"رصيد\s*ال?اجاز|رصيد\s*إجاز|اجازات?\s*متبقي|الإجازات?\s*المتبقي|"
+    r"رصيد\s*اجاز"
+    r")",
+    re.IGNORECASE,
+)
+
+_FIRST_PERSON_LEAVE_RE = re.compile(
+    r"(?i)\b(my|mine)\b|اجازاتي|رصيد\s*اجازاتي|رصيد\s*إجازاتي",
+)
+
+_NAMED_LEAVE_HINT_RE = re.compile(
+    r"(?i)("
+    r"\bemp[_\s-]?\d+\b|"
+    r"\bemployee\s*(?:no\.?|number|#|:)?\s*\d+|"
+    r"\bfor\s+(?!me\b)[\w\u0600-\u06FF]|"
+    r"'s\s+(?:leave|annual|sick|balance)"
+    r")",
+)
+
+
+def leave_balance_intent_asked(text: str | None) -> bool:
+    """True when the utterance asks about leave remaining / balance (EN/AR)."""
+    return bool(_LEAVE_BALANCE_INTENT_RE.search(text or ""))
+
+
+def first_person_leave_ask(text: str | None) -> bool:
+    """True for first-person leave balance asks (my leave / اجازاتي)."""
+    return leave_balance_intent_asked(text) and bool(
+        _FIRST_PERSON_LEAVE_RE.search(text or "")
+    )
+
+
+def named_leave_balance_ask(text: str | None) -> bool:
+    """True for third-person / numbered-employee leave balance asks.
+
+    Admin Chat N-CHAT-03: \"annual leave remaining for employee 1001 Wellie\"
+    must route to ``list_leave_entitlements``, not stop after ``resolve_entity``.
+    """
+    if not leave_balance_intent_asked(text):
+        return False
+    if first_person_leave_ask(text):
+        return False
+    return bool(_NAMED_LEAVE_HINT_RE.search(text or ""))
 
 
 def _compensation_intent_text(*parts: str | None) -> str:

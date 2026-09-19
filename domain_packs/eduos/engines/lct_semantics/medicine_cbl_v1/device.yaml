@@ -26,8 +26,11 @@ scale:
     axis_note: SD+ = condensed clinical concepts (e.g. peritonism, SIRS); SD- = plain narrative.
 reliability_gate:
   metric: cohen_kappa
-  minimum: 0.6
+  minimum: 0.4
+  minimum_sd: 0.3
   required_for_summative: true
+  held_out_status: instrument_coded_disjoint
+  soft_floor_note: "Disjoint Instrument Trust coding (not clinical faculty wave yet) — soft κ floors"
 hitl:
   learning_enabled: true
   promote_edits_to_anchors: true

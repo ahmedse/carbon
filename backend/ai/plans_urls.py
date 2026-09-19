@@ -6,7 +6,9 @@ below is relative to ``/carbon-api/ai/plans/``:
     POST   /                        create (brief → pending_approval)
     GET    /                        list my plans
     GET    /{id}/                   plan detail + steps
-    PATCH  /{id}/                   edit plan (replan + diff)
+    PATCH  /{id}/                   edit plan (mode=rename|replan + diff)
+    POST   /{id}/confirm-edit/      keep replan (clear rollback snapshot)
+    POST   /{id}/discard-edit/      cancel replan (restore snapshot)
     PATCH  /{id}/steps/{step}/      edit a single plan step
     POST   /{id}/approve/           plan-level consent (RULE_21)
     POST   /{id}/decline/           decline a pending plan
@@ -76,6 +78,16 @@ urlpatterns = [
         "<str:pk>/",
         PlanViewSet.as_view({"get": "retrieve", "patch": "partial_update", "delete": "destroy"}),
         name="ai-plan-detail",
+    ),
+    path(
+        "<str:pk>/confirm-edit/",
+        PlanViewSet.as_view({"post": "confirm_edit"}),
+        name="ai-plan-confirm-edit",
+    ),
+    path(
+        "<str:pk>/discard-edit/",
+        PlanViewSet.as_view({"post": "discard_edit"}),
+        name="ai-plan-discard-edit",
     ),
     path(
         "<str:pk>/discover/",

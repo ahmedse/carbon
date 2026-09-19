@@ -46,6 +46,25 @@ class GradevanceSubmitAccess(BasePermission):
         )
 
 
+class GradevanceLearnAccess(BasePermission):
+    """Student self-service namespace — submit (or view/manage for demos)."""
+
+    def has_permission(self, request, view):
+        return (
+            _can(request.user, "gradevance:submit")
+            or _can(request.user, "gradevance:manage")
+            or _can(request.user, "gradevance:view")
+            or _can(request.user, "learn:access")
+        )
+
+
+class GradevanceQaAccess(BasePermission):
+    """QA console — gradevance:qa or manage."""
+
+    def has_permission(self, request, view):
+        return _can(request.user, "gradevance:qa") or _can(request.user, "gradevance:manage")
+
+
 class GradevanceReadOrSubmit(BasePermission):
     """GET → view; POST submit path → submit/manage."""
 

@@ -711,6 +711,24 @@ GRADEVANCE_QA = Capability(
     category="data",
 )
 
+LEARN_ACCESS = Capability(
+    key="learn:access",
+    domain="learn",
+    action="access",
+    label="Learn",
+    description="Access the student learn surface (my courses, assignments, coaching)",
+    category="general",
+)
+
+TEACH_ACCESS = Capability(
+    key="teach:access",
+    domain="teach",
+    action="access",
+    label="Teach",
+    description="Access the teach surface (my courses, marking, assignment hub)",
+    category="general",
+)
+
 CORRESPONDENCE_SUBMIT = Capability(
     key="correspondence:submit",
     domain="correspondence",
@@ -857,6 +875,8 @@ ALL_CAPABILITIES: Dict[str, Capability] = {
     GRADEVANCE_MARK.key: GRADEVANCE_MARK,
     GRADEVANCE_SUBMIT.key: GRADEVANCE_SUBMIT,
     GRADEVANCE_QA.key: GRADEVANCE_QA,
+    LEARN_ACCESS.key: LEARN_ACCESS,
+    TEACH_ACCESS.key: TEACH_ACCESS,
     # e-Office Correspondence + Self-Service
     CORRESPONDENCE_SUBMIT.key: CORRESPONDENCE_SUBMIT,
     CORRESPONDENCE_ACT.key: CORRESPONDENCE_ACT,
@@ -949,16 +969,18 @@ IMPLIES: Dict[str, Set[str]] = {
     # ── People manage → view (+ compensation) ──
     PEOPLE_MANAGE.key: {PEOPLE_VIEW.key, PEOPLE_VIEW_COMPENSATION.key},
 
-    # ── GradeVance manage/mark → view ──
+    # ── GradeVance manage/mark → view (+ persona tiles) ──
     GRADEVANCE_MANAGE.key: {
         GRADEVANCE_VIEW.key,
         GRADEVANCE_MARK.key,
         GRADEVANCE_SUBMIT.key,
         GRADEVANCE_QA.key,
+        TEACH_ACCESS.key,
+        LEARN_ACCESS.key,
     },
-    GRADEVANCE_MARK.key: {GRADEVANCE_VIEW.key},
+    GRADEVANCE_MARK.key: {GRADEVANCE_VIEW.key, TEACH_ACCESS.key},
     GRADEVANCE_QA.key: {GRADEVANCE_VIEW.key},
-    GRADEVANCE_SUBMIT.key: {GRADEVANCE_VIEW.key},
+    GRADEVANCE_SUBMIT.key: {GRADEVANCE_VIEW.key, LEARN_ACCESS.key},
 
     # ── Correspondence admin → act/submit + self-service ──
     CORRESPONDENCE_ADMIN.key: {
@@ -1053,12 +1075,15 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
     # ── GradeVance (EduOS) ──
     "gradevance_lead": {
         GRADEVANCE_MANAGE.key,
+        TEACH_ACCESS.key,
     },
     "gradevance_markers": {
         GRADEVANCE_MARK.key,
+        TEACH_ACCESS.key,
     },
     "gradevance_students": {
         GRADEVANCE_SUBMIT.key,
+        LEARN_ACCESS.key,
     },
 
     # Every linked employee (global scope) → self-service "my" app baseline.

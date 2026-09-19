@@ -306,40 +306,231 @@ export function buildPlanPhases(plan) {
   return { phases, stepPhase };
 }
 
-// ── Execution-graph layout (TensorFlow-style) ─────────────────────────────
-// The plan DAG is rendered as a LAYERED DIRECTED execution graph: ranks come
-// from longest-path layering (sources at rank 0, sinks at the max rank), so
-// edges always flow left→right with arrowheads — dependency is execution
-// order, exactly like a computation graph. Within a rank, steps are stacked
-// top→bottom by step_id. Phase bands (vertical columns) group the ranks a
-// phase spans so the workflow stages read as execution lanes.
+// ── Execution-graph layout (Sugiyama-style flowchart) ─────────────────────
+// Longest-path ranks + barycentric within-rank order so edges flow cleanly
+// L→R (branched) or T→B (pure sequential). Orphan mid-flow gateways (e.g. an
+// observe node with no inbound edge) are pulled ALAP beside their successors
+// instead of sitting at rank 0 and shooting long crossing edges.
 
 export const EXEC_LAYOUT = {
   nodeW: 228,
   nodeH: 58,
-  colGap: 64,
-  rowGap: 36,
+  colGap: 72,
+  rowGap: 44,
   padX: 28,
   padTop: 40,
   padBottom: 24,
 };
 
+const STATUS_LANE = {
+  completed: 0,
+  running: 1,
+  awaiting_approval: 2,
+  pending: 3,
+  skipped: 4,
+  failed: 5,
+};
+
+function idKey(id) {
+  return String(id);
+}
+
+function avg(nums) {
+  if (!nums.length) return null;
+  return nums.reduce((a, b) => a + b, 0) / nums.length;
+}
+
+/**
+ * Pull source-less mid-flow nodes (observe/fail side paths) to sit just before
+ * their successors so they do not occupy rank 0 and cross the whole DAG.
+ */
+function tightenOrphanSources(rankOf, preds, succs) {
+  let changed = true;
+  let guard = 0;
+  while (changed && guard < 32) {
+    changed = false;
+    guard += 1;
+    rankOf.forEach((r, id) => {
+      const ps = preds.get(id) || [];
+      if (ps.length) return;
+      const outs = succs.get(id) || [];
+      if (!outs.length) return;
+      const succRanks = outs.map((s) => rankOf.get(s)).filter((v) => v != null);
+      if (!succRanks.length) return;
+      const next = Math.max(0, Math.min(...succRanks) - 1);
+      if (next !== r) {
+        rankOf.set(id, next);
+        changed = true;
+      }
+    });
+  }
+}
+
+/**
+ * Compact ranks to 0..max after orphan tightening (gaps from pulls).
+ */
+function compressRanks(rankOf) {
+  const used = [...new Set(rankOf.values())].sort((a, b) => a - b);
+  const map = new Map(used.map((r, i) => [r, i]));
+  rankOf.forEach((r, id) => rankOf.set(id, map.get(r)));
+}
+
+/**
+ * Split long-span edges with invisible dummy nodes so barycenter ordering and
+ * edge routing stay local to adjacent ranks (classic Sugiyama).
+ */
+function insertRankDummies(nodes, edges, rankOf) {
+  const outNodes = [...nodes];
+  const outEdges = [];
+  let seq = 0;
+  edges.forEach((e) => {
+    const rs = rankOf.get(e.source);
+    const rt = rankOf.get(e.target);
+    if (rs == null || rt == null || rt <= rs + 1) {
+      outEdges.push(e);
+      return;
+    }
+    let prev = e.source;
+    for (let r = rs + 1; r < rt; r += 1) {
+      const id = `__d${seq++}`;
+      outNodes.push({
+        id,
+        label: '',
+        status: 'pending',
+        tool_name: null,
+        agent_role: null,
+        phase_id: null,
+        node_type: 'dummy',
+        is_gateway: false,
+        is_dummy: true,
+      });
+      rankOf.set(id, r);
+      outEdges.push({
+        source: prev,
+        target: id,
+        label: null,
+        guard: null,
+        is_default: false,
+        branch: e.branch || null,
+      });
+      prev = id;
+    }
+    outEdges.push({
+      source: prev,
+      target: e.target,
+      label: e.label || null,
+      guard: e.guard || null,
+      is_default: Boolean(e.is_default),
+      branch: e.branch || null,
+    });
+  });
+  return { nodes: outNodes, edges: outEdges };
+}
+
+/**
+ * Rebuild adjacency after dummy insertion.
+ */
+function buildAdj(nodes, edges) {
+  const preds = new Map(nodes.map((n) => [n.id, []]));
+  const succs = new Map(nodes.map((n) => [n.id, []]));
+  edges.forEach((e) => {
+    if (preds.has(e.target)) preds.get(e.target).push(e.source);
+    if (succs.has(e.source)) succs.get(e.source).push(e.target);
+  });
+  return { preds, succs };
+}
+
+/**
+ * Barycentric crossing reduction (forward + backward sweeps) with stable
+ * tie-breaks: chosen/happy path above escalate/skipped/fail lanes.
+ */
+function orderRanksBarycenter(byRank, ranks, preds, succs, edges, nodesById) {
+  const branchBias = new Map();
+  edges.forEach((e) => {
+    if (e.branch === 'chosen') branchBias.set(e.target, Math.min(branchBias.get(e.target) ?? 9, 0));
+    else if (e.branch === 'unchosen') branchBias.set(e.target, Math.min(branchBias.get(e.target) ?? 9, 2));
+  });
+
+  const tieBreak = (a, b) => {
+    const ba = branchBias.get(a.id) ?? 1;
+    const bb = branchBias.get(b.id) ?? 1;
+    if (ba !== bb) return ba - bb;
+    const sa = STATUS_LANE[a.status] ?? 3;
+    const sb = STATUS_LANE[b.status] ?? 3;
+    if (sa !== sb) return sa - sb;
+    // Gateways (choice) stay centered relative to plain tasks of same bias.
+    const ga = a.is_gateway ? 0 : 1;
+    const gb = b.is_gateway ? 0 : 1;
+    if (ga !== gb) return ga - gb;
+    return idKey(a.id).localeCompare(idKey(b.id), undefined, { numeric: true });
+  };
+
+  ranks.forEach((r) => byRank.get(r).sort(tieBreak));
+
+  const positionOf = () => {
+    const pos = new Map();
+    ranks.forEach((r) => {
+      byRank.get(r).forEach((n, i) => pos.set(n.id, i));
+    });
+    return pos;
+  };
+
+  const sortByNeighborAvg = (r, neighborFn) => {
+    const pos = positionOf();
+    const group = byRank.get(r);
+    const scored = group.map((n, idx) => {
+      const nbrs = neighborFn(n.id);
+      const bary = avg(nbrs.map((id) => pos.get(id)).filter((v) => v != null));
+      return { n, bary: bary == null ? idx : bary, idx };
+    });
+    scored.sort((a, b) => {
+      if (a.bary !== b.bary) return a.bary - b.bary;
+      return tieBreak(a.n, b.n) || a.idx - b.idx;
+    });
+    byRank.set(r, scored.map((s) => s.n));
+  };
+
+  for (let iter = 0; iter < 16; iter += 1) {
+    for (let i = 1; i < ranks.length; i += 1) {
+      sortByNeighborAvg(ranks[i], (id) => preds.get(id) || []);
+    }
+    for (let i = ranks.length - 2; i >= 0; i -= 1) {
+      sortByNeighborAvg(ranks[i], (id) => succs.get(id) || []);
+    }
+  }
+
+  // Final pass: keep chosen-path / completed nodes toward the top lane so the
+  // happy path reads as a straight flowchart spine.
+  ranks.forEach((r) => {
+    const group = byRank.get(r);
+    if (group.length < 2) return;
+    group.sort(tieBreak);
+    // Re-apply one bary pull so tie-break does not undo neighbor alignment.
+    sortByNeighborAvg(r, (id) => {
+      const ps = preds.get(id) || [];
+      return ps.length ? ps : (succs.get(id) || []);
+    });
+  });
+
+  // Silence unused in case of empty graph tooling.
+  void nodesById;
+}
+
 /**
  * Layered execution-graph layout for a plan.
  *
  * @param {object} plan - plan payload from GET /ai/plans/{id}/
- * @returns {{nodes: Array<{id:number,label:string,status:string,tool_name:string|null,x:number,y:number,rank:number,phase_id:number|null}>, edges: Array<{source:number,target:number,sourceX:number,sourceY:number,targetX:number,targetY:number}>, width:number, height:number, phaseBands: Array<{phase_id:number,name:string,x:number,width:number,strategy:string}>}}
+ * @returns {{nodes: Array<object>, edges: Array<object>, width:number, height:number, phaseBands: Array<object>, direction:'lr'|'tb'}}
  */
 export function layoutExecutionGraph(plan) {
   const { nodes, edges } = buildPlanGraph(plan);
   const { phases, stepPhase } = buildPlanPhases(plan);
 
-  // Longest-path layering measured FROM SOURCES (Sugiyama):
-  // rank(node) = 0 for sources, else 1 + max(rank of its predecessors).
-  // Ranks grow left→right, so every dependency edge flows left→right.
   const preds = new Map(nodes.map((n) => [n.id, []]));
+  const succs = new Map(nodes.map((n) => [n.id, []]));
   edges.forEach((e) => {
     if (preds.has(e.target)) preds.get(e.target).push(e.source);
+    if (succs.has(e.source)) succs.get(e.source).push(e.target);
   });
 
   const rankOf = new Map();
@@ -352,71 +543,164 @@ export function layoutExecutionGraph(plan) {
     return r;
   };
   nodes.forEach((n) => rankOf.set(n.id, visit(n.id)));
+  tightenOrphanSources(rankOf, preds, succs);
+  compressRanks(rankOf);
 
-  const maxRank = nodes.length ? Math.max(...rankOf.values()) : 0;
+  const withDummies = insertRankDummies(nodes, edges, rankOf);
+  const layoutNodes = withDummies.nodes;
+  const layoutEdges = withDummies.edges;
+  const adj = buildAdj(layoutNodes, layoutEdges);
+
   const byRank = new Map();
-  nodes.forEach((n) => {
+  layoutNodes.forEach((n) => {
     const r = rankOf.get(n.id) ?? 0;
     if (!byRank.has(r)) byRank.set(r, []);
     byRank.get(r).push(n);
   });
   const ranks = [...byRank.keys()].sort((a, b) => a - b);
-  ranks.forEach((r) => byRank.get(r).sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true })));
+  const nodesById = new Map(layoutNodes.map((n) => [n.id, n]));
+  orderRanksBarycenter(byRank, ranks, adj.preds, adj.succs, layoutEdges, nodesById);
 
   const L = EXEC_LAYOUT;
-  const width = L.padX * 2 + (maxRank + 1) * L.nodeW + maxRank * L.colGap;
-  const maxInRank = ranks.length ? Math.max(...ranks.map((r) => byRank.get(r).length)) : 0;
-  const height = L.padTop + maxInRank * L.nodeH + (maxInRank - 1) * L.rowGap + L.padBottom;
+  const maxRank = ranks.length ? ranks[ranks.length - 1] : 0;
+  // Lane count ignores invisible dummies so height matches visible flowchart.
+  const maxInRank = ranks.length
+    ? Math.max(...ranks.map((r) => byRank.get(r).filter((n) => !n.is_dummy).length || 1))
+    : 0;
+  const direction = maxInRank <= 1 && nodes.length >= 3 ? 'tb' : 'lr';
+
+  let width;
+  let height;
+  if (direction === 'tb') {
+    width = L.padX * 2 + L.nodeW;
+    height = L.padTop + (maxRank + 1) * L.nodeH + maxRank * L.rowGap + L.padBottom;
+  } else {
+    width = L.padX * 2 + (maxRank + 1) * L.nodeW + maxRank * L.colGap;
+    height = L.padTop + maxInRank * L.nodeH + Math.max(0, maxInRank - 1) * L.rowGap + L.padBottom;
+  }
 
   const laid = [];
   ranks.forEach((r) => {
     const group = byRank.get(r);
-    const groupH = group.length * L.nodeH + (group.length - 1) * L.rowGap;
-    const startY = L.padTop + (height - L.padTop - L.padBottom - groupH) / 2;
-    const x = L.padX + r * (L.nodeW + L.colGap);
-    group.forEach((n, i) => {
-      laid.push({
-        ...n,
-        x,
-        y: startY + i * (L.nodeH + L.rowGap),
-        // Node dimensions ride along so the enterprise graph can render and
-        // (re)size nodes generically without re-deriving the layout constants.
-        w: L.nodeW,
-        h: L.nodeH,
-        rank: r,
-        phase_id: stepPhase[n.id] ?? null,
+    // Place visible nodes on the lane grid; dummies sit on the same y as the
+    // barycentric slot so long edges track the lane without drawing a card.
+    const visible = group.filter((n) => !n.is_dummy);
+    const visibleIndex = new Map(visible.map((n, i) => [n.id, i]));
+    if (direction === 'tb') {
+      const x = L.padX;
+      group.forEach((n, i) => {
+        const lane = visibleIndex.has(n.id) ? visibleIndex.get(n.id) : i;
+        const y = L.padTop + r * (L.nodeH + L.rowGap);
+        if (n.is_dummy) {
+          laid.push({
+            ...n,
+            x: x + L.nodeW / 2,
+            y: y + L.nodeH / 2,
+            w: 0,
+            h: 0,
+            rank: r,
+            phase_id: null,
+          });
+        } else {
+          laid.push({
+            ...n,
+            x: x + lane * (L.nodeW + L.colGap),
+            y,
+            w: L.nodeW,
+            h: L.nodeH,
+            rank: r,
+            phase_id: stepPhase[n.id] ?? null,
+          });
+        }
       });
-    });
+    } else {
+      const groupH = Math.max(visible.length, 1) * L.nodeH + Math.max(0, visible.length - 1) * L.rowGap;
+      const startY = L.padTop + (height - L.padTop - L.padBottom - groupH) / 2;
+      const x = L.padX + r * (L.nodeW + L.colGap);
+      group.forEach((n, i) => {
+        const lane = visibleIndex.has(n.id) ? visibleIndex.get(n.id) : Math.min(i, Math.max(visible.length - 1, 0));
+        const y = startY + lane * (L.nodeH + L.rowGap);
+        if (n.is_dummy) {
+          laid.push({
+            ...n,
+            x: x + L.nodeW / 2,
+            y: y + L.nodeH / 2,
+            w: 0,
+            h: 0,
+            rank: r,
+            phase_id: null,
+          });
+        } else {
+          laid.push({
+            ...n,
+            x,
+            y,
+            w: L.nodeW,
+            h: L.nodeH,
+            rank: r,
+            phase_id: stepPhase[n.id] ?? null,
+          });
+        }
+      });
+    }
   });
 
-  const laidEdges = edges
+  const laidById = new Map(laid.map((n) => [n.id, n]));
+  const laidEdges = layoutEdges
     .map((e) => {
-      const s = laid.find((n) => n.id === e.source);
-      const t = laid.find((n) => n.id === e.target);
+      const s = laidById.get(e.source);
+      const t = laidById.get(e.target);
       if (!s || !t) return null;
+      const sDummy = Boolean(s.is_dummy);
+      const tDummy = Boolean(t.is_dummy);
+      if (direction === 'tb') {
+        return {
+          source: e.source,
+          target: e.target,
+          label: sDummy || tDummy ? null : e.label || null,
+          guard: e.guard || null,
+          is_default: Boolean(e.is_default),
+          branch: e.branch || null,
+          sourceX: sDummy ? s.x : s.x + L.nodeW / 2,
+          sourceY: sDummy ? s.y : s.y + L.nodeH,
+          targetX: tDummy ? t.x : t.x + L.nodeW / 2,
+          targetY: tDummy ? t.y : t.y,
+        };
+      }
       return {
         source: e.source,
         target: e.target,
-        label: e.label || null,
+        label: sDummy || tDummy ? null : e.label || null,
         guard: e.guard || null,
         is_default: Boolean(e.is_default),
         branch: e.branch || null,
-        sourceX: s.x + L.nodeW,
-        sourceY: s.y + L.nodeH / 2,
-        targetX: t.x,
-        targetY: t.y + L.nodeH / 2,
+        sourceX: sDummy ? s.x : s.x + L.nodeW,
+        sourceY: sDummy ? s.y : s.y + L.nodeH / 2,
+        targetX: tDummy ? t.x : t.x,
+        targetY: tDummy ? t.y : t.y + L.nodeH / 2,
       };
     })
     .filter(Boolean);
 
-  // Phase bands — the x-span each phase covers across its step ranks.
   const phaseBands = phases
     .map((p) => {
-      const xs = p.step_ids
-        .map((id) => laid.find((n) => n.id === id))
-        .filter(Boolean)
-        .map((n) => n.x);
-      if (!xs.length) return null;
+      const owned = p.step_ids
+        .map((id) => laidById.get(id))
+        .filter(Boolean);
+      if (!owned.length) return null;
+      if (direction === 'tb') {
+        const ys = owned.map((n) => n.y);
+        return {
+          phase_id: p.phase_id,
+          name: p.name,
+          strategy: p.strategy,
+          x: L.padX,
+          width: L.nodeW,
+          y: Math.min(...ys),
+          height: Math.max(...ys) + L.nodeH - Math.min(...ys),
+        };
+      }
+      const xs = owned.map((n) => n.x);
       return {
         phase_id: p.phase_id,
         name: p.name,
@@ -427,5 +711,12 @@ export function layoutExecutionGraph(plan) {
     })
     .filter(Boolean);
 
-  return { nodes: laid, edges: laidEdges, width, height, phaseBands };
+  return {
+    nodes: laid,
+    edges: laidEdges,
+    width,
+    height,
+    phaseBands,
+    direction,
+  };
 }

@@ -232,11 +232,12 @@ describe('planDagMermaid', () => {
 });
 
 describe('layoutExecutionGraph', () => {
-  it('computes longest-path ranks so execution flows left→right', () => {
-    const { nodes } = layoutExecutionGraph(PLAN);
+  it('stacks pure sequential plans top→bottom in the Pulse rail', () => {
+    const { nodes, direction } = layoutExecutionGraph(PLAN);
 
-    expect(nodes).toHaveLength(3);
-    const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+    expect(nodes.filter((n) => !n.is_dummy)).toHaveLength(3);
+    expect(direction).toBe('tb');
+    const byId = Object.fromEntries(nodes.filter((n) => !n.is_dummy).map((n) => [n.id, n]));
 
     // step 0 is a source (rank 0); step 1 depends on 0 (rank 1);
     // step 2 depends on 0 AND 1 → longest path → rank 2.
@@ -244,10 +245,10 @@ describe('layoutExecutionGraph', () => {
     expect(byId[1].rank).toBe(1);
     expect(byId[2].rank).toBe(2);
 
-    // Coordinates follow the rank: deeper rank → strictly larger x.
-    expect(byId[2].x).toBeGreaterThan(byId[1].x);
-    expect(byId[1].x).toBeGreaterThan(byId[0].x);
-    expect(byId[0].y).toBe(byId[2].y); // vertical centering per rank
+    // TB: deeper rank → strictly larger y; same column x.
+    expect(byId[2].y).toBeGreaterThan(byId[1].y);
+    expect(byId[1].y).toBeGreaterThan(byId[0].y);
+    expect(byId[0].x).toBe(byId[2].x);
   });
 
   it('assigns phase ids and emits phase bands', () => {
@@ -258,34 +259,41 @@ describe('layoutExecutionGraph', () => {
         { phase_id: 2, name: 'Act', goal: '', strategy: 'parallel', step_ids: [1, 2] },
       ],
     };
-    const { nodes, phaseBands } = layoutExecutionGraph(plan);
+    const { nodes, phaseBands, direction } = layoutExecutionGraph(plan);
 
-    const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+    const byId = Object.fromEntries(nodes.filter((n) => !n.is_dummy).map((n) => [n.id, n]));
     expect(byId[0].phase_id).toBe(1);
     expect(byId[1].phase_id).toBe(2);
 
     expect(phaseBands.some((b) => b.name === 'Investigate')).toBe(true);
     expect(phaseBands.some((b) => b.name === 'Act' && b.strategy === 'parallel')).toBe(true);
-    // A band's x-span must cover the nodes it owns.
     const act = phaseBands.find((b) => b.name === 'Act');
-    expect(act.x + act.width).toBeGreaterThanOrEqual(byId[2].x + 168);
+    if (direction === 'tb') {
+      expect(act.y + act.height).toBeGreaterThanOrEqual(byId[2].y + byId[2].h - 1);
+    } else {
+      expect(act.x + act.width).toBeGreaterThanOrEqual(byId[2].x + 168);
+    }
   });
 
-  it('emits directed edges with left→right anchor points', () => {
-    const { edges } = layoutExecutionGraph(PLAN);
-
-    expect(edges).toHaveLength(3);
-    edges.forEach((e) => {
-      // Source exits the right edge of its node; target enters the left edge.
-      expect(e.sourceX).toBeGreaterThan(e.sourceY ? 0 : 0); // x present
-      expect(e.targetX).toBeGreaterThan(e.sourceX); // always flows right
-      expect(e.targetY).toBeCloseTo(e.sourceY); // same baseline, horizontal flow
-    });
+  it('emits directed edges with flow-aligned anchor points', () => {
+    const { edges, direction } = layoutExecutionGraph(PLAN);
+    const real = edges.filter((e) => !String(e.source).startsWith('__d') && !String(e.target).startsWith('__d'));
+    // Long-span 0→2 is split through a dummy — at least the adjacent links remain.
+    expect(edges.length).toBeGreaterThanOrEqual(3);
+    if (direction === 'tb') {
+      edges.forEach((e) => {
+        expect(e.targetY).toBeGreaterThanOrEqual(e.sourceY);
+      });
+    } else {
+      real.forEach((e) => {
+        expect(e.targetX).toBeGreaterThan(e.sourceX);
+      });
+    }
   });
 
   it('carries per-node width/height so nodes can be rendered and resized generically', () => {
     const { nodes } = layoutExecutionGraph(PLAN);
-    nodes.forEach((n) => {
+    nodes.filter((n) => !n.is_dummy).forEach((n) => {
       expect(n.w).toBeGreaterThan(0);
       expect(n.h).toBeGreaterThan(0);
     });
@@ -298,5 +306,62 @@ describe('layoutExecutionGraph', () => {
     expect(layout.phaseBands).toEqual([]);
     expect(layout.width).toBeGreaterThan(0);
     expect(layout.height).toBeGreaterThan(0);
+  });
+
+  it('lays out branched board-pack as L→R with chosen path above escalate and no orphan at rank 0', () => {
+    const plan = {
+      id: 'board-pack',
+      status: 'completed',
+      steps: [
+        { step_id: 0, intent: 'Fetch', tool_name: 'call_host_api', status: 'completed', depends_on: [], agent_role: 'domain_specialist' },
+        { step_id: 1, intent: 'Variance', tool_name: 'call_host_api', status: 'completed', depends_on: [0], agent_role: 'domain_specialist' },
+        { step_id: 2, intent: 'Summarize', tool_name: null, status: 'completed', depends_on: [1], agent_role: 'researcher' },
+        { step_id: 3, intent: 'Critic', tool_name: null, status: 'completed', depends_on: [2], agent_role: 'critic' },
+        { step_id: 4, intent: 'Export', tool_name: 'export_document', status: 'completed', depends_on: [3], agent_role: 'orchestrator' },
+        { step_id: 5, intent: 'Escalate Finance', tool_name: null, status: 'skipped', depends_on: [1], agent_role: 'orchestrator' },
+      ],
+      workflow_graph: {
+        version: '1',
+        entry: 't0',
+        nodes: [
+          { id: 't0', node_type: 'task', meta: { step_id: 0 } },
+          { id: 't1', node_type: 'task', meta: { step_id: 1 } },
+          { id: 'choice_variance', node_type: 'choice', intent: 'Variance within policy band?' },
+          { id: 't2', node_type: 'task', meta: { step_id: 2 } },
+          { id: 't5', node_type: 'human', meta: { step_id: 5 } },
+          { id: 't3', node_type: 'task', meta: { step_id: 3 } },
+          { id: 'observe_repair', node_type: 'observe', intent: 'Repair critic findings' },
+          { id: 't4', node_type: 'task', meta: { step_id: 4 } },
+          { id: 'fail_block_export', node_type: 'fail', intent: 'Block export' },
+        ],
+        edges: [
+          { source: 't0', target: 't1' },
+          { source: 't1', target: 'choice_variance' },
+          { source: 'choice_variance', target: 't2', guard: 'variance_pct <= 2.0', label: 'within band' },
+          { source: 'choice_variance', target: 't5', is_default: true, label: 'escalate' },
+          { source: 't2', target: 't3' },
+          { source: 't3', target: 't4' },
+          { source: 'observe_repair', target: 't4', guard: 'critic_healed == true' },
+          { source: 'observe_repair', target: 'fail_block_export', is_default: true },
+          { source: 't5', target: 'fail_block_export' },
+        ],
+      },
+    };
+    const { nodes, direction } = layoutExecutionGraph(plan);
+    expect(direction).toBe('lr');
+    const visible = nodes.filter((n) => !n.is_dummy);
+    const byId = Object.fromEntries(visible.map((n) => [n.id, n]));
+
+    // Orphan observe must not sit at the entry rank (that caused full-width crossings).
+    expect(byId.observe_repair.rank).toBeGreaterThan(0);
+    expect(byId.observe_repair.rank).toBeLessThanOrEqual(byId[4].rank);
+
+    // Chosen summarize lane above skipped escalate.
+    expect(byId[2].y).toBeLessThan(byId[5].y);
+
+    // Flow left→right along the happy path.
+    expect(byId[1].x).toBeGreaterThan(byId[0].x);
+    expect(byId.choice_variance.x).toBeGreaterThan(byId[1].x);
+    expect(byId[4].x).toBeGreaterThan(byId[3].x);
   });
 });

@@ -6,66 +6,67 @@ import { render, screen } from '@testing-library/react';
 import OpsCanvasHost from './OpsCanvasHost';
 
 describe('OpsCanvasHost', () => {
-  it('renders five Job Map layers from a job_map artifact', () => {
+  it('renders Agent Job Map with live run and plan steps', () => {
     const artifact = {
       id: 'c1',
-      title: 'Leave follow-up',
+      title: 'Payroll board pack',
       artifact_type: 'job_map',
       content_json: {
         kind: 'job_map',
-        mode: 'chat',
+        mode: 'agent',
+        plan_id: 'plan-abc',
         layers: {
-          intent: { ask: 'What are their leave entitlements?', contract: 'advisory' },
+          intent: { ask: 'Build payroll variance pack', contract: 'agent' },
           job_map: {
-            steps: [{ id: '1', title: 'List leave', tool: 'list_leave_entitlements', status: 'done' }],
-            tools: ['list_leave_entitlements'],
-            capabilities: [],
+            steps: [
+              { id: '1', title: 'Fetch run', tool: 'resolve_entity', status: 'completed' },
+              { id: '2', title: 'Export pack', tool: 'export_document', status: 'running' },
+            ],
+            tools: ['resolve_entity', 'export_document'],
+            capabilities: ['ai:run_agent'],
             entities: [],
           },
-          live_run: { progress_pct: 100, status: 'complete', blockers: [] },
-          evidence: { headline: 'Five leave types', tables: [], sources: [], caveats: [] },
-          outcome: { summary: 'Entitlements retrieved', canvas_id: 'c1', sor_links: [] },
+          live_run: {
+            progress_pct: 50,
+            status: 'running',
+            qos: { acceptance_status: 'partial', requirements_total: 2, requirements_met: 1 },
+            blockers: [],
+          },
+          evidence: { headline: 'Mid-run', tables: [], sources: [], caveats: [] },
+          outcome: { summary: '', canvas_id: 'c1', sor_links: [] },
         },
       },
     };
     render(<OpsCanvasHost artifact={artifact} />);
     expect(screen.getByTestId('ops-canvas-host')).toBeTruthy();
-    expect(screen.getByText('Leave follow-up')).toBeTruthy();
-    expect(screen.getByText(/What are their leave entitlements/)).toBeTruthy();
-    expect(screen.getByText('Five leave types')).toBeTruthy();
-    expect(screen.getByText(/List leave/)).toBeTruthy();
+    expect(screen.getByText('Payroll board pack')).toBeTruthy();
+    expect(screen.getByText(/Agent · execution/)).toBeTruthy();
+    expect(screen.getByText(/Live run/)).toBeTruthy();
+    expect(screen.getByText(/Job map · plan steps/)).toBeTruthy();
+    expect(screen.getByText(/Fetch run/)).toBeTruthy();
+    expect(screen.getByText('QoS partial')).toBeTruthy();
   });
 
-  it('renders FlightDirector QoS chips on live_run', () => {
+  it('demotes Chat brief as advisory', () => {
     const artifact = {
       id: 'c2',
-      title: 'Agent map',
+      title: 'Leave brief',
       artifact_type: 'job_map',
       content_json: {
         kind: 'job_map',
-        mode: 'agent',
+        mode: 'chat',
         layers: {
-          intent: { ask: 'Audit leave', contract: 'agent' },
+          intent: { ask: 'Leave balances?', contract: 'advisory' },
           job_map: { steps: [], tools: [], capabilities: [], entities: [] },
-          live_run: {
-            progress_pct: 100,
-            status: 'completed',
-            qos: {
-              acceptance_status: 'met',
-              requirements_total: 2,
-              requirements_met: 2,
-              requirements_partial: 0,
-              requirements_missed: 0,
-            },
-            blockers: [],
-          },
-          evidence: { headline: '', tables: [], sources: [], caveats: [] },
-          outcome: { summary: '', canvas_id: 'c2', sor_links: [] },
+          live_run: { progress_pct: 100, status: 'complete', blockers: [] },
+          evidence: { headline: 'Five types', tables: [], sources: [], caveats: [] },
+          outcome: { summary: 'Done', canvas_id: 'c2', sor_links: [] },
         },
       },
     };
     render(<OpsCanvasHost artifact={artifact} />);
-    expect(screen.getByText('QoS met')).toBeTruthy();
-    expect(screen.getByText('2/2 met')).toBeTruthy();
+    expect(screen.getByText(/Chat · advisory/)).toBeTruthy();
+    expect(screen.getAllByText(/Chat Job Brief/).length).toBeGreaterThan(0);
+    expect(screen.getByText('Five types')).toBeTruthy();
   });
 });

@@ -26,11 +26,41 @@ def passes_reliability_gate(
     engine_labels: Sequence[str | int],
     *,
     minimum: float = 0.6,
+    dimension: str = "semantic_gravity",
 ) -> dict:
     kappa = cohen_kappa(expert_labels, engine_labels)
     return {
         "metric": "cohen_kappa",
+        "dimension": dimension,
         "value": round(kappa, 4),
         "minimum": minimum,
         "passed": kappa >= minimum,
+        "n": len(expert_labels),
+    }
+
+
+def adjacent_band_agreement(
+    expert: Sequence[str],
+    engine: Sequence[str],
+    *,
+    band_order: Sequence[str] | None = None,
+) -> dict:
+    """Exact + adjacent-band match rate for rubric gold (Instrument Trust T4)."""
+    if not expert or len(expert) != len(engine):
+        return {"exact": 0.0, "adjacent": 0.0, "n": 0, "passed": False}
+    order = list(band_order or [])
+    idx = {b: i for i, b in enumerate(order)}
+    exact = sum(1 for a, b in zip(expert, engine) if a == b)
+    adj = 0
+    for a, b in zip(expert, engine):
+        if a == b:
+            adj += 1
+        elif order and a in idx and b in idx and abs(idx[a] - idx[b]) <= 1:
+            adj += 1
+    n = len(expert)
+    return {
+        "exact": round(exact / n, 4),
+        "adjacent": round(adj / n, 4),
+        "n": n,
+        "passed": (exact / n) >= 0.5 if n else False,
     }

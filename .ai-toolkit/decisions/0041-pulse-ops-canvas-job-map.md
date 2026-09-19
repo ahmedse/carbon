@@ -99,6 +99,7 @@ Evidence: `docs/pulse/evidence/OPS-CANVAS-ADR-0041-2026-09-18.md`
 | EduOS GradeVance attach | **DONE** (Run workbench) |
 | Agent run Job Map button | **DONE** (`AgentRunSurface`) |
 | SkillRegistry DB admission | N/A — filesystem skill + auto-emit hooks; guidance packs remain F1a deferred |
+| **Placement in Agent cockpit** | **ADR-0043** — Canvas is exclusive hero (not under DAG) |
 
 ## Alternatives Considered
 

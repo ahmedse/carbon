@@ -78,23 +78,24 @@ describe('PlanDagGraph', () => {
     expect(marker).not.toBeNull();
     expect(marker.getAttribute('orient')).toBe('auto-start-reverse');
 
+    // Long-span edges are split through invisible dummies, so path count may
+    // exceed the logical link count shown in the header.
     const edgePaths = container.querySelectorAll('path[marker-end]');
-    expect(edgePaths.length).toBe(3);
+    expect(edgePaths.length).toBeGreaterThanOrEqual(3);
     edgePaths.forEach((p) => expect(p.getAttribute('marker-end')).toBe('url(#plan-arrow)'));
   });
 
-  it('lays steps out left-to-right by execution rank', () => {
+  it('lays sequential steps top-to-bottom by execution rank', () => {
     const { container } = renderGraph({ plan: PLAN });
 
     const step0 = container.querySelector('[role="button"][aria-label^="Step 0:"]');
     const step2 = container.querySelector('[role="button"][aria-label^="Step 2:"]');
     expect(step0).not.toBeNull();
     expect(step2).not.toBeNull();
-    // Longest-path layering: step 2 (depends on 0 AND 1) sits at a deeper rank
-    // than step 0, so its x coordinate must be strictly greater.
-    const x0 = Number(step0.getAttribute('transform').match(/translate\(([\d.-]+)/)[1]);
-    const x2 = Number(step2.getAttribute('transform').match(/translate\(([\d.-]+)/)[1]);
-    expect(x2).toBeGreaterThan(x0);
+    // Pure sequential plans stack TB in the Pulse rail.
+    const y0 = Number(step0.getAttribute('transform').match(/translate\([\d.-]+,\s*([\d.-]+)/)[1]);
+    const y2 = Number(step2.getAttribute('transform').match(/translate\([\d.-]+,\s*([\d.-]+)/)[1]);
+    expect(y2).toBeGreaterThan(y0);
   });
 
   it('renders agent role · tool on each DAG node (not tool alone)', () => {

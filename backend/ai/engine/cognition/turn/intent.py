@@ -518,6 +518,62 @@ def _apply_compensation_override(
     return resolution
 
 
+def _apply_named_leave_override(
+    resolution: IntentResolution,
+    *,
+    user_message: str,
+    labels: list[dict],
+) -> IntentResolution:
+    """N7: named-person leave balance must hit entitlements, not stop at resolve.
+
+    Admin \"annual leave remaining for employee 1001 Wellie\" historically
+    matched ``resolve_entity`` only (Pulse loop never forced the leave tool).
+    Prefer ``list_leave_entitlements`` (org-scoped). First-person \"my leave\"
+    stays on ``get_my_leave_balance``.
+    """
+    from ai.engine.agent.tools import (
+        first_person_leave_ask,
+        leave_balance_intent_asked,
+        named_leave_balance_ask,
+    )
+
+    if not leave_balance_intent_asked(user_message):
+        return resolution
+
+    label_names = {lbl["name"] for lbl in labels}
+    if first_person_leave_ask(user_message):
+        preferred = ("get_my_leave_balance", "list_my_leave")
+    elif named_leave_balance_ask(user_message):
+        preferred = ("list_leave_entitlements", "list_leave_records")
+    else:
+        return resolution
+
+    pick = next((n for n in preferred if n in label_names), None)
+    if pick is None:
+        return resolution
+
+    top = resolution.candidates[0].name if resolution.candidates else ""
+    if top == pick and resolution.action == "answer":
+        return resolution
+
+    resolution.action = "answer"
+    resolution.clarification = ""
+    resolution.options = []
+    resolution.zone = "platform"
+    resolution.delivery = "lookup"
+    resolution.needs_host_data = True
+    resolution.candidates = [
+        IntentCandidate(
+            name=pick,
+            confidence=max(resolution.confidence, 0.9),
+            reason="leave balance ask → host leave entitlements/self path",
+        )
+    ]
+    resolution.confidence = max(resolution.confidence, 0.9)
+    resolution.intent = resolution.intent or "leave balance lookup"
+    return resolution
+
+
 def _parse_json(content: str | None) -> dict | None:
     """Defensively extract a JSON object from LLM output (handles stray fences)."""
     if not content:
@@ -740,6 +796,11 @@ class IntentResolver:
             labels=labels,
         )
         resolution = _apply_compensation_override(
+            resolution,
+            user_message=user_message,
+            labels=labels,
+        )
+        resolution = _apply_named_leave_override(
             resolution,
             user_message=user_message,
             labels=labels,

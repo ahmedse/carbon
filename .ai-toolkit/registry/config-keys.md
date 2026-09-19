@@ -1,4 +1,4 @@
-# Registry: Configuration Keys  (auto-generated 2026-09-16 19:49 — DO NOT EDIT)
+# Registry: Configuration Keys  (auto-generated 2026-09-19 10:12 — DO NOT EDIT)
 
 > Every env var the app reads. NEVER hardcode these — always read from env with a safe default.
 
@@ -14,6 +14,10 @@ AI_STORE_BACKEND
 ALAMEIN_USER_PASSWORD
 CARBON_ADMIN_PASSWORD
 DJANGO_ENV
+EDUOS_ADMIN_PASSWORD
+EDUOS_ADMIN_USERNAME
+EDUOS_SUPERUSER_USERNAME
+EVAL_PASS_K
 KG_MULTI_STEP_ENABLED
 LLM_API_KEY
 LOG_FORMAT

@@ -1,0 +1,27 @@
+{
+  "frozen_at": "2026-09-19",
+  "instrument_trust": "B4+",
+  "packs": [
+    {
+      "device_rel": "engines/lct_semantics/medicine_cbl_v1",
+      "gold_status": "instrument_coded_disjoint",
+      "held_out_file": "held_out.jsonl",
+      "legacy_overlap": "held_out_legacy_overlap.jsonl",
+      "notes": "CBL-CHOL-WAVE-01 + CBL-PNA-WAVE-02 — disjoint from appendicitis anchors; Instrument Trust coded (not clinical faculty wave). Soft κ floors."
+    },
+    {
+      "device_rel": "engines/lct_semantics/medicine_clinical_reflection_v1",
+      "gold_status": "seeded_draft",
+      "held_out_file": "held_out.jsonl",
+      "source": "gradevance/tests/test_osce_checklist.py OSCE_SAMPLE",
+      "notes": "Still seeded / overlaps anchors — summative blocked until disjoint expert coding."
+    }
+  ],
+  "runtime_pdf_parsing": false,
+  "promotion_criteria": [
+    "Clinical faculty-coded held_out disjoint from anchors",
+    "SG+SD on every segment",
+    "device.reliability_gate.held_out_status = expert_disjoint",
+    "Replace instrument_coded_disjoint soft floors with faculty floors"
+  ]
+}

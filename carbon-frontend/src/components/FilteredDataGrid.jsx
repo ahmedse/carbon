@@ -34,6 +34,7 @@ export default function FilteredDataGrid({
   countLabel = '',
   searchValue = '',
   onSearchChange,
+  searchPlaceholder,
   filterDefs = [],
   filterValues = {},
   onFilterChange,
@@ -43,6 +44,11 @@ export default function FilteredDataGrid({
   emptyMessage,
   emptySubtext,
   getRowId,
+  /** When true, omit PageContainer/PageHeader — for master-detail tabs. */
+  embedded = false,
+  height = 480,
+  initialState,
+  onRowClick,
   _toolbar = false,
 }) {
   const { t } = useTranslation('common');
@@ -64,14 +70,16 @@ export default function FilteredDataGrid({
 
   const hasFilters = Boolean(searchValue || activeFilters.length > 0);
 
-  return (
-    <PageContainer>
-      <PageHeader title={title} subtitle={subtitle} description={description} actions={actions} />
+  const body = (
+    <>
+      {!embedded && (
+        <PageHeader title={title} subtitle={subtitle} description={description} actions={actions} />
+      )}
 
-      <Paper sx={{ p: 2, mb: 3, bgcolor: 'background.paper' }}>
+      <Paper sx={{ p: 2, mb: embedded ? 2 : 3, bgcolor: 'background.paper' }}>
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
           <TextField
-            placeholder={t('searchByName')}
+            placeholder={searchPlaceholder || t('searchByName')}
             value={searchValue}
             onChange={(e) => onSearchChange?.(e.target.value)}
             size="small"
@@ -155,6 +163,10 @@ export default function FilteredDataGrid({
           hideFooterSelectedRowCount
           toolbar
           getRowId={getRowId}
+          height={height}
+          initialState={initialState}
+          onRowClick={onRowClick}
+          sx={onRowClick ? { '& .MuiDataGrid-row': { cursor: 'pointer' } } : undefined}
         />
 
         {rows.length === 0 && !loading && (
@@ -168,6 +180,9 @@ export default function FilteredDataGrid({
           </Paper>
         )}
       </Box>
-    </PageContainer>
+    </>
   );
+
+  if (embedded) return body;
+  return <PageContainer>{body}</PageContainer>;
 }

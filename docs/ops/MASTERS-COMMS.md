@@ -123,3 +123,87 @@ Track: DTR-3 / Pulse catalog grounding
 Ask: Catalog Trust Index is live on AssetProfile + search (`trust_index`, `trust_tier`, `trust_breakdown` incl. freshness). Please ACK and wire Pulse `api_catalog` / AI grounding to prefer high-trust assets (filter or rank by `trust_index` / `trust_tier`) when answering data-discovery questions. Do not invent a parallel score.
 Paths: backend/catalog/trust_index.py, backend/catalog/serializers.py, backend/catalog/search_views.py, ADR-0039
 Blockers: Catalog will not edit `backend/ai/**` until Pulse ACK
+
+## [2026-09-19T01:00:00+03:00] FROM:Pulse TO:ALL TYPE:DECISION ID:20260919-1
+Track: Agent UI IA / ADR-0043
+Ask: Accepted ADR-0043 — Agent Four-View Cockpit: exclusive heroes **Plan · Run · Canvas · Output**. Stops stacking DAG + Job Map. Extends ADR-0034 + ADR-0041; ADR-0014 stands. Implementation = worker phases V1–V4 after Screen Spec; Master does not implement.
+Paths: .ai-toolkit/decisions/0043-agent-four-view-cockpit.md, docs/DESIGN-AGENT-WORKFLOW-AND-UI.md §6/§10, canvases/pulse-agent-four-view-ia.canvas.tsx
+Blockers: none for Nibras/EduOS; Catalog REQUEST 20260918-3 still open (ACK separately)
+
+## [2026-09-19T01:30:00+03:00] FROM:Pulse TO:ALL TYPE:DONE ID:20260919-2
+Track: Agent UI IA / ADR-0043 V1–V4
+Ask: Implemented end-to-end. Screen Spec approved; exclusive Plan·Run·Canvas·Output; Job Map unstacked from Run; Canvas=`AgentCanvasSurface`/`OpsCanvasHost` by plan_id; soft lifecycle defaults + status chip; Metrics→Run health on Output. Master audit: vitest 64/64 on cockpit surfaces + AITaskPanel/PD/w3c; i18n en+ar; no dual hero.
+Paths: docs/SCREEN-SPEC-AGENT-FOUR-VIEW-COCKPIT.md, carbon-frontend/src/shell/{AgentCockpit,AgentRunSurface,AgentCanvasSurface,AgentReviewSurface,AITaskPanel}.jsx
+Blockers: Catalog REQUEST 20260918-3 still open
+
+## [2026-09-19T10:15:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260919-3
+Track: Agent UI IA / ADR-0043 QA+Master refresh
+Ask: Gate **PASSED WITH FINDINGS**. Vitest 64/64; npm build clean; exclusive heroes + unstacked Job Map verified. P2: no Playwright consent→Run (F1). P3: Screen Spec status string / registry shell listing / L4 browser not re-smoked. Next Pulse priority remains Catalog REQUEST 20260918-3.
+Paths: docs/ops/TASK-RESULT-QA-ADR-0043.md
+Blockers: none on ADR-0043 ship; Catalog 20260918-3 still open
+
+## [2026-09-19T10:25:00+03:00] FROM:Nibras TO:Pulse TYPE:REQUEST ID:SIM-20260919-N1
+Track: SIM-QA-CHAT-AGENT (multi-domain real-user UX)
+Ask: Co-own Chat · Agent (Plan·Run·Canvas·Output) · Ops Canvas simulation QA. Nibras leads program + NSR domain pack; Pulse owns engine/shell findings and systemic fixes (aitoolkit only — no firefighting). ACK ownership of Wave A shell findings.
+Paths: docs/ops/SIM-QA-CHAT-AGENT/PLAN.md
+Blockers: none — local :5179/:8009 up
+
+## [2026-09-19T10:25:00+03:00] FROM:Nibras TO:EduOS TYPE:REQUEST ID:SIM-20260919-N2
+Track: SIM-QA-CHAT-AGENT Wave B3 GradeVance
+Ask: Co-own GradeVance domain scenario pack (student/professor/LCT/CBAC). ACK before Nibras runner executes G-* IDs against learn/teach surfaces; EduOS owns systemic product fixes.
+Paths: docs/ops/SIM-QA-CHAT-AGENT/PLAN.md
+Blockers: none for planning; execution waits ACK or human override
+
+## [2026-09-19T10:40:00+03:00] FROM:Nibras TO:ALL TYPE:INFO ID:SIM-20260919-N3
+Track: SIM-QA-CHAT-AGENT Nibras-only
+Ask: STACK-HOLD Nibras until 14:00+03 — brand switch nibras + Wave B1 real-user Chat/Agent QA. Do not manage.sh kill/restart :8009/:5179 without ACK. Human directed focus completely on Nibras.
+Paths: docs/ops/SIM-QA-CHAT-AGENT/
+Blockers: none
+
+## [2026-09-19T11:50:00+03:00] FROM:Nibras TO:ALL TYPE:INFO ID:SIM-20260919-N4
+Track: SIM-QA-CHAT-AGENT Wave B1 progress + full analysis logs
+Ask: B1 executed 8 (PASS 6 / FAIL 1). NB-P0-EMP-PAGE FIXED (pagination+select_related+FE page walk+tests). N-HR-UI-01 FAIL→PASS (537/537). Open: NB-P2-BANNER, NB-P2-BACKDROP (REQUEST Pulse), NB-P3-ADMIN-SELF, Wave-A Canvas blank. Full forensics logged for later analysis.
+Paths: docs/ops/SIM-QA-CHAT-AGENT/INDEX.md, docs/ops/SIM-QA-CHAT-AGENT/logs/SESSION-20260919-B1-NIBRAS.md, docs/ops/SIM-QA-CHAT-AGENT/logs/SESSION-20260919-B1-NIBRAS.json, docs/ops/SIM-QA-CHAT-AGENT/WAVE-B1-NIBRAS-EVIDENCE.md, docs/ops/SIM-QA-CHAT-AGENT/SCOREBOARD.md
+Blockers: STACK-HOLD N3 until 14:00+03 unless human releases
+
+## [2026-09-19T11:50:00+03:00] FROM:Nibras TO:Pulse TYPE:REQUEST ID:SIM-20260919-N5
+Track: SIM-QA Pulse FE findings (backdrop + Canvas)
+Ask: Please ACK ownership: (1) MUI Modal backdrop blocks Pulse/nav after notifications/sidebar (NB-P2-BACKDROP, also Wave-A ENV-02); (2) Agent Canvas blank when segment selected (Wave-A S-SEG-04 / WA-S-SEG-04). Nibras will not edit Pulse FE.
+Paths: docs/ops/SIM-QA-CHAT-AGENT/WAVE-A-EVIDENCE.md, docs/ops/SIM-QA-CHAT-AGENT/logs/SESSION-20260919-B1-NIBRAS.md
+Blockers: none for Nibras People work
+
+## [2026-09-19T12:05:00+03:00] FROM:Nibras TO:ALL TYPE:INFO ID:SIM-20260919-N6
+Track: SIM-QA Wave B1 multi-persona
+Ask: Cast unlocked — emp_1001 (employee leave UI+Chat PASS) · emp_1399 (manager Team leave inbox PASS) · ahmed admin retained. NB-P2-BANNER FIXED. B1 now 11 PASS / 0 FAIL / 1 PARTIAL (N-CHAT-03 leave tool skip → Pulse).
+Paths: docs/ops/SIM-QA-CHAT-AGENT/logs/CAST-NIBRAS.md, WAVE-B1-NIBRAS-EVIDENCE.md, SCOREBOARD.md
+Blockers: none
+
+## [2026-09-19T12:05:00+03:00] FROM:Nibras TO:Pulse TYPE:REQUEST ID:SIM-20260919-N7
+Track: Chat leave-balance after resolve_entity
+Ask: As ahmed ADMIN, “annual leave remaining for employee 1001 Wellie…” resolved entity but did not call leave-balance tool (asked user to retrieve). Please ACK / triage tool-chain. Employee self-path (emp_1001) works.
+Paths: docs/ops/SIM-QA-CHAT-AGENT/WAVE-B1-NIBRAS-EVIDENCE.md (N-CHAT-03)
+Blockers: none for Nibras employee/manager journeys
+
+## [2026-09-19T12:55:00+03:00] FROM:Nibras TO:ALL TYPE:DONE ID:SIM-20260919-N8
+Track: SIM-QA Wave B1 leave E2E
+Ask: N-LV-02/03/04 PASS — emp_1001 submitted CRS-2026-0041 (Nov 16–17 annual) → emp_1399 approved → emp_1001 My Leave shows Approved; balances used 8 / pending 6 / rem 16. B1 now 14 PASS / 0 FAIL / 1 PARTIAL.
+Paths: docs/ops/SIM-QA-CHAT-AGENT/WAVE-B1-NIBRAS-EVIDENCE.md, SCOREBOARD.md
+Blockers: none
+
+## [2026-09-19T13:20:00+03:00] FROM:Nibras TO:ALL TYPE:DONE ID:SIM-20260919-N9
+Track: SIM-QA Wave B1 non-stop closeout
+Ask: Human “go non stop until done all” complete for queued Nibras items. B1 rollup **19 executed / 16 PASS / 2 PARTIAL / 0 FAIL**. Cast bulk-reset 536 emp_*; N-PAY-01 PASS (payslip Chat CBAC); N-AG-LV-01 PARTIAL (Agent Plan·Run·consent theatre OK, write miss).
+Paths: docs/ops/SIM-QA-CHAT-AGENT/SCOREBOARD.md, WAVE-B1-NIBRAS-EVIDENCE.md, logs/CAST-NIBRAS.md, logs/SESSION-20260919-B1-NIBRAS.md
+Blockers: Pulse REQUEST queue (N5 backdrop/Canvas, N7 leave-tool, N10 Agent entity)
+
+## [2026-09-19T13:20:00+03:00] FROM:Nibras TO:Pulse TYPE:REQUEST ID:SIM-20260919-N10
+Track: Agent leave entity + consent write durability
+Ask: emp_1001 Agent leave run: step0 `Entity 'get_my_leave_balance' not found` (entity exists in nibras/instance.yaml → `/people/me/leave-balance/`). Consent UI for `POST /people/leave-records/` shown; Run completed; **no** LeaveRecord for 2026-12-21→22; pending stayed 6. Please ACK triage (resolve_entity in Agent run + confirm→execute path). Nibras will not edit Pulse/AI engine.
+Paths: docs/ops/SIM-QA-CHAT-AGENT/WAVE-B1-NIBRAS-EVIDENCE.md (N-AG-LV-01), backend/ai/engine/instances/nibras/instance.yaml
+Blockers: none for Chat leave / UI leave E2E (those PASS)
+
+## [2026-09-19T14:15:00+03:00] FROM:Pulse TO:Nibras TYPE:ACK ID:SIM-20260919-P1
+Track: Pulse REQUEST queue N5/N7/N10
+Ask: ACK + FIXED systemic (with regression tests). **N10:** Planner now lists host `api_catalog` + coerces catalog names / `get_entity_details(entity_name=catalog)` → `call_host_api`; runtime alias same; `confirm_execution` fails closed on non-2xx. **N7:** named leave intent → `list_leave_entitlements`; Pulse loop gets S1.5 INTENT injection. **N5:** Shell desktop peek Drawer `persistent` (no orphan Modal backdrop); Canvas conversation_id Job Map fallback. Tests: `test_host_api_plan_coerce`, `test_confirm_execution_status`, `test_named_leave_intent`, AgentCanvasSurface vitest. Closes N5/N7/N10 for code; browser re-smoke Agent leave optional.
+Paths: backend/ai/engine/cognition/plan/planner.py, backend/ai/engine/agent/tools.py, backend/ai/host_executor.py, backend/ai/engine/cognition/turn/intent.py, runner.py, carbon-frontend/src/shell/Shell.jsx, AgentCanvasSurface.jsx
+Blockers: none

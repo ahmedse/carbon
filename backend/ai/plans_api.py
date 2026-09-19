@@ -80,10 +80,11 @@ class PlanCompensateSerializer(serializers.Serializer):
 
 
 class PlanEditSerializer(serializers.Serializer):
-    """PATCH /plans/{id}/ — new brief (+ optional step deltas).
+    """PATCH /plans/{id}/ — rename or replan (+ optional step deltas).
 
-    ``brief`` may be omitted to re-plan the existing brief while applying
-    ``step_deltas``; the service keeps at least one of them meaningful.
+    ``mode``: ``rename`` (brief label only) or ``replan`` (default — decompose).
+    ``brief`` may be omitted on replan to re-plan the existing brief while
+    applying ``step_deltas``.
     """
 
     brief = serializers.CharField(
@@ -91,6 +92,11 @@ class PlanEditSerializer(serializers.Serializer):
     )
     step_deltas = serializers.ListField(
         child=serializers.DictField(), required=False
+    )
+    mode = serializers.ChoiceField(
+        choices=("rename", "replan"),
+        required=False,
+        default="replan",
     )
 
 
@@ -255,10 +261,11 @@ class PlanViewSet(viewsets.GenericViewSet):
             )
 
     def partial_update(self, request, pk=None):
-        """Edit the plan brief → re-plan and return the diff for review.
+        """Edit plan: ``mode=rename`` (label) or ``mode=replan`` (decompose + diff).
 
-        Editing never auto-approves (RULE_21): a non-pending plan drops to
-        ``pending_approval`` and the response carries ``replan_gate``.
+        Replan never auto-approves (RULE_21): a non-pending plan drops to
+        ``pending_approval`` and the response carries ``replan_gate``. A
+        snapshot is stashed so Cancel can ``discard-edit``.
         """
         serializer = PlanEditSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -268,6 +275,7 @@ class PlanViewSet(viewsets.GenericViewSet):
                 pk,
                 brief=serializer.validated_data.get("brief"),
                 step_deltas=serializer.validated_data.get("step_deltas"),
+                mode=serializer.validated_data.get("mode") or "replan",
             )
         except PlanNotAccessibleError as exc:
             return Response(
@@ -278,6 +286,40 @@ class PlanViewSet(viewsets.GenericViewSet):
                 {"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST
             )
         return Response(result)
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="confirm-edit",
+        url_name="confirm-edit",
+    )
+    def confirm_edit(self, request, pk=None):
+        """Keep an applied replan — clear the Cancel rollback snapshot."""
+        try:
+            return Response(self.service.confirm_plan_edit(request.user, pk))
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="discard-edit",
+        url_name="discard-edit",
+    )
+    def discard_edit(self, request, pk=None):
+        """Cancel a replan — restore the pre-edit snapshot."""
+        try:
+            return Response(self.service.discard_plan_edit(request.user, pk))
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+        except (PlanNotRunnableError, PlanStepError, ValueError) as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST
+            )
 
     @action(
         detail=True,

@@ -1,23 +1,18 @@
 // src/shell/__tests__/AgentCockpit.test.jsx
-// U-1 — the presentational run-cockpit shell (DESIGN-AGENT-WORKFLOW-AND-UI §6).
-// Verifies the four segments render and switch the body, the Library overflow
-// exposes Templates/Scheduled/classic-view and fires their callbacks, and the
-// parent-supplied run header (global toolbar) renders and routes clicks. Pure
-// layout — no network, no AITaskPanel contexts.
+// ADR-0043 — Plan · Run · Canvas · Output exclusive heroes.
 import React, { useState } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import AgentCockpit from '../AgentCockpit';
+import AgentCockpit, { defaultCockpitSegment, normalizeCockpitSegment } from '../AgentCockpit';
 
 const bodyRenderers = () => ({
   renderPlan: () => <div data-testid="body-plan">PLAN</div>,
-  renderSteps: () => <div data-testid="body-steps">STEPS</div>,
+  renderRun: () => <div data-testid="body-run">RUN</div>,
+  renderCanvas: () => <div data-testid="body-canvas">CANVAS</div>,
   renderOutput: () => <div data-testid="body-output">OUTPUT</div>,
-  renderMetrics: () => <div data-testid="body-metrics">METRICS</div>,
 });
 
-// Controlled harness so clicking a segment actually re-renders the body.
-function Harness({ initial = 'steps', ...props }) {
+function Harness({ initial = 'run', ...props }) {
   const [segment, setSegment] = useState(initial);
   return (
     <AgentCockpit segment={segment} onSegment={setSegment} {...bodyRenderers()} {...props} />
@@ -25,7 +20,7 @@ function Harness({ initial = 'steps', ...props }) {
 }
 
 describe('AgentCockpit — segmented control', () => {
-  const SEGMENTS = ['Plan', 'Steps', 'Output', 'Metrics'];
+  const SEGMENTS = ['Plan', 'Run', 'Canvas', 'Output'];
 
   it('renders all four segments', () => {
     render(<Harness />);
@@ -34,21 +29,24 @@ describe('AgentCockpit — segmented control', () => {
     }
   });
 
-  it('shows the Steps body by default', () => {
-    render(<Harness />);
-    expect(screen.getByTestId('body-steps')).toBeInTheDocument();
-    expect(screen.queryByTestId('body-plan')).not.toBeInTheDocument();
+  it('shows exactly one hero test-id at a time', () => {
+    render(<Harness initial="run" />);
+    expect(screen.getByTestId('agent-cockpit-hero-run')).toBeInTheDocument();
+    expect(screen.queryByTestId('agent-cockpit-hero-plan')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('agent-cockpit-hero-canvas')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('agent-cockpit-hero-output')).not.toBeInTheDocument();
   });
 
   it.each([
-    ['Plan', 'body-plan'],
-    ['Output', 'body-output'],
-    ['Metrics', 'body-metrics'],
-    ['Steps', 'body-steps'],
-  ])('switching to %s renders %s', (label, testId) => {
+    ['Plan', 'agent-cockpit-hero-plan', 'body-plan'],
+    ['Canvas', 'agent-cockpit-hero-canvas', 'body-canvas'],
+    ['Output', 'agent-cockpit-hero-output', 'body-output'],
+    ['Run', 'agent-cockpit-hero-run', 'body-run'],
+  ])('switching to %s renders %s', (label, heroId, bodyId) => {
     render(<Harness initial="plan" />);
     fireEvent.click(screen.getByRole('button', { name: label }));
-    expect(screen.getByTestId(testId)).toBeInTheDocument();
+    expect(screen.getByTestId(heroId)).toBeInTheDocument();
+    expect(screen.getByTestId(bodyId)).toBeInTheDocument();
   });
 });
 
@@ -67,7 +65,6 @@ describe('AgentCockpit — Library overflow', () => {
       />,
     );
 
-    // Menu is closed until the overflow button is clicked.
     expect(screen.queryByRole('menuitem', { name: 'Templates' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Library' }));
@@ -84,25 +81,20 @@ describe('AgentCockpit — Library overflow', () => {
   });
 });
 
-describe('AgentCockpit — run header', () => {
-  it('renders the parent-supplied global run toolbar and routes clicks', () => {
-    const onRun = vi.fn();
-    const onFork = vi.fn();
-    render(
-      <Harness
-        header={
-          <div>
-            <button type="button" onClick={onRun}>Run plan</button>
-            <button type="button" onClick={onFork}>Fork into a reviewable copy</button>
-          </div>
-        }
-      />,
-    );
+describe('defaultCockpitSegment / normalizeCockpitSegment', () => {
+  it('maps lifecycle to soft defaults', () => {
+    expect(defaultCockpitSegment('pending_approval', 'idle')).toBe('plan');
+    expect(defaultCockpitSegment('running', 'working')).toBe('run');
+    expect(defaultCockpitSegment('paused', 'paused')).toBe('run');
+    expect(defaultCockpitSegment('completed', 'finished')).toBe('output');
+    expect(defaultCockpitSegment('failed', 'error')).toBe('output');
+    expect(defaultCockpitSegment('cancelled', 'stopped')).toBe('output');
+    expect(defaultCockpitSegment('cancelled', 'idle')).toBe('plan');
+  });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Run plan' }));
-    expect(onRun).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Fork into a reviewable copy' }));
-    expect(onFork).toHaveBeenCalledTimes(1);
+  it('migrates legacy segment ids', () => {
+    expect(normalizeCockpitSegment('steps')).toBe('run');
+    expect(normalizeCockpitSegment('metrics')).toBe('output');
+    expect(normalizeCockpitSegment('canvas')).toBe('canvas');
   });
 });

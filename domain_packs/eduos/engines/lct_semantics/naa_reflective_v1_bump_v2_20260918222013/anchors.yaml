@@ -1,0 +1,58 @@
+device_id: naa_reflective_semantics
+version: 2
+anchors:
+- id: a_sgpp_ielts
+  dimension: semantic_gravity
+  value: SG+
+  numeric: 2
+  span_text: I spent 4 hours each day on rewriting IELTS writing test and I studies
+    hundreds of vocabularies like nouns and academic word list.
+  rationale: Specific personal practice routine with concrete details (time, IELTS,
+    word lists).
+  source: raw/LCT Reflective Wave criteria — Category 2 example
+- id: a_sgmm_gaokao_frame
+  dimension: semantic_gravity
+  value: SG--
+  numeric: 4
+  span_text: The most difficult aspect of preparing my Gaokao is how to use my limited
+    time to fulfill the most parts of my exam paper.
+  rationale: Abstract problem framing; decontextualised challenge statement.
+  source: gold AR-CYCLE1-18 week1 S1
+- id: a_sgm_general_claim
+  dimension: semantic_gravity
+  value: SG-
+  numeric: 3
+  span_text: In Gaokao it's a normal and an animist problems that you won't have enough
+    time to write a huge amounts of exam papers.
+  rationale: Generalised claim about Gaokao students; not a particular narrated event.
+  source: gold AR-CYCLE1-18 week1 S2
+- id: a_sgp_narrative
+  dimension: semantic_gravity
+  value: SG+
+  numeric: 2
+  span_text: When I was doing my pre-Gaokao exam, For example, the Chinese exam, I
+    always spent most of my time doing the right thing by reading a certain article
+  rationale: Concrete first-person narrative of a particular exam episode.
+  source: gold AR-CYCLE1-18 week1 S3
+- id: a_sdm_descriptive
+  dimension: semantic_density
+  value: SD-
+  span_text: Exams in high school they take about 7-9 hours of learning and preparing
+    each day. Last year more than 7 millions students had to compete in Gao Kao.
+  rationale: Descriptive reporting of external general facts; little personal evaluation.
+  source: raw/LCT criteria Category 1
+- id: a_sdp_reflective
+  dimension: semantic_density
+  value: SD+
+  span_text: My performance within GaoKao exam was not good enough because it did
+    not reflect my English speaking skills, skill that I tested via IELTS and got
+    7.
+  rationale: Personal evaluation / interpretation of performance — reflective density.
+  source: raw/LCT criteria Category 4
+- id: promoted_6f48f2f5
+  dimension: semantic_gravity
+  value: SG+
+  numeric: 2
+  span_text: When I sat the mock exam I spent two hours on one passage.
+  rationale: Concrete episode
+  source: proposal:6f48f2f5-d133-446f-b78c-00cd59fecca9

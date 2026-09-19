@@ -1,7 +1,7 @@
 // Marking workbench — open HITL review queue → Run workbench (RULE_33).
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Button, Chip, Paper, Table, TableBody, TableCell, TableHead, TableRow, Typography,
 } from '@mui/material';
@@ -16,7 +16,9 @@ import { fetchReviewQueue, postExpertEdit } from '../../api/gradevance';
 import SkipToMain from './SkipToMain';
 
 export default function MarkingPage() {
-  useDocumentTitle('GradeVance · Marking');
+  const { pathname } = useLocation();
+  const titlePrefix = pathname.startsWith('/teach') ? 'Teach' : 'GradeVance';
+  useDocumentTitle(`${titlePrefix} · Marking`);
   const { token } = useAuth();
   const navigate = useNavigate();
   const [rows, setRows] = useState([]);
@@ -110,7 +112,7 @@ export default function MarkingPage() {
                 <TableCell>
                   <Button
                     size="small"
-                    onClick={() => navigate(`/apps/gradevance/runs/${r.run}`)}
+                    onClick={() => navigate(`/teach/runs/${r.run}`)}
                     aria-label={`Open run for ${r.profile_pack_id}`}
                   >
                     Open run

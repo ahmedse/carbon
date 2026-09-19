@@ -1,12 +1,6 @@
 // src/shell/AgentCockpit.jsx
-// U-1 (DESIGN-AGENT-WORKFLOW-AND-UI §6) — presentational run-cockpit shell that
-// collapses the six-tab Agent panel into ONE contextual cockpit. It only
-// arranges what it is given: a run header (title · status · global toolbar,
-// built by the parent), a four-way segmented control (Plan · Steps · Output ·
-// Metrics), and a Library overflow menu that demotes Templates/Scheduled from
-// primary navigation. All state, handlers and API calls stay in AITaskPanel —
-// this component is pure layout so it can be tested in isolation (RULE_2
-// reuse; theme tokens only, RULE_8; outcome copy only, RULE_23).
+// ADR-0043 — presentational run-cockpit shell: Plan · Run · Canvas · Output
+// (exclusive heroes). Parent owns state/handlers; this is pure layout (RULE_2).
 import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import {
@@ -24,34 +18,35 @@ import {
 } from '@mui/material';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
-import ViewListOutlinedIcon from '@mui/icons-material/ViewListOutlined';
+import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
+import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
-import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
 import BookmarksOutlinedIcon from '@mui/icons-material/BookmarksOutlined';
 import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
 import ViewColumnOutlinedIcon from '@mui/icons-material/ViewColumnOutlined';
+import { useTranslation } from 'react-i18next';
 
 const SEGMENTS = [
-  { value: 'plan', label: 'Plan', icon: AccountTreeOutlinedIcon },
-  { value: 'steps', label: 'Steps', icon: ViewListOutlinedIcon },
-  { value: 'output', label: 'Output', icon: ArticleOutlinedIcon },
-  { value: 'metrics', label: 'Metrics', icon: LeaderboardOutlinedIcon },
+  { value: 'plan', labelKey: 'cockpitPlan', icon: AccountTreeOutlinedIcon },
+  { value: 'run', labelKey: 'cockpitRun', icon: PlayCircleOutlineIcon },
+  { value: 'canvas', labelKey: 'cockpitCanvas', icon: MapOutlinedIcon },
+  { value: 'output', labelKey: 'cockpitOutput', icon: ArticleOutlinedIcon },
 ];
 
 /**
  * Run-cockpit layout shell.
  * @param {object} props
- * @param {'plan'|'steps'|'output'|'metrics'} props.segment - active segment
- * @param {function} props.onSegment - (value) => void
- * @param {React.ReactNode} props.header - run header (title · status · toolbar)
- * @param {object|null} props.plan - selected plan (for context only)
- * @param {function} props.renderPlan - () => node for the Plan segment
- * @param {function} props.renderSteps - () => node for the Steps segment
- * @param {function} props.renderOutput - () => node for the Output segment
- * @param {function} props.renderMetrics - () => node for the Metrics segment
- * @param {function} [props.onOpenTemplates] - Library → Templates
- * @param {function} [props.onOpenScheduled] - Library → Scheduled
- * @param {function} [props.onSwitchToClassic] - Library → classic 6-tab view
+ * @param {'plan'|'run'|'canvas'|'output'} props.segment
+ * @param {function} props.onSegment
+ * @param {React.ReactNode} props.header
+ * @param {object|null} props.plan
+ * @param {function} props.renderPlan
+ * @param {function} props.renderRun
+ * @param {function} props.renderCanvas
+ * @param {function} props.renderOutput
+ * @param {function} [props.onOpenTemplates]
+ * @param {function} [props.onOpenScheduled]
+ * @param {function} [props.onSwitchToClassic]
  */
 function AgentCockpit({
   segment,
@@ -59,28 +54,36 @@ function AgentCockpit({
   header,
   plan,
   renderPlan,
-  renderSteps,
+  renderRun,
+  renderCanvas,
   renderOutput,
-  renderMetrics,
   onOpenTemplates,
   onOpenScheduled,
   onSwitchToClassic,
 }) {
+  const { t } = useTranslation('ai');
   const [libraryAnchor, setLibraryAnchor] = useState(null);
   const libraryOpen = Boolean(libraryAnchor);
   const closeLibrary = () => setLibraryAnchor(null);
+
+  const heroTestId = {
+    plan: 'agent-cockpit-hero-plan',
+    run: 'agent-cockpit-hero-run',
+    canvas: 'agent-cockpit-hero-canvas',
+    output: 'agent-cockpit-hero-output',
+  }[segment] || 'agent-cockpit-hero-run';
 
   const body = () => {
     switch (segment) {
       case 'plan':
         return renderPlan();
+      case 'canvas':
+        return renderCanvas();
       case 'output':
         return renderOutput();
-      case 'metrics':
-        return renderMetrics();
-      case 'steps':
+      case 'run':
       default:
-        return renderSteps();
+        return renderRun();
     }
   };
 
@@ -88,9 +91,9 @@ function AgentCockpit({
     <Box
       data-testid="agent-cockpit"
       data-plan-id={plan?.id ?? ''}
+      data-segment={segment}
       sx={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}
     >
-      {/* Cockpit header — run title/status/toolbar (parent) + Library overflow */}
       <Stack
         direction="row"
         alignItems="center"
@@ -98,10 +101,10 @@ function AgentCockpit({
         sx={{ px: 1, py: 0.5, borderBottom: 1, borderColor: 'divider' }}
       >
         <Box sx={{ flex: 1, minWidth: 0 }}>{header}</Box>
-        <Tooltip title="Library">
+        <Tooltip title={t('library')}>
           <IconButton
             size="small"
-            aria-label="Library"
+            aria-label={t('library')}
             aria-haspopup="menu"
             onClick={(e) => setLibraryAnchor(e.currentTarget)}
             sx={{ p: 0.375 }}
@@ -112,21 +115,20 @@ function AgentCockpit({
         <Menu anchorEl={libraryAnchor} open={libraryOpen} onClose={closeLibrary}>
           <MenuItem onClick={() => { closeLibrary(); onOpenTemplates?.(); }}>
             <ListItemIcon><BookmarksOutlinedIcon sx={{ fontSize: 16 }} /></ListItemIcon>
-            <ListItemText primaryTypographyProps={{ fontSize: '0.75rem' }}>Templates</ListItemText>
+            <ListItemText primaryTypographyProps={{ fontSize: '0.75rem' }}>{t('templates')}</ListItemText>
           </MenuItem>
           <MenuItem onClick={() => { closeLibrary(); onOpenScheduled?.(); }}>
             <ListItemIcon><ScheduleOutlinedIcon sx={{ fontSize: 16 }} /></ListItemIcon>
-            <ListItemText primaryTypographyProps={{ fontSize: '0.75rem' }}>Scheduled</ListItemText>
+            <ListItemText primaryTypographyProps={{ fontSize: '0.75rem' }}>{t('scheduled')}</ListItemText>
           </MenuItem>
           <Divider />
           <MenuItem onClick={() => { closeLibrary(); onSwitchToClassic?.(); }}>
             <ListItemIcon><ViewColumnOutlinedIcon sx={{ fontSize: 16 }} /></ListItemIcon>
-            <ListItemText primaryTypographyProps={{ fontSize: '0.75rem' }}>Switch to classic view</ListItemText>
+            <ListItemText primaryTypographyProps={{ fontSize: '0.75rem' }}>{t('switchClassic')}</ListItemText>
           </MenuItem>
         </Menu>
       </Stack>
 
-      {/* Segmented control — Plan · Steps · Output · Metrics */}
       <Box sx={{ px: 1, py: 0.5, borderBottom: 1, borderColor: 'divider' }}>
         <ToggleButtonGroup
           value={segment}
@@ -134,42 +136,85 @@ function AgentCockpit({
           size="small"
           fullWidth
           onChange={(_e, next) => { if (next) onSegment?.(next); }}
-          aria-label="Run cockpit view"
+          aria-label={t('cockpitView')}
         >
-          {SEGMENTS.map(({ value, label, icon: Icon }) => (
+          {SEGMENTS.map(({ value, labelKey, icon: Icon }) => (
             <ToggleButton
               key={value}
               value={value}
-              aria-label={label}
+              aria-label={t(labelKey)}
               sx={{ fontSize: '0.6875rem', textTransform: 'none', py: 0.25, gap: 0.5 }}
             >
               <Icon sx={{ fontSize: 14 }} />
-              {label}
+              {t(labelKey)}
             </ToggleButton>
           ))}
         </ToggleButtonGroup>
       </Box>
 
-      {/* Segment body */}
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 1 }} data-testid="cockpit-body">
-        {body()}
+      <Box
+        sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 1 }}
+        data-testid="cockpit-body"
+        data-hero={segment}
+      >
+        <Box data-testid={heroTestId}>
+          {body()}
+        </Box>
       </Box>
     </Box>
   );
 }
 
 AgentCockpit.propTypes = {
-  segment: PropTypes.oneOf(['plan', 'steps', 'output', 'metrics']).isRequired,
+  segment: PropTypes.oneOf(['plan', 'run', 'canvas', 'output']).isRequired,
   onSegment: PropTypes.func.isRequired,
   header: PropTypes.node,
   plan: PropTypes.object,
   renderPlan: PropTypes.func.isRequired,
-  renderSteps: PropTypes.func.isRequired,
+  renderRun: PropTypes.func.isRequired,
+  renderCanvas: PropTypes.func.isRequired,
   renderOutput: PropTypes.func.isRequired,
-  renderMetrics: PropTypes.func.isRequired,
   onOpenTemplates: PropTypes.func,
   onOpenScheduled: PropTypes.func,
   onSwitchToClassic: PropTypes.func,
 };
 
 export default AgentCockpit;
+
+/** Soft lifecycle default (ADR-0043 §2). */
+export function defaultCockpitSegment(effectiveStatus, phase) {
+  // Settled session phases win so Output can show stop/fail chrome.
+  if (phase === 'stopped' || phase === 'error' || phase === 'finished') {
+    return 'output';
+  }
+  if (effectiveStatus === 'pending_approval' || effectiveStatus === 'discovering') {
+    return 'plan';
+  }
+  if (
+    phase === 'working'
+    || phase === 'paused'
+    || effectiveStatus === 'running'
+    || effectiveStatus === 'paused'
+    || effectiveStatus === 'approved'
+  ) {
+    return 'run';
+  }
+  if (
+    effectiveStatus === 'completed'
+    || effectiveStatus === 'completed_with_gaps'
+    || effectiveStatus === 'failed'
+  ) {
+    return 'output';
+  }
+  // Declined before a run — Plan shows “nothing executed”.
+  if (effectiveStatus === 'cancelled') return 'plan';
+  return 'plan';
+}
+
+/** Migrate ADR-0034 segment ids → ADR-0043. */
+export function normalizeCockpitSegment(raw) {
+  if (raw === 'steps') return 'run';
+  if (raw === 'metrics') return 'output';
+  if (raw === 'plan' || raw === 'run' || raw === 'canvas' || raw === 'output') return raw;
+  return 'run';
+}

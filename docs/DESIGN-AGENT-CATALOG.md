@@ -105,13 +105,21 @@ stay separate** — Workspace for engagement, Admin for management/observation.
 
 Extend `plans_service.py` + `plans_api.py`.
 
-- **`PATCH /plans/{id}/`** — edit `brief` (and optional `step_deltas`).
-  - If plan is `pending_approval` → re-run `decompose()` → return **diff**
-    (`added`/`removed`/`changed` steps) for review; do NOT auto-approve.
-  - If plan is `approved`/`running`/`paused` → require a **replan gate**: return
-    the diff as `pending_approval`-style review payload; user must re-approve.
+- **`PATCH /plans/{id}/`** — edit plan. Body: `brief?`, `step_deltas?`,
+  **`mode`**: `rename` | `replan` (default `replan` for back-compat).
+  - **`mode=rename`** — update `user_message` / brief label only. No
+    `decompose()`, no `_replace_run_steps`, no status change. Empty diff.
+  - **`mode=replan`** — re-run `decompose()` → return **diff**
+    (`added`/`removed`/`changed`) for review; do NOT auto-approve (RULE_21).
+    If plan is `approved`/`running`/`paused`/`completed`/… → **replan gate**:
+    status → `pending_approval`. Server stashes `pre_edit_snapshot` so
+    **Cancel** can restore.
   - Per-step edit: `PATCH /plans/{id}/steps/{step_id}/` (fields allowed: `title`,
-    `instructions`, `depends_on`) with the same diff-review rule.
+    `instructions`, `depends_on`) with the same diff-review rule + snapshot.
+- **`POST /plans/{id}/confirm-edit/`** — clear `pre_edit_snapshot` after the
+  operator keeps the diff (RULE_21 consent already applied by replan write).
+- **`POST /plans/{id}/discard-edit/`** — restore `pre_edit_snapshot` (Cancel on
+  the diff dialog). Idempotent if no snapshot.
 - **`POST /plans/{id}/pause/`** — only from `running`; sets `STATUS_PAUSED`.
   Cooperates with step-consent (a paused consent step is already effectively
   paused — `pause` must not corrupt `awaiting_approval` steps).

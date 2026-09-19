@@ -1,0 +1,138 @@
+{
+  "generated_at": "2026-09-19T09:19:43.925914+00:00",
+  "profile_pack_id": "naa_cycle1_exam_prep",
+  "profile_version": 1,
+  "device_rel": "engines/lct_semantics/naa_reflective_v1",
+  "presegmented_gate": {
+    "sg": {
+      "metric": "cohen_kappa",
+      "dimension": "semantic_gravity",
+      "value": 0.6883,
+      "minimum": 0.6,
+      "passed": true,
+      "n": 16
+    },
+    "sd": {
+      "metric": "cohen_kappa",
+      "dimension": "semantic_density",
+      "value": 0.75,
+      "minimum": 0.4,
+      "passed": true,
+      "n": 16
+    },
+    "held_out_n_sg": 16,
+    "held_out_n_sd": 16
+  },
+  "essays": [
+    {
+      "id": "IELTS-SPEAK-WAVE-01",
+      "run_id": "eca9d1ba-5927-45db-b588-a6aa8a9bf0bd",
+      "word_count": 90,
+      "engine_status": "needs_review",
+      "alignment": {
+        "precision": 1.0,
+        "recall": 0.6,
+        "f1": 0.75,
+        "matched": 3
+      },
+      "engine_segment_count": 3,
+      "expert_segment_count": 5,
+      "rubric": {
+        "exact": 0.3333,
+        "adjacent": 0.6667,
+        "n": 3,
+        "passed": false,
+        "expert": {
+          "task_achievement": "C",
+          "coherence_cohesion": "C",
+          "lexis_grammar_academic_style": "B"
+        },
+        "engine": {
+          "coherence_cohesion": "C",
+          "lexis_grammar_academic_style": "C",
+          "task_achievement": "E"
+        }
+      },
+      "advisory_bands": {
+        "task_achievement": "E",
+        "coherence_cohesion": "C",
+        "lexis_grammar_academic_style": "C"
+      }
+    },
+    {
+      "id": "READING-ROUTINE-02",
+      "run_id": "1797098c-ace0-45dc-8dde-ee0c0022af2c",
+      "word_count": 74,
+      "engine_status": "complete",
+      "alignment": {
+        "precision": 1.0,
+        "recall": 0.6,
+        "f1": 0.75,
+        "matched": 3
+      },
+      "engine_segment_count": 3,
+      "expert_segment_count": 5,
+      "rubric": {
+        "exact": 0.6667,
+        "adjacent": 1.0,
+        "n": 3,
+        "passed": true,
+        "expert": {
+          "task_achievement": "B",
+          "coherence_cohesion": "C",
+          "lexis_grammar_academic_style": "C"
+        },
+        "engine": {
+          "coherence_cohesion": "C",
+          "lexis_grammar_academic_style": "C",
+          "task_achievement": "C"
+        }
+      },
+      "advisory_bands": {
+        "task_achievement": "C",
+        "coherence_cohesion": "C",
+        "lexis_grammar_academic_style": "C"
+      }
+    },
+    {
+      "id": "AR-CYCLE1-03-HANI",
+      "run_id": "1dbbe0ed-892d-4148-b6c3-5e6a175aab88",
+      "word_count": 137,
+      "engine_status": "needs_review",
+      "alignment": {
+        "precision": 1.0,
+        "recall": 0.6667,
+        "f1": 0.8,
+        "matched": 4
+      },
+      "engine_segment_count": 4,
+      "expert_segment_count": 6,
+      "rubric": {
+        "exact": 0.0,
+        "adjacent": 0.3333,
+        "n": 3,
+        "passed": false,
+        "expert": {
+          "task_achievement": "D",
+          "coherence_cohesion": "E",
+          "lexis_grammar_academic_style": "F"
+        },
+        "engine": {
+          "coherence_cohesion": "C",
+          "lexis_grammar_academic_style": "C",
+          "task_achievement": "E"
+        }
+      },
+      "advisory_bands": {
+        "task_achievement": "E",
+        "coherence_cohesion": "C",
+        "lexis_grammar_academic_style": "C"
+      }
+    }
+  ],
+  "notes": [
+    "presegmented_gate = publish/calibration path (expert spans, no re-segment)",
+    "essays[].alignment = full-pipeline re-segment vs expert spans",
+    "rubric agreement only when expert_rubric_bands present on held_out row"
+  ]
+}

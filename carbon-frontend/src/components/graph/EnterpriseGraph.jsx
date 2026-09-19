@@ -59,10 +59,13 @@ const DRAG_THRESHOLD = 3;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 /**
- * Cubic bezier path from a source node's right edge to a target node's left
- * edge — edges always flow left→right, matching the layered execution layout.
+ * Cubic bezier between node anchors. LR: right→left edges; TB: bottom→top.
  */
-function edgePath(sx, sy, tx, ty) {
+function edgePath(sx, sy, tx, ty, direction = 'lr') {
+  if (direction === 'tb') {
+    const dy = Math.max((ty - sy) * 0.5, 12);
+    return `M ${sx} ${sy} C ${sx} ${sy + dy}, ${tx} ${ty - dy}, ${tx} ${ty}`;
+  }
   const dx = Math.max((tx - sx) * 0.5, 12);
   return `M ${sx} ${sy} C ${sx + dx} ${sy}, ${tx - dx} ${ty}, ${tx} ${ty}`;
 }
@@ -163,6 +166,7 @@ function Tool({ label, onClick, testId, children, disabled = false }) {
  * @param {string} modalCloseTestId — data-testid for the modal close button
  * @param {string} expandTestId — data-testid for the maximize button
  * @param {string} exportFileName — downloaded PNG filename (no extension)
+ * @param {'lr'|'tb'} [direction] — edge flow; must match layoutExecutionGraph
  */
 export default function EnterpriseGraph({
   nodes = [],
@@ -192,9 +196,11 @@ export default function EnterpriseGraph({
   modalCloseTestId = 'graph-modal-close',
   expandTestId = 'graph-maximize',
   exportFileName = 'graph',
+  direction = 'lr',
 }) {
   const theme = useTheme();
   const svgRef = useRef(null);
+  const canvasRef = useRef(null);
   const drag = useRef(null);
   const moved = useRef(false);
   const [dragging, setDragging] = useState(false);
@@ -205,6 +211,7 @@ export default function EnterpriseGraph({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [overrides, setOverrides] = useState({});
   const [expanded, setExpanded] = useState(false);
+  const [viewport, setViewport] = useState({ w: 0, h: 0 });
 
   const setZoomClamped = useCallback((updater) => {
     setZoom((z) => clamp(typeof updater === 'function' ? updater(z) : updater, ZOOM_MIN, ZOOM_MAX));
@@ -251,6 +258,15 @@ export default function EnterpriseGraph({
           const s = nodeById.get(e.source);
           const t = nodeById.get(e.target);
           if (!s || !t) return null;
+          if (direction === 'tb') {
+            return {
+              ...e,
+              sourceX: s.x + s.w / 2,
+              sourceY: s.y + s.h,
+              targetX: t.x + t.w / 2,
+              targetY: t.y,
+            };
+          }
           return {
             ...e,
             sourceX: s.x + s.w,
@@ -260,7 +276,7 @@ export default function EnterpriseGraph({
           };
         })
         .filter(Boolean),
-    [edges, nodeById],
+    [edges, nodeById, direction],
   );
 
   const viewW = Math.max(640, width);
@@ -365,23 +381,42 @@ export default function EnterpriseGraph({
     }
   }, [viewW, viewH, theme, exportFileName]);
 
+  // Measure the real canvas box so fit/zoom use the Pulse rail width, not the
+  // SVG viewBox (which tracks layout width and made fitView a no-op).
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver((entries) => {
+      const box = entries[0]?.contentRect;
+      if (!box) return;
+      setViewport({ w: box.width, h: box.height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [expanded, fill]);
+
   const fitView = useCallback(() => {
-    const fitted = viewW / Math.max(width, 1);
+    const availW = viewport.w > 0 ? viewport.w : viewW;
+    const availH = viewport.h > 0 ? viewport.h : Math.max(height, layoutHeight);
+    const fitX = availW / Math.max(width, 1);
+    const fitY = availH / Math.max(layoutHeight, 1);
+    const fitted = Math.min(fitX, fitY);
     // Cap at 1× so we never enlarge past layout size; floor so auto-fit in a
     // narrow Pulse rail does not crush node type into illegible pixels.
     setZoomClamped(Math.max(FIT_ZOOM_FLOOR, Math.min(1, fitted)));
     setPan({ x: 0, y: 0 });
-  }, [setZoomClamped, viewW, width]);
+  }, [setZoomClamped, viewport.w, viewport.h, viewW, viewH, width, height, layoutHeight]);
 
   // Graph-first Run: fit the DAG when the layout size changes so the hero
   // isn't a tiny cluster in a sea of empty canvas.
   useEffect(() => {
     fitView();
-  }, [fitView, nodes.length, width, layoutHeight]);
+  }, [fitView, nodes.length, width, layoutHeight, direction]);
 
   // ── Shared canvas renderer (inline + modal) ─────────────────────────────
   const renderCanvas = (canvasFill, marker = markerId) => (
     <Box
+      ref={canvasFill ? undefined : canvasRef}
       sx={{
         position: 'relative',
         overflow: 'auto',
@@ -422,18 +457,20 @@ export default function EnterpriseGraph({
           {phaseBands.map((b) => {
             const bandColor = phaseColor(b.phase_id);
             if (!bandColor) return null;
+            const bandY = direction === 'tb' ? (b.y ?? 0) : 0;
+            const bandH = direction === 'tb' ? (b.height ?? layoutHeight) : layoutHeight;
             return (
               <g key={`band-${b.phase_id}`}>
                 <rect
                   x={b.x - 12}
-                  y={0}
+                  y={bandY}
                   width={b.width + 24}
-                  height={layoutHeight}
+                  height={bandH}
                   rx={6}
                   fill={bandColor}
                   opacity={0.05}
                 />
-                <text x={b.x - 12 + 6} y={18} fontSize={11} fill={bandColor} fontWeight={650} letterSpacing={0.4}>
+                <text x={b.x - 12 + 6} y={bandY + 18} fontSize={11} fill={bandColor} fontWeight={650} letterSpacing={0.4}>
                   {b.name}
                   {b.strategy === 'parallel' ? ' · parallel' : ''}
                 </text>
@@ -441,7 +478,7 @@ export default function EnterpriseGraph({
             );
           })}
 
-          {/* Edges — always left→right with arrowheads; choice branches tinted */}
+          {/* Edges — flow with arrowheads; choice branches tinted */}
           {effectiveEdges.map((e) => {
             const branch = e.branch || 'pending';
             let stroke = theme.palette.text.secondary;
@@ -461,7 +498,7 @@ export default function EnterpriseGraph({
             return (
               <path
                 key={`e-${e.source}-${e.target}`}
-                d={edgePath(e.sourceX, e.sourceY, e.targetX, e.targetY)}
+                d={edgePath(e.sourceX, e.sourceY, e.targetX, e.targetY, direction)}
                 fill="none"
                 stroke={stroke}
                 strokeWidth={strokeWidth}
@@ -474,8 +511,8 @@ export default function EnterpriseGraph({
             );
           })}
 
-          {/* Nodes */}
-          {effectiveNodes.map((n) => {
+          {/* Nodes (skip invisible Sugiyama dummies) */}
+          {effectiveNodes.filter((n) => !n.is_dummy).map((n) => {
             const isSelected = selected?.id === n.id;
             const fill = nodeColor(n) || theme.palette.primary.main;
             const isRunning = n.status === 'running';
@@ -700,4 +737,5 @@ EnterpriseGraph.propTypes = {
   modalCloseTestId: PropTypes.string,
   expandTestId: PropTypes.string,
   exportFileName: PropTypes.string,
+  direction: PropTypes.oneOf(['lr', 'tb']),
 };

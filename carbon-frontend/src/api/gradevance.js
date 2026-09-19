@@ -47,6 +47,16 @@ export const patchCourse = (token, courseId, body) =>
     token,
   });
 
+export const fetchCourseEnrollments = (token, courseId) =>
+  apiFetch(`${ROOT}courses/${encodeURIComponent(courseId)}/enrollments/`, { token });
+
+export const createCourseEnrollment = (token, courseId, body) =>
+  apiFetch(`${ROOT}courses/${encodeURIComponent(courseId)}/enrollments/`, {
+    method: 'POST',
+    body,
+    token,
+  });
+
 export const fetchAssignments = (token, params = {}) =>
   apiFetch(`${ROOT}assignments/${qs(params)}`, { token });
 
@@ -156,6 +166,28 @@ export const previewDeepLink = (token, body) =>
 export const fetchAccessibility = (token) =>
   apiFetch(`${ROOT}accessibility/`, { token });
 
+export const fetchQaSummary = (token, params = {}) =>
+  apiFetch(`${ROOT}qa/summary/${qs(params)}`, { token });
+
+export const fetchLtiConfig = (token) =>
+  apiFetch(`${ROOT}lti/config/`, { token });
+
+export const fetchAuditExport = (token, runId, params = {}) =>
+  apiFetch(
+    `${ROOT}runs/${encodeURIComponent(runId)}/audit-export/${qs(params)}`,
+    { token },
+  );
+
+export const fetchAppeals = (token, params = {}) =>
+  apiFetch(`${ROOT}appeals/${qs(params)}`, { token });
+
+export const resolveAppeal = (token, appealId, body) =>
+  apiFetch(`${ROOT}appeals/${encodeURIComponent(appealId)}/resolve/`, {
+    method: 'POST',
+    body,
+    token,
+  });
+
 export const fetchPublishGate = (token, packId, version = 1, params = {}) =>
   apiFetch(
     `${ROOT}publish-gate/${qs({
@@ -189,3 +221,73 @@ export const repinProposal = (token, id, body) =>
     body,
     token,
   });
+
+// ── Student self-service (gradevance/me/*) — Learn app ─────────────
+const ME = `${ROOT}me/`;
+
+export const fetchMyCourses = (token) =>
+  apiFetch(`${ME}courses/`, { token });
+
+export const joinCourseByCode = (token, entry_code) =>
+  apiFetch(`${ME}join/`, {
+    method: 'POST',
+    body: { entry_code },
+    token,
+  });
+
+export const fetchMyAssignments = (token, params = {}) =>
+  apiFetch(`${ME}assignments/${qs(params)}`, { token });
+
+export const fetchMyAssignment = (token, assignmentId) =>
+  apiFetch(`${ME}assignments/${encodeURIComponent(assignmentId)}/`, { token });
+
+export const fetchMySubmissions = (token, params = {}) =>
+  apiFetch(`${ME}submissions/${qs(params)}`, { token });
+
+/** POST draft/submit; pass analyze: true for formative coaching run. */
+export const createMySubmission = (token, body) =>
+  apiFetch(`${ME}submissions/`, {
+    method: 'POST',
+    body,
+    token,
+  });
+
+export const patchMySubmission = (token, submissionId, body) =>
+  apiFetch(`${ME}submissions/${encodeURIComponent(submissionId)}/`, {
+    method: 'PATCH',
+    body,
+    token,
+  });
+
+export const fetchMyRun = (token, runId) =>
+  apiFetch(`${ME}runs/${encodeURIComponent(runId)}/`, { token });
+
+export const fetchMyProgress = (token, params = {}) =>
+  apiFetch(`${ME}progress/${qs(params)}`, { token });
+
+export const fetchMyAppeals = (token, params = {}) =>
+  apiFetch(`${ME}appeals/${qs(params)}`, { token });
+
+export const createMyAppeal = (token, body) =>
+  apiFetch(`${ME}appeals/`, {
+    method: 'POST',
+    body,
+    token,
+  });
+
+export const withdrawMyAppeal = (token, appealId) =>
+  apiFetch(`${ME}appeals/${encodeURIComponent(appealId)}/withdraw/`, {
+    method: 'POST',
+    body: {},
+    token,
+  });
+
+export const patchEnrollment = (token, courseId, enrollmentId, body) =>
+  apiFetch(
+    `${ROOT}courses/${encodeURIComponent(courseId)}/enrollments/${encodeURIComponent(enrollmentId)}/`,
+    {
+      method: 'PATCH',
+      body,
+      token,
+    },
+  );

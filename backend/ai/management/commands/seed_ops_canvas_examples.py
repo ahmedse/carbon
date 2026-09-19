@@ -1,695 +1,550 @@
-"""Seed complex Ops Canvas Job Map examples (ADR-0041).
+"""Seed Agent tasks + sophisticated Job Maps (visible on Agent tab).
 
-Creates a dedicated conversation plus several multi-layer Job Maps so Pulse →
-Artifacts → Ops Canvas has something to open immediately.
+Agent UI lists ``Run`` plans — not Artifacts alone. This command:
+  1. Wipes prior showcase Job Maps + showcase Runs for the user
+  2. Creates a conversation + real Agent plans (with steps)
+  3. Attaches rich Ops Canvas Job Maps keyed by ``plan_id``
 
 Usage:
-    python manage.py seed_ops_canvas_examples
-    python manage.py seed_ops_canvas_examples --user ahmed
-    python manage.py seed_ops_canvas_examples --reset
+    python manage.py seed_ops_canvas_examples --user ahmed --reset
 """
 
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
+from django.utils.timezone import now
 
 from ai.models import AIArtifact, AIConversation
-from ai.ops_canvas import MODE_AGENT, MODE_CHAT, ARTIFACT_TYPE, build_payload
+from ai.models.core import Run, RunStep, generate_uuid
+from ai.ops_canvas import ARTIFACT_TYPE, MODE_AGENT, build_payload
+from ai.plans_service import (
+    PLAN_INSTANCE_ID,
+    STATUS_COMPLETED,
+    STATUS_PAUSED,
+    STEP_AWAITING_APPROVAL,
+    STEP_COMPLETED,
+    STEP_PENDING,
+    STEP_RUNNING,
+    STEP_SKIPPED,
+)
+
+DEMO_CONV_TITLE = "Ops Canvas · agentic showcase"
+SHOWCASE_NOTE = "ops_canvas_showcase"
 
 
-DEMO_CONV_TITLE = "Ops Canvas · demo maps"
-
-
-def _examples() -> list[dict]:
-    """Complex Job Map payloads — closed kit only."""
+def _showcases() -> list[dict]:
+    """Each item: Agent Run (task list) + Job Map layers (canvas under DAG)."""
     return [
         {
-            "title": "Payroll variance board pack (Agent)",
-            "mode": MODE_AGENT,
-            "ask": (
-                "Build October payroll variance board pack: fetch run, compute "
-                "variance vs prior month, branch escalate if >2%, critic gate, "
-                "export docx/xlsx pack for Finance."
+            "brief": (
+                "Close October payroll: parallel GOSI/loans/leave fan-out, "
+                "XOR branch on MoM variance >2%, critic gate, export board pack"
             ),
-            "plan_id": "demo-plan-payroll-board",
+            "run_status": STATUS_COMPLETED,
+            "title": "Month-end payroll saga — parallel · branch · critic · pack",
+            "plan_id_hint": None,  # generated
+            "steps": [
+                {
+                    "step_id": 0,
+                    "intent": "Resolve PayrollRun PR-2026-10 + lock period",
+                    "tool_name": "resolve_entity",
+                    "depends_on": [],
+                    "status": STEP_COMPLETED,
+                },
+                {
+                    "step_id": 1,
+                    "intent": "∥ Fan-out: GOSI exposure ledger",
+                    "tool_name": "aggregate_entity",
+                    "depends_on": [0],
+                    "status": STEP_COMPLETED,
+                },
+                {
+                    "step_id": 2,
+                    "intent": "∥ Fan-out: active loans outstanding",
+                    "tool_name": "aggregate_entity",
+                    "depends_on": [0],
+                    "status": STEP_COMPLETED,
+                },
+                {
+                    "step_id": 3,
+                    "intent": "∥ Fan-out: leave accrual delta MoM",
+                    "tool_name": "list_leave_entitlements",
+                    "depends_on": [0],
+                    "status": STEP_COMPLETED,
+                },
+                {
+                    "step_id": 4,
+                    "intent": "Join fan-out → compute MoM variance %",
+                    "tool_name": "cross_synthesize",
+                    "depends_on": [1, 2, 3],
+                    "status": STEP_COMPLETED,
+                },
+                {
+                    "step_id": 5,
+                    "intent": "Choice XOR: variance ≤ 2% → continue else escalate",
+                    "tool_name": "plan_task",
+                    "depends_on": [4],
+                    "status": STEP_COMPLETED,
+                },
+                {
+                    "step_id": 6,
+                    "intent": "Escalate Finance human grant",
+                    "tool_name": "plan_task",
+                    "depends_on": [5],
+                    "status": STEP_SKIPPED,
+                },
+                {
+                    "step_id": 7,
+                    "intent": "Draft board narrative + risk flags",
+                    "tool_name": "cross_synthesize",
+                    "depends_on": [5],
+                    "status": STEP_COMPLETED,
+                    "agent_role": "finance_packager",
+                },
+                {
+                    "step_id": 8,
+                    "intent": "Critic agent: veto / pass board pack",
+                    "tool_name": "cross_synthesize",
+                    "depends_on": [7],
+                    "status": STEP_COMPLETED,
+                    "agent_role": "critic",
+                },
+                {
+                    "step_id": 9,
+                    "intent": "Export board pack (docx + xlsx + png)",
+                    "tool_name": "export_document",
+                    "depends_on": [8],
+                    "status": STEP_COMPLETED,
+                    "tool_args": {"format": "pack", "title": "Oct Payroll Board"},
+                },
+                {
+                    "step_id": 10,
+                    "intent": "FlightDirector acceptance close + learn",
+                    "tool_name": "flight_acceptance",
+                    "depends_on": [9],
+                    "status": STEP_COMPLETED,
+                },
+            ],
+            "phases": [
+                {"phase_id": 0, "name": "Fan-out", "strategy": "parallel", "step_ids": [1, 2, 3]},
+                {"phase_id": 1, "name": "Branch + critic", "strategy": "sequential", "step_ids": [4, 5, 6, 7, 8]},
+                {"phase_id": 2, "name": "Export + accept", "strategy": "sequential", "step_ids": [9, 10]},
+            ],
             "related_object": {
                 "type": "people.PayrollRun",
-                "id": "oct-2026",
-                "label": "October 2026 payroll",
+                "id": "PR-2026-10",
+                "label": "October 2026 payroll close",
             },
             "layers": {
                 "intent": {
-                    "ask": "October payroll variance board pack for Finance",
-                    "success_criteria": (
-                        "Pack exported only after critic pass; escalate path "
-                        "taken when variance_pct > 2.0"
-                    ),
+                    "ask": "Close October payroll with resilient parallel→choice→critic→export workflow",
+                    "success_criteria": "Pack exported after critic pass; escalate only if variance>2%",
                     "contract": "agent",
                 },
                 "job_map": {
-                    "steps": [
-                        {
-                            "id": "1",
-                            "title": "Fetch October payroll run + headcount",
-                            "tool": "resolve_entity",
-                            "status": "completed",
-                            "depends_on": [],
-                        },
-                        {
-                            "id": "2",
-                            "title": "Compute MoM variance + GOSI exposure",
-                            "tool": "aggregate_entity",
-                            "status": "completed",
-                            "depends_on": ["1"],
-                        },
-                        {
-                            "id": "3",
-                            "title": "Branch: variance ≤ 2% → continue else escalate",
-                            "tool": "plan_task",
-                            "status": "completed",
-                            "depends_on": ["2"],
-                        },
-                        {
-                            "id": "4",
-                            "title": "Critic review of board narrative",
-                            "tool": "cross_synthesize",
-                            "status": "completed",
-                            "depends_on": ["3"],
-                        },
-                        {
-                            "id": "5",
-                            "title": "Export board pack (docx + xlsx)",
-                            "tool": "export_document",
-                            "status": "completed",
-                            "depends_on": ["4"],
-                        },
-                    ],
+                    "steps": [],  # filled from RunSteps at seed time
                     "tools": [
                         "resolve_entity",
                         "aggregate_entity",
-                        "plan_task",
+                        "list_leave_entitlements",
                         "cross_synthesize",
                         "export_document",
                     ],
-                    "capabilities": ["people:view", "ai:run_agent", "ai:export"],
-                    "entities": [
-                        {"type": "people.PayrollRun", "id": "oct-2026"},
-                        {"type": "people.Employee", "metric": "headcount"},
-                    ],
+                    "capabilities": ["people:view", "people:view_payroll", "ai:run_agent", "ai:export"],
+                    "entities": [{"type": "people.PayrollRun", "id": "PR-2026-10"}],
+                    "workflow_graph": {
+                        "pattern": "parallel→join→choice→critic→export",
+                        "resilience": {"retry": {"max_attempts": 3}, "compensate_on": "critic_veto"},
+                    },
                 },
                 "live_run": {
                     "progress_pct": 100,
                     "status": "completed",
                     "qos": {
                         "acceptance_status": "met",
-                        "requirements_total": 5,
-                        "requirements_met": 5,
+                        "requirements_total": 7,
+                        "requirements_met": 7,
                         "requirements_partial": 0,
                         "requirements_missed": 0,
+                        "repairs": 0,
+                        "escalations": 0,
                     },
                     "blockers": [],
                     "pending_consent": None,
+                    "phases": [
+                        {"name": "Fan-out", "status": "completed"},
+                        {"name": "Variance branch", "status": "completed"},
+                        {"name": "Critic", "status": "completed"},
+                        {"name": "Export", "status": "completed"},
+                    ],
                 },
                 "evidence": {
-                    "headline": "Variance 1.8% ≤ 2.0% band — escalate skipped",
+                    "headline": "Variance 1.8% ≤ 2.0% · critic PASS · pack exported",
                     "prose": (
-                        "October closed within tolerance. GOSI exposure "
-                        "KWD 184,220. Critic passed; pack allowed."
+                        "Parallel fan-out joined. Escalate skipped. Critic 0.91. "
+                        "FlightDirector acceptance met on all requirements."
                     ),
                     "tables": [
                         {
-                            "title": "Board metrics",
-                            "columns": ["Metric", "Value"],
+                            "title": "Parallel fan-out",
+                            "columns": ["Lane", "Metric", "Value"],
                             "rows": [
-                                ["Headcount", "529"],
-                                ["Variance %", "1.8"],
-                                ["GOSI exposure (KWD)", "184,220"],
-                                ["Active loans", "42"],
-                                ["Late enrollments", "2"],
+                                ["GOSI", "Exposure KWD", "184,220"],
+                                ["Loans", "Active / outstanding", "42 / 312,400"],
+                                ["Leave", "Accrual MoM Δ (d)", "+1,104"],
                             ],
-                        }
+                        },
+                        {
+                            "title": "Gates",
+                            "columns": ["Gate", "Decision"],
+                            "rows": [
+                                ["XOR variance 1.8%", "continue"],
+                                ["Critic", "PASS"],
+                                ["Catch repair", "not entered"],
+                            ],
+                        },
                     ],
-                    "sources": [
-                        {"label": "payroll_run.oct-2026"},
-                        {"label": "gosi_ledger"},
-                    ],
-                    "caveats": [
-                        "2 late enrollment cases — HR to close by month-end"
-                    ],
+                    "sources": [{"label": "payroll_run.PR-2026-10"}, {"label": "flight.acceptance"}],
+                    "caveats": ["2 late GOSI enrollments — HR by EOM"],
                 },
                 "outcome": {
-                    "summary": (
-                        "Board pack exported. Escalate branch not taken. "
-                        "Finance can download from run artifacts."
-                    ),
+                    "summary": "October payroll closed. Board pack ready. Compensate unused.",
                     "sor_links": [
-                        {
-                            "label": "Payroll run Oct 2026",
-                            "path": "/people/payroll/oct-2026",
-                        }
+                        {"label": "PayrollRun PR-2026-10", "path": "/people/payroll/PR-2026-10"}
                     ],
                     "canvas_id": "",
                 },
             },
         },
         {
-            "title": "Leave portfolio brief — Eslam (Chat)",
-            "mode": MODE_CHAT,
-            "ask": (
-                "What leave does Eslam have left, by type, and any pending "
-                "requests that would affect next week's draft?"
+            "brief": (
+                "Create DQ rule Water consumption > 0 with exact field set; "
+                "FlightDirector repair loop ≤2; never auto-rerun mutation"
             ),
-            "related_object": {
-                "type": "people.Employee",
-                "id": "1416",
-                "label": "Eslam (demo)",
-            },
+            "run_status": STATUS_PAUSED,  # mid-run feel
+            "title": "DQ water rule — FlightDirector repair · exact fields · consent",
+            "steps": [
+                {
+                    "step_id": 0,
+                    "intent": "Catalog search: emissions water field (trust-ranked)",
+                    "tool_name": "api_catalog_search",
+                    "depends_on": [],
+                    "status": STEP_COMPLETED,
+                },
+                {
+                    "step_id": 1,
+                    "intent": "Resolve DataField water_consumption",
+                    "tool_name": "resolve_entity",
+                    "depends_on": [0],
+                    "status": STEP_COMPLETED,
+                },
+                {
+                    "step_id": 2,
+                    "intent": "Consent: create_dq_rule (mutation)",
+                    "tool_name": "create_dq_rule",
+                    "depends_on": [1],
+                    "status": STEP_COMPLETED,
+                    "is_mutation": True,
+                },
+                {
+                    "step_id": 3,
+                    "intent": "FlightDirector re-query created_entity",
+                    "tool_name": "host_get",
+                    "depends_on": [2],
+                    "status": STEP_COMPLETED,
+                },
+                {
+                    "step_id": 4,
+                    "intent": "Accept #1: table_fields → PARTIAL",
+                    "tool_name": "flight_acceptance",
+                    "depends_on": [3],
+                    "status": STEP_COMPLETED,
+                },
+                {
+                    "step_id": 5,
+                    "intent": "Repair #1: inject ACTUAL diff + re-consent",
+                    "tool_name": "create_dq_rule",
+                    "depends_on": [4],
+                    "status": STEP_COMPLETED,
+                    "is_mutation": True,
+                },
+                {
+                    "step_id": 6,
+                    "intent": "FlightDirector re-check after repair",
+                    "tool_name": "host_get",
+                    "depends_on": [5],
+                    "status": STEP_COMPLETED,
+                },
+                {
+                    "step_id": 7,
+                    "intent": "Accept #2 + learn playbook pattern",
+                    "tool_name": "flight_acceptance",
+                    "depends_on": [6],
+                    "status": STEP_RUNNING,
+                },
+            ],
+            "phases": [
+                {"phase_id": 0, "name": "Discover", "strategy": "sequential", "step_ids": [0, 1]},
+                {"phase_id": 1, "name": "Mutate + repair", "strategy": "sequential", "step_ids": [2, 3, 4, 5, 6]},
+                {"phase_id": 2, "name": "Close", "strategy": "sequential", "step_ids": [7]},
+            ],
+            "related_object": {"type": "dq.Rule", "id": "129", "label": "Water consumption > 0"},
             "layers": {
                 "intent": {
-                    "ask": "Leave entitlements + pending for Eslam",
-                    "success_criteria": (
-                        "Per-type balances + pending request count; advisory only"
-                    ),
-                    "contract": "advisory",
-                },
-                "job_map": {
-                    "steps": [
-                        {
-                            "id": "1",
-                            "title": "Resolve employee Eslam / 1416",
-                            "tool": "resolve_entity",
-                            "status": "done",
-                        },
-                        {
-                            "id": "2",
-                            "title": "List leave entitlements by type",
-                            "tool": "list_leave_entitlements",
-                            "status": "done",
-                        },
-                        {
-                            "id": "3",
-                            "title": "List open leave requests",
-                            "tool": "list_leave_requests",
-                            "status": "done",
-                        },
-                        {
-                            "id": "4",
-                            "title": "Synthesize portfolio brief",
-                            "tool": "cross_synthesize",
-                            "status": "done",
-                        },
-                    ],
-                    "tools": [
-                        "resolve_entity",
-                        "list_leave_entitlements",
-                        "list_leave_requests",
-                        "cross_synthesize",
-                    ],
-                    "capabilities": ["people:view"],
-                    "entities": [{"type": "people.Employee", "id": "1416"}],
-                },
-                "live_run": {
-                    "progress_pct": 100,
-                    "status": "complete",
-                    "qos": None,
-                    "blockers": [],
-                },
-                "evidence": {
-                    "headline": "Five leave types · 1 pending request",
-                    "prose": (
-                        "Advisory brief only — Chat will not submit leave. "
-                        "Draft next week would consume Annual."
-                    ),
-                    "tables": [
-                        {
-                            "title": "Entitlements",
-                            "columns": ["Type", "Balance (d)", "Used"],
-                            "rows": [
-                                ["Annual", "14.5", "15.5"],
-                                ["Sick", "12", "3"],
-                                ["Emergency", "3", "0"],
-                                ["Unpaid", "∞", "0"],
-                                ["Maternity", "0", "0"],
-                            ],
-                        }
-                    ],
-                    "sources": [{"label": "leave_entitlement"}, {"label": "leave_request"}],
-                    "caveats": [
-                        "Pending request #8821 (Annual 3d) not yet approved"
-                    ],
-                },
-                "outcome": {
-                    "summary": (
-                        "Portfolio ready for manager review. No SoR writes "
-                        "from Chat mode."
-                    ),
-                    "sor_links": [
-                        {
-                            "label": "Employee 360 (demo id)",
-                            "path": "/people/employees/1416",
-                        }
-                    ],
-                    "canvas_id": "",
-                },
-            },
-        },
-        {
-            "title": "DQ water rule + FlightDirector repair (Agent)",
-            "mode": MODE_AGENT,
-            "ask": (
-                "Create DQ rule 'Water consumption > 0' on emissions fact table; "
-                "FlightDirector must verify created_entity; repair if missed."
-            ),
-            "plan_id": "demo-plan-dq-water",
-            "related_object": {
-                "type": "dq.Rule",
-                "id": "pending",
-                "label": "Water consumption > 0",
-            },
-            "layers": {
-                "intent": {
-                    "ask": "Durable DQ rule for water consumption",
-                    "success_criteria": (
-                        "Rule row exists; acceptance met or escalated after ≤2 repairs"
-                    ),
+                    "ask": "Durable DQ rule with FlightDirector exact field-set acceptance",
+                    "success_criteria": "Rule exists; accept met or escalated after ≤2 repairs",
                     "contract": "agent",
                 },
                 "job_map": {
-                    "steps": [
-                        {
-                            "id": "1",
-                            "title": "Locate emissions water field",
-                            "tool": "search_entity",
-                            "status": "completed",
-                        },
-                        {
-                            "id": "2",
-                            "title": "Create DQ rule (mutation · consent)",
-                            "tool": "create_dq_rule",
-                            "status": "completed",
-                        },
-                        {
-                            "id": "3",
-                            "title": "FlightDirector re-query created_entity",
-                            "tool": "host_get",
-                            "status": "completed",
-                        },
-                        {
-                            "id": "4",
-                            "title": "Repair: exact field set mismatch",
-                            "tool": "create_dq_rule",
-                            "status": "completed",
-                        },
-                        {
-                            "id": "5",
-                            "title": "Acceptance report close",
-                            "tool": "flight_acceptance",
-                            "status": "completed",
-                        },
-                    ],
-                    "tools": ["search_entity", "create_dq_rule"],
-                    "capabilities": ["dq:manage", "ai:run_agent"],
+                    "steps": [],
+                    "tools": ["api_catalog_search", "resolve_entity", "create_dq_rule", "host_get"],
+                    "capabilities": ["dq:manage", "catalog:view", "ai:run_agent"],
                     "entities": [
+                        {"type": "dq.Rule", "id": "129"},
                         {"type": "dataschema.DataField", "name": "water_consumption"},
-                        {"type": "dq.Rule", "name": "Water consumption > 0"},
                     ],
+                    "workflow_graph": {
+                        "pattern": "mutate→accept→repair→accept→learn",
+                        "resilience": {"max_repairs": 2, "mutation_auto_rerun": False},
+                    },
                 },
                 "live_run": {
-                    "progress_pct": 100,
-                    "status": "partial",
+                    "progress_pct": 88,
+                    "status": "running",
                     "qos": {
                         "acceptance_status": "partial",
-                        "requirements_total": 3,
-                        "requirements_met": 2,
+                        "requirements_total": 4,
+                        "requirements_met": 3,
                         "requirements_partial": 1,
                         "requirements_missed": 0,
+                        "repairs": 1,
                     },
                     "blockers": [],
                     "pending_consent": None,
+                    "phases": [
+                        {"name": "Discover", "status": "completed"},
+                        {"name": "Mutate+repair", "status": "completed"},
+                        {"name": "Accept#2 + learn", "status": "running"},
+                    ],
                 },
                 "evidence": {
-                    "headline": "Rule created after 1 repair · table_fields partial",
+                    "headline": "Rule #129 live after 1 repair · table_fields still partial",
                     "prose": (
-                        "First create missed exact field set; FlightDirector "
-                        "injected repair instructions with actual missing/extra "
-                        "diff. Mutation never auto-re-run without consent."
+                        "First create had extra=['unit_code']. FlightDirector injected "
+                        "repair with ACTUAL diff. RULE_21: mutation never auto-replayed."
                     ),
                     "tables": [
                         {
-                            "title": "Acceptance",
-                            "columns": ["Requirement", "Verdict"],
+                            "title": "Acceptance timeline",
+                            "columns": ["Pass", "Requirement", "Verdict"],
                             "rows": [
-                                ["created_entity rule", "met"],
-                                ["table_fields exact set", "partial"],
-                                ["artifact export", "met"],
+                                ["1", "created_entity", "met"],
+                                ["1", "table_fields exact", "partial"],
+                                ["2", "created_entity", "met"],
+                                ["2", "table_fields exact", "partial"],
                             ],
-                        }
+                        },
+                        {
+                            "title": "Repair ledger",
+                            "columns": ["#", "Diff", "Consent"],
+                            "rows": [["1", "drop unit_code", "granted"]],
+                        },
                     ],
-                    "sources": [{"label": "dq/rules"}, {"label": "flight.acceptance"}],
-                    "caveats": [
-                        "Partial = field set still has 1 extra column vs brief"
-                    ],
+                    "sources": [{"label": "dq/rules/129"}, {"label": "flight.ledger"}],
+                    "caveats": ["Partial ≠ failed — tighten field set in DQ UI"],
                 },
                 "outcome": {
-                    "summary": (
-                        "Rule id 129 live. Human may tighten field set; "
-                        "learning pattern queued for playbook."
-                    ),
-                    "sor_links": [
-                        {"label": "DQ rules", "path": "/admin/dq/rules"}
-                    ],
+                    "summary": "Rule 129 durable. Final learn step still running.",
+                    "sor_links": [{"label": "DQ rule 129", "path": "/admin/dq/rules/129"}],
                     "canvas_id": "",
                 },
             },
         },
         {
-            "title": "GradeVance OSCE run — LCT HITL (Agent)",
-            "mode": MODE_AGENT,
-            "ask": (
-                "Mark reflective OSCE segment with LCT Semantics (SG/SD), open "
-                "HITL edit drawer, gate on mean confidence, release for AGS dry-run."
+            "brief": (
+                "Mark OSCE reflective run with LCT HITL, release, then stage "
+                "compensation deny for linked employee 333 under RULE_21 consent"
             ),
-            "plan_id": "demo-plan-gv-osce",
+            "run_status": STATUS_PAUSED,
+            "title": "Cross-domain OSCE HITL → People subagent → compensation deny (blocked)",
+            "steps": [
+                {
+                    "step_id": 0,
+                    "intent": "Load OSCE-7741 + assignment pack",
+                    "tool_name": "gradevance_fetch_run",
+                    "depends_on": [],
+                    "status": STEP_COMPLETED,
+                    "agent_role": "eduos_marker",
+                },
+                {
+                    "step_id": 1,
+                    "intent": "Auto LCT Semantics codes (SG/SD)",
+                    "tool_name": "gradevance_lct_code",
+                    "depends_on": [0],
+                    "status": STEP_COMPLETED,
+                },
+                {
+                    "step_id": 2,
+                    "intent": "HITL ExpertEdit seg2 SG+→SG−",
+                    "tool_name": "gradevance_expert_edit",
+                    "depends_on": [1],
+                    "status": STEP_COMPLETED,
+                },
+                {
+                    "step_id": 3,
+                    "intent": "Confidence gate + ceremonial release",
+                    "tool_name": "gradevance_release",
+                    "depends_on": [2],
+                    "status": STEP_COMPLETED,
+                },
+                {
+                    "step_id": 4,
+                    "intent": "AGS passback dry-run",
+                    "tool_name": "gradevance_ags_preview",
+                    "depends_on": [3],
+                    "status": STEP_COMPLETED,
+                },
+                {
+                    "step_id": 5,
+                    "intent": "Subagent: resolve Employee 333 + leave portfolio",
+                    "tool_name": "resolve_entity",
+                    "depends_on": [3],
+                    "status": STEP_COMPLETED,
+                    "agent_role": "people_ops",
+                },
+                {
+                    "step_id": 6,
+                    "intent": "Subagent: list compensation CR-4412",
+                    "tool_name": "list_compensation_requests",
+                    "depends_on": [5],
+                    "status": STEP_COMPLETED,
+                    "agent_role": "people_ops",
+                },
+                {
+                    "step_id": 7,
+                    "intent": "Save WorkObjective: post-OSCE people follow-up",
+                    "tool_name": "save_work_objective",
+                    "depends_on": [6],
+                    "status": STEP_COMPLETED,
+                },
+                {
+                    "step_id": 8,
+                    "intent": "BLOCKED — deny_compensation_request CR-4412",
+                    "tool_name": "deny_compensation_request",
+                    "depends_on": [6],
+                    "status": STEP_AWAITING_APPROVAL,
+                    "is_mutation": True,
+                },
+                {
+                    "step_id": 9,
+                    "intent": "Audit ledger after grant",
+                    "tool_name": "write_audit",
+                    "depends_on": [8],
+                    "status": STEP_PENDING,
+                },
+            ],
+            "phases": [
+                {"phase_id": 0, "name": "OSCE mark", "strategy": "sequential", "step_ids": [0, 1, 2, 3, 4]},
+                {"phase_id": 1, "name": "People subagent", "strategy": "sequential", "step_ids": [5, 6, 7]},
+                {"phase_id": 2, "name": "Consent deny", "strategy": "sequential", "step_ids": [8, 9]},
+            ],
             "related_object": {
                 "type": "gradevance.AssessmentRun",
-                "id": "demo-osce-1",
-                "label": "OSCE reflective · demo",
+                "id": "OSCE-7741",
+                "label": "OSCE reflective · employee 333",
             },
             "layers": {
                 "intent": {
-                    "ask": "Formative OSCE mark + HITL + release ceremony",
-                    "success_criteria": (
-                        "All segments coded; mean confidence ≥ gate; released=true"
-                    ),
+                    "ask": "EduOS OSCE close + People compensation deny under RULE_21",
+                    "success_criteria": "OSCE released; deny only after human grant",
                     "contract": "agent",
                 },
                 "job_map": {
-                    "steps": [
-                        {
-                            "id": "1",
-                            "title": "Load run + assignment pack",
-                            "tool": "gradevance_fetch_run",
-                            "status": "completed",
-                        },
-                        {
-                            "id": "2",
-                            "title": "Auto LCT codes (SG / SD)",
-                            "tool": "gradevance_lct_code",
-                            "status": "completed",
-                        },
-                        {
-                            "id": "3",
-                            "title": "HITL ExpertEdit on segment 2 SG",
-                            "tool": "gradevance_expert_edit",
-                            "status": "completed",
-                        },
-                        {
-                            "id": "4",
-                            "title": "Confidence gate + release",
-                            "tool": "gradevance_release",
-                            "status": "completed",
-                        },
-                        {
-                            "id": "5",
-                            "title": "AGS passback dry-run",
-                            "tool": "gradevance_ags_preview",
-                            "status": "completed",
-                        },
-                    ],
+                    "steps": [],
                     "tools": [
                         "gradevance_fetch_run",
                         "gradevance_lct_code",
                         "gradevance_expert_edit",
                         "gradevance_release",
-                        "gradevance_ags_preview",
+                        "resolve_entity",
+                        "deny_compensation_request",
                     ],
                     "capabilities": [
                         "gradevance:mark",
                         "gradevance:release",
+                        "people:manage_compensation",
                         "ai:run_agent",
                     ],
                     "entities": [
-                        {
-                            "type": "gradevance.AssessmentRun",
-                            "id": "demo-osce-1",
-                        }
+                        {"type": "gradevance.AssessmentRun", "id": "OSCE-7741"},
+                        {"type": "people.Employee", "id": "333"},
                     ],
-                },
-                "live_run": {
-                    "progress_pct": 100,
-                    "status": "completed",
-                    "qos": {
-                        "acceptance_status": "met",
-                        "requirements_total": 4,
-                        "requirements_met": 4,
-                        "requirements_partial": 0,
-                        "requirements_missed": 0,
+                    "workflow_graph": {
+                        "pattern": "eduos ∥ people_subagent → consent",
+                        "subagents": ["eduos_marker", "people_ops"],
+                        "human_gates": ["deny_compensation_request"],
                     },
-                    "blockers": [],
-                    "pending_consent": None,
-                },
-                "evidence": {
-                    "headline": "Released · mean conf 0.86 · gate pass",
-                    "prose": (
-                        "ExpertEdit on seg2 SG+ → SG- with rationale captured "
-                        "for proposal miner."
-                    ),
-                    "tables": [
-                        {
-                            "title": "Segments",
-                            "columns": ["#", "SG", "SD", "Conf"],
-                            "rows": [
-                                ["1", "SG+", "SD-", "0.91"],
-                                ["2", "SG-", "SD+", "0.78"],
-                                ["3", "SG+", "SD-", "0.88"],
-                            ],
-                        }
-                    ],
-                    "sources": [
-                        {"label": "lct_device"},
-                        {"label": "expert_edit"},
-                    ],
-                    "caveats": ["AGS passback was dry-run only"],
-                },
-                "outcome": {
-                    "summary": (
-                        "Run released. Learning loop may draft a Proposal from "
-                        "ExpertEdit."
-                    ),
-                    "sor_links": [
-                        {
-                            "label": "Run workbench",
-                            "path": "/apps/gradevance/runs/demo-osce-1",
-                        }
-                    ],
-                    "canvas_id": "",
-                },
-            },
-        },
-        {
-            "title": "Kuwaitization headcount + trust-ranked catalog (Chat)",
-            "mode": MODE_CHAT,
-            "ask": (
-                "How many Kuwaiti vs non-Kuwaiti employees, and which catalog "
-                "assets should I trust for the headcount definition?"
-            ),
-            "layers": {
-                "intent": {
-                    "ask": "Kuwaitization split + trusted headcount definition",
-                    "success_criteria": (
-                        "Counts by nationality band + top trust_tier assets cited"
-                    ),
-                    "contract": "advisory",
-                },
-                "job_map": {
-                    "steps": [
-                        {
-                            "id": "1",
-                            "title": "Aggregate headcount by nationality",
-                            "tool": "aggregate_entity",
-                            "status": "done",
-                        },
-                        {
-                            "id": "2",
-                            "title": "Search catalog for headcount definition",
-                            "tool": "api_catalog_search",
-                            "status": "done",
-                        },
-                        {
-                            "id": "3",
-                            "title": "Rank assets by trust_index",
-                            "tool": "api_catalog_search",
-                            "status": "done",
-                        },
-                        {
-                            "id": "4",
-                            "title": "Compose advisory brief",
-                            "tool": "cross_synthesize",
-                            "status": "done",
-                        },
-                    ],
-                    "tools": [
-                        "aggregate_entity",
-                        "api_catalog_search",
-                        "cross_synthesize",
-                    ],
-                    "capabilities": ["people:view", "catalog:view"],
-                    "entities": [{"type": "people.Employee"}],
                 },
                 "live_run": {
-                    "progress_pct": 100,
-                    "status": "complete",
-                    "qos": None,
-                    "blockers": [],
-                },
-                "evidence": {
-                    "headline": "529 headcount · 41% Kuwaiti · trust A assets preferred",
-                    "prose": (
-                        "Counts use Employee.is_active. Catalog trust_tier=A "
-                        "definition preferred over stale warehouse views."
-                    ),
-                    "tables": [
-                        {
-                            "title": "Nationality band",
-                            "columns": ["Band", "Count", "%"],
-                            "rows": [
-                                ["Kuwaiti", "217", "41.0"],
-                                ["GCC", "38", "7.2"],
-                                ["Other", "274", "51.8"],
-                            ],
-                        },
-                        {
-                            "title": "Catalog assets (trust)",
-                            "columns": ["Asset", "Tier", "Index"],
-                            "rows": [
-                                ["emp_headcount_def", "A", "0.94"],
-                                ["hr_snapshot_v3", "B", "0.71"],
-                                ["legacy_payroll_hdct", "C", "0.42"],
-                            ],
-                        },
-                    ],
-                    "sources": [
-                        {"label": "people.Employee"},
-                        {"label": "catalog.AssetProfile.trust_index"},
-                    ],
-                    "caveats": [
-                        "Trust Index grounding is advisory until Pulse ranks live"
-                    ],
-                },
-                "outcome": {
-                    "summary": (
-                        "Prefer emp_headcount_def (A). Do not use "
-                        "legacy_payroll_hdct for board reporting."
-                    ),
-                    "sor_links": [
-                        {"label": "Catalog search", "path": "/admin/catalog"}
-                    ],
-                    "canvas_id": "",
-                },
-            },
-        },
-        {
-            "title": "Consent-gated compensation deny (Agent · blocked)",
-            "mode": MODE_AGENT,
-            "ask": (
-                "Deny compensation adjustment for employee 333 — must stage "
-                "consent; Chat must never mutate."
-            ),
-            "plan_id": "demo-plan-comp-deny",
-            "related_object": {
-                "type": "people.Employee",
-                "id": "333",
-                "label": "Employee 333 (demo)",
-            },
-            "layers": {
-                "intent": {
-                    "ask": "Deny compensation adjustment with consent",
-                    "success_criteria": (
-                        "Mutation staged; human grant; SoR deny recorded"
-                    ),
-                    "contract": "agent",
-                },
-                "job_map": {
-                    "steps": [
-                        {
-                            "id": "1",
-                            "title": "Resolve employee 333",
-                            "tool": "resolve_entity",
-                            "status": "completed",
-                        },
-                        {
-                            "id": "2",
-                            "title": "Load open compensation request",
-                            "tool": "list_compensation_requests",
-                            "status": "completed",
-                        },
-                        {
-                            "id": "3",
-                            "title": "Stage deny mutation (consent)",
-                            "tool": "deny_compensation_request",
-                            "status": "blocked",
-                        },
-                        {
-                            "id": "4",
-                            "title": "Audit ledger entry",
-                            "tool": "write_audit",
-                            "status": "pending",
-                        },
-                    ],
-                    "tools": [
-                        "resolve_entity",
-                        "list_compensation_requests",
-                        "deny_compensation_request",
-                    ],
-                    "capabilities": ["people:manage_compensation", "ai:run_agent"],
-                    "entities": [{"type": "people.Employee", "id": "333"}],
-                },
-                "live_run": {
-                    "progress_pct": 50,
+                    "progress_pct": 72,
                     "status": "blocked",
                     "qos": {
-                        "acceptance_status": "missed",
-                        "requirements_total": 2,
-                        "requirements_met": 1,
+                        "acceptance_status": "partial",
+                        "requirements_total": 5,
+                        "requirements_met": 4,
                         "requirements_partial": 0,
                         "requirements_missed": 1,
+                        "escalations": 1,
                     },
                     "blockers": [
-                        "RULE_21: deny_compensation_request awaiting human consent"
+                        "RULE_21: deny_compensation_request awaiting human consent (step 8)"
                     ],
                     "pending_consent": {
+                        "step_id": 8,
                         "tool": "deny_compensation_request",
-                        "reason": "Compensation deny is irreversible SoR write",
+                        "intent": "Deny CR-4412 for employee 333",
+                        "reason": "Irreversible SoR write",
                     },
+                    "phases": [
+                        {"name": "OSCE mark+HITL", "status": "completed"},
+                        {"name": "People subagent", "status": "completed"},
+                        {"name": "Compensation deny", "status": "blocked"},
+                    ],
                 },
                 "evidence": {
-                    "headline": "Paused on consent — no SoR write yet",
+                    "headline": "OSCE released · mean conf 0.86 · paused on compensation consent",
                     "prose": (
-                        "Agent correctly staged the deny. Approver must grant "
-                        "in the run surface before step 3 executes."
+                        "EduOS path complete. People subagent found CR-4412. "
+                        "Deny staged — will not execute until grant."
                     ),
                     "tables": [
                         {
-                            "title": "Request",
-                            "columns": ["Field", "Value"],
+                            "title": "OSCE segments (post-HITL)",
+                            "columns": ["#", "SG", "SD", "Conf", "Edited?"],
                             "rows": [
-                                ["Request id", "CR-4412"],
-                                ["Amount (KWD)", "120"],
-                                ["Status", "pending_manager"],
+                                ["1", "SG+", "SD-", "0.91", ""],
+                                ["2", "SG-", "SD+", "0.78", "ExpertEdit"],
+                                ["3", "SG+", "SD-", "0.88", ""],
                             ],
-                        }
+                        },
+                        {
+                            "title": "Consent queue",
+                            "columns": ["Step", "Tool", "Grant?"],
+                            "rows": [["8", "deny_compensation_request", "WAITING"]],
+                        },
                     ],
-                    "sources": [{"label": "compensation_request"}],
-                    "caveats": ["Chat mode would refuse this mutation entirely"],
+                    "sources": [
+                        {"label": "gradevance.run.OSCE-7741"},
+                        {"label": "people.Employee.333"},
+                    ],
+                    "caveats": ["AGS passback dry-run only"],
                 },
                 "outcome": {
-                    "summary": "Waiting on human grant. Job Map stays reopenable.",
+                    "summary": "EduOS closed. Compensation deny blocked on consent — grant on run surface.",
                     "sor_links": [
-                        {
-                            "label": "Employee 333",
-                            "path": "/people/employees/333",
-                        }
+                        {"label": "OSCE workbench", "path": "/apps/gradevance/runs/OSCE-7741"},
+                        {"label": "Employee 333", "path": "/people/employees/333"},
                     ],
                     "canvas_id": "",
                 },
@@ -698,19 +553,28 @@ def _examples() -> list[dict]:
     ]
 
 
+def _steps_for_job_map(steps: list[dict]) -> list[dict]:
+    return [
+        {
+            "id": str(s["step_id"]),
+            "title": s["intent"],
+            "tool": s.get("tool_name") or "",
+            "status": s.get("status") or "pending",
+            "deps": list(s.get("depends_on") or []),
+        }
+        for s in steps
+    ]
+
+
 class Command(BaseCommand):
-    help = "Seed complex Ops Canvas Job Map examples for Pulse Artifacts."
+    help = "Seed Agent tasks + Job Maps so Agent tab is not empty."
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            "--user",
-            default="ahmed",
-            help="Username that owns the demo conversation (default: ahmed)",
-        )
+        parser.add_argument("--user", default="ahmed")
         parser.add_argument(
             "--reset",
             action="store_true",
-            help="Delete prior demo conversation + its job_map artifacts first",
+            help="Delete prior showcase Job Maps + Runs for this user",
         )
 
     def handle(self, *args, **options):
@@ -721,69 +585,154 @@ class Command(BaseCommand):
         except User.DoesNotExist as exc:
             raise CommandError(f"User {username!r} not found") from exc
 
+        user_pk = str(user.pk)
+
         if options["reset"]:
-            old = AIConversation.objects.filter(user=user, title=DEMO_CONV_TITLE)
-            n_art = AIArtifact.objects.filter(
-                conversation__in=old, artifact_type=ARTIFACT_TYPE
+            # Showcase runs
+            showcase_runs = Run.objects.filter(
+                host_user_id=user_pk,
+                instance_id=PLAN_INSTANCE_ID,
+            )
+            # Prefer tagged; also wipe by conversation title link later
+            tagged = [
+                r
+                for r in showcase_runs
+                if (r.working_notes or {}).get(SHOWCASE_NOTE)
+            ]
+            for r in tagged:
+                RunStep.objects.filter(run_id=r.id).delete()
+                r.delete()
+            n_maps = AIArtifact.objects.filter(
+                artifact_type=ARTIFACT_TYPE, created_by=user
             ).count()
-            deleted, _ = old.delete()
+            AIArtifact.objects.filter(
+                artifact_type=ARTIFACT_TYPE, created_by=user
+            ).delete()
+            AIConversation.objects.filter(
+                user=user, title__startswith="Ops Canvas"
+            ).delete()
             self.stdout.write(
                 self.style.WARNING(
-                    f"Reset: removed {deleted} conversation row(s), ~{n_art} maps"
+                    f"Reset: {len(tagged)} showcase run(s), {n_maps} Job Map(s)"
                 )
             )
 
-        conv, created = AIConversation.objects.get_or_create(
+        conv = AIConversation.objects.create(
             user=user,
             title=DEMO_CONV_TITLE,
-            defaults={
-                "conversation_type": "chat",
-                "status": "active",
-            },
+            conversation_type="chat",
+            status="active",
         )
-        if created:
-            self.stdout.write(f"Created conversation {conv.id}")
-        else:
-            self.stdout.write(f"Reusing conversation {conv.id}")
+        self.stdout.write(f"Conversation {conv.id}")
 
-        # Drop prior demo maps on this conversation (idempotent re-seed).
-        AIArtifact.objects.filter(
-            conversation=conv, artifact_type=ARTIFACT_TYPE
-        ).delete()
+        for spec in _showcases():
+            run_id = generate_uuid()
+            steps = spec["steps"]
+            plan_json = {
+                "pattern": "custom",
+                "source": "showcase",
+                "brief": spec["brief"],
+                "synthesis_instruction": "Summarize run outcome for the Job Map.",
+                "needs_confirmation": True,
+                "steps": [
+                    {
+                        "step_id": s["step_id"],
+                        "intent": s["intent"],
+                        "tool_name": s.get("tool_name"),
+                        "tool_args": s.get("tool_args") or {},
+                        "depends_on": s.get("depends_on") or [],
+                        "is_mutation": bool(s.get("is_mutation")),
+                        "agent_role": s.get("agent_role", "orchestrator"),
+                        "status": s.get("status"),
+                    }
+                    for s in steps
+                ],
+                "phases": spec.get("phases") or [],
+                "workflow_graph": (spec.get("layers") or {})
+                .get("job_map", {})
+                .get("workflow_graph"),
+            }
 
-        created_ids = []
-        for ex in _examples():
-            payload = build_payload(
-                mode=ex["mode"],
-                ask=ex["ask"],
-                layers=ex.get("layers"),
-                related_object=ex.get("related_object"),
-                plan_id=ex.get("plan_id"),
+            Run.objects.create(
+                id=run_id,
+                instance_id=PLAN_INSTANCE_ID,
                 conversation_id=str(conv.id),
-                title=ex["title"],
+                host_user_id=user_pk,
+                user_message=spec["brief"],
+                status=spec["run_status"],
+                plan_json=plan_json,
+                working_notes={
+                    SHOWCASE_NOTE: True,
+                    "title": spec["title"],
+                    "seeded_at": now().isoformat(),
+                },
+                final_response=(
+                    spec["layers"]["outcome"]["summary"]
+                    if spec["run_status"] == STATUS_COMPLETED
+                    else None
+                ),
+            )
+
+            for s in steps:
+                st = s.get("status") or STEP_PENDING
+                step_state = {
+                    STEP_COMPLETED: "succeeded",
+                    STEP_SKIPPED: "skipped",
+                    STEP_AWAITING_APPROVAL: "awaiting_approval",
+                    STEP_RUNNING: "executing",
+                    STEP_PENDING: "planned",
+                }.get(st, "planned")
+                RunStep.objects.create(
+                    run_id=run_id,
+                    step_index=s["step_id"],
+                    intent=s["intent"],
+                    tool_name=s.get("tool_name"),
+                    tool_args_json=s.get("tool_args") or {},
+                    depends_on_json=s.get("depends_on") or [],
+                    status=st,
+                    step_id=str(s["step_id"]),
+                    step_state=step_state,
+                )
+
+            layers = dict(spec["layers"])
+            job = dict(layers.get("job_map") or {})
+            job["steps"] = _steps_for_job_map(steps)
+            layers["job_map"] = job
+
+            payload = build_payload(
+                mode=MODE_AGENT,
+                ask=spec["brief"],
+                layers=layers,
+                related_object=spec.get("related_object"),
+                plan_id=run_id,
+                conversation_id=str(conv.id),
+                title=spec["title"],
             )
             art = AIArtifact.objects.create(
                 conversation=conv,
                 created_by=user,
-                title=ex["title"][:255],
+                title=spec["title"][:255],
                 artifact_type=ARTIFACT_TYPE,
                 content_json=payload,
                 visibility="private",
             )
             content = dict(art.content_json or {})
-            layers = dict(content.get("layers") or {})
-            outcome = dict(layers.get("outcome") or {})
+            ly = dict(content.get("layers") or {})
+            outcome = dict(ly.get("outcome") or {})
             outcome["canvas_id"] = str(art.id)
-            layers["outcome"] = outcome
-            content["layers"] = layers
+            ly["outcome"] = outcome
+            content["layers"] = ly
             art.content_json = content
             art.save(update_fields=["content_json"])
-            created_ids.append(str(art.id))
-            self.stdout.write(f"  · {art.title}")
+
+            self.stdout.write(
+                f"  · Agent task {run_id[:8]}…  [{spec['run_status']}]  {spec['title'][:60]}"
+            )
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"Seeded {len(created_ids)} Job Maps on conversation {conv.id}. "
-                f"Open Pulse → Artifacts → Job Maps."
+                f"Seeded {len(_showcases())} Agent tasks + Job Maps. "
+                f"Open Pulse → Agent → pick a task from the dropdown "
+                f"(not Chat Artifacts)."
             )
         )

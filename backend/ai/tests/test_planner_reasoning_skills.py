@@ -33,6 +33,7 @@ def test_decompose_prompt_forbids_inventing_skill_names():
     # Skill names are never in the tool list — they live in a separate,
     # registry-backed section.
     assert "{skills_list}" in prompt
+    assert "{host_api_list}" in prompt
     assert "invoke_skill may ONLY reference an exact name" in prompt
     assert "NEVER invent a skill name" in prompt
     # Reasoning guidance: analysis/comparison/synthesis are LLM work.
@@ -205,10 +206,11 @@ async def test_single_step_passthrough_keeps_allow_set():
     """Single-step passthrough still exposes the curated allow-set."""
     from unittest.mock import patch
 
-    def _fake_defs():
+    def _fake_defs(*_a, **_k):
         return [
             {"function": {"name": "search_knowledge"}},
             {"function": {"name": "plan_task"}},
+            {"function": {"name": "call_host_api"}},
             {"function": {"name": "export_document"}},
         ]
 
@@ -218,6 +220,7 @@ async def test_single_step_passthrough_keeps_allow_set():
     names = [d["function"]["name"] for d in (tools or [])]
     assert "search_knowledge" in names
     assert "plan_task" in names
+    assert "call_host_api" in names
     assert "export_document" not in names
 
 
@@ -226,7 +229,7 @@ async def test_named_tool_step_exposes_only_that_tool():
     """A step with an explicit tool_name gets exactly that tool."""
     from unittest.mock import patch
 
-    def _fake_defs():
+    def _fake_defs(*_a, **_k):
         return [
             {"function": {"name": "search_knowledge"}},
             {"function": {"name": "export_document"}},

@@ -1,6 +1,7 @@
 // Learning proposals — HITL intelligence promotion queue (P2).
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Box, Button, Chip, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography,
 } from '@mui/material';
@@ -17,7 +18,9 @@ import {
 import SkipToMain from './SkipToMain';
 
 export default function ProposalsPage() {
-  useDocumentTitle('GradeVance · Proposals');
+  const { pathname } = useLocation();
+  const titlePrefix = pathname.startsWith('/teach') ? 'Teach' : 'GradeVance';
+  useDocumentTitle(`${titlePrefix} · Proposals`);
   const { token } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);

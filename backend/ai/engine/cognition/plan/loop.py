@@ -1476,8 +1476,16 @@ class ReActLoop:
         elif plan_source == "single_step":
             # Single-step passthrough: mirror runner.py's curated allow-set so
             # a plain imperative request still dispatches a tool.
-            _allow = {"create_dq_rule", "search_knowledge", "get_entity_details",
-                      "list_my_capabilities", "plan_task"}
+            _allow = {
+                "create_dq_rule",
+                "search_knowledge",
+                "get_entity_details",
+                "call_host_api",
+                "list_my_capabilities",
+                "plan_task",
+                "resolve_entity",
+                "aggregate_entity",
+            }
             step_tools = [
                 d for d in get_tool_definitions(instance_config)
                 if d.get("function", {}).get("name") in _allow

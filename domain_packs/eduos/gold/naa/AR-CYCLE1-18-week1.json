@@ -80,5 +80,16 @@
       "text": "completed the big writing first in Gaokao and left a short time for me to complete the read and write, Later I kept on this strategy for me, by leave the last time for the part I used to spend 2 many time on, thus, I can push my potentials to make me read faster and more efficient in order to fulfill their exam."
     }
   ],
-  "expected_wave_pattern": "down-up oscillation (abstract→concrete→abstract→concrete); must not be flat"
+  "expected_wave_pattern": "down-up oscillation (abstract→concrete→abstract→concrete); must not be flat",
+  "expert_rubric_bands": {
+    "task_achievement": "E",
+    "coherence_cohesion": "C",
+    "lexis_grammar_academic_style": "E"
+  },
+  "expert_rubric_meta": {
+    "_protocol": "faculty_mark_sheet_cycle1_week1",
+    "_status": "tutor_letter_bands",
+    "_source": "gold/naa/faculty_mark_sheet_cycle1_week1.json",
+    "_note": "Week1 tutor marks — essay remains calibration/demo only (overlaps anchors; not in gate held_out)"
+  }
 }

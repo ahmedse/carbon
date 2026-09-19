@@ -101,13 +101,13 @@ export default function LibraryPage() {
                     <Button size="small" onClick={() => setDetailPack(r)}>Detail</Button>
                     <Button
                       size="small"
-                      onClick={() => navigate(`/apps/gradevance/courses?pack=${encodeURIComponent(r.pack_id)}`)}
+                      onClick={() => navigate(`/teach/stems?tab=author&pack=${encodeURIComponent(r.pack_id)}`)}
                     >
                       Use in stem
                     </Button>
                     <Button
                       size="small"
-                      onClick={() => navigate(`/apps/gradevance/calibration?profile_pack_id=${encodeURIComponent(r.pack_id)}`)}
+                      onClick={() => navigate(`/teach/calibration?profile_pack_id=${encodeURIComponent(r.pack_id)}`)}
                     >
                       Calibrate
                     </Button>

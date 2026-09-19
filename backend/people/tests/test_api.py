@@ -146,6 +146,64 @@ def test_org_scoped_user_sees_only_own_org(
     assert employee_nos == ['E-A']
 
 
+@pytest.mark.django_db
+def test_employee_list_query_budget_is_bounded(auth, create_user, org_a):
+    """List must not N+1 per employee (SIM-QA N-HR-UI-01 / nibras_dev timeout)."""
+    from django.test.utils import CaptureQueriesContext
+    from django.db import connection
+
+    nat = ensure_ref('nationality', 'KW')
+    et = ensure_ref('employment_type', 'permanent')
+    ct = ensure_ref('contract_type', 'unlimited')
+    gender = ensure_ref('gender', 'male')
+    for i in range(25):
+        Employee.objects.create(
+            org_unit=org_a,
+            employee_no=f'E-Q{i:02d}',
+            full_name=f'Query Budget {i}',
+            basic_salary='1000.000',
+            join_date=date(2026, 1, 1),
+            nationality=nat,
+            employment_type=et,
+            contract_type=ct,
+            gender=gender,
+        )
+
+    client = auth(create_user('people_list_budget', is_superuser=True))
+    with CaptureQueriesContext(connection) as ctx:
+        resp = client.get(EMPLOYEES_URL, {'page_size': 50})
+    assert resp.status_code == 200
+    assert resp.json()['count'] >= 25
+    # Constant-ish: auth/scope + one SELECT + count. Must not grow with N rows.
+    assert len(ctx) < 40, f'employee list issued {len(ctx)} queries (N+1 regression)'
+
+
+@pytest.mark.django_db
+def test_employee_list_honors_page_size(auth, create_user, org_a):
+    """page_size must cap results (NB-P0-EMP-PAGE — was ignored / unbounded)."""
+    for i in range(12):
+        Employee.objects.create(
+            org_unit=org_a,
+            employee_no=f'E-P{i:02d}',
+            full_name=f'Page Cap {i}',
+            basic_salary='1000.000',
+            join_date=date(2026, 1, 1),
+        )
+    client = auth(create_user('people_list_page', is_superuser=True))
+    resp = client.get(EMPLOYEES_URL, {'page_size': 5, 'page': 1})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body['count'] >= 12
+    assert body['page_size'] == 5
+    assert body['page'] == 1
+    assert len(body['results']) == 5
+    page2 = client.get(EMPLOYEES_URL, {'page_size': 5, 'page': 2}).json()
+    assert len(page2['results']) == 5
+    assert {r['id'] for r in body['results']}.isdisjoint(
+        {r['id'] for r in page2['results']},
+    )
+
+
 # ── 4. Tier-1 write gate ───────────────────────────────────────────────────
 
 def _nationality_not_null_rule():

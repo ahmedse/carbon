@@ -41,6 +41,9 @@ export const BRAND_PALETTE = brand.palette || {};
 // Pulse instance id (mirrors backend PULSE_INSTANCE_ID).
 export const PULSE_INSTANCE_ID = import.meta.env.VITE_PULSE_INSTANCE_ID || brand.pulseInstanceId || "carbon";
 
+// Early-preview banner product label (defaults to PLATFORM_NAME; EduOS names GradeVance).
+export const DEV_BANNER_PLATFORM = brand.devBannerPlatform || PLATFORM_NAME;
+
 // Informational mirror of the backend app-enablement preset. Not enforced here —
 // the real gate is PlatformAppConfig.is_enabled via useEnabledApps().
 export const BRAND_ENABLED_APP_IDS = brand.enabledAppIds || [];

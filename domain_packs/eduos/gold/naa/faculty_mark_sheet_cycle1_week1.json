@@ -1,0 +1,84 @@
+{
+  "frozen_at": "2026-09-19",
+  "source_path": "/home/ahmed/ws/gradevance2/raw/Reflective writing - 2 cycles (ss writing and LCT visualisation).docx",
+  "source_table": "Cycle1 marks matrix (Week 1/2 Tutor\u2019s mark)",
+  "expert": "NAA tutor (FFe workbook)",
+  "criteria_map": {
+    "TA": "task_achievement",
+    "CC": "coherence_cohesion",
+    "Gr": "lexis_grammar_academic_style"
+  },
+  "week": "1/2",
+  "marks": {
+    "AR-CYCLE1-18": {
+      "task_achievement": "E",
+      "coherence_cohesion": "C",
+      "lexis_grammar_academic_style": "E",
+      "raw": {
+        "TA": "E",
+        "CC": "C",
+        "Gr": "E"
+      }
+    },
+    "AR-CYCLE1-23": {
+      "task_achievement": "E",
+      "coherence_cohesion": "C",
+      "lexis_grammar_academic_style": "D",
+      "raw": {
+        "TA": "E",
+        "CC": "C",
+        "Gr": "D"
+      }
+    },
+    "AR-CYCLE1-22": {
+      "task_achievement": "D",
+      "coherence_cohesion": "C",
+      "lexis_grammar_academic_style": "C",
+      "raw": {
+        "TA": "D",
+        "CC": "C",
+        "Gr": "C"
+      }
+    },
+    "AR-CYCLE1-07": {
+      "task_achievement": "E",
+      "coherence_cohesion": "E",
+      "lexis_grammar_academic_style": "E",
+      "raw": {
+        "TA": "E",
+        "CC": "E",
+        "Gr": "E"
+      }
+    },
+    "AR-CYCLE1-28": {
+      "task_achievement": "F",
+      "coherence_cohesion": "E",
+      "lexis_grammar_academic_style": "E",
+      "raw": {
+        "TA": "F",
+        "CC": "E",
+        "Gr": "E"
+      }
+    },
+    "AR-CYCLE1-03": {
+      "task_achievement": "D",
+      "coherence_cohesion": "E",
+      "lexis_grammar_academic_style": "F",
+      "raw": {
+        "TA": "D",
+        "CC": "E",
+        "Gr": "F"
+      }
+    },
+    "AR-CYCLE1-11": {
+      "task_achievement": "F",
+      "coherence_cohesion": "D",
+      "lexis_grammar_academic_style": "E",
+      "raw": {
+        "TA": "F",
+        "CC": "D",
+        "Gr": "E"
+      }
+    }
+  }
+}

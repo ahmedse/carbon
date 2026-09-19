@@ -141,6 +141,24 @@ def test_rerun_completed_plan_resets_steps_and_approves(user, run_ids_cleanup):
 
 
 @pytest.mark.django_db
+def test_rerun_completed_with_gaps_plan_resets_and_approves(user, run_ids_cleanup):
+    plan = _make_plan(user, status="completed_with_gaps")
+    s0 = _make_step(plan, step_index=0, status="completed")
+    s1 = _make_step(plan, step_index=1, status="failed")
+    s1.error = "[caught] tool boom"
+    s1.save(update_fields=["error"])
+    run_ids_cleanup.append(plan.id)
+
+    result = PlansService().rerun_plan(user, plan.id)
+
+    assert result["rerun"] == {"of": "completed_with_gaps", "reset_count": 2}
+    assert Run.objects.get(id=plan.id).status == "approved"
+    assert _reload(s0).status == "pending"
+    assert _reload(s1).status == "pending"
+    assert not _reload(s1).error
+
+
+@pytest.mark.django_db
 def test_rerun_non_executed_plan_is_refused(user, run_ids_cleanup):
     plan = _make_plan(user, status="running")
     _make_step(plan, step_index=0, status="running")

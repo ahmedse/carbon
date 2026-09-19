@@ -65,6 +65,8 @@ vi.mock('../api/aiWorkspace', () => ({
   forkPlan: (...args) => forkPlan(...args),
   editPlan: (...args) => editPlan(...args),
   editPlanStep: (...args) => editPlanStep(...args),
+  confirmPlanEdit: vi.fn().mockResolvedValue({}),
+  discardPlanEdit: vi.fn().mockResolvedValue({}),
   confirmPlanStep: (...args) => confirmPlanStep(...args),
   declinePlanStep: (...args) => declinePlanStep(...args),
   stopPlan: (...args) => stopPlan(...args),
@@ -181,7 +183,10 @@ describe('AITaskPanel — edit brief with diff consent gate', () => {
     fireEvent.change(input, { target: { value: 'Audit duplicates AND triples.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Apply changes' }));
 
-    await waitFor(() => expect(editPlan).toHaveBeenCalledWith('test-token', 'plan-1', { brief: 'Audit duplicates AND triples.' }));
+    await waitFor(() => expect(editPlan).toHaveBeenCalledWith('test-token', 'plan-1', {
+      brief: 'Audit duplicates AND triples.',
+      mode: 'replan',
+    }));
 
     // Consent gate summarizes the diff in outcome terms.
     expect(await screen.findByText('Review plan changes')).toBeInTheDocument();
@@ -206,6 +211,10 @@ describe('AITaskPanel — edit brief with diff consent gate', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Apply changes' }));
 
     await waitFor(() => expect(editPlan).toHaveBeenCalledTimes(1));
+    expect(editPlan).toHaveBeenCalledWith('test-token', 'plan-1', {
+      brief: 'Same plan, no step changes.',
+      mode: 'replan',
+    });
     expect(screen.queryByText('Review plan changes')).not.toBeInTheDocument();
     expect(notify).toHaveBeenCalledWith('Plan updated.', 'success');
   });
@@ -450,7 +459,7 @@ describe('AITaskPanel — W5-D Results tab', () => {
     expect(screen.getByText('2.0 KB')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Download' }).length).toBeGreaterThanOrEqual(1);
     // Headings for the outcome copy + actions.
-    expect(screen.getByText('Final response')).toBeInTheDocument();
+    expect(screen.getByText('Answer')).toBeInTheDocument();
     expect(screen.getByText('Artifacts')).toBeInTheDocument();
     expect(screen.getByText('Actions')).toBeInTheDocument();
   });
@@ -545,8 +554,8 @@ describe('AITaskPanel — F-28 steer a paused run', () => {
     // Completed step is locked (disabled edit affordance).
     expect(screen.getByRole('button', { name: 'Step 0 locked' })).toBeDisabled();
     // Pending steps remain editable (enabled edit affordances).
-    expect(screen.getByRole('button', { name: 'Edit step 1' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Edit step 2' })).toBeEnabled();
+    expect(screen.getAllByRole('button', { name: 'Edit step 1' })[0]).toBeEnabled();
+    expect(screen.getAllByRole('button', { name: 'Edit step 2' })[0]).toBeEnabled();
   });
 
   it('disables the edit affordance with a tooltip when no upcoming steps remain', async () => {

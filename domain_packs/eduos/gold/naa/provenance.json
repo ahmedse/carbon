@@ -1,0 +1,85 @@
+{
+  "frozen_at": "2026-09-19",
+  "sources": [
+    {
+      "id": "reflective_writing_2_cycles",
+      "path": "/home/ahmed/ws/gradevance2/raw/Reflective writing - 2 cycles (ss writing and LCT visualisation).docx",
+      "used_for": [
+        "gold/naa/AR-CYCLE1-18-week1.json",
+        "gold/naa/AR-CYCLE1-03-week1.json",
+        "engines/lct_semantics/naa_reflective_v1/held_out.jsonl#AR-CYCLE1-03-HANI",
+        "held_out_legacy_overlap.jsonl"
+      ],
+      "expert_marks": [
+        "SG wave",
+        "segment SG/SD labels (ali+hani via audit)"
+      ],
+      "missing": [
+        "letter rubric bands on original tutor sheets"
+      ]
+    },
+    {
+      "id": "cycle1_marks_matrix",
+      "path": "/home/ahmed/ws/gradevance2/raw/Reflective writing - 2 cycles (ss writing and LCT visualisation).docx",
+      "used_for": [
+        "gold/naa/faculty_mark_sheet_cycle1_week1.json"
+      ],
+      "expert_marks": [
+        "Week 1/2 Tutor\u2019s mark TA/CC/Gr letter bands"
+      ]
+    },
+    {
+      "id": "audit_sonnet_vs_expert_cycle1",
+      "path": "/home/ahmed/ws/gradevance2/docs/audit-sonnet-vs-expert-cycle1.md",
+      "used_for": [
+        "held_out AR-CYCLE1-03-HANI expert wave"
+      ],
+      "expert_marks": [
+        "hani 6-segment SG/SD expert coding"
+      ]
+    },
+    {
+      "id": "lct_criteria_reflective_waves",
+      "path": "/home/ahmed/ws/gradevance2/raw/Legitimation Code Theory - Criteria for Reflective Waves.pdf",
+      "used_for": [
+        "engines/lct_semantics/naa_reflective_v1/anchors.yaml"
+      ],
+      "expert_marks": [
+        "category examples as anchors"
+      ]
+    },
+    {
+      "id": "writing_briefs",
+      "path": "/home/ahmed/ws/gradevance2/raw/Writing briefs for both Cycles.pdf",
+      "used_for": [
+        "gold/naa/writing_briefs.yaml"
+      ]
+    },
+    {
+      "id": "feedback",
+      "path": "/home/ahmed/ws/gradevance2/raw/FEEDBACK.docx",
+      "used_for": [
+        "qualitative cues informing soft expert_rubric_bands"
+      ],
+      "notes": "Tutor feedback is diagnosis/action prose \u2014 not letter band sheets; bands remain dual_reviewed_soft"
+    }
+  ],
+  "gate_held_out": "engines/lct_semantics/naa_reflective_v1/held_out.jsonl",
+  "legacy_overlap_held_out": "engines/lct_semantics/naa_reflective_v1/held_out_legacy_overlap.jsonl",
+  "rubric_gold": {
+    "schema": "schemas/gold_essay.schema.json",
+    "pack": "engines/rubric/naa_reflective_analytic_v1",
+    "faculty_mark_sheet": "gold/naa/faculty_mark_sheet_cycle1_week1.json",
+    "held_out_rows_with_bands": [
+      "IELTS-SPEAK-WAVE-01",
+      "READING-ROUTINE-02",
+      "AR-CYCLE1-03-HANI"
+    ],
+    "tutor_letter_bands_on": [
+      "AR-CYCLE1-03-HANI"
+    ],
+    "status": "tutor_sheet_cycle1_week1_plus_soft_synthetic",
+    "metric": "reliability.adjacent_band_agreement via gradevance_gold_eval"
+  },
+  "runtime_pdf_parsing": false
+}

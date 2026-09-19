@@ -2673,6 +2673,25 @@ class CarbonHostExecutor(HostAPIExecutor):
             await self.db.commit()
             raise
 
+        # Honest confirm: non-2xx must not mark the staged write "confirmed"
+        # (N-AG-LV-01: leave POST 4xx still showed Run completed with no row).
+        status_code = None
+        if isinstance(api_result, dict):
+            status_code = api_result.get("status_code")
+        try:
+            code_int = int(status_code) if status_code is not None else None
+        except (TypeError, ValueError):
+            code_int = None
+        if code_int is not None and not (200 <= code_int < 300):
+            execution.status = "failed"
+            execution.output = json.dumps(api_result, default=str)
+            execution.executed_at = _utcnow()
+            await self.db.commit()
+            raise ToolExecutionError(
+                f"Confirmed API call failed with HTTP {code_int} "
+                f"({method} {endpoint})"
+            )
+
         execution.status = "confirmed"
         execution.confirmed_by_user = True
         execution.output = json.dumps(api_result, default=str)

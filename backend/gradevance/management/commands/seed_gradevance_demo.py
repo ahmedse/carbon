@@ -1,10 +1,16 @@
 """Seed EduOS GradeVance demo: gold/raw LCT examples → assignments → analyzed runs."""
 from __future__ import annotations
 
+import os
+
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand
 
-from gradevance.models import Assignment, Course, Submission
+from accounts.constants import GRADEVANCE_STUDENTS_GROUP
+from accounts.models import ScopedRole
+from gradevance.lti.roster_sync import ensure_enrollment
+from gradevance.models import Assignment, Course, Enrollment, Submission
 from gradevance.services.demo_examples import DEMO_SPECS, collect_demo_texts
 from gradevance.services.packs import find_profile_file_for_id, load_profile
 from gradevance.services.pipeline import FormativePipelineService
@@ -33,7 +39,42 @@ class Command(BaseCommand):
             defaults={
                 "name": "GradeVance LCT demo course",
                 "discipline": "multi_domain",
+                "entry_code": "DEMO-LCT",
             },
+        )
+        if not (course.entry_code or "").strip():
+            course.entry_code = "DEMO-LCT"
+            course.save(update_fields=["entry_code", "updated_at"])
+
+        ensure_enrollment(
+            course, author, Enrollment.ROLE_INSTRUCTOR, source=Enrollment.SOURCE_MANUAL
+        )
+
+        password = os.environ.get("CARBON_ADMIN_PASSWORD") or "AdminPa_132"
+        student, created = User.objects.get_or_create(
+            username="gv_student",
+            defaults={"email": "gv_student@eduos.local"},
+        )
+        if created or not student.has_usable_password():
+            student.set_password(password)
+            student.is_active = True
+            student.save()
+        else:
+            # Keep password in sync with env when re-seeding demos.
+            student.set_password(password)
+            student.is_active = True
+            student.save(update_fields=["password", "is_active"])
+
+        students_group, _ = Group.objects.get_or_create(name=GRADEVANCE_STUDENTS_GROUP)
+        ScopedRole.objects.get_or_create(
+            user=student,
+            group=students_group,
+            org_unit=None,
+            module=None,
+            defaults={"is_active": True},
+        )
+        ensure_enrollment(
+            course, student, Enrollment.ROLE_STUDENT, source=Enrollment.SOURCE_MANUAL
         )
 
         pipeline = FormativePipelineService()
@@ -118,6 +159,11 @@ class Command(BaseCommand):
             self.style.SUCCESS(
                 f"✓ Demo seed complete — assignments={created_asg} "
                 f"submissions={created_sub} new_runs={created_run} "
-                f"(course={course.code})"
+                f"(course={course.code}, entry_code={course.entry_code})"
             )
+        )
+        self.stdout.write(
+            f"  Student login: gv_student / "
+            f"{'(CARBON_ADMIN_PASSWORD)' if os.environ.get('CARBON_ADMIN_PASSWORD') else 'AdminPa_132'} "
+            f"— join code DEMO-LCT (already enrolled)"
         )

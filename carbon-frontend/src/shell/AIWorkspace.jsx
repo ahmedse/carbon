@@ -807,9 +807,9 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
             ? [
                 { id: 'tasks',   icon: <TaskAltOutlinedIcon sx={{ fontSize: 16 }} />,          label: t('agent.tasks')   },
                 { id: 'monitor', icon: <LeaderboardOutlinedIcon sx={{ fontSize: 16 }} />,      label: t('agent.monitor') },
-                { id: 'results', icon: <HistoryOutlinedIcon sx={{ fontSize: 16 }} />,          label: t('agent.results') },
-              ].map(({ id, icon, label }) => (
-                <Tooltip key={id} title={label} placement="left">
+                { id: 'results', icon: <HistoryOutlinedIcon sx={{ fontSize: 16 }} />,          label: t('agent.results'), tip: t('agent.resultsHint') },
+              ].map(({ id, icon, label, tip }) => (
+                <Tooltip key={id} title={tip || label} placement="left">
                   <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', borderRight: 2, borderColor: agentView === id ? 'primary.main' : 'transparent' }}>
                     <IconButton
                       size="small"
