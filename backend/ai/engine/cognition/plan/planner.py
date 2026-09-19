@@ -69,26 +69,33 @@ def _score_skill(skill, utterance_lower: str) -> float:
     """Score a skill against the utterance using simple keyword overlap.
 
     Returns 0.0–1.0 where higher = better match.
+    Name tokens are split on underscores so ``payroll_run_variance_check``
+    does not score as a single opaque blob against unrelated payroll chatter.
+    Description-only matches stay below the hot-path threshold unless strong.
     """
     name_lower = skill.name.lower()
     desc_lower = (skill.description or "").lower()
+    utterance_tokens = set(utterance_lower.replace("_", " ").split())
 
     # Direct name match is strongest signal
-    if name_lower in utterance_lower:
+    if name_lower in utterance_lower or name_lower.replace("_", " ") in utterance_lower:
         score = 0.95
-    # Word overlap on name tokens
     else:
-        name_tokens = set(name_lower.split())
-        utterance_tokens = set(utterance_lower.split())
+        name_tokens = set(name_lower.replace("_", " ").split()) - {
+            "a", "an", "the", "of", "to", "and", "or", "for", "in", "on", "by",
+            "run", "check", "get", "list",
+        }
         name_hits = len(name_tokens & utterance_tokens)
         if name_hits > 0:
-            score = min(0.6 + name_hits * 0.1, 0.9)
+            score = min(0.55 + name_hits * 0.12, 0.9)
         else:
-            # Description overlap
-            desc_tokens = set(desc_lower.split())
+            # Description overlap — capped soft so weak desc hits never auto-route
+            desc_tokens = set(desc_lower.replace("_", " ").split()) - {
+                "a", "an", "the", "of", "to", "and", "or", "for", "in", "on", "by",
+            }
             desc_hits = len(desc_tokens & utterance_tokens)
-            if desc_hits > 0:
-                score = min(0.3 + desc_hits * 0.1, 0.6)
+            if desc_hits >= 3:
+                score = min(0.35 + desc_hits * 0.05, 0.49)
             else:
                 score = 0.0
 
@@ -100,6 +107,29 @@ def _score_skill(skill, utterance_lower: str) -> float:
             boost = min(0.15, boost + 0.05)
         return min(score + boost, 0.99)
     return score
+
+
+# Explicit "make this a Tasks-panel plan" — Chat PLAN FIRST / plan_task owns these.
+# Must NOT skill-match into invoke_skill / silent ReAct.
+_TASK_CREATION_MARKERS: tuple[str, ...] = (
+    "need a task",
+    "i need a task",
+    "create a task",
+    "make a task",
+    "as a task",
+    "turn this into a task",
+    "convert this into a task",
+    "convert what we talk",
+    "in the tasks panel",
+)
+
+
+def _wants_explicit_task_creation(utterance: str) -> bool:
+    """True when the user wants a reviewable Agent plan, not a silent skill run."""
+    if not utterance:
+        return False
+    lower = utterance.lower()
+    return any(m in lower for m in _TASK_CREATION_MARKERS)
 
 
 # ── LLM decompose prompt (agentic tool format, not SQL) ────────────────────────
@@ -634,6 +664,13 @@ class SkillAwarePlanner:
                 )],
             )
 
+        # "I need a task / create a task" → Chat owns plan_task (PLAN FIRST).
+        # Never hot-path a loosely matched skill (e.g. payroll variance) into
+        # invoke_skill and fail the turn.
+        skip_skill_hotpath = (
+            (not force_decompose) and _wants_explicit_task_creation(utterance)
+        )
+
         # ── Step 1: search skills ───────────────────────────────────────────
         skills = await self._search_skills(skill_registry, instance_id, user_id)
         logger.debug(
@@ -646,7 +683,11 @@ class SkillAwarePlanner:
         scored = [(s, _score_skill(s, utterance_lower)) for s in skills]
         scored.sort(key=lambda pair: pair[1], reverse=True)
 
-        if scored and scored[0][1] >= self._MATCH_THRESHOLD:
+        if (
+            not skip_skill_hotpath
+            and scored
+            and scored[0][1] >= self._MATCH_THRESHOLD
+        ):
             top_skill, top_score = scored[0]
             logger.info(
                 "SkillAwarePlanner: matched skill=%s score=%.2f kind=%s",
@@ -686,6 +727,25 @@ class SkillAwarePlanner:
                         strategy="sequential", step_ids=[0],
                     )],
                 )
+        elif skip_skill_hotpath and scored and scored[0][1] >= self._MATCH_THRESHOLD:
+            logger.info(
+                "SkillAwarePlanner: skipping skill hot-path '%s' (explicit task creation)",
+                scored[0][0].name,
+            )
+
+        # Explicit task-creation: stay single-step so Chat proposes + plan_task.
+        if skip_skill_hotpath:
+            logger.info("SkillAwarePlanner: explicit task creation — single-step for plan_task")
+            return Plan(
+                pattern="custom",
+                steps=[PlanStep(step_id=0, intent=utterance)],
+                synthesis_instruction="Respond directly to the user.",
+                source="single_step",
+                phases=[PlanPhase(
+                    phase_id=0, name="All steps", goal="",
+                    strategy="sequential", step_ids=[0],
+                )],
+            )
 
         # ── Step 3: LLM decomposition fallback ──────────────────────────────
         # force_decompose bypasses the utterance heuristic: an explicit

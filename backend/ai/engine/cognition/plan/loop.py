@@ -246,11 +246,34 @@ class ReActLoop:
         # host executor (for ``call_host_api`` / ``search_knowledge`` grounding)
         # and the knowledge store. Previously it was built bare — the loop could
         # not reach the host executor or the knowledge backend at all.
+        # Also thread instance_id / conversation into hook_ctx_defaults so
+        # invoke_skill / call_host_api receive instance context (otherwise
+        # invoke_skill fails with "No instance context").
         _host_executor = getattr(dw, "executor", None)
-        ex = self.executor or ExecuteWitness(
-            executor=_host_executor,
-            knowledge_store=self.knowledge_store,
-        )
+        _hook_defaults = {
+            "instance_id": instance_id or "",
+            "conversation_id": conversation_id or "",
+            "host_user_id": host_user_id,
+            "instance_config": instance_config,
+            "user_message": user_message or "",
+        }
+        if self.executor is not None:
+            ex = self.executor
+            # Merge turn context onto a pre-built witness that lacked it.
+            merged = dict(getattr(ex, "hook_ctx_defaults", None) or {})
+            for k, v in _hook_defaults.items():
+                if v is not None and not merged.get(k):
+                    merged[k] = v
+            ex.hook_ctx_defaults = merged
+            if not getattr(ex, "instance_id", None) and instance_id:
+                ex.instance_id = instance_id
+        else:
+            ex = ExecuteWitness(
+                executor=_host_executor,
+                knowledge_store=self.knowledge_store,
+                instance_id=instance_id or "",
+                hook_ctx_defaults=_hook_defaults,
+            )
 
         # Use self.db or passed db
         _db = db or self.db
@@ -847,6 +870,7 @@ class ReActLoop:
                     flight_director=fd,
                     host_user_id=host_user_id,
                     retry_policy=_retry_policy,
+                    prior_results=list(step_results),
                 )
                 # Hard-cancel: race step I/O against operator Stop (cancel_plan).
                 _task = asyncio.create_task(_exec_coro)
@@ -1306,6 +1330,8 @@ class ReActLoop:
                 instance_id=instance_id,
                 gap_step_ids=sorted(_gap_step_ids),
             )
+            if not (final_response or "").strip():
+                final_response = self._fallback_final_response(step_results)
             ok_results = [
                 r for r in step_results
                 if r.critic_verdict in ("pass", "pass_with_flag") and not r.error
@@ -1427,6 +1453,7 @@ class ReActLoop:
         flight_director=None,   # FlightDirector — additive in-loop supervisor
         host_user_id: str | None = None,
         retry_policy: dict | None = None,
+        prior_results: list | None = None,
     ) -> StepResult:
         """Execute one plan step: draft → critic → execute → observe."""
 
@@ -1620,6 +1647,26 @@ class ReActLoop:
 
         # Execute (only if not vetoed)
         if not dry_run:
+            # Deterministic export bind: prior structured outputs → content/table/images
+            # before export_document runs (RULE_20 pure helper).
+            from ai.engine.cognition.plan.export_bind import apply_bind_to_tool_calls
+
+            _deps = set(step.depends_on or [])
+            _priors = list(prior_results or [])
+            if _deps:
+                _priors = [r for r in _priors if getattr(r, "step_id", None) in _deps] or _priors
+            _title_fb = (
+                (step.tool_args or {}).get("title")
+                or (step.intent or "Agent report")[:80]
+            )
+            _bound_calls = apply_bind_to_tool_calls(
+                draft.tool_calls,
+                _priors,
+                step_tool_name=step.tool_name,
+                step_tool_args=step.tool_args,
+                title_fallback=str(_title_fb),
+            )
+
             # W6-D: record the dispatching step so export-style plugins can
             # attribute artifacts to THIS step (multi-step / parallel runs).
             # Contextvars flow onto the sync_to_async worker thread via
@@ -1629,7 +1676,7 @@ class ReActLoop:
             try:
                 execution = await ex.execute(
                     text=draft.text,
-                    tool_calls=draft.tool_calls,
+                    tool_calls=_bound_calls,
                     stream_callback=stream_callback,
                     progress_callback=progress_callback,
                     agent_role=agent_role or step.agent_role,
@@ -1677,7 +1724,7 @@ class ReActLoop:
                     try:
                         _retry_exec = await ex.execute(
                             text=draft.text,
-                            tool_calls=draft.tool_calls,
+                            tool_calls=_bound_calls,
                             stream_callback=stream_callback,
                             progress_callback=progress_callback,
                             agent_role=agent_role or step.agent_role,
@@ -2279,6 +2326,45 @@ class ReActLoop:
         logger.debug("ReActLoop: finalized Run row id=%s status=%s", run_id, run_row.status)
 
     # ── Synthesis ──────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _fallback_final_response(step_results: list[StepResult]) -> str:
+        """Operator-facing Answer when LLM synthesis is empty (RULE_23)."""
+        lines: list[str] = []
+        export_names: list[str] = []
+        for r in step_results or []:
+            intent = (r.intent or f"Step {r.step_id}").strip()
+            if r.error and not str(r.error).startswith("[caught]"):
+                lines.append(f"- {intent}: did not complete.")
+                continue
+            lines.append(f"- {intent}: done.")
+            out = r.tool_output if isinstance(r.tool_output, dict) else {}
+            files = out.get("files") if isinstance(out.get("files"), list) else []
+            for f in files:
+                if isinstance(f, dict) and f.get("filename"):
+                    export_names.append(str(f["filename"]))
+            # Nested result JSON may also carry files
+            raw = out.get("result")
+            if isinstance(raw, str):
+                try:
+                    parsed = json.loads(raw)
+                except (json.JSONDecodeError, TypeError):
+                    parsed = None
+                if isinstance(parsed, dict):
+                    for f in parsed.get("files") or []:
+                        if isinstance(f, dict) and f.get("filename"):
+                            export_names.append(str(f["filename"]))
+        head = "The plan finished."
+        if export_names:
+            uniq = list(dict.fromkeys(export_names))
+            head = (
+                "The plan finished. Downloadable files are under Artifacts: "
+                + ", ".join(uniq[:6])
+                + ("…" if len(uniq) > 6 else "")
+                + "."
+            )
+        body = "\n".join(lines[:12])
+        return f"{head}\n\n{body}".strip()[:2000]
 
     async def _synthesise(
         self,

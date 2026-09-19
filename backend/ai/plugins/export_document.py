@@ -98,9 +98,11 @@ class ExportDocument(ToolPlugin):
             "content": {
                 "type": "string",
                 "description": (
-                    "Markdown body: '# Heading', '## Subheading', '- bullet', "
-                    "'1. item', blank-line-separated paragraphs. Rendered into "
-                    "the Word document (and a summary sheet for Excel)."
+                    "Markdown body with REAL findings only: '# Heading', "
+                    "'## Subheading', '- bullet', '1. item', blank-line "
+                    "paragraphs. NEVER use placeholder tokens such as "
+                    "'[Placeholder…]', 'to be inserted', or empty stubs. "
+                    "Rendered into Word (and an Excel Summary sheet)."
                 ),
             },
             "table": {
@@ -120,6 +122,21 @@ class ExportDocument(ToolPlugin):
                 },
                 "required": ["headers", "rows"],
             },
+            "images": {
+                "type": "array",
+                "description": (
+                    "Optional chart/figure PNGs as base64 (no data: URI prefix). "
+                    "Embedded into Word; ignored by Excel/PDF text writers."
+                ),
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "caption": {"type": "string"},
+                        "image_b64": {"type": "string"},
+                    },
+                    "required": ["image_b64"],
+                },
+            },
         },
         "required": ["title"],
     }
@@ -128,6 +145,8 @@ class ExportDocument(ToolPlugin):
     app_identifier: str | None = None
 
     async def execute(self, args: dict, *, ctx) -> dict:
+        from ai.engine.cognition.plan.export_bind import content_is_placeholder
+
         title = (args.get("title") or "").strip()
         if not title:
             return {"error": "A title is required — e.g. 'Carbon Standards Study'."}
@@ -137,6 +156,24 @@ class ExportDocument(ToolPlugin):
 
         content = (args.get("content") or "").strip()
         table = args.get("table") or None
+        images = args.get("images") if isinstance(args.get("images"), list) else []
+
+        has_table = bool(
+            isinstance(table, dict)
+            and (table.get("headers") or table.get("rows"))
+        )
+        has_images = any(
+            isinstance(img, dict) and str(img.get("image_b64") or "").strip()
+            for img in images
+        )
+        # Fail-visible: never ship a hollow title-only Word with placeholder stubs.
+        if content_is_placeholder(content) and not has_table and not has_images:
+            return {
+                "error": (
+                    "Export refused — no real findings to write. Provide markdown "
+                    "content with measured results, and/or a table, and/or chart images."
+                ),
+            }
 
         out_dir = Path(settings.MEDIA_ROOT) / "ai_exports"
         try:
@@ -160,7 +197,10 @@ class ExportDocument(ToolPlugin):
             filename = f"{stem}-{stamp}.{kind}"
             path = out_dir / filename
             try:
-                writer(path, title, content, table)
+                if kind == "docx":
+                    writer(path, title, content, table, images=images)
+                else:
+                    writer(path, title, content, table)
                 files.append({
                     "filename": filename,
                     "format": kind,
@@ -232,7 +272,14 @@ class ExportDocument(ToolPlugin):
 
     # ── generators ─────────────────────────────────────────────────────────
 
-    def _write_docx(self, path: Path, title: str, content: str, table: dict | None) -> None:
+    def _write_docx(
+        self,
+        path: Path,
+        title: str,
+        content: str,
+        table: dict | None,
+        images: list | None = None,
+    ) -> None:
         from docx import Document
         from docx.enum.text import WD_ALIGN_PARAGRAPH
         from docx.shared import Pt, RGBColor
@@ -260,7 +307,42 @@ class ExportDocument(ToolPlugin):
             self._render_markdown_to_docx(doc, content)
         if table:
             self._render_table_docx(doc, table)
+        if images:
+            self._embed_images_docx(doc, images)
         doc.save(str(path))
+
+    @staticmethod
+    def _embed_images_docx(doc, images: list) -> None:
+        """Embed base64 PNG/JPEG figures into the Word document."""
+        import base64
+        import io
+
+        from docx.shared import Inches, Pt, RGBColor
+
+        for img in images[:6]:
+            if not isinstance(img, dict):
+                continue
+            raw_b64 = str(img.get("image_b64") or "").strip()
+            if not raw_b64:
+                continue
+            if "," in raw_b64 and raw_b64.lower().startswith("data:"):
+                raw_b64 = raw_b64.split(",", 1)[1]
+            try:
+                blob = base64.b64decode(raw_b64, validate=False)
+            except Exception:
+                continue
+            if len(blob) < 32:
+                continue
+            caption = str(img.get("caption") or "Figure").strip() or "Figure"
+            cap = doc.add_paragraph()
+            run = cap.add_run(caption)
+            run.bold = True
+            run.font.size = Pt(10)
+            run.font.color.rgb = RGBColor.from_string(_BRAND_TEAL)
+            try:
+                doc.add_picture(io.BytesIO(blob), width=Inches(5.8))
+            except Exception:
+                logger.warning("export_document: skipped unreadable image (%s)", caption)
 
     @staticmethod
     def _shade_cell(cell, hex_fill: str) -> None:

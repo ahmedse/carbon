@@ -110,6 +110,41 @@ except Exception:
     data = {}
 
 _namespace = {"data": data, "pd": pd, "plt": plt}
+
+# Charts are auto-captured after user code via plt.savefig(BytesIO).
+# LLM code often calls fig.savefig("/tmp/…") which the audit hook blocks —
+# rewrite path-based savefig to a no-op so figures stay open for capture.
+_orig_plt_savefig = plt.savefig
+
+def _is_path_like(target):
+    if isinstance(target, (str, bytes)):
+        return True
+    try:
+        from pathlib import Path as _Path
+        return isinstance(target, _Path)
+    except Exception:
+        return False
+
+def _plt_savefig_no_disk(*args, **kwargs):
+    target = args[0] if args else kwargs.get("fname")
+    if _is_path_like(target):
+        return None
+    return _orig_plt_savefig(*args, **kwargs)
+
+plt.savefig = _plt_savefig_no_disk
+try:
+    from matplotlib.figure import Figure as _Figure
+    _orig_fig_savefig = _Figure.savefig
+
+    def _fig_savefig_no_disk(self, *args, **kwargs):
+        target = args[0] if args else kwargs.get("fname")
+        if _is_path_like(target):
+            return None
+        return _orig_fig_savefig(self, *args, **kwargs)
+
+    _Figure.savefig = _fig_savefig_no_disk
+except Exception:
+    pass
 '''
 
 _POSTAMBLE = r'''

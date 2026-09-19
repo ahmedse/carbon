@@ -125,11 +125,36 @@ describe('StepOutputRenderer — output shapes', () => {
     expect(screen.getByText('Found 3 duplicate rows.')).toBeInTheDocument();
   });
 
-  it('infers text from a bare string and returns nothing for empty values', () => {
-    render(<StepOutputRenderer outputType={null} value="Inferred prose." />);
-    expect(screen.getByText('Inferred prose.')).toBeInTheDocument();
+  it('summarizes sandbox chart payloads instead of dumping base64', () => {
+    const b64 = `iVBORw0KGgo${'A'.repeat(400)}`;
+    render(
+      <StepOutputRenderer
+        outputType="json"
+        value={{
+          result: JSON.stringify({
+            image_b64: b64,
+            table_rows: [{ nationality: 'Saudi', avg: 12000 }],
+          }),
+        }}
+      />,
+    );
 
-    const { container } = render(<StepOutputRenderer outputType="text" value="" />);
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByText(/chart generated/i)).toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(b64.slice(0, 40)))).not.toBeInTheDocument();
+    expect(screen.getByText('Saudi')).toBeInTheDocument();
+  });
+
+  it('redacts base64 in Raw output', () => {
+    const b64 = `iVBORw0KGgo${'B'.repeat(400)}`;
+    const { container } = render(
+      <StepOutputRenderer
+        outputType="json"
+        value={{ nested: { image_b64: b64, note: 'ok' } }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /raw output/i }));
+    const pre = container.querySelector('pre');
+    expect(pre.textContent).not.toContain('BBBBB');
+    expect(pre.textContent).toMatch(/binary/i);
   });
 });

@@ -3009,9 +3009,16 @@ class TurnPipelineRunner:
         settings = get_settings()
 
         # Agent → Discuss seeds must never enter ReAct (skill/invoke path).
-        from ai.engine.cognition.plan.planner import _is_agent_discuss_turn
+        from ai.engine.cognition.plan.planner import (
+            _is_agent_discuss_turn,
+            _wants_explicit_task_creation,
+        )
         if _is_agent_discuss_turn(user_message):
             logger.info("TurnPipelineRunner: Agent discuss turn — skip ReAct")
+            return None
+        # "I need a task…" → Chat PLAN FIRST + plan_task, not silent ReAct.
+        if _wants_explicit_task_creation(user_message):
+            logger.info("TurnPipelineRunner: explicit task creation — skip ReAct")
             return None
 
         # Build skill registry from self.db

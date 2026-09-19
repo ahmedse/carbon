@@ -3,6 +3,7 @@
 // from an `outputType` hint (or infers it from the output shape) and renders
 // text / table / chart / artifact / json. Pure, dense, theme tokens only
 // (RULE_8); renders nothing when there is no output yet.
+// Never dumps base64 / Office binary / huge JSON walls (RULE_23).
 import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import {
@@ -25,6 +26,8 @@ import { useAuth } from '../../auth/AuthContext';
 import { downloadArtifactUrl } from '../../api/aiWorkspace';
 
 const MAX_TABLE_ROWS = 10;
+const MAX_SCALAR_CHARS = 240;
+const BLOB_KEY_RE = /(_b64|base64|binary)$/i;
 
 /** Human-readable byte size (RULE_23 outcome copy). */
 function formatBytes(bytes) {
@@ -35,29 +38,105 @@ function formatBytes(bytes) {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** Coerce an arbitrary tool output into a single string (prose or fallback). */
+function looksLikeBinaryBlob(s) {
+  if (typeof s !== 'string' || s.length < 120) return false;
+  if (/^data:image\//i.test(s)) return true;
+  const sample = s.slice(0, 200).replace(/\s/g, '');
+  const ok = (sample.match(/[A-Za-z0-9+/=]/g) || []).length;
+  return ok / Math.max(sample.length, 1) > 0.95;
+}
+
+function formatScalar(val, key = '') {
+  if (val == null) return '—';
+  if (typeof val === 'string') {
+    if (BLOB_KEY_RE.test(key) || looksLikeBinaryBlob(val)) {
+      return `[binary, ~${Math.max(0, Math.floor((val.length * 3) / 4))} bytes]`;
+    }
+    return val.length > MAX_SCALAR_CHARS ? `${val.slice(0, MAX_SCALAR_CHARS - 1)}…` : val;
+  }
+  if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+  if (val && typeof val === 'object' && val.present === true) {
+    return val.bytes_est != null ? `[binary, ~${val.bytes_est} bytes]` : '[binary]';
+  }
+  try {
+    const s = JSON.stringify(val);
+    return s.length > 80 ? `${s.slice(0, 80)}…` : s;
+  } catch {
+    return String(val);
+  }
+}
+
+/** Unwrap execute-wrapper / sandbox payloads for typed rendering. */
+function unwrapPayload(value) {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return value;
+  let data = { ...value };
+  let result = data.result;
+  if (typeof result === 'string') {
+    const stripped = result.trim();
+    if (stripped && (stripped[0] === '{' || stripped[0] === '[')) {
+      try {
+        result = JSON.parse(stripped);
+      } catch {
+        /* keep string */
+      }
+    }
+  }
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    data = { ...result, ...data };
+    if (typeof data.result === 'string' && looksLikeBinaryBlob(data.result)) {
+      delete data.result;
+    }
+  }
+  return data;
+}
+
+/** Human-readable byte size (RULE_23 outcome copy). */
 function toText(value) {
   if (value == null) return '';
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') {
+    return looksLikeBinaryBlob(value)
+      ? `[binary, ~${Math.max(0, Math.floor((value.length * 3) / 4))} bytes]`
+      : value.length > 1200
+        ? `${value.slice(0, 1199)}…`
+        : value;
+  }
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   if (Array.isArray(value)) {
     return value
-      .map((v) => (typeof v === 'string' ? v : JSON.stringify(v)))
+      .map((v) => (typeof v === 'string' ? formatScalar(v) : formatScalar(v)))
       .join('\n');
   }
+  const data = unwrapPayload(value);
   const scalar =
-    value.text ?? value.content ?? value.summary ?? value.message ?? value.result;
-  if (typeof scalar === 'string') return scalar;
+    data.text ?? data.content ?? data.summary ?? data.message ?? data.result;
+  if (typeof scalar === 'string') return formatScalar(scalar, 'result');
   if (typeof scalar === 'number' || typeof scalar === 'boolean') return String(scalar);
-  return JSON.stringify(value, null, 2);
+  // Never dump full objects as JSON walls — fall back to KeyValue/RawJson callers.
+  return '';
 }
 
 /** Normalize a tool output into { headers, rows } or null when not tabular. */
 function normalizeTable(value) {
-  let data = value;
+  let data = unwrapPayload(value);
   if (data && typeof data === 'object' && !Array.isArray(data)) {
-    // Honor an explicit { headers, rows } shape at the top level — unwrapping
-    // `rows` here would swallow the headers and eat the first row instead.
+    if (Array.isArray(data.table_rows)) {
+      const records = data.table_rows;
+      if (!records.length) return null;
+      if (typeof records[0] === 'object' && records[0] !== null && !Array.isArray(records[0])) {
+        const headers = Object.keys(records[0]);
+        return {
+          headers,
+          rows: records.map((r) => headers.map((h) => (r[h] == null ? '' : r[h]))),
+        };
+      }
+    }
+    if (Array.isArray(data.breakdown) && data.breakdown.length && typeof data.breakdown[0] === 'object') {
+      const headers = Object.keys(data.breakdown[0]);
+      return {
+        headers,
+        rows: data.breakdown.map((r) => headers.map((h) => (r[h] == null ? '' : r[h]))),
+      };
+    }
     const hasDirectHeaders = Array.isArray(data.headers) || Array.isArray(data.columns);
     if (!hasDirectHeaders) {
       const inner = data.result ?? data.data ?? data.rows;
@@ -104,7 +183,7 @@ function normalizeTable(value) {
 
 /** Extract a flat numeric series from a tool output, or null when malformed. */
 function normalizeSeries(value) {
-  let data = value;
+  let data = unwrapPayload(value);
   if (data && typeof data === 'object' && !Array.isArray(data)) {
     const candidate =
       data.series ?? data.values ?? data.data ?? data.result;
@@ -125,16 +204,25 @@ function normalizeSeries(value) {
   return null;
 }
 
+function hasChartSignal(value) {
+  const data = unwrapPayload(value);
+  if (!data || typeof data !== 'object') return false;
+  if (typeof data.image_b64 === 'string' && data.image_b64) return true;
+  if (data.image && typeof data.image === 'object' && data.image.present) return true;
+  return Boolean(normalizeSeries(data));
+}
+
 /** Human-readable key→value rows for flat JSON objects (RULE_23 outcome copy).
  *  `{ rule_details: "…" }` renders as a labelled row instead of a raw blob;
  *  complex (nested/array) shapes fall back to the collapsible raw block. */
 export function KeyValueOutput({ value }) {
-  const isPlainObject = value !== null && typeof value === 'object' && !Array.isArray(value);
+  const data = unwrapPayload(value);
+  const isPlainObject = data !== null && typeof data === 'object' && !Array.isArray(data);
   if (!isPlainObject) return <RawJson value={value} />;
-  const entries = Object.entries(value);
+  const entries = Object.entries(data).filter(([k]) => k !== '_output_type' && k !== 'image_b64');
   if (entries.length === 0) return null;
   const allScalar = entries.every(([, v]) => v === null || typeof v !== 'object');
-  if (!allScalar) return <RawJson value={value} />;
+  if (!allScalar) return <RawJson value={data} />;
   return (
     <Box sx={{ mt: 0.5 }}>
       <Stack spacing={0.25}>
@@ -155,7 +243,7 @@ export function KeyValueOutput({ value }) {
               {key.replace(/_/g, ' ')}
             </Typography>
             <Typography sx={{ fontSize: '0.6875rem', wordBreak: 'break-word', minWidth: 0, whiteSpace: 'pre-wrap' }}>
-              {typeof val === 'string' ? val : val == null ? '—' : String(val)}
+              {formatScalar(val, key)}
             </Typography>
           </Box>
         ))}
@@ -164,11 +252,31 @@ export function KeyValueOutput({ value }) {
   );
 }
 
-/** Collapsible "Raw output" JSON block — hidden by default. */
+/** Collapsible "Raw output" JSON block — hidden by default; redacts blobs. */
 function RawJson({ value }) {
   const [open, setOpen] = useState(false);
-  const text =
-    typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  const safe = typeof value === 'string'
+    ? formatScalar(value)
+    : JSON.stringify(
+      (function redact(v, key = '') {
+        if (typeof v === 'string') return formatScalar(v, key);
+        if (Array.isArray(v)) return v.slice(0, 40).map((x) => redact(x));
+        if (v && typeof v === 'object') {
+          const out = {};
+          Object.entries(v).forEach(([k, val]) => {
+            if (k === 'image_b64' || BLOB_KEY_RE.test(k)) {
+              out[k] = formatScalar(typeof val === 'string' ? val : '', k);
+            } else {
+              out[k] = redact(val, k);
+            }
+          });
+          return out;
+        }
+        return v;
+      }(unwrapPayload(value))),
+      null,
+      2,
+    );
   return (
     <Box sx={{ mt: 0.5 }}>
       <Button
@@ -195,7 +303,7 @@ function RawJson({ value }) {
             overflow: 'auto',
           }}
         >
-          {text}
+          {safe}
         </Box>
       </Collapse>
     </Box>
@@ -248,8 +356,26 @@ function TableOutput({ value }) {
   );
 }
 
-/** Simple bar chart from a numeric series (falls back to table/json). */
+/** Chart: prefer image signal summary, else simple bar series. */
 function ChartOutput({ value }) {
+  const data = unwrapPayload(value);
+  const imageMeta = (data && data.image && typeof data.image === 'object')
+    ? data.image
+    : null;
+  const rawB64 = typeof data?.image_b64 === 'string' ? data.image_b64 : '';
+  if (imageMeta?.present || rawB64) {
+    const bytes = imageMeta?.bytes_est
+      ?? (rawB64 ? Math.floor((rawB64.length * 3) / 4) : null);
+    return (
+      <Stack spacing={0.5} sx={{ mt: 0.5 }}>
+        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
+          Chart generated{bytes != null ? ` (${formatBytes(bytes)})` : ''}.
+          Open the exported document under Artifacts for the full figure.
+        </Typography>
+        {normalizeTable(data) ? <TableOutput value={data} /> : null}
+      </Stack>
+    );
+  }
   const series = normalizeSeries(value);
   if (!series) return <TableOutput value={value} />;
   const max = Math.max(...series, 1);
@@ -351,15 +477,26 @@ export function ArtifactCard({ value }) {
 function StepOutputRenderer({ outputType, value }) {
   if (value === null || value === undefined || value === '') return null;
 
+  const data = unwrapPayload(value);
   let type = outputType;
   if (!type) {
-    if (typeof value === 'string') type = 'text';
+    if (hasChartSignal(data)) type = 'chart';
+    else if (normalizeTable(data)) type = 'table';
+    else if (typeof value === 'string') type = 'text';
     else if (Array.isArray(value)) type = 'table';
-    else if (typeof value === 'object') type = 'json';
+    else if (typeof value === 'object') {
+      if (value.files || value.download_url || value.filename) type = 'artifact';
+      else type = 'json';
+    }
   }
+  // Promote sandbox shapes even when a stale hint said "text"/"json"
+  if ((type === 'text' || type === 'json') && hasChartSignal(data)) type = 'chart';
+  if ((type === 'text' || type === 'json') && normalizeTable(data)) type = 'table';
 
   switch (type) {
-    case 'text':
+    case 'text': {
+      const prose = toText(value);
+      if (!prose) return <KeyValueOutput value={data} />;
       return (
         <Typography
           sx={{
@@ -371,17 +508,18 @@ function StepOutputRenderer({ outputType, value }) {
             wordBreak: 'break-word',
           }}
         >
-          {toText(value)}
+          {prose}
         </Typography>
       );
+    }
     case 'table':
-      return <TableOutput value={value} />;
+      return <TableOutput value={data} />;
     case 'chart':
-      return <ChartOutput value={value} />;
+      return <ChartOutput value={data} />;
     case 'artifact':
-      return <ArtifactCard value={value} />;
+      return <ArtifactCard value={data} />;
     case 'json':
-      return <KeyValueOutput value={value} />;
+      return <KeyValueOutput value={data} />;
     default:
       return null;
   }

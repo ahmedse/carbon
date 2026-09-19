@@ -29,8 +29,11 @@ class CodeExecuteTool(ToolPlugin):
     name = "code_execute"
     description = (
         "Run Python/pandas/matplotlib code over a provided result set and "
-        "return a chart image, a table, or a scalar. Read-only. Assign the "
-        "final answer to `result` (a DataFrame for a table, or a scalar)."
+        "return a chart image, a table, or a scalar. Read-only sandbox: no "
+        "network, no disk writes, no subprocess. Build charts with plt "
+        "(they are captured automatically) — do NOT call savefig to a file "
+        "path. Assign the final answer to `result` (a DataFrame for a table, "
+        "or a scalar)."
     )
     input_schema: dict[str, Any] = {
         "type": "object",
@@ -38,7 +41,9 @@ class CodeExecuteTool(ToolPlugin):
             "code": {
                 "type": "string",
                 "description": (
-                    "Python code to run. Assign the final answer to `result` "
+                    "Python code to run. Use `data` (dict/list), `pd`, and `plt`. "
+                    "Do not open files or savefig to a path — figures are "
+                    "auto-captured. Assign the final answer to `result` "
                     "(a DataFrame for a table, or a scalar)."
                 ),
             },

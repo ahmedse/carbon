@@ -35,6 +35,7 @@ import contextvars
 import json
 import logging
 import queue
+import re
 import threading
 from datetime import datetime
 
@@ -569,13 +570,30 @@ def _infer_output_type(tool_output_json):
         )
     ):
         return "artifact"
+
+    # Prefer unwrapped sandbox / host payloads (stringified ``result``).
     result = data.get("result", data)
     if isinstance(result, str):
-        return "text"
+        stripped = result.strip()
+        if stripped and stripped[0] in "{[":
+            try:
+                result = json.loads(stripped)
+            except (json.JSONDecodeError, TypeError):
+                return "text"
+        else:
+            return "text"
     if isinstance(result, dict):
+        if result.get("image_b64") or (
+            isinstance(result.get("image"), dict) and result["image"].get("present")
+        ):
+            return "chart"
+        if result.get("table_rows") or (
+            isinstance(result.get("headers"), list) and isinstance(result.get("rows"), list)
+        ):
+            return "table"
         if any(k in result for k in ("series", "labels", "values", "x", "y")):
             return "chart"
-        if any(k in result for k in ("columns", "headers", "rows")):
+        if any(k in result for k in ("columns", "headers", "rows", "breakdown")):
             return "table"
         return "json"
     if isinstance(result, list):
@@ -589,19 +607,116 @@ def _infer_output_type(tool_output_json):
     return "json"
 
 
-def _with_output_type(tool_output_json):
-    """Return the tool output with ``_output_type`` injected (W5-C B4).
+_BLOB_KEY_RE = re.compile(r"(_b64|base64|binary)$", re.IGNORECASE)
+_MAX_UI_STRING = 240
 
-    Keeps the original value intact when it already carries a hint or is empty.
+
+def _looks_base64_blob(value: str) -> bool:
+    if not isinstance(value, str) or len(value) < 120:
+        return False
+    sample = value[:200].replace("\n", "").replace(" ", "")
+    if sample.startswith("data:image"):
+        return True
+    # Long mostly-base64 alphabet strings (PNG charts, etc.)
+    import string as _string
+    allowed = set(_string.ascii_letters + _string.digits + "+/=")
+    if sum(1 for ch in sample if ch in allowed) / max(len(sample), 1) > 0.95:
+        return True
+    return False
+
+
+def _sanitize_ui_value(value, *, key: str = ""):
+    """Redact binary / huge strings for product-facing tool_output (RULE_23)."""
+    if isinstance(value, str):
+        if _BLOB_KEY_RE.search(key or "") or _looks_base64_blob(value):
+            return {"present": True, "bytes_est": max(0, (len(value) * 3) // 4)}
+        if len(value) > _MAX_UI_STRING:
+            return value[:_MAX_UI_STRING - 1] + "…"
+        return value
+    if isinstance(value, list):
+        # Cap list length for UI; keep first rows for tables.
+        capped = value[:60]
+        return [_sanitize_ui_value(v, key=key) for v in capped]
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            sk = str(k)
+            if sk in ("image_b64",) or _BLOB_KEY_RE.search(sk):
+                if isinstance(v, str) and v:
+                    out["image"] = {
+                        "present": True,
+                        "bytes_est": max(0, (len(v) * 3) // 4),
+                    }
+                elif isinstance(v, dict):
+                    out[sk] = _sanitize_ui_value(v, key=sk)
+                else:
+                    out[sk] = {"present": bool(v)}
+                continue
+            out[sk] = _sanitize_ui_value(v, key=sk)
+        return out
+    return value
+
+
+def _ui_tool_output(tool_output_json):
+    """Product-facing tool_output: shaped + redacted (DB row stays raw).
+
+    - Parses stringified ``result`` when it is sandbox/API JSON
+    - Replaces ``image_b64`` with ``{present, bytes_est}``
+    - Truncates huge strings
+    - Sets ``_output_type`` for the FE renderer
     """
     data = _parse_tool_output_json(tool_output_json)
     if not data:
         return tool_output_json
-    if isinstance(data, dict) and "_output_type" not in data:
-        data = dict(data)
-        data["_output_type"] = _infer_output_type(data)
-    return data
 
+    shaped = dict(data)
+    raw_result = shaped.get("result")
+    if isinstance(raw_result, str):
+        stripped = raw_result.strip()
+        if stripped and stripped[0] in "{[":
+            try:
+                parsed = json.loads(stripped)
+            except (json.JSONDecodeError, TypeError):
+                parsed = None
+            if isinstance(parsed, dict):
+                # Promote sandbox keys for typed rendering; keep a short result note.
+                for k in ("image_b64", "table_rows", "stdout", "error", "headers", "rows", "breakdown"):
+                    if k in parsed and k not in shaped:
+                        shaped[k] = parsed[k]
+                summary = parsed.get("summary") or parsed.get("message")
+                if isinstance(summary, str) and summary.strip():
+                    shaped["result"] = summary.strip()[:_MAX_UI_STRING]
+                else:
+                    shaped.pop("result", None)
+            elif isinstance(parsed, list):
+                shaped["table_rows"] = parsed
+                shaped.pop("result", None)
+            else:
+                shaped["result"] = _sanitize_ui_value(raw_result, key="result")
+        else:
+            shaped["result"] = _sanitize_ui_value(raw_result, key="result")
+
+    shaped = _sanitize_ui_value(shaped)
+    if isinstance(shaped, dict):
+        shaped = dict(shaped)
+        shaped["_output_type"] = _infer_output_type(shaped)
+    return shaped
+
+
+def _with_output_type(tool_output_json):
+    """Return the UI-safe tool output with ``_output_type`` injected (W5-C B4).
+
+    Prefer ``_ui_tool_output`` so product surfaces never receive raw base64.
+    """
+    return _ui_tool_output(tool_output_json)
+
+
+def _step_tool_output_fields(tool_output_json):
+    """Return ``(ui_tool_output, output_type)`` for plan/SSE step payloads."""
+    ui = _with_output_type(tool_output_json)
+    if isinstance(ui, dict):
+        return ui, ui.get("_output_type") or _infer_output_type(ui)
+    return ui, _infer_output_type(tool_output_json)
 
 class PlansService:
     """Plan lifecycle: create → review → approve → run → consent → ledger."""
@@ -1321,6 +1436,7 @@ class PlansService:
             "created_at": run.created_at.isoformat() if run.created_at else None,
             "updated_at": run.updated_at.isoformat() if run.updated_at else None,
             "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+            "final_response": run.final_response,
             "steps": [
                 {
                     "step_id": s.step_index,
@@ -1341,8 +1457,8 @@ class PlansService:
                     "draft_text": s.draft_text,
                     "critic_verdict": s.critic_verdict,
                     "error": s.error,
-                    "tool_output": _with_output_type(s.tool_output_json),
-                    "output_type": _infer_output_type(s.tool_output_json),
+                    "tool_output": _step_tool_output_fields(s.tool_output_json)[0],
+                    "output_type": _step_tool_output_fields(s.tool_output_json)[1],
                     "artifacts": [
                         {
                             "id": a.id,
@@ -3750,6 +3866,7 @@ class PlansService:
                     ),
                 }
             else:
+                _ui_out, _ui_type = _step_tool_output_fields(step.tool_output_json)
                 yield {
                     "type": "step_result",
                     "plan_id": run.id,
@@ -3758,8 +3875,8 @@ class PlansService:
                     "status": step.status,
                     "verdict": step.critic_verdict,
                     "draft_text": step.draft_text,
-                    "tool_output": _with_output_type(step.tool_output_json),
-                    "output_type": _infer_output_type(step.tool_output_json),
+                    "tool_output": _ui_out,
+                    "output_type": _ui_type,
                     "error": step.error,
                     "artifacts": [
                         {

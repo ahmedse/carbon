@@ -3,6 +3,8 @@ import pytest
 from ai.engine.cognition.plan.planner import (
     _is_agent_discuss_turn,
     _looks_agent_multi_step,
+    _score_skill,
+    _wants_explicit_task_creation,
 )
 
 
@@ -24,6 +26,32 @@ def test_simple_lookup_stays_single():
 
 def test_greeting_stays_single():
     assert _looks_agent_multi_step("hello") is False
+
+
+def test_need_a_task_is_explicit_task_creation():
+    msg = "now i need a task to create amazing word file with all the charts and tables"
+    assert _wants_explicit_task_creation(msg) is True
+    assert _wants_explicit_task_creation("analyze salaries by nationality") is False
+
+
+def test_score_skill_does_not_hotpath_unrelated_payroll_skill():
+    """Underscore name + weak desc overlap must stay below match threshold."""
+
+    class _Skill:
+        name = "payroll_run_variance_check"
+        description = (
+            "Compare payroll run totals and variance for salary distributions "
+            "by location nationality specialty and charts"
+        )
+        success_rate = 0
+        usage_count = 0
+
+    utterance = (
+        "now i need a task to create amazing word file with all the charts "
+        "and tables about salary distribution"
+    ).lower()
+    score = _score_skill(_Skill(), utterance)
+    assert score < 0.5
 
 
 def test_agent_discuss_refine_is_not_multi_step():

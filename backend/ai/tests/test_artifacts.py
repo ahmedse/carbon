@@ -16,6 +16,7 @@ media store.
 
 from __future__ import annotations
 
+import json
 import uuid
 
 import pytest
@@ -23,7 +24,7 @@ from django.test import override_settings
 
 from accounts.models import User
 from ai.models.core import Run, RunArtifact, RunStep
-from ai.plans_service import PlansService, _infer_output_type
+from ai.plans_service import PlansService, _infer_output_type, _ui_tool_output
 
 
 @pytest.fixture
@@ -195,6 +196,46 @@ def test_infer_output_type_shapes():
     assert _infer_output_type({"nested": {"key": "value"}}) == "json"
     assert _infer_output_type(None) is None
     assert _infer_output_type({}) is None
+    # Sandbox / stringified result with chart signal
+    assert _infer_output_type({
+        "result": '{"image_b64": "' + ("A" * 200) + '", "table_rows": [{"a": 1}]}',
+    }) == "chart"
+
+
+def test_ui_tool_output_redacts_image_b64():
+    raw = {
+        "tool_name": "code_execute",
+        "result": json.dumps({
+            "image_b64": "iVBORw0KGgo" + ("B" * 400),
+            "table_rows": [{"nationality": "Saudi", "avg": 12}],
+            "stdout": "ok",
+        }),
+    }
+    ui = _ui_tool_output(raw)
+    assert isinstance(ui, dict)
+    dumped = json.dumps(ui)
+    assert "iVBORw0KGgo" not in dumped
+    assert "BBBBB" not in dumped
+    assert ui.get("image", {}).get("present") is True or "image" in ui
+    assert ui.get("table_rows") or ui.get("_output_type") in ("chart", "table")
+    assert ui["_output_type"] in ("chart", "table")
+
+
+@pytest.mark.django_db
+def test_serialize_run_includes_final_response(user):
+    run = _make_run(user)
+    run.final_response = "Salary analysis is ready under Artifacts."
+    run.save(update_fields=["final_response", "updated_at"])
+    RunStep.objects.create(
+        run_id=run.id,
+        step_index=0,
+        intent="Export",
+        tool_name="export_document",
+        status="completed",
+        tool_output_json={"files": [{"filename": "a.docx"}]},
+    )
+    payload = PlansService().get_plan(user, run.id)
+    assert payload["final_response"] == "Salary analysis is ready under Artifacts."
 
 
 # ── output_type inference regression gate (F-W5-C-01) ───────────────────

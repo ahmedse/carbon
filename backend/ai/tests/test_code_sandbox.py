@@ -81,6 +81,22 @@ def test_matplotlib_image():
     assert png_bytes[:8] == b"\x89PNG\r\n\x1a\n"
 
 
+def test_matplotlib_savefig_path_is_redirected_not_blocked():
+    """LLM code often calls fig.savefig('/tmp/x.png') — must not PermissionError."""
+    result = CodeSandbox.execute(
+        "import matplotlib.pyplot as plt\n"
+        "fig, ax = plt.subplots()\n"
+        "ax.plot([1, 2, 3])\n"
+        "fig.savefig('/tmp/pulse_chart_should_not_write.png')\n"
+        "result = None\n",
+        {},
+    )
+    assert result["error"] is None, result["error"]
+    assert result["image_b64"]
+    png_bytes = base64.b64decode(result["image_b64"])
+    assert png_bytes[:8] == b"\x89PNG\r\n\x1a\n"
+
+
 # ── _build_code_result extraction (Wave I2-F) ───────────────────────────
 
 def test_build_code_result_extracts_code_execute():

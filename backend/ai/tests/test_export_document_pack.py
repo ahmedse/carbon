@@ -69,3 +69,46 @@ async def test_export_png_fallback_without_table(plugin, tmp_path):
         )
     assert "error" not in result
     assert result["files"][0]["format"] == "png"
+
+
+@pytest.mark.asyncio
+async def test_export_refuses_hollow_placeholder(plugin, tmp_path):
+    with override_settings(MEDIA_ROOT=str(tmp_path)):
+        result = await plugin.execute(
+            {
+                "title": "Empty Report",
+                "format": "docx",
+                "content": "[Placeholder for insights]\n[Chart and table to be inserted]",
+            },
+            ctx=None,
+        )
+    assert "error" in result
+    assert "refused" in result["error"].lower() or "findings" in result["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_export_docx_embeds_image(plugin, tmp_path):
+    # Minimal 1x1 PNG
+    import base64
+
+    png = base64.b64encode(
+        bytes.fromhex(
+            "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+            "0000000a49444154789c63000100000500010d0a2db40000000049454e44ae426082"
+        )
+    ).decode("ascii")
+    with override_settings(MEDIA_ROOT=str(tmp_path)):
+        result = await plugin.execute(
+            {
+                "title": "With Chart",
+                "format": "docx",
+                "content": "## Findings\n- Real measured result.",
+                "images": [{"caption": "Salary chart", "image_b64": png}],
+            },
+            ctx=None,
+        )
+    assert "error" not in result, result
+    path = Path(tmp_path) / "ai_exports" / result["files"][0]["filename"]
+    assert path.exists()
+    assert path.read_bytes()[:2] == b"PK"
+

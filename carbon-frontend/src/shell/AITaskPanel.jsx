@@ -123,6 +123,10 @@ import AgentReviewSurface from './AgentReviewSurface';
 import AgentCockpit, { defaultCockpitSegment, normalizeCockpitSegment } from './AgentCockpit';
 import AgentCanvasSurface from './AgentCanvasSurface';
 import StepOutputRenderer, { ArtifactCard } from '../components/ai/StepOutputRenderer';
+import { buildDiscussDraft } from './buildDiscussDraft';
+import { splitAnswerAppendix } from './splitAnswerAppendix';
+import { humanizeStepError } from './humanizeStepError';
+import { isImageMime, isPreviewableMime } from './artifactMime';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -191,17 +195,6 @@ function artifactIcon(mime) {
   if (m.includes('pdf')) return '📕';
   if (m.includes('word') || m.includes('doc')) return '📄';
   return '📁';
-}
-
-// W5-D — a mime type is inline-previewable when its text can be read as lines.
-function isPreviewableMime(mime) {
-  const m = (mime || '').toLowerCase();
-  return /json|csv|text|plain|markdown|xml|yaml|yml/.test(m);
-}
-
-function isImageMime(mime) {
-  const m = (mime || '').toLowerCase();
-  return /image\/|png|jpeg|jpg|gif|webp/.test(m);
 }
 
 // W5-D — human file size for the Results artifact cards.
@@ -296,7 +289,96 @@ function AnswerTechnicalDetails({ appendix }) {
 
 AnswerTechnicalDetails.propTypes = { appendix: PropTypes.string };
 
+/** Failed-step banner: short outcome + optional collapsed traceback. */
+function StepErrorBanner({ error }) {
+  const [open, setOpen] = useState(false);
+  const { summary, detail } = humanizeStepError(error);
+  return (
+    <Box sx={{ mt: 0.5 }}>
+      <Typography variant="caption" color="error.main" sx={{ display: 'block', fontSize: '0.6875rem' }}>
+        {summary}
+      </Typography>
+      {detail ? (
+        <>
+          <Button
+            size="small"
+            color="inherit"
+            onClick={() => setOpen((v) => !v)}
+            endIcon={open ? <ExpandLessIcon sx={{ fontSize: 14 }} /> : <ExpandMoreIcon sx={{ fontSize: 14 }} />}
+            sx={{ fontSize: '0.625rem', textTransform: 'none', px: 0, minWidth: 0, mt: 0.25, color: 'text.secondary' }}
+            aria-expanded={open}
+          >
+            Technical details
+          </Button>
+          <Collapse in={open} unmountOnExit>
+            <Box
+              component="pre"
+              sx={{
+                m: 0,
+                mt: 0.25,
+                p: 1,
+                borderRadius: 1,
+                bgcolor: 'action.hover',
+                fontSize: '0.625rem',
+                lineHeight: 1.4,
+                maxHeight: 160,
+                overflow: 'auto',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {detail}
+            </Box>
+          </Collapse>
+        </>
+      ) : null}
+    </Box>
+  );
+}
+
+StepErrorBanner.propTypes = { error: PropTypes.string };
+
 // W5-C — collapsible "Input parameters" section (key→value rows, not raw JSON).
+function formatParamValue(val, key = '') {
+  if (val === null || val === undefined) return '—';
+  const keyHint = String(key || '');
+  if (typeof val === 'string') {
+    if (/(_b64|base64|binary)$/i.test(keyHint) || looksLikeBinaryBlob(val)) {
+      return `[binary, ~${Math.max(0, Math.floor((val.length * 3) / 4))} bytes]`;
+    }
+    if (keyHint === 'code' || (val.length > 200 && /\n/.test(val) && /def |import |SELECT /i.test(val))) {
+      return `[code, ${val.length} chars]`;
+    }
+    return val.length > 160 ? `${val.slice(0, 140)}…` : val;
+  }
+  if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+  if (Array.isArray(val)) {
+    if (val.length === 0) return '[]';
+    return `[…] ${val.length} items`;
+  }
+  if (val && typeof val === 'object') {
+    if (val.present === true && val.bytes_est != null) {
+      return `[binary, ~${val.bytes_est} bytes]`;
+    }
+    const keys = Object.keys(val);
+    return `{…} ${keys.length} fields`;
+  }
+  try {
+    const s = JSON.stringify(val);
+    return s.length > 80 ? `${s.slice(0, 80)}…` : s;
+  } catch {
+    return String(val);
+  }
+}
+
+function looksLikeBinaryBlob(s) {
+  if (typeof s !== 'string' || s.length < 120) return false;
+  if (/^data:image\//i.test(s)) return true;
+  const sample = s.slice(0, 200).replace(/\s/g, '');
+  const ok = (sample.match(/[A-Za-z0-9+/=]/g) || []).length;
+  return ok / Math.max(sample.length, 1) > 0.95;
+}
+
 function InputParams({ value }) {
   const [open, setOpen] = useState(false);
   if (value === null || value === undefined) return null;
@@ -336,14 +418,14 @@ function InputParams({ value }) {
                   {key.replace(/_/g, ' ')}
                 </Typography>
                 <Typography sx={{ fontSize: '0.6875rem', wordBreak: 'break-word', minWidth: 0 }}>
-                  {typeof val === 'string' ? val : JSON.stringify(val)}
+                  {formatParamValue(val, key)}
                 </Typography>
               </Box>
             ))}
           </Stack>
         ) : (
           <Typography sx={{ fontSize: '0.6875rem', mt: 0.5, wordBreak: 'break-word' }}>
-            {String(value)}
+            {formatParamValue(value)}
           </Typography>
         )}
       </Collapse>
@@ -478,7 +560,10 @@ function StepCard({
       {showBody && (
         <Box sx={{ px: 1.25, pb: 0.875 }}>
           <InputParams value={step.tool_args} />
-          <StepOutputRenderer outputType={step.output_type} value={step.tool_output} />
+          {/* Failed steps: short error banner only — avoid dumping the same traceback as "output". */}
+          {step.status !== 'failed' && (
+            <StepOutputRenderer outputType={step.output_type} value={step.tool_output} />
+          )}
           {Array.isArray(step.artifacts) && step.artifacts.length > 0 && (
             <Stack spacing={0.5} sx={{ mt: 0.5 }}>
               {step.artifacts.map((artifact) => (
@@ -525,9 +610,7 @@ function StepCard({
             </Typography>
           )}
           {step.status === 'failed' && (
-            <Typography variant="caption" color="error.main" sx={{ display: 'block', mt: 0.5, fontSize: '0.6875rem' }}>
-              {step.error || 'This step failed.'}
-            </Typography>
+            <StepErrorBanner error={step.error || 'This step failed.'} />
           )}
         </Box>
       )}
@@ -707,9 +790,6 @@ ResultArtifactCard.propTypes = {
   planId: PropTypes.string.isRequired,
   token: PropTypes.string,
 };
-
-import { buildDiscussDraft } from './buildDiscussDraft';
-import { splitAnswerAppendix } from './splitAnswerAppendix';
 
 /**
  * Agentic task orchestration panel.
@@ -1289,8 +1369,19 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           else if (doneStatus === 'stopped' || doneStatus === 'cancelled') setPhase('stopped');
           else if (doneStatus === 'failed') { setPhase('error'); setErrorMessage('The run failed.'); }
           else setPhase('finished');
+          // Apply Answer immediately from the done frame so Output works
+          // without waiting on Ledger (plan DTO also carries final_response).
+          if (typeof frame?.final_response === 'string' && frame.final_response.trim()) {
+            setSelectedPlan((prev) => (
+              prev && prev.id === planId
+                ? { ...prev, final_response: frame.final_response }
+                : prev
+            ));
+          }
           await refreshPlan(planId);
-          if (doneStatus === 'completed') loadLedger(planId);
+          if (doneStatus === 'completed' || doneStatus === 'completed_with_gaps') {
+            loadLedger(planId);
+          }
         },
         onError: (message) => {
           setPhase('error');
