@@ -1,7 +1,10 @@
 import pytest
 
 from ai.engine.cognition.plan.planner import (
+    _history_has_discuss_markers,
+    _is_agent_discuss_context,
     _is_agent_discuss_turn,
+    _is_discuss_apply_turn,
     _looks_agent_multi_step,
     _score_skill,
     _wants_explicit_task_creation,
@@ -106,6 +109,83 @@ async def test_decompose_skips_skill_match_on_discuss_turn():
     )
     assert plan.source == "single_step"
     assert plan.steps[0].tool_name is None
+
+
+@pytest.mark.asyncio
+async def test_force_decompose_refuses_invoke_skill_collapse():
+    """Agent create/replan must not collapse multi-action briefs to 1 skill step."""
+    from ai.engine.cognition.plan.planner import Plan, PlanStep, SkillAwarePlanner
+
+    class _Skill:
+        name = "payroll_run_variance_check"
+        kind = "procedure"
+        description = "Compute and validate payroll run variance GOSI KLL"
+        body = {}
+        success_rate = 0.9
+        usage_count = 10
+
+    class _Reg:
+        async def search(self, *a, **k):
+            return [_Skill()]
+
+    brief = (
+        "Compute and validate the GOFSCO October 2026 payroll run "
+        "(run_id: demo-oct-2026). Apply KLL / GOSI statutory rules. "
+        "Report variance findings. Do NOT commit."
+    )
+
+    async def _fake_llm_decompose(*a, **k):
+        return Plan(
+            pattern="custom",
+            steps=[
+                PlanStep(step_id=0, intent="Fetch run", tool_name="call_host_api"),
+                PlanStep(step_id=1, intent="Compute", tool_name="call_host_api"),
+                PlanStep(step_id=2, intent="Validate", tool_name="call_host_api"),
+                PlanStep(step_id=3, intent="Report", tool_name="export_document"),
+            ],
+            synthesis_instruction="Summarize",
+            source="llm_decompose",
+        )
+
+    planner = SkillAwarePlanner()
+    planner._llm_decompose = _fake_llm_decompose
+    plan = await planner.decompose(
+        brief, _Reg(), instance_id="i", user_id="u",
+        llm_client=object(), force_decompose=True,
+    )
+    assert plan.source == "llm_decompose"
+    assert len(plan.steps) == 4
+    assert plan.steps[0].tool_name != "invoke_skill"
+
+
+def test_discuss_followup_stays_in_context():
+    history = [
+        {
+            "role": "user",
+            "content": (
+                'I\'d like to refine plan (plan 29e0cdbf-1aa4-4f1c-8b61-36c02312a045): '
+                '"Compute payroll".\n\n'
+                "DISCUSSION ONLY — reply in Chat with one improved brief.\n"
+                "Do not change the Agent plan until I say to Fork or Replan."
+            ),
+        },
+        {"role": "assistant", "content": "Improved brief…\n1. Fetch\n2. Compute"},
+    ]
+    assert _history_has_discuss_markers(history) is True
+    assert _is_agent_discuss_context("why in single step?!", history) is True
+    assert _is_agent_discuss_context(
+        "think deeper, compare to latest online numbers and make doc file report",
+        history,
+    ) is True
+    assert _is_discuss_apply_turn("proceed") is True
+    assert _is_agent_discuss_context("proceed", history) is False
+    assert _is_agent_discuss_context("go", history) is False
+    assert _is_agent_discuss_context("replan", history) is False
+
+
+def test_discuss_apply_ignores_why_replan():
+    assert _is_discuss_apply_turn("why replan into one step?") is False
+    assert _is_discuss_apply_turn("do not replan yet") is False
 
 
 # ── export-step coercion (document-generation reliability) ──────────────────

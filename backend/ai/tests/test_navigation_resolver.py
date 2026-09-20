@@ -140,7 +140,13 @@ def test_load_targets_skips_entity_routes():
 
 # ── Grounding (LLM target concept → routes) ─────────────────────────────────
 
-def test_ground_navigation_from_llm_concept():
+def test_resolve_navigation_alias_matches_ground():
+    from ai.engine.cognition.turn.navigation import ground_navigation, resolve_navigation
+
+    g = ground_navigation("payroll", NIBRAS_CONFIG)
+    r = resolve_navigation("payroll", NIBRAS_CONFIG)
+    assert r.action == g.action
+    assert [t.route for t in r.targets] == [t.route for t in g.targets]
     # The LLM names the concept "people"; grounding maps it to the app home.
     res = ground_navigation("people", NIBRAS_CONFIG)
     assert res.action in ("navigate", "disambiguate")

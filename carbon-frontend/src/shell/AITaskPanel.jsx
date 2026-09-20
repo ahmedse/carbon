@@ -37,18 +37,15 @@ import CloudOffIcon from '@mui/icons-material/CloudOff';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
 import StopIcon from '@mui/icons-material/Stop';
 import ReplayIcon from '@mui/icons-material/Replay';
-import RefreshIcon from '@mui/icons-material/Refresh';
 import SkipNextIcon from '@mui/icons-material/SkipNext';
 import CloseIcon from '@mui/icons-material/Close';
 import PauseIcon from '@mui/icons-material/Pause';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import CallSplitIcon from '@mui/icons-material/CallSplit';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import dayjs from 'dayjs';
@@ -94,6 +91,7 @@ import {
   stepSkip,
   stopPlan,
   durableResumeRun,
+  deletePlanArtifact,
 } from '../api/aiWorkspace';
 import ScheduleDialog from '../components/ai/ScheduleDialog';
 import ScheduleList from '../components/ai/ScheduleList';
@@ -111,8 +109,6 @@ import {
 } from './aiTaskStatus';
 import AITaskPlanCard from './AITaskPlanCard';
 import MarkdownMessage from './MarkdownMessage';
-import AITaskAuditCard from './AITaskAuditCard';
-import SubagentResultCard from './SubagentResultCard';
 import PlanDiffReviewDialog from './PlanDiffReviewDialog';
 import StepEditDialog from './StepEditDialog';
 import DiscoveryComposer from './DiscoveryComposer';
@@ -121,11 +117,16 @@ import AgentStage, { stageForStatus } from './AgentStage';
 import AgentRunSurface, { mergePlanWithRunSteps } from './AgentRunSurface';
 import AgentReviewSurface from './AgentReviewSurface';
 import AgentCockpit, { defaultCockpitSegment, normalizeCockpitSegment } from './AgentCockpit';
+import AgentPlanToolbar from './AgentPlanToolbar';
+import AgentRunToolbar from './AgentRunToolbar';
 import AgentCanvasSurface from './AgentCanvasSurface';
 import StepOutputRenderer, { ArtifactCard } from '../components/ai/StepOutputRenderer';
 import { buildDiscussDraft } from './buildDiscussDraft';
 import { splitAnswerAppendix } from './splitAnswerAppendix';
 import { humanizeStepError } from './humanizeStepError';
+import ConsentHeroCard from './ConsentHeroCard';
+import { stripEngineJargon } from './humanizeOperatorCopy';
+import { autonomyDefaultListOpen, readAutonomyMode } from './autonomyMode';
 import { isImageMime, isPreviewableMime } from './artifactMime';
 
 dayjs.extend(utc);
@@ -443,7 +444,8 @@ const STEP_CONTROLS = {
   running: ['pause', 'cancel'],
   paused: ['resume', 'skip', 'cancel'],
   failed: ['retry', 'skip'],
-  awaiting_approval: ['skip'],
+  // Consent gate: Approve/Decline only (hero card). No skip/play that looks like bypass.
+  awaiting_approval: [],
 };
 
 const STEP_CONTROL_META = {
@@ -498,14 +500,21 @@ StepToolbar.propTypes = {
 };
 
 function StepCard({
-  step, phaseName, confirming, busy, onConfirm, onDecline, onRetry, onSkip, onCancel, onPause, onResume, onEdit,
+  step, phaseName, confirming, busy, onConfirm, onDecline, onRetry, onSkip, onCancel, onPause, onResume, onEdit, forceOpen = null,
 }) {
-  const [open, setOpen] = useState(true);
   const meta = stepStatusMeta(step.status);
-  const showBody = open || step.status === 'awaiting_approval' || step.status === 'failed';
+  const urgent = step.status === 'awaiting_approval' || step.status === 'failed';
+  const [open, setOpen] = useState(urgent);
+  const expanded = forceOpen == null ? open : forceOpen;
+  const showBody = expanded || urgent;
 
   return (
-    <Paper variant="outlined" sx={{ borderRadius: 1 }}>
+    <Paper
+      variant="outlined"
+      sx={{ borderRadius: 1 }}
+      data-testid={`agent-step-card-${step.step_id}`}
+      data-expanded={expanded ? 'true' : 'false'}
+    >
       <Stack
         direction="row"
         alignItems="center"
@@ -514,19 +523,20 @@ function StepCard({
         onClick={() => setOpen((v) => !v)}
       >
         <IconButton size="small" sx={{ p: 0, m: 0 }} aria-label={`Toggle step ${step.step_id} details`}>
-          {open ? <ExpandMoreIcon sx={{ fontSize: 15 }} /> : <ChevronRightIcon sx={{ fontSize: 15 }} />}
+          {expanded ? <ExpandMoreIcon sx={{ fontSize: 15 }} /> : <ChevronRightIcon sx={{ fontSize: 15 }} />}
         </IconButton>
         <StepStatusIcon status={step.status} />
         <Typography variant="body2" sx={{ flex: 1, minWidth: 0, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {step.intent || `Step ${step.step_id}`}
+          {stripEngineJargon(step.intent) || `Step ${step.step_id}`}
         </Typography>
-        {phaseName && (
+        {expanded && phaseName && (
           <Chip size="small" variant="outlined" label={phaseName} sx={{ height: 16, fontSize: '0.5625rem' }} />
         )}
-        {step.agent_role && step.agent_role !== 'orchestrator' && (
-          <Chip size="small" variant="outlined" color="secondary" label={`Agent ${step.step_id + 1} · ${agentRoleLabel(step.agent_role)}`} sx={{ height: 16, fontSize: '0.5625rem' }} />
+        {/* Analyst chips only when expanded — Operator default stays calm (progressive disclosure). */}
+        {expanded && step.agent_role && step.agent_role !== 'orchestrator' && (
+          <Chip size="small" variant="outlined" color="secondary" label={agentRoleLabel(step.agent_role)} sx={{ height: 16, fontSize: '0.5625rem' }} />
         )}
-        {step.tool_name && (
+        {expanded && step.tool_name && (
           <Chip size="small" variant="outlined" label={toolLabel(step.tool_name)} sx={{ height: 16, fontSize: '0.5625rem' }} />
         )}
         {onEdit && (
@@ -555,6 +565,15 @@ function StepCard({
           onResume={onResume}
         />
         <Chip size="small" variant="outlined" label={meta.label} color={meta.color} sx={{ height: 16, fontSize: '0.5625rem' }} />
+        {step.consent_granted && step.status === 'completed' && (
+          <Chip
+            size="small"
+            color="success"
+            variant="outlined"
+            label="✓ Approved by you"
+            sx={{ height: 16, fontSize: '0.5625rem' }}
+          />
+        )}
       </Stack>
 
       {showBody && (
@@ -578,31 +597,9 @@ function StepCard({
           )}
 
           {step.status === 'awaiting_approval' && (
-            <Box sx={{ mt: 0.75, p: 1, borderRadius: 1, bgcolor: 'warning.soft' }}>
-              <Typography variant="caption" sx={{ display: 'block', fontSize: '0.6875rem', mb: 0.5 }}>
-                This action writes to Carbon. Approve it to run, or decline to skip it.
-              </Typography>
-              <Stack direction="row" spacing={1}>
-                <Button
-                  size="small"
-                  variant="contained"
-                  disabled={confirming}
-                  onClick={() => onConfirm(step.step_id)}
-                  sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
-                >
-                  {confirming ? 'Approving…' : 'Approve'}
-                </Button>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  disabled={confirming}
-                  onClick={() => onDecline(step.step_id)}
-                  sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
-                >
-                  Decline
-                </Button>
-              </Stack>
-            </Box>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75, fontSize: '0.6875rem' }}>
+              Use Approve / Decline in the card above to continue.
+            </Typography>
           )}
           {step.status === 'skipped' && (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, fontSize: '0.6875rem' }}>
@@ -631,6 +628,7 @@ StepCard.propTypes = {
   onPause: PropTypes.func,
   onResume: PropTypes.func,
   onEdit: PropTypes.func,
+  forceOpen: PropTypes.bool,
 };
 
 // W5-D — labelled metric for the Monitor grid (mirrors AITaskAuditCard Stat).
@@ -652,15 +650,15 @@ MonitorMetric.propTypes = {
   value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
 };
 
-// W5-D — one artifact in the Results grid: emoji icon by mime_type, name +
-// size, Download, and an inline Preview (first 20 lines, collapsible) for
-// text-like artifacts.
-function ResultArtifactCard({ artifact, planId, token }) {
-  const { notifyFromError } = useNotification();
+// W5-D — one artifact in the Results grid: Download, Preview, Delete (confirm).
+function ResultArtifactCard({ artifact, planId, token, onDeleted }) {
+  const { t } = useTranslation('ai');
+  const { notify, notifyFromError } = useNotification();
   const [busy, setBusy] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLines, setPreviewLines] = useState([]);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const name = artifact.name || 'artifact';
   const mime = artifact.mime_type || '';
@@ -724,8 +722,25 @@ function ResultArtifactCard({ artifact, planId, token }) {
     setPreviewOpen(true);
   };
 
+  const handleDelete = async () => {
+    if (!artifact?.id || !planId) return;
+    setBusy(true);
+    setConfirmDelete(false);
+    try {
+      // Plan Output artifacts are RunArtifact rows — not workspace AIArtifact.
+      // Hitting DELETE /ai/artifacts/{int}/ blew up (UUID PK) → red banner.
+      await deletePlanArtifact(token, planId, artifact.id);
+      notify({ message: t('artifactDeleted'), type: 'success' });
+      onDeleted?.(artifact.id);
+    } catch (err) {
+      notifyFromError(err, t('artifactDeleteFailed'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <Paper variant="outlined" sx={{ p: 1 }}>
+    <Paper variant="outlined" sx={{ p: 1 }} data-testid="result-artifact-card">
       <Stack direction="row" alignItems="flex-start" spacing={0.75}>
         <Typography component="span" sx={{ fontSize: '1rem', lineHeight: 1 }} aria-hidden>
           {artifactIcon(mime)}
@@ -746,7 +761,7 @@ function ResultArtifactCard({ artifact, planId, token }) {
             onClick={handleDownload}
             sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0, px: 0.75 }}
           >
-            {busy ? '…' : 'Download'}
+            {busy ? '…' : t('download')}
           </Button>
           {(previewable || imageable) && (
             <Button
@@ -756,7 +771,21 @@ function ResultArtifactCard({ artifact, planId, token }) {
               onClick={handlePreview}
               sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0, px: 0.75 }}
             >
-              {previewLoading ? '…' : previewOpen ? 'Hide' : 'Preview'}
+              {previewLoading ? '…' : previewOpen ? t('hidePreview') : t('preview')}
+            </Button>
+          )}
+          {artifact.id && (
+            <Button
+              size="small"
+              variant="text"
+              color="error"
+              disabled={busy}
+              onClick={() => setConfirmDelete(true)}
+              aria-label={t('deleteArtifact')}
+              data-testid="result-artifact-delete"
+              sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0, px: 0.5 }}
+            >
+              {t('delete')}
             </Button>
           )}
         </Stack>
@@ -772,7 +801,7 @@ function ResultArtifactCard({ artifact, planId, token }) {
             />
           ) : previewLines.length === 0 ? (
             <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
-              No text to preview.
+              {t('noPreviewText')}
             </Typography>
           ) : (
             <Typography variant="caption" component="pre" sx={{ m: 0, fontSize: '0.6875rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
@@ -781,6 +810,22 @@ function ResultArtifactCard({ artifact, planId, token }) {
           )}
         </Box>
       </Collapse>
+      <Dialog open={confirmDelete} onClose={() => setConfirmDelete(false)}>
+        <DialogTitle sx={{ fontSize: '0.875rem' }}>{t('deleteArtifactTitle')}</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ fontSize: '0.8125rem' }}>
+            {t('deleteArtifactConfirm', { name })}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDelete(false)} sx={{ textTransform: 'none', fontSize: '0.75rem' }}>
+            {t('keepFile')}
+          </Button>
+          <Button color="error" variant="contained" onClick={handleDelete} sx={{ textTransform: 'none', fontSize: '0.75rem' }}>
+            {t('deleteForever')}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Paper>
   );
 }
@@ -789,6 +834,7 @@ ResultArtifactCard.propTypes = {
   artifact: PropTypes.object.isRequired,
   planId: PropTypes.string.isRequired,
   token: PropTypes.string,
+  onDeleted: PropTypes.func,
 };
 
 /**
@@ -846,6 +892,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   const [detailLoading, setDetailLoading] = useState(false);
   const [runSteps, setRunSteps] = useState([]);
   const [phase, setPhase] = useState('idle'); // idle|working|paused|finished|stopped|error
+  const [autonomyMode, setAutonomyMode] = useState(() => readAutonomyMode());
   const [errorMessage, setErrorMessage] = useState(null);
   const [confirmingId, setConfirmingId] = useState(null);
   const [ledger, setLedger] = useState(null);
@@ -950,6 +997,17 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   selectedPlanRef.current = selectedPlan;
   phaseRef.current = phase;
   runStepsRef.current = runSteps;
+
+  useEffect(() => {
+    const onAutonomy = (event) => {
+      const next = event?.detail;
+      if (next) setAutonomyMode(next);
+      else setAutonomyMode(readAutonomyMode());
+    };
+    window.addEventListener('carbon-ai-autonomy', onAutonomy);
+    return () => window.removeEventListener('carbon-ai-autonomy', onAutonomy);
+  }, []);
+
   const prevExternalSegRef = useRef(externalTab);
   useEffect(() => {
     if (prevExternalSegRef.current === externalTab) return;
@@ -1092,6 +1150,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             output_type: s.output_type ?? null,
             artifacts: s.artifacts ?? [],
             error: s.error ?? null,
+            consent_granted: Boolean(s.consent_granted),
             // W7-A execution contract (F-26 / F-28): parallel lane grouping
             // + the runnable_state enum the UI locks/edits on.
             strategy: s.strategy || 'sequential',
@@ -1248,7 +1307,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       || isRerunnableStatus(effectivePlanStatus(selectedPlan));
     const ledgerVisible =
       tab === 'monitor' || tab === 'results'
-      || (chatFirst && (segment === 'output' || runHealthOpen || settled));
+      || (chatFirst && (segment === 'run' || segment === 'output' || runHealthOpen || settled));
     if (!planId || !ledgerVisible) return undefined;
     if (phase === 'working') {
       const timer = setInterval(() => loadLedger(planId), 5000);
@@ -1352,6 +1411,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
               output_type: frame.output_type ?? null,
               artifacts: frame.artifacts ?? [],
               error: frame.error ?? null,
+              ...(frame.consent_granted ? { consent_granted: true } : {}),
             });
           } else if (frame.type === 'step_end') {
             upsertStep({ step_id: frame.step_id, status: frame.status });
@@ -1857,6 +1917,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
         conversationId={conversationId}
         onPlanReady={handleDiscoveryReady}
         onStarted={handleDiscoveryStarted}
+        onSwitchToChat={onSwitchToChat}
       />
       <AgentTaskPicker
         plans={plans}
@@ -1891,18 +1952,40 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     });
     const phaseNameFor = (stepId) => phaseNameByStep[stepId] || null;
 
-    const completedCount = runSteps.filter((s) => s.runnable_state === 'completed').length;
-    const pendingCount = runSteps.filter((s) => s.runnable_state === 'pending').length;
+    const listSteps = runSteps.length ? runSteps : (Array.isArray(selectedPlan.steps)
+      ? selectedPlan.steps.map((s) => ({
+          step_id: s.step_id,
+          intent: s.intent,
+          tool_name: s.tool_name,
+          tool_args: s.tool_args,
+          status: s.status || 'pending',
+          tool_output: s.tool_output ?? null,
+          output_type: s.output_type ?? null,
+          artifacts: s.artifacts ?? [],
+          error: s.error ?? null,
+          runnable_state: s.runnable_state,
+          agent_role: s.agent_role,
+          consent_granted: Boolean(s.consent_granted),
+        }))
+      : []);
+    const completedCount = listSteps.filter(
+      (s) => s.status === 'completed' || s.runnable_state === 'completed',
+    ).length;
+    const pendingCount = listSteps.filter(
+      (s) => s.status === 'pending' || s.status === 'awaiting_approval' || s.runnable_state === 'pending',
+    ).length;
+    const awaitingStep = listSteps.find((s) => s.status === 'awaiting_approval') || null;
+    const pausedCompletedLabel = `${completedCount} step${completedCount === 1 ? '' : 's'} completed, ${pendingCount} to go`;
 
     const statusBanner = (() => {
-      if (phase === 'paused') {
+      if (phase === 'paused' || awaitingStep) {
         return (
           <Alert
             severity="info"
             data-testid="paused-banner"
             sx={{ fontSize: '0.6875rem', py: 0.25, '& .MuiAlert-message': { py: 0 } }}
           >
-            Paused — {completedCount} step{completedCount === 1 ? '' : 's'} completed, {pendingCount} to go
+            Paused — {pausedCompletedLabel}
           </Alert>
         );
       }
@@ -1954,24 +2037,9 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       return null;
     })();
 
-    const listSteps = runSteps.length ? runSteps : (Array.isArray(selectedPlan.steps)
-      ? selectedPlan.steps.map((s) => ({
-          step_id: s.step_id,
-          intent: s.intent,
-          tool_name: s.tool_name,
-          tool_args: s.tool_args,
-          status: s.status || 'pending',
-          tool_output: s.tool_output ?? null,
-          output_type: s.output_type ?? null,
-          artifacts: s.artifacts ?? [],
-          error: s.error ?? null,
-          runnable_state: s.runnable_state,
-        }))
-      : []);
-
     const listContent = (
       <Stack spacing={1}>
-        {phase === 'paused' && (
+        {(phase === 'paused' || awaitingStep) && !awaitingStep && (
           <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>
             Run paused — a step needs your approval
           </Typography>
@@ -1993,18 +2061,22 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             onEdit={(s) => setEditStepTarget({ step: s })}
           />
         ))}
-        {phase === 'paused' && (
-          <Typography variant="caption" color="text.secondary" sx={{ px: 0.5, fontSize: '0.6875rem' }}>
-            Approve or decline the step above, then resume the run from the toolbar.
-          </Typography>
-        )}
       </Stack>
     );
 
-    // Chat-first: Approve on Review only; Run/Pause/Resume live in the top toolbar.
-    // Classic debug tabs still need the plan card for Pause/Resume/Edit controls.
+    const consentHero = awaitingStep ? (
+      <ConsentHeroCard
+        step={awaitingStep}
+        confirming={confirmingId === awaitingStep.step_id}
+        onConfirm={handleConfirmStep}
+        onDecline={handleDeclineStep}
+        completedLabel={pausedCompletedLabel}
+      />
+    ) : null;
+
+    // Chat-first cockpit: Plan owns Approve/Cancel. Classic tabs still use the plan card.
     const needsPlanCard = chatFirst
-      ? selectedPlan.status === 'pending_approval'
+      ? false
       : ['pending_approval', 'approved', 'paused', 'running', 'failed'].includes(selectedPlan.status);
 
     return (
@@ -2039,7 +2111,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           />
         )}
 
-        {!needsPlanCard && selectedPlan.brief && (
+        {!needsPlanCard && !chatFirst && selectedPlan.brief && (
           <Typography
             variant="body2"
             color="text.secondary"
@@ -2057,90 +2129,36 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           </Typography>
         )}
 
+        {!chatFirst && showRunToolbar && (
+          <AgentRunToolbar
+            {...buildRunToolbarProps()}
+            onOpenPlan={() => setTab('tasks')}
+            onOpenOutput={() => setTab('results')}
+          />
+        )}
+
         <AgentRunSurface
           plan={selectedPlan}
           runSteps={runSteps}
           phase={phase}
           live={phase === 'working'}
-          defaultListOpen={phase === 'paused'}
+          defaultListOpen={autonomyDefaultListOpen(autonomyMode, {
+            paused: phase === 'paused',
+            awaiting: Boolean(awaitingStep),
+            finished: phase === 'finished' || phase === 'stopped' || phase === 'error',
+          })}
           artifacts={artifacts}
           banner={statusBanner}
+          consentHero={consentHero}
           listContent={listContent}
-          onOpenOutput={() => handleSegmentChange('output', { user: true })}
-          onRerun={handleRerun}
-          onOpenPlan={() => handleSegmentChange('plan', { user: true })}
-          canRerun={
-            isRerunnableStatus(selectedPlan.status)
-            || isRerunnableStatus(effectivePlanStatus(
-              runSteps.length
-                ? { ...selectedPlan, steps: mergePlanWithRunSteps(selectedPlan, runSteps).steps }
-                : selectedPlan,
-            ))
-          }
+          onOpenOutput={chatFirst
+            ? () => handleSegmentChange('output', { user: true })
+            : () => setTab('results')}
           busy={mutating}
+          confirmingId={confirmingId}
+          onConfirmStep={handleConfirmStep}
+          onDeclineStep={handleDeclineStep}
         />
-
-        {!chatFirst && (phase === 'finished' || (ledger && (phase === 'paused' || phase === 'stopped' || phase === 'error'))) && (
-          <>
-            <Stack direction="row" alignItems="center" spacing={1}>
-              <HistoryOutlinedIcon sx={{ fontSize: 15, color: 'text.secondary' }} />
-              <Typography variant="caption" sx={{ flex: 1, fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.secondary' }}>
-                Audit
-              </Typography>
-              {!ledger && !ledgerLoading && (
-                <Button size="small" onClick={() => loadLedger(selectedPlan.id)} sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0, px: 0.75 }}>
-                  Load
-                </Button>
-              )}
-            </Stack>
-            {ledgerLoading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={20} /></Box>
-            ) : (
-              <AITaskAuditCard ledger={ledger} />
-            )}
-          </>
-        )}
-
-        {conversationId && (
-          <Paper variant="outlined" sx={{ bgcolor: 'background.paper', overflow: 'hidden' }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.25, py: 0.875, borderBottom: 1, borderColor: 'divider' }}>
-              <Typography variant="body2" sx={{ flex: 1, fontWeight: 600, fontSize: '0.75rem' }}>
-                {t('subagents')}
-              </Typography>
-              <Button
-                size="small"
-                onClick={() => setSubagentDialogOpen(true)}
-                disabled={subagentSubmitting}
-                sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
-              >
-                {t('dispatchSubagent')}
-              </Button>
-            </Stack>
-            {subagentsLoading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-                <CircularProgress size={18} />
-              </Box>
-            ) : subagents.length === 0 ? (
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', px: 1.25, py: 1, fontSize: '0.6875rem' }}>
-                {t('noSubagents')}
-              </Typography>
-            ) : (
-              <Stack spacing={1} sx={{ p: 1 }}>
-                {subagents.map((sub) => (
-                  <SubagentResultCard
-                    key={sub.id}
-                    subagent={sub}
-                    token={token}
-                    conversationId={conversationId}
-                    onResolved={(updated) =>
-                      setSubagents((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
-                    }
-                  />
-                ))}
-              </Stack>
-            )}
-          </Paper>
-        )}
       </Stack>
     );
   };
@@ -2379,13 +2397,84 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       );
     }
 
+    const outputSteps = runSteps.length
+      ? runSteps
+      : (Array.isArray(selectedPlan.steps) ? selectedPlan.steps : []);
+    const awaitingOut = outputSteps.find((s) => s.status === 'awaiting_approval') || null;
+    const doneOut = outputSteps.filter(
+      (s) => s.status === 'completed' || s.runnable_state === 'completed',
+    ).length;
+    const leftOut = outputSteps.filter(
+      (s) => s.status === 'pending' || s.status === 'awaiting_approval' || s.runnable_state === 'pending',
+    ).length;
+    const midRun = phase === 'paused'
+      || phase === 'working'
+      || Boolean(awaitingOut)
+      || selectedPlan.status === 'paused'
+      || selectedPlan.status === 'running';
+
+    if (midRun && phase !== 'finished' && phase !== 'stopped' && phase !== 'error') {
+      const effective = effectivePlanStatus(selectedPlan);
+      if (!isRerunnableStatus(effective) && !isRerunnableStatus(selectedPlan.status)) {
+        const interimArts = artifacts.filter(Boolean);
+        return (
+          <Stack spacing={1.25} data-testid="output-lifecycle-card">
+            {(phase === 'paused' || awaitingOut) ? (
+              <>
+                <Alert
+                  severity="info"
+                  data-testid="paused-banner"
+                  sx={{ fontSize: '0.6875rem', py: 0.25, '& .MuiAlert-message': { py: 0 } }}
+                >
+                  Paused — {doneOut} step{doneOut === 1 ? '' : 's'} completed, {leftOut} to go
+                </Alert>
+                {awaitingOut ? (
+                  <ConsentHeroCard
+                    step={awaitingOut}
+                    confirming={confirmingId === awaitingOut.step_id}
+                    onConfirm={handleConfirmStep}
+                    onDecline={handleDeclineStep}
+                    onReviewStep={() => handleSegmentChange('run', { user: true })}
+                  />
+                ) : (
+                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                    Waiting on you — open Run to continue.
+                  </Typography>
+                )}
+              </>
+            ) : (
+              <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                Run in progress ({doneOut}/{outputSteps.length || 0} steps). Results and files will appear here as steps finish.
+              </Typography>
+            )}
+            {interimArts.length > 0 && (
+              <Stack spacing={0.75}>
+                <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.secondary' }}>
+                  Artifacts so far
+                </Typography>
+                {interimArts.map((artifact) => (
+                  <ResultArtifactCard
+                    key={artifact.id ?? artifact.name}
+                    artifact={artifact}
+                    planId={selectedPlan.id}
+                    token={token}
+                    onDeleted={(id) => setArtifacts((prev) => prev.filter((a) => a.id !== id))}
+                  />
+                ))}
+              </Stack>
+            )}
+          </Stack>
+        );
+      }
+    }
+
     if (phase !== 'finished' && phase !== 'stopped' && phase !== 'error') {
       const effective = effectivePlanStatus(selectedPlan);
       if (!isRerunnableStatus(effective) && !isRerunnableStatus(selectedPlan.status)) {
         return (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
             <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
-              Run the plan to see results.
+              Approve the plan, then run it to see results here.
             </Typography>
           </Box>
         );
@@ -2399,8 +2488,64 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       || isRerunnableStatus(effective)
       || selectedPlan.status === 'approved';
 
+    const exportGaps = (runSteps.length ? runSteps : (selectedPlan.steps || [])).filter((s) => {
+      const err = `${s.error || ''} ${typeof s.tool_output === 'object' && s.tool_output?.error ? s.tool_output.error : ''}`;
+      return /export refused|no real findings|could not create export/i.test(err);
+    });
+    const priorRun = selectedPlan.prior_run;
+    const priorComparison = priorRun?.comparison;
+
     return (
       <Stack spacing={1.25}>
+        {exportGaps.length > 0 && (
+          <Alert
+            severity="warning"
+            data-testid="output-export-gaps"
+            sx={{ fontSize: '0.6875rem', py: 0.5, '& .MuiAlert-message': { py: 0 } }}
+          >
+            <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, fontSize: '0.75rem', mb: 0.25 }}>
+              Export gap
+            </Typography>
+            {exportGaps.map((s) => (
+              <Typography key={s.step_id} variant="caption" sx={{ display: 'block', fontSize: '0.6875rem' }}>
+                {stripEngineJargon(s.intent) || `Step ${s.step_id}`}:{' '}
+                {s.error || s.tool_output?.error || 'Document export was refused.'}
+              </Typography>
+            ))}
+          </Alert>
+        )}
+        {priorRun && (
+          <Alert
+            severity={priorComparison === 'changed' ? 'info' : priorComparison === 'unchanged' ? 'success' : 'info'}
+            data-testid="output-rerun-receipt"
+            sx={{ fontSize: '0.6875rem', py: 0.5, '& .MuiAlert-message': { py: 0 } }}
+          >
+            <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, fontSize: '0.75rem', mb: 0.25 }}>
+              {priorComparison === 'changed' && 'Rerun — Answer changed vs last run'}
+              {priorComparison === 'unchanged' && 'Rerun — Answer unchanged vs last run'}
+              {priorComparison === 'pending' && 'Rerun — Previous Answer kept for comparison'}
+              {!priorComparison && 'Rerun — Previous Answer available'}
+            </Typography>
+            {priorComparison === 'changed' && priorRun.prior_final_response && (
+              <Typography
+                variant="caption"
+                component="div"
+                sx={{
+                  display: 'block',
+                  fontSize: '0.6875rem',
+                  mt: 0.5,
+                  maxHeight: 120,
+                  overflow: 'auto',
+                  whiteSpace: 'pre-wrap',
+                  opacity: 0.85,
+                }}
+              >
+                {priorRun.prior_final_response.slice(0, 800)}
+                {priorRun.prior_final_response.length > 800 ? '…' : ''}
+              </Typography>
+            )}
+          </Alert>
+        )}
         <Paper variant="outlined" sx={{ p: 1.25, bgcolor: 'background.paper' }}>
           <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.secondary', mb: 0.5 }}>
             Answer
@@ -2440,7 +2585,13 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
         ) : (
           <Stack spacing={0.75}>
             {artifacts.map((artifact) => (
-              <ResultArtifactCard key={artifact.id ?? artifact.name} artifact={artifact} planId={selectedPlan.id} token={token} />
+              <ResultArtifactCard
+                key={artifact.id ?? artifact.name}
+                artifact={artifact}
+                planId={selectedPlan.id}
+                token={token}
+                onDeleted={(id) => setArtifacts((prev) => prev.filter((a) => a.id !== id))}
+              />
             ))}
           </Stack>
         )}
@@ -2521,36 +2672,6 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
 
   // ── U-1 cockpit — Plan segment handled by AgentReviewSurface (review + inspect).
 
-  // Global run toolbar — one location (top bar).
-  const renderRunToolbar = () => {
-    const running = phase === 'working';
-    const busy = mutating;
-    const runnable = selectedEffective === 'approved' || selectedEffective === 'paused';
-    const paused = selectedEffective === 'paused';
-    const failed = selectedEffective === 'failed';
-    const rerunnable = isRerunnableStatus(selectedEffective);
-    const showRun = runnable && !running;
-    const btn = (title, disabled, onClick, Icon, color) => (
-      <Tooltip title={title}>
-        <span>
-          <IconButton size="small" aria-label={title} disabled={disabled} onClick={onClick} sx={{ p: 0.375 }}>
-            <Icon sx={{ fontSize: 16, color: color && !disabled ? color : undefined }} />
-          </IconButton>
-        </span>
-      </Tooltip>
-    );
-    return (
-      <Stack direction="row" spacing={0.25} alignItems="center" sx={{ flexShrink: 0 }}>
-        {btn(paused ? t('resumeRun') : t('runPlan'), !showRun || busy, handleRun, PlayArrowIcon, 'primary.main')}
-        {btn(t('pauseRun'), !running || busy, handlePause, PauseIcon, 'warning.main')}
-        {btn(t('stopRun'), !running, handleStop, StopIcon, 'error.main')}
-        {btn(t('rerunPlan'), !rerunnable || busy || running, handleRerun, RefreshIcon, 'primary.main')}
-        {btn(t('retryFailedSteps'), !failed || busy, handleRetry, ReplayIcon, 'warning.main')}
-        {btn(t('forkReviewable'), !selectedPlan || busy, handleFork, CallSplitIcon)}
-      </Stack>
-    );
-  };
-
   const clarifying = selectedPlan?.status === 'discovering';
   const showComposer = !selectedPlan || clarifying;
   // Prefer live runSteps over stale selectedPlan.steps so chips flip as soon
@@ -2562,11 +2683,31 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
         : selectedPlan,
     )
     : '';
-  // Toolbar when runnable or mid/post-run (Approve stays on Review stage).
-  // Retry affordance keys off effective status (all finished → completed).
+  // Toolbar when runnable or mid/post-run (Approve stays on Plan / Review).
   const showRunToolbar = ['approved', 'running', 'paused', 'failed', 'completed', 'cancelled', 'completed_with_gaps'].includes(
     selectedEffective,
   );
+
+  // Run controls — mounted under cockpit tabs via AgentRunToolbar (chat-first).
+  const buildRunToolbarProps = () => {
+    const awaitingConsent = (runSteps.length ? runSteps : (selectedPlan?.steps || []))
+      .some((s) => s.status === 'awaiting_approval');
+    return {
+      plan: selectedPlan,
+      phase,
+      effectiveStatus: selectedEffective,
+      busy: mutating,
+      awaitingConsent,
+      onRun: handleRun,
+      onPause: handlePause,
+      onStop: handleStop,
+      onRerun: handleRerun,
+      onRetry: handleRetry,
+      onFork: handleFork,
+      onOpenPlan: () => handleSegmentChange('plan', { user: true }),
+      onOpenOutput: () => handleSegmentChange('output', { user: true }),
+    };
+  };
 
   const renderChatFirst = () => {
     const statusChip = selectedPlan
@@ -2582,17 +2723,29 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           </Typography>
         );
       }
-      const reviewMode = selectedPlan.status === 'pending_approval' || selectedPlan.status === 'cancelled';
       return (
         <AgentReviewSurface
           plan={selectedPlan}
+          live={phase === 'working'}
+          confirmingId={confirmingId}
+          onConfirmStep={handleConfirmStep}
+          onDeclineStep={handleDeclineStep}
+        />
+      );
+    };
+
+    const planToolbar = (() => {
+      if (!selectedPlan || selectedPlan.status === 'discovering') return null;
+      if (segment !== 'plan') return null;
+      const reviewMode = selectedPlan.status === 'pending_approval' || selectedPlan.status === 'cancelled';
+      return (
+        <AgentPlanToolbar
+          plan={selectedPlan}
           mode={reviewMode ? 'review' : 'inspect'}
           busy={mutating}
-          live={phase === 'working'}
           onApprove={handleApprove}
           onDecline={handleDecline}
           onFork={handleFork}
-          onRenamePlan={handleRenamePlan}
           onReplanPlan={handleReplanPlan}
           onDiscuss={
             onSwitchToChat
@@ -2605,26 +2758,46 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
               )
               : undefined
           }
-          onEditStep={(step) => setEditStepTarget({ step })}
-          confirmingId={confirmingId}
-          onConfirmStep={handleConfirmStep}
-          onDeclineStep={handleDeclineStep}
+        />
+      );
+    })();
+
+    const runToolbar = (() => {
+      if (!selectedPlan || selectedPlan.status === 'discovering') return null;
+      if (segment !== 'run') return null;
+      if (!showRunToolbar) return null;
+      return <AgentRunToolbar {...buildRunToolbarProps()} />;
+    })();
+
+    const cockpitToolbar = segment === 'plan' ? planToolbar : segment === 'run' ? runToolbar : null;
+
+    const renderCockpitRun = () => renderRun();
+
+    const renderCockpitCanvas = () => {
+      const journeySteps = runSteps.length
+        ? runSteps
+        : (Array.isArray(selectedPlan?.steps) ? selectedPlan.steps : []);
+      const journey = selectedPlan
+        ? {
+          status: selectedPlan.status,
+          brief: selectedPlan.brief || selectedPlan.user_message || '',
+          steps: journeySteps,
+          finalResponse: selectedPlan.final_response || '',
+          artifacts,
+        }
+        : null;
+      return (
+        <AgentCanvasSurface
+          planId={selectedPlan?.id || null}
+          conversationId={conversationId}
+          live={phase === 'working' || phase === 'finished'}
+          journey={journey}
         />
       );
     };
 
-    const renderCockpitRun = () => renderRun();
-
-    const renderCockpitCanvas = () => (
-      <AgentCanvasSurface
-        planId={selectedPlan?.id || null}
-        conversationId={conversationId}
-        live={phase === 'working'}
-      />
-    );
-
     const renderCockpitOutput = () => (
-      <Stack spacing={1.25}>
+      <Stack spacing={1.25} data-testid="agent-output-pure">
         {(phase === 'finished' || phase === 'stopped' || phase === 'error') && (
           <Paper variant="outlined" sx={{ bgcolor: 'background.paper', overflow: 'hidden' }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.25, py: 0.875 }}>
@@ -2652,67 +2825,6 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           </Paper>
         )}
         {renderResults()}
-        <Paper variant="outlined" sx={{ bgcolor: 'background.paper', overflow: 'hidden' }}>
-          <Button
-            fullWidth
-            size="small"
-            onClick={() => setRunHealthOpen((v) => !v)}
-            endIcon={runHealthOpen ? <ExpandLessIcon sx={{ fontSize: 16 }} /> : <ExpandMoreIcon sx={{ fontSize: 16 }} />}
-            sx={{
-              justifyContent: 'space-between',
-              textTransform: 'none',
-              fontSize: '0.6875rem',
-              fontWeight: 600,
-              px: 1.25,
-              py: 0.875,
-              color: 'text.secondary',
-            }}
-            aria-expanded={runHealthOpen}
-          >
-            {t('runHealth')}
-          </Button>
-          <Collapse in={runHealthOpen} unmountOnExit>
-            <Box sx={{ px: 1, pb: 1 }}>
-              {renderMonitor()}
-              {(ledger || phase === 'finished' || phase === 'error' || phase === 'stopped') && (
-                <Stack spacing={1} sx={{ mt: 1 }}>
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    <HistoryOutlinedIcon sx={{ fontSize: 15, color: 'text.secondary' }} />
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        flex: 1,
-                        fontWeight: 600,
-                        fontSize: '0.6875rem',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                        color: 'text.secondary',
-                      }}
-                    >
-                      Audit
-                    </Typography>
-                    {!ledger && !ledgerLoading && selectedPlan && (
-                      <Button
-                        size="small"
-                        onClick={() => loadLedger(selectedPlan.id)}
-                        sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0, px: 0.75 }}
-                      >
-                        Load
-                      </Button>
-                    )}
-                  </Stack>
-                  {ledgerLoading ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
-                      <CircularProgress size={20} />
-                    </Box>
-                  ) : (
-                    <AITaskAuditCard ledger={ledger} />
-                  )}
-                </Stack>
-              )}
-            </Box>
-          </Collapse>
-        </Paper>
       </Stack>
     );
 
@@ -2755,7 +2867,6 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
               sx={{ height: 20, fontSize: '0.625rem', flexShrink: 0, maxWidth: 200 }}
             />
           )}
-          {showRunToolbar && renderRunToolbar()}
         </Stack>
 
         {showComposer && (
@@ -2764,6 +2875,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
               conversationId={conversationId}
               onPlanReady={handleDiscoveryReady}
               onStarted={handleDiscoveryStarted}
+              onSwitchToChat={onSwitchToChat}
               resumePlanId={clarifying ? selectedPlan.id : null}
               resumeTurns={clarifying ? (selectedPlan.discovery_turns || []) : null}
             />
@@ -2776,6 +2888,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             onSegment={(value) => handleSegmentChange(value, { user: true })}
             plan={selectedPlan}
             header={null}
+            toolbar={cockpitToolbar}
             renderPlan={renderCockpitPlan}
             renderRun={renderCockpitRun}
             renderCanvas={renderCockpitCanvas}

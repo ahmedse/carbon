@@ -41,9 +41,35 @@ so I can answer one question without triple-encoding the same job (DAG + steps +
 
 **Metrics demotion**
 - Metrics is **not** a peer segment. QoS chips live on Run progress; deep Monitor + Audit
-  live under Output (collapsible “Run health”). When the run is settled
-  (`finished` / `stopped` / `error`), Run health opens by default so audit is
-  not hidden behind a click.
+  live under **Run** as collapsible “Run health” (V5 — moved off Output). When the run is
+  settled (`finished` / `stopped` / `error`), Run health may open by default on **Run**
+  so audit is not hidden — Output stays Answer + files only.
+
+**Plan Operator chrome (V6 — graph structure)**
+- Given `pending_approval` Plan, When the Operator views Plan, Then a **toolbar under the tabs**
+  shows a **renameable plan label** plus primary CTAs **Approve plan** · **Cancel plan** ·
+  **Discuss in Chat** (≤3). Fork · Rename · Replan live under **More**. Body is
+  **`PlanDagGraph` structure mode** with a **docked scrollable detail pane** (not an overlay
+  Drawer). Hover shows node/edge tooltips; click fills the pane via **`RichContent`**
+  (shared MarkdownMessage formatter). No Finished/run status on Plan.
+- Given Cancel plan, When clicked, Then same API as prior Decline (`POST …/decline/` →
+  `cancelled`). Label must name the consequence (cancel the plan).
+
+**Run chronicle (V5)**
+- Given Run with steps, When Operator views Run, Then a chronicle (time · event · status)
+  is the default narrative; step I/O params stay collapsed until expand. Consent hero
+  remains above-fold. Transport Pause/Stop/Resume/Retry stay available (header and/or
+  per-step toolbar) and never replace step Approve/Decline.
+
+**Canvas story-first (V5)**
+- Given Agent Job Map on Canvas, When Operator views, Then layers read as goal → stages →
+  here → outcome. Raw `RULE_` / CBAC capability ids / tool names are demoted (expand or
+  Analyst). No new chart library — still `OpsCanvasHost`.
+
+**Output purity (V5)**
+- Given Output, When settled, Then Answer + artifact cards only (no Run health accordion).
+- Given an artifact card, When Delete is confirmed, Then `DELETE ai/artifacts/:id/` and
+  the card leaves the list.
 
 **Completed-plan actions (ADR-0043 aligned)**
 - Given a settled plan, When the operator is on **Run**, Then a thin CTA strip
@@ -85,17 +111,15 @@ AITaskPanel (chat-first)
  ├─ Header: AgentTaskPicker · status chip · RunToolbar
  ├─ DiscoveryComposer (idle / discovering only)
  └─ AgentCockpit                    ← segments Plan · Run · Canvas · Output
-      ├─ Plan  → AgentReviewSurface | PlanDagGraph   data-testid=agent-cockpit-hero-plan
-      ├─ Run   → AgentRunSurface (list-first, QoS strip; no Job Map / no DAG / no artifact cards)
+      ├─ Plan  → toolbar (`AgentPlanToolbar`) under tabs · graph + docked RichContent
+      │            data-testid=agent-cockpit-hero-plan
+      ├─ Run   → AgentRunSurface (chronicle · QoS strip · consent · Run health)
       │            data-testid=agent-cockpit-hero-run
-      │            (artifact count in progress strip; handoff CTA → Output when finished;
-│             post-done CTAs: Rerun · Edit on Plan · Open Output — no ledger table on Run)
-      ├─ Canvas → AgentCanvasSurface → OpsCanvasHost
+      │            (no Job Map / no DAG / no artifact cards; post-done CTAs)
+      ├─ Canvas → AgentCanvasSurface → OpsCanvasHost (story-first)
       │            data-testid=agent-cockpit-hero-canvas
-      └─ Output → Answer (prose; tool JSON behind Technical details) ·
-         artifact cards · Actions (Rerun · Fork · Edit plan · …)
-         Empty artifacts: explain that files need an export step.
-                   · Run health (Monitor + Audit; auto-open when run settled)
+      └─ Output → Answer · artifact cards (Preview/Download/Delete) · Actions
+                   (no Run health)
                    data-testid=agent-cockpit-hero-output
 ```
 
@@ -103,17 +127,17 @@ AITaskPanel (chat-first)
 - [x] Reuse `PlanDagGraph`, `OpsCanvasHost`, `OpsCanvasShelf`, `AgentReviewSurface`, `StepCard`
 - [x] No new chart library (ADR-0011 / 0012)
 - [x] Feedback via `NotificationProvider` — no `alert()`
-- [x] Dialogs: existing `SystemDialog` / MUI Dialog for Library only
+- [x] Dialogs: **SystemDialog** for Operator surfaces (beat details, library); ConfirmDialog / named consequence for destructive — never invent a raw Dialog chrome for AI forms (`.ai-toolkit/shared/design-system.md`, `frontend-ready.md`).
 
 ### State Matrix (Artifact 5)
 
 | Surface | idle | loading | empty | loaded | error | forbidden |
 |---------|------|---------|-------|--------|-------|-----------|
 | Cockpit | composer hint | skeleton “Loading task…” | picker empty | four segments | notify + retry | notify |
-| Plan | — | — | no steps caption | DAG / review / inspect (Edit brief · Fork when completed) | — | — |
-| Run | — | progress “Starting…” | no steps | StepCards + QoS (+ post-done CTAs when settled) | step error chips | — |
-| Canvas | — | CircularProgress | empty copy + CTA | OpsCanvasHost | Retry | notify |
-| Output | — | artifacts spinner | “Run the plan…” | artifacts + Actions + Run health | notify | — |
+| Plan | — | — | no steps caption | stage list / optional DAG / review chrome | — | — |
+| Run | — | progress “Starting…” | no steps | Chronicle + StepCards + QoS (+ Run health) | step error chips | — |
+| Canvas | — | CircularProgress | empty copy + CTA | OpsCanvasHost story-first | Retry | notify |
+| Output | — | artifacts spinner | lifecycle honesty | Answer + files + Actions | notify | — |
 
 Component: segment ToggleButton `default|selected|focus-visible|disabled`.
 

@@ -24,6 +24,27 @@ logger = logging.getLogger("pulse.cognition.plan.loop")
 _step_index_context = None
 
 
+def _coerce_json_field(value, *, default=None):
+    """Accept dict/list already decoded by Django JSONField, or a JSON string.
+
+    Resume used to call ``json.loads`` unconditionally — DjangoStore returns
+    native dicts, which raised ``TypeError: the JSON object must be str,
+    bytes or bytearray, not dict`` and aborted the whole plan mid-run.
+    """
+    if value is None or value == "":
+        return default
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, (bytes, bytearray)):
+        value = value.decode("utf-8", errors="replace")
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return default
+    return default
+
+
 def set_step_index_context(fn) -> None:
     """Inject the host step-index contextvar setter (plans_service.set_current_step_index)."""
     global _step_index_context
@@ -60,6 +81,37 @@ def _tool_requires_confirmation(tool_name: str) -> bool:
             tool_name,
         )
     return requires_confirmation
+
+
+def _hollow_tool_message(tool_output: dict | None) -> str | None:
+    """Return an error message when a tool 'succeeded' with zero usable evidence.
+
+    Empty ``web_research`` used to persist as Finished — operator saw green
+    with 'No results were returned'. That is a hollow success; fail closed.
+    """
+    if not isinstance(tool_output, dict):
+        return None
+    name = (tool_output.get("tool_name") or "").strip()
+    raw = tool_output.get("result")
+    parsed = raw
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            parsed = None
+    if not isinstance(parsed, dict):
+        return None
+    if name == "web_research" or "web_research" in name:
+        results = parsed.get("results")
+        if isinstance(results, list) and len(results) == 0:
+            return (
+                parsed.get("error")
+                or parsed.get("message")
+                or "Web research returned no results."
+            )
+        if parsed.get("status") == "no_match" and not results:
+            return parsed.get("error") or "Web research returned no results."
+    return None
 
 
 # Pulse v2 Phase 5: read-only tools the loop may auto-chain for multi-hop
@@ -335,9 +387,13 @@ class ReActLoop:
                             intent=s.intent,
                             draft_text=s.draft_text or "",
                             critic_verdict=s.critic_verdict or "pass",
-                            critic_flags=json.loads(s.critic_flags_json) if s.critic_flags_json else [],
+                            critic_flags=_coerce_json_field(
+                                s.critic_flags_json, default=[],
+                            ) or [],
                             executed=s.status == "completed",
-                            tool_output=json.loads(s.tool_output_json) if s.tool_output_json else None,
+                            tool_output=_coerce_json_field(
+                                s.tool_output_json, default=None,
+                            ),
                             error=s.error,
                         ))
                 logger.debug(
@@ -1351,11 +1407,27 @@ class ReActLoop:
             elif hard_fails:
                 succeeded = False
                 final_status = "failed"
+            elif not step_results:
+                # Empty work is NOT success when the durable run still has
+                # open steps (the "Completed + 0/N pending" lie). Fail closed.
+                open_n = await self._count_open_steps(_db, run_id) if (
+                    _db is not None and run_id is not None
+                ) else 0
+                if open_n > 0:
+                    succeeded = False
+                    final_status = "failed"
+                    final_response = (
+                        "Run ended without executing any steps "
+                        f"({open_n} still pending). Re-approve to retry."
+                    )
+                else:
+                    succeeded = True
+                    final_status = "completed"
             else:
                 succeeded = all(
                     r.critic_verdict in ("pass", "pass_with_flag") and not r.error
                     for r in step_results
-                ) if step_results else True
+                )
                 final_status = "completed" if succeeded else "failed"
 
         # ── P1.1: Update Run row with final status ────────────────────────
@@ -1744,6 +1816,21 @@ class ReActLoop:
                     )
                 if _tool_err:
                     result.error = str(_tool_err)
+
+            # ── Hollow-result honesty (empty research / soft-empty tools) ─
+            # Tools that "succeed" with zero evidence must not persist as
+            # Finished — that is the same lie as Completed + 0/N pending.
+            if not result.error and not result.paused and result.tool_output:
+                _hollow = _hollow_tool_message(result.tool_output)
+                if _hollow:
+                    result.error = _hollow
+                    result.critic_verdict = "veto"
+                    if "hollow_result" not in result.critic_flags:
+                        result.critic_flags.append("hollow_result")
+                    logger.info(
+                        "ReActLoop: hollow tool result step=%d → failed honestly",
+                        step.step_id,
+                    )
 
             # ── Fix 3: mutation-tool output validation ─────────────────────
             # A confirmation-gated tool (create_dq_rule, learn_fact, …) MUST
@@ -2151,6 +2238,20 @@ class ReActLoop:
 
     # ── P1.1: Durable run persistence helpers ─────────────────────────────
 
+    async def _count_open_steps(self, _db, run_id: str) -> int:
+        """Count durable steps that are not terminal (pending/running/awaiting)."""
+        from ai.engine.core.models import RunStep
+
+        if _db is None or not run_id:
+            return 0
+        try:
+            rows = await _db.select(RunStep, ("run_id", run_id))
+        except Exception:  # noqa: BLE001 — honesty check must never crash finalize
+            logger.exception("ReActLoop: open-step count failed run=%s", run_id)
+            return 0
+        terminal = {"completed", "failed", "skipped"}
+        return sum(1 for s in rows if getattr(s, "status", None) not in terminal)
+
     async def _persist_skipped_step(
         self,
         _db,
@@ -2313,9 +2414,32 @@ class ReActLoop:
             return
 
         if final_status in ("completed", "completed_with_gaps", "failed"):
+            # Never stamp Completed while durable steps are still open.
+            if final_status in ("completed", "completed_with_gaps"):
+                open_n = await self._count_open_steps(_db, run_id)
+                if open_n > 0:
+                    logger.error(
+                        "ReActLoop: refusing %s with %d open step(s) id=%s",
+                        final_status, open_n, run_id,
+                    )
+                    final_status = "failed"
+                    succeeded = False
+                    final_response = (
+                        "Run ended before steps finished "
+                        f"({open_n} still open). Re-approve to retry."
+                    )
             run_row.status = final_status
         else:
             run_row.status = "completed" if succeeded else "failed"
+            if run_row.status == "completed":
+                open_n = await self._count_open_steps(_db, run_id)
+                if open_n > 0:
+                    run_row.status = "failed"
+                    succeeded = False
+                    final_response = (
+                        "Run ended before steps finished "
+                        f"({open_n} still open). Re-approve to retry."
+                    )
         run_row.final_response = final_response[:2000] if final_response else None
         run_row.total_llm_calls = total_llm_calls
         run_row.total_latency_ms = total_latency_ms

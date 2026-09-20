@@ -610,6 +610,61 @@ def test_finalize_discovery_builds_plan_without_more_questions(
     assert RunStep.objects.filter(run_id=run.id).count() >= 1
 
 
+@pytest.mark.django_db
+def test_discovery_gates_personal_leave_without_run(user, patch_engine_seams, monkeypatch):
+    """Track B — personal leave must not open a discovering Carbon quiz."""
+    service = PlansService()
+    result = service.start_discovery(user, brief="أريد عمل اجازه")
+    assert result["status"] == "recommended"
+    assert result["id"] is None
+    assert result["plannable"] is False
+    assert result["route"]["recommended"] == "leave_request"
+    assert Run.objects.filter(host_user_id=str(user.pk), status="discovering").count() == 0
+    # LLM must not be consulted for gated briefs.
+    from ai.engine.llm.router import route_chat
+    # no monkeypatch needed — if route_chat were called it would hit network/fail
+
+
+@pytest.mark.django_db
+def test_discovery_gates_who_is_advisory(user, patch_engine_seams):
+    service = PlansService()
+    result = service.start_discovery(user, brief="من هو سلمان")
+    assert result["status"] == "handoff_chat"
+    assert result["plannable"] is False
+    assert result["id"] is None
+
+
+@pytest.mark.django_db
+def test_discovery_advance_digression_returns_route(
+    user, patch_engine_seams, run_ids_cleanup, monkeypatch
+):
+    monkeypatch.setattr(
+        "ai.engine.llm.router.route_chat",
+        AsyncMock(
+            return_value={
+                "content": '{"action": "ask", "question": "Which data sources?"}',
+                "tool_calls": None,
+                "finish_reason": "stop",
+                "model": "test",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cost_usd": 0.0,
+            }
+        ),
+    )
+    service = PlansService()
+    started = service.start_discovery(user, brief="Summarize our carbon footprint")
+    run_ids_cleanup.append(started["id"])
+
+    advance = service.advance_discovery(user, started["id"], "أريد إجازة")
+    assert advance["plannable"] is False
+    assert advance["status"] == "recommended"
+    assert advance["route"]["recommended"] == "leave_request"
+    assert advance["run_status"] == "discovering"
+    # Must not append another Carbon clarifying question.
+    assert advance.get("question") is None
+
+
 # ── Owner scoping (CBAC) ─────────────────────────────────────────────────
 
 
@@ -881,6 +936,8 @@ def test_confirm_step_executes_staged_mutation(user, patch_engine_seams, run_ids
     assert result == {"status": "confirmed", "plan_id": plan.id, "step_id": 1}
     step = RunStep.objects.get(run_id=plan.id, step_index=1)
     assert step.status == "completed"
+    assert isinstance(step.critic_flags_json, dict)
+    assert step.critic_flags_json.get("consent_granted") is True
 
 
 @pytest.mark.django_db
@@ -1214,6 +1271,53 @@ def test_edit_plan_applies_step_deltas(user, patch_engine_seams, run_ids_cleanup
     assert "Archive the results" in intents
     assert "Compare against the baseline" not in intents
     assert len(result["steps"]) == 2
+    assert result.get("edit_mode") == "delta"
+
+
+@pytest.mark.django_db
+def test_edit_plan_add_chart_is_surgical(user, patch_engine_seams, run_ids_cleanup):
+    """'add a chart' must not wipe the plan into duplicate analyze steps."""
+    plan = _make_plan(user, brief="Analyze salary distribution at GOFSCO")
+    run_ids_cleanup.append(plan.id)
+    # Pretend the LLM would have returned a clone-heavy replan if called.
+    _FakePlanner.plan_specs = {
+        "add a chart": {
+            "pattern": "custom",
+            "source": "llm_decompose",
+            "synthesis_instruction": "x",
+            "steps": [
+                {"step_id": 0, "intent": "Analyze salary distribution by nationality", "tool_name": None, "tool_args": {}, "depends_on": []},
+                {"step_id": 1, "intent": "Analyze salary distribution by org", "tool_name": None, "tool_args": {}, "depends_on": [0]},
+                {"step_id": 2, "intent": "Analyze salary distribution by…", "tool_name": None, "tool_args": {}, "depends_on": [1]},
+                {"step_id": 3, "intent": "Analyze salary distribution by…", "tool_name": None, "tool_args": {}, "depends_on": [2]},
+                {"step_id": 4, "intent": "Analyze salary distribution by…", "tool_name": None, "tool_args": {}, "depends_on": [3]},
+            ],
+        }
+    }
+
+    service = PlansService()
+    result = service.edit_plan(user, plan.id, brief="add a chart")
+
+    assert result.get("edit_mode") == "incremental"
+    intents = [s["intent"] for s in result["steps"]]
+    # Prior spine kept (fixture starts with emissions load)
+    assert any("emissions" in i.lower() or "Load" in i for i in intents)
+    fps = [PlansService._intent_fingerprint(i) for i in intents]
+    assert len(fps) == len(set(fps))
+    assert any("chart" in i.lower() for i in intents)
+
+
+def test_dedupe_plan_steps_collapses_clones():
+    steps = [
+        {"step_id": 0, "intent": "Analyze salary distribution by nationality", "depends_on": []},
+        {"step_id": 1, "intent": "Analyze salary distribution by…", "depends_on": [0]},
+        {"step_id": 2, "intent": "Analyze salary distribution by…", "depends_on": [1]},
+        {"step_id": 3, "intent": "Export Word report", "depends_on": [2]},
+    ]
+    out = PlansService._dedupe_plan_steps(steps)
+    intents = [s["intent"] for s in out]
+    assert len(out) == 3
+    assert intents[-1] == "Export Word report"
 
 
 @pytest.mark.django_db

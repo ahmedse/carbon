@@ -24,6 +24,47 @@ _PLACEHOLDER_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Template slots the LLM leaves in prose/tables — e.g. [Insert specific insights…],
+# [Avg Kuwaiti Salary], [Median Non-Kuwaiti Salary]. Any of these = hollow pack.
+_UNFILLED_SLOT_RE = re.compile(
+    r"\["
+    r"(?:"
+    r"Insert\b"
+    r"|Placeholder\b"
+    r"|TODO\b"
+    r"|TBD\b"
+    r"|N/?A\b"
+    r"|Avg(?:erage)?\b"
+    r"|Median\b"
+    r"|Highest\b"
+    r"|Lowest\b"
+    r"|Specific insights?\b"
+    r"|actionable recommendations?\b"
+    r"|[A-Za-z][^\]]{0,60}?\b(?:Salary|Value|Count|Rate|Amount|Figure|Metric)\b"
+    r")"
+    r"[^\]]*\]",
+    re.IGNORECASE,
+)
+
+# Mid-run / incomplete language that must not ship as a finished deliverable.
+_MID_RUN_RE = re.compile(
+    r"\b(?:in progress|work in progress|WIP|awaiting|pending results?"
+    r"|results? (?:will|to) (?:follow|come|be (?:added|inserted))"
+    r"|partial (?:results?|findings?|data)|TBD|to be (?:determined|confirmed)"
+    r"|once (?:the )?(?:run|computation|validation) completes?)\b",
+    re.IGNORECASE,
+)
+
+_MIN_PROSE_CHARS = 120
+_MIN_TABLE_CELLS = 2
+
+
+def text_has_unfilled_slots(text: str | None) -> bool:
+    """True when prose still contains LLM template brackets."""
+    if not (text or "").strip():
+        return False
+    return bool(_UNFILLED_SLOT_RE.search(text))
+
 
 def content_is_placeholder(md: str | None) -> bool:
     """True when markdown is empty or a hollow skeleton (placeholder tokens)."""
@@ -32,11 +73,112 @@ def content_is_placeholder(md: str | None) -> bool:
         return True
     if _PLACEHOLDER_RE.search(text):
         return True
+    if text_has_unfilled_slots(text):
+        return True
     # Mostly bracketed stubs like "[Placeholder for insights]"
     brackets = re.findall(r"\[[^\]]{3,80}\]", text)
     if brackets and len("".join(brackets)) >= max(24, int(len(text) * 0.35)):
         return True
     return False
+
+
+def content_is_mid_run(md: str | None) -> bool:
+    """True when prose advertises incomplete / pending work."""
+    text = (md or "").strip()
+    if not text:
+        return False
+    return bool(_MID_RUN_RE.search(text))
+
+
+def cell_is_placeholder(cell: Any) -> bool:
+    """True when a table cell is an unfilled template slot."""
+    s = str(cell or "").strip()
+    if not s:
+        return False
+    if text_has_unfilled_slots(s):
+        return True
+    # Whole-cell bracket stub: [anything]
+    if re.fullmatch(r"\[[^\]]{2,80}\]", s):
+        return True
+    return False
+
+
+def table_has_unfilled_slots(table: dict | None) -> bool:
+    if not isinstance(table, dict):
+        return False
+    for row in table.get("rows") or []:
+        cells = row if isinstance(row, (list, tuple)) else [row]
+        if any(cell_is_placeholder(c) for c in cells):
+            return True
+    return False
+
+
+def table_has_substance(table: dict | None) -> bool:
+    """True when table carries real data cells (not headers-only / blank / stubs)."""
+    if not isinstance(table, dict):
+        return False
+    if table_has_unfilled_slots(table):
+        return False
+    rows = table.get("rows")
+    if not isinstance(rows, list) or not rows:
+        return False
+    filled = 0
+    for row in rows:
+        cells = row if isinstance(row, (list, tuple)) else [row]
+        for c in cells:
+            if str(c or "").strip() and not cell_is_placeholder(c):
+                filled += 1
+    return filled >= _MIN_TABLE_CELLS
+
+
+def images_have_substance(images: list | None) -> bool:
+    if not isinstance(images, list):
+        return False
+    return any(
+        isinstance(img, dict) and str(img.get("image_b64") or "").strip()
+        for img in images
+    )
+
+
+def export_has_substance(
+    content: str | None,
+    table: dict | None = None,
+    images: list | None = None,
+) -> tuple[bool, str]:
+    """Gate finished deliverables: refuse hollow, mid-run, or title-only packs.
+
+    Returns ``(ok, reason)``. Reason is empty when ok.
+
+    A chart alone does **not** excuse unfilled ``[Insert…]`` / ``[Avg … Salary]``
+    slots in prose or tables — that is the hollow Word the operator already saw.
+    """
+    if text_has_unfilled_slots(content) or table_has_unfilled_slots(table):
+        return False, (
+            "Export refused — the draft still contains unfilled template slots "
+            "(e.g. [Insert …], [Avg … Salary]). Bind real findings from prior "
+            "steps, then export."
+        )
+    if content_is_placeholder(content) and not table_has_substance(table) and not images_have_substance(images):
+        return False, (
+            "Export refused — no real findings to write. Provide markdown "
+            "content with measured results, and/or a table, and/or chart images."
+        )
+    if content_is_mid_run(content) and not table_has_substance(table):
+        return False, (
+            "Export refused — content still reads as in-progress / pending. "
+            "Finish the analysis steps, then export a complete findings pack."
+        )
+    prose = (content or "").strip()
+    if (
+        not table_has_substance(table)
+        and not images_have_substance(images)
+        and len(prose) < _MIN_PROSE_CHARS
+    ):
+        return False, (
+            "Export refused — findings are too thin for a deliverable "
+            f"(need ≥{_MIN_PROSE_CHARS} characters of prose, a data table, or a chart)."
+        )
+    return True, ""
 
 
 def _parse_maybe_json(value: Any) -> Any:

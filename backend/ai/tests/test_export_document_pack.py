@@ -22,7 +22,12 @@ async def test_export_pack_writes_four_formats(plugin, tmp_path):
             {
                 "title": "Board Pack Demo",
                 "format": "pack",
-                "content": "## Summary\n- Headcount up\n- GOSI stable\n",
+                "content": (
+                    "## Summary\n"
+                    "- Headcount up across GOFSCO sites this quarter.\n"
+                    "- GOSI employer contributions remain within statutory bands.\n"
+                    "- No material variance vs last committed payroll cycle.\n"
+                ),
                 "table": {
                     "headers": ["Metric", "Value"],
                     "rows": [["Headcount", "529"], ["GOSI", "184220"]],
@@ -49,7 +54,16 @@ async def test_export_pack_writes_four_formats(plugin, tmp_path):
 async def test_export_pdf_only(plugin, tmp_path):
     with override_settings(MEDIA_ROOT=str(tmp_path)):
         result = await plugin.execute(
-            {"title": "PDF Only", "format": "pdf", "content": "Hello PDF"},
+            {
+                "title": "PDF Only",
+                "format": "pdf",
+                "content": (
+                    "## Compliance note\n"
+                    "October payroll figures were validated against GOSI and KL "
+                    "statutory rates. Employer share matches the published schedule "
+                    "for the period under review."
+                ),
+            },
             ctx=None,
         )
     assert "error" not in result
@@ -63,7 +77,11 @@ async def test_export_png_fallback_without_table(plugin, tmp_path):
             {
                 "title": "Chart Fallback",
                 "format": "png",
-                "content": "- Alpha finding\n- Beta finding\n",
+                "content": (
+                    "## Findings\n"
+                    "- Alpha cohort average base pay rose 3.2% versus prior period.\n"
+                    "- Beta sites remain within GOSI contribution tolerance bands.\n"
+                ),
             },
             ctx=None,
         )
@@ -84,6 +102,93 @@ async def test_export_refuses_hollow_placeholder(plugin, tmp_path):
         )
     assert "error" in result
     assert "refused" in result["error"].lower() or "findings" in result["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_export_refuses_mid_run_prose(plugin, tmp_path):
+    with override_settings(MEDIA_ROOT=str(tmp_path)):
+        result = await plugin.execute(
+            {
+                "title": "Partial Pack",
+                "format": "docx",
+                "content": (
+                    "## Status\n"
+                    "Analysis is still in progress. Partial results will follow "
+                    "once the payroll computation completes and validation finishes."
+                ),
+            },
+            ctx=None,
+        )
+    assert "error" in result
+    assert "in-progress" in result["error"].lower() or "pending" in result["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_export_refuses_thin_prose(plugin, tmp_path):
+    with override_settings(MEDIA_ROOT=str(tmp_path)):
+        result = await plugin.execute(
+            {
+                "title": "Thin",
+                "format": "docx",
+                "content": "Looks fine.",
+            },
+            ctx=None,
+        )
+    assert "error" in result
+    assert "thin" in result["error"].lower() or "refused" in result["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_export_refuses_insert_slot_shell(plugin, tmp_path):
+    with override_settings(MEDIA_ROOT=str(tmp_path)):
+        result = await plugin.execute(
+            {
+                "title": "Salary Distribution Analysis at GOFSCO",
+                "format": "docx",
+                "content": (
+                    "## Overview\n"
+                    "This report analyses salary distribution.\n\n"
+                    "## Key Findings\n"
+                    "- [Insert specific insights, e.g., 'Kuwaiti nationals…']\n"
+                ),
+                "table": {
+                    "headers": ["Category", "Average Salary"],
+                    "rows": [["Kuwaiti", "[Avg Kuwaiti Salary]"]],
+                },
+            },
+            ctx=None,
+        )
+    assert "error" in result
+    assert "template" in result["error"].lower() or "unfilled" in result["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_export_docx_identity_header(plugin, tmp_path):
+    with override_settings(MEDIA_ROOT=str(tmp_path)):
+        result = await plugin.execute(
+            {
+                "title": "Identity Check",
+                "format": "docx",
+                "content": (
+                    "## Findings\n"
+                    "Kuwaiti average base pay is 1,180 KWD across the sampled cohort. "
+                    "Indian and Egyptian bands sit between 820 and 980 KWD for the same period."
+                ),
+                "table": {
+                    "headers": ["Nationality", "Avg"],
+                    "rows": [["Kuwaiti", "1180"], ["Indian", "900"]],
+                },
+            },
+            ctx=None,
+        )
+    assert "error" not in result, result
+    from docx import Document
+
+    path = Path(tmp_path) / "ai_exports" / result["files"][0]["filename"]
+    doc = Document(str(path))
+    texts = [p.text for p in doc.paragraphs]
+    assert any("Pulse — AI Coworker" in t for t in texts)
+    assert not any("Carbon" in t for t in texts)
 
 
 @pytest.mark.asyncio

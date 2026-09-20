@@ -40,6 +40,7 @@ const stopPlan = vi.fn();
 const getPlanLedger = vi.fn();
 const listPlanArtifacts = vi.fn();
 const downloadArtifact = vi.fn();
+const deletePlanArtifact = vi.fn();
 const listPlanTemplates = vi.fn();
 const instantiatePlanTemplate = vi.fn();
 const promotePlanTemplate = vi.fn();
@@ -73,6 +74,7 @@ vi.mock('../api/aiWorkspace', () => ({
   getPlanLedger: (...args) => getPlanLedger(...args),
   listPlanArtifacts: (...args) => listPlanArtifacts(...args),
   downloadArtifact: (...args) => downloadArtifact(...args),
+  deletePlanArtifact: (...args) => deletePlanArtifact(...args),
   listPlanTemplates: (...args) => listPlanTemplates(...args),
   instantiatePlanTemplate: (...args) => instantiatePlanTemplate(...args),
   promotePlanTemplate: (...args) => promotePlanTemplate(...args),
@@ -120,6 +122,7 @@ beforeEach(() => {
   declinePlanStep.mockResolvedValue({ status: 'declined', plan_id: 'plan-1', step_id: 1 });
   getPlanLedger.mockResolvedValue({ plan_id: 'plan-1', status: 'completed', runs: [] });
   listPlanArtifacts.mockResolvedValue({ plan_id: 'plan-1', artifacts: [], count: 0 });
+  deletePlanArtifact.mockResolvedValue({ deleted: 10, plan_id: 'plan-1' });
   listPlanTemplates.mockResolvedValue({ templates: [], count: 0 });
   listSchedules.mockResolvedValue({ schedules: [], count: 0 });
   instantiatePlanTemplate.mockResolvedValue({ ...PLAN, id: 'plan-from-tpl' });
@@ -419,7 +422,33 @@ describe('AITaskPanel — W5-D Results tab', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Results' }));
 
-    expect(screen.getByText('Run the plan to see results.')).toBeInTheDocument();
+    expect(screen.getByText('Approve the plan, then run it to see results here.')).toBeInTheDocument();
+  });
+
+  it('shows paused consent hero on Output instead of empty placeholder', async () => {
+    currentPlan = {
+      ...PLAN,
+      status: 'paused',
+      steps: [
+        { step_id: 0, intent: 'Search', tool_name: 'search_entity', status: 'completed', runnable_state: 'completed' },
+        {
+          step_id: 1,
+          intent: 'Deny compensation under RULE_21',
+          tool_name: 'call_host_api',
+          status: 'awaiting_approval',
+          runnable_state: 'pending',
+        },
+      ],
+    };
+
+    render(<AITaskPanel conversationId="conv-1" />);
+    await ensureClassicRunTab();
+    fireEvent.click(screen.getByRole('tab', { name: 'Results' }));
+
+    expect(await screen.findByTestId('output-lifecycle-card')).toBeInTheDocument();
+    expect(screen.getByTestId('consent-hero-card')).toBeInTheDocument();
+    expect(screen.queryByText(/RULE_21/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Run the plan to see results.')).not.toBeInTheDocument();
   });
 
   it('renders the final response and artifacts after a completed run', async () => {

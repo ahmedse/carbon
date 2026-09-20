@@ -478,13 +478,17 @@ class WebResearch(ToolPlugin):
                 logger.warning("web_research ddg-html error: %s", exc)
 
         if not results:
+            # Honesty: empty research is a failure to gather evidence — not a
+            # successful Finished step. Callers must retry with a URL or
+            # different query, not green-check a hollow result.
             return {
+                "error": (
+                    "No results were returned from the keyless web sources. "
+                    "Retry with a more specific query or fetch a concrete URL."
+                ),
                 "query": query,
                 "results": [],
-                "message": (
-                    "No results were returned from the keyless web sources. "
-                    "Consider fetching a specific URL instead."
-                ),
+                "status": "no_match",
                 "source": "external_web",
                 "retrieved_at": _now_iso(),
             }

@@ -171,45 +171,70 @@ def sync_agent_job_map_from_run(run) -> int:
 
     Called as steps advance so the canvas tracks plan execution (not Chat).
     Matches artifacts by ``content_json.plan_id == run.id``. Returns patched count.
+
+    When no board exists for this plan, upserts one from the run so Canvas
+    never stays on the create-time Planned seed while the header says Completed.
     """
+    from accounts.models import User
     from ai.models import AIArtifact
-    from ai.models.core import RunStep
+    from ai.models.core import RunArtifact, RunStep
 
     run_id = str(getattr(run, "id", "") or "")
     if not run_id:
         return 0
 
     rows = list(RunStep.objects.filter(run_id=run_id).order_by("step_index"))
+    # Prefer durable RunSteps; fall back to plan_json steps so a board still
+    # shows the intended path before steps are materialised.
+    if not rows:
+        plan = getattr(run, "plan_json", None) or {}
+        seed = layers_from_plan(plan if isinstance(plan, dict) else {})
+        step_payload = list((seed.get("job_map") or {}).get("steps") or [])
+    else:
+        step_payload = [
+            {
+                "id": str(r.step_index),
+                "title": str(r.intent or r.tool_name or f"Step {r.step_index}")[:200],
+                "tool": str(r.tool_name or ""),
+                "status": str(r.status or "pending"),
+                "deps": list(r.depends_on_json or []),
+            }
+            for r in rows
+        ]
+
     terminal = {"completed", "failed", "skipped"}
-    settled = sum(1 for r in rows if (r.status or "") in terminal)
-    total = len(rows) or 1
-    progress = int(round(100 * settled / total)) if rows else 0
+    settled = sum(1 for s in step_payload if (s.get("status") or "") in terminal)
+    total = len(step_payload) or 1
+    progress = int(round(100 * settled / total)) if step_payload else 0
 
     awaiting = next(
-        (r for r in rows if (r.status or "") == "awaiting_approval"),
+        (s for s in step_payload if (s.get("status") or "") == "awaiting_approval"),
         None,
     )
-    failed = any((r.status or "") == "failed" for r in rows)
-    all_done = rows and settled == len(rows)
+    failed = any((s.get("status") or "") == "failed" for s in step_payload)
+    all_done = step_payload and settled == len(step_payload)
+    run_status = str(getattr(run, "status", "") or "")
 
     if awaiting:
         live_status = "blocked"
-        blockers = [f"Consent required: step {awaiting.step_index} — {awaiting.intent or awaiting.tool_name or ''}"]
+        blockers = [
+            f"Consent required: step {awaiting.get('id')} — {awaiting.get('title') or awaiting.get('tool') or ''}"
+        ]
         pending_consent = {
-            "step_id": awaiting.step_index,
-            "tool": awaiting.tool_name,
-            "intent": awaiting.intent,
+            "step_id": awaiting.get("id"),
+            "tool": awaiting.get("tool"),
+            "intent": awaiting.get("title"),
         }
     elif failed and all_done:
         live_status = "failed"
         blockers = []
         pending_consent = None
-    elif all_done:
-        live_status = "completed"
+    elif all_done or run_status in ("completed", "completed_with_gaps"):
+        live_status = "completed" if run_status != "completed_with_gaps" else "partial"
         blockers = []
         pending_consent = None
-        progress = 100
-    elif settled > 0:
+        progress = 100 if all_done or run_status.startswith("completed") else progress
+    elif settled > 0 or run_status == "running":
         live_status = "running"
         blockers = []
         pending_consent = None
@@ -218,18 +243,7 @@ def sync_agent_job_map_from_run(run) -> int:
         blockers = []
         pending_consent = None
 
-    step_payload = [
-        {
-            "id": str(r.step_index),
-            "title": str(r.intent or r.tool_name or f"Step {r.step_index}")[:200],
-            "tool": str(r.tool_name or ""),
-            "status": str(r.status or "pending"),
-            "deps": list(r.depends_on_json or []),
-        }
-        for r in rows
-    ]
-
-    # Evidence: pull tool outputs briefly from completed steps.
+    # Evidence: step summaries + deliverable names.
     evidence_rows = []
     for r in rows:
         if (r.status or "") != "completed":
@@ -243,17 +257,14 @@ def sync_agent_job_map_from_run(run) -> int:
                     str(out.get("summary") or out.get("ok") or "ok")[:120],
                 ]
             )
+    deliverables = list(
+        RunArtifact.objects.filter(run_id=run_id).order_by("created_at").values_list(
+            "name", flat=True
+        )[:12]
+    )
+    final_text = (getattr(run, "final_response", None) or "").strip()
 
-    patched = 0
-    for art in AIArtifact.objects.filter(artifact_type=ARTIFACT_TYPE).order_by(
-        "-created_at"
-    )[:80]:
-        content = dict(art.content_json or {})
-        if content.get("plan_id") != run_id:
-            continue
-        if content.get("mode") != MODE_AGENT:
-            continue
-        layers = dict(content.get("layers") or {})
+    def _apply_layers(layers: dict) -> dict:
         job = dict(layers.get("job_map") or {})
         if step_payload:
             job["steps"] = step_payload
@@ -265,32 +276,113 @@ def sync_agent_job_map_from_run(run) -> int:
         live["blockers"] = blockers
         live["pending_consent"] = pending_consent
         layers["live_run"] = live
+        ev = dict(layers.get("evidence") or {})
+        tables = [t for t in (ev.get("tables") or []) if t.get("title") != "Step outputs"]
         if evidence_rows:
-            ev = dict(layers.get("evidence") or {})
-            ev["tables"] = [
+            tables = [
                 {
                     "title": "Step outputs",
                     "columns": ["Step", "Tool", "Result"],
                     "rows": evidence_rows[:12],
                 }
-            ] + [t for t in (ev.get("tables") or []) if t.get("title") != "Step outputs"]
-            if live_status == "completed" and not ev.get("headline"):
-                ev["headline"] = f"Run finished · {settled}/{total} steps settled"
-            layers["evidence"] = ev
-        if live_status == "completed":
+            ] + tables
+        if deliverables:
+            tables = [
+                {
+                    "title": "Deliverables",
+                    "columns": ["File"],
+                    "rows": [[n] for n in deliverables],
+                }
+            ] + [t for t in tables if t.get("title") != "Deliverables"]
+        ev["tables"] = tables
+        if live_status in ("completed", "partial") and not ev.get("headline"):
+            ev["headline"] = (
+                f"Run finished · {settled}/{total} steps settled"
+                + (f" · {len(deliverables)} file(s)" if deliverables else "")
+            )
+        if final_text and not ev.get("prose"):
+            ev["prose"] = final_text[:2000]
+        layers["evidence"] = ev
+        if live_status in ("completed", "partial", "failed"):
             outcome = dict(layers.get("outcome") or {})
-            if not outcome.get("summary"):
+            if final_text:
+                outcome["summary"] = final_text[:800]
+            elif not outcome.get("summary"):
                 outcome["summary"] = (
-                    f"Plan {run_id[:8]}… completed ({settled}/{total} steps)."
+                    f"Plan {run_id[:8]}… {live_status} ({settled}/{total} steps)."
                 )
             layers["outcome"] = outcome
+        return layers
+
+    patched = 0
+    for art in AIArtifact.objects.filter(artifact_type=ARTIFACT_TYPE).order_by(
+        "-created_at"
+    )[:80]:
+        content = dict(art.content_json or {})
+        if str(content.get("plan_id") or "") != run_id:
+            continue
+        if content.get("mode") not in (MODE_AGENT, None, ""):
+            # Only Agent maps track execution; Chat briefs stay advisory.
+            if content.get("mode") == MODE_CHAT:
+                continue
+        layers = _apply_layers(dict(content.get("layers") or {}))
         content["layers"] = layers
+        content["mode"] = MODE_AGENT
         art.content_json = content
         art.save(update_fields=["content_json"])
         patched += 1
         if patched >= 3:
             break
-    return patched
+
+    if patched:
+        return patched
+
+    # No board for this plan — create one so Canvas is never a stale orphan.
+    conv_id = getattr(run, "conversation_id", None)
+    host_uid = getattr(run, "host_user_id", None)
+    if not conv_id or not host_uid:
+        return 0
+    try:
+        user = User.objects.filter(pk=host_uid).first()
+        if user is None:
+            return 0
+        brief = str(
+            (getattr(run, "user_message", None) or "")
+            or ((getattr(run, "plan_json", None) or {}).get("brief") if isinstance(getattr(run, "plan_json", None), dict) else "")
+            or "Agent Job Map"
+        )
+        layers = _apply_layers(
+            layers_from_plan(
+                getattr(run, "plan_json", None)
+                if isinstance(getattr(run, "plan_json", None), dict)
+                else {"brief": brief, "steps": []}
+            )
+        )
+        # Prefer RunStep-derived path over create-time collapsed plan.
+        if step_payload:
+            layers["job_map"] = {
+                **(layers.get("job_map") or {}),
+                "steps": step_payload,
+                "tools": sorted({s["tool"] for s in step_payload if s.get("tool")}),
+            }
+        payload = build_payload(
+            mode=MODE_AGENT,
+            ask=brief,
+            layers=layers,
+            plan_id=run_id,
+            conversation_id=str(conv_id),
+            title=(brief[:80] or "Agent Job Map"),
+        )
+        upsert_job_map_artifact(
+            user=user,
+            conversation_id=str(conv_id),
+            title=(brief[:80] or "Agent Job Map"),
+            payload=payload,
+        )
+        return 1
+    except Exception:  # noqa: BLE001 — canvas must never break the run
+        logger.debug("ops_canvas ensure job map failed", exc_info=True)
+        return 0
 
 
 def layers_from_envelope_and_tools(
@@ -364,22 +456,33 @@ def upsert_job_map_artifact(
     visibility: str = "private",
     replace_existing: bool = True,
 ) -> dict[str, Any]:
-    """Create or update a job_map artifact on the conversation via CarbonIntelligence."""
+    """Create or update a job_map artifact on the conversation via CarbonIntelligence.
+
+    When ``payload.plan_id`` is set, replace only the Agent map for **that**
+    plan — never clobber another plan's board on the same conversation
+    (that left Canvas stuck on Planned while the header showed Completed).
+    """
     from ai.intelligence import CarbonIntelligence
     from ai.models import AIArtifact
 
     ci = CarbonIntelligence()
     existing = None
+    plan_id = str((payload or {}).get("plan_id") or "")
     if replace_existing and conversation_id:
-        existing = (
-            AIArtifact.objects.filter(
-                conversation_id=conversation_id,
-                artifact_type=ARTIFACT_TYPE,
-                created_by=user,
-            )
-            .order_by("-created_at")
-            .first()
-        )
+        qs = AIArtifact.objects.filter(
+            conversation_id=conversation_id,
+            artifact_type=ARTIFACT_TYPE,
+            created_by=user,
+        ).order_by("-created_at")
+        if plan_id:
+            for cand in qs[:40]:
+                content = cand.content_json or {}
+                if str(content.get("plan_id") or "") == plan_id:
+                    if content.get("mode") in (MODE_AGENT, None, ""):
+                        existing = cand
+                        break
+        else:
+            existing = qs.first()
 
     # Stamp canvas_id into outcome after we know the id.
     if existing is not None:
@@ -390,6 +493,8 @@ def upsert_job_map_artifact(
         layers["outcome"] = outcome
         content["layers"] = layers
         content["conversation_id"] = conversation_id
+        if plan_id:
+            content["plan_id"] = plan_id
         return ci.update_artifact(
             user,
             str(existing.id),

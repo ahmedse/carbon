@@ -470,6 +470,19 @@ tools:
     - detail_endpoint: get_employee
       list_endpoint: list_employees
       match_fields: [employee_no, name_en_given, name_en_family]
+    # Payroll lifecycle — planners invent demo-oct-2026; resolve via list + period.
+    - detail_endpoint: get_payroll_run
+      list_endpoint: list_payroll_runs
+      match_fields: [id, period_start]
+    - detail_endpoint: compute_payroll_run
+      list_endpoint: list_payroll_runs
+      match_fields: [id, period_start]
+    - detail_endpoint: validate_payroll_run
+      list_endpoint: list_payroll_runs
+      match_fields: [id, period_start]
+    - detail_endpoint: commit_payroll_run
+      list_endpoint: list_payroll_runs
+      match_fields: [id, period_start]
 
 # ECF entity descriptors (ADR-0032) — loaded when ECF_ENABLED=True.
 # Each descriptor drives the generic resolve/search/get/aggregate/describe

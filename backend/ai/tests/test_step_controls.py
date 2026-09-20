@@ -121,6 +121,8 @@ def test_retry_completed_step_is_refused(user, run_ids_cleanup):
 @pytest.mark.django_db
 def test_rerun_completed_plan_resets_steps_and_approves(user, run_ids_cleanup):
     plan = _make_plan(user, status="completed")
+    plan.final_response = "### Prior answer\n\nTotal **42**"
+    plan.save(update_fields=["final_response"])
     s0 = _make_step(plan, step_index=0, status="completed")
     s1 = _make_step(plan, step_index=1, status="failed")
     s1.error = "boom"
@@ -138,6 +140,9 @@ def test_rerun_completed_plan_resets_steps_and_approves(user, run_ids_cleanup):
     assert s1.status == "pending"
     assert not s1.error
     assert s1.retry_count == 0
+    # Track D — prior Answer preserved for Output receipt (comparison pending).
+    assert result.get("prior_run", {}).get("comparison") == "pending"
+    assert "Prior answer" in (result["prior_run"]["prior_final_response"] or "")
 
 
 @pytest.mark.django_db

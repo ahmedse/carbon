@@ -44,12 +44,15 @@ import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
+import { nodeShapePath, nodeShapeInnerPath } from './planGraphShapes';
 
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 1.15;
 /** Prefer pan/scroll over shrinking node type below readable size in the Pulse rail. */
-const FIT_ZOOM_FLOOR = 0.82;
+const FIT_ZOOM_FLOOR = 0.7;
+/** Allow modest scale-up so small plans fill the rail instead of floating in a hole. */
+const FIT_ZOOM_CEIL = 1.45;
 const NODE_MIN_W = 120;
 const NODE_MAX_W = 640;
 const NODE_MIN_H = 48;
@@ -155,6 +158,11 @@ function Tool({ label, onClick, testId, children, disabled = false }) {
  * @param {boolean} fill — render to fill the container (full-screen modal)
  * @param {object} selected — currently selected node (or null)
  * @param {function} onSelect — (node|null) => void
+ * @param {object|null} [selectedEdge] — currently selected edge {source,target,…}
+ * @param {function} [onSelectEdge] — (edge|null) => void
+ * @param {function} [nodeTitle] — (node) => tooltip string (SVG <title>)
+ * @param {function} [edgeTitle] — (edge) => tooltip string
+ * @param {boolean} [showStatusPulse] — animate running-node outline (default true)
  * @param {ReactNode} legend — legend row rendered above the canvas
  * @param {function} sidebar — (variant: 'inline'|'modal') => docked detail pane
  * @param {string} title — header title
@@ -175,12 +183,19 @@ export default function EnterpriseGraph({
   phaseColor = () => undefined,
   nodeColor = () => undefined,
   renderNode,
+  nodeShape,
+  edgeStyle,
   width = 960,
   layoutHeight = 420,
   height = 380,
   fill = false,
   selected,
   onSelect,
+  selectedEdge = null,
+  onSelectEdge,
+  nodeTitle,
+  edgeTitle,
+  showStatusPulse = true,
   legend = null,
   sidebar,
   title = 'Graph',
@@ -197,6 +212,8 @@ export default function EnterpriseGraph({
   expandTestId = 'graph-maximize',
   exportFileName = 'graph',
   direction = 'lr',
+  /** 'contain' = fit both axes (may shrink); 'width' = fit width only; 'none' = 1× */
+  fitMode = 'contain',
 }) {
   const theme = useTheme();
   const svgRef = useRef(null);
@@ -279,9 +296,14 @@ export default function EnterpriseGraph({
     [edges, nodeById, direction],
   );
 
-  const viewW = Math.max(640, width);
-  const viewH = fill ? layoutHeight : Math.max(height, layoutHeight);
-  const transform = `translate(${pan.x + (viewW - width * zoom) / 2}, ${pan.y + (viewH - layoutHeight * zoom) / 2}) scale(${zoom})`;
+  // Content-sized viewBox — never inflate to 640×viewport (that left empty
+  // gutters around skinny Plan DAGs). The host Box owns the visible rail size;
+  // fitView scales the content into it.
+  const viewW = Math.max(1, width);
+  const viewH = Math.max(1, layoutHeight);
+  // Prefer top-left of the content after zoom — centering skinny/tall DAGs
+  // left empty gutters on both sides of the Plan rail.
+  const transform = `translate(${pan.x}, ${pan.y}) scale(${zoom})`;
 
   // ── Pointer interaction (pan canvas / drag node / resize node) ──────────
   const startPan = (e) => {
@@ -372,7 +394,18 @@ export default function EnterpriseGraph({
 
   const onNodeClick = (node) => {
     if (moved.current) return; // a drag, not a click
+    onSelectEdge?.(null);
     onSelect?.(selected?.id === node.id ? null : node);
+  };
+
+  const onEdgeClick = (edge, evt) => {
+    if (moved.current) return;
+    evt?.stopPropagation?.();
+    onSelect?.(null);
+    const same = selectedEdge
+      && String(selectedEdge.source) === String(edge.source)
+      && String(selectedEdge.target) === String(edge.target);
+    onSelectEdge?.(same ? null : edge);
   };
 
   const exportPng = useCallback(() => {
@@ -396,16 +429,21 @@ export default function EnterpriseGraph({
   }, [expanded, fill]);
 
   const fitView = useCallback(() => {
+    if (fitMode === 'none') {
+      setZoomClamped(1);
+      setPan({ x: 0, y: 0 });
+      return;
+    }
     const availW = viewport.w > 0 ? viewport.w : viewW;
     const availH = viewport.h > 0 ? viewport.h : Math.max(height, layoutHeight);
     const fitX = availW / Math.max(width, 1);
     const fitY = availH / Math.max(layoutHeight, 1);
-    const fitted = Math.min(fitX, fitY);
-    // Cap at 1× so we never enlarge past layout size; floor so auto-fit in a
-    // narrow Pulse rail does not crush node type into illegible pixels.
-    setZoomClamped(Math.max(FIT_ZOOM_FLOOR, Math.min(1, fitted)));
+    // width: use horizontal space; contain: fit both axes; allow mild scale-up
+    // so compact plans fill the rail instead of a tiny cluster in empty space.
+    const fitted = fitMode === 'width' ? fitX : Math.min(fitX, fitY);
+    setZoomClamped(clamp(fitted, FIT_ZOOM_FLOOR, FIT_ZOOM_CEIL));
     setPan({ x: 0, y: 0 });
-  }, [setZoomClamped, viewport.w, viewport.h, viewW, viewH, width, height, layoutHeight]);
+  }, [setZoomClamped, viewport.w, viewport.h, viewW, width, height, layoutHeight, fitMode]);
 
   // Graph-first Run: fit the DAG when the layout size changes so the hero
   // isn't a tiny cluster in a sea of empty canvas.
@@ -416,7 +454,10 @@ export default function EnterpriseGraph({
   // ── Shared canvas renderer (inline + modal) ─────────────────────────────
   const renderCanvas = (canvasFill, marker = markerId) => (
     <Box
-      ref={canvasFill ? undefined : canvasRef}
+      ref={(el) => {
+        // Keep measuring the visible canvas (inline or full-screen).
+        if (el) canvasRef.current = el;
+      }}
       sx={{
         position: 'relative',
         overflow: 'auto',
@@ -433,7 +474,8 @@ export default function EnterpriseGraph({
         ref={svgRef}
         viewBox={`0 0 ${viewW} ${viewH}`}
         width="100%"
-        height={canvasFill ? '100%' : viewH}
+        height="100%"
+        preserveAspectRatio="xMinYMin meet"
         role="img"
         aria-label="Graph — drag to pan, wheel to zoom, drag nodes to move or resize them"
       >
@@ -449,6 +491,30 @@ export default function EnterpriseGraph({
             orient="auto-start-reverse"
           >
             <path d="M 0 0 L 10 5 L 0 10 z" fill={theme.palette.text.secondary} />
+          </marker>
+          <marker
+            id={`${marker}-open`}
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            markerUnits="userSpaceOnUse"
+            orient="auto-start-reverse"
+          >
+            <path d="M 0 0 L 10 5 L 0 10" fill="none" stroke={theme.palette.text.secondary} strokeWidth="1.5" />
+          </marker>
+          <marker
+            id={`${marker}-thin`}
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="5"
+            markerHeight="5"
+            markerUnits="userSpaceOnUse"
+            orient="auto-start-reverse"
+          >
+            <path d="M 0 0 L 10 5 L 0 10 z" fill={theme.palette.text.disabled} />
           </marker>
         </defs>
 
@@ -466,11 +532,14 @@ export default function EnterpriseGraph({
                   y={bandY}
                   width={b.width + 24}
                   height={bandH}
-                  rx={6}
+                  rx={8}
                   fill={bandColor}
-                  opacity={0.05}
+                  opacity={0.08}
+                  stroke={bandColor}
+                  strokeOpacity={0.35}
+                  strokeWidth={1.25}
                 />
-                <text x={b.x - 12 + 6} y={bandY + 18} fontSize={11} fill={bandColor} fontWeight={650} letterSpacing={0.4}>
+                <text x={b.x - 12 + 8} y={bandY + 16} fontSize={11} fill={bandColor} fontWeight={650} letterSpacing={0.4}>
                   {b.name}
                   {b.strategy === 'parallel' ? ' · parallel' : ''}
                 </text>
@@ -478,36 +547,71 @@ export default function EnterpriseGraph({
             );
           })}
 
-          {/* Edges — flow with arrowheads; choice branches tinted */}
+          {/* Edges — sequence / conditional / default (BPMN-style) */}
           {effectiveEdges.map((e) => {
             const branch = e.branch || 'pending';
-            let stroke = theme.palette.text.secondary;
-            let strokeWidth = 2.25;
+            const styled = edgeStyle ? edgeStyle(e) : null;
+            let stroke = styled?.stroke || theme.palette.text.secondary;
+            let strokeWidth = styled?.strokeWidth ?? 2.25;
             let strokeOpacity = 0.95;
-            let dash = undefined;
-            if (branch === 'chosen') {
+            let dash = styled?.dash;
+            let markerKind = styled?.marker || 'arrow';
+            if (!styled) {
+              if (branch === 'chosen') {
+                stroke = theme.palette.primary.main;
+                strokeWidth = 3;
+                strokeOpacity = 1;
+              } else if (branch === 'unchosen') {
+                stroke = theme.palette.text.disabled;
+                strokeWidth = 1.5;
+                strokeOpacity = 0.4;
+                dash = '6 4';
+                markerKind = 'arrowThin';
+              }
+            } else if (branch === 'chosen' && !styled.stroke) {
               stroke = theme.palette.primary.main;
-              strokeWidth = 3;
-              strokeOpacity = 1;
-            } else if (branch === 'unchosen') {
-              stroke = theme.palette.text.disabled;
-              strokeWidth = 1.5;
-              strokeOpacity = 0.4;
-              dash = '6 4';
             }
+            const edgeSelected = selectedEdge
+              && String(selectedEdge.source) === String(e.source)
+              && String(selectedEdge.target) === String(e.target);
+            if (edgeSelected) {
+              stroke = theme.palette.primary.main;
+              strokeWidth = Math.max(strokeWidth, 3);
+              strokeOpacity = 1;
+            }
+            const markerRef = markerKind === 'arrowOpen'
+              ? `url(#${marker}-open)`
+              : markerKind === 'arrowThin'
+                ? `url(#${marker}-thin)`
+                : `url(#${marker})`;
+            const d = edgePath(e.sourceX, e.sourceY, e.targetX, e.targetY, direction);
+            const tip = edgeTitle ? edgeTitle(e) : (e.label || '');
+            const edgeKey = `e-${e.source}-${e.target}`;
             return (
-              <path
-                key={`e-${e.source}-${e.target}`}
-                d={edgePath(e.sourceX, e.sourceY, e.targetX, e.targetY, direction)}
-                fill="none"
-                stroke={stroke}
-                strokeWidth={strokeWidth}
-                strokeOpacity={strokeOpacity}
-                strokeDasharray={dash}
-                markerEnd={`url(#${marker})`}
-                pointerEvents="none"
-                data-branch={branch}
-              />
+              <g key={edgeKey} data-testid={`${testId}-edge-${e.source}-${e.target}`} data-edge-kind={styled?.kind || branch}>
+                <path
+                  d={d}
+                  fill="none"
+                  stroke="transparent"
+                  strokeWidth={14}
+                  pointerEvents="stroke"
+                  style={{ cursor: onSelectEdge ? 'pointer' : 'default' }}
+                  onClick={(evt) => onEdgeClick(e, evt)}
+                >
+                  {tip ? <title>{tip}</title> : null}
+                </path>
+                <path
+                  d={d}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={strokeWidth}
+                  strokeOpacity={strokeOpacity}
+                  strokeDasharray={dash}
+                  markerEnd={markerRef}
+                  pointerEvents="none"
+                  data-branch={branch}
+                />
+              </g>
             );
           })}
 
@@ -515,7 +619,20 @@ export default function EnterpriseGraph({
           {effectiveNodes.filter((n) => !n.is_dummy).map((n) => {
             const isSelected = selected?.id === n.id;
             const fill = nodeColor(n) || theme.palette.primary.main;
-            const isRunning = n.status === 'running';
+            const isRunning = showStatusPulse && n.status === 'running';
+            const tip = nodeTitle ? nodeTitle(n) : '';
+            const shape = nodeShape ? nodeShape(n) : 'roundedRect';
+            const framePath = nodeShapePath(shape, n.w, n.h);
+            const innerPath = nodeShapeInnerPath(shape, n.w, n.h);
+            const isCard = shape === 'roundedRect' || shape === 'doubleRoundedRect' || shape === 'stadium'
+              || shape === 'parallelogram' || shape === 'hexagon' || shape === 'chamfer';
+            const strokeW = shape === 'thickCircle' ? 2.5 : (isSelected ? 2.25 : (isCard ? 1.5 : 1.75));
+            const strokeColor = isSelected
+              ? theme.palette.primary.main
+              : (theme.palette.mode === 'dark' ? theme.palette.grey[600] : theme.palette.grey[400]);
+            const fillBg = isSelected
+              ? theme.palette.action.selected
+              : theme.palette.background.paper;
             return (
               <g
                 key={`n-${n.id}`}
@@ -525,30 +642,52 @@ export default function EnterpriseGraph({
                 style={{ cursor: 'move' }}
                 role="button"
                 aria-label={nodeAriaLabel ? nodeAriaLabel(n) : `Node ${n.id}: ${n.label || ''}`}
+                data-shape={shape}
+                data-node-w={n.w}
+                data-node-h={n.h}
               >
-                {/* Live pulse for running nodes */}
+                {tip ? <title>{tip}</title> : null}
+                {/* Soft drop shadow for card boxes */}
+                {isCard && (
+                  <path
+                    d={framePath}
+                    fill={theme.palette.common.black}
+                    opacity={0.06}
+                    transform="translate(0, 1.5)"
+                  />
+                )}
                 {isRunning && (
-                  <rect
-                    x={-3}
-                    y={-3}
-                    width={n.w + 6}
-                    height={n.h + 6}
-                    rx={8}
+                  <path
+                    d={framePath}
                     fill="none"
                     stroke={fill}
-                    strokeWidth={1.5}
+                    strokeWidth={2}
+                    transform="translate(-2,-2) scale(1.04)"
                   >
-                    <animate attributeName="opacity" values="0.9;0.1;0.9" dur="1.1s" repeatCount="indefinite" />
-                  </rect>
+                    <animate attributeName="opacity" values="0.9;0.15;0.9" dur="1.1s" repeatCount="indefinite" />
+                  </path>
                 )}
-                <rect
-                  width={n.w}
-                  height={n.h}
-                  rx={6}
-                  fill={isSelected ? theme.palette.action.selected : theme.palette.background.paper}
-                  stroke={isSelected ? theme.palette.primary.main : theme.palette.divider}
-                  strokeWidth={isSelected ? 2 : 1}
+                <path
+                  d={framePath}
+                  fill={fillBg}
+                  stroke={strokeColor}
+                  strokeWidth={strokeW}
                 />
+                {innerPath && (
+                  <path
+                    d={innerPath}
+                    fill="none"
+                    stroke={strokeColor}
+                    strokeWidth={1}
+                    transform={`translate(${shape === 'doubleCircle' || shape === 'doubleRoundedRect' ? 4 : 0}, ${shape === 'doubleCircle' || shape === 'doubleRoundedRect' ? 4 : 0})`}
+                  />
+                )}
+                {shape === 'diamondPlus' && (
+                  <g stroke={theme.palette.text.secondary} strokeWidth={1.75} fill="none">
+                    <line x1={n.w / 2} y1={n.h * 0.28} x2={n.w / 2} y2={n.h * 0.72} />
+                    <line x1={n.w * 0.28} y1={n.h / 2} x2={n.w * 0.72} y2={n.h / 2} />
+                  </g>
+                )}
                 {renderNode ? renderNode(n) : (
                   <>
                     <rect x={3} y={5} width={3} height={n.h - 10} rx={1.5} fill={fill} />
@@ -565,20 +704,19 @@ export default function EnterpriseGraph({
                   style={{ cursor: 'nwse-resize' }}
                 >
                   <rect
-                    x={n.w - 9}
-                    y={n.h - 9}
-                    width={9}
-                    height={9}
-                    fill={theme.palette.background.paper}
-                    stroke={isSelected ? theme.palette.primary.main : theme.palette.divider}
+                    x={n.w - 10}
+                    y={n.h - 10}
+                    width={10}
+                    height={10}
+                    fill={fillBg}
+                    stroke={strokeColor}
                     strokeWidth={1}
                     rx={2}
                   />
                 </g>
               </g>
             );
-          })}
-        </g>
+          })}        </g>
       </svg>
     </Box>
   );
@@ -666,7 +804,7 @@ export default function EnterpriseGraph({
             </Typography>
           </Box>
         ) : (
-          <Stack direction="row" sx={{ width: '100%' }}>
+          <Stack direction="row" alignItems="stretch" sx={{ width: '100%', minHeight: height }}>
             <Box sx={{ flex: 1, minWidth: 0, position: 'relative', minHeight: 0 }}>
               {legend}
               {renderCanvas(false, markerId)}
@@ -716,12 +854,19 @@ EnterpriseGraph.propTypes = {
   phaseColor: PropTypes.func,
   nodeColor: PropTypes.func,
   renderNode: PropTypes.func,
+  nodeShape: PropTypes.func,
+  edgeStyle: PropTypes.func,
   width: PropTypes.number,
   layoutHeight: PropTypes.number,
   height: PropTypes.number,
   fill: PropTypes.bool,
   selected: PropTypes.object,
   onSelect: PropTypes.func,
+  selectedEdge: PropTypes.object,
+  onSelectEdge: PropTypes.func,
+  nodeTitle: PropTypes.func,
+  edgeTitle: PropTypes.func,
+  showStatusPulse: PropTypes.bool,
   legend: PropTypes.node,
   sidebar: PropTypes.func,
   title: PropTypes.string,
@@ -738,4 +883,5 @@ EnterpriseGraph.propTypes = {
   expandTestId: PropTypes.string,
   exportFileName: PropTypes.string,
   direction: PropTypes.oneOf(['lr', 'tb']),
+  fitMode: PropTypes.oneOf(['contain', 'width', 'none']),
 };

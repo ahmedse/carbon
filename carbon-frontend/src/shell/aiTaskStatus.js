@@ -29,6 +29,9 @@ const PLAN_STATUS_LOCKED = new Set(['discovering', 'pending_approval', 'cancelle
  * Keeps discovering / pending_approval / cancelled untouched. If any step
  * failed → failed; otherwise all finished → completed. Used by the picker and
  * run chrome so list rows stay honest even when a run row lagged.
+ *
+ * Honesty: never surface Completed / Completed-with-gaps while any step is
+ * still open (Pending under Completed is a product lie).
  * @param {object|null|undefined} plan
  * @returns {string}
  */
@@ -36,10 +39,19 @@ export function effectivePlanStatus(plan) {
   if (!plan) return '';
   const status = plan.status || '';
   if (PLAN_STATUS_LOCKED.has(status)) return status;
-  if (status === 'completed_with_gaps') return 'completed_with_gaps';
   const steps = Array.isArray(plan.steps) ? plan.steps : [];
-  if (!steps.length) return status;
   if (steps.some((s) => s.status === 'awaiting_approval')) return 'paused';
+  // False-complete guard — trust steps over a dishonest run.status.
+  if (
+    (status === 'completed' || status === 'completed_with_gaps')
+    && steps.length
+    && !steps.every((s) => STEP_TERMINAL.has(s.status))
+  ) {
+    if (steps.some((s) => s.status === 'running')) return 'running';
+    return 'failed';
+  }
+  if (status === 'completed_with_gaps') return 'completed_with_gaps';
+  if (!steps.length) return status;
   if (!steps.every((s) => STEP_TERMINAL.has(s.status))) return status;
   const failed = steps.filter((s) => s.status === 'failed');
   const completed = steps.filter((s) => s.status === 'completed');
@@ -167,7 +179,7 @@ export function runHeaderStatusChip(plan, runSteps = [], phase = 'idle') {
 
   if (awaiting || phase === 'paused' || effective === 'paused') {
     return {
-      label: total ? `${settled}/${total} · consent needed` : meta.label,
+      label: total ? `${settled}/${total} · Needs approval` : meta.label,
       color: 'warning',
     };
   }

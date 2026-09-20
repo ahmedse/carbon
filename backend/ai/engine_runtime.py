@@ -232,7 +232,12 @@ async def _run_chat(
         # serialized refs ([[kind:id:label]]) for the frontend EntityChip.
         # Runs on the finalized answer text, scoped to the requesting user so
         # no cross-tenant name ever resolves (deterministic, never-raising).
-        content = _annotate_entity_mentions(content, host_user_id)
+        # Must use sync_to_async — this coroutine path cannot call ORM sync.
+        from asgiref.sync import sync_to_async
+
+        content = await sync_to_async(
+            _annotate_entity_mentions, thread_sensitive=True
+        )(content, host_user_id)
         # G-E: persist the F1–F3 gate flags so the §4.3 "truthfulness hit-rate"
         # metric is measurable from the turn_ledger (observability surface).
         await _record_truthfulness_gate(db=db, ledger=ledger, anti_flags=anti_flags)

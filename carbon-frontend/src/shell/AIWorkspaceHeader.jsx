@@ -12,6 +12,8 @@ import { useTranslation } from 'react-i18next';
 import {
   Box,
   IconButton,
+  MenuItem,
+  Select,
   Snackbar,
   ToggleButton,
   ToggleButtonGroup,
@@ -29,6 +31,7 @@ import { createCheckpoint } from '../api/aiWorkspace';
 import PulseLogo from './PulseLogo';
 import AIContextMenu from './AIContextMenu';
 import CheckpointPicker from './CheckpointPicker';
+import { readAutonomyMode, writeAutonomyMode } from './autonomyMode';
 
 // ADR-0014 §4 — the safety contract is always visible in the header. Exact
 // copy per the decision table; the header must never invent new wording.
@@ -58,11 +61,20 @@ function AIWorkspaceHeader({
   const { notifyFromError } = useNotification();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [snackbar, setSnackbar] = useState(null); // { message }
+  const [autonomy, setAutonomy] = useState(() => readAutonomyMode());
 
   const contractKey =
     mode === 'chat'
       ? CONTRACT_TEXT_KEYS.chat
       : CONTRACT_TEXT_KEYS[agentLifecycleState] || CONTRACT_TEXT_KEYS.idle;
+
+  const handleAutonomy = (event) => {
+    const next = writeAutonomyMode(event.target.value);
+    setAutonomy(next);
+    try {
+      window.dispatchEvent(new CustomEvent('carbon-ai-autonomy', { detail: next }));
+    } catch { /* ignore */ }
+  };
 
   const handleSaveCheckpoint = async () => {
     if (!conversationId) return;
@@ -121,6 +133,27 @@ function AIWorkspaceHeader({
             🤖 {t('modeAgent')}
           </ToggleButton>
         </ToggleButtonGroup>
+        {mode === 'agent' && (
+          <Tooltip title={t('autonomy.hint')}>
+            <Select
+              size="small"
+              value={autonomy}
+              onChange={handleAutonomy}
+              aria-label={t('autonomy.label')}
+              sx={{
+                ml: 0.5,
+                minWidth: 88,
+                fontSize: '0.625rem',
+                height: 28,
+                '& .MuiSelect-select': { py: 0.5, px: 1 },
+              }}
+            >
+              <MenuItem value="careful" sx={{ fontSize: '0.75rem' }}>{t('autonomy.careful')}</MenuItem>
+              <MenuItem value="balanced" sx={{ fontSize: '0.75rem' }}>{t('autonomy.balanced')}</MenuItem>
+              <MenuItem value="fast" sx={{ fontSize: '0.75rem' }}>{t('autonomy.fast')}</MenuItem>
+            </Select>
+          </Tooltip>
+        )}
         <Tooltip title={t('saveCheckpoint')}>
           <span>
             <IconButton

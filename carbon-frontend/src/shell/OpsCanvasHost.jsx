@@ -1,10 +1,12 @@
-/** Ops Canvas Job Map host — ADR-0041 Agent-first execution board. */
-import React, { useMemo } from 'react';
+/** Ops Canvas Job Map host — ADR-0041 Agent-first execution board; ADR-0043 V5 Operator story. */
+import React, { useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   Alert,
   Box,
+  Button,
   Chip,
+  Collapse,
   Divider,
   LinearProgress,
   Stack,
@@ -15,7 +17,10 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
+import { humanizeCanvasText, humanStatusLabel } from '../utils/humanizeCanvas';
 
 const STATUS_COLOR = {
   completed: 'success',
@@ -67,11 +72,81 @@ LayerCard.propTypes = {
   accent: PropTypes.bool,
 };
 
+function layerTitles(operatorSimple, isAgent) {
+  if (operatorSimple) {
+    return {
+      intent: 'Goal',
+      live: 'Where we are',
+      jobMap: 'The path',
+      evidence: 'What we found',
+      outcome: 'Outcome',
+    };
+  }
+  return {
+    intent: 'Intent',
+    live: 'Live run · execution',
+    jobMap: isAgent ? 'Job map · plan steps' : 'Job map',
+    evidence: isAgent ? 'Evidence · outputs' : 'Evidence',
+    outcome: 'Outcome',
+  };
+}
+
+function displayText(text, operatorSimple) {
+  const raw = text == null ? '' : String(text);
+  return operatorSimple ? humanizeCanvasText(raw) : raw;
+}
+
+function formatConsentCopy(pending, operatorSimple) {
+  if (!pending) return '';
+  let msg = 'Consent pending';
+  if (pending.tool) msg += `: ${pending.tool}`;
+  if (pending.intent) msg += ` — ${pending.intent}`;
+  if (!pending.tool && !pending.intent && typeof pending !== 'object') {
+    msg += `: ${String(pending)}`;
+  }
+  return operatorSimple ? humanizeCanvasText(msg) : msg;
+}
+
+function QosChipCluster({ qos }) {
+  if (!qos || typeof qos !== 'object') return null;
+  return (
+    <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+      {qos.acceptance_status && (
+        <Chip size="small" label={`QoS ${qos.acceptance_status}`} color="primary" variant="outlined" />
+      )}
+      {qos.requirements_total != null && (
+        <Chip
+          size="small"
+          variant="outlined"
+          label={`${qos.requirements_met ?? 0}/${qos.requirements_total} met`}
+        />
+      )}
+      {(qos.requirements_partial || 0) > 0 && (
+        <Chip size="small" color="warning" variant="outlined" label={`${qos.requirements_partial} partial`} />
+      )}
+      {(qos.requirements_missed || 0) > 0 && (
+        <Chip size="small" color="error" variant="outlined" label={`${qos.requirements_missed} missed`} />
+      )}
+    </Stack>
+  );
+}
+
+QosChipCluster.propTypes = {
+  qos: PropTypes.object,
+};
+
 /**
  * Agent Job Map = plan + live execution + evidence + outcome.
  * Chat Job Brief = thinner advisory (Intent + Evidence) — demoted visually.
  */
-export default function OpsCanvasHost({ artifact, readOnly = true, flightQos = null }) {
+export default function OpsCanvasHost({
+  artifact,
+  readOnly = true,
+  flightQos = null,
+  operatorSimple = true,
+}) {
+  const [qosOpen, setQosOpen] = useState(false);
+
   const payload = useMemo(() => {
     const raw = artifact?.content_json;
     if (!raw || typeof raw !== 'object') return null;
@@ -83,6 +158,7 @@ export default function OpsCanvasHost({ artifact, readOnly = true, flightQos = n
   const mode = payload?.mode || 'chat';
   const isAgent = mode === 'agent';
   const related = payload?.related_object;
+  const titles = layerTitles(operatorSimple, isAgent);
 
   if (!payload) {
     return (
@@ -103,6 +179,9 @@ export default function OpsCanvasHost({ artifact, readOnly = true, flightQos = n
   const progress = Number(live.progress_pct) || 0;
   const steps = job.steps || [];
   const liveStatus = live.status || (isAgent ? 'planned' : 'idle');
+  const liveStatusLabel = operatorSimple ? humanStatusLabel(liveStatus) : liveStatus;
+  const blockers = (live.blockers || []).map((b) => displayText(b, operatorSimple)).filter(Boolean);
+  const consentCopy = live.pending_consent ? formatConsentCopy(live.pending_consent, operatorSimple) : '';
 
   return (
     <Box sx={{ p: 2, height: '100%', overflow: 'auto' }} data-testid="ops-canvas-host">
@@ -117,14 +196,14 @@ export default function OpsCanvasHost({ artifact, readOnly = true, flightQos = n
           color={isAgent ? 'warning' : 'default'}
           variant={isAgent ? 'filled' : 'outlined'}
         />
-        {payload.plan_id && (
+        {!operatorSimple && payload.plan_id && (
           <Chip size="small" variant="outlined" label={`Plan ${String(payload.plan_id).slice(0, 8)}…`} />
         )}
         {isAgent && (
           <Chip
             size="small"
             color={STATUS_COLOR[liveStatus] || 'default'}
-            label={liveStatus}
+            label={liveStatusLabel}
           />
         )}
       </Stack>
@@ -144,27 +223,25 @@ export default function OpsCanvasHost({ artifact, readOnly = true, flightQos = n
       )}
 
       <Stack spacing={1.25}>
-        {/* Intent — compact on Agent */}
-        <LayerCard title="Intent" muted={!isAgent}>
+        <LayerCard title={titles.intent} muted={!isAgent}>
           <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-            {intent.ask || '—'}
+            {displayText(intent.ask, operatorSimple) || '—'}
           </Typography>
           {intent.success_criteria ? (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-              Success: {intent.success_criteria}
+              Success: {displayText(intent.success_criteria, operatorSimple)}
             </Typography>
           ) : null}
         </LayerCard>
 
-        {/* LIVE RUN first for Agent — this is the execution layer */}
         {isAgent && (
-          <LayerCard title="Live run · execution" accent>
+          <LayerCard title={titles.live} accent>
             <Stack spacing={0.75}>
               <Stack direction="row" spacing={1} alignItems="center">
                 <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
                   {settledLabel(steps)} · {progress}%
                 </Typography>
-                <Chip size="small" color={STATUS_COLOR[liveStatus] || 'default'} label={liveStatus} />
+                <Chip size="small" color={STATUS_COLOR[liveStatus] || 'default'} label={liveStatusLabel} />
               </Stack>
               <LinearProgress
                 variant="determinate"
@@ -172,90 +249,98 @@ export default function OpsCanvasHost({ artifact, readOnly = true, flightQos = n
                 sx={{ height: 8, borderRadius: 1 }}
               />
               {qos && typeof qos === 'object' && (
-                <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
-                  {qos.acceptance_status && (
-                    <Chip size="small" label={`QoS ${qos.acceptance_status}`} color="primary" variant="outlined" />
-                  )}
-                  {qos.requirements_total != null && (
-                    <Chip
+                operatorSimple ? (
+                  <Box data-testid="ops-canvas-qos-expand">
+                    <Button
+                      fullWidth
                       size="small"
-                      variant="outlined"
-                      label={`${qos.requirements_met ?? 0}/${qos.requirements_total} met`}
-                    />
-                  )}
-                  {(qos.requirements_partial || 0) > 0 && (
-                    <Chip size="small" color="warning" variant="outlined" label={`${qos.requirements_partial} partial`} />
-                  )}
-                  {(qos.requirements_missed || 0) > 0 && (
-                    <Chip size="small" color="error" variant="outlined" label={`${qos.requirements_missed} missed`} />
-                  )}
-                </Stack>
+                      onClick={() => setQosOpen((v) => !v)}
+                      endIcon={qosOpen ? <ExpandLessIcon sx={{ fontSize: 16 }} /> : <ExpandMoreIcon sx={{ fontSize: 16 }} />}
+                      sx={{
+                        justifyContent: 'space-between',
+                        textTransform: 'none',
+                        fontSize: '0.6875rem',
+                        fontWeight: 600,
+                        px: 0.5,
+                        py: 0.5,
+                        color: 'text.secondary',
+                      }}
+                      aria-expanded={qosOpen}
+                    >
+                      Quality details
+                    </Button>
+                    <Collapse in={qosOpen} unmountOnExit>
+                      <Box sx={{ pt: 0.5 }}>
+                        <QosChipCluster qos={qos} />
+                      </Box>
+                    </Collapse>
+                  </Box>
+                ) : (
+                  <QosChipCluster qos={qos} />
+                )
               )}
-              {(live.blockers || []).length > 0 && (
+              {blockers.length > 0 && (
                 <Alert severity="warning" sx={{ py: 0, fontSize: '0.75rem' }}>
-                  {(live.blockers || []).join('; ')}
+                  {blockers.join('; ')}
                 </Alert>
               )}
-              {live.pending_consent && (
+              {consentCopy && (
                 <Alert severity="warning" sx={{ py: 0, fontSize: '0.75rem' }}>
-                  Consent pending
-                  {live.pending_consent.tool ? `: ${live.pending_consent.tool}` : ''}
-                  {live.pending_consent.intent ? ` — ${live.pending_consent.intent}` : ''}
-                  {!live.pending_consent.tool && !live.pending_consent.intent
-                    ? `: ${String(live.pending_consent)}`
-                    : ''}
+                  {consentCopy}
                 </Alert>
               )}
             </Stack>
           </LayerCard>
         )}
 
-        {/* JOB MAP — the plan */}
-        <LayerCard title={isAgent ? 'Job map · plan steps' : 'Job map'} accent={isAgent}>
+        <LayerCard title={titles.jobMap} accent={isAgent}>
           {steps.length === 0 ? (
             <Typography variant="caption" color="text.secondary">No steps yet.</Typography>
           ) : (
             <Stack spacing={0.5}>
-              {steps.map((s) => (
-                <Stack key={s.id || s.title} direction="row" spacing={1} alignItems="center">
-                  <Chip
-                    size="small"
-                    color={STATUS_COLOR[s.status] || 'default'}
-                    label={s.status || 'pending'}
-                    sx={{ minWidth: 88, fontSize: '0.65rem' }}
-                  />
-                  <Typography variant="body2" sx={{ flex: 1 }}>
-                    {s.title}
-                  </Typography>
-                  {s.tool ? (
-                    <Typography variant="caption" color="text.disabled">{s.tool}</Typography>
-                  ) : null}
-                </Stack>
-              ))}
+              {steps.map((s) => {
+                const stepStatus = s.status || 'pending';
+                const stepLabel = operatorSimple ? humanStatusLabel(stepStatus) : stepStatus;
+                return (
+                  <Stack key={s.id || s.title} direction="row" spacing={1} alignItems="center">
+                    <Chip
+                      size="small"
+                      color={STATUS_COLOR[stepStatus] || 'default'}
+                      label={stepLabel}
+                      sx={{ minWidth: 88, fontSize: '0.65rem' }}
+                    />
+                    <Typography variant="body2" sx={{ flex: 1 }}>
+                      {s.title}
+                    </Typography>
+                    {!operatorSimple && s.tool ? (
+                      <Typography variant="caption" color="text.disabled">{s.tool}</Typography>
+                    ) : null}
+                  </Stack>
+                );
+              })}
             </Stack>
           )}
-          {(job.tools || []).length > 0 && (
+          {!operatorSimple && (job.tools || []).length > 0 && (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
               Tools: {(job.tools || []).join(', ')}
             </Typography>
           )}
-          {(job.capabilities || []).length > 0 && (
+          {!operatorSimple && (job.capabilities || []).length > 0 && (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
               CBAC: {(job.capabilities || []).join(', ')}
             </Typography>
           )}
         </LayerCard>
 
-        {/* EVIDENCE — outputs */}
-        <LayerCard title={isAgent ? 'Evidence · outputs' : 'Evidence'}>
+        <LayerCard title={titles.evidence}>
           {evidence.headline ? (
             <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
-              {evidence.headline}
+              {displayText(evidence.headline, operatorSimple)}
             </Typography>
           ) : null}
           {evidence.prose ? (
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1, whiteSpace: 'pre-wrap' }}>
-              {String(evidence.prose).slice(0, 800)}
+              {displayText(String(evidence.prose).slice(0, 800), operatorSimple)}
             </Typography>
           ) : null}
           {(evidence.tables || []).slice(0, 3).map((tbl, idx) => (
@@ -289,7 +374,10 @@ export default function OpsCanvasHost({ artifact, readOnly = true, flightQos = n
           ))}
           {(evidence.caveats || []).length > 0 && (
             <Typography variant="caption" color="warning.main" display="block">
-              Caveats: {(evidence.caveats || []).map((c) => (typeof c === 'string' ? c : c.text || '')).join('; ')}
+              Caveats:{' '}
+              {(evidence.caveats || [])
+                .map((c) => displayText(typeof c === 'string' ? c : c.text || '', operatorSimple))
+                .join('; ')}
             </Typography>
           )}
           {!evidence.headline && !(evidence.tables || []).length && (
@@ -299,9 +387,12 @@ export default function OpsCanvasHost({ artifact, readOnly = true, flightQos = n
           )}
         </LayerCard>
 
-        <LayerCard title="Outcome">
+        <LayerCard title={titles.outcome}>
           <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-            {outcome.summary || (isAgent ? 'Outcome fills when the run closes.' : '—')}
+            {displayText(
+              outcome.summary || (isAgent ? 'Outcome fills when the run closes.' : '—'),
+              operatorSimple,
+            )}
           </Typography>
           {(outcome.sor_links || []).length > 0 && (
             <Stack spacing={0.25} sx={{ mt: 0.75 }}>
@@ -312,7 +403,7 @@ export default function OpsCanvasHost({ artifact, readOnly = true, flightQos = n
               ))}
             </Stack>
           )}
-          {outcome.canvas_id && (
+          {!operatorSimple && outcome.canvas_id && (
             <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.5 }}>
               Canvas id: {outcome.canvas_id}
             </Typography>
@@ -321,10 +412,16 @@ export default function OpsCanvasHost({ artifact, readOnly = true, flightQos = n
       </Stack>
 
       <Divider sx={{ my: 1.5 }} />
-      <Typography variant="caption" color="text.disabled">
-        ADR-0041 · {isAgent ? 'Agent Job Map = plan + execution + outputs' : 'Chat Job Brief = advisory only'}
-        {readOnly ? ' · reopenable board' : ''}
-      </Typography>
+      {operatorSimple ? (
+        <Typography variant="caption" color="text.disabled">
+          {readOnly ? 'Read-only board.' : 'Live board.'}
+        </Typography>
+      ) : (
+        <Typography variant="caption" color="text.disabled">
+          ADR-0041 · {isAgent ? 'Agent Job Map = plan + execution + outputs' : 'Chat Job Brief = advisory only'}
+          {readOnly ? ' · reopenable board' : ''}
+        </Typography>
+      )}
     </Box>
   );
 }
@@ -339,4 +436,5 @@ OpsCanvasHost.propTypes = {
   artifact: PropTypes.object,
   readOnly: PropTypes.bool,
   flightQos: PropTypes.object,
+  operatorSimple: PropTypes.bool,
 };

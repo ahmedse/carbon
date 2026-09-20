@@ -14,6 +14,7 @@ const PLAN = {
       tool_name: 'search_entity',
       tool_args: { dataset: 'emissions' },
       status: 'completed',
+      finished_at: '2026-09-20T10:00:00Z',
       depends_on: [],
     },
     {
@@ -21,6 +22,7 @@ const PLAN = {
       intent: 'Create a rule',
       tool_name: 'create_dq_rule',
       status: 'completed',
+      finished_at: '2026-09-20T10:01:00Z',
       depends_on: [0],
     },
   ],
@@ -52,7 +54,7 @@ describe('AgentRunSurface', () => {
     expect(screen.queryByTestId('plan-dag-graph')).toBeNull();
   });
 
-  it('renders progress strip and step list as the Run hero — no artifact cards', () => {
+  it('renders visual timeline spine with beat nodes', () => {
     render(
       <AgentRunSurface
         plan={PLAN}
@@ -64,11 +66,12 @@ describe('AgentRunSurface', () => {
     );
 
     expect(screen.getByTestId('agent-run-surface')).toBeInTheDocument();
+    const timeline = screen.getByTestId('agent-run-chronicle');
+    expect(timeline).toHaveAttribute('data-timeline', 'visual');
+    expect(timeline).toHaveTextContent('Search for duplicate records');
+    expect(screen.getByTestId('run-timeline-node-0')).toBeInTheDocument();
     expect(screen.getByTestId('agent-run-progress')).toHaveTextContent(/2\/2/);
-    expect(screen.getByTestId('agent-run-progress')).toHaveTextContent(/1 artifacts/);
-    expect(screen.getByTestId('agent-run-list')).toHaveTextContent('Step list body');
-    // ADR-0043: deliverable cards belong on Output, not Run.
-    expect(screen.queryByTestId('agent-run-artifacts')).toBeNull();
+    expect(screen.queryByTestId('agent-run-list')).not.toBeInTheDocument();
     expect(screen.queryByText('report.csv')).toBeNull();
   });
 
@@ -110,7 +113,7 @@ describe('AgentRunSurface', () => {
     expect(onOpenPlan).toHaveBeenCalled();
   });
 
-  it('hides the step list when List is toggled off', () => {
+  it('toggles step details without losing chronicle', () => {
     render(
       <AgentRunSurface
         plan={PLAN}
@@ -120,9 +123,36 @@ describe('AgentRunSurface', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Hide list' }));
-    expect(screen.queryByTestId('agent-run-list')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'List' }));
+    expect(screen.getByTestId('agent-run-chronicle')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('agent-run-toggle-details'));
     expect(screen.getByTestId('agent-run-list')).toHaveTextContent('Step list body');
+    fireEvent.click(screen.getByTestId('agent-run-toggle-details'));
+    expect(screen.queryByTestId('agent-run-list')).not.toBeInTheDocument();
+  });
+
+  it('does not host Run health accordion', () => {
+    render(
+      <AgentRunSurface
+        plan={PLAN}
+        runSteps={[]}
+        phase="finished"
+      />,
+    );
+    expect(screen.queryByTestId('agent-run-health')).toBeNull();
+  });
+
+  it('opens docked side pane from timeline beat click', async () => {
+    render(
+      <AgentRunSurface
+        plan={PLAN}
+        runSteps={[]}
+        phase="finished"
+      />,
+    );
+    expect(screen.getByTestId('run-structure-detail')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('run-timeline-open-0'));
+    expect(await screen.findByTestId('beat-detail-body')).toBeInTheDocument();
+    expect(screen.getByTestId('beat-detail-body')).toHaveTextContent('Search for duplicate records');
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

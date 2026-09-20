@@ -32,7 +32,6 @@ describe('StepToolbar — status → controls state machine', () => {
     running: ['Pause', 'Cancel'],
     paused: ['Resume', 'Skip', 'Cancel'],
     failed: ['Retry', 'Skip'],
-    awaiting_approval: ['Skip'],
   };
 
   for (const [status, labels] of Object.entries(CASES)) {
@@ -46,7 +45,7 @@ describe('StepToolbar — status → controls state machine', () => {
     });
   }
 
-  it.each(['completed', 'skipped'])('renders no controls for status "%s"', (status) => {
+  it.each(['completed', 'skipped', 'awaiting_approval'])('renders no controls for status "%s"', (status) => {
     renderToolbar(status);
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });

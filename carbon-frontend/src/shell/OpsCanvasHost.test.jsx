@@ -6,7 +6,7 @@ import { render, screen } from '@testing-library/react';
 import OpsCanvasHost from './OpsCanvasHost';
 
 describe('OpsCanvasHost', () => {
-  it('renders Agent Job Map with live run and plan steps', () => {
+  it('renders Agent Job Map with live run and plan steps (Analyst)', () => {
     const artifact = {
       id: 'c1',
       title: 'Payroll board pack',
@@ -37,7 +37,7 @@ describe('OpsCanvasHost', () => {
         },
       },
     };
-    render(<OpsCanvasHost artifact={artifact} />);
+    render(<OpsCanvasHost artifact={artifact} operatorSimple={false} />);
     expect(screen.getByTestId('ops-canvas-host')).toBeTruthy();
     expect(screen.getByText('Payroll board pack')).toBeTruthy();
     expect(screen.getByText(/Agent · execution/)).toBeTruthy();
@@ -45,6 +45,49 @@ describe('OpsCanvasHost', () => {
     expect(screen.getByText(/Job map · plan steps/)).toBeTruthy();
     expect(screen.getByText(/Fetch run/)).toBeTruthy();
     expect(screen.getByText('QoS partial')).toBeTruthy();
+    expect(screen.getByText('resolve_entity')).toBeTruthy();
+  });
+
+  it('renders Operator story layers and strips RULE_ from blockers', () => {
+    const artifact = {
+      id: 'c3',
+      title: 'Leave review',
+      artifact_type: 'job_map',
+      content_json: {
+        kind: 'job_map',
+        mode: 'agent',
+        plan_id: 'plan-xyz',
+        layers: {
+          intent: { ask: 'Review leave balances', contract: 'agent' },
+          job_map: {
+            steps: [{ id: '1', title: 'Check balances', tool: 'lookup', status: 'awaiting_approval' }],
+            tools: ['lookup'],
+            capabilities: ['people:view_leave'],
+            entities: [],
+          },
+          live_run: {
+            progress_pct: 10,
+            status: 'awaiting_approval',
+            qos: { acceptance_status: 'partial', requirements_total: 1, requirements_met: 0 },
+            blockers: ['RULE_23: approval required before export'],
+          },
+          evidence: { headline: '', tables: [], sources: [], caveats: [] },
+          outcome: { summary: '', canvas_id: 'c3', sor_links: [] },
+        },
+      },
+    };
+    render(<OpsCanvasHost artifact={artifact} />);
+    expect(screen.getByText('Goal')).toBeTruthy();
+    expect(screen.getByText('Where we are')).toBeTruthy();
+    expect(screen.getByText('The path')).toBeTruthy();
+    expect(screen.getAllByText('Needs your OK').length).toBeGreaterThan(0);
+    expect(screen.getByText(/approval required before export/)).toBeTruthy();
+    expect(screen.queryByText(/RULE_23/)).toBeNull();
+    expect(screen.queryByText('lookup')).toBeNull();
+    expect(screen.queryByText(/Plan plan-xyz/)).toBeNull();
+    expect(screen.queryByText(/Canvas id/)).toBeNull();
+    expect(screen.getByText('Quality details')).toBeTruthy();
+    expect(screen.queryByText('QoS partial')).toBeNull();
   });
 
   it('demotes Chat brief as advisory', () => {

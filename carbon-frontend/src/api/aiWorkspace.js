@@ -1403,6 +1403,21 @@ export function listPlanArtifacts(token, planId) {
 }
 
 /**
+ * Hard-delete a plan-run artifact (file + row).
+ * DELETE /ai/plans/{id}/artifacts/{artifactId}/
+ * @param {string} token - JWT access token
+ * @param {string} planId - plan UUID
+ * @param {string|number} artifactId - RunArtifact id
+ * @returns {Promise<object>} { deleted, plan_id }
+ */
+export function deletePlanArtifact(token, planId, artifactId) {
+  return apiFetch(`${PLANS_BASE}${planId}/artifacts/${artifactId}/`, {
+    token,
+    method: 'DELETE',
+  });
+}
+
+/**
  * Download an artifact as a blob and return an object URL (caller must revoke
  * it via URL.revokeObjectURL once done).
  * GET /ai/plans/{id}/artifacts/{artifactId}/download/

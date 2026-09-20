@@ -26,18 +26,51 @@ import {
   IconButton,
   Paper,
   Stack,
+  Tooltip,
   Typography,
   useTheme,
 } from '@mui/material';
 import ArrowRightAltIcon from '@mui/icons-material/ArrowRightAlt';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CloseIcon from '@mui/icons-material/Close';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
 import EnterpriseGraph from './EnterpriseGraph';
+import RichContent from '../RichContent';
+import {
+  PLAN_ROLE_ACCENT,
+  PLAN_SHAPE_LEGEND,
+  legendShapePath,
+  resolvePlanEdgeStyle,
+  resolvePlanNodeShape,
+} from './planGraphShapes';
 import { layoutExecutionGraph } from '../../utils/planGraph';
-import { NODE_STATUS_DENSE, STEP_STATUS, agentRoleLabel, stepStatusMeta } from '../../shell/aiTaskStatus';
-import { FONT } from '../../theme/themeTokens';
+import { NODE_STATUS_DENSE, agentRoleLabel, stepStatusMeta } from '../../shell/aiTaskStatus';
+
+/** Wrap intent for graph cards — prefer readable journey labels over `…` soup. */
+export function wrapTitleLines(raw, maxPerLine, maxLines = 2) {
+  const text = String(raw || '').trim();
+  if (!text) return [''];
+  if (text.length <= maxPerLine) return [text];
+  const lines = [];
+  let rest = text;
+  while (rest && lines.length < maxLines) {
+    if (rest.length <= maxPerLine) {
+      lines.push(rest);
+      break;
+    }
+    let cut = rest.lastIndexOf(' ', maxPerLine);
+    if (cut < Math.floor(maxPerLine * 0.45)) cut = maxPerLine;
+    lines.push(rest.slice(0, cut).trim());
+    rest = rest.slice(cut).trim();
+  }
+  if (rest && lines.length === maxLines) {
+    const last = lines[maxLines - 1];
+    lines[maxLines - 1] = `${last.slice(0, Math.max(1, maxPerLine - 1))}…`;
+  }
+  return lines;
+}
 
 /**
  * Step status → theme color token (RULE_8 — never raw hex).
@@ -272,12 +305,15 @@ ParallelLaneBand.propTypes = {
 };
 
 /**
- * Live plan execution graph.
+ * Live plan execution graph — or structure-only Plan preview.
  * @param {object} props
  * @param {object} props.plan - plan payload (GET /ai/plans/{id}/)
  * @param {number} [props.height] - graph viewport height
  * @param {boolean} [props.live] - show the "Live" badge (parent is running)
  * @param {boolean} [props.fill] - render to fill the container (full-screen modal)
+ * @param {'execution'|'structure'} [props.mode]
+ *   - execution: status colors, Finished/Running legend, docked analyst pane (Run/classic)
+ *   - structure: Plan view — topology only; tooltips; click → light scrollable drawer
  * @param {string} [props.testId] - data-testid
  * @param {function} [props.onConfirmStep] - (stepId) => void, consent inside a lane
  * @param {function} [props.onDeclineStep] - (stepId) => void, skip inside a lane
@@ -289,6 +325,7 @@ export default function PlanDagGraph({
   height = 380,
   live = false,
   fill = false,
+  mode = 'execution',
   testId = 'plan-dag-graph',
   onConfirmStep,
   onDeclineStep,
@@ -296,20 +333,43 @@ export default function PlanDagGraph({
   confirmingId = null,
 }) {
   const theme = useTheme();
+  const structure = mode === 'structure';
   const [selected, setSelected] = useState(null);
+  const [selectedEdge, setSelectedEdge] = useState(null);
+  const [paneOpen, setPaneOpen] = useState(true);
 
   const { nodes, edges, width, height: layoutHeight, phaseBands, direction } = useMemo(
-    () => layoutExecutionGraph(plan),
-    [plan],
+    () => layoutExecutionGraph(
+      plan,
+      structure
+        ? {
+          // Wide Plan rail: LR journey fills the viewport. TB tall chains
+          // letterboxed into a skinny strip (empty left/right, unreadably small).
+          direction: 'lr',
+          layout: {
+            nodeW: 200,
+            nodeH: 78,
+            colGap: 40,
+            rowGap: 28,
+            padX: 20,
+            padTop: 28,
+            padBottom: 20,
+          },
+        }
+        : undefined,
+    ),
+    [plan, structure],
   );
 
   const visibleNodes = useMemo(() => nodes.filter((n) => !n.is_dummy), [nodes]);
 
   const steps = useMemo(() => (Array.isArray(plan?.steps) ? plan.steps : []), [plan]);
 
-  // F-26 — parallel lanes: sibling steps that "run together" become one
-  // collapsible band (MUI Collapse/Stack), each keeping its own status chip.
-  const parallelLanes = useMemo(() => parallelLaneGroups(steps), [steps]);
+  // F-26 — parallel lanes (execution only): sibling steps that "run together".
+  const parallelLanes = useMemo(
+    () => (structure ? [] : parallelLaneGroups(steps)),
+    [steps, structure],
+  );
   const laneNameByGroup = useMemo(() => {
     const m = new Map();
     (Array.isArray(phaseBands) ? phaseBands : []).forEach((b) => {
@@ -318,13 +378,13 @@ export default function PlanDagGraph({
     return m;
   }, [phaseBands]);
   const attentionSummary = useMemo(() => {
+    if (structure) return null;
     const counts = parallelLanes
       .map((lane) => laneAttentionLabel(lane.steps))
       .filter(Boolean);
     return counts[0] || null;
-  }, [parallelLanes]);
+  }, [parallelLanes, structure]);
 
-  // feeds-into: which steps depend on a given step (reverse depends_on).
   const feedsInto = useMemo(() => {
     const map = new Map();
     steps.forEach((s) => {
@@ -349,14 +409,16 @@ export default function PlanDagGraph({
   );
 
   const legend = useMemo(
-    () => [
-      { label: 'Pending', color: theme.palette.text.disabled },
-      { label: 'Running', color: theme.palette.primary.main },
-      { label: 'Needs approval', color: theme.palette.warning.main },
-      { label: 'Finished', color: theme.palette.success.main },
-      { label: 'Failed', color: theme.palette.error.main },
-    ],
-    [theme],
+    () => (structure
+      ? []
+      : [
+        { label: 'Pending', color: theme.palette.text.disabled },
+        { label: 'Running', color: theme.palette.primary.main },
+        { label: 'Needs approval', color: theme.palette.warning.main },
+        { label: 'Finished', color: theme.palette.success.main },
+        { label: 'Failed', color: theme.palette.error.main },
+      ]),
+    [theme, structure],
   );
 
   const selectedStep = selected ? stepById.get(selected.id) : null;
@@ -373,13 +435,92 @@ export default function PlanDagGraph({
       }) || null)
     : null;
 
-  // ── Node interior (drawn inside the EnterpriseGraph rect) ──────────────
-  // Linear/Temporal-style compact node: a 3px status accent bar on the left,
-  // the intent on the title row with the status label right-aligned, and the
-  // agent role + tool/kind on the meta row (enterprise multi-agent cast).
-  // The running pulse outline is drawn by EnterpriseGraph from the node status.
+  const edgeSourceStep = selectedEdge ? stepById.get(selectedEdge.source) : null;
+  const edgeTargetStep = selectedEdge ? stepById.get(selectedEdge.target) : null;
+
+  const clearSelection = useCallback(() => {
+    setSelected(null);
+    setSelectedEdge(null);
+  }, []);
+
+  const handleSelectNode = useCallback((node) => {
+    setSelectedEdge(null);
+    setSelected(node);
+    if (node) setPaneOpen(true);
+  }, []);
+
+  const handleSelectEdge = useCallback((edge) => {
+    setSelected(null);
+    setSelectedEdge(edge);
+    if (edge) setPaneOpen(true);
+  }, []);
+
+  // Structure / execution node interiors — card boxes with clear accent bar.
   const renderNode = useCallback(
     (n) => {
+      const shape = resolvePlanNodeShape(n);
+      const isDiamond = shape === 'diamond' || shape === 'diamondPlus';
+      const isCircle = shape === 'circle' || shape === 'doubleCircle' || shape === 'thickCircle';
+      const center = isDiamond || isCircle;
+      const padX = center ? 0 : 14;
+      const textX = center ? n.w / 2 : padX + 8;
+      const anchor = center ? 'middle' : 'start';
+      const roleKey = String(n.agent_role || 'orchestrator').toLowerCase();
+      const accentToken = PLAN_ROLE_ACCENT[roleKey] || 'primary';
+      const accent = structure
+        ? (theme.palette[accentToken]?.main || phaseColor(n.phase_id) || theme.palette.primary.main)
+        : colorFor(n.status);
+
+      if (structure) {
+        const rawTitle = String(n.label || `Step ${n.id}`);
+        const titleMax = Math.max(18, Math.floor((n.w - (center ? n.w * 0.35 : 40)) / 6.6));
+        const titleLines = wrapTitleLines(rawTitle, titleMax, 2);
+        const isGateway = n.is_gateway
+          || ['choice', 'parallel', 'observe', 'map', 'loop', 'wait', 'fail', 'succeed'].includes(n.node_type);
+        const meta = isGateway
+          ? String(n.node_type || 'gateway')
+          : (agentRoleLabel(n.agent_role || 'orchestrator') || n.phase_name || '');
+        const metaMax = Math.max(8, Math.floor((n.w - (center ? n.w * 0.4 : 40)) / 5.6));
+        const metaTrim = meta.length > metaMax ? `${meta.slice(0, metaMax - 1)}…` : meta;
+        const lineCount = titleLines.length + (metaTrim ? 1 : 0);
+        const blockH = lineCount * 13;
+        const startY = n.h / 2 - blockH / 2 + 10;
+        return (
+          <>
+            {!center ? (
+              <>
+                <rect x={0} y={0} width={5} height={n.h} rx={0} fill={accent} />
+                <rect x={5} y={0} width={1} height={n.h} fill={theme.palette.divider} opacity={0.35} />
+              </>
+            ) : null}
+            {titleLines.map((line, i) => (
+              <text
+                key={`t${i}`}
+                x={textX}
+                y={startY + i * 14}
+                fontSize={center ? 11 : 12.5}
+                fontWeight={650}
+                fill={theme.palette.text.primary}
+                textAnchor={anchor}
+              >
+                {line}
+              </text>
+            ))}
+            {metaTrim ? (
+              <text
+                x={textX}
+                y={startY + titleLines.length * 14 + 2}
+                fontSize={10}
+                fill={theme.palette.text.secondary}
+                textAnchor={anchor}
+              >
+                {metaTrim}
+              </text>
+            ) : null}
+          </>
+        );
+      }
+
       const color = colorFor(n.status);
       const statusLabel = NODE_STATUS[n.status] || 'PENDING';
       const rawTitle = String(n.label || `Step ${n.id}`);
@@ -391,47 +532,111 @@ export default function PlanDagGraph({
       const roleLabel = isGateway
         ? null
         : agentRoleLabel(n.agent_role || 'orchestrator');
-      // Meta row: "Critic · Reasoning (LLM)" / "Domain specialist · call_host_api"
       const metaRaw = roleLabel ? `${roleLabel} · ${toolKind}` : toolKind;
-      // Title is truncated to leave room for the right-aligned status label.
-      const titleMax = Math.max(8, Math.floor((n.w - 78) / 6.6));
-      const title = rawTitle.length > titleMax ? `${rawTitle.slice(0, titleMax - 1)}…` : rawTitle;
-      const metaMax = Math.max(8, Math.floor((n.w - 28) / 5.6));
+      const titleMax = Math.max(18, Math.floor((n.w - 78) / 6.8));
+      const titleLines = wrapTitleLines(rawTitle, titleMax, 2);
+      const metaMax = Math.max(10, Math.floor((n.w - 28) / 5.6));
       const meta = metaRaw.length > metaMax ? `${metaRaw.slice(0, metaMax - 1)}…` : metaRaw;
+      const startY = titleLines.length > 1 ? n.h / 2 - 10 : n.h / 2 - 3;
       return (
         <>
-          {/* Status accent bar — the primary at-a-glance signal */}
-          <rect x={4} y={6} width={4} height={n.h - 12} rx={2} fill={color} />
-          {/* Intent */}
-          <text x={16} y={n.h / 2 - 2} fontSize={13} fontWeight={650} fill={theme.palette.text.primary}>
-            {title}
-          </text>
-          {/* Status — right-aligned on the title row, always visible while running */}
+          {!center ? (
+            <>
+              <rect x={0} y={0} width={5} height={n.h} fill={color} />
+              <rect x={5} y={0} width={1} height={n.h} fill={theme.palette.divider} opacity={0.35} />
+            </>
+          ) : null}
+          {titleLines.map((line, i) => (
+            <text
+              key={`et${i}`}
+              x={padX + 8}
+              y={startY + i * 13}
+              fontSize={12.5}
+              fontWeight={650}
+              fill={theme.palette.text.primary}
+            >
+              {line}
+            </text>
+          ))}
           <text x={n.w - 10} y={n.h / 2 + 1} fontSize={10} fontWeight={700} fill={color} textAnchor="end">
             {statusLabel}
           </text>
-          {/* Agent role · tool / gateway kind */}
-          <text x={16} y={n.h / 2 + 14} fontSize={11} fill={theme.palette.text.secondary}>
+          <text x={padX + 8} y={startY + titleLines.length * 13 + 2} fontSize={10} fill={theme.palette.text.secondary}>
             {meta}
           </text>
         </>
       );
     },
-    [colorFor, theme],
+    [colorFor, theme, structure, phaseColor],
   );
 
   const nodeAriaLabel = useCallback(
     (n) => {
+      if (structure) {
+        return `Step: ${n.label || n.id}`;
+      }
       const role = n.is_gateway
         ? ''
         : ` · ${agentRoleLabel(n.agent_role || 'orchestrator')}`;
       return `Step ${n.id}: ${n.label}${role} — ${planStepStatusLabel(n.status)}`;
     },
-    [],
+    [structure],
   );
 
-  // ── Legend (rendered above the canvas, inline + modal) ─────────────────
-  const legendEl = (
+  const nodeTitleTip = useCallback(
+    (n) => {
+      const intent = String(n.label || `Step ${n.id}`);
+      if (structure) {
+        const phase = n.phase_name ? ` · ${n.phase_name}` : '';
+        return `${intent}${phase}`;
+      }
+      return `${intent} — ${planStepStatusLabel(n.status)}`;
+    },
+    [structure],
+  );
+
+  const edgeTitleTip = useCallback(
+    (e) => {
+      const from = stepById.get(e.source);
+      const to = stepById.get(e.target);
+      const a = from?.intent || `Step ${e.source}`;
+      const b = to?.intent || `Step ${e.target}`;
+      return `${a} → ${b}`;
+    },
+    [stepById],
+  );
+
+  const legendEl = structure ? (
+    <Stack spacing={0.35} sx={{ px: 1, py: 0.5 }} data-testid="plan-shape-legend">
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap', rowGap: 0.35 }}>
+        {PLAN_SHAPE_LEGEND.map((row) => (
+          <Stack key={row.shape} direction="row" spacing={0.5} alignItems="center">
+            <Box
+              component="svg"
+              width={12}
+              height={12}
+              viewBox="0 0 12 12"
+              aria-hidden
+              sx={{ flexShrink: 0, color: 'text.secondary' }}
+            >
+              <path
+                d={legendShapePath(row.shape)}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.25}
+              />
+            </Box>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.625rem' }}>
+              {row.label}
+            </Typography>
+          </Stack>
+        ))}
+      </Stack>
+      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.5625rem' }}>
+        Solid arrow = sequence · Dashed = conditional · Open arrowhead = guarded
+      </Typography>
+    </Stack>
+  ) : legend.length > 0 ? (
     <Stack spacing={0.25} sx={{ px: 1, py: 0.5 }}>
       <Stack
         direction="row"
@@ -449,19 +654,183 @@ export default function PlanDagGraph({
         ))}
       </Stack>
     </Stack>
-  );
+  ) : null;
 
-  // ── Docked detail pane (never floats over the graph) ───────────────────
-  // `variant` is supplied by EnterpriseGraph so inline + modal panes get
-  // distinct test ids and widths.
+  // Light Operator dock (structure) — RichContent in chat-message style; collapsible.
+  const structureMarkdown = (() => {
+    if (selectedStep) {
+      const lines = [
+        `### ${selectedStep.intent || 'Step'}`,
+        '',
+      ];
+      if (selectedPhase) {
+        const parallel = selectedPhase.strategy === 'parallel' ? ' · runs with siblings' : '';
+        lines.push(`**Stage:** ${selectedPhase.name}${parallel}`, '');
+      }
+      const role = agentRoleLabel(selectedStep.agent_role || 'orchestrator');
+      if (role) lines.push(`**Who:** ${role}`, '');
+      lines.push('**Needs first**', '');
+      if (selectedDeps.length) {
+        selectedDeps.forEach((d) => lines.push(`- ${d.intent || `Step ${d.step_id}`}`));
+      } else {
+        lines.push('_Starts here_');
+      }
+      lines.push('', '**Then**', '');
+      if (selectedFeeds.length) {
+        selectedFeeds.forEach((d) => lines.push(`- ${d.intent || `Step ${d.step_id}`}`));
+      } else {
+        lines.push('_Ends the plan_');
+      }
+      return lines.join('\n');
+    }
+    if (selectedEdge && (edgeSourceStep || edgeTargetStep)) {
+      return [
+        '### Link',
+        '',
+        '**From**',
+        '',
+        edgeSourceStep?.intent || `Step ${selectedEdge.source}`,
+        '',
+        '**To**',
+        '',
+        edgeTargetStep?.intent || `Step ${selectedEdge.target}`,
+        '',
+        '_The later step waits on the earlier one._',
+      ].join('\n');
+    }
+    const brief = String(plan?.brief || '').trim();
+    if (!brief) return '_Select a step or link for details._';
+    return brief;
+  })();
+
+  const renderStructurePane = (variant) => {
+    const railH = variant === 'modal' ? '100%' : height;
+    if (!paneOpen) {
+      return (
+        <Box
+          sx={{
+            width: 40,
+            flexShrink: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            pt: 1,
+            pr: 0.5,
+            height: railH,
+          }}
+          data-testid="plan-structure-detail-collapsed"
+        >
+          <Tooltip title="Show details">
+            <IconButton
+              size="small"
+              aria-label="Show details"
+              data-testid="plan-structure-expand"
+              onClick={() => setPaneOpen(true)}
+              sx={{
+                p: 0.5,
+                border: 1,
+                borderColor: 'divider',
+                borderRadius: 1,
+                bgcolor: 'background.paper',
+              }}
+            >
+              <ChevronLeftIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      );
+    }
+    const paneWidth = variant === 'modal' ? 340 : 288;
+    const paneTestId = variant === 'modal' ? 'plan-structure-detail-modal' : 'plan-structure-detail';
+    return (
+      <Box
+        sx={{
+          width: paneWidth,
+          flexShrink: 0,
+          height: railH,
+          alignSelf: 'stretch',
+          minHeight: 0,
+          p: 1,
+          pl: 0.75,
+          boxSizing: 'border-box',
+        }}
+      >
+        <Paper
+          variant="outlined"
+          data-testid={paneTestId}
+          sx={{
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+            borderRadius: 1.5,
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
+            overflow: 'hidden',
+            boxShadow: (t) => `inset 0 0 0 1px ${t.palette.action.hover}`,
+          }}
+        >
+          <Stack
+            direction="row"
+            spacing={0.5}
+            alignItems="center"
+            sx={{ px: 1, py: 0.625, borderBottom: 1, borderColor: 'divider', flexShrink: 0, bgcolor: 'action.hover' }}
+          >
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ flex: 1, fontSize: '0.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}
+            >
+              {selectedStep ? 'Step' : selectedEdge ? 'Link' : 'Brief'}
+            </Typography>
+            {(selectedStep || selectedEdge) && (
+              <Button
+                size="small"
+                onClick={clearSelection}
+                sx={{ fontSize: '0.625rem', textTransform: 'none', minWidth: 0 }}
+              >
+                Brief
+              </Button>
+            )}
+            <Tooltip title="Hide details">
+              <IconButton
+                size="small"
+                aria-label="Hide details"
+                data-testid="plan-structure-collapse"
+                onClick={() => setPaneOpen(false)}
+                sx={{ p: 0.25 }}
+              >
+                <ChevronRightIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+          <Box
+            sx={{
+              flex: 1,
+              minHeight: 0,
+              overflowY: 'auto',
+              p: 1.25,
+            }}
+          >
+            <Box data-testid="plan-structure-message" sx={{ width: '100%', minWidth: 0 }}>
+              <RichContent content={structureMarkdown} testId="plan-structure-rich" variant="message" />
+            </Box>
+          </Box>
+        </Paper>
+      </Box>
+    );
+  };
+
+  // Execution docked pane (analyst) — unchanged payload depth.
   const renderDetailPane = (variant) => {
+    if (structure) return renderStructurePane(variant);
     if (!selected || !selectedStep) return null;
-    const width = variant === 'modal' ? 300 : 236;
+    const paneWidth = variant === 'modal' ? 300 : 236;
     const paneTestId = variant === 'modal' ? 'plan-step-detail-modal' : 'plan-step-detail';
     return (
       <Box
         sx={{
-          width,
+          width: paneWidth,
           flexShrink: 0,
           borderLeft: 1,
           borderColor: 'divider',
@@ -642,7 +1011,7 @@ export default function PlanDagGraph({
         <Button
           size="small"
           startIcon={<CloseIcon sx={{ fontSize: '0.75rem' }} />}
-          onClick={() => setSelected(null)}
+          onClick={clearSelection}
           sx={{ mt: 1, fontSize: '0.625rem', textTransform: 'none', minWidth: 0 }}
         >
           Close
@@ -656,6 +1025,16 @@ export default function PlanDagGraph({
   } link${edges.filter((e) => !String(e.source).startsWith('__d')).length !== 1 ? 's' : ''}${
     attentionSummary ? ` · ${attentionSummary}` : ''
   }`;
+
+  // Enrich nodes with phase_name for structure tooltips / meta row.
+  const nodesWithPhase = useMemo(() => {
+    if (!structure) return nodes;
+    const byId = new Map((phaseBands || []).map((b) => [b.phase_id, b.name]));
+    return nodes.map((n) => ({
+      ...n,
+      phase_name: byId.get(n.phase_id) || n.phase_name,
+    }));
+  }, [nodes, phaseBands, structure]);
 
   return (
     <>
@@ -676,23 +1055,32 @@ export default function PlanDagGraph({
         </Stack>
       )}
       <EnterpriseGraph
-        nodes={nodes}
+        nodes={nodesWithPhase}
         edges={edges}
         width={width}
         layoutHeight={layoutHeight}
         height={height}
         phaseBands={phaseBands}
         phaseColor={phaseColor}
-        nodeColor={(n) => colorFor(n.status)}
+        nodeColor={(n) => (structure
+          ? (phaseColor(n.phase_id) || theme.palette.primary.main)
+          : colorFor(n.status))}
         renderNode={renderNode}
+        nodeShape={resolvePlanNodeShape}
+        edgeStyle={resolvePlanEdgeStyle}
         selected={selected}
-        onSelect={setSelected}
+        onSelect={handleSelectNode}
+        selectedEdge={selectedEdge}
+        onSelectEdge={handleSelectEdge}
+        nodeTitle={nodeTitleTip}
+        edgeTitle={edgeTitleTip}
+        showStatusPulse={!structure}
         legend={legendEl}
         sidebar={renderDetailPane}
-        title="Plan graph"
-        modalTitle="Plan graph — full view"
+        title={structure ? 'Plan' : 'Plan graph'}
+        modalTitle={structure ? 'Plan — full view' : 'Plan graph — full view'}
         summary={summary}
-        live={live}
+        live={!structure && live}
         emptyMessage="This plan has no steps to graph yet."
         nodeAriaLabel={nodeAriaLabel}
         markerId="plan-arrow"
@@ -704,6 +1092,7 @@ export default function PlanDagGraph({
         exportFileName="plan-graph"
         fill={fill}
         direction={direction || 'lr'}
+        fitMode={structure ? 'width' : 'contain'}
       />
     </>
   );
@@ -714,6 +1103,7 @@ PlanDagGraph.propTypes = {
   height: PropTypes.number,
   live: PropTypes.bool,
   fill: PropTypes.bool,
+  mode: PropTypes.oneOf(['execution', 'structure']),
   testId: PropTypes.string,
   onConfirmStep: PropTypes.func,
   onDeclineStep: PropTypes.func,

@@ -506,6 +506,16 @@ async def execute_search_knowledge(
         return {"entities": [], "message": "Knowledge store not available"}
 
     entities = await knowledge_store.search(instance_id, query, top_k=10)
+    if not entities:
+        return {
+            "entities": [],
+            "count": 0,
+            "status": "no_match",
+            "message": (
+                "I couldn't find that in the knowledge base. "
+                "Name the item more specifically, or ask a different question."
+            ),
+        }
     return {"entities": entities, "count": len(entities)}
 
 
@@ -640,6 +650,46 @@ def _extract_items(api_result) -> list[dict]:
     return []
 
 
+def _is_pk_type_error(err: str) -> bool:
+    """True when the host rejected a non-numeric primary key (invented demo id)."""
+    t = (err or "").lower()
+    return any(
+        tok in t
+        for tok in (
+            "expected a number",
+            "field 'id'",
+            "invalid literal for int",
+            "must be an integer",
+        )
+    )
+
+
+def _extract_unresolved_path_ids(path: str) -> dict:
+    """Pull non-numeric resource ids still embedded in a substituted path."""
+    out: dict = {}
+    if not path:
+        return out
+    for pattern in (
+        r"/payroll-runs/([^/]+)",
+        r"/employees/([^/]+)",
+        r"/payslip-lines/([^/]+)",
+    ):
+        m = re.search(pattern, path)
+        if not m:
+            continue
+        seg = m.group(1)
+        if seg.isdigit():
+            continue
+        if re.match(
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            seg,
+            re.I,
+        ):
+            continue
+        out["id"] = seg
+    return out
+
+
 async def _resolve_slug_to_id(
     executor,
     api_name: str,
@@ -650,15 +700,31 @@ async def _resolve_slug_to_id(
     the real numeric PK by fetching the corresponding list endpoint first.
     Returns a (possibly updated) copy of path_params.
 
+    Intelligence layer: invented demo labels (``demo-oct-2026``) are matched
+    against ``period_start`` when exact field match fails — so payroll compute
+    does not die on ``Field 'id' expected a number``.
+
     Legacy list_employees / get_employee path via slug_resolution.
     Superseded by ECF resolve_entity when ECF_ENABLED (ECF-7); kept as
     30-day fallback — do NOT delete.
     """
+    from ai.engine.agent.period_alias import item_matches_period, parse_period_alias
+
     resolution = _get_slug_resolution(executor, api_name)
+    # Built-in payroll resolve when instance.yaml omitted the mapping —
+    # planners invent ``demo-oct-2026`` constantly for GOFSCO briefs.
+    if not resolution and any(
+        tok in (api_name or "") for tok in ("payroll_run", "payroll-run")
+    ):
+        resolution = ("list_payroll_runs", ["period_start", "id"])
+
     if not resolution:
         return path_params
 
-    _UUID_RE = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.I)
+    _UUID_RE = re.compile(
+        r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+        re.I,
+    )
 
     def _is_resolved(v: str) -> bool:
         """True if the value looks like a valid PK (numeric or UUID)."""
@@ -695,15 +761,36 @@ async def _resolve_slug_to_id(
                 ),
                 None,
             )
+            # Period alias: demo-oct-2026 → run whose period_start is 2026-10
+            if match is None:
+                hint = parse_period_alias(needle)
+                if hint:
+                    year, month = hint
+                    period_hits = [
+                        item for item in items
+                        if item_matches_period(item, year, month)
+                    ]
+                    if len(period_hits) == 1:
+                        match = period_hits[0]
+                    elif len(period_hits) > 1:
+                        match = next(
+                            (
+                                item for item in period_hits
+                                if str(item.get("status", "")).lower()
+                                in ("draft", "computed", "validated")
+                            ),
+                            period_hits[0],
+                        )
             if match and "id" in match:
                 logger.info(
-                    f"Resolved slug '{param_val}' → id={match['id']} "
-                    f"for {api_name} via {list_api_name}"
+                    "Resolved slug %r → id=%s for %s via %s",
+                    param_val, match["id"], api_name, list_api_name,
                 )
                 resolved[param_key] = match["id"]
             else:
                 logger.warning(
-                    f"Could not resolve '{param_val}' to a numeric id via {list_api_name}"
+                    "Could not resolve %r to a numeric id via %s",
+                    param_val, list_api_name,
                 )
         return resolved
     except Exception as e:
@@ -1049,11 +1136,52 @@ async def execute_call_host_api(
         # Direct execution for read-only endpoints
         settings = get_settings()
 
-        async def _exec_direct() -> dict:
+        async def _exec_direct_once(active_path: str) -> dict:
             try:
-                return await executor.call_api_direct(method, path, query_params, body)
+                return await executor.call_api_direct(
+                    method, active_path, query_params, body,
+                )
             except Exception as e:
                 return {"error": str(e)}
+
+        async def _exec_direct() -> dict:
+            """Execute once; on invented-id TypeError, resolve + retry (self-heal)."""
+            nonlocal path, path_params
+            result = await _exec_direct_once(path)
+            err = result.get("error") if isinstance(result, dict) else None
+            if not err or not _is_pk_type_error(str(err)):
+                return result
+
+            heal_params = dict(path_params or {})
+            heal_params.update(_extract_unresolved_path_ids(path))
+            if not heal_params:
+                return result
+
+            healed = await _resolve_slug_to_id(executor, api_name, heal_params)
+            new_path = path_template
+            for key, value in healed.items():
+                new_path = new_path.replace(f"{{{key}}}", str(value))
+            # Replace any leftover literal invented segment in the live path.
+            for key, old in list(heal_params.items()):
+                new_val = healed.get(key, old)
+                if str(old) in path and str(new_val) != str(old):
+                    new_path = path.replace(str(old), str(new_val))
+
+            remaining = re.findall(r"\{(\w+)\}", new_path)
+            if remaining or new_path == path:
+                logger.warning(
+                    "Self-heal could not rewrite path after pk error api=%s path=%s err=%s",
+                    api_name, path, str(err)[:160],
+                )
+                return result
+
+            logger.info(
+                "Self-heal invented-id retry: %s → %s (api=%s)",
+                path, new_path, api_name,
+            )
+            path = new_path
+            path_params = healed
+            return await _exec_direct_once(new_path)
 
         # N1: optional validate→execute→retry discipline (gated, default off).
         if settings.API_DISCIPLINE_ENABLED:

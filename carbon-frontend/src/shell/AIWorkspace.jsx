@@ -804,11 +804,23 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
           }}
         >
           {mode === 'agent'
-            ? [
-                { id: 'tasks',   icon: <TaskAltOutlinedIcon sx={{ fontSize: 16 }} />,          label: t('agent.tasks')   },
-                { id: 'monitor', icon: <LeaderboardOutlinedIcon sx={{ fontSize: 16 }} />,      label: t('agent.monitor') },
-                { id: 'results', icon: <HistoryOutlinedIcon sx={{ fontSize: 16 }} />,          label: t('agent.results'), tip: t('agent.resultsHint') },
-              ].map(({ id, icon, label, tip }) => (
+            ? (() => {
+                // ADR-0043 cockpit is default; Monitor/Results duplicate Plan·Run·Canvas·Output.
+                // Classic dual chrome only when carbon-ai-cockpit=off.
+                let cockpitOn = true;
+                try {
+                  cockpitOn = localStorage.getItem('carbon-ai-cockpit') !== 'off';
+                } catch {
+                  cockpitOn = true;
+                }
+                const items = cockpitOn
+                  ? [{ id: 'tasks', icon: <TaskAltOutlinedIcon sx={{ fontSize: 16 }} />, label: t('agent.tasks') }]
+                  : [
+                      { id: 'tasks', icon: <TaskAltOutlinedIcon sx={{ fontSize: 16 }} />, label: t('agent.tasks') },
+                      { id: 'monitor', icon: <LeaderboardOutlinedIcon sx={{ fontSize: 16 }} />, label: t('agent.monitor') },
+                      { id: 'results', icon: <HistoryOutlinedIcon sx={{ fontSize: 16 }} />, label: t('agent.results'), tip: t('agent.resultsHint') },
+                    ];
+                return items.map(({ id, icon, label, tip }) => (
                 <Tooltip key={id} title={tip || label} placement="left">
                   <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', borderRight: 2, borderColor: agentView === id ? 'primary.main' : 'transparent' }}>
                     <IconButton
@@ -823,7 +835,8 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
                     </IconButton>
                   </Box>
                 </Tooltip>
-              ))
+                ));
+              })()
             : [
                 { id: 'sessions',    icon: <ForumOutlinedIcon sx={{ fontSize: 16 }} />,             label: t('panel.sessions')    },
                 { id: 'context',     icon: <InfoOutlinedIcon sx={{ fontSize: 16 }} />,               label: t('panel.context')     },

@@ -100,11 +100,12 @@ async def _resolve_plan_id(service, user, plan_id: str | None) -> str:
 class EditPlan(ToolPlugin):
     name = "edit_plan"
     description = (
-        "Revise an existing plan based on the user's chat feedback. Use it "
-        "when the user wants to change the plan (add / remove / reword steps, "
-        "or rewrite the brief) after you proposed it. Editing never executes "
-        "or auto-approves — it returns the revised plan (with a diff of what "
-        "changed) so you can re-present it and ask if it is settled."
+        "Revise an existing plan based on the user's chat feedback. Prefer "
+        "step_deltas for small changes (add a chart step, remove a step, "
+        "reword one intent) — that keeps the existing plan topology. Use a "
+        "full brief rewrite only when the user wants a different plan. "
+        "Editing never executes or auto-approves — it returns the revised "
+        "plan (with a diff) so you can re-present it and ask if it is settled."
     )
     input_schema: dict[str, Any] = {
         "type": "object",

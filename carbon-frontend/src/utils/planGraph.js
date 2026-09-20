@@ -313,12 +313,12 @@ export function buildPlanPhases(plan) {
 // instead of sitting at rank 0 and shooting long crossing edges.
 
 export const EXEC_LAYOUT = {
-  nodeW: 228,
-  nodeH: 58,
-  colGap: 72,
-  rowGap: 44,
-  padX: 28,
-  padTop: 40,
+  nodeW: 300,
+  nodeH: 68,
+  colGap: 48,
+  rowGap: 36,
+  padX: 24,
+  padTop: 32,
   padBottom: 24,
 };
 
@@ -362,6 +362,95 @@ function tightenOrphanSources(rankOf, preds, succs) {
         rankOf.set(id, next);
         changed = true;
       }
+    });
+  }
+}
+
+/**
+ * True isolates (no in/out edges) used to pile onto rank 0 and float as a
+ * disconnected strip above the main spine. Stack them after the connected
+ * component so the primary flow stays compact and readable.
+ */
+function packIsolates(rankOf, preds, succs) {
+  let maxConnected = -1;
+  rankOf.forEach((r, id) => {
+    const ps = preds.get(id) || [];
+    const outs = succs.get(id) || [];
+    if (ps.length || outs.length) {
+      maxConnected = Math.max(maxConnected, r);
+    }
+  });
+  const isolates = [];
+  rankOf.forEach((_r, id) => {
+    const ps = preds.get(id) || [];
+    const outs = succs.get(id) || [];
+    if (!ps.length && !outs.length) isolates.push(id);
+  });
+  if (!isolates.length) return;
+  const base = maxConnected < 0 ? 0 : maxConnected + 1;
+  isolates.forEach((id, i) => {
+    rankOf.set(id, base + i);
+  });
+}
+
+/**
+ * Weakly connected components (undirected over the DAG edges).
+ * Largest first — that is the primary journey spine.
+ */
+function weaklyConnectedComponents(nodes, edges) {
+  const parent = new Map(nodes.map((n) => [n.id, n.id]));
+  const find = (x) => {
+    let r = x;
+    while (parent.get(r) !== r) r = parent.get(r);
+    let c = x;
+    while (c !== r) {
+      const n = parent.get(c);
+      parent.set(c, r);
+      c = n;
+    }
+    return r;
+  };
+  const unite = (a, b) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
+  };
+  edges.forEach((e) => {
+    if (parent.has(e.source) && parent.has(e.target)) unite(e.source, e.target);
+  });
+  const groups = new Map();
+  nodes.forEach((n) => {
+    const r = find(n.id);
+    if (!groups.has(r)) groups.set(r, []);
+    groups.get(r).push(n.id);
+  });
+  return [...groups.values()].sort((a, b) => b.length - a.length);
+}
+
+/**
+ * Stack secondary components UNDER the primary spine instead of parking them
+ * as a second column (ugly dual vertical strips with empty space between).
+ */
+function stackDisconnectedComponents(rankOf, nodes, edges) {
+  const comps = weaklyConnectedComponents(nodes, edges);
+  if (comps.length <= 1) return;
+  let globalMax = -1;
+  (comps[0] || []).forEach((id) => {
+    globalMax = Math.max(globalMax, rankOf.get(id) ?? 0);
+  });
+  for (let c = 1; c < comps.length; c += 1) {
+    const ids = comps[c];
+    let localMin = Infinity;
+    ids.forEach((id) => {
+      localMin = Math.min(localMin, rankOf.get(id) ?? 0);
+    });
+    if (!Number.isFinite(localMin)) continue;
+    const shift = globalMax + 1 - localMin;
+    ids.forEach((id) => {
+      rankOf.set(id, (rankOf.get(id) ?? 0) + shift);
+    });
+    ids.forEach((id) => {
+      globalMax = Math.max(globalMax, rankOf.get(id) ?? 0);
     });
   }
 }
@@ -520,9 +609,14 @@ function orderRanksBarycenter(byRank, ranks, preds, succs, edges, nodesById) {
  * Layered execution-graph layout for a plan.
  *
  * @param {object} plan - plan payload from GET /ai/plans/{id}/
+ * @param {object} [options]
+ * @param {'auto'|'tb'|'lr'} [options.direction='auto']
+ *   - auto: TB for pure chains; LR when a rank has parallel siblings
+ *   - tb / lr: force flow (Plan structure uses tb so parallel fans use width + height)
+ * @param {object} [options.layout] - partial override of EXEC_LAYOUT
  * @returns {{nodes: Array<object>, edges: Array<object>, width:number, height:number, phaseBands: Array<object>, direction:'lr'|'tb'}}
  */
-export function layoutExecutionGraph(plan) {
+export function layoutExecutionGraph(plan, options = {}) {
   const { nodes, edges } = buildPlanGraph(plan);
   const { phases, stepPhase } = buildPlanPhases(plan);
 
@@ -544,6 +638,8 @@ export function layoutExecutionGraph(plan) {
   };
   nodes.forEach((n) => rankOf.set(n.id, visit(n.id)));
   tightenOrphanSources(rankOf, preds, succs);
+  packIsolates(rankOf, preds, succs);
+  stackDisconnectedComponents(rankOf, nodes, edges);
   compressRanks(rankOf);
 
   const withDummies = insertRankDummies(nodes, edges, rankOf);
@@ -561,18 +657,22 @@ export function layoutExecutionGraph(plan) {
   const nodesById = new Map(layoutNodes.map((n) => [n.id, n]));
   orderRanksBarycenter(byRank, ranks, adj.preds, adj.succs, layoutEdges, nodesById);
 
-  const L = EXEC_LAYOUT;
+  const L = { ...EXEC_LAYOUT, ...(options.layout || {}) };
   const maxRank = ranks.length ? ranks[ranks.length - 1] : 0;
   // Lane count ignores invisible dummies so height matches visible flowchart.
   const maxInRank = ranks.length
     ? Math.max(...ranks.map((r) => byRank.get(r).filter((n) => !n.is_dummy).length || 1))
     : 0;
-  const direction = maxInRank <= 1 && nodes.length >= 3 ? 'tb' : 'lr';
+  const prefer = options.direction || 'auto';
+  const direction = prefer === 'tb' || prefer === 'lr'
+    ? prefer
+    : (maxInRank <= 1 && nodes.length >= 3 ? 'tb' : 'lr');
 
   let width;
   let height;
   if (direction === 'tb') {
-    width = L.padX * 2 + L.nodeW;
+    // Parallel siblings share a rank → sit side-by-side; use full lane width.
+    width = L.padX * 2 + maxInRank * L.nodeW + Math.max(0, maxInRank - 1) * L.colGap;
     height = L.padTop + (maxRank + 1) * L.nodeH + maxRank * L.rowGap + L.padBottom;
   } else {
     width = L.padX * 2 + (maxRank + 1) * L.nodeW + maxRank * L.colGap;
@@ -587,10 +687,13 @@ export function layoutExecutionGraph(plan) {
     const visible = group.filter((n) => !n.is_dummy);
     const visibleIndex = new Map(visible.map((n, i) => [n.id, i]));
     if (direction === 'tb') {
-      const x = L.padX;
+      // Left-align ranks on a spine — centering skinny ranks in a wide canvas
+      // left a sea of empty whitespace (Plan "fill" complaint).
+      const startX = L.padX;
+      const y = L.padTop + r * (L.nodeH + L.rowGap);
       group.forEach((n, i) => {
         const lane = visibleIndex.has(n.id) ? visibleIndex.get(n.id) : i;
-        const y = L.padTop + r * (L.nodeH + L.rowGap);
+        const x = startX + lane * (L.nodeW + L.colGap);
         if (n.is_dummy) {
           laid.push({
             ...n,
@@ -604,7 +707,7 @@ export function layoutExecutionGraph(plan) {
         } else {
           laid.push({
             ...n,
-            x: x + lane * (L.nodeW + L.colGap),
+            x,
             y,
             w: L.nodeW,
             h: L.nodeH,
@@ -614,8 +717,8 @@ export function layoutExecutionGraph(plan) {
         }
       });
     } else {
-      const groupH = Math.max(visible.length, 1) * L.nodeH + Math.max(0, visible.length - 1) * L.rowGap;
-      const startY = L.padTop + (height - L.padTop - L.padBottom - groupH) / 2;
+      // Top-align lanes on the spine (same reason as TB left-align).
+      const startY = L.padTop;
       const x = L.padX + r * (L.nodeW + L.colGap);
       group.forEach((n, i) => {
         const lane = visibleIndex.has(n.id) ? visibleIndex.get(n.id) : Math.min(i, Math.max(visible.length - 1, 0));
@@ -690,12 +793,13 @@ export function layoutExecutionGraph(plan) {
       if (!owned.length) return null;
       if (direction === 'tb') {
         const ys = owned.map((n) => n.y);
+        const xs = owned.map((n) => n.x);
         return {
           phase_id: p.phase_id,
           name: p.name,
           strategy: p.strategy,
-          x: L.padX,
-          width: L.nodeW,
+          x: Math.min(...xs),
+          width: Math.max(...xs) + L.nodeW - Math.min(...xs),
           y: Math.min(...ys),
           height: Math.max(...ys) + L.nodeH - Math.min(...ys),
         };

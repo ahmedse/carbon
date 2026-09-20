@@ -72,16 +72,12 @@ class Settings(BaseSettings):
 
     # ── LLM Cost Tracking ──
     LLM_DAILY_BUDGET_USD: float = 5.0            # per-instance daily spend cap
-    # DeepSeek entries use PEAK rates (Mon–Fri 01–04 & 06–10 UTC = 2× off-peak).
-    # Source: https://api-docs.deepseek.com/quick_start/pricing (2026-09).
     LLM_COST_MODELS: str = (
-        '{"DeepSeek-Flash": {"input": 0.30, "output": 1.20},'
-        ' "DeepSeek-V4-Pro": {"input": 1.32, "output": 3.96},'
-        ' "Claude-Haiku-4.5": {"input": 1.0, "output": 5.0},'
-        ' "Claude-Sonnet-4.5": {"input": 3.0, "output": 15.0},'
+        '{"Claude-Haiku-4.5": {"input": 1.0, "output": 5.0},'
+        ' "Claude-Sonnet-4.5": {"input": 3.0, "output": 5.0},'
         ' "GPT-4o": {"input": 2.5, "output": 10.0},'
         ' "GPT-4o-mini": {"input": 0.15, "output": 0.6}}'
-    )  # JSON: model → {input, output} cost per 1M tokens (USD)
+    )  # JSON: model → {input, output} cost per 1M tokens
 
     # ── Agent ──
     AGENT_UNIFIED_FINALIZE: bool = True          # collapse _wisdom_review + _enrich + _follow_ups into 1 LLM call
@@ -130,11 +126,9 @@ class Settings(BaseSettings):
 
     # ── Entity Capability Framework (ADR-0032) ──
     # Generic resolve/search/get/aggregate/describe over registered entity descriptors.
-    # Additive: only instances with an `entities:` block expose resolve_entity;
+    # Additive: only instances with an `entities:` block (nibras) expose resolve_entity;
     # instances without one are unaffected. Legacy list_employees/get_employee stay live.
-    # Cutover ECF-7 2026-09-16; human sign-off; goldens green.
-    # Emergency rollback: set env ECF_ENABLED=false (pydantic-settings).
-    ECF_ENABLED: bool = True
+    ECF_ENABLED: bool = False  # off until ECF-7 cutover (ADR-0032 gate: goldens green + human sign-off)
 
     # ── Navigation Resolution (deterministic, bilingual EN/AR pre-classifier) ──
     # Resolves "fly to / open / take me to <area>" (and Arabic equivalents)

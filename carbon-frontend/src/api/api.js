@@ -344,7 +344,11 @@ export async function apiFetch(
           : null;
       const detail =
         feedback?.detail ||
-        (responseData && (responseData.detail || responseData.message)) ||
+        (responseData && (
+          responseData.detail
+          || responseData.message
+          || responseData.error
+        )) ||
         `API Error: ${response.status}`;
 
       const normalized = normalizeError(

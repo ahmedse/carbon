@@ -240,6 +240,62 @@ def _people_route(key: str) -> tuple[str, str | None, str | None]:
     return resource, pk, action
 
 
+def _parse_payroll_period_hint(token: str) -> tuple[int, int] | None:
+    """Extract (year, month) from planner aliases like ``demo-oct-2026``."""
+    from ai.engine.agent.period_alias import parse_period_alias
+
+    return parse_period_alias(token)
+
+
+def _resolve_payroll_run(qs, pk):
+    """Resolve a payroll run by numeric pk OR period alias (demo-oct-2026).
+
+    Planners routinely invent ``run_id: demo-oct-2026`` from the brief; the
+    ORM only accepts integer PKs. Map month/year hints onto ``period_start``
+    so compute/validate do not crash with ``Field 'id' expected a number``.
+    """
+    from people.models import PayrollRun
+    from ai.engine.agent.period_alias import item_matches_period
+
+    if pk is None or pk == "":
+        raise PayrollRun.DoesNotExist("Payroll run id required")
+    pk_str = str(pk).strip()
+    if pk_str.isdigit():
+        return qs.get(pk=int(pk_str))
+
+    hint = _parse_payroll_period_hint(pk_str)
+    if hint:
+        year, month = hint
+        matches = [
+            r for r in qs.order_by("-period_start", "-id")[:40]
+            if item_matches_period(
+                {"period_start": r.period_start.isoformat()}, year, month,
+            )
+        ]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            preferred = next(
+                (r for r in matches if r.status in ("draft", "computed", "validated")),
+                matches[0],
+            )
+            return preferred
+
+    available = list(qs.order_by("-period_start")[:5])
+    hint_bits = [
+        f"#{r.pk} {r.period_start}→{r.period_end} ({r.status})"
+        for r in available
+    ]
+    raise PayrollRun.DoesNotExist(
+        f"No payroll run matches id={pk_str!r}. "
+        + (
+            f"Available: {'; '.join(hint_bits)}."
+            if hint_bits
+            else "No payroll runs in scope — create or list payroll-runs first."
+        )
+    )
+
+
 def _people_can(user, capability_key: str) -> bool:
     """CBAC gate mirroring ``PeopleAccess`` (global admins bypass)."""
     from people.permissions import is_global_admin
@@ -646,9 +702,9 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
             qs = _people_scope(user, PayrollRun.objects.all(), "org_unit_id__in")
             if pk:
                 try:
-                    run = qs.get(pk=pk)
-                except PayrollRun.DoesNotExist:
-                    return {"status_code": 404, "data": {"detail": "Payroll run not found"}}
+                    run = _resolve_payroll_run(qs, pk)
+                except PayrollRun.DoesNotExist as exc:
+                    return {"status_code": 404, "data": {"detail": str(exc)}}
                 return {"status_code": 200, "data": S.PayrollRunSerializer(run).data}
             results = S.PayrollRunSerializer(qs, many=True).data
             return {"status_code": 200, "data": {"count": len(results), "results": results}}
@@ -659,9 +715,9 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
 
             qs = _people_scope(user, PayrollRun.objects.all(), "org_unit_id__in")
             try:
-                run = qs.get(pk=pk)
-            except PayrollRun.DoesNotExist:
-                return {"status_code": 404, "data": {"detail": "Payroll run not found"}}
+                run = _resolve_payroll_run(qs, pk)
+            except PayrollRun.DoesNotExist as exc:
+                return {"status_code": 404, "data": {"detail": str(exc)}}
             service = PayrollRunService()
             try:
                 result = getattr(service, action)(run)

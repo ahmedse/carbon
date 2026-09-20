@@ -24,7 +24,14 @@ async def test_finalize_run_preserves_cancelled_status():
         final_response=None,
         completed_at=None,
     )
-    db = SimpleNamespace(select=AsyncMock(return_value=[row]), commit=AsyncMock())
+
+    async def _select(model, *filters):
+        name = getattr(model, "__name__", str(model))
+        if "RunStep" in name:
+            return []
+        return [row]
+
+    db = SimpleNamespace(select=AsyncMock(side_effect=_select), commit=AsyncMock())
 
     await loop._finalize_run(
         _db=db,
@@ -56,7 +63,14 @@ async def test_finalize_run_sets_completed_when_running():
         final_response=None,
         completed_at=None,
     )
-    db = SimpleNamespace(select=AsyncMock(return_value=[row]), commit=AsyncMock())
+
+    async def _select(model, *filters):
+        name = getattr(model, "__name__", str(model))
+        if "RunStep" in name:
+            return []  # no open steps — empty success is allowed
+        return [row]
+
+    db = SimpleNamespace(select=AsyncMock(side_effect=_select), commit=AsyncMock())
 
     await loop._finalize_run(
         _db=db,
@@ -72,6 +86,45 @@ async def test_finalize_run_sets_completed_when_running():
     assert row.status == "completed"
     assert row.final_response == "done"
     assert row.total_tokens == 40
+
+
+@pytest.mark.asyncio
+async def test_finalize_run_refuses_completed_with_open_steps():
+    """Pending-under-Completed is a product lie — fail closed instead."""
+    loop = ReActLoop(llm_client=None)
+    row = SimpleNamespace(
+        status="running",
+        total_llm_calls=0,
+        total_latency_ms=0,
+        total_tokens=0,
+        updated_at=None,
+        final_response=None,
+        completed_at=None,
+    )
+    open_step = SimpleNamespace(status="pending", step_index=0)
+
+    async def _select(model, *filters):
+        name = getattr(model, "__name__", str(model))
+        if "RunStep" in name:
+            return [open_step]
+        return [row]
+
+    db = SimpleNamespace(select=AsyncMock(side_effect=_select), commit=AsyncMock())
+
+    await loop._finalize_run(
+        _db=db,
+        run_id="run-3",
+        succeeded=True,
+        final_status="completed",
+        final_response="pretend done",
+        total_latency_ms=5.0,
+        total_llm_calls=1,
+        step_results=[],
+        total_tokens=10,
+    )
+
+    assert row.status == "failed"
+    assert "still open" in (row.final_response or "")
 
 
 @pytest.mark.asyncio

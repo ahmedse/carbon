@@ -1,7 +1,8 @@
 // src/shell/AgentCanvasSurface.jsx
 // ADR-0043 Canvas view — exclusive OpsCanvasHost Job Map by plan_id (ADR-0041).
-// Parent owns segment switching; this surface only loads + renders the board.
-import React, { useCallback, useEffect, useState } from 'react';
+// Parent owns segment switching; this surface loads the durable board and
+// overlays live run journey so Operator never sees Planned while the run is done.
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   Alert,
@@ -16,14 +17,22 @@ import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
 import { listArtifacts } from '../api/aiWorkspace';
 import OpsCanvasHost from './OpsCanvasHost';
+import { mergeCanvasJourney } from './mergeCanvasJourney';
 
 /**
  * @param {object} props
  * @param {string|null} props.planId
  * @param {string|null} [props.conversationId]
- * @param {boolean} [props.live] — poll while the plan is executing
+ * @param {boolean} [props.live] — poll while the plan is executing or just settled
+ * @param {object|null} [props.journey] — live run truth from cockpit (steps/status/answer)
  */
-function AgentCanvasSurface({ planId, conversationId = null, live = false }) {
+function AgentCanvasSurface({
+  planId,
+  conversationId = null,
+  live = false,
+  operatorSimple = true,
+  journey = null,
+}) {
   const { t } = useTranslation('ai');
   const { token } = useAuth();
   const { notifyFromError } = useNotification();
@@ -93,6 +102,11 @@ function AgentCanvasSurface({ planId, conversationId = null, live = false }) {
     };
   }, [load, live, planId]);
 
+  const displayArtifact = useMemo(
+    () => mergeCanvasJourney(artifact, journey ? { ...journey, planId } : null),
+    [artifact, journey, planId],
+  );
+
   if (!planId) {
     return (
       <Typography variant="body2" color="text.secondary" sx={{ py: 3, fontSize: '0.75rem' }}>
@@ -101,7 +115,7 @@ function AgentCanvasSurface({ planId, conversationId = null, live = false }) {
     );
   }
 
-  if (loading && !artifact) {
+  if (loading && !displayArtifact) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }} data-testid="agent-canvas-loading">
         <CircularProgress size={22} />
@@ -109,7 +123,7 @@ function AgentCanvasSurface({ planId, conversationId = null, live = false }) {
     );
   }
 
-  if (error && !artifact) {
+  if (error && !displayArtifact) {
     return (
       <Stack spacing={1} sx={{ py: 2 }} data-testid="agent-canvas-error">
         <Alert severity="error" sx={{ fontSize: '0.75rem' }}>
@@ -122,7 +136,7 @@ function AgentCanvasSurface({ planId, conversationId = null, live = false }) {
     );
   }
 
-  if (!artifact) {
+  if (!displayArtifact) {
     return (
       <Stack spacing={1} sx={{ py: 3 }} data-testid="agent-canvas-empty">
         <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
@@ -142,7 +156,7 @@ function AgentCanvasSurface({ planId, conversationId = null, live = false }) {
 
   return (
     <Box data-testid="agent-canvas-board" sx={{ minHeight: 280 }}>
-      <OpsCanvasHost artifact={artifact} readOnly />
+      <OpsCanvasHost artifact={displayArtifact} readOnly operatorSimple={operatorSimple} />
     </Box>
   );
 }
@@ -151,6 +165,15 @@ AgentCanvasSurface.propTypes = {
   planId: PropTypes.string,
   conversationId: PropTypes.string,
   live: PropTypes.bool,
+  operatorSimple: PropTypes.bool,
+  journey: PropTypes.shape({
+    status: PropTypes.string,
+    brief: PropTypes.string,
+    steps: PropTypes.array,
+    finalResponse: PropTypes.string,
+    artifacts: PropTypes.array,
+    planId: PropTypes.string,
+  }),
 };
 
 export default AgentCanvasSurface;

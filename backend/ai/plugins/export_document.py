@@ -47,10 +47,36 @@ def _slugify(value: str) -> str:
     return value[:60] or "document"
 
 
-# Brand palette for a polished, consistent look across DOCX + XLSX.
 _BRAND_TEAL = "0B5F4E"
 _BRAND_BAND = "EAF3F0"
 _BRAND_MUTED = "6B7280"
+
+# Identity block stamped on every deliverable (Operator-facing, RULE_23).
+# Never brand host platform names (Carbon) on Pulse outputs.
+_PULSE_COWORKER = "Pulse — AI Coworker"
+
+
+def _deliverable_identity_lines(*, run_id: str | None = None) -> list[str]:
+    """Header lines identifying who prepared the file and when."""
+    stamp = now().strftime("%B %d, %Y · %H:%M UTC")
+    lines = [
+        f"Prepared by {_PULSE_COWORKER}",
+        f"Generated {stamp}",
+    ]
+    rid = (run_id or "").strip()
+    if rid:
+        lines.append(f"Agent run {rid[:8]}…  ·  Confidential — authorized recipients only")
+    else:
+        lines.append("Confidential — authorized recipients only")
+    return lines
+
+
+def _current_run_id() -> str | None:
+    try:
+        from ai.plans_service import get_current_plan_run
+        return get_current_plan_run()
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _looks_numeric(text: str) -> bool:
@@ -145,7 +171,7 @@ class ExportDocument(ToolPlugin):
     app_identifier: str | None = None
 
     async def execute(self, args: dict, *, ctx) -> dict:
-        from ai.engine.cognition.plan.export_bind import content_is_placeholder
+        from ai.engine.cognition.plan.export_bind import export_has_substance
 
         title = (args.get("title") or "").strip()
         if not title:
@@ -158,22 +184,10 @@ class ExportDocument(ToolPlugin):
         table = args.get("table") or None
         images = args.get("images") if isinstance(args.get("images"), list) else []
 
-        has_table = bool(
-            isinstance(table, dict)
-            and (table.get("headers") or table.get("rows"))
-        )
-        has_images = any(
-            isinstance(img, dict) and str(img.get("image_b64") or "").strip()
-            for img in images
-        )
-        # Fail-visible: never ship a hollow title-only Word with placeholder stubs.
-        if content_is_placeholder(content) and not has_table and not has_images:
-            return {
-                "error": (
-                    "Export refused — no real findings to write. Provide markdown "
-                    "content with measured results, and/or a table, and/or chart images."
-                ),
-            }
+        # Fail-visible substance gate: never ship hollow, mid-run, or title-only packs.
+        ok, reason = export_has_substance(content, table, images)
+        if not ok:
+            return {"error": reason}
 
         out_dir = Path(settings.MEDIA_ROOT) / "ai_exports"
         try:
@@ -191,6 +205,8 @@ class ExportDocument(ToolPlugin):
             "pdf": (self._write_pdf, "PDF"),
             "png": (self._write_png_chart, "PNG chart"),
         }
+        # Shell-only Office files (title band, no body) stay tiny — refuse them.
+        _MIN_BYTES = {"docx": 2500, "xlsx": 1800, "pdf": 400, "png": 200}
 
         for kind in wanted:
             writer, label = writers[kind]
@@ -201,10 +217,23 @@ class ExportDocument(ToolPlugin):
                     writer(path, title, content, table, images=images)
                 else:
                     writer(path, title, content, table)
+                size = path.stat().st_size if path.exists() else 0
+                if size < _MIN_BYTES.get(kind, 0):
+                    try:
+                        path.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+                    return {
+                        "error": (
+                            f"{label} export refused — file was empty/shell-only "
+                            f"({size} bytes). Re-run after steps produce real findings."
+                        ),
+                    }
                 files.append({
                     "filename": filename,
                     "format": kind,
                     "path": f"/media/ai_exports/{filename}",
+                    "size_bytes": size,
                 })
             except Exception as exc:  # fail-visible, never fabricate a file
                 logger.exception("export_document %s failed", kind)
@@ -294,14 +323,16 @@ class ExportDocument(ToolPlugin):
         for run in heading.runs:
             run.font.color.rgb = RGBColor.from_string(_BRAND_TEAL)
 
-        sub = doc.add_paragraph()
-        sub_run = sub.add_run(
-            f"Generated {now().strftime('%B %d, %Y')}  ·  Pulse Agent deliverable"
-        )
-        sub_run.italic = True
-        sub_run.font.size = Pt(9)
-        sub_run.font.color.rgb = RGBColor.from_string(_BRAND_MUTED)
-        sub.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        for i, line in enumerate(_deliverable_identity_lines(run_id=_current_run_id())):
+            para = doc.add_paragraph()
+            run = para.add_run(line)
+            run.italic = i > 0
+            run.bold = i == 0
+            run.font.size = Pt(9 if i else 10)
+            run.font.color.rgb = RGBColor.from_string(
+                _BRAND_TEAL if i == 0 else _BRAND_MUTED
+            )
+            para.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
         if content:
             self._render_markdown_to_docx(doc, content)
@@ -458,12 +489,18 @@ class ExportDocument(ToolPlugin):
         title_cell.fill = teal_fill
         title_cell.alignment = Alignment(horizontal="left", vertical="center")
         ws.row_dimensions[1].height = 26
-        ws.cell(
-            row=2, column=1,
-            value=f"Generated {now().strftime('%B %d, %Y')} · Pulse Agent deliverable",
-        ).font = Font(italic=True, size=9, color=_BRAND_MUTED)
 
-        row = 4
+        id_lines = _deliverable_identity_lines(run_id=_current_run_id())
+        for i, line in enumerate(id_lines):
+            cell = ws.cell(row=2 + i, column=1, value=line)
+            cell.font = Font(
+                bold=(i == 0),
+                italic=(i > 0),
+                size=10 if i == 0 else 9,
+                color=_BRAND_TEAL if i == 0 else _BRAND_MUTED,
+            )
+
+        row = 2 + len(id_lines) + 1
         if headers:
             for c, h in enumerate(headers, start=1):
                 cell = ws.cell(row=row, column=c, value=str(h))
@@ -521,7 +558,7 @@ class ExportDocument(ToolPlugin):
     def _write_pdf(self, path: Path, title: str, content: str, table: dict | None) -> None:
         """Minimal PDF 1.4 (Helvetica) — no reportlab dependency."""
         lines: list[str] = [title[:120], ""]
-        lines.append(f"Generated {now().strftime('%B %d, %Y')} · Pulse Agent deliverable")
+        lines.extend(_deliverable_identity_lines(run_id=_current_run_id()))
         lines.append("")
         if content:
             for raw in content.splitlines():
@@ -663,7 +700,7 @@ class ExportDocument(ToolPlugin):
 
         draw.text(
             (24, height - 28),
-            "Pulse Agent chart · derived from export table",
+            "Pulse — AI Coworker chart · derived from export table",
             fill="#6B7280",
             font=font_small,
         )

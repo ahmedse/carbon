@@ -139,6 +139,44 @@ def test_artifact_download_streams_file(
 
 
 @pytest.mark.django_db
+def test_artifact_delete_removes_row_and_file(
+    api_client, get_token_for_user, user, tmp_path
+):
+    with override_settings(MEDIA_ROOT=str(tmp_path)):
+        run = _make_run(user)
+        meta = _store(run, step_index=0, name="report.docx", content=b"bye")
+        aid = meta["artifact_id"]
+        assert RunArtifact.objects.filter(id=aid).exists()
+
+        token = get_token_for_user(user)
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+        resp = api_client.delete(
+            f"/carbon-api/ai/plans/{run.id}/artifacts/{aid}/"
+        )
+
+        assert resp.status_code == 200, resp.content
+        assert resp.json()["deleted"] == aid
+        assert not RunArtifact.objects.filter(id=aid).exists()
+
+
+@pytest.mark.django_db
+def test_cross_user_artifact_delete_denied(
+    api_client, get_token_for_user, user, other_user, tmp_path
+):
+    with override_settings(MEDIA_ROOT=str(tmp_path)):
+        run = _make_run(user)
+        meta = _store(run, step_index=0, name="report.docx")
+
+        token = get_token_for_user(other_user)
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+        resp = api_client.delete(
+            f"/carbon-api/ai/plans/{run.id}/artifacts/{meta['artifact_id']}/"
+        )
+        assert resp.status_code == 404
+        assert RunArtifact.objects.filter(id=meta["artifact_id"]).exists()
+
+
+@pytest.mark.django_db
 def test_cross_user_artifact_access_denied(
     api_client, get_token_for_user, user, other_user, tmp_path
 ):

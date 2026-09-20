@@ -186,12 +186,35 @@ def _reconcile_run_status_from_steps(run, steps) -> None:
 
     Repairs stuck ``running`` / lagged ``failed`` rows after retries leave
     every step completed, and keeps list/get payloads honest for every plan.
+
+    Also demotes a dishonest ``completed`` / ``completed_with_gaps`` when any
+    step is still open (Pending under Completed — never leave that lie).
     """
     if run is None:
         return
     if run.status not in _RUN_STATUS_RECONCILEABLE:
         return
     derived = _derived_status_from_steps(steps)
+
+    # Honesty demote: engine finalized completed while steps stayed pending.
+    if (
+        run.status in (STATUS_COMPLETED, STATUS_COMPLETED_WITH_GAPS)
+        and derived is None
+        and steps
+    ):
+        statuses = [getattr(s, "status", None) for s in steps]
+        if any(st == STEP_AWAITING_APPROVAL for st in statuses):
+            derived = STATUS_PAUSED
+        elif any(st not in _STEP_TERMINAL for st in statuses):
+            derived = STATUS_FAILED
+            if not (run.final_response or "").strip():
+                open_n = sum(1 for st in statuses if st not in _STEP_TERMINAL)
+                run.final_response = (
+                    "Run ended before steps finished "
+                    f"({open_n} still open). Re-approve to retry."
+                )[:2000]
+                run.save(update_fields=["final_response", "updated_at"])
+
     if derived is None or derived == run.status:
         return
     fields = ["status", "updated_at"]
@@ -206,6 +229,14 @@ def _reconcile_run_status_from_steps(run, steps) -> None:
         "reconciled plan status id=%s → %s from %d finished step(s)",
         run.id, derived, len(steps),
     )
+    if derived in (
+        STATUS_COMPLETED, STATUS_COMPLETED_WITH_GAPS, STATUS_FAILED,
+    ):
+        try:
+            from ai.ops_canvas import sync_agent_job_map_from_run
+            sync_agent_job_map_from_run(run)
+        except Exception:  # noqa: BLE001
+            logger.debug("ops_canvas reconcile sync failed", exc_info=True)
 
 
 # Serialized step runnable-state enum (F-28) — the product-level lock/edit
@@ -267,6 +298,32 @@ def _step_execution_fields(step_phase, step_index, status):
     if strategy == "parallel":
         fields["parallel_group"] = phase_id
     return fields
+
+
+def _prior_run_receipt(run) -> dict | None:
+    """Track D — Rerun receipt: prior Answer vs current (when both exist)."""
+    notes = run.working_notes if isinstance(run.working_notes, dict) else {}
+    prior = notes.get("prior_run")
+    if not isinstance(prior, dict):
+        return None
+    prior_text = (prior.get("final_response") or "").strip()
+    if not prior_text:
+        return None
+    current = (run.final_response or "").strip()
+    receipt = {
+        "prior_status": prior.get("status"),
+        "prior_completed_at": prior.get("completed_at"),
+        "prior_step_count": prior.get("step_count"),
+        "prior_final_response": prior_text,
+    }
+    if not current:
+        receipt["comparison"] = "pending"
+        return receipt
+    if current == prior_text:
+        receipt["comparison"] = "unchanged"
+    else:
+        receipt["comparison"] = "changed"
+    return receipt
 
 
 def _display_timezone():
@@ -1437,6 +1494,7 @@ class PlansService:
             "updated_at": run.updated_at.isoformat() if run.updated_at else None,
             "completed_at": run.completed_at.isoformat() if run.completed_at else None,
             "final_response": run.final_response,
+            "prior_run": _prior_run_receipt(run),
             "steps": [
                 {
                     "step_id": s.step_index,
@@ -1456,6 +1514,10 @@ class PlansService:
                     "status": s.status,
                     "draft_text": s.draft_text,
                     "critic_verdict": s.critic_verdict,
+                    "consent_granted": bool(
+                        isinstance(s.critic_flags_json, dict)
+                        and s.critic_flags_json.get("consent_granted")
+                    ),
                     "error": s.error,
                     "tool_output": _step_tool_output_fields(s.tool_output_json)[0],
                     "output_type": _step_tool_output_fields(s.tool_output_json)[1],
@@ -1746,6 +1808,147 @@ class PlansService:
         return (intent or "").strip().lower()
 
     @staticmethod
+    def _intent_fingerprint(intent: str) -> str:
+        """Coarse key for near-duplicate intents (ellipsis / truncated labels)."""
+        text = PlansService._normalize_intent(intent)
+        text = re.sub(r"[.…]+$", "", text)
+        text = re.sub(r"\s+", " ", text)
+        # First ~48 chars captures "analyze salary distribution by…" clones.
+        return text[:48]
+
+    @classmethod
+    def _dedupe_plan_steps(cls, steps: list) -> list:
+        """Drop near-duplicate intents that make Discuss→replan graphs regress."""
+        out: list = []
+        seen: set[str] = set()
+        for s in steps:
+            if not isinstance(s, dict):
+                continue
+            fp = cls._intent_fingerprint(s.get("intent") or "")
+            if fp and fp in seen:
+                continue
+            if fp:
+                seen.add(fp)
+            out.append(dict(s))
+        # Re-number step_id sequentially so the DAG stays contiguous.
+        for i, s in enumerate(out):
+            old_id = s.get("step_id", i)
+            s["step_id"] = i
+            deps = s.get("depends_on") or []
+            if isinstance(deps, list) and deps:
+                # Keep deps that still exist by remapping old→new when possible.
+                id_map = {}
+                # built below — first pass collect old ids
+            s["_old_id"] = old_id
+        id_map = {s.get("_old_id"): s["step_id"] for s in out}
+        for s in out:
+            deps = s.get("depends_on") or []
+            if isinstance(deps, list):
+                s["depends_on"] = [
+                    id_map[d] for d in deps if d in id_map
+                ]
+            s.pop("_old_id", None)
+        return out
+
+    @staticmethod
+    def _is_incremental_plan_feedback(old_brief: str, new_brief: str) -> bool:
+        """True when the edit is a small additive ask (e.g. 'add a chart')."""
+        new = (new_brief or "").strip()
+        old = (old_brief or "").strip()
+        if not new:
+            return False
+        lower = new.lower()
+        # Short additive asks — never wipe the whole topology for these.
+        if len(new) <= 320 and re.search(
+            r"\b(add|include|embed|insert|also|with)\b.{0,40}\b"
+            r"(chart|charts|graph|graphs|visual|visuals|plot|plots|"
+            r"table|tables|export|docx|word|excel|xlsx)\b",
+            lower,
+        ):
+            return True
+        if old and len(new) <= len(old) + 500:
+            # Feedback that still contains the prior spine.
+            old_tokens = {t for t in re.findall(r"[a-z0-9]{4,}", old.lower())}
+            new_tokens = {t for t in re.findall(r"[a-z0-9]{4,}", lower)}
+            if old_tokens and len(old_tokens & new_tokens) / max(1, len(old_tokens)) >= 0.55:
+                if re.search(
+                    r"\b(add|include|embed|also|chart|graph|visual)\b", lower
+                ):
+                    return True
+        return False
+
+    @classmethod
+    def _surgical_incremental_steps(cls, old_steps: list, feedback: str) -> list:
+        """Keep existing steps; append chart/export work for additive feedback."""
+        steps = [dict(s) for s in old_steps if isinstance(s, dict)]
+        fl = (feedback or "").lower()
+        wants_chart = bool(
+            re.search(r"\b(chart|charts|graph|graphs|visual|plot)\b", fl)
+        )
+        has_chartish = any(
+            re.search(
+                r"\b(chart|graph|visual|plot)\b",
+                f"{s.get('intent') or ''}".lower(),
+            )
+            for s in steps
+        )
+        has_export = any(
+            (s.get("tool_name") or "") == "export_document"
+            or re.search(r"\b(export|word|docx)\b", (s.get("intent") or "").lower())
+            for s in steps
+        )
+        next_id = max((int(s.get("step_id", 0)) for s in steps), default=-1) + 1
+        last_ids = [s.get("step_id") for s in steps[-2:]] if steps else []
+
+        if wants_chart and not has_chartish:
+            steps.append({
+                "step_id": next_id,
+                "intent": (
+                    "Generate visually compelling charts for each salary "
+                    "dimension (nationality, org unit, position)"
+                ),
+                "tool_name": "code_execute",
+                "tool_args": {},
+                "depends_on": [last_ids[-1]] if last_ids else [],
+                "is_mutation": False,
+                "dry_run_supported": False,
+                "instructions": (
+                    "Build bar/pie charts from prior analysis tables; "
+                    "return image_b64 PNG figures for the Word pack."
+                ),
+            })
+            next_id += 1
+            has_chartish = True
+
+        if wants_chart and has_export:
+            # Point the last export at embedding visuals.
+            for s in reversed(steps):
+                if (s.get("tool_name") or "") == "export_document" or re.search(
+                    r"\b(export|word|docx)\b", (s.get("intent") or "").lower()
+                ):
+                    intent = (s.get("intent") or "").rstrip(".")
+                    if "chart" not in intent.lower() and "visual" not in intent.lower():
+                        s["intent"] = f"{intent} with embedded charts"
+                    break
+        elif wants_chart and not has_export:
+            chart_deps = [
+                s.get("step_id") for s in steps
+                if re.search(r"chart|visual|code_execute", f"{s.get('intent')}{s.get('tool_name')}".lower())
+            ]
+            steps.append({
+                "step_id": next_id,
+                "intent": "Export the Word report with embedded charts and tables",
+                "tool_name": "export_document",
+                "tool_args": {"format": "docx"},
+                "depends_on": chart_deps or ([steps[-1]["step_id"]] if steps else []),
+                "is_mutation": False,
+                "dry_run_supported": False,
+                "instructions": None,
+            })
+
+        return cls._dedupe_plan_steps(steps)
+
+    @staticmethod
     def _step_key(step) -> tuple:
         """Canonical fingerprint for diffing two plan steps."""
         step = step if isinstance(step, dict) else {}
@@ -1837,6 +2040,11 @@ class PlansService:
                     "error": s.error,
                     "last_error": getattr(s, "last_error", "") or "",
                     "critic_verdict": s.critic_verdict,
+                    "critic_flags_json": (
+                        s.critic_flags_json
+                        if isinstance(s.critic_flags_json, dict)
+                        else {}
+                    ),
                     "draft_text": s.draft_text,
                     "tool_output_json": s.tool_output_json,
                     "latency_ms": s.latency_ms,
@@ -1908,6 +2116,11 @@ class PlansService:
                 error=row.get("error"),
                 last_error=row.get("last_error") or "",
                 critic_verdict=row.get("critic_verdict"),
+                critic_flags_json=(
+                    row.get("critic_flags_json")
+                    if isinstance(row.get("critic_flags_json"), dict)
+                    else {}
+                ),
                 draft_text=row.get("draft_text"),
                 tool_output_json=row.get("tool_output_json"),
                 latency_ms=row.get("latency_ms"),
@@ -2004,10 +2217,42 @@ class PlansService:
 
         The approved plan is the executed plan — no re-decomposition at run
         time (review contract).
+
+        If ``plan_json.steps`` is empty but durable ``RunStep`` rows exist,
+        rebuild from those rows so the loop never finalizes empty-success
+        while the UI still shows pending steps.
         """
         from ai.engine.cognition.plan.planner import Plan, PlanPhase, PlanStep
+        from ai.models.core import RunStep
 
         plan_json = _coerce_plan_json(run.plan_json)
+        raw_steps = [
+            s for s in (plan_json.get("steps") or []) if isinstance(s, dict)
+        ]
+        if not raw_steps:
+            durable = list(
+                RunStep.objects.filter(run_id=run.id).order_by("step_index")
+            )
+            if durable:
+                logger.warning(
+                    "plan_json.steps empty for run=%s — rebuilding %d steps "
+                    "from durable RunStep rows",
+                    run.id, len(durable),
+                )
+                raw_steps = [
+                    {
+                        "step_id": s.step_index,
+                        "intent": s.intent or "",
+                        "tool_name": s.tool_name,
+                        "tool_args": s.tool_args_json or {},
+                        "depends_on": s.depends_on_json or [],
+                        "is_mutation": False,
+                        "dry_run_supported": False,
+                        "agent_role": "orchestrator",
+                        "instructions": None,
+                    }
+                    for s in durable
+                ]
         steps = [
             PlanStep(
                 step_id=int(s.get("step_id", 0)),
@@ -2021,7 +2266,7 @@ class PlansService:
                 agent_role=s.get("agent_role", "orchestrator"),
                 instructions=s.get("instructions"),
             )
-            for s in plan_json.get("steps", [])
+            for s in raw_steps
         ]
         phases = [
             PlanPhase(
@@ -2129,11 +2374,22 @@ class PlansService:
     DISCOVERY_MAX_TURNS = 5
 
     DISCOVERY_SYSTEM_PROMPT = (
-        "You are Pulse, the planning assistant for the Carbon Data Trust "
-        "Platform. Before proposing a plan, you clarify the user's outcome "
+        "You are Pulse, the planning assistant for the Carbon / EduOS platform. "
+        "Before proposing a plan, you clarify the user's outcome "
         "with a short series of focused questions. Ask ONE concise question "
         "at a time. When you have enough information, respond with complete."
         "\n\n"
+        "Scope rules (critical):\n"
+        "- Only clarify outcomes Agent can plan: reports, board packs, data-quality "
+        "rules, data workflows, exports.\n"
+        "- Never map personal leave / vacation / إجازة to DQ rules, approvals, or "
+        "data-source onboarding. If the user wants personal leave, respond with "
+        '{"action":"complete"} only if they clearly asked for a leave-compliance '
+        "REPORT; otherwise keep asking for the report outcome — the host may "
+        "already have redirected them.\n"
+        "- Do not ask 'what outcome on the Carbon Data Trust Platform' for "
+        "trivia, names, or personal HR actions.\n"
+        "\n"
         "If the user wants a data-quality rule (validate/check/flag a field, "
         "not-null, unique, allowed values, range, regex, format like an email "
         "or phone number), you MUST find out exactly WHICH field and table the "
@@ -2222,8 +2478,10 @@ class PlansService:
 
         Creates a Run in ``discovering`` state (no plan yet) and returns the
         first clarifying question from Pulse as the opening ``discovery_turn``
-        frame.
+        frame. Out-of-scope briefs (advisory / personal leave / abuse) return
+        a route payload without creating a stuck discovering run.
         """
+        from ai.engine.cognition.scope_route import scope_route, status_for_route
         from ai.models.core import Run, generate_uuid
 
         brief = (brief or "").strip()
@@ -2231,6 +2489,34 @@ class PlansService:
             raise ValueError("brief is required.")
         if len(brief) > 4000:
             raise ValueError("brief is too long (max 4000 characters).")
+
+        route = scope_route(brief, stage="brief")
+        try:
+            from ai.pulse_ux_telemetry import emit_ux
+            emit_ux(
+                "agent.scope_route",
+                stage="brief",
+                cls=getattr(route, "cls", None),
+                plannable=bool(getattr(route, "plannable", False)),
+            )
+        except Exception:  # noqa: BLE001
+            pass
+        if not route.plannable:
+            logger.info(
+                "Discovery gated class=%s brief=%r",
+                route.cls, brief[:80],
+            )
+            return {
+                "id": None,
+                "status": status_for_route(route),
+                "run_status": None,
+                "brief": brief,
+                "question": None,
+                "turns": [],
+                "conversation_id": conversation_id or "",
+                "route": route.to_dict(),
+                "plannable": False,
+            }
 
         first = self._ask_discovery_llm(brief, [])
         turns = [{"question": first["question"], "reply": None}]
@@ -2258,6 +2544,8 @@ class PlansService:
             "question": first["question"],
             "turns": turns,
             "conversation_id": conversation_id or "",
+            "route": route.to_dict(),
+            "plannable": True,
         }
 
     def advance_discovery(self, user, plan_id: str, user_reply: str) -> dict:
@@ -2267,7 +2555,11 @@ class PlansService:
         question or completion. On completion the enriched brief (original
         brief + discovery answers) is decomposed into a full plan and the Run
         transitions to ``pending_approval`` (RULE_21 — review only).
+        Mid-loop digressions (leave, trivia) return a route card without
+        forcing another platform outcome question.
         """
+        from ai.engine.cognition.scope_route import scope_route, status_for_route
+
         run = self._get_owned_run(user, plan_id)
         if run.status != STATUS_DISCOVERING:
             raise PlanNotRunnableError(
@@ -2292,6 +2584,29 @@ class PlansService:
         if not filled:
             turns.append({"question": "", "reply": reply})
 
+        reply_route = scope_route(reply, stage="reply")
+        if not reply_route.plannable:
+            run.plan_json = {
+                "discovery_turns": turns,
+                "brief": brief,
+                "scope_route": reply_route.to_dict(),
+            }
+            run.save(update_fields=["plan_json", "updated_at"])
+            logger.info(
+                "Discovery digression id=%s class=%s",
+                run.id, reply_route.cls,
+            )
+            return {
+                "id": run.id,
+                "status": status_for_route(reply_route),
+                "run_status": STATUS_DISCOVERING,
+                "question": None,
+                "plan": None,
+                "turns": turns,
+                "route": reply_route.to_dict(),
+                "plannable": False,
+            }
+
         if len(turns) >= self.DISCOVERY_MAX_TURNS:
             decision = {"action": "complete", "question": None}
         else:
@@ -2312,6 +2627,7 @@ class PlansService:
             "question": next_question,
             "plan": None,
             "turns": turns,
+            "plannable": True,
         }
 
     def finalize_discovery(self, user, plan_id: str) -> dict:
@@ -2319,7 +2635,10 @@ class PlansService:
 
         Used when the brief is already actionable or the user skips clarifying
         questions — prevents runs stuck forever in ``discovering`` with 0 steps.
+        Out-of-scope briefs are refused instead of decomposing nonsense.
         """
+        from ai.engine.cognition.scope_route import scope_route, status_for_route
+
         run = self._get_owned_run(user, plan_id)
         if run.status != STATUS_DISCOVERING:
             raise PlanNotRunnableError(
@@ -2338,6 +2657,20 @@ class PlansService:
             elif not q:
                 continue
             # unanswered question — omit
+
+        gate_text = self._enrich_brief(brief, cleaned)
+        route = scope_route(gate_text, stage="brief")
+        if not route.plannable:
+            return {
+                "id": run.id,
+                "status": status_for_route(route),
+                "run_status": STATUS_DISCOVERING,
+                "plan": None,
+                "turns": cleaned,
+                "route": route.to_dict(),
+                "plannable": False,
+            }
+
         return self._finalize_discovery_run(user, run, brief, cleaned)
 
     def _finalize_discovery_run(self, user, run, brief: str, turns: list) -> dict:
@@ -2441,6 +2774,22 @@ class PlansService:
         except (RunArtifact.DoesNotExist, ValueError, TypeError):
             raise PlanNotAccessibleError(f"Artifact {artifact_id} not found.")
 
+    def delete_artifact(self, user, plan_id: str, artifact_id) -> dict:
+        """Hard-delete a plan artifact (file + row), owner-scoped."""
+        artifact = self.get_artifact(user, plan_id, artifact_id)
+        deleted_id = artifact.id
+        # Remove the media file first so orphaned blobs never accumulate.
+        try:
+            if artifact.file:
+                artifact.file.delete(save=False)
+        except Exception:  # noqa: BLE001 - DB row must still go even if file is gone
+            logger.warning(
+                "Could not delete artifact file for id=%s plan=%s",
+                deleted_id, plan_id, exc_info=True,
+            )
+        artifact.delete()
+        return {"deleted": deleted_id, "plan_id": plan_id}
+
     # ── Consent: plan-level approve ───────────────────────────────────────
 
     def approve_plan(self, user, plan_id: str) -> dict:
@@ -2500,11 +2849,13 @@ class PlansService:
         **rename** updates ``user_message`` only: no decompose, no step wipe,
         no status change.
 
-        **replan** re-runs ``SkillAwarePlanner.decompose`` and returns
-        ``{added, removed, changed}`` for review — editing NEVER auto-approves
-        (RULE_21). Non-``pending_approval`` plans drop back to
-        ``pending_approval``. A ``pre_edit_snapshot`` is stashed so Cancel can
-        restore via ``discard_plan_edit``.
+        **replan** prefers a surgical edit when the feedback is additive
+        (e.g. "add a chart") or ``step_deltas`` are supplied — full
+        ``SkillAwarePlanner.decompose`` only for genuine brief rewrites.
+        Near-duplicate intents are always collapsed. Editing NEVER
+        auto-approves (RULE_21). Non-``pending_approval`` plans drop back
+        to ``pending_approval``. A ``pre_edit_snapshot`` is stashed so
+        Cancel can restore via ``discard_plan_edit``.
         """
         run = self._get_owned_run(user, plan_id)
         mode = (mode or "replan").strip().lower()
@@ -2544,17 +2895,58 @@ class PlansService:
 
         self._stash_pre_edit_snapshot(run)
 
-        plan = self._decompose(user, new_brief)
-        steps = self._plan_to_dict(plan)["steps"]
+        # Surgical paths — never wipe a good topology for "add a chart".
         if step_deltas:
-            steps = self._apply_step_deltas(steps, step_deltas)
+            base = [dict(s) for s in old_steps] if old_steps else []
+            if not base:
+                plan = self._decompose(user, new_brief)
+                base = self._plan_to_dict(plan)["steps"]
+                plan_dict = self._plan_to_dict(plan)
+            else:
+                plan_dict = dict(old_plan_json)
+            steps = self._dedupe_plan_steps(
+                self._apply_step_deltas(base, step_deltas)
+            )
+            plan_dict["brief"] = new_brief
+            plan_dict["steps"] = steps
+            edit_kind = "delta"
+        elif old_steps and self._is_incremental_plan_feedback(
+            run.user_message or "", new_brief
+        ):
+            steps = self._surgical_incremental_steps(old_steps, new_brief)
+            plan_dict = dict(old_plan_json)
+            spine = (run.user_message or new_brief).strip()
+            note = new_brief.strip()
+            if len(note) <= 320 and note.lower() not in spine.lower():
+                plan_dict["brief"] = f"{spine.rstrip('.')}. Also: {note}"
+                new_brief = plan_dict["brief"]
+            else:
+                plan_dict["brief"] = new_brief
+            plan_dict["steps"] = steps
+            edit_kind = "incremental"
+        else:
+            plan = self._decompose(user, new_brief)
+            plan_dict = self._plan_to_dict(plan)
+            steps = self._dedupe_plan_steps(plan_dict.get("steps") or [])
+            # Guard: if the LLM replan cloned the same intent 2+ times, keep
+            # the prior spine and apply incremental surgery instead.
+            fps = [self._intent_fingerprint(s.get("intent")) for s in (plan_dict.get("steps") or [])]
+            dup_count = len(fps) - len({f for f in fps if f})
+            if old_steps and dup_count >= 2:
+                steps = self._surgical_incremental_steps(old_steps, new_brief)
+                plan_dict = dict(old_plan_json)
+                plan_dict["brief"] = new_brief
+                plan_dict["steps"] = steps
+                edit_kind = "incremental_guard"
+            else:
+                plan_dict["steps"] = steps
+                edit_kind = "replan"
 
         diff = self._plan_diff(old_steps, steps)
         replan_gate = run.status != STATUS_PENDING_APPROVAL
 
         run.user_message = new_brief
-        run.plan_json = self._plan_to_dict(plan)
-        run.plan_json["steps"] = steps
+        run.plan_json = plan_dict
         if replan_gate:
             run.status = STATUS_PENDING_APPROVAL
         run.save(
@@ -2569,14 +2961,14 @@ class PlansService:
         self._replace_run_steps(run.id, steps)
 
         logger.info(
-            "Plan edited id=%s user=%s replan_gate=%s added=%d removed=%d changed=%d",
-            plan_id, str(user.pk), replan_gate,
+            "Plan edited id=%s user=%s kind=%s replan_gate=%s added=%d removed=%d changed=%d",
+            plan_id, str(user.pk), edit_kind, replan_gate,
             len(diff["added"]), len(diff["removed"]), len(diff["changed"]),
         )
         result = self.get_plan(user, plan_id)
         result["diff"] = diff
         result["replan_gate"] = replan_gate
-        result["edit_mode"] = "replan"
+        result["edit_mode"] = edit_kind
         return result
 
     def edit_step(self, user, plan_id: str, step_id, title=None,
@@ -3878,6 +4270,10 @@ class PlansService:
                     "tool_output": _ui_out,
                     "output_type": _ui_type,
                     "error": step.error,
+                    "consent_granted": bool(
+                        isinstance(step.critic_flags_json, dict)
+                        and step.critic_flags_json.get("consent_granted")
+                    ),
                     "artifacts": [
                         {
                             "id": a.id,
@@ -3947,35 +4343,6 @@ class PlansService:
             (parsed or {}).get("execution_id")
             or tool_output.get("execution_id")
         )
-        if not execution_id:
-            # Plan-level mutation consent (Fix A): the tool never staged an
-            # execution — this is the PRE-execution consent pause. Confirming
-            # here only GRANTS consent; nothing executes yet. The step stays
-            # awaiting_approval with its confirmation_token so the next resume
-            # re-executes it WITH the token (critic passes → tool runs → row
-            # persists completed). Declining the same step marks it skipped
-            # (see decline_step). Idempotent: a second confirm is a no-op.
-            if not step.confirmation_token:
-                from uuid import uuid4
-                step.confirmation_token = str(uuid4())
-            step.save(update_fields=["confirmation_token", "updated_at"])
-            StepJournal.append(
-                run.id,
-                canonical_step_id(step),
-                EVENT_STEP_CONSENT_GRANTED,
-                payload={"unstaged": True},
-            )
-            logger.info(
-                "Plan step consent recorded (unstaged) plan=%s step=%s user=%s",
-                plan_id, step.step_index, str(user.pk),
-            )
-            return {
-                "status": "confirmed",
-                "plan_id": plan_id,
-                "step_id": step.step_index,
-                "unstaged": True,
-            }
-
         user_pk = str(user.pk)
         instance_config = _plan_instance_config(user_pk)
         factory = get_session_factory(PLAN_INSTANCE_ID)
@@ -3992,9 +4359,73 @@ class PlansService:
                     execution_id, expected_host_user_id=user_pk
                 )
 
+        def _grant_unstaged_consent(*, reason: str) -> dict:
+            """Pre-execution / recovery path — token only; resume re-runs the tool."""
+            if not step.confirmation_token:
+                from uuid import uuid4
+                step.confirmation_token = str(uuid4())
+            # Drop the dead staged execution id so the next resume does not
+            # re-enter confirm_execution on a failed/expired row.
+            cleaned = dict(tool_output) if isinstance(tool_output, dict) else {}
+            cleaned.pop("execution_id", None)
+            if isinstance(cleaned.get("result"), dict):
+                cleaned["result"] = {
+                    k: v for k, v in cleaned["result"].items() if k != "execution_id"
+                }
+            elif isinstance(cleaned.get("result"), str):
+                try:
+                    nested = json.loads(cleaned["result"])
+                    if isinstance(nested, dict) and "execution_id" in nested:
+                        nested = {k: v for k, v in nested.items() if k != "execution_id"}
+                        cleaned["result"] = json.dumps(nested)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            step.tool_output_json = cleaned
+            flags = step.critic_flags_json if isinstance(step.critic_flags_json, dict) else {}
+            flags = {**(flags or {}), "consent_granted": True, "consent_recovery": reason}
+            step.critic_flags_json = flags
+            step.save(update_fields=[
+                "confirmation_token", "tool_output_json", "critic_flags_json", "updated_at",
+            ])
+            StepJournal.append(
+                run.id,
+                canonical_step_id(step),
+                EVENT_STEP_CONSENT_GRANTED,
+                payload={"unstaged": True, "recovery": reason},
+            )
+            logger.info(
+                "Plan step consent recorded (unstaged/%s) plan=%s step=%s user=%s",
+                reason, plan_id, step.step_index, str(user.pk),
+            )
+            return {
+                "status": "confirmed",
+                "plan_id": plan_id,
+                "step_id": step.step_index,
+                "unstaged": True,
+                "recovered": True,
+            }
+
+        if not execution_id:
+            return _grant_unstaged_consent(reason="no_execution_id")
+
         try:
             async_to_sync(_confirm)()
         except Exception as exc:  # noqa: BLE001 - fail-visible with detail
+            msg = str(exc)
+            dead = (
+                "not pending confirmation" in msg
+                or "not found" in msg.lower()
+                or "(status: failed)" in msg
+                or "(status: cancelled)" in msg
+                or "(status: expired)" in msg
+            )
+            if dead:
+                logger.warning(
+                    "Plan step confirm recovering from dead staged execution "
+                    "plan=%s step=%s execution=%s: %s",
+                    plan_id, step.step_index, execution_id, msg,
+                )
+                return _grant_unstaged_consent(reason="dead_staged_execution")
             logger.warning(
                 "Plan step confirm failed plan=%s step=%s: %s",
                 plan_id, step.step_index, exc, exc_info=True,
@@ -4002,7 +4433,10 @@ class PlansService:
             raise PlanStepError(f"Confirmation failed: {exc}")
 
         step.status = STEP_COMPLETED
-        step.save(update_fields=["status", "updated_at"])
+        flags = step.critic_flags_json if isinstance(step.critic_flags_json, dict) else {}
+        flags = {**(flags or {}), "consent_granted": True}
+        step.critic_flags_json = flags
+        step.save(update_fields=["status", "critic_flags_json", "updated_at"])
         # Journal the committed consent + completion (exactly-one-effect): a
         # confirmed step reconstructs as ``succeeded``, never re-executed.
         StepJournal.append(
@@ -4384,6 +4818,19 @@ class PlansService:
         steps = list(
             RunStep.objects.filter(run_id=run.id).order_by("step_index")
         )
+        # Track D — preserve prior Answer so Output can show a Rerun receipt.
+        notes = dict(run.working_notes or {})
+        prior_body = (run.final_response or "").strip()
+        if prior_body:
+            notes["prior_run"] = {
+                "final_response": prior_body[:12000],
+                "status": run.status,
+                "completed_at": (
+                    run.completed_at.isoformat() if run.completed_at else None
+                ),
+                "step_count": len(steps),
+            }
+            run.working_notes = notes
         for step in steps:
             step.status = STEP_PENDING
             step.confirmation_token = None
@@ -4392,24 +4839,38 @@ class PlansService:
             step.critic_verdict = None
             step.draft_text = None
             step.tool_output_json = None
+            step.critic_flags_json = None
             step.latency_ms = None
             step.retry_count = 0
             step.save(update_fields=[
                 "status", "confirmation_token", "error", "last_error",
                 "critic_verdict", "draft_text", "tool_output_json",
-                "latency_ms", "retry_count", "updated_at",
+                "critic_flags_json", "latency_ms", "retry_count", "updated_at",
             ])
         previous_status = run.status
         run.status = STATUS_APPROVED
         run.final_response = None
         run.completed_at = None
-        run.save(update_fields=[
+        update_fields = [
             "status", "final_response", "completed_at", "updated_at",
-        ])
+        ]
+        if prior_body:
+            update_fields.append("working_notes")
+        run.save(update_fields=update_fields)
         logger.info(
             "Plan re-run staged id=%s user=%s of=%s steps=%d",
             plan_id, str(user.pk), previous_status, len(steps),
         )
+        try:
+            from ai.pulse_ux_telemetry import emit_ux
+            emit_ux(
+                "agent.rerun",
+                of=previous_status,
+                reset_count=len(steps),
+                had_prior=bool(prior_body),
+            )
+        except Exception:  # noqa: BLE001
+            pass
         return {
             **self.get_plan(user, plan_id),
             "rerun": {"of": previous_status, "reset_count": len(steps)},
@@ -4545,6 +5006,10 @@ class PlansService:
                     "critic_verdict": s.critic_verdict,
                     "latency_ms": s.latency_ms,
                     "error": s.error,
+                    "consent_granted": bool(
+                        isinstance(s.critic_flags_json, dict)
+                        and s.critic_flags_json.get("consent_granted")
+                    ),
                     "confirmed": s.status == STEP_COMPLETED
                     and s.confirmation_token is not None,
                     "skipped": s.status == STEP_SKIPPED,

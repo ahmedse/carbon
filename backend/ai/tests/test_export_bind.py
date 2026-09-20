@@ -8,6 +8,7 @@ from ai.engine.cognition.plan.export_bind import (
     apply_bind_to_tool_calls,
     bind_export_args,
     content_is_placeholder,
+    export_has_substance,
     extract_structured_facts,
 )
 
@@ -17,6 +18,39 @@ def test_content_is_placeholder_detects_stubs():
     assert content_is_placeholder("[Placeholder for insights]") is True
     assert content_is_placeholder("## Findings\n[Chart and table to be inserted]") is True
     assert content_is_placeholder("## Findings\n- Saudis average 12k") is False
+
+
+def test_export_has_substance_mid_run_and_thin():
+    ok, reason = export_has_substance("Still in progress — results will follow.")
+    assert ok is False
+    assert "progress" in reason.lower() or "pending" in reason.lower()
+    ok2, _ = export_has_substance("Short.")
+    assert ok2 is False
+    ok3, _ = export_has_substance(
+        "",
+        table={"headers": ["A", "B"], "rows": [["1", "2"]]},
+    )
+    assert ok3 is True
+
+
+def test_export_refuses_insert_slots_even_with_chart():
+    """Operator hollow Word: prose [Insert…] + table [Avg …] + PNG must not ship."""
+    prose = (
+        "## Key Findings\n"
+        "### Salary Distribution by Nationality\n"
+        "- [Insert specific insights, e.g., 'Kuwaiti nationals…']\n"
+    )
+    table = {
+        "headers": ["Dimension", "Category", "Average Salary"],
+        "rows": [
+            ["Nationality", "Kuwaiti", "[Avg Kuwaiti Salary]"],
+            ["Nationality", "Non-Kuwaiti", "[Median Non-Kuwaiti Salary]"],
+        ],
+    }
+    images = [{"caption": "Chart", "image_b64": "a" * 80}]
+    ok, reason = export_has_substance(prose, table, images)
+    assert ok is False
+    assert "template" in reason.lower() or "unfilled" in reason.lower()
 
 
 def test_extract_structured_facts_from_code_execute():

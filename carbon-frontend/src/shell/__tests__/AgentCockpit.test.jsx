@@ -92,6 +92,12 @@ describe('defaultCockpitSegment / normalizeCockpitSegment', () => {
     expect(defaultCockpitSegment('cancelled', 'idle')).toBe('plan');
   });
 
+  it('does not jump to Output on false finished with unsettled status', () => {
+    expect(defaultCockpitSegment('failed', 'finished')).toBe('output');
+    expect(defaultCockpitSegment('approved', 'finished')).toBe('run');
+    expect(defaultCockpitSegment('running', 'finished')).toBe('run');
+  });
+
   it('migrates legacy segment ids', () => {
     expect(normalizeCockpitSegment('steps')).toBe('run');
     expect(normalizeCockpitSegment('metrics')).toBe('output');

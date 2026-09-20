@@ -1244,7 +1244,24 @@ class TurnPipelineRunner:
         # The canonical comprehension path is the LLM intent classifier, but
         # this exact-match fast path is free and injection-proof for the common
         # case. Both paths converge on the same grounding + propose→confirm.
-        if settings.NAVIGATION_RESOLVER_ENABLED:
+        # Agent→Discuss threads must never short-circuit to "open Payroll"
+        # (or any app) — the brief often names a module the user is planning,
+        # not a place they want to navigate.
+        from ai.engine.cognition.plan.planner import (
+            _history_has_discuss_markers,
+            _is_agent_discuss_context,
+            _is_agent_discuss_turn,
+            _is_discuss_apply_turn,
+        )
+        _discuss_ctx = _is_agent_discuss_context(
+            user_message, conversation_history,
+        )
+        _discuss_thread = (
+            _discuss_ctx
+            or _is_agent_discuss_turn(user_message)
+            or _history_has_discuss_markers(conversation_history)
+        )
+        if settings.NAVIGATION_RESOLVER_ENABLED and not _discuss_thread:
             try:
                 from ai.engine.cognition.turn.navigation import resolve_navigation
                 _nav = resolve_navigation(user_message, instance_config)
@@ -1284,6 +1301,11 @@ class TurnPipelineRunner:
                     "[%s] Navigation short-circuit failed; continuing normal pipeline",
                     turn_id[:8], exc_info=True,
                 )
+        elif _discuss_thread and settings.NAVIGATION_RESOLVER_ENABLED:
+            logger.info(
+                "[%s] Skipping navigation short-circuit (Agent discuss thread)",
+                turn_id[:8],
+            )
 
         # S1 — Salience
         s1_start = time.monotonic()
@@ -1366,6 +1388,64 @@ class TurnPipelineRunner:
                     host_user_id, _e,
                 )
 
+        # Track C (ux-07): deixis gate BEFORE intent/tools — "check that one"
+        # must ask confirm, never invent a KG search Answer. Always on (not
+        # tied to INTENT_RESOLVER_ENABLED).
+        try:
+            from ai.engine.cognition.dialogue.deixis import should_gate_deixis
+
+            _deixis_q = should_gate_deixis(
+                user_message, conversation_history=conversation_history
+            )
+            if _deixis_q:
+                try:
+                    from ai.pulse_ux_telemetry import emit_ux
+                    emit_ux("chat.deixis_gate", has_topic="**" in _deixis_q)
+                except Exception:  # noqa: BLE001
+                    pass
+                total_latency = (time.monotonic() - t0) * 1000
+                await self._write_ledger_row(
+                    turn_id, instance_id, conversation_id, host_user_id,
+                    "final", 5,
+                    {
+                        "total_latency_ms": total_latency,
+                        "total_tokens": total_tokens,
+                        "total_llm_calls": total_llm_calls,
+                        "intent_shortcircuit": "deixis",
+                    },
+                    total_latency, verdict="pass",
+                )
+                if self.db is not None:
+                    await self.db.commit()
+                ledger.final_response = _deixis_q[:500]
+                ledger.total_latency_ms = total_latency
+                ledger.total_tokens = total_tokens
+                ledger.total_llm_calls = total_llm_calls
+                response = AgentResponse(
+                    text=_deixis_q,
+                    sources_cited=[],
+                    tools_used=[],
+                    confidence=0.75,
+                    total_tokens=total_tokens,
+                    llm_calls=total_llm_calls,
+                    model="",
+                    response_type="clarification",
+                    confidence_label="medium",
+                )
+                await _broadcast_run(instance_id, "run.completed", {
+                    "run_id": turn_id,
+                    "total_latency_ms": total_latency,
+                    "total_tokens": total_tokens,
+                    "total_llm_calls": total_llm_calls,
+                    "intent_shortcircuit": "deixis",
+                })
+                return response, ledger
+        except Exception:
+            logger.warning(
+                "[%s] Deixis gate failed; continuing",
+                turn_id[:8], exc_info=True,
+            )
+
         # ── S1.5 — Intent Resolution (LLM-as-classifier, no local models) ──
         # Recognises which read-only endpoint the user is after, with a
         # confidence ladder that answers / disambiguates / clarifies. Falls
@@ -1426,7 +1506,13 @@ class TurnPipelineRunner:
             # against the enumerated routes and propose→confirm (RULE_21 — no
             # auto-jump). The LLM's comprehension drives this; grounding is the
             # deterministic guard that prevents the "People (HRMS)" hallucination.
-            if _intent_resolution.action == "navigate" and _intent_resolution.navigate_target:
+            # Skip entirely during Agent→Discuss threads (brief often names a
+            # module; user is refining a plan, not asking to open an app).
+            if (
+                not _discuss_thread
+                and _intent_resolution.action == "navigate"
+                and _intent_resolution.navigate_target
+            ):
                 from ai.engine.cognition.turn.navigation import ground_navigation
                 _nav = ground_navigation(_intent_resolution.navigate_target, instance_config)
                 if _nav.action in ("navigate", "disambiguate"):
@@ -2046,10 +2132,13 @@ class TurnPipelineRunner:
         # [GAP-M7] Salience guard: only surface list_my_capabilities when the
         # user is asking about identity/access, never as a confusion fallback.
         draft_tools = _filter_draft_tools(draft_tools, user_message, salience.domain)
-        # Agent → Discuss: strip tools entirely — prose refine only until
-        # Fork / Replan / explicit re-run. Mirrors SkillAwarePlanner gate.
-        from ai.engine.cognition.plan.planner import _is_agent_discuss_turn
-        _discuss_turn = _is_agent_discuss_turn(user_message)
+        # Agent → Discuss: strip tools for prose refine (seed + follow-ups).
+        # Apply turns (go/proceed/replan) keep tools so edit_plan can fire.
+        _discuss_turn = _discuss_ctx
+        _discuss_apply = (
+            _history_has_discuss_markers(conversation_history)
+            and _is_discuss_apply_turn(user_message)
+        )
         if _discuss_turn:
             draft_tools = None
         # Zone-aware grounding: the anti-fabrication GROUNDING RULES are for
@@ -2065,12 +2154,60 @@ class TurnPipelineRunner:
                 "AGENT DISCUSS MODE — follow exactly:\n"
                 "- The user is refining or discussing an existing Agent plan in Chat.\n"
                 "- Reply in prose only: improved brief and/or numbered steps.\n"
+                "- Keep the step list multi-step when the brief has multiple "
+                "actions (compute, validate, compare rates, report, do-not-commit). "
+                "Never collapse to a single vague step.\n"
                 "- Do NOT call any tools (no invoke_skill, call_host_api, "
                 "resolve_entity, aggregate_entity, plan_task, edit_plan, "
                 "approve_plan, web_research, export_document).\n"
                 "- Do NOT re-run the prior analysis or fetch live data.\n"
+                "- Do NOT navigate the user to an app (Payroll, People, …).\n"
                 "- Do NOT mutate the Agent plan. Wait until the user says "
                 "Fork, Replan, or explicitly asks to convert/run.\n"
+            )
+        elif _discuss_apply:
+            import re as _re_plan
+            _plan_id_match = None
+            for _msg in (conversation_history or [])[-12:]:
+                if not isinstance(_msg, dict):
+                    continue
+                _plan_id_match = _re_plan.search(
+                    r"plan\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
+                    r"[0-9a-f]{4}-[0-9a-f]{12})",
+                    (_msg.get("content") or ""),
+                    _re_plan.I,
+                )
+                if _plan_id_match:
+                    break
+            if not _plan_id_match:
+                _plan_id_match = _re_plan.search(
+                    r"plan\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
+                    r"[0-9a-f]{4}-[0-9a-f]{12})",
+                    user_message or "",
+                    _re_plan.I,
+                )
+            _plan_id_hint = (
+                _plan_id_match.group(1) if _plan_id_match else ""
+            )
+            system_prompt = (
+                f"{system_prompt}\n\n"
+                "AGENT DISCUSS APPLY — follow exactly:\n"
+                "- The user confirmed a Chat refine of an EXISTING Agent plan.\n"
+                "- Call edit_plan on that plan"
+                + (f" (plan_id={_plan_id_hint})" if _plan_id_hint else "")
+                + ".\n"
+                "- If the ask is small and additive (add a chart, embed visuals, "
+                "add one export step), pass step_deltas with action=add — do NOT "
+                "rewrite the whole brief. Rewriting the brief forces a full replan "
+                "and often regresses the graph into duplicate vague steps.\n"
+                "- Only pass a full replacement brief when the user asked to "
+                "rebuild the plan from scratch.\n"
+                "- Do NOT call plan_task (that creates a NEW plan).\n"
+                "- Do NOT navigate to Payroll or any app.\n"
+                "- Do NOT collapse the brief into a single invoke_skill step — "
+                "the brief's multiple actions must remain multiple steps.\n"
+                "- After edit_plan succeeds, tell the user the plan was updated "
+                "and still awaits approval in Tasks — nothing has run yet.\n"
             )
         elif draft_tools and _is_platform_zone:
             system_prompt = (
@@ -3008,12 +3145,12 @@ class TurnPipelineRunner:
 
         settings = get_settings()
 
-        # Agent → Discuss seeds must never enter ReAct (skill/invoke path).
+        # Agent → Discuss seeds (and follow-ups) must never enter ReAct.
         from ai.engine.cognition.plan.planner import (
-            _is_agent_discuss_turn,
+            _is_agent_discuss_context,
             _wants_explicit_task_creation,
         )
-        if _is_agent_discuss_turn(user_message):
+        if _is_agent_discuss_context(user_message, conversation_history):
             logger.info("TurnPipelineRunner: Agent discuss turn — skip ReAct")
             return None
         # "I need a task…" → Chat PLAN FIRST + plan_task, not silent ReAct.

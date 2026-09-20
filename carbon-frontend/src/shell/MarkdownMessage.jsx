@@ -2,10 +2,10 @@
 // ────────────────────────────────────────────────────────────────────────────
 // GENERIC RICH MARKDOWN RENDERER for AI assistant messages.
 //
-// One renderer, driven purely by the markdown content — nothing here is
-// crafted for a single feature or use case. Any assistant reply (capability
-// listings, query results, explanations, reports) renders the same formal,
-// Copilot-style document:
+// Public import for apps / Agent surfaces: `components/RichContent.jsx`
+// (same engine — GFM tables, code, mermaid, math, figures). Use RichContent
+// for plan briefs, graph entity details, Run/Canvas/Output prose, and domain
+// apps so formatting stays one stack.
 //
 //   * GFM tables            — MUI Table (striped, scrollable)
 //   * syntax highlighting   — rehype-highlight (One Dark theme)

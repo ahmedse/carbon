@@ -30,6 +30,7 @@ below is relative to ``/carbon-api/ai/plans/``:
     GET    /{id}/flight/            supervision state (W4-D/25-C)
     GET    /{id}/artifacts/         list plan artifacts (W5-C)
     GET    /{id}/artifacts/{aid}/download/   download an artifact (W5-C)
+    DELETE /{id}/artifacts/{aid}/   hard-delete an artifact (W5-C)
 
 Note: explicit ``as_view`` mappings instead of a router because the include
 mount already carries the ``plans`` prefix — a router would double it.
@@ -216,5 +217,10 @@ urlpatterns = [
         "<str:pk>/artifacts/<str:artifact_id>/download/",
         PlanViewSet.as_view({"get": "download_artifact"}),
         name="ai-plan-artifact-download",
+    ),
+    path(
+        "<str:pk>/artifacts/<str:artifact_id>/",
+        PlanViewSet.as_view({"delete": "delete_artifact"}),
+        name="ai-plan-artifact-delete",
     ),
 ]

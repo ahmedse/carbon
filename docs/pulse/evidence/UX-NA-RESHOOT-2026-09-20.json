@@ -1,0 +1,48 @@
+{
+  "user": "gv_student",
+  "brand": "eduos",
+  "results": [
+    {
+      "name": "ux-na-02-pulse-chat-dock",
+      "url": "http://127.0.0.1:5179/",
+      "ok": true,
+      "bytes": 61505
+    },
+    {
+      "name": "ux-na-07a-chat-topic-seed",
+      "url": "http://127.0.0.1:5179/",
+      "ok": true,
+      "bytes": 65582
+    },
+    {
+      "name": "ux-na-07-chat-deixis-clarify",
+      "url": "http://127.0.0.1:5179/",
+      "ok": true,
+      "bytes": 65913
+    },
+    {
+      "deixis_hint": false,
+      "no_empty_kg": true
+    },
+    {
+      "name": "ux-na-03-agent-mode-autonomy",
+      "url": "http://127.0.0.1:5179/",
+      "ok": true,
+      "bytes": 64610
+    },
+    {
+      "autonomy_visible": true
+    },
+    {
+      "name": "ux-na-10-agent-leave-scope-route",
+      "url": "http://127.0.0.1:5179/",
+      "ok": true,
+      "bytes": 60210
+    },
+    {
+      "leave_card": false,
+      "leave_not_planned_as_dq": true
+    }
+  ],
+  "at": "2026-09-20T10:26:36.681Z"
+}

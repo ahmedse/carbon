@@ -1,0 +1,8 @@
+{
+  "user": "gv_student",
+  "conversation_id": "b532753b-c120-48d6-b04b-094ed33139e8",
+  "latency_s": 0.19,
+  "deixis_clarify": true,
+  "text_snip": "Did you mean **GradeVance**? Reply **yes** to continue with that, or name the item you meant.",
+  "method": "inproc_send_message"
+}

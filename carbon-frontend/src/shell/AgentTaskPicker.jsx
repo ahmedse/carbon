@@ -54,10 +54,13 @@ function AgentTaskPicker({
   return (
     <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
       <FormControl size="small" fullWidth sx={{ minWidth: 0 }}>
-        <InputLabel id="agent-task-picker-label">Task</InputLabel>
+        <InputLabel id="agent-task-picker-label" shrink>
+          Task
+        </InputLabel>
         <Select
           labelId="agent-task-picker-label"
           label="Task"
+          notched
           value={value}
           displayEmpty
           onChange={(e) => {
@@ -72,7 +75,7 @@ function AgentTaskPicker({
             if (!v) {
               return (
                 <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8125rem' }}>
-                  {loading ? 'Loading tasks…' : 'New task / pick one'}
+                  {loading ? 'Loading…' : 'New / pick one'}
                 </Typography>
               );
             }

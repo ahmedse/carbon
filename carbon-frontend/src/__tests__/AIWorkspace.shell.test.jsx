@@ -238,10 +238,11 @@ describe('AIWorkspace mode split (Phase W5-A / ADR-0014)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Agent mode' }));
 
     expect(await screen.findByTestId('task-panel')).toBeInTheDocument();
-    expect(screen.getByText(/The AI will plan before doing anything/i)).toBeInTheDocument();
+    expect(screen.getByText(/You approve the plan before it starts/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Tasks' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Monitor' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Results' })).toBeInTheDocument();
+    // Cockpit on by default: Monitor/Results hidden (Plan·Run·Canvas·Output is the IA).
+    expect(screen.queryByRole('button', { name: 'Monitor' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Results' })).not.toBeInTheDocument();
     // Chat-only surfaces are hidden in Agent mode.
     expect(screen.queryByRole('button', { name: 'Sessions' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'New chat' })).not.toBeInTheDocument();
@@ -274,7 +275,18 @@ describe('AIWorkspace mode split (Phase W5-A / ADR-0014)', () => {
     expect(localStorage.getItem('carbon-ai-mode')).toBe('agent');
   });
 
+  it('restores Monitor/Results activity icons when classic cockpit is off', async () => {
+    localStorage.setItem('carbon-ai-cockpit', 'off');
+    render(<AIWorkspace onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Agent mode' }));
+    await screen.findByTestId('task-panel');
+
+    expect(screen.getByRole('button', { name: 'Monitor' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Results' })).toBeInTheDocument();
+  });
+
   it('switches the Agent task panel to the Monitor tab via the activity bar (W5-D)', async () => {
+    localStorage.setItem('carbon-ai-cockpit', 'off');
     render(<AIWorkspace onClose={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Agent mode' }));
     await screen.findByTestId('task-panel');
@@ -287,6 +299,7 @@ describe('AIWorkspace mode split (Phase W5-A / ADR-0014)', () => {
   });
 
   it('switches the Agent task panel to the Results tab via the activity bar (W5-D)', async () => {
+    localStorage.setItem('carbon-ai-cockpit', 'off');
     render(<AIWorkspace onClose={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Agent mode' }));
     await screen.findByTestId('task-panel');

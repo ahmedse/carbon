@@ -44,6 +44,7 @@ const SEGMENTS = [
  * @param {function} props.renderRun
  * @param {function} props.renderCanvas
  * @param {function} props.renderOutput
+ * @param {React.ReactNode} [props.toolbar] — segment toolbar under tabs (e.g. Plan chrome)
  * @param {function} [props.onOpenTemplates]
  * @param {function} [props.onOpenScheduled]
  * @param {function} [props.onSwitchToClassic]
@@ -57,6 +58,7 @@ function AgentCockpit({
   renderRun,
   renderCanvas,
   renderOutput,
+  toolbar = null,
   onOpenTemplates,
   onOpenScheduled,
   onSwitchToClassic,
@@ -152,6 +154,15 @@ function AgentCockpit({
         </ToggleButtonGroup>
       </Box>
 
+      {toolbar ? (
+        <Box
+          data-testid="agent-cockpit-toolbar"
+          sx={{ px: 1, py: 0.75, borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}
+        >
+          {toolbar}
+        </Box>
+      ) : null}
+
       <Box
         sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 1 }}
         data-testid="cockpit-body"
@@ -174,6 +185,7 @@ AgentCockpit.propTypes = {
   renderRun: PropTypes.func.isRequired,
   renderCanvas: PropTypes.func.isRequired,
   renderOutput: PropTypes.func.isRequired,
+  toolbar: PropTypes.node,
   onOpenTemplates: PropTypes.func,
   onOpenScheduled: PropTypes.func,
   onSwitchToClassic: PropTypes.func,
@@ -183,9 +195,21 @@ export default AgentCockpit;
 
 /** Soft lifecycle default (ADR-0043 §2). */
 export function defaultCockpitSegment(effectiveStatus, phase) {
-  // Settled session phases win so Output can show stop/fail chrome.
-  if (phase === 'stopped' || phase === 'error' || phase === 'finished') {
+  // Settled session phases win so Output can show stop/fail chrome —
+  // but never treat a false "finished" as Output when the plan is not
+  // actually settled (Completed + 0/N pending).
+  if (phase === 'stopped' || phase === 'error') {
     return 'output';
+  }
+  if (phase === 'finished') {
+    if (
+      effectiveStatus === 'completed'
+      || effectiveStatus === 'completed_with_gaps'
+      || effectiveStatus === 'failed'
+    ) {
+      return 'output';
+    }
+    return 'run';
   }
   if (effectiveStatus === 'pending_approval' || effectiveStatus === 'discovering') {
     return 'plan';

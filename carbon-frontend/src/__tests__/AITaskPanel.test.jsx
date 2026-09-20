@@ -39,6 +39,7 @@ const stopPlan = vi.fn();
 const getPlanLedger = vi.fn();
 const listPlanArtifacts = vi.fn();
 const downloadArtifact = vi.fn();
+const deletePlanArtifact = vi.fn();
 const dispatchSubagent = vi.fn();
 const listSubagents = vi.fn();
 
@@ -58,6 +59,7 @@ vi.mock('../api/aiWorkspace', () => ({
   getPlanLedger: (...args) => getPlanLedger(...args),
   listPlanArtifacts: (...args) => listPlanArtifacts(...args),
   downloadArtifact: (...args) => downloadArtifact(...args),
+  deletePlanArtifact: (...args) => deletePlanArtifact(...args),
   dispatchSubagent: (...args) => dispatchSubagent(...args),
   listSubagents: (...args) => listSubagents(...args),
 }));
@@ -239,7 +241,7 @@ describe('AITaskPanel — plan review and approval', () => {
 
     await screen.findByRole('button', { name: 'Approve plan' });
     expect(await screen.findByRole('button', { name: 'Approve plan' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Decline' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel plan' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Approve plan' }));
 
@@ -251,7 +253,7 @@ describe('AITaskPanel — plan review and approval', () => {
     render(<AITaskPanel conversationId="conv-1" />);
 
     await screen.findByRole('button', { name: 'Approve plan' });
-    fireEvent.click(await screen.findByRole('button', { name: 'Decline' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel plan' }));
 
     await waitFor(() => expect(declinePlan).toHaveBeenCalledWith('test-token', 'plan-1'));
     expect(await screen.findByText('This plan was cancelled — nothing was executed.')).toBeInTheDocument();
@@ -260,7 +262,7 @@ describe('AITaskPanel — plan review and approval', () => {
 
 // ── Streamed run + steps ──────────────────────────────────────────────────
 describe('AITaskPanel — streamed run and step consent', () => {
-  it('streams step frames and shows the audit ledger on completion', async () => {
+  it('streams step frames and completes without Run health / audit on Run tab', async () => {
     render(<AITaskPanel conversationId="conv-1" />);
 
     await screen.findByRole('button', { name: 'Approve plan' });
@@ -287,12 +289,9 @@ describe('AITaskPanel — streamed run and step consent', () => {
     streamHandlers.onDone({ type: 'done', plan_id: 'plan-1', status: 'completed', final_response: 'Found 3 duplicate rows.' });
 
     expect(await screen.findByText('Run completed')).toBeInTheDocument();
-    // ADR-0043: Audit demoted under Output → Run health (not a Metrics peer segment).
-    fireEvent.click(screen.getByRole('button', { name: 'Run health' }));
-    expect(await screen.findByText('Audit ledger')).toBeInTheDocument();
-    await waitFor(() => expect(getPlanLedger).toHaveBeenCalledWith('test-token', 'plan-1'));
-    expect(screen.getByText('12000')).toBeInTheDocument();
-    expect(screen.getByText('1.2 s')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Run health' })).toBeNull();
+    expect(screen.queryByText('Audit ledger')).toBeNull();
+    expect(screen.queryByText('No subagents dispatched yet.')).toBeNull();
   });
 
   it('pauses on a consent step and confirms it via the step gate', async () => {
@@ -307,10 +306,10 @@ describe('AITaskPanel — streamed run and step consent', () => {
     streamHandlers.onFrame({ type: 'step_confirm', plan_id: 'plan-1', step_id: 1, intent: 'Create a rule to prevent duplicates' });
     streamHandlers.onDone({ type: 'done', plan_id: 'plan-1', status: 'paused', final_response: null });
 
-    expect(await screen.findByText('Run paused — a step needs your approval')).toBeInTheDocument();
-    expect(screen.getByText('This action writes to Carbon. Approve it to run, or decline to skip it.')).toBeInTheDocument();
+    expect(await screen.findByTestId('consent-hero-card')).toBeInTheDocument();
+    expect(screen.getByText('Needs your approval')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    fireEvent.click(within(screen.getByTestId('consent-hero-card')).getByRole('button', { name: 'Approve' }));
 
     await waitFor(() => expect(confirmPlanStep).toHaveBeenCalledWith('test-token', 'plan-1', 1));
     expect(await screen.findByRole('button', { name: 'Resume run' })).toBeInTheDocument();
@@ -328,10 +327,9 @@ describe('AITaskPanel — streamed run and step consent', () => {
     streamHandlers.onFrame({ type: 'step_confirm', plan_id: 'plan-1', step_id: 1, intent: 'Create a rule to prevent duplicates' });
     streamHandlers.onDone({ type: 'done', plan_id: 'plan-1', status: 'paused', final_response: null });
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Decline' }));
+    fireEvent.click(within(await screen.findByTestId('consent-hero-card')).getByRole('button', { name: 'Decline' }));
 
     await waitFor(() => expect(declinePlanStep).toHaveBeenCalledWith('test-token', 'plan-1', 1));
-    expect(await screen.findByText('Skipped — not executed.')).toBeInTheDocument();
   });
 
   it('stops a running plan and shows stopped copy', async () => {
@@ -449,41 +447,18 @@ describe('AITaskPanel — emits workspace lifecycle state (W5-A / ADR-0014)', ()
   });
 });
 
-// ── I4-F — conversation-scoped subagents ─────────────────────────────────
+// ── I4-F — conversation-scoped subagents (UI deferred to Pulse admin) ────
 describe('AITaskPanel — subagents (I4-F)', () => {
-  it('lists empty subagents and dispatches one via the dialog', async () => {
+  it('does not show Subagents section on the operator Run tab', async () => {
     render(<AITaskPanel conversationId="conv-1" />);
 
-    // Hydration loads the conversation's subagents (empty here).
     await waitFor(() => expect(listSubagents).toHaveBeenCalledWith('test-token', 'conv-1'));
 
-    // Approve so the run stage (and its Subagents section) renders.
     await screen.findByRole('button', { name: 'Approve plan' });
     fireEvent.click(screen.getByRole('button', { name: 'Approve plan' }));
     expect(await screen.findByRole('button', { name: 'Run plan' })).toBeInTheDocument();
 
-    // Empty state caption before any dispatch.
-    expect(await screen.findByText('No subagents dispatched yet.')).toBeInTheDocument();
-
-    // Open the dispatch dialog and submit a named subagent.
-    fireEvent.click(screen.getByRole('button', { name: 'Dispatch subagent' }));
-    const dialog = await screen.findByRole('dialog');
-    // Use getByRole('textbox') to avoid MUI v7 floating-label htmlFor quirks.
-    const [nameField, briefField] = within(dialog).getAllByRole('textbox');
-    fireEvent.change(nameField, { target: { value: 'Dedupe auditor' } });
-    fireEvent.change(briefField, {
-      target: { value: 'Find duplicate rows in the emissions table.' },
-    });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Dispatch subagent' }));
-
-    await waitFor(() => {
-      expect(dispatchSubagent).toHaveBeenCalledWith('test-token', 'conv-1', {
-        name: 'Dedupe auditor',
-        brief: 'Find duplicate rows in the emissions table.',
-      });
-    });
-
-    // The new SubagentResultCard renders with the subagent's name.
-    expect(await screen.findByText('Dedupe auditor')).toBeInTheDocument();
+    expect(screen.queryByText('No subagents dispatched yet.')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Dispatch subagent' })).toBeNull();
   });
 });

@@ -20,7 +20,7 @@ describe('AIWorkspaceHeader mode toggle + safety contract (W5-A / ADR-0014)', ()
   it('renders the agent contract text in Agent mode while idle', () => {
     render(<AIWorkspaceHeader onClose={vi.fn()} mode="agent" agentLifecycleState="idle" />);
     expect(
-      screen.getByText(/Describe an outcome\. The AI will plan before doing anything/i),
+      screen.getByText(/You approve the plan before it starts/i),
     ).toBeInTheDocument();
   });
 
@@ -31,7 +31,7 @@ describe('AIWorkspaceHeader mode toggle + safety contract (W5-A / ADR-0014)', ()
 
   it('renders the running contract text with the pause affordance note', () => {
     render(<AIWorkspaceHeader onClose={vi.fn()} mode="agent" agentLifecycleState="running" />);
-    expect(screen.getByText(/Running — Step N of M · Pause anytime/i)).toBeInTheDocument();
+    expect(screen.getByText(/Running — Pause anytime/i)).toBeInTheDocument();
   });
 
   it('renders the consent-needed contract text when a step requires approval', () => {
@@ -49,8 +49,15 @@ describe('AIWorkspaceHeader mode toggle + safety contract (W5-A / ADR-0014)', ()
   it('falls back to the idle contract text for unknown lifecycle states', () => {
     render(<AIWorkspaceHeader onClose={vi.fn()} mode="agent" agentLifecycleState="bogus" />);
     expect(
-      screen.getByText(/Describe an outcome\. The AI will plan before doing anything/i),
+      screen.getByText(/You approve the plan before it starts/i),
     ).toBeInTheDocument();
+  });
+
+  it('shows the autonomy dial only in Agent mode', () => {
+    const { rerender } = render(<AIWorkspaceHeader onClose={vi.fn()} mode="chat" />);
+    expect(screen.queryByLabelText(/Autonomy/i)).not.toBeInTheDocument();
+    rerender(<AIWorkspaceHeader onClose={vi.fn()} mode="agent" agentLifecycleState="idle" />);
+    expect(screen.getByLabelText(/Autonomy/i)).toBeInTheDocument();
   });
 
   it('reports a mode change via onModeChange when Agent is clicked', () => {

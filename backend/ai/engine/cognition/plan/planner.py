@@ -196,6 +196,18 @@ Rules:
 - Group steps into 2-4 phases that tell a workflow story: research/collect
   first, then analyze, then produce output. Keep plans small — prefer 4-7
   total steps. A single phase is fine for simple jobs.
+- NEVER invent numeric path ids (payroll run ids, employee ids, org ids).
+  Demo labels in the brief (e.g. run_id: demo-oct-2026) are NOT database
+  primary keys. Always list first (list_payroll_runs / list_employees /
+  resolve_entity), then call detail/compute/validate with the REAL id from
+  that prior step via depends_on — or omit path_params and let the host
+  resolve the period alias. Putting a fake string into path_params.id
+  will fail.
+- NEVER collapse a multi-action brief (compute + validate + report, compare
+  to rates, generate a document, do-not-commit) into ONE invoke_skill step.
+  Emit a separate step for each distinct action. Prefer call_host_api for
+  live payroll/host reads and writes; use null-tool reasoning for analysis;
+  use export_document when the brief asks for a document/file report.
 - strategy "parallel" only when the phase's steps are truly independent;
   otherwise "sequential".
 - agent_role selects who executes the step: "researcher" for read-only
@@ -269,6 +281,7 @@ _ACTION_VERBS: list[str] = [
     "create", "bind", "validate", "check", "reuse", "build", "add",
     "update", "delete", "remove", "import", "export", "ingest", "attach",
     "link", "apply", "run", "populate", "finalize",
+    "compute", "report", "commit", "compare", "retrieve", "fetch",
 ]
 
 
@@ -281,6 +294,27 @@ _AGENT_DISCUSS_MARKERS: tuple[str, ...] = (
     "do not change the agent plan until i say to fork or replan",
 )
 
+# Explicit apply / convert signals that END discuss continuity (tools allowed).
+_AGENT_DISCUSS_APPLY_PHRASES: tuple[str, ...] = (
+    "fork",
+    "replan",
+    "convert it to a task",
+    "create the task",
+    "make it a task",
+    "settled",
+    "yes build it",
+    "apply the plan",
+    "update the plan",
+    "use this plan",
+    "proceed with",
+)
+
+# Bare affirmatives — only exit discuss when history already has discuss markers.
+_AGENT_DISCUSS_APPLY_SHORT: frozenset[str] = frozenset({
+    "go", "proceed", "yes", "ok", "okay", "do it", "confirm", "approved",
+    "lfg", "ship it",
+})
+
 
 def _is_agent_discuss_turn(utterance: str) -> bool:
     """True when Chat was seeded from Agent → Discuss (refine / outcome talk).
@@ -292,6 +326,51 @@ def _is_agent_discuss_turn(utterance: str) -> bool:
         return False
     lower = utterance.lower()
     return any(m in lower for m in _AGENT_DISCUSS_MARKERS)
+
+
+def _history_has_discuss_markers(conversation_history: list | None) -> bool:
+    """True when a recent message in this thread carried Agent→Discuss markers."""
+    if not conversation_history:
+        return False
+    for msg in conversation_history[-12:]:
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get("content") or ""
+        if _is_agent_discuss_turn(content):
+            return True
+    return False
+
+
+def _is_discuss_apply_turn(utterance: str) -> bool:
+    """True when the user is asking to apply the refined plan (exit discuss)."""
+    lower = (utterance or "").strip().lower()
+    if not lower:
+        return False
+    if lower in _AGENT_DISCUSS_APPLY_SHORT:
+        return True
+    # "why replan" / "do not replan yet" stay in discuss.
+    if any(neg in lower for neg in ("why ", "don't ", "do not ", "not yet", "don't replan")):
+        return False
+    return any(p in lower for p in _AGENT_DISCUSS_APPLY_PHRASES)
+
+
+def _is_agent_discuss_context(
+    utterance: str,
+    conversation_history: list | None = None,
+) -> bool:
+    """True while Chat is still refining an Agent plan in prose.
+
+    Seeded DISCUSSION ONLY messages are discuss. Follow-ups ("why single
+    step?", "think deeper") stay discuss while history still has markers —
+    until the user explicitly applies (go / proceed / replan / fork).
+    """
+    if _is_agent_discuss_turn(utterance):
+        return True
+    if not _history_has_discuss_markers(conversation_history):
+        return False
+    if _is_discuss_apply_turn(utterance):
+        return False
+    return True
 
 
 def _looks_agent_multi_step(utterance: str) -> bool:
@@ -698,6 +777,15 @@ class SkillAwarePlanner:
                 if plan and plan.steps:
                     logger.info("SkillAwarePlanner: using skill plan '%s'", top_skill.name)
                     return plan
+            elif force_decompose:
+                # Agent create/replan MUST LLM-decompose. Collapsing a
+                # compute+validate+report brief into one invoke_skill step
+                # is the "why single step?!" failure mode.
+                logger.info(
+                    "SkillAwarePlanner: force_decompose — refusing invoke_skill "
+                    "collapse for skill '%s'; LLM decompose instead",
+                    top_skill.name,
+                )
             else:
                 # Non-plan promoted skill (procedure, prompt_template, sql_macro,
                 # api_call, code_snippet) — route it to invoke_skill so the matched

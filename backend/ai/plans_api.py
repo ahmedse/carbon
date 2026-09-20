@@ -879,3 +879,14 @@ class PlanViewSet(viewsets.GenericViewSet):
             or "application/octet-stream",
         )
         return response
+
+    def delete_artifact(self, request, pk=None, artifact_id=None):
+        """Hard-delete a plan artifact (owner-scoped)."""
+        try:
+            return Response(
+                self.service.delete_artifact(request.user, pk, artifact_id)
+            )
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )

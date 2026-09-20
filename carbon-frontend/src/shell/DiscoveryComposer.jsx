@@ -6,6 +6,7 @@
 // Pulse asks focused clarifying questions one at a time; when discovery
 // completes, a reviewable plan is produced (RULE_21 — nothing executes until
 // approved and run). Theme tokens only (RULE_8); outcome copy only (RULE_23).
+// Track B — scope_route gates: refuse / recommend / handoff before Plan now.
 import React, { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
@@ -24,8 +25,8 @@ import AIMessageBubble from './AIMessageBubble';
 import AIInputBar from './AIInputBar';
 import AIWorkingIndicator from './AIWorkingIndicator';
 
-// Map discovery turns onto the message shape AIMessageBubble expects, so the
-// same rich bubble component renders both the main chat and discovery.
+const COMPLIANCE_BRIEF = 'Prepare a leave-compliance board pack summarizing risk for the latest period';
+
 function turnsToMessages(turns) {
   const messages = [];
   turns.forEach((turn, i) => {
@@ -51,11 +52,70 @@ function turnsToMessages(turns) {
   return messages;
 }
 
-// ── DiscoveryComposer — brief → guided questions → ready plan ────────────
+function ScopeRouteCard({ route, busy, onPick }) {
+  if (!route) return null;
+  const cards = Array.isArray(route.cards) ? route.cards : [];
+  return (
+    <Paper
+      variant="outlined"
+      data-testid="scope-route-card"
+      sx={{ p: 1.25, bgcolor: 'background.paper', borderColor: 'warning.main' }}
+    >
+      <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5 }}>
+        {route.class === 'ABUSE' ? 'I can’t help with that' : 'Let’s route this correctly'}
+      </Typography>
+      {route.message && (
+        <Typography variant="caption" sx={{ display: 'block', fontSize: '0.75rem', mb: 1, color: 'text.primary' }}>
+          {route.message}
+        </Typography>
+      )}
+      {cards.length > 0 && (
+        <Stack spacing={0.75}>
+          {cards.map((card) => (
+            <Button
+              key={card.id}
+              size="small"
+              variant={card.primary ? 'contained' : 'outlined'}
+              color={card.primary ? 'primary' : 'inherit'}
+              disabled={busy}
+              onClick={() => onPick(card.id)}
+              sx={{
+                fontSize: '0.75rem',
+                textTransform: 'none',
+                justifyContent: 'flex-start',
+                textAlign: 'left',
+                fontWeight: card.primary ? 600 : 500,
+              }}
+            >
+              <Box>
+                <Typography component="span" sx={{ display: 'block', fontSize: '0.75rem', fontWeight: 'inherit' }}>
+                  {card.label}
+                </Typography>
+                {card.hint && (
+                  <Typography component="span" variant="caption" color="text.secondary" sx={{ fontSize: '0.625rem' }}>
+                    {card.hint}
+                  </Typography>
+                )}
+              </Box>
+            </Button>
+          ))}
+        </Stack>
+      )}
+    </Paper>
+  );
+}
+
+ScopeRouteCard.propTypes = {
+  route: PropTypes.object,
+  busy: PropTypes.bool,
+  onPick: PropTypes.func.isRequired,
+};
+
 function DiscoveryComposer({
   conversationId,
   onPlanReady,
   onStarted,
+  onSwitchToChat,
   resumePlanId = null,
   resumeTurns = null,
 }) {
@@ -64,16 +124,17 @@ function DiscoveryComposer({
 
   const [busy, setBusy] = useState(false);
   const [planId, setPlanId] = useState(null);
-  const [turns, setTurns] = useState([]); // [{ question, reply }]
+  const [turns, setTurns] = useState([]);
   const [readyPlan, setReadyPlan] = useState(null);
+  const [route, setRoute] = useState(null);
+  const [lastBrief, setLastBrief] = useState('');
 
-  // Resume a stuck/in-progress discovering run selected from the task picker.
-  // Do NOT clear local discovery when resumePlanId is simply unset (new brief).
   useEffect(() => {
     if (!resumePlanId) return;
     setPlanId(resumePlanId);
     setTurns(Array.isArray(resumeTurns) ? resumeTurns : []);
     setReadyPlan(null);
+    setRoute(null);
     setBusy(false);
   }, [resumePlanId, resumeTurns]);
 
@@ -81,11 +142,44 @@ function DiscoveryComposer({
     setPlanId(null);
     setTurns([]);
     setReadyPlan(null);
+    setRoute(null);
     setBusy(false);
+    setLastBrief('');
   };
 
   const handlePlanReady = (plan) => {
     setReadyPlan(plan);
+    setRoute(null);
+  };
+
+  const applyRoutePayload = (payload, briefText) => {
+    if (payload?.route && payload.plannable === false) {
+      setRoute(payload.route);
+      if (briefText) setLastBrief(briefText);
+      if (payload.id) setPlanId(payload.id);
+      if (Array.isArray(payload.turns)) setTurns(payload.turns);
+      return true;
+    }
+    setRoute(null);
+    return false;
+  };
+
+  const startWithBrief = async (text) => {
+    const started = await startDiscoveryPlan(token, {
+      brief: text,
+      conversation_id: conversationId || '',
+    });
+    if (applyRoutePayload(started, text)) {
+      return;
+    }
+    setPlanId(started.id);
+    setTurns(
+      Array.isArray(started.turns)
+        ? started.turns
+        : [{ question: started.question, reply: null }],
+    );
+    setLastBrief(text);
+    onStarted?.({ ...started, brief: text });
   };
 
   const handleSubmit = async (value) => {
@@ -95,22 +189,13 @@ function DiscoveryComposer({
     setBusy(true);
     try {
       if (!planId) {
-        // First submit — start the guided discovery conversation.
-        const started = await startDiscoveryPlan(token, {
-          brief: text,
-          conversation_id: conversationId || '',
-        });
-        setPlanId(started.id);
-        setTurns(
-          Array.isArray(started.turns)
-            ? started.turns
-            : [{ question: started.question, reply: null }],
-        );
-        onStarted?.({ ...started, brief: text });
+        await startWithBrief(text);
       } else {
-        // Reply to Pulse's current question.
         const result = await advanceDiscovery(token, planId, text);
         setTurns(Array.isArray(result.turns) ? result.turns : turns);
+        if (applyRoutePayload(result, lastBrief)) {
+          return;
+        }
         if (result.status === 'plan_ready') {
           handlePlanReady(result.plan);
         }
@@ -123,10 +208,13 @@ function DiscoveryComposer({
   };
 
   const handleFinalize = async () => {
-    if (!planId || busy) return;
+    if (!planId || busy || (route && route.plannable === false)) return;
     setBusy(true);
     try {
       const result = await finalizeDiscovery(token, planId);
+      if (applyRoutePayload(result, lastBrief)) {
+        return;
+      }
       if (result.status === 'plan_ready' && result.plan) {
         handlePlanReady(result.plan);
       }
@@ -137,7 +225,33 @@ function DiscoveryComposer({
     }
   };
 
-  // Plan ready — banner + review transition (renders AITaskPlanCard on the Run tab).
+  const handleCardPick = async (cardId) => {
+    if (busy) return;
+    if (cardId === 'handoff_chat' || cardId === 'leave_request') {
+      const draft = cardId === 'leave_request'
+        ? (lastBrief || 'I want to request leave')
+        : (lastBrief || '');
+      onSwitchToChat?.(draft);
+      reset();
+      return;
+    }
+    if (cardId === 'compliance_report') {
+      setBusy(true);
+      try {
+        reset();
+        await startWithBrief(COMPLIANCE_BRIEF);
+      } catch (err) {
+        notifyFromError(err, 'Could not start planning');
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    if (cardId === 'rewrite_brief') {
+      reset();
+    }
+  };
+
   if (readyPlan) {
     return (
       <Paper variant="outlined" sx={{ p: 1.25, bgcolor: 'background.paper', borderColor: 'success.main' }}>
@@ -173,9 +287,10 @@ function DiscoveryComposer({
   }
 
   const messages = turnsToMessages(turns);
+  const gated = Boolean(route && route.plannable === false);
+  const planNowDisabled = busy || !planId || gated;
 
-  // When no conversation has started yet, show a compact input-only state.
-  if (messages.length === 0) {
+  if (messages.length === 0 && !gated) {
     return (
       <AIInputBar
         onSend={handleSubmit}
@@ -186,33 +301,55 @@ function DiscoveryComposer({
 
   return (
     <Paper variant="outlined" sx={{ p: 1.25, bgcolor: 'background.paper' }}>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, mb: 1 }}>
-        {messages.map((msg) => (
-          <AIMessageBubble key={msg.id} message={msg} />
-        ))}
-        {busy && <AIWorkingIndicator conversationType="chat" />}
-      </Box>
+      {messages.length > 0 && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, mb: 1 }}>
+          {messages.map((msg) => (
+            <AIMessageBubble key={msg.id} message={msg} />
+          ))}
+          {busy && <AIWorkingIndicator conversationType="chat" />}
+        </Box>
+      )}
 
-      <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.75 }}>
-        <Typography variant="caption" color="text.secondary" sx={{ flex: 1, fontSize: '0.6875rem' }}>
-          Answer above, or plan with the brief as stated.
-        </Typography>
+      {gated && (
+        <Box sx={{ mb: 1 }}>
+          <ScopeRouteCard route={route} busy={busy} onPick={handleCardPick} />
+        </Box>
+      )}
+
+      {!gated && (
+        <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.75 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ flex: 1, fontSize: '0.6875rem' }}>
+            Answer above, or plan with the brief as stated.
+          </Typography>
+          <Button
+            size="small"
+            variant="outlined"
+            disabled={planNowDisabled}
+            onClick={handleFinalize}
+            sx={{ fontSize: '0.6875rem', textTransform: 'none', flexShrink: 0 }}
+          >
+            Plan now
+          </Button>
+        </Stack>
+      )}
+
+      {!gated && (
+        <AIInputBar
+          onSend={handleSubmit}
+          working={busy}
+          conversationStatus={planId ? 'needs_input' : undefined}
+        />
+      )}
+
+      {gated && (
         <Button
           size="small"
-          variant="outlined"
-          disabled={busy || !planId}
-          onClick={handleFinalize}
-          sx={{ fontSize: '0.6875rem', textTransform: 'none', flexShrink: 0 }}
+          onClick={reset}
+          sx={{ mt: 0.75, fontSize: '0.6875rem', textTransform: 'none' }}
         >
-          Plan now
+          Start over
         </Button>
-      </Stack>
-
-      <AIInputBar
-        onSend={handleSubmit}
-        working={busy}
-        conversationStatus={planId ? 'needs_input' : undefined}
-      />
+      )}
     </Paper>
   );
 }
@@ -221,6 +358,7 @@ DiscoveryComposer.propTypes = {
   conversationId: PropTypes.string,
   onPlanReady: PropTypes.func,
   onStarted: PropTypes.func,
+  onSwitchToChat: PropTypes.func,
   resumePlanId: PropTypes.string,
   resumeTurns: PropTypes.arrayOf(PropTypes.shape({
     question: PropTypes.string,

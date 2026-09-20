@@ -308,6 +308,27 @@ describe('layoutExecutionGraph', () => {
     expect(layout.height).toBeGreaterThan(0);
   });
 
+  it('packs disconnected isolates after the main spine (not floating at rank 0)', () => {
+    const plan = {
+      id: 'iso',
+      steps: [
+        { step_id: 0, intent: 'Fetch', depends_on: [], status: 'pending' },
+        { step_id: 1, intent: 'Compute', depends_on: [0], status: 'pending' },
+        { step_id: 2, intent: 'Orphan validate', depends_on: [], status: 'pending' },
+        { step_id: 3, intent: 'Orphan report', depends_on: [], status: 'pending' },
+      ],
+    };
+    const { nodes, direction } = layoutExecutionGraph(plan, { direction: 'tb' });
+    expect(direction).toBe('tb');
+    const byId = Object.fromEntries(nodes.filter((n) => !n.is_dummy).map((n) => [n.id, n]));
+    expect(byId[0].rank).toBe(0);
+    expect(byId[1].rank).toBe(1);
+    expect(byId[2].rank).toBeGreaterThan(byId[1].rank);
+    expect(byId[3].rank).toBeGreaterThan(byId[2].rank);
+    // Spine left-aligned — no mid-canvas float for the sequential chain.
+    expect(byId[0].x).toBe(byId[1].x);
+  });
+
   it('lays out branched board-pack as L→R with chosen path above escalate and no orphan at rank 0', () => {
     const plan = {
       id: 'board-pack',
@@ -363,5 +384,31 @@ describe('layoutExecutionGraph', () => {
     expect(byId[1].x).toBeGreaterThan(byId[0].x);
     expect(byId.choice_variance.x).toBeGreaterThan(byId[1].x);
     expect(byId[4].x).toBeGreaterThan(byId[3].x);
+  });
+});
+
+describe('layoutExecutionGraph — disconnected components', () => {
+  it('stacks a secondary chain under the primary spine (not a second column)', () => {
+    const plan = {
+      id: 'ugly-dual',
+      status: 'pending_approval',
+      steps: [
+        { step_id: 0, intent: 'List employees', status: 'pending', depends_on: [] },
+        { step_id: 1, intent: 'Fetch salaries', status: 'pending', depends_on: [0] },
+        { step_id: 2, intent: 'Analyze distribution', status: 'pending', depends_on: [1] },
+        // Disconnected second chain (no depends_on into the spine)
+        { step_id: 3, intent: 'Generate tables', status: 'pending', depends_on: [] },
+        { step_id: 4, intent: 'Generate charts', status: 'pending', depends_on: [3] },
+      ],
+    };
+    const { nodes, direction } = layoutExecutionGraph(plan, { direction: 'tb' });
+    expect(direction).toBe('tb');
+    const byId = Object.fromEntries(nodes.filter((n) => !n.is_dummy).map((n) => [n.id, n]));
+    // Primary spine then secondary — all share one x lane (left-aligned).
+    expect(byId[0].x).toBe(byId[1].x);
+    expect(byId[3].x).toBe(byId[0].x);
+    // Secondary sits below primary, not beside rank 0.
+    expect(byId[3].y).toBeGreaterThan(byId[2].y);
+    expect(byId[4].y).toBeGreaterThan(byId[3].y);
   });
 });

@@ -153,8 +153,8 @@ describe('PlanDagGraph', () => {
 
     const pane = screen.getByTestId('plan-step-detail');
     expect(pane).toBeInTheDocument();
-    expect(screen.getByText('Step 0')).toBeInTheDocument();
-    expect(screen.getByText('Search for duplicate records')).toBeInTheDocument();
+    expect(within(pane).getByText('Step 0')).toBeInTheDocument();
+    expect(within(pane).getByText('Search for duplicate records')).toBeInTheDocument();
     expect(within(pane).getByText('search_entity')).toBeInTheDocument();
     expect(within(pane).getByText(/Nothing — starts the workflow/)).toBeInTheDocument();
     expect(within(pane).getByText(/Create a rule to prevent duplicates/)).toBeInTheDocument(); // feeds into
@@ -209,6 +209,39 @@ describe('PlanDagGraph', () => {
       expect(screen.queryByText('Plan graph — full view')).not.toBeInTheDocument(),
     );
   });
+
+  it('structure mode: agent tasks are card boxes; gateways keep BPMN shapes', () => {
+    const multi = {
+      id: 'p-shapes',
+      status: 'pending_approval',
+      brief: 'Board pack',
+      steps: [
+        { step_id: 0, intent: 'Fetch totals', tool_name: 'call_host_api', agent_role: 'domain_specialist', status: 'pending', depends_on: [] },
+        { step_id: 1, intent: 'Research notes', tool_name: null, agent_role: 'researcher', status: 'pending', depends_on: [0] },
+        { step_id: 2, intent: 'Critic review', tool_name: null, agent_role: 'critic', status: 'pending', depends_on: [1] },
+        { step_id: 3, intent: 'Export pack', tool_name: 'export_document', agent_role: 'orchestrator', status: 'pending', depends_on: [2] },
+      ],
+    };
+    const { container } = renderGraph({ plan: multi, mode: 'structure' });
+    expect(screen.getByTestId('plan-shape-legend')).toBeInTheDocument();
+    const cards = container.querySelectorAll('[data-shape="roundedRect"]');
+    expect(cards.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('structure mode: docked detail box collapsible', () => {
+    renderGraph({
+      plan: {
+        ...PLAN,
+        steps: PLAN.steps.map((s) => ({ ...s, status: 'completed' })),
+      },
+      mode: 'structure',
+    });
+    expect(screen.getByTestId('plan-structure-detail')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('plan-structure-collapse'));
+    expect(screen.getByTestId('plan-structure-detail-collapsed')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('plan-structure-expand'));
+    expect(screen.getByTestId('plan-structure-detail')).toBeInTheDocument();
+  });
 });
 
 describe('EnterpriseGraph interactions (movable/resizable nodes, live status, toolbar)', () => {
@@ -249,14 +282,15 @@ describe('EnterpriseGraph interactions (movable/resizable nodes, live status, to
   it('lets a node be resized via its bottom-right handle', () => {
     const { container } = renderGraph({ plan: PLAN });
     const handle = container.querySelector('[data-testid="plan-dag-graph-resize-0"]');
-    const nodeRect = container.querySelector('[role="button"][aria-label^="Step 0:"] > rect');
-    const beforeW = Number(nodeRect.getAttribute('width'));
+    const node = container.querySelector('[role="button"][aria-label^="Step 0:"]');
+    const frame = node.querySelector('path');
+    const beforeD = frame.getAttribute('d');
 
     fireEvent.mouseDown(handle, { button: 0, clientX: 200, clientY: 200 });
     fireEvent.mouseMove(handle, { clientX: 240, clientY: 220 });
     fireEvent.mouseUp(handle, { clientX: 240, clientY: 220 });
 
-    expect(Number(nodeRect.getAttribute('width'))).toBeGreaterThan(beforeW);
+    expect(frame.getAttribute('d')).not.toBe(beforeD);
   });
 
   it('keeps a correct position when dragging after a resize (no NaN origin)', () => {
@@ -289,8 +323,7 @@ describe('EnterpriseGraph interactions (movable/resizable nodes, live status, to
   it('keeps correct dimensions when resizing after a drag (no NaN size)', () => {
     const { container } = renderGraph({ plan: PLAN });
     const node = container.querySelector('[role="button"][aria-label^="Step 0:"]');
-    const nodeRect = node.querySelector('rect');
-    const beforeW = Number(nodeRect.getAttribute('width'));
+    const beforeW = Number(node.getAttribute('data-node-w'));
 
     // Drag the node first.
     fireEvent.mouseDown(node, { button: 0, clientX: 100, clientY: 100 });
@@ -304,8 +337,8 @@ describe('EnterpriseGraph interactions (movable/resizable nodes, live status, to
     fireEvent.mouseMove(handle, { clientX: 240, clientY: 220 });
     fireEvent.mouseUp(handle, { clientX: 240, clientY: 220 });
 
-    const w = Number(nodeRect.getAttribute('width'));
-    const h = Number(nodeRect.getAttribute('height'));
+    const w = Number(node.getAttribute('data-node-w'));
+    const h = Number(node.getAttribute('data-node-h'));
     expect(Number.isFinite(w)).toBe(true);
     expect(Number.isFinite(h)).toBe(true);
     expect(w).toBeCloseTo(beforeW + 40, 5);

@@ -285,3 +285,14 @@ def ground_navigation(
         lang=lang,
         matched=",".join(t.name for t, _s in distinct),
     )
+
+
+def resolve_navigation(
+    message: str, instance_config: dict | None,
+) -> NavigationResolution:
+    """Deterministic zero-token fast path used by the turn runner.
+
+    Grounds the raw user message against declared routes. Same contract as
+    :func:`ground_navigation` — never invents destinations.
+    """
+    return ground_navigation(message or "", instance_config)

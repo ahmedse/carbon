@@ -1,7 +1,7 @@
 // PD-* / PX-* fixtures — Done Answer surface + discovering honesty (Pulse × Nibras coworker QA).
 // IDs map to canvases/pulse-nibras-coworker-qa.canvas.tsx §7b.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import AITaskAuditCard from '../shell/AITaskAuditCard';
 import { effectivePlanStatus, planStatusMeta } from '../shell/aiTaskStatus';
 import AITaskPanel from '../shell/AITaskPanel';
@@ -164,6 +164,15 @@ describe('PX-01 — discovering / empty steps honesty', () => {
       }),
     ).toBe('running');
   });
+
+  it('demotes dishonest Completed when steps are still pending', () => {
+    expect(
+      effectivePlanStatus({
+        status: 'completed',
+        steps: Array.from({ length: 11 }, () => ({ status: 'pending' })),
+      }),
+    ).toBe('failed');
+  });
 });
 
 describe('PD-01/03/04/05 — Done Output Answer · Discuss · Artifacts · PNG', () => {
@@ -200,6 +209,79 @@ describe('PD-01/03/04/05 — Done Output Answer · Discuss · Artifacts · PNG',
     expect(screen.getByTestId('markdown-message')).toHaveTextContent('### GOSI Exposure');
     // Raw pre-wrap dump of ### must not appear outside the markdown mock.
     expect(screen.queryByText('Answer')).toBeInTheDocument();
+  });
+
+  it('Track D: Output shows Rerun receipt when prior_run comparison is changed', async () => {
+    const withPrior = {
+      ...COMPLETED,
+      id: 'plan-rerun-diff',
+      final_response: '### New answer\n\nTotal **99**',
+      prior_run: {
+        comparison: 'changed',
+        prior_final_response: '### Prior answer\n\nTotal **42**',
+        prior_status: 'completed',
+      },
+    };
+    listPlans.mockResolvedValue({ plans: [withPrior], count: 1 });
+    getPlan.mockResolvedValue(withPrior);
+    render(
+      <AITaskPanel conversationId="conv-1" focusPlanId="plan-rerun-diff" onSwitchToChat={onSwitchToChat} />,
+    );
+    expect(await screen.findByTestId('output-rerun-receipt')).toBeInTheDocument();
+    expect(screen.getByText(/Answer changed vs last run/i)).toBeInTheDocument();
+    expect(screen.getByText(/Prior answer/i)).toBeInTheDocument();
+  });
+
+  it('Track C: Output shows Export gap when hollow export was refused', async () => {
+    const withGap = {
+      ...COMPLETED,
+      id: 'plan-export-gap',
+      steps: [
+        {
+          step_id: 4,
+          intent: 'Export board pack',
+          tool_name: 'export_document',
+          status: 'failed',
+          error: 'Export refused: no real findings to bind into the document.',
+        },
+      ],
+    };
+    listPlans.mockResolvedValue({ plans: [withGap], count: 1 });
+    getPlan.mockResolvedValue(withGap);
+    render(
+      <AITaskPanel conversationId="conv-1" focusPlanId="plan-export-gap" onSwitchToChat={onSwitchToChat} />,
+    );
+    expect(await screen.findByTestId('output-export-gaps')).toBeInTheDocument();
+    expect(screen.getByText(/Export gap/i)).toBeInTheDocument();
+    expect(screen.getByText(/no real findings/i)).toBeInTheDocument();
+  });
+
+  it('Track C: completed write step shows Approved by you when consent_granted', async () => {
+    const withConsent = {
+      ...COMPLETED,
+      id: 'plan-consent-trace',
+      steps: [
+        {
+          step_id: 2,
+          intent: 'Deny compensation request',
+          tool_name: 'call_host_api',
+          status: 'completed',
+          consent_granted: true,
+        },
+      ],
+    };
+    listPlans.mockResolvedValue({ plans: [withConsent], count: 1 });
+    getPlan.mockResolvedValue(withConsent);
+    render(
+      <AITaskPanel conversationId="conv-1" focusPlanId="plan-consent-trace" onSwitchToChat={onSwitchToChat} />,
+    );
+    const cockpit = await screen.findByTestId('agent-cockpit');
+    // Completed plans land on Output — switch to Run for StepCards.
+    fireEvent.click(within(cockpit).getByRole('button', { name: 'Run' }));
+    // Graph-first Run may hide the step list when settled — open List.
+    const listBtn = screen.queryByRole('button', { name: 'List' });
+    if (listBtn) fireEvent.click(listBtn);
+    expect(await screen.findByText(/Approved by you/i)).toBeInTheDocument();
   });
 
   it('PD-02: Audit under Run health opens by default when the run is settled', async () => {
