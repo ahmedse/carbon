@@ -1,11 +1,10 @@
 // src/App.jsx
 import React, { Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useParams } from "react-router-dom";
-import { LocalizationProvider } from '@mui/x-date-pickers';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { Box, Typography } from '@mui/material';
 import { useAuth } from "./auth/AuthContext";
 import Login from "./pages/Login";
+import LocaleAwareLocalizationProvider from "./i18n/LocaleAwareLocalizationProvider";
 const ForgotPasswordPage = React.lazy(() => import("./pages/ForgotPasswordPage"));
 const ResetPasswordPage = React.lazy(() => import("./pages/ResetPasswordPage"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
@@ -245,7 +244,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <NetworkStatusProvider>
-        <LocalizationProvider dateAdapter={AdapterDayjs}>
+        <LocaleAwareLocalizationProvider>
           <BrowserRouter basename={import.meta.env.VITE_BASE} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <Suspense fallback={<LoadingSpinner />}>
               <Routes>
@@ -573,7 +572,7 @@ export default function App() {
               </Routes>
             </Suspense>
           </BrowserRouter>
-        </LocalizationProvider>
+        </LocaleAwareLocalizationProvider>
       </NetworkStatusProvider>
     </ErrorBoundary>
   );

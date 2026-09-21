@@ -4307,13 +4307,17 @@ class PlansService:
 
     # ── Consent: step-level confirm / decline ─────────────────────────────
 
-    def confirm_step(self, user, plan_id: str, step_id) -> dict:
+    def confirm_step(self, user, plan_id: str, step_id, body_override=None) -> dict:
         """Confirm a paused consent step — executes the staged mutation.
 
         Mirrors the workspace ``tool-executions/confirm`` seam: the staged
         host mutation runs in-process as the requesting user via
         ``CarbonHostExecutor.confirm_execution``; the step is then marked
         completed so the next ``run`` resumes past it.
+
+        ``body_override`` (optional dict) merges into the staged execution
+        body before confirm — used when the operator filled missing hire
+        fields on the Run timeline (no JSON editing).
         """
         from asgiref.sync import async_to_sync
 
@@ -4355,6 +4359,17 @@ class PlansService:
                     user_token=f"inproc:carbon:{user_pk}",
                     host_user_id=user_pk,
                 )
+                if body_override and isinstance(body_override, dict) and execution_id:
+                    from ai.engine.core.models import ToolExecution
+
+                    rows = await db.select(ToolExecution, {"id": execution_id})
+                    execution = rows[0] if rows else None
+                    if execution is not None and execution.status == "pending_confirmation":
+                        params = json.loads(execution.input_params) if execution.input_params else {}
+                        existing = params.get("body") if isinstance(params.get("body"), dict) else {}
+                        params["body"] = {**existing, **body_override}
+                        execution.input_params = json.dumps(params)
+                        await db.commit()
                 return await executor.confirm_execution(
                     execution_id, expected_host_user_id=user_pk
                 )

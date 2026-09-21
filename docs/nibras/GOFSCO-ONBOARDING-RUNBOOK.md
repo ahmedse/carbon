@@ -102,11 +102,13 @@ Employees with `join_date=NULL` may get **no** entitlements until enriched — M
 ```bash
 ../.venv/bin/python manage.py link_employee_users --dry-run
 ../.venv/bin/python manage.py link_employee_users --password "$EMPLOYEE_DEFAULT_PASSWORD"
+# QA / Playwright: also refresh existing emp_* passwords to match the default
+../.venv/bin/python manage.py link_employee_users --password "$EMPLOYEE_DEFAULT_PASSWORD" --reset-password
 ```
 
-**Accept:** Users `emp_<employee_no>`; `my:access` via employee_group.  
+**Accept:** Users `emp_<employee_no>`; `my:access` via employee_group.
 `team:access` only for users who manage others (see §2).
-
+**Note:** without `--reset-password`, existing linked users keep their prior hash — Playwright defaults (`ChangeMe_132`) will fail login.
 ---
 
 ## 2. Manager hierarchy (mandatory for Team inbox)

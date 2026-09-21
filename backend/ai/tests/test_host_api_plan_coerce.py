@@ -34,6 +34,92 @@ def test_coerce_get_entity_details_leave_balance_to_call_host_api():
     assert "entity_name" not in step.tool_args
 
 
+def test_coerce_create_leave_record_to_submit_my_leave():
+    from ai.engine.cognition.plan.planner import PlanStep, _coerce_host_api_steps
+
+    catalog = {"get_my_leave_balance", "create_leave_record", "submit_my_leave", "list_my_leave"}
+    step = PlanStep(
+        step_id=4,
+        intent="Create a one-day emergency leave record",
+        tool_name="call_host_api",
+        tool_args={
+            "api_name": "create_leave_record",
+            "body": {
+                "employee": 1067,
+                "leave_type": "emergency",
+                "start_date": "2026-09-22",
+                "end_date": "2026-09-22",
+                "days": 1,
+            },
+        },
+        is_mutation=True,
+    )
+    _coerce_host_api_steps([step], catalog, utterance="Plan leave.request.lifecycle for myself")
+    assert step.tool_args.get("api_name") == "submit_my_leave"
+    assert "employee" not in (step.tool_args.get("body") or {})
+
+
+def test_coerce_loan_brief_rewrites_submit_my_leave():
+    from ai.engine.cognition.plan.planner import PlanStep, _coerce_host_api_steps
+
+    catalog = {
+        "submit_my_leave",
+        "submit_my_loan",
+        "list_my_loans",
+        "create_leave_record",
+    }
+    step = PlanStep(
+        step_id=0,
+        intent="Submit a loan request",
+        tool_name="call_host_api",
+        tool_args={"api_name": "submit_my_leave"},
+        is_mutation=True,
+    )
+    _coerce_host_api_steps(
+        [step],
+        catalog,
+        utterance="Plan Nibras process loan.request.lifecycle for myself",
+    )
+    assert step.tool_args.get("api_name") == "submit_my_loan"
+
+
+def test_coerce_onboarding_brief_rewrites_submit_my_leave():
+    from ai.engine.cognition.plan.planner import PlanStep, _coerce_host_api_steps
+
+    catalog = {"submit_my_leave", "create_employee", "list_employees", "update_employee"}
+    step = PlanStep(
+        step_id=1,
+        intent="Submit onboarding",
+        tool_name="call_host_api",
+        tool_args={"api_name": "submit_my_leave"},
+        is_mutation=True,
+    )
+    _coerce_host_api_steps(
+        [step],
+        catalog,
+        utterance="Plan employee.onboarding.lifecycle for a new hire",
+    )
+    assert step.tool_args.get("api_name") == "create_employee"
+
+
+def test_coerce_leave_brief_keeps_submit_my_leave():
+    from ai.engine.cognition.plan.planner import PlanStep, _coerce_host_api_steps
+
+    catalog = {"submit_my_leave", "submit_my_loan", "create_employee"}
+    step = PlanStep(
+        step_id=0,
+        intent="Submit leave",
+        tool_name="call_host_api",
+        tool_args={"api_name": "submit_my_leave"},
+        is_mutation=True,
+    )
+    _coerce_host_api_steps(
+        [step],
+        catalog,
+        utterance="Execute leave.request.lifecycle Prefer submit_my_leave",
+    )
+    assert step.tool_args.get("api_name") == "submit_my_leave"
+
 def test_coerce_tool_name_that_is_catalog_api():
     from ai.engine.cognition.plan.planner import PlanStep, _coerce_host_api_steps
 

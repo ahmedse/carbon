@@ -11,6 +11,7 @@ import PropTypes from 'prop-types';
 import { useTranslation } from 'react-i18next';
 import {
   Box,
+  Chip,
   IconButton,
   MenuItem,
   Select,
@@ -25,6 +26,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import CloseFullscreenIcon from '@mui/icons-material/CloseFullscreen';
 import RestoreOutlinedIcon from '@mui/icons-material/RestoreOutlined';
+import TaskAltOutlinedIcon from '@mui/icons-material/TaskAltOutlined';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
 import { createCheckpoint } from '../api/aiWorkspace';
@@ -55,6 +57,9 @@ function AIWorkspaceHeader({
   mode = 'chat',
   onModeChange,
   agentLifecycleState = 'idle',
+  linkedPlan = null,
+  onOpenLinkedPlan,
+  onDismissLinkedPlan,
 }) {
   const { t } = useTranslation('ai');
   const { token } = useAuth();
@@ -67,6 +72,13 @@ function AIWorkspaceHeader({
     mode === 'chat'
       ? CONTRACT_TEXT_KEYS.chat
       : CONTRACT_TEXT_KEYS[agentLifecycleState] || CONTRACT_TEXT_KEYS.idle;
+
+  const linkedBrief = (linkedPlan?.brief || '').trim();
+  const linkedLabel = linkedBrief
+    ? t('continuity.openPlan', {
+      brief: linkedBrief.length > 36 ? `${linkedBrief.slice(0, 36)}…` : linkedBrief,
+    })
+    : t('continuity.openPlanShort');
 
   const handleAutonomy = (event) => {
     const next = writeAutonomyMode(event.target.value);
@@ -105,6 +117,25 @@ function AIWorkspaceHeader({
         }}
       >
         <PulseLogo size={20} showWordmark />
+        {mode === 'chat' && linkedPlan?.id ? (
+          <Chip
+            size="small"
+            color="primary"
+            variant="outlined"
+            icon={<TaskAltOutlinedIcon sx={{ fontSize: '14px !important' }} />}
+            label={linkedLabel}
+            onClick={() => onOpenLinkedPlan?.()}
+            onDelete={onDismissLinkedPlan ? () => onDismissLinkedPlan() : undefined}
+            data-testid="chat-agent-continuity-chip"
+            sx={{
+              mx: 0.75,
+              maxWidth: 220,
+              height: 24,
+              fontSize: '0.625rem',
+              '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' },
+            }}
+          />
+        ) : null}
         <Typography
           variant="caption"
           color="text.secondary"
@@ -242,6 +273,12 @@ AIWorkspaceHeader.propTypes = {
     'done',
     'error',
   ]),
+  linkedPlan: PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    brief: PropTypes.string,
+  }),
+  onOpenLinkedPlan: PropTypes.func,
+  onDismissLinkedPlan: PropTypes.func,
 };
 
 export default AIWorkspaceHeader;

@@ -11,6 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 import useDocumentTitle from '../../../../hooks/useDocumentTitle';
+import { useTranslation } from 'react-i18next';
 import PageContainer from '../../../../components/layout/PageContainer';
 import { useAuth } from '../../../../auth/AuthContext';
 import { useNotification } from '../../../../components/NotificationProvider';
@@ -21,7 +22,8 @@ import {
 } from '../../../../api/aiWorkspace';
 
 export default function MemoryGovernancePanel() {
-  useDocumentTitle('Memory Assets');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.memoryGovernance.title'));
   const { token } = useAuth();
   const { notify, notifyFromError } = useNotification();
   const [facts, setFacts] = useState([]);
@@ -67,10 +69,10 @@ export default function MemoryGovernancePanel() {
     <PageContainer>
       <Stack spacing={2}>
         <Typography variant="h5" fontWeight={700}>
-          Memory
+          {t('control.memoryGovernance.heading')}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Revoke stops future use while keeping the row for audit. Forget is hard delete (GDPR).
+          {t('control.memoryGovernance.subtitle')}
         </Typography>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -103,7 +105,7 @@ export default function MemoryGovernancePanel() {
             ))}
             {!facts.length && (
               <Typography variant="body2" color="text.secondary">
-                No memory facts.
+                {t('control.memoryGovernance.empty')}
               </Typography>
             )}
           </Stack>

@@ -20,12 +20,14 @@ import {
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import useDocumentTitle from '../../../../hooks/useDocumentTitle';
+import { useTranslation } from 'react-i18next';
 import PageContainer from '../../../../components/layout/PageContainer';
 import { useAuth } from '../../../../auth/AuthContext';
 import { fetchCapabilityMatrix } from '../../../../api/accessControl';
 
 export default function RolesMatrixPanel() {
-  useDocumentTitle('Platform Roles');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.rolesMatrix.title'));
   const { token } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -78,7 +80,7 @@ export default function RolesMatrixPanel() {
       <Stack spacing={2}>
         <Stack direction="row" justifyContent="space-between" alignItems="center">
           <Typography variant="h5" fontWeight={700}>
-            Roles & AI capabilities
+            {t('control.rolesMatrix.heading')}
           </Typography>
           <Stack direction="row" spacing={1} alignItems="center">
             <Button
@@ -89,13 +91,12 @@ export default function RolesMatrixPanel() {
               Assign users
             </Button>
             <Button size="small" startIcon={<RefreshIcon />} onClick={load} disabled={loading}>
-              Refresh
+              {t('control.rolesMatrix.refresh')}
             </Button>
           </Stack>
         </Stack>
         <Typography variant="body2" color="text.secondary">
-          Read-only matrix of groups that carry AI capabilities. Assign users via Access
-          Control; this view answers who can publish, contain, or manage Pulse.
+          {t('control.rolesMatrix.subtitle')}
         </Typography>
 
         {loading ? (
@@ -107,7 +108,7 @@ export default function RolesMatrixPanel() {
         ) : !aiKeys.length ? (
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Typography variant="body2" color="text.secondary">
-              No AI capability domain in matrix.
+              {t('control.rolesMatrix.empty')}
             </Typography>
           </Paper>
         ) : (
@@ -115,7 +116,7 @@ export default function RolesMatrixPanel() {
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>Group</TableCell>
+                  <TableCell>{t('control.rolesMatrix.colGroup')}</TableCell>
                   {aiKeys.map((key) => (
                     <TableCell key={key} sx={{ whiteSpace: 'nowrap' }}>
                       <Typography variant="caption">{key.replace(/^ai:/, '')}</Typography>

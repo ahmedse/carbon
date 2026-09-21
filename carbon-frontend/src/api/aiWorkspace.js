@@ -1066,13 +1066,18 @@ export async function runPlanStream(token, planId, { onFrame, onDone, onError })
  * @param {string} token - JWT access token
  * @param {string} planId - UUID
  * @param {number} stepId - step_index
+ * @param {{ body?: object }} [opts] - optional body merge for incomplete staged mutations
  * @returns {Promise<object>} { status: 'confirmed', plan_id, step_id }
  */
-export function confirmPlanStep(token, planId, stepId) {
+export function confirmPlanStep(token, planId, stepId, opts = {}) {
+  const body = { step_id: stepId };
+  if (opts && opts.body && typeof opts.body === 'object') {
+    body.body = opts.body;
+  }
   return apiFetch(`${PLANS_BASE}${planId}/steps/confirm/`, {
     token,
     method: 'POST',
-    body: { step_id: stepId },
+    body,
   });
 }
 

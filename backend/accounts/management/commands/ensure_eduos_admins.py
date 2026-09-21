@@ -6,7 +6,7 @@ Idempotent account provisioning for the EduOS (GradeVance) instance.
 Mirrors ensure_nibras_admins for the eduos brand:
 
   * ahmed / {CARBON_ADMIN_PASSWORD|AdminPa_132}
-        platform SUPERUSER
+        UNIVERSAL platform SUPERUSER (same on every brand DB)
   * admin / {EDUOS_ADMIN_PASSWORD|AdmEduos_132}
         EduOS admin (staff, not Django superuser)
 

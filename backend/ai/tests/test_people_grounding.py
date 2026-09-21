@@ -472,3 +472,50 @@ def test_analytics_empty_population_returns_zero_total_with_caveat():
     assert data["total"] == 0
     assert data["breakdown"] == []
     assert len(data["caveats"]) > 0
+
+
+# ─── create / activate (onboarding host mutations) ───────────────────────────
+
+@pytest.mark.django_db(transaction=True)
+def test_create_employee_post_returns_201():
+    """Agent confirm create_employee must not 404 — in-process POST exists."""
+    from datetime import date
+
+    user = User.objects.create_superuser(username="tg-hire", password="secret123")
+    org = _make_org("Hire Org", "tg-hire-org")
+    no = "HIRE001"
+    result = _people(
+        _executor(user),
+        "carbon-api/people/employees",
+        method="POST",
+        body={
+            "employee_no": no,
+            "full_name": "New Hire",
+            "org_unit": org.pk,
+            "join_date": date.today().isoformat(),
+            "basic_salary": "500.000",
+            "is_active": False,
+        },
+    )
+    assert result["status_code"] == 201, result
+    assert result["data"]["employee_no"] == no
+    assert Employee.objects.filter(employee_no=no).exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_update_employee_patch_activates():
+    """Onboarding activate uses PATCH is_active=true via in-process host."""
+    user = User.objects.create_superuser(username="tg-act", password="secret123")
+    org = _make_org("Act Org", "tg-act-org")
+    emp = _make_employee(org, "ACT001", "Inactive Hire")
+    emp.is_active = False
+    emp.save(update_fields=["is_active"])
+    result = _people(
+        _executor(user),
+        f"carbon-api/people/employees/{emp.pk}",
+        method="PATCH",
+        body={"is_active": True},
+    )
+    assert result["status_code"] == 200, result
+    emp.refresh_from_db()
+    assert emp.is_active is True

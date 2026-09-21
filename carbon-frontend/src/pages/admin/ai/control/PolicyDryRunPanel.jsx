@@ -10,6 +10,7 @@ import {
   Typography,
 } from '@mui/material';
 import useDocumentTitle from '../../../../hooks/useDocumentTitle';
+import { useTranslation } from 'react-i18next';
 import PageContainer from '../../../../components/layout/PageContainer';
 import { useAuth } from '../../../../auth/AuthContext';
 import { useNotification } from '../../../../components/NotificationProvider';
@@ -25,7 +26,8 @@ const AUTONOMY = [
 ];
 
 export default function PolicyDryRunPanel() {
-  useDocumentTitle('Policy Dry-Run');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.policyDryRun.title'));
   const { token } = useAuth();
   const { notify } = useNotification();
   const [action, setAction] = useState('call_host_api');
@@ -58,15 +60,15 @@ export default function PolicyDryRunPanel() {
     <PageContainer>
       <Stack spacing={2}>
         <Typography variant="h5" fontWeight={700}>
-          Policy dry-run
+          {t('control.policyDryRun.heading')}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Simulate PDP without executing a host effect. Result is audited as dry_run.
+          {t('control.policyDryRun.subtitle')}
         </Typography>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
           <TextField
             size="small"
-            label="Action"
+            label={t('control.policyDryRun.action')}
             value={action}
             onChange={(e) => setAction(e.target.value)}
             fullWidth
@@ -74,7 +76,7 @@ export default function PolicyDryRunPanel() {
           <TextField
             select
             size="small"
-            label="Autonomy"
+            label={t('control.policyDryRun.autonomy')}
             value={autonomy}
             onChange={(e) => setAutonomy(e.target.value)}
             sx={{ minWidth: 180 }}
@@ -87,7 +89,7 @@ export default function PolicyDryRunPanel() {
           </TextField>
           <TextField
             size="small"
-            label="Objects (comma-separated)"
+            label={t('control.policyDryRun.objects')}
             value={objects}
             onChange={(e) => setObjects(e.target.value)}
             fullWidth

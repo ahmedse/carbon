@@ -31,6 +31,7 @@ import {
   useTheme,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { useTranslation } from 'react-i18next';
 import useDocumentTitle from '../../../../hooks/useDocumentTitle';
 import PageContainer from '../../../../components/layout/PageContainer';
 import { useAuth } from '../../../../auth/AuthContext';
@@ -164,10 +165,15 @@ export default function ProcessObjectPage() {
   const { processId } = useParams();
   const navigate = useNavigate();
   const theme = useTheme();
+  const { t } = useTranslation('ai');
   const { token, userCapabilities } = useAuth();
   const { notify, notifyFromError } = useNotification();
 
-  useDocumentTitle(processId ? `Process · ${processId}` : 'Process');
+  useDocumentTitle(
+    processId
+      ? t('control.processObject.titleWithId', { id: processId })
+      : t('control.processObject.title'),
+  );
 
   const caps = useMemo(() => capabilityKeys(userCapabilities), [userCapabilities]);
   const isOwner = useMemo(() => hasAnyCap(caps, [AI_PROCESS_OWNER]), [caps]);
@@ -323,7 +329,7 @@ export default function ProcessObjectPage() {
             component={RouterLink}
             to="/admin/ai/domain?tab=processes"
           >
-            Registry
+            {t('control.processObject.registry')}
           </Button>
           <Typography variant="h5" fontWeight={700} sx={{ flex: 1 }}>
             {detail.process_id}
@@ -347,49 +353,61 @@ export default function ProcessObjectPage() {
           {detail.status === 'draft' && (
             <GatedButton
               allowed={isOwner}
-              reason="Requires ai:process_owner"
+              reason={t('control.processObject.requiresProcessOwner')}
               size="small"
               variant="contained"
               disabled={acting}
               onClick={() =>
-                runAction(submitProcess, [token, processId], 'Submitted for review.')
+                runAction(
+                  submitProcess,
+                  [token, processId],
+                  t('control.processObject.submitted'),
+                )
               }
             >
-              Submit for review
+              {t('control.processObject.submitForReview')}
             </GatedButton>
           )}
           {detail.status === 'review' && (
             <GatedButton
               allowed={isPublisher}
-              reason="Requires ai:publisher"
+              reason={t('control.processObject.requiresPublisher')}
               size="small"
               variant="contained"
               color="success"
               disabled={acting}
               onClick={() =>
-                runAction(publishProcess, [token, processId], 'Published.')
+                runAction(
+                  publishProcess,
+                  [token, processId],
+                  t('control.processObject.published'),
+                )
               }
             >
-              Publish
+              {t('control.processObject.publish')}
             </GatedButton>
           )}
           {detail.status === 'active' && (
             <GatedButton
               allowed={canDeprecate}
-              reason="Requires ai:process_owner or ai:publisher"
+              reason={t('control.processObject.requiresOwnerOrPublisher')}
               size="small"
               variant="outlined"
               color="warning"
               disabled={acting}
               onClick={() =>
-                runAction(deprecateProcess, [token, processId], 'Deprecated.')
+                runAction(
+                  deprecateProcess,
+                  [token, processId],
+                  t('control.processObject.deprecated'),
+                )
               }
             >
-              Deprecate
+              {t('control.processObject.deprecate')}
             </GatedButton>
           )}
           <Stack direction="row" spacing={0.5} alignItems="center">
-            <Typography variant="body2">Kill switch</Typography>
+            <Typography variant="body2">{t('control.processObject.killSwitch')}</Typography>
             <Switch
               size="small"
               checked={Boolean(detail.kill_switch)}
@@ -398,7 +416,7 @@ export default function ProcessObjectPage() {
                 runAction(
                   setKillSwitch,
                   [token, processId, e.target.checked],
-                  'Kill switch updated.',
+                  t('control.processObject.killSwitchUpdated'),
                 )
               }
             />
@@ -408,7 +426,7 @@ export default function ProcessObjectPage() {
             to={`/admin/ai/evidence?tab=explorer`}
             variant="body2"
           >
-            Evidence
+            {t('control.processObject.evidence')}
           </Link>
         </Stack>
 
@@ -418,46 +436,46 @@ export default function ProcessObjectPage() {
           variant="scrollable"
           scrollButtons="auto"
         >
-          <Tab value="overview" label="Overview" />
-          <Tab value="steps" label="Steps & autonomy" />
-          <Tab value="scope" label="Scope" />
-          <Tab value="diff" label="Diff" />
-          <Tab value="advanced" label="Advanced JSON" />
+          <Tab value="overview" label={t('control.processObject.tabOverview')} />
+          <Tab value="steps" label={t('control.processObject.tabSteps')} />
+          <Tab value="scope" label={t('control.processObject.tabScope')} />
+          <Tab value="diff" label={t('control.processObject.tabDiff')} />
+          <Tab value="advanced" label={t('control.processObject.tabAdvanced')} />
         </Tabs>
 
         {tab === 'overview' && (
           <Stack spacing={2}>
             <Paper variant="outlined" sx={{ p: 2 }}>
               <Typography variant="overline" color="text.secondary">
-                Objective
+                {t('control.processObject.objective')}
               </Typography>
               <Typography variant="body1">{objectiveText(detail.definition)}</Typography>
             </Paper>
             <Stack direction="row" spacing={2} flexWrap="wrap">
               <Typography variant="body2">
-                <strong>Steps:</strong> {steps.length}
+                <strong>{t('control.processObject.stepsCount')}</strong> {steps.length}
               </Typography>
               <Typography variant="body2">
-                <strong>Evidence items:</strong>{' '}
+                <strong>{t('control.processObject.evidenceCount')}</strong>{' '}
                 {Array.isArray(detail.definition?.evidence)
                   ? detail.definition.evidence.length
                   : 0}
               </Typography>
               <Typography variant="body2">
-                <strong>Tests:</strong>{' '}
+                <strong>{t('control.processObject.testsCount')}</strong>{' '}
                 {Array.isArray(detail.definition?.tests)
                   ? detail.definition.tests.length
                   : 0}
               </Typography>
               <Typography variant="body2">
-                <strong>Scope source:</strong>{' '}
+                <strong>{t('control.processObject.scopeSource')}</strong>{' '}
                 {detail.definition?.scope?.source || '—'}
               </Typography>
             </Stack>
             {detail.definition?.last_reject_reason && (
               <Paper variant="outlined" sx={{ p: 1.5 }}>
                 <Typography variant="caption" color="warning.main">
-                  Last reject reason
+                  {t('control.processObject.lastReject')}
                 </Typography>
                 <Typography variant="body2">
                   {detail.definition.last_reject_reason}
@@ -473,11 +491,11 @@ export default function ProcessObjectPage() {
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Step</TableCell>
-                    <TableCell>Kind</TableCell>
-                    <TableCell>Capability</TableCell>
-                    <TableCell>Autonomy</TableCell>
-                    <TableCell>Consent</TableCell>
+                    <TableCell>{t('control.processObject.colStep')}</TableCell>
+                    <TableCell>{t('control.processObject.colKind')}</TableCell>
+                    <TableCell>{t('control.processObject.colCapability')}</TableCell>
+                    <TableCell>{t('control.processObject.colAutonomy')}</TableCell>
+                    <TableCell>{t('control.processObject.colConsent')}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -488,10 +506,10 @@ export default function ProcessObjectPage() {
                       <TableCell>{s.capability || '—'}</TableCell>
                       <TableCell>
                         <FormControl size="small" sx={{ minWidth: 160 }} disabled={!isOwner}>
-                          <InputLabel id={`aut-${s.id}`}>Autonomy</InputLabel>
+                          <InputLabel id={`aut-${s.id}`}>{t('control.processObject.colAutonomy')}</InputLabel>
                           <Select
                             labelId={`aut-${s.id}`}
-                            label="Autonomy"
+                            label={t('control.processObject.colAutonomy')}
                             value={autonomyDraft[s.id] || s.autonomy || 'human_only'}
                             onChange={(e) =>
                               setAutonomyDraft((prev) => ({
@@ -508,7 +526,7 @@ export default function ProcessObjectPage() {
                           </Select>
                         </FormControl>
                       </TableCell>
-                      <TableCell>{s.consent === true ? 'Yes' : 'No'}</TableCell>
+                      <TableCell>{s.consent === true ? t('control.processObject.yes') : t('control.processObject.no')}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -535,10 +553,10 @@ export default function ProcessObjectPage() {
             </Typography>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
               <FormControl size="small" sx={{ minWidth: 220 }} disabled={!isDraft || !isOwner}>
-                <InputLabel id="scope-source">Source</InputLabel>
+                <InputLabel id="scope-source">{t('control.processObject.source')}</InputLabel>
                 <Select
                   labelId="scope-source"
-                  label="Source"
+                  label={t('control.processObject.source')}
                   value={scopeForm.source}
                   onChange={(e) =>
                     setScopeForm((prev) => ({ ...prev, source: e.target.value }))
@@ -553,7 +571,7 @@ export default function ProcessObjectPage() {
               </FormControl>
               <TextField
                 size="small"
-                label="Org unit"
+                label={t('control.processObject.orgUnit')}
                 value={scopeForm.org_unit}
                 onChange={(e) =>
                   setScopeForm((prev) => ({ ...prev, org_unit: e.target.value }))
@@ -564,7 +582,7 @@ export default function ProcessObjectPage() {
             </Stack>
             <TextField
               size="small"
-              label="Roles (comma-separated)"
+              label={t('control.processObject.roles')}
               value={scopeForm.roles}
               onChange={(e) =>
                 setScopeForm((prev) => ({ ...prev, roles: e.target.value }))
@@ -574,7 +592,7 @@ export default function ProcessObjectPage() {
             />
             <TextField
               size="small"
-              label="Approval validity"
+              label={t('control.processObject.approvalValidity')}
               value={scopeForm.approval_validity}
               onChange={(e) =>
                 setScopeForm((prev) => ({
@@ -589,7 +607,7 @@ export default function ProcessObjectPage() {
             <Divider />
             <TextField
               size="small"
-              label="Objective"
+              label={t('control.processObject.objective')}
               value={objectiveDraft}
               onChange={(e) => setObjectiveDraft(e.target.value)}
               disabled={!isDraft || !isOwner}

@@ -27,6 +27,7 @@ import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } 
 import { select } from 'd3-selection';
 import { drag as d3Drag } from 'd3-drag';
 import { zoom as d3Zoom, zoomIdentity } from 'd3-zoom';
+import { useTranslation } from 'react-i18next';
 
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
 import PageContainer from '../../../components/layout/PageContainer';
@@ -45,7 +46,8 @@ function radiusFor(degrees, node) {
 }
 
 export default function KnowledgeGraphPanel() {
-  useDocumentTitle('Knowledge Graph');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.knowledgeGraph.title'));
   const { token } = useAuth();
   const theme = useTheme();
 
@@ -286,7 +288,7 @@ export default function KnowledgeGraphPanel() {
     <Stack spacing={1}>
       <Stack direction="row" spacing={1} alignItems="center">
         <Typography variant="h5" fontWeight={700} sx={{ flex: 1 }}>
-          Knowledge Graph
+          {t('control.knowledgeGraph.title')}
         </Typography>
         <ToggleButtonGroup
           value={view}
@@ -295,12 +297,12 @@ export default function KnowledgeGraphPanel() {
           onChange={handleViewChange}
           aria-label="graph view toggle"
         >
-          <ToggleButton value="graph">Graph</ToggleButton>
-          <ToggleButton value="table">Table</ToggleButton>
+          <ToggleButton value="graph">{t('control.knowledgeGraph.viewGraph')}</ToggleButton>
+          <ToggleButton value="table">{t('control.knowledgeGraph.viewTable')}</ToggleButton>
         </ToggleButtonGroup>
       </Stack>
       <Typography variant="body2" color="text.secondary">
-        Normalized knowledge-graph nodes and edges from the AI engine.
+        {t('control.knowledgeGraph.description')}
       </Typography>
     </Stack>
   );
@@ -310,10 +312,10 @@ export default function KnowledgeGraphPanel() {
       <PageContainer>
         <Box sx={{ mb: 2 }}>{header}</Box>
         <PulseDataPanel
-          title="Knowledge Graph"
-          description="Graph nodes, edges, provenance, query plans, and bootstrap runs."
+          title={t('control.knowledgeGraph.title')}
+          description={t('control.knowledgeGraph.description')}
           dataKey="graph"
-          emptyHint="No graph nodes or edges yet. Run schema analysis to bootstrap the graph."
+          emptyHint={t('control.knowledgeGraph.empty')}
         />
       </PageContainer>
     );
@@ -339,9 +341,9 @@ export default function KnowledgeGraphPanel() {
         </Paper>
       ) : nodes.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
-          <Typography variant="subtitle1" fontWeight={600}>Knowledge Graph</Typography>
+          <Typography variant="subtitle1" fontWeight={600}>{t('control.knowledgeGraph.title')}</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            No graph nodes or edges yet. Run schema analysis to bootstrap the graph.
+            {t('control.knowledgeGraph.empty')}
           </Typography>
         </Paper>
       ) : (
@@ -354,22 +356,22 @@ export default function KnowledgeGraphPanel() {
                 <Chip size="small" color="warning" label="truncated" />
               )}
               {Object.keys(typeColors)
-                .filter((t) => t !== 'unknown')
-                .map((t) => (
-                  <Stack key={t} direction="row" spacing={0.5} alignItems="center">
+                .filter((typeKey) => typeKey !== 'unknown')
+                .map((typeKey) => (
+                  <Stack key={typeKey} direction="row" spacing={0.5} alignItems="center">
                     <Box
                       sx={{
                         width: 10,
                         height: 10,
                         borderRadius: '50%',
-                        backgroundColor: typeColors[t],
+                        backgroundColor: typeColors[typeKey],
                       }}
                     />
-                    <Typography variant="caption" color="text.secondary">{t}</Typography>
+                    <Typography variant="caption" color="text.secondary">{typeKey}</Typography>
                   </Stack>
                 ))}
               <Box sx={{ flex: 1 }} />
-              <Button size="small" onClick={resetZoom}>Reset view</Button>
+              <Button size="small" onClick={resetZoom}>{t('control.knowledgeGraph.resetView')}</Button>
             </Stack>
             <Box sx={{ position: 'relative' }}>
               <svg
@@ -378,20 +380,20 @@ export default function KnowledgeGraphPanel() {
                 width="100%"
                 height={HEIGHT}
                 role="img"
-                aria-label="Knowledge graph force-directed layout"
+                aria-label={t('control.knowledgeGraph.ariaGraph')}
               />
               {hovered && (
                 <Paper
                   elevation={4}
-                  sx={{
+                  // Inline left/top — stylis RTL must not flip pageX/pageY screen coords.
+                  style={{
                     position: 'fixed',
                     left: (hovered.x ?? 0) + 14,
                     top: (hovered.y ?? 0) + 14,
-                    px: 1.5,
-                    py: 0.75,
                     pointerEvents: 'none',
                     zIndex: 1300,
                     maxWidth: 340,
+                    padding: '6px 12px',
                   }}
                 >
                   <Typography variant="body2" fontWeight={600}>{hovered.title}</Typography>
@@ -426,7 +428,7 @@ export default function KnowledgeGraphPanel() {
                   </Typography>
                 )}
                 <Divider />
-                <Typography variant="caption" fontWeight={600}>Properties</Typography>
+                <Typography variant="caption" fontWeight={600}>{t('control.knowledgeGraph.properties')}</Typography>
                 <Typography
                   component="pre"
                   variant="caption"
@@ -434,7 +436,7 @@ export default function KnowledgeGraphPanel() {
                 >
                   {JSON.stringify(selectedNode.properties ?? {}, null, 2)}
                 </Typography>
-                <Button size="small" onClick={() => setSelectedNode(null)}>Close</Button>
+                <Button size="small" onClick={() => setSelectedNode(null)}>{t('control.knowledgeGraph.close')}</Button>
               </Stack>
             </Paper>
           )}

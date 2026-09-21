@@ -31,3 +31,18 @@ export function buildDiscussDraft(plan, finalResponse, { refine = false } = {}) 
   ];
   return parts.join('\n').trim();
 }
+
+/**
+ * Agent → Chat handoff payload: composer seed + linked-plan chip metadata.
+ * @param {object|null} plan
+ * @param {string} [finalResponse]
+ * @param {{ refine?: boolean }} [opts]
+ * @returns {{ draft: string, planId: string|null, planBrief: string }}
+ */
+export function buildDiscussHandoff(plan, finalResponse, opts = {}) {
+  return {
+    draft: buildDiscussDraft(plan, finalResponse, opts),
+    planId: plan?.id || null,
+    planBrief: (plan?.brief || '').trim(),
+  };
+}

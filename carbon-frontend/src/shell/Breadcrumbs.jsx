@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthContext';
 import { shellLabel } from '../i18n/shellLabels';
 import HomeIcon from '@mui/icons-material/Home';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import { ChevronEnd } from '../i18n/DirectionalIcons';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import Co2Icon from '@mui/icons-material/Co2';
 import StorageIcon from '@mui/icons-material/Storage';
@@ -784,7 +784,7 @@ export function Breadcrumbs() {
       }}
     >
       <MuiBreadcrumbs
-        separator={<ChevronRightIcon sx={{ fontSize: 11, color: 'text.disabled' }} />}
+        separator={<ChevronEnd sx={{ fontSize: 11, color: 'text.disabled' }} />}
         aria-label={t('ui.breadcrumb')}
         sx={{ fontSize: '0.65rem' }}
       >

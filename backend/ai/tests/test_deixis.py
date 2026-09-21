@@ -30,7 +30,9 @@ def test_should_gate_with_prior_topic():
 
 def test_confirm_reply_skips_gate():
     assert is_confirm_reply("yes")
+    assert is_confirm_reply("نعم")
     assert should_gate_deixis("yes", conversation_history=None) is None
+    assert should_gate_deixis("نعم", conversation_history=None) is None
 
 
 def test_infer_prior_from_bold():

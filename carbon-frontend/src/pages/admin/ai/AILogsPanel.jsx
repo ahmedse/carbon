@@ -1,18 +1,20 @@
 // Evidence → Logs — LLM/tool/turn logs with Evidence deep links.
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import PulseDataPanel from './PulseDataPanel';
 
 export default function AILogsPanel() {
+  const { t } = useTranslation('ai');
   return (
     <PulseDataPanel
-      title="AI Logs"
-      description="LLM call logs, tool/task executions, turn ledger, and context records. Reconstruct a decision on Evidence."
+      title={t('control.logs.title')}
+      description={t('control.logs.description')}
       dataKey="logs"
-      emptyHint="No LLM call logs yet. Run a chat or task to populate."
+      emptyHint={t('control.logs.empty')}
       links={[
-        { label: 'Evidence explorer', to: '/admin/ai/evidence?tab=explorer' },
-        { label: 'Audit', to: '/admin/ai/evidence?tab=audit' },
-        { label: 'Run timeline', to: '/admin/ai/evidence?tab=runs' },
+        { label: t('control.logs.linkEvidence'), to: '/admin/ai/evidence?tab=explorer' },
+        { label: t('control.logs.linkAudit'), to: '/admin/ai/evidence?tab=audit' },
+        { label: t('control.logs.linkRuns'), to: '/admin/ai/evidence?tab=runs' },
       ]}
     />
   );

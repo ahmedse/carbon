@@ -28,6 +28,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
+import { useTranslation } from 'react-i18next';
 import PageContainer from '../../../components/layout/PageContainer';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
@@ -73,7 +74,8 @@ function GatedButton({ allowed, reason, children, ...props }) {
 }
 
 export default function KnowledgeBasePanel() {
-  useDocumentTitle('Knowledge');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.knowledgeBase.title'));
   const { token, userCapabilities } = useAuth();
   const { notify, notifyFromError } = useNotification();
   const caps = useMemo(() => capabilityKeys(userCapabilities), [userCapabilities]);
@@ -134,7 +136,7 @@ export default function KnowledgeBasePanel() {
       <Stack spacing={2}>
         <Stack direction="row" justifyContent="space-between" alignItems="center">
           <Typography variant="h5" fontWeight={700}>
-            Curated knowledge
+            {t('control.knowledgeBase.heading')}
           </Typography>
           <Stack direction="row" spacing={1}>
             <GatedButton
@@ -148,20 +150,19 @@ export default function KnowledgeBasePanel() {
               New item
             </GatedButton>
             <Button size="small" startIcon={<RefreshIcon />} onClick={load} disabled={loading}>
-              Refresh
+              {t('control.knowledgeBase.refresh')}
             </Button>
           </Stack>
         </Stack>
         <Typography variant="body2" color="text.secondary">
-          KnowledgeItem records feed the engine corpus. Revoke deprecates and ends
-          the validity window; the row stays for provenance.
+          {t('control.knowledgeBase.subtitle')}
         </Typography>
         {loading ? (
           <CircularProgress size={24} />
         ) : rows.length === 0 ? (
           <Paper variant="outlined" sx={{ p: 3 }}>
             <Typography variant="body2" color="text.secondary">
-              No curated knowledge items.
+              {t('control.knowledgeBase.empty')}
             </Typography>
           </Paper>
         ) : (
@@ -169,11 +170,11 @@ export default function KnowledgeBasePanel() {
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>Class</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Source</TableCell>
-                  <TableCell>Content</TableCell>
-                  <TableCell>Actions</TableCell>
+                  <TableCell>{t('control.knowledgeBase.colClass')}</TableCell>
+                  <TableCell>{t('control.knowledgeBase.colStatus')}</TableCell>
+                  <TableCell>{t('control.knowledgeBase.colSource')}</TableCell>
+                  <TableCell>{t('control.knowledgeBase.colContent')}</TableCell>
+                  <TableCell>{t('control.knowledgeBase.colActions')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -201,7 +202,7 @@ export default function KnowledgeBasePanel() {
                         disabled={row.review_status === 'deprecated'}
                         onClick={() => onRevoke(row.id)}
                       >
-                        Revoke
+                        {t('control.knowledgeBase.revoke')}
                       </GatedButton>
                     </TableCell>
                   </TableRow>
@@ -213,14 +214,14 @@ export default function KnowledgeBasePanel() {
       </Stack>
 
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>New knowledge item</DialogTitle>
+        <DialogTitle>{t('control.knowledgeBase.newItem')}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <FormControl size="small" fullWidth>
-              <InputLabel id="kclass">Class</InputLabel>
+              <InputLabel id="kclass">{t('control.knowledgeBase.class')}</InputLabel>
               <Select
                 labelId="kclass"
-                label="Class"
+                label={t('control.knowledgeBase.class')}
                 value={form.knowledge_class}
                 onChange={(e) =>
                   setForm((prev) => ({ ...prev, knowledge_class: e.target.value }))
@@ -235,13 +236,13 @@ export default function KnowledgeBasePanel() {
             </FormControl>
             <TextField
               size="small"
-              label="Source"
+              label={t('control.knowledgeBase.source')}
               value={form.source}
               onChange={(e) => setForm((prev) => ({ ...prev, source: e.target.value }))}
               fullWidth
             />
             <TextField
-              label="Content"
+              label={t('control.knowledgeBase.content')}
               value={form.content}
               onChange={(e) => setForm((prev) => ({ ...prev, content: e.target.value }))}
               fullWidth
@@ -251,13 +252,13 @@ export default function KnowledgeBasePanel() {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancel</Button>
+          <Button onClick={() => setOpen(false)}>{t('control.knowledgeBase.cancel')}</Button>
           <Button
             variant="contained"
             onClick={onCreate}
             disabled={!form.content.trim()}
           >
-            Create
+            {t('control.knowledgeBase.create')}
           </Button>
         </DialogActions>
       </Dialog>

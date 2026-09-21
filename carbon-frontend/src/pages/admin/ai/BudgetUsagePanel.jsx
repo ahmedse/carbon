@@ -16,6 +16,7 @@ import {
 import CloudOffIcon from '@mui/icons-material/CloudOff';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
+import { useTranslation } from 'react-i18next';
 import PageContainer from '../../../components/layout/PageContainer';
 import CarbonDataGrid from '../../../components/DataGrid/CarbonDataGrid';
 import { useAuth } from '../../../auth/AuthContext';
@@ -34,7 +35,8 @@ function formatInt(value) {
 }
 
 export default function BudgetUsagePanel() {
-  useDocumentTitle('Budget & Usage');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.budgetUsage.title'));
   const { token } = useAuth();
 
   const [data, setData] = useState(null);
@@ -82,39 +84,39 @@ export default function BudgetUsagePanel() {
 
   const modelColumns = useMemo(
     () => [
-      { field: 'model', headerName: 'Model', minWidth: 240, flex: 1 },
-      { field: 'cost_usd', headerName: 'Cost (USD)', width: 140, valueFormatter: ({ value }) => formatUsd(value) },
-      { field: 'total_tokens', headerName: 'Tokens', width: 140, valueFormatter: ({ value }) => formatInt(value) },
-      { field: 'calls', headerName: 'Calls', width: 120, valueFormatter: ({ value }) => formatInt(value) },
+      { field: 'model', headerName: t('control.budgetUsage.colModel'), minWidth: 240, flex: 1 },
+      { field: 'cost_usd', headerName: t('control.budgetUsage.colCostUsd'), width: 140, valueFormatter: ({ value }) => formatUsd(value) },
+      { field: 'total_tokens', headerName: t('control.budgetUsage.colTokens'), width: 140, valueFormatter: ({ value }) => formatInt(value) },
+      { field: 'calls', headerName: t('control.budgetUsage.colCalls'), width: 120, valueFormatter: ({ value }) => formatInt(value) },
     ],
-    []
+    [t]
   );
 
   const dayColumns = useMemo(
     () => [
-      { field: 'date', headerName: 'Date', minWidth: 160, flex: 1 },
-      { field: 'cost_usd', headerName: 'Cost (USD)', width: 140, valueFormatter: ({ value }) => formatUsd(value) },
-      { field: 'total_tokens', headerName: 'Tokens', width: 140, valueFormatter: ({ value }) => formatInt(value) },
-      { field: 'calls', headerName: 'Calls', width: 120, valueFormatter: ({ value }) => formatInt(value) },
+      { field: 'date', headerName: t('control.budgetUsage.colDate'), minWidth: 160, flex: 1 },
+      { field: 'cost_usd', headerName: t('control.budgetUsage.colCostUsd'), width: 140, valueFormatter: ({ value }) => formatUsd(value) },
+      { field: 'total_tokens', headerName: t('control.budgetUsage.colTokens'), width: 140, valueFormatter: ({ value }) => formatInt(value) },
+      { field: 'calls', headerName: t('control.budgetUsage.colCalls'), width: 120, valueFormatter: ({ value }) => formatInt(value) },
     ],
-    []
+    [t]
   );
 
   return (
     <PageContainer>
       <Stack spacing={1.5} sx={{ flex: 1, minHeight: 0 }}>
         <Stack direction="row" spacing={1} alignItems="center">
-          <Typography variant="h5" fontWeight={700} sx={{ flex: 1 }}>Budget & Usage</Typography>
+          <Typography variant="h5" fontWeight={700} sx={{ flex: 1 }}>{t('control.budgetUsage.title')}</Typography>
           {data && !offline && (
             <Chip
               size="small"
               color={exceeded ? 'error' : 'success'}
-              label={exceeded ? 'Budget exceeded' : 'Within budget'}
+              label={exceeded ? t('control.budgetUsage.budgetExceeded') : t('control.budgetUsage.withinBudget')}
             />
           )}
         </Stack>
         <Typography variant="body2" color="text.secondary">
-          Daily LLM budget vs. spend, plus token and call aggregates from the engine cost ledger.
+          {t('control.budgetUsage.subtitle')}
         </Typography>
 
         {loading ? (
@@ -125,10 +127,10 @@ export default function BudgetUsagePanel() {
           <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
             <CloudOffIcon fontSize="large" sx={{ color: 'text.secondary' }} />
             <Typography variant="subtitle1" sx={{ mt: 1 }} fontWeight={600}>
-              Data unavailable
+              {t('control.budgetUsage.dataUnavailable')}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              Data unavailable — the Pulse usage API is offline
+              {t('control.budgetUsage.offline')}
             </Typography>
           </Paper>
         ) : (
@@ -139,25 +141,25 @@ export default function BudgetUsagePanel() {
                 <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
                   <AccountBalanceWalletIcon color="primary" />
                   <Box>
-                    <Typography variant="body2" color="text.secondary">Daily budget</Typography>
+                    <Typography variant="body2" color="text.secondary">{t('control.budgetUsage.dailyBudget')}</Typography>
                     <Typography variant="h6" fontWeight={700}>{formatUsd(budgetUsd)}</Typography>
                   </Box>
                   <Box>
-                    <Typography variant="body2" color="text.secondary">Spent today</Typography>
+                    <Typography variant="body2" color="text.secondary">{t('control.budgetUsage.spentToday')}</Typography>
                     <Typography variant="h6" fontWeight={700} color={exceeded ? 'error.main' : 'text.primary'}>
                       {formatUsd(spentToday)}
                     </Typography>
                   </Box>
                   <Box>
-                    <Typography variant="body2" color="text.secondary">Remaining</Typography>
+                    <Typography variant="body2" color="text.secondary">{t('control.budgetUsage.remaining')}</Typography>
                     <Typography variant="h6" fontWeight={700}>{formatUsd(data?.remaining_usd)}</Typography>
                   </Box>
                   <Box>
-                    <Typography variant="body2" color="text.secondary">Calls today</Typography>
+                    <Typography variant="body2" color="text.secondary">{t('control.budgetUsage.callsToday')}</Typography>
                     <Typography variant="h6" fontWeight={700}>{formatInt(data?.calls_today)}</Typography>
                   </Box>
                   <Box>
-                    <Typography variant="body2" color="text.secondary">Tokens today</Typography>
+                    <Typography variant="body2" color="text.secondary">{t('control.budgetUsage.tokensToday')}</Typography>
                     <Typography variant="h6" fontWeight={700}>{formatInt(data?.tokens_today)}</Typography>
                   </Box>
                 </Stack>
@@ -169,7 +171,7 @@ export default function BudgetUsagePanel() {
                     sx={{ borderRadius: 1, height: 8 }}
                   />
                   <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-                    {budgetPct.toFixed(1)}% of the daily budget consumed
+                    {t('control.budgetUsage.budgetConsumed', { pct: budgetPct.toFixed(1) })}
                   </Typography>
                 </Box>
               </Stack>
@@ -177,18 +179,18 @@ export default function BudgetUsagePanel() {
 
             {/* ── Lifetime totals ── */}
             <Paper variant="outlined" sx={{ p: 2 }}>
-              <Typography variant="overline" color="text.secondary">Lifetime totals</Typography>
+              <Typography variant="overline" color="text.secondary">{t('control.budgetUsage.lifetimeTotals')}</Typography>
               <Stack direction="row" spacing={4} sx={{ mt: 0.5 }} flexWrap="wrap">
                 <Box>
-                  <Typography variant="body2" color="text.secondary">Calls</Typography>
+                  <Typography variant="body2" color="text.secondary">{t('control.budgetUsage.calls')}</Typography>
                   <Typography variant="h6" fontWeight={700}>{formatInt(data?.calls_total)}</Typography>
                 </Box>
                 <Box>
-                  <Typography variant="body2" color="text.secondary">Tokens</Typography>
+                  <Typography variant="body2" color="text.secondary">{t('control.budgetUsage.tokens')}</Typography>
                   <Typography variant="h6" fontWeight={700}>{formatInt(data?.tokens_total)}</Typography>
                 </Box>
                 <Box>
-                  <Typography variant="body2" color="text.secondary">Cost</Typography>
+                  <Typography variant="body2" color="text.secondary">{t('control.budgetUsage.cost')}</Typography>
                   <Typography variant="h6" fontWeight={700}>{formatUsd(data?.cost_total)}</Typography>
                 </Box>
               </Stack>
@@ -196,28 +198,28 @@ export default function BudgetUsagePanel() {
 
             {/* ── Per-model breakdown ── */}
             <Paper variant="outlined" sx={{ p: 2 }}>
-              <Typography variant="overline" color="text.secondary">Per-model breakdown</Typography>
+              <Typography variant="overline" color="text.secondary">{t('control.budgetUsage.perModel')}</Typography>
               <Box sx={{ mt: 1 }}>
                 <CarbonDataGrid
                   columns={modelColumns}
                   rows={modelRows}
                   loading={false}
                   getRowId={(row) => row.id}
-                  emptyMessage="No LLM calls logged yet."
+                  emptyMessage={t('control.budgetUsage.emptyModels')}
                 />
               </Box>
             </Paper>
 
             {/* ── 7-day breakdown ── */}
             <Paper variant="outlined" sx={{ p: 2 }}>
-              <Typography variant="overline" color="text.secondary">Last 7 days</Typography>
+              <Typography variant="overline" color="text.secondary">{t('control.budgetUsage.last7Days')}</Typography>
               <Box sx={{ mt: 1 }}>
                 <CarbonDataGrid
                   columns={dayColumns}
                   rows={dayRows}
                   loading={false}
                   getRowId={(row) => row.id}
-                  emptyMessage="No usage in the last 7 days."
+                  emptyMessage={t('control.budgetUsage.emptyDays')}
                 />
               </Box>
             </Paper>

@@ -244,6 +244,15 @@ def test_is_mutation_request_detects_create():
     assert _is_mutation_request("a new dq rule")  # noun phrase, no verb
 
 
+def test_is_mutation_request_detects_leave_submit_en_ar():
+    assert _is_mutation_request("I want to request leave tomorrow")
+    assert _is_mutation_request("apply for leave next week")
+    assert _is_mutation_request("اريد اجازة، ليوم واحد غدا، عارضة")
+    assert _is_mutation_request("أريد إجازة عارضة غدا")
+    assert not _is_mutation_request("how much leave do I have left")
+    assert not _is_mutation_request("رصيد اجازاتي")
+
+
 def test_is_mutation_request_ignores_reads():
     assert not _is_mutation_request("list dq rules")
     assert not _is_mutation_request("show me the emission factors")

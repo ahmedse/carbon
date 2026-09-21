@@ -14,8 +14,8 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import { useTranslation } from 'react-i18next';
+import { ChevronEnd, ChevronStart, useStartPlacement } from '../i18n/DirectionalIcons';
 import SummarizeIcon from '@mui/icons-material/Summarize';
 import { useNotification } from '../components/NotificationProvider';
 import { useAuth } from '../auth/AuthContext';
@@ -53,6 +53,8 @@ function parseBudget(snapshot) {
 const TIER_COLORS = ['primary', 'info', 'success', 'warning'];
 
 function AIContextPanel({ conversation, mentions, onSummarized, defaultOpen = false }) {
+  const { t } = useTranslation('ai');
+  const endPlacement = useStartPlacement();
   const { token } = useAuth();
   const { notify, notifyFromError } = useNotification();
   const [open, setOpen] = useState(defaultOpen);
@@ -86,7 +88,7 @@ function AIContextPanel({ conversation, mentions, onSummarized, defaultOpen = fa
       sx={{
         display: 'flex',
         flexDirection: 'row',
-        borderLeft: open ? 1 : 0,
+        borderInlineStart: open ? 1 : 0,
         borderColor: 'divider',
         height: '100%',
         position: 'relative',
@@ -98,18 +100,18 @@ function AIContextPanel({ conversation, mentions, onSummarized, defaultOpen = fa
           display: 'flex',
           alignItems: 'flex-start',
           pt: 1,
-          borderLeft: 1,
+          borderInlineStart: 1,
           borderColor: 'divider',
         }}
       >
-        <Tooltip title={open ? 'Hide context' : 'Show context'} placement="left">
+        <Tooltip title={open ? t('hideContext') : t('showContext')} placement={endPlacement}>
           <IconButton
             size="small"
             onClick={() => setOpen((v) => !v)}
-            aria-label={open ? 'Hide context panel' : 'Show context panel'}
+            aria-label={open ? t('hideContextPanel') : t('showContextPanel')}
             sx={{ borderRadius: 1 }}
           >
-            {open ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
+            {open ? <ChevronEnd fontSize="small" /> : <ChevronStart fontSize="small" />}
           </IconButton>
         </Tooltip>
       </Box>

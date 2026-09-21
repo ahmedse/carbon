@@ -1,6 +1,6 @@
 # SCOREBOARD — SIM-QA-CHAT-AGENT
 
-Updated: 2026-09-19 · Runner: real browser + API · Lead: Nibras · Multi-persona
+Updated: 2026-09-21 · Runner: real browser + API · Lead: Nibras · Multi-persona
 
 | Wave | Executed | PASS | FAIL | BLOCKED | Mean (PASS) | Status |
 |------|----------|------|------|---------|-------------|--------|
@@ -9,6 +9,8 @@ Updated: 2026-09-19 · Runner: real browser + API · Lead: Nibras · Multi-perso
 | B2 Emissions | 0 | 0 | 0 | pack | — | QUEUED |
 | B3 GradeVance | 0 | 0 | 0 | 0 | — | QUEUED (EduOS ACK) |
 | C Intelligence | 0 | 0 | 0 | 0 | — | QUEUED |
+| C Nibras-Processes | **5** | **5** | **0** | **0** | — | **PASS** 2026-09-21 — host 5/5 · agent 5/5 · chat 5/5 (process briefing ≠ nav) · [SESSION-20260921-101554](./logs/SESSION-20260921-101554-NIBRAS-PROCESSES.md) |
+| C Nibras-Processes deep | **5** | **5** | **0** | **0** | — | **PASS** 2026-09-21 — registry · host · edge · chat_brief · agent_plan · agent_run_consent · canvas `nibras-processes-e2e-sim` · [SESSION-20260921-111830](./logs/SESSION-20260921-111830-NIBRAS-PROCESSES.md) |
 | D Staging | 0 | 0 | 0 | 0 | — | QUEUED |
 
 ## B1 highlight — leave E2E + Agent theatre + cast

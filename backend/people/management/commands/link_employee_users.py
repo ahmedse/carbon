@@ -15,7 +15,7 @@
 # and uses get_or_create for groups and ScopedRole assignments.
 #
 # Usage:
-#   ./manage.py link_employee_users [--password <pwd>] [--dry-run]
+#   ./manage.py link_employee_users [--password <pwd>] [--reset-password] [--dry-run]
 
 from django.core.management.base import BaseCommand, CommandError
 
@@ -46,10 +46,19 @@ class Command(BaseCommand):
             action="store_true",
             help="Report what would change without writing to the DB.",
         )
+        parser.add_argument(
+            "--reset-password",
+            action="store_true",
+            help=(
+                "Also set --password on existing linked users "
+                "(QA / demo credential refresh)."
+            ),
+        )
 
     def handle(self, *args, **options):
         password = options["password"]
         dry_run = options["dry_run"]
+        reset_password = options["reset_password"]
 
         if not password:
             raise CommandError(
@@ -85,8 +94,11 @@ class Command(BaseCommand):
             )
 
             result = provision_employee_user(
-                emp, password=password, is_manager=is_manager,
+                emp,
+                password=password,
+                is_manager=is_manager,
                 commit=not dry_run,
+                reset_password=reset_password,
             )
             if result.created:
                 stats["created_users"] += 1
@@ -123,3 +135,10 @@ class Command(BaseCommand):
                 f"{stats['manager_org']} org-unit manager_group."
             )
         )
+        if reset_password:
+            self.stdout.write(
+                self.style.SUCCESS(
+                    "✓ Passwords reset for linked employee users "
+                    "(--reset-password)."
+                )
+            )

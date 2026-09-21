@@ -29,6 +29,7 @@ import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
 import ReplayOutlinedIcon from '@mui/icons-material/ReplayOutlined';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
+import { useTranslation } from 'react-i18next';
 import PageContainer from '../../../components/layout/PageContainer';
 import RunTimeline from '../../../components/graph/RunTimeline';
 import { useAuth } from '../../../auth/AuthContext';
@@ -36,7 +37,8 @@ import { useNotification } from '../../../components/NotificationProvider';
 import { getRunTimeline, resumeRun, replayRun, compareRuns } from '../../../api/aiCatalog';
 
 export default function RunTimelinePanel() {
-  useDocumentTitle('Run Timeline');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.runTimeline.title'));
   const { token } = useAuth();
   const { notify, notifyFromError } = useNotification();
 
@@ -128,12 +130,10 @@ export default function RunTimelinePanel() {
     <PageContainer>
       <Stack spacing={1} sx={{ width: '100%', maxWidth: 1080 }}>
         <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 700 }}>
-          Run Timeline
+          {t('control.runTimeline.title')}
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
-          Cross-user run observation for admins. Enter a run id to see its ordered event log
-          (plan lifecycle, per-step state, resume/replay provenance). Resume and replay are
-          explicit, admin-gated actions.
+          {t('control.runTimeline.subtitle')}
         </Typography>
 
         {/* Run id entry */}
@@ -141,8 +141,8 @@ export default function RunTimelinePanel() {
           <Stack direction="row" spacing={1} alignItems="flex-start" flexWrap="wrap" useFlexGap>
             <TextField
               size="small"
-              label="Run / plan id"
-              placeholder="e.g. 7f3a9c21-…"
+              label={t('control.runTimeline.runPlanId')}
+              placeholder={t('control.runTimeline.runPlanPlaceholder')}
               value={runId}
               onChange={(e) => setRunId(e.target.value)}
               onKeyDown={(e) => {
@@ -157,7 +157,7 @@ export default function RunTimelinePanel() {
               disabled={loading || !runId.trim()}
               sx={{ fontSize: '0.75rem' }}
             >
-              Load timeline
+              {t('control.runTimeline.load')}
             </Button>
             {timeline && !loading && (
               <Button
@@ -167,7 +167,7 @@ export default function RunTimelinePanel() {
                 onClick={() => setConfirmAction('resume')}
                 sx={{ fontSize: '0.75rem' }}
               >
-                Resume
+                {t('control.runTimeline.resume')}
               </Button>
             )}
             {timeline && !loading && (
@@ -178,7 +178,7 @@ export default function RunTimelinePanel() {
                 onClick={() => setConfirmAction('replay')}
                 sx={{ fontSize: '0.75rem' }}
               >
-                Replay
+                {t('control.runTimeline.replay')}
               </Button>
             )}
           </Stack>
@@ -189,16 +189,16 @@ export default function RunTimelinePanel() {
           <Stack direction="row" spacing={1} alignItems="flex-start" flexWrap="wrap" useFlexGap>
             <TextField
               size="small"
-              label="Run A"
-              placeholder="e.g. 7f3a9c21-…"
+              label={t('control.runTimeline.runA')}
+              placeholder={t('control.runTimeline.runPlanPlaceholder')}
               value={runId}
               onChange={(e) => setRunId(e.target.value)}
               sx={{ flex: 1, minWidth: 200, maxWidth: 300, '& .MuiInputBase-input': { fontSize: '0.8125rem' } }}
             />
             <TextField
               size="small"
-              label="Run B"
-              placeholder="e.g. 9c21f3a7-…"
+              label={t('control.runTimeline.runB')}
+              placeholder={t('control.runTimeline.runBPlaceholder')}
               value={runBId}
               onChange={(e) => setRunBId(e.target.value)}
               onKeyDown={(e) => {
@@ -230,7 +230,7 @@ export default function RunTimelinePanel() {
               <Stack direction="row" spacing={1} alignItems="center">
                 <CloudOffIcon sx={{ fontSize: '1.125rem', color: 'text.secondary' }} />
                 <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.8125rem' }}>
-                  Timeline unavailable
+                  {t('control.runTimeline.offline')}
                 </Typography>
               </Stack>
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
@@ -264,7 +264,7 @@ export default function RunTimelinePanel() {
               <Stack direction="row" spacing={1} alignItems="center">
                 <CloudOffIcon sx={{ fontSize: '1.125rem', color: 'text.secondary' }} />
                 <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.8125rem' }}>
-                  Comparison unavailable
+                  {t('control.runTimeline.compareOffline')}
                 </Typography>
               </Stack>
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>

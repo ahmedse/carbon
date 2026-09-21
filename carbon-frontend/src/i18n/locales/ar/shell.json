@@ -104,6 +104,11 @@
     "systemLogs": "سجلات النظام",
     "roleRegistry": "سجل الأدوار",
     "platformConfig": "إعدادات المنصة",
+    "commandCenter": "مركز القيادة",
+    "domain": "المجال",
+    "evidence": "الأدلة",
+    "learning": "التعلّم",
+    "platform": "المنصة",
     "pulse": "Pulse",
     "conversations": "المحادثات",
     "knowledgeBase": "قاعدة المعرفة",
@@ -157,7 +162,26 @@
     "myRequests": "طلباتي",
     "my": "لوحتي",
     "team": "الفريق",
-    "requestDetail": "تفاصيل الطلب"
+    "requestDetail": "تفاصيل الطلب",
+    "processes": "العمليات",
+    "policy": "السياسة",
+    "graph": "الرسم البياني",
+    "skills": "المهارات",
+    "prompts": "التعليمات",
+    "explorer": "المستكشف",
+    "audit": "التدقيق",
+    "runs": "التشغيلات",
+    "inbox": "الوارد",
+    "watches": "المراقبات",
+    "quality": "الجودة",
+    "reviewQueue": "قائمة المراجعة",
+    "candidates": "المرشحون",
+    "jobs": "المهام",
+    "flywheel": "دورة التعلم",
+    "skillLearning": "تعلّم المهارات",
+    "spend": "الإنفاق",
+    "engine": "المحرك",
+    "expertise": "الخبرة"
   },
   "group": {
     "dataProducts": "منتجات البيانات",
@@ -207,6 +231,8 @@
     "hidePulseShortcut": "إخفاء Pulse (Ctrl+\\)",
     "expandPulse": "توسيع Pulse",
     "dockPulse": "إرساء Pulse",
+    "pulseExpandedBanner": "مساحة عمل النطاق مخفية أثناء توسيع Pulse.",
+    "pulseExpandedDock": "إرساء بجانب النطاق",
     "domainsHeading": "تطبيقات النطاق",
     "domainsSubheading": "افتح نطاقاً للعمل في مساحة العمل التقليدية. استخدم Pulse بجانبها للذكاء الاصطناعي.",
     "openDomain": "فتح {{name}}",
@@ -269,5 +295,9 @@
     "label": "عرض مبكر",
     "message": "{{platform}} قيد التطوير النشط. شارك ملاحظاتك للمساهمة في تشكيل ما نبنيه بعد ذلك.",
     "cta": "شارك ملاحظاتك"
+  },
+  "commandPalette": {
+    "searchPlaceholder": "اكتب أمراً أو ابحث...",
+    "searchAria": "البحث في الأوامر"
   }
 }

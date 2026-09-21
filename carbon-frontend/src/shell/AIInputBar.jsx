@@ -30,11 +30,12 @@ import { API_ROUTES } from '../config';
 import { useExecuteMode } from './useExecuteMode';
 import { useDraftPersistence } from '../hooks/useDraftPersistence';
 import ContextChipRow from './ContextChipRow';
+import { useTranslation } from 'react-i18next';
 
-const PLACEHOLDER_MAP = {
-  working: 'AI is thinking… (Enter to queue)',
-  needs_input: 'Respond to AI\'s question…',
-  default: 'Ask a question or give directions…',
+const PLACEHOLDER_KEYS = {
+  working: 'placeholderWorking',
+  needs_input: 'placeholderNeedsInput',
+  default: 'placeholderDefault',
 };
 
 
@@ -151,6 +152,7 @@ function AIInputBar({
   seedDraft = null,
   onSeedDraftConsumed,
 }) {
+  const { t } = useTranslation('ai');
   const { token } = useAuth();
   const { executeMode } = useExecuteMode();
   const { draft, persist, clear } = useDraftPersistence(conversationId);
@@ -479,10 +481,10 @@ function AIInputBar({
   );
 
   const placeholder = working
-    ? PLACEHOLDER_MAP.working
+    ? t(PLACEHOLDER_KEYS.working)
     : conversationStatus === 'needs_input'
-      ? PLACEHOLDER_MAP.needs_input
-      : PLACEHOLDER_MAP.default;
+      ? t(PLACEHOLDER_KEYS.needs_input)
+      : t(PLACEHOLDER_KEYS.default);
 
   const popperOpen = stage !== null && (
     (stage === 'kind' && visibleKinds.length > 0) ||
@@ -544,14 +546,17 @@ function AIInputBar({
             // Scroll within the composer once it reaches maxRows (Copilot-style)
             '& .MuiOutlinedInput-input': {
               overflowY: 'auto',
+              // Per-field bidi: Arabic (or mixed) briefs align correctly even when
+              // the shell locale is still EN/LTR (and vice versa).
+              unicodeBidi: 'plaintext',
             },
           }}
-          inputProps={{ 'aria-label': 'Message input' }}
+          inputProps={{ 'aria-label': t('messageInput'), dir: 'auto' }}
         />
 
         {/* Slash command menu (ShellSidebar-style, compact + keyboard navigable) */}
         {stage === 'slash' && visibleCommands.length > 0 && (
-          <PickerMenu label="Commands" minWidth={300} maxHeight={220}>
+          <PickerMenu label={t('commands')} minWidth={300} maxHeight={220}>
             {visibleCommands.map((cmd, i) => (
               <PickerOption
                 key={cmd.name}
@@ -569,7 +574,7 @@ function AIInputBar({
 
         {/* Stage 1: kind picker */}
         {stage === 'kind' && visibleKinds.length > 0 && (
-          <PickerMenu label="Mention kinds" minWidth={220} maxHeight={180}>
+          <PickerMenu label={t('mentionKinds')} minWidth={220} maxHeight={180}>
             {visibleKinds.map((kind, i) => (
               <PickerOption
                 key={kind}
@@ -587,7 +592,7 @@ function AIInputBar({
 
         {/* Stage 2: entity search */}
         {stage === 'entity' && popperOpen && (
-          <PickerMenu label={`${activeKind} search results`} minWidth={240} maxHeight={200}>
+          <PickerMenu label={t('searchResults', { kind: activeKind })} minWidth={240} maxHeight={200}>
             {entityLoading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
                 <CircularProgress size={14} />
@@ -615,7 +620,7 @@ function AIInputBar({
 
         {/* '@'-mention: single-stage cross-kind typeahead (table/rule/module/org-unit) */}
         {stage === 'at' && (
-          <PickerMenu label="Mentions" minWidth={280} maxHeight={220}>
+          <PickerMenu label={t('mentions')} minWidth={280} maxHeight={220}>
             {atLoading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
                 <CircularProgress size={14} />
@@ -642,19 +647,19 @@ function AIInputBar({
       </Box>
 
       {working && (
-        <Tooltip title="Stop generation">
-          <IconButton size="small" color="warning" onClick={handleStop} aria-label="Stop generation">
+        <Tooltip title={t('stopGeneration')}>
+          <IconButton size="small" color="warning" onClick={handleStop} aria-label={t('stopGeneration')}>
             <StopCircleIcon fontSize="small" />
           </IconButton>
         </Tooltip>
       )}
-      <Tooltip title="Send message (Enter)">
+      <Tooltip title={t('sendMessageEnter')}>
         <span>
           <IconButton
             size="small"
             color="primary"
             onClick={handleSubmit}
-            aria-label="Send message"
+            aria-label={t('sendMessage')}
           >
             <SendIcon fontSize="small" />
           </IconButton>

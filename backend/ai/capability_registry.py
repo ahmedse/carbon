@@ -53,7 +53,7 @@ HOST_ACTION_REGISTRY: dict[str, str] = {
     # submit (mutation) → review (human task) → record (mutation) → verify
     # (assertion). Mutations/reads bind to existing People leave views; review
     # uses the inbox sentinel and resolves fail-closed like payroll.
-    "leave.request.submit": "people.views:LeaveRecordListCreateView",
+    "leave.request.submit": "people.self_views:LeaveSelfCollectionView",
     "leave.request.record": "people.views:LeaveRecordDetailView",
     "leave.request.list": "people.views:LeaveRecordListCreateView",
     "leave.entitlement.list": "people.views:LeaveEntitlementListCreateView",
@@ -64,7 +64,7 @@ HOST_ACTION_REGISTRY: dict[str, str] = {
     # submit (mutation) → review (human task) → activate (mutation) → verify
     # (assertion). Mutations/reads bind to People loan views; review uses the
     # inbox sentinel and resolves fail-closed like payroll/leave.
-    "loan.request.submit": "people.views:LoanListCreateView",
+    "loan.request.submit": "people.self_views:LoanSelfCollectionView",
     "loan.request.activate": "people.views:LoanDetailView",
     "loan.list": "people.views:LoanListCreateView",
     "loan.installment.list": "people.views:LoanInstallmentListCreateView",

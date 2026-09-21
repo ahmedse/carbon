@@ -31,6 +31,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import CheckIcon from '@mui/icons-material/Check';
 import BlockIcon from '@mui/icons-material/Block';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
+import { useTranslation } from 'react-i18next';
 import PageContainer from '../../../components/layout/PageContainer';
 import { useAuth } from '../../../auth/AuthContext';
 import {
@@ -91,7 +92,8 @@ function JsonBlock({ label, value }) {
 }
 
 export default function HumanTaskInbox() {
-  useDocumentTitle('Human Task Inbox');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.humanTaskInbox.title'));
   const theme = useTheme();
   const { token } = useAuth();
 
@@ -157,9 +159,9 @@ export default function HumanTaskInbox() {
     <PageContainer>
       <Stack spacing={2}>
         <Stack direction="row" alignItems="center" justifyContent="space-between">
-          <Typography variant="h5">Human Task Inbox</Typography>
+          <Typography variant="h5">{t('control.humanTaskInbox.title')}</Typography>
           <Button startIcon={<RefreshIcon />} onClick={load} disabled={loading}>
-            Refresh
+            {t('control.humanTaskInbox.refresh')}
           </Button>
         </Stack>
 
@@ -167,7 +169,7 @@ export default function HumanTaskInbox() {
           <Paper sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
             <CloudOffIcon color="disabled" />
             <Typography variant="body2">
-              Inbox is temporarily unavailable.
+              {t('control.humanTaskInbox.offline')}
             </Typography>
           </Paper>
         )}
@@ -179,7 +181,7 @@ export default function HumanTaskInbox() {
         ) : pending.length === 0 ? (
           <Paper sx={{ p: 4, textAlign: 'center' }}>
             <Typography variant="body2" color="text.secondary">
-              No pending tasks.
+              {t('control.humanTaskInbox.empty')}
             </Typography>
           </Paper>
         ) : (
@@ -187,12 +189,12 @@ export default function HumanTaskInbox() {
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>Capability</TableCell>
-                  <TableCell>Title</TableCell>
-                  <TableCell>Object</TableCell>
-                  <TableCell>Authority</TableCell>
-                  <TableCell>Expires</TableCell>
-                  <TableCell align="right">Actions</TableCell>
+                  <TableCell>{t('control.humanTaskInbox.colCapability')}</TableCell>
+                  <TableCell>{t('control.humanTaskInbox.colTitle')}</TableCell>
+                  <TableCell>{t('control.humanTaskInbox.colObject')}</TableCell>
+                  <TableCell>{t('control.humanTaskInbox.colAuthority')}</TableCell>
+                  <TableCell>{t('control.humanTaskInbox.colExpires')}</TableCell>
+                  <TableCell align="right">{t('control.humanTaskInbox.colActions')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -224,7 +226,7 @@ export default function HumanTaskInbox() {
                           disabled={actioning}
                           onClick={() => act(task.id, 'approve')}
                         >
-                          Approve
+                          {t('control.humanTaskInbox.approve')}
                         </Button>
                         <Button
                           size="small"
@@ -234,7 +236,7 @@ export default function HumanTaskInbox() {
                           disabled={actioning}
                           onClick={() => act(task.id, 'decline')}
                         >
-                          Decline
+                          {t('control.humanTaskInbox.decline')}
                         </Button>
                       </Stack>
                     </TableCell>
@@ -250,7 +252,7 @@ export default function HumanTaskInbox() {
         {selected && (
           <Box sx={{ width: 420, maxWidth: '100vw', p: 2 }}>
             <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-              <Typography variant="h6">Task Detail</Typography>
+              <Typography variant="h6">{t('control.humanTaskInbox.taskDetail')}</Typography>
               <IconButton onClick={() => setSelected(null)}>
                 <CloseIcon />
               </IconButton>
@@ -271,20 +273,20 @@ export default function HumanTaskInbox() {
               <Typography variant="subtitle1">{selected.title || '—'}</Typography>
               <Typography variant="body2">{selected.description || '—'}</Typography>
               <Divider />
-              <JsonBlock label="Before" value={selected.before_state} />
-              <JsonBlock label="After" value={selected.after_state} />
-              <JsonBlock label="Evidence" value={selected.evidence} />
-              <JsonBlock label="Object Revisions" value={selected.object_revisions} />
+              <JsonBlock label={t('control.humanTaskInbox.before')} value={selected.before_state} />
+              <JsonBlock label={t('control.humanTaskInbox.after')} value={selected.after_state} />
+              <JsonBlock label={t('control.humanTaskInbox.evidence')} value={selected.evidence} />
+              <JsonBlock label={t('control.humanTaskInbox.objectRevisions')} value={selected.object_revisions} />
               <Typography variant="body2">
-                <strong>Reversibility:</strong> {selected.reversibility || '—'}
+                <strong>{t('control.humanTaskInbox.reversibility')}</strong> {selected.reversibility || '—'}
               </Typography>
               <Typography variant="body2">
-                <strong>Required authority:</strong> {selected.required_authority || '—'}
+                <strong>{t('control.humanTaskInbox.requiredAuthority')}</strong> {selected.required_authority || '—'}
               </Typography>
               <Typography variant="body2">
-                <strong>Expires:</strong> {formatTimestamp(selected.expires_at)}
+                <strong>{t('control.humanTaskInbox.expires')}</strong> {formatTimestamp(selected.expires_at)}
               </Typography>
-              <JsonBlock label="Alternatives" value={selected.alternatives} />
+              <JsonBlock label={t('control.humanTaskInbox.alternatives')} value={selected.alternatives} />
               <Stack direction="row" spacing={1}>
                 <Button
                   fullWidth
@@ -293,7 +295,7 @@ export default function HumanTaskInbox() {
                   disabled={actioning || selected.status !== 'pending'}
                   onClick={() => act(selected.id, 'approve')}
                 >
-                  Approve
+                  {t('control.humanTaskInbox.approve')}
                 </Button>
                 <Button
                   fullWidth
@@ -303,7 +305,7 @@ export default function HumanTaskInbox() {
                   disabled={actioning || selected.status !== 'pending'}
                   onClick={() => act(selected.id, 'decline')}
                 >
-                  Decline
+                  {t('control.humanTaskInbox.decline')}
                 </Button>
               </Stack>
             </Stack>

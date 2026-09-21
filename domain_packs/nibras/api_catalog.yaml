@@ -57,6 +57,11 @@ tools:
     requires_confirmation: true
     source_type: carbon_api
 
+  - name: submit_my_leave
+    kind: confirm
+    requires_confirmation: true
+    source_type: carbon_api
+
   # ── GOSI/WPS SIF filing (staged + confirmed; RULE_21) ─────────────────
   - name: generate_gosi_wps_sif
     kind: confirm

@@ -30,6 +30,7 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import CloudOffIcon from '@mui/icons-material/CloudOff';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import { useTranslation } from 'react-i18next';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
 import PageContainer from '../../../components/layout/PageContainer';
 import CarbonDataGrid from '../../../components/DataGrid/CarbonDataGrid';
@@ -96,7 +97,8 @@ const PROMOTE_STATUSES = new Set(['draft', 'user_approved']);
 const REJECT_STATUSES = new Set(['draft', 'user_approved', 'instance_promoted']);
 
 export default function SkillsPanel() {
-  useDocumentTitle('Skills Catalog');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.skills.title'));
   const theme = useTheme();
   const { token, userCapabilities } = useAuth();
   const { notify, notifyFromError } = useNotification();
@@ -299,7 +301,7 @@ export default function SkillsPanel() {
       <Stack spacing={1} sx={{ width: '100%', maxWidth: 1200 }}>
         <Stack direction="row" alignItems="center" spacing={1}>
           <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 700, flex: 1 }}>
-            Skills Catalog
+            {t('control.skills.title')}
           </Typography>
           <Button
             size="small"
@@ -308,13 +310,12 @@ export default function SkillsPanel() {
             disabled={loading}
             sx={{ fontSize: '0.75rem' }}
           >
-            Refresh
+            {t('control.skills.refresh')}
           </Button>
         </Stack>
 
         <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
-          Skill catalog with admission-gate verdicts. Publishers and process owners can
-          promote a skill after the gate admits it, or retire one with a reason.
+          {t('control.skills.subtitle')}
         </Typography>
 
         {learningFrozen && (
@@ -377,7 +378,7 @@ export default function SkillsPanel() {
                 <Typography sx={{ fontSize: '1rem', fontWeight: 700, flex: 1 }}>
                   {selected.name}
                 </Typography>
-                <IconButton size="small" onClick={() => setSelected(null)} aria-label="Close detail">
+                <IconButton size="small" onClick={() => setSelected(null)} aria-label={t('control.common.closeDetail')}>
                   <CloseIcon />
                 </IconButton>
               </Stack>
@@ -538,7 +539,7 @@ export default function SkillsPanel() {
               size="small"
               multiline
               minRows={2}
-              label="Reason (optional)"
+              label={t('control.skills.reasonOptional')}
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               inputProps={{ maxLength: 2000, 'data-testid': 'skill-reject-reason' }}

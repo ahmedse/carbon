@@ -33,6 +33,7 @@ import useDocumentTitle from '../../../hooks/useDocumentTitle';
 import PageContainer from '../../../components/layout/PageContainer';
 import { useAuth } from '../../../auth/AuthContext';
 import { getAuditTrail } from '../../../api/aiPulse';
+import { useTranslation } from 'react-i18next';
 import { AI_MANAGE_CONSOLE, expandCapabilities, hasCap } from '../../../capabilities';
 
 /** Format an ISO timestamp defensively (em-dash when missing/invalid). */
@@ -56,7 +57,7 @@ function csvField(value) {
 }
 
 const ACTION_CHOICES = [
-  { value: '', label: 'All actions' },
+  { value: '', labelKey: 'control.audit.allActions' },
   { value: 'ai.tool_call', label: 'ai.tool_call' },
   { value: 'ai.consent_approved', label: 'ai.consent_approved' },
   { value: 'ai.consent_declined', label: 'ai.consent_declined' },
@@ -66,7 +67,8 @@ const ACTION_CHOICES = [
 const EMPTY_FILTERS = { action: '', actor: '', start: '', end: '' };
 
 export default function AuditPanel() {
-  useDocumentTitle('AI Audit Trail');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.audit.title'));
   const { token, userCapabilities } = useAuth();
 
   const [rows, setRows] = useState([]);
@@ -165,7 +167,7 @@ export default function AuditPanel() {
     return (
       <PageContainer>
         <Typography color="text.secondary">
-          Access to the AI Audit Trail requires the AI manage console capability.
+          {t('control.audit.requiresCapability')}
         </Typography>
       </PageContainer>
     );
@@ -175,9 +177,9 @@ export default function AuditPanel() {
     <PageContainer>
       <Stack spacing={1.5} sx={{ flex: 1, minHeight: 0 }}>
         <Stack direction="row" spacing={1} alignItems="center">
-          <Typography variant="h5" fontWeight={700} sx={{ flex: 1 }}>AI Audit Trail</Typography>
+          <Typography variant="h5" fontWeight={700} sx={{ flex: 1 }}>{t('control.audit.title')}</Typography>
           <IconButton
-            aria-label="Refresh audit trail"
+            aria-label={t('control.audit.refresh')}
             onClick={handleRefresh}
             disabled={loading}
             size="small"
@@ -190,11 +192,11 @@ export default function AuditPanel() {
             disabled={rows.length === 0}
             size="small"
           >
-            Export CSV
+            {t('control.audit.exportCsv')}
           </Button>
         </Stack>
         <Typography variant="body2" color="text.secondary">
-          Read-only audit trail of AI actions across the platform.
+          {t('control.audit.subtitle')}
         </Typography>
 
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
@@ -203,23 +205,25 @@ export default function AuditPanel() {
             onChange={(e) => setDraftFilters((f) => ({ ...f, action: e.target.value }))}
             size="small"
             displayEmpty
-            aria-label="Action type"
+            aria-label={t('control.audit.actionType')}
             sx={{ minWidth: 200 }}
           >
             {ACTION_CHOICES.map((choice) => (
-              <MenuItem key={choice.value} value={choice.value}>{choice.label}</MenuItem>
+              <MenuItem key={choice.value} value={choice.value}>
+                {choice.labelKey ? t(choice.labelKey) : choice.label}
+              </MenuItem>
             ))}
           </Select>
           <TextField
             size="small"
-            placeholder="Actor"
+            placeholder={t('control.audit.actor')}
             value={draftFilters.actor}
             onChange={(e) => setDraftFilters((f) => ({ ...f, actor: e.target.value }))}
           />
           <TextField
             size="small"
             type="date"
-            label="Start"
+            label={t('control.audit.start')}
             value={draftFilters.start}
             onChange={(e) => setDraftFilters((f) => ({ ...f, start: e.target.value }))}
             InputLabelProps={{ shrink: true }}
@@ -227,13 +231,13 @@ export default function AuditPanel() {
           <TextField
             size="small"
             type="date"
-            label="End"
+            label={t('control.audit.end')}
             value={draftFilters.end}
             onChange={(e) => setDraftFilters((f) => ({ ...f, end: e.target.value }))}
             InputLabelProps={{ shrink: true }}
           />
-          <Button variant="outlined" onClick={handleApply} size="small">Apply</Button>
-          <Button variant="text" onClick={handleClear} size="small">Clear</Button>
+          <Button variant="outlined" onClick={handleApply} size="small">{t('control.audit.apply')}</Button>
+          <Button variant="text" onClick={handleClear} size="small">{t('control.audit.clear')}</Button>
         </Stack>
 
         {loading ? (
@@ -243,14 +247,14 @@ export default function AuditPanel() {
         ) : offline ? (
           <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
             <CloudOffIcon fontSize="large" sx={{ color: 'text.secondary' }} />
-            <Typography variant="subtitle1" sx={{ mt: 1 }} fontWeight={600}>Data unavailable</Typography>
+            <Typography variant="subtitle1" sx={{ mt: 1 }} fontWeight={600}>{t('control.audit.dataUnavailable')}</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              Data unavailable — the AI audit API is offline
+              {t('control.audit.offline')}
             </Typography>
           </Paper>
         ) : rows.length === 0 ? (
           <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
-            <Typography color="text.secondary">No audit entries match the current filters.</Typography>
+            <Typography color="text.secondary">{t('control.audit.empty')}</Typography>
           </Paper>
         ) : (
           <>
@@ -258,10 +262,10 @@ export default function AuditPanel() {
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Timestamp</TableCell>
-                    <TableCell>Actor</TableCell>
-                    <TableCell>Action</TableCell>
-                    <TableCell>Target</TableCell>
+                    <TableCell>{t('control.audit.colTimestamp')}</TableCell>
+                    <TableCell>{t('control.audit.colActor')}</TableCell>
+                    <TableCell>{t('control.audit.colAction')}</TableCell>
+                    <TableCell>{t('control.audit.colTarget')}</TableCell>
                     <TableCell align="right" />
                   </TableRow>
                 </TableHead>

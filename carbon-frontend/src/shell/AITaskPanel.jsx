@@ -120,8 +120,8 @@ import AgentCockpit, { defaultCockpitSegment, normalizeCockpitSegment } from './
 import AgentPlanToolbar from './AgentPlanToolbar';
 import AgentRunToolbar from './AgentRunToolbar';
 import AgentCanvasSurface from './AgentCanvasSurface';
-import StepOutputRenderer, { ArtifactCard } from '../components/ai/StepOutputRenderer';
-import { buildDiscussDraft } from './buildDiscussDraft';
+import { ArtifactCard } from '../components/ai/StepOutputRenderer';
+import { buildDiscussHandoff } from './buildDiscussDraft';
 import { splitAnswerAppendix } from './splitAnswerAppendix';
 import { humanizeStepError } from './humanizeStepError';
 import ConsentHeroCard from './ConsentHeroCard';
@@ -339,103 +339,6 @@ function StepErrorBanner({ error }) {
 
 StepErrorBanner.propTypes = { error: PropTypes.string };
 
-// W5-C — collapsible "Input parameters" section (key→value rows, not raw JSON).
-function formatParamValue(val, key = '') {
-  if (val === null || val === undefined) return '—';
-  const keyHint = String(key || '');
-  if (typeof val === 'string') {
-    if (/(_b64|base64|binary)$/i.test(keyHint) || looksLikeBinaryBlob(val)) {
-      return `[binary, ~${Math.max(0, Math.floor((val.length * 3) / 4))} bytes]`;
-    }
-    if (keyHint === 'code' || (val.length > 200 && /\n/.test(val) && /def |import |SELECT /i.test(val))) {
-      return `[code, ${val.length} chars]`;
-    }
-    return val.length > 160 ? `${val.slice(0, 140)}…` : val;
-  }
-  if (typeof val === 'number' || typeof val === 'boolean') return String(val);
-  if (Array.isArray(val)) {
-    if (val.length === 0) return '[]';
-    return `[…] ${val.length} items`;
-  }
-  if (val && typeof val === 'object') {
-    if (val.present === true && val.bytes_est != null) {
-      return `[binary, ~${val.bytes_est} bytes]`;
-    }
-    const keys = Object.keys(val);
-    return `{…} ${keys.length} fields`;
-  }
-  try {
-    const s = JSON.stringify(val);
-    return s.length > 80 ? `${s.slice(0, 80)}…` : s;
-  } catch {
-    return String(val);
-  }
-}
-
-function looksLikeBinaryBlob(s) {
-  if (typeof s !== 'string' || s.length < 120) return false;
-  if (/^data:image\//i.test(s)) return true;
-  const sample = s.slice(0, 200).replace(/\s/g, '');
-  const ok = (sample.match(/[A-Za-z0-9+/=]/g) || []).length;
-  return ok / Math.max(sample.length, 1) > 0.95;
-}
-
-function InputParams({ value }) {
-  const [open, setOpen] = useState(false);
-  if (value === null || value === undefined) return null;
-  const isObject = value !== null && typeof value === 'object' && !Array.isArray(value);
-  const entries = isObject ? Object.entries(value) : null;
-  if (entries && entries.length === 0) return null;
-  if (!entries && String(value).length === 0) return null;
-
-  return (
-    <Box sx={{ mt: 0.5 }}>
-      <Button
-        size="small"
-        color="inherit"
-        onClick={() => setOpen((v) => !v)}
-        endIcon={open ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-        sx={{ fontSize: '0.625rem', textTransform: 'none', px: 0, minWidth: 0 }}
-      >
-        Input parameters
-      </Button>
-      <Collapse in={open}>
-        {entries ? (
-          <Stack spacing={0.25} sx={{ mt: 0.5 }}>
-            {entries.map(([key, val]) => (
-              <Box key={key} sx={{ display: 'flex', gap: 1, alignItems: 'baseline' }}>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    fontSize: '0.625rem',
-                    fontWeight: 600,
-                    color: 'text.secondary',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    minWidth: 88,
-                    flexShrink: 0,
-                  }}
-                >
-                  {key.replace(/_/g, ' ')}
-                </Typography>
-                <Typography sx={{ fontSize: '0.6875rem', wordBreak: 'break-word', minWidth: 0 }}>
-                  {formatParamValue(val, key)}
-                </Typography>
-              </Box>
-            ))}
-          </Stack>
-        ) : (
-          <Typography sx={{ fontSize: '0.6875rem', mt: 0.5, wordBreak: 'break-word' }}>
-            {formatParamValue(value)}
-          </Typography>
-        )}
-      </Collapse>
-    </Box>
-  );
-}
-
-InputParams.propTypes = { value: PropTypes.any };
-
 // W-7 — per-step control toolbar. The visible set of controls is driven purely
 // by the step's status (see STEP_CONTROLS). Every action stops event
 // propagation so it never toggles the row's expand/collapse.
@@ -578,11 +481,7 @@ function StepCard({
 
       {showBody && (
         <Box sx={{ px: 1.25, pb: 0.875 }}>
-          <InputParams value={step.tool_args} />
-          {/* Failed steps: short error banner only — avoid dumping the same traceback as "output". */}
-          {step.status !== 'failed' && (
-            <StepOutputRenderer outputType={step.output_type} value={step.tool_output} />
-          )}
+          {/* Operator Run: no Input params / Raw JSON — approve on the timeline. */}
           {Array.isArray(step.artifacts) && step.artifacts.length > 0 && (
             <Stack spacing={0.5} sx={{ mt: 0.5 }}>
               {step.artifacts.map((artifact) => (
@@ -598,7 +497,7 @@ function StepCard({
 
           {step.status === 'awaiting_approval' && (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75, fontSize: '0.6875rem' }}>
-              Use Approve / Decline in the card above to continue.
+              Use Approve / Decline on the timeline step to continue.
             </Typography>
           )}
           {step.status === 'skipped' && (
@@ -1470,11 +1369,11 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   };
 
   // ── Per-step consent (resumes the run afterwards via "Resume run") ────
-  const handleConfirmStep = async (stepId) => {
+  const handleConfirmStep = async (stepId, opts = {}) => {
     if (!selectedPlan) return;
     setConfirmingId(stepId);
     try {
-      const result = await confirmPlanStep(token, selectedPlan.id, stepId);
+      const result = await confirmPlanStep(token, selectedPlan.id, stepId, opts);
       if (result?.unstaged) {
         // Pre-execution consent: the step hasn't run yet; token is now set.
         // Auto-resume so the user only needs one click instead of Approve → Resume.
@@ -1483,6 +1382,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
         // Post-execution confirmation: the staged host mutation ran; step done.
         upsertStep({ step_id: stepId, status: 'completed' });
       }
+      await refreshPlan(selectedPlan.id);
     } catch (err) {
       notifyFromErrorRef.current(err, 'Could not approve the step');
     } finally {
@@ -2064,12 +1964,10 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       </Stack>
     );
 
+    // Status strip only — Approve/Decline live on the timeline node.
     const consentHero = awaitingStep ? (
       <ConsentHeroCard
         step={awaitingStep}
-        confirming={confirmingId === awaitingStep.step_id}
-        onConfirm={handleConfirmStep}
-        onDecline={handleDeclineStep}
         completedLabel={pausedCompletedLabel}
       />
     ) : null;
@@ -2100,7 +1998,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             onSwitchToChat={
               onSwitchToChat
                 ? () => onSwitchToChat(
-                  buildDiscussDraft(
+                  buildDiscussHandoff(
                     selectedPlan,
                     ledger?.final_response || selectedPlan.final_response,
                   ),
@@ -2169,27 +2067,27 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       {/* Save current plan as a template */}
       <Paper variant="outlined" sx={{ p: 1.25, bgcolor: 'background.paper' }}>
         <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.75rem', mb: 0.25 }}>
-          Save current plan as a template
+          {t('planTemplate.title')}
         </Typography>
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.6875rem', mb: 0.75 }}>
           {selectedPlan
-            ? 'Captures the plan steps so you can reuse this workflow later.'
-            : 'Open a task from the Tasks tab, then save its plan shape here.'}
+            ? t('planTemplate.hintWithPlan')
+            : t('planTemplate.hintNoPlan')}
         </Typography>
         <TextField
           size="small"
           fullWidth
-          placeholder="Template name"
+          placeholder={t('planTemplate.namePlaceholder')}
           value={templateName}
           onChange={(e) => setTemplateName(e.target.value)}
           disabled={!selectedPlan || templateSaving}
-          inputProps={{ 'aria-label': 'Template name' }}
+          inputProps={{ 'aria-label': t('planTemplate.namePlaceholder') }}
           sx={{ '& .MuiInputBase-input': { fontSize: '0.75rem' } }}
         />
         <TextField
           size="small"
           fullWidth
-          placeholder="Description (optional)"
+          placeholder={t('planTemplate.descriptionPlaceholder')}
           value={templateDescription}
           onChange={(e) => setTemplateDescription(e.target.value)}
           disabled={!selectedPlan || templateSaving}
@@ -2431,9 +2329,6 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
                 {awaitingOut ? (
                   <ConsentHeroCard
                     step={awaitingOut}
-                    confirming={confirmingId === awaitingOut.step_id}
-                    onConfirm={handleConfirmStep}
-                    onDecline={handleDeclineStep}
                     onReviewStep={() => handleSegmentChange('run', { user: true })}
                   />
                 ) : (
@@ -2658,7 +2553,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
                 size="small"
                 variant="outlined"
                 startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 14 }} />}
-                onClick={() => onSwitchToChat(buildDiscussDraft(selectedPlan, finalResponse, { refine: true }))}
+                onClick={() => onSwitchToChat(buildDiscussHandoff(selectedPlan, finalResponse, { refine: true }))}
                 sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
               >
                 {t('discussInChat')}
@@ -2703,7 +2598,6 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       onStop: handleStop,
       onRerun: handleRerun,
       onRetry: handleRetry,
-      onFork: handleFork,
       onOpenPlan: () => handleSegmentChange('plan', { user: true }),
       onOpenOutput: () => handleSegmentChange('output', { user: true }),
     };
@@ -2750,7 +2644,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           onDiscuss={
             onSwitchToChat
               ? () => onSwitchToChat(
-                buildDiscussDraft(
+                buildDiscussHandoff(
                   selectedPlan,
                   ledger?.final_response || selectedPlan.final_response,
                   { refine: true },
@@ -2933,8 +2827,8 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
               <Tab value="run" label="Run" />
               <Tab value="monitor" label="Monitor" />
               <Tab value="results" label="Results" />
-              <Tab value="templates" label="Templates" />
-              <Tab value="scheduled" label="Scheduled" />
+              <Tab value="templates" label={t('templates')} />
+              <Tab value="scheduled" label={t('scheduled')} />
             </Tabs>
           </Box>
           <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 1 }}>
@@ -2958,7 +2852,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             }}
             sx={{ textTransform: 'none', fontSize: '0.625rem' }}
           >
-            Back to chat-first Agent
+            {t('backToChatFirst')}
           </Button>
         </>
       )}
@@ -2967,7 +2861,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           Rendered as dialogs over the cockpit; reuse the tab-body renderers. */}
       <Dialog open={libraryView === 'templates'} onClose={() => setLibraryView(null)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ fontSize: '0.875rem', fontWeight: 700, py: 1.25, display: 'flex', alignItems: 'center' }}>
-          <Box sx={{ flex: 1 }}>Templates</Box>
+          <Box sx={{ flex: 1 }}>{t('templates')}</Box>
           <IconButton size="small" aria-label="Close" onClick={() => setLibraryView(null)} sx={{ p: 0.375 }}>
             <CloseIcon sx={{ fontSize: 16 }} />
           </IconButton>
@@ -2976,7 +2870,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       </Dialog>
       <Dialog open={libraryView === 'scheduled'} onClose={() => setLibraryView(null)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ fontSize: '0.875rem', fontWeight: 700, py: 1.25, display: 'flex', alignItems: 'center' }}>
-          <Box sx={{ flex: 1 }}>Scheduled</Box>
+          <Box sx={{ flex: 1 }}>{t('scheduled')}</Box>
           <IconButton size="small" aria-label="Close" onClick={() => setLibraryView(null)} sx={{ p: 0.375 }}>
             <CloseIcon sx={{ fontSize: 16 }} />
           </IconButton>

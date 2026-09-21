@@ -55,7 +55,14 @@ class ProvisionResult:
     initial_password: str = ""  # Set only when a random password was generated.
 
 
-def provision_employee_user(employee, password=None, *, is_manager=False, commit=True):
+def provision_employee_user(
+    employee,
+    password=None,
+    *,
+    is_manager=False,
+    commit=True,
+    reset_password=False,
+):
     """Create (or reuse) a platform User for ``employee`` and link it.
 
     Assigns the employee/manager group structure (Django auth groups + CBAC
@@ -69,6 +76,8 @@ def provision_employee_user(employee, password=None, *, is_manager=False, commit
 
     ``password``: the default password for newly created accounts. When empty
     a random password is generated and returned via ``initial_password``.
+    When ``reset_password=True`` and ``password`` is set, existing users also
+    receive that password (QA / demo credential refresh).
 
     Returns a :class:`ProvisionResult`.
     """
@@ -101,6 +110,10 @@ def provision_employee_user(employee, password=None, *, is_manager=False, commit
         result.linked = True
         employee.user = user
         employee.save(update_fields=["user"])
+    elif reset_password and password:
+        user.set_password(password)
+        user.is_active = bool(employee.is_active)
+        user.save(update_fields=["password", "is_active"])
     result.user = user
 
     # Django auth group membership (visible in admin; legacy surface).

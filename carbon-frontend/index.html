@@ -1,8 +1,19 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" dir="ltr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var lang = localStorage.getItem('carbon.lang');
+          if (lang === 'ar' || lang === 'en') {
+            document.documentElement.lang = lang;
+            document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+          }
+        } catch (e) { /* ignore */ }
+      })();
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
     <!-- Title / SEO (driven by VITE_* vars in .env) -->
     <title>%VITE_PLATFORM_TITLE%</title>

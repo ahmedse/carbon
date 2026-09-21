@@ -1,3 +1,14 @@
+## [2026-09-21] master-architect (Nibras) — NSR-9 Playwright closeout
+
+- **Seat:** Nibras (Pulse out of scope).
+- **J-EMP-06:** already fixed — `propagate_for_employee` / eligibility requires `join_date`; `test_employee_onboard.py` **8 passed** (null join → 0 ents).
+- **NSR-9 Playwright:** `nibras-leave-approve` **3/3 PASS** (53.9s) — emp_1001 submit → emp_1399 approve → Approved.
+- **Ops fix:** `link_employee_users --password ChangeMe_132 --reset-password` (link alone does not refresh hashes).
+- Evidence: `docs/nibras/evidence/NSR-9-go-live-gate.md` · runbook `--reset-password` note.
+- **TASKS:** NSR-9 / W9 → **DONE**; Active focus NSR COMPLETE.
+
+---
+
 ## [2026-09-17] master-architect (Pulse) — MOB mobile FE program (ADR-0035)
 
 - **MOB-0:** ADR-0035 Accepted; compact-ui §Mobile; COMMS 20260917-1…3; Screen Specs `docs/mobile/SCREEN-SPECS-MOB.md`; TASKS Active focus MOB row.

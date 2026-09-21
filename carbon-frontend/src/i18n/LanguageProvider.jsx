@@ -5,6 +5,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import i18n from './index';
 import { LanguageContext } from './languageContext';
 import { apiFetch } from '../api/api';
+import dayjs from 'dayjs';
+import 'dayjs/locale/ar';
+import 'dayjs/locale/en';
 
 const STORAGE_KEY = 'carbon.lang';
 const SUPPORTED_LANGS = ['en', 'ar'];
@@ -22,6 +25,7 @@ function getInitialLanguage() {
 function applyDocumentLanguage(lang) {
   document.documentElement.lang = lang;
   document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+  dayjs.locale(lang === 'ar' ? 'ar' : 'en');
 }
 
 export default function LanguageProvider({ children }) {

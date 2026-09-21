@@ -130,6 +130,21 @@ export default function SystemDialog({
       fullWidth={fullWidth}
       maxWidth={false}
       PaperProps={{
+        // Desktop position/size must stay in inline style — stylis RTL flips
+        // sx `left` to `right` and breaks absolute windowing.
+        style: isMobile
+          ? undefined
+          : {
+              position: 'absolute',
+              top: position.top,
+              left: position.left,
+              width: size.width,
+              height: size.height,
+              margin: 0,
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+            },
         sx: isMobile
           ? {
               m: 0,
@@ -143,19 +158,10 @@ export default function SystemDialog({
               overflow: 'hidden',
             }
           : {
-              position: 'absolute',
-              top: position.top,
-              left: position.left,
-              width: size.width,
-              height: size.height,
               minWidth,
               minHeight,
               maxWidth,
               maxHeight,
-              m: 0,
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column',
             },
       }}
       BackdropProps={{
@@ -216,7 +222,8 @@ export default function SystemDialog({
       {!isMobile && (
         <Box
           onMouseDown={handleResizeStart}
-          sx={{
+          // Physical bottom-right grip — inline so stylis does not flip to start edge.
+          style={{
             position: 'absolute',
             right: 6,
             bottom: 6,

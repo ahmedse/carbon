@@ -20,6 +20,7 @@ import {
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
+import { useTranslation } from 'react-i18next';
 import { humanizeCanvasText, humanStatusLabel } from '../utils/humanizeCanvas';
 
 const STATUS_COLOR = {
@@ -145,6 +146,7 @@ export default function OpsCanvasHost({
   flightQos = null,
   operatorSimple = true,
 }) {
+  const { t } = useTranslation('ai');
   const [qosOpen, setQosOpen] = useState(false);
 
   const payload = useMemo(() => {
@@ -179,7 +181,7 @@ export default function OpsCanvasHost({
   const progress = Number(live.progress_pct) || 0;
   const steps = job.steps || [];
   const liveStatus = live.status || (isAgent ? 'planned' : 'idle');
-  const liveStatusLabel = operatorSimple ? humanStatusLabel(liveStatus) : liveStatus;
+  const liveStatusLabel = operatorSimple ? humanStatusLabel(liveStatus, t) : liveStatus;
   const blockers = (live.blockers || []).map((b) => displayText(b, operatorSimple)).filter(Boolean);
   const consentCopy = live.pending_consent ? formatConsentCopy(live.pending_consent, operatorSimple) : '';
 
@@ -300,7 +302,7 @@ export default function OpsCanvasHost({
             <Stack spacing={0.5}>
               {steps.map((s) => {
                 const stepStatus = s.status || 'pending';
-                const stepLabel = operatorSimple ? humanStatusLabel(stepStatus) : stepStatus;
+                const stepLabel = operatorSimple ? humanStatusLabel(stepStatus, t) : stepStatus;
                 return (
                   <Stack key={s.id || s.title} direction="row" spacing={1} alignItems="center">
                     <Chip

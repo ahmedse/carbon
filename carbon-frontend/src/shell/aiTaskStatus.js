@@ -130,6 +130,12 @@ export const TOOL_LABELS = {
   approve_plan: 'Approve plan',
   plan_task: 'Plan task',
   web_research: 'Web research',
+  create_employee: 'Create employee',
+  update_employee: 'Update employee',
+  submit_my_leave: 'Submit leave',
+  create_leave_record: 'Create leave record',
+  submit_my_loan: 'Submit loan',
+  call_host_api: 'Host action',
 };
 
 export function toolLabel(name) {

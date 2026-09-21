@@ -207,3 +207,9 @@ Track: Pulse REQUEST queue N5/N7/N10
 Ask: ACK + FIXED systemic (with regression tests). **N10:** Planner now lists host `api_catalog` + coerces catalog names / `get_entity_details(entity_name=catalog)` → `call_host_api`; runtime alias same; `confirm_execution` fails closed on non-2xx. **N7:** named leave intent → `list_leave_entitlements`; Pulse loop gets S1.5 INTENT injection. **N5:** Shell desktop peek Drawer `persistent` (no orphan Modal backdrop); Canvas conversation_id Job Map fallback. Tests: `test_host_api_plan_coerce`, `test_confirm_execution_status`, `test_named_leave_intent`, AgentCanvasSurface vitest. Closes N5/N7/N10 for code; browser re-smoke Agent leave optional.
 Paths: backend/ai/engine/cognition/plan/planner.py, backend/ai/engine/agent/tools.py, backend/ai/host_executor.py, backend/ai/engine/cognition/turn/intent.py, runner.py, carbon-frontend/src/shell/Shell.jsx, AgentCanvasSurface.jsx
 Blockers: none
+
+## [2026-09-21T14:20:00+03:00] FROM:Nibras TO:ALL TYPE:DONE ID:20260921-1
+Track: NSR-9 Playwright leave UI
+Ask: Closed. Playwright nibras-leave-approve 3/3 PASS on live nibras stack after emp_* --reset-password to ChangeMe_132. J-EMP-06 already product-fixed (onboard 8/8). Evidence docs/nibras/evidence/NSR-9-go-live-gate.md. Pulse seat unchanged.
+Paths: TASKS.md, docs/nibras/evidence/NSR-9-go-live-gate.md, docs/nibras/GOFSCO-ONBOARDING-RUNBOOK.md
+Blockers: none

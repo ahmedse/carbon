@@ -11,7 +11,8 @@ NOT a Django superuser, so this command maintains it separately.
 Guarantees, on every run (no-op unless DJANGO_BRAND == "nibras"):
 
   * ahmed / {CARBON_ADMIN_PASSWORD|AdminPa_132}
-        platform SUPERUSER  → is_superuser=True, is_staff=True, active,
+        UNIVERSAL platform SUPERUSER (same on every brand DB)
+        → is_superuser=True, is_staff=True, active,
                               admins_group + global ScopedRole
   * admin / {NIBRAS_ADMIN_PASSWORD|AdmNibras_132}
         Nibras admin        → is_superuser=False, is_staff=True, active,

@@ -1,14 +1,20 @@
 /**
  * Operator Run timeline — visual rail + beats (ADR-0043 V5).
- * Not a flat list: connected spine, focus node, tooltip for Analyst detail.
+ * Consent Approve/Decline + optional field form live only on the active node.
  */
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   Box,
+  Button,
   Chip,
+  FormControl,
   IconButton,
+  InputLabel,
+  MenuItem,
+  Select,
   Stack,
+  TextField,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -16,6 +22,9 @@ import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import { FONT } from '../theme/themeTokens';
 import { chronicleTone } from '../utils/runChronicle';
 import { useTranslation } from 'react-i18next';
+import { consentFormValid, consentInputSpec } from './consentInputSpec';
+import { toolLabel } from './aiTaskStatus';
+import { stripEngineJargon } from './humanizeOperatorCopy';
 
 function formatDuration(ms) {
   if (ms == null || !Number.isFinite(ms)) return null;
@@ -39,12 +48,157 @@ function nodeColors(kind) {
   }
 }
 
-function TimelineBeat({ event, isLast, index, selected, onSelect }) {
+function humanTitle(event, step) {
+  const args = step?.tool_args;
+  const api = args && typeof args === 'object' ? args.api_name : '';
+  if (api) return toolLabel(api) || String(api).replace(/_/g, ' ');
+  return stripEngineJargon(event?.title || step?.intent || `Step ${event?.stepId}`);
+}
+
+function TimelineConsentForm({ step, confirming, onConfirm, onDecline }) {
+  const spec = consentInputSpec(step);
+  const [values, setValues] = useState(() => ({ ...(spec?.values || {}) }));
+
+  useEffect(() => {
+    const next = consentInputSpec(step);
+    setValues({ ...(next?.values || {}) });
+  }, [step?.step_id, step?.status, step?.tool_args]);
+
+  if (!step || step.status !== 'awaiting_approval') return null;
+
+  const fields = spec?.fields || [];
+  const showForm = Boolean(spec?.requiresForm) || (fields.length > 0 && Object.keys(spec?.values || {}).length === 0);
+  const valid = !showForm || consentFormValid(fields, values);
+  const busy = Boolean(confirming);
+
+  const setField = (key, raw) => {
+    setValues((prev) => ({ ...prev, [key]: raw }));
+  };
+
+  const handleApprove = (e) => {
+    e?.stopPropagation?.();
+    if (!valid || !onConfirm) return;
+    if (showForm || (spec && Object.keys(values).length > 0)) {
+      const body = {};
+      fields.forEach((f) => {
+        let v = values[f.key];
+        if (f.type === 'number' && v !== '' && v != null) v = Number(v);
+        body[f.key] = v;
+      });
+      onConfirm(step.step_id, { body });
+    } else {
+      onConfirm(step.step_id);
+    }
+  };
+
+  const handleDecline = (e) => {
+    e?.stopPropagation?.();
+    onDecline?.(step.step_id);
+  };
+
+  return (
+    <Box
+      data-testid={`timeline-consent-${step.step_id}`}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+      sx={{ mt: 1 }}
+    >
+      {showForm && (
+        <Stack spacing={0.75} sx={{ mb: 1 }} data-testid={`timeline-consent-form-${step.step_id}`}>
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.625rem' }}>
+            Fill required fields, then approve.
+          </Typography>
+          {fields.map((f) => {
+            if (f.type === 'select') {
+              return (
+                <FormControl key={f.key} size="small" fullWidth required={f.required}>
+                  <InputLabel id={`${f.key}-label`} sx={{ fontSize: '0.75rem' }}>{f.label}</InputLabel>
+                  <Select
+                    labelId={`${f.key}-label`}
+                    label={f.label}
+                    value={values[f.key] ?? ''}
+                    onChange={(e) => setField(f.key, e.target.value)}
+                    sx={{ fontSize: '0.75rem' }}
+                  >
+                    {(f.options || []).map((opt) => (
+                      <MenuItem key={opt.value} value={opt.value} sx={{ fontSize: '0.75rem' }}>
+                        {opt.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              );
+            }
+            return (
+              <TextField
+                key={f.key}
+                size="small"
+                fullWidth
+                required={f.required}
+                type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
+                label={f.label}
+                value={values[f.key] ?? ''}
+                onChange={(e) => setField(f.key, e.target.value)}
+                InputLabelProps={f.type === 'date' ? { shrink: true } : undefined}
+                inputProps={{ 'data-testid': `consent-field-${f.key}` }}
+                sx={{ '& .MuiInputBase-input': { fontSize: '0.75rem' } }}
+              />
+            );
+          })}
+        </Stack>
+      )}
+      <Stack direction="row" spacing={1} alignItems="center">
+        <Button
+          size="small"
+          variant="contained"
+          color="warning"
+          disabled={busy || !valid}
+          onClick={handleApprove}
+          data-testid={`timeline-approve-${step.step_id}`}
+          sx={{ fontSize: '0.75rem', textTransform: 'none', fontWeight: 600 }}
+        >
+          {busy ? 'Approving…' : 'Approve'}
+        </Button>
+        <Button
+          size="small"
+          variant="outlined"
+          color="inherit"
+          disabled={busy}
+          onClick={handleDecline}
+          data-testid={`timeline-decline-${step.step_id}`}
+          sx={{ fontSize: '0.75rem', textTransform: 'none' }}
+        >
+          Decline
+        </Button>
+      </Stack>
+    </Box>
+  );
+}
+
+TimelineConsentForm.propTypes = {
+  step: PropTypes.object,
+  confirming: PropTypes.bool,
+  onConfirm: PropTypes.func,
+  onDecline: PropTypes.func,
+};
+
+function TimelineBeat({
+  event,
+  step,
+  isLast,
+  selected,
+  onSelect,
+  activeConsent,
+  confirming,
+  onConfirm,
+  onDecline,
+}) {
   const { t } = useTranslation('ai');
   const tone = chronicleTone(event.kind);
   const chipColor = tone === 'default' ? undefined : tone;
   const focused = event.kind === 'consent' || event.kind === 'running' || event.kind === 'paused';
   const colors = nodeColors(event.kind);
+  const title = humanTitle(event, step);
   const tipBits = [
     t('beatTooltipOpen'),
     event.clockFull || event.clock || null,
@@ -68,7 +222,6 @@ function TimelineBeat({ event, isLast, index, selected, onSelect }) {
       data-selected={selected ? 'true' : undefined}
       sx={{ minHeight: 52 }}
     >
-      {/* Spine + node */}
       <Box
         sx={{
           width: 40,
@@ -97,7 +250,7 @@ function TimelineBeat({ event, isLast, index, selected, onSelect }) {
           title={(
             <Box sx={{ p: 0.25 }}>
               <Typography variant="caption" sx={{ fontWeight: 600, display: 'block' }}>
-                {event.title}
+                {title}
               </Typography>
               {tipBits.map((line) => (
                 <Typography key={line} variant="caption" sx={{ display: 'block', opacity: 0.9 }}>
@@ -112,7 +265,7 @@ function TimelineBeat({ event, isLast, index, selected, onSelect }) {
           <Box
             role="button"
             tabIndex={0}
-            aria-label={`${event.beatLabel}: ${event.title}. Click for details.`}
+            aria-label={`${event.beatLabel}: ${title}. Click for details.`}
             data-testid={`run-timeline-node-${event.stepId}`}
             onClick={(e) => select(e)}
             onKeyDown={(e) => {
@@ -158,7 +311,6 @@ function TimelineBeat({ event, isLast, index, selected, onSelect }) {
         )}
       </Box>
 
-      {/* Content card — click opens details modal */}
       <Box
         onClick={(e) => select(e)}
         onKeyDown={(e) => {
@@ -187,7 +339,7 @@ function TimelineBeat({ event, isLast, index, selected, onSelect }) {
         <Stack direction="row" spacing={0.75} alignItems="flex-start">
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant="body2" sx={{ fontSize: '0.75rem', fontWeight: focused || selected ? 600 : 500 }}>
-              {event.title}
+              {title}
             </Typography>
             {event.detail && (
               <Typography
@@ -207,6 +359,14 @@ function TimelineBeat({ event, isLast, index, selected, onSelect }) {
                 {event.clock}
                 {event.latencyMs != null ? ` · ${formatDuration(event.latencyMs)}` : ''}
               </Typography>
+            )}
+            {activeConsent && step && (
+              <TimelineConsentForm
+                step={step}
+                confirming={confirming}
+                onConfirm={onConfirm}
+                onDecline={onDecline}
+              />
             )}
           </Box>
           <Tooltip title={event.statusLabel}>
@@ -236,16 +396,30 @@ function TimelineBeat({ event, isLast, index, selected, onSelect }) {
 
 TimelineBeat.propTypes = {
   event: PropTypes.object.isRequired,
+  step: PropTypes.object,
   isLast: PropTypes.bool,
   index: PropTypes.number,
   selected: PropTypes.bool,
   onSelect: PropTypes.func,
+  activeConsent: PropTypes.bool,
+  confirming: PropTypes.bool,
+  onConfirm: PropTypes.func,
+  onDecline: PropTypes.func,
 };
 
 /**
- * @param {{ events: Array, title?: string, selectedStepId?: *, onSelectStep?: function }} props
+ * @param {{ events: Array, stepsById?: object, title?: string, selectedStepId?: *, onSelectStep?: function, onConfirmStep?: function, onDeclineStep?: function, confirmingId?: * }} props
  */
-export default function RunTimeline({ events, title, selectedStepId = null, onSelectStep }) {
+export default function RunTimeline({
+  events,
+  stepsById = null,
+  title,
+  selectedStepId = null,
+  onSelectStep,
+  onConfirmStep = null,
+  onDeclineStep = null,
+  confirmingId = null,
+}) {
   if (!Array.isArray(events) || events.length === 0) return null;
 
   return (
@@ -278,16 +452,25 @@ export default function RunTimeline({ events, title, selectedStepId = null, onSe
         {title}
       </Typography>
       <Stack spacing={0}>
-        {events.map((evt, i) => (
-          <TimelineBeat
-            key={evt.id}
-            event={evt}
-            index={i}
-            isLast={i === events.length - 1}
-            selected={selectedStepId != null && selectedStepId === evt.stepId}
-            onSelect={onSelectStep}
-          />
-        ))}
+        {events.map((evt, i) => {
+          const step = stepsById?.[evt.stepId] || null;
+          const isConsent = evt.kind === 'consent' || step?.status === 'awaiting_approval';
+          return (
+            <TimelineBeat
+              key={evt.id}
+              event={evt}
+              step={step}
+              index={i}
+              isLast={i === events.length - 1}
+              selected={selectedStepId != null && selectedStepId === evt.stepId}
+              onSelect={onSelectStep}
+              activeConsent={Boolean(isConsent && onConfirmStep)}
+              confirming={confirmingId === evt.stepId}
+              onConfirm={onConfirmStep}
+              onDecline={onDeclineStep}
+            />
+          );
+        })}
       </Stack>
     </Box>
   );
@@ -295,7 +478,11 @@ export default function RunTimeline({ events, title, selectedStepId = null, onSe
 
 RunTimeline.propTypes = {
   events: PropTypes.arrayOf(PropTypes.object).isRequired,
+  stepsById: PropTypes.object,
   title: PropTypes.string,
   selectedStepId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
   onSelectStep: PropTypes.func,
+  onConfirmStep: PropTypes.func,
+  onDeclineStep: PropTypes.func,
+  confirmingId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
 };

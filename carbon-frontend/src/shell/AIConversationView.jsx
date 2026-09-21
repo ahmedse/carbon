@@ -13,6 +13,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
+import { useTranslation } from 'react-i18next';
 import {
   acceptSuggestion,
   clearContext,
@@ -66,6 +67,7 @@ function normalizeConversationShape(payload) {
 }
 
 function AIConversationView({ conversationId, onOpenPanel, onForked, onConversationUpdated, seedDraft = null, onSeedDraftConsumed }) {
+  const { t } = useTranslation('ai');
   const { token, user, userCapabilities, isGlobalAdminFlag } = useAuth();
   const { notify, notifyFromError } = useNotification();
   const { executeMode, setExecuteMode } = useExecuteMode();
@@ -1270,7 +1272,7 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
               startIcon={showOlder ? <ExpandLessIcon /> : <ExpandMoreIcon />}
               onClick={() => setShowOlder((v) => !v)}
               aria-expanded={showOlder}
-              aria-label={showOlder ? 'Hide older messages' : 'Show older messages'}
+              aria-label={showOlder ? t('hideOlderMessages') : t('showOlderMessages')}
               sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
             >
               {showOlder ? 'Hide older messages' : `Show ${olderMessages.length} older messages`}
@@ -1421,7 +1423,7 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
             <Chip
               size="small"
               color="warning"
-              label="Interrupted"
+              label={t('interrupted')}
               sx={{ fontSize: '0.625rem', height: 20 }}
             />
             <Button size="small" variant="outlined" onClick={handleContinue}>
@@ -1574,11 +1576,11 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
       >
         <AIStatusBar variant={statusVariant} label={statusLabel} onRetry={handleRetry} />
         <PulsePresence />
-        <Tooltip title="Text size">
+        <Tooltip title={t('textSize')}>
           <Stack direction="row" alignItems="center" spacing={0.25} sx={{ borderLeft: 1, borderColor: 'divider', pl: 0.5 }}>
             <IconButton
               size="small"
-              aria-label="Decrease text size"
+              aria-label={t('decreaseTextSize')}
               disabled={contentZoom <= 0.8}
               onClick={() => adjustZoom(-0.1)}
               sx={{ p: 0.25 }}
@@ -1590,7 +1592,7 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
               onClick={resetZoom}
               role="button"
               tabIndex={0}
-              aria-label="Reset text size"
+              aria-label={t('resetTextSize')}
               sx={{
                 minWidth: 32,
                 textAlign: 'center',
@@ -1604,7 +1606,7 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
             </Typography>
             <IconButton
               size="small"
-              aria-label="Increase text size"
+              aria-label={t('increaseTextSize')}
               disabled={contentZoom >= 1.4}
               onClick={() => adjustZoom(0.1)}
               sx={{ p: 0.25 }}
@@ -1615,16 +1617,16 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
         </Tooltip>
         {isOwner && <AIModelSelect onChange={handleModelChange} />}
         {isOwner && (
-          <Tooltip title={conversation.visibility === 'shared' ? 'Unshare' : 'Share'}>
+          <Tooltip title={conversation.visibility === 'shared' ? t('unshare') : t('share')}>
             <span>
-              <IconButton size="small" onClick={handleToggleShare} disabled={sharing} color={conversation.visibility === 'shared' ? 'primary' : 'default'} aria-label={conversation.visibility === 'shared' ? 'Unshare conversation' : 'Share conversation'} sx={{ p: 0.25 }}>
+              <IconButton size="small" onClick={handleToggleShare} disabled={sharing} color={conversation.visibility === 'shared' ? 'primary' : 'default'} aria-label={conversation.visibility === 'shared' ? t('unshareConversation') : t('shareConversation')} sx={{ p: 0.25 }}>
                 <GroupIcon sx={{ fontSize: 13 }} />
               </IconButton>
             </span>
           </Tooltip>
         )}
-        <Tooltip title="Export">
-          <IconButton size="small" onClick={handleExportMenuOpen} aria-label="Export conversation" sx={{ p: 0.25 }}>
+        <Tooltip title={t('export')}>
+          <IconButton size="small" onClick={handleExportMenuOpen} aria-label={t('exportConversation')} sx={{ p: 0.25 }}>
             <DownloadIcon sx={{ fontSize: 13 }} />
           </IconButton>
         </Tooltip>

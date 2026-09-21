@@ -20,34 +20,37 @@ describe('ConsentHeroCard', () => {
     intent: 'Deny compensation request CR-4412 under RULE_21',
   };
 
-  it('renders above-fold Approve/Decline without engine rule ids', () => {
-    const onConfirm = vi.fn();
-    const onDecline = vi.fn();
+  it('renders status strip without Approve/Decline buttons', () => {
     render(
       <ConsentHeroCard
         step={step}
-        onConfirm={onConfirm}
-        onDecline={onDecline}
         completedLabel="8 steps completed, 2 to go"
       />,
     );
     expect(screen.getByTestId('consent-hero-card')).toBeInTheDocument();
+    expect(screen.getByTestId('consent-hero-card')).toHaveAttribute('data-consent-mode', 'status-strip');
+    expect(screen.getByText(/Needs your approval/)).toBeInTheDocument();
     expect(screen.getByText(/Paused — 8 steps completed/)).toBeInTheDocument();
     expect(screen.queryByText(/RULE_21/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
-    expect(onConfirm).toHaveBeenCalledWith(8);
-    fireEvent.click(screen.getByRole('button', { name: 'Decline' }));
-    expect(onDecline).toHaveBeenCalledWith(8);
+    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Decline' })).not.toBeInTheDocument();
   });
 
   it('returns null when step is not awaiting approval', () => {
     const { container } = render(
       <ConsentHeroCard
         step={{ ...step, status: 'completed' }}
-        onConfirm={vi.fn()}
-        onDecline={vi.fn()}
       />,
     );
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('can link to timeline via Open on timeline', () => {
+    const onReview = vi.fn();
+    render(
+      <ConsentHeroCard step={step} onReviewStep={onReview} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Open on timeline/i }));
+    expect(onReview).toHaveBeenCalled();
   });
 });

@@ -108,6 +108,13 @@ def test_confirmation_returns_fact_and_category(store):
     assert result["category"] == "observation"
 
 
+def test_arabic_confirmation_signals(store):
+    store.set_pending("conv1", "store leave preference", "preference")
+    assert store.check_confirmation("conv1", "نعم") is not None
+    store.set_pending("conv1", "store leave preference", "preference")
+    assert store.check_confirmation("conv1", "تمام") is not None
+
+
 def test_long_message_with_yes_is_not_confirmation(store):
     store.set_pending("conv1", "your name is Alex")
     long_msg = "yes I would also like you to explain the Dataset schema in detail"

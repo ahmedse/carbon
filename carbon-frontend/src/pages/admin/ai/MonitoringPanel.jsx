@@ -1,17 +1,19 @@
 // Command → Monitoring — snapshots/insights with Command Center deep link.
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import PulseDataPanel from './PulseDataPanel';
 
 export default function MonitoringPanel() {
+  const { t } = useTranslation('ai');
   return (
     <PulseDataPanel
-      title="Monitoring"
-      description="System snapshots, notifications, insights, and proactive KG triggers. Containment and queues live on Command Center."
+      title={t('control.monitoring.title')}
+      description={t('control.monitoring.description')}
       dataKey="monitoring"
-      emptyHint="No system snapshots or proactive insights yet."
+      emptyHint={t('control.monitoring.empty')}
       links={[
-        { label: 'Command Center', to: '/admin/ai' },
-        { label: 'Evidence explorer', to: '/admin/ai/evidence?tab=explorer' },
+        { label: t('control.monitoring.linkCommand'), to: '/admin/ai' },
+        { label: t('control.monitoring.linkEvidence'), to: '/admin/ai/evidence?tab=explorer' },
       ]}
     />
   );

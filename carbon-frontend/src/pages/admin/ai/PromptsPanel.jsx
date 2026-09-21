@@ -19,6 +19,7 @@ import {
   Typography,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import { useTranslation } from 'react-i18next';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
 import PageContainer from '../../../components/layout/PageContainer';
 import { useAuth } from '../../../auth/AuthContext';
@@ -56,7 +57,8 @@ function GatedButton({ allowed, reason, children, ...props }) {
 }
 
 export default function PromptsPanel() {
-  useDocumentTitle('Prompts');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.prompts.title'));
   const { token, userCapabilities } = useAuth();
   const { notify, notifyFromError } = useNotification();
   const caps = useMemo(() => capabilityKeys(userCapabilities), [userCapabilities]);
@@ -118,7 +120,7 @@ export default function PromptsPanel() {
       <Stack spacing={2}>
         <Stack direction="row" justifyContent="space-between" alignItems="center">
           <Typography variant="h5" fontWeight={700}>
-            Prompt versions
+            {t('control.prompts.title')}
           </Typography>
           <Button size="small" startIcon={<RefreshIcon />} onClick={load} disabled={loading}>
             Refresh
@@ -141,11 +143,11 @@ export default function PromptsPanel() {
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>Round</TableCell>
-                  <TableCell>Score</TableCell>
-                  <TableCell>Active</TableCell>
-                  <TableCell>Preview</TableCell>
-                  <TableCell>Actions</TableCell>
+                  <TableCell>{t('control.prompts.colRound')}</TableCell>
+                  <TableCell>{t('control.prompts.colScore')}</TableCell>
+                  <TableCell>{t('control.prompts.colActive')}</TableCell>
+                  <TableCell>{t('control.prompts.colPreview')}</TableCell>
+                  <TableCell>{t('control.prompts.colActions')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -157,9 +159,9 @@ export default function PromptsPanel() {
                     </TableCell>
                     <TableCell>
                       {row.is_active ? (
-                        <Chip size="small" color="success" label="Active" />
+                        <Chip size="small" color="success" label={t('control.prompts.active')} />
                       ) : (
-                        <Chip size="small" variant="outlined" label="Inactive" />
+                        <Chip size="small" variant="outlined" label={t('control.prompts.inactive')} />
                       )}
                     </TableCell>
                     <TableCell sx={{ maxWidth: 320 }}>

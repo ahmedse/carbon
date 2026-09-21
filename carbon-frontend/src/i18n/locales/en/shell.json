@@ -104,6 +104,11 @@
     "systemLogs": "System Logs",
     "roleRegistry": "Role Registry",
     "platformConfig": "Platform Config",
+    "commandCenter": "Command Center",
+    "domain": "Domain",
+    "evidence": "Evidence",
+    "learning": "Learning",
+    "platform": "Platform",
     "pulse": "Pulse",
     "conversations": "Conversations",
     "knowledgeBase": "Knowledge Base",
@@ -157,7 +162,26 @@
     "myRequests": "My Requests",
     "my": "My",
     "team": "Team",
-    "requestDetail": "Request Detail"
+    "requestDetail": "Request Detail",
+    "processes": "Processes",
+    "policy": "Policy",
+    "graph": "Graph",
+    "skills": "Skills",
+    "prompts": "Prompts",
+    "explorer": "Explorer",
+    "audit": "Audit",
+    "runs": "Runs",
+    "inbox": "Inbox",
+    "watches": "Watches",
+    "quality": "Quality",
+    "reviewQueue": "Review Queue",
+    "candidates": "Candidates",
+    "jobs": "Jobs",
+    "flywheel": "Flywheel",
+    "skillLearning": "Skill Learning",
+    "spend": "Spend",
+    "engine": "Engine",
+    "expertise": "Expertise"
   },
   "group": {
     "dataProducts": "Data Products",
@@ -207,6 +231,8 @@
     "hidePulseShortcut": "Hide Pulse (Ctrl+\\)",
     "expandPulse": "Expand Pulse",
     "dockPulse": "Dock Pulse",
+    "pulseExpandedBanner": "Domain workspace is hidden while Pulse is expanded.",
+    "pulseExpandedDock": "Dock beside domain",
     "domainsHeading": "Domain applications",
     "domainsSubheading": "Open a domain to work in the traditional workspace. Use Pulse alongside for AI.",
     "openDomain": "Open {{name}}",
@@ -269,5 +295,9 @@
     "label": "Early preview",
     "message": "{{platform}} is under active development. Share feedback to help shape what we build next.",
     "cta": "Share feedback"
+  },
+  "commandPalette": {
+    "searchPlaceholder": "Type a command or search...",
+    "searchAria": "Search commands"
   }
 }

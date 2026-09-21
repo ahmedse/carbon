@@ -9,6 +9,7 @@ import {
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ChatIcon from '@mui/icons-material/Chat';
+import { useTranslation } from 'react-i18next';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
 import PageContainer from '../../../components/layout/PageContainer';
 import { useAuth } from '../../../auth/AuthContext';
@@ -41,7 +42,8 @@ function formatDate(value) {
 }
 
 export default function AIConversationsPage() {
-  useDocumentTitle('AI Conversations');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.conversations.title'));
   const { token } = useAuth();
   const { notifyFromError } = useNotification();
 
@@ -94,11 +96,11 @@ export default function AIConversationsPage() {
       {selectedId ? (
         <Stack spacing={1} sx={{ flex: 1, minHeight: 0 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <IconButton size="small" onClick={handleBack} aria-label="Back to conversations">
+            <IconButton size="small" onClick={handleBack} aria-label={t('control.conversations.backAria')}>
               <ArrowBackIcon fontSize="small" />
             </IconButton>
             <Typography variant="subtitle1" sx={{ fontWeight: 600, flex: 1 }} noWrap>
-              {selected?.title || 'Conversation'}
+              {selected?.title || t('control.conversations.conversation')}
             </Typography>
             {selected && (
               <Chip
@@ -115,7 +117,7 @@ export default function AIConversationsPage() {
             </Box>
           ) : messages.length === 0 ? (
             <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-              No messages in this conversation.
+              {t('control.conversations.noMessages')}
             </Typography>
           ) : (
             <Paper variant="outlined" sx={{ flex: 1, minHeight: 0, overflow: 'auto', py: 1 }}>
@@ -133,9 +135,9 @@ export default function AIConversationsPage() {
       ) : (
         <Stack spacing={1} sx={{ flex: 1, minHeight: 0 }}>
           <Box>
-            <Typography variant="h5" fontWeight={700}>AI Conversations</Typography>
+            <Typography variant="h5" fontWeight={700}>{t('control.conversations.title')}</Typography>
             <Typography variant="body2" color="text.secondary">
-              Browse and inspect Pulse conversations.
+              {t('control.conversations.subtitle')}
             </Typography>
           </Box>
 
@@ -144,7 +146,7 @@ export default function AIConversationsPage() {
               <CircularProgress size={24} />
             </Box>
           ) : conversations.length === 0 ? (
-            <Alert severity="info">No conversations yet.</Alert>
+            <Alert severity="info">{t('control.conversations.empty')}</Alert>
           ) : (
             <Paper variant="outlined" sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
               <List dense disablePadding>
@@ -152,7 +154,7 @@ export default function AIConversationsPage() {
                   <ListItemButton key={c.id} onClick={() => openConversation(c)} divider>
                     <ChatIcon sx={{ fontSize: '1rem', color: 'text.secondary', mr: 1 }} />
                     <ListItemText
-                      primary={c.title || `${TYPE_LABELS[c.conversation_type] || 'Conversation'} #${String(c.id).slice(0, 6)}`}
+                      primary={c.title || `${TYPE_LABELS[c.conversation_type] || t('control.conversations.conversation')} #${String(c.id).slice(0, 6)}`}
                       secondary={formatDate(c.created_at)}
                       primaryTypographyProps={{ variant: 'body2', fontWeight: 600 }}
                       secondaryTypographyProps={{ variant: 'caption' }}

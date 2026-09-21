@@ -186,6 +186,27 @@ api_catalog:
     requires_auth: true
     requires_confirmation: false
 
+  - name: create_employee
+    method: POST
+    path: /carbon-api/people/employees/
+    description: >
+      Create / hire a new employee (onboarding submit). Body includes
+      employee_no, full_name, org_unit, join_date, basic_salary, is_active
+      (usually false until activate), optional position. Use for employee
+      onboarding lifecycle submit — NEVER submit_my_leave.
+    requires_auth: true
+    requires_confirmation: true
+
+  - name: update_employee
+    method: PATCH
+    path: /carbon-api/people/employees/{id}/
+    description: >
+      Patch an employee record (onboarding activate sets is_active=true).
+      Path param {id} is the employee numeric id. Consent required for
+      activation mutations.
+    requires_auth: true
+    requires_confirmation: true
+
   - name: get_employee
     method: GET
     path: /carbon-api/people/employees/{id}/
@@ -298,6 +319,19 @@ api_catalog:
     requires_auth: true
     requires_confirmation: false
 
+  - name: submit_my_leave
+    method: POST
+    path: /carbon-api/people/me/leave/
+    description: >
+      Submit a leave request for the logged-in employee (self-service). Body:
+      {leave_type: code (annual|sick|emergency|…), start_date: YYYY-MM-DD,
+      end_date: YYYY-MM-DD, days: number, note: optional string}. Use for
+      "I want leave", "request leave", "أريد إجازة", "تقديم إجازة", "عارضة",
+      "emergency leave". Prefer this over create_leave_record for first-person
+      requests — employee is implied from the session; do NOT send employee id.
+    requires_auth: true
+    requires_confirmation: true
+
   - name: get_my_leave_balance
     method: GET
     path: /carbon-api/people/me/leave-balance/
@@ -316,6 +350,19 @@ api_catalog:
       interest_rate, term_months, status. Use for "my loans", "قروضي".
     requires_auth: true
     requires_confirmation: false
+
+  - name: submit_my_loan
+    method: POST
+    path: /carbon-api/people/me/loan/
+    description: >
+      Submit a loan request for the logged-in employee (self-service). Body:
+      {loan_type: code (emergency|housing|…), principal: number,
+      interest_rate: number, term_months: int, start_date: YYYY-MM-DD}.
+      Use for "I want a loan", "request loan", "أريد قرض", "تقديم قرض".
+      Prefer this over admin loan create — employee is implied from the session.
+      NEVER use submit_my_leave for loans.
+    requires_auth: true
+    requires_confirmation: true
 
   - name: list_my_payslips
     method: GET
@@ -359,8 +406,10 @@ api_catalog:
     method: POST
     path: /carbon-api/people/leave-records/
     description: >
-      Record a leave request. Body: {employee: id, leave_type: str,
-      start_date: YYYY-MM-DD, end_date: YYYY-MM-DD, notes: str}.
+      HR/admin leave record create for a named employee (requires employee id).
+      Body: {employee: id, leave_type: code, start_date: YYYY-MM-DD,
+      end_date: YYYY-MM-DD, days: number}. For the logged-in employee's OWN
+      leave request use submit_my_leave instead (POST /me/leave/).
     requires_auth: true
     requires_confirmation: true
 

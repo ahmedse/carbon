@@ -1,106 +1,72 @@
-// ConsentHeroCard — pinned Approve/Decline for awaiting_approval (RULE_21).
-// Operator-facing consequence copy only (RULE_23). Used on Run (above the fold)
-// and Output (lifecycle-truthful paused state).
+// ConsentHeroCard — status strip when a step awaits approval (RULE_21).
+// Approve / Decline live only on the active Run timeline node (no duplicate buttons).
 import React from 'react';
 import PropTypes from 'prop-types';
-import { Box, Button, Stack, Typography } from '@mui/material';
+import { Box, Button, Typography } from '@mui/material';
 import { stripEngineJargon } from './humanizeOperatorCopy';
+import { toolLabel } from './aiTaskStatus';
+
+function actionLabel(step) {
+  const args = step?.tool_args;
+  const api = args && typeof args === 'object' ? args.api_name : '';
+  if (api) return toolLabel(api) || String(api).replace(/_/g, ' ');
+  return stripEngineJargon(step?.intent || `Step ${step?.step_id}`);
+}
 
 /**
  * @param {object} props
  * @param {object} props.step — RunStep with status awaiting_approval
- * @param {boolean} [props.confirming]
- * @param {function} props.onConfirm — (stepId) => void
- * @param {function} props.onDecline — (stepId) => void
  * @param {string} [props.completedLabel] — e.g. "8 steps completed, 2 to go"
- * @param {function} [props.onReviewStep] — optional jump to Run list
+ * @param {function} [props.onReviewStep] — jump to Run timeline
  */
 export default function ConsentHeroCard({
   step,
-  confirming = false,
-  onConfirm,
-  onDecline,
   completedLabel = null,
   onReviewStep = null,
+  // Legacy props kept so callers stay compile-clean; buttons removed.
+  confirming = false, // eslint-disable-line no-unused-vars
+  onConfirm = null, // eslint-disable-line no-unused-vars
+  onDecline = null, // eslint-disable-line no-unused-vars
 }) {
   if (!step || step.status !== 'awaiting_approval') return null;
 
-  const intent = stripEngineJargon(step.intent || `Step ${step.step_id}`);
-  const consequence = intent
-    ? `This will: ${intent}`
-    : 'This action writes to your data. Approve to continue, or decline to skip it.';
+  const label = actionLabel(step);
 
   return (
     <Box
       data-testid="consent-hero-card"
+      data-consent-mode="status-strip"
       sx={{
-        p: 1.25,
+        px: 1.25,
+        py: 0.75,
         borderRadius: 1,
         border: 1,
         borderColor: 'warning.main',
         bgcolor: 'warning.soft',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1,
+        flexWrap: 'wrap',
       }}
     >
-      {completedLabel && (
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ display: 'block', fontSize: '0.6875rem', mb: 0.5 }}
-        >
-          Paused — {completedLabel}
-        </Typography>
-      )}
       <Typography
-        variant="body2"
-        sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5 }}
+        variant="caption"
+        sx={{ fontWeight: 600, fontSize: '0.75rem', flex: '1 1 160px', minWidth: 0 }}
       >
         Needs your approval
+        {label ? ` — ${label}` : ''}
+        {completedLabel ? ` · Paused — ${completedLabel}` : ''}
       </Typography>
-      <Typography
-        variant="caption"
-        sx={{ display: 'block', fontSize: '0.75rem', mb: 1, color: 'text.primary' }}
-      >
-        {consequence}
-      </Typography>
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        sx={{ display: 'block', fontSize: '0.6875rem', mb: 1 }}
-      >
-        Approve to run this step, or decline to skip it. Nothing else continues until you choose.
-      </Typography>
-      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+      {onReviewStep && (
         <Button
           size="small"
-          variant="contained"
-          color="warning"
-          disabled={confirming}
-          onClick={() => onConfirm(step.step_id)}
-          sx={{ fontSize: '0.75rem', textTransform: 'none', fontWeight: 600 }}
+          variant="text"
+          onClick={onReviewStep}
+          sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0 }}
         >
-          {confirming ? 'Approving…' : 'Approve'}
+          Open on timeline
         </Button>
-        <Button
-          size="small"
-          variant="outlined"
-          color="inherit"
-          disabled={confirming}
-          onClick={() => onDecline(step.step_id)}
-          sx={{ fontSize: '0.75rem', textTransform: 'none' }}
-        >
-          Decline
-        </Button>
-        {onReviewStep && (
-          <Button
-            size="small"
-            variant="text"
-            onClick={onReviewStep}
-            sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
-          >
-            Review step
-          </Button>
-        )}
-      </Stack>
+      )}
     </Box>
   );
 }
@@ -108,8 +74,8 @@ export default function ConsentHeroCard({
 ConsentHeroCard.propTypes = {
   step: PropTypes.object,
   confirming: PropTypes.bool,
-  onConfirm: PropTypes.func.isRequired,
-  onDecline: PropTypes.func.isRequired,
+  onConfirm: PropTypes.func,
+  onDecline: PropTypes.func,
   completedLabel: PropTypes.string,
   onReviewStep: PropTypes.func,
 };

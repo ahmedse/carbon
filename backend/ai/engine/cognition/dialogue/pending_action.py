@@ -37,6 +37,8 @@ _CONFIRMATION_SIGNALS: frozenset[str] = frozenset({
     "yes", "yeah", "yep", "ok", "okay", "sure",
     "do it", "go ahead", "please", "store it", "remember it",
     "yes please",
+    # Arabic affirmatives (same set as deixis.is_confirm_reply)
+    "نعم", "ايوه", "أيوه", "صح", "تمام", "موافق",
 })
 
 _MAX_CONFIRMATION_WORDS = 4

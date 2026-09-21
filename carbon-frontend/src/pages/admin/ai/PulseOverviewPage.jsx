@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { Box, Chip, CircularProgress, Paper, Stack, Typography } from '@mui/material';
 import CloudOffIcon from '@mui/icons-material/CloudOff';
 import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
+import { useTranslation } from 'react-i18next';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
 import PageContainer from '../../../components/layout/PageContainer';
 import { useAuth } from '../../../auth/AuthContext';
@@ -22,22 +23,23 @@ const CAPABILITY_STATUS_COLORS = {
   unavailable: 'error',
 };
 
-const CAPABILITY_LABELS = {
-  store: 'Store',
-  reason_lane: 'Reason lane',
-  verify: 'Verify',
-  mcp: 'MCP',
-  sandbox: 'Sandbox',
+const CAPABILITY_LABEL_KEYS = {
+  store: 'control.overview.capStore',
+  reason_lane: 'control.overview.capReasonLane',
+  verify: 'control.overview.capVerify',
+  mcp: 'control.overview.capMcp',
+  sandbox: 'control.overview.capSandbox',
 };
 
 /** One capability: name + status chip + detail line. */
 function CapabilityCard({ name, cap }) {
+  const { t } = useTranslation('ai');
   const status = cap?.status || 'unavailable';
   return (
     <Paper variant="outlined" sx={{ p: 1.5 }}>
       <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
         <Typography variant="body2" sx={{ fontWeight: 600 }}>
-          {CAPABILITY_LABELS[name] || name}
+          {CAPABILITY_LABEL_KEYS[name] ? t(CAPABILITY_LABEL_KEYS[name]) : name}
         </Typography>
         <Chip
           size="small"
@@ -55,7 +57,8 @@ function CapabilityCard({ name, cap }) {
 }
 
 export default function PulseOverviewPage() {
-  useDocumentTitle('Pulse Overview');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.overview.title'));
   const { token } = useAuth();
 
   const [health, setHealth] = useState(null);
@@ -89,9 +92,9 @@ export default function PulseOverviewPage() {
   return (
     <PageContainer>
       <Stack spacing={1} sx={{ flex: 1, minHeight: 0 }}>
-        <Typography variant="h5" fontWeight={700}>Pulse Overview</Typography>
+        <Typography variant="h5" fontWeight={700}>{t('control.overview.title')}</Typography>
         <Typography variant="body2" color="text.secondary">
-          Provider health, task envelope, and model tier for the in-hand intelligence layer.
+          {t('control.overview.subtitle')}
         </Typography>
 
         {loading ? (
@@ -102,11 +105,10 @@ export default function PulseOverviewPage() {
           <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
             <CloudOffIcon fontSize="large" sx={{ color: 'text.secondary' }} />
             <Typography variant="subtitle1" sx={{ mt: 1 }} fontWeight={600}>
-              Pulse provider offline
+              {t('control.overview.offlineTitle')}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              The Pulse ops API is not yet wired (backend Phase 2b). Health data will appear
-              here once the /ai/pulse/health endpoint lands.
+              {t('control.overview.offlineBody')}
             </Typography>
           </Paper>
         ) : (
@@ -121,13 +123,15 @@ export default function PulseOverviewPage() {
                 <Chip
                   size="small"
                   color={health.healthy ? 'success' : 'error'}
-                  label={health.healthy ? 'Healthy' : 'Unhealthy'}
+                  label={health.healthy ? t('control.overview.healthy') : t('control.overview.unhealthy')}
                 />
               </Stack>
 
               {Array.isArray(health.modules) && health.modules.length > 0 && (
                 <Stack spacing={0.5}>
-                  <Typography variant="overline" color="text.secondary">Modules</Typography>
+                  <Typography variant="overline" color="text.secondary">
+                    {t('control.overview.modules')}
+                  </Typography>
                   <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                     {health.modules.map((m) => (
                       <Chip key={m} size="small" variant="outlined" label={m} />
@@ -138,7 +142,9 @@ export default function PulseOverviewPage() {
 
               {health.capabilities && (
                 <Stack spacing={1}>
-                  <Typography variant="overline" color="text.secondary">Capabilities</Typography>
+                  <Typography variant="overline" color="text.secondary">
+                    {t('control.overview.capabilities')}
+                  </Typography>
                   <Box
                     sx={{
                       display: 'grid',

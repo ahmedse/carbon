@@ -25,6 +25,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import TravelExploreIcon from '@mui/icons-material/TravelExplore';
 import { Link as RouterLink } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
 import PageContainer from '../../../components/layout/PageContainer';
 import CarbonDataGrid from '../../../components/DataGrid/CarbonDataGrid';
@@ -41,6 +42,7 @@ import {
 
 /** Read-only detail drawer — the full record of the clicked Pulse row. */
 function PulseDetailDrawer({ row, onClose }) {
+  const { t } = useTranslation('ai');
   if (!row) return null;
   const fields = buildDetailFields(row);
   const rawJson = JSON.stringify(row, null, 2);
@@ -57,10 +59,10 @@ function PulseDetailDrawer({ row, onClose }) {
         <Stack direction="row" spacing={1} alignItems="center">
           <Chip size="small" variant="outlined" label={row._type ?? 'record'} />
           <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>
-            {row.id ?? row.conversation_id ?? row.name ?? 'Record detail'}
+            {row.id ?? row.conversation_id ?? row.name ?? t('control.pulseData.recordDetail')}
           </Typography>
         </Stack>
-        <IconButton size="small" onClick={onClose} aria-label="Close detail">
+        <IconButton size="small" onClick={onClose} aria-label={t('control.pulseData.closeDetail')}>
           <CloseIcon />
         </IconButton>
       </Stack>
@@ -75,7 +77,7 @@ function PulseDetailDrawer({ row, onClose }) {
           sx={{ mb: 2, alignSelf: 'flex-start' }}
           onClick={onClose}
         >
-          Open in Evidence
+          {t('control.pulseData.openInEvidence')}
         </Button>
       ) : null}
 
@@ -104,13 +106,13 @@ function PulseDetailDrawer({ row, onClose }) {
         </Stack>
       ) : (
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          No scalar fields — see raw JSON below.
+          {t('control.pulseData.noScalar')}
         </Typography>
       )}
 
       <Divider sx={{ mb: 1 }} />
       <Typography variant="caption" color="text.secondary" sx={{ mb: 1 }}>
-        Raw JSON
+        {t('control.pulseData.rawJson')}
       </Typography>
       <Box
         component="pre"
@@ -143,6 +145,7 @@ PulseDetailDrawer.defaultProps = {
 };
 
 export default function PulseDataPanel({ title, description, dataKey, emptyHint, links }) {
+  const { t } = useTranslation('ai');
   useDocumentTitle(title);
   const { token } = useAuth();
 
@@ -215,10 +218,10 @@ export default function PulseDataPanel({ title, description, dataKey, emptyHint,
           const href = buildEvidenceHref(row);
           return (
             <Stack direction="row" spacing={0}>
-              <Tooltip title="Inspect record">
+              <Tooltip title={t('control.pulseData.inspectRecord')}>
                 <IconButton
                   size="small"
-                  aria-label="Inspect record"
+                  aria-label={t('control.pulseData.inspectRecord')}
                   onClick={(event) => {
                     event.stopPropagation();
                     setSelected(row);
@@ -228,10 +231,10 @@ export default function PulseDataPanel({ title, description, dataKey, emptyHint,
                 </IconButton>
               </Tooltip>
               {href ? (
-                <Tooltip title="Open in Evidence">
+                <Tooltip title={t('control.pulseData.openInEvidence')}>
                   <IconButton
                     size="small"
-                    aria-label="Open in Evidence"
+                    aria-label={t('control.pulseData.openInEvidence')}
                     component={RouterLink}
                     to={href}
                     onClick={(event) => event.stopPropagation()}
@@ -246,14 +249,14 @@ export default function PulseDataPanel({ title, description, dataKey, emptyHint,
       },
       {
         field: '_type',
-        headerName: 'Type',
+        headerName: t('control.pulseData.colType'),
         width: 140,
         sortable: true,
         renderCell: ({ value }) => <Chip size="small" variant="outlined" label={value} />,
       },
       {
         field: 'scope',
-        headerName: 'Scope',
+        headerName: t('control.pulseData.colScope'),
         width: 200,
         sortable: false,
         renderCell: ({ row }) => (
@@ -280,7 +283,7 @@ export default function PulseDataPanel({ title, description, dataKey, emptyHint,
         ),
       })),
     ];
-  }, [dataKey, filteredRows, rows]);
+  }, [dataKey, filteredRows, rows, t]);
 
   return (
     <PageContainer>
@@ -296,7 +299,7 @@ export default function PulseDataPanel({ title, description, dataKey, emptyHint,
             onClick={load}
             disabled={loading}
           >
-            Refresh
+            {t('control.pulseData.refresh')}
           </Button>
         </Stack>
         {description && (
@@ -324,19 +327,19 @@ export default function PulseDataPanel({ title, description, dataKey, emptyHint,
           <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
             <Chip
               size="small"
-              label="All types"
+              label={t('control.pulseData.allTypes')}
               color={typeFilter === '' ? 'primary' : 'default'}
               variant={typeFilter === '' ? 'filled' : 'outlined'}
               onClick={() => setTypeFilter('')}
             />
-            {types.map((t) => (
+            {types.map((typeName) => (
               <Chip
-                key={t}
+                key={typeName}
                 size="small"
-                label={t}
-                color={typeFilter === t ? 'primary' : 'default'}
-                variant={typeFilter === t ? 'filled' : 'outlined'}
-                onClick={() => setTypeFilter(t)}
+                label={typeName}
+                color={typeFilter === typeName ? 'primary' : 'default'}
+                variant={typeFilter === typeName ? 'filled' : 'outlined'}
+                onClick={() => setTypeFilter(typeName)}
               />
             ))}
           </Stack>
@@ -350,17 +353,17 @@ export default function PulseDataPanel({ title, description, dataKey, emptyHint,
           <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
             <CloudOffIcon fontSize="large" sx={{ color: 'text.secondary' }} />
             <Typography variant="subtitle1" sx={{ mt: 1 }} fontWeight={600}>
-              Data unavailable
+              {t('control.pulseData.dataUnavailable')}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              Data unavailable — the Pulse read API is offline
+              {t('control.pulseData.offline')}
             </Typography>
           </Paper>
         ) : filteredRows.length === 0 ? (
           <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
             <Typography variant="subtitle1" fontWeight={600}>{title}</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              {typeFilter ? `No rows of type “${typeFilter}”.` : emptyHint}
+              {typeFilter ? t('control.pulseData.noRowsOfType', { type: typeFilter }) : emptyHint}
             </Typography>
           </Paper>
         ) : (

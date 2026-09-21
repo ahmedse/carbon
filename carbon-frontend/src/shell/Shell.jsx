@@ -3,9 +3,9 @@
 // ADR-0035: under sm — temporary nav, no ActivityBar rail, Pulse fullscreen overlay
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Dialog, Drawer, IconButton, Tooltip, Typography } from '@mui/material';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import { Box, Button, Dialog, Drawer, IconButton, Tooltip, Typography } from '@mui/material';
 import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
+import ViewColumnOutlinedIcon from '@mui/icons-material/ViewColumnOutlined';
 import { Allotment } from 'allotment';
 import 'allotment/dist/style.css';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -25,7 +25,9 @@ import { AIWorkspace } from './AIWorkspace';
 import { AITaskTransferProvider } from './AITaskTransferContext';
 import { NotesProvider, useNotes } from '../notes/NotesContext';
 import { NotesDrawer } from '../notes/NotesDrawer';
-import { useIsMobile } from '../hooks/useIsMobile';
+import { useIsMobile, usePulseFullscreen } from '../hooks/useIsMobile';
+import { useVisualViewportHeight } from '../hooks/useVisualViewportHeight';
+import { ChevronEnd } from '../i18n/DirectionalIcons';
 
 /** Docked Pulse may grow until traditional still has ~320px (editor min). */
 function dockedPulseMaxSize() {
@@ -101,6 +103,8 @@ export function Shell() {
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
+  // Pulse fullscreen Dialog on phones only — tablets keep the alongside dock.
+  const pulseFullscreen = usePulseFullscreen();
 
   const [drawerWidth, setDrawerWidth] = useState(() => {
     const stored = Number(localStorage.getItem('carbon-drawer-width'));
@@ -135,8 +139,11 @@ export function Shell() {
     copilotExpanded,
     toggleCopilot,
     toggleCopilotExpanded,
+    dockCopilot,
     openCopilot,
   } = useShellState();
+
+  const { cssHeight: viewportCssHeight } = useVisualViewportHeight(pulseFullscreen && copilotVisible);
 
   // ADR-0035: under sm, ignore pinned — only peek (temporary open) or hidden.
   // Desktop localStorage preference is preserved for md+.
@@ -244,11 +251,41 @@ export function Shell() {
   const renderCopilotDesktop = () => {
     if (copilotExpanded) {
       return (
-        <Box sx={{ display: 'flex', flex: 1, minWidth: 0, height: '100%' }}>
-          <Box sx={{ flex: 1, minWidth: 0, height: '100%', display: 'flex', flexDirection: 'column' }}>
-            {renderPulseWorkspace()}
+        <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, height: '100%' }}>
+          {/* DW-P0-2 — expanded Pulse hides domain; one-click restore to alongside dock. */}
+          <Box
+            data-testid="pulse-expanded-dock-banner"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              px: 1.5,
+              py: 0.625,
+              borderBottom: 1,
+              borderColor: 'divider',
+              bgcolor: 'action.hover',
+              flexShrink: 0,
+            }}
+          >
+            <Typography variant="caption" color="text.secondary" sx={{ flex: 1, fontSize: '0.6875rem' }}>
+              {t('ui.pulseExpandedBanner')}
+            </Typography>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<ViewColumnOutlinedIcon sx={{ fontSize: 14 }} />}
+              onClick={dockCopilot}
+              sx={{ fontSize: '0.6875rem', textTransform: 'none', minHeight: 28 }}
+            >
+              {t('ui.pulseExpandedDock')}
+            </Button>
           </Box>
-          {DOCKED_PANES}
+          <Box sx={{ display: 'flex', flex: 1, minWidth: 0, minHeight: 0 }}>
+            <Box sx={{ flex: 1, minWidth: 0, height: '100%', display: 'flex', flexDirection: 'column' }}>
+              {renderPulseWorkspace()}
+            </Box>
+            {DOCKED_PANES}
+          </Box>
         </Box>
       );
     }
@@ -300,7 +337,8 @@ export function Shell() {
       sx={{
         display: 'flex',
         flexDirection: 'column',
-        height: '100vh',
+        height: { xs: '100dvh', sm: '100vh' },
+        maxHeight: { xs: '100dvh', sm: '100vh' },
         width: '100%',
         maxWidth: '100vw',
         overflow: 'hidden',
@@ -359,14 +397,13 @@ export function Shell() {
             aria-label={t('ui.showSidebar')}
             title={t('ui.showSidebarShortcut')}
           >
-            <ChevronRightIcon
+            <ChevronEnd
               className="expand-chevron"
               sx={{
                 fontSize: 14,
                 opacity: 0.45,
                 color: 'text.secondary',
                 transition: 'opacity 150ms',
-                ...(isRtl && { transform: 'scaleX(-1)' }),
               }}
             />
           </Box>
@@ -476,15 +513,22 @@ export function Shell() {
           <NotesShortcutBridge />
           <AITaskTransferProvider onRequestOpen={openCopilot}>
             <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', minWidth: 0 }}>
-              {copilotVisible && !isMobile ? renderCopilotDesktop() : renderContentPane()}
+              {copilotVisible && !pulseFullscreen ? renderCopilotDesktop() : renderContentPane()}
             </Box>
 
-            {isMobile && (
+            {pulseFullscreen && (
               <Dialog
                 fullScreen
                 open={copilotVisible}
                 onClose={toggleCopilot}
-                PaperProps={{ sx: { bgcolor: 'background.paper' } }}
+                PaperProps={{
+                  sx: {
+                    bgcolor: 'background.paper',
+                    height: viewportCssHeight,
+                    maxHeight: viewportCssHeight,
+                    pb: 'env(safe-area-inset-bottom, 0px)',
+                  },
+                }}
               >
                 <ErrorBoundary>
                   <AIWorkspace

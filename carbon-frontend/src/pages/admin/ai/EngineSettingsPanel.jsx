@@ -14,6 +14,7 @@ import {
 } from '@mui/material';
 import CloudOffIcon from '@mui/icons-material/CloudOff';
 import TuneIcon from '@mui/icons-material/Tune';
+import { useTranslation } from 'react-i18next';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
 import PageContainer from '../../../components/layout/PageContainer';
 import { CarbonDataGrid } from '../../../components/DataGrid';
@@ -103,6 +104,7 @@ const KIND_COLORS = {
 
 /** Tool catalog: rich metadata (kind, confirmation, capability, app). */
 function ToolsCatalog({ tools }) {
+  const { t } = useTranslation('ai');
   const rows = (tools ?? []).map((tool, index) => ({
     id: tool.name || `tool-${index}`,
     name: tool.name ?? '—',
@@ -116,7 +118,7 @@ function ToolsCatalog({ tools }) {
   const columns = [
     {
       field: 'name',
-      headerName: 'Tool',
+      headerName: t('control.engineSettings.colTool'),
       width: 220,
       renderCell: ({ value }) => (
         <Typography variant="body2" sx={{ fontWeight: 600 }}>{value}</Typography>
@@ -124,7 +126,7 @@ function ToolsCatalog({ tools }) {
     },
     {
       field: 'kind',
-      headerName: 'Kind',
+      headerName: t('control.engineSettings.colKind'),
       width: 120,
       renderCell: ({ value }) => (
         <Chip size="small" variant="outlined" color={KIND_COLORS[value] || 'default'} label={value} />
@@ -132,7 +134,7 @@ function ToolsCatalog({ tools }) {
     },
     {
       field: 'requiresConfirmation',
-      headerName: 'Confirm',
+      headerName: t('control.engineSettings.colConfirm'),
       width: 100,
       renderCell: ({ value }) => (
         <Chip
@@ -145,7 +147,7 @@ function ToolsCatalog({ tools }) {
     },
     {
       field: 'capability',
-      headerName: 'Capability',
+      headerName: t('control.engineSettings.colCapability'),
       width: 180,
       renderCell: ({ value }) => (
         <Typography variant="body2" color={value ? 'text.primary' : 'text.secondary'}>
@@ -155,7 +157,7 @@ function ToolsCatalog({ tools }) {
     },
     {
       field: 'appIdentifier',
-      headerName: 'App',
+      headerName: t('control.engineSettings.colApp'),
       width: 110,
       renderCell: ({ value }) => (
         <Typography variant="body2" color={value ? 'text.primary' : 'text.secondary'}>
@@ -165,7 +167,7 @@ function ToolsCatalog({ tools }) {
     },
     {
       field: 'description',
-      headerName: 'Description',
+      headerName: t('control.engineSettings.colDescription'),
       flex: 1,
       minWidth: 320,
       renderCell: ({ value }) => (
@@ -178,7 +180,7 @@ function ToolsCatalog({ tools }) {
 
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
-      <Typography variant="overline" color="text.secondary">Tools catalog</Typography>
+      <Typography variant="overline" color="text.secondary">{t('control.engineSettings.toolsCatalog')}</Typography>
       {rows.length ? (
         <Box sx={{ mt: 1 }}>
           <CarbonDataGrid
@@ -186,12 +188,12 @@ function ToolsCatalog({ tools }) {
             rows={rows}
             density="compact"
             showColumnToggle={false}
-            emptyMessage="No tools registered."
+            emptyMessage={t('control.engineSettings.noTools')}
           />
         </Box>
       ) : (
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-          No tools registered.
+          {t('control.engineSettings.noTools')}
         </Typography>
       )}
     </Paper>
@@ -199,10 +201,11 @@ function ToolsCatalog({ tools }) {
 }
 
 /** MCP servers: name/command/args rows. */
-function McpServers({ servers }) {
+function McpServers({ servers, emptyLabel }) {
+  const { t } = useTranslation('ai');
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
-      <Typography variant="overline" color="text.secondary">MCP servers</Typography>
+      <Typography variant="overline" color="text.secondary">{t('control.engineSettings.mcpServers')}</Typography>
       {servers.length ? (
         <Stack spacing={0} sx={{ mt: 1 }}>
           {servers.map((server) => (
@@ -223,7 +226,7 @@ function McpServers({ servers }) {
         </Stack>
       ) : (
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-          No MCP servers configured.
+          {emptyLabel}
         </Typography>
       )}
     </Paper>
@@ -231,7 +234,8 @@ function McpServers({ servers }) {
 }
 
 export default function EngineSettingsPanel() {
-  useDocumentTitle('Engine Settings');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.engineSettings.title'));
   const { token } = useAuth();
 
   const [data, setData] = useState(null);
@@ -266,11 +270,11 @@ export default function EngineSettingsPanel() {
     <PageContainer>
       <Stack spacing={1.5} sx={{ flex: 1, minHeight: 0 }}>
         <Stack direction="row" spacing={1} alignItems="center">
-          <Typography variant="h5" fontWeight={700} sx={{ flex: 1 }}>Engine Settings</Typography>
+          <Typography variant="h5" fontWeight={700} sx={{ flex: 1 }}>{t('control.engineSettings.title')}</Typography>
           {data && !offline && <TuneIcon color="primary" />}
         </Stack>
         <Typography variant="body2" color="text.secondary">
-          Effective intelligence-core configuration and capability inventory. Secrets are redacted server-side.
+          {t('control.engineSettings.subtitle')}
         </Typography>
 
         {loading ? (
@@ -281,19 +285,19 @@ export default function EngineSettingsPanel() {
           <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
             <CloudOffIcon fontSize="large" sx={{ color: 'text.secondary' }} />
             <Typography variant="subtitle1" sx={{ mt: 1 }} fontWeight={600}>
-              Data unavailable
+              {t('control.engineSettings.dataUnavailable')}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              Data unavailable — the Pulse settings API is offline
+              {t('control.engineSettings.offline')}
             </Typography>
           </Paper>
         ) : (
           <>
-            <KvGroup title="LLM provider" entries={data.llm ?? {}} />
-            <KvGroup title="Limits & guardrails" entries={data.limits ?? {}} />
+            <KvGroup title={t('control.engineSettings.llmProvider')} entries={data.llm ?? {}} />
+            <KvGroup title={t('control.engineSettings.limits')} entries={data.limits ?? {}} />
 
             <Paper variant="outlined" sx={{ p: 2 }}>
-              <Typography variant="overline" color="text.secondary">Cache</Typography>
+              <Typography variant="overline" color="text.secondary">{t('control.engineSettings.cache')}</Typography>
               <Stack spacing={0} sx={{ mt: 1 }}>
                 <KvRow label="ttl_seconds" value={data.cache?.ttl_seconds} />
                 <KvRow label="store" value={data.cache?.store ?? {}} />
@@ -301,16 +305,16 @@ export default function EngineSettingsPanel() {
             </Paper>
 
             <Paper variant="outlined" sx={{ p: 2 }}>
-              <Typography variant="overline" color="text.secondary">Rate limit</Typography>
+              <Typography variant="overline" color="text.secondary">{t('control.engineSettings.rateLimit')}</Typography>
               <Stack spacing={0} sx={{ mt: 1 }}>
                 <KvRow label="requests_per_minute" value={data.rate_limit} />
               </Stack>
             </Paper>
 
-            <KvGroup title="Routing" entries={data.routing ?? {}} />
-            <McpServers servers={data.mcp_servers ?? []} />
+            <KvGroup title={t('control.engineSettings.routing')} entries={data.routing ?? {}} />
+            <McpServers servers={data.mcp_servers ?? []} emptyLabel={t('control.engineSettings.noMcp')} />
             <ToolsCatalog tools={data.tools_catalog ?? []} />
-            <ChipList title="Agents" items={data.agents ?? []} />
+            <ChipList title={t('control.engineSettings.agents')} items={data.agents ?? []} />
           </>
         )}
       </Stack>

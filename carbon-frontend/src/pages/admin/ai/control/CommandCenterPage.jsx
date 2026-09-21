@@ -1,6 +1,6 @@
 // src/pages/admin/ai/control/CommandCenterPage.jsx
 // ADR-0036 Phase 2 — Command Center: health, queues, graduated containment.
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
@@ -15,6 +15,8 @@ import {
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import CloudOffIcon from '@mui/icons-material/CloudOff';
+import { useTranslation } from 'react-i18next';
+import { shellLabel } from '../../../../i18n/shellLabels';
 import useDocumentTitle from '../../../../hooks/useDocumentTitle';
 import PageContainer from '../../../../components/layout/PageContainer';
 import { useAuth } from '../../../../auth/AuthContext';
@@ -24,16 +26,11 @@ import ControlHub from './ControlHub';
 import AIExpertisePanel from '../AIExpertisePanel';
 import MonitoringPanel from '../MonitoringPanel';
 
-const LEVELS = [
-  { value: 'normal', label: 'Normal' },
-  { value: 'autonomy_clamp', label: 'Autonomy clamp' },
-  { value: 'tool_freeze', label: 'Tool freeze' },
-  { value: 'learning_freeze', label: 'Learning freeze' },
-  { value: 'full_stop', label: 'Full stop (kill active)' },
-];
+const LEVEL_VALUES = ['normal', 'autonomy_clamp', 'tool_freeze', 'learning_freeze', 'full_stop'];
 
 function OverviewPanel() {
-  useDocumentTitle('Command Center');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.commandCenter.title'));
   const { token } = useAuth();
   const { notify } = useNotification();
   const [data, setData] = useState(null);
@@ -66,10 +63,13 @@ function OverviewPanel() {
     setSaving(true);
     try {
       await setContainment(token, { level, reason });
-      notify({ message: 'Containment updated', type: 'success' });
+      notify({ message: t('control.commandCenter.updated'), type: 'success' });
       await load();
     } catch (err) {
-      notify({ message: err?.detail || err?.message || 'Containment update failed', type: 'error' });
+      notify({
+        message: err?.detail || err?.message || t('control.commandCenter.updateFailed'),
+        type: 'error',
+      });
     } finally {
       setSaving(false);
     }
@@ -89,7 +89,7 @@ function OverviewPanel() {
         <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
           <CloudOffIcon fontSize="large" sx={{ color: 'text.secondary' }} />
           <Typography variant="subtitle1" sx={{ mt: 1 }} fontWeight={600}>
-            Command Center unavailable
+            {t('control.commandCenter.unavailable')}
           </Typography>
         </Paper>
       </PageContainer>
@@ -100,36 +100,39 @@ function OverviewPanel() {
   const queues = data.queues || {};
   const spend = data.spend || {};
   const caps = health.capabilities || {};
+  const containmentLevel = data.containment?.containment_level || 'normal';
+
+  const queueCards = [
+    [t('control.commandCenter.queueInbox'), queues.inbox_pending, data.links?.inbox],
+    [t('control.commandCenter.queueReview'), queues.review_queue, data.links?.review],
+    [t('control.commandCenter.queueFailingRuns'), queues.failing_runs, data.links?.runs],
+    [t('control.commandCenter.queueLearning'), queues.learning_candidates, data.links?.review],
+  ];
 
   return (
     <PageContainer>
       <Stack spacing={2}>
         <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
           <Typography variant="h5" fontWeight={700} sx={{ flex: 1 }}>
-            Command Center
+            {t('control.commandCenter.title')}
           </Typography>
           <Chip
             size="small"
             color={health.healthy ? 'success' : 'error'}
-            label={health.healthy ? 'Healthy' : 'Degraded'}
+            label={health.healthy ? t('control.commandCenter.healthy') : t('control.commandCenter.degraded')}
           />
           <Chip
             size="small"
             variant="outlined"
-            label={`Containment: ${data.containment?.containment_level || 'normal'}`}
+            label={t('control.commandCenter.containmentChip', { level: containmentLevel })}
           />
         </Stack>
 
         <Typography variant="overline" color="text.secondary">
-          Queues
+          {t('control.commandCenter.queues')}
         </Typography>
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-          {[
-            ['Inbox', queues.inbox_pending, data.links?.inbox],
-            ['Review', queues.review_queue, data.links?.review],
-            ['Failing runs', queues.failing_runs, data.links?.runs],
-            ['Learning', queues.learning_candidates, data.links?.review],
-          ].map(([label, count, href]) => (
+          {queueCards.map(([label, count, href]) => (
             <Paper key={label} variant="outlined" sx={{ p: 1.5, minWidth: 140 }}>
               <Typography variant="caption" color="text.secondary">
                 {label}
@@ -139,14 +142,14 @@ function OverviewPanel() {
               </Typography>
               {href && (
                 <Link component={RouterLink} to={href} variant="caption">
-                  Open
+                  {t('control.commandCenter.open')}
                 </Link>
               )}
             </Paper>
           ))}
           <Paper variant="outlined" sx={{ p: 1.5, minWidth: 160 }}>
             <Typography variant="caption" color="text.secondary">
-              Spend today
+              {t('control.commandCenter.spendToday')}
             </Typography>
             <Typography variant="h6" fontWeight={700}>
               ${Number(spend.spent_today_usd || 0).toFixed(2)}
@@ -155,13 +158,13 @@ function OverviewPanel() {
               </Typography>
             </Typography>
             {spend.budget_exceeded && (
-              <Chip size="small" color="error" label="Budget exceeded" />
+              <Chip size="small" color="error" label={t('control.commandCenter.budgetExceeded')} />
             )}
           </Paper>
         </Stack>
 
         <Typography variant="overline" color="text.secondary">
-          Capabilities
+          {t('control.commandCenter.capabilities')}
         </Typography>
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
           {Object.entries(caps).map(([name, cap]) => (
@@ -182,37 +185,37 @@ function OverviewPanel() {
         </Stack>
 
         <Typography variant="overline" color="text.secondary">
-          Graduated containment
+          {t('control.commandCenter.containment')}
         </Typography>
         <Paper variant="outlined" sx={{ p: 2 }}>
           <Stack spacing={1.5} direction={{ xs: 'column', sm: 'row' }} alignItems="flex-start">
             <TextField
               select
               size="small"
-              label="Level"
+              label={t('control.commandCenter.level')}
               value={level}
               onChange={(e) => setLevel(e.target.value)}
               sx={{ minWidth: 220 }}
             >
-              {LEVELS.map((opt) => (
-                <MenuItem key={opt.value} value={opt.value}>
-                  {opt.label}
+              {LEVEL_VALUES.map((value) => (
+                <MenuItem key={value} value={value}>
+                  {t(`control.commandCenter.levels.${value}`)}
                 </MenuItem>
               ))}
             </TextField>
             <TextField
               size="small"
-              label="Reason"
+              label={t('control.commandCenter.reason')}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               fullWidth
             />
             <Button variant="contained" onClick={onContain} disabled={saving}>
-              Apply
+              {t('control.commandCenter.apply')}
             </Button>
           </Stack>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-            Full stop enables kill_switch on all active processes. Changes are audited.
+            {t('control.commandCenter.containmentHint')}
           </Typography>
         </Paper>
       </Stack>
@@ -221,15 +224,22 @@ function OverviewPanel() {
 }
 
 export default function CommandCenterPage() {
+  const { t: ts } = useTranslation('shell');
+  const label = (english) => shellLabel(ts, english);
+  const tabs = useMemo(
+    () => [
+      { id: 'overview', label: label('Overview'), element: <OverviewPanel /> },
+      { id: 'expertise', label: label('Expertise'), element: <AIExpertisePanel /> },
+      { id: 'monitoring', label: label('Monitoring'), element: <MonitoringPanel /> },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ts],
+  );
   return (
     <ControlHub
-      title="Command Center"
+      title={label('Command Center')}
       defaultTab="overview"
-      tabs={[
-        { id: 'overview', label: 'Overview', element: <OverviewPanel /> },
-        { id: 'expertise', label: 'Expertise', element: <AIExpertisePanel /> },
-        { id: 'monitoring', label: 'Monitoring', element: <MonitoringPanel /> },
-      ]}
+      tabs={tabs}
     />
   );
 }

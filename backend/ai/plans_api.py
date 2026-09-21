@@ -67,6 +67,8 @@ class PlanDiscoverSerializer(serializers.Serializer):
 
 class PlanConfirmSerializer(serializers.Serializer):
     step_id = serializers.IntegerField(required=True)
+    # Optional operator-filled body for incomplete staged mutations (hire fields).
+    body = serializers.DictField(required=False, allow_null=True)
 
 
 class PlanCompensateSerializer(serializers.Serializer):
@@ -625,7 +627,10 @@ class PlanViewSet(viewsets.GenericViewSet):
         serializer.is_valid(raise_exception=True)
         try:
             result = self.service.confirm_step(
-                request.user, pk, serializer.validated_data["step_id"]
+                request.user,
+                pk,
+                serializer.validated_data["step_id"],
+                body_override=serializer.validated_data.get("body"),
             )
         except PlanNotAccessibleError as exc:
             return Response(

@@ -23,6 +23,7 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import SettingsIcon from '@mui/icons-material/Settings';
 import HelpIcon from '@mui/icons-material/Help';
 import { useEnabledApps } from '../hooks/useEnabledApps';
+import { useTranslation } from 'react-i18next';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -200,6 +201,7 @@ function searchCommands(query) {
 }
 
 export default function CommandPalette({ open, onClose }) {
+  const { t } = useTranslation('shell');
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef(null);
@@ -291,12 +293,12 @@ export default function CommandPalette({ open, onClose }) {
           <TextField
             inputRef={inputRef}
             fullWidth
-            placeholder="Type a command or search..."
+            placeholder={t('commandPalette.searchPlaceholder')}
             value={query}
             onChange={handleQueryChange}
             variant="standard"
             inputProps={{
-              'aria-label': 'Search commands',
+              'aria-label': t('commandPalette.searchAria'),
               'role': 'combobox',
               'aria-expanded': filteredCommands.length > 0,
               'aria-controls': 'command-list',

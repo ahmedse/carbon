@@ -155,4 +155,45 @@ describe('AgentRunSurface', () => {
     expect(screen.getByTestId('beat-detail-body')).toHaveTextContent('Search for duplicate records');
     expect(screen.queryByRole('dialog')).toBeNull();
   });
+
+  it('shows one Approve control on the consent timeline node only', () => {
+    const onConfirm = vi.fn();
+    const onDecline = vi.fn();
+    const consentPlan = {
+      id: 'plan-consent',
+      status: 'paused',
+      brief: 'Hire someone',
+      steps: [
+        {
+          step_id: 0,
+          intent: 'Create employee',
+          tool_name: 'call_host_api',
+          tool_args: { api_name: 'create_employee', body: {} },
+          status: 'awaiting_approval',
+          depends_on: [],
+        },
+      ],
+    };
+    render(
+      <AgentRunSurface
+        plan={consentPlan}
+        runSteps={[]}
+        phase="paused"
+        onConfirmStep={onConfirm}
+        onDeclineStep={onDecline}
+        confirmingId={null}
+        consentHero={(
+          <div data-testid="consent-hero-card" data-consent-mode="status-strip">
+            Needs your approval
+          </div>
+        )}
+      />,
+    );
+    expect(screen.getByTestId('timeline-consent-0')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /^Approve$/i })).toHaveLength(1);
+    expect(screen.getByTestId('consent-hero-card')).toHaveAttribute('data-consent-mode', 'status-strip');
+    // No operator JSON dump of api_name in the dock / timeline
+    expect(screen.queryByText(/"api_name"/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('timeline-consent-form-0')).toBeInTheDocument();
+  });
 });

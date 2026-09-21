@@ -180,6 +180,13 @@ Rules:
   tool_name "call_host_api" with tool_args.api_name set to an exact name
   from the Host API catalog. NEVER put a catalog name in
   get_entity_details.entity_name — that tool is knowledge-schema only.
+- First-person leave submit ("I want leave", Arabic إجازة / عارضة) MUST use
+  submit_my_leave when that catalog name exists — never create_leave_record
+  (admin path; needs employee id and skips the /me/leave/ workflow).
+- Loan process / first-person loan submit MUST use submit_my_loan (or list_my_loans
+  for reads) — NEVER submit_my_leave. Leave APIs are leave-only.
+- Employee onboarding MUST use create_employee / list_employees / update_employee
+  — NEVER submit_my_leave.
 - Person / org identity lookups by name or employee number use
   resolve_entity (ECF), not get_entity_details and not a catalog name as
   an entity.
@@ -599,6 +606,7 @@ def _catalog_api_names(instance_config: dict | None) -> set[str]:
 
 def _coerce_host_api_steps(
     steps: list[PlanStep], catalog_names: set[str] | None,
+    utterance: str = "",
 ) -> None:
     """Rewrite mistaken knowledge-entity bindings to ``call_host_api``.
 
@@ -608,20 +616,30 @@ def _coerce_host_api_steps(
     That tool only searches the knowledge store → soft miss
     ``Entity '…' not found``. Chat uses ``call_host_api`` with the same
     catalog names. Mutates ``steps`` in place.
+
+    Also rewrites leave-only APIs off loan/onboarding briefs (P1 bind).
     """
     if not catalog_names:
         return
+    domain = _plan_domain(utterance)
     for step in steps:
         args = dict(step.tool_args or {})
         # tool_name was itself a catalog name (invalid executor key → stripped
         # earlier, or still present if it somehow passed validation).
         if step.tool_name in catalog_names:
             api = step.tool_name
+            if api == "create_leave_record" and "submit_my_leave" in catalog_names:
+                api = "submit_my_leave"
+            api = _rewrite_domain_api(api, domain, catalog_names)
             step.tool_name = "call_host_api"
             args = {"api_name": api, **{k: v for k, v in args.items() if k != "api_name"}}
+            if api == "submit_my_leave" and isinstance(args.get("body"), dict):
+                args["body"] = {
+                    k: v for k, v in args["body"].items() if k != "employee"
+                }
             step.tool_args = args
             logger.info(
-                "Coerced step %d tool_name=%r → call_host_api",
+                "Coerced step %d tool_name → call_host_api(api_name=%r)",
                 step.step_id, api,
             )
             continue
@@ -637,20 +655,103 @@ def _coerce_host_api_steps(
             or args.get("query")
         )
         if not isinstance(candidate, str) or candidate not in catalog_names:
+            # Domain rewrite may still apply when api_name is already set to a
+            # leave API on a non-leave brief (candidate still in catalog).
+            if (
+                step.tool_name == "call_host_api"
+                and isinstance(args.get("api_name"), str)
+            ):
+                rewritten = _rewrite_domain_api(
+                    args["api_name"], domain, catalog_names,
+                )
+                if rewritten != args["api_name"]:
+                    args["api_name"] = rewritten
+                    step.tool_args = args
+                    logger.info(
+                        "Coerced step %d domain api → %r",
+                        step.step_id, rewritten,
+                    )
             continue
         if step.tool_name == "call_host_api" and args.get("api_name") == candidate:
+            # Prefer self-service leave submit when both catalog entries exist
+            # (Agent plans historically bound create_leave_record → /leave-records/
+            # without employee → HTTP 400; /me/leave/ is the governed self path).
+            if (
+                candidate == "create_leave_record"
+                and "submit_my_leave" in catalog_names
+            ):
+                candidate = "submit_my_leave"
+                body = args.get("body")
+                if isinstance(body, dict) and "employee" in body:
+                    body = {k: v for k, v in body.items() if k != "employee"}
+                    args["body"] = body
+            rewritten = _rewrite_domain_api(candidate, domain, catalog_names)
+            if rewritten != args.get("api_name"):
+                args["api_name"] = rewritten
+                step.tool_args = args
+                logger.info(
+                    "Coerced step %d api_name → %r",
+                    step.step_id, rewritten,
+                )
             continue
         step.tool_name = "call_host_api"
+        coerced_api = candidate
+        if (
+            candidate == "create_leave_record"
+            and "submit_my_leave" in catalog_names
+        ):
+            coerced_api = "submit_my_leave"
+        coerced_api = _rewrite_domain_api(coerced_api, domain, catalog_names)
         step.tool_args = {
-            "api_name": candidate,
+            "api_name": coerced_api,
             **{k: v for k, v in args.items() if k not in (
                 "api_name", "entity_name", "entity_type", "name", "query",
             )},
         }
         logger.info(
             "Coerced step %d → call_host_api(api_name=%r)",
-            step.step_id, candidate,
+            step.step_id, coerced_api,
         )
+
+
+def _plan_domain(utterance: str) -> str:
+    """Classify plan brief domain for API bind guards."""
+    u = (utterance or "").casefold()
+    if "loan.request" in u or re.search(r"\bloan\b", u):
+        if "leave" not in u:
+            return "loan"
+        # Mixed — prefer explicit process id
+        if "loan.request" in u and "leave.request" not in u:
+            return "loan"
+    if "employee.onboarding" in u or "onboard" in u:
+        return "onboarding"
+    if "leave.request" in u or re.search(r"\bleave\b|إجازة|اجازة", utterance or "", re.I):
+        return "leave"
+    if "payroll" in u:
+        return "payroll"
+    if "gosi" in u or "wps" in u or "sif" in u:
+        return "gosi"
+    return ""
+
+
+def _rewrite_domain_api(
+    api: str, domain: str, catalog_names: set[str],
+) -> str:
+    """Keep leave APIs off loan/onboarding plans; bind pack-correct hosts."""
+    leave_only = {"submit_my_leave", "create_leave_record", "list_my_leave", "get_my_leave_balance"}
+    if domain == "loan" and api in leave_only:
+        if "submit_my_loan" in catalog_names:
+            return "submit_my_loan"
+        if "list_my_loans" in catalog_names:
+            return "list_my_loans"
+        if "list_loans" in catalog_names:
+            return "list_loans"
+    if domain == "onboarding" and api in leave_only:
+        if "create_employee" in catalog_names:
+            return "create_employee"
+        if "list_employees" in catalog_names:
+            return "list_employees"
+    return api
 
 
 def _ensure_export_deliverable(utterance: str, steps: list[PlanStep]) -> None:
@@ -1024,7 +1125,7 @@ class SkillAwarePlanner:
         # Validate tool names — catalog names are not executors; rewrite via
         # _coerce_host_api_steps after stripping unknown tools would lose the
         # name, so coerce FIRST while the catalog name is still on the step.
-        _coerce_host_api_steps(steps, catalog_names)
+        _coerce_host_api_steps(steps, catalog_names, utterance=utterance)
 
         from ai.engine.agent.tools import get_tool_executors
         _vexecs = await get_tool_executors()
@@ -1064,7 +1165,7 @@ class SkillAwarePlanner:
         _ensure_export_deliverable(utterance, steps)
         # Second pass after arg strip — entity_name may remain on
         # get_entity_details when the tool_name was already valid.
-        _coerce_host_api_steps(steps, catalog_names)
+        _coerce_host_api_steps(steps, catalog_names, utterance=utterance)
 
         # Deterministic mutation classification — a capability fact of the
         # tool, NOT the LLM's judgment. The LLM routinely under-marks mutation

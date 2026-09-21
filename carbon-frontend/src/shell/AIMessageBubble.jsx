@@ -534,9 +534,9 @@ function AIMessageBubble({
     : {
         ...AI_BUBBLE_SX,
         ...(honestUncertainty && {
-          borderLeft: '2px solid',
+          borderInlineStart: '2px solid',
           borderColor: 'warning.light',
-          pl: 1.5,
+          ps: 1.5,
         }),
       };
 
@@ -1182,6 +1182,8 @@ function AIMessageBubble({
                 label="Edit message"
                 value={editText}
                 onChange={(event) => setEditText(event.target.value)}
+                inputProps={{ dir: 'auto' }}
+                sx={{ '& textarea': { unicodeBidi: 'plaintext' } }}
               />
               <Stack direction="row" spacing={0.5}>
                 <Button
@@ -1210,14 +1212,26 @@ function AIMessageBubble({
           ) : (
             <Typography
               variant="body2"
-              sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5, color: 'text.primary' }}
+              dir="auto"
+              sx={{
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                lineHeight: 1.5,
+                color: 'text.primary',
+                unicodeBidi: 'plaintext',
+              }}
             >
               {message.content}
             </Typography>
           )
         ) : (
           <LongContent content={message.content}>
-            <Box ref={contentRef} data-testid="message-content" sx={{ color: 'text.secondary' }}>
+            <Box
+              ref={contentRef}
+              data-testid="message-content"
+              dir="auto"
+              sx={{ color: 'text.secondary', unicodeBidi: 'plaintext' }}
+            >
               <EnvelopeMessage envelope={envelope} fallbackContent={message.content} />
             </Box>
           </LongContent>
@@ -1250,10 +1264,10 @@ function AIMessageBubble({
               fullWidth
               multiline
               minRows={2}
-              label="Correction"
+              label={t('correction.label')}
               value={correctionText}
               onChange={(event) => setCorrectionText(event.target.value)}
-              placeholder="Describe what the answer should have said…"
+              placeholder={t('correction.placeholder')}
             />
             <Stack direction="row" spacing={0.5}>
               <Button
@@ -1262,7 +1276,7 @@ function AIMessageBubble({
                 disabled={!correctionText.trim()}
                 onClick={() => onCorrect?.(message, correctionText.trim())}
               >
-                Save
+                {t('correction.save')}
               </Button>
               <Button
                 size="small"
@@ -1272,7 +1286,7 @@ function AIMessageBubble({
                   setCorrectionText('');
                 }}
               >
-                Cancel
+                {t('correction.cancel')}
               </Button>
             </Stack>
           </Box>

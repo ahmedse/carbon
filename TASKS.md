@@ -49,8 +49,8 @@ evidence → not done.
 | **PEC** (Pulse Enterprise Control-plane) | **Pulse** | COMPLETE | Core P1–P7 closed |
 | **PEC-R** (Pulse residuals) | **Pulse** | **COMPLETE** | R4 journey-16 **3/3 PASS** · R5–R7 · leave fetch |
 | **Pulse Chat QA** | **Pulse** | **ACTIVE** | Deep journey ~**86%** · **GOFSCO clarify-loop CLOSED** (530 headcount) · open PARTIAL: B1/B5/C1/C7 |
-| **NSR** (Nibras Staff-Ready) | **Nibras** | **COMPLETE** (W9 PARTIAL) | Staff go-live **READY**; Playwright UI leave journey ops residual — `docs/nibras/evidence/NSR-9-go-live-gate.md` |
-| **Nibras Deep QA** | **Nibras** | **COMPLETE** | **P0 46/46** · all-case **80/81** · only FAIL J-EMP-06 (ents w/o join_date) · Playwright ops residual · board |
+| **NSR** (Nibras Staff-Ready) | **Nibras** | **COMPLETE** | Staff go-live **READY**; Playwright leave UI **3/3 PASS** 2026-09-21 — `docs/nibras/evidence/NSR-9-go-live-gate.md` |
+| **Nibras Deep QA** | **Nibras** | **COMPLETE** | **P0 46/46** · all-case **81/81** · J-EMP-06 fixed · Playwright NSR-9 **3/3** |
 | **OF-15…OF-20** | **Nibras** | DONE | Leave vertical live |
 | **NIR-3C / NIR-7A/B** | **Nibras** | DONE | Code+tests shipped |
 | **NIR-5 / NIR-6** | **Nibras** | DONE via NSR-7/8 | Governed FKs + single-root org shipped |
@@ -84,7 +84,7 @@ evidence → not done.
 | **W6** | NSR-6A | DONE | Path H: Attendance + Rotation hidden from go-live nav; Certifications stay |
 | **W7** | NSR-7A → NSR-7B → NSR-7C | Sequential | ADR-0027 governed lookups (was NIR-5) |
 | **W8** | NSR-8A → NSR-8B | Sequential | ADR-0028 single-root org (was NIR-6) |
-| **W9** | NSR-9 | After W1–W5 green | QA E2E gate — **PARTIAL**: pytest/vitest/build PASS; Playwright leave UI ops residual; product **READY** |
+| **W9** | NSR-9 | After W1–W5 green | QA E2E gate — **DONE** 2026-09-21: Playwright leave UI **3/3 PASS** |
 
 **Go-live gate:** NSR-9 PASS required before declaring GOFSCO staff onboarding ready. W7/W8 may run after first cohort only if Master explicitly defers (document debt); W6 demote path is allowed instead of thicken if Master chooses hide.
 
@@ -604,7 +604,7 @@ cd /home/ahmed/ws/carbon/carbon-frontend && npx vitest run src/__tests__/OrgUnit
 **Date:** 2026-09-16  
 **Worker Role:** qa-validator  
 **Recommended Model:** DeepSeek V4.1-Flash  
-**Status:** PARTIAL — 2026-09-16 (pytest/vitest/build PASS; Playwright UI leave journey BLOCKED on host — API leave green)
+**Status:** DONE — 2026-09-21 (pytest/vitest/build + Playwright leave UI 3/3 PASS; evidence `docs/nibras/evidence/NSR-9-go-live-gate.md`)
 **Depends on:** NSR-1B, NSR-2B, NSR-3B, NSR-4B, NSR-5C (W6–W8 per Master deferral note); W7–W8 now DONE
 
 #### Objective

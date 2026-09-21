@@ -7,9 +7,11 @@ import { useNavigate } from 'react-router-dom';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
 import PageContainer from '../../../components/layout/PageContainer';
 import { AIWorkspace } from '../../../shell/AIWorkspace';
+import { useTranslation } from 'react-i18next';
 
 export default function AIWorkspacePage() {
-  useDocumentTitle('Pulse');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.workspace.title'));
   const navigate = useNavigate();
 
   return (

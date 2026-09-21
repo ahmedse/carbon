@@ -23,7 +23,7 @@ export function ActivityBar({ studios, activeStudio, onStudioChange }) {
       : studio.label;
 
     return (
-      <Tooltip title={label} placement="right" key={studio.id}>
+      <Tooltip title={label} placement={isRtl ? 'left' : 'right'} key={studio.id}>
         <IconButton
           size="small"
           onClick={() => onStudioChange(studio.id)}

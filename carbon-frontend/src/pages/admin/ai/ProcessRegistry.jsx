@@ -36,6 +36,7 @@ import useDocumentTitle from '../../../hooks/useDocumentTitle';
 import PageContainer from '../../../components/layout/PageContainer';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
+import { useTranslation } from 'react-i18next';
 import {
   AI_OPERATOR,
   AI_PROCESS_OWNER,
@@ -161,7 +162,8 @@ function GatedButton({ allowed, reason, children, ...props }) {
 }
 
 export default function ProcessRegistry() {
-  useDocumentTitle('Process Registry');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.processRegistry.title'));
   const theme = useTheme();
   const navigate = useNavigate();
   const { token, userCapabilities } = useAuth();
@@ -259,7 +261,7 @@ export default function ProcessRegistry() {
     <PageContainer>
       <Stack spacing={2}>
         <Stack direction="row" alignItems="center" justifyContent="space-between">
-          <Typography variant="h5">Process Registry</Typography>
+          <Typography variant="h5">{t('control.processRegistry.title')}</Typography>
           <Stack direction="row" spacing={1}>
             <GatedButton
               allowed={isOwner}
@@ -269,7 +271,7 @@ export default function ProcessRegistry() {
               startIcon={<AddIcon />}
               onClick={openDraft}
             >
-              New draft
+              {t('control.processRegistry.newDraft')}
             </GatedButton>
             <Button
               size="small"
@@ -277,14 +279,13 @@ export default function ProcessRegistry() {
               onClick={() => load()}
               disabled={loading}
             >
-              Refresh
+              {t('control.processRegistry.refresh')}
             </Button>
           </Stack>
         </Stack>
 
         <Typography variant="body2" color="text.secondary">
-          Open a process for structured scope, steps, autonomy, and lifecycle —
-          not JSON-first.
+          {t('control.processRegistry.subtitle')}
         </Typography>
 
         <Tabs
@@ -302,7 +303,7 @@ export default function ProcessRegistry() {
           <Paper sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
             <CloudOffIcon color="disabled" />
             <Typography variant="body2">
-              Registry is temporarily unavailable.
+              {t('control.processRegistry.offline')}
             </Typography>
           </Paper>
         )}
@@ -314,7 +315,7 @@ export default function ProcessRegistry() {
         ) : rows.length === 0 ? (
           <Paper sx={{ p: 4, textAlign: 'center' }}>
             <Typography variant="body2" color="text.secondary">
-              No process definitions.
+              {t('control.processRegistry.empty')}
             </Typography>
           </Paper>
         ) : (
@@ -322,12 +323,12 @@ export default function ProcessRegistry() {
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>Process ID</TableCell>
-                  <TableCell>Version</TableCell>
-                  <TableCell>Owner</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Kill switch</TableCell>
-                  <TableCell>Updated</TableCell>
+                  <TableCell>{t('control.processRegistry.colProcessId')}</TableCell>
+                  <TableCell>{t('control.processRegistry.colVersion')}</TableCell>
+                  <TableCell>{t('control.processRegistry.colOwner')}</TableCell>
+                  <TableCell>{t('control.processRegistry.colStatus')}</TableCell>
+                  <TableCell>{t('control.processRegistry.colKillSwitch')}</TableCell>
+                  <TableCell>{t('control.processRegistry.colUpdated')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -381,14 +382,14 @@ export default function ProcessRegistry() {
       </Stack>
 
       <Dialog open={draftOpen} onClose={() => setDraftOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>New draft</DialogTitle>
+        <DialogTitle>{t('control.processRegistry.newDraft')}</DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ mb: 1 }}>
             Paste the full process definition JSON. After create, edit scope and
             steps on the process page.
           </DialogContentText>
           <TextField
-            label="Definition JSON"
+            label={t('control.processRegistry.definitionJson')}
             multiline
             fullWidth
             minRows={12}

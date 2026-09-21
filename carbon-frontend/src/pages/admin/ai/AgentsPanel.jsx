@@ -44,6 +44,7 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import SchemaOutlinedIcon from '@mui/icons-material/SchemaOutlined';
 import TableRowsOutlinedIcon from '@mui/icons-material/TableRowsOutlined';
+import { useTranslation } from 'react-i18next';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
 import PageContainer from '../../../components/layout/PageContainer';
 import CarbonDataGrid from '../../../components/DataGrid/CarbonDataGrid';
@@ -73,7 +74,8 @@ const EMPTY_FORM = {
 };
 
 export default function AgentsPanel() {
-  useDocumentTitle('Agents');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.agents.title'));
   const theme = useTheme();
   const { token, canSchemaAdmin, isGlobalAdminFlag } = useAuth();
   const { notify, notifyFromError } = useNotification();
@@ -266,12 +268,12 @@ export default function AgentsPanel() {
               disableColumnMenu: true,
               renderCell: ({ row }) => (
                 <Stack direction="row" spacing={0.5}>
-                  <Tooltip title="Edit agent">
+                  <Tooltip title={t('control.agents.edit')}>
                     <IconButton size="small" aria-label={`Edit ${row.name}`} onClick={() => openEdit(row)}>
                       <EditOutlinedIcon sx={{ fontSize: '0.9375rem' }} />
                     </IconButton>
                   </Tooltip>
-                  <Tooltip title="Remove agent">
+                  <Tooltip title={t('control.agents.remove')}>
                     <IconButton size="small" aria-label={`Remove ${row.name}`} onClick={() => openDelete(row)}>
                       <DeleteOutlineIcon sx={{ fontSize: '0.9375rem' }} />
                     </IconButton>
@@ -283,7 +285,7 @@ export default function AgentsPanel() {
         : []),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [theme, staff],
+    [theme, staff, t],
   );
 
   const toggleView = (_e, next) => {
@@ -303,7 +305,7 @@ export default function AgentsPanel() {
       <Stack spacing={1} sx={{ width: '100%', maxWidth: 1200 }}>
         <Stack direction="row" alignItems="center" spacing={1}>
           <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 700, flex: 1 }}>
-            Agents
+            {t('control.agents.title')}
           </Typography>
           {staff && (
             <Button
@@ -313,7 +315,7 @@ export default function AgentsPanel() {
               onClick={openCreate}
               sx={{ fontSize: '0.75rem' }}
             >
-              Register agent
+              {t('control.agents.register')}
             </Button>
           )}
           <Button
@@ -323,9 +325,9 @@ export default function AgentsPanel() {
             disabled={loading}
             sx={{ fontSize: '0.75rem' }}
           >
-            Refresh
+            {t('control.agents.refresh')}
           </Button>
-          <ToggleButtonGroup size="small" exclusive value={view} onChange={toggleView} aria-label="Agents view">
+          <ToggleButtonGroup size="small" exclusive value={view} onChange={toggleView} aria-label={t('control.agents.viewAria')}>
             <ToggleButton value="table" sx={{ fontSize: '0.6875rem', px: 1 }}>
               <TableRowsOutlinedIcon sx={{ fontSize: '0.9375rem', mr: 0.5 }} />
               Table
@@ -414,7 +416,7 @@ export default function AgentsPanel() {
                 <Typography sx={{ fontSize: '1rem', fontWeight: 700, flex: 1 }}>
                   {selected.name}
                 </Typography>
-                <IconButton size="small" onClick={() => setSelected(null)} aria-label="Close detail">
+                <IconButton size="small" onClick={() => setSelected(null)} aria-label={t('control.common.closeDetail')}>
                   <CloseIcon />
                 </IconButton>
               </Stack>
@@ -560,17 +562,17 @@ export default function AgentsPanel() {
               {dialog === 'create' && (
                 <TextField
                   size="small"
-                  label="Name (unique — engine upsert key)"
+                  label={t('control.agents.nameUnique')}
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   fullWidth
                 />
               )}
               <FormControl size="small" fullWidth>
-                <InputLabel id="agent-role-label">Role</InputLabel>
+                <InputLabel id="agent-role-label">{t('control.agents.role')}</InputLabel>
                 <Select
                   labelId="agent-role-label"
-                  label="Role"
+                  label={t('control.agents.role')}
                   value={form.role}
                   onChange={(e) => setForm({ ...form, role: e.target.value })}
                 >
@@ -583,30 +585,30 @@ export default function AgentsPanel() {
               </FormControl>
               <TextField
                 size="small"
-                label="Tool set (comma-separated)"
+                label={t('control.agents.toolSet')}
                 value={form.tool_set}
                 onChange={(e) => setForm({ ...form, tool_set: e.target.value })}
                 fullWidth
-                placeholder="web_search, kg_lookup"
+                placeholder={t('control.agents.toolSetPlaceholder')}
               />
               <TextField
                 size="small"
-                label="Playbook blocks (comma-separated, optional)"
+                label={t('control.agents.playbookBlocks')}
                 value={form.playbook_blocks}
                 onChange={(e) => setForm({ ...form, playbook_blocks: e.target.value })}
                 fullWidth
-                placeholder="verify_grounding, cite_sources"
+                placeholder={t('control.agents.playbookPlaceholder')}
               />
               <TextField
                 size="small"
-                label="Model override (optional)"
+                label={t('control.agents.modelOverride')}
                 value={form.model_override}
                 onChange={(e) => setForm({ ...form, model_override: e.target.value })}
                 fullWidth
               />
               <TextField
                 size="small"
-                label="Max turns"
+                label={t('control.agents.maxTurns')}
                 type="number"
                 inputProps={{ min: 1, max: 100 }}
                 value={form.max_turns}
@@ -633,7 +635,7 @@ export default function AgentsPanel() {
 
         {/* ── Delete confirm dialog (RULE_21) ────────────────────────────── */}
         <Dialog open={dialog === 'delete'} onClose={() => !saving && setDialog(null)} maxWidth="sm" fullWidth>
-          <DialogTitle sx={{ fontSize: '1rem', fontWeight: 700 }}>Remove agent?</DialogTitle>
+          <DialogTitle sx={{ fontSize: '1rem', fontWeight: 700 }}>{t('control.agents.removeConfirm')}</DialogTitle>
           <DialogContent>
             <DialogContentText sx={{ fontSize: '0.8125rem' }}>
               Remove <strong>{selected?.name}</strong> (role: {selected?.role})? This is a soft

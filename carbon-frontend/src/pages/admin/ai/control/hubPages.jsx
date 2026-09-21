@@ -1,6 +1,8 @@
 // src/pages/admin/ai/control/hubPages.jsx
 // Pulse Control Plane destinations (ADR-0036).
-import React from 'react';
+import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { shellLabel } from '../../../../i18n/shellLabels';
 import ControlHub from './ControlHub';
 import CommandCenterPage from './CommandCenterPage';
 import EvidenceExplorerPanel from './EvidenceExplorerPanel';
@@ -32,71 +34,80 @@ import SkillLearningPanel from '../SkillLearningPanel';
 
 export { CommandCenterPage, PlatformHubPage };
 
+function useShellNavLabel() {
+  const { t } = useTranslation('shell');
+  return (english) => shellLabel(t, english);
+}
+
 export function DomainHubPage() {
-  return (
-    <ControlHub
-      title="Domain"
-      defaultTab="processes"
-      tabs={[
-        { id: 'processes', label: 'Processes', element: <ProcessRegistry /> },
-        { id: 'capabilities', label: 'Capabilities', element: <CapabilitiesPanel /> },
-        { id: 'policy', label: 'Policy', element: <PolicyDryRunPanel /> },
-        { id: 'agents', label: 'Agents', element: <AgentsPanel /> },
-        { id: 'tools', label: 'Tools', element: <ToolsPanel /> },
-        { id: 'topology', label: 'Topology', element: <AgentTopologyPanel /> },
-        { id: 'archetypes', label: 'Archetypes', element: <PulseArchetypesPanel /> },
-      ]}
-    />
+  const label = useShellNavLabel();
+  const { t } = useTranslation('shell');
+  const tabs = useMemo(
+    () => [
+      { id: 'processes', label: label('Processes'), element: <ProcessRegistry /> },
+      { id: 'capabilities', label: label('Capabilities'), element: <CapabilitiesPanel /> },
+      { id: 'policy', label: label('Policy'), element: <PolicyDryRunPanel /> },
+      { id: 'agents', label: label('Agents'), element: <AgentsPanel /> },
+      { id: 'tools', label: label('Tools'), element: <ToolsPanel /> },
+      { id: 'topology', label: label('Topology'), element: <AgentTopologyPanel /> },
+      { id: 'archetypes', label: label('Archetypes'), element: <PulseArchetypesPanel /> },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [t],
   );
+  return <ControlHub title={label('Domain')} defaultTab="processes" tabs={tabs} />;
 }
 
 export function AssetsHubPage() {
-  return (
-    <ControlHub
-      title="Assets"
-      defaultTab="knowledge"
-      tabs={[
-        { id: 'knowledge', label: 'Knowledge', element: <KnowledgeBasePanel /> },
-        { id: 'memory', label: 'Memory', element: <MemoryGovernancePanel /> },
-        { id: 'graph', label: 'Graph', element: <KnowledgeGraphPanel /> },
-        { id: 'skills', label: 'Skills', element: <SkillsPanel /> },
-        { id: 'prompts', label: 'Prompts', element: <PromptsPanel /> },
-      ]}
-    />
+  const label = useShellNavLabel();
+  const { t } = useTranslation('shell');
+  const tabs = useMemo(
+    () => [
+      { id: 'knowledge', label: label('Knowledge Base'), element: <KnowledgeBasePanel /> },
+      { id: 'memory', label: label('Memory'), element: <MemoryGovernancePanel /> },
+      { id: 'graph', label: label('Graph'), element: <KnowledgeGraphPanel /> },
+      { id: 'skills', label: label('Skills'), element: <SkillsPanel /> },
+      { id: 'prompts', label: label('Prompts'), element: <PromptsPanel /> },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [t],
   );
+  return <ControlHub title={label('Assets')} defaultTab="knowledge" tabs={tabs} />;
 }
 
 export function EvidenceHubPage() {
-  return (
-    <ControlHub
-      title="Evidence"
-      defaultTab="explorer"
-      tabs={[
-        { id: 'explorer', label: 'Explorer', element: <EvidenceExplorerPanel /> },
-        { id: 'audit', label: 'Audit', element: <AuditPanel /> },
-        { id: 'runs', label: 'Runs', element: <RunTimelinePanel /> },
-        { id: 'inbox', label: 'Inbox', element: <HumanTaskInbox /> },
-        { id: 'watches', label: 'Watches', element: <WatchesPanel /> },
-        { id: 'logs', label: 'Logs', element: <AILogsPanel /> },
-        { id: 'quality', label: 'Quality', element: <OutputQualityPanel /> },
-      ]}
-    />
+  const label = useShellNavLabel();
+  const { t } = useTranslation('shell');
+  const tabs = useMemo(
+    () => [
+      { id: 'explorer', label: label('Explorer'), element: <EvidenceExplorerPanel /> },
+      { id: 'audit', label: label('Audit'), element: <AuditPanel /> },
+      { id: 'runs', label: label('Runs'), element: <RunTimelinePanel /> },
+      { id: 'inbox', label: label('Inbox'), element: <HumanTaskInbox /> },
+      { id: 'watches', label: label('Watches'), element: <WatchesPanel /> },
+      { id: 'logs', label: label('Logs'), element: <AILogsPanel /> },
+      { id: 'quality', label: label('Quality'), element: <OutputQualityPanel /> },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [t],
   );
+  return <ControlHub title={label('Evidence')} defaultTab="explorer" tabs={tabs} />;
 }
 
 export function LearningHubPage() {
-  return (
-    <ControlHub
-      title="Learning"
-      defaultTab="review"
-      tabs={[
-        { id: 'review', label: 'Review Queue', element: <ReviewQueue /> },
-        { id: 'candidates', label: 'Candidates', element: <LearningCandidatesPanel /> },
-        { id: 'feedback', label: 'Feedback', element: <FeedbackPanel /> },
-        { id: 'jobs', label: 'Jobs', element: <LearningJobsPanel /> },
-        { id: 'flywheel', label: 'Flywheel', element: <LearningFlywheelPanel /> },
-        { id: 'skills', label: 'Skill Learning', element: <SkillLearningPanel /> },
-      ]}
-    />
+  const label = useShellNavLabel();
+  const { t } = useTranslation('shell');
+  const tabs = useMemo(
+    () => [
+      { id: 'review', label: label('Review Queue'), element: <ReviewQueue /> },
+      { id: 'candidates', label: label('Candidates'), element: <LearningCandidatesPanel /> },
+      { id: 'feedback', label: label('Feedback'), element: <FeedbackPanel /> },
+      { id: 'jobs', label: label('Jobs'), element: <LearningJobsPanel /> },
+      { id: 'flywheel', label: label('Flywheel'), element: <LearningFlywheelPanel /> },
+      { id: 'skills', label: label('Skill Learning'), element: <SkillLearningPanel /> },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [t],
   );
+  return <ControlHub title={label('Learning')} defaultTab="review" tabs={tabs} />;
 }

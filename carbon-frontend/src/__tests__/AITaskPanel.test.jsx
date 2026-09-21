@@ -189,7 +189,8 @@ describe('AITaskPanel — chat-first coworker shell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Review plan' }));
 
     expect(await screen.findByText('Approve plan')).toBeInTheDocument();
-    expect(screen.getAllByText('Search for duplicate records').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('plan-dag-graph')).toBeInTheDocument();
+    expect(screen.getAllByText(/Search for duplicate/i).length).toBeGreaterThan(0);
   });
 
   it('renders Pulse questions and user replies as bubbles across turns (W5-B)', async () => {

@@ -10,7 +10,7 @@ const PLAN = {
 };
 
 describe('AgentRunToolbar', () => {
-  it('renders under-tab run controls with plan label', () => {
+  it('renders play/pause/stop without fork', () => {
     const onRun = vi.fn();
     render(
       <AgentRunToolbar
@@ -22,12 +22,15 @@ describe('AgentRunToolbar', () => {
         onStop={vi.fn()}
         onRerun={vi.fn()}
         onRetry={vi.fn()}
-        onFork={vi.fn()}
       />,
     );
     expect(screen.getByTestId('agent-run-toolbar')).toBeInTheDocument();
     expect(screen.getByTestId('agent-run-label')).toHaveTextContent(/board pack/i);
-    fireEvent.click(screen.getByRole('button', { name: /Run plan/i }));
+    expect(screen.getByTestId('agent-run-play')).toBeInTheDocument();
+    expect(screen.getByTestId('agent-run-pause')).toBeInTheDocument();
+    expect(screen.getByTestId('agent-run-stop')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/fork/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('agent-run-play'));
     expect(onRun).toHaveBeenCalled();
   });
 
@@ -47,5 +50,17 @@ describe('AgentRunToolbar', () => {
     expect(onOpenPlan).toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: /Open Output/i }));
     expect(onOpenOutput).toHaveBeenCalled();
+  });
+
+  it('shows retry only when failed', () => {
+    render(
+      <AgentRunToolbar
+        plan={{ ...PLAN, status: 'failed' }}
+        phase="error"
+        effectiveStatus="failed"
+        onRetry={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('agent-run-retry')).toBeInTheDocument();
   });
 });

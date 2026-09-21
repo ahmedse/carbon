@@ -14,12 +14,14 @@ import {
 } from '@mui/material';
 import { useSearchParams } from 'react-router-dom';
 import useDocumentTitle from '../../../../hooks/useDocumentTitle';
+import { useTranslation } from 'react-i18next';
 import PageContainer from '../../../../components/layout/PageContainer';
 import { useAuth } from '../../../../auth/AuthContext';
 import { getEvidence } from '../../../../api/aiControlPlane';
 
 export default function EvidenceExplorerPanel() {
-  useDocumentTitle('Evidence Explorer');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.evidenceExplorer.title'));
   const { token } = useAuth();
   const [searchParams] = useSearchParams();
   const [runId, setRunId] = useState('');
@@ -85,23 +87,22 @@ export default function EvidenceExplorerPanel() {
     <PageContainer>
       <Stack spacing={2}>
         <Typography variant="h5" fontWeight={700}>
-          Evidence Explorer
+          {t('control.evidenceExplorer.title')}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Reconstruct a run or conversation on one spine: run events, PDP decisions,
-          human tasks, and audit rows.
+          {t('control.evidenceExplorer.subtitle')}
         </Typography>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
           <TextField
             size="small"
-            label="Run ID"
+            label={t('control.evidenceExplorer.runId')}
             value={runId}
             onChange={(e) => setRunId(e.target.value)}
             fullWidth
           />
           <TextField
             size="small"
-            label="Conversation ID"
+            label={t('control.evidenceExplorer.conversationId')}
             value={conversationId}
             onChange={(e) => setConversationId(e.target.value)}
             fullWidth
@@ -163,7 +164,7 @@ export default function EvidenceExplorerPanel() {
               ))}
               {!payload.events?.length && (
                 <Typography variant="body2" color="text.secondary">
-                  No events found for this lookup.
+                  {t('control.evidenceExplorer.empty')}
                 </Typography>
               )}
             </Stack>

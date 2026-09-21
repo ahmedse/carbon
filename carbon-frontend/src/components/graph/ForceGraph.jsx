@@ -263,16 +263,16 @@ export default function ForceGraph({
         {hovered && (
           <Paper
             elevation={4}
-            sx={{
+            // Inline left/top — stylis RTL must not flip pageX/pageY screen coords.
+            style={{
               position: 'fixed',
               left: (hovered.x ?? 0) + 14,
               top: (hovered.y ?? 0) + 14,
-              px: 1.5,
-              py: 0.75,
               pointerEvents: 'none',
               zIndex: 1300,
               maxWidth: 340,
-              bgcolor: hoverPaper,
+              padding: '6px 12px',
+              backgroundColor: hoverPaper,
             }}
           >
             <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.75rem' }}>

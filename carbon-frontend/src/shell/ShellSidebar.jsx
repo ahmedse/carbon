@@ -4,7 +4,7 @@
 import React, { useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Box, List, Typography, IconButton, Tooltip } from '@mui/material';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import { ChevronStart } from '../i18n/DirectionalIcons';
 import HomeIcon from '@mui/icons-material/Home';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import BarChartIcon from '@mui/icons-material/BarChart';
@@ -623,7 +623,7 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
               '&:hover': { opacity: 1, bgcolor: 'action.hover' },
             }}
           >
-            <ChevronLeftIcon sx={{ fontSize: 14 }} />
+            <ChevronStart sx={{ fontSize: 14 }} />
           </IconButton>
         </Tooltip>
       </Box>

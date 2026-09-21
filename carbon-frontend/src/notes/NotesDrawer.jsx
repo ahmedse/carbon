@@ -29,7 +29,7 @@ export function NotesDrawer({ mobileFullscreen = false }) {
             onClick={() => setOpen(true)}
             sx={{
               position: 'fixed',
-              bottom: 48,
+              bottom: 'calc(48px + env(safe-area-inset-bottom, 0px))',
               zIndex: (theme) => theme.zIndex.speedDial,
               minWidth: 40,
               minHeight: 40,

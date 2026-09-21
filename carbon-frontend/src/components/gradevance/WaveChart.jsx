@@ -172,7 +172,7 @@ export default function WaveChart({
   const grid = alpha(theme.palette.text.primary, 0.1);
 
   return (
-    <Box data-testid="semantic-wave-chart" sx={{ width: '100%', position: 'relative' }}>
+      <Box data-testid="semantic-wave-chart" sx={{ width: '100%', position: 'relative' }} dir="ltr">
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.25 }} alignItems="center">
         <Chip size="small" label={`${series.length} segments`} variant="outlined" />
         <Chip size="small" label={`${transitions} swings`} variant="outlined" />
@@ -277,17 +277,18 @@ export default function WaveChart({
           <Paper
             elevation={3}
             data-testid="wave-hover-card"
-            sx={{
+            // Inline left/top — SVG plot coords must not be mirrored by stylis RTL.
+            style={{
               position: 'absolute',
               left: Math.min(Math.max(toX(active.progress) - 120, 8), w - 260),
               top: Math.max(toY(active.level) - 110, 4),
               width: 240,
-              p: 1.25,
+              padding: 10,
               pointerEvents: 'none',
               zIndex: 2,
               border: '1px solid',
-              borderColor: 'divider',
-              bgcolor: alpha(theme.palette.background.paper, 0.97),
+              borderColor: theme.palette.divider,
+              backgroundColor: alpha(theme.palette.background.paper, 0.97),
             }}
           >
             <Typography variant="caption" fontWeight={700} display="block">

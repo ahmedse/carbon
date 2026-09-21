@@ -9,13 +9,15 @@ import { Alert, Box, Button, Chip, CircularProgress, Paper, Stack, Typography } 
 import CloudOffIcon from '@mui/icons-material/CloudOff';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
+import { useTranslation } from 'react-i18next';
 import PageContainer from '../../../components/layout/PageContainer';
 import AgentTopologyGraph from '../../../components/graph/AgentTopologyGraph';
 import { useAuth } from '../../../auth/AuthContext';
 import { getTopology } from '../../../api/aiCatalog';
 
 export default function AgentTopologyPanel() {
-  useDocumentTitle('Agent Topology');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.agentTopology.title'));
   const { token } = useAuth();
 
   const [data, setData] = useState(null);
@@ -48,13 +50,13 @@ export default function AgentTopologyPanel() {
       <Stack spacing={1} sx={{ width: '100%', maxWidth: 1080 }}>
         <Stack direction="row" alignItems="center" spacing={1}>
           <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 700, flex: 1 }}>
-            Agent Topology
+            {t('control.agentTopology.title')}
           </Typography>
           {!loading && !offline && (
             <Chip
               size="small"
               variant="outlined"
-              label={`${nodeCount} agents declared`}
+              label={t('control.agentTopology.agentsDeclared', { count: nodeCount })}
               sx={{ fontSize: '0.625rem', height: 20 }}
             />
           )}
@@ -65,13 +67,12 @@ export default function AgentTopologyPanel() {
             disabled={loading}
             sx={{ fontSize: '0.75rem' }}
           >
-            Refresh
+            {t('control.agentTopology.refresh')}
           </Button>
         </Stack>
 
         <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
-          The system&apos;s declared graph (ADR-001): agents as nodes, declared handoffs as edges.
-          Click a node to inspect it. Admin observe surface — read-only.
+          {t('control.agentTopology.subtitle')}
         </Typography>
 
         {loading && (
@@ -86,14 +87,14 @@ export default function AgentTopologyPanel() {
               <Stack direction="row" spacing={1} alignItems="center">
                 <CloudOffIcon sx={{ fontSize: '1.125rem', color: 'text.secondary' }} />
                 <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.8125rem' }}>
-                  Topology unavailable
+                  {t('control.agentTopology.offline')}
                 </Typography>
               </Stack>
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
-                Could not reach the catalog service. Check the API and try again.
+                {t('control.agentTopology.offlineHint')}
               </Typography>
               <Button size="small" startIcon={<RefreshIcon sx={{ fontSize: '0.9375rem' }} />} onClick={load}>
-                Retry
+                {t('control.agentTopology.retry')}
               </Button>
             </Stack>
           </Paper>
@@ -101,7 +102,7 @@ export default function AgentTopologyPanel() {
 
         {!loading && !offline && nodeCount === 0 && (
           <Alert severity="info" sx={{ fontSize: '0.75rem' }}>
-            No agents registered yet — the declared topology is empty. Agents are registered from the Agents panel.
+            {t('control.agentTopology.empty')}
           </Alert>
         )}
 

@@ -20,6 +20,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import CloudOffIcon from '@mui/icons-material/CloudOff';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
+import { useTranslation } from 'react-i18next';
 import PageContainer from '../../../components/layout/PageContainer';
 import CarbonDataGrid from '../../../components/DataGrid/CarbonDataGrid';
 import { useAuth } from '../../../auth/AuthContext';
@@ -60,7 +61,8 @@ function permissionsSummary(permissions) {
 }
 
 export default function CapabilitiesPanel() {
-  useDocumentTitle('Capabilities');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.capabilities.title'));
   const { token, userCapabilities } = useAuth();
 
   const caps = useMemo(() => capabilityKeys(userCapabilities), [userCapabilities]);
@@ -160,7 +162,7 @@ export default function CapabilitiesPanel() {
     return (
       <PageContainer>
         <Typography color="text.secondary" sx={{ fontSize: '0.8125rem' }}>
-          Viewing the capability registry requires ai:view_console.
+          {t('control.capabilities.requiresCapability')}
         </Typography>
       </PageContainer>
     );
@@ -171,7 +173,7 @@ export default function CapabilitiesPanel() {
       <Stack spacing={1} sx={{ width: '100%', maxWidth: 1200 }}>
         <Stack direction="row" alignItems="center" spacing={1}>
           <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 700, flex: 1 }}>
-            Capabilities
+            {t('control.capabilities.title')}
           </Typography>
           <Button
             size="small"
@@ -180,13 +182,12 @@ export default function CapabilitiesPanel() {
             disabled={loading}
             sx={{ fontSize: '0.75rem' }}
           >
-            Refresh
+            {t('control.capabilities.refresh')}
           </Button>
         </Stack>
 
         <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
-          Governed actions the console can offer. Read-only registry — open a row
-          for details.
+          {t('control.capabilities.subtitle')}
         </Typography>
 
         {loading && (
@@ -204,18 +205,18 @@ export default function CapabilitiesPanel() {
               <Stack direction="row" spacing={1} alignItems="center">
                 <CloudOffIcon sx={{ fontSize: '1.125rem', color: 'text.secondary' }} />
                 <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.8125rem' }}>
-                  Capability registry unavailable
+                  {t('control.capabilities.offline')}
                 </Typography>
               </Stack>
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
-                Could not reach the catalog service. Check the API and try again.
+                {t('control.capabilities.offlineHint')}
               </Typography>
               <Button
                 size="small"
                 startIcon={<RefreshIcon sx={{ fontSize: '0.9375rem' }} />}
                 onClick={load}
               >
-                Retry
+                {t('control.capabilities.retry')}
               </Button>
             </Stack>
           </Paper>
@@ -231,7 +232,7 @@ export default function CapabilitiesPanel() {
               pageSize={10}
               pageSizeOptions={[10, 25, 50]}
               density="compact"
-              emptyMessage="No capabilities in the registry yet."
+              emptyMessage={t('control.capabilities.empty')}
               onRowClick={(params) => setSelected(params.row)}
             />
           </Paper>
@@ -252,7 +253,7 @@ export default function CapabilitiesPanel() {
                 <IconButton
                   size="small"
                   onClick={() => setSelected(null)}
-                  aria-label="Close detail"
+                  aria-label={t('control.common.closeDetail')}
                 >
                   <CloseIcon />
                 </IconButton>

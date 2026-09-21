@@ -14,8 +14,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import { ChevronEnd, ChevronStart } from '../i18n/DirectionalIcons';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { FONT } from '../theme/themeTokens';
 import { useTranslation } from 'react-i18next';
@@ -165,10 +164,10 @@ function AgentRunSurface({
           }}
           data-testid="run-structure-detail-collapsed"
         >
-          <Tooltip title="Show step details">
+          <Tooltip title={t('showStepDetailsPane')}>
             <IconButton
               size="small"
-              aria-label="Show step details"
+              aria-label={t('showStepDetailsPane')}
               data-testid="run-structure-expand"
               onClick={() => setPaneOpen(true)}
               sx={{
@@ -179,7 +178,7 @@ function AgentRunSurface({
                 bgcolor: 'background.paper',
               }}
             >
-              <ChevronLeftIcon sx={{ fontSize: 18 }} />
+              <ChevronStart sx={{ fontSize: 18 }} />
             </IconButton>
           </Tooltip>
         </Box>
@@ -202,15 +201,15 @@ function AgentRunSurface({
           variant="outlined"
           data-testid="run-structure-detail"
           sx={{
-            height: '100%',
-            minHeight: 220,
+            height: isMobile ? 'auto' : '100%',
+            minHeight: isMobile ? 0 : 220,
             display: 'flex',
             flexDirection: 'column',
             minWidth: 0,
             borderRadius: 1.5,
             borderColor: 'divider',
             bgcolor: 'background.paper',
-            overflow: 'hidden',
+            overflow: isMobile ? 'visible' : 'hidden',
             boxShadow: (th) => `inset 0 0 0 1px ${th.palette.action.hover}`,
           }}
         >
@@ -236,15 +235,15 @@ function AgentRunSurface({
                 Clear
               </Button>
             )}
-            <Tooltip title="Hide step details">
+            <Tooltip title={t('hideStepDetailsPane')}>
               <IconButton
                 size="small"
-                aria-label="Hide step details"
+                aria-label={t('hideStepDetailsPane')}
                 data-testid="run-structure-collapse"
                 onClick={() => setPaneOpen(false)}
                 sx={{ p: 0.25 }}
               >
-                <ChevronRightIcon sx={{ fontSize: 16 }} />
+                <ChevronEnd sx={{ fontSize: 16 }} />
               </IconButton>
             </Tooltip>
           </Stack>
@@ -252,7 +251,7 @@ function AgentRunSurface({
             sx={{
               flex: 1,
               minHeight: 0,
-              overflowY: 'auto',
+              overflowY: isMobile ? 'visible' : 'auto',
               p: 1.25,
             }}
           >
@@ -261,16 +260,6 @@ function AgentRunSurface({
                 step={selectedStep}
                 event={selectedEvent}
                 busy={busy || confirmingId === selectedStepId}
-                onApprove={onConfirmStep
-                  ? async (id) => {
-                    await onConfirmStep(id);
-                  }
-                  : undefined}
-                onDecline={onDeclineStep
-                  ? async (id) => {
-                    await onDeclineStep(id);
-                  }
-                  : undefined}
               />
             ) : (
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
@@ -338,16 +327,30 @@ function AgentRunSurface({
         direction={{ xs: 'column', sm: 'row' }}
         alignItems="stretch"
         spacing={0}
-        sx={{ minHeight: 280 }}
+        sx={{ minHeight: { xs: 0, sm: 280 } }}
         data-testid="agent-run-timeline-dock"
       >
-        <Box sx={{ flex: 1, minWidth: 0, overflowY: 'auto', pr: { sm: 0.5 } }}>
+        <Box
+          sx={{
+            flex: 1,
+            minWidth: 0,
+            // Mobile: cockpit body owns scroll — avoid nested overflow traps.
+            overflowY: isMobile ? 'visible' : 'auto',
+            pr: { sm: 0.5 },
+          }}
+        >
           {chronicle.length > 0 ? (
             <RunTimeline
               events={chronicle}
+              stepsById={Object.fromEntries(
+                (mergedPlan?.steps || []).map((s) => [s.step_id, s]),
+              )}
               title={t('runTimeline')}
               selectedStepId={paneOpen ? selectedStepId : null}
               onSelectStep={handleSelectStep}
+              onConfirmStep={onConfirmStep}
+              onDeclineStep={onDeclineStep}
+              confirmingId={confirmingId}
             />
           ) : null}
         </Box>

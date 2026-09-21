@@ -33,6 +33,7 @@ import { apiFetch } from '../../../api/api';
 import PageContainer from '../../../components/layout/PageContainer';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
 import { FONT } from '../../../theme/themeTokens';
+import { useTranslation } from 'react-i18next';
 
 // Maturity score gauge visualization with enhanced visuals
 function MaturityGauge({ score, level, description }) {
@@ -404,7 +405,8 @@ function DomainExpertise({ domains }) {
 }
 
 export default function AIExpertisePanel() {
-  useDocumentTitle('AI Expertise Dashboard');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.expertise.title'));
   const { token } = useAuth();
 
   const [data, setData] = useState(null);
@@ -463,7 +465,7 @@ export default function AIExpertisePanel() {
       <Stack spacing={4}>
         <Box>
           <Typography variant="h4" fontWeight={800} sx={{ mb: 1 }}>
-            AI Expertise Dashboard
+            {t('control.expertise.title')}
           </Typography>
           <Typography variant="body1" color="text.secondary">
             Comprehensive view of Pulse's learning progress, competencies, and domain expertise
@@ -480,14 +482,17 @@ export default function AIExpertisePanel() {
         {/* Key Metrics */}
         <Box>
           <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>
-            Key Performance Indicators
+            {t('control.expertise.kpiHeading')}
           </Typography>
           <Grid container spacing={2.5}>
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <MetricCard
-                title="Skills"
+                title={t('control.expertise.skills')}
                 value={data.skills.total}
-                subtitle={`${data.skills.promoted} promoted, ${data.skills.draft} in draft`}
+                subtitle={t('control.expertise.skillsSubtitle', {
+                  promoted: data.skills.promoted,
+                  draft: data.skills.draft,
+                })}
                 icon={<LibraryBooksIcon />}
                 color="primary.main"
                 trend={data.skills.total > 10 ? '+15% this month' : null}
@@ -495,28 +500,35 @@ export default function AIExpertisePanel() {
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <MetricCard
-                title="Knowledge Entities"
+                title={t('control.expertise.knowledgeEntities')}
                 value={data.knowledge.entities}
-                subtitle={`${data.knowledge.nodes} nodes, ${data.knowledge.edges} edges`}
+                subtitle={t('control.expertise.knowledgeSubtitle', {
+                  nodes: data.knowledge.nodes,
+                  edges: data.knowledge.edges,
+                })}
                 icon={<EmojiObjectsIcon />}
                 color="info.main"
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <MetricCard
-                title="Success Rate"
+                title={t('control.expertise.successRate')}
                 value={`${data.performance.success_rate}%`}
-                subtitle={`${data.performance.total_feedback} feedback items`}
+                subtitle={t('control.expertise.feedbackSubtitle', {
+                  count: data.performance.total_feedback,
+                })}
                 icon={<VerifiedIcon />}
                 color="success.main"
-                trend={data.performance.success_rate >= 80 ? 'Excellent' : null}
+                trend={data.performance.success_rate >= 80 ? t('control.expertise.excellent') : null}
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <MetricCard
-                title="Conversations"
+                title={t('control.expertise.conversations')}
                 value={data.complexity.total_conversations || data.complexity.total_plans}
-                subtitle={`${data.complexity.completed_plans} plans completed`}
+                subtitle={t('control.expertise.plansSubtitle', {
+                  count: data.complexity.completed_plans,
+                })}
                 icon={<PsychologyIcon />}
                 color="warning.main"
               />
@@ -527,25 +539,25 @@ export default function AIExpertisePanel() {
         {/* Competencies */}
         <Box>
           <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>
-            Competency Progress
+            {t('control.expertise.competencyHeading')}
           </Typography>
           <Stack spacing={2}>
             <CompetencyBar
-              label="Skills Promotion"
+              label={t('control.expertise.skillsPromotion')}
               value={data.skills.promoted}
               total={data.skills.total}
               icon={<StarIcon fontSize="small" />}
               color="primary"
             />
             <CompetencyBar
-              label="Knowledge Graph Density"
+              label={t('control.expertise.kgDensity')}
               value={Math.round(data.knowledge.graph_density * 100)}
               total={100}
               icon={<AutoGraphIcon fontSize="small" />}
               color="info"
             />
             <CompetencyBar
-              label="Plan Completion"
+              label={t('control.expertise.planCompletion')}
               value={data.complexity.completed_plans}
               total={data.complexity.total_plans}
               icon={<CheckCircleIcon fontSize="small" />}
@@ -561,7 +573,7 @@ export default function AIExpertisePanel() {
         {data.domain_expertise && data.domain_expertise.length > 0 && (
           <Box>
             <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>
-              Domain Expertise
+              {t('control.expertise.domainExpertise')}
             </Typography>
             <DomainExpertise domains={data.domain_expertise} />
           </Box>

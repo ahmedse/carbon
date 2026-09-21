@@ -31,6 +31,7 @@ import {
 import { Line } from 'react-chartjs-2';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
 import PageContainer from '../../../components/layout/PageContainer';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../../auth/AuthContext';
 import { getQualityTrend } from '../../../api/aiPulse';
 
@@ -57,7 +58,8 @@ function formatCount(value) {
 }
 
 export default function OutputQualityPanel() {
-  useDocumentTitle('Output Quality');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.outputQuality.title'));
   const theme = useTheme();
   const { token } = useAuth();
 
@@ -128,7 +130,7 @@ export default function OutputQualityPanel() {
       <Stack spacing={1.5} sx={{ flex: 1, minHeight: 0 }}>
         <Stack direction="row" spacing={1} alignItems="center">
           <Typography variant="h5" fontWeight={700} sx={{ flex: 1 }}>
-            Output Quality
+            {t('control.outputQuality.title')}
           </Typography>
           {data && !offline && (
             <Chip

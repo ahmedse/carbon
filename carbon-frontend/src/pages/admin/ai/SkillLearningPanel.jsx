@@ -18,6 +18,7 @@ import {
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CloudOffIcon from '@mui/icons-material/CloudOff';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
+import { useTranslation } from 'react-i18next';
 import PageContainer from '../../../components/layout/PageContainer';
 import { useAuth } from '../../../auth/AuthContext';
 import { getPulseSkills } from '../../../api/aiPulse';
@@ -43,7 +44,8 @@ function pct(value) {
 }
 
 export default function SkillLearningPanel() {
-  useDocumentTitle('Skill Learning');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.skillLearning.title'));
   const theme = useTheme();
   const { token } = useAuth();
 
@@ -97,20 +99,19 @@ export default function SkillLearningPanel() {
 
   const stages = useMemo(
     () => [
-      { key: 'drafted', label: 'Drafted', caption: 'Drafted but not yet promoted', count: draftedCount },
-      { key: 'promoted', label: 'Promoted', caption: 'Promoted to instance', count: promotedCount },
-      { key: 'reused', label: 'Reused', caption: 'Invoked on the hot path', count: reusedCount },
+      { key: 'drafted', label: t('control.skillLearning.drafted'), caption: t('control.skillLearning.draftedCaption'), count: draftedCount },
+      { key: 'promoted', label: t('control.skillLearning.promoted'), caption: t('control.skillLearning.promotedCaption'), count: promotedCount },
+      { key: 'reused', label: t('control.skillLearning.reused'), caption: t('control.skillLearning.reusedCaption'), count: reusedCount },
     ],
-    [draftedCount, promotedCount, reusedCount]
+    [draftedCount, promotedCount, reusedCount, t]
   );
 
   return (
     <PageContainer>
       <Stack spacing={1.5} sx={{ flex: 1, minHeight: 0, width: '100%', maxWidth: 1000 }}>
-        <Typography variant="h5" fontWeight={700}>Skill Learning</Typography>
+        <Typography variant="h5" fontWeight={700}>{t('control.skillLearning.title')}</Typography>
         <Typography variant="body2" color="text.secondary">
-          The drafted → promoted → reused arc. Shows how many skills progressed through the
-          admission gate and actually ran on the hot path — backed by real backend counts.
+          {t('control.skillLearning.subtitle')}
         </Typography>
 
         {loading ? (
@@ -120,16 +121,16 @@ export default function SkillLearningPanel() {
         ) : offline ? (
           <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
             <CloudOffIcon fontSize="large" sx={{ color: 'text.secondary' }} />
-            <Typography variant="subtitle1" sx={{ mt: 1 }} fontWeight={600}>Data unavailable</Typography>
+            <Typography variant="subtitle1" sx={{ mt: 1 }} fontWeight={600}>{t('control.skillLearning.dataUnavailable')}</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              Data unavailable — the skill learning API is offline
+              {t('control.skillLearning.offline')}
             </Typography>
           </Paper>
         ) : (skills?.length ?? 0) === 0 ? (
           <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
-            <Typography variant="subtitle1" fontWeight={600}>No skills yet</Typography>
+            <Typography variant="subtitle1" fontWeight={600}>{t('control.skillLearning.emptyTitle')}</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              No skills yet — draft a skill from the AI workspace to start the learning flywheel.
+              {t('control.skillLearning.empty')}
             </Typography>
           </Paper>
         ) : (
@@ -187,11 +188,10 @@ export default function SkillLearningPanel() {
 
             {/* ── Reused skills list ── */}
             <Paper variant="outlined" sx={{ p: 2 }}>
-              <Typography variant="overline" color="text.secondary">Reused skills</Typography>
+              <Typography variant="overline" color="text.secondary">{t('control.skillLearning.reusedSkills')}</Typography>
               {reusedSkills.length === 0 ? (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  No skills have been reused yet — promote a skill and let the agent invoke it on
-                  a matching request.
+                  {t('control.skillLearning.noReused')}
                 </Typography>
               ) : (
                 <Stack spacing={1} sx={{ mt: 1 }}>

@@ -1263,39 +1263,49 @@ class TurnPipelineRunner:
         )
         if settings.NAVIGATION_RESOLVER_ENABLED and not _discuss_thread:
             try:
+                from ai.engine.cognition.turn.process_brief import is_process_briefing
                 from ai.engine.cognition.turn.navigation import resolve_navigation
-                _nav = resolve_navigation(user_message, instance_config)
-                if _nav.action in ("navigate", "disambiguate"):
-                    total_latency = (time.monotonic() - t0) * 1000
-                    await self._write_ledger_row(
-                        turn_id, instance_id, conversation_id, host_user_id,
-                        "final", 5,
-                        {
+
+                # Process / lifecycle briefing mentions place nouns ("leave",
+                # "payroll") but must NEVER short-circuit to open-app propose.
+                if is_process_briefing(user_message):
+                    logger.info(
+                        "[%s] Skipping navigation fast-path (process briefing)",
+                        turn_id[:8],
+                    )
+                else:
+                    _nav = resolve_navigation(user_message, instance_config)
+                    if _nav.action in ("navigate", "disambiguate"):
+                        total_latency = (time.monotonic() - t0) * 1000
+                        await self._write_ledger_row(
+                            turn_id, instance_id, conversation_id, host_user_id,
+                            "final", 5,
+                            {
+                                "total_latency_ms": total_latency,
+                                "total_tokens": 0,
+                                "total_llm_calls": 0,
+                                "navigation_shortcircuit": _nav.action,
+                                "navigation_source": "deterministic_fast_path",
+                                "navigation_targets": [t.route for t in _nav.targets],
+                            },
+                            total_latency, verdict="pass",
+                        )
+                        if self.db is not None:
+                            await self.db.commit()
+
+                        ledger.final_response = _navigation_text(_nav)[:500]
+                        ledger.total_latency_ms = total_latency
+                        ledger.intent_zone = "platform"
+
+                        response = _navigation_response(_nav)
+                        await _broadcast_run(instance_id, "run.completed", {
+                            "run_id": turn_id,
                             "total_latency_ms": total_latency,
                             "total_tokens": 0,
                             "total_llm_calls": 0,
                             "navigation_shortcircuit": _nav.action,
-                            "navigation_source": "deterministic_fast_path",
-                            "navigation_targets": [t.route for t in _nav.targets],
-                        },
-                        total_latency, verdict="pass",
-                    )
-                    if self.db is not None:
-                        await self.db.commit()
-
-                    ledger.final_response = _navigation_text(_nav)[:500]
-                    ledger.total_latency_ms = total_latency
-                    ledger.intent_zone = "platform"
-
-                    response = _navigation_response(_nav)
-                    await _broadcast_run(instance_id, "run.completed", {
-                        "run_id": turn_id,
-                        "total_latency_ms": total_latency,
-                        "total_tokens": 0,
-                        "total_llm_calls": 0,
-                        "navigation_shortcircuit": _nav.action,
-                    })
-                    return response, ledger
+                        })
+                        return response, ledger
             except Exception:  # noqa: BLE001 - navigation gate must never block the turn
                 logger.warning(
                     "[%s] Navigation short-circuit failed; continuing normal pipeline",
@@ -1306,6 +1316,45 @@ class TurnPipelineRunner:
                 "[%s] Skipping navigation short-circuit (Agent discuss thread)",
                 turn_id[:8],
             )
+
+        # Also run process briefing *before* salience when nav was skipped —
+        # zero-token concept answer for governed process ids.
+        if not _discuss_thread:
+            try:
+                from asgiref.sync import sync_to_async
+                from ai.engine.cognition.turn.process_brief import try_process_briefing
+
+                _early_brief = await sync_to_async(
+                    try_process_briefing, thread_sensitive=True,
+                )(user_message)
+                if _early_brief is not None:
+                    _pid, _brief_text = _early_brief
+                    total_latency = (time.monotonic() - t0) * 1000
+                    ledger.intent_zone = "concept"
+                    ledger.final_response = _brief_text[:500]
+                    ledger.total_latency_ms = total_latency
+                    response = AgentResponse(
+                        text=_brief_text,
+                        sources_cited=[],
+                        tools_used=[],
+                        confidence=1.0,
+                        total_tokens=0,
+                        llm_calls=0,
+                        model="",
+                        response_type="inferred",
+                        actions=[],
+                    )
+                    await _broadcast_run(instance_id, "run.completed", {
+                        "run_id": turn_id,
+                        "process_briefing": _pid,
+                        "navigation_source": "skipped_for_process_brief",
+                    })
+                    return response, ledger
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "[%s] Process briefing early gate failed; continuing",
+                    turn_id[:8], exc_info=True,
+                )
 
         # S1 — Salience
         s1_start = time.monotonic()
@@ -1502,6 +1551,55 @@ class TurnPipelineRunner:
             # provenance (metadata["intent_zone"]) to the frontend.
             ledger.intent_zone = _intent_resolution.zone
 
+            # [PROCESS BRIEF] Explain governed process / lifecycle steps —
+            # never a navigate short-circuit to People & Payroll (P0).
+            if not _discuss_thread:
+                from asgiref.sync import sync_to_async
+                from ai.engine.cognition.turn.process_brief import try_process_briefing
+
+                _brief = await sync_to_async(
+                    try_process_briefing, thread_sensitive=True,
+                )(user_message)
+                if _brief is not None:
+                    _pid, _brief_text = _brief
+                    total_latency = (time.monotonic() - t0) * 1000
+                    await self._write_ledger_row(
+                        turn_id, instance_id, conversation_id, host_user_id,
+                        "final", 5,
+                        {
+                            "total_latency_ms": total_latency,
+                            "total_tokens": total_tokens,
+                            "total_llm_calls": total_llm_calls,
+                            "process_briefing": _pid,
+                        },
+                        total_latency, verdict="pass",
+                    )
+                    if self.db is not None:
+                        await self.db.commit()
+                    ledger.final_response = _brief_text[:500]
+                    ledger.total_latency_ms = total_latency
+                    ledger.total_tokens = total_tokens
+                    ledger.total_llm_calls = total_llm_calls
+                    response = AgentResponse(
+                        text=_brief_text,
+                        sources_cited=[],
+                        tools_used=[],
+                        confidence=1.0,
+                        total_tokens=total_tokens,
+                        llm_calls=total_llm_calls,
+                        model="",
+                        response_type="inferred",
+                        actions=[],
+                    )
+                    await _broadcast_run(instance_id, "run.completed", {
+                        "run_id": turn_id,
+                        "total_latency_ms": total_latency,
+                        "total_tokens": total_tokens,
+                        "total_llm_calls": total_llm_calls,
+                        "process_briefing": _pid,
+                    })
+                    return response, ledger
+
             # [NAV] LLM-recognised navigation: ground the target *concept*
             # against the enumerated routes and propose→confirm (RULE_21 — no
             # auto-jump). The LLM's comprehension drives this; grounding is the
@@ -1556,11 +1654,27 @@ class TurnPipelineRunner:
             # GATE layered on top of any zone. Mirrors the clarify/disambiguate
             # shortcircuit exactly: a proper persisted assistant message, never
             # an HTTP error.
+            # Confirm replies ("yes" / "نعم") must never hard-refuse: they
+            # continue a prior in-scope turn (leave submit, memory, deixis).
+            # Mis-classifying them as off_limits produced Carbon-branded refuse
+            # copy on Nibras Arabic leave confirmations.
             if _intent_resolution.zone == "off_limits":
+                from ai.engine.cognition.dialogue.deixis import is_confirm_reply
+                if is_confirm_reply(user_message):
+                    _intent_resolution.zone = "platform"
+                    logger.info(
+                        "[%s] Confirm reply reclassified off_limits → platform",
+                        turn_id[:8],
+                    )
+            if _intent_resolution.zone == "off_limits":
+                _tg = (instance_config or {}).get("topic_guard") or {}
                 _refuse_text = (
-                    "I'm not able to help with that request. "
-                    "If you have a question about your platform data, emissions, "
-                    "or data quality, I'm here to help."
+                    (_tg.get("refusal") or "").strip()
+                    or (
+                        "I'm not able to help with that request. "
+                        "If you have a question about your platform data, emissions, "
+                        "or data quality, I'm here to help."
+                    )
                 )
                 total_latency = (time.monotonic() - t0) * 1000
                 await self._write_ledger_row(
@@ -1665,6 +1779,38 @@ class TurnPipelineRunner:
                         "[WEATHER-FT] Intent shortcircuit — stored pending_weather: %r",
                         user_message,
                     )
+                return response, ledger
+
+        # [PROCESS BRIEF] Fallback when intent resolver was disabled / None —
+        # still never navigate for lifecycle explanations.
+        if not _discuss_thread:
+            from asgiref.sync import sync_to_async
+            from ai.engine.cognition.turn.process_brief import try_process_briefing
+
+            _brief_fb = await sync_to_async(
+                try_process_briefing, thread_sensitive=True,
+            )(user_message)
+            if _brief_fb is not None:
+                _pid, _brief_text = _brief_fb
+                total_latency = (time.monotonic() - t0) * 1000
+                ledger.intent_zone = "concept"
+                ledger.final_response = _brief_text[:500]
+                ledger.total_latency_ms = total_latency
+                response = AgentResponse(
+                    text=_brief_text,
+                    sources_cited=[],
+                    tools_used=[],
+                    confidence=1.0,
+                    total_tokens=total_tokens,
+                    llm_calls=total_llm_calls,
+                    model="",
+                    response_type="inferred",
+                    actions=[],
+                )
+                await _broadcast_run(instance_id, "run.completed", {
+                    "run_id": turn_id,
+                    "process_briefing": _pid,
+                })
                 return response, ledger
 
         # S2 — Retrieval

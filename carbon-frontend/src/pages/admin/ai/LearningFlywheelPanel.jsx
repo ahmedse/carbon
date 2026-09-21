@@ -22,6 +22,7 @@ import PsychologyIcon from '@mui/icons-material/Psychology';
 import FeedbackIcon from '@mui/icons-material/Feedback';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
+import { useTranslation } from 'react-i18next';
 import PageContainer from '../../../components/layout/PageContainer';
 import CarbonDataGrid from '../../../components/DataGrid/CarbonDataGrid';
 import { useAuth } from '../../../auth/AuthContext';
@@ -49,7 +50,8 @@ const OUTCOME_LABELS = {
 };
 
 export default function LearningFlywheelPanel() {
-  useDocumentTitle('Learning Flywheel');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.learningFlywheel.title'));
   const { token, userCapabilities } = useAuth();
 
   const [data, setData] = useState(null);
@@ -116,23 +118,23 @@ export default function LearningFlywheelPanel() {
 
   const factColumns = useMemo(
     () => [
-      { field: 'category', headerName: 'Category', width: 140, valueFormatter: (params) => params?.value ?? '—' },
-      { field: 'content', headerName: 'Fact', minWidth: 320, flex: 1 },
-      { field: 'confidence', headerName: 'Confidence', width: 120, valueFormatter: (params) => formatInt(params?.value) },
-      { field: 'created_at', headerName: 'Created', width: 200, valueFormatter: (params) => formatDate(params?.value) },
+      { field: 'category', headerName: t('control.learningFlywheel.colCategory'), width: 140, valueFormatter: (params) => params?.value ?? '—' },
+      { field: 'content', headerName: t('control.learningFlywheel.colFact'), minWidth: 320, flex: 1 },
+      { field: 'confidence', headerName: t('control.learningFlywheel.colConfidence'), width: 120, valueFormatter: (params) => formatInt(params?.value) },
+      { field: 'created_at', headerName: t('control.learningFlywheel.colCreated'), width: 200, valueFormatter: (params) => formatDate(params?.value) },
     ],
-    []
+    [t]
   );
 
   const feedbackColumns = useMemo(
     () => [
-      { field: 'signal_type', headerName: 'Signal', width: 150, valueFormatter: (params) => params?.value ?? '—' },
-      { field: 'message_id', headerName: 'Message', width: 220, valueFormatter: (params) => params?.value ?? '—' },
-      { field: 'user_comment', headerName: 'Comment', minWidth: 240, flex: 1, valueFormatter: (params) => params?.value || '—' },
-      { field: 'quality_score', headerName: 'Quality', width: 110, valueFormatter: (params) => formatInt(params?.value) },
-      { field: 'created_at', headerName: 'Created', width: 200, valueFormatter: (params) => formatDate(params?.value) },
+      { field: 'signal_type', headerName: t('control.learningFlywheel.colSignal'), width: 150, valueFormatter: (params) => params?.value ?? '—' },
+      { field: 'message_id', headerName: t('control.learningFlywheel.colMessage'), width: 220, valueFormatter: (params) => params?.value ?? '—' },
+      { field: 'user_comment', headerName: t('control.learningFlywheel.colComment'), minWidth: 240, flex: 1, valueFormatter: (params) => params?.value || '—' },
+      { field: 'quality_score', headerName: t('control.learningFlywheel.colQuality'), width: 110, valueFormatter: (params) => formatInt(params?.value) },
+      { field: 'created_at', headerName: t('control.learningFlywheel.colCreated'), width: 200, valueFormatter: (params) => formatDate(params?.value) },
     ],
-    []
+    [t]
   );
 
   const outcomeEntries = Object.entries(data?.by_outcome ?? {});
@@ -141,19 +143,18 @@ export default function LearningFlywheelPanel() {
     <PageContainer>
       <Stack spacing={1.5} sx={{ flex: 1, minHeight: 0 }}>
         <Stack direction="row" spacing={1} alignItems="center">
-          <Typography variant="h5" fontWeight={700} sx={{ flex: 1 }}>Learning Flywheel</Typography>
+          <Typography variant="h5" fontWeight={700} sx={{ flex: 1 }}>{t('control.learningFlywheel.title')}</Typography>
           {data && !offline && (
             <Chip
               size="small"
               color={data?.durable ? 'success' : 'warning'}
               icon={<StorageIcon />}
-              label={data?.durable ? 'Durable store' : 'In-memory'}
+              label={data?.durable ? t('control.learningFlywheel.durableStore') : t('control.learningFlywheel.inMemory')}
             />
           )}
         </Stack>
         <Typography variant="body2" color="text.secondary">
-          Feedback → learning → long-term memory. Shows judged messages pending consumption,
-          the durable-fact ledger, and the feedback signals that feed the flywheel.
+          {t('control.learningFlywheel.subtitle')}
         </Typography>
 
         {loading ? (
@@ -163,31 +164,31 @@ export default function LearningFlywheelPanel() {
         ) : offline || !data ? (
           <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
             <CloudOffIcon fontSize="large" sx={{ color: 'text.secondary' }} />
-            <Typography variant="subtitle1" sx={{ mt: 1 }} fontWeight={600}>Data unavailable</Typography>
+            <Typography variant="subtitle1" sx={{ mt: 1 }} fontWeight={600}>{t('control.learningFlywheel.dataUnavailable')}</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              Data unavailable — the learning flywheel API is offline
+              {t('control.learningFlywheel.offline')}
             </Typography>
           </Paper>
         ) : (
           <>
             {/* ── Flywheel status ── */}
             <Paper variant="outlined" sx={{ p: 2 }}>
-              <Typography variant="overline" color="text.secondary">Flywheel status</Typography>
+              <Typography variant="overline" color="text.secondary">{t('control.learningFlywheel.flywheelStatus')}</Typography>
               <Stack direction="row" spacing={4} sx={{ mt: 0.5 }} flexWrap="wrap">
                 <Box>
-                  <Typography variant="body2" color="text.secondary">Pending</Typography>
+                  <Typography variant="body2" color="text.secondary">{t('control.learningFlywheel.pending')}</Typography>
                   <Typography variant="h6" fontWeight={700}>{formatInt(data?.pending)}</Typography>
                 </Box>
                 <Box>
-                  <Typography variant="body2" color="text.secondary">Processed</Typography>
+                  <Typography variant="body2" color="text.secondary">{t('control.learningFlywheel.processed')}</Typography>
                   <Typography variant="h6" fontWeight={700}>{formatInt(data?.processed)}</Typography>
                 </Box>
                 <Box>
-                  <Typography variant="body2" color="text.secondary">Feedback records</Typography>
+                  <Typography variant="body2" color="text.secondary">{t('control.learningFlywheel.feedbackRecords')}</Typography>
                   <Typography variant="h6" fontWeight={700}>{formatInt(data?.feedback_records?.count)}</Typography>
                 </Box>
                 <Box>
-                  <Typography variant="body2" color="text.secondary">Durable facts</Typography>
+                  <Typography variant="body2" color="text.secondary">{t('control.learningFlywheel.durableFacts')}</Typography>
                   <Typography variant="h6" fontWeight={700}>
                     {formatInt((data?.facts?.counts?.learned ?? 0) + (data?.facts?.counts?.correction ?? 0))}
                   </Typography>
@@ -208,7 +209,7 @@ export default function LearningFlywheelPanel() {
                 </Stack>
               ) : (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
-                  No learned outcomes yet — judge a message (accept / reject / correct) to start the flywheel.
+                  {t('control.learningFlywheel.noOutcomes')}
                 </Typography>
               )}
             </Paper>
@@ -217,10 +218,9 @@ export default function LearningFlywheelPanel() {
             <Paper variant="outlined" sx={{ p: 2 }}>
               <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
                 <Box sx={{ flex: 1, minWidth: 260 }}>
-                  <Typography variant="overline" color="text.secondary">Manual sweep</Typography>
+                  <Typography variant="overline" color="text.secondary">{t('control.learningFlywheel.manualSweep')}</Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Consume every pending judged message into the feedback ledger and long-term memory now
-                    (the scheduler also runs this automatically).
+                    {t('control.learningFlywheel.sweepHint')}
                   </Typography>
                 </Box>
                 {canRun ? (
@@ -230,10 +230,10 @@ export default function LearningFlywheelPanel() {
                     disabled={running || data?.pending === 0}
                     onClick={handleRunSweep}
                   >
-                    {running ? 'Running…' : 'Run sweep'}
+                    {running ? t('control.learningFlywheel.running') : t('control.learningFlywheel.runSweep')}
                   </Button>
                 ) : (
-                  <Chip size="small" variant="outlined" label="Requires ai:manage_console" />
+                  <Chip size="small" variant="outlined" label={t('control.learningFlywheel.requiresManage')} />
                 )}
               </Stack>
 
@@ -254,14 +254,14 @@ export default function LearningFlywheelPanel() {
             <Paper variant="outlined" sx={{ p: 2 }}>
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
                 <PsychologyIcon color="primary" fontSize="small" />
-                <Typography variant="overline" color="text.secondary">Recent durable facts</Typography>
+                <Typography variant="overline" color="text.secondary">{t('control.learningFlywheel.recentFacts')}</Typography>
               </Stack>
               <CarbonDataGrid
                 columns={factColumns}
                 rows={factsRows}
                 loading={false}
                 getRowId={(row) => row.id}
-                emptyMessage="No durable facts yet — accept or correct answers to capture knowledge."
+                emptyMessage={t('control.learningFlywheel.emptyFacts')}
               />
             </Paper>
 
@@ -269,14 +269,14 @@ export default function LearningFlywheelPanel() {
             <Paper variant="outlined" sx={{ p: 2 }}>
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
                 <FeedbackIcon color="primary" fontSize="small" />
-                <Typography variant="overline" color="text.secondary">Recent feedback signals</Typography>
+                <Typography variant="overline" color="text.secondary">{t('control.learningFlywheel.recentSignals')}</Typography>
               </Stack>
               <CarbonDataGrid
                 columns={feedbackColumns}
                 rows={feedbackRows}
                 loading={false}
                 getRowId={(row) => row.id}
-                emptyMessage="No feedback signals recorded yet."
+                emptyMessage={t('control.learningFlywheel.emptySignals')}
               />
             </Paper>
           </>

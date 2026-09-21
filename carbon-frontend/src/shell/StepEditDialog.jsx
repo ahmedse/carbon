@@ -16,6 +16,7 @@ import {
 } from '@mui/material';
 import Autocomplete from '@mui/material/Autocomplete';
 import Chip from '@mui/material/Chip';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Step edit dialog.
@@ -28,6 +29,7 @@ import Chip from '@mui/material/Chip';
  * @param {function} [props.onClose]
  */
 export default function StepEditDialog({ open, step, steps, busy, onSave, onClose }) {
+  const { t } = useTranslation('ai');
   const [title, setTitle] = useState('');
   const [instructions, setInstructions] = useState('');
   const [dependsOn, setDependsOn] = useState([]);
@@ -110,9 +112,9 @@ export default function StepEditDialog({ open, step, steps, busy, onSave, onClos
             <TextField
               {...params}
               size="small"
-              label="Runs after"
-              placeholder="Choose steps that must finish first"
-              inputProps={{ ...params.inputProps, 'aria-label': 'Depends on' }}
+              label={t('stepEdit.runsAfter')}
+              placeholder={t('stepEdit.dependsPlaceholder')}
+              inputProps={{ ...params.inputProps, 'aria-label': t('stepEdit.dependsAria') }}
             />
           )}
           sx={{ '& .MuiInputBase-input': { fontSize: '0.75rem' } }}
@@ -120,7 +122,7 @@ export default function StepEditDialog({ open, step, steps, busy, onSave, onClos
       </DialogContent>
       <DialogActions sx={{ px: 2, py: 1 }}>
         <Button size="small" onClick={onClose} disabled={busy} sx={{ fontSize: '0.6875rem', textTransform: 'none' }}>
-          Cancel
+          {t('stepEdit.cancel')}
         </Button>
         <Button
           size="small"

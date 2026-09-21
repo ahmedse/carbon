@@ -1,5 +1,5 @@
 // src/shell/AgentRunToolbar.jsx
-// ADR-0043 — Run toolbar under cockpit tabs (actions only).
+// ADR-0043 — Run toolbar under cockpit tabs (actions only). No Fork on Run.
 import React from 'react';
 import PropTypes from 'prop-types';
 import {
@@ -15,7 +15,6 @@ import PauseIcon from '@mui/icons-material/Pause';
 import StopIcon from '@mui/icons-material/Stop';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import ReplayIcon from '@mui/icons-material/Replay';
-import CallSplitIcon from '@mui/icons-material/CallSplit';
 import { useTranslation } from 'react-i18next';
 import { isRerunnableStatus } from './aiTaskStatus';
 import { planDisplayLabel } from './AgentPlanToolbar';
@@ -32,7 +31,6 @@ import { planDisplayLabel } from './AgentPlanToolbar';
  * @param {function} [props.onStop]
  * @param {function} [props.onRerun]
  * @param {function} [props.onRetry]
- * @param {function} [props.onFork]
  * @param {function} [props.onOpenPlan]
  * @param {function} [props.onOpenOutput]
  */
@@ -47,7 +45,6 @@ export default function AgentRunToolbar({
   onStop,
   onRerun,
   onRetry,
-  onFork,
   onOpenPlan,
   onOpenOutput,
 }) {
@@ -63,18 +60,20 @@ export default function AgentRunToolbar({
     || ['completed', 'cancelled', 'completed_with_gaps', 'failed'].includes(effectiveStatus);
   const playTitle = consentBlocksPlay
     ? 'Continues after you approve or decline'
-    : (paused ? t('resumeRun') : t('runPlan'));
+    : (paused ? t('resumeRun') : 'Play — resume run');
   const pauseTitle = consentBlocksPlay
     ? t('pauseBlockedByConsent')
-    : t('pauseRun');
+    : 'Pause run';
+  const stopTitle = 'Stop run';
   const label = planDisplayLabel(plan, t('untitledPlan'));
 
-  const iconBtn = (title, disabled, onClick, Icon, color) => (
+  const iconBtn = (title, disabled, onClick, Icon, color, testId) => (
     <Tooltip title={title}>
       <span>
         <IconButton
           size="small"
           aria-label={title}
+          data-testid={testId}
           disabled={disabled || !onClick}
           onClick={onClick}
           sx={{ p: 0.375 }}
@@ -116,12 +115,11 @@ export default function AgentRunToolbar({
       </Typography>
 
       <Stack direction="row" spacing={0.25} alignItems="center" flexWrap="wrap" useFlexGap>
-        {iconBtn(playTitle, !showRun || busy, onRun, PlayArrowIcon, 'primary.main')}
-        {iconBtn(pauseTitle, !running || busy || consentBlocksPlay, onPause, PauseIcon, consentBlocksPlay ? undefined : 'warning.main')}
-        {iconBtn(t('stopRun'), (!running && !consentBlocksPlay) || busy, onStop, StopIcon, 'error.main')}
-        {iconBtn(t('rerunPlan'), !rerunnable || busy || running, onRerun, RefreshIcon, 'primary.main')}
-        {iconBtn(t('retryFailedSteps'), !failed || busy, onRetry, ReplayIcon, 'warning.main')}
-        {iconBtn(t('forkReviewable'), !plan || busy, onFork, CallSplitIcon)}
+        {iconBtn(playTitle, !showRun || busy, onRun, PlayArrowIcon, 'primary.main', 'agent-run-play')}
+        {iconBtn(pauseTitle, !running || busy || consentBlocksPlay, onPause, PauseIcon, consentBlocksPlay ? undefined : 'warning.main', 'agent-run-pause')}
+        {iconBtn(stopTitle, (!running && !consentBlocksPlay) || busy, onStop, StopIcon, 'error.main', 'agent-run-stop')}
+        {rerunnable && iconBtn(t('rerunPlan'), busy || running, onRerun, RefreshIcon, 'primary.main', 'agent-run-rerun')}
+        {failed && iconBtn(t('retryFailedSteps'), busy, onRetry, ReplayIcon, 'warning.main', 'agent-run-retry')}
 
         {settled && onOpenPlan && (
           <Button

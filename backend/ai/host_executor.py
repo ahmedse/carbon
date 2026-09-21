@@ -679,6 +679,139 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
                 )
             return {"status_code": 200, "data": data}
 
+        if method == "POST":
+            # create_employee / onboarding submit — same contract as
+            # EmployeeListCreateView.post (serializer + onboard hooks).
+            from django.db import IntegrityError
+            from django.utils import timezone as dj_tz
+
+            from people.chronicle import record_event, snapshot_employee
+            from people.employee_onboard_service import onboard_employee
+            from people.validation import validate_write
+
+            serializer = S.EmployeeSerializer(data=body or {})
+            if not serializer.is_valid():
+                return {
+                    "status_code": 400,
+                    "data": {
+                        "detail": "Validation failed",
+                        "errors": json.dumps(serializer.errors, default=str),
+                    },
+                }
+            opening_basic = serializer.validated_data.pop("opening_basic", None)
+            instance = Employee(**serializer.validated_data)
+            gate = validate_write(instance)
+            if gate.get("blocked"):
+                return {
+                    "status_code": 422,
+                    "data": {
+                        "detail": "DQ validation blocked this write",
+                        "sample_failures": gate.get("sample_failures"),
+                    },
+                }
+            try:
+                serializer.save()
+            except IntegrityError:
+                return {
+                    "status_code": 400,
+                    "data": {"employee_no": "This employee number is already taken."},
+                }
+            record_event(
+                entity_type="Employee",
+                entity_id=serializer.instance.pk,
+                event_kind="hired",
+                effective_date=dj_tz.localdate(),
+                user=user,
+                before=None,
+                after=snapshot_employee(serializer.instance),
+            )
+            try:
+                onboard_employee(
+                    serializer.instance,
+                    opening_basic=opening_basic,
+                    user=user,
+                )
+            except Exception:  # noqa: BLE001 — hire succeeded; hooks are best-effort
+                logger.exception(
+                    "Employee onboard hooks failed for employee_no=%s",
+                    serializer.instance.employee_no,
+                )
+            return {
+                "status_code": 201,
+                "data": mask_employee(S.EmployeeSerializer(serializer.instance).data, user),
+            }
+
+        if method == "PATCH" and pk:
+            # update_employee / onboarding activate — same contract as
+            # EmployeeDetailView.patch (partial update + chronicle).
+            from django.utils import timezone as dj_tz
+
+            from people.chronicle import record_event, snapshot_employee
+            from people.compensation_service import CompensationService
+            from people.validation import validate_write
+
+            qs = _people_scope(user, Employee.objects.all(), "org_unit_id__in")
+            try:
+                employee = qs.get(pk=pk)
+            except (Employee.DoesNotExist, ValueError, TypeError):
+                return {"status_code": 404, "data": {"detail": "Employee not found"}}
+            before = snapshot_employee(employee)
+            old_salary = employee.basic_salary
+            data = body or {}
+            if "basic_salary" in data:
+                verified = CompensationService.verified_basic_amount(employee)
+                if verified is not None:
+                    return {
+                        "status_code": 400,
+                        "data": {
+                            "detail": (
+                                "basic_salary cannot be changed while a verified "
+                                "compensation ledger basic line exists; append a "
+                                "new ledger line instead."
+                            ),
+                        },
+                    }
+            serializer = S.EmployeeSerializer(employee, data=data, partial=True)
+            if not serializer.is_valid():
+                return {
+                    "status_code": 400,
+                    "data": {
+                        "detail": "Validation failed",
+                        "errors": json.dumps(serializer.errors, default=str),
+                    },
+                }
+            for field, value in serializer.validated_data.items():
+                setattr(employee, field, value)
+            gate = validate_write(employee)
+            if gate.get("blocked"):
+                return {
+                    "status_code": 422,
+                    "data": {
+                        "detail": "DQ validation blocked this write",
+                        "sample_failures": gate.get("sample_failures"),
+                    },
+                }
+            serializer.save()
+            if old_salary != employee.basic_salary:
+                event_kind = "salary_change"
+            elif before.get("org_unit_id") != employee.org_unit_id:
+                event_kind = "transferred"
+            else:
+                event_kind = "profile_updated"
+            record_event(
+                entity_type="Employee",
+                entity_id=employee.pk,
+                event_kind=event_kind,
+                effective_date=dj_tz.localdate(),
+                user=user,
+                before=before,
+                after=snapshot_employee(employee),
+            )
+            return {
+                "status_code": 200,
+                "data": mask_employee(S.EmployeeSerializer(employee).data, user),
+            }
+
     # ── Positions ───────────────────────────────────────────────────────
     if resource == "positions":
         from people.models import Position

@@ -302,9 +302,9 @@ function WatchDialog({
 }
 
 export default function WatchesPanel() {
-  useDocumentTitle('Anomaly Watches');
   const { t } = useTranslation('ai');
   const { t: tc } = useTranslation('common');
+  useDocumentTitle(t('watches.title'));
   const { token, userCapabilities } = useAuth();
   const { notify, notifyFromError } = useNotification();
 

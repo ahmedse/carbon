@@ -23,6 +23,7 @@ import {
 } from '@mui/material';
 import CloudOffIcon from '@mui/icons-material/CloudOff';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import { useTranslation } from 'react-i18next';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
 import PageContainer from '../../../components/layout/PageContainer';
 import { useAuth } from '../../../auth/AuthContext';
@@ -180,7 +181,8 @@ function Dimension({ label, children }) {
 }
 
 export default function ReviewQueue() {
-  useDocumentTitle('Review Queue');
+  const { t } = useTranslation('ai');
+  useDocumentTitle(t('control.reviewQueue.title'));
   const theme = useTheme();
   const { token, userCapabilities } = useAuth();
   const { notify, notifyFromError } = useNotification();
@@ -273,9 +275,9 @@ export default function ReviewQueue() {
     <PageContainer>
       <Stack spacing={2}>
         <Stack direction="row" alignItems="center" justifyContent="space-between">
-          <Typography variant="h5">Review Queue</Typography>
+          <Typography variant="h5">{t('control.reviewQueue.title')}</Typography>
           <Button startIcon={<RefreshIcon />} onClick={load} disabled={loading}>
-            Refresh
+            {t('control.reviewQueue.refresh')}
           </Button>
         </Stack>
 
@@ -283,7 +285,7 @@ export default function ReviewQueue() {
           <Paper sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
             <CloudOffIcon color="disabled" />
             <Typography variant="body2">
-              Review queue is temporarily unavailable.
+              {t('control.reviewQueue.offline')}
             </Typography>
           </Paper>
         )}
@@ -295,7 +297,7 @@ export default function ReviewQueue() {
         ) : items.length === 0 ? (
           <Paper sx={{ p: 4, textAlign: 'center' }}>
             <Typography variant="body2" color="text.secondary">
-              No processes awaiting review.
+              {t('control.reviewQueue.empty')}
             </Typography>
           </Paper>
         ) : (
@@ -324,7 +326,7 @@ export default function ReviewQueue() {
                     </Stack>
 
                     {/* 1. Diff */}
-                    <Dimension label="Diff">
+                    <Dimension label={t('control.reviewQueue.diff')}>
                       {!item.diff ? (
                         <Typography variant="body2" color="text.secondary">
                           Diff unavailable.
@@ -372,12 +374,12 @@ export default function ReviewQueue() {
                     </Dimension>
 
                     {/* 2. Rationale */}
-                    <Dimension label="Rationale">
+                    <Dimension label={t('control.reviewQueue.rationale')}>
                       <Typography variant="body2">{objectiveText(def)}</Typography>
                     </Dimension>
 
                     {/* 3. Evidence */}
-                    <Dimension label="Evidence">
+                    <Dimension label={t('control.reviewQueue.evidence')}>
                       {Array.isArray(def.evidence) && def.evidence.length > 0 ? (
                         <Stack spacing={0.25}>
                           {def.evidence.map((e, i) => (
@@ -394,7 +396,7 @@ export default function ReviewQueue() {
                     </Dimension>
 
                     {/* 4. Missing evidence (derived) */}
-                    <Dimension label="Missing evidence">
+                    <Dimension label={t('control.reviewQueue.missingEvidence')}>
                       {missing.length === 0 ? (
                         <Typography variant="body2" color="text.secondary">
                           No missing evidence.
@@ -411,7 +413,7 @@ export default function ReviewQueue() {
                     </Dimension>
 
                     {/* 5. Permissions delta (derived) */}
-                    <Dimension label="Permissions delta">
+                    <Dimension label={t('control.reviewQueue.permissionsDelta')}>
                       {permDelta.length === 0 ? (
                         <Typography variant="body2" color="text.secondary">
                           No permission changes vs active.
@@ -428,7 +430,7 @@ export default function ReviewQueue() {
                     </Dimension>
 
                     {/* 6. Tests */}
-                    <Dimension label="Tests">
+                    <Dimension label={t('control.reviewQueue.tests')}>
                       {Array.isArray(def.tests) && def.tests.length > 0 ? (
                         <Stack spacing={0.25}>
                           {def.tests.map((t, i) => (
@@ -445,7 +447,7 @@ export default function ReviewQueue() {
                     </Dimension>
 
                     {/* 7. Affected runs */}
-                    <Dimension label="Affected runs">
+                    <Dimension label={t('control.reviewQueue.affectedRuns')}>
                       {runs.length === 0 ? (
                         <Typography variant="body2" color="text.secondary">
                           No runs for the current user referencing this process.
@@ -479,7 +481,7 @@ export default function ReviewQueue() {
                       </Button>
                       <TextField
                         size="small"
-                        label="Reject reason (persisted)"
+                        label={t('control.reviewQueue.rejectReason')}
                         value={notes[item.process_id] || ''}
                         onChange={(e) =>
                           setNotes((prev) => ({ ...prev, [item.process_id]: e.target.value }))

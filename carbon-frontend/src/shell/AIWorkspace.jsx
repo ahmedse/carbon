@@ -124,6 +124,35 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   const [tasksFocusPlanId, setTasksFocusPlanId] = useState(null);
   // Agent Done → Chat: prefill composer with plan outcome context.
   const [chatSeedDraft, setChatSeedDraft] = useState(null);
+  // DW-P1-2 — persistent Chat↔Agent link after Discuss / Open in Tasks.
+  const [linkedPlan, setLinkedPlan] = useState(null); // { id, brief } | null
+
+  const applyDiscussHandoff = useCallback((payload) => {
+    if (payload == null) return;
+    if (typeof payload === 'string') {
+      const text = payload.trim();
+      if (text) setChatSeedDraft(text);
+      return;
+    }
+    if (typeof payload === 'object') {
+      const draft = typeof payload.draft === 'string' ? payload.draft.trim() : '';
+      if (draft) setChatSeedDraft(draft);
+      if (payload.planId) {
+        setLinkedPlan({
+          id: payload.planId,
+          brief: typeof payload.planBrief === 'string' ? payload.planBrief : '',
+        });
+      }
+    }
+  }, []);
+
+  const openLinkedPlan = useCallback(() => {
+    if (!linkedPlan?.id) return;
+    setTasksFocusPlanId(linkedPlan.id);
+    setMode('agent');
+  }, [linkedPlan]);
+
+  const dismissLinkedPlan = useCallback(() => setLinkedPlan(null), []);
 
   const [drawerWidth, setDrawerWidth] = useState(200);
   const dragRef = useRef(null);
@@ -532,6 +561,16 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
 
   const hasAny = order.length > 0 || archivedIds.length > 0;
 
+  // ADR-0043 cockpit is on unless classic override is stored.
+  let agentCockpitOn = true;
+  try {
+    agentCockpitOn = localStorage.getItem('carbon-ai-cockpit') !== 'off';
+  } catch {
+    agentCockpitOn = true;
+  }
+  // DW-P1-1 — mobile Agent with cockpit: hide activity rail (cockpit segments only).
+  const hideAgentActivityRail = isMobile && mode === 'agent' && agentCockpitOn;
+
   const togglePanel = (panel) => setActivePanel((prev) => (prev === panel ? null : panel));
 
   // open_panel action from a chat reply — switch the workspace panel and,
@@ -545,6 +584,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
       setMode('agent');
       if (panel === 'tasks' && planId) {
         setTasksFocusPlanId(planId);
+        setLinkedPlan((prev) => (prev?.id === planId ? prev : { id: planId, brief: prev?.brief || '' }));
       }
       return;
     }
@@ -571,6 +611,9 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
             mode={mode}
             onModeChange={handleModeChange}
             agentLifecycleState={agentLifecycleState}
+            linkedPlan={mode === 'chat' ? linkedPlan : null}
+            onOpenLinkedPlan={openLinkedPlan}
+            onDismissLinkedPlan={dismissLinkedPlan}
           />
           {loading ? (
             <Box
@@ -595,10 +638,8 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
               focusPlanId={tasksFocusPlanId}
               onFocusPlanConsumed={() => setTasksFocusPlanId(null)}
               onLifecycleStateChange={handleLifecycleStateChange}
-              onSwitchToChat={(draft) => {
-                if (typeof draft === 'string' && draft.trim()) {
-                  setChatSeedDraft(draft.trim());
-                }
+              onSwitchToChat={(payload) => {
+                applyDiscussHandoff(payload);
                 setMode('chat');
               }}
               externalTab={agentView}
@@ -784,7 +825,10 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
         {/* Activity bar — rightmost edge. W5-A (ADR-0014): each mode shows
             only its relevant surfaces. Chat = conversation-centric panels;
             Agent = tasks + run + monitor + results. W5-D: the Monitor and
-            Results icons route into AITaskPanel's internal tabs. */}
+            Results icons route into AITaskPanel's internal tabs.
+            DW-P1-1: on mobile + cockpit, hide this rail — cockpit segments
+            are the sole nav spine (no competing Tasks icon). */}
+        {!(hideAgentActivityRail) && (
         <Box
           sx={{
             width: isMobile ? '100%' : 32,
@@ -805,15 +849,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
         >
           {mode === 'agent'
             ? (() => {
-                // ADR-0043 cockpit is default; Monitor/Results duplicate Plan·Run·Canvas·Output.
-                // Classic dual chrome only when carbon-ai-cockpit=off.
-                let cockpitOn = true;
-                try {
-                  cockpitOn = localStorage.getItem('carbon-ai-cockpit') !== 'off';
-                } catch {
-                  cockpitOn = true;
-                }
-                const items = cockpitOn
+                const items = agentCockpitOn
                   ? [{ id: 'tasks', icon: <TaskAltOutlinedIcon sx={{ fontSize: 16 }} />, label: t('agent.tasks') }]
                   : [
                       { id: 'tasks', icon: <TaskAltOutlinedIcon sx={{ fontSize: 16 }} />, label: t('agent.tasks') },
@@ -874,6 +910,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
             </Tooltip>
           )}
         </Box>
+        )}
 
         <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)}>
           <DialogTitle>{t('delete.title')}</DialogTitle>

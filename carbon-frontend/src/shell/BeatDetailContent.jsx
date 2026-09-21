@@ -1,13 +1,12 @@
 /**
  * Shared beat / step detail body — used by docked Run pane (and dialog wrapper).
+ * Operator surface: no Approve/Decline (timeline owns consent) and no raw JSON dumps.
  */
 import React from 'react';
 import PropTypes from 'prop-types';
 import {
   Box,
-  Button,
   Chip,
-  Divider,
   Stack,
   Typography,
 } from '@mui/material';
@@ -39,26 +38,29 @@ function formatWhen(iso) {
   }
 }
 
+function humanAction(step) {
+  const args = step?.tool_args;
+  const api = args && typeof args === 'object' ? args.api_name : '';
+  if (api) return toolLabel(api) || String(api).replace(/_/g, ' ');
+  return stripEngineJargon(step?.intent || `Step ${step?.step_id}`);
+}
+
 /**
  * @param {object} props
  * @param {object} props.step
  * @param {object|null} [props.event]
- * @param {function} [props.onApprove]
- * @param {function} [props.onDecline]
  * @param {boolean} [props.busy]
  */
 export default function BeatDetailContent({
   step,
   event = null,
-  onApprove,
-  onDecline,
-  busy = false,
+  busy = false, // kept for call-site compatibility
 }) {
   const { t } = useTranslation('ai');
   if (!step) return null;
 
   const meta = stepStatusMeta(step.status);
-  const intent = stripEngineJargon(step.intent || event?.title || `Step ${step.step_id}`);
+  const intent = humanAction(step) || stripEngineJargon(event?.title || `Step ${step.step_id}`);
   const needsYou = step.status === 'awaiting_approval';
   const failed = step.status === 'failed';
   const skipped = step.status === 'skipped';
@@ -78,7 +80,7 @@ export default function BeatDetailContent({
   ].filter(Boolean);
 
   return (
-    <Stack spacing={1.25} data-testid="beat-detail-body">
+    <Stack spacing={1.25} data-testid="beat-detail-body" data-busy={busy ? 'true' : undefined}>
       <Stack direction="row" spacing={1} alignItems="center">
         <Typography variant="body1" sx={{ fontSize: '0.875rem', fontWeight: 600, flex: 1, lineHeight: 1.35 }}>
           {intent}
@@ -106,35 +108,9 @@ export default function BeatDetailContent({
           </Typography>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
             {event?.detail || t('beatNeedsYouHint')}
+            {' '}
+            Approve or decline on the timeline step.
           </Typography>
-          {(onApprove || onDecline) && (
-            <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-              {onDecline && (
-                <Button
-                  size="small"
-                  color="inherit"
-                  variant="outlined"
-                  disabled={busy}
-                  onClick={() => onDecline(step.step_id)}
-                  sx={{ textTransform: 'none', fontSize: '0.75rem' }}
-                >
-                  {t('declineStep')}
-                </Button>
-              )}
-              {onApprove && (
-                <Button
-                  size="small"
-                  variant="contained"
-                  color="warning"
-                  disabled={busy}
-                  onClick={() => onApprove(step.step_id)}
-                  sx={{ textTransform: 'none', fontSize: '0.75rem', fontWeight: 600 }}
-                >
-                  {busy ? t('approvingPlan') : t('approveStep')}
-                </Button>
-              )}
-            </Stack>
-          )}
         </Box>
       )}
 
@@ -176,35 +152,6 @@ export default function BeatDetailContent({
           </Stack>
         ))}
       </Stack>
-
-      {step.tool_args && typeof step.tool_args === 'object' && Object.keys(step.tool_args).length > 0 && (
-        <>
-          <Divider />
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}
-          >
-            {t('beatInputs')}
-          </Typography>
-          <Box
-            component="pre"
-            sx={{
-              p: 1,
-              m: 0,
-              borderRadius: 1,
-              bgcolor: 'action.hover',
-              fontSize: '0.6875rem',
-              overflow: 'auto',
-              maxHeight: 140,
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-            }}
-          >
-            {JSON.stringify(step.tool_args, null, 2)}
-          </Box>
-        </>
-      )}
     </Stack>
   );
 }

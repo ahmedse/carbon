@@ -162,4 +162,26 @@ test.describe.serial('Journey 13: Dual-Language (EN/AR) — I18N-6', () => {
     await expect.poll(() => page.evaluate(() => localStorage.getItem('carbon.lang'))).toBe('en');
     await assertVisible(page, 'Dashboard', 8000);
   });
+
+  test('13G. RTL sidebar + Pulse Control destinations stay mirrored', async ({ page }) => {
+    await seedLang(page, 'ar');
+    const ok = await loginRobust(page, 'ar');
+    expect(ok, 'AR login succeeded').toBe(true);
+    await expectHtmlDir(page, 'rtl', 'ar');
+
+    await navigateTo(page, '/admin/ai');
+    await assertVisible(page, 'مركز القيادة', 10000);
+
+    // Sidebar Pulse Control destinations (shell.nav.*) in Arabic.
+    await assertVisible(page, 'المجال', 8000);
+    await assertVisible(page, 'الأدلة', 8000);
+    await assertVisible(page, 'التعلّم', 8000);
+    await assertVisible(page, 'المنصة', 8000);
+
+    // Directional collapse control stays in the DOM (ChevronStart flips in RTL).
+    const collapse = page.getByRole('button', { name: /طي الشريط الجانبي|Collapse sidebar/i }).first();
+    await expect(collapse).toBeVisible({ timeout: 8000 });
+    const mirrored = await page.locator('[data-chevron="start"][data-mirrored="1"]').count();
+    expect(mirrored, 'ChevronStart mirrored in RTL').toBeGreaterThan(0);
+  });
 });
