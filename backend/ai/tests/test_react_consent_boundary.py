@@ -179,3 +179,248 @@ async def test_tool_requires_confirmation_is_fail_closed(monkeypatch):
 
     # Lookup failure now means confirmation-required (deny-by-default).
     assert _tool_requires_confirmation("call_host_api") is True
+
+
+async def test_p13_auto_confirms_when_resume_token_present():
+    """Approve → resume must not pause again on the staged leave submit.
+
+    After unstaged consent the tool re-runs and returns ``requires_confirmation``
+    + ``execution_id``. With a resume token the P1.3 gate must call
+    ``confirm_execution`` and continue — not open a second Approve loop.
+    """
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+
+    from ai.engine.cognition.plan.loop import ReActLoop
+    from ai.engine.cognition.plan.planner import PlanStep
+    from ai.engine.cognition.turn.witnesses import RetrievalResult
+
+    confirmed: list[str] = []
+
+    class _Host:
+        async def confirm_execution(self, execution_id, expected_host_user_id=None):
+            confirmed.append(execution_id)
+            return {
+                "status_code": 201,
+                "data": {"id": 99},
+                "action": "navigate",
+                "route": "/my/requests/99",
+                "label": "Open leave request",
+                "summary": "Leave request annual · CRS-99",
+            }
+
+    loop = ReActLoop.__new__(ReActLoop)
+    loop._build_step_prompt = MagicMock(return_value="prompt")  # noqa: SLF001
+    loop._observe = AsyncMock(return_value=None)  # noqa: SLF001
+
+    dw = AsyncMock()
+    dw.draft = AsyncMock(
+        return_value=SimpleNamespace(text="submit leave", tool_calls=[])
+    )
+
+    cw = AsyncMock()
+    cw.review = AsyncMock(
+        return_value=SimpleNamespace(verdict="pass", flags=[], veto_reason=None)
+    )
+
+    staged = {
+        "tool_name": "call_host_api",
+        "result": json.dumps(
+            {
+                "requires_confirmation": True,
+                "execution_id": "exec-leave-1",
+                "message": "Submit leave request",
+            }
+        ),
+    }
+    ex = AsyncMock()
+    ex.executor = _Host()
+    ex.execute = AsyncMock(
+        return_value=SimpleNamespace(completed_tools=[staged])
+    )
+
+    step = PlanStep(
+        step_id=2,
+        intent="Submit leave request",
+        tool_name="call_host_api",
+        is_mutation=True,
+    )
+
+    result = await loop._execute_step(  # noqa: SLF001
+        step=step,
+        dw=dw,
+        cw=cw,
+        ex=ex,
+        instance_id="i",
+        conversation_id="c",
+        user_message="اريد اجازة",
+        system_prompt="sp",
+        conversation_history=None,
+        instance_config=None,
+        user_info=None,
+        retrieval=RetrievalResult(),
+        progress_callback=None,
+        stream_callback=None,
+        dry_run=False,
+        confirmation_token="resume-tok-abc",
+        step_contexts={},
+        host_user_id="u1",
+    )
+
+    assert confirmed == ["exec-leave-1"]
+    assert result.paused is False
+    assert result.executed is True
+    assert result.error is None
+    assert result.tool_output.get("confirmed") is True
+    assert result.tool_output.get("action") == "navigate"
+    committed = json.loads(result.tool_output["result"])
+    assert committed["data"]["id"] == 99
+    # Observe must be skipped after auto-confirm (resume SSE hang guard).
+    loop._observe.assert_not_called()
+
+
+async def test_p13_auto_confirm_failure_fails_step_not_re_pause():
+    """Overlap / host 400 after Approve must fail the step — not ask again."""
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+
+    from ai.engine.cognition.plan.loop import ReActLoop
+    from ai.engine.cognition.plan.planner import PlanStep
+    from ai.engine.cognition.turn.witnesses import RetrievalResult
+
+    class _Host:
+        async def confirm_execution(self, execution_id, expected_host_user_id=None):
+            raise RuntimeError(
+                "Those dates overlap an existing annual leave "
+                "(2026-09-23→2026-09-23, status=draft). (HTTP 400)"
+            )
+
+    loop = ReActLoop.__new__(ReActLoop)
+    loop._build_step_prompt = MagicMock(return_value="prompt")  # noqa: SLF001
+    loop._observe = AsyncMock(return_value=None)  # noqa: SLF001
+
+    dw = AsyncMock()
+    dw.draft = AsyncMock(
+        return_value=SimpleNamespace(text="submit leave", tool_calls=[])
+    )
+    cw = AsyncMock()
+    cw.review = AsyncMock(
+        return_value=SimpleNamespace(verdict="pass", flags=[], veto_reason=None)
+    )
+    staged = {
+        "tool_name": "call_host_api",
+        "result": json.dumps(
+            {"requires_confirmation": True, "execution_id": "exec-overlap"}
+        ),
+    }
+    ex = AsyncMock()
+    ex.executor = _Host()
+    ex.execute = AsyncMock(
+        return_value=SimpleNamespace(completed_tools=[staged])
+    )
+
+    step = PlanStep(
+        step_id=1,
+        intent="Submit leave request",
+        tool_name="call_host_api",
+        is_mutation=True,
+    )
+
+    result = await loop._execute_step(  # noqa: SLF001
+        step=step,
+        dw=dw,
+        cw=cw,
+        ex=ex,
+        instance_id="i",
+        conversation_id="c",
+        user_message="leave",
+        system_prompt="sp",
+        conversation_history=None,
+        instance_config=None,
+        user_info=None,
+        retrieval=RetrievalResult(),
+        progress_callback=None,
+        stream_callback=None,
+        dry_run=False,
+        confirmation_token="resume-tok",
+        step_contexts={},
+        host_user_id="u1",
+    )
+
+    assert result.paused is False
+    assert result.executed is False
+    assert "overlap" in (result.error or "").lower()
+    assert "auto_confirm_failed" in result.critic_flags
+    loop._observe.assert_not_called()
+
+
+async def test_p13_still_pauses_without_resume_token():
+    """First-time staging (no prior Approve) must still pause for consent."""
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+
+    from ai.engine.cognition.plan.loop import ReActLoop
+    from ai.engine.cognition.plan.planner import PlanStep
+    from ai.engine.cognition.turn.witnesses import RetrievalResult
+
+    class _Host:
+        async def confirm_execution(self, *a, **k):
+            raise AssertionError("must not auto-confirm without resume token")
+
+    loop = ReActLoop.__new__(ReActLoop)
+    loop._build_step_prompt = MagicMock(return_value="prompt")  # noqa: SLF001
+
+    dw = AsyncMock()
+    dw.draft = AsyncMock(
+        return_value=SimpleNamespace(text="submit leave", tool_calls=[])
+    )
+    cw = AsyncMock()
+    cw.review = AsyncMock(
+        return_value=SimpleNamespace(verdict="pass", flags=[], veto_reason=None)
+    )
+    staged = {
+        "tool_name": "call_host_api",
+        "result": json.dumps(
+            {"requires_confirmation": True, "execution_id": "exec-2"}
+        ),
+    }
+    ex = AsyncMock()
+    ex.executor = _Host()
+    ex.execute = AsyncMock(
+        return_value=SimpleNamespace(completed_tools=[staged])
+    )
+
+    step = PlanStep(
+        step_id=2,
+        intent="Submit leave request",
+        tool_name="call_host_api",
+        is_mutation=True,
+    )
+
+    result = await loop._execute_step(  # noqa: SLF001
+        step=step,
+        dw=dw,
+        cw=cw,
+        ex=ex,
+        instance_id="i",
+        conversation_id="c",
+        user_message="leave",
+        system_prompt="sp",
+        conversation_history=None,
+        instance_config=None,
+        user_info=None,
+        retrieval=RetrievalResult(),
+        progress_callback=None,
+        stream_callback=None,
+        dry_run=False,
+        confirmation_token=None,
+        step_contexts={},
+        host_user_id="u1",
+    )
+
+    assert result.paused is True
+    assert result.executed is False
+    assert result.confirmation_token

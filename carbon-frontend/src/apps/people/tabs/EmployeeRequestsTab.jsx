@@ -356,7 +356,11 @@ export default function EmployeeRequestsTab({ entityData }) {
               </ToggleButtonGroup>
             </Stack>
             {view === 'stepper' ? (
-              <ApproverChainStepper chain={selected.approver_chain} currentStep={selected.current_step} />
+              <ApproverChainStepper
+                chain={selected.approver_chain}
+                currentStep={selected.current_step}
+                status={selected.status}
+              />
             ) : (
               <WorkflowGraph
                 chain={selected.approver_chain}

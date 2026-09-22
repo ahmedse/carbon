@@ -14,6 +14,7 @@ vi.mock('../components/graph/EnterpriseGraph', () => ({
         <span data-testid="eg-live">{String(Boolean(props.live))}</span>
         <span data-testid="eg-nodes">{props.nodes?.length ?? 0}</span>
         <span data-testid="eg-edges">{props.edges?.length ?? 0}</span>
+        <span data-testid="eg-first-id">{props.nodes?.[0]?.id ?? ''}</span>
         {props.emptyMessage && !(props.nodes?.length) ? (
           <span data-testid="eg-empty">{props.emptyMessage}</span>
         ) : null}
@@ -30,7 +31,22 @@ function wrap(ui) {
 }
 
 describe('WorkflowGraph → EnterpriseGraph adapter', () => {
-  it('lays out chain + terminal node on the shared Pulse graph surface', () => {
+  it('prepends Submitted origin before chain + terminal', () => {
+    wrap(
+      <WorkflowGraph
+        chain={[{ order: 1, role: 'manager', intent: 'approve', user_ids: [1] }]}
+        currentStep={1}
+        status="submitted"
+      />,
+    );
+    expect(screen.getByTestId('workflow-graph')).toBeInTheDocument();
+    expect(screen.getByTestId('eg-first-id')).toHaveTextContent('submitted');
+    // origin + 1 approver + Completed terminal
+    expect(screen.getByTestId('eg-nodes')).toHaveTextContent('3');
+    expect(screen.getByTestId('eg-edges')).toHaveTextContent('2');
+  });
+
+  it('lays out chain + origin + terminal on the shared Pulse graph surface', () => {
     wrap(
       <WorkflowGraph
         chain={[
@@ -42,9 +58,10 @@ describe('WorkflowGraph → EnterpriseGraph adapter', () => {
       />,
     );
     expect(screen.getByTestId('workflow-graph')).toBeInTheDocument();
-    // 2 steps + Completed terminal
-    expect(screen.getByTestId('eg-nodes')).toHaveTextContent('3');
-    expect(screen.getByTestId('eg-edges')).toHaveTextContent('2');
+    // Submitted origin + 2 steps + Completed terminal
+    expect(screen.getByTestId('eg-nodes')).toHaveTextContent('4');
+    expect(screen.getByTestId('eg-edges')).toHaveTextContent('3');
+    expect(screen.getByTestId('eg-first-id')).toHaveTextContent('submitted');
     expect(screen.getByTestId('eg-live')).toHaveTextContent('true');
   });
 

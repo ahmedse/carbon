@@ -114,6 +114,21 @@ def _hollow_tool_message(tool_output: dict | None) -> str | None:
     return None
 
 
+def _strip_markdown_fence(text: str) -> str:
+    """Return inner body when ``text`` is a single ```…``` fence; else stripped text."""
+    raw = (text or "").strip()
+    if not raw.startswith("```"):
+        return raw
+    lines = raw.splitlines()
+    if len(lines) < 2:
+        return raw
+    # Drop opening fence (``` or ```json) and optional closing fence.
+    body = lines[1:]
+    if body and body[-1].strip().startswith("```"):
+        body = body[:-1]
+    return "\n".join(body).strip()
+
+
 # Pulse v2 Phase 5: read-only tools the loop may auto-chain for multi-hop
 # reasoning. Mutation/planning tools are deliberately excluded — an automatic
 # follow-up must never write state or trigger a consent gate without the user.
@@ -1383,22 +1398,22 @@ class ReActLoop:
             final_status = "cancelled"
         else:
             # ── Synthesise final response ─────────────────────────────────
-            final_response = await self._synthesise(
-                plan, step_results, user_message, system_prompt, step_contexts,
-                instance_id=instance_id,
-                gap_step_ids=sorted(_gap_step_ids),
-            )
+            # Confirmed host writes already carry an honest receipt — do NOT
+            # re-narrate via LLM (it invents future-tense "I'll submit…" and
+            # pastes stale observe JSON from earlier read steps).
+            if self._has_confirmed_host_write(step_results):
+                final_response = self._fallback_final_response(step_results)
+            else:
+                final_response = await self._synthesise(
+                    plan, step_results, user_message, system_prompt, step_contexts,
+                    instance_id=instance_id,
+                    gap_step_ids=sorted(_gap_step_ids),
+                )
             host_actions_md = self._host_actions_markdown(step_results)
             if host_actions_md:
-                # Always surface host write receipts (details + deep link).
-                if not (final_response or "").strip():
-                    final_response = host_actions_md
-                elif "/my/" not in (final_response or "") and "](/" not in (
-                    final_response or ""
-                ):
-                    final_response = (
-                        f"{final_response.strip()}\n\n{host_actions_md}"
-                    )[:2000]
+                final_response = self._merge_host_actions_markdown(
+                    final_response, host_actions_md,
+                )
             elif not (final_response or "").strip():
                 final_response = self._fallback_final_response(step_results)
             ok_results = [
@@ -1906,6 +1921,10 @@ class ReActLoop:
                             result.critic_flags.append("missing_confirmation_response")
 
             # ── P1.3: Consent gate — pause if tool requires confirmation ──
+            # If this step already carries a resume confirmation_token (user
+            # clicked Approve on the pre-execution critic pause), the staged
+            # execution must be confirmed here — do NOT pause again (that
+            # loop left the UI stuck on "Needs approval" after Approve).
             if result.tool_output:
                 _to = result.tool_output
                 _raw = _to.get("result", "")
@@ -1914,16 +1933,77 @@ class ReActLoop:
                 except (json.JSONDecodeError, TypeError):
                     _parsed = {}
                 if isinstance(_parsed, dict) and _parsed.get("requires_confirmation"):
-                    from uuid import uuid4
-                    result.paused = True
-                    result.confirmation_token = str(uuid4())
-                    result.executed = False
-                    result.error = None
-                    logger.info(
-                        "ReActLoop: consent gate hit step=%d tool=%s token=%s",
-                        step.step_id, _to.get("tool_name", "?"), result.confirmation_token[:8],
-                    )
-                    return result
+                    _exec_id = str(_parsed.get("execution_id") or "").strip()
+                    _host = getattr(ex, "executor", None)
+                    _confirm_fn = getattr(_host, "confirm_execution", None) if _host else None
+                    if confirmation_token and _exec_id and callable(_confirm_fn):
+                        try:
+                            _committed = await _confirm_fn(
+                                _exec_id,
+                                expected_host_user_id=host_user_id,
+                            )
+                            _to = dict(_to)
+                            _to["result"] = (
+                                _committed
+                                if isinstance(_committed, str)
+                                else json.dumps(_committed, default=str)
+                            )
+                            _to["error"] = None
+                            _to["confirmed"] = True
+                            if isinstance(_committed, dict) and _committed.get("action") == "navigate":
+                                _to["action"] = "navigate"
+                                _to["route"] = _committed.get("route") or ""
+                                _to["label"] = _committed.get("label") or "Open"
+                                _to["summary"] = _committed.get("summary") or ""
+                            result.tool_output = _to
+                            result.executed = True
+                            result.paused = False
+                            result.error = None
+                            result.confirmation_token = confirmation_token
+                            # Skip observe — the host receipt is the outcome.
+                            # A post-write LLM observe can hang the resume SSE
+                            # and leave the step stuck "Running" after a real
+                            # write (leave already created; UI never got done).
+                            result.draft_text = (
+                                (_to.get("summary") or "").strip()
+                                or result.draft_text
+                                or "Submitted."
+                            )
+                            logger.info(
+                                "ReActLoop: auto-confirmed staged mutation "
+                                "step=%d exec=%s (resume token present)",
+                                step.step_id, _exec_id[:8],
+                            )
+                            return result
+                        except Exception as _confirm_exc:  # noqa: BLE001
+                            # Do NOT pause again — the user already Approved.
+                            # Surface the host error (e.g. date overlap) as a
+                            # failed step so Approve cannot loop forever.
+                            _msg = str(_confirm_exc).strip() or "Confirmation failed"
+                            logger.warning(
+                                "ReActLoop: auto-confirm failed step=%d exec=%s: %s",
+                                step.step_id, _exec_id[:8], _msg,
+                            )
+                            result.paused = False
+                            result.executed = False
+                            result.error = _msg
+                            result.confirmation_token = confirmation_token
+                            result.critic_verdict = "veto"
+                            if "auto_confirm_failed" not in result.critic_flags:
+                                result.critic_flags.append("auto_confirm_failed")
+                            return result
+                    else:
+                        from uuid import uuid4
+                        result.paused = True
+                        result.confirmation_token = str(uuid4())
+                        result.executed = False
+                        result.error = None
+                        logger.info(
+                            "ReActLoop: consent gate hit step=%d tool=%s token=%s",
+                            step.step_id, _to.get("tool_name", "?"),
+                            result.confirmation_token[:8],
+                        )
+                        return result
 
             # ── Pulse v2 Phase 1: observe — synthesize a grounded answer from a
             #    successfully executed tool result (draft→critic→execute→observe).
@@ -2141,8 +2221,12 @@ class ReActLoop:
             return None
 
         # Phase 5: parse the structured JSON decision when the model complied.
+        # Models often wrap the object in ```json fences — strip before loads
+        # so we never persist the raw fence as draft_text / final_response.
+        _decision = None
+        _candidate = _strip_markdown_fence(text)
         try:
-            _decision = json.loads(text)
+            _decision = json.loads(_candidate)
         except (json.JSONDecodeError, TypeError):
             _decision = None
         if isinstance(_decision, dict):
@@ -2160,7 +2244,10 @@ class ReActLoop:
                 )
 
         # Fallback (Phase 1 behavior): plain prose = a grounded final answer.
-        if len(text) > 20:
+        # Never keep a fenced JSON blob as the operator-facing answer.
+        if _candidate != text and _candidate.startswith("{"):
+            return None
+        if len(text) > 20 and not text.lstrip().startswith("```"):
             return ObservationResult(answer=text, needs_followup=False)
         return None
 
@@ -2494,16 +2581,120 @@ class ReActLoop:
         return format_actions_markdown(collect_navigate_actions(outputs))
 
     @staticmethod
+    def _has_confirmed_host_write(step_results: list[StepResult]) -> bool:
+        """True when a step already committed a host mutation with a receipt."""
+        for r in step_results or []:
+            if r.error and not str(r.error).startswith("[caught]"):
+                continue
+            out = r.tool_output if isinstance(r.tool_output, dict) else {}
+            if out.get("confirmed") and (
+                out.get("action") == "navigate" or (out.get("summary") or "").strip()
+            ):
+                return True
+            if out.get("action") == "navigate" and (out.get("route") or "").startswith("/"):
+                return True
+        return False
+
+    @staticmethod
+    def _merge_host_actions_markdown(
+        final_response: str | None, host_actions_md: str,
+    ) -> str:
+        """Append navigate receipts without duplicating summary lines."""
+        host = (host_actions_md or "").strip()
+        if not host:
+            return (final_response or "").strip()[:2000]
+        base = (final_response or "").strip()
+        if not base:
+            return host[:2000]
+        # Receipt already present (LLM or fallback copied the summary).
+        first_line = host.splitlines()[0].strip() if host else ""
+        if first_line and first_line in base:
+            # Ensure the deep link exists when only the summary was copied.
+            if "](/" not in base and "/my/" not in base:
+                link_lines = [
+                    ln for ln in host.splitlines()
+                    if ln.strip().startswith("[") and "](/" in ln
+                ]
+                if link_lines:
+                    return f"{base}\n\n{link_lines[0]}".strip()[:2000]
+            return base[:2000]
+        if "/my/" in base or "](/" in base:
+            return base[:2000]
+        return f"{base}\n\n{host}".strip()[:2000]
+
+    @staticmethod
     def _fallback_final_response(step_results: list[StepResult]) -> str:
         """Operator-facing Answer when LLM synthesis is empty (RULE_23)."""
         from ai.host_receipt import collect_navigate_actions, format_actions_markdown
 
-        actions_md = format_actions_markdown(
-            collect_navigate_actions([
-                (r.tool_output if isinstance(r.tool_output, dict) else {})
-                for r in (step_results or [])
-            ]),
-        )
+        outputs = [
+            (r.tool_output if isinstance(r.tool_output, dict) else {})
+            for r in (step_results or [])
+        ]
+        actions_md = format_actions_markdown(collect_navigate_actions(outputs))
+        leave_submit_done = False
+        for r in step_results or []:
+            if r.error and not str(r.error).startswith("[caught]"):
+                continue
+            out = r.tool_output if isinstance(r.tool_output, dict) else {}
+            layers = [out]
+            raw = out.get("result")
+            if isinstance(raw, str):
+                try:
+                    raw = json.loads(raw)
+                except (json.JSONDecodeError, TypeError):
+                    raw = None
+            if isinstance(raw, dict):
+                layers.append(raw)
+                nested = raw.get("data")
+                if isinstance(nested, dict):
+                    layers.append(nested)
+            data = out.get("data") if isinstance(out.get("data"), dict) else {}
+            if data:
+                layers.append(data)
+
+            api = ""
+            args = out.get("tool_args") if isinstance(out.get("tool_args"), dict) else {}
+            if isinstance(args, dict):
+                api = str(args.get("api_name") or "")
+
+            for layer in layers:
+                ctype = str(layer.get("corr_type_code") or "").lower()
+                status = str(layer.get("status") or "").lower()
+                code = layer.get("status_code")
+                try:
+                    code_int = int(code) if code is not None else None
+                except (TypeError, ValueError):
+                    code_int = None
+                if api == "submit_my_leave" or ctype == "leave_request":
+                    if code_int in (200, 201) or status in (
+                        "submitted", "in_review", "approved", "draft",
+                    ):
+                        leave_submit_done = True
+                        break
+                if out.get("confirmed") and ctype == "leave_request":
+                    leave_submit_done = True
+                    break
+            if leave_submit_done:
+                break
+            intent = (r.intent or "").lower()
+            if (
+                "submit leave" in intent
+                and out.get("confirmed")
+                and not (r.error and not str(r.error).startswith("[caught]"))
+            ):
+                leave_submit_done = True
+                break
+
+        if leave_submit_done:
+            head = (
+                "Your leave request was submitted. "
+                "Your manager reviews it in Team — track status in My Leave."
+            )
+            if actions_md:
+                return f"{head}\n\n{actions_md}".strip()[:2000]
+            return head
+
         if actions_md:
             return actions_md
 

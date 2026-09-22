@@ -22,7 +22,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import SystemDialog from '../../../components/SystemDialog';
 import { useAuth } from '../../../auth/AuthContext';
-import { submitLeaveRequest } from '../../../api/my';
+import { editCorrespondence, submitLeaveRequest } from '../../../api/my';
 
 // ── Pure helpers ──────────────────────────────────────────────────────
 
@@ -95,9 +95,19 @@ function mapSubmitError(t, err) {
 
 // ── Component ─────────────────────────────────────────────────────────
 
-export default function RequestLeaveDialog({ open, onClose, balances, profile, onSubmitted }) {
+export default function RequestLeaveDialog({
+  open,
+  onClose,
+  balances,
+  profile,
+  onSubmitted,
+  mode,
+  correspondenceId,
+  initialPayload,
+}) {
   const { t, i18n } = useTranslation('my');
   const { token } = useAuth();
+  const isEdit = mode === 'edit';
 
   const [leaveType, setLeaveType] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -126,20 +136,27 @@ export default function RequestLeaveDialog({ open, onClose, balances, profile, o
 
   const canSubmit = Boolean(leaveType && startDate && endDate) && !endBeforeStart && !submitting;
 
-  // Reset the form and focus the first field each time the dialog opens.
+  // Prefill (edit) or reset (create) each time the dialog opens.
   useEffect(() => {
     if (open) {
-      setLeaveType('');
-      setStartDate('');
-      setEndDate('');
-      setNote('');
+      if (isEdit && initialPayload && typeof initialPayload === 'object') {
+        setLeaveType(initialPayload.leave_type || '');
+        setStartDate(String(initialPayload.start_date || '').slice(0, 10));
+        setEndDate(String(initialPayload.end_date || '').slice(0, 10));
+        setNote(initialPayload.note || '');
+      } else {
+        setLeaveType('');
+        setStartDate('');
+        setEndDate('');
+        setNote('');
+      }
       setSubmitError(null);
       setSubmitting(false);
       const id = setTimeout(() => firstFieldRef.current?.focus(), 0);
       return () => clearTimeout(id);
     }
     return undefined;
-  }, [open]);
+  }, [open, isEdit, initialPayload]);
 
   const handleSubmit = useCallback(async () => {
     if (!leaveType) {
@@ -167,21 +184,41 @@ export default function RequestLeaveDialog({ open, onClose, balances, profile, o
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await submitLeaveRequest(token, payload);
+      if (isEdit) {
+        if (correspondenceId == null) {
+          setSubmitError(t('submitError'));
+          return;
+        }
+        await editCorrespondence(token, correspondenceId, { payload });
+      } else {
+        await submitLeaveRequest(token, payload);
+      }
       onSubmitted();
     } catch (err) {
       setSubmitError(mapSubmitError(t, err));
     } finally {
       setSubmitting(false);
     }
-  }, [leaveType, startDate, endDate, endBeforeStart, displayDays, note, token, t, onSubmitted]);
+  }, [
+    leaveType,
+    startDate,
+    endDate,
+    endBeforeStart,
+    displayDays,
+    note,
+    token,
+    t,
+    onSubmitted,
+    isEdit,
+    correspondenceId,
+  ]);
 
   const managerName = profile?.manager?.name;
 
   return (
     <SystemDialog
       open={open}
-      title={t('dialogTitle')}
+      title={isEdit ? t('editLeaveDialogTitle') : t('dialogTitle')}
       onClose={onClose}
       onCancel={onClose}
       cancelLabel={t('cancelButton')}
@@ -194,7 +231,7 @@ export default function RequestLeaveDialog({ open, onClose, balances, profile, o
           disabled={!canSubmit}
           startIcon={submitting ? <CircularProgress size={14} color="inherit" /> : null}
         >
-          {t('confirmButton')}
+          {isEdit ? t('saveEditsButton') : t('confirmButton')}
         </Button>
       }
     >
@@ -275,7 +312,8 @@ export default function RequestLeaveDialog({ open, onClose, balances, profile, o
           onChange={(e) => setNote(e.target.value)}
         />
 
-        {/* Approver chain preview */}
+        {/* Approver chain preview (create only — edit keeps existing chain) */}
+        {!isEdit ? (
         <Box>
           <Typography variant="overline" color="text.secondary" sx={{ display: 'block' }}>
             {t('approverTitle')}

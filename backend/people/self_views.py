@@ -15,7 +15,6 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
-from django.db.models import Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -30,9 +29,17 @@ from correspondence.policies import PolicyNotFound
 from correspondence.serializers import CorrespondenceDetailSerializer
 from mdm.models import ReferenceValue
 
-from .models import AttendancePermission, Employee, LeaveEntitlement, LeaveRecord, Loan, PayslipLine
+from .models import AttendancePermission, Employee, LeaveRecord, Loan, PayslipLine
 from .permissions import IsActiveEmployee, HasTeamAccess
 from .leave_days import leave_days_json
+from .leave_guards import (
+    MAX_BACKDATED_LEAVE_DAYS,
+    SUBJECT_TYPE,
+    compute_balance as _compute_balance,
+    linked_actionable_corr as _linked_actionable_corr,
+    linked_approved_corr as _linked_approved_corr,
+    record_blocks_overlap as _record_blocks_overlap,
+)
 from .leave_type_resolve import allowed_leave_type_payload, resolve_leave_type
 from .manager_routing import manager_routing_block_response
 from .self_serializers import (
@@ -44,17 +51,9 @@ from .self_serializers import (
 )
 from .serializers import AttendancePermissionSerializer, LoanSerializer, PayslipLineSerializer
 
-SUBJECT_TYPE = 'people.LeaveRecord'
-
 # Payroll run statuses whose payslip lines are final and safe to expose to the
 # employee (F10). Draft/computed runs are internal and stay hidden.
 COMMITTED_RUN_STATUSES = ('validated', 'committed')
-
-# Retroactive filing is legitimate (sick leave is reported after the fact),
-# but only within living memory. Beyond this window a start date is a data
-# error — an assistant with no clock reading "1 October" as a year long gone —
-# and the request would be scored against a balance year that has closed.
-MAX_BACKDATED_LEAVE_DAYS = 30
 
 
 # ── helpers ────────────────────────────────────────────────────────────────
@@ -64,67 +63,6 @@ def _corr_type_value(code='leave_request'):
     return ReferenceValue.objects.get(
         reference_set__name='correspondence_type', code=code,
     )
-
-
-def _linked_actionable_corr(record) -> bool:
-    """True if this leave record has a workflow correspondence awaiting action."""
-    return Correspondence.objects.filter(
-        subject_type=SUBJECT_TYPE,
-        subject_id=record.pk,
-        status__in=ACTIONABLE,
-    ).exists()
-
-
-def _linked_approved_corr(record) -> bool:
-    """True if this leave record has a workflow correspondence that was approved.
-
-    NSR-1B mirrors terminal correspondence onto ``LeaveRecord.status``; this
-    Correspondence lookup remains as a fallback for any pre-sync rows that
-    still show ``draft`` while their correspondence is already ``approved``.
-    """
-    return Correspondence.objects.filter(
-        subject_type=SUBJECT_TYPE,
-        subject_id=record.pk,
-        status='approved',
-    ).exists()
-
-
-def _record_blocks_overlap(record) -> bool:
-    """Whether an existing leave record should block a new request."""
-    if record.status in ('approved', 'submitted'):
-        return True
-    # In-flight draft records whose correspondence is still actionable block
-    # overlapping requests until the workflow resolves.
-    return _linked_actionable_corr(record)
-
-
-def _compute_balance(profile, code, year):
-    """Return ``(entitled, carried_forward, used, pending, remaining)`` Decimals."""
-    agg = LeaveEntitlement.objects.filter(
-        employee=profile, year=year, leave_type__code=code,
-    ).aggregate(
-        total_entitled=Sum('entitled_days'),
-        total_carried=Sum('carried_forward'),
-    )
-    entitled = agg['total_entitled'] or Decimal('0')
-    carried_forward = agg['total_carried'] or Decimal('0')
-    # Opening balance is the entitlement plus whatever carried forward from last year.
-    opening_balance = entitled + carried_forward
-
-    used = Decimal('0')
-    for record in LeaveRecord.objects.filter(
-        employee=profile, leave_type__code=code, start_date__year=year,
-    ):
-        if record.status == 'approved' or _linked_approved_corr(record):
-            used += record.days
-
-    pending = Decimal('0')
-    for record in LeaveRecord.objects.filter(employee=profile, leave_type__code=code):
-        if _linked_actionable_corr(record):
-            pending += record.days
-
-    remaining = max(Decimal('0'), opening_balance - used - pending)
-    return entitled, carried_forward, used, pending, remaining
 
 
 # ── views ──────────────────────────────────────────────────────────────────
@@ -676,11 +614,17 @@ class DirectReportsView(APIView):
 
 
 class TeamLeaveView(APIView):
-    """GET — leave overlapping a calendar month for direct reports (Who's Out)."""
+    """GET — leave overlapping a calendar month for direct reports (Who's Out).
+
+    Includes approved leave and in-flight ESS requests (LeaveRecord stays
+    ``draft`` until Correspondence resolves — filter those by actionable corr).
+    """
 
     permission_classes = [IsAuthenticated, IsActiveEmployee, HasTeamAccess]
 
     def get(self, request):
+        from django.db.models import Exists, OuterRef, Q
+
         profile = request.user.employee_profile
         today = timezone.localdate()
         try:
@@ -698,12 +642,21 @@ class TeamLeaveView(APIView):
             )
 
         start, end = _month_bounds(year, month)
+        pending_corr = Correspondence.objects.filter(
+            subject_type=SUBJECT_TYPE,
+            subject_id=OuterRef('pk'),
+            status__in=ACTIONABLE,
+        )
         qs = (
             LeaveRecord.objects.filter(
                 employee__manager=profile,
                 start_date__lte=end,
                 end_date__gte=start,
-                status__in=('submitted', 'approved'),
+            )
+            .annotate(_pending=Exists(pending_corr))
+            .filter(
+                Q(status__in=('submitted', 'approved'))
+                | Q(status='draft', _pending=True)
             )
             .select_related('employee', 'leave_type')
             .order_by('start_date', 'employee__employee_no')

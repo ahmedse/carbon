@@ -9,7 +9,6 @@ import {
   Chip,
   FormControlLabel,
   IconButton,
-  MenuItem,
   Snackbar,
   Stack,
   Switch,
@@ -28,25 +27,24 @@ import EmptyState from '../../components/Page/EmptyState';
 import SystemDialog from '../../components/SystemDialog';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import StandardDataGrid from '../../components/StandardDataGrid';
+import { SearchSelect } from '../../components/Form';
 import { useAuth } from '../../auth/AuthContext';
+import { useReferenceOptions } from '../../hooks/useReferenceOptions';
 import {
   fetchComplianceRules,
   createComplianceRule,
   updateComplianceRule,
   deleteComplianceRule,
 } from '../../api/people';
-import { formatDate } from './utils';
-import { FONT } from '../../theme/themeTokens';
-
-const CATEGORIES = ['leave', 'eosi', 'gosi', 'wps', 'overtime', 'payroll', 'other'];
+import { formatDate, refCode, refLabel } from './utils';
 
 const EMPTY_FORM = {
   rule_id: '',
   version: '',
   name: '',
   description: '',
-  jurisdiction: 'KW',
-  category: 'other',
+  jurisdiction: '',
+  category: '',
   effective_date: '',
   formula_ref: '',
   source_citation: '',
@@ -66,6 +64,8 @@ export default function ComplianceRulesPanel() {
   const { t } = useTranslation('people');
   const { t: tCommon } = useTranslation('common');
   const { token } = useAuth();
+  const categoryRef = useReferenceOptions('compliance_category');
+  const jurisdictionRef = useReferenceOptions('jurisdiction');
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -113,8 +113,8 @@ export default function ComplianceRulesPanel() {
       version: row.version ?? '',
       name: row.name ?? '',
       description: row.description ?? '',
-      jurisdiction: row.jurisdiction ?? 'KW',
-      category: row.category ?? 'other',
+      jurisdiction: refCode(row.jurisdiction) || '',
+      category: refCode(row.category) || '',
       effective_date: row.effective_date ?? '',
       formula_ref: row.formula_ref ?? '',
       source_citation: row.source_citation ?? '',
@@ -135,7 +135,14 @@ export default function ComplianceRulesPanel() {
   };
 
   const handleSave = async () => {
-    if (!form.rule_id.trim() || !form.version.trim() || !form.name.trim() || !form.effective_date || !form.category) {
+    if (
+      !form.rule_id.trim()
+      || !form.version.trim()
+      || !form.name.trim()
+      || !form.effective_date
+      || !form.category
+      || !form.jurisdiction
+    ) {
       setSnackbar({ open: true, message: tCommon('allFieldsRequired'), severity: 'error' });
       return;
     }
@@ -156,7 +163,7 @@ export default function ComplianceRulesPanel() {
       version: form.version.trim(),
       name: form.name.trim(),
       description: form.description.trim(),
-      jurisdiction: form.jurisdiction.trim() || 'KW',
+      jurisdiction: form.jurisdiction.trim(),
       category: form.category,
       effective_date: form.effective_date,
       formula_ref: form.formula_ref.trim(),
@@ -202,16 +209,19 @@ export default function ComplianceRulesPanel() {
     {
       field: 'jurisdiction',
       headerName: t('colJurisdiction'),
-      width: 100,
+      width: 110,
       renderHeader: tipHeader(t('colJurisdictionTip')),
+      valueGetter: (_v, row) => refLabel(row.jurisdiction) || refCode(row.jurisdiction) || '—',
     },
     {
       field: 'category',
       headerName: t('colCategory'),
-      width: 110,
-      renderCell: (p) => (
-        <Chip size="small" variant="outlined" label={t(`complianceCategory_${p.value}`, { defaultValue: p.value || '—' })} />
-      ),
+      width: 120,
+      renderCell: (p) => {
+        const code = refCode(p.row.category);
+        const label = refLabel(p.row.category) || t(`complianceCategory_${code}`, { defaultValue: code || '—' });
+        return <Chip size="small" variant="outlined" label={label} />;
+      },
     },
     {
       field: 'effective_date',
@@ -258,7 +268,7 @@ export default function ComplianceRulesPanel() {
   return (
     <Stack spacing={1.5}>
       <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
-        <Typography sx={{ ...FONT.heading }}>{t('configComplianceRules')}</Typography>
+        <Typography variant="subtitle1">{t('configComplianceRules')}</Typography>
         <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
           {t('actionAddComplianceRule')}
         </Button>
@@ -308,12 +318,28 @@ export default function ComplianceRulesPanel() {
           <TextField size="small" fullWidth required name="name" label={t('colName')} value={form.name} onChange={handleChange} />
           <TextField size="small" fullWidth multiline minRows={2} name="description" label={t('colDescription')} value={form.description} onChange={handleChange} />
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-            <TextField size="small" fullWidth name="jurisdiction" label={t('colJurisdiction')} value={form.jurisdiction} onChange={handleChange} />
-            <TextField size="small" fullWidth required select name="category" label={t('colCategory')} value={form.category} onChange={handleChange}>
-              {CATEGORIES.map((c) => (
-                <MenuItem key={c} value={c}>{t(`complianceCategory_${c}`)}</MenuItem>
-              ))}
-            </TextField>
+            <SearchSelect
+              label={t('colJurisdiction')}
+              options={jurisdictionRef.options}
+              value={form.jurisdiction}
+              onChange={(v) => setForm((prev) => ({ ...prev, jurisdiction: v?.value ?? '' }))}
+              loading={jurisdictionRef.loading}
+              error={jurisdictionRef.error}
+              onRetry={jurisdictionRef.refetch}
+              required
+              clearable={false}
+            />
+            <SearchSelect
+              label={t('colCategory')}
+              options={categoryRef.options}
+              value={form.category}
+              onChange={(v) => setForm((prev) => ({ ...prev, category: v?.value ?? '' }))}
+              loading={categoryRef.loading}
+              error={categoryRef.error}
+              onRetry={categoryRef.refetch}
+              required
+              clearable={false}
+            />
             <TextField
               size="small"
               fullWidth

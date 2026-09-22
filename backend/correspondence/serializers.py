@@ -15,6 +15,30 @@ from .models import (
 )
 
 
+def _user_display_name(user):
+    """Prefer linked employee full_name, then Django full name, then username.
+
+    When a person name exists and differs from the login id, return
+    ``Name (username)`` so inbox/timeline show both (e.g. who ``emp_1067`` is).
+    """
+    if user is None:
+        return None
+    person = None
+    try:
+        emp = user.employee_profile
+    except Exception:
+        # OneToOne reverse raises RelatedObjectDoesNotExist when unlinked.
+        emp = None
+    if emp is not None:
+        person = (getattr(emp, 'full_name', None) or '').strip() or None
+    if not person:
+        person = (user.get_full_name() or '').strip() or None
+    username = user.username or ''
+    if person and username and person != username:
+        return f'{person} ({username})'
+    return person or username or None
+
+
 class CorrespondenceEventSerializer(serializers.ModelSerializer):
     """Append-only timeline entry (``events``)."""
 
@@ -29,7 +53,9 @@ class CorrespondenceEventSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_actor_name(self, obj):
-        return obj.actor.username if obj.actor_id else None
+        if not obj.actor_id:
+            return None
+        return _user_display_name(obj.actor)
 
 
 class CorrespondenceSerializer(serializers.ModelSerializer):
@@ -62,7 +88,7 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
     def get_requester_name(self, obj):
         if not obj.requester_id:
             return None
-        return obj.requester.get_full_name() or obj.requester.username
+        return _user_display_name(obj.requester)
 
     def get_corr_type_code(self, obj):
         return obj.corr_type.code if obj.corr_type_id else None

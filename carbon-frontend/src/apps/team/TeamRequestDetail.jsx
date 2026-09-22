@@ -1,8 +1,8 @@
 // src/apps/team/TeamRequestDetail.jsx
 // Team approval detail (/team/:id).
 // Layout: Summary → Stepper|Graph → Timeline → act buttons.
-// Act UX: SystemDialog (comment) + ConfirmDialog for destructive reject/send-back.
-// No Card action bar. No Archive for managers (FSM: requester/admin only).
+// Act UX: SystemDialog (comment) + ConfirmDialog for destructive reject/send-back/void/reopen.
+// Approver acts while actionable. correspondence:admin may Void / Reopen terminals.
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -21,7 +21,10 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import UndoIcon from '@mui/icons-material/Undo';
+import ReplayIcon from '@mui/icons-material/Replay';
+import BlockIcon from '@mui/icons-material/Block';
 import HowToVoteIcon from '@mui/icons-material/HowToVote';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
@@ -33,12 +36,19 @@ import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import {
+  CORRESPONDENCE_ADMIN,
+  expandCapabilities,
+  hasCap,
+} from '../../capabilities';
+import {
   fetchCorrespondenceDetail,
   approveCorrespondence,
   acknowledgeCorrespondence,
   reviewCorrespondence,
   rejectCorrespondence,
   sendBackCorrespondence,
+  voidCorrespondence,
+  reopenCorrespondence,
 } from '../../api/team';
 import { SectionTitle } from '../my/components/myRequestsCommon';
 import SummaryCard from '../my/components/SummaryCard';
@@ -47,6 +57,8 @@ import WorkflowGraph from '../my/components/WorkflowGraph';
 import RequestTimeline from '../my/components/RequestTimeline';
 
 const ACTIONABLE = ['submitted', 'in_review'];
+const ADMIN_TERMINAL = ['approved', 'rejected', 'cancelled', 'expired'];
+const COMMENT_REQUIRED = new Set(['reject', 'sendBack', 'void', 'reopen']);
 
 const POSITIVE_INTENTS = {
   approve: {
@@ -71,6 +83,10 @@ const POSITIVE_INTENTS = {
     color: 'primary',
   },
 };
+
+function capabilityKeys(raw) {
+  return (Array.isArray(raw) ? raw : []).map((c) => (typeof c === 'string' ? c : c?.key)).filter(Boolean);
+}
 
 function extractErrorMessage(err, fallback) {
   if (!err) return fallback;
@@ -100,7 +116,7 @@ export default function TeamRequestDetail() {
   const { t } = useTranslation('team');
   const theme = useTheme();
   const isRtl = theme.direction === 'rtl';
-  const { token } = useAuth();
+  const { token, userCapabilities, isGlobalAdminFlag } = useAuth();
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -111,6 +127,11 @@ export default function TeamRequestDetail() {
   const backPath = fromHistory ? '/team/history' : '/team';
   const backLabel = fromHistory ? t('backToHistory') : t('backToInbox');
 
+  const canCorrAdmin = useMemo(() => {
+    if (isGlobalAdminFlag === true) return true;
+    return hasCap(expandCapabilities(capabilityKeys(userCapabilities)), CORRESPONDENCE_ADMIN);
+  }, [isGlobalAdminFlag, userCapabilities]);
+
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -118,7 +139,7 @@ export default function TeamRequestDetail() {
   const [view, setView] = useState('graph');
   const [submitting, setSubmitting] = useState(false);
 
-  /** @type {null | 'positive' | 'reject' | 'sendBack'} */
+  /** @type {null | 'positive' | 'reject' | 'sendBack' | 'void' | 'reopen'} */
   const [dialogAction, setDialogAction] = useState(null);
   const [comment, setComment] = useState('');
   const [commentError, setCommentError] = useState(null);
@@ -126,6 +147,9 @@ export default function TeamRequestDetail() {
   const [confirmDestructive, setConfirmDestructive] = useState(false);
 
   const isActionable = Boolean(data && ACTIONABLE.includes(data.status));
+  const showAdminActs = Boolean(
+    data && canCorrAdmin && ADMIN_TERMINAL.includes(data.status),
+  );
   const positiveIntent = useMemo(() => currentStepIntent(data), [data]);
   const positiveDef = POSITIVE_INTENTS[positiveIntent];
 
@@ -172,14 +196,24 @@ export default function TeamRequestDetail() {
         if (action === 'positive') {
           await positiveDef.api(token, id, { comment: trimmedComment || '' });
           notify({ message: t(positiveDef.successKey), type: 'success' });
+          navigate(fromHistory ? '/team/history' : '/team');
         } else if (action === 'reject') {
           await rejectCorrespondence(token, id, { comment: trimmedComment });
           notify({ message: t('successRejected'), type: 'success' });
+          navigate(fromHistory ? '/team/history' : '/team');
         } else if (action === 'sendBack') {
           await sendBackCorrespondence(token, id, { comment: trimmedComment });
           notify({ message: t('successSentBack'), type: 'success' });
+          navigate(fromHistory ? '/team/history' : '/team');
+        } else if (action === 'void') {
+          await voidCorrespondence(token, id, { comment: trimmedComment });
+          notify({ message: t('successVoided'), type: 'success' });
+          navigate('/team/history');
+        } else if (action === 'reopen') {
+          await reopenCorrespondence(token, id, { comment: trimmedComment });
+          notify({ message: t('successReopened'), type: 'success' });
+          navigate('/team');
         }
-        navigate(fromHistory ? '/team/history' : '/team');
       } catch (err) {
         notify({ message: extractErrorMessage(err, t('error')), type: 'error' });
       } finally {
@@ -192,7 +226,7 @@ export default function TeamRequestDetail() {
 
   const handleDialogPrimary = useCallback(() => {
     const trimmed = comment.trim();
-    if (dialogAction === 'reject' || dialogAction === 'sendBack') {
+    if (COMMENT_REQUIRED.has(dialogAction)) {
       if (!trimmed) {
         setCommentError(t('commentRequired'));
         return;
@@ -213,14 +247,48 @@ export default function TeamRequestDetail() {
   const dialogTitle = useMemo(() => {
     if (dialogAction === 'reject') return t('rejectConfirmTitle');
     if (dialogAction === 'sendBack') return t('sendBackConfirmTitle');
+    if (dialogAction === 'void') return t('voidConfirmTitle');
+    if (dialogAction === 'reopen') return t('reopenConfirmTitle');
     return t(positiveDef.labelKey);
   }, [dialogAction, t, positiveDef]);
 
   const dialogPrimaryLabel = useMemo(() => {
     if (dialogAction === 'reject') return t('reject');
     if (dialogAction === 'sendBack') return t('sendBack');
+    if (dialogAction === 'void') return t('void');
+    if (dialogAction === 'reopen') return t('reopen');
     return t(positiveDef.labelKey);
   }, [dialogAction, t, positiveDef]);
+
+  const confirmTitle = useMemo(() => {
+    if (dialogAction === 'reject') return t('rejectConfirmTitle');
+    if (dialogAction === 'sendBack') return t('sendBackConfirmTitle');
+    if (dialogAction === 'void') return t('voidConfirmTitle');
+    if (dialogAction === 'reopen') return t('reopenConfirmTitle');
+    return '';
+  }, [dialogAction, t]);
+
+  const confirmMessage = useMemo(() => {
+    if (dialogAction === 'reject') return t('rejectConfirmMessage');
+    if (dialogAction === 'sendBack') return t('sendBackConfirmMessage');
+    if (dialogAction === 'void') return t('voidConfirmMessage');
+    if (dialogAction === 'reopen') return t('reopenConfirmMessage');
+    return '';
+  }, [dialogAction, t]);
+
+  const confirmLabel = useMemo(() => {
+    if (dialogAction === 'reject') return t('reject');
+    if (dialogAction === 'sendBack') return t('sendBack');
+    if (dialogAction === 'void') return t('void');
+    if (dialogAction === 'reopen') return t('reopen');
+    return '';
+  }, [dialogAction, t]);
+
+  const dialogColor = useMemo(() => {
+    if (dialogAction === 'reject' || dialogAction === 'void') return 'error';
+    if (dialogAction === 'sendBack' || dialogAction === 'reopen') return 'warning';
+    return positiveDef.color;
+  }, [dialogAction, positiveDef]);
 
   const PositiveIcon = positiveDef.icon;
 
@@ -292,7 +360,11 @@ export default function TeamRequestDetail() {
               </ToggleButtonGroup>
             </Stack>
             {view === 'stepper' ? (
-              <ApproverChainStepper chain={data.approver_chain} currentStep={data.current_step} />
+              <ApproverChainStepper
+                chain={data.approver_chain}
+                currentStep={data.current_step}
+                status={data.status}
+              />
             ) : (
               <WorkflowGraph
                 chain={data.approver_chain}
@@ -303,46 +375,78 @@ export default function TeamRequestDetail() {
             <RequestTimeline events={data.events} />
 
             <Box sx={{ pt: 1 }}>
-              <SectionTitle icon={HowToVoteIcon} title={t('actionsTitle')} />
-              {!isActionable ? (
-                <Typography variant="body2" color="text.secondary">
-                  {t('actionsNotAvailable')}
-                </Typography>
-              ) : (
+              {isActionable || !showAdminActs ? (
+                <>
+                  <SectionTitle icon={HowToVoteIcon} title={t('actionsTitle')} />
+                  {isActionable ? (
+                    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color={positiveDef.color}
+                        startIcon={<PositiveIcon />}
+                        disabled={submitting}
+                        onClick={() => openAction('positive')}
+                      >
+                        {t(positiveDef.labelKey)}
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="error"
+                        startIcon={<CloseIcon />}
+                        disabled={submitting}
+                        onClick={() => openAction('reject')}
+                      >
+                        {t('reject')}
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="warning"
+                        startIcon={<UndoIcon />}
+                        disabled={submitting}
+                        onClick={() => openAction('sendBack')}
+                      >
+                        {t('sendBack')}
+                      </Button>
+                    </Stack>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      {t('actionsNotAvailable')}
+                    </Typography>
+                  )}
+                </>
+              ) : null}
+            </Box>
+
+            {showAdminActs ? (
+              <Box sx={{ pt: 0.5 }}>
+                <SectionTitle icon={AdminPanelSettingsIcon} title={t('adminActionsTitle')} />
                 <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
                   <Button
                     size="small"
-                    variant="contained"
-                    color={positiveDef.color}
-                    startIcon={<PositiveIcon />}
+                    variant="outlined"
+                    color="warning"
+                    startIcon={<ReplayIcon />}
                     disabled={submitting}
-                    onClick={() => openAction('positive')}
+                    onClick={() => openAction('reopen')}
                   >
-                    {t(positiveDef.labelKey)}
+                    {t('reopen')}
                   </Button>
                   <Button
                     size="small"
                     variant="outlined"
                     color="error"
-                    startIcon={<CloseIcon />}
+                    startIcon={<BlockIcon />}
                     disabled={submitting}
-                    onClick={() => openAction('reject')}
+                    onClick={() => openAction('void')}
                   >
-                    {t('reject')}
-                  </Button>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="warning"
-                    startIcon={<UndoIcon />}
-                    disabled={submitting}
-                    onClick={() => openAction('sendBack')}
-                  >
-                    {t('sendBack')}
+                    {t('void')}
                   </Button>
                 </Stack>
-              )}
-            </Box>
+              </Box>
+            ) : null}
           </Stack>
         ) : null}
       </PageContainer>
@@ -358,7 +462,7 @@ export default function TeamRequestDetail() {
         actions={
           <Button
             variant="contained"
-            color={dialogAction === 'reject' ? 'error' : dialogAction === 'sendBack' ? 'warning' : positiveDef.color}
+            color={dialogColor}
             onClick={handleDialogPrimary}
             disabled={submitting}
             startIcon={submitting ? <CircularProgress size={14} color="inherit" /> : null}
@@ -369,7 +473,7 @@ export default function TeamRequestDetail() {
       >
         <Stack spacing={1.5} sx={{ pt: 0.5 }}>
           <Typography variant="body2" color="text.secondary">
-            {dialogAction === 'reject' || dialogAction === 'sendBack'
+            {COMMENT_REQUIRED.has(dialogAction)
               ? t('actDialogDestructiveHint')
               : t('actDialogPositiveHint')}
           </Typography>
@@ -386,11 +490,11 @@ export default function TeamRequestDetail() {
             }}
             label={t('commentLabel')}
             placeholder={
-              dialogAction === 'reject' || dialogAction === 'sendBack'
+              COMMENT_REQUIRED.has(dialogAction)
                 ? t('commentRequiredPlaceholder')
                 : t('commentPlaceholder')
             }
-            required={dialogAction === 'reject' || dialogAction === 'sendBack'}
+            required={COMMENT_REQUIRED.has(dialogAction)}
             error={Boolean(commentError)}
             helperText={commentError || undefined}
           />
@@ -399,13 +503,11 @@ export default function TeamRequestDetail() {
 
       <ConfirmDialog
         open={confirmDestructive}
-        title={dialogAction === 'reject' ? t('rejectConfirmTitle') : t('sendBackConfirmTitle')}
-        message={
-          dialogAction === 'reject' ? t('rejectConfirmMessage') : t('sendBackConfirmMessage')
-        }
-        confirmLabel={dialogAction === 'reject' ? t('reject') : t('sendBack')}
+        title={confirmTitle}
+        message={confirmMessage}
+        confirmLabel={confirmLabel}
         cancelLabel={t('cancel')}
-        destructive={dialogAction === 'reject'}
+        destructive={dialogAction === 'reject' || dialogAction === 'void'}
         onCancel={() => setConfirmDestructive(false)}
         onConfirm={handleConfirmDestructive}
       />

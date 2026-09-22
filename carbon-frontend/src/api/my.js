@@ -100,6 +100,20 @@ export function cancelCorrespondence(token, id) {
   return apiFetch(`${CORRESPONDENCE_ROOT}${id}/cancel/`, { method: 'POST', token });
 }
 
+/**
+ * Requester edits payload while sent_back (POST correspondence/{id}/edit/).
+ * Body: { payload, title? }. Status stays sent_back.
+ */
+export function editCorrespondence(token, id, { payload, title } = {}) {
+  const body = { payload };
+  if (title != null) body.title = title;
+  return apiFetch(`${CORRESPONDENCE_ROOT}${id}/edit/`, {
+    method: 'POST',
+    body,
+    token,
+  });
+}
+
 /** Requester resubmits a sent-back request (POST correspondence/{id}/resubmit/). */
 export function resubmitCorrespondence(token, id) {
   return apiFetch(`${CORRESPONDENCE_ROOT}${id}/resubmit/`, { method: 'POST', token });

@@ -277,6 +277,88 @@ def test_send_back_and_resubmit(workflow, api_client, get_token_for_user):
 
 
 @pytest.mark.django_db
+def test_edit_then_resubmit_leave_subject(workflow, api_client, get_token_for_user):
+    """sent_back → edit payload (+ LeaveRecord sync) → resubmit with DQ subject."""
+    from datetime import date as date_cls
+    from decimal import Decimal
+
+    from people.models import LeaveEntitlement, LeaveRecord
+    from mdm.models import ReferenceSet, ReferenceValue
+
+    wf = workflow
+    leave_set, _ = ReferenceSet.objects.get_or_create(
+        name='leave_type', defaults={'slug': 'leave-type'},
+    )
+    annual, _ = ReferenceValue.objects.get_or_create(
+        reference_set=leave_set, code='annual',
+        defaults={'label': 'Annual Leave'},
+    )
+    emp = Employee.objects.get(user=wf.requester_user)
+    LeaveEntitlement.objects.get_or_create(
+        employee=emp, year=2026, leave_type=annual,
+        defaults={'entitled_days': Decimal('30'), 'used_days': Decimal('0')},
+    )
+    record = LeaveRecord.objects.create(
+        employee=emp,
+        leave_type=annual,
+        start_date=date_cls(2026, 10, 6),
+        end_date=date_cls(2026, 10, 6),
+        days=Decimal('1'),
+        status='draft',
+    )
+    corr = _draft(
+        wf.corr_type, wf.org, wf.requester_user,
+        subject_type='people.LeaveRecord',
+        subject_id=record.pk,
+        title='Leave request annual 2026-10-06→2026-10-06',
+        payload={
+            'leave_type': 'annual',
+            'start_date': '2026-10-06',
+            'end_date': '2026-10-06',
+            'days': '1',
+            'note': '',
+        },
+    )
+    submit_correspondence(corr=corr, by=wf.requester_user, subject=record,
+                          subject_label='people.LeaveRecord')
+
+    _auth(api_client, wf.manager_user, get_token_for_user)
+    assert api_client.post(
+        f'{PREFIX}/correspondence/{corr.id}/send-back/',
+        {'comment': 'change day'}, format='json',
+    ).status_code == 200
+
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    resp = api_client.post(
+        f'{PREFIX}/correspondence/{corr.id}/edit/',
+        {
+            'payload': {
+                'leave_type': 'annual',
+                'start_date': '2026-10-07',
+                'end_date': '2026-10-07',
+                'days': '1',
+                'note': 'moved',
+            },
+        },
+        format='json',
+    )
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
+    assert body['status'] == 'sent_back'
+    assert body['payload']['start_date'] == '2026-10-07'
+    assert any(e['event_type'] == 'edited' for e in body['events'])
+    record.refresh_from_db()
+    assert record.start_date == date_cls(2026, 10, 7)
+    assert record.end_date == date_cls(2026, 10, 7)
+
+    resp = api_client.post(
+        f'{PREFIX}/correspondence/{corr.id}/resubmit/', {}, format='json',
+    )
+    assert resp.status_code == 200
+    assert resp.json()['status'] == 'submitted'
+
+
+@pytest.mark.django_db
 def test_cancel_by_requester_and_non_requester(
     workflow, api_client, get_token_for_user, create_user,
 ):
@@ -394,6 +476,89 @@ def test_invalid_transition_409(workflow, api_client, get_token_for_user):
         f'{PREFIX}/correspondence/{corr.id}/resubmit/', {}, format='json',
     )
     assert resp.status_code == 409
+
+
+@pytest.mark.django_db
+def test_void_and_reopen_admin_gated(
+    workflow, api_client, get_token_for_user, create_user, create_scoped_role,
+):
+    wf = workflow
+    corr = _draft(wf.corr_type, wf.org, wf.requester_user)
+    submit_correspondence(corr=corr, by=wf.requester_user)
+    _auth(api_client, wf.manager_user, get_token_for_user)
+    assert api_client.post(
+        f'{PREFIX}/correspondence/{corr.id}/reject/',
+        {'comment': 'reject for reopen test'},
+        format='json',
+    ).status_code == 200
+
+    # Manager (approver, not admin) cannot void.
+    resp = api_client.post(
+        f'{PREFIX}/correspondence/{corr.id}/void/',
+        {'comment': 'nope'},
+        format='json',
+    )
+    assert resp.status_code == 403
+
+    admin = create_user('api_void_admin')
+    create_scoped_role(admin, 'people_lead')
+    _auth(api_client, admin, get_token_for_user)
+
+    # Comment required.
+    assert api_client.post(
+        f'{PREFIX}/correspondence/{corr.id}/void/', {}, format='json',
+    ).status_code == 400
+
+    # Reopen first (from rejected).
+    resp = api_client.post(
+        f'{PREFIX}/correspondence/{corr.id}/reopen/',
+        {'comment': 'reopen after fix'},
+        format='json',
+    )
+    assert resp.status_code == 200
+    assert resp.json()['status'] == 'submitted'
+    events = {e['event_type'] for e in resp.json()['events']}
+    assert 'reopened' in events
+
+    # Reject again then void.
+    _auth(api_client, wf.manager_user, get_token_for_user)
+    api_client.post(
+        f'{PREFIX}/correspondence/{corr.id}/reject/',
+        {'comment': 'still no'},
+        format='json',
+    )
+    _auth(api_client, admin, get_token_for_user)
+    resp = api_client.post(
+        f'{PREFIX}/correspondence/{corr.id}/void/',
+        {'comment': 'void permanently'},
+        format='json',
+    )
+    assert resp.status_code == 200
+    assert resp.json()['status'] == 'archived'
+    assert any(e['event_type'] == 'voided' for e in resp.json()['events'])
+
+
+@pytest.mark.django_db
+def test_inbox_requester_name_includes_employee_full_name(
+    workflow, api_client, get_token_for_user,
+):
+    wf = workflow
+    from people.models import Employee
+    emp = Employee.objects.get(user=wf.requester_user)
+    emp.full_name = 'Ada Lovelace'
+    emp.save(update_fields=['full_name'])
+
+    corr = _draft(wf.corr_type, wf.org, wf.requester_user)
+    submit_correspondence(corr=corr, by=wf.requester_user)
+    _auth(api_client, wf.manager_user, get_token_for_user)
+    resp = api_client.get(f'{PREFIX}/correspondence/inbox/')
+    assert resp.status_code == 200
+    items = resp.json()
+    if isinstance(items, dict):
+        items = items.get('results') or []
+    row = next(i for i in items if i['id'] == corr.id)
+    assert 'Ada Lovelace' in (row.get('requester_name') or '')
+    assert wf.requester_user.username in (row.get('requester_name') or '')
 
 
 # ── policies ────────────────────────────────────────────────────────────────

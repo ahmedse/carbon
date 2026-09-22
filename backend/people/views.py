@@ -1187,6 +1187,23 @@ class LeaveRecordListCreateView(_GatedListCreateView):
             'employee', 'leave_type',
         ).order_by('-start_date', '-id')
 
+    def post(self, request):
+        """Refuse creating leave already approved/rejected — use ESS + Team."""
+        desired = (request.data or {}).get('status')
+        if desired in ('approved', 'rejected'):
+            return Response(
+                {
+                    'detail': (
+                        'Leave approve/reject must go through Correspondence '
+                        '(Team inbox), not People Leave admin create.'
+                    ),
+                    'error_kind': 'leave_status_via_correspondence',
+                    'code': 'leave_status_via_correspondence',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().post(request)
+
     def get(self, request):
         qs = self.get_queryset()
         if self.org_lookup is not None:
@@ -1234,6 +1251,27 @@ class LeaveRecordDetailView(_GatedDetailView):
         if self.org_lookup is not None:
             qs = _scoped(user, qs, self.org_lookup)
         return qs
+
+    def patch(self, request, pk):
+        """Refuse direct approve/reject — NSR spine is Correspondence / Team."""
+        instance = get_object_or_404(self._get_queryset(request.user), pk=pk)
+        desired = (request.data or {}).get('status')
+        if (
+            desired in ('approved', 'rejected')
+            and desired != instance.status
+        ):
+            return Response(
+                {
+                    'detail': (
+                        'Leave approve/reject must go through Correspondence '
+                        '(Team inbox), not People Leave admin PATCH.'
+                    ),
+                    'error_kind': 'leave_status_via_correspondence',
+                    'code': 'leave_status_via_correspondence',
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().patch(request, pk)
 
 
 # BenefitType (global reference data — no org scope)
@@ -1750,7 +1788,7 @@ class EmployeeCorrespondenceListView(APIView):
                 Q(requester__employee_profile=employee)
                 | Q(subject_type='people.Employee', subject_id=employee.pk),
             )
-            .select_related('requester', 'org_unit', 'corr_type')
+            .select_related('requester', 'requester__employee_profile', 'org_unit', 'corr_type')
             .order_by('-created_at')
         )
         return Response({
@@ -1789,7 +1827,7 @@ class EmployeeCorrespondenceDetailView(APIView):
                 Q(requester__employee_profile=employee)
                 | Q(subject_type='people.Employee', subject_id=employee.pk),
             )
-            .select_related('requester', 'org_unit', 'corr_type')
+            .select_related('requester', 'requester__employee_profile', 'org_unit', 'corr_type')
             .prefetch_related('events'),
             pk=corr_pk,
         )

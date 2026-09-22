@@ -1,8 +1,8 @@
 """Correspondence workflow state machine (Phase OF-5).
 
 The CORE of the e-Office Correspondence engine: submit/approve/reject/send_back/
-cancel/resubmit transitions with DQ gating, approver routing, governance-event
-emission, and notifications.
+cancel/resubmit/archive/void/reopen transitions with DQ gating, approver routing,
+governance-event emission, and notifications.
 
 Layering: this module NEVER imports ``people``. Approvers are resolved via
 ``routing.resolve_step_approvers`` (which reaches ``people.Employee`` through
@@ -692,4 +692,129 @@ def archive(corr, by):
             title=f'{corr.reference_no} was archived',
             body=corr.title,
         )
+        return corr
+
+
+def edit_payload(corr, by, *, payload, title=None):
+    """Requester edits payload while ``sent_back`` (status unchanged).
+
+    Domain subject sync (LeaveRecord fields, etc.) is the caller's
+    responsibility — this function only mutates the correspondence payload /
+    title and appends an ``edited`` timeline event with before/after.
+    """
+    if not isinstance(payload, dict):
+        raise InvalidTransition('payload must be an object')
+
+    with transaction.atomic():
+        _lock_correspondence(corr)
+        if by.id != corr.requester_id:
+            raise NotActorError('Only the requester may edit a request')
+        if corr.status != 'sent_back':
+            raise InvalidTransition(
+                f'Cannot edit from status {corr.status!r}'
+            )
+
+        before = copy.deepcopy(corr.payload) if corr.payload is not None else {}
+        corr.payload = payload
+        if title is not None:
+            corr.title = str(title)[:200]
+        corr.save(update_fields=['payload', 'title', 'updated_at'])
+
+        _add_event(
+            corr, by, 'edited', 'sent_back', 'sent_back',
+            {'before': before, 'after': copy.deepcopy(payload)},
+        )
+        _governance(corr, by, 'edit', old_status='sent_back')
+        return corr
+
+
+def void(corr, by, comment):
+    """Admin-only nullify of a closed decision → archived.
+
+    Distinct from requester ``archive``: requires ``correspondence:admin``, a
+    comment, and emits event ``voided`` so the timeline shows why the
+    outcome was vacated. Does not reopen the workflow.
+    """
+    comment = (comment or '').strip()
+    if not comment:
+        raise CommentRequired('A comment is required to void a request')
+
+    with transaction.atomic():
+        if not has_capability(by, 'correspondence:admin'):
+            raise NotActorError(
+                'Only a correspondence admin may void a request'
+            )
+        if corr.status not in ('approved', 'rejected', 'cancelled', 'expired'):
+            raise InvalidTransition(
+                f'Cannot void from status {corr.status!r}'
+            )
+
+        old_status = corr.status
+        corr.status = 'archived'
+        corr.resolved_at = timezone.now()
+        corr.current_approver_ids = []
+        corr.save()
+
+        _add_event(corr, by, 'voided', old_status, corr.status,
+                   {'comment': comment})
+        _governance(corr, by, 'void', old_status=old_status)
+
+        notify(
+            corr,
+            user_ids=[corr.requester_id],
+            type='status_changed',
+            title=f'{corr.reference_no} was voided',
+            body=comment,
+        )
+        return corr
+
+
+def reopen(corr, by, comment):
+    """Admin-only reopen of a closed decision → resubmitted workflow.
+
+    Rebuilds the approver chain from the frozen ``policy_snapshot`` (same as
+    ``resubmit``) so the request returns to the inbox. Requires
+    ``correspondence:admin`` and a comment. Not allowed from ``archived``.
+    """
+    comment = (comment or '').strip()
+    if not comment:
+        raise CommentRequired('A comment is required to reopen a request')
+
+    with transaction.atomic():
+        if not has_capability(by, 'correspondence:admin'):
+            raise NotActorError(
+                'Only a correspondence admin may reopen a request'
+            )
+        if corr.status not in ('approved', 'rejected', 'cancelled', 'expired'):
+            raise InvalidTransition(
+                f'Cannot reopen from status {corr.status!r}'
+            )
+        if not (corr.policy_snapshot or {}).get('steps'):
+            raise InvalidTransition(
+                'Cannot reopen: missing frozen policy snapshot'
+            )
+
+        old_status = corr.status
+        now = timezone.now()
+        steps = corr.policy_snapshot.get('steps', [])
+        chain = _build_chain(steps, corr=corr, by=corr.requester)
+        current_step, current_approver_ids = _advance(chain, -1, now)
+        _settle(corr, chain, current_step, current_approver_ids, now,
+                active_status='submitted')
+        corr.resolved_at = None
+        corr.save()
+
+        _add_event(corr, by, 'reopened', old_status, corr.status,
+                   {'comment': comment})
+        _governance(corr, by, 'reopen', old_status=old_status)
+
+        notify(
+            corr,
+            user_ids=[corr.requester_id],
+            type='status_changed',
+            title=f'{corr.reference_no} was reopened',
+            body=comment,
+        )
+        if corr.status == 'submitted':
+            _notify_open_step(corr)
         return corr

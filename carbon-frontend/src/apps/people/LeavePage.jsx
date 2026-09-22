@@ -1,8 +1,7 @@
 // src/apps/people/LeavePage.jsx
 // People & Payroll — Leave records + entitlements.
-// Toolkit: FilteredDataGrid (search + filters), SearchSelect for employee /
-// leave-type pickers, SystemDialog / ConfirmDialog. Does NOT fetch the full
-// employee directory for labels — API embeds employee_name / employee_no.
+// People Leave is HR ops (records + entitlements). Approve/reject is Team /
+// Correspondence only (NSR leave spine) — no parallel status PATCH here.
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -17,10 +16,9 @@ import {
   Tabs,
   TextField,
   Tooltip,
+  Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import CancelIcon from '@mui/icons-material/Cancel';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import { useTranslation } from 'react-i18next';
@@ -201,8 +199,11 @@ export default function LeavePage() {
       start_date: recordForm.start_date,
       end_date: recordForm.end_date,
       days: String(recordForm.days).trim(),
-      status: recordForm.status,
     };
+    // Create as draft only — terminal statuses come from Correspondence.
+    if (!editingRecord) {
+      payload.status = 'draft';
+    }
     setSaving(true);
     try {
       if (editingRecord) {
@@ -217,26 +218,6 @@ export default function LeavePage() {
       showError(err);
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleApprove = async (record) => {
-    try {
-      await updateLeaveRecord(record.id, { status: 'approved' }, token);
-      setSnackbar({ open: true, message: t('leaveApproved'), severity: 'success' });
-      await loadData();
-    } catch (err) {
-      showError(err);
-    }
-  };
-
-  const handleReject = async (record) => {
-    try {
-      await updateLeaveRecord(record.id, { status: 'rejected' }, token);
-      setSnackbar({ open: true, message: t('leaveRejected'), severity: 'success' });
-      await loadData();
-    } catch (err) {
-      showError(err);
     }
   };
 
@@ -449,45 +430,17 @@ export default function LeavePage() {
       {
         field: 'actions',
         headerName: t('colActions'),
-        width: 140,
+        width: 100,
         sortable: false,
         filterable: false,
         renderCell: (params) => {
           const record = params.row;
-          const actionable = record.status === 'draft' || record.status === 'submitted';
           return (
             <Box>
-              {actionable && (
-                <>
-                  <Tooltip title={t('actionApprove')}>
-                    <IconButton
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleApprove(record);
-                      }}
-                      sx={{ color: 'success.main' }}
-                    >
-                      <CheckCircleIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title={t('actionReject')}>
-                    <IconButton
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleReject(record);
-                      }}
-                      sx={{ color: 'warning.main' }}
-                    >
-                      <CancelIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </>
-              )}
               <Tooltip title={tCommon('edit')}>
                 <IconButton
                   size="small"
+                  aria-label={tCommon('edit')}
                   onClick={(e) => {
                     e.stopPropagation();
                     openEditRecord(record);
@@ -499,6 +452,7 @@ export default function LeavePage() {
               <Tooltip title={tCommon('delete')}>
                 <IconButton
                   size="small"
+                  aria-label={tCommon('delete')}
                   sx={{ color: 'error.main' }}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -684,6 +638,9 @@ export default function LeavePage() {
         }
       >
         <Stack spacing={2}>
+          <Alert severity="info" variant="outlined">
+            {t('leaveApproveViaTeamHint')}
+          </Alert>
           <SearchSelect
             label={t('colEmployee')}
             options={employeeOptions}
@@ -736,16 +693,19 @@ export default function LeavePage() {
             required
             size="small"
           />
-          <SearchSelect
-            label={t('colStatus')}
-            options={LEAVE_STATUSES.map((s) => ({ value: s, label: t(statusLabelKey(s)) }))}
-            valueKey="value"
-            labelKey="label"
-            value={{ value: recordForm.status, label: t(statusLabelKey(recordForm.status)) }}
-            onChange={(opt) => setRecordForm((prev) => ({ ...prev, status: opt?.value ?? 'draft' }))}
-            clearable={false}
-            size="small"
-          />
+          {editingRecord && (
+            <Box>
+              <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                {t('colStatus')}
+              </Typography>
+              <Chip
+                size="small"
+                variant="outlined"
+                color={statusColor(recordForm.status)}
+                label={statusLabelKey(recordForm.status) ? t(statusLabelKey(recordForm.status)) : recordForm.status}
+              />
+            </Box>
+          )}
         </Stack>
       </SystemDialog>
 

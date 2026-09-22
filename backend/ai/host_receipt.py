@@ -72,6 +72,15 @@ def correspondence_navigate_receipt(
     status = str(data.get("status") or "").strip()
     if status and status not in summary:
         summary = f"{summary} · {status}".strip(" ·")
+    # ESS leave/loan: corr is submitted → manager acts in Team (not Pulse).
+    ctype_code = str(data.get("corr_type_code") or "").strip().lower()
+    if status in ("submitted", "in_review") and ctype_code in (
+        "leave_request",
+        "loan_request",
+        "attendance_permission",
+    ):
+        if "manager" not in summary.lower():
+            summary = f"{summary} · awaiting your manager in Team".strip(" ·")
     if not summary:
         summary = label
     return navigate_receipt(route=route, label=label, summary=summary)

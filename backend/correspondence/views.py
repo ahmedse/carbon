@@ -1,17 +1,20 @@
 """Correspondence engine API views (Phase OF-7 / OF-15).
 
 List/inbox/detail, a generic payload-only create (OF-15), and step actions
-(approve/acknowledge/reject/send-back/cancel/resubmit). Business logic lives in
-``correspondence.fsm``; views stay thin (validate → call fsm → serialize).
+(approve/acknowledge/reject/send-back/cancel/resubmit/edit/archive/void/reopen).
+Business logic lives in ``correspondence.fsm``; views stay thin
+(validate → call fsm → serialize).
 
-Layering: this module never imports ``people``. It is self-contained on
-``correspondence`` models, FSM and CBAC permissions.
+Layering: ``fsm`` / ``routing`` never import ``people``. Views may call
+``people.leave_revise`` on edit for subject sync (domain owns LeaveRecord
+fields; people already depends on correspondence for submit).
 """
 
 import uuid
 
+from django.apps import apps
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -27,7 +30,14 @@ from .exceptions import (
     NotActorError,
     SubmissionBlocked,
 )
-from .models import ACTIONABLE, ACTOR_HISTORY_EVENTS, Correspondence, Notification, WorkflowPolicy
+from .models import (
+    ACTIONABLE,
+    ACTOR_HISTORY_EVENTS,
+    Correspondence,
+    CorrespondenceEvent,
+    Notification,
+    WorkflowPolicy,
+)
 from .permissions import (
     CanActOnCorrespondence,
     CanSubmitCorrespondence,
@@ -52,8 +62,15 @@ class CorrespondenceViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         qs = (
             Correspondence.objects
-            .select_related('requester', 'org_unit', 'corr_type')
-            .prefetch_related('events')
+            .select_related('requester', 'requester__employee_profile', 'org_unit', 'corr_type')
+            .prefetch_related(
+                Prefetch(
+                    'events',
+                    queryset=CorrespondenceEvent.objects.select_related(
+                        'actor', 'actor__employee_profile',
+                    ),
+                ),
+            )
         )
         # The list endpoint is self-scoped for non-admins. A
         # ``correspondence:admin`` may widen the filter surface to answer
@@ -90,7 +107,8 @@ class CorrespondenceViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_serializer_class(self):
         if self.action in ('retrieve', 'approve', 'reject', 'send_back',
-                           'cancel', 'resubmit', 'acknowledge', 'archive'):
+                           'cancel', 'resubmit', 'acknowledge', 'archive',
+                           'void', 'reopen', 'edit'):
             return CorrespondenceDetailSerializer
         return CorrespondenceSerializer
 
@@ -103,11 +121,25 @@ class CorrespondenceViewSet(viewsets.ReadOnlyModelViewSet):
         if self.action in ('approve', 'reject', 'send_back', 'acknowledge',
                            'review'):
             return base + [CanActOnCorrespondence()]
-        if self.action in ('cancel', 'resubmit', 'archive'):
-            # cancel/resubmit/archive are requester-only (fsm enforces + maps
-            # NotActorError -> 403); requester-or-admin gate is CanViewCorrespondence.
+        if self.action in ('cancel', 'resubmit', 'archive', 'edit'):
+            # requester-only (fsm enforces); CanViewCorrespondence is the view gate.
             return base + [CanViewCorrespondence()]
+        if self.action in ('void', 'reopen'):
+            return base + [CorrespondenceAdminOnly()]
         return base
+
+    @staticmethod
+    def _load_subject(corr):
+        """Resolve ``subject_type`` + ``subject_id`` via apps.get_model."""
+        if not corr.subject_type or not corr.subject_id:
+            return None, None
+        try:
+            app_label, model_name = corr.subject_type.split('.', 1)
+            model = apps.get_model(app_label, model_name)
+        except (ValueError, LookupError):
+            return None, None
+        subject = model.objects.filter(pk=corr.subject_id).first()
+        return subject, corr.subject_type
 
     def _transition(self, corr, user, fn):
         """Run an fsm transition, map engine exceptions to HTTP, and return the
@@ -357,11 +389,67 @@ class CorrespondenceViewSet(viewsets.ReadOnlyModelViewSet):
             corr, request.user, lambda: fsm.cancel(corr, request.user),
         )
 
+    @action(detail=True, methods=['post'], url_path='edit')
+    def edit(self, request, pk=None):
+        """Edit payload while ``sent_back`` (requester only). Status unchanged.
+
+        Leave subjects: domain validation + LeaveRecord field sync, then
+        ``fsm.edit_payload``. Payload-only types: engine edit alone.
+        """
+        corr = self.get_object()
+        data = request.data or {}
+        payload = data.get('payload')
+        if not isinstance(payload, dict):
+            return Response(
+                {'detail': 'payload must be an object'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        title = data.get('title')
+
+        try:
+            with transaction.atomic():
+                if corr.subject_type == 'people.LeaveRecord':
+                    # Domain owns leave field rules (balance / overlap / dates).
+                    from people.leave_revise import (  # noqa: PLC0415
+                        LeaveReviseError,
+                        apply_leave_payload_edit,
+                    )
+                    try:
+                        payload, title = apply_leave_payload_edit(corr, payload)
+                    except LeaveReviseError as exc:
+                        body = {'detail': exc.detail}
+                        if exc.error_kind:
+                            body['error_kind'] = exc.error_kind
+                        body.update(exc.extra)
+                        return Response(body, status=exc.status_code)
+
+                corr = fsm.edit_payload(
+                    corr, request.user, payload=payload, title=title,
+                )
+        except NotActorError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except InvalidTransition as exc:
+            return Response(
+                {'detail': f'Invalid transition: {exc}'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        refreshed = self.get_queryset().get(pk=corr.pk)
+        return Response(CorrespondenceDetailSerializer(refreshed).data)
+
     @action(detail=True, methods=['post'], url_path='resubmit')
     def resubmit(self, request, pk=None):
         corr = self.get_object()
+        subject, subject_label = self._load_subject(corr)
         return self._transition(
-            corr, request.user, lambda: fsm.resubmit(corr, request.user),
+            corr,
+            request.user,
+            lambda: fsm.resubmit(
+                corr,
+                request.user,
+                subject=subject,
+                subject_label=subject_label,
+            ),
         )
 
     @action(detail=True, methods=['post'], url_path='archive')
@@ -369,6 +457,34 @@ class CorrespondenceViewSet(viewsets.ReadOnlyModelViewSet):
         corr = self.get_object()
         return self._transition(
             corr, request.user, lambda: fsm.archive(corr, request.user),
+        )
+
+    @action(detail=True, methods=['post'], url_path='void')
+    def void(self, request, pk=None):
+        corr = self.get_object()
+        comment = self._require_comment(request)
+        if comment is None:
+            return Response(
+                {'detail': 'Comment is required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return self._transition(
+            corr, request.user,
+            lambda: fsm.void(corr, request.user, comment),
+        )
+
+    @action(detail=True, methods=['post'], url_path='reopen')
+    def reopen(self, request, pk=None):
+        corr = self.get_object()
+        comment = self._require_comment(request)
+        if comment is None:
+            return Response(
+                {'detail': 'Comment is required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return self._transition(
+            corr, request.user,
+            lambda: fsm.reopen(corr, request.user, comment),
         )
 
 

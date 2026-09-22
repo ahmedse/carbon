@@ -9,13 +9,13 @@ import { useTranslation } from 'react-i18next';
 import EnterpriseGraph from '../../../components/graph/EnterpriseGraph';
 import { codeLabel, ROLE_SUFFIX, INTENT_SUFFIX } from './myRequestsLabels';
 
-/** Layout mirrors EXEC_LAYOUT density (ADR-0012 / planGraph.js). */
+/** Layout mirrors EXEC_LAYOUT density (ADR-0012 / planGraph.js) — compact for detail pages. */
 const LAYOUT = {
-  nodeW: 200,
-  nodeH: 58,
-  colGap: 56,
-  padX: 28,
-  padY: 32,
+  nodeW: 180,
+  nodeH: 52,
+  colGap: 40,
+  padX: 20,
+  padY: 16,
 };
 
 /**
@@ -75,8 +75,15 @@ function terminalState(status) {
   return 'pending';
 }
 
+/** Origin (employee submit) is complete once the request left draft. */
+function originState(status) {
+  if (!status || status === 'draft') return 'pending';
+  return 'approved';
+}
+
 /**
  * Approver-chain workflow graph — EnterpriseGraph adapter.
+ * Layout: Submitted (origin) → approver_chain → Completed (terminal).
  * @param {Array} props.chain
  * @param {number} [props.currentStep]
  * @param {string} [props.status]
@@ -109,6 +116,25 @@ function WorkflowGraph({ chain, currentStep, status, height }) {
     const present = new Set();
     let hasCurrent = false;
 
+    // Origin: employee submit (not an approver step).
+    const origin = originState(status);
+    const oMeta = STATE_META[origin];
+    present.add(origin);
+    built.push({
+      id: 'submitted',
+      label: t('graphNodeSubmitted'),
+      subtitle: t('graphNodeRequester'),
+      status: oMeta.status,
+      statusKey: origin,
+      statusLabel: t(oMeta.label),
+      metaText: '',
+      colorToken: oMeta.colorToken,
+      x: L.padX,
+      y: L.padY,
+      w: L.nodeW,
+      h: L.nodeH,
+    });
+
     steps.forEach((step, index) => {
       const order = Number(step.order ?? 0);
       const state = stepState(step, order, currentStep);
@@ -121,6 +147,7 @@ function WorkflowGraph({ chain, currentStep, status, height }) {
       const statusLabel = t(meta.label);
       const approverCount = Array.isArray(step.user_ids) ? step.user_ids.length : 0;
       const isSkipped = state === 'skipped_auto' || state === 'skipped_condition';
+      const col = index + 1; // after origin
       built.push({
         id: `step-${index}`,
         label: role,
@@ -130,7 +157,7 @@ function WorkflowGraph({ chain, currentStep, status, height }) {
         statusLabel,
         metaText: isSkipped ? '' : t('stepperApprovers', { count: approverCount }),
         colorToken: meta.colorToken,
-        x: L.padX + index * (L.nodeW + L.colGap),
+        x: L.padX + col * (L.nodeW + L.colGap),
         y: L.padY,
         w: L.nodeW,
         h: L.nodeH,
@@ -281,6 +308,8 @@ function WorkflowGraph({ chain, currentStep, status, height }) {
       expandTestId="workflow-graph-expand"
       exportFileName="approval-workflow"
       fill={false}
+      contentSized
+      fitZoomCeil={1}
     />
   );
 }
@@ -296,7 +325,8 @@ WorkflowGraph.defaultProps = {
   chain: [],
   currentStep: null,
   status: null,
-  height: 220,
+  // Fallback only when contentSized is off; live height follows layoutHeight.
+  height: 140,
 };
 
 export default memo(WorkflowGraph);

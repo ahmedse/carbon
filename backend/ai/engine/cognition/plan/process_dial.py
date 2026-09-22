@@ -116,7 +116,7 @@ def materialize_leave_request_plan(
         "body": body,
         "explanation": (
             "Submit personal leave via leave.request.lifecycle (submit). "
-            "Manager review continues in Correspondence after approval here."
+            "Manager review continues in Team after you Approve here."
         ),
         "_process": process_meta,
     }
@@ -136,8 +136,8 @@ def materialize_leave_request_plan(
     synthesis = (
         "Leave request follows process dial leave.request.lifecycle: "
         "Pulse runs balance check then submit (consent). "
-        "Host Correspondence owns manager review → record → verify — "
-        "those steps are not invented by the planner."
+        "After you Approve submit, the request waits for your manager in Team "
+        "(/team). Track status in My Leave — Pulse does not approve for them."
     )
     if missing:
         synthesis += (

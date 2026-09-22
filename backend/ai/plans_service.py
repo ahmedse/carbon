@@ -3867,7 +3867,11 @@ class PlansService:
             # owning plan from this thread-local during execution.
             set_current_plan_run(str(run.id))
             try:
-                wf_raw = (getattr(run, "plan_json", None) or {}).get("workflow_graph")
+                # Engine stores plan_json as a JSON string; Django may surface
+                # it as str — always coerce before .get (see _coerce_plan_json).
+                wf_raw = _coerce_plan_json(getattr(run, "plan_json", None)).get(
+                    "workflow_graph"
+                )
                 wf_ctx: dict = {"status": "ok"}
 
                 async def _on_choice(node_id, chosen, evaluations):

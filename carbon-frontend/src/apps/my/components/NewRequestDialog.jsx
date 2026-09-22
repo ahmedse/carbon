@@ -33,6 +33,7 @@ import {
 } from '../../../api/my';
 import { fetchOrgUnits } from '../../../api/orgUnits';
 import { CORR_TYPES, corrTypeLabel } from './myRequestsLabels';
+import { PROFILE_CHANGE_FIELDS, isProfileChangeField } from './profileChangeAllowlist';
 
 // ── Constants & pure helpers ───────────────────────────────────────────
 
@@ -358,56 +359,82 @@ function RequestFormSwitch({
         </>
       );
 
-    case 'profile_change':
+    case 'profile_change': {
+      const selectedFields = new Set(
+        form.changes.map((c) => c.field).filter(Boolean),
+      );
+      const fieldOptions = PROFILE_CHANGE_FIELDS.map((code) => ({
+        value: code,
+        label: t(`profileField.${code}`, { defaultValue: code }),
+      }));
       return (
         <>
           <Typography variant="body2" color="text.secondary">
             {t('profileChangeHint')}
           </Typography>
-          {form.changes.map((change, index) => (
-            <Stack key={index} direction="row" spacing={0.5} alignItems="flex-start">
-              <TextField
-                size="small"
-                fullWidth
-                label={t('fieldChangeField')}
-                value={change.field}
-                onChange={(e) => onUpdateChange(index, { field: e.target.value })}
-                error={Boolean(errors[`changes.${index}.field`])}
-                helperText={errors[`changes.${index}.field`]}
-              />
-              <TextField
-                size="small"
-                fullWidth
-                label={t('fieldChangeCurrent')}
-                value={change.current}
-                onChange={(e) => onUpdateChange(index, { current: e.target.value })}
-              />
-              <TextField
-                size="small"
-                fullWidth
-                label={t('fieldChangeNew')}
-                value={change.value}
-                onChange={(e) => onUpdateChange(index, { value: e.target.value })}
-                error={Boolean(errors[`changes.${index}.value`])}
-                helperText={errors[`changes.${index}.value`]}
-              />
-              <IconButton
-                size="small"
-                onClick={() => onRemoveChange(index)}
-                disabled={form.changes.length === 1}
-                aria-label={t('removeChangeField')}
-                sx={{ mt: 0.5 }}
-              >
-                <RemoveCircleOutlineIcon fontSize="small" />
-              </IconButton>
-            </Stack>
-          ))}
+          {form.changes.map((change, index) => {
+            const optionsForRow = fieldOptions.filter(
+              (o) => o.value === change.field || !selectedFields.has(o.value),
+            );
+            const isDate = change.field === 'date_of_birth';
+            return (
+              <Stack key={index} direction="row" spacing={0.5} alignItems="flex-start">
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <SearchSelect
+                    label={t('fieldChangeField')}
+                    options={optionsForRow}
+                    value={change.field}
+                    onChange={(v) => onUpdateChange(index, { field: v?.value ?? '' })}
+                    required
+                    clearable={false}
+                    error={errors[`changes.${index}.field`]}
+                    helperText={errors[`changes.${index}.field`]}
+                    placeholder={t('fieldChangeFieldPlaceholder')}
+                  />
+                </Box>
+                <TextField
+                  size="small"
+                  fullWidth
+                  label={t('fieldChangeCurrent')}
+                  value={change.current}
+                  onChange={(e) => onUpdateChange(index, { current: e.target.value })}
+                />
+                <TextField
+                  size="small"
+                  fullWidth
+                  required
+                  type={isDate ? 'date' : 'text'}
+                  label={t('fieldChangeNew')}
+                  value={change.value}
+                  onChange={(e) => onUpdateChange(index, { value: e.target.value })}
+                  error={Boolean(errors[`changes.${index}.value`])}
+                  helperText={errors[`changes.${index}.value`]}
+                  slotProps={isDate ? { inputLabel: { shrink: true } } : undefined}
+                />
+                <IconButton
+                  size="small"
+                  onClick={() => onRemoveChange(index)}
+                  disabled={form.changes.length === 1}
+                  aria-label={t('removeChangeField')}
+                  sx={{ mt: 0.5 }}
+                >
+                  <RemoveCircleOutlineIcon fontSize="small" />
+                </IconButton>
+              </Stack>
+            );
+          })}
           {errors.changes && <Alert severity="error">{errors.changes}</Alert>}
-          <Button size="small" startIcon={<AddIcon />} onClick={onAddChange}>
+          <Button
+            size="small"
+            startIcon={<AddIcon />}
+            onClick={onAddChange}
+            disabled={selectedFields.size >= PROFILE_CHANGE_FIELDS.length}
+          >
             {t('addChangeField')}
           </Button>
         </>
       );
+    }
 
     case 'internal_memo':
     case 'circular':
@@ -610,6 +637,8 @@ export default function NewRequestDialog({ open, onClose, profile, balances, onS
           form.changes.forEach((c, i) => {
             if (!c.field.trim() && c.value.trim()) {
               next[`changes.${i}.field`] = t('errorChangeFieldRequired');
+            } else if (c.field.trim() && !isProfileChangeField(c.field.trim())) {
+              next[`changes.${i}.field`] = t('errorChangeFieldNotAllowed');
             }
             if (c.field.trim() && !c.value.trim()) {
               next[`changes.${i}.value`] = t('errorChangeNewRequired');

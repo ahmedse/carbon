@@ -39,6 +39,15 @@
   "backToInbox": "Back to Inbox",
   "actionsTitle": "Action",
   "actionsNotAvailable": "No actions available for this request in its current status.",
+  "adminActionsTitle": "Admin",
+  "void": "Void",
+  "reopen": "Reopen",
+  "voidConfirmTitle": "Void request?",
+  "voidConfirmMessage": "This archives the request as voided. The outcome stands as vacated; the requester will see your comment.",
+  "reopenConfirmTitle": "Reopen request?",
+  "reopenConfirmMessage": "This returns the request to the approval inbox for a fresh decision. The requester will see your comment.",
+  "successVoided": "Request voided",
+  "successReopened": "Request reopened",
   "commentLabel": "Comment",
   "commentPlaceholder": "Add a comment (optional)",
   "commentRequiredPlaceholder": "Comment required",
@@ -79,7 +88,10 @@
     "rejected": "Rejected",
     "sentBack": "Sent Back",
     "cancelled": "Cancelled",
-    "resubmitted": "Resubmitted"
+    "resubmitted": "Resubmitted",
+    "archived": "Archived",
+    "voided": "Voided",
+    "reopened": "Reopened"
   },
   "role": {
     "manager": "Manager",

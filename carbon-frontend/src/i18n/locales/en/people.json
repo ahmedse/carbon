@@ -360,6 +360,7 @@
   "leaveRejected": "Leave rejected",
   "leaveRecordsTitle": "Leave Records",
   "leaveSubtitle": "Leave records & entitlements",
+  "leaveApproveViaTeamHint": "Approve or reject leave in Team (Correspondence). This screen is for HR records and entitlements only.",
   "leaveTitle": "Leave",
   "loading": "Loading…",
   "loanCreateTitle": "Add Loan",

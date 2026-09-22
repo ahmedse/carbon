@@ -74,6 +74,59 @@ def test_team_leave_month_overlap(manager_world, api_client, get_token_for_user)
 
 
 @pytest.mark.django_db
+def test_team_leave_includes_pending_draft_with_actionable_corr(
+    manager_world, api_client, get_token_for_user, db,
+):
+    """ESS leave stays LeaveRecord.draft until approve — Who's Out must still list it."""
+    from correspondence.models import Correspondence, WorkflowPolicy, WorkflowPolicyStep
+    from mdm.models import ReferenceSet, ReferenceValue
+
+    corr_set, _ = ReferenceSet.objects.get_or_create(
+        name='correspondence_type', defaults={'slug': 'correspondence-type'},
+    )
+    leave_corr, _ = ReferenceValue.objects.get_or_create(
+        reference_set=corr_set, code='leave_request',
+        defaults={'label': 'Leave Request', 'is_active': True},
+    )
+    leave_set = ReferenceSet.objects.get(name='leave_type')
+    annual = ReferenceValue.objects.get(reference_set=leave_set, code='annual')
+    rec = LeaveRecord.objects.create(
+        employee=manager_world.rep, leave_type=annual,
+        start_date=date(2026, 9, 20), end_date=date(2026, 9, 20),
+        days=Decimal('1'), status='draft',
+    )
+    policy, _ = WorkflowPolicy.objects.get_or_create(
+        name='Leave Default TeamLeave', corr_type=leave_corr,
+        defaults={'version': '1.0.0', 'is_active': True},
+    )
+    WorkflowPolicyStep.objects.get_or_create(
+        policy=policy, order=1,
+        defaults={'role': 'manager', 'intent': 'approve', 'is_active': True},
+    )
+    Correspondence.objects.create(
+        reference_no=f'TL-PEND-{rec.pk}',
+        corr_type=leave_corr,
+        subject_type='people.LeaveRecord',
+        subject_id=rec.pk,
+        org_unit=manager_world.rep.org_unit,
+        title='Pending leave',
+        status='submitted',
+        requester=manager_world.rep.user,
+        current_approver_ids=[manager_world.mgr_user.pk],
+        payload={},
+    )
+    _auth(api_client, manager_world.mgr_user, get_token_for_user)
+    resp = api_client.get(TEAM_LEAVE_URL, {'year': 2026, 'month': 9})
+    assert resp.status_code == 200, resp.content
+    items = resp.json()['items']
+    nos = {row['employee_no'] for row in items}
+    assert 'TM-REP' in nos
+    pending = [row for row in items if row['id'] == rec.pk]
+    assert pending, items
+    assert pending[0]['status'] == 'submitted'  # corr status surfaced
+
+
+@pytest.mark.django_db
 def test_team_leave_empty_other_month(manager_world, api_client, get_token_for_user):
     _auth(api_client, manager_world.mgr_user, get_token_for_user)
     resp = api_client.get(TEAM_LEAVE_URL, {'year': 2026, 'month': 1})

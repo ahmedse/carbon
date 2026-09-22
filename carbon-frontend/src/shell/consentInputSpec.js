@@ -15,13 +15,13 @@ import { presentToolLabel } from './presentationPlane';
 /** One-line consequence of approving (RULE_21 — say what changes). */
 const MUTATION_CONSEQUENCE = {
   submit_my_leave:
-    'Creates a leave request in the system. Manager review may follow in Correspondence.',
+    'Creates a leave request. Your manager reviews it in Team — not submitted as approved until they Approve.',
   create_leave_record:
     'Creates a leave record in the system.',
   submit_my_loan:
-    'Creates a loan request in the system.',
+    'Creates a loan request. Your manager reviews it in Team.',
   submit_my_attendance_permission:
-    'Creates an attendance permission request in the system.',
+    'Creates an attendance permission request. Your manager reviews it in Team.',
   create_employee:
     'Creates an employee record in the system.',
   update_employee:

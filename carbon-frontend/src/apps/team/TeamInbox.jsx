@@ -171,8 +171,8 @@ export default function TeamInbox() {
       {
         field: 'requester',
         headerName: t('tableRequester'),
-        flex: 1,
-        minWidth: 140,
+        flex: 1.2,
+        minWidth: 180,
         valueGetter: (value, row) => row.requester_name || requesterLabel(row.requester),
       },
       {

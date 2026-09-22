@@ -39,6 +39,23 @@ _N_DAYS = re.compile(
     r"|\b(\d+)\s*(?:يوم|أيام|ايام|day|days)\b",
     re.I,
 )
+_N_MONTHS = re.compile(
+    r"(?:لمدة|مدة|for|over)\s*(\d+)\s*(?:شهر|أشهر|اشهر|month|months)?"
+    r"|\b(\d+)\s*(?:شهر|أشهر|اشهر|month|months)\b",
+    re.I,
+)
+# Principal / amount — prefer figures next to currency or loan wording.
+_AMOUNT = re.compile(
+    r"(?:(?:قرض|loan|principal|مبلغ|amount|sar|kwd|ريال|د\.?\s*ك)\s*)"
+    r"([0-9]{2,}(?:[.,][0-9]+)?)"
+    r"|([0-9]{2,}(?:[.,][0-9]+)?)\s*(?:sar|kwd|ريال|د\.?\s*ك|ر\.?\s*س)",
+    re.I,
+)
+_RATE = re.compile(
+    r"(?:interest|rate|فائدة|نسبة)\s*(?:of\s*)?([0-9]+(?:[.,][0-9]+)?)\s*%?"
+    r"|([0-9]+(?:[.,][0-9]+)?)\s*%\s*(?:interest|rate|فائدة)?",
+    re.I,
+)
 
 # Calendar localization (platform data, not domain logic).
 _MONTHS: dict[str, int] = {
@@ -174,6 +191,59 @@ def parse_days(text: Any) -> int | None:
     except (TypeError, ValueError):
         return None
     return value if value > 0 else None
+
+
+def parse_months(text: Any) -> int | None:
+    """Term in months the text states, if any."""
+    raw = _clean(text)
+    if not raw.strip():
+        return None
+    match = _N_MONTHS.search(raw)
+    if not match:
+        return None
+    try:
+        value = int(match.group(1) or match.group(2))
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def parse_amount(text: Any) -> float | None:
+    """Principal / money amount the text states, if any."""
+    raw = _clean(text)
+    if not raw.strip():
+        return None
+    match = _AMOUNT.search(raw)
+    if not match:
+        # Fallback: bare 3+ digit number when loan/قرض is present.
+        if not re.search(r"قرض|\bloan\b|\bprincipal\b|\bamount\b", raw, re.I):
+            return None
+        bare = re.search(r"\b([0-9]{3,}(?:[.,][0-9]+)?)\b", raw)
+        if not bare:
+            return None
+        token = bare.group(1)
+    else:
+        token = match.group(1) or match.group(2)
+    try:
+        value = float(str(token).replace(",", ""))
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def parse_rate(text: Any) -> float | None:
+    """Interest rate percent the text states, if any."""
+    raw = _clean(text)
+    if not raw.strip():
+        return None
+    match = _RATE.search(raw)
+    if not match:
+        return None
+    try:
+        value = float(str(match.group(1) or match.group(2)).replace(",", ""))
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0 else None
 
 
 def _governed_code(field: str, raw: Any) -> str | None:
@@ -404,6 +474,36 @@ def fill_write_body(
                 days = _days_from_span(out)
             if days:
                 out[field] = days
+            continue
+        if kind in ("months", "term_months") or field in ("term_months", "months"):
+            months = parse_months(seed)
+            if months:
+                out[field] = months
+            continue
+        if kind in ("amount", "number", "principal") or field in (
+            "principal", "amount", "hours",
+        ):
+            amount = parse_amount(seed)
+            if amount is not None:
+                # Hours are usually small; prefer bare digits for hours field.
+                if field == "hours" and amount >= 24:
+                    hours_m = re.search(
+                        r"\b([0-9]+(?:[.,][0-9]+)?)\s*(?:hour|hours|ساعة|ساعات)?\b",
+                        seed,
+                        re.I,
+                    )
+                    if hours_m:
+                        try:
+                            amount = float(hours_m.group(1).replace(",", ""))
+                        except (TypeError, ValueError):
+                            pass
+                out[field] = amount
+            continue
+        if kind in ("rate", "interest_rate") or field in ("interest_rate", "rate"):
+            rate = parse_rate(seed)
+            if rate is not None:
+                out[field] = rate
+            continue
     _align_date_pair(out, mirror=_declares(slots, "end_date"))
     if not end_given:
         _stretch_end_to_days(out)

@@ -39,6 +39,15 @@
   "backToInbox": "العودة إلى صندوق الاعتمادات",
   "actionsTitle": "الإجراء",
   "actionsNotAvailable": "لا تتوفر إجراءات لهذا الطلب في حالته الحالية.",
+  "adminActionsTitle": "إدارة",
+  "void": "إبطال",
+  "reopen": "إعادة فتح",
+  "voidConfirmTitle": "إبطال الطلب؟",
+  "voidConfirmMessage": "سيُؤرشف الطلب كملغى إدارياً. سيظهر تعليقك لمقدم الطلب.",
+  "reopenConfirmTitle": "إعادة فتح الطلب؟",
+  "reopenConfirmMessage": "سيُعاد الطلب إلى صندوق الاعتمادات لقرار جديد. سيظهر تعليقك لمقدم الطلب.",
+  "successVoided": "تم إبطال الطلب",
+  "successReopened": "أُعيد فتح الطلب",
   "commentLabel": "التعليق",
   "commentPlaceholder": "أضف تعليقًا (اختياري)",
   "commentRequiredPlaceholder": "التعليق مطلوب",
@@ -79,7 +88,10 @@
     "rejected": "رفض",
     "sentBack": "إعادة",
     "cancelled": "إلغاء",
-    "resubmitted": "إعادة إرسال"
+    "resubmitted": "إعادة إرسال",
+    "archived": "مؤرشف",
+    "voided": "ملغى إدارياً",
+    "reopened": "أُعيد فتحه"
   },
   "role": {
     "manager": "المدير",

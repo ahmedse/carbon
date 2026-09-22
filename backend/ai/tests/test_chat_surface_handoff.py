@@ -192,6 +192,25 @@ def test_leave_handoff_spec():
     assert len(acts) >= 2
 
 
+def test_manager_review_intent_hands_off_to_team():
+    from ai.engine.agent.chat_surface import (
+        build_handoff_actions,
+        handoff_copy,
+        handoff_spec_for_intent,
+    )
+
+    spec = handoff_spec_for_intent("Please approve the leave request in my inbox")
+    assert spec["my_route"] == "/team"
+    assert spec.get("manager_only")
+    acts = build_handoff_actions(spec)
+    assert len(acts) == 1
+    assert acts[0]["route"] == "/team"
+    copy = handoff_copy(spec)
+    assert "Team" in copy
+    assert "Agent" in copy  # says not in Agent
+    assert "Open" in copy or "inbox" in copy.lower()
+
+
 def test_chat_narration_never_says_submitting():
     msg = _narrate_tool(
         "call_host_api",

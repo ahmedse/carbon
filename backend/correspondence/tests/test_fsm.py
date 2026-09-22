@@ -19,10 +19,13 @@ from correspondence.fsm import (
     approve,
     archive,
     cancel,
+    edit_payload,
     reject,
+    reopen,
     resubmit,
     send_back,
     submit_correspondence,
+    void,
 )
 from correspondence.models import (
     Correspondence,
@@ -247,6 +250,48 @@ def test_send_back_and_resubmit(leave_workflow):
     assert corr.reference_no == ref_no
 
 
+@pytest.mark.django_db
+def test_edit_payload_while_sent_back(leave_workflow):
+    wf = leave_workflow
+    corr = _draft(
+        wf.corr_type, wf.org, wf.requester_user,
+        payload={'leave_type': 'annual', 'start_date': '2026-10-06', 'end_date': '2026-10-06', 'days': '1'},
+        title='Leave request annual 2026-10-06→2026-10-06',
+    )
+    corr = submit_correspondence(corr=corr, by=wf.requester_user)
+    corr = send_back(corr, wf.manager_user, 'change day')
+
+    with pytest.raises(NotActorError):
+        edit_payload(
+            corr, wf.manager_user,
+            payload={'leave_type': 'annual', 'start_date': '2026-10-07', 'end_date': '2026-10-07', 'days': '1'},
+        )
+
+    pending = _draft(wf.corr_type, wf.org, wf.requester_user)
+    pending = submit_correspondence(corr=pending, by=wf.requester_user)
+    with pytest.raises(InvalidTransition):
+        edit_payload(pending, wf.requester_user, payload={'x': 1})
+
+    new_payload = {
+        'leave_type': 'annual',
+        'start_date': '2026-10-07',
+        'end_date': '2026-10-07',
+        'days': '1',
+        'note': 'moved one day',
+    }
+    corr = edit_payload(
+        corr, wf.requester_user,
+        payload=new_payload,
+        title='Leave request annual 2026-10-07→2026-10-07',
+    )
+    assert corr.status == 'sent_back'
+    assert corr.payload['start_date'] == '2026-10-07'
+    assert corr.title.startswith('Leave request annual 2026-10-07')
+    ev = CorrespondenceEvent.objects.filter(correspondence=corr, event_type='edited').get()
+    assert ev.payload['before']['start_date'] == '2026-10-06'
+    assert ev.payload['after']['start_date'] == '2026-10-07'
+
+
 # ── cancel ──────────────────────────────────────────────────────────────────
 
 @pytest.mark.django_db
@@ -293,6 +338,60 @@ def test_archive_by_requester_and_non_requester(leave_workflow, create_user):
     # Idempotence: archiving an already-archived corr is an InvalidTransition.
     with pytest.raises(InvalidTransition):
         archive(corr, wf.requester_user)
+
+
+@pytest.mark.django_db
+def test_void_admin_only_comment_required(leave_workflow, create_user):
+    wf = leave_workflow
+    admin = create_user('fsm_void_admin', is_superuser=True)
+    corr = _draft(wf.corr_type, wf.org, wf.requester_user)
+    corr = submit_correspondence(corr=corr, by=wf.requester_user)
+    corr = reject(corr, wf.manager_user, 'no')
+
+    with pytest.raises(CommentRequired):
+        void(corr, admin, '')
+    with pytest.raises(NotActorError):
+        void(corr, wf.manager_user, 'manager cannot void')
+
+    corr = void(corr, admin, 'voided by HR — payroll error')
+    assert corr.status == 'archived'
+    assert corr.current_approver_ids == []
+    ev = CorrespondenceEvent.objects.filter(correspondence=corr, event_type='voided').get()
+    assert ev.payload.get('comment') == 'voided by HR — payroll error'
+    assert Notification.objects.filter(
+        correspondence=corr, user=wf.requester_user, type='status_changed',
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_reopen_admin_rebuilds_chain(leave_workflow, create_user):
+    wf = leave_workflow
+    admin = create_user('fsm_reopen_admin', is_superuser=True)
+    corr = _draft(wf.corr_type, wf.org, wf.requester_user)
+    corr = submit_correspondence(corr=corr, by=wf.requester_user)
+    corr = reject(corr, wf.manager_user, 'fix incomplete')
+    assert corr.status == 'rejected'
+    assert corr.resolved_at is not None
+
+    with pytest.raises(NotActorError):
+        reopen(corr, wf.requester_user, 'requester cannot reopen')
+    with pytest.raises(CommentRequired):
+        reopen(corr, admin, '  ')
+
+    corr = reopen(corr, admin, 'reopen after clarification')
+    assert corr.status == 'submitted'
+    assert corr.resolved_at is None
+    assert wf.manager_user.id in (corr.current_approver_ids or [])
+    assert CorrespondenceEvent.objects.filter(
+        correspondence=corr, event_type='reopened',
+    ).exists()
+
+    # Terminal again, then void; archived cannot reopen.
+    corr = reject(corr, wf.manager_user, 'still incomplete')
+    corr = void(corr, admin, 'close again')
+    assert corr.status == 'archived'
+    with pytest.raises(InvalidTransition):
+        reopen(corr, admin, 'too late')
 
 
 @pytest.mark.django_db

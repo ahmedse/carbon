@@ -111,16 +111,27 @@ class LeaveRecordSerializer(serializers.ModelSerializer):
 
 
 class TeamLeaveRecordSerializer(LeaveRecordSerializer):
-    """Leave row for a manager's direct report (Who's Out)."""
+    """Leave row for a manager's direct report (Who's Out).
+
+    Surface Correspondence status when the LeaveRecord is still ``draft``
+    (ESS pending approval) so the grid matches inbox language (submitted).
+    """
 
     employee_id = serializers.IntegerField(source='employee.id', read_only=True)
     employee_no = serializers.CharField(source='employee.employee_no', read_only=True)
     employee_name = serializers.CharField(source='employee.full_name', read_only=True)
+    status = serializers.SerializerMethodField()
 
     class Meta(LeaveRecordSerializer.Meta):
         fields = LeaveRecordSerializer.Meta.fields + [
             'employee_id', 'employee_no', 'employee_name',
         ]
+
+    def get_status(self, obj):
+        corr_status = self.get_correspondence_status(obj)
+        if obj.status == 'draft' and corr_status:
+            return corr_status
+        return obj.status
 
 
 class LeaveRecordDetailSerializer(LeaveRecordSerializer):

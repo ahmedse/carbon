@@ -1,6 +1,7 @@
 // src/apps/my/components/RequestAttendanceDialog.jsx
 // Request short-hours attendance permission (SystemDialog). Submits via
 // submitAttendancePermission → POST people/me/attendance-permissions/.
+// permission_type from governed ReferenceSet (ADR-0027 / NSR-7).
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
@@ -9,17 +10,16 @@ import {
   Box,
   Button,
   CircularProgress,
-  MenuItem,
   Stack,
   TextField,
   Typography,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import SystemDialog from '../../../components/SystemDialog';
+import { SearchSelect } from '../../../components/Form';
 import { useAuth } from '../../../auth/AuthContext';
+import { useReferenceOptions } from '../../../hooks/useReferenceOptions';
 import { submitAttendancePermission } from '../../../api/my';
-
-const PERMISSION_TYPES = ['personal', 'medical', 'official', 'emergency'];
 
 function mapSubmitError(t, err) {
   const detail = err?.data?.detail;
@@ -51,39 +51,57 @@ function mapSubmitError(t, err) {
 export default function RequestAttendanceDialog({ open, onClose, profile, onSubmitted }) {
   const { t } = useTranslation('my');
   const { token } = useAuth();
+  const permTypeRef = useReferenceOptions('permission_type');
 
-  const [permissionType, setPermissionType] = useState('personal');
+  const [permissionType, setPermissionType] = useState('');
   const [dateValue, setDateValue] = useState('');
   const [hours, setHours] = useState('2');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
-  const firstFieldRef = useRef(null);
+  const [fieldError, setFieldError] = useState(null);
+  const openedRef = useRef(false);
 
   useEffect(() => {
     if (open) {
-      setPermissionType('personal');
+      openedRef.current = true;
+      setPermissionType('');
       setDateValue('');
       setHours('2');
       setNotes('');
       setSubmitError(null);
+      setFieldError(null);
       setSubmitting(false);
-      const id = setTimeout(() => firstFieldRef.current?.focus(), 0);
-      return () => clearTimeout(id);
+    } else {
+      openedRef.current = false;
     }
-    return undefined;
   }, [open]);
+
+  // Prefer seeded "personal" when present; else first catalog value.
+  useEffect(() => {
+    if (!open || !openedRef.current || permissionType) return;
+    const opts = permTypeRef.options || [];
+    if (!opts.length) return;
+    const personal = opts.find((o) => o.value === 'personal');
+    setPermissionType(personal?.value ?? opts[0].value);
+  }, [open, permissionType, permTypeRef.options]);
 
   const canSubmit =
     Boolean(permissionType && dateValue && hours) &&
     !Number.isNaN(Number(hours)) &&
     Number(hours) > 0 &&
-    !submitting;
+    !submitting &&
+    !permTypeRef.loading;
 
   const handleSubmit = useCallback(async () => {
+    if (!permissionType) {
+      setFieldError(t('errorPermissionTypeRequired'));
+      return;
+    }
     if (!canSubmit) return;
     setSubmitting(true);
     setSubmitError(null);
+    setFieldError(null);
     try {
       await submitAttendancePermission(token, {
         permission_type: permissionType,
@@ -128,21 +146,22 @@ export default function RequestAttendanceDialog({ open, onClose, profile, onSubm
             {submitError}
           </Alert>
         )}
-        <TextField
-          select
-          inputRef={firstFieldRef}
+        <SearchSelect
           label={t('fieldPermissionType')}
+          options={permTypeRef.options}
           value={permissionType}
-          onChange={(e) => setPermissionType(e.target.value)}
-          fullWidth
-          size="small"
-        >
-          {PERMISSION_TYPES.map((code) => (
-            <MenuItem key={code} value={code}>
-              {t(`permissionType.${code}`, { defaultValue: code })}
-            </MenuItem>
-          ))}
-        </TextField>
+          onChange={(v) => {
+            setPermissionType(v?.value ?? '');
+            setFieldError(null);
+          }}
+          loading={permTypeRef.loading}
+          error={fieldError || permTypeRef.error}
+          helperText={fieldError || undefined}
+          onRetry={permTypeRef.refetch}
+          required
+          clearable={false}
+          placeholder={t('fieldPermissionTypePlaceholder')}
+        />
         <TextField
           type="date"
           label={t('fieldPermissionDate')}

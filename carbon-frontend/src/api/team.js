@@ -90,6 +90,24 @@ export function sendBackCorrespondence(token, id, { comment } = {}) {
   });
 }
 
+/** POST correspondence/{id}/void/ — admin only, comment REQUIRED. */
+export function voidCorrespondence(token, id, { comment } = {}) {
+  return apiFetch(`${CORRESPONDENCE_ROOT}${id}/void/`, {
+    method: 'POST',
+    body: { comment },
+    token,
+  });
+}
+
+/** POST correspondence/{id}/reopen/ — admin only, comment REQUIRED. */
+export function reopenCorrespondence(token, id, { comment } = {}) {
+  return apiFetch(`${CORRESPONDENCE_ROOT}${id}/reopen/`, {
+    method: 'POST',
+    body: { comment },
+    token,
+  });
+}
+
 /**
  * Direct reports for the current manager (Team Directory).
  * GET people/me/direct-reports/

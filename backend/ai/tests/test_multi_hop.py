@@ -20,6 +20,43 @@ pytestmark = pytest.mark.asyncio
 
 
 @pytest.mark.asyncio
+async def test_observe_strips_json_fence_before_parse():
+    """Fenced ```json observe payloads must yield prose answer, not the fence."""
+    loop = ReActLoop()
+    fenced = (
+        "```json\n"
+        + json.dumps({
+            "answer": "You have 25 days remaining.",
+            "needs_followup": False,
+            "followup_tool": None,
+            "followup_args": None,
+        })
+        + "\n```"
+    )
+    mock_dw = AsyncMock()
+    mock_dw.draft.return_value = MagicMock(text=fenced, tool_calls=[])
+
+    result = await loop._observe(
+        step=MagicMock(step_id=0),
+        tool_output={
+            "tool_name": "call_host_api",
+            "result": {"remaining": 25},
+        },
+        user_message="leave balance",
+        system_prompt="",
+        conversation_history=None,
+        instance_config=None,
+        user_info=None,
+        dw=mock_dw,
+    )
+
+    assert result is not None
+    assert result.answer == "You have 25 days remaining."
+    assert "```" not in (result.answer or "")
+    assert result.needs_followup is False
+
+
+@pytest.mark.asyncio
 async def test_observe_returns_followup_when_data_insufficient():
     """_observe must detect a partial result and request a read-only follow-up."""
     loop = ReActLoop()
@@ -51,6 +88,78 @@ async def test_observe_returns_followup_when_data_insufficient():
     assert result.needs_followup is True
     assert result.followup_tool == "web_research"
     assert result.answer == "The platform factor is 2.5 kg CO2e/kWh."
+
+
+def test_fallback_final_response_past_tense_for_confirmed_leave():
+    """Confirmed leave receipt → past-tense Answer, not 'I'll submit'."""
+    from ai.engine.cognition.plan.loop import ReActLoop, StepResult
+
+    result = StepResult(
+        step_id=1,
+        intent="Submit leave request",
+        draft_text="I'll submit your annual leave…",
+        critic_verdict="pass",
+        executed=True,
+        tool_output={
+            "confirmed": True,
+            "action": "navigate",
+            "route": "/my/requests/87",
+            "label": "Open Leave Request",
+            "summary": (
+                "Leave request annual 2026-09-23→2026-09-23 · CRS-2026-0080 · "
+                "submitted · awaiting your manager in Team"
+            ),
+            "result": json.dumps({
+                "status_code": 201,
+                "data": {
+                    "id": 87,
+                    "corr_type_code": "leave_request",
+                    "status": "submitted",
+                    "reference_no": "CRS-2026-0080",
+                },
+                "action": "navigate",
+                "route": "/my/requests/87",
+                "label": "Open Leave Request",
+                "summary": (
+                    "Leave request annual 2026-09-23→2026-09-23 · CRS-2026-0080 · "
+                    "submitted · awaiting your manager in Team"
+                ),
+            }),
+        },
+    )
+    text = ReActLoop._fallback_final_response([result])
+    assert "was submitted" in text.lower()
+    assert "i'll submit" not in text.lower()
+    assert "CRS-2026-0080" in text
+    assert "](/my/requests/87)" in text
+
+
+def test_merge_host_actions_does_not_duplicate_summary():
+    from ai.engine.cognition.plan.loop import ReActLoop
+
+    summary = (
+        "Leave request annual 2026-09-23→2026-09-23 · CRS-2026-0080 · "
+        "submitted · awaiting your manager in Team"
+    )
+    host = f"{summary}\n\n[Open Leave Request](/my/requests/87)"
+    # Synth already copied the summary once.
+    merged = ReActLoop._merge_host_actions_markdown(summary, host)
+    assert merged.count("CRS-2026-0080") == 1
+    assert "](/my/requests/87)" in merged
+
+
+def test_has_confirmed_host_write():
+    from ai.engine.cognition.plan.loop import ReActLoop, StepResult
+
+    empty = StepResult(step_id=0, intent="balance", critic_verdict="pass")
+    done = StepResult(
+        step_id=1,
+        intent="submit",
+        critic_verdict="pass",
+        tool_output={"confirmed": True, "action": "navigate", "route": "/my/x", "summary": "ok"},
+    )
+    assert ReActLoop._has_confirmed_host_write([empty]) is False
+    assert ReActLoop._has_confirmed_host_write([empty, done]) is True
 
 
 def test_followup_mutation_tool_is_blocked():

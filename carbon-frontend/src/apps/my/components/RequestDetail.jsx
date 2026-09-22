@@ -187,7 +187,11 @@ export default function RequestDetail() {
               </ToggleButtonGroup>
             </Stack>
             {view === 'stepper' ? (
-              <ApproverChainStepper chain={data.approver_chain} currentStep={data.current_step} />
+              <ApproverChainStepper
+                chain={data.approver_chain}
+                currentStep={data.current_step}
+                status={data.status}
+              />
             ) : (
               <WorkflowGraph
                 chain={data.approver_chain}

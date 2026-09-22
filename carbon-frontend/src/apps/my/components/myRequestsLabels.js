@@ -47,6 +47,9 @@ export const EVENT_SUFFIX = {
   sent_back: 'sentBack',
   cancelled: 'cancelled',
   resubmitted: 'resubmitted',
+  archived: 'archived',
+  voided: 'voided',
+  reopened: 'reopened',
 };
 
 export const ROLE_SUFFIX = {

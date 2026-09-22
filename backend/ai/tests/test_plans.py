@@ -731,6 +731,20 @@ def test_coerce_plan_json_accepts_dict_string_and_junk():
     assert _coerce_plan_json([1, 2]) == {}
 
 
+def test_coerce_plan_json_exposes_workflow_graph_from_string():
+    """Resume path must read workflow_graph when plan_json is a JSON string."""
+    from ai.plans_service import _coerce_plan_json
+    import json as _json
+
+    raw = _json.dumps({
+        "pattern": "custom",
+        "steps": [{"step_id": 1, "intent": "leave"}],
+        "workflow_graph": {"nodes": [{"id": "n1"}], "edges": []},
+    })
+    coerced = _coerce_plan_json(raw)
+    assert coerced.get("workflow_graph") == {"nodes": [{"id": "n1"}], "edges": []}
+
+
 @pytest.mark.django_db
 def test_list_plans_reconciles_status_when_all_steps_finished(
     user, run_ids_cleanup,

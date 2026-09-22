@@ -65,6 +65,14 @@ _ATTENDANCE_INTENT = re.compile(
     r"\b(?:attendance|permission|excuse)\b|استئذان|حضور",
     re.IGNORECASE,
 )
+#: Manager wants to act on Team inbox (approve leave/loan) — host /team, not Pulse.
+_MANAGER_REVIEW_INTENT = re.compile(
+    r"(?:\b(?:approve|reject|review)\b.{0,40}\b(?:leave|loan|request|inbox)\b)"
+    r"|(?:\b(?:leave|loan|request)\b.{0,40}\b(?:approve|reject|review)\b)"
+    r"|(?:\bteam\s+inbox\b|\bapprovals?\s+inbox\b)"
+    r"|موافق على|اعتماد\s*(?:ال)?(?:إجاز|اجاز|طلب)|رفض\s*(?:ال)?(?:إجاز|اجاز)",
+    re.IGNORECASE | re.DOTALL,
+)
 _ARABIC_SCRIPT = re.compile(r"[\u0600-\u06FF]")
 
 #: Internal flag only — never shown in UI copy / caveats.
@@ -162,6 +170,18 @@ def handoff_spec_for_api(api_name: str | None) -> dict[str, str]:
 
 def handoff_spec_for_intent(user_message: str) -> dict[str, str]:
     text = user_message or ""
+    if _MANAGER_REVIEW_INTENT.search(text):
+        return {
+            "my_route": "/team",
+            "my_label_en": "Open Team inbox",
+            "my_label_ar": "فتح صندوق الفريق",
+            "process": "",
+            "agent_label_en": "Open in Agent",
+            "agent_label_ar": "فتح الوكيل",
+            "topic_en": "team approval",
+            "topic_ar": "اعتماد الفريق",
+            "manager_only": "1",
+        }
     if _LEAVE_INTENT.search(text):
         return handoff_spec_for_api("submit_my_leave")
     if _LOAN_INTENT.search(text):
@@ -182,7 +202,20 @@ def _label(spec: dict[str, str], key: str, locale: str) -> str:
 
 
 def build_handoff_actions(spec: dict[str, str], *, locale: str = "en") -> list[dict[str, Any]]:
-    """Machine-readable CTAs — Agent first, then My (AIMessageBubble order)."""
+    """Machine-readable CTAs — Agent first, then My (AIMessageBubble order).
+
+    Manager Team-review intents skip Agent (host SoD lives on /team).
+    """
+    route = (spec.get("my_route") or "").strip()
+    if spec.get("manager_only"):
+        if not route:
+            return []
+        return [{
+            "type": "navigate",
+            "route": route,
+            "label": _label(spec, "my_label", locale),
+            "summary": "Approve or reject in Team",
+        }]
     actions: list[dict[str, Any]] = [
         {
             "type": "open_panel",
@@ -196,7 +229,6 @@ def build_handoff_actions(spec: dict[str, str], *, locale: str = "en") -> list[d
             "process_hint": spec.get("process") or "",
         },
     ]
-    route = (spec.get("my_route") or "").strip()
     if route:
         actions.append({
             "type": "navigate",
@@ -216,6 +248,16 @@ def handoff_copy(
     """Deterministic Chat reply — one next step, no fake Confirm (RULE_23)."""
     topic = _label(spec, "topic", locale)
     my_label = _label(spec, "my_label", locale)
+    if spec.get("manager_only"):
+        if locale == "ar":
+            return (
+                "اعتماد الطلبات يتم في تطبيق الفريق (Team)، وليس من الدردشة أو الوكيل.\n\n"
+                f"افتح «{my_label}» للمراجعة والموافقة أو الرفض."
+            )
+        return (
+            "Approvals happen in the Team app — not in Chat or Agent.\n\n"
+            f"Open {my_label} to review and Approve or Decline."
+        )
     if locale == "ar":
         lines = [
             f"يمكنني مساعدتك في تجهيز {topic}، لكن الدردشة لا تُرسل ولا تغيّر "
