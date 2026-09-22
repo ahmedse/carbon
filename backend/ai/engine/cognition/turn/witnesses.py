@@ -117,6 +117,7 @@ class TurnLedger:
     # PV2-0A — measured LLM calls + turn routing signals (log-only).
     llm_calls_by_stage: dict | None = None
     llm_calls_measured: int = 0
+    llm_calls_background: int = 0
     decision_signals: list | None = None
     turn_decision: str = ""
     # PV2-1A — durable ConversationState written at turn exit.
