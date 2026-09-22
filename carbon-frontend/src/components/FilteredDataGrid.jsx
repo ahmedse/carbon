@@ -49,6 +49,12 @@ export default function FilteredDataGrid({
   height = 480,
   initialState,
   onRowClick,
+  /** When set, matching rows get `.highlighted-row` (ROW CLICK = HIGHLIGHT ONLY). */
+  highlightRow,
+  checkboxSelection = false,
+  rowSelectionModel,
+  onRowSelectionModelChange,
+  hideFooterSelectedRowCount = true,
   _toolbar = false,
 }) {
   const { t } = useTranslation('common');
@@ -69,6 +75,11 @@ export default function FilteredDataGrid({
     .filter(Boolean);
 
   const hasFilters = Boolean(searchValue || activeFilters.length > 0);
+  // Prefer caller emptySubtext (e.g. Team inbox hint) over generic "no data yet".
+  const emptyFooter =
+    emptySubtext != null || hasFilters
+      ? resolvedEmptySubtext
+      : t('noDataAvailable');
 
   const body = (
     <>
@@ -154,30 +165,47 @@ export default function FilteredDataGrid({
       )}
 
       <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <StandardDataGrid
-          rows={rows}
-          columns={columns}
-          loading={loading}
-          pageSize={pageSize}
-          rowsPerPageOptions={rowsPerPageOptions}
-          hideFooterSelectedRowCount
-          toolbar
-          getRowId={getRowId}
-          height={height}
-          initialState={initialState}
-          onRowClick={onRowClick}
-          sx={onRowClick ? { '& .MuiDataGrid-row': { cursor: 'pointer' } } : undefined}
-        />
-
-        {rows.length === 0 && !loading && (
-          <Paper sx={{ p: 4, mt: 2, textAlign: 'center' }}>
+        {rows.length === 0 && !loading ? (
+          <Paper sx={{ p: 4, textAlign: 'center' }}>
             <Typography color="text.secondary" gutterBottom>
               {resolvedEmptyMessage}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {hasFilters ? resolvedEmptySubtext : t('noDataAvailable')}
+              {emptyFooter}
             </Typography>
           </Paper>
+        ) : (
+          <StandardDataGrid
+            rows={rows}
+            columns={columns}
+            loading={loading}
+            pageSize={pageSize}
+            rowsPerPageOptions={rowsPerPageOptions}
+            hideFooterSelectedRowCount={hideFooterSelectedRowCount}
+            toolbar
+            getRowId={getRowId}
+            height={height}
+            initialState={initialState}
+            onRowClick={onRowClick}
+            getRowClassName={(params) =>
+              highlightRow?.(params.row) ? 'highlighted-row' : ''
+            }
+            checkboxSelection={checkboxSelection}
+            {...(checkboxSelection
+              ? {
+                  rowSelectionModel,
+                  onRowSelectionModelChange,
+                }
+              : {})}
+            sx={{
+              ...(onRowClick
+                ? { '& .MuiDataGrid-row': { cursor: 'pointer' } }
+                : {}),
+              '& .highlighted-row': {
+                bgcolor: 'action.selected',
+              },
+            }}
+          />
         )}
       </Box>
     </>

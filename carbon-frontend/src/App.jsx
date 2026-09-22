@@ -1,7 +1,6 @@
 // src/App.jsx
 import React, { Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useParams } from "react-router-dom";
-import { Box, Typography } from '@mui/material';
 import { useAuth } from "./auth/AuthContext";
 import Login from "./pages/Login";
 import LocaleAwareLocalizationProvider from "./i18n/LocaleAwareLocalizationProvider";
@@ -149,10 +148,14 @@ const PoliciesPage = React.lazy(() => import("./apps/people/PoliciesPage"));
 const PolicyDetailPage = React.lazy(() => import("./apps/people/PolicyDetailPage"));
 const MyDashboard = React.lazy(() => import("./apps/my/MyDashboard"));
 const MyLeave = React.lazy(() => import("./apps/my/MyLeave"));
+const MyAttendance = React.lazy(() => import("./apps/my/MyAttendance"));
 const MyRequests = React.lazy(() => import("./apps/my/MyRequests"));
 const RequestDetail = React.lazy(() => import("./apps/my/components/RequestDetail"));
 const TeamInbox = React.lazy(() => import("./apps/team/TeamInbox"));
 const TeamRequestDetail = React.lazy(() => import("./apps/team/TeamRequestDetail"));
+const TeamDirectory = React.lazy(() => import("./apps/team/TeamDirectory"));
+const TeamLeave = React.lazy(() => import("./apps/team/TeamLeave"));
+const TeamHistory = React.lazy(() => import("./apps/team/TeamHistory"));
 
 import PlatformHome from "./pages/PlatformHome";
 
@@ -210,32 +213,17 @@ function RequireContext() {
 }
 
 /**
- * Role-aware landing — everyone with any access sees PlatformHome first.
- * PlatformHome's own hasAppAccess filtering shows only the cards you can use.
- * Fallback: users with literally no permissions see an empty state.
+ * Post-login landing — always PlatformHome.
+ *
+ * Domain cards are filtered inside PlatformHome via hasAppAccess +
+ * useEnabledApps (capability-based). Do NOT gate on Carbon-era
+ * `perspectives` / `modules` (data products): ESS users (my:access) have
+ * empty perspectives but a valid My app — ActivityBar already knows this.
  */
 function RoleAwareLanding() {
-  const { availablePerspectives, context, loading } = useAuth();
-  
+  const { loading } = useAuth();
   if (loading) return <div className="centered">Loading…</div>;
-
-  const perspectives = availablePerspectives || [];
-  const hasModules = (context?.modules?.length || 0) > 0;
-
-  // Anyone with a perspective or modules → PlatformHome (which filters cards)
-  if (perspectives.length > 0 || hasModules) {
-    return <PlatformHome />;
-  }
-  
-  // Truly empty — no roles, no modules
-  return (
-    <Box sx={{ p: 8, textAlign: 'center' }}>
-      <Typography variant="h6">No Data Products Assigned</Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-        Contact your administrator to get access to data products.
-      </Typography>
-    </Box>
-  );
+  return <PlatformHome />;
 }
 
 export default function App() {
@@ -381,10 +369,14 @@ export default function App() {
                 {/* My app — employee self-service. Bare namespace root resolves to MyDashboard. RULE_22. */}
                 <Route path="/my" element={<MyDashboard />} />
                 <Route path="/my/leave" element={<MyLeave />} />
+                <Route path="/my/attendance" element={<MyAttendance />} />
                 <Route path="/my/requests" element={<MyRequests />} />
                 <Route path="/my/requests/:id" element={<RequestDetail />} />
-                {/* Team app — manager approvals inbox. Bare namespace root resolves to TeamInbox. RULE_22. */}
+                {/* Team app — inbox + history + directory + who's out. Static paths before :id. */}
                 <Route path="/team" element={<TeamInbox />} />
+                <Route path="/team/history" element={<TeamHistory />} />
+                <Route path="/team/directory" element={<TeamDirectory />} />
+                <Route path="/team/leave" element={<TeamLeave />} />
                 <Route path="/team/:id" element={<TeamRequestDetail />} />
                 {/* Schema Manager decommissioned — schema authoring lives in Data Products (SchemaDetailPage). */}
                 {/* Namespace root redirect — bare /schema-admin root. RULE_22. */}

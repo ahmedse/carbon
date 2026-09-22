@@ -3,6 +3,8 @@
 from django.urls import path
 
 from .self_views import (
+    AttendancePermissionSelfCollectionView,
+    DirectReportsView,
     EmployeeMeView,
     LeaveBalanceView,
     LeaveSelfCollectionView,
@@ -11,6 +13,7 @@ from .self_views import (
     PayslipSelfCollectionView,
     PayslipSelfDetailView,
     ProfileChangeSelfView,
+    TeamLeaveView,
 )
 
 urlpatterns = [
@@ -19,7 +22,14 @@ urlpatterns = [
     path('leave/', LeaveSelfCollectionView.as_view(), name='people-me-leave-collection'),
     path('leave/<int:pk>/', LeaveSelfDetailView.as_view(), name='people-me-leave-detail'),
     path('loan/', LoanSelfCollectionView.as_view(), name='people-me-loan-collection'),
+    path(
+        'attendance-permissions/',
+        AttendancePermissionSelfCollectionView.as_view(),
+        name='people-me-attendance-permission-collection',
+    ),
     path('payslips/', PayslipSelfCollectionView.as_view(), name='people-me-payslip-collection'),
     path('payslips/<int:pk>/', PayslipSelfDetailView.as_view(), name='people-me-payslip-detail'),
     path('profile-change/', ProfileChangeSelfView.as_view(), name='people-me-profile-change'),
+    path('direct-reports/', DirectReportsView.as_view(), name='people-me-direct-reports'),
+    path('team-leave/', TeamLeaveView.as_view(), name='people-me-team-leave'),
 ]

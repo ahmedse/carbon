@@ -110,7 +110,9 @@ holds the conversation until the user confirms "generate plan".
 - **Negative / trade-off:** users with existing muscle memory for the activity-bar `Tasks`
   icon need to learn the top-level `Agent` button. Mitigated by the mode persisting.
 - **Do NOT re-try:** putting mode back in the composer; merging agent views into the chat
-  conversation list; making the safety contract text a tooltip instead of persistent header text.
+  conversation list; making the safety contract text a tooltip instead of persistent header text;
+  **enabling Chat Confirm for host API mutations** (see ADR-0046 / RULE_35 / G2 — Chat must
+  not stage `pending_exec` either; hand off to Agent or My).
 
 ## References
 
@@ -121,3 +123,5 @@ holds the conversation until the user confirms "generate plan".
 - `backend/ai/plans_service.py` — discovery conversation + plan creation
 - TASKS.md W5-A / W5-B / W5-C / W5-D / W5-E
 - ADR-0013 (gap closure), ADR-0012 (enterprise graph canvas)
+- **ADR-0046** — Chat never stages host writes; system change via Agent or host UI
+- `docs/pulse/QA-CHAT-AGENTIC-SCENARIO-BANK.md` gate G2

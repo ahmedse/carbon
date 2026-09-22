@@ -332,6 +332,108 @@ def test_skip_if_self_auto_approves(leave_workflow):
     assert corr.resolved_at is not None
 
 
+# ── unrouted step (no approver holds the role) ─────────────────────────────
+
+@pytest.mark.django_db
+def test_missing_manager_never_auto_approves(leave_workflow):
+    """An employee with no manager must not have their request self-approve."""
+    wf = leave_workflow
+    Employee.objects.filter(user=wf.requester_user).update(manager=None)
+
+    corr = _draft(wf.corr_type, wf.org, wf.requester_user)
+    corr = submit_correspondence(corr=corr, by=wf.requester_user)
+
+    assert corr.status == 'submitted'
+    assert corr.resolved_at is None
+    assert corr.current_approver_ids == []
+    step = corr.approver_chain[0]
+    assert step['unrouted'] is True
+    assert 'decision' not in step
+
+
+@pytest.mark.django_db
+def test_routing_gap_is_reported_to_admins(leave_workflow, create_user):
+    wf = leave_workflow
+    admin = create_user('fsm_routing_admin', is_superuser=True)
+    Employee.objects.filter(user=wf.requester_user).update(manager=None)
+
+    corr = _draft(wf.corr_type, wf.org, wf.requester_user)
+    corr = submit_correspondence(corr=corr, by=wf.requester_user)
+
+    note = Notification.objects.get(user=admin, correspondence=corr)
+    assert note.type == 'routing_gap'
+    assert corr.reference_no in note.title
+
+
+@pytest.mark.django_db
+def test_unrouted_request_routes_once_the_manager_is_assigned(leave_workflow):
+    wf = leave_workflow
+    Employee.objects.filter(user=wf.requester_user).update(manager=None)
+    corr = _draft(wf.corr_type, wf.org, wf.requester_user)
+    corr = submit_correspondence(corr=corr, by=wf.requester_user)
+    assert corr.status == 'submitted'
+
+    # HR fills the gap; the request must become actionable with no admin
+    # reaching into the record.
+    Employee.objects.filter(user=wf.requester_user).update(
+        manager=wf.manager_emp,
+    )
+    corr = approve(corr, wf.manager_user)
+
+    assert corr.status == 'approved'
+    assert corr.approver_chain[0]['decided_by'] == wf.manager_user.id
+    assert 'unrouted' not in corr.approver_chain[0]
+
+
+@pytest.mark.django_db
+def test_fallback_role_covers_a_vacant_manager_slot(leave_workflow, create_user):
+    """With no manager on file, HR approves — not nobody."""
+    wf = leave_workflow
+    hr_user = create_user('fsm_hr_fallback', is_superuser=True)
+    Employee.objects.filter(user=wf.requester_user).update(manager=None)
+    wf.step.fallback_role = 'hr'
+    wf.step.save()
+
+    corr = _draft(wf.corr_type, wf.org, wf.requester_user)
+    corr = submit_correspondence(corr=corr, by=wf.requester_user)
+
+    assert corr.status == 'submitted'
+    assert hr_user.id in corr.current_approver_ids
+    step = corr.approver_chain[0]
+    assert step['routed_via'] == 'fallback'
+    assert step['acting_role'] == 'hr'
+    assert 'unrouted' not in step
+
+    corr = approve(corr, hr_user)
+    assert corr.status == 'approved'
+
+
+@pytest.mark.django_db
+def test_fallback_is_not_used_when_the_manager_exists(leave_workflow, create_user):
+    wf = leave_workflow
+    create_user('fsm_hr_unused', is_superuser=True)
+    wf.step.fallback_role = 'hr'
+    wf.step.save()
+
+    corr = _draft(wf.corr_type, wf.org, wf.requester_user)
+    corr = submit_correspondence(corr=corr, by=wf.requester_user)
+
+    assert corr.current_approver_ids == [wf.manager_user.id]
+    assert 'routed_via' not in corr.approver_chain[0]
+
+
+@pytest.mark.django_db
+def test_unrouted_request_rejects_a_stranger(leave_workflow, create_user):
+    wf = leave_workflow
+    outsider = create_user('fsm_routing_outsider')
+    Employee.objects.filter(user=wf.requester_user).update(manager=None)
+    corr = _draft(wf.corr_type, wf.org, wf.requester_user)
+    corr = submit_correspondence(corr=corr, by=wf.requester_user)
+
+    with pytest.raises(NotActorError):
+        approve(corr, outsider)
+
+
 # ── auto_approve step ───────────────────────────────────────────────────────
 
 @pytest.mark.django_db

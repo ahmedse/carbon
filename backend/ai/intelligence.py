@@ -25,6 +25,22 @@ from django.db import models
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
+# Stashed under context_snapshot_json when /clear runs so the UI can show a
+# Restore divider and undo_clear_context can re-seed working context.  Turn
+# telemetry writes must preserve this key (see _snapshot_with_clear_break).
+CLEAR_BREAK_KEY = "_clear_break"
+
+
+def _snapshot_with_clear_break(conversation, snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Merge turn telemetry with any active clear-break marker."""
+    prior = (getattr(conversation, "context_snapshot_json", None) or {}).get(
+        CLEAR_BREAK_KEY,
+    )
+    out = dict(snapshot or {})
+    if prior:
+        out[CLEAR_BREAK_KEY] = prior
+    return out
+
 from ai.engine_runtime import dispatch_task, get_task
 from ai.audit_service import AuditService
 from ai.protocol import (
@@ -413,10 +429,13 @@ class CarbonIntelligence:
         )
 
         # Persist the context budget telemetry snapshot + retrieved KG entities.
-        conversation.context_snapshot_json = {
-            **assembled["budget"],
-            "kg_entities": assembled["kg_entities"],
-        }
+        conversation.context_snapshot_json = _snapshot_with_clear_break(
+            conversation,
+            {
+                **assembled["budget"],
+                "kg_entities": assembled["kg_entities"],
+            },
+        )
         conversation.save(update_fields=["context_snapshot_json"])
 
         # Mark working
@@ -567,10 +586,13 @@ class CarbonIntelligence:
             )
 
             # Persist the context budget telemetry snapshot + retrieved KG entities.
-            conversation.context_snapshot_json = {
-                **assembled["budget"],
-                "kg_entities": assembled["kg_entities"],
-            }
+            conversation.context_snapshot_json = _snapshot_with_clear_break(
+                conversation,
+                {
+                    **assembled["budget"],
+                    "kg_entities": assembled["kg_entities"],
+                },
+            )
             conversation.save(update_fields=["context_snapshot_json"])
 
             # Mark working.
@@ -2090,15 +2112,72 @@ class CarbonIntelligence:
         row, the durable message log, per-message provenance, and learned
         facts are all untouched — no learning forget path is called.  A
         conversation stuck in ``working`` is released back to ``pending``.
+
+        Stashes a ``_clear_break`` marker so the UI can empty the thread,
+        show a Restore divider, and undo this clear.  Subsequent turns
+        assemble history only from messages after the boundary.
+
+        Owners may always clear their own thread (Pulse Chat / ESS).
+        Non-owners need ``ai:manage_console`` (shared-thread stewardship).
         """
         conversation = self._get_lifecycle_conversation(user, conversation_id)
+        if conversation.user_id != user.id and not has_capability(
+            user, "ai:manage_console",
+        ):
+            raise PermissionDenied(
+                "Clearing another user's conversation requires ai:manage_console."
+            )
+        prior_summary = conversation.summary or ""
+        prior_snapshot = dict(conversation.context_snapshot_json or {})
+        prior_snapshot.pop(CLEAR_BREAK_KEY, None)
+        last_msg_id = (
+            conversation.messages.order_by("-created_at")
+            .values_list("id", flat=True)
+            .first()
+        )
         conversation.summary = ""
-        conversation.context_snapshot_json = {}
+        conversation.context_snapshot_json = {
+            CLEAR_BREAK_KEY: {
+                "summary": prior_summary,
+                "prior_snapshot": prior_snapshot,
+                "message_boundary_id": str(last_msg_id) if last_msg_id else None,
+                "cleared_at": timezone.now().isoformat(),
+            },
+        }
         update_fields = ["summary", "context_snapshot_json", "updated_at"]
         if conversation.status == "working":
             conversation.status = "pending"
             update_fields.append("status")
         conversation.save(update_fields=update_fields)
+        return _serialize_conversation(conversation)
+
+    def undo_clear_context(self, user, conversation_id: str) -> dict[str, Any]:
+        """Undo the most recent ``clear_context`` for this conversation.
+
+        Restores the stashed summary + prior snapshot and removes the
+        ``_clear_break`` marker so the full message log is visible and
+        assembled again.  No-op-ish ValueError when there is no clear break.
+        Same ownership rules as ``clear_context``.
+        """
+        conversation = self._get_lifecycle_conversation(user, conversation_id)
+        if conversation.user_id != user.id and not has_capability(
+            user, "ai:manage_console",
+        ):
+            raise PermissionDenied(
+                "Restoring another user's conversation requires ai:manage_console."
+            )
+        snap = dict(conversation.context_snapshot_json or {})
+        clear_break = snap.get(CLEAR_BREAK_KEY)
+        if not isinstance(clear_break, dict):
+            raise ValueError("No cleared context to restore.")
+        prior_snapshot = clear_break.get("prior_snapshot")
+        if not isinstance(prior_snapshot, dict):
+            prior_snapshot = {}
+        conversation.summary = clear_break.get("summary") or ""
+        conversation.context_snapshot_json = prior_snapshot
+        conversation.save(
+            update_fields=["summary", "context_snapshot_json", "updated_at"],
+        )
         return _serialize_conversation(conversation)
 
     def regenerate_message(
@@ -2289,10 +2368,13 @@ class CarbonIntelligence:
         )
 
         # Persist the context budget telemetry snapshot + retrieved KG entities.
-        conversation.context_snapshot_json = {
-            **assembled["budget"],
-            "kg_entities": assembled["kg_entities"],
-        }
+        conversation.context_snapshot_json = _snapshot_with_clear_break(
+            conversation,
+            {
+                **assembled["budget"],
+                "kg_entities": assembled["kg_entities"],
+            },
+        )
         conversation.save(update_fields=["context_snapshot_json"])
 
         conversation.status = "working"
@@ -2390,10 +2472,13 @@ class CarbonIntelligence:
             messages=assembled["messages"],
         )
 
-        conversation.context_snapshot_json = {
-            **assembled["budget"],
-            "kg_entities": assembled["kg_entities"],
-        }
+        conversation.context_snapshot_json = _snapshot_with_clear_break(
+            conversation,
+            {
+                **assembled["budget"],
+                "kg_entities": assembled["kg_entities"],
+            },
+        )
         conversation.save(update_fields=["context_snapshot_json"])
 
         conv_id = str(conversation.id)

@@ -125,6 +125,13 @@ async def _run_chat(
         instance_id, host_user_id, app_identifier=payload.get("app_identifier")
     )
 
+    # Consent resume: if the previous turn PROPOSED an action in prose and the
+    # user just said yes, re-issue the turn as the explicit action. Runs before
+    # the topic guard and the intent classifier so a bare "ايوة" is never read
+    # as a new (or off-limits) request. Never executes anything itself — the
+    # rewritten turn still stages under RULE_21.
+    message, consent_resume = _apply_consent_resume(conversation_id, message)
+
     # Topic guard: check before dispatching to the LLM so prompt injection
     # or training-knowledge bypass cannot circumvent the instance's prohibitions.
     guard_refusal = _check_topic_guard(instance_config, message)
@@ -179,10 +186,9 @@ async def _run_chat(
             envelope_synthesizer=synthesize_envelope,
             domain_context_assembler=CarbonContextAssembler,
         )
-        response, ledger = await runner.run(
+        _run_kwargs = dict(
             instance_id=instance_id,
             conversation_id=conversation_id,
-            user_message=message,
             host_user_id=host_user_id,
             conversation_history=history_messages,
             instance_config=instance_config,
@@ -194,16 +200,57 @@ async def _run_chat(
             knowledge_items=knowledge_items,
             scope=knowledge_scope,
         )
+        response, ledger = await runner.run(user_message=message, **_run_kwargs)
+
+        # Deterministic backstop: the user asked for a write. On Chat we must
+        # NEVER force a mutation tool call (ADR-0046 / G2) — synthesize an
+        # honest Agent/My handoff instead. Staging belongs to Agent/plan.
+        handoff_envelope = None
+        if _should_force_action(message, response, ledger):
+            from ai.engine.agent.chat_surface import synthesize_intent_handoff
+
+            logger.info(
+                "[chat-handoff] conv=%s write intent without stage; "
+                "emitting Agent/My handoff (no mutation force)",
+                str(conversation_id)[:8],
+            )
+            handoff_text, handoff_actions, handoff_envelope = synthesize_intent_handoff(
+                message
+            )
+            # Attach actions onto the response so merge below picks them up.
+            existing = list(getattr(response, "actions", None) or [])
+            try:
+                response.actions = existing + handoff_actions
+            except Exception:  # noqa: BLE001 — response may be a simple ns
+                pass
+            # Own the bubble copy — LLM deflection is not the product answer.
+            try:
+                response.text = handoff_text
+            except Exception:  # noqa: BLE001
+                pass
+            content_override = handoff_text
+            handoff_forced_actions = handoff_actions
+        else:
+            content_override = None
+            handoff_forced_actions = []
 
         # Deterministic, tool-grounded outcome surfacing — the assistant text
         # is LLM prose, so success/failure claims ride here, not in prose.
         completed_tools = getattr(getattr(ledger, "execution", None), "completed_tools", None) or []
         actions, pending_actions = _extract_tool_actions(completed_tools)
+        # G2 safety net: Chat must never return host pending_actions even if a
+        # staging path leaked past the surface hook (memory stays).
+        pending_actions = [
+            p for p in pending_actions
+            if isinstance(p, dict) and p.get("kind") == "memory"
+        ]
         # Merge deterministic surface actions emitted directly on the response
         # (e.g. the bilingual navigation short-circuit) with tool-derived ones.
         resp_actions = getattr(response, "actions", None) or []
         if resp_actions:
             actions = _merge_surface_actions(actions, resp_actions)
+        if handoff_forced_actions:
+            actions = _merge_surface_actions(actions, handoff_forced_actions)
         tool_trace = _build_tool_trace(completed_tools)
         # ECF-3 — boundary contracts on entity tool results + answer prose.
         # Flag-gated (ECF_ENABLED=False by default); never raises.
@@ -216,13 +263,58 @@ async def _run_chat(
         )
         external_sources = _build_external_sources(completed_tools)
         code_result = _build_code_result(completed_tools)
-        grounded_note = _grounded_outcome_note(completed_tools)
-        # Anti-hallucination gate: strip false success claims from the LLM
-        # prose BEFORE the truthful grounded note is appended, so a staged
-        # "I remembered X" / "rule created" claim never reaches the user.
-        content, anti_flags = apply_anti_hallucination_gate(ecf_prose, completed_tools)
-        if grounded_note:
-            content = f"{content}\n\n{grounded_note}" if content else grounded_note
+        # All-failed turns: prefer ADR-0021 recovery synthesis from the runner
+        # (grounded host detail / next step). Fall back to mutation-aware refuse
+        # only when recovery produced nothing. Never append a grounded twin.
+        if _tools_all_failed(completed_tools):
+            recovered = (ecf_prose or "").strip()
+            if recovered and "no answer was invented" not in recovered.lower():
+                content = recovered
+                anti_flags = ["all_tools_failed_recovery"]
+            else:
+                content = fail_reply_when_all_tools_failed(completed_tools)
+                anti_flags = ["all_tools_failed_refuse"]
+            grounded_note = ""
+        else:
+            grounded_note = _grounded_outcome_note(completed_tools)
+            # Anti-hallucination gate: strip false success claims from the LLM
+            # prose BEFORE the truthful grounded note is appended, so a staged
+            # "I remembered X" / "rule created" claim never reaches the user.
+            content, anti_flags = apply_anti_hallucination_gate(ecf_prose, completed_tools)
+            chat_handoff_note = _chat_handoff_note(completed_tools)
+            if content_override:
+                content = content_override
+                anti_flags = [*anti_flags, "chat_write_handoff"]
+            elif chat_handoff_note:
+                # Tool attempted a host write; Chat cancelled + handed off.
+                content = chat_handoff_note
+                anti_flags = [*anti_flags, "chat_no_host_mutation"]
+                if handoff_envelope is None:
+                    handoff_envelope = _chat_handoff_envelope(completed_tools)
+            elif _has_staged_host_action(pending_actions) and grounded_note:
+                # A staged mutation is the system's statement, not the model's.
+                # Drafted before the tool ran, the prose reliably misreads the
+                # confirm card as an obstacle ("complete the confirmation in
+                # the system first, then try again") and sends the user
+                # looking for a screen that does not exist. Phrase-matching
+                # those excuses is unwinnable — the model rewords them every
+                # turn — so the deterministic note simply owns the answer.
+                content = grounded_note
+                anti_flags = [*anti_flags, "staged_action_deterministic_copy"]
+            elif grounded_note:
+                content = f"{content}\n\n{grounded_note}" if content else grounded_note
+        # Consent resume bookkeeping: Chat never remembers prose "shall I
+        # submit?" proposals for host writes (ADR-0046) — that baited users
+        # into نعم → fake submit. Memory / Agent staging still use the store.
+        _record_consent_proposal(
+            conversation_id,
+            content,
+            pending_actions=pending_actions,
+            user_message=message,
+            was_resume=consent_resume,
+            allow_host_prose=False,
+        )
+
         # Capability listing → unified rich "Your Access" document (GFM table
         # with page links), appended deterministically — never LLM prose.
         access_table = _grounded_access_table(completed_tools)
@@ -332,8 +424,13 @@ async def _run_chat(
                 "confidence_label": confidence_label,
                 "honest_uncertainty": honest_uncertainty,
                 # PAQ-2A — typed AnswerEnvelope (None when disabled or unavailable).
-                # The frontend renders tables/charts/caveats/sources from this data.
-                "envelope": getattr(response, "envelope", None),
+                # On Chat handoff, replace LLM envelope with a deterministic one
+                # (empty caveats — RULE_23: never ADR/G2 jargon).
+                "envelope": (
+                    handoff_envelope
+                    if handoff_envelope is not None
+                    else getattr(response, "envelope", None)
+                ),
                 # Phase 5 — floor of the resolved tool inputs' confidence
                 # (None = no resolved numeric input, i.e. no constraint).
                 "min_input_confidence": min_input_conf,
@@ -640,6 +737,202 @@ def _platform_display_name() -> str:
     return title or name or "Data Trust Platform"
 
 
+def _completed_tools_of(ledger) -> list[dict]:
+    items = getattr(getattr(ledger, "execution", None), "completed_tools", None) or []
+    return [i for i in items if isinstance(i, dict)]
+
+
+def _staged_or_acted(ledger) -> bool:
+    """True when the turn staged a confirm card or completed a write."""
+    for item in _completed_tools_of(ledger):
+        raw = item.get("result")
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        if data.get("requires_confirmation") and data.get("execution_id"):
+            return True
+        if _is_mutation_tool(item.get("tool_name"), _tool_args_of(item)) and not (
+            data.get("error") or item.get("error")
+        ):
+            return True
+    return False
+
+
+def _attempted_mutation(ledger) -> bool:
+    """True when a write tool ran this turn, whatever its outcome.
+
+    If the host itself refused (balance, overlap, bad dates), the turn already
+    has a grounded answer — retrying would only re-ask a settled question.
+    """
+    return any(
+        _is_mutation_tool(item.get("tool_name"), _tool_args_of(item))
+        for item in _completed_tools_of(ledger)
+    )
+
+
+def _should_force_action(message: str, response, ledger) -> bool:
+    """True when a write request ended nowhere on Chat.
+
+    A write request may legitimately end in: a clarifying question for a
+    missing slot, or a host refusal. "Shall I submit?" prose is NOT a valid
+    ending on Chat (ADR-0046) — it is bait; treat it as a dead end and emit
+    handoff. Anything else that drops the write also earns a handoff.
+    """
+    try:
+        from ai.engine.cognition.dialogue.pending_mutation import detect_action_proposal
+        from ai.engine.cognition.turn.action_deflection import is_action_deflection
+        from ai.engine.cognition.turn.intent import _is_mutation_request
+
+        if not _is_mutation_request(message or ""):
+            return False
+        if _staged_or_acted(ledger) or _attempted_mutation(ledger):
+            return False
+        # Already produced a chat_handoff this turn — do not re-synthesize.
+        if _chat_handoff_note(_completed_tools_of(ledger)):
+            return False
+        text = (getattr(response, "text", "") or "").strip()
+        if not text:
+            return False
+        if is_action_deflection(text):
+            return True
+        # Prose "shall I submit / أتتابع تقديم؟" is not a real slot question.
+        if detect_action_proposal(text):
+            return True
+        # No action, no question — the request was silently dropped.
+        return "?" not in text and "؟" not in text
+    except Exception:  # noqa: BLE001 - the backstop must never break a turn
+        logger.exception("action-deflection check failed; shipping the answer")
+        return False
+
+
+def build_forced_action_message(user_message: str, deflected_reply: str = "") -> str:
+    from ai.engine.cognition.turn.action_deflection import (
+        build_forced_action_message as _build,
+    )
+
+    return _build(user_message, deflected_reply)
+
+
+def _is_chat_host_write_proposal(original: str, proposal: str) -> bool:
+    """True when a prose proposal is a Chat-forbidden host ESS write.
+
+    Plan edits / replan offers stay on the classic consent-resume path.
+    Leave/loan/attendance "shall I submit?" must not become CALL THE TOOL
+    on Chat (ADR-0046 / G2).
+    """
+    blob = f"{original or ''}\n{proposal or ''}"
+    if not blob.strip():
+        return False
+    try:
+        from ai.engine.cognition.turn.intent import _is_mutation_request
+    except Exception:  # noqa: BLE001
+        return False
+    if not (
+        _is_mutation_request(original or "")
+        or _is_mutation_request(proposal or "")
+        or _is_mutation_request(blob)
+    ):
+        return False
+    # Narrow to ESS host writes — not every mutation verb (e.g. replan).
+    return bool(
+        re.search(
+            r"\b(?:leave|loan|attendance|vacation|permission)\b"
+            r"|إجاز|اجاز|قرض|استئذان"
+            r"|submit_my_(?:leave|loan|attendance)"
+            r"|تقديم\s*(?:ال)?(?:طلب\s*)?(?:إجاز|اجاز)",
+            blob,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _apply_consent_resume(conversation_id: str, message: str) -> tuple[str, bool]:
+    """Rewrite a bare "yes" after a prose proposal.
+
+    Host ESS writes on Chat: re-issue the original write intent (handoff
+    backstop / surface hook) — never ``CALL THE TOOL``. Plan/replan offers
+    keep the classic explicit-action resume.
+    """
+    try:
+        from ai.engine.cognition.dialogue.pending_mutation import (
+            build_resume_message,
+            get_pending_mutation_store,
+        )
+
+        store = get_pending_mutation_store()
+        pending = store.take_if_affirmed(conversation_id, message)
+        if not pending:
+            return message, False
+        proposal = str(pending.get("proposal") or "")
+        original = str(pending.get("original_request") or "").strip()
+        if _is_chat_host_write_proposal(original, proposal):
+            logger.info(
+                "[consent-resume] conv=%s host-write affirmation → "
+                "re-issue original (Chat handoff, no tool force)",
+                str(conversation_id)[:8],
+            )
+            return (original or message), True
+        resumed = build_resume_message(
+            proposal,
+            original_request=original,
+        )
+        logger.info(
+            "[consent-resume] conv=%s affirmation resumed a proposed action",
+            str(conversation_id)[:8],
+        )
+        return resumed, True
+    except Exception:  # noqa: BLE001 - consent resume must never break a turn
+        logger.exception("consent resume failed; using the original message")
+        return message, False
+
+
+def _record_consent_proposal(
+    conversation_id: str,
+    content: str,
+    *,
+    pending_actions: list[dict] | None,
+    user_message: str,
+    was_resume: bool,
+    allow_host_prose: bool = True,
+) -> None:
+    """Remember a prose action proposal so the next "yes" can run it.
+
+    Chat path passes ``allow_host_prose=False`` (ADR-0046): skip storing
+    leave/loan/attendance "shall I submit?" bait. Plan-edit offers still
+    record so "نعم" can resume them.
+    """
+    try:
+        from ai.engine.cognition.dialogue.pending_mutation import (
+            detect_action_proposal,
+            get_pending_mutation_store,
+        )
+
+        store = get_pending_mutation_store()
+        if pending_actions:
+            # A confirm card is on screen — it owns the consent from here.
+            store.clear(conversation_id)
+            return
+        proposal = detect_action_proposal(content)
+        if proposal and not allow_host_prose and _is_chat_host_write_proposal(
+            user_message, proposal
+        ):
+            store.clear(conversation_id)
+            return
+        if proposal:
+            store.set_pending(
+                conversation_id,
+                proposal,
+                original_request="" if was_resume else user_message,
+            )
+        else:
+            store.age_out(conversation_id)
+    except Exception:  # noqa: BLE001 - bookkeeping must never break a turn
+        logger.exception("consent proposal bookkeeping failed")
+
+
 def _check_topic_guard(instance_config: dict, message: str) -> str | None:
     """Return a canned refusal if the message matches an instance topic guard.
 
@@ -898,6 +1191,36 @@ def _extract_tool_actions(completed_tools: list[dict]) -> tuple[list[dict], list
                 "label": str(data.get("label") or "Open"),
                 "summary": str(data.get("summary") or ""),
             })
+
+        # ADR-0046 — Chat blocked a host mutation; promote nested CTAs.
+        if data.get("action") == "chat_handoff":
+            nested = data.get("actions") or []
+            if isinstance(nested, list):
+                for nav in nested:
+                    if not isinstance(nav, dict):
+                        continue
+                    if nav.get("type") == "navigate":
+                        route = str(nav.get("route") or "").strip()
+                        if not route or route in seen_routes:
+                            continue
+                        seen_routes.add(route)
+                        actions.append({
+                            "type": "navigate",
+                            "route": route,
+                            "label": str(nav.get("label") or "Open"),
+                            "summary": str(nav.get("summary") or ""),
+                        })
+                    elif nav.get("type") == "open_panel":
+                        actions.append({
+                            "type": "open_panel",
+                            "panel": str(nav.get("panel") or "tasks"),
+                            "plan_id": str(nav.get("plan_id") or ""),
+                            "label": str(nav.get("label") or "Open in Agent"),
+                            "summary": str(nav.get("summary") or ""),
+                            "process_hint": str(nav.get("process_hint") or ""),
+                        })
+            # Never treat as pending_exec.
+            continue
 
         if data.get("action") == "plan_created":
             # plan_task outcome — jump the user straight to the workspace
@@ -1204,6 +1527,25 @@ def _build_tool_trace(completed_tools: list[dict]) -> list[dict]:
             data = None
         if isinstance(data, dict) and data.get("requires_confirmation"):
             continue
+        # ADR-0046: handoff is not a live query — label honestly or skip.
+        if isinstance(data, dict) and data.get("action") == "chat_handoff":
+            step_label = str(data.get("summary") or "").strip() or (
+                "Prepared draft — handoff to Agent or My"
+            )
+            try:
+                duration_ms = int(item.get("latency_ms") or 0)
+            except (TypeError, ValueError):
+                duration_ms = 0
+            steps.append({
+                "step_label": step_label,
+                "tool_id": str(item.get("tool_name") or ""),
+                "tool": str(item.get("tool_name") or ""),
+                "input": _summarize_tool_input(item),
+                "output": step_label,
+                "confidence": _tool_confidence(False, data),
+                "duration_ms": duration_ms,
+            })
+            continue
 
         tool_name = str(item.get("tool_name") or "")
 
@@ -1304,31 +1646,300 @@ def _build_code_result(completed_tools: list[dict]) -> dict | None:
 #: Split read vs mutation — Chat advisory lookups must not sound like a
 #: failed write ("nothing was created or changed") — A9 / M08 gate.
 _FAILED_ACTION_COPY = (
-    "⚠️ That action didn't complete — nothing was created or changed. "
-    "Please try again in a moment."
+    "That action didn't complete — nothing was created or changed. "
+    "Please try again, or tell me what to change."
 )
 _FAILED_LOOKUP_COPY = (
-    "⚠️ That lookup didn't complete. Please try again in a moment — "
-    "no answer was invented."
+    "That lookup didn't complete. Please try again in a moment."
+)
+# All-failed Chat reply (single bubble — no emoji twin, no invention meta).
+_FAILED_ACTION_REPLY = (
+    "I couldn't complete that request — nothing was submitted. "
+    "Please try again, or tell me what to change."
+)
+_FAILED_LOOKUP_REPLY = (
+    "I couldn't complete that lookup just now. "
+    "Please try again in a moment."
 )
 
-# Tools that are never host mutations in Chat — fail copy must be lookup-shaped.
+# Tools that are read-shaped by default. ``call_host_api`` is NOT listed — it
+# is classified from method / api_name (submit_/create_ = mutation).
 _READ_TOOL_NAMES = frozenset({
     "aggregate_entity",
     "resolve_entity",
     "get_entity_details",
     "search_knowledge",
-    "call_host_api",
     "list_my_capabilities",
     "navigate_to",
 })
 
+_MUTATION_API_PREFIXES = ("submit_", "create_", "update_", "delete_", "post_", "put_", "patch_")
 
-def _fail_copy_for_tool(tool_name: str | None) -> str:
+
+def _tool_args_of(item: dict | None) -> dict:
+    """Resolve tool args even when error paths omitted ``tool_args``.
+
+    Fallbacks: ``args``, ``input``, ``call_host_api:<api>`` on tool_name,
+    and ``api_name`` / ``method`` embedded in a serialized result dict.
+    """
+    if not isinstance(item, dict):
+        return {}
+    args = item.get("tool_args") or item.get("args") or item.get("input") or {}
+    out = dict(args) if isinstance(args, dict) else {}
+    name = str(item.get("tool_name") or item.get("tool") or "")
+    if ":" in name:
+        # Durable / confirm shape: ``call_host_api:submit_my_leave``.
+        suffix = name.split(":", 1)[1].strip()
+        if suffix and "api_name" not in out and "api" not in out:
+            out["api_name"] = suffix
+    raw = item.get("result")
+    try:
+        data = json.loads(raw) if isinstance(raw, str) else raw
+    except (TypeError, ValueError):
+        data = None
+    if isinstance(data, dict):
+        for key in ("api_name", "api", "method", "endpoint"):
+            if key not in out and data.get(key) not in (None, ""):
+                out[key] = data.get(key)
+    return out
+
+
+def _human_action_label(item: dict | None) -> str:
+    """Name a staged host action in plain words (RULE_23 — no METHOD /path).
+
+    ``submit_my_leave`` → "Your leave request". Falls back to a neutral
+    phrase rather than leaking the endpoint into the user's bubble.
+    """
+    args = _tool_args_of(item)
+    api = str(args.get("api_name") or args.get("api") or "").strip().lower()
+    if not api:
+        return "The change you asked for"
+    words = [w for w in re.split(r"[_\-.]+", api) if w]
+    if words and words[0] in {"submit", "create", "update", "delete", "cancel",
+                              "approve", "reject", "post", "add", "set"}:
+        words = words[1:]
+    words = ["your" if w == "my" else w for w in words]
+    phrase = " ".join(words).strip()
+    if not phrase:
+        return "The change you asked for"
+    return phrase[0].upper() + phrase[1:]
+
+
+def _staged_body_summary(body, limit: int = 4) -> str:
+    """One line of what is about to be submitted, from the staged body.
+
+    Keys are humanized and values printed as-is so the user reads the actual
+    payload ("leave type annual, start date 2026-09-22") without any JSON.
+    """
+    if not isinstance(body, dict):
+        return ""
+    parts: list[str] = []
+    for key, value in body.items():
+        if value in (None, "", [], {}):
+            continue
+        if isinstance(value, (dict, list)):
+            continue
+        label = str(key).replace("_", " ").strip()
+        parts.append(f"{label} {value}")
+        if len(parts) >= limit:
+            break
+    return ", ".join(parts)
+
+
+def _has_staged_host_action(pending_actions: list[dict] | None) -> bool:
+    """True when this turn put a host mutation on the confirm card."""
+    return any(
+        isinstance(p, dict) and p.get("kind") == "host"
+        for p in (pending_actions or [])
+    )
+
+
+def _chat_handoff_note(completed_tools: list[dict] | None) -> str:
+    """Deterministic copy when Chat blocked a host mutation (ADR-0046)."""
+    for item in completed_tools or []:
+        if not isinstance(item, dict) or item.get("error"):
+            continue
+        raw = item.get("result")
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        if data.get("action") != "chat_handoff":
+            continue
+        msg = str(data.get("message") or "").strip()
+        if msg:
+            return msg
+        flags = item.get("guardrail_flags") or []
+        if "chat_no_host_mutation" in flags:
+            from ai.engine.agent.chat_surface import (
+                handoff_copy,
+                handoff_spec_for_api,
+            )
+            api = str(data.get("api_name") or "").strip()
+            return handoff_copy(
+                handoff_spec_for_api(api),
+                draft=data.get("draft"),
+                locale=str(data.get("locale") or "en"),
+            )
+    return ""
+
+
+def _chat_handoff_envelope(completed_tools: list[dict] | None) -> dict | None:
+    """Deterministic envelope from a chat_handoff tool result (empty caveats)."""
+    for item in completed_tools or []:
+        if not isinstance(item, dict) or item.get("error"):
+            continue
+        raw = item.get("result")
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(data, dict) or data.get("action") != "chat_handoff":
+            continue
+        env = data.get("envelope")
+        if isinstance(env, dict):
+            # Belt-and-suspenders: never leak ADR jargon via caveats.
+            env = {**env, "caveats": []}
+            return env
+    return None
+
+
+def _is_mutation_tool(tool_name: str | None, tool_args: dict | None = None) -> bool:
+    """True when the tool is a write / submit — fail copy must not say "lookup"."""
+    raw_name = (tool_name or "").strip()
+    name = raw_name.split(":", 1)[0].strip()
+    args = tool_args if isinstance(tool_args, dict) else {}
+    api = str(
+        args.get("api_name") or args.get("api") or (
+            raw_name.split(":", 1)[1] if ":" in raw_name else ""
+        ) or ""
+    ).strip().lower()
+    method = str(args.get("method") or "").strip().upper()
+    endpoint = str(args.get("endpoint") or "").strip().lower()
+    if method in ("POST", "PUT", "PATCH", "DELETE"):
+        return True
+    if api.startswith(_MUTATION_API_PREFIXES):
+        return True
+    if name.startswith(_MUTATION_API_PREFIXES):
+        return True
+    if any(tok in endpoint for tok in ("/submit", "/create", "/update", "/delete")):
+        return True
+    if name in ("create_dq_rule", "learn_fact", "forget_fact", "plan_task", "edit_plan"):
+        return True
+    return False
+
+
+def _fail_copy_for_tool(tool_name: str | None, tool_args: dict | None = None) -> str:
     name = (tool_name or "").split(":", 1)[0].strip()
+    args = tool_args if isinstance(tool_args, dict) else {}
+    if _is_mutation_tool(tool_name, args):
+        return f"⚠️ {_FAILED_ACTION_COPY}"
+    if name == "call_host_api" or name.startswith("call_host_api"):
+        # Default host calls without a mutation signal are reads.
+        return f"⚠️ {_FAILED_LOOKUP_COPY}"
     if name in _READ_TOOL_NAMES or name.startswith("get_") or name.startswith("list_"):
-        return _FAILED_LOOKUP_COPY
-    return _FAILED_ACTION_COPY
+        return f"⚠️ {_FAILED_LOOKUP_COPY}"
+    return f"⚠️ {_FAILED_ACTION_COPY}"
+
+
+def _tool_item_failed(item: dict) -> bool:
+    if item.get("error"):
+        return True
+    raw = item.get("result")
+    try:
+        data = json.loads(raw) if isinstance(raw, str) else raw
+    except (TypeError, ValueError):
+        return False
+    if not isinstance(data, dict):
+        return False
+    if data.get("error") and not (
+        isinstance(data.get("clarification"), dict) and data["clarification"].get("needed")
+    ):
+        return True
+    # Host envelope non-2xx (leave validation deny, etc.) — treat as failed
+    # so Chat recovery / all-failed gate fires instead of a false success note.
+    try:
+        code = int(data.get("status_code")) if data.get("status_code") is not None else None
+    except (TypeError, ValueError):
+        code = None
+    return code is not None and code >= 400
+
+
+def _tools_all_failed(completed_tools: list[dict] | None) -> bool:
+    items = [i for i in (completed_tools or []) if isinstance(i, dict)]
+    return bool(items) and all(_tool_item_failed(i) for i in items)
+
+
+def _host_failure_detail(completed_tools: list[dict] | None) -> str:
+    """Best host ``detail`` / hints for RULE_23 fail copy.
+
+    Only structured host envelopes count — never bare tool exception strings
+    (``timeout``, ``boom``) which would leak into the user bubble.
+    """
+    for item in completed_tools or []:
+        if not isinstance(item, dict):
+            continue
+        raw = item.get("result")
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            data = None
+        if not isinstance(data, dict):
+            continue
+        inner = data.get("data") if isinstance(data.get("data"), dict) else data
+        if not isinstance(inner, dict):
+            continue
+        detail = str(inner.get("detail") or "").strip()
+        if not detail:
+            detail = str(data.get("detail") or "").strip()
+        if not detail:
+            continue
+        # Require a host signal so random result payloads don't become copy.
+        try:
+            code = int(data.get("status_code")) if data.get("status_code") is not None else None
+        except (TypeError, ValueError):
+            code = None
+        kind = str(inner.get("error_kind") or data.get("error_kind") or "").strip()
+        if code is None or code < 400:
+            if not kind and "error" not in data and "error" not in inner:
+                continue
+        hints = inner.get("hints") if isinstance(inner.get("hints"), dict) else {}
+        suggestion = str(hints.get("suggestion") or "").strip()
+        if suggestion and suggestion.lower() not in detail.lower():
+            return f"{detail} {suggestion}"
+        return detail
+    return ""
+
+
+def fail_reply_when_all_tools_failed(completed_tools: list[dict] | None) -> str:
+    """Single user-facing reply when every tool in the turn failed.
+
+    Mutation-aware (leave submit ≠ lookup). Prefer host ``detail`` / hints
+    when present (overlap, balance, invalid type). Never mentions invention /
+    fabrication. Used by Chat tool-only summary and ``_run_chat`` fallback so
+    the bubble is one clear line — not summary + ⚠️ twin.
+    """
+    host_detail = _host_failure_detail(completed_tools)
+    mutation = False
+    for item in completed_tools or []:
+        if not isinstance(item, dict):
+            continue
+        if _is_mutation_tool(
+            item.get("tool_name") or item.get("tool"),
+            _tool_args_of(item),
+        ):
+            mutation = True
+            break
+    if host_detail:
+        low = host_detail.lower()
+        if mutation and "nothing was submitted" not in low:
+            if not any(p in low for p in ("pick ", "try again", "what would you", "tell me")):
+                return f"{host_detail} Nothing was submitted — tell me what to change."
+            return f"{host_detail} Nothing was submitted."
+        return host_detail
+    return _FAILED_ACTION_REPLY if mutation else _FAILED_LOOKUP_REPLY
 
 
 def _clarification_question(missing: list[str] | None) -> str:
@@ -1452,12 +2063,27 @@ def _grounded_outcome_note(completed_tools: list[dict]) -> str:
     "created successfully" could stand.  This note only reports real tool
     outcomes — staging proposals and failures — appended to the assistant text.
     """
+    items = [i for i in (completed_tools or []) if isinstance(i, dict)]
+    if not items:
+        return ""
+
+    def _failed(item: dict) -> bool:
+        return _tool_item_failed(item)
+
+    # All-failed turns already get a single refuse in ``_run_chat`` — do not
+    # append a second warning (leave UX duplicate bubble).
+    if _tools_all_failed(items):
+        return ""
+
     lines: list[str] = []
-    for item in completed_tools or []:
-        if not isinstance(item, dict):
-            continue
+    for item in items:
         if item.get("error"):
-            lines.append(_fail_copy_for_tool(item.get("tool_name") or item.get("tool")))
+            lines.append(
+                _fail_copy_for_tool(
+                    item.get("tool_name") or item.get("tool"),
+                    _tool_args_of(item),
+                )
+            )
             continue
         raw = item.get("result")
         try:
@@ -1476,7 +2102,10 @@ def _grounded_outcome_note(completed_tools: list[dict]) -> str:
                 lines.append(_clarification_question(clarification.get("missing")))
             else:
                 lines.append(
-                    _fail_copy_for_tool(item.get("tool_name") or item.get("tool"))
+                    _fail_copy_for_tool(
+                        item.get("tool_name") or item.get("tool"),
+                        _tool_args_of(item),
+                    )
                 )
             continue
         if data.get("requires_confirmation"):
@@ -1502,11 +2131,12 @@ def _grounded_outcome_note(completed_tools: list[dict]) -> str:
                     "was created yet. Confirm & create below (Agent mode required)."
                 )
             elif kind == "host":
-                method = str(data.get("method") or "").strip() or "action"
-                endpoint = str(data.get("endpoint") or "").strip()
+                detail = _staged_body_summary((payload or {}).get("body"))
                 lines.append(
-                    f"✅ Proposed {method} {endpoint} — staged, nothing executed "
-                    "yet. Confirm below to proceed (Agent mode required)."
+                    f"✅ {_human_action_label(item)} is ready to go"
+                    + (f" — {detail}" if detail else "")
+                    + ". Nothing has been submitted yet: confirm below to "
+                    "proceed, or decline to drop it."
                 )
             # kind is None → unrecognized staged result; emit nothing rather
             # than fabricate a DQ-rule note (anti-fabrication).
@@ -1910,6 +2540,51 @@ def _classify_tool_outcomes(completed_tools: list[dict]) -> dict[str, str]:
     return outcomes
 
 
+#: Prose that sends the user somewhere else to confirm ("complete the
+#: confirmation in the system first, then try again"). When the turn actually
+#: STAGED the action, that instruction is false and unactionable — the confirm
+#: card is right here. Probes run against Arabic-folded text (see
+#: ``dialogue.affirmation.normalize``), so diacritics never break a match.
+_STAGED_DEFLECTION_PROBES = (
+    # English
+    r"requires?\s+(?:an?\s+)?(?:additional|further|extra)\s+confirmation",
+    r"needs?\s+(?:an?\s+)?(?:additional|further|extra)\s+confirmation",
+    r"complete\s+the\s+confirmation\s+(?:process|step)",
+    r"confirmation\s+(?:process|step)\s+(?:there|first|in\s+the\s+(?:system|platform))",
+    r"confirm(?:ation)?[^.\n]{0,60}\bthen\s+try\s+again",
+    r"confirm[^.\n]{0,60}\bin\s+the\s+(?:system|platform)\b[^.\n]{0,30}\bfirst\b",
+    # Arabic (normalized: hamza folded to ا, ة→ه, ى→ي)
+    r"اكمال\s+عمليه\s+التاكيد",
+    r"عمليه\s+التاكيد\s+(?:في|من)\s+النظام",
+    r"خطوه\s+تاكيد\s+مطلوبه",
+    r"يتطلب\s+تاكيد\S*\s+اضافي",
+    r"ثم\s+المحاول\S*\s+مره\s+اخر",
+    r"لا\s+يمكن\s+اتمام\s+الطلب",
+)
+
+_STAGED_DEFLECTION_RE = re.compile("|".join(_STAGED_DEFLECTION_PROBES), re.IGNORECASE)
+
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?؟\n])")
+
+
+def _strip_staged_deflection(text: str) -> tuple[str, bool]:
+    """Drop "go confirm it elsewhere" sentences from an otherwise good answer."""
+    if not text:
+        return text, False
+    from ai.engine.cognition.dialogue.affirmation import normalize as _fold
+
+    kept: list[str] = []
+    removed = False
+    for sentence in _SENTENCE_SPLIT_RE.split(text):
+        if sentence.strip() and _STAGED_DEFLECTION_RE.search(_fold(sentence)):
+            removed = True
+            continue
+        kept.append(sentence)
+    if not removed:
+        return text, False
+    return "".join(kept).strip(), True
+
+
 def apply_anti_hallucination_gate(
     text: str,
     completed_tools: list[dict],
@@ -1977,6 +2652,15 @@ def apply_anti_hallucination_gate(
         corrected, removed = _LLM_REFUSAL_RE.subn("", corrected)
         if removed:
             flags.append("false_llm_refusal_corrected")
+
+    # Gate 6 — anti-deflection: the action WAS staged, yet the prose tells the
+    # user to go complete a confirmation somewhere else and try again. There is
+    # no "somewhere else" — the confirm card is on this turn. Stripped so the
+    # grounded staged note is the only instruction the user reads.
+    if corrected and any(o == _STAGED for o in outcomes.values()):
+        corrected, removed = _strip_staged_deflection(corrected)
+        if removed:
+            flags.append("staged_deflection_corrected")
 
     # Gate 5 — anti-vendor-identity: model self-identifies as Claude/GPT/etc.
     # The instance persona owns identity; the model's own claim is stripped.

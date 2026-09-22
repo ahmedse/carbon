@@ -45,6 +45,12 @@ class HookContext:
     is_worker: bool = False           # True if called from a worker subagent
     db: object | None = None          # P3.4: optional async session for budget_hook
     instance_config: dict | None = None  # per-instance YAML config for guardrail overrides
+    # ADR-0046 / RULE_35 — where this tool call runs.
+    # ``chat`` / ``advisory``: no host mutation staging (G2).
+    # ``agent`` / ``plan``: propose→confirm / RULE_21 consent allowed.
+    surface: str = "chat"
+    # Utterance for locale-aware handoff copy (optional).
+    user_message: str = ""
 
 
 @dataclass
@@ -63,7 +69,7 @@ class HookResult:
     modified_args: dict | None = None  # set when action="redirect"
     modified_result: dict | None = None  # set when action="redact"
     flags: list[str] = field(default_factory=list)  # e.g. ["over_rate_limit", "unusual_args"]
-
+    payload: dict | None = None    # structured handoff / cancel details (ADR-0046)
 
 # ── Hook Pipeline ──────────────────────────────────────────────────────────
 
@@ -153,17 +159,62 @@ class HookPipeline:
 # ── Built-in Hooks ─────────────────────────────────────────────────────────
 
 
+async def chat_surface_hook(ctx: HookContext) -> HookResult:
+    """ADR-0046 / G2 — Chat never stages host writes.
+
+    On Chat/advisory surfaces, cancel host mutations / DQ creates before
+    ``consent_hook`` / the executor can create ``pending_exec``. Memory
+    (`learn_fact`) remains allowed. Agent/plan surfaces pass through.
+
+    The cancel carries a structured ``payload`` (``chat_handoff``) so the
+    turn layer can emit Open-in-Agent / Open-My CTAs instead of a dead
+    Confirm banner.
+    """
+    from ai.engine.agent.chat_surface import (
+        build_chat_handoff_result,
+        is_chat_surface,
+        is_host_mutation_tool,
+    )
+
+    if not is_chat_surface(ctx.surface):
+        return HookResult(action="pass")
+
+    if not is_host_mutation_tool(ctx.tool_name, ctx.tool_args):
+        return HookResult(action="pass")
+
+    # Payload carries internal reason + product copy; HookResult.reason is
+    # L0 product text only (RULE_23 — never ADR/G2 jargon).
+    handoff = build_chat_handoff_result(
+        ctx.tool_name,
+        ctx.tool_args,
+        user_message=str(ctx.user_message or ""),
+    )
+    return HookResult(
+        action="cancel",
+        reason=(
+            "This change can’t be submitted in Chat — use Agent or My."
+        ),
+        flags=["chat_no_host_mutation"],
+        payload=handoff,
+    )
+
+
 async def consent_hook(ctx: HookContext) -> HookResult:
-    """Block mutation tool calls that require user confirmation.
+    """Guard the consent BYPASS — never the propose→confirm path itself.
 
-    If the tool is call_host_api with POST/PUT/DELETE method, checks whether
-    a user confirmation exists in the ToolExecution table. Without confirmation,
-    the call is cancelled.
+    On **Agent/plan** surfaces, ``HostAPIExecutor.create_pending_execution()``
+    is the consent gate: a non-GET ``call_host_api`` STAGES a pending
+    execution and returns ``requires_confirmation``. The tool call IS the
+    proposal.
 
-    Note: The HostAPIExecutor.create_pending_execution() path (which returns
-    requires_confirmation=True) is the primary consent gate for POST/PUT/DELETE.
-    This hook acts as an additional safety net — if someone bypasses the executor
-    and calls the tool directly, the hook catches it.
+    On **Chat** surfaces, ``chat_surface_hook`` runs first and cancels host
+    mutations before this hook — Chat must not stage (ADR-0046 / G2). Do not
+    "fix" Chat by enabling Confirm for ``call_host_api``.
+
+    What this hook still guards: a caller ASSERTING consent it does not have
+    — ``_confirmed=True`` with no confirmation token or execution id —
+    since that skips staging and executes for real. Worker subagents are
+    handled separately by ``readonly_worker_hook``.
     """
     if ctx.tool_name != "call_host_api":
         return HookResult(action="pass")
@@ -184,19 +235,28 @@ async def consent_hook(ctx: HookContext) -> HookResult:
     if not is_likely_mutation:
         return HookResult(action="pass")
 
-    # Check for pre-confirmation token (passed when user confirms via widget)
-    confirmed = args.get("_confirmed", False)
-    if confirmed:
-        logger.debug("consent_hook: pre-confirmed call to %s", api_name)
-        return HookResult(action="pass")
+    # Claimed consent must be backed by a token / staged execution id.
+    if args.get("_confirmed"):
+        token = args.get("_confirmation_token") or args.get("_execution_id")
+        if token:
+            logger.debug("consent_hook: confirmed call to %s", api_name)
+            return HookResult(action="pass")
+        logger.warning(
+            "consent_hook: blocking unverified _confirmed on %s", api_name,
+        )
+        return HookResult(
+            action="cancel",
+            reason=(
+                f"'{api_name}' was marked confirmed without a confirmation "
+                "token. Nothing was submitted."
+            ),
+            flags=["unverified_confirmation"],
+        )
 
-    logger.warning("consent_hook: blocking unconfirmed mutation %s", api_name)
-    return HookResult(
-        action="cancel",
-        reason=f"Mutation '{api_name}' requires user confirmation. "
-                "The host system's confirmation flow must be completed first.",
-        flags=["requires_confirmation"],
-    )
+    # Normal path: let it through to the executor, which stages a pending
+    # execution instead of executing. Cancelling here is what left the user
+    # with a mutation they could never approve.
+    return HookResult(action="pass", flags=["stages_for_confirmation"])
 
 
 # Worker-safe tool names (read-only operations)
@@ -496,17 +556,19 @@ def build_default_pipeline() -> HookPipeline:
     """Create the default hook pipeline with all built-in guards.
 
     Before hooks (execution order matters):
-        1. consent_hook        — block unconfirmed mutations
-        2. readonly_worker_hook — block mutation tools in worker context
-        3. tool_safety_hook    — block dangerous patterns
-        4. rate_limit_hook     — warn on high-frequency tool calls
-        5. budget_hook         — check token budget (stub for P3.4)
+        1. chat_surface_hook    — Chat: no host mutation staging (ADR-0046)
+        2. consent_hook         — block unverified consent bypass
+        3. readonly_worker_hook — block mutation tools in worker context
+        4. tool_safety_hook     — block dangerous patterns
+        5. rate_limit_hook      — warn on high-frequency tool calls
+        6. budget_hook          — check token budget (stub for P3.4)
 
     After hooks:
-        6. redaction_hook      — redact confidential tool results
+        7. redaction_hook       — redact confidential tool results
     """
     pipeline = HookPipeline()
     # Before hooks — order is critical
+    pipeline.add_hook(chat_surface_hook, stage="before")
     pipeline.add_hook(consent_hook, stage="before")
     pipeline.add_hook(readonly_worker_hook, stage="before")
     pipeline.add_hook(tool_safety_hook, stage="before")

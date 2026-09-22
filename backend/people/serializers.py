@@ -16,6 +16,7 @@ from mdm.models import ReferenceValue
 from mdm.serializers import GovernedValueField
 
 from .civil_id import validate as _validate_civil_id
+from .leave_days import LeaveDaysField
 
 from .models import (
     AttendancePermission,
@@ -222,21 +223,27 @@ class LeaveEntitlementSerializer(serializers.ModelSerializer):
     )
     leave_type_id = serializers.IntegerField(read_only=True)
     leave_type_label = serializers.SerializerMethodField()
+    employee_no = serializers.CharField(source='employee.employee_no', read_only=True)
+    employee_name = serializers.CharField(source='employee.full_name', read_only=True)
     policy = serializers.IntegerField(source='policy_id', read_only=True, allow_null=True)
     policy_name = serializers.SerializerMethodField()
     policy_version = serializers.IntegerField(source='policy_version_id', read_only=True, allow_null=True)
     policy_version_number = serializers.SerializerMethodField()
+    entitled_days = LeaveDaysField()
+    used_days = LeaveDaysField()
+    carried_forward = LeaveDaysField()
 
     class Meta:
         model = LeaveEntitlement
         fields = [
-            'id', 'employee', 'year', 'leave_type', 'leave_type_id',
-            'leave_type_label', 'entitled_days',
+            'id', 'employee', 'employee_no', 'employee_name', 'year', 'leave_type',
+            'leave_type_id', 'leave_type_label', 'entitled_days',
             'used_days', 'carried_forward', 'notes',
             'policy', 'policy_name', 'policy_version', 'policy_version_number',
         ]
         read_only_fields = [
-            'id', 'leave_type_id', 'policy', 'policy_name', 'policy_version',
+            'id', 'employee_no', 'employee_name', 'leave_type_id',
+            'policy', 'policy_name', 'policy_version',
         ]
 
     def get_leave_type_label(self, obj):
@@ -308,15 +315,22 @@ class LeaveRecordSerializer(serializers.ModelSerializer):
     )
     leave_type_id = serializers.IntegerField(read_only=True)
     leave_type_label = serializers.SerializerMethodField()
+    employee_no = serializers.CharField(source='employee.employee_no', read_only=True)
+    employee_name = serializers.CharField(source='employee.full_name', read_only=True)
+    days = LeaveDaysField()
 
     class Meta:
         model = LeaveRecord
         fields = [
-            'id', 'employee', 'leave_type', 'leave_type_id', 'leave_type_label',
+            'id', 'employee', 'employee_no', 'employee_name',
+            'leave_type', 'leave_type_id', 'leave_type_label',
             'start_date', 'end_date',
             'days', 'status', 'calendar_split', 'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'leave_type_id', 'created_at', 'updated_at']
+        read_only_fields = [
+            'id', 'employee_no', 'employee_name', 'leave_type_id',
+            'created_at', 'updated_at',
+        ]
 
     def get_leave_type_label(self, obj):
         return obj.leave_type.label if obj.leave_type_id else None

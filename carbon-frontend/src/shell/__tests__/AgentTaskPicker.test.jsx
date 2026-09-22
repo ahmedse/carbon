@@ -34,10 +34,18 @@ describe('AgentTaskPicker', () => {
     expect(onSelect).toHaveBeenCalledWith('a');
   });
 
-  it('shows Completed for plans whose steps are all finished', async () => {
-    render(<AgentTaskPicker plans={plans} selectedId="" onSelect={vi.fn()} />);
-    fireEvent.mouseDown(screen.getByLabelText('Task'));
-    const option = await screen.findByRole('option', { name: /Stuck running but all finished/i });
-    expect(option.textContent).toMatch(/Completed/i);
+  it('shows a multi-line scrollable brief in the closed select', () => {
+    const long = {
+      id: 'long',
+      brief: 'Submit an annual leave request for one day on October 7, 2026. Also confirm balance and notify the manager before submitting.',
+      status: 'pending_approval',
+      created_at: '2026-09-16T10:00:00Z',
+    };
+    render(<AgentTaskPicker plans={[long]} selectedId="long" onSelect={vi.fn()} />);
+    const brief = screen.getByTitle(long.brief);
+    expect(brief).toBeInTheDocument();
+    expect(brief).toHaveTextContent(/Submit an annual leave request/);
+    expect(brief).toHaveTextContent(/notify the manager/);
+    expect(brief).toHaveStyle({ maxHeight: '4.05em' });
   });
 });

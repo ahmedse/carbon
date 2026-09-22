@@ -1,73 +1,28 @@
 // src/apps/team/TeamInbox.jsx
-// Team (manager approvals inbox) — Approvals Inbox page (route /team).
-// Lists actionable correspondence (items awaiting the current approver) in a
-// compact table. Rows navigate to /team/:id. The backend now emits human-readable
-// `requester_name` / `corr_type_code` / `corr_type_label` alongside the raw PKs;
-// the local helpers below stay as defensive fallbacks only.
+// Team Approvals Inbox — FilteredDataGrid shell (search + status/type filters).
+// Loads actionable correspondence once; filters/search are client-side.
+// compact-ui: ROW CLICK = HIGHLIGHT ONLY; open detail via eye action.
+// 429 backoff lives in apiFetch (rateLimitRetries) — not page-local.
 
-import React, { useCallback, useEffect, useState } from 'react';
-import {
-  Box,
-  Card,
-  CardContent,
-  Chip,
-  CircularProgress,
-  Skeleton,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Typography,
-} from '@mui/material';
-import InboxIcon from '@mui/icons-material/Inbox';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, Box, Chip, IconButton, Tooltip } from '@mui/material';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import PageContainer from '../../components/layout/PageContainer';
-import ResponsiveList from '../../components/layout/ResponsiveList';
-import PageHeader from '../../components/Page/PageHeader';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
 import { fetchInbox } from '../../api/team';
-import { SectionTitle, InlineError } from '../my/components/myRequestsCommon';
 import {
+  STATUS_CODES,
   STATUS_COLOR,
   STATUS_SUFFIX,
+  CORR_FILTER_TYPES,
   codeLabel,
+  corrTypeLabel,
   formatDateTime,
+  payloadSummary,
 } from '../my/components/myRequestsLabels';
-import { FONT } from '../../theme/themeTokens';
-
-/** Parse DRF throttle wait hint ("Expected available in N seconds"). */
-function throttleWaitMs(err) {
-  const msg = String(err?.message || err?.feedback?.detail || '');
-  const match = msg.match(/available in (\d+)\s*seconds?/i);
-  if (match) return (Number(match[1]) + 1) * 1000;
-  if (err?.status === 429 || err?.isRateLimited || err?.type === 'rate_limit') return 5000;
-  return null;
-}
-
-// Governed correspondence codes (mirrors backend/seed_correspondence.py).
-const CORR_TYPE_SUFFIX = {
-  leave_request: 'leaveRequest',
-  loan_request: 'loanRequest',
-  profile_change: 'profileChange',
-  internal_memo: 'internalMemo',
-  circular: 'circular',
-  decision: 'decision',
-};
-
-/** corr_type may be a serialized object ({id, code, label}) or a plain PK. */
-function corrTypeLabel(t, corrType) {
-  if (corrType == null) return '—';
-  if (typeof corrType === 'object') {
-    const code = corrType.code || corrType.name || corrType.label;
-    return code ? codeLabel(t, 'corrType', CORR_TYPE_SUFFIX, code) : String(corrType.id ?? '');
-  }
-  return codeLabel(t, 'corrType', CORR_TYPE_SUFFIX, corrType);
-}
 
 /** requester may be a serialized object ({id, name/username}) or a plain PK. */
 function requesterLabel(requester) {
@@ -84,8 +39,25 @@ function requesterLabel(requester) {
   return String(requester);
 }
 
+function inboxTypeLabel(t, row) {
+  if (row?.corr_type_label) return row.corr_type_label;
+  if (row?.corr_type_code) return corrTypeLabel(t, row.corr_type_code);
+  const ct = row?.corr_type;
+  if (ct && typeof ct === 'object') {
+    return corrTypeLabel(t, ct.code || ct.name) || ct.label || '—';
+  }
+  return corrTypeLabel(t, ct);
+}
+
+function recencyKey(row) {
+  const ts = row?.updated_at || row?.created_at || '';
+  const id = Number(row?.id) || 0;
+  return `${String(ts)}\0${String(id).padStart(12, '0')}`;
+}
+
 export default function TeamInbox() {
   const { t, i18n } = useTranslation('team');
+  const { t: tMy } = useTranslation('my');
   const { token } = useAuth();
   const navigate = useNavigate();
   useDocumentTitle(t('inboxTitle'));
@@ -93,21 +65,21 @@ export default function TeamInbox() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [routingOrphans, setRoutingOrphans] = useState(0);
+  const [searchValue, setSearchValue] = useState('');
+  const [filters, setFilters] = useState({ status: '', corr_type: '' });
+  const [selectedId, setSelectedId] = useState(null);
 
-  const load = useCallback(async (attempt = 0) => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const result = await fetchInbox(token);
-      setItems(Array.isArray(result?.items) ? result.items : []);
+      const list = Array.isArray(result?.items) ? [...result.items] : [];
+      list.sort((a, b) => recencyKey(b).localeCompare(recencyKey(a)));
+      setItems(list);
+      setRoutingOrphans(Number(result?.routing_orphans) || 0);
     } catch (err) {
-      const wait = attempt < 2 ? throttleWaitMs(err) : null;
-      if (wait != null) {
-        await new Promise((resolve) => {
-          setTimeout(resolve, wait);
-        });
-        return load(attempt + 1);
-      }
       setError(err?.message || t('error'));
     } finally {
       setLoading(false);
@@ -118,130 +90,201 @@ export default function TeamInbox() {
     load();
   }, [load]);
 
-  const handleOpen = useCallback((id) => navigate(`/team/${id}`), [navigate]);
+  const openDetail = useCallback(
+    (id) => {
+      if (id == null) return;
+      navigate(`/team/${id}`);
+    },
+    [navigate],
+  );
 
-  const handleKeyDown = (event, id) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      handleOpen(id);
-    }
-  };
+  const filterDefs = useMemo(
+    () => [
+      {
+        key: 'status',
+        label: t('filterStatus'),
+        emptyLabel: t('filterAll'),
+        options: STATUS_CODES.filter((code) =>
+          ['submitted', 'in_review'].includes(code),
+        ).map((code) => ({
+          value: code,
+          label: codeLabel(t, 'status', STATUS_SUFFIX, code),
+        })),
+      },
+      {
+        key: 'corr_type',
+        label: t('filterType'),
+        emptyLabel: t('filterAll'),
+        options: CORR_FILTER_TYPES.map((code) => ({
+          value: code,
+          label: corrTypeLabel(t, code),
+        })),
+      },
+    ],
+    [t],
+  );
 
-  const showInitialSkeleton = loading && items.length === 0;
+  const filteredRows = useMemo(() => {
+    const q = searchValue.trim().toLowerCase();
+    return items.filter((row) => {
+      if (filters.status && row.status !== filters.status) return false;
+      const typeCode =
+        row.corr_type_code ||
+        (typeof row.corr_type === 'object' ? row.corr_type?.code : row.corr_type);
+      if (filters.corr_type && typeCode !== filters.corr_type) return false;
+      if (q) {
+        const requester = row.requester_name || requesterLabel(row.requester);
+        const type = inboxTypeLabel(t, row);
+        const hay = [
+          row.reference_no,
+          row.title,
+          requester,
+          type,
+          row.status,
+          typeCode,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [items, searchValue, filters, t]);
+
+  const columns = useMemo(
+    () => [
+      {
+        field: 'reference_no',
+        headerName: t('tableReferenceNo'),
+        flex: 1,
+        minWidth: 140,
+        valueGetter: (value, row) => row.reference_no || '—',
+      },
+      {
+        field: 'title',
+        headerName: t('tableTitle'),
+        flex: 1.4,
+        minWidth: 180,
+        valueGetter: (value, row) => row.title || '—',
+      },
+      {
+        field: 'requester',
+        headerName: t('tableRequester'),
+        flex: 1,
+        minWidth: 140,
+        valueGetter: (value, row) => row.requester_name || requesterLabel(row.requester),
+      },
+      {
+        field: 'corr_type_code',
+        headerName: t('tableType'),
+        flex: 1,
+        minWidth: 140,
+        valueGetter: (value, row) => inboxTypeLabel(t, row),
+      },
+      {
+        field: 'summary',
+        headerName: t('tableSummary'),
+        flex: 1,
+        minWidth: 140,
+        sortable: false,
+        valueGetter: (value, row) => payloadSummary(tMy, row, i18n.language) || '—',
+      },
+      {
+        field: 'status',
+        headerName: t('tableStatus'),
+        width: 130,
+        renderCell: (params) => (
+          <Chip
+            size="small"
+            variant="outlined"
+            color={STATUS_COLOR[params.row.status] || 'default'}
+            label={codeLabel(t, 'status', STATUS_SUFFIX, params.row.status)}
+          />
+        ),
+      },
+      {
+        field: 'created_at',
+        headerName: t('tableDate'),
+        flex: 1,
+        minWidth: 160,
+        renderCell: (params) =>
+          formatDateTime(params.row.updated_at || params.row.created_at, i18n.language),
+      },
+      {
+        field: 'actions',
+        headerName: t('tableActions'),
+        width: 70,
+        sortable: false,
+        filterable: false,
+        renderCell: (params) => (
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Tooltip title={t('openItem', { ref: params.row.reference_no || params.row.id })}>
+              <IconButton
+                size="small"
+                aria-label={t('openItem', { ref: params.row.reference_no || params.row.id })}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openDetail(params.row.id);
+                }}
+                sx={{ color: 'primary.main' }}
+              >
+                <VisibilityIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        ),
+      },
+    ],
+    [t, tMy, i18n.language, openDetail],
+  );
+
+  const hasActiveFilters = Boolean(
+    searchValue.trim() || filters.status || filters.corr_type,
+  );
 
   return (
-    <Box
-      component="main"
-      sx={{ width: '100%', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
-    >
-      <PageContainer>
-        <PageHeader icon={InboxIcon} title={t('inboxTitle')} subtitle={t('inboxSubtitle')} />
-        <Card variant="outlined" sx={{ minWidth: 0, overflow: 'hidden' }}>
-          <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 }, minWidth: 0 }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-              <SectionTitle icon={InboxIcon} title={t('inboxTitle')} />
-              {loading && <CircularProgress size={12} aria-label={t('loading')} />}
-            </Stack>
-            {showInitialSkeleton ? (
-              <Stack spacing={0.5} aria-label={t('loading')}>
-                <Skeleton />
-                <Skeleton width="70%" />
-                <Skeleton width="85%" />
-              </Stack>
-            ) : error ? (
-              <InlineError message={error} onRetry={load} />
-            ) : items.length === 0 ? (
-              <Typography sx={{ ...FONT.body2, color: 'text.secondary' }}>
-                {t('inboxEmpty')}
-              </Typography>
-            ) : (
-              <ResponsiveList
-                items={items}
-                getKey={(row) => row.id}
-                emptyLabel={t('inboxEmpty')}
-                renderCard={(row) => {
-                  const requester = row.requester_name || requesterLabel(row.requester);
-                  const type =
-                    row.corr_type_label || row.corr_type_code || corrTypeLabel(t, row.corr_type);
-                  return {
-                    title: requester !== '—' ? requester : type,
-                    status: codeLabel(t, 'status', STATUS_SUFFIX, row.status),
-                    statusColor: STATUS_COLOR[row.status] || 'default',
-                    meta: formatDateTime(row.created_at, i18n.language),
-                    onClick: () => handleOpen(row.id),
-                  };
-                }}
-                table={
-                  <TableContainer sx={{ overflowX: 'auto', maxWidth: '100%' }}>
-                    <Table size="small" aria-busy={loading} sx={{ minWidth: 640 }}>
-                      <TableHead>
-                        <TableRow>
-                          <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
-                            {t('tableReferenceNo')}
-                          </TableCell>
-                          <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
-                            {t('tableTitle')}
-                          </TableCell>
-                          <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
-                            {t('tableRequester')}
-                          </TableCell>
-                          <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
-                            {t('tableType')}
-                          </TableCell>
-                          <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
-                            {t('tableStatus')}
-                          </TableCell>
-                          <TableCell sx={{ ...FONT.body, fontWeight: 600 }}>
-                            {t('tableDate')}
-                          </TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {items.map((row) => (
-                          <TableRow
-                            key={row.id}
-                            hover
-                            onClick={() => handleOpen(row.id)}
-                            onKeyDown={(event) => handleKeyDown(event, row.id)}
-                            role="button"
-                            tabIndex={0}
-                            aria-label={t('openItem', { ref: row.reference_no || row.id })}
-                            sx={{ cursor: 'pointer', opacity: loading ? 0.6 : 1 }}
-                          >
-                            <TableCell sx={{ ...FONT.body2 }}>
-                              {row.reference_no || '—'}
-                            </TableCell>
-                            <TableCell sx={{ ...FONT.body2 }}>{row.title || '—'}</TableCell>
-                            <TableCell sx={{ ...FONT.body2 }}>
-                              {row.requester_name || requesterLabel(row.requester)}
-                            </TableCell>
-                            <TableCell sx={{ ...FONT.body2 }}>
-                              {row.corr_type_label ||
-                                row.corr_type_code ||
-                                corrTypeLabel(t, row.corr_type)}
-                            </TableCell>
-                            <TableCell>
-                              <Chip
-                                size="small"
-                                variant="outlined"
-                                color={STATUS_COLOR[row.status] || 'default'}
-                                label={codeLabel(t, 'status', STATUS_SUFFIX, row.status)}
-                              />
-                            </TableCell>
-                            <TableCell sx={{ ...FONT.body2 }}>
-                              {formatDateTime(row.created_at, i18n.language)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                }
-              />
-            )}
-          </CardContent>
-        </Card>
-      </PageContainer>
-    </Box>
+    <>
+      {error && (
+        <Alert severity="error" sx={{ mx: 1, mt: 1 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+      {routingOrphans > 0 && (
+        <Alert severity="warning" sx={{ mx: 1, mt: 1 }}>
+          {t('inboxRoutingOrphans', { count: routingOrphans })}
+        </Alert>
+      )}
+      <FilteredDataGrid
+        title={t('inboxTitle')}
+        subtitle={t('inboxSubtitle')}
+        rows={filteredRows}
+        columns={columns}
+        loading={loading}
+        getRowId={(row) => row.id}
+        countLabel={t('inboxCount', { count: filteredRows.length, total: items.length })}
+        searchValue={searchValue}
+        onSearchChange={setSearchValue}
+        searchPlaceholder={t('inboxSearchPlaceholder')}
+        filterDefs={filterDefs}
+        filterValues={filters}
+        onFilterChange={(key, value) => setFilters((prev) => ({ ...prev, [key]: value }))}
+        onClearFilters={() => {
+          setSearchValue('');
+          setFilters({ status: '', corr_type: '' });
+        }}
+        emptyMessage={hasActiveFilters ? t('inboxEmptyFiltered') : t('inboxEmpty')}
+        emptySubtext={hasActiveFilters ? t('inboxEmptyFilteredHint') : t('inboxEmptyHint')}
+        onRowClick={(params) => {
+          const id = params.row.id;
+          setSelectedId((prev) => (prev === id ? null : id));
+        }}
+        highlightRow={(row) => row.id === selectedId}
+        initialState={{
+          sorting: { sortModel: [{ field: 'created_at', sort: 'desc' }] },
+        }}
+        height={560}
+      />
+    </>
   );
 }

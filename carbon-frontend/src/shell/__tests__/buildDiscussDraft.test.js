@@ -19,7 +19,7 @@ describe('buildDiscussDraft', () => {
     expect(draft).toMatch(/74a5e6a6-942c-4185-a986-8f895601d5ca/);
     expect(draft).toMatch(/Count Nibras employees/);
     expect(draft).toMatch(/DISCUSSION ONLY/);
-    expect(draft).toMatch(/Fork or Replan/);
+    expect(draft).toMatch(/explicitly ask you to apply changes/);
     expect(draft).not.toMatch(/analyze the employee/);
     expect(draft).not.toMatch(/call the relevant endpoint/);
     expect(draft).not.toMatch(/Nibras' was not found/);

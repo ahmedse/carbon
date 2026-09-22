@@ -31,6 +31,10 @@ from django.db import transaction
 from django.utils import timezone
 
 from accounts.capabilities import has_capability
+from ai.governance.review_authority import (
+    DEFAULT_REQUIRED_AUTHORITY,
+    resolve_required_authority,
+)
 from ai.models.approval import STATUS_ACTIVE, ApprovalGrant, canonicalize_args
 from ai.models.human_task import (
     IRREVERSIBLE,
@@ -46,7 +50,6 @@ from ai.models.human_task import (
 logger = logging.getLogger("carbon.ai.task_inbox")
 
 # Defaults for the boundary enqueuer seam (documented, policy-overridable).
-DEFAULT_REQUIRED_AUTHORITY = "ai:operator"
 DEFAULT_REVERSIBILITY = IRREVERSIBLE  # conservative fail-closed default
 DEFAULT_TASK_TTL = timedelta(days=7)
 
@@ -180,8 +183,11 @@ class TaskInbox:
 
         When ``user`` is supplied the queryset is CBAC-scoped via
         ``accounts.ai_scoping.scope_ai_queryset`` (superusers/global admins see
-        all; otherwise visibility + org-subtree narrowing).  Expired tasks are
-        excluded at read time regardless of whether ``expire_stale`` has run.
+        all; otherwise visibility + org-subtree narrowing) and further narrowed
+        to tasks whose ``required_authority`` the principal holds — unless they
+        are an ``ai:operator`` / ``ai:auditor`` (console readers see the full
+        scoped inbox).  Expired tasks are excluded at read time regardless of
+        whether ``expire_stale`` has run.
         """
         now = now or timezone.now()
         qs = HumanTask.objects.filter(
@@ -189,8 +195,20 @@ class TaskInbox:
         )
         if user is not None:
             from accounts.ai_scoping import scope_ai_queryset
+            from accounts.capabilities import (
+                AI_AUDITOR,
+                AI_OPERATOR,
+                get_user_capabilities,
+                has_any_capability,
+            )
 
             qs = scope_ai_queryset(qs, user)
+            if not has_any_capability(user, {AI_OPERATOR.key, AI_AUDITOR.key}):
+                caps = get_user_capabilities(user)
+                if "*" in caps:
+                    pass
+                else:
+                    qs = qs.filter(required_authority__in=caps)
         return qs.order_by("created_at")
 
     def get(self, task_id: Any) -> HumanTask:
@@ -359,6 +377,8 @@ async def enqueue_inbox_task(command, *, now=None) -> str | None:
         return None
 
     now = now or timezone.now()
+    from ai.instance_registry import resolve_default_app_identifier
+
     inbox = TaskInbox()
     task = await sync_to_async(inbox.create_task, thread_sensitive=True)(
         run_id=getattr(command, "run_id", None) or None,
@@ -377,7 +397,7 @@ async def enqueue_inbox_task(command, *, now=None) -> str | None:
         evidence={"evidence_digest": getattr(command, "evidence_digest", "") or ""},
         evidence_digest=getattr(command, "evidence_digest", "") or "",
         reversibility=DEFAULT_REVERSIBILITY,
-        required_authority=DEFAULT_REQUIRED_AUTHORITY,
+        required_authority=resolve_required_authority(capability),
         expires_at=now + DEFAULT_TASK_TTL,
         alternatives=[],
         capability=capability,
@@ -388,6 +408,8 @@ async def enqueue_inbox_task(command, *, now=None) -> str | None:
         object_type=getattr(command, "object_type", "") or None,
         process_instance=getattr(command, "process_instance", "") or None,
         effect_limits={},
+        app_identifier=resolve_default_app_identifier(),
+        visibility="global",
     )
     logger.info("enqueued human task %s for capability %s", task.id, capability)
     return task.id

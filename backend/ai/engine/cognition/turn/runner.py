@@ -737,6 +737,219 @@ async def _stream_final_text(text: str, *, stream_callback, progress_callback) -
         pos = end
 
 
+def _failed_tools_for_recovery(completed_tools: list[dict]) -> list[dict]:
+    """Tools that failed (top-level error or host non-2xx envelope)."""
+    import json as _json
+
+    failed: list[dict] = []
+    for tr in completed_tools or []:
+        if not isinstance(tr, dict):
+            continue
+        if tr.get("error"):
+            failed.append(tr)
+            continue
+        if tr.get("requires_confirmation"):
+            continue
+        raw = tr.get("result")
+        try:
+            data = _json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        if data.get("error"):
+            failed.append(tr)
+            continue
+        try:
+            code = int(data.get("status_code")) if data.get("status_code") is not None else None
+        except (TypeError, ValueError):
+            code = None
+        if code is not None and code >= 400:
+            failed.append(tr)
+    return failed
+
+
+def _render_tool_failures_for_recovery(failed_tools: list[dict]) -> str:
+    """Compact, outcome-oriented failure payload for recovery synthesis."""
+    import json as _json
+
+    sections: list[str] = []
+    for tr in failed_tools:
+        name = str(tr.get("tool_name") or "tool")
+        args = tr.get("tool_args") if isinstance(tr.get("tool_args"), dict) else {}
+        api = str(args.get("api_name") or args.get("api") or "")
+        if ":" in name and not api:
+            api = name.split(":", 1)[1]
+        err = str(tr.get("error") or "").strip()
+        raw = tr.get("result")
+        try:
+            data = _json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            data = None
+        payload: dict = {"tool": name}
+        if api:
+            payload["api_name"] = api
+        if err:
+            payload["error"] = err[:400]
+        if isinstance(data, dict):
+            inner = data.get("data") if isinstance(data.get("data"), dict) else data
+            if isinstance(inner, dict):
+                for key in ("detail", "error_kind", "hints", "remaining", "message"):
+                    if key in inner and inner[key] is not None:
+                        payload[key] = inner[key]
+            if data.get("status_code") is not None:
+                payload["status_code"] = data.get("status_code")
+        sections.append(_json.dumps(payload, default=str, ensure_ascii=False))
+    return "\n".join(sections)
+
+
+def _deterministic_failure_reply(failed_tools: list[dict], user_message: str = "") -> str:
+    """RULE_23 fallback when recovery LLM is unavailable."""
+    import json as _json
+
+    from ai.engine_runtime import fail_reply_when_all_tools_failed
+
+    details: list[str] = []
+    for tr in failed_tools:
+        err = str(tr.get("error") or "").strip()
+        raw = tr.get("result")
+        try:
+            data = _json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            data = None
+        detail = err
+        kind = ""
+        suggestion = ""
+        if isinstance(data, dict):
+            inner = data.get("data") if isinstance(data.get("data"), dict) else data
+            if isinstance(inner, dict):
+                detail = str(inner.get("detail") or detail or "").strip()
+                kind = str(inner.get("error_kind") or "").strip()
+                hints = inner.get("hints") if isinstance(inner.get("hints"), dict) else {}
+                suggestion = str(hints.get("suggestion") or "").strip()
+        if detail:
+            details.append(detail)
+        if suggestion and suggestion not in details:
+            details.append(suggestion)
+        elif kind == "overlap" and "Pick another day" not in " ".join(details):
+            details.append("Pick another day that is free.")
+        elif kind == "insufficient_balance" and "another leave type" not in " ".join(details).lower():
+            details.append("Pick another leave type or a shorter period.")
+        elif kind == "invalid_leave_type" and "allowed" not in " ".join(details).lower():
+            details.append("Use a recognised leave type (for example emergency for عارضة).")
+
+    base = fail_reply_when_all_tools_failed(failed_tools)
+    if not details:
+        return base
+    # Prefer the host outcome; keep one clear next step.
+    body = details[0]
+    extra = details[1] if len(details) > 1 else ""
+    if extra:
+        return f"{body} {extra}"
+    # If we only have a detail, still invite a next step for mutations.
+    if "try again" not in body.lower() and "pick" not in body.lower():
+        return f"{body} What would you like to change?"
+    return body
+
+
+async def _synthesize_tool_failures(
+    *,
+    instance_id: str,
+    conversation_id: str,
+    user_message: str,
+    completed_tools: list[dict],
+    model: str | None = None,
+    stream_callback=None,
+    progress_callback=None,
+) -> dict | None:
+    """ADR-0021 failure branch — turn host/tool errors into grounded guidance.
+
+    Does NOT auto-retry mutations (RULE_21). Does NOT invent success (anti-
+    fabrication). Prefer host ``detail`` / ``error_kind`` over generic refuse.
+    """
+    failed = _failed_tools_for_recovery(completed_tools)
+    if not failed:
+        return None
+
+    if progress_callback:
+        try:
+            await progress_callback("Working out what went wrong…")
+        except Exception:
+            pass
+
+    failures_text = _render_tool_failures_for_recovery(failed)
+    system = (
+        "You are Pulse helping the user after a tool action failed.\n"
+        "RULES:\n"
+        "- Explain the failure in plain business language using ONLY the tool "
+        "failure payload below (detail / error_kind / hints).\n"
+        "- NEVER claim the action succeeded or that anything was submitted/"
+        "created/changed.\n"
+        "- NEVER invent numbers, balances, or dates not in the payload.\n"
+        "- NEVER mention tools, APIs, HTTP codes, stack traces, or 'invented'.\n"
+        "- Do NOT retry or pretend you will auto-retry a write — ask the user "
+        "what to change (another day, leave type, etc.) if that is the fix.\n"
+        "- If error_kind is invalid_leave_type, map common synonyms using hints "
+        "(عارضة/casual → emergency) and ask them to confirm the corrected type.\n"
+        "- If overlap or insufficient_balance, say so clearly and ask for another "
+        "day or type.\n"
+        "- Match the user's language when possible (Arabic if they wrote Arabic).\n"
+        "- Keep it short: 2–4 sentences max."
+    )
+    try:
+        from ai.engine.llm.router import route_chat
+
+        result = await route_chat(
+            task="cognition",
+            instance_id=instance_id,
+            conversation_id=f"recovery-{conversation_id}",
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": (
+                    f"User's message: {user_message}\n\n"
+                    f"Tool failures (JSON lines):\n{failures_text}"
+                )},
+            ],
+            temperature=0.2,
+            model=model,
+            tools=None,
+        )
+        synthesized = (result.get("content") or "").strip()
+        if synthesized:
+            # Strip accidental success claims / invention meta.
+            low = synthesized.lower()
+            if any(p in low for p in (
+                "successfully submitted", "has been submitted",
+                "was created", "no answer was invented",
+            )):
+                synthesized = ""
+            if synthesized:
+                await _stream_final_text(
+                    synthesized,
+                    stream_callback=stream_callback,
+                    progress_callback=progress_callback,
+                )
+                tokens = int(result.get("input_tokens", 0) or 0) + int(
+                    result.get("output_tokens", 0) or 0
+                )
+                return {
+                    "text": synthesized,
+                    "tokens": tokens,
+                    "model": result.get("model", ""),
+                    "is_recovery": True,
+                }
+    except Exception:
+        logger.warning("Tool-failure recovery LLM call failed", exc_info=True)
+
+    fallback = _deterministic_failure_reply(failed, user_message)
+    await _stream_final_text(
+        fallback,
+        stream_callback=stream_callback,
+        progress_callback=progress_callback,
+    )
+    return {"text": fallback, "tokens": 0, "model": model or "", "is_recovery": True}
+
+
 async def _synthesize_tool_results(
     *,
     instance_id: str,
@@ -815,7 +1028,18 @@ async def _synthesize_tool_results(
         return result
 
     if not usable:
-        return None
+        # ADR-0021 failure branch — grounded recovery from tool errors
+        # (leave validation deny, boundary refuse, …). Never invent success;
+        # never auto-retry mutations (RULE_21).
+        return await _synthesize_tool_failures(
+            instance_id=instance_id,
+            conversation_id=conversation_id,
+            user_message=user_message,
+            completed_tools=completed_tools,
+            model=model,
+            stream_callback=stream_callback,
+            progress_callback=progress_callback,
+        )
 
     results_text = _render_tool_results_for_synthesis(usable)
     if not results_text.strip():
@@ -1263,14 +1487,23 @@ class TurnPipelineRunner:
         )
         if settings.NAVIGATION_RESOLVER_ENABLED and not _discuss_thread:
             try:
-                from ai.engine.cognition.turn.process_brief import is_process_briefing
+                from ai.engine.cognition.turn.process_brief import (
+                    is_deliverable_request,
+                    is_process_briefing,
+                )
                 from ai.engine.cognition.turn.navigation import resolve_navigation
 
                 # Process / lifecycle briefing mentions place nouns ("leave",
                 # "payroll") but must NEVER short-circuit to open-app propose.
+                # Deliverable asks ("تقرير عن المرتبات … word") likewise.
                 if is_process_briefing(user_message):
                     logger.info(
                         "[%s] Skipping navigation fast-path (process briefing)",
+                        turn_id[:8],
+                    )
+                elif is_deliverable_request(user_message):
+                    logger.info(
+                        "[%s] Skipping navigation fast-path (deliverable request)",
                         turn_id[:8],
                     )
                 else:
@@ -1606,8 +1839,12 @@ class TurnPipelineRunner:
             # deterministic guard that prevents the "People (HRMS)" hallucination.
             # Skip entirely during Agent→Discuss threads (brief often names a
             # module; user is refining a plan, not asking to open an app).
+            # Also skip when the utterance is a deliverable ask (report/Word/…)
+            # that merely mentions a place noun — LLM may still emit navigate.
+            from ai.engine.cognition.turn.process_brief import is_deliverable_request as _is_deliv
             if (
                 not _discuss_thread
+                and not _is_deliv(user_message)
                 and _intent_resolution.action == "navigate"
                 and _intent_resolution.navigate_target
             ):
@@ -2363,6 +2600,22 @@ class TurnPipelineRunner:
                 "of guessing. When a tool matches the user's request, call it "
                 "right away — do not answer in prose instead of using it, and "
                 "do not say you cannot run/execute tasks.\n"
+                "- CALLING A MUTATION TOOL *IS* THE PROPOSAL. Submitting "
+                "leave, requesting a loan, advancing payroll and every other "
+                "write is confirmation-gated BY THE PLATFORM: the tool call "
+                "stages the action and shows the user a confirm/decline card, "
+                "and nothing reaches the system until they confirm. So when "
+                "you have the details you need, CALL THE TOOL. Describing the "
+                "action in prose instead stages nothing and leaves the user "
+                "with no way to approve it.\n"
+                "- Therefore NEVER say you cannot perform a write, that it "
+                "must be done 'directly in the system', that the user should "
+                "'complete the confirmation steps first and try again', or "
+                "that they should use 'the appropriate channel'. There is no "
+                "other channel — you are it, and the confirm card appears on "
+                "your tool call. If details are missing, ask ONE short "
+                "question for the missing piece; if you have them, call the "
+                "tool and tell the user the confirm card is ready.\n"
                 "- PLAN FIRST, CONVERT ON CONFIRMATION: when the user asks you "
                 "to plan, study, research, audit, orchestrate, or 'make a "
                 "multi-agent workflow' for something, DO NOT call plan_task "
@@ -2808,6 +3061,9 @@ class TurnPipelineRunner:
             # B5: resolve_entity / compensation stamping need the turn utterance
             # (tool query may be only a name like "Abrar").
             "user_message": _resolved_user_message,
+            # ADR-0046: TurnPipelineRunner is the Chat advisory path — never
+            # stage host mutations. Agent/plan runners set surface=agent|plan.
+            "surface": "chat",
         }
         execute_witness = ExecuteWitness(
             executor=self.executor,

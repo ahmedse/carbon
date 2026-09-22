@@ -8,6 +8,8 @@ from rest_framework.permissions import BasePermission
 
 from accounts.capabilities import has_capability
 
+from .models import ACTOR_HISTORY_EVENTS
+
 
 class CanSubmitCorrespondence(BasePermission):
     """Only users holding ``correspondence:submit`` may create correspondence."""
@@ -35,7 +37,7 @@ class CanActOnCorrespondence(BasePermission):
 
 
 class CanViewCorrespondence(BasePermission):
-    """Requester-or-admin: the requester themselves, or a ``correspondence:admin``."""
+    """Requester, current approver, past decision actor, or ``correspondence:admin``."""
 
     message = "You do not have permission to view this correspondence."
 
@@ -43,7 +45,13 @@ class CanViewCorrespondence(BasePermission):
         if has_capability(request.user, 'correspondence:admin'):
             return True
         uid = request.user.id
-        return obj.requester_id == uid or uid in (obj.current_approver_ids or [])
+        if obj.requester_id == uid or uid in (obj.current_approver_ids or []):
+            return True
+        # Team History: manager who already decided must still open the record.
+        return obj.events.filter(
+            actor_id=uid,
+            event_type__in=ACTOR_HISTORY_EVENTS,
+        ).exists()
 
 
 class CorrespondenceAdminOnly(BasePermission):

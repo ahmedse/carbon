@@ -1,4 +1,4 @@
-# Registry: Configuration Keys  (auto-generated 2026-09-19 10:12 — DO NOT EDIT)
+# Registry: Configuration Keys  (auto-generated 2026-09-21 14:41 — DO NOT EDIT)
 
 > Every env var the app reads. NEVER hardcode these — always read from env with a safe default.
 

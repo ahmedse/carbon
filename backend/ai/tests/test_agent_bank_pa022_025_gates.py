@@ -47,6 +47,7 @@ SOD_PROCESSES = (
     "payroll.run.lifecycle",
     "employee.onboarding.lifecycle",
     "gosi_wps.sif.lifecycle",
+    "attendance.permission.lifecycle",
 )
 
 

@@ -34,6 +34,8 @@ export default function UsersPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [searchValue, setSearchValue] = useState("");
   const [filters, setFilters] = useState({ is_active: "", is_staff: "" });
+  /** Read-only linked Employee identity shown when editing (not editable here). */
+  const [linkedEmployee, setLinkedEmployee] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -49,12 +51,22 @@ export default function UsersPage() {
   const openCreate = () => {
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setLinkedEmployee(null);
     setDialogOpen(true);
   };
 
   const openEdit = (u) => {
     setEditingId(u.id);
     setForm({ username: u.username, email: u.email || "", password: "", is_active: u.is_active });
+    setLinkedEmployee(
+      u.employee_full_name || u.employee_no || u.employee_org_unit
+        ? {
+            full_name: u.employee_full_name || null,
+            employee_no: u.employee_no || null,
+            org_unit: u.employee_org_unit || null,
+          }
+        : null
+    );
     setDialogOpen(true);
   };
 
@@ -125,7 +137,16 @@ export default function UsersPage() {
     const q = searchValue.trim().toLowerCase();
     return users.filter((u) => {
       if (q) {
-        const hay = `${u.username ?? ''} ${u.email ?? ''}`.toLowerCase();
+        const hay = [
+          u.username,
+          u.email,
+          u.employee_full_name,
+          u.employee_no,
+          u.employee_org_unit,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
         if (!hay.includes(q)) return false;
       }
       if (filters.is_active === 'true' && !u.is_active) return false;
@@ -142,14 +163,34 @@ export default function UsersPage() {
         field: 'username',
         headerName: 'Username',
         flex: 1,
-        minWidth: 160,
+        minWidth: 140,
         renderCell: (p) => <Typography sx={{ fontWeight: 600 }}>{p.value}</Typography>,
+      },
+      {
+        field: 'employee_full_name',
+        headerName: 'Employee',
+        flex: 1,
+        minWidth: 160,
+        valueGetter: (value, row) => row.employee_full_name || '—',
+      },
+      {
+        field: 'employee_no',
+        headerName: 'Emp. No',
+        width: 110,
+        valueGetter: (value, row) => row.employee_no || '—',
+      },
+      {
+        field: 'employee_org_unit',
+        headerName: 'Org unit',
+        flex: 1.2,
+        minWidth: 180,
+        valueGetter: (value, row) => row.employee_org_unit || '—',
       },
       {
         field: 'email',
         headerName: 'Email',
         flex: 1,
-        minWidth: 200,
+        minWidth: 180,
         valueGetter: (value, row) => row.email || '—',
       },
       {
@@ -206,7 +247,7 @@ export default function UsersPage() {
 
       <FilteredDataGrid
         title="Users"
-        description="Create and manage user accounts. Assign roles on the Access Control page."
+        description="Create and manage user accounts. Linked employee name and org unit are read-only (edit people in Employees). Assign roles on Access Control."
         actions={
           <Button variant="contained" size="small" startIcon={<AddRounded />} onClick={openCreate}>
             New User
@@ -218,6 +259,7 @@ export default function UsersPage() {
         countLabel={`${filteredRows.length} of ${users.length} users`}
         searchValue={searchValue}
         onSearchChange={setSearchValue}
+        searchPlaceholder="Search username, employee, emp. no, org…"
         filterDefs={filterDefs}
         filterValues={filters}
         onFilterChange={(key, value) => setFilters((prev) => ({ ...prev, [key]: value }))}
@@ -242,9 +284,9 @@ export default function UsersPage() {
           </Button>
         }
         width={480}
-        height={400}
+        height={460}
         minWidth={400}
-        minHeight={320}
+        minHeight={360}
         maxWidth="calc(100vw - 32px)"
         maxHeight="calc(100vh - 32px)"
       >
@@ -255,6 +297,14 @@ export default function UsersPage() {
               value={form.username} disabled={!!editingId}
               onChange={(e) => setForm({ ...form, username: e.target.value })}
             />
+            {linkedEmployee && (
+              <Alert severity="info" variant="outlined">
+                Linked employee: {linkedEmployee.full_name || '—'}
+                {linkedEmployee.employee_no ? ` (${linkedEmployee.employee_no})` : ''}
+                {linkedEmployee.org_unit ? ` · ${linkedEmployee.org_unit}` : ''}
+                . Edit people records in Employees — not here.
+              </Alert>
+            )}
             <TextField
               label="Email" type="email" fullWidth size="small"
               value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}

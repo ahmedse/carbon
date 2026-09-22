@@ -387,7 +387,7 @@ class PlanViewSet(viewsets.GenericViewSet):
             )
 
     def destroy(self, request, pk=None):
-        """DELETE /plans/{id}/ — hard-delete a cancelled/failed/completed plan."""
+        """DELETE /plans/{id}/ — remove a task at any stage (cancel-in-flight then delete)."""
         try:
             result = self.service.delete_plan(request.user, pk)
         except PlanNotAccessibleError as exc:

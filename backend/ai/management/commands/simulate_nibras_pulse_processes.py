@@ -6,6 +6,7 @@ Processes (domain_packs/nibras/processes):
   3. payroll.run.lifecycle
   4. gosi_wps.sif.lifecycle
   5. employee.onboarding.lifecycle
+  6. attendance.permission.lifecycle
 
 For each process the command runs deep lanes until a final result:
   A) Registry — process is active; steps/capabilities match pack
@@ -42,7 +43,14 @@ from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from ai.models.process import ProcessDefinition, STATUS_ACTIVE
-from people.models import Employee, LeaveEntitlement, LeaveRecord, Loan, PayrollRun
+from people.models import (
+    AttendancePermission,
+    Employee,
+    LeaveEntitlement,
+    LeaveRecord,
+    Loan,
+    PayrollRun,
+)
 
 BASE = "http://127.0.0.1:8009/carbon-api"
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -55,6 +63,7 @@ PROCESSES = (
     "payroll.run.lifecycle",
     "gosi_wps.sif.lifecycle",
     "employee.onboarding.lifecycle",
+    "attendance.permission.lifecycle",
 )
 
 CARBON_REFUSE = re.compile(r"platform data,\s*emissions,\s*or data quality", re.I)
@@ -104,6 +113,12 @@ def _staged_body_incomplete(step: dict) -> bool:
         return any(not body.get(k) for k in required)
     if api in ("submit_my_leave", "create_leave_record"):
         required = ("leave_type", "start_date", "end_date")
+        return any(not body.get(k) for k in required)
+    if api == "create_attendance_permission":
+        required = ("employee", "date", "permission_type", "hours")
+        return any(not body.get(k) for k in required)
+    if api == "submit_my_attendance_permission":
+        required = ("date", "permission_type", "hours")
         return any(not body.get(k) for k in required)
     if api == "submit_my_loan":
         required = ("loan_type", "principal", "term_months", "start_date")
@@ -259,6 +274,8 @@ class Command(BaseCommand):
                 return self._host_gosi()
             if pid == "employee.onboarding.lifecycle":
                 return self._host_onboarding()
+            if pid == "attendance.permission.lifecycle":
+                return self._host_attendance()
         except Exception as exc:  # noqa: BLE001
             return {"binary": "FAIL", "notes": f"exception: {exc}"}
         return {"binary": "FAIL", "notes": "unknown process"}
@@ -478,9 +495,13 @@ class Command(BaseCommand):
         }
 
     def _host_payroll(self) -> dict:
-        """compute → validate → (human review) → commit → verify."""
-        admin = Live("ahmed")
-        evidence = {"path": []}
+        """compute → validate → (human review) → commit → verify.
+
+        ADR-0045: preparer (ahmed) ≠ committer (admin).
+        """
+        preparer = Live("ahmed")
+        approver = Live("admin")
+        evidence = {"path": [], "sod": {"preparer": "ahmed", "approver": "admin"}}
         steps = []
 
         # Prefer finishing a validated run (complete remaining process steps).
@@ -512,7 +533,7 @@ class Command(BaseCommand):
 
         run.refresh_from_db()
         if run.status == "draft":
-            r = admin.post(f"/people/payroll-runs/{run.id}/compute/")
+            r = preparer.post(f"/people/payroll-runs/{run.id}/compute/")
             steps.append({"step": "compute", "http": r.status_code, "body": r.json() if r.ok else r.text[:240]})
             if r.status_code != 200:
                 # Seed again + create a clean draft for a future period.
@@ -528,7 +549,7 @@ class Command(BaseCommand):
                     evidence["ledger_seed_fresh"] = self._ensure_verified_basic_for_org(
                         fresh.org_unit_id, as_of=fresh.period_end,
                     )
-                    r2 = admin.post(f"/people/payroll-runs/{fresh.id}/compute/")
+                    r2 = preparer.post(f"/people/payroll-runs/{fresh.id}/compute/")
                     steps.append({"step": "compute_fresh", "http": r2.status_code, "body": r2.json() if r2.ok else r2.text[:240]})
                     if r2.status_code == 200:
                         run = fresh
@@ -555,7 +576,7 @@ class Command(BaseCommand):
                 run.refresh_from_db()
 
         if run.status == "computed":
-            r = admin.post(f"/people/payroll-runs/{run.id}/validate/")
+            r = preparer.post(f"/people/payroll-runs/{run.id}/validate/")
             steps.append({"step": "validate", "http": r.status_code, "body": r.json() if r.ok else r.text[:240]})
             if r.status_code != 200:
                 return {"binary": "PARTIAL", "evidence": evidence, "steps": steps, "notes": "validate failed"}
@@ -576,21 +597,41 @@ class Command(BaseCommand):
                         status="draft",
                     )
                     evidence["retry_run_id"] = retry.id
-                    r_comp = admin.post(f"/people/payroll-runs/{retry.id}/compute/")
+                    r_comp = preparer.post(f"/people/payroll-runs/{retry.id}/compute/")
                     steps.append({"step": "compute_retry", "http": r_comp.status_code, "body": r_comp.json() if r_comp.ok else r_comp.text[:200]})
                     if r_comp.status_code == 200:
-                        r_val = admin.post(f"/people/payroll-runs/{retry.id}/validate/")
+                        r_val = preparer.post(f"/people/payroll-runs/{retry.id}/validate/")
                         steps.append({"step": "validate_retry", "http": r_val.status_code, "body": r_val.json() if r_val.ok else r_val.text[:200]})
                         retry.refresh_from_db()
                         run = retry
 
         evidence["review"] = {
-            "notes": "human_only — QA admin proceeds to commit after validate",
+            "notes": "human_only — distinct approver commits after validate (ADR-0045)",
             "status": run.status,
         }
 
         if run.status == "validated":
-            r = admin.post(f"/people/payroll-runs/{run.id}/commit/")
+            from people.governance.sod import (
+                SUBJECT_PAYROLL_RUN,
+                get_preparer,
+                record_preparer,
+            )
+
+            if get_preparer(subject_type=SUBJECT_PAYROLL_RUN, subject_id=run.pk) is None:
+                record_preparer(
+                    subject_type=SUBJECT_PAYROLL_RUN,
+                    subject_id=run.pk,
+                    user=preparer.user,
+                    process_key="payroll.run.lifecycle",
+                )
+                evidence["sod"]["legacy_stamp"] = True
+            same = preparer.post(f"/people/payroll-runs/{run.id}/commit/")
+            steps.append({
+                "step": "commit_same_actor",
+                "http": same.status_code,
+                "ok_sod": same.status_code == 403,
+            })
+            r = approver.post(f"/people/payroll-runs/{run.id}/commit/")
             steps.append({"step": "commit", "http": r.status_code, "body": r.json() if r.ok else r.text[:240]})
             run.refresh_from_db()
 
@@ -601,8 +642,11 @@ class Command(BaseCommand):
             "committed": run.status == "committed",
             "committed_at": str(getattr(run, "committed_at", None)),
         }
+        sod_ok = all(
+            s.get("ok_sod") for s in steps if s.get("step") == "commit_same_actor"
+        ) if any(s.get("step") == "commit_same_actor" for s in steps) else True
         return {
-            "binary": "PASS" if run.status == "committed" else "PARTIAL",
+            "binary": "PASS" if run.status == "committed" and sod_ok else "PARTIAL",
             "evidence": evidence,
             "notes": f"payroll run {run.id} → {run.status}",
         }
@@ -706,45 +750,75 @@ class Command(BaseCommand):
         }
 
     def _host_gosi(self) -> dict:
-        """generate → validate → review → submit → verify (WPS on committed run)."""
-        admin = Live("ahmed")
+        """generate → validate → review → submit → verify (honest WPS filing).
+
+        ADR-0045: preparer (ahmed) ≠ submitter (admin).
+        """
+        from people.models import WpsFiling
+
+        preparer = Live("ahmed")
+        approver = Live("admin")
         run = PayrollRun.objects.filter(status="committed").order_by("-id").first()
         if run is None:
-            # try complete payroll first
             pay = self._host_payroll()
             run = PayrollRun.objects.filter(status="committed").order_by("-id").first()
             if run is None:
                 return {"binary": "FAIL", "notes": "no committed payroll run", "payroll": pay}
-        evidence = {"run_id": run.id}
-        # generate/submit bind to WPS export
-        gen = admin.get(f"/people/payroll-runs/{run.id}/wps/")
-        # some deployments use POST
-        if gen.status_code not in (200, 201):
-            gen = admin.post(f"/people/payroll-runs/{run.id}/wps/")
-        evidence["generate"] = {"http": gen.status_code, "content_type": gen.headers.get("Content-Type"), "bytes": len(gen.content or b"")}
-        val = admin.get(f"/people/payroll-runs/{run.id}/validations/")
-        evidence["validate"] = {"http": val.status_code, "body": val.json() if val.ok else val.text[:200]}
-        evidence["review"] = {"notes": "human_only — QA proceeds after generate"}
-        # submit = second WPS pull / same export (statutory file)
-        sub = admin.get(f"/people/payroll-runs/{run.id}/wps/")
-        evidence["submit"] = {"http": sub.status_code, "bytes": len(sub.content or b"")}
+        evidence = {"run_id": run.id, "sod": {"preparer": "ahmed", "approver": "admin"}}
+        gen = preparer.post(f"/people/payroll-runs/{run.id}/wps/generate/")
+        evidence["generate"] = {
+            "http": gen.status_code,
+            "body": gen.json() if gen.ok else gen.text[:240],
+        }
+        val = preparer.post(f"/people/payroll-runs/{run.id}/wps/validate/")
+        evidence["validate"] = {
+            "http": val.status_code,
+            "body": val.json() if val.headers.get("content-type", "").startswith("application/json") else val.text[:240],
+        }
+        evidence["review"] = {"notes": "human_only — distinct actor submits (ADR-0045)"}
+        same = preparer.post(f"/people/payroll-runs/{run.id}/wps/submit/")
+        evidence["submit_same_actor"] = {
+            "http": same.status_code,
+            "ok_sod": same.status_code == 403,
+        }
+        sub = approver.post(f"/people/payroll-runs/{run.id}/wps/submit/")
+        evidence["submit"] = {
+            "http": sub.status_code,
+            "body": sub.json() if sub.ok else sub.text[:240],
+        }
+        filing = WpsFiling.objects.filter(payroll_run=run).first()
         evidence["verify"] = {
             "objective": "gosi_wps.sif.submitted_and_reconciled",
-            "sif_bytes": len(sub.content or b""),
-            "ok": sub.status_code in (200, 201) and len(sub.content or b"") > 0,
+            "filing_status": getattr(filing, "status", None),
+            "receipt_id": getattr(filing, "receipt_id", None),
+            "reconciled": getattr(filing, "reconciled", None),
+            "ok": (
+                getattr(filing, "status", None) == "submitted"
+                and bool(getattr(filing, "reconciled", False))
+            ),
         }
-        ok = evidence["verify"]["ok"] and evidence["generate"]["http"] in (200, 201)
+        ok = (
+            gen.status_code == 200
+            and val.status_code == 200
+            and evidence["submit_same_actor"]["ok_sod"]
+            and sub.status_code == 200
+            and evidence["verify"]["ok"]
+        )
         return {
             "binary": "PASS" if ok else "PARTIAL",
             "evidence": evidence,
-            "notes": f"WPS/SIF on run {run.id}",
+            "notes": f"WPS/SIF filing on run {run.id}",
         }
 
     def _host_onboarding(self) -> dict:
-        """submit (create employee) → review → activate → verify payroll-eligible."""
-        admin = Live("ahmed")
+        """submit (create employee) → review → activate → verify payroll-eligible.
+
+        ADR-0045: creator (ahmed) ≠ activator (admin).
+        """
+        preparer = Live("ahmed")
+        approver = Live("admin")
         # Find a position/org
-        org_list = admin.get("/mdm/org-units/?page_size=5")
+        org_list = preparer.get("/mdm/org-units/?page_size=5")
         org_id = None
         if org_list.status_code == 200:
             data = org_list.json()
@@ -766,27 +840,30 @@ class Command(BaseCommand):
             "is_active": False,
         }
         # positions optional
-        pos = admin.get("/people/positions/?page_size=1")
+        pos = preparer.get("/people/positions/?page_size=1")
         if pos.status_code == 200:
             pdata = pos.json()
             rows = pdata.get("results") if isinstance(pdata, dict) else pdata
             if rows:
                 payload["position"] = rows[0]["id"]
-        sub = admin.post("/people/employees/", payload)
-        evidence = {"submit": {"http": sub.status_code, "body": sub.json() if sub.ok else sub.text[:300]}}
+        sub = preparer.post("/people/employees/", payload)
+        evidence = {
+            "submit": {"http": sub.status_code, "body": sub.json() if sub.ok else sub.text[:300]},
+            "sod": {"preparer": "ahmed", "approver": "admin"},
+        }
         if sub.status_code not in (200, 201):
             return {"binary": "FAIL", "step": "submit", "evidence": evidence}
         emp_id = sub.json().get("id")
-        evidence["review"] = {"notes": "human_only — QA activates after create"}
-        # activate: set is_active true
-        act = admin.patch(f"/people/employees/{emp_id}/", {"is_active": True})
+        evidence["review"] = {"notes": "human_only — distinct actor activates (ADR-0045)"}
+        same = preparer.patch(f"/people/employees/{emp_id}/", {"is_active": True})
+        evidence["activate_same_actor"] = {
+            "http": same.status_code,
+            "ok_sod": same.status_code == 403,
+        }
+        act = approver.patch(f"/people/employees/{emp_id}/", {"is_active": True})
         evidence["activate"] = {"http": act.status_code, "body": act.json() if act.ok else act.text[:200]}
         emp = Employee.objects.filter(pk=emp_id).first()
-        if emp and not emp.is_active:
-            emp.is_active = True
-            emp.save(update_fields=["is_active"])
-            evidence["activate"]["orm_fallback"] = True
-            emp.refresh_from_db()
+        # No ORM bypass — SoD must hold on the host path.
         evidence["verify"] = {
             "objective": "employee.onboarding.completed_and_payroll_eligible",
             "employee_id": emp_id,
@@ -795,11 +872,114 @@ class Command(BaseCommand):
             "has_salary": bool(getattr(emp, "basic_salary", None)),
             "org_unit_id": getattr(emp, "org_unit_id", None),
         }
-        ok = emp is not None and emp.is_active and emp.org_unit_id and emp.basic_salary
+        ok = (
+            emp is not None
+            and emp.is_active
+            and emp.org_unit_id
+            and emp.basic_salary
+            and evidence["activate_same_actor"]["ok_sod"]
+        )
         return {
             "binary": "PASS" if ok else "PARTIAL",
             "evidence": evidence,
             "notes": f"onboarded {no}",
+        }
+
+    def _host_attendance(self) -> dict:
+        """ESS submit → manager corr approve → verify (approved=true).
+
+        ADR-0030 / ADR-0045: employee self-service + Correspondence (like leave).
+        Admin PATCH + SoD remains ops fallback (exercised in edges lane).
+        """
+        emp = Live("emp_1067")
+        profile = Employee.objects.filter(user__username="emp_1067").first()
+        if profile is None:
+            return {"binary": "FAIL", "notes": "no emp_1067 fixture for attendance ESS"}
+        day = date.today() + timedelta(days=14)
+        for _ in range(30):
+            if not AttendancePermission.objects.filter(employee=profile, date=day).exists():
+                break
+            day += timedelta(days=1)
+        sub = emp.post(
+            "/people/me/attendance-permissions/",
+            {
+                "date": day.isoformat(),
+                "permission_type": "personal",
+                "hours": "2.00",
+                "notes": "SIM-PROC attendance.permission.lifecycle ESS",
+            },
+        )
+        evidence = {
+            "submit": {
+                "http": sub.status_code,
+                "body": sub.json() if sub.ok else sub.text[:300],
+            },
+        }
+        if sub.status_code != 201:
+            return {"binary": "FAIL", "step": "submit", "evidence": evidence}
+        corr = sub.json()
+        corr_id = corr["id"]
+        perm_id = corr.get("subject_id") or (corr.get("payload") or {}).get("permission_id")
+        status = corr.get("status")
+        evidence["submit"]["corr_id"] = corr_id
+        evidence["submit"]["permission_id"] = perm_id
+        evidence["submit"]["status"] = status
+        if status in ("submitted", "in_review"):
+            approver_ids = corr.get("current_approver_ids") or []
+            User = get_user_model()
+            approved = False
+            for uid in approver_ids:
+                try:
+                    u = User.objects.get(pk=uid)
+                    mgr = Live(u.username)
+                    ap = mgr.post(
+                        f"/correspondence/{corr_id}/approve/",
+                        {"comment": "SIM-PROC attendance approve"},
+                    )
+                    evidence["review"] = {
+                        "http": ap.status_code,
+                        "approver": u.username,
+                        "body": ap.json() if ap.ok else ap.text[:200],
+                    }
+                    if ap.status_code == 200:
+                        approved = True
+                        status = ap.json().get("status")
+                        break
+                except Exception as e:  # noqa: BLE001
+                    evidence.setdefault("review_errors", []).append(str(e))
+            if not approved and status not in ("approved",):
+                try:
+                    mgr = Live("emp_1399")
+                    ap = mgr.post(
+                        f"/correspondence/{corr_id}/approve/",
+                        {"comment": "SIM-PROC attendance approve"},
+                    )
+                    evidence["review"] = {
+                        "http": ap.status_code,
+                        "approver": "emp_1399",
+                        "body": ap.json() if ap.ok else ap.text[:200],
+                    }
+                    if ap.status_code == 200:
+                        status = ap.json().get("status")
+                        approved = True
+                except Exception as e:  # noqa: BLE001
+                    evidence["review_fallback_error"] = str(e)
+        else:
+            evidence["review"] = {"status": status, "notes": "auto-resolved on submit"}
+        perm = AttendancePermission.objects.filter(pk=perm_id).first()
+        evidence["verify"] = {
+            "objective": "attendance.permission.approved_and_recorded",
+            "permission_id": perm_id,
+            "approved": getattr(perm, "approved", None),
+            "corr_status": status,
+            "employee_id": profile.pk,
+            "date": day.isoformat(),
+        }
+        ok = perm is not None and bool(perm.approved) and status == "approved"
+        return {
+            "binary": "PASS" if ok else "PARTIAL",
+            "evidence": evidence,
+            "notes": f"attendance ESS permission {perm_id} approved={ok}",
         }
 
     def _lane_edges(self, pid: str) -> dict:
@@ -814,6 +994,8 @@ class Command(BaseCommand):
                 return self._edges_gosi()
             if pid == "employee.onboarding.lifecycle":
                 return self._edges_onboarding()
+            if pid == "attendance.permission.lifecycle":
+                return self._edges_attendance()
         except Exception as exc:  # noqa: BLE001
             return {"binary": "FAIL", "notes": f"exception: {exc}"}
         return {"binary": "FAIL", "notes": "unknown process"}
@@ -1045,20 +1227,35 @@ class Command(BaseCommand):
                 period_end=date(2029, 1, 31),
                 status="draft",
             )
-        blocked = admin.get(f"/people/payroll-runs/{draft.id}/wps/")
-        if blocked.status_code not in (200, 201):
-            blocked = admin.post(f"/people/payroll-runs/{draft.id}/wps/")
+        blocked = admin.post(f"/people/payroll-runs/{draft.id}/wps/generate/")
         cases["no_committed_blocked"] = {
             "http": blocked.status_code,
-            "ok": blocked.status_code not in (200, 201) or len(blocked.content or b"") == 0,
+            "ok": blocked.status_code in (400, 409),
             "run_status": draft.status,
+            "body": (blocked.text or "")[:200],
         }
+        # Submit without generate must refuse
+        committed = PayrollRun.objects.filter(status="committed").order_by("-id").first()
+        if committed is not None:
+            # Clear any prior filing for a clean edge on a throwaway? Use generate gap:
+            from people.models import WpsFiling
+
+            WpsFiling.objects.filter(payroll_run=committed).delete()
+            sub_early = admin.post(f"/people/payroll-runs/{committed.id}/wps/submit/")
+            cases["submit_without_generate"] = {
+                "http": sub_early.status_code,
+                "ok": sub_early.status_code in (400, 409),
+            }
+        else:
+            cases["submit_without_generate"] = {"ok": True, "notes": "no committed run"}
+
         if getattr(self, "skip_llm", False):
             cases["wrong_bind_leave"] = {"ok": True, "notes": "SKIPPED (--skip-llm)"}
         else:
             plan = _plan(
                 admin,
-                "Generate GOSI WPS SIF for the latest committed payroll. Do not submit leave.",
+                "Generate GOSI WPS SIF for the latest committed payroll using "
+                "generate_gosi_wps_sif. Do not submit leave.",
             )
             apis = {
                 (s.get("tool_args") or {}).get("api_name")
@@ -1079,8 +1276,9 @@ class Command(BaseCommand):
 
     def _edges_onboarding(self) -> dict:
         cases = {}
-        admin = Live("ahmed")
-        empty = admin.post("/people/employees/", {})
+        preparer = Live("ahmed")
+        approver = Live("admin")
+        empty = preparer.post("/people/employees/", {})
         cases["empty_body_honest"] = {
             "http": empty.status_code,
             "ok": empty.status_code in (400, 422) and empty.status_code != 404,
@@ -1088,7 +1286,7 @@ class Command(BaseCommand):
         }
         org = Employee.objects.filter(org_unit__isnull=False).first()
         no = f"EDGE{timezone.now().strftime('%H%M%S')}"
-        filled = admin.post(
+        filled = preparer.post(
             "/people/employees/",
             {
                 "employee_no": no,
@@ -1105,7 +1303,12 @@ class Command(BaseCommand):
         }
         if filled.status_code in (200, 201):
             eid = filled.json().get("id")
-            patch = admin.patch(f"/people/employees/{eid}/", {"is_active": True})
+            same = preparer.patch(f"/people/employees/{eid}/", {"is_active": True})
+            cases["sod_same_actor"] = {
+                "http": same.status_code,
+                "ok": same.status_code == 403,
+            }
+            patch = approver.patch(f"/people/employees/{eid}/", {"is_active": True})
             cases["patch_activate"] = {
                 "http": patch.status_code,
                 "ok": patch.status_code == 200,
@@ -1114,8 +1317,149 @@ class Command(BaseCommand):
             cases["never_submit_my_leave"] = {"ok": True, "notes": "SKIPPED (--skip-llm)"}
         else:
             plan = _plan(
-                admin,
+                preparer,
                 "Onboard a new employee with create_employee then update_employee. Never submit_my_leave.",
+            )
+            apis = {
+                (s.get("tool_args") or {}).get("api_name")
+                for s in (plan.get("steps") or [])
+                if (s.get("tool_args") or {}).get("api_name")
+            }
+            cases["never_submit_my_leave"] = {
+                "ok": "submit_my_leave" not in apis,
+                "apis": sorted(a for a in apis if a),
+            }
+        passed = sum(1 for c in cases.values() if c.get("ok"))
+        return {
+            "binary": "PASS" if passed == len(cases) else "PARTIAL",
+            "passed": passed,
+            "total": len(cases),
+            "cases": cases,
+        }
+
+    def _edges_attendance(self) -> dict:
+        cases = {}
+        emp = Live("emp_1067")
+        empty = emp.post("/people/me/attendance-permissions/", {})
+        cases["empty_body_honest"] = {
+            "http": empty.status_code,
+            "ok": empty.status_code in (400, 422) and empty.status_code != 404,
+            "body": (empty.text or "")[:200],
+        }
+        profile = Employee.objects.filter(user__username="emp_1067").first()
+        day = date.today() + timedelta(days=40)
+        for _ in range(30):
+            if profile and not AttendancePermission.objects.filter(
+                employee=profile, date=day,
+            ).exists():
+                break
+            day += timedelta(days=1)
+        sub = emp.post(
+            "/people/me/attendance-permissions/",
+            {
+                "date": day.isoformat(),
+                "permission_type": "personal",
+                "hours": "1.50",
+                "notes": "SIM-EDGE attendance ESS",
+            },
+        )
+        cases["ess_submit"] = {
+            "http": sub.status_code,
+            "ok": sub.status_code == 201,
+        }
+        if sub.status_code == 201:
+            corr = sub.json()
+            corr_id = corr["id"]
+            perm_id = corr.get("subject_id")
+            status0 = corr.get("status")
+            if status0 == "approved":
+                # No manager on fixture → skip_if_self / empty chain auto-resolves
+                # (same honesty as leave host lane). Signal must have flipped approved.
+                perm = AttendancePermission.objects.filter(pk=perm_id).first()
+                cases["sod_self_approve_refused"] = {
+                    "ok": True,
+                    "notes": "SKIPPED — auto-approved (no manager)",
+                }
+                cases["ess_manager_approve"] = {
+                    "ok": perm is not None and bool(perm.approved),
+                    "notes": "auto-approved on submit",
+                }
+            else:
+                self_ap = emp.post(
+                    f"/correspondence/{corr_id}/approve/",
+                    {"comment": "self"},
+                )
+                cases["sod_self_approve_refused"] = {
+                    "http": self_ap.status_code,
+                    "ok": self_ap.status_code in (403, 400, 409),
+                }
+                approved = False
+                for uid in corr.get("current_approver_ids") or []:
+                    try:
+                        u = get_user_model().objects.get(pk=uid)
+                        ap = Live(u.username).post(
+                            f"/correspondence/{corr_id}/approve/",
+                            {"comment": "SIM-EDGE"},
+                        )
+                        if ap.status_code == 200:
+                            approved = True
+                            break
+                    except Exception:  # noqa: BLE001
+                        pass
+                if not approved:
+                    ap = Live("emp_1399").post(
+                        f"/correspondence/{corr_id}/approve/",
+                        {"comment": "SIM-EDGE"},
+                    )
+                    approved = ap.status_code == 200
+                perm = AttendancePermission.objects.filter(pk=perm_id).first()
+                cases["ess_manager_approve"] = {
+                    "ok": approved and perm is not None and bool(perm.approved),
+                }
+        # Ops fallback: admin create + NPS-1 SoD still enforced
+        preparer = Live("ahmed")
+        approver = Live("admin")
+        day2 = day + timedelta(days=1)
+        admin_sub = preparer.post(
+            "/people/attendance-permissions/",
+            {
+                "employee": profile.pk if profile else None,
+                "date": day2.isoformat(),
+                "permission_type": "personal",
+                "hours": "1.00",
+                "notes": "SIM-EDGE admin ops",
+                "approved": False,
+            },
+        )
+        cases["admin_create"] = {
+            "http": admin_sub.status_code,
+            "ok": admin_sub.status_code in (200, 201),
+        }
+        if admin_sub.status_code in (200, 201):
+            pid_perm = admin_sub.json().get("id")
+            same = preparer.patch(
+                f"/people/attendance-permissions/{pid_perm}/",
+                {"approved": True},
+            )
+            cases["admin_sod_same_actor"] = {
+                "http": same.status_code,
+                "ok": same.status_code == 403,
+            }
+            patch = approver.patch(
+                f"/people/attendance-permissions/{pid_perm}/",
+                {"approved": True},
+            )
+            cases["admin_patch_approve"] = {
+                "http": patch.status_code,
+                "ok": patch.status_code == 200,
+            }
+        if getattr(self, "skip_llm", False):
+            cases["never_submit_my_leave"] = {"ok": True, "notes": "SKIPPED (--skip-llm)"}
+        else:
+            plan = _plan(
+                emp,
+                "Submit a short-hours attendance permission for myself with "
+                "submit_my_attendance_permission. Never submit_my_leave.",
             )
             apis = {
                 (s.get("tool_args") or {}).get("api_name")
@@ -1213,6 +1557,27 @@ class Command(BaseCommand):
                     "days": 1,
                     "note": "SIM consent fill",
                 }
+            elif api == "create_attendance_permission":
+                emp = Employee.objects.filter(user__username="emp_1067").first()
+                if emp is None:
+                    emp = Employee.objects.filter(is_active=True).first()
+                body = {
+                    "employee": emp.pk if emp else 1,
+                    "date": (date.today() + timedelta(days=21)).isoformat(),
+                    "permission_type": "personal",
+                    "hours": "2.00",
+                    "notes": "SIM consent fill",
+                    "approved": False,
+                }
+            elif api == "submit_my_attendance_permission":
+                body = {
+                    "date": (date.today() + timedelta(days=21)).isoformat(),
+                    "permission_type": "personal",
+                    "hours": "2.00",
+                    "notes": "SIM consent fill ESS",
+                }
+            elif api == "approve_attendance_permission":
+                body = {"approved": True}
             elif api == "submit_my_loan":
                 start = (date.today().replace(day=1) + timedelta(days=32)).replace(day=1)
                 body = {
@@ -1341,6 +1706,12 @@ class Command(BaseCommand):
                 f"Plan Nibras process {pid}: {', '.join(steps)}. "
                 f"Use generate_gosi_wps_sif / WPS export on a committed payroll run."
             )
+        elif pid.startswith("attendance"):
+            brief = (
+                f"Plan Nibras process {pid}: {', '.join(steps)}. "
+                f"Use submit_my_attendance_permission (self-service). "
+                f"Never submit_my_leave. Manager correspondence review."
+            )
         else:
             brief = (
                 f"Plan Nibras process {pid}: {', '.join(steps)}. "
@@ -1368,6 +1739,11 @@ class Command(BaseCommand):
             "call_host_api",
             "list_my_loan",
             "list_employees",
+            "create_attendance_permission",
+            "approve_attendance_permission",
+            "submit_my_attendance_permission",
+            "list_my_attendance_permissions",
+            "list_attendance",
         ):
             if needle in blob:
                 tool_hits += 1
@@ -1390,6 +1766,8 @@ class Command(BaseCommand):
         if pid.startswith("loan") and "submit_my_leave" in apis:
             binary = "PARTIAL"
         if pid.startswith("employee") and "submit_my_leave" in apis:
+            binary = "PARTIAL"
+        if pid.startswith("attendance") and "submit_my_leave" in apis:
             binary = "PARTIAL"
         return {
             "binary": binary,

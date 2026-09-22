@@ -6,15 +6,13 @@
 // RULE_8: theme tokens only (no hex/raw px). RULE_3: compact density.
 // G3 — Checkpoint buttons: ⊕ saves a named snapshot, ↩ opens CheckpointPicker.
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import { useTranslation } from 'react-i18next';
 import {
   Box,
   Chip,
   IconButton,
-  MenuItem,
-  Select,
   Snackbar,
   ToggleButton,
   ToggleButtonGroup,
@@ -30,10 +28,17 @@ import TaskAltOutlinedIcon from '@mui/icons-material/TaskAltOutlined';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
 import { createCheckpoint } from '../api/aiWorkspace';
+import { AI_MANAGE_CONSOLE, expandCapabilities, hasCap } from '../capabilities';
 import PulseLogo from './PulseLogo';
 import AIContextMenu from './AIContextMenu';
 import CheckpointPicker from './CheckpointPicker';
-import { readAutonomyMode, writeAutonomyMode } from './autonomyMode';
+
+function capabilityKeys(caps) {
+  if (!Array.isArray(caps)) return [];
+  return caps
+    .map((c) => (typeof c === 'string' ? c : c?.key || c?.capability))
+    .filter(Boolean);
+}
 
 // ADR-0014 §4 — the safety contract is always visible in the header. Exact
 // copy per the decision table; the header must never invent new wording.
@@ -62,11 +67,14 @@ function AIWorkspaceHeader({
   onDismissLinkedPlan,
 }) {
   const { t } = useTranslation('ai');
-  const { token } = useAuth();
+  const { token, userCapabilities } = useAuth();
   const { notifyFromError } = useNotification();
+  const canManageConsole = useMemo(
+    () => hasCap(expandCapabilities(capabilityKeys(userCapabilities)), AI_MANAGE_CONSOLE),
+    [userCapabilities],
+  );
   const [pickerOpen, setPickerOpen] = useState(false);
   const [snackbar, setSnackbar] = useState(null); // { message }
-  const [autonomy, setAutonomy] = useState(() => readAutonomyMode());
 
   const contractKey =
     mode === 'chat'
@@ -80,16 +88,8 @@ function AIWorkspaceHeader({
     })
     : t('continuity.openPlanShort');
 
-  const handleAutonomy = (event) => {
-    const next = writeAutonomyMode(event.target.value);
-    setAutonomy(next);
-    try {
-      window.dispatchEvent(new CustomEvent('carbon-ai-autonomy', { detail: next }));
-    } catch { /* ignore */ }
-  };
-
   const handleSaveCheckpoint = async () => {
-    if (!conversationId) return;
+    if (!conversationId || !canManageConsole) return;
     const now = new Date();
     const name = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
       + ' · '
@@ -164,53 +164,36 @@ function AIWorkspaceHeader({
             🤖 {t('modeAgent')}
           </ToggleButton>
         </ToggleButtonGroup>
-        {mode === 'agent' && (
-          <Tooltip title={t('autonomy.hint')}>
-            <Select
-              size="small"
-              value={autonomy}
-              onChange={handleAutonomy}
-              aria-label={t('autonomy.label')}
-              sx={{
-                ml: 0.5,
-                minWidth: 88,
-                fontSize: '0.625rem',
-                height: 28,
-                '& .MuiSelect-select': { py: 0.5, px: 1 },
-              }}
-            >
-              <MenuItem value="careful" sx={{ fontSize: '0.75rem' }}>{t('autonomy.careful')}</MenuItem>
-              <MenuItem value="balanced" sx={{ fontSize: '0.75rem' }}>{t('autonomy.balanced')}</MenuItem>
-              <MenuItem value="fast" sx={{ fontSize: '0.75rem' }}>{t('autonomy.fast')}</MenuItem>
-            </Select>
-          </Tooltip>
-        )}
-        <Tooltip title={t('saveCheckpoint')}>
-          <span>
-            <IconButton
-              size="small"
-              onClick={handleSaveCheckpoint}
-              disabled={!conversationId}
-              aria-label={t('saveCheckpoint')}
-              sx={{ p: 0.5 }}
-            >
-              <AddCircleOutlineIcon sx={{ fontSize: 15 }} />
-            </IconButton>
-          </span>
-        </Tooltip>
-        <Tooltip title={t('checkpoints')}>
-          <span>
-            <IconButton
-              size="small"
-              onClick={() => setPickerOpen(true)}
-              disabled={!conversationId}
-              aria-label={t('openCheckpoints')}
-              sx={{ p: 0.5 }}
-            >
-              <RestoreOutlinedIcon sx={{ fontSize: 15 }} />
-            </IconButton>
-          </span>
-        </Tooltip>
+        {canManageConsole ? (
+          <>
+            <Tooltip title={t('saveCheckpoint')}>
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={handleSaveCheckpoint}
+                  disabled={!conversationId}
+                  aria-label={t('saveCheckpoint')}
+                  sx={{ p: 0.5 }}
+                >
+                  <AddCircleOutlineIcon sx={{ fontSize: 15 }} />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title={t('checkpoints')}>
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={() => setPickerOpen(true)}
+                  disabled={!conversationId}
+                  aria-label={t('openCheckpoints')}
+                  sx={{ p: 0.5 }}
+                >
+                  <RestoreOutlinedIcon sx={{ fontSize: 15 }} />
+                </IconButton>
+              </span>
+            </Tooltip>
+          </>
+        ) : null}
         <AIContextMenu
           conversationId={conversationId}
           onConversationUpdated={onConversationUpdated}
@@ -239,12 +222,14 @@ function AIWorkspaceHeader({
           </IconButton>
         </Tooltip>
       </Box>
-      <CheckpointPicker
-        conversationId={conversationId}
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onFork={onForked}
-      />
+      {canManageConsole ? (
+        <CheckpointPicker
+          conversationId={conversationId}
+          open={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          onFork={onForked}
+        />
+      ) : null}
       <Snackbar
         open={Boolean(snackbar)}
         message={snackbar?.message}

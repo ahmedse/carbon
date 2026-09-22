@@ -1,15 +1,24 @@
 // ConsentHeroCard — status strip when a step awaits approval (RULE_21).
-// Approve / Decline live only on the active Run timeline node (no duplicate buttons).
+// Approve / Decline live in the step detail drawer (no duplicate buttons).
 import React from 'react';
 import PropTypes from 'prop-types';
 import { Box, Button, Typography } from '@mui/material';
 import { stripEngineJargon } from './humanizeOperatorCopy';
 import { toolLabel } from './aiTaskStatus';
+import { presentToolLabel } from './presentationPlane';
 
 function actionLabel(step) {
   const args = step?.tool_args;
   const api = args && typeof args === 'object' ? args.api_name : '';
-  if (api) return toolLabel(api) || String(api).replace(/_/g, ' ');
+  if (api) {
+    return (
+      presentToolLabel('call_host_api', { audience: 'operator', apiName: api })
+      || toolLabel(api)
+      || String(api).replace(/_/g, ' ')
+    );
+  }
+  const fromTool = presentToolLabel(step?.tool_name, { audience: 'operator', apiName: api });
+  if (fromTool) return fromTool;
   return stripEngineJargon(step?.intent || `Step ${step?.step_id}`);
 }
 
@@ -17,7 +26,7 @@ function actionLabel(step) {
  * @param {object} props
  * @param {object} props.step — RunStep with status awaiting_approval
  * @param {string} [props.completedLabel] — e.g. "8 steps completed, 2 to go"
- * @param {function} [props.onReviewStep] — jump to Run timeline
+ * @param {function} [props.onReviewStep] — open step detail drawer
  */
 export default function ConsentHeroCard({
   step,
@@ -56,6 +65,8 @@ export default function ConsentHeroCard({
         Needs your approval
         {label ? ` — ${label}` : ''}
         {completedLabel ? ` · Paused — ${completedLabel}` : ''}
+        {' · '}
+        Approve or decline in the step details panel.
       </Typography>
       {onReviewStep && (
         <Button
@@ -64,7 +75,7 @@ export default function ConsentHeroCard({
           onClick={onReviewStep}
           sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0 }}
         >
-          Open on timeline
+          Open step details
         </Button>
       )}
     </Box>

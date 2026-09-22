@@ -31,6 +31,7 @@ import {
   retryMessageStream,
   sendMessageStream,
   stopGeneration,
+  undoClearContext,
   updateConversation,
 } from '../api/aiWorkspace';
 import { createDQRule } from '../api/dq';
@@ -66,7 +67,29 @@ function normalizeConversationShape(payload) {
   };
 }
 
-function AIConversationView({ conversationId, onOpenPanel, onForked, onConversationUpdated, seedDraft = null, onSeedDraftConsumed }) {
+/** Messages visible after a user-caused /clear (post-boundary only). */
+function messagesAfterClearBreak(messages, clearBreak) {
+  if (!clearBreak) return messages;
+  const boundary = clearBreak.message_boundary_id;
+  if (boundary) {
+    const idx = messages.findIndex((m) => String(m.id) === String(boundary));
+    if (idx >= 0) return messages.slice(idx + 1);
+  }
+  if (clearBreak.cleared_at) {
+    return messages.filter((m) => (m.created_at || '') > clearBreak.cleared_at);
+  }
+  return [];
+}
+
+function AIConversationView({
+  conversationId,
+  onOpenPanel,
+  onForked,
+  onConversationUpdated,
+  seedDraft = null,
+  onSeedDraftConsumed,
+  contextPulse = null,
+}) {
   const { t } = useTranslation('ai');
   const { token, user, userCapabilities, isGlobalAdminFlag } = useAuth();
   const { notify, notifyFromError } = useNotification();
@@ -173,6 +196,15 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
     setMessages([]);
     load();
   }, [load]);
+
+  // Kebab clear / undo-clear updates tab metadata in the workspace; adopt the
+  // working-context mutation so the Restore divider appears without a reload.
+  useEffect(() => {
+    if (!contextPulse || String(contextPulse.id) !== String(conversationId)) return;
+    const updated = contextPulse.conversation;
+    if (!updated || typeof updated !== 'object') return;
+    setConversation((prev) => (prev ? { ...prev, ...updated } : updated));
+  }, [contextPulse, conversationId]);
 
   // Phase 5B — resume catch-up. Call once per conversation open (server is
   // idempotent: it bumps last_viewed_at, so a stale thread only yields a
@@ -1046,8 +1078,9 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
       try {
         if (name === 'clear') {
           const updated = await clearContext(token, conversationId);
+          setConversation((prev) => (prev ? { ...prev, ...updated } : updated));
           onConversationUpdated?.(updated);
-          notify({ message: 'Working context cleared', type: 'success' });
+          notify({ message: t('contextCleared'), type: 'success' });
         } else if (name === 'checkpoint') {
           setSaveCheckpointOpen(true);
         } else if (name === 'fork') {
@@ -1060,8 +1093,21 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
         notifyFromError(err, 'Could not run command');
       }
     },
-    [token, conversationId, notify, notifyFromError, onConversationUpdated, handleExport],
+    [token, conversationId, notify, notifyFromError, onConversationUpdated, handleExport, t],
   );
+
+  // In-stream Restore after /clear — re-seeds working context and shows history.
+  const handleUndoClear = useCallback(async () => {
+    if (!conversationId) return;
+    try {
+      const updated = await undoClearContext(token, conversationId);
+      setConversation((prev) => (prev ? { ...prev, ...updated } : updated));
+      onConversationUpdated?.(updated);
+      notify({ message: t('clearedContextRestored'), type: 'success' });
+    } catch (err) {
+      notifyFromError(err, t('clearedContextRestoreFailed'));
+    }
+  }, [conversationId, token, notify, notifyFromError, onConversationUpdated, t]);
 
   // Slash-command /fork → user picked a checkpoint → fork immediately.
   const handleCheckpointPick = useCallback(
@@ -1136,12 +1182,15 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
 
   // Phase 21-C — collapse the older half of a long thread behind a toggle;
   // infinite scroll still pages older messages into the collapsed region.
+  // After /clear, only post-boundary messages are shown (Restore undoes this).
+  const clearBreak = conversation?.context_snapshot_json?._clear_break || null;
+  const threadMessages = messagesAfterClearBreak(messages, clearBreak);
   const olderMessages =
-    messages.length > OLDER_MESSAGES_COLLAPSE_AT
-      ? messages.slice(0, messages.length - OLDER_MESSAGES_COLLAPSE_AT)
+    threadMessages.length > OLDER_MESSAGES_COLLAPSE_AT
+      ? threadMessages.slice(0, threadMessages.length - OLDER_MESSAGES_COLLAPSE_AT)
       : [];
   const recentMessages =
-    olderMessages.length > 0 ? messages.slice(-OLDER_MESSAGES_COLLAPSE_AT) : messages;
+    olderMessages.length > 0 ? threadMessages.slice(-OLDER_MESSAGES_COLLAPSE_AT) : threadMessages;
 
   const needsInputHint =
     convStatus === 'needs_input'
@@ -1256,11 +1305,56 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
           </Box>
         )}
 
-        {messages.length === 0 && !isWorking && (
+        {threadMessages.length === 0 && !isWorking && !clearBreak && (
           <Box sx={{ p: 3, textAlign: 'center' }}>
             <Typography variant="caption" color="text.disabled">
               Send a message to start the conversation.
             </Typography>
+          </Box>
+        )}
+
+        {/* User-caused /clear — empty the thread and offer Restore (PULSE-UX). */}
+        {clearBreak && (
+          <Box
+            data-testid="context-clear-divider"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+              px: 2,
+              py: 2.5,
+            }}
+          >
+            <Box
+              sx={{
+                flex: 1,
+                borderTop: '1px dotted',
+                borderColor: 'divider',
+              }}
+            />
+            <Button
+              size="small"
+              onClick={handleUndoClear}
+              aria-label={t('restoreClearedContext')}
+              sx={{
+                textTransform: 'none',
+                fontSize: '0.75rem',
+                minWidth: 0,
+                px: 1,
+                py: 0.25,
+                color: 'text.secondary',
+                '&:hover': { color: 'primary.main', bgcolor: 'transparent' },
+              }}
+            >
+              {t('restoreClearedContext')}
+            </Button>
+            <Box
+              sx={{
+                flex: 1,
+                borderTop: '1px dotted',
+                borderColor: 'divider',
+              }}
+            />
           </Box>
         )}
 
@@ -1660,10 +1754,16 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
 
 AIConversationView.propTypes = {
   conversationId: PropTypes.string.isRequired,
+  onOpenPanel: PropTypes.func,
   onForked: PropTypes.func,
   onConversationUpdated: PropTypes.func,
   seedDraft: PropTypes.string,
   onSeedDraftConsumed: PropTypes.func,
+  contextPulse: PropTypes.shape({
+    id: PropTypes.string,
+    at: PropTypes.number,
+    conversation: PropTypes.object,
+  }),
 };
 
 export default AIConversationView;

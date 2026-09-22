@@ -181,7 +181,7 @@ class PayrollRunService:
 
     # --- compute -----------------------------------------------------------
 
-    def compute(self, run):
+    def compute(self, run, *, user=None):
         self._require_status(run, self.ALLOWED_TRANSITIONS["compute"])
 
         rules = ComplianceRule.objects
@@ -199,6 +199,17 @@ class PayrollRunService:
                 )
             run.status = "computed"
             run.save(update_fields=["status"])
+            from people.governance.sod import (
+                SUBJECT_PAYROLL_RUN,
+                record_preparer,
+            )
+
+            record_preparer(
+                subject_type=SUBJECT_PAYROLL_RUN,
+                subject_id=run.pk,
+                user=user,
+                process_key="payroll.run.lifecycle",
+            )
 
         return {
             "run": run.pk,
@@ -385,8 +396,22 @@ class PayrollRunService:
 
     # --- validate ----------------------------------------------------------
 
-    def validate(self, run):
+    def validate(self, run, *, user=None):
         self._require_status(run, self.ALLOWED_TRANSITIONS["validate"])
+        from people.governance.sod import (
+            SUBJECT_PAYROLL_RUN,
+            get_preparer,
+            record_preparer,
+        )
+
+        # Fill preparer only if compute stamped nothing (legacy / edge).
+        if get_preparer(subject_type=SUBJECT_PAYROLL_RUN, subject_id=run.pk) is None:
+            record_preparer(
+                subject_type=SUBJECT_PAYROLL_RUN,
+                subject_id=run.pk,
+                user=user,
+                process_key="payroll.run.lifecycle",
+            )
         result = self._run_validation(run)
         run.status = "failed" if result["has_errors"] else "validated"
         run.save(update_fields=["status"])
@@ -396,8 +421,20 @@ class PayrollRunService:
 
     # --- commit ------------------------------------------------------------
 
-    def commit(self, run):
+    def commit(self, run, *, user=None):
         self._require_status(run, self.ALLOWED_TRANSITIONS["commit"])
+        from people.governance.sod import (
+            ACTION_COMMIT,
+            SUBJECT_PAYROLL_RUN,
+            require_distinct_actor,
+        )
+
+        require_distinct_actor(
+            subject_type=SUBJECT_PAYROLL_RUN,
+            subject_id=run.pk,
+            actor=user,
+            action=ACTION_COMMIT,
+        )
         result = self._run_validation(run)
         if result["has_errors"]:
             run.status = "failed"
@@ -443,6 +480,197 @@ class PayrollRunService:
             payslip = self._payslip_summary(employee, run, employee_lines)
             records.append(calculation_engine.format_wps_record(rule, payslip))
         return {"rule": rule, "records": records}
+
+    # --- GOSI/WPS SIF filing lifecycle (generate → validate → submit) -------
+
+    def wps_generate(self, run, *, user=None):
+        """Generate and persist SIF/WPS artifact for a committed run."""
+        import csv
+        import hashlib
+        import io
+
+        from django.utils import timezone
+
+        from people.governance.sod import (
+            SUBJECT_WPS_FILING,
+            record_preparer,
+        )
+        from people.models import WpsFiling
+
+        export = self.wps_export(run)
+        records = export["records"]
+        if not records:
+            csv_text = ""
+        else:
+            columns = list(records[0]["record"].keys())
+            buf = io.StringIO()
+            writer = csv.writer(buf)
+            writer.writerow(columns)
+            for item in records:
+                record = item["record"]
+                writer.writerow([record.get(col, "") for col in columns])
+            csv_text = buf.getvalue()
+        raw = csv_text.encode("utf-8")
+        digest = hashlib.sha256(raw).hexdigest()
+        filing, _ = WpsFiling.objects.update_or_create(
+            payroll_run=run,
+            defaults={
+                "status": "generated",
+                "content_hash": digest,
+                "record_count": len(records),
+                "csv_bytes": raw,
+                "generated_at": timezone.now(),
+                "validated_at": None,
+                "validation_passed": False,
+                "validation_issues": [],
+                "submitted_at": None,
+                "submitted_by": None,
+                "receipt_id": "",
+                "reconciled": False,
+            },
+        )
+        # New generate cycle resets preparer (overwrite).
+        record_preparer(
+            subject_type=SUBJECT_WPS_FILING,
+            subject_id=filing.pk,
+            user=user,
+            process_key="gosi_wps.sif.lifecycle",
+            overwrite=True,
+        )
+        return {
+            "run_id": run.pk,
+            "status": filing.status,
+            "content_hash": filing.content_hash,
+            "record_count": filing.record_count,
+            "generated_at": filing.generated_at.isoformat() if filing.generated_at else None,
+            "bytes": len(raw),
+        }
+
+    def wps_validate_filing(self, run, *, user=None):
+        """Validate a generated WPS filing (structure + authoritative rule)."""
+        from django.utils import timezone
+
+        from people.governance.sod import (
+            SUBJECT_WPS_FILING,
+            get_preparer,
+            record_preparer,
+        )
+        from people.models import WpsFiling
+
+        self._require_status(run, ("committed",))
+        try:
+            filing = run.wps_filing
+        except WpsFiling.DoesNotExist as exc:
+            raise PayrollServiceError(
+                "No WPS filing generated for this run — call generate first."
+            ) from exc
+        if filing.status == "submitted":
+            raise PayrollServiceError("Filing already submitted; cannot re-validate.")
+
+        if get_preparer(subject_type=SUBJECT_WPS_FILING, subject_id=filing.pk) is None:
+            record_preparer(
+                subject_type=SUBJECT_WPS_FILING,
+                subject_id=filing.pk,
+                user=user,
+                process_key="gosi_wps.sif.lifecycle",
+            )
+
+        issues = []
+        if not filing.csv_bytes or filing.record_count < 1:
+            issues.append({"code": "empty_artifact", "detail": "Generated SIF has no records."})
+        if not filing.content_hash:
+            issues.append({"code": "missing_hash", "detail": "Generated SIF missing content hash."})
+        rule = self._resolve_rule(ComplianceRule.objects, "wps")
+        if rule is None or not rule.is_authoritative:
+            issues.append({"code": "no_authoritative_wps_rule", "detail": "No authoritative WPS rule."})
+
+        passed = len(issues) == 0
+        filing.validation_passed = passed
+        filing.validation_issues = issues
+        filing.validated_at = timezone.now()
+        filing.status = "validated" if passed else "generated"
+        filing.save(
+            update_fields=[
+                "validation_passed",
+                "validation_issues",
+                "validated_at",
+                "status",
+            ]
+        )
+        return {
+            "run_id": run.pk,
+            "status": filing.status,
+            "passed": passed,
+            "issues": issues,
+            "content_hash": filing.content_hash,
+            "validated_at": filing.validated_at.isoformat() if filing.validated_at else None,
+        }
+
+    def wps_submit_filing(self, run, *, user=None):
+        """Irreversibly mark a validated WPS filing as submitted (idempotent)."""
+        from django.utils import timezone
+
+        from people.governance.sod import (
+            ACTION_SUBMIT,
+            SUBJECT_WPS_FILING,
+            require_distinct_actor,
+        )
+        from people.models import WpsFiling
+
+        self._require_status(run, ("committed",))
+        try:
+            filing = run.wps_filing
+        except WpsFiling.DoesNotExist as exc:
+            raise PayrollServiceError(
+                "No WPS filing generated for this run — call generate first."
+            ) from exc
+
+        if filing.status == "submitted" and filing.submitted_at:
+            return {
+                "run_id": run.pk,
+                "status": "submitted",
+                "receipt_id": filing.receipt_id,
+                "submitted_at": filing.submitted_at.isoformat(),
+                "reconciled": filing.reconciled,
+                "idempotent": True,
+            }
+
+        if not filing.validation_passed or filing.status != "validated":
+            raise PayrollServiceError(
+                "Filing must be validated (passed) before submit."
+            )
+
+        require_distinct_actor(
+            subject_type=SUBJECT_WPS_FILING,
+            subject_id=filing.pk,
+            actor=user,
+            action=ACTION_SUBMIT,
+        )
+
+        now = timezone.now()
+        filing.status = "submitted"
+        filing.submitted_at = now
+        filing.submitted_by = user
+        filing.receipt_id = filing.receipt_id or f"WPS-{run.pk}-{now.strftime('%Y%m%d%H%M%S')}"
+        filing.reconciled = True
+        filing.save(
+            update_fields=[
+                "status",
+                "submitted_at",
+                "submitted_by",
+                "receipt_id",
+                "reconciled",
+            ]
+        )
+        return {
+            "run_id": run.pk,
+            "status": "submitted",
+            "receipt_id": filing.receipt_id,
+            "submitted_at": filing.submitted_at.isoformat(),
+            "reconciled": filing.reconciled,
+            "content_hash": filing.content_hash,
+            "idempotent": False,
+        }
 
     @staticmethod
     def _payslip_summary(employee, run, lines):

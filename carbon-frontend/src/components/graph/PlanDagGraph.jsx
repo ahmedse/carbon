@@ -99,7 +99,7 @@ export function planStepStatusLabel(status) {
   return stepStatusMeta(status).label;
 }
 
-/** Pretty-print JSON / values for the dock, collapsed by default. */
+/** Pretty-print JSON / values — kept for structure dock only; Plan operator dock stays business-only. */
 function CollapsiblePayload({ label, value, testId }) {
   const [open, setOpen] = useState(false);
   if (value == null || value === '') return null;
@@ -339,26 +339,11 @@ export default function PlanDagGraph({
   const [paneOpen, setPaneOpen] = useState(true);
 
   const { nodes, edges, width, height: layoutHeight, phaseBands, direction } = useMemo(
-    () => layoutExecutionGraph(
-      plan,
-      structure
-        ? {
-          // Wide Plan rail: LR journey fills the viewport. TB tall chains
-          // letterboxed into a skinny strip (empty left/right, unreadably small).
-          direction: 'lr',
-          layout: {
-            nodeW: 200,
-            nodeH: 78,
-            colGap: 40,
-            rowGap: 28,
-            padX: 20,
-            padTop: 28,
-            padBottom: 20,
-          },
-        }
-        : undefined,
-    ),
-    [plan, structure],
+    () => layoutExecutionGraph(plan, {
+      // Always auto: parallel → LR fan, pure chain → TB (fills the rail).
+      direction: 'auto',
+    }),
+    [plan],
   );
 
   const visibleNodes = useMemo(() => nodes.filter((n) => !n.is_dummy), [nodes]);
@@ -526,18 +511,13 @@ export default function PlanDagGraph({
       const rawTitle = String(n.label || `Step ${n.id}`);
       const isGateway = n.is_gateway
         || ['choice', 'parallel', 'observe', 'map', 'loop', 'wait', 'fail', 'succeed'].includes(n.node_type);
-      const toolKind = isGateway
-        ? String(n.node_type || 'gateway').toUpperCase()
-        : String(n.tool_name || 'Reasoning (LLM)');
-      const roleLabel = isGateway
-        ? null
-        : agentRoleLabel(n.agent_role || 'orchestrator');
-      const metaRaw = roleLabel ? `${roleLabel} · ${toolKind}` : toolKind;
-      const titleMax = Math.max(18, Math.floor((n.w - 78) / 6.8));
+      // Cards stay light — tool ids / cast live in the dock under "More detail".
+      const metaRaw = isGateway ? String(n.node_type || 'gateway').toUpperCase() : '';
+      const titleMax = Math.max(22, Math.floor((n.w - 72) / 6.6));
       const titleLines = wrapTitleLines(rawTitle, titleMax, 2);
       const metaMax = Math.max(10, Math.floor((n.w - 28) / 5.6));
       const meta = metaRaw.length > metaMax ? `${metaRaw.slice(0, metaMax - 1)}…` : metaRaw;
-      const startY = titleLines.length > 1 ? n.h / 2 - 10 : n.h / 2 - 3;
+      const startY = titleLines.length > 1 ? n.h / 2 - (meta ? 8 : 4) : n.h / 2 + (meta ? -2 : 4);
       return (
         <>
           {!center ? (
@@ -558,12 +538,14 @@ export default function PlanDagGraph({
               {line}
             </text>
           ))}
-          <text x={n.w - 10} y={n.h / 2 + 1} fontSize={10} fontWeight={700} fill={color} textAnchor="end">
+          <text x={n.w - 10} y={14} fontSize={9} fontWeight={700} fill={color} textAnchor="end">
             {statusLabel}
           </text>
-          <text x={padX + 8} y={startY + titleLines.length * 13 + 2} fontSize={10} fill={theme.palette.text.secondary}>
-            {meta}
-          </text>
+          {meta ? (
+            <text x={padX + 8} y={startY + titleLines.length * 13 + 2} fontSize={10} fill={theme.palette.text.secondary}>
+              {meta}
+            </text>
+          ) : null}
         </>
       );
     },
@@ -821,12 +803,14 @@ export default function PlanDagGraph({
     );
   };
 
-  // Execution docked pane (analyst) — unchanged payload depth.
+  // Operator dock — intent + action first; engine internals behind "More detail".
   const renderDetailPane = (variant) => {
     if (structure) return renderStructurePane(variant);
     if (!selected || !selectedStep) return null;
-    const paneWidth = variant === 'modal' ? 300 : 236;
+    const paneWidth = variant === 'modal' ? 280 : 220;
     const paneTestId = variant === 'modal' ? 'plan-step-detail-modal' : 'plan-step-detail';
+    const needsApproval = selectedStep.status === 'awaiting_approval';
+    const nextStep = selectedFeeds[0] || null;
     return (
       <Box
         sx={{
@@ -840,182 +824,69 @@ export default function PlanDagGraph({
         }}
         data-testid={paneTestId}
       >
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.75 }}>
-          <SmartToyOutlinedIcon sx={{ fontSize: '0.9375rem', color: 'text.secondary' }} />
+        <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.75 }}>
           <Typography variant="body2" fontWeight={600} sx={{ flex: 1, fontSize: '0.75rem' }}>
-            Step {selectedStep.step_id}
+            This step
           </Typography>
           <Chip
             size="small"
             label={planStepStatusLabel(selectedStep.status)}
             sx={{
-              height: 16,
+              height: 18,
               fontSize: '0.5625rem',
               bgcolor: colorFor(selectedStep.status),
               color: theme.palette.getContrastText(colorFor(selectedStep.status)),
             }}
           />
+          <IconButton size="small" aria-label="Close step details" onClick={clearSelection} sx={{ p: 0.25 }}>
+            <CloseIcon sx={{ fontSize: '0.875rem' }} />
+          </IconButton>
         </Stack>
 
-        <Typography variant="body2" sx={{ fontSize: '0.75rem', lineHeight: 1.4, mb: 0.75 }}>
+        <Typography variant="body2" sx={{ fontSize: '0.8125rem', lineHeight: 1.4, mb: 1, fontWeight: 600 }}>
           {selectedStep.intent || 'No description'}
         </Typography>
 
-        {selectedPhase && (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.625rem', mb: 0.5 }}>
-            Phase: <strong>{selectedPhase.name}</strong>
-            {selectedPhase.strategy === 'parallel' ? ' (parallel)' : ''}
-          </Typography>
-        )}
-
-        <Divider sx={{ my: 0.75 }} />
-
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.625rem' }}>
-          Tool
-        </Typography>
-        <Typography variant="body2" sx={{ fontSize: '0.6875rem', mb: 0.5 }}>
-          {selectedStep.tool_name ? (
-            selectedStep.tool_name
-          ) : (
-            <Box component="span" sx={{ color: 'text.secondary' }}>
-              None — pure reasoning step (LLM)
-            </Box>
-          )}
-        </Typography>
-
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.625rem' }}>
-          Agent role
-        </Typography>
-        <Typography variant="body2" sx={{ fontSize: '0.6875rem', mb: 0.5 }}>
-          {agentRoleLabel(selectedStep.agent_role || 'orchestrator')}
-        </Typography>
-
-        {typeof selectedStep.latency_ms === 'number' && (
-          <>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.625rem' }}>
-              Latency
-            </Typography>
-            <Typography variant="body2" sx={{ fontSize: '0.6875rem', mb: 0.5 }}>
-              {selectedStep.latency_ms < 1000
-                ? `${Math.round(selectedStep.latency_ms)} ms`
-                : `${(selectedStep.latency_ms / 1000).toFixed(1)} s`}
-            </Typography>
-          </>
-        )}
-
-        <Divider sx={{ my: 0.75 }} />
-
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.625rem' }}>
-          Depends on
-        </Typography>
-        {selectedDeps.length ? (
-          selectedDeps.map((d) => (
-            <Typography key={d.step_id} variant="body2" sx={{ fontSize: '0.6875rem', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <ArrowRightAltIcon sx={{ fontSize: '0.6875rem' }} />
-              {d.intent || `Step ${d.step_id}`}
-            </Typography>
-          ))
-        ) : (
-          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.6875rem', mb: 0.5 }}>
-            Nothing — starts the workflow
-          </Typography>
-        )}
-
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.625rem', mt: 0.5 }}>
-          Feeds into
-        </Typography>
-        {selectedFeeds.length ? (
-          selectedFeeds.map((d) => (
-            <Typography key={d.step_id} variant="body2" sx={{ fontSize: '0.6875rem', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <ArrowRightAltIcon sx={{ fontSize: '0.6875rem' }} />
-              {d.intent || `Step ${d.step_id}`}
-            </Typography>
-          ))
-        ) : (
-          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
-            Nothing — ends the workflow
-          </Typography>
-        )}
-
-        {selectedStep.draft_text && (
-          <>
-            <Divider sx={{ my: 0.75 }} />
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.625rem' }}>
-              Draft
-            </Typography>
-            <Typography variant="body2" sx={{ fontSize: '0.6875rem' }}>
-              {selectedStep.draft_text}
-            </Typography>
-          </>
-        )}
-
-        {selectedStep.critic_verdict && (
-          <>
-            <Divider sx={{ my: 0.75 }} />
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.625rem' }}>
-              Critic verdict
-            </Typography>
-            <Typography variant="body2" sx={{ fontSize: '0.6875rem' }}>
-              {selectedStep.critic_verdict}
-            </Typography>
-          </>
+        {needsApproval && (onConfirmStep || onDeclineStep) && (
+          <Stack direction="row" spacing={0.75} sx={{ mb: 1 }}>
+            <Button
+              size="small"
+              variant="contained"
+              disabled={confirmingId === selectedStep.step_id}
+              onClick={() => onConfirmStep?.(selectedStep.step_id)}
+              sx={{ flex: 1, fontSize: '0.6875rem', textTransform: 'none', py: 0.5 }}
+            >
+              Approve
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={confirmingId === selectedStep.step_id}
+              onClick={() => onDeclineStep?.(selectedStep.step_id)}
+              sx={{ flex: 1, fontSize: '0.6875rem', textTransform: 'none', py: 0.5 }}
+            >
+              Skip
+            </Button>
+          </Stack>
         )}
 
         {selectedStep.error && (
-          <>
-            <Divider sx={{ my: 0.75 }} />
-            <Typography variant="caption" color="error.main" sx={{ display: 'block', fontSize: '0.625rem' }}>
-              Error
-            </Typography>
-            <Typography variant="body2" color="error.main" sx={{ fontSize: '0.6875rem' }}>
-              {selectedStep.error}
-            </Typography>
-          </>
+          <Typography variant="body2" color="error.main" sx={{ fontSize: '0.6875rem', mb: 1 }}>
+            {selectedStep.error}
+          </Typography>
         )}
 
-        {(selectedStep.tool_args != null || selectedStep.tool_output != null
-          || (Array.isArray(selectedStep.artifacts) && selectedStep.artifacts.length > 0)) && (
-          <Divider sx={{ my: 0.75 }} />
+        {nextStep && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.6875rem', mb: 0.5 }}>
+            Next: {nextStep.intent || `Step ${nextStep.step_id}`}
+          </Typography>
         )}
 
-        <CollapsiblePayload
-          label="inputs"
-          value={selectedStep.tool_args}
-          testId="plan-step-tool-args"
-        />
-        <CollapsiblePayload
-          label="output"
-          value={selectedStep.tool_output}
-          testId="plan-step-tool-output"
-        />
-
-        {Array.isArray(selectedStep.artifacts) && selectedStep.artifacts.length > 0 && (
-          <Box sx={{ mt: 0.75 }} data-testid="plan-step-artifacts">
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.625rem', mb: 0.25 }}>
-              Step artifacts
-            </Typography>
-            <Stack spacing={0.25}>
-              {selectedStep.artifacts.map((a) => (
-                <Typography
-                  key={a.id ?? a.name}
-                  variant="body2"
-                  sx={{ fontSize: '0.6875rem' }}
-                >
-                  {a.name || 'artifact'}
-                </Typography>
-              ))}
-            </Stack>
-          </Box>
+        {selectedPhase?.name && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.625rem' }}>
+            Stage: {selectedPhase.name}
+          </Typography>
         )}
-
-        <Button
-          size="small"
-          startIcon={<CloseIcon sx={{ fontSize: '0.75rem' }} />}
-          onClick={clearSelection}
-          sx={{ mt: 1, fontSize: '0.625rem', textTransform: 'none', minWidth: 0 }}
-        >
-          Close
-        </Button>
       </Box>
     );
   };
@@ -1091,8 +962,10 @@ export default function PlanDagGraph({
         expandTestId="plan-graph-expand"
         exportFileName="plan-graph"
         fill={fill}
-        direction={direction || 'lr'}
-        fitMode={structure ? 'width' : 'contain'}
+        direction={direction || 'tb'}
+        fitMode="contain"
+        // Never auto-upscale — meet×zoom>1 blew compact plans into one giant card.
+        fitZoomCeil={1}
       />
     </>
   );

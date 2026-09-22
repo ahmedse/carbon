@@ -72,6 +72,13 @@ PROCESS_DIALS = {
         "consent": ["submit"],
         "predicate": "gosi_wps.sif.submitted_and_reconciled",
     },
+    "attendance.permission.lifecycle": {
+        "pa": "PA-035",
+        "step_ids": ["submit", "review", "approve", "verify"],
+        "human_only": ["review"],
+        "consent": ["approve"],
+        "predicate": "attendance.permission.approved_and_recorded",
+    },
 }
 
 

@@ -1,20 +1,19 @@
 // apps/team/manifest.js
-// Team App — Manager Approvals Inbox — Platform App Manifest.
-// Registers the manager approvals domain app ('team') in the platform app
-// registry. Backend endpoints are owned by backend/correspondence
-// (correspondence/inbox/* + approve/reject/send-back actions).
+// Team App — Manager Approvals + Directory + Who's Out — Platform App Manifest.
+// Registers the manager domain app ('team') in the platform app registry.
+// Approvals: correspondence/inbox + act. Directory/leave: people/me/*.
 
 export default {
   // ── IDENTITY ──────────────────────────────────────────────────
   id:          'team',
   name:        'Team',
-  version:     '1.0.0',
-  description: 'Manager approvals inbox — act on team requests',
+  description: 'Manager approvals, history, team directory, and who\'s out',
+  version:     '1.2.0',
   icon:        'SupervisorAccount',   // mapped in useShellState.js MANIFEST_ICON_MAP
 
   // ── NAMESPACE ─────────────────────────────────────────────────
-  routePrefix: '/team',             // frontend Team landing page
-  apiPrefix:   '/correspondence/',  // backend correspondence action namespace
+  routePrefix: '/team',
+  apiPrefix:   '/correspondence/',
 
   // ── RBAC ──────────────────────────────────────────────────────
   roles: [],
@@ -24,6 +23,9 @@ export default {
     section: 'Team',
     items: [
       { label: 'Approvals Inbox', path: '/team', role: '*' },
+      { label: 'History', path: '/team/history', role: '*' },
+      { label: 'Team Directory', path: '/team/directory', role: '*' },
+      { label: "Who's Out", path: '/team/leave', role: '*' },
     ],
   },
 

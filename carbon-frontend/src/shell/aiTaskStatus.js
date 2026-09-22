@@ -106,40 +106,50 @@ export const NODE_STATUS_DENSE = Object.fromEntries(
   ]),
 );
 
-// W3-G — human-facing tool names (RULE_23 outcome copy). The engine exposes
-// snake_case function names (e.g. `create_dq_rule`); the console shows a
-// friendly label instead. Unknown tools fall back to a title-cased rewrite
-// so a newly registered plugin never renders as a raw identifier.
+// W3-G — human-facing tool names via presentation plane (RULE_23).
+// Unknown tools title-case for step chips; L0 Chat omits unknowns via presentSource.
+import { presentToolLabel } from './presentationPlane';
+
 export const TOOL_LABELS = {
-  search_knowledge: 'Search knowledge',
-  get_entity_details: 'Entity details',
-  search_entity: 'Search records',
-  call_host_api: 'Call host API',
-  navigate_to: 'Navigate',
-  open_entity: 'Open entity',
-  ask_clarification: 'Ask a question',
-  learn_fact: 'Remember fact',
-  forget_fact: 'Forget fact',
-  run_ops_workflow: 'Run workflow',
+  search_knowledge: 'Knowledge base',
+  get_entity_details: 'Record details',
+  search_entity: 'Records search',
+  call_host_api: 'System check',
+  navigate_to: 'Open page',
+  open_entity: 'Open record',
+  ask_clarification: 'Clarification',
+  learn_fact: 'Saved memory',
+  forget_fact: 'Removed memory',
+  run_ops_workflow: 'Workflow',
   draft_skill: 'Draft skill',
-  invoke_skill: 'Run skill',
-  create_dq_rule: 'Create DQ rule',
-  export_document: 'Export document',
-  list_my_capabilities: 'List capabilities',
+  invoke_skill: 'Skill run',
+  create_dq_rule: 'Data quality rule',
+  export_document: 'Export',
+  list_my_capabilities: 'Capabilities',
   edit_plan: 'Edit plan',
   approve_plan: 'Approve plan',
-  plan_task: 'Plan task',
+  plan_task: 'Plan',
   web_research: 'Web research',
   create_employee: 'Create employee',
   update_employee: 'Update employee',
   submit_my_leave: 'Submit leave',
-  create_leave_record: 'Create leave record',
+  create_leave_record: 'Leave request',
   submit_my_loan: 'Submit loan',
-  call_host_api: 'Host action',
+  analyze_employees: 'Employee data',
+  people_query: 'People records',
 };
 
-export function toolLabel(name) {
+/**
+ * @param {string} name
+ * @param {{ apiName?: string, audience?: 'operator'|'proof'|'analyst' }} [opts]
+ */
+export function toolLabel(name, opts = {}) {
   if (!name) return '';
+  const presented = presentToolLabel(name, {
+    audience: opts.audience || 'operator',
+    apiName: opts.apiName,
+  });
+  if (presented) return presented;
   if (TOOL_LABELS[name]) return TOOL_LABELS[name];
   return String(name)
     .replace(/_/g, ' ')

@@ -38,8 +38,25 @@ def slug_username(employee_no: str) -> str:
 
 
 def get_default_password() -> str:
-    """Default employee password from the environment (empty when unset)."""
-    return os.environ.get(DEFAULT_PASSWORD_ENV, "") or ""
+    """Default employee password from the environment.
+
+    Nibras local DEBUG falls back to the forever-dev credential
+    ``mozafNibrasPa_132`` when ``EMPLOYEE_DEFAULT_PASSWORD`` is unset.
+    """
+    env = (os.environ.get(DEFAULT_PASSWORD_ENV, "") or "").strip()
+    if env:
+        return env
+    try:
+        from django.conf import settings
+
+        if (
+            getattr(settings, "DJANGO_BRAND", "") == "nibras"
+            and getattr(settings, "DEBUG", False)
+        ):
+            return "mozafNibrasPa_132"
+    except Exception:
+        pass
+    return ""
 
 
 @dataclass

@@ -47,6 +47,7 @@ def freeze_policy(policy) -> dict:
             'steps': [
                 {
                     'order': s.order, 'role': s.role, 'intent': s.intent,
+                    'fallback_role': s.fallback_role,
                     'specific_user_id': s.specific_user_id,
                     'skip_if_self': s.skip_if_self, 'auto_approve': s.auto_approve,
                     'can_skip': s.can_skip, 'condition': s.condition,

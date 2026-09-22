@@ -1,6 +1,6 @@
 // src/shell/AgentRunSurface.jsx
-// ADR-0043 V6 Run view — visual timeline + docked step detail (Plan-parity).
-// Plan graph lives on Plan; Job Map on Canvas. No health / audit / subagents here.
+// ADR-0043 Run view — timeline + collapsible step detail drawer.
+// Plan owns the DAG; Canvas owns Job Map. No bottom "Show details" list.
 import React, { useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
@@ -8,19 +8,15 @@ import {
   Box,
   Button,
   Chip,
-  IconButton,
-  Paper,
   Stack,
-  Tooltip,
   Typography,
 } from '@mui/material';
-import { ChevronEnd, ChevronStart } from '../i18n/DirectionalIcons';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { FONT } from '../theme/themeTokens';
 import { useTranslation } from 'react-i18next';
 import { buildRunChronicle } from '../utils/runChronicle';
 import RunTimeline from './RunTimeline';
-import BeatDetailContent from './BeatDetailContent';
+import RunStepDetailDrawer from './RunStepDetailDrawer';
 
 function formatDuration(ms) {
   if (ms == null || !Number.isFinite(ms)) return null;
@@ -58,10 +54,8 @@ function AgentRunSurface({
   phase,
   live = false,
   artifacts = [],
-  listContent = null,
   banner = null,
   consentHero = null,
-  defaultListOpen = false,
   onOpenOutput = null,
   onRerun = null,
   onOpenPlan = null,
@@ -73,27 +67,22 @@ function AgentRunSurface({
 }) {
   const { t } = useTranslation('ai');
   const isMobile = useIsMobile();
-  const [showList, setShowList] = useState(Boolean(defaultListOpen) || isMobile);
   const [selectedStepId, setSelectedStepId] = useState(null);
-  const [paneOpen, setPaneOpen] = useState(true);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const mergedPlan = useMemo(
     () => mergePlanWithRunSteps(plan, runSteps),
     [plan, runSteps],
   );
 
-  useEffect(() => {
-    if (defaultListOpen || isMobile) setShowList(true);
-  }, [defaultListOpen, isMobile]);
-
-  // Focus the urgent beat when consent / failure arrives.
+  // Focus the urgent beat when consent / failure arrives — open drawer.
   useEffect(() => {
     const urgent = (mergedPlan?.steps || []).find(
       (s) => s.status === 'awaiting_approval' || s.status === 'failed',
     );
     if (urgent) {
       setSelectedStepId(urgent.step_id);
-      setPaneOpen(true);
+      setDrawerOpen(true);
     }
   }, [mergedPlan, phase]);
 
@@ -102,24 +91,29 @@ function AgentRunSurface({
     [mergedPlan, runSteps],
   );
 
-  const selectedStep = useMemo(() => {
-    if (selectedStepId == null) return null;
-    return (mergedPlan?.steps || []).find((s) => s.step_id === selectedStepId) || null;
-  }, [mergedPlan, selectedStepId]);
+  const handleSelectStep = (stepId) => {
+    if (selectedStepId === stepId && drawerOpen) {
+      setDrawerOpen(false);
+      return;
+    }
+    setSelectedStepId(stepId);
+    setDrawerOpen(true);
+  };
 
+  const handleCloseDrawer = () => {
+    setDrawerOpen(false);
+  };
+
+  const steps = Array.isArray(mergedPlan?.steps) ? mergedPlan.steps : [];
+  const stepsById = useMemo(
+    () => Object.fromEntries(steps.map((s) => [s.step_id, s])),
+    [steps],
+  );
+  const selectedStep = selectedStepId != null ? stepsById[selectedStepId] : null;
   const selectedEvent = useMemo(
     () => chronicle.find((e) => e.stepId === selectedStepId) || null,
     [chronicle, selectedStepId],
   );
-
-  const handleSelectStep = (stepId) => {
-    setSelectedStepId(stepId);
-    setPaneOpen(true);
-  };
-
-  const clearSelection = () => setSelectedStepId(null);
-
-  const steps = Array.isArray(mergedPlan?.steps) ? mergedPlan.steps : [];
   const terminal = new Set(['completed', 'failed', 'skipped']);
   const settled = steps.filter((s) => terminal.has(s.status)).length;
   const failed = steps.filter((s) => s.status === 'failed').length;
@@ -145,132 +139,7 @@ function AgentRunSurface({
     Boolean(onOpenOutput)
     && artCount > 0
     && runSettled;
-  // Post-done CTAs for classic Run tab; chat-first uses AgentRunToolbar.
   const showPostDone = runSettled && (onRerun || onOpenPlan);
-
-  const renderDetailPane = () => {
-    if (!paneOpen) {
-      return (
-        <Box
-          sx={{
-            width: 40,
-            flexShrink: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            pt: 1,
-            pr: 0.5,
-            alignSelf: 'stretch',
-          }}
-          data-testid="run-structure-detail-collapsed"
-        >
-          <Tooltip title={t('showStepDetailsPane')}>
-            <IconButton
-              size="small"
-              aria-label={t('showStepDetailsPane')}
-              data-testid="run-structure-expand"
-              onClick={() => setPaneOpen(true)}
-              sx={{
-                p: 0.5,
-                border: 1,
-                borderColor: 'divider',
-                borderRadius: 1,
-                bgcolor: 'background.paper',
-              }}
-            >
-              <ChevronStart sx={{ fontSize: 18 }} />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      );
-    }
-
-    return (
-      <Box
-        sx={{
-          width: { xs: '100%', sm: 288 },
-          flexShrink: 0,
-          alignSelf: 'stretch',
-          minHeight: { xs: 220, sm: 320 },
-          p: 1,
-          pl: { xs: 1, sm: 0.75 },
-          boxSizing: 'border-box',
-        }}
-      >
-        <Paper
-          variant="outlined"
-          data-testid="run-structure-detail"
-          sx={{
-            height: isMobile ? 'auto' : '100%',
-            minHeight: isMobile ? 0 : 220,
-            display: 'flex',
-            flexDirection: 'column',
-            minWidth: 0,
-            borderRadius: 1.5,
-            borderColor: 'divider',
-            bgcolor: 'background.paper',
-            overflow: isMobile ? 'visible' : 'hidden',
-            boxShadow: (th) => `inset 0 0 0 1px ${th.palette.action.hover}`,
-          }}
-        >
-          <Stack
-            direction="row"
-            spacing={0.5}
-            alignItems="center"
-            sx={{ px: 1, py: 0.625, borderBottom: 1, borderColor: 'divider', flexShrink: 0, bgcolor: 'action.hover' }}
-          >
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ flex: 1, fontSize: '0.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}
-            >
-              {selectedStep ? t('beatDetailTitle') : t('runTimeline')}
-            </Typography>
-            {selectedStep && (
-              <Button
-                size="small"
-                onClick={clearSelection}
-                sx={{ fontSize: '0.625rem', textTransform: 'none', minWidth: 0 }}
-              >
-                Clear
-              </Button>
-            )}
-            <Tooltip title={t('hideStepDetailsPane')}>
-              <IconButton
-                size="small"
-                aria-label={t('hideStepDetailsPane')}
-                data-testid="run-structure-collapse"
-                onClick={() => setPaneOpen(false)}
-                sx={{ p: 0.25 }}
-              >
-                <ChevronEnd sx={{ fontSize: 16 }} />
-              </IconButton>
-            </Tooltip>
-          </Stack>
-          <Box
-            sx={{
-              flex: 1,
-              minHeight: 0,
-              overflowY: isMobile ? 'visible' : 'auto',
-              p: 1.25,
-            }}
-          >
-            {selectedStep ? (
-              <BeatDetailContent
-                step={selectedStep}
-                event={selectedEvent}
-                busy={busy || confirmingId === selectedStepId}
-              />
-            ) : (
-              <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
-                {t('beatTooltipOpen')}
-              </Typography>
-            )}
-          </Box>
-        </Paper>
-      </Box>
-    );
-  };
 
   return (
     <Stack spacing={1} data-testid="agent-run-surface">
@@ -308,60 +177,52 @@ function AgentRunSurface({
         {phase === 'error' && (
           <Chip size="small" color="error" variant="outlined" label={t('failedWord')} sx={{ height: 18, ...FONT.chip }} />
         )}
-        <Box sx={{ flex: 1 }} />
-        {listContent != null && (
-          <Button
-            size="small"
-            variant={showList ? 'contained' : 'outlined'}
-            onClick={() => setShowList((v) => !v)}
-            aria-pressed={showList}
-            data-testid="agent-run-toggle-details"
-            sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0, minHeight: { xs: 40, sm: 'auto' } }}
-          >
-            {showList ? t('hideDetails') : t('showDetails')}
-          </Button>
-        )}
       </Stack>
 
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        alignItems="stretch"
-        spacing={0}
-        sx={{ minHeight: { xs: 0, sm: 280 } }}
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          alignItems: 'stretch',
+          gap: 0,
+          minHeight: { xs: 0, sm: 280 },
+          border: 1,
+          borderColor: 'divider',
+          borderRadius: 1,
+          overflow: 'hidden',
+          bgcolor: 'background.default',
+        }}
         data-testid="agent-run-timeline-dock"
       >
         <Box
           sx={{
             flex: 1,
             minWidth: 0,
-            // Mobile: cockpit body owns scroll — avoid nested overflow traps.
             overflowY: isMobile ? 'visible' : 'auto',
-            pr: { sm: 0.5 },
+            p: 0.5,
           }}
         >
           {chronicle.length > 0 ? (
             <RunTimeline
               events={chronicle}
-              stepsById={Object.fromEntries(
-                (mergedPlan?.steps || []).map((s) => [s.step_id, s]),
-              )}
+              stepsById={stepsById}
               title={t('runTimeline')}
-              selectedStepId={paneOpen ? selectedStepId : null}
+              selectedStepId={selectedStepId}
               onSelectStep={handleSelectStep}
-              onConfirmStep={onConfirmStep}
-              onDeclineStep={onDeclineStep}
-              confirmingId={confirmingId}
             />
           ) : null}
         </Box>
-        {chronicle.length > 0 ? renderDetailPane() : null}
-      </Stack>
 
-      {(showList || isMobile) && listContent && (
-        <Box data-testid="agent-run-list">
-          {listContent}
-        </Box>
-      )}
+        <RunStepDetailDrawer
+          open={drawerOpen}
+          step={selectedStep}
+          event={selectedEvent}
+          confirming={confirmingId === selectedStepId}
+          onConfirm={onConfirmStep}
+          onDecline={onDeclineStep}
+          onClose={handleCloseDrawer}
+        />
+      </Box>
 
       {showPostDone && (
         <Stack
@@ -442,7 +303,7 @@ AgentRunSurface.propTypes = {
   phase: PropTypes.string,
   live: PropTypes.bool,
   artifacts: PropTypes.array,
-  listContent: PropTypes.node,
+  listContent: PropTypes.node, // ignored — bottom details list removed
   banner: PropTypes.node,
   consentHero: PropTypes.node,
   defaultListOpen: PropTypes.bool,

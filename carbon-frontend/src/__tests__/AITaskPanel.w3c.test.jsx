@@ -253,8 +253,8 @@ describe('AITaskPanel — edit step with diff consent gate', () => {
   });
 });
 
-// ── Pause / Fork / Resume ────────────────────────────────────────────────
-describe('AITaskPanel — pause, fork, resume (W3-C endpoints)', () => {
+// ── Pause / Resume ───────────────────────────────────────────────────────
+describe('AITaskPanel — pause, resume (W3-C endpoints)', () => {
   it('pauses a running plan', async () => {
     pausePlan.mockResolvedValue({ ...PLAN, status: 'paused' });
 
@@ -268,21 +268,9 @@ describe('AITaskPanel — pause, fork, resume (W3-C endpoints)', () => {
     expect(await screen.findByRole('button', { name: 'Resume run' })).toBeInTheDocument();
   });
 
-  it('forks a plan into a reviewable copy and opens it', async () => {
-    const forked = { ...PLAN, id: 'plan-fork', status: 'pending_approval', forked_from: 'plan-1' };
-    forkPlan.mockResolvedValue(forked);
-    // The original plan is open; only the post-fork load returns the copy.
-    getPlan.mockImplementation(async (_t, id) => (id === 'plan-fork' ? forked : currentPlan));
-
+  it('does not expose Fork on the plan card', async () => {
     await openPlanForReview();
-    fireEvent.click(screen.getByRole('button', { name: 'Fork' }));
-
-    await waitFor(() => expect(forkPlan).toHaveBeenCalledWith('test-token', 'plan-1'));
-    // The forked plan is loaded into the Run tab as a new reviewable copy.
-    await waitFor(() => expect(getPlan).toHaveBeenCalledWith('test-token', 'plan-fork'));
-    expect(await screen.findByRole('button', { name: 'Approve plan' })).toBeInTheDocument();
-    expect(screen.getByText('Forked copy')).toBeInTheDocument();
-    expect(notify).toHaveBeenCalledWith('Forked — a reviewable copy was created.', 'success');
+    expect(screen.queryByRole('button', { name: 'Fork' })).not.toBeInTheDocument();
   });
 
   it('resumes a paused plan through the W3-C SSE resume stream', async () => {
@@ -481,7 +469,7 @@ describe('AITaskPanel — W5-D Results tab', () => {
     expect(screen.getByText('summary.json')).toBeInTheDocument();
     expect(screen.getByText('📊')).toBeInTheDocument();
     expect(screen.getByText('🗄')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Fork' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Fork' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Ledger JSON' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Response .md' })).toBeInTheDocument();
     // Artifact card body: size via formatBytes + download action.

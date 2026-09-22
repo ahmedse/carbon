@@ -1,173 +1,247 @@
 // src/apps/my/MyRequests.jsx
-// My (employee self-service) — My Requests page (route /my/requests).
-// Lists the current user's own correspondence (thin slice: leave requests)
-// with client-side Status/Type filter chips. Selecting a chip refetches
-// GET correspondence/ with the matching query params. Rows navigate to
-// /my/requests/:id.
+// My Requests — FilteredDataGrid shell (search + status/type filters).
+// Loads the employee's correspondence once; filters/search are client-side.
+// compact-ui: ROW CLICK = HIGHLIGHT ONLY; open detail via eye action.
 
-import React, { useCallback, useEffect, useState } from 'react';
-import PropTypes from 'prop-types';
-import {
-  Box,
-  Chip,
-  CircularProgress,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
-  Stack,
-  Typography,
-} from '@mui/material';
-import ArticleIcon from '@mui/icons-material/Article';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, Box, Chip, IconButton, Tooltip } from '@mui/material';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import PageContainer from '../../components/layout/PageContainer';
-import PageHeader from '../../components/Page/PageHeader';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
-import { useIsMobile } from '../../hooks/useIsMobile';
 import { useAuth } from '../../auth/AuthContext';
 import { fetchMyCorrespondence } from '../../api/my';
-import { FONT } from '../../theme/themeTokens';
-import RequestTable from './components/RequestTable';
-import { STATUS_CODES, STATUS_SUFFIX, codeLabel, CORR_TYPES, corrTypeLabel } from './components/myRequestsLabels';
+import {
+  STATUS_CODES,
+  STATUS_COLOR,
+  STATUS_SUFFIX,
+  CORR_FILTER_TYPES,
+  codeLabel,
+  corrTypeLabel,
+  requestTypeLabel,
+  payloadSummary,
+  formatDateTime,
+} from './components/myRequestsLabels';
 
-function FilterChips({ label, options, value, onChange }) {
-  const isMobile = useIsMobile();
-
-  // ADR-0035: selects instead of wrapped chip rows under sm.
-  if (isMobile) {
-    const selectId = `filter-${label.replace(/\s+/g, '-').toLowerCase()}`;
-    return (
-      <FormControl size="small" sx={{ minWidth: 140, flex: 1 }}>
-        <InputLabel id={`${selectId}-label`}>{label}</InputLabel>
-        <Select
-          labelId={`${selectId}-label`}
-          id={selectId}
-          value={value}
-          label={label}
-          onChange={(e) => onChange(e.target.value)}
-          sx={{ minHeight: 40 }}
-        >
-          {options.map((option) => (
-            <MenuItem key={option.value || 'all'} value={option.value}>
-              {option.label}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
-    );
-  }
-
-  return (
-    <Stack direction="row" alignItems="center" spacing={0.5} useFlexGap flexWrap="wrap">
-      <Typography sx={{ ...FONT.body, color: 'text.secondary' }}>{label}</Typography>
-      {options.map((option) => {
-        const selected = value === option.value;
-        return (
-          <Chip
-            key={option.value}
-            size="small"
-            variant={selected ? 'filled' : 'outlined'}
-            color={selected ? 'primary' : 'default'}
-            label={option.label}
-            onClick={() => onChange(option.value)}
-          />
-        );
-      })}
-    </Stack>
-  );
+function recencyKey(row) {
+  const ts = row?.updated_at || row?.created_at || '';
+  const id = Number(row?.id) || 0;
+  return `${String(ts)}\0${String(id).padStart(12, '0')}`;
 }
 
-FilterChips.propTypes = {
-  label: PropTypes.string.isRequired,
-  options: PropTypes.arrayOf(
-    PropTypes.shape({ value: PropTypes.string.isRequired, label: PropTypes.string.isRequired })
-  ).isRequired,
-  value: PropTypes.string.isRequired,
-  onChange: PropTypes.func.isRequired,
-};
-
 export default function MyRequests() {
-  const { t } = useTranslation('my');
+  const { t, i18n } = useTranslation('my');
   const { token } = useAuth();
   const navigate = useNavigate();
   useDocumentTitle(t('requestsTitle'));
 
-  const [status, setStatus] = useState('');
-  const [corrType, setCorrType] = useState('');
-
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [searchValue, setSearchValue] = useState('');
+  const [filters, setFilters] = useState({ status: '', corr_type: '' });
+  const [selectedId, setSelectedId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchMyCorrespondence(token, {
-        status: status || undefined,
-        corrType: corrType || undefined,
-      });
-      setItems(Array.isArray(result?.items) ? result.items : []);
+      const result = await fetchMyCorrespondence(token);
+      const list = Array.isArray(result?.items) ? [...result.items] : [];
+      list.sort((a, b) => recencyKey(b).localeCompare(recencyKey(a)));
+      setItems(list);
     } catch (err) {
       setError(err?.message || t('error'));
     } finally {
       setLoading(false);
     }
-  }, [token, status, corrType, t]);
+  }, [token, t]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const handleOpen = useCallback((id) => navigate(`/my/requests/${id}`), [navigate]);
+  const openDetail = useCallback(
+    (id) => {
+      if (id == null) return;
+      navigate(`/my/requests/${id}`);
+    },
+    [navigate],
+  );
 
-  const statusOptions = [
-    { value: '', label: t('filterAll') },
-    ...STATUS_CODES.map((code) => ({
-      value: code,
-      label: codeLabel(t, 'status', STATUS_SUFFIX, code),
-    })),
-  ];
+  const filterDefs = useMemo(
+    () => [
+      {
+        key: 'status',
+        label: t('filterStatus'),
+        emptyLabel: t('filterAll'),
+        options: STATUS_CODES.map((code) => ({
+          value: code,
+          label: codeLabel(t, 'status', STATUS_SUFFIX, code),
+        })),
+      },
+      {
+        key: 'corr_type',
+        label: t('filterType'),
+        emptyLabel: t('filterAll'),
+        options: CORR_FILTER_TYPES.map((code) => ({
+          value: code,
+          label: corrTypeLabel(t, code),
+        })),
+      },
+    ],
+    [t],
+  );
 
-  const typeOptions = [
-    { value: '', label: t('filterAll') },
-    ...CORR_TYPES.map((code) => ({ value: code, label: corrTypeLabel(t, code) })),
-  ];
+  const filteredRows = useMemo(() => {
+    const q = searchValue.trim().toLowerCase();
+    return items.filter((row) => {
+      if (filters.status && row.status !== filters.status) return false;
+      if (filters.corr_type && row.corr_type_code !== filters.corr_type) return false;
+      if (q) {
+        const typeLabel = requestTypeLabel(t, row);
+        const summary = payloadSummary(t, row, i18n.language) || '';
+        const hay = [
+          row.reference_no,
+          row.title,
+          typeLabel,
+          summary,
+          row.status,
+          row.corr_type_code,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [items, searchValue, filters, t, i18n.language]);
+
+  const columns = useMemo(
+    () => [
+      {
+        field: 'reference_no',
+        headerName: t('tableReferenceNo'),
+        flex: 1,
+        minWidth: 140,
+        valueGetter: (value, row) => row.reference_no || '—',
+      },
+      {
+        field: 'corr_type_code',
+        headerName: t('tableType'),
+        flex: 1,
+        minWidth: 150,
+        valueGetter: (value, row) => requestTypeLabel(t, row),
+      },
+      {
+        field: 'title',
+        headerName: t('tableTitle'),
+        flex: 1.4,
+        minWidth: 200,
+        valueGetter: (value, row) => row.title || '—',
+      },
+      {
+        field: 'summary',
+        headerName: t('tableSummary'),
+        flex: 1,
+        minWidth: 140,
+        sortable: false,
+        valueGetter: (value, row) => payloadSummary(t, row, i18n.language) || '—',
+      },
+      {
+        field: 'status',
+        headerName: t('tableStatus'),
+        width: 130,
+        renderCell: (params) => (
+          <Chip
+            size="small"
+            variant="outlined"
+            color={STATUS_COLOR[params.row.status] || 'default'}
+            label={codeLabel(t, 'status', STATUS_SUFFIX, params.row.status)}
+          />
+        ),
+      },
+      {
+        field: 'created_at',
+        headerName: t('tableCreated'),
+        flex: 1,
+        minWidth: 160,
+        renderCell: (params) => formatDateTime(params.row.created_at, i18n.language),
+      },
+      {
+        field: 'updated_at',
+        headerName: t('tableUpdated'),
+        flex: 1,
+        minWidth: 160,
+        renderCell: (params) => formatDateTime(params.row.updated_at, i18n.language),
+      },
+      {
+        field: 'actions',
+        headerName: t('tableActions'),
+        width: 70,
+        sortable: false,
+        filterable: false,
+        renderCell: (params) => (
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Tooltip title={t('openRequest', { ref: params.row.reference_no || params.row.id })}>
+              <IconButton
+                size="small"
+                aria-label={t('openRequest', { ref: params.row.reference_no || params.row.id })}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openDetail(params.row.id);
+                }}
+                sx={{ color: 'primary.main' }}
+              >
+                <VisibilityIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        ),
+      },
+    ],
+    [t, i18n.language, openDetail],
+  );
 
   return (
-    <Box
-      component="main"
-      sx={{ width: '100%', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
-    >
-      <PageContainer>
-        <PageHeader icon={ArticleIcon} title={t('requestsTitle')} subtitle={t('requestsSubtitle')} />
-        <Stack spacing={1}>
-          <Stack direction="row" alignItems="center" spacing={1.5} useFlexGap flexWrap="wrap">
-            <FilterChips
-              label={t('filterStatus')}
-              options={statusOptions}
-              value={status}
-              onChange={setStatus}
-            />
-            <FilterChips
-              label={t('filterType')}
-              options={typeOptions}
-              value={corrType}
-              onChange={setCorrType}
-            />
-            {loading && <CircularProgress size={12} aria-label={t('loading')} />}
-          </Stack>
-          <RequestTable
-            records={items}
-            loading={loading}
-            error={error}
-            onRetry={load}
-            onRowClick={handleOpen}
-            hasActiveFilters={Boolean(status || corrType)}
-          />
-        </Stack>
-      </PageContainer>
-    </Box>
+    <>
+      {error && (
+        <Alert severity="error" sx={{ mx: 1, mt: 1 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+      <FilteredDataGrid
+        title={t('requestsTitle')}
+        subtitle={t('requestsSubtitle')}
+        rows={filteredRows}
+        columns={columns}
+        loading={loading}
+        getRowId={(row) => row.id}
+        countLabel={`${filteredRows.length} of ${items.length}`}
+        searchValue={searchValue}
+        onSearchChange={setSearchValue}
+        searchPlaceholder={t('requestsSearchPlaceholder')}
+        filterDefs={filterDefs}
+        filterValues={filters}
+        onFilterChange={(key, value) => setFilters((prev) => ({ ...prev, [key]: value }))}
+        onClearFilters={() => {
+          setSearchValue('');
+          setFilters({ status: '', corr_type: '' });
+        }}
+        emptyMessage={t('requestsEmpty')}
+        emptySubtext={t('requestsEmptyFiltered')}
+        onRowClick={(params) => {
+          const id = params.row.id;
+          setSelectedId((prev) => (prev === id ? null : id));
+        }}
+        highlightRow={(row) => row.id === selectedId}
+        initialState={{
+          sorting: { sortModel: [{ field: 'updated_at', sort: 'desc' }] },
+        }}
+        height={560}
+      />
+    </>
   );
 }

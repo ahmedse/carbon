@@ -22,6 +22,7 @@ REFERENCE_SETS = [
         [
             ('leave_request', 'Leave Request', 'طلب إجازة'),
             ('loan_request', 'Loan Request', 'طلب سلفة'),
+            ('attendance_permission', 'Attendance Permission', 'إذن حضور'),
             ('profile_change', 'Profile Change', 'تعديل بيانات'),
             ('internal_memo', 'Internal Memo', 'مذكرة داخلية'),
             ('circular', 'Circular', 'تعميم'),
@@ -118,6 +119,7 @@ class Command(BaseCommand):
             policy=policy, order=1,
             defaults={
                 'role': 'manager',
+                'fallback_role': 'hr',
                 'intent': 'approve',
                 'skip_if_self': True,
                 'is_active': True,
@@ -148,11 +150,12 @@ class Command(BaseCommand):
             )
         )
 
-        for order, role, intent, skip_if_self in steps:
+        for order, role, intent, skip_if_self, fallback_role in steps:
             step, step_created = WorkflowPolicyStep.objects.update_or_create(
                 policy=policy, order=order,
                 defaults={
                     'role': role,
+                    'fallback_role': fallback_role,
                     'intent': intent,
                     'skip_if_self': skip_if_self,
                     'is_active': True,
@@ -164,23 +167,31 @@ class Command(BaseCommand):
             )
 
     def _seed_additional_policies(self):
-        """Seed the payload-only / people-domain governed policies (OF-15)."""
+        """Seed the payload-only / people-domain governed policies (OF-15).
+
+        Steps are ``(order, role, intent, skip_if_self, fallback_role)``. Every
+        manager step names HR as its fallback: an employee with no manager on
+        file must still reach a human approver, never an empty chain.
+        """
         policies = [
             ('internal_memo', 'Internal Memo Default', [
-                (1, 'any_admin', 'acknowledge', False),
+                (1, 'any_admin', 'acknowledge', False, ''),
             ]),
             ('circular', 'Circular Default', [
-                (1, 'any_admin', 'acknowledge', False),
+                (1, 'any_admin', 'acknowledge', False, ''),
             ]),
             ('decision', 'Decision Default', [
-                (1, 'manager', 'approve', False),
+                (1, 'manager', 'approve', False, 'hr'),
             ]),
             ('loan_request', 'Loan Request Default', [
-                (1, 'manager', 'approve', True),
-                (2, 'finance', 'approve', False),
+                (1, 'manager', 'approve', True, 'hr'),
+                (2, 'finance', 'approve', False, ''),
+            ]),
+            ('attendance_permission', 'Attendance Permission Default', [
+                (1, 'manager', 'approve', True, 'hr'),
             ]),
             ('profile_change', 'Profile Change Default', [
-                (1, 'hr', 'approve', False),
+                (1, 'hr', 'approve', False, ''),
             ]),
         ]
         for code, name, steps in policies:

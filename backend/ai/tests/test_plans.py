@@ -39,6 +39,7 @@ from django.utils import timezone
 from accounts.models import User
 from ai.models.core import Run, RunStep
 from ai.plans_service import (
+    PLAN_INSTANCE_ID,
     PlanNotAccessibleError,
     PlanNotRunnableError,
     PlanStepError,
@@ -62,7 +63,7 @@ def other_user(db):
 def _make_plan(user, brief="Summarize the emissions data", status="pending_approval"):
     return Run.objects.create(
         id=str(uuid.uuid4()),
-        instance_id="carbon",
+        instance_id=PLAN_INSTANCE_ID,
         conversation_id=f"conv-{uuid.uuid4().hex[:8]}",
         host_user_id=str(user.pk),
         user_message=brief,
@@ -336,7 +337,7 @@ def test_create_plan_persists_reviewable_plan(user, patch_engine_seams, run_ids_
 
     run = Run.objects.get(id=plan["id"])
     assert run.host_user_id == str(user.pk)
-    assert run.instance_id == "carbon"
+    assert run.instance_id == PLAN_INSTANCE_ID
     assert run.plan_json["source"] == "llm_decompose"
     assert RunStep.objects.filter(run_id=run.id).count() == 2
     run_ids_cleanup.append(run.id)
@@ -686,8 +687,6 @@ def test_list_plans_tolerates_string_plan_json(user, run_ids_cleanup):
     """Engine ReActLoop stores plan_json as a JSON string — must not 500 list."""
     import json as _json
 
-    from ai.plans_service import PLAN_INSTANCE_ID
-
     run = Run.objects.create(
         id=str(uuid.uuid4()),
         instance_id=PLAN_INSTANCE_ID,
@@ -938,6 +937,59 @@ def test_confirm_step_executes_staged_mutation(user, patch_engine_seams, run_ids
     assert step.status == "completed"
     assert isinstance(step.critic_flags_json, dict)
     assert step.critic_flags_json.get("consent_granted") is True
+    # The confirmed host response replaces the staged consent envelope: the
+    # step must record the effect, not the pre-consent intent.
+    committed = json.loads(step.tool_output_json["result"])
+    assert committed == {"data": {"id": "rule-1", "name": "Test rule"}}
+    assert step.tool_output_json.get("confirmed") is True
+    assert "execution_id" not in step.tool_output_json
+
+
+@pytest.mark.django_db
+def test_confirm_step_keeps_navigate_receipt_for_output(
+    user, patch_engine_seams, run_ids_cleanup, monkeypatch,
+):
+    """A confirmed host write surfaces its receipt as plan ``output_actions``."""
+
+    class _ReceiptExecutor(_FakeHostExecutor):
+        async def confirm_execution(self, execution_id, expected_host_user_id=None):
+            return {
+                "status_code": 201,
+                "data": {"id": 42},
+                "action": "navigate",
+                "route": "/my/requests/42",
+                "label": "Open leave request",
+                "summary": "Leave request annual 2026-10-01 · CRS-42",
+            }
+
+    monkeypatch.setattr("ai.host_executor.CarbonHostExecutor", _ReceiptExecutor)
+
+    plan = _make_plan(user, status="paused")
+    _make_step(
+        plan,
+        step_index=1,
+        status="awaiting_approval",
+        token="tok-1",
+        tool_output={
+            "result": json.dumps(
+                {"requires_confirmation": True, "execution_id": "exec-1"}
+            )
+        },
+    )
+    run_ids_cleanup.append(plan.id)
+
+    service = PlansService()
+    service.confirm_step(user, plan.id, 1)
+
+    payload = service.get_plan(user, plan.id)
+    assert payload["output_actions"] == [
+        {
+            "type": "navigate",
+            "route": "/my/requests/42",
+            "label": "Open leave request",
+            "summary": "Leave request annual 2026-10-01 · CRS-42",
+        }
+    ]
 
 
 @pytest.mark.django_db
@@ -1630,7 +1682,7 @@ def test_serialized_steps_carry_execution_contract(user, run_ids_cleanup):
     ``parallel_group`` and ``runnable_state`` (frozen for W7-B)."""
     run = Run.objects.create(
         id=str(uuid.uuid4()),
-        instance_id="carbon",
+        instance_id=PLAN_INSTANCE_ID,
         conversation_id="conv-serialized",
         host_user_id=str(user.pk),
         user_message="Parallel plan",

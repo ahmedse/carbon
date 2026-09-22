@@ -30,7 +30,11 @@ from .models import ACTIONABLE, Correspondence, CorrespondenceEvent
 from .notifications import notify
 from .policies import PolicyNotFound, freeze_policy, resolve_policy
 from .registry import allocate_reference_no
-from .routing import apply_delegation, resolve_step_approvers
+from .routing import (
+    apply_delegation,
+    resolve_step_approvers,
+    users_with_capability,
+)
 
 DEFAULT_PREFIX = 'CRS'
 
@@ -129,6 +133,7 @@ def _step_fields(step):
         return {
             'order': step.get('order'),
             'role': step.get('role'),
+            'fallback_role': step.get('fallback_role', ''),
             'intent': step.get('intent'),
             'specific_user_id': step.get('specific_user_id'),
             'skip_if_self': step.get('skip_if_self', False),
@@ -139,6 +144,7 @@ def _step_fields(step):
     return {
         'order': step.order,
         'role': step.role,
+        'fallback_role': step.fallback_role,
         'intent': step.intent,
         'specific_user_id': step.specific_user_id,
         'skip_if_self': step.skip_if_self,
@@ -148,19 +154,51 @@ def _step_fields(step):
     }
 
 
-def _resolve_user_ids(fields, *, corr, by):
-    """Resolve approvers for a step then apply active delegations."""
+def _approvers_for_role(role, fields, *, corr, by):
+    """Approvers for one role, after ``skip_if_self`` and delegation."""
     step = SimpleNamespace(
-        role=fields['role'],
+        role=role,
         specific_user_id=fields['specific_user_id'],
-        skip_if_self=fields['skip_if_self'],
+        skip_if_self=False,
     )
-    user_ids = resolve_step_approvers(
+    candidates = resolve_step_approvers(
         step=step, requester=by, org_unit=corr.org_unit,
     )
-    return apply_delegation(
+    user_ids = candidates
+    if fields['skip_if_self'] and by is not None:
+        user_ids = [uid for uid in user_ids if uid != by.id]
+    user_ids = apply_delegation(
         user_ids, corr_type=corr.corr_type, org_unit=corr.org_unit,
     )
+    return user_ids, bool(candidates)
+
+
+def _resolve_user_ids(fields, *, corr, by):
+    """Resolve a step's approvers, falling back to the declared backup role.
+
+    Returns ``(user_ids, role_is_filled, routed_via)``. ``role_is_filled``
+    says whether the role named anyone at all, BEFORE ``skip_if_self`` dropped
+    the requester — "the policy says this approver sits their own request out"
+    and "nobody holds this role" both end in an empty list but mean opposite
+    things, and only the first one may pass unapproved.
+
+    When the primary role is unfilled and the policy names a ``fallback_role``
+    (leave goes to HR for an employee with no manager), the backup answers and
+    ``routed_via`` records that it did.
+    """
+    user_ids, role_is_filled = _approvers_for_role(
+        fields['role'], fields, corr=corr, by=by,
+    )
+    if role_is_filled:
+        return user_ids, True, 'role'
+
+    fallback = str(fields.get('fallback_role') or '').strip()
+    if not fallback:
+        return user_ids, False, 'role'
+    user_ids, fallback_is_filled = _approvers_for_role(
+        fallback, fields, corr=corr, by=by,
+    )
+    return user_ids, fallback_is_filled, 'fallback' if fallback_is_filled else 'role'
 
 
 def _build_chain(steps, *, corr, by):
@@ -180,28 +218,50 @@ def _build_chain(steps, *, corr, by):
                 'decision': 'skip',
             })
             continue
-        chain.append({
+        user_ids, role_is_filled, routed_via = _resolve_user_ids(
+            fields, corr=corr, by=by,
+        )
+        entry = {
             'order': fields['order'],
             'role': fields['role'],
             'intent': fields['intent'],
-            'user_ids': _resolve_user_ids(fields, corr=corr, by=by),
+            'user_ids': user_ids,
             'auto_approve': fields['auto_approve'],
             'can_skip': fields['can_skip'],
             'skip_if_self': fields['skip_if_self'],
-        })
+        }
+        if routed_via == 'fallback':
+            # Who actually holds this step, so the timeline does not claim the
+            # manager approved when HR stood in for a vacant role.
+            entry['routed_via'] = 'fallback'
+            entry['acting_role'] = fields['fallback_role']
+        if not user_ids and not role_is_filled:
+            entry['unrouted'] = True
+        chain.append(entry)
     return chain
 
 
 def _advance(chain, from_step, now):
-    """Auto-pass condition-skipped / auto-approve / empty-approver steps and
-    return ``(current_step, current_approver_ids)`` for the next actionable
-    step, or ``(len(chain), [])`` if none remain. Mutates chain in place."""
+    """Auto-pass the steps the POLICY waives and stop at the next actionable
+    one. Returns ``(current_step, current_approver_ids)``, or
+    ``(len(chain), [])`` when the chain is exhausted. Mutates chain in place.
+
+    A step is waived only when the policy says so: a failed condition, an
+    ``auto_approve`` step, or ``skip_if_self`` dropping the requester from a
+    role somebody does hold. An ``unrouted`` step — the role exists but nobody
+    fills it (an employee with no manager) — is NOT waived: it becomes the
+    current step with no approvers, so the request waits instead of being
+    granted an approval nobody gave. ``_reroute`` picks it up once the role is
+    filled.
+    """
     i = from_step + 1
     while i < len(chain):
         entry = chain[i]
         if entry.get('decision') == 'skip':
             i += 1
             continue
+        if entry.get('unrouted'):
+            return i, []
         if entry.get('auto_approve') or not entry.get('user_ids'):
             entry['decision'] = 'auto'
             entry['decided_at'] = now.isoformat()
@@ -209,6 +269,109 @@ def _advance(chain, from_step, now):
             continue
         return i, list(entry['user_ids'])
     return len(chain), []
+
+
+def _snapshot_step(corr, order):
+    """The frozen policy step for ``order`` (routing fields, not live policy)."""
+    for step in (corr.policy_snapshot or {}).get('steps') or []:
+        if step.get('order') == order:
+            return step
+    return None
+
+
+def _reroute(corr):
+    """Re-resolve the current step when it had no approver at submit time.
+
+    An unrouted request is not stuck forever: the moment the role is filled
+    (HR assigns the employee a manager, a delegation opens), the next action
+    on the request resolves the approver and the normal chain continues. No
+    admin has to reach into the record.
+    """
+    chain = copy.deepcopy(corr.approver_chain or [])
+    if not 0 <= corr.current_step < len(chain):
+        return False
+    entry = chain[corr.current_step]
+    if not entry.get('unrouted'):
+        return False
+    fields = _step_fields(_snapshot_step(corr, entry.get('order')) or entry)
+    user_ids, _, routed_via = _resolve_user_ids(
+        fields, corr=corr, by=corr.requester,
+    )
+    if not user_ids:
+        return False
+    entry['user_ids'] = user_ids
+    if routed_via == 'fallback':
+        entry['routed_via'] = 'fallback'
+        entry['acting_role'] = fields['fallback_role']
+    entry.pop('unrouted', None)
+    corr.approver_chain = chain
+    corr.current_approver_ids = user_ids
+    corr.save(update_fields=['approver_chain', 'current_approver_ids'])
+    notify(
+        corr,
+        user_ids=user_ids,
+        type='awaiting_action',
+        title=f'Action needed on {corr.reference_no}',
+        body=corr.title,
+    )
+    return True
+
+
+def _require_current_approver(corr, by):
+    """Actor gate for a step decision, re-routing an unrouted step first."""
+    if by.id in corr.current_approver_ids:
+        return
+    if _reroute(corr) and by.id in corr.current_approver_ids:
+        return
+    raise NotActorError(
+        f'User {by.id} is not a current approver of {corr.reference_no}'
+    )
+
+
+def _settle(corr, chain, current_step, current_approver_ids, now, *,
+            active_status):
+    """Write the routing outcome onto ``corr``: still open, or approved.
+
+    Open means a step remains — whether or not its approver is resolved yet.
+    Keying this off the approver list is what let an unroutable step read as
+    an approval.
+    """
+    corr.approver_chain = chain
+    if current_step < len(chain):
+        corr.status = active_status
+        corr.current_step = current_step
+        corr.current_approver_ids = current_approver_ids
+    else:
+        corr.status = 'approved'
+        corr.resolved_at = now
+        corr.current_step = len(chain)
+        corr.current_approver_ids = []
+
+
+def _notify_open_step(corr):
+    """Tell whoever must act — or flag a request nobody can act on."""
+    if corr.current_approver_ids:
+        notify(
+            corr,
+            user_ids=corr.current_approver_ids,
+            type='awaiting_action',
+            title=f'Action needed on {corr.reference_no}',
+            body=corr.title,
+        )
+        return
+    chain = corr.approver_chain or []
+    entry = chain[corr.current_step] if corr.current_step < len(chain) else {}
+    notify(
+        corr,
+        user_ids=users_with_capability('correspondence:admin'),
+        type='routing_gap',
+        title=f'{corr.reference_no} has no approver',
+        body=(
+            f"No user holds the '{entry.get('role') or 'approver'}' role for "
+            f'this request, so it is waiting. Assign one and it routes '
+            f'automatically.'
+        ),
+    )
 
 
 # ── transitions ────────────────────────────────────────────────────────────
@@ -249,30 +412,15 @@ def submit_correspondence(*, corr, by, subject=None, subject_label=None,
         steps = policy.steps.filter(is_active=True).order_by('order')
         chain = _build_chain(steps, corr=corr, by=by)
         current_step, current_approver_ids = _advance(chain, -1, now)
-        corr.approver_chain = chain
-
-        if current_approver_ids:
-            corr.status = 'submitted'
-            corr.current_step = current_step
-            corr.current_approver_ids = current_approver_ids
-        else:
-            corr.status = 'approved'
-            corr.resolved_at = now
-            corr.current_step = len(chain)
-            corr.current_approver_ids = []
+        _settle(corr, chain, current_step, current_approver_ids, now,
+                active_status='submitted')
 
         corr.save()
         _add_event(corr, by, 'submitted', 'draft', corr.status)
         _governance(corr, by, 'submit', old_status='draft')
 
         if corr.status == 'submitted':
-            notify(
-                corr,
-                user_ids=corr.current_approver_ids,
-                type='awaiting_action',
-                title=f'Action needed on {corr.reference_no}',
-                body=corr.title,
-            )
+            _notify_open_step(corr)
         return corr
 
 
@@ -288,10 +436,7 @@ def _decide(corr, by, *, decision, event_type, governance_action, action_label,
             raise InvalidTransition(
                 f'Cannot {action_label} from status {corr.status!r}'
             )
-        if by.id not in corr.current_approver_ids:
-            raise NotActorError(
-                f'User {by.id} is not a current approver of {corr.reference_no}'
-            )
+        _require_current_approver(corr, by)
 
         old_status = corr.status
         now = timezone.now()
@@ -304,17 +449,8 @@ def _decide(corr, by, *, decision, event_type, governance_action, action_label,
         chain[corr.current_step] = step
 
         current_step, current_approver_ids = _advance(chain, corr.current_step, now)
-        corr.approver_chain = chain
-
-        if current_approver_ids:
-            corr.status = 'in_review'
-            corr.current_step = current_step
-            corr.current_approver_ids = current_approver_ids
-        else:
-            corr.status = 'approved'
-            corr.resolved_at = now
-            corr.current_step = len(chain)
-            corr.current_approver_ids = []
+        _settle(corr, chain, current_step, current_approver_ids, now,
+                active_status='in_review')
 
         corr.save()
         _add_event(corr, by, event_type, old_status, corr.status,
@@ -329,13 +465,7 @@ def _decide(corr, by, *, decision, event_type, governance_action, action_label,
             body=corr.title,
         )
         if corr.status == 'in_review':
-            notify(
-                corr,
-                user_ids=corr.current_approver_ids,
-                type='awaiting_action',
-                title=f'Action needed on {corr.reference_no}',
-                body=corr.title,
-            )
+            _notify_open_step(corr)
         return corr
 
 
@@ -390,10 +520,7 @@ def reject(corr, by, comment):
             raise InvalidTransition(
                 f'Cannot reject from status {corr.status!r}'
             )
-        if by.id not in corr.current_approver_ids:
-            raise NotActorError(
-                f'User {by.id} is not a current approver of {corr.reference_no}'
-            )
+        _require_current_approver(corr, by)
 
         old_status = corr.status
         now = timezone.now()
@@ -435,10 +562,7 @@ def send_back(corr, by, comment):
             raise InvalidTransition(
                 f'Cannot send back from status {corr.status!r}'
             )
-        if by.id not in corr.current_approver_ids:
-            raise NotActorError(
-                f'User {by.id} is not a current approver of {corr.reference_no}'
-            )
+        _require_current_approver(corr, by)
 
         old_status = corr.status
         now = timezone.now()
@@ -525,30 +649,15 @@ def resubmit(corr, by, subject=None, subject_label=None):
         steps = corr.policy_snapshot.get('steps', [])
         chain = _build_chain(steps, corr=corr, by=by)
         current_step, current_approver_ids = _advance(chain, -1, now)
-        corr.approver_chain = chain
-
-        if current_approver_ids:
-            corr.status = 'submitted'
-            corr.current_step = current_step
-            corr.current_approver_ids = current_approver_ids
-        else:
-            corr.status = 'approved'
-            corr.resolved_at = now
-            corr.current_step = len(chain)
-            corr.current_approver_ids = []
+        _settle(corr, chain, current_step, current_approver_ids, now,
+                active_status='submitted')
 
         corr.save()
         _add_event(corr, by, 'resubmitted', old_status, corr.status)
         _governance(corr, by, 'resubmit', old_status=old_status)
 
         if corr.status == 'submitted':
-            notify(
-                corr,
-                user_ids=corr.current_approver_ids,
-                type='awaiting_action',
-                title=f'Action needed on {corr.reference_no}',
-                body=corr.title,
-            )
+            _notify_open_step(corr)
         return corr
 
 

@@ -59,3 +59,12 @@ class IsActiveEmployee(BasePermission):
         except (Employee.DoesNotExist, AttributeError):
             return False
         return profile is not None and getattr(profile, 'is_active', False)
+
+
+class HasTeamAccess(BasePermission):
+    """``team:access`` (or global admin) — manager Team Directory / Who's Out."""
+
+    message = "Team access required."
+
+    def has_permission(self, request, view):
+        return _can(request.user, 'team:access')

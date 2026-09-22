@@ -26,10 +26,13 @@ import AddIcon from '@mui/icons-material/Add';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import EditIcon from '@mui/icons-material/Edit';
+import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import FilteredDataGrid from '../../components/FilteredDataGrid';
+import SystemDialog from '../../components/SystemDialog';
+import { SearchSelect } from '../../components/Form';
 import PageContainer from '../../components/layout/PageContainer';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import ErrorAlert from '../../components/Page/ErrorAlert';
@@ -47,6 +50,14 @@ import {
   updateEmployee,
 } from '../../api/people';
 import { fetchOrgUnits, orgUnitSelectOptions } from '../../api/orgUnits';
+
+function selectionIds(model) {
+  if (!model) return [];
+  if (Array.isArray(model)) return model.map(Number);
+  if (model.ids instanceof Set) return Array.from(model.ids).map(Number);
+  if (Array.isArray(model.ids)) return model.ids.map(Number);
+  return [];
+}
 
 function getInitials(employee) {
   if (employee.name_en_given && employee.name_en_family) {
@@ -99,11 +110,17 @@ export default function EmployeesPage() {
     rotation: '',
     kuwaitization: '',
     nationality: '',
+    manager: '',
   });
 
   const [openDialog, setOpenDialog] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [saving, setSaving] = useState(false);
+
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkManagerOpen, setBulkManagerOpen] = useState(false);
+  const [bulkManagerId, setBulkManagerId] = useState('');
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [createdAccount, setCreatedAccount] = useState(null);
@@ -190,6 +207,15 @@ export default function EmployeesPage() {
       ],
     },
     { key: 'nationality', label: t('colNationality'), emptyLabel: t('filterAll'), options: nationalityOptions },
+    {
+      key: 'manager',
+      label: t('colManager'),
+      emptyLabel: t('filterAll'),
+      options: [
+        { value: 'assigned', label: t('filterManagerAssigned') },
+        { value: 'unassigned', label: t('filterManagerUnassigned') },
+      ],
+    },
   ], [t, orgUnitOptions, rotationOptions, nationalityOptions]);
 
   const filteredRows = useMemo(() => {
@@ -207,6 +233,8 @@ export default function EmployeesPage() {
       if (filters.kuwaitization === 'true' && !emp.kuwaitization) return false;
       if (filters.kuwaitization === 'false' && emp.kuwaitization) return false;
       if (filters.nationality && refCode(emp.nationality) !== filters.nationality) return false;
+      if (filters.manager === 'assigned' && !emp.manager) return false;
+      if (filters.manager === 'unassigned' && emp.manager) return false;
       return true;
     });
   }, [employees, searchValue, filters]);
@@ -258,6 +286,62 @@ export default function EmployeesPage() {
   }, [token, t, loadData, closeDialog, editingEmployee]);
 
   const closeSnackbar = () => setSnackbar((prev) => ({ ...prev, open: false }));
+
+  const managerOptions = useMemo(
+    () => [
+      { value: '', label: t('managerUnassigned') },
+      ...employees
+        .filter((e) => e.is_active !== false)
+        .map((e) => ({
+          value: String(e.id),
+          label: `${e.employee_no} — ${e.full_name}`,
+        })),
+    ],
+    [employees, t],
+  );
+
+  const openBulkManager = useCallback(() => {
+    setBulkManagerId('');
+    setBulkManagerOpen(true);
+  }, []);
+
+  const closeBulkManager = useCallback(() => {
+    if (bulkSaving) return;
+    setBulkManagerOpen(false);
+  }, [bulkSaving]);
+
+  const applyBulkManager = useCallback(async () => {
+    if (!selectedIds.length) return;
+    setBulkSaving(true);
+    const managerPk = bulkManagerId ? Number(bulkManagerId) : null;
+    let ok = 0;
+    let skippedSelf = 0;
+    let failed = 0;
+    try {
+      for (const id of selectedIds) {
+        if (managerPk != null && Number(id) === managerPk) {
+          skippedSelf += 1;
+          continue;
+        }
+        try {
+          await updateEmployee(id, { manager: managerPk }, token);
+          ok += 1;
+        } catch {
+          failed += 1;
+        }
+      }
+      setBulkManagerOpen(false);
+      setSelectedIds([]);
+      await loadData();
+      setSnackbar({
+        open: true,
+        message: t('bulkManagerResult', { ok, skippedSelf, failed }),
+        severity: failed ? 'warning' : 'success',
+      });
+    } finally {
+      setBulkSaving(false);
+    }
+  }, [selectedIds, bulkManagerId, token, loadData, t]);
 
   const copyToClipboard = useCallback(async (text, field) => {
     if (!text) return;
@@ -398,9 +482,21 @@ export default function EmployeesPage() {
         subtitle={t('employeesSubtitle')}
         description={t('employeesDescription')}
         actions={
-          <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={openCreate}>
-            {t('actionAddEmployee')}
-          </Button>
+          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+            {selectedIds.length > 0 && (
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<SupervisorAccountIcon />}
+                onClick={openBulkManager}
+              >
+                {t('actionSetManager', { count: selectedIds.length })}
+              </Button>
+            )}
+            <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={openCreate}>
+              {t('actionAddEmployee')}
+            </Button>
+          </Stack>
         }
         rows={filteredRows}
         columns={columns}
@@ -413,11 +509,53 @@ export default function EmployeesPage() {
         onFilterChange={(key, value) => setFilters((prev) => ({ ...prev, [key]: value }))}
         onClearFilters={() => {
           setSearchValue('');
-          setFilters({ status: '', org_unit: '', rotation: '', kuwaitization: '', nationality: '' });
+          setFilters({
+            status: '', org_unit: '', rotation: '', kuwaitization: '', nationality: '', manager: '',
+          });
         }}
         emptyMessage={t('employeesEmpty')}
         emptySubtext={t('employeesEmptyDesc')}
+        checkboxSelection
+        rowSelectionModel={{ type: 'include', ids: new Set(selectedIds) }}
+        onRowSelectionModelChange={(model) => setSelectedIds(selectionIds(model))}
+        hideFooterSelectedRowCount={false}
       />
+
+      <SystemDialog
+        open={bulkManagerOpen}
+        title={t('bulkManagerTitle')}
+        onClose={closeBulkManager}
+        onCancel={closeBulkManager}
+        cancelLabel={t('close')}
+        height={360}
+        width={520}
+        actions={
+          <Button
+            variant="contained"
+            onClick={applyBulkManager}
+            disabled={bulkSaving || selectedIds.length === 0}
+          >
+            {bulkSaving ? t('saving') : t('bulkManagerApply')}
+          </Button>
+        }
+      >
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            {t('bulkManagerBody', { count: selectedIds.length })}
+          </Typography>
+          <SearchSelect
+            options={managerOptions}
+            valueKey="value"
+            labelKey="label"
+            label={t('formManager')}
+            value={bulkManagerId}
+            onChange={(v) => setBulkManagerId(v?.value ?? '')}
+            clearable
+            size="small"
+            placeholder={t('managerUnassigned')}
+          />
+        </Stack>
+      </SystemDialog>
 
       <Dialog
         open={openDialog}

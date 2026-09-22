@@ -57,6 +57,7 @@ PROCESS_IDS = (
     "leave.request.lifecycle",
     "loan.request.lifecycle",
     "gosi_wps.sif.lifecycle",
+    "attendance.permission.lifecycle",
 ) + pec5b_onboarding_process_ids()
 
 # Fields copied onto each upserted Capability row (mirrors the pack spec).
@@ -83,7 +84,7 @@ _CAPABILITY_FIELDS = (
 
 class Command(BaseCommand):
     help = (
-        "Seed Nibras payroll/leave/loan/GOSI-WPS/onboarding ProcessDefinition + "
+        "Seed Nibras payroll/leave/loan/GOSI-WPS/onboarding/attendance ProcessDefinition + "
         "Capability rows from domain_packs/nibras (idempotent). "
         "Run with DJANGO_BRAND=nibras."
     )

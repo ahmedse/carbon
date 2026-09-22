@@ -14,6 +14,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from accounts.capabilities import ALL_CAPABILITIES, GROUP_CAPABILITIES, _expand_capabilities
+from mdm.org_unit_manager import resolve_org_unit_manager_user_id
 
 from .models import Delegation
 
@@ -75,11 +76,17 @@ def _users_with_capability(cap_key: str) -> list[int]:
     return sorted(ids)
 
 
+def users_with_capability(cap_key: str) -> list[int]:
+    """Ordered active user ids holding ``cap_key`` (public seam for the FSM)."""
+    return _users_with_capability(cap_key)
+
+
 def resolve_step_approvers(*, step, requester, org_unit=None) -> list[int]:
     """Map a WorkflowPolicyStep.role to an ordered list of user ids.
 
-    - 'manager'        -> requester's Employee.manager.user_id (via
-                          apps.get_model('people','Employee')); [] if no manager
+    - 'manager'        -> requester's Employee.manager.user_id; if unset,
+                          OrgUnit.manager_employee_id (walk parent chain) →
+                          that employee's user_id; [] if neither resolves
     - 'specific_user'  -> [step.specific_user_id] (skip None)
     - 'any_admin'      -> _users_with_capability('correspondence:admin')
     - 'hr'             -> _users_with_capability('people:manage')
@@ -89,13 +96,7 @@ def resolve_step_approvers(*, step, requester, org_unit=None) -> list[int]:
     role = step.role
     ids: list[int] = []
     if role == 'manager':
-        Employee = apps.get_model('people', 'Employee')
-        try:
-            emp = Employee.objects.select_related('manager').filter(user_id=requester.id).first()
-        except (LookupError, AttributeError):
-            emp = None
-        if emp and emp.manager_id and emp.manager.user_id:
-            ids = [emp.manager.user_id]
+        ids = _resolve_manager_approver_ids(requester=requester, org_unit=org_unit)
     elif role == 'specific_user':
         if step.specific_user_id:
             ids = [step.specific_user_id]
@@ -115,6 +116,27 @@ def resolve_step_approvers(*, step, requester, org_unit=None) -> list[int]:
             seen.add(i)
             out.append(i)
     return out
+
+
+def _resolve_manager_approver_ids(*, requester, org_unit=None) -> list[int]:
+    """Line manager first; else OrgUnit.manager_employee_id walking parents."""
+    Employee = apps.get_model('people', 'Employee')
+    try:
+        emp = (
+            Employee.objects.select_related('manager', 'org_unit')
+            .filter(user_id=requester.id)
+            .first()
+        )
+    except (LookupError, AttributeError):
+        emp = None
+    if emp and emp.manager_id and emp.manager and emp.manager.user_id:
+        return [emp.manager.user_id]
+
+    start_ou = org_unit
+    if start_ou is None and emp is not None:
+        start_ou = emp.org_unit
+    uid = resolve_org_unit_manager_user_id(start_ou)
+    return [uid] if uid else []
 
 
 def apply_delegation(user_ids, *, corr_type=None, org_unit=None, now=None) -> list[int]:

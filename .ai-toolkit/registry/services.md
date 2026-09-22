@@ -1,4 +1,4 @@
-# Registry: Backend Services & Utilities  (auto-generated 2026-09-19 10:12 — DO NOT EDIT)
+# Registry: Backend Services & Utilities  (auto-generated 2026-09-21 14:41 — DO NOT EDIT)
 
 > Business logic lives in services. Before writing a new one, check this list — extend, don't duplicate.
 
@@ -10,7 +10,7 @@ backend/accounts/services.py:61:class AppManifestService:
 backend/ai/audit_service.py:23:class AuditService:
 backend/ai/catalog_service.py:60:class CatalogService:
 backend/ai/durable_service.py:101:class DurableExecutionService:
-backend/ai/plans_service.py:582:class PlansService:
+backend/ai/plans_service.py:778:class PlansService:
 backend/ai/subagent_service.py:68:class SubagentService:
 backend/appregistry/services.py:13:class AppRegistryService:
 backend/connections/services.py:22:class ConnectionService:
@@ -53,8 +53,8 @@ backend/emissions/tests/test_services.py:76:class TargetServiceTests(TestCase):
 backend/emissions/tests/test_services.py:95:class DashboardServiceTests(TestCase):
 backend/evidence/services.py:9:class EvidenceService:
 backend/gradevance/services/pack_bump.py:32:class PackBumpService:
-backend/gradevance/services/pipeline.py:553:class FormativePipelineService:
-backend/gradevance/services/pipeline.py:703:class ReviewService:
+backend/gradevance/services/pipeline.py:1098:class ReviewService:
+backend/gradevance/services/pipeline.py:845:class FormativePipelineService:
 backend/gradevance/services/repin.py:33:class ProfileRepinService:
 backend/healthy/services.py:134:class ERPSnapshotService:
 backend/healthy/services.py:249:class HealthyPipelineService:
@@ -99,6 +99,8 @@ backend/ai/management/commands/seed_nibras_knowledge.py
 backend/ai/management/commands/seed_nibras_processes.py
 backend/ai/management/commands/seed_ops_canvas_examples.py
 backend/ai/management/commands/simulate_agent_workflows.py
+backend/ai/management/commands/simulate_nibras_operator_processes.py
+backend/ai/management/commands/simulate_nibras_pulse_processes.py
 backend/appregistry/management/commands/activate_apps.py
 backend/appregistry/management/commands/register_app.py
 backend/core/management/commands/deploy_aastmt.py
@@ -120,10 +122,12 @@ backend/emissions/management/commands/setup_carbon_app.py
 backend/emissions/management/commands/sync_carbon_catalog.py
 backend/emissions/management/commands/unlock_tables.py
 backend/gradevance/management/commands/bump_gradevance_pack.py
+backend/gradevance/management/commands/gradevance_gold_eval.py
 backend/gradevance/management/commands/gradevance_lti_readiness.py
 backend/gradevance/management/commands/mine_gradevance_proposals.py
 backend/gradevance/management/commands/register_gradevance_app.py
 backend/gradevance/management/commands/seed_gradevance_demo.py
+backend/gradevance/management/commands/seed_wave10_demo.py
 backend/gradevance/management/commands/soak_gradevance_lti.py
 backend/gradevance/management/commands/sync_eduos_packs.py
 backend/healthy/management/commands/register_healthy_app.py

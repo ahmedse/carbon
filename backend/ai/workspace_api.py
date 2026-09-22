@@ -971,15 +971,35 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
         """Reset the conversation's working context (summary + snapshot).
 
         Never deletes the conversation row, the message log, or learned
-        facts.  Mutating console action → ``ai:manage_console``.
+        facts.  Stashes a clear-break marker so the UI can empty the
+        thread and offer Restore.  Conversation owners may always clear
+        their own working context (ESS / Chat).  Non-owners need
+        ``ai:manage_console`` (steward path for shared threads) —
+        enforced in intelligence.
         """
-        if not has_capability(request.user, "ai:manage_console"):
-            raise PermissionDenied(
-                "Clearing context requires ai:manage_console."
-            )
-
         try:
             conversation = self.intelligence.clear_context(
+                user=request.user,
+                conversation_id=pk,
+            )
+            return Response(conversation)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="undo-clear-context",
+        url_name="undo-clear-context",
+    )
+    def undo_clear_context(self, request, pk=None):
+        """Undo the most recent clear-context (restore working context).
+
+        Same ownership rules as clear-context.  404 when there is no
+        clear-break to undo.
+        """
+        try:
+            conversation = self.intelligence.undo_clear_context(
                 user=request.user,
                 conversation_id=pk,
             )

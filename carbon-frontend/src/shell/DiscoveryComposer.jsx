@@ -20,7 +20,7 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
-import { advanceDiscovery, finalizeDiscovery, startDiscoveryPlan } from '../api/aiWorkspace';
+import { advanceDiscovery, createPlan, finalizeDiscovery, startDiscoveryPlan } from '../api/aiWorkspace';
 import AIMessageBubble from './AIMessageBubble';
 import AIInputBar from './AIInputBar';
 import AIWorkingIndicator from './AIWorkingIndicator';
@@ -227,12 +227,29 @@ function DiscoveryComposer({
 
   const handleCardPick = async (cardId) => {
     if (busy) return;
-    if (cardId === 'handoff_chat' || cardId === 'leave_request') {
-      const draft = cardId === 'leave_request'
-        ? (lastBrief || 'I want to request leave')
-        : (lastBrief || '');
+    // Explicit Chat opt-in only — never bounce new-task creation into Chat.
+    if (cardId === 'handoff_chat') {
+      const draft = lastBrief || '';
       onSwitchToChat?.(draft);
       reset();
+      return;
+    }
+    // Personal leave → create a reviewable Agent plan (editable), stay here.
+    if (cardId === 'leave_request') {
+      setBusy(true);
+      try {
+        const brief = (lastBrief || 'Submit a leave request').trim();
+        const plan = await createPlan(token, {
+          brief,
+          conversation_id: conversationId || '',
+        });
+        onPlanReady?.(plan);
+        reset();
+      } catch (err) {
+        notifyFromError(err, 'Could not create the leave plan');
+      } finally {
+        setBusy(false);
+      }
       return;
     }
     if (cardId === 'compliance_report') {

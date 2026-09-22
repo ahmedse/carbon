@@ -1,0 +1,28 @@
+---
+description: Plan structure DAG must be top→bottom (ADR-0043); never force LR strip
+globs: carbon-frontend/src/components/graph/PlanDagGraph.jsx,carbon-frontend/src/utils/planGraph.js,carbon-frontend/src/shell/AgentReviewSurface.jsx
+alwaysApply: false
+---
+
+# Plan structure graph layout (anti-regression)
+
+## Binding
+
+ADR-0043 V6 §6: **Structure layout is top→bottom** (parallel siblings side-by-side).
+
+## Forbidden
+
+- Forcing `direction: 'lr'` (or any left→right) on `PlanDagGraph` `mode="structure"` to “fill a wide rail.”
+- That regression shipped in commit `565ba71` and collapsed sequential payroll-style plans into **one horizontal card strip** with truncated labels and a huge empty vertical gutter.
+
+## Required
+
+- `STRUCTURE_LAYOUT_OPTIONS.direction === 'tb'` in `PlanDagGraph.jsx`.
+- Letterboxing / unreadably small nodes → fix **fitMode / pan / nodeW·nodeH**, not direction.
+- Structure `fitMode` must be **`none`** + **`contentSized`** (never stretch a short DAG into a tall rail — that blew cards to ~2×). Cap fitZoomCeil ≤ 1 when auto-fitting.
+- Long-span Sugiyama dummies must stay on visible lanes / neighbor channels — never park at raw group index (far-right edge loops).
+- Keep Vitest: `structure mode: ADR-0043 — top→bottom, never LR strip`.
+
+## Do not introduce
+
+New DAG libraries (dagre/elk/React Flow) — ADR-0011 / 0012.

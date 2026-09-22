@@ -14,8 +14,16 @@ const notificationMocks = vi.hoisted(() => ({
   notifyFromError: vi.fn(),
 }));
 
+const authState = vi.hoisted(() => ({
+  token: 'test-token',
+  userCapabilities: ['ai:manage_console'],
+}));
+
 vi.mock('../auth/AuthContext', () => ({
-  useAuth: () => ({ token: 'test-token' }),
+  useAuth: () => ({
+    token: authState.token,
+    userCapabilities: authState.userCapabilities,
+  }),
 }));
 
 vi.mock('../components/NotificationProvider', () => ({
@@ -54,6 +62,7 @@ const openMenu = () =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  authState.userCapabilities = ['ai:manage_console'];
   listCheckpoints.mockResolvedValue({ checkpoints: [] });
   checkpointConversation.mockResolvedValue({ id: 'cp-x' });
   restoreConversation.mockResolvedValue({ id: 'c-1', title: 'Chat' });
@@ -85,7 +94,7 @@ describe('AIContextMenu', () => {
 
     // Confirm dialog — copy must make visible that the durable chat is kept.
     expect(screen.getByText('Clear working context?')).toBeInTheDocument();
-    expect(screen.getByText(/nothing is deleted/i)).toBeInTheDocument();
+    expect(screen.getByText(/empties the chat window/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear context' }));
 
@@ -228,3 +237,17 @@ describe('AIContextMenu', () => {
     });
   });
 });
+
+describe('AIContextMenu ESS (no manage_console)', () => {
+  it('shows only Clear context for employees without ai:manage_console', () => {
+    authState.userCapabilities = [];
+    render(<AIContextMenu conversationId="c-1" />);
+    openMenu();
+
+    expect(screen.getByRole('menuitem', { name: 'Clear context' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Save checkpoint' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Restore' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Fork from here' })).not.toBeInTheDocument();
+  });
+});
+

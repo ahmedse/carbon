@@ -54,11 +54,12 @@ evidence → not done.
 | **OF-15…OF-20** | **Nibras** | DONE | Leave vertical live |
 | **NIR-3C / NIR-7A/B** | **Nibras** | DONE | Code+tests shipped |
 | **NIR-5 / NIR-6** | **Nibras** | DONE via NSR-7/8 | Governed FKs + single-root org shipped |
+| **NPS** (Nibras Process Security) | **Nibras** | **DONE** | NPS-1 SoD · NPS-2 review→HR · NPS-3 Att ESS · 6/6 deep+op PASS · My Attendance UI |
 | **DTR** (Data Trust / Catalog Index) | **Catalog** | **ACTIVE** | Stewardship nudges + FilteredDataGrid→SearchSelect · DTR-3 = Pulse (other master) |
 | **GradeVance E2E QA** | **EduOS** | **DONE** | Seed 6 runs + LCT report · `docs/eduos/qa-evidence/E2E-SUMMARY.json` |
 | **GradeVance HITL P2** | **EduOS** | **ACTIVE** | Learning loop proven: edit→proposal→accept→bump→repin · `docs/eduos/qa-evidence/HITL-LEARNING-LOOP.json` · next: UI path + Phase C depth |
 
-**Multi-Master:** `.ai-toolkit/shared/multi-master.md` · seats · `docs/ops/MASTERS-COMMS.md` · RULE_30. · **This session seat: EduOS.**
+**Multi-Master:** `.ai-toolkit/shared/multi-master.md` · seats · `docs/ops/MASTERS-COMMS.md` · RULE_30. · **This session seat: Nibras.**
 
 **NSR principle (Nibras seat only):** every nav item under people/my/team is either architecture-thick + tested + E2E-QA’d for GOFSCO staff use, or demoted/hidden until it is.
 
@@ -924,6 +925,75 @@ cd /home/ahmed/ws/carbon/backend && \
 **Depends on:** PEC-5A patterns  
 
 Same pattern as PEC-5A for employee onboarding lifecycle. Evidence + seed + tests.
+
+---
+
+### Phase NPS-0 — Toolkit: process security honesty (ADR-0045) · DONE 2026-09-21
+**Owner:** Nibras · **Status:** DONE  
+**Delivered:** ADR-0045 · RULE_34 · security.md RULE 11 · PB-61 · honesty CI
+`ai/tests/test_nibras_process_security_planes.py` · pack README · cursor rule.
+**Does not** implement host SoD — documents residual risk and forbids firefighting.
+
+---
+
+### Phase NPS-1 — Backend: shared host SoD gate for admin irreversibles
+**Date:** 2026-09-21  
+**Worker Role:** backend-worker  
+**Status:** DONE  
+**Owner:** Nibras  
+
+**Delivered:** `people.governance.sod` + `SoDPreparation` (migration 0029); stamp on
+compute/generate/create; refuse same-actor on commit/WPS submit/activate/attendance
+approve (views + host_executor + payroll_service); honesty matrix → `host_gate`;
+`people/tests/test_host_sod.py`; deep sim two-actor (`ahmed`/`admin`); ADR-0045 /
+PB-61 / RULE 11 / cursor rule updated.
+
+---
+
+### Phase NPS-2 — Backend: Pulse review authority → HR CBAC
+**Date:** 2026-09-21  
+**Worker Role:** backend-worker  
+**Status:** DONE  
+**Owner:** Nibras  
+
+**Delivered:** `ai.governance.review_authority` maps Nibras `*.review` human_task
+capabilities to host CBAC (`correspondence:act` leave, `correspondence:finance` loan,
+`people:manage` payroll/GOSI/onboard/attendance). `enqueue_inbox_task` uses resolver
+(+ brand `app_identifier` / `visibility=global`). Inbox list/stream admit designated
+authorities; `list_pending` filters to tasks the principal may decide. Tests:
+`ai/tests/test_review_authority.py`. ADR-0045 / RULE_34 / RULE 11 / PB-61 / pack README
+updated. Unmapped Pulse caps still default `ai:operator`.
+
+---
+
+### Phase NPS-3 — Backend: Attendance ESS via Correspondence
+**Date:** 2026-09-21  
+**Worker Role:** backend-worker  
+**Status:** DONE  
+**Owner:** Nibras  
+
+**Delivered:** Leave-shaped ESS for `attendance.permission.lifecycle` — corr type
+`attendance_permission` + manager `skip_if_self` policy; `POST /people/me/attendance-permissions/`
+(`people.attendance_ess` + self view); signal flips `approved=True`; Agent tools
+`submit_my_attendance_permission` / `list_my_attendance_permissions`; capability
+submit → self view; honesty matrix → `correspondence`; review authority →
+`correspondence:act`. Admin create/PATCH + NPS-1 SoD kept as ops fallback. Tests:
+`people/tests/test_attendance_ess.py`. Sims/host lane use ESS path.
+
+---
+
+### Phase NPS-4 — Backend+FE: me POST parity + My Attendance UI + 6/6 regression
+**Date:** 2026-09-21  
+**Worker Role:** backend-worker + frontend-worker  
+**Status:** DONE  
+**Owner:** Nibras (Master seat)  
+
+**Delivered:**
+- `host_executor._people_me` POST for `leave` / `loan` / `attendance-permissions` (reuses DRF self-views / `attendance_ess`) — Agent confirm path matches HTTP.
+- My Attendance UI (`/my/attendance`) mirroring My Leave: SystemDialog, history table, i18n en/ar, nav/breadcrumbs/capabilities, dashboard quick action, vitest smoke.
+- Deep 6/6 PASS + operator 6/6 PASS after NPS-1–3.
+
+**Evidence:** `SESSION-20260921-132047-NIBRAS-PROCESSES` · `SESSION-20260921-132248-NIBRAS-OPERATOR` · `test_people_me_ess_post.py` · `MyAttendance.test.jsx`
 
 ---
 

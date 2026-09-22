@@ -300,6 +300,21 @@ export function clearContext(token, conversationId) {
 }
 
 /**
+ * Undo the most recent clear-context for a conversation — restores the
+ * stashed summary/snapshot and removes the clear-break marker so the full
+ * message log is visible again.
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @returns {Promise<object>} Serialized AIConversation
+ */
+export function undoClearContext(token, conversationId) {
+  return apiFetch(`${BASE}conversations/${conversationId}/undo-clear-context/`, {
+    token,
+    method: 'POST',
+  });
+}
+
+/**
  * Confirm a staged tool execution (e.g. a proposed create_dq_rule) so it
  * actually runs as the current user. The response carries the created
  * entity + a navigate action the UI can follow.

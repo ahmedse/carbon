@@ -25,7 +25,7 @@ cp .ai-toolkit/decisions/0000-template.md .ai-toolkit/decisions/00NN-short-title
 - Master Architect owns ADRs. Workers READ them before touching the relevant area.
 - Link the ADR from the relevant TASKS.md phase when it constrains the work.
 
-## Index (0001–0043)
+## Index (0001–0046)
 
 | # | Title | Status |
 |---|-------|--------|
@@ -72,5 +72,8 @@ cp .ai-toolkit/decisions/0000-template.md .ai-toolkit/decisions/00NN-short-title
 | [0041](0041-pulse-ops-canvas-job-map.md) | Pulse Ops Canvas (Job Map) — durable agent/ops artifact | Accepted |
 | [0042](0042-gradevance-persona-apps.md) | GradeVance persona apps: Learn · Teach · Engine (three surfaces, one engine) | Accepted |
 | [0043](0043-agent-four-view-cockpit.md) | Agent Four-View Cockpit (Plan · Run · Canvas · Output) | Implemented |
+| [0044](0044-nibras-dual-catalog-ssot.md) | Nibras dual-catalog SSOT (pack tools ⊆ instance.yaml) | Accepted |
+| [0045](0045-nibras-process-security-planes.md) | Nibras process security planes (host SoD vs Pulse dials) | Accepted |
+| [0046](0046-pulse-chat-no-host-mutation-stage.md) | Pulse Chat never stages host writes; system change via Agent or host UI | Accepted |
 
 <!-- Add a row per ADR. Keep newest at the bottom. -->

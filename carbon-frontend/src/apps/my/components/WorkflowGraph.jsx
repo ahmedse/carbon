@@ -115,7 +115,8 @@ function WorkflowGraph({ chain, currentStep, status, height }) {
       const meta = STATE_META[state];
       present.add(state);
       if (state === 'current') hasCurrent = true;
-      const role = codeLabel(t, 'role', ROLE_SUFFIX, step.role);
+      // acting_role: HR (or another backup) standing in for a vacant role.
+      const role = codeLabel(t, 'role', ROLE_SUFFIX, step.acting_role || step.role);
       const intent = codeLabel(t, 'intent', INTENT_SUFFIX, step.intent);
       const statusLabel = t(meta.label);
       const approverCount = Array.isArray(step.user_ids) ? step.user_ids.length : 0;

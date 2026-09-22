@@ -3,7 +3,8 @@
 // restore / fork. All actions operate on the conversation's *working* context;
 // the durable conversation, its message log, and learned facts are never
 // deleted — the copy below makes that explicit (Notes for the Master).
-import React, { useCallback, useState } from 'react';
+// Clear is an owner Chat action; checkpoint/restore/fork need ai:manage_console.
+import React, { useCallback, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   IconButton,
@@ -27,12 +28,24 @@ import {
   forkConversation,
   restoreConversation,
 } from '../api/aiWorkspace';
+import { AI_MANAGE_CONSOLE, expandCapabilities, hasCap } from '../capabilities';
+
+function capabilityKeys(caps) {
+  if (!Array.isArray(caps)) return [];
+  return caps
+    .map((c) => (typeof c === 'string' ? c : c?.key || c?.capability))
+    .filter(Boolean);
+}
 
 // ── Header kebab menu ─────────────────────────────────────────────────────
 function AIContextMenu({ conversationId, onConversationUpdated, onForked }) {
   const { t } = useTranslation('ai');
-  const { token } = useAuth();
+  const { token, userCapabilities } = useAuth();
   const { notify, notifyFromError } = useNotification();
+  const canManageConsole = useMemo(
+    () => hasCap(expandCapabilities(capabilityKeys(userCapabilities)), AI_MANAGE_CONSOLE),
+    [userCapabilities],
+  );
 
   const [menuAnchor, setMenuAnchor] = useState(null);
   const [clearOpen, setClearOpen] = useState(false);
@@ -59,8 +72,6 @@ function AIContextMenu({ conversationId, onConversationUpdated, onForked }) {
       setClearing(false);
     }
   }, [conversationId, clearing, token, notify, notifyFromError, onConversationUpdated, t]);
-
-  // Save checkpoint — name + note (handled by SaveCheckpointDialog).
 
   // Picker action: restore immediately; fork defers to a confirm dialog.
   const handlePick = useCallback(
@@ -130,44 +141,48 @@ function AIContextMenu({ conversationId, onConversationUpdated, onForked }) {
           </ListItemIcon>
           {t('clearContext')}
         </MenuItem>
-        <MenuItem
-          sx={{ fontSize: '0.8125rem' }}
-          onClick={() => {
-            setSaveOpen(true);
-            closeMenu();
-          }}
-        >
-          <ListItemIcon>
-            <BookmarkAddIcon fontSize="small" />
-          </ListItemIcon>
-          {t('saveCheckpoint')}
-        </MenuItem>
-        <MenuItem
-          sx={{ fontSize: '0.8125rem' }}
-          onClick={() => {
-            setPickerMode('restore');
-            setPickerOpen(true);
-            closeMenu();
-          }}
-        >
-          <ListItemIcon>
-            <RestoreIcon fontSize="small" />
-          </ListItemIcon>
-          {t('restoreCheckpoint')}
-        </MenuItem>
-        <MenuItem
-          sx={{ fontSize: '0.8125rem' }}
-          onClick={() => {
-            setPickerMode('fork');
-            setPickerOpen(true);
-            closeMenu();
-          }}
-        >
-          <ListItemIcon>
-            <CallSplitIcon fontSize="small" />
-          </ListItemIcon>
-          {t('forkFromHere')}
-        </MenuItem>
+        {canManageConsole ? (
+          <>
+            <MenuItem
+              sx={{ fontSize: '0.8125rem' }}
+              onClick={() => {
+                setSaveOpen(true);
+                closeMenu();
+              }}
+            >
+              <ListItemIcon>
+                <BookmarkAddIcon fontSize="small" />
+              </ListItemIcon>
+              {t('saveCheckpoint')}
+            </MenuItem>
+            <MenuItem
+              sx={{ fontSize: '0.8125rem' }}
+              onClick={() => {
+                setPickerMode('restore');
+                setPickerOpen(true);
+                closeMenu();
+              }}
+            >
+              <ListItemIcon>
+                <RestoreIcon fontSize="small" />
+              </ListItemIcon>
+              {t('restoreCheckpoint')}
+            </MenuItem>
+            <MenuItem
+              sx={{ fontSize: '0.8125rem' }}
+              onClick={() => {
+                setPickerMode('fork');
+                setPickerOpen(true);
+                closeMenu();
+              }}
+            >
+              <ListItemIcon>
+                <CallSplitIcon fontSize="small" />
+              </ListItemIcon>
+              {t('forkFromHere')}
+            </MenuItem>
+          </>
+        ) : null}
       </Menu>
 
       {/* Clear context — destructive-ish; the durable conversation is kept. */}
@@ -181,34 +196,37 @@ function AIContextMenu({ conversationId, onConversationUpdated, onForked }) {
         onConfirm={handleClearConfirm}
       />
 
-      {/* Save checkpoint — name (required) + note (optional). */}
-      <SaveCheckpointDialog
-        open={saveOpen}
-        conversationId={conversationId}
-        onClose={() => setSaveOpen(false)}
-      />
+      {canManageConsole ? (
+        <SaveCheckpointDialog
+          open={saveOpen}
+          conversationId={conversationId}
+          onClose={() => setSaveOpen(false)}
+        />
+      ) : null}
 
-      {/* Checkpoint picker — shared by Restore and Fork-from-here. */}
-      <CheckpointPickerDialog
-        open={pickerOpen}
-        mode={pickerMode}
-        conversationId={conversationId}
-        onClose={() => setPickerOpen(false)}
-        onPick={handlePick}
-      />
+      {canManageConsole ? (
+        <CheckpointPickerDialog
+          open={pickerOpen}
+          mode={pickerMode}
+          conversationId={conversationId}
+          onClose={() => setPickerOpen(false)}
+          onPick={handlePick}
+        />
+      ) : null}
 
-      {/* Fork confirm — a new chat is created; the current one stays as is. */}
-      <ConfirmDialog
-        open={Boolean(forkTarget)}
-        title={t('forkNewChatTitle')}
-        message={t('forkNewChatBody', {
-          name: forkTarget?.name || t('selectedCheckpoint'),
-        })}
-        confirmLabel={t('forkConfirm')}
-        destructive
-        onCancel={() => setForkTarget(null)}
-        onConfirm={handleForkConfirm}
-      />
+      {canManageConsole ? (
+        <ConfirmDialog
+          open={Boolean(forkTarget)}
+          title={t('forkNewChatTitle')}
+          message={t('forkNewChatBody', {
+            name: forkTarget?.name || t('selectedCheckpoint'),
+          })}
+          confirmLabel={t('forkConfirm')}
+          destructive
+          onCancel={() => setForkTarget(null)}
+          onConfirm={handleForkConfirm}
+        />
+      ) : null}
     </>
   );
 }

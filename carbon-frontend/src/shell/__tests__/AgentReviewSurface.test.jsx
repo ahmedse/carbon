@@ -19,10 +19,10 @@ const PLAN = {
 };
 
 describe('AgentReviewSurface', () => {
-  it('Plan body is structure graph only (chrome lives in cockpit toolbar)', () => {
+  it('Plan body is the live status DAG (chrome lives in cockpit toolbar)', () => {
     render(<AgentReviewSurface plan={PLAN} />);
     expect(screen.getByTestId('agent-review-surface')).toBeInTheDocument();
-    expect(screen.getByTestId('plan-dag-graph')).toHaveAttribute('data-mode', 'structure');
+    expect(screen.getByTestId('plan-dag-graph')).toHaveAttribute('data-mode', 'execution');
     expect(screen.queryByTestId('agent-review-consent')).not.toBeInTheDocument();
     expect(screen.queryByTestId('agent-review-step-list')).not.toBeInTheDocument();
   });

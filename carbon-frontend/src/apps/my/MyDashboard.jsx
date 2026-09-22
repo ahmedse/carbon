@@ -28,6 +28,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import ArticleIcon from '@mui/icons-material/Article';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
@@ -503,6 +504,14 @@ function QuickActions({ onNewRequest }) {
             onClick={() => navigate('/my/leave')}
           >
             {t('quickActionsRequestLeave')}
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<AccessTimeIcon />}
+            onClick={() => navigate('/my/attendance')}
+          >
+            {t('quickActionsRequestAttendance')}
           </Button>
           <Button
             size="small"

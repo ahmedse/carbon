@@ -126,6 +126,8 @@ import { splitAnswerAppendix } from './splitAnswerAppendix';
 import { humanizeStepError } from './humanizeStepError';
 import ConsentHeroCard from './ConsentHeroCard';
 import { stripEngineJargon } from './humanizeOperatorCopy';
+import { resolveOutputActions } from './resolveOutputActions';
+import { Link as RouterLink } from 'react-router-dom';
 import { autonomyDefaultListOpen, readAutonomyMode } from './autonomyMode';
 import { isImageMime, isPreviewableMime } from './artifactMime';
 
@@ -1989,7 +1991,6 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             onDecline={handleDecline}
             onRun={handleRun}
             onPause={handlePause}
-            onFork={handleFork}
             onRetry={handleRetry}
             onEditPlan={handleEditPlan}
             onEditStep={(step) => setEditStepTarget({ step })}
@@ -2378,6 +2379,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
 
     const finalResponse = ledger?.final_response || selectedPlan.final_response;
     const { prose: answerProse, appendix: answerAppendix, hasAppendix } = splitAnswerAppendix(finalResponse);
+    const outputActions = resolveOutputActions(selectedPlan, runSteps);
     const effective = effectivePlanStatus(selectedPlan);
     const rerunnable = isRerunnableStatus(selectedPlan.status)
       || isRerunnableStatus(effective)
@@ -2454,10 +2456,42 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
                 <AnswerTechnicalDetails appendix={answerAppendix} />
               )}
             </Stack>
-          ) : (
+          ) : outputActions.length === 0 ? (
             <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
               No final response recorded for this run.
             </Typography>
+          ) : null}
+          {outputActions.length > 0 && (
+            <Stack spacing={0.75} sx={{ mt: finalResponse ? 1 : 0 }} data-testid="output-host-actions">
+              {outputActions.map((action) => (
+                <Stack
+                  key={action.route}
+                  direction={{ xs: 'column', sm: 'row' }}
+                  spacing={0.75}
+                  alignItems={{ sm: 'center' }}
+                  sx={{
+                    border: 1,
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                    px: 1,
+                    py: 0.75,
+                  }}
+                >
+                  <Typography variant="body2" sx={{ flex: 1, fontSize: '0.75rem', minWidth: 0 }}>
+                    {action.summary || action.label}
+                  </Typography>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    component={RouterLink}
+                    to={action.route}
+                    sx={{ fontSize: '0.6875rem', textTransform: 'none', flexShrink: 0 }}
+                  >
+                    {action.label}
+                  </Button>
+                </Stack>
+              ))}
+            </Stack>
           )}
         </Paper>
 
@@ -2475,7 +2509,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
         ) : artifacts.length === 0 ? (
           <Typography variant="body2" color="text.secondary" sx={{ py: 2, fontSize: '0.75rem' }}>
             No downloadable files for this run. Artifacts appear when a step exports a document
-            (Word/Excel/PDF). Use Replan or Discuss in Chat and ask for an export.
+            (Word/Excel/PDF). Use Discuss in Chat and ask for an export.
           </Typography>
         ) : (
           <Stack spacing={0.75}>
@@ -2509,15 +2543,6 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
                 </Button>
               </span>
             </Tooltip>
-            <Button
-              size="small"
-              variant="outlined"
-              disabled={mutating}
-              onClick={handleFork}
-              sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
-            >
-              Fork
-            </Button>
             {chatFirst && (
               <Button
                 size="small"
@@ -2624,6 +2649,12 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           confirmingId={confirmingId}
           onConfirmStep={handleConfirmStep}
           onDeclineStep={handleDeclineStep}
+          onOpenRun={() => handleSegmentChange('run', { user: true })}
+          showLiveHandoff={
+            phase === 'working'
+            || phase === 'paused'
+            || ['running', 'paused', 'awaiting_approval'].includes(selectedPlan?.status)
+          }
         />
       );
     };
@@ -2639,8 +2670,6 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           busy={mutating}
           onApprove={handleApprove}
           onDecline={handleDecline}
-          onFork={handleFork}
-          onReplanPlan={handleReplanPlan}
           onDiscuss={
             onSwitchToChat
               ? () => onSwitchToChat(

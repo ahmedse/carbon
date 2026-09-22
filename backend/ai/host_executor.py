@@ -236,7 +236,9 @@ def _people_route(key: str) -> tuple[str, str | None, str | None]:
     parts = [p for p in rest.split("/") if p]
     resource = parts[0] if parts else ""
     pk = parts[1] if len(parts) > 1 else None
-    action = parts[2] if len(parts) > 2 else None
+    # Join remaining segments so nested actions survive
+    # (e.g. payroll-runs/5/wps/generate → action "wps/generate").
+    action = "/".join(parts[2:]) if len(parts) > 2 else None
     return resource, pk, action
 
 
@@ -333,6 +335,7 @@ _PEOPLE_ENTITY_SCOPE_LOOKUP: dict[str, str] = {
     "people.models.Loan": "employee__org_unit_id__in",
     "people.models.LoanInstallment": "loan__employee__org_unit_id__in",
     "people.models.AttendanceRecord": "employee__org_unit_id__in",
+    "people.models.AttendancePermission": "employee__org_unit_id__in",
 }
 
 # Soft aliases for pre-ReferenceValue CharField filter keys in ECF metrics/resolves.
@@ -716,6 +719,14 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
                     "status_code": 400,
                     "data": {"employee_no": "This employee number is already taken."},
                 }
+            from people.governance.sod import SUBJECT_EMPLOYEE, record_preparer
+
+            record_preparer(
+                subject_type=SUBJECT_EMPLOYEE,
+                subject_id=serializer.instance.pk,
+                user=user,
+                process_key="employee.onboarding.lifecycle",
+            )
             record_event(
                 entity_type="Employee",
                 entity_id=serializer.instance.pk,
@@ -780,6 +791,31 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
                         "errors": json.dumps(serializer.errors, default=str),
                     },
                 }
+            activating = (
+                "is_active" in serializer.validated_data
+                and bool(serializer.validated_data["is_active"])
+                and not bool(before.get("is_active"))
+            )
+            if activating:
+                from people.governance.sod import (
+                    ACTION_ACTIVATE,
+                    SUBJECT_EMPLOYEE,
+                    SoDViolation,
+                    require_distinct_actor,
+                )
+
+                try:
+                    require_distinct_actor(
+                        subject_type=SUBJECT_EMPLOYEE,
+                        subject_id=employee.pk,
+                        actor=user,
+                        action=ACTION_ACTIVATE,
+                    )
+                except SoDViolation as exc:
+                    return {
+                        "status_code": 403,
+                        "data": {"detail": str(exc), "code": exc.code},
+                    }
             for field, value in serializer.validated_data.items():
                 setattr(employee, field, value)
             gate = validate_write(employee)
@@ -843,6 +879,7 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
             return {"status_code": 200, "data": {"count": len(results), "results": results}}
 
         if method == "POST" and action in ("compute", "validate", "commit"):
+            from people.governance.sod import SoDViolation
             from people.payroll_service import PayrollRunService, PayrollServiceError
             from people.validation import persist_findings
 
@@ -853,12 +890,109 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
                 return {"status_code": 404, "data": {"detail": str(exc)}}
             service = PayrollRunService()
             try:
-                result = getattr(service, action)(run)
+                result = getattr(service, action)(run, user=user)
+            except SoDViolation as exc:
+                return {
+                    "status_code": 403,
+                    "data": {"detail": str(exc), "code": exc.code},
+                }
             except PayrollServiceError as exc:
                 return {"status_code": 409, "data": {"detail": str(exc)}}
             if action in ("validate", "commit"):
                 persist_findings(run, result.get("findings", []))
             return {"status_code": 200, "data": result}
+
+        # Legacy GET /payroll-runs/{id}/wps/ — CSV download (not filing lifecycle).
+        if method == "GET" and action == "wps":
+            from people.payroll_service import PayrollRunService, PayrollServiceError
+
+            qs = _people_scope(user, PayrollRun.objects.all(), "org_unit_id__in")
+            try:
+                run = _resolve_payroll_run(qs, pk)
+            except PayrollRun.DoesNotExist as exc:
+                return {"status_code": 404, "data": {"detail": str(exc)}}
+            try:
+                result = PayrollRunService().wps_export(run)
+            except PayrollServiceError as exc:
+                return {"status_code": 409, "data": {"detail": str(exc)}}
+            return {
+                "status_code": 200,
+                "data": {
+                    "run_id": run.pk,
+                    "record_count": len(result.get("records") or []),
+                    "format": "csv",
+                },
+            }
+
+        # GOSI/WPS SIF filing: .../wps/generate|validate|submit|filing
+        if pk and action in (
+            "wps/generate",
+            "wps/validate",
+            "wps/submit",
+            "wps/filing",
+        ):
+            from people.models import WpsFiling
+            from people.governance.sod import SoDViolation
+            from people.payroll_service import PayrollRunService, PayrollServiceError
+
+            qs = _people_scope(user, PayrollRun.objects.all(), "org_unit_id__in")
+            try:
+                run = _resolve_payroll_run(qs, pk)
+            except PayrollRun.DoesNotExist as exc:
+                return {"status_code": 404, "data": {"detail": str(exc)}}
+            service = PayrollRunService()
+            try:
+                if action == "wps/generate" and method == "POST":
+                    return {
+                        "status_code": 200,
+                        "data": service.wps_generate(run, user=user),
+                    }
+                if action == "wps/validate" and method == "POST":
+                    data = service.wps_validate_filing(run, user=user)
+                    code = 200 if data.get("passed") else 422
+                    return {"status_code": code, "data": data}
+                if action == "wps/submit" and method == "POST":
+                    return {
+                        "status_code": 200,
+                        "data": service.wps_submit_filing(run, user=user),
+                    }
+                if action == "wps/filing" and method == "GET":
+                    try:
+                        filing = run.wps_filing
+                    except WpsFiling.DoesNotExist:
+                        return {
+                            "status_code": 404,
+                            "data": {"detail": "No WPS filing for this run."},
+                        }
+                    return {
+                        "status_code": 200,
+                        "data": {
+                            "run_id": run.pk,
+                            "status": filing.status,
+                            "content_hash": filing.content_hash,
+                            "record_count": filing.record_count,
+                            "validation_passed": filing.validation_passed,
+                            "validation_issues": filing.validation_issues,
+                            "receipt_id": filing.receipt_id,
+                            "reconciled": filing.reconciled,
+                            "submitted_at": (
+                                filing.submitted_at.isoformat()
+                                if filing.submitted_at
+                                else None
+                            ),
+                        },
+                    }
+            except SoDViolation as exc:
+                return {
+                    "status_code": 403,
+                    "data": {"detail": str(exc), "code": exc.code},
+                }
+            except PayrollServiceError as exc:
+                return {"status_code": 409, "data": {"detail": str(exc)}}
+            return {
+                "status_code": 405,
+                "data": {"detail": f"Unsupported {method} {action}"},
+            }
 
     # ── Payslip lines ───────────────────────────────────────────────────
     if resource == "payslip-lines":
@@ -976,6 +1110,137 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
                 data["caveat"] = f"Showing first {len(results)} of {total} loan installments."
             return {"status_code": 200, "data": data}
 
+    # ── Attendance permissions (list + create + approve) ────────────────
+    if resource == "attendance-permissions":
+        from people.models import AttendancePermission
+
+        if method == "GET" and not pk:
+            qs = _people_scope(
+                user, AttendancePermission.objects.all(), "employee__org_unit_id__in",
+            )
+            qs = _filter_qs_by_employee_param(qs, params)
+            total = qs.count()
+            page = qs[:_PEOPLE_LIST_PAGE_CAP]
+            results = _annotate_employee_identity(
+                S.AttendancePermissionSerializer(page, many=True).data, page,
+            )
+            data = {"total": total, "count": len(results), "results": results}
+            if _employee_param_from_query(params):
+                data["filtered_by_employee"] = _employee_param_from_query(params)
+            if total > _PEOPLE_LIST_PAGE_CAP:
+                data["truncated"] = True
+                data["caveat"] = (
+                    f"Showing first {len(results)} of {total} attendance permissions."
+                )
+            return {"status_code": 200, "data": data}
+
+        if method == "POST" and not pk:
+            serializer = S.AttendancePermissionSerializer(data=body or {})
+            if not serializer.is_valid():
+                return {
+                    "status_code": 400,
+                    "data": {
+                        "detail": "Validation failed",
+                        "errors": json.dumps(serializer.errors, default=str),
+                    },
+                }
+            from people.validation import validate_write
+
+            # Force pending on submit — approve is a separate PATCH.
+            validated = dict(serializer.validated_data)
+            validated["approved"] = False
+            gate = validate_write(AttendancePermission(**validated))
+            if gate.get("blocked"):
+                return {
+                    "status_code": 422,
+                    "data": {
+                        "detail": "DQ validation blocked this write",
+                        "sample_failures": gate.get("sample_failures"),
+                    },
+                }
+            instance = serializer.save(approved=False)
+            from people.governance.sod import (
+                SUBJECT_ATTENDANCE_PERMISSION,
+                record_preparer,
+            )
+
+            record_preparer(
+                subject_type=SUBJECT_ATTENDANCE_PERMISSION,
+                subject_id=instance.pk,
+                user=user,
+                process_key="attendance.permission.lifecycle",
+            )
+            return {
+                "status_code": 201,
+                "data": S.AttendancePermissionSerializer(instance).data,
+            }
+
+        if method in ("GET", "PATCH") and pk:
+            qs = _people_scope(
+                user, AttendancePermission.objects.all(), "employee__org_unit_id__in",
+            )
+            try:
+                perm = qs.get(pk=pk)
+            except (AttendancePermission.DoesNotExist, ValueError, TypeError):
+                return {"status_code": 404, "data": {"detail": "Attendance permission not found"}}
+            if method == "GET":
+                return {
+                    "status_code": 200,
+                    "data": S.AttendancePermissionSerializer(perm).data,
+                }
+            # approve_attendance_permission — partial update (typically approved=true)
+            serializer = S.AttendancePermissionSerializer(
+                perm, data=body or {}, partial=True,
+            )
+            if not serializer.is_valid():
+                return {
+                    "status_code": 400,
+                    "data": {
+                        "detail": "Validation failed",
+                        "errors": json.dumps(serializer.errors, default=str),
+                    },
+                }
+            approving = (
+                "approved" in serializer.validated_data
+                and bool(serializer.validated_data["approved"])
+                and not bool(perm.approved)
+            )
+            if approving:
+                from people.governance.sod import (
+                    ACTION_APPROVE,
+                    SUBJECT_ATTENDANCE_PERMISSION,
+                    SoDViolation,
+                    require_distinct_actor,
+                )
+
+                try:
+                    require_distinct_actor(
+                        subject_type=SUBJECT_ATTENDANCE_PERMISSION,
+                        subject_id=perm.pk,
+                        actor=user,
+                        action=ACTION_APPROVE,
+                    )
+                except SoDViolation as exc:
+                    return {
+                        "status_code": 403,
+                        "data": {"detail": str(exc), "code": exc.code},
+                    }
+            from people.validation import validate_write
+
+            for field, value in serializer.validated_data.items():
+                setattr(perm, field, value)
+            gate = validate_write(perm)
+            if gate.get("blocked"):
+                return {
+                    "status_code": 422,
+                    "data": {
+                        "detail": "DQ validation blocked this write",
+                        "sample_failures": gate.get("sample_failures"),
+                    },
+                }
+            serializer.save()
+            return {"status_code": 200, "data": serializer.data}
+
     # ── Attendance ──────────────────────────────────────────────────────
     if resource == "attendance":
         from people.models import AttendanceRecord
@@ -994,20 +1259,14 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
     return {"status_code": 404, "data": {"detail": f"Unknown People endpoint: {resource}"}}
 
 
-def _people_me(user, sub, method) -> dict:
-    """Self-service People reads — strictly scoped to the CALLER's own record.
+def _people_me(user, sub, method, body=None) -> dict:
+    """Self-service People — scoped to the CALLER's own employee profile.
 
-    Mirrors ``people/self_views.py`` (``IsActiveEmployee``): every query is
-    filtered to ``user.employee_profile`` so the caller can only ever see their
-    own leave, balance, loans, payslips, and profile. Authorization here IS the
-    self-scoping — it deliberately does NOT require ``people:view`` (an ordinary
-    employee holds only ``my:access``). Fail-closed when no active employee is
-    linked, so "my leave" can never fall back to the org-wide population.
+    Reads (GET) mirror ``people/self_views.py``. Writes (POST) are allowed for
+    ESS Correspondence submits (ADR-0030): ``me/leave/``, ``me/loan/``,
+    ``me/attendance-permissions/``. Other methods stay fail-closed 405.
     """
     from people.models import Employee
-
-    if method not in ("GET", "HEAD", "OPTIONS"):
-        return {"status_code": 405, "data": {"detail": "Self-service endpoints are read-only"}}
 
     try:
         profile = user.employee_profile
@@ -1021,6 +1280,70 @@ def _people_me(user, sub, method) -> dict:
                 "personal records cannot be resolved."
             )},
         }
+
+    if method in ("POST",) and sub == "attendance-permissions":
+        from correspondence.serializers import CorrespondenceDetailSerializer
+        from people.attendance_ess import (
+            AttendanceESSError,
+            submit_my_attendance_permission,
+        )
+
+        try:
+            corr = submit_my_attendance_permission(user, body or {})
+        except AttendanceESSError as exc:
+            return {
+                "status_code": exc.status,
+                "data": {"detail": exc.detail, **exc.extra},
+            }
+        from ai.host_receipt import attach_receipt, correspondence_navigate_receipt
+
+        data = CorrespondenceDetailSerializer(corr).data
+        return attach_receipt(
+            {"status_code": 201, "data": data},
+            correspondence_navigate_receipt(data, fallback_route="/my/attendance"),
+        )
+
+    if method in ("POST",) and sub in ("leave", "loan"):
+        # Reuse DRF self-views (ADR-0030) so Agent confirm and HTTP stay one path.
+        from rest_framework.test import APIRequestFactory, force_authenticate
+
+        from people.self_views import LeaveSelfCollectionView, LoanSelfCollectionView
+
+        factory = APIRequestFactory()
+        path = f"/people/me/{sub}/"
+        django_req = factory.post(path, body or {}, format="json")
+        force_authenticate(django_req, user=user)
+        view = (
+            LeaveSelfCollectionView.as_view()
+            if sub == "leave"
+            else LoanSelfCollectionView.as_view()
+        )
+        response = view(django_req)
+        # DRF may defer rendering until .render() for Response objects.
+        if hasattr(response, "render") and not getattr(response, "_is_rendered", False):
+            response.render()
+        data = getattr(response, "data", None)
+        if data is None and getattr(response, "content", None):
+            import json as _json
+
+            try:
+                data = _json.loads(response.content.decode("utf-8") or "{}")
+            except Exception:  # noqa: BLE001
+                data = {"detail": (response.content or b"")[:200].decode("utf-8", "replace")}
+        code = int(response.status_code)
+        result = {"status_code": code, "data": data}
+        if 200 <= code < 300:
+            from ai.host_receipt import attach_receipt, correspondence_navigate_receipt
+
+            fallback = "/my/leave" if sub == "leave" else "/my/requests"
+            result = attach_receipt(
+                result,
+                correspondence_navigate_receipt(data, fallback_route=fallback),
+            )
+        return result
+
+    if method not in ("GET", "HEAD", "OPTIONS"):
+        return {"status_code": 405, "data": {"detail": "Self-service endpoints are read-only"}}
 
     from people.self_serializers import EmployeeSummarySerializer
 
@@ -1062,6 +1385,14 @@ def _people_me(user, sub, method) -> dict:
 
         qs = Loan.objects.filter(employee=profile)
         results = LoanSerializer(qs, many=True).data
+        return {"status_code": 200, "data": {"count": len(results), "results": results}}
+
+    if sub == "attendance-permissions":
+        from people.models import AttendancePermission
+        from people.serializers import AttendancePermissionSerializer
+
+        qs = AttendancePermission.objects.filter(employee=profile)
+        results = AttendancePermissionSerializer(qs, many=True).data
         return {"status_code": 200, "data": {"count": len(results), "results": results}}
 
     if sub == "payslips":
@@ -1739,6 +2070,8 @@ class CarbonHostExecutor(HostAPIExecutor):
                         "conversation_id": conversation_id,
                         "run_id": run_id,
                         "host_user_id": host_user_id,
+                        # ADR-0046: host agent executor may stage mutations.
+                        "surface": "agent",
                     },
                     knowledge_store=knowledge_store,
                 )
@@ -2593,7 +2926,7 @@ class CarbonHostExecutor(HostAPIExecutor):
                 # Self-service: the self-scoping IS the authorization (mirrors
                 # IsActiveEmployee). Must NOT require people:view — an ordinary
                 # employee holds only my:access, yet may read their own records.
-                return _people_me(user, pk, method)
+                return _people_me(user, pk, method, body=body or {})
             cap = "people:view" if method in ("GET", "HEAD", "OPTIONS") else "people:manage"
             if not _people_can(user, cap):
                 return {
@@ -2773,6 +3106,29 @@ class CarbonHostExecutor(HostAPIExecutor):
 
     # ── Confirmation lifecycle (Django Store-session compatible) ────────
 
+    async def _normalize_staged_body(self, body, method: str, endpoint: str):
+        """Governed/date repair of a staged write body (never invents values).
+
+        Slots come from the brand api_catalog entry for this endpoint, so
+        forward-dated fields are grounded and governed values resolved before
+        the operator ever sees the consent card.
+        """
+        if not isinstance(body, dict) or not body:
+            return body
+        from asgiref.sync import sync_to_async
+
+        from ai.write_slots import normalize_write_body, write_slots_for_endpoint
+
+        catalog = (self.instance_config or {}).get("api_catalog") or []
+        slots = write_slots_for_endpoint(method, endpoint, catalog)
+        try:
+            return await sync_to_async(
+                normalize_write_body, thread_sensitive=True,
+            )(body, slots=slots)
+        except Exception:  # noqa: BLE001 - staging must not fail on repair
+            logger.warning("Staged body normalization failed", exc_info=True)
+            return body
+
     async def create_pending_execution(
         self,
         conversation_id: str,
@@ -2790,6 +3146,11 @@ class CarbonHostExecutor(HostAPIExecutor):
         hold in the in-process transport.
         """
         from ai.engine.core.models import ToolExecution, generate_uuid
+
+        # Governed codes + grounded dates before anything is staged: the model
+        # has no clock and invents synonyms, and the operator sees this body on
+        # the consent card. Spec-free repair, so every surface benefits.
+        body = await self._normalize_staged_body(body, method, endpoint)
 
         execution = ToolExecution(
             id=generate_uuid(),
@@ -2876,9 +3237,19 @@ class CarbonHostExecutor(HostAPIExecutor):
             execution.output = json.dumps(api_result, default=str)
             execution.executed_at = _utcnow()
             await self.db.commit()
+            # Surface the host detail for Chat recovery synthesis (RULE_23) —
+            # never only "HTTP 400" without the outcome reason — and keep the
+            # status visible so the failure stays diagnosable.
+            detail = ""
+            if isinstance(api_result, dict):
+                data = api_result.get("data")
+                if isinstance(data, dict):
+                    detail = str(data.get("detail") or "").strip()
+                if not detail:
+                    detail = str(api_result.get("detail") or "").strip()
+            reason = detail or f"{method} {endpoint}"
             raise ToolExecutionError(
-                f"Confirmed API call failed with HTTP {code_int} "
-                f"({method} {endpoint})"
+                f"{reason} (HTTP {code_int})",
             )
 
         execution.status = "confirmed"

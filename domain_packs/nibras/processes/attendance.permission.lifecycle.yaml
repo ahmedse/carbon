@@ -1,0 +1,99 @@
+# Nibras attendance permission lifecycle — governed ProcessDefinition.
+#
+# submit (ESS /me) → (human review via Correspondence) → approve → verify.
+# Happy path: employee self-service + manager Correspondence (ADR-0030).
+# Admin create/PATCH + NPS-1 SoD remains ops fallback only.
+id: attendance.permission.lifecycle
+version: "1.0"
+owner: ai
+status: active
+
+objects:
+  - type: attendance.permission
+    selector: permission_id
+
+inputs:
+  permission_id:
+    type: string
+
+scope:
+  source: authenticated_host_context
+
+objective:
+  predicate: attendance.permission.approved_and_recorded
+
+steps:
+  - id: submit
+    kind: command
+    capability: attendance.permission.submit
+    depends_on: []
+    autonomy: act_confirm
+    binds_to: attendance.permission
+    consent: true
+    idempotency_scope: permission_id
+    unknown_outcome: escalate
+
+  - id: review
+    kind: human_task
+    capability: attendance.permission.review
+    depends_on:
+      - submit
+    autonomy: human_only
+    separation_of_duties:
+      - requester
+      - approver
+    binds_to: inbox
+    consent: false
+    approval_ref: attendance.permission.review
+
+  - id: approve
+    kind: command
+    capability: attendance.permission.approve
+    depends_on:
+      - review
+    autonomy: act_confirm
+    binds_to: attendance.permission
+    consent: true
+    idempotency_scope: permission_id
+    unknown_outcome: escalate
+
+  - id: verify
+    kind: assertion
+    capability: attendance.permission.approved_and_recorded
+    depends_on:
+      - approve
+    autonomy: observe
+    binds_to: attendance.permission
+    consent: false
+
+constraints:
+  precedence:
+    - from: submit
+      to: review
+    - from: review
+      to: approve
+    - from: approve
+      to: verify
+
+evidence:
+  - type: AttendancePermission
+    from_step: submit
+  - type: ApprovalGrant
+    from_step: review
+  - type: AttendancePermission
+    from_step: approve
+
+policies:
+  refuse_if:
+    - requester equals approver
+    - permission is not reviewed before approve
+  ask_if:
+    - hours exceed daily threshold
+
+exceptions: []
+
+kill_switch: false
+
+tests:
+  - name: happy-path-approved-and-recorded
+    expect: attendance.permission.approved_and_recorded

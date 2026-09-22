@@ -65,15 +65,63 @@ describe('EnvelopeMessage — full envelope', () => {
     expect(screen.getByText('8% have no gender recorded.')).toBeInTheDocument();
   });
 
-  it('renders source provenance chips', () => {
-    render(<EnvelopeMessage envelope={sampleEnvelope} fallbackContent="" />);
-
-    const source = screen.getByTestId('envelope-source');
-    expect(source).toHaveTextContent('analyze_employees');
-    expect(source).toHaveTextContent('2 rows');
+  it('rewrites ADR-0046 host-mutation caveats into operator language', () => {
+    render(
+      <EnvelopeMessage
+        envelope={{
+          headline: 'Leave prepared',
+          prose: ['Draft ready.'],
+          caveats: [
+            {
+              level: 'info',
+              text: 'Chat cannot stage host mutations (ADR-0046 / G2).',
+            },
+          ],
+        }}
+        fallbackContent=""
+      />,
+    );
+    const caveat = screen.getByTestId('envelope-caveat');
+    expect(caveat).toHaveTextContent(/can’t be submitted in Chat/i);
+    expect(caveat).not.toHaveTextContent(/ADR-0046/);
+    expect(caveat).not.toHaveTextContent(/host mutations/i);
   });
 
-  it('renders all four provenance facts (tool, rows, truncation, resolved-at)', () => {
+  it('renders Based on chips in outcome language (no engine tool ids)', () => {
+    render(<EnvelopeMessage envelope={sampleEnvelope} fallbackContent="" />);
+
+    expect(screen.getByText(/Based on/i)).toBeInTheDocument();
+    const source = screen.getByTestId('envelope-source');
+    expect(source).toHaveTextContent('Employee data');
+    expect(source).not.toHaveTextContent('analyze_employees');
+    expect(source).not.toHaveTextContent('rows');
+  });
+
+  it('maps call_host_api leave sources without leaking the tool id or 0 rows', () => {
+    render(
+      <EnvelopeMessage
+        envelope={{
+          headline: 'Leave ready',
+          sources: [
+            {
+              tool: 'call_host_api',
+              rows_returned: 0,
+              api_name: 'self/leave/balance',
+              resolved_at: '2026-09-14T10:30:00Z',
+            },
+          ],
+        }}
+        fallbackContent=""
+      />,
+    );
+
+    const source = screen.getByTestId('envelope-source');
+    expect(source).toHaveTextContent('Leave balance');
+    expect(source).not.toHaveTextContent('call_host_api');
+    expect(source).not.toHaveTextContent('0');
+  });
+
+  it('renders proof-friendly people sources without raw tool ids on L0', () => {
     render(
       <EnvelopeMessage
         envelope={{
@@ -92,10 +140,9 @@ describe('EnvelopeMessage — full envelope', () => {
     );
 
     const source = screen.getByTestId('envelope-source');
-    expect(source).toHaveTextContent('people_query');
-    expect(source).toHaveTextContent('1200 rows');
-    expect(source).toHaveTextContent('Truncated');
-    expect(screen.getByText(/2026/)).toBeInTheDocument();
+    expect(source).toHaveTextContent('People records');
+    expect(source).not.toHaveTextContent('people_query');
+    expect(source).not.toHaveTextContent('1200');
   });
 
   it('renders a chart with the declared type', () => {

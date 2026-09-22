@@ -24,11 +24,7 @@ _DEIXIS = re.compile(
     re.IGNORECASE,
 )
 
-# Explicit confirmation after a prior clarify — do not re-ask.
-_CONFIRM = re.compile(
-    r"^(yes|yep|yeah|yup|correct|right|ok|okay|sure|نعم|أيوه|ايوه|صح|تمام)\b",
-    re.IGNORECASE,
-)
+from ai.engine.cognition.dialogue.affirmation import starts_with_affirmation
 
 _HEADING = re.compile(r"^#{1,3}\s+(.+)$", re.MULTILINE)
 _BOLD = re.compile(r"\*\*([^*]{2,80})\*\*")
@@ -41,7 +37,12 @@ def has_deixis(message: str) -> bool:
 
 
 def is_confirm_reply(message: str) -> bool:
-    return bool(_CONFIRM.match((message or "").strip()))
+    """True when the user is agreeing with the previous turn.
+
+    Delegates to the canonical affirmation module so every surface (deixis,
+    pending memory cards, consent resume) reads the same Arabic spellings.
+    """
+    return starts_with_affirmation(message)
 
 
 def _topic_from_content(content: str) -> str | None:

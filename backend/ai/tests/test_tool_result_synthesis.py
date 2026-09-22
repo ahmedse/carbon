@@ -54,14 +54,47 @@ class TestRenderToolResultsForSynthesis:
 
 class TestSynthesizeToolResultsShortCircuits:
     @pytest.mark.asyncio
-    async def test_no_usable_tools_returns_none(self):
-        # requires_confirmation + errored tools are excluded → no usable → None
+    async def test_no_usable_tools_with_error_runs_recovery(self):
+        # Errored tools → ADR-0021 failure recovery (deterministic fallback
+        # when the recovery LLM is unavailable / mocked off).
+        with patch(
+            "ai.engine.llm.router.route_chat",
+            AsyncMock(side_effect=RuntimeError("no llm")),
+        ):
+            result = await _synthesize_tool_results(
+                instance_id="i", conversation_id="c", user_message="hi",
+                completed_tools=[
+                    {"tool_name": "create_dq_rule", "result": {},
+                     "requires_confirmation": True},
+                    {
+                        "tool_name": "call_host_api:submit_my_leave",
+                        "tool_args": {"api_name": "submit_my_leave", "method": "POST"},
+                        "result": {
+                            "status_code": 400,
+                            "data": {
+                                "detail": "Those dates overlap an existing emergency leave.",
+                                "error_kind": "overlap",
+                                "hints": {"suggestion": "Pick another day that is free."},
+                            },
+                        },
+                        "error": "Those dates overlap an existing emergency leave.",
+                    },
+                ],
+                draft_text="",
+            )
+        assert result is not None
+        assert result.get("is_recovery") is True
+        assert "overlap" in result["text"].lower() or "Pick another day" in result["text"]
+        assert "invented" not in result["text"].lower()
+
+    @pytest.mark.asyncio
+    async def test_confirm_only_tools_returns_none(self):
+        # Staging-only turn (no executed failure) → no recovery, no synthesis.
         result = await _synthesize_tool_results(
             instance_id="i", conversation_id="c", user_message="hi",
             completed_tools=[
                 {"tool_name": "create_dq_rule", "result": {},
                  "requires_confirmation": True},
-                {"tool_name": "x", "result": None, "error": "boom"},
             ],
             draft_text="",
         )

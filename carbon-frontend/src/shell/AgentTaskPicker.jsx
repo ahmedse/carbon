@@ -29,6 +29,10 @@ function briefLabel(plan) {
   return raw.length > 72 ? `${raw.slice(0, 72)}…` : raw;
 }
 
+function fullBrief(plan) {
+  return (plan?.brief || '').trim() || 'Untitled task';
+}
+
 function AgentTaskPicker({
   plans,
   loading,
@@ -83,33 +87,47 @@ function AgentTaskPicker({
             if (!plan) return v;
             const meta = planStatusMeta(effectivePlanStatus(plan));
             return (
-              <Stack direction="row" alignItems="center" spacing={0.75} sx={{ minWidth: 0 }}>
+              <Stack
+                direction="row"
+                alignItems="flex-start"
+                spacing={0.75}
+                sx={{ minWidth: 0, width: '100%', py: 0.125 }}
+              >
                 <Typography
                   variant="body2"
+                  title={fullBrief(plan)}
                   sx={{
                     fontSize: '0.8125rem',
                     fontWeight: 500,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
+                    lineHeight: 1.35,
                     minWidth: 0,
                     flex: 1,
+                    maxHeight: '4.05em',
+                    overflowY: 'auto',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
                   }}
                 >
-                  {briefLabel(plan)}
+                  {fullBrief(plan)}
                 </Typography>
                 <Chip
                   size="small"
                   variant="outlined"
                   label={meta.label}
                   color={meta.color}
-                  sx={{ height: 18, fontSize: '0.625rem', flexShrink: 0 }}
+                  sx={{ height: 18, fontSize: '0.625rem', flexShrink: 0, mt: 0.125 }}
                 />
               </Stack>
             );
           }}
           sx={{
-            '& .MuiSelect-select': { py: 0.75, display: 'flex', alignItems: 'center' },
+            '& .MuiSelect-select': {
+              py: 0.75,
+              display: 'flex',
+              alignItems: 'flex-start',
+              // ~2–3 lines of brief; overflow scrolls inside the value.
+              minHeight: '3.25em',
+            },
           }}
           MenuProps={{ PaperProps: { sx: { maxHeight: 360 } } }}
         >
@@ -134,13 +152,28 @@ function AgentTaskPicker({
             const meta = planStatusMeta(effectivePlanStatus(plan));
             return (
               <MenuItem key={plan.id} value={plan.id} sx={{ maxWidth: 420 }}>
-                <Stack direction="row" alignItems="center" spacing={1} sx={{ width: '100%', minWidth: 0 }}>
+                <Stack direction="row" alignItems="center" spacing={0.5} sx={{ width: '100%', minWidth: 0 }}>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography variant="body2" sx={{ fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {briefLabel(plan)}
                     </Typography>
                   </Box>
                   <Chip size="small" variant="outlined" label={meta.label} color={meta.color} sx={{ height: 16, fontSize: '0.5625rem' }} />
+                  {onDelete && (
+                    <Tooltip title="Remove task">
+                      <IconButton
+                        size="small"
+                        aria-label="Remove task"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDelete(plan.id);
+                        }}
+                        sx={{ p: 0.25 }}
+                      >
+                        <DeleteOutlinedIcon sx={{ fontSize: 14, color: deletingId === plan.id ? 'error.main' : 'text.disabled' }} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                 </Stack>
               </MenuItem>
             );
@@ -149,7 +182,6 @@ function AgentTaskPicker({
           {done.map((plan) => {
             const st = effectivePlanStatus(plan);
             const meta = planStatusMeta(st);
-            const canDelete = TERMINAL.has(st);
             return (
               <MenuItem key={plan.id} value={plan.id} sx={{ maxWidth: 420 }}>
                 <Stack direction="row" alignItems="center" spacing={0.5} sx={{ width: '100%', minWidth: 0 }}>
@@ -159,11 +191,11 @@ function AgentTaskPicker({
                     </Typography>
                   </Box>
                   <Chip size="small" variant="outlined" label={meta.label} color={meta.color} sx={{ height: 16, fontSize: '0.5625rem' }} />
-                  {canDelete && onDelete && (
-                    <Tooltip title="Delete task">
+                  {onDelete && (
+                    <Tooltip title="Remove task">
                       <IconButton
                         size="small"
-                        aria-label="Delete task"
+                        aria-label="Remove task"
                         onClick={(e) => {
                           e.stopPropagation();
                           onDelete(plan.id);

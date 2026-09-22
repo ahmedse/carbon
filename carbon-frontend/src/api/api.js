@@ -223,7 +223,8 @@ function globalLogout() {
 /**
  * Universal API call helper with JWT refresh, robust param handling, errors, JSON parsing, and optional timeout.
  * @param {string} endpoint - API endpoint, relative to API_BASE_URL
- * @param {object} opts - Options: method, body, token, project_id, module_id, timeoutMs, headers
+ * @param {object} opts - Options: method, body, token, project_id, module_id, timeoutMs, headers,
+ *   rateLimitRetries (default 2) — how many times to wait+retry on HTTP 429
  */
 export async function apiFetch(
   endpoint,
@@ -235,6 +236,7 @@ export async function apiFetch(
     module_id,
     timeoutMs = 15000, // 15s default timeout
     headers: customHeaders = {},
+    rateLimitRetries = 2,
   } = {}
 ) {
   let url = joinUrl(API_BASE_URL, endpoint);
@@ -287,57 +289,66 @@ export async function apiFetch(
     ...customHeaders,
   };
 
-  // Use AbortController for timeout
+  // Use AbortController for timeout (covers the whole attempt sequence).
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   let response;
   let responseData;
+  let attemptsLeft = Math.max(0, Number(rateLimitRetries) || 0);
 
   try {
-    response = await fetch(url, { // internal apiFetch
-      method,
-      headers,
-      signal: controller.signal,
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
-    clearTimeout(timeout);
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      response = await fetch(url, {
+        method,
+        headers,
+        signal: controller.signal,
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
 
-    const isJson = response.headers.get("content-type")?.includes("application/json");
-    responseData = isJson ? await response.json() : await response.text();
+      const isJson = response.headers.get("content-type")?.includes("application/json");
+      responseData = isJson ? await response.json() : await response.text();
 
-    // Handle token errors: try refresh exactly once.
-    // If a refresh happened recently (within 2s), skip the retry — we just
-    // refreshed, so a 401 now means the problem is NOT the token.
-    const timeSinceLastRefresh = Date.now() - getLastRefreshTimestamp();
-    const justRefreshed = timeSinceLastRefresh < 2000; // 2-second window
+      // Handle token errors: try refresh exactly once.
+      const timeSinceLastRefresh = Date.now() - getLastRefreshTimestamp();
+      const justRefreshed = timeSinceLastRefresh < 2000;
 
-    if (
-      !response.ok &&
-      response.status === 401 &&
-      accessToken &&
-      !justRefreshed
-    ) {
-      try {
-        accessToken = await refreshAccessToken();
-        headers.Authorization = `Bearer ${accessToken}`;
-        // Retry request after token refresh
-        response = await fetch(url, { // retry after refresh
-          method,
-          headers,
-          signal: controller.signal,
-          ...(body ? { body: JSON.stringify(body) } : {}),
-        });
-        clearTimeout(timeout);
-        const retryIsJson = response.headers.get("content-type")?.includes("application/json");
-        responseData = retryIsJson ? await response.json() : await response.text();
-      } catch (_refreshError) {
-        handleRefreshFailure(_refreshError);
+      if (
+        !response.ok &&
+        response.status === 401 &&
+        accessToken &&
+        !justRefreshed
+      ) {
+        try {
+          accessToken = await refreshAccessToken();
+          headers.Authorization = `Bearer ${accessToken}`;
+          response = await fetch(url, {
+            method,
+            headers,
+            signal: controller.signal,
+            ...(body ? { body: JSON.stringify(body) } : {}),
+          });
+          const retryIsJson = response.headers.get("content-type")?.includes("application/json");
+          responseData = retryIsJson ? await response.json() : await response.text();
+        } catch (_refreshError) {
+          handleRefreshFailure(_refreshError);
+        }
       }
-    }
 
-    // Check for fatal errors and propagate with detail
-    if (!response.ok) {
+      if (response.ok) {
+        clearTimeout(timeout);
+        return responseData;
+      }
+
+      // Platform-wide 429 backoff (replaces page-local TeamInbox throttle).
+      if (response.status === 429 && attemptsLeft > 0) {
+        attemptsLeft -= 1;
+        const waitMs = rateLimitWaitMs(response, responseData);
+        await sleep(waitMs);
+        continue;
+      }
+
       const feedback =
         responseData && typeof responseData === "object"
           ? responseData.feedback
@@ -359,20 +370,19 @@ export async function apiFetch(
       err.normalized = normalized;
       err.feedback = feedback;
       err.status = response.status;
-      // Attach raw payload so callers can map DRF field errors per-field.
       err.data = responseData;
+      if (response.status === 429) err.isRateLimited = true;
       throw err;
     }
-
-    return responseData;
   } catch (error) {
     clearTimeout(timeout);
-    // Detect AbortController timeout (including Chrome quirk where abort throws TypeError)
+    if (error.status || error.isRateLimited || error.normalized) {
+      throw error;
+    }
     let err = error;
     if (error.name === "AbortError" || controller.signal.aborted) {
       err = new Error("Request timed out");
     }
-    // Normalize all errors through the standard shape
     const normalized = normalizeError(
       err,
       { endpoint, method, status: err.status }
@@ -384,6 +394,29 @@ export async function apiFetch(
     if (err.data !== undefined) finalErr.data = err.data;
     throw finalErr;
   }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+/** Prefer Retry-After header, then DRF throttle message, else 5s. */
+function rateLimitWaitMs(response, responseData) {
+  const retryAfter = response?.headers?.get?.("Retry-After");
+  if (retryAfter) {
+    const asNum = Number(retryAfter);
+    if (Number.isFinite(asNum) && asNum >= 0) return (asNum + 1) * 1000;
+  }
+  const msg = String(
+    (responseData && typeof responseData === "object" && (responseData.detail || responseData.message))
+    || responseData
+    || "",
+  );
+  const match = msg.match(/available in (\d+)\s*seconds?/i);
+  if (match) return (Number(match[1]) + 1) * 1000;
+  return 5000;
 }
 
 /**

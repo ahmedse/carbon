@@ -714,6 +714,47 @@ def _sanitize_ui_value(value, *, key: str = ""):
     return value
 
 
+def _consent_slots_for_step(step, host_user_id: str | None) -> list:
+    """Governed slot specs for a step waiting on consent (empty otherwise).
+
+    The consent card renders fields and value options from here, so the UI
+    never carries its own copy of governed leave / loan / permission lists.
+    """
+    if getattr(step, "status", "") != STEP_AWAITING_APPROVAL:
+        return []
+    if getattr(step, "tool_name", "") != "call_host_api":
+        return []
+    args = step.tool_args_json if isinstance(step.tool_args_json, dict) else {}
+    api_name = str(args.get("api_name") or "").strip()
+    if not api_name:
+        return []
+    try:
+        from ai.write_slots import consent_slot_specs
+
+        catalog = (_plan_instance_config(host_user_id) or {}).get("api_catalog") or []
+        return consent_slot_specs(api_name, catalog)
+    except Exception:  # noqa: BLE001 - serialization must not fail on metadata
+        logger.warning(
+            "consent slot spec failed for api=%s", api_name, exc_info=True,
+        )
+        return []
+
+
+def _output_actions_from_steps(steps) -> list:
+    """Chat-compatible navigate actions derived from completed host writes."""
+    from ai.host_receipt import collect_navigate_actions
+
+    outputs = []
+    for step in steps or []:
+        raw = getattr(step, "tool_output_json", None)
+        if raw is None:
+            continue
+        parsed = _parse_tool_output_json(raw) if not isinstance(raw, dict) else raw
+        if isinstance(parsed, dict):
+            outputs.append(parsed)
+    return collect_navigate_actions(outputs)
+
+
 def _ui_tool_output(tool_output_json):
     """Product-facing tool_output: shaped + redacted (DB row stays raw).
 
@@ -1495,6 +1536,7 @@ class PlansService:
             "completed_at": run.completed_at.isoformat() if run.completed_at else None,
             "final_response": run.final_response,
             "prior_run": _prior_run_receipt(run),
+            "output_actions": _output_actions_from_steps(steps),
             "steps": [
                 {
                     "step_id": s.step_index,
@@ -1518,6 +1560,7 @@ class PlansService:
                         isinstance(s.critic_flags_json, dict)
                         and s.critic_flags_json.get("consent_granted")
                     ),
+                    "consent_slots": _consent_slots_for_step(s, run.host_user_id),
                     "error": s.error,
                     "tool_output": _step_tool_output_fields(s.tool_output_json)[0],
                     "output_type": _step_tool_output_fields(s.tool_output_json)[1],
@@ -2824,13 +2867,22 @@ class PlansService:
         return self.get_plan(user, plan_id)
 
     def delete_plan(self, user, plan_id: str) -> dict:
-        """Delete a terminal-state plan (cancelled / failed / completed only)."""
+        """Remove a plan from the owner's task list at any stage.
+
+        Non-terminal runs are cancelled first (stop work / skip remaining
+        steps) then hard-deleted. Owners should always be able to clear
+        their inbox — waiting for completion is not required.
+        """
         run = self._get_owned_run(user, plan_id)
-        if run.status not in (STATUS_CANCELLED, STATUS_FAILED, STATUS_COMPLETED):
-            raise PlanNotRunnableError(
-                f"Only cancelled, failed, or completed plans can be deleted "
-                f"(status: {run.status})."
-            )
+        terminal = (
+            STATUS_CANCELLED,
+            STATUS_FAILED,
+            STATUS_COMPLETED,
+            STATUS_COMPLETED_WITH_GAPS,
+        )
+        if run.status not in terminal:
+            self._apply_cancel(run)
+            run.refresh_from_db()
         run.delete()
         return {"deleted": True, "plan_id": plan_id}
 
@@ -3770,6 +3822,8 @@ class PlansService:
                     "host_user_id": user_pk,
                     "run_id": str(run.id),
                     "instance_config": instance_config,
+                    # ADR-0046: Agent plan Run may stage mutations (RULE_21).
+                    "surface": "plan",
                 },
             )
             # W4-D Flight Director (additive): in-loop supervisor wired onto
@@ -4307,6 +4361,30 @@ class PlansService:
 
     # ── Consent: step-level confirm / decline ─────────────────────────────
 
+    @staticmethod
+    def _committed_tool_output(staged, api_result) -> dict:
+        """Replace a staged consent envelope with the committed host effect.
+
+        The pre-consent payload (``requires_confirmation`` / ``execution_id``)
+        is intent; the confirmed host response is the outcome. Output, the
+        navigate receipt (``ai.host_receipt``) and the ledger must read the
+        effect that actually happened, so the step carries it after confirm.
+        """
+        out = dict(staged) if isinstance(staged, dict) else {}
+        out.pop("execution_id", None)
+        out["result"] = (
+            api_result if isinstance(api_result, str)
+            else json.dumps(api_result, default=str)
+        )
+        out["error"] = None
+        out["confirmed"] = True
+        if isinstance(api_result, dict) and api_result.get("action") == "navigate":
+            out["action"] = "navigate"
+            out["route"] = api_result.get("route") or ""
+            out["label"] = api_result.get("label") or "Open"
+            out["summary"] = api_result.get("summary") or ""
+        return out
+
     def confirm_step(self, user, plan_id: str, step_id, body_override=None) -> dict:
         """Confirm a paused consent step — executes the staged mutation.
 
@@ -4424,7 +4502,7 @@ class PlansService:
             return _grant_unstaged_consent(reason="no_execution_id")
 
         try:
-            async_to_sync(_confirm)()
+            api_result = async_to_sync(_confirm)()
         except Exception as exc:  # noqa: BLE001 - fail-visible with detail
             msg = str(exc)
             dead = (
@@ -4449,9 +4527,12 @@ class PlansService:
 
         step.status = STEP_COMPLETED
         flags = step.critic_flags_json if isinstance(step.critic_flags_json, dict) else {}
-        flags = {**(flags or {}), "consent_granted": True}
+        flags = {**(flags or {}), "consent_granted": True, "effect_committed": True}
         step.critic_flags_json = flags
-        step.save(update_fields=["status", "critic_flags_json", "updated_at"])
+        step.tool_output_json = self._committed_tool_output(tool_output, api_result)
+        step.save(update_fields=[
+            "status", "critic_flags_json", "tool_output_json", "updated_at",
+        ])
         # Journal the committed consent + completion (exactly-one-effect): a
         # confirmed step reconstructs as ``succeeded``, never re-executed.
         StepJournal.append(

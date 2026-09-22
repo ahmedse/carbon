@@ -8,6 +8,7 @@
 #
 # RULE_12: employee + payroll data are org-scoped via the OrgUnit FK.
 
+from django.conf import settings
 from django.db import models
 
 
@@ -275,6 +276,51 @@ class PayrollRunValidation(models.Model):
 
     def __str__(self):
         return f"{self.rule_key} @ run #{self.payroll_run_id}: {'pass' if self.passed else 'fail'}"
+
+
+class WpsFiling(models.Model):
+    """GOSI/WPS SIF filing lifecycle state for one committed payroll run.
+
+    Distinct from a raw WPS download: generate persists artifact metadata,
+    validate records pass/fail, submit is irreversible (idempotent).
+    """
+
+    STATUS_CHOICES = [
+        ("generated", "Generated"),
+        ("validated", "Validated"),
+        ("submitted", "Submitted"),
+    ]
+
+    payroll_run = models.OneToOneField(
+        PayrollRun,
+        on_delete=models.CASCADE,
+        related_name="wps_filing",
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="generated")
+    content_hash = models.CharField(max_length=64, blank=True, default="")
+    record_count = models.PositiveIntegerField(default=0)
+    csv_bytes = models.BinaryField(null=True, blank=True)
+    generated_at = models.DateTimeField(null=True, blank=True)
+    validated_at = models.DateTimeField(null=True, blank=True)
+    validation_passed = models.BooleanField(default=False)
+    validation_issues = models.JSONField(default=list, blank=True)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    submitted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    receipt_id = models.CharField(max_length=64, blank=True, default="")
+    reconciled = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "WPS Filing"
+        verbose_name_plural = "WPS Filings"
+
+    def __str__(self):
+        return f"WPS filing run #{self.payroll_run_id} ({self.status})"
 
 
 class Position(models.Model):
@@ -1005,3 +1051,38 @@ class PersonnelEvent(models.Model):
             models.Index(fields=['entity_type', 'entity_id', 'effective_date']),
             models.Index(fields=['event_kind', 'effective_date']),
         ]
+
+
+class SoDPreparation(models.Model):
+    """First-writer preparer stamp for host SoD (ADR-0045 / NPS-1).
+
+    Polymorphic subject (payroll_run | wps_filing | employee |
+    attendance_permission). Irreversible effects call
+    ``people.governance.sod.require_distinct_actor``.
+    """
+
+    subject_type = models.CharField(max_length=64)
+    subject_id = models.PositiveIntegerField()
+    process_key = models.CharField(max_length=128, blank=True)
+    preparer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='sod_preparations',
+    )
+    prepared_at = models.DateTimeField()
+
+    class Meta:
+        verbose_name = "SoD preparation"
+        verbose_name_plural = "SoD preparations"
+        constraints = [
+            models.UniqueConstraint(
+                fields=['subject_type', 'subject_id'],
+                name='people_sodprep_subject_uniq',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['subject_type', 'subject_id']),
+        ]
+
+    def __str__(self):
+        return f"{self.subject_type}:{self.subject_id} by {self.preparer_id}"

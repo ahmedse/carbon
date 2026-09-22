@@ -67,6 +67,7 @@ const SUBJECT_TYPE_KEY = {
   'people.LeaveRecord': 'type.leaveRequest',
   'people.Loan': 'type.loanRequest',
   'people.Employee': 'type.profileChange',
+  'people.AttendancePermission': 'type.attendancePermission',
 };
 
 /**
@@ -87,7 +88,7 @@ export function subjectTypeLabel(t, subjectType) {
   return key ? t(key, { defaultValue: subjectType }) : subjectType;
 }
 
-/** The six governed correspondence types, in display order. */
+/** Creatable types in New Request dialog (attendance has its own flow). */
 export const CORR_TYPES = [
   'leave_request',
   'internal_memo',
@@ -97,6 +98,17 @@ export const CORR_TYPES = [
   'profile_change',
 ];
 
+/** Types shown in My Requests type filter (includes attendance). */
+export const CORR_FILTER_TYPES = [
+  'leave_request',
+  'attendance_permission',
+  'loan_request',
+  'profile_change',
+  'internal_memo',
+  'circular',
+  'decision',
+];
+
 const CORR_TYPE_SUFFIX = {
   leave_request: 'leaveRequest',
   internal_memo: 'internalMemo',
@@ -104,6 +116,7 @@ const CORR_TYPE_SUFFIX = {
   decision: 'decision',
   loan_request: 'loanRequest',
   profile_change: 'profileChange',
+  attendance_permission: 'attendancePermission',
 };
 
 /** Localized label for a corr_type code (e.g. "loan_request"). */
@@ -173,6 +186,13 @@ export function payloadSummary(t, item, lang) {
       if (start === '—' && end === '—') return null;
       return `${start} → ${end}`;
     }
+    case 'attendance_permission': {
+      const day = formatDate(payload.date || payload.permission_date, lang);
+      const hours = payload.hours != null ? String(payload.hours) : null;
+      if (day === '—' && !hours) return null;
+      if (hours) return `${day} (${hours}h)`;
+      return day;
+    }
     case 'loan_request':
       return t('summaryLoanAmount', {
         amount: payload.principal != null ? String(payload.principal) : '—',
@@ -213,6 +233,13 @@ export function payloadRows(t, item, lang) {
         { label: t('summaryEnd'), value: formatDate(payload.end_date, lang) },
         { label: t('summaryDays'), value: payload.days != null ? String(payload.days) : '—' },
         { label: t('summaryNote'), value: payload.note || '—' },
+      ];
+    case 'attendance_permission':
+      return [
+        { label: t('summaryPermissionType'), value: payload.permission_type || '—' },
+        { label: t('summaryDate'), value: formatDate(payload.date, lang) },
+        { label: t('summaryHours'), value: payload.hours != null ? String(payload.hours) : '—' },
+        { label: t('summaryNotes'), value: payload.notes || '—' },
       ];
     case 'loan_request':
       return [

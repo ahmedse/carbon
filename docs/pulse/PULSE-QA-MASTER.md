@@ -326,7 +326,7 @@ curl -s http://localhost:8009/carbon-api/ai/workspace/conversations/ \
 | U01 | `@` trigger | Typeahead picker opens; searches tables/rules/modules/org-units in parallel |
 | U02 | `@Emissions` mention | Resolves to entity; ContextChipRow shows chip; chip passed as session context |
 | U03 | `#` mention | Same for DQ domain entities; PickerMenu opens |
-| U04 | `/clear` slash command | Clears current conversation messages |
+| U04 | `/clear` slash command | Empties the chat window; thin dotted divider with clickable **Restore** mid-line; working context cleared; Restore brings prior context + messages back |
 | U05 | `/help` slash command | Shows available commands |
 | U06 | `/summarize` | Triggers summarize directive |
 | U07 | `/checkpoint` | Creates checkpoint from input bar |

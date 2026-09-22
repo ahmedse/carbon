@@ -19,6 +19,16 @@ def _estimate_tokens(text: str) -> int:
     return max(0, len(text or "") // 4)
 
 
+def _message_created_after(created_at, cleared_at: str) -> bool:
+    """True when ``created_at`` is strictly after an ISO ``cleared_at`` stamp."""
+    if created_at is None or not cleared_at:
+        return False
+    created_s = (
+        created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at)
+    )
+    return created_s > cleared_at
+
+
 def _default_adapter():
     """Lazily instantiate the default host adapter (avoids import cycles).
 
@@ -269,6 +279,26 @@ def assemble_context(
     # Phase 19-A — soft-deleted messages never consume budget; filter them out
     # BEFORE the recent-turns window is truncated.
     live_messages = [m for m in messages if not m.get("is_deleted")]
+
+    # After /clear, only turns after the clear boundary enter the provider
+    # window (durable log is kept; UI Restore undoes the break).
+    clear_break = (
+        getattr(conversation, "context_snapshot_json", None) or {}
+    ).get("_clear_break") or {}
+    boundary_id = clear_break.get("message_boundary_id")
+    if boundary_id:
+        boundary = str(boundary_id)
+        ids = [str(m.get("id")) for m in live_messages]
+        if boundary in ids:
+            live_messages = live_messages[ids.index(boundary) + 1 :]
+        else:
+            cleared_at = clear_break.get("cleared_at")
+            if cleared_at:
+                live_messages = [
+                    m
+                    for m in live_messages
+                    if _message_created_after(m.get("created_at"), cleared_at)
+                ]
 
     # T2 — most recent turns verbatim; anything older is NOT sent.
     recent = list(live_messages[-recent_turns:])

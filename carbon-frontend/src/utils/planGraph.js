@@ -162,6 +162,25 @@ export function annotateChoiceBranches(nodes, edges) {
       });
     }
   });
+
+  // Parallel / map gateways inherit children status (Collect must not stay PENDING
+  // while every fan-out child is Finished).
+  nodes.forEach((n) => {
+    if (n.node_type !== 'parallel' && n.node_type !== 'map') return;
+    const kids = (outBySource.get(n.id) || [])
+      .map((e) => byId.get(e.target))
+      .filter(Boolean);
+    if (!kids.length) return;
+    if (kids.every((k) => k.status === 'completed' || k.status === 'skipped')) {
+      n.status = 'completed';
+    } else if (kids.some((k) => k.status === 'failed')) {
+      n.status = 'failed';
+    } else if (kids.some((k) => k.status === 'running' || k.status === 'awaiting_approval')) {
+      n.status = 'running';
+    } else if (kids.some((k) => k.status === 'completed')) {
+      n.status = 'running';
+    }
+  });
 }
 
 /**
@@ -664,9 +683,24 @@ export function layoutExecutionGraph(plan, options = {}) {
     ? Math.max(...ranks.map((r) => byRank.get(r).filter((n) => !n.is_dummy).length || 1))
     : 0;
   const prefer = options.direction || 'auto';
+  // Smart axis: parallel fan-out → LR (ranks left→right, siblings stacked).
+  // Pure chain → TB (reads top→bottom, fills a tall rail — never a lonely 2-card row).
   const direction = prefer === 'tb' || prefer === 'lr'
     ? prefer
-    : (maxInRank <= 1 && nodes.length >= 3 ? 'tb' : 'lr');
+    : (maxInRank > 1 ? 'lr' : 'tb');
+
+  // Short sequential plans get wider cards so fit-to-view fills the canvas.
+  const visibleCount = nodes.filter((n) => !n.is_dummy).length;
+  if (maxInRank <= 1 && visibleCount > 0 && visibleCount <= 4) {
+    L.nodeW = Math.max(L.nodeW, 380);
+    L.nodeH = Math.max(L.nodeH, 72);
+    L.rowGap = Math.max(L.rowGap, 44);
+    L.colGap = Math.max(L.colGap, 40);
+  } else if (maxInRank > 1) {
+    // Parallel fans: slightly shorter cards so siblings fit without endless scroll.
+    L.nodeW = Math.max(L.nodeW, 260);
+    L.nodeH = Math.min(Math.max(L.nodeH, 64), 72);
+  }
 
   let width;
   let height;

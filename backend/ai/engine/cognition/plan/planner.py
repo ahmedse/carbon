@@ -630,12 +630,23 @@ def _coerce_host_api_steps(
             api = step.tool_name
             if api == "create_leave_record" and "submit_my_leave" in catalog_names:
                 api = "submit_my_leave"
+            if (
+                api == "create_attendance_permission"
+                and "submit_my_attendance_permission" in catalog_names
+            ):
+                api = "submit_my_attendance_permission"
             api = _rewrite_domain_api(api, domain, catalog_names)
             step.tool_name = "call_host_api"
             args = {"api_name": api, **{k: v for k, v in args.items() if k != "api_name"}}
             if api == "submit_my_leave" and isinstance(args.get("body"), dict):
                 args["body"] = {
                     k: v for k, v in args["body"].items() if k != "employee"
+                }
+            if api == "submit_my_attendance_permission" and isinstance(args.get("body"), dict):
+                args["body"] = {
+                    k: v
+                    for k, v in args["body"].items()
+                    if k not in ("employee", "approved")
                 }
             step.tool_args = args
             logger.info(
@@ -685,9 +696,29 @@ def _coerce_host_api_steps(
                 if isinstance(body, dict) and "employee" in body:
                     body = {k: v for k, v in body.items() if k != "employee"}
                     args["body"] = body
+            if (
+                candidate == "create_attendance_permission"
+                and "submit_my_attendance_permission" in catalog_names
+            ):
+                candidate = "submit_my_attendance_permission"
+                body = args.get("body")
+                if isinstance(body, dict):
+                    args["body"] = {
+                        k: v
+                        for k, v in body.items()
+                        if k not in ("employee", "approved")
+                    }
             rewritten = _rewrite_domain_api(candidate, domain, catalog_names)
             if rewritten != args.get("api_name"):
                 args["api_name"] = rewritten
+                if rewritten == "submit_my_attendance_permission" and isinstance(
+                    args.get("body"), dict,
+                ):
+                    args["body"] = {
+                        k: v
+                        for k, v in args["body"].items()
+                        if k not in ("employee", "approved")
+                    }
                 step.tool_args = args
                 logger.info(
                     "Coerced step %d api_name → %r",
@@ -701,17 +732,64 @@ def _coerce_host_api_steps(
             and "submit_my_leave" in catalog_names
         ):
             coerced_api = "submit_my_leave"
+        if (
+            candidate == "create_attendance_permission"
+            and "submit_my_attendance_permission" in catalog_names
+        ):
+            coerced_api = "submit_my_attendance_permission"
         coerced_api = _rewrite_domain_api(coerced_api, domain, catalog_names)
-        step.tool_args = {
+        new_args = {
             "api_name": coerced_api,
             **{k: v for k, v in args.items() if k not in (
                 "api_name", "entity_name", "entity_type", "name", "query",
             )},
         }
+        if coerced_api == "submit_my_attendance_permission" and isinstance(
+            new_args.get("body"), dict,
+        ):
+            new_args["body"] = {
+                k: v
+                for k, v in new_args["body"].items()
+                if k not in ("employee", "approved")
+            }
+        step.tool_args = new_args
         logger.info(
             "Coerced step %d → call_host_api(api_name=%r)",
             step.step_id, coerced_api,
         )
+
+def resolve_step_write_bodies(
+    steps: list[PlanStep],
+    api_catalog,
+    utterance: str = "",
+) -> None:
+    """Fill the write slots the brief already answered (RULE_21 consent card).
+
+    Slots are declared per endpoint in the brand ``api_catalog``
+    (``write_slots``) and resolved by ``ai.write_slots``: governed values
+    through MDM, dates against the platform clock. A card must never ask the
+    operator for a leave type or day they just stated. Mutates in place; needs
+    DB access, so callers in async code wrap it with ``sync_to_async``.
+    """
+    from ai.write_slots import fill_write_body, write_slots_for
+
+    for step in steps:
+        if step.tool_name != "call_host_api":
+            continue
+        args = dict(step.tool_args or {})
+        slots = write_slots_for(args.get("api_name"), api_catalog)
+        if not slots:
+            continue
+        body = args.get("body") if isinstance(args.get("body"), dict) else {}
+        seed = " ".join(p for p in (utterance, step.intent or "") if p)
+        resolved = fill_write_body(body, slots=slots, text=seed)
+        if resolved != body:
+            args["body"] = resolved
+            step.tool_args = args
+            logger.info(
+                "Resolved step %d write slots for %s (keys=%s)",
+                step.step_id, args.get("api_name"), sorted(resolved.keys()),
+            )
 
 
 def _plan_domain(utterance: str) -> str:
@@ -725,6 +803,8 @@ def _plan_domain(utterance: str) -> str:
             return "loan"
     if "employee.onboarding" in u or "onboard" in u:
         return "onboarding"
+    if "attendance.permission" in u or "attendance permission" in u or "إذن حضور" in (utterance or ""):
+        return "attendance"
     if "leave.request" in u or re.search(r"\bleave\b|إجازة|اجازة", utterance or "", re.I):
         return "leave"
     if "payroll" in u:
@@ -751,6 +831,14 @@ def _rewrite_domain_api(
             return "create_employee"
         if "list_employees" in catalog_names:
             return "list_employees"
+    if domain == "attendance":
+        if api in leave_only or api == "create_attendance_permission":
+            if "submit_my_attendance_permission" in catalog_names:
+                return "submit_my_attendance_permission"
+        if api == "approve_attendance_permission":
+            # ESS approve is Correspondence; drop admin PATCH from first-person plans
+            if "list_my_attendance_permissions" in catalog_names:
+                return "list_my_attendance_permissions"
     return api
 
 
@@ -1044,12 +1132,14 @@ class SkillAwarePlanner:
         # to get_entity_details (knowledge store) and Agent leave/balance
         # steps soft-miss (N-AG-LV-01 / SIM-20260919-N10).
         catalog_names: set[str] = set()
+        api_catalog: list = []
         host_api_list = "- (none configured for this instance)"
         try:
             from ai.engine_runtime import _instance_config
 
             cfg = _instance_config(instance_id or "", user_id or None) if instance_id else {}
             catalog_names = _catalog_api_names(cfg)
+            api_catalog = list((cfg or {}).get("api_catalog") or [])
             if catalog_names:
                 host_api_list = "\n".join(f"- {n}" for n in sorted(catalog_names))
         except Exception as exc:  # noqa: BLE001 - planning must still run
@@ -1166,6 +1256,18 @@ class SkillAwarePlanner:
         # Second pass after arg strip — entity_name may remain on
         # get_entity_details when the tool_name was already valid.
         _coerce_host_api_steps(steps, catalog_names, utterance=utterance)
+
+        # Governed slots + grounded dates from the brief (MDM codes, platform
+        # clock) — the consent card must not re-ask what the operator stated.
+        if api_catalog:
+            from asgiref.sync import sync_to_async
+
+            try:
+                await sync_to_async(resolve_step_write_bodies, thread_sensitive=True)(
+                    steps, api_catalog, utterance,
+                )
+            except Exception as exc:  # noqa: BLE001 - planning must still run
+                logger.warning("write slot resolution failed: %s", exc)
 
         # Deterministic mutation classification — a capability fact of the
         # tool, NOT the LLM's judgment. The LLM routinely under-marks mutation

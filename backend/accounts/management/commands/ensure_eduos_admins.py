@@ -45,15 +45,22 @@ class Command(BaseCommand):
 
         admins_group, _ = Group.objects.get_or_create(name=ADMINS_GROUP)
 
+        # Only set_password when hash does not already match (see ensure_nibras_admins).
         ahmed, _ = User.objects.get_or_create(username=superuser_username)
-        ahmed.set_password(superuser_password)
+        ahmed_pwd_touched = False
+        if not ahmed.check_password(superuser_password):
+            ahmed.set_password(superuser_password)
+            ahmed_pwd_touched = True
         ahmed.is_active = True
         ahmed.is_staff = True
         ahmed.is_superuser = True
         ahmed.save()
 
         admin, _ = User.objects.get_or_create(username=admin_username)
-        admin.set_password(admin_password)
+        admin_pwd_touched = False
+        if not admin.check_password(admin_password):
+            admin.set_password(admin_password)
+            admin_pwd_touched = True
         admin.is_active = True
         admin.is_staff = True
         admin.is_superuser = False
@@ -75,8 +82,10 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"✓ EduOS admins ensured (brand={brand}):\n"
             f"    {ahmed.username:8s} superuser=True  staff=True  "
-            f"password_ok={ahmed.check_password(superuser_password)}\n"
+            f"password_ok={ahmed.check_password(superuser_password)}  "
+            f"pwd_updated={ahmed_pwd_touched}\n"
             f"    {admin.username:8s} superuser=False staff=True  "
-            f"password_ok={admin.check_password(admin_password)}\n"
+            f"password_ok={admin.check_password(admin_password)}  "
+            f"pwd_updated={admin_pwd_touched}\n"
             f"    both in {ADMINS_GROUP} with a global ScopedRole."
         ))

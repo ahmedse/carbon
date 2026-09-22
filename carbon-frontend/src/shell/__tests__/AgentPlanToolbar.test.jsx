@@ -11,7 +11,7 @@ const PLAN = {
 };
 
 describe('AgentPlanToolbar', () => {
-  it('toolbar: Approve / Cancel / Discuss; label is not editable', () => {
+  it('toolbar: Approve / Cancel / Discuss; no Fork or Replan', () => {
     const onApprove = vi.fn();
     const onDecline = vi.fn();
     const onDiscuss = vi.fn();
@@ -21,15 +21,17 @@ describe('AgentPlanToolbar', () => {
         onApprove={onApprove}
         onDecline={onDecline}
         onDiscuss={onDiscuss}
-        onFork={vi.fn()}
-        onReplanPlan={vi.fn()}
       />,
     );
 
     expect(screen.getByTestId('agent-plan-toolbar')).toBeInTheDocument();
-    expect(screen.getByTestId('agent-plan-label')).toHaveTextContent(/Create a professional Word report/i);
-    expect(screen.queryByTestId('agent-plan-label-edit')).not.toBeInTheDocument();
+    expect(screen.getByTestId('agent-plan-label')).toHaveTextContent(
+      /Create a professional Word report analyzing salary distribution at GOFSCO/i,
+    );
     expect(screen.getByTestId('agent-review-consent')).toBeInTheDocument();
+    expect(screen.queryByTestId('agent-review-more')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Fork/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /Replan/i })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Approve plan' }));
     expect(onApprove).toHaveBeenCalled();
@@ -39,25 +41,18 @@ describe('AgentPlanToolbar', () => {
     expect(onDiscuss).toHaveBeenCalled();
   });
 
-  it('inspect More: Fork + Replan only (no Rename of prompt)', () => {
-    const onReplan = vi.fn();
+  it('inspect mode: Discuss only', () => {
     render(
       <AgentPlanToolbar
         plan={{ ...PLAN, status: 'completed' }}
         mode="inspect"
         onApprove={vi.fn()}
         onDecline={vi.fn()}
-        onFork={vi.fn()}
-        onReplanPlan={onReplan}
         onDiscuss={vi.fn()}
       />,
     );
     expect(screen.getByTestId('agent-review-inspect')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('agent-review-more'));
-    expect(screen.queryByRole('menuitem', { name: 'Rename' })).not.toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: /Fork/i })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: 'Replan…' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Replan…' }));
-    expect(screen.getByTestId('agent-brief-editor-replan')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Discuss in Chat/i })).toBeInTheDocument();
+    expect(screen.queryByTestId('agent-review-more')).not.toBeInTheDocument();
   });
 });

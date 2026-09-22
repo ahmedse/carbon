@@ -301,11 +301,12 @@ describe('PD-01/03/04/05 — Done Output Answer · Discuss · Artifacts · PNG',
     const discuss = await screen.findByRole('button', { name: /Discuss in Chat/i });
     fireEvent.click(discuss);
     await waitFor(() => expect(onSwitchToChat).toHaveBeenCalled());
-    const draft = onSwitchToChat.mock.calls[0][0];
+    const payload = onSwitchToChat.mock.calls[0][0];
+    const draft = typeof payload === 'string' ? payload : payload?.draft;
     expect(draft).toMatch(/October payroll variance board pack/);
     expect(draft).toMatch(/plan plan-done-1/);
     expect(draft).toMatch(/DISCUSSION ONLY/);
-    expect(draft).toMatch(/Fork or Replan/);
+    expect(draft).toMatch(/explicitly ask you to apply changes/);
     // Refine seed must not paste the prior answer body (avoids invoke_skill).
     expect(draft).not.toMatch(/GOSI Exposure/);
   });
@@ -324,14 +325,14 @@ describe('PD-01/03/04/05 — Done Output Answer · Discuss · Artifacts · PNG',
     expect(screen.getAllByRole('button', { name: 'Download' }).length).toBeGreaterThanOrEqual(4);
   });
 
-  it('PD-06: Output Actions include Rerun, Fork, and Open Plan for completed', async () => {
+  it('PD-06: Output Actions include Rerun and Open Plan for completed (no Fork)', async () => {
     render(
       <AITaskPanel conversationId="conv-1" focusPlanId="plan-done-1" onSwitchToChat={onSwitchToChat} />,
     );
     await screen.findByTestId('markdown-message');
     expect(screen.getByRole('button', { name: 'Rerun' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Fork' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Open Plan to rename or replan/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Fork' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Open Plan$/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Rerun' }));
     await waitFor(() => expect(rerunPlan).toHaveBeenCalledWith(expect.anything(), 'plan-done-1'));
   });

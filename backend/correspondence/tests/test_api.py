@@ -123,6 +123,41 @@ def test_inbox_returns_only_awaiting_mine(
 
 
 @pytest.mark.django_db
+def test_history_lists_acted_items_and_detail_visible(
+    workflow, api_client, get_token_for_user, create_user,
+):
+    """Team History: any/all decisions by me; detail still readable after act."""
+    wf = workflow
+    corr = _draft(wf.corr_type, wf.org, wf.requester_user)
+    submit_correspondence(corr=corr, by=wf.requester_user)
+
+    _auth(api_client, wf.manager_user, get_token_for_user)
+    # Not yet decided → empty history.
+    resp = api_client.get(f'{PREFIX}/correspondence/history/')
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+    assert api_client.post(
+        f'{PREFIX}/correspondence/{corr.id}/approve/', {}, format='json',
+    ).status_code == 200
+
+    # Leaves inbox, appears in history, detail still 200 for the actor.
+    assert api_client.get(f'{PREFIX}/correspondence/inbox/').json() == []
+    hist = api_client.get(f'{PREFIX}/correspondence/history/')
+    assert hist.status_code == 200
+    assert [row['id'] for row in hist.json()] == [corr.id]
+    assert hist.json()[0]['status'] == 'approved'
+    detail = api_client.get(f'{PREFIX}/correspondence/{corr.id}/')
+    assert detail.status_code == 200
+
+    # Outsider still cannot see history or detail.
+    outsider = create_user('api_hist_outsider')
+    _auth(api_client, outsider, get_token_for_user)
+    assert api_client.get(f'{PREFIX}/correspondence/history/').json() == []
+    assert api_client.get(f'{PREFIX}/correspondence/{corr.id}/').status_code == 403
+
+
+@pytest.mark.django_db
 def test_detail_includes_events_and_chain(workflow, api_client, get_token_for_user):
     wf = workflow
     corr = _draft(wf.corr_type, wf.org, wf.requester_user)

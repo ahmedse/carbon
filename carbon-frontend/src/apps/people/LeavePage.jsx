@@ -1,44 +1,35 @@
 // src/apps/people/LeavePage.jsx
-// People & Payroll — Leave (full CRUD): leave records + leave entitlements (accrual).
-// Approval/rejection is a PATCH { status } on the leave record — no dedicated endpoint.
-// All colours via theme tokens; apiFetch only; SystemDialog for the forms.
+// People & Payroll — Leave records + entitlements.
+// Toolkit: FilteredDataGrid (search + filters), SearchSelect for employee /
+// leave-type pickers, SystemDialog / ConfirmDialog. Does NOT fetch the full
+// employee directory for labels — API embeds employee_name / employee_no.
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
   Button,
   Chip,
   IconButton,
-  MenuItem,
-  Paper,
   Snackbar,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
+  Tab,
+  Tabs,
   TextField,
   Tooltip,
-  Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
-import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import { useTranslation } from 'react-i18next';
-import PageContainer from '../../components/layout/PageContainer';
-import PageHeader from '../../components/Page/PageHeader';
-import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
-import ErrorAlert from '../../components/Page/ErrorAlert';
-import EmptyState from '../../components/Page/EmptyState';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
 import SystemDialog from '../../components/SystemDialog';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { SearchSelect } from '../../components/Form';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import { useReferenceOptions } from '../../hooks/useReferenceOptions';
 import { useAuth } from '../../auth/AuthContext';
 import {
   fetchEmployees,
@@ -51,7 +42,7 @@ import {
   updateLeaveEntitlement,
   deleteLeaveEntitlement,
 } from '../../api/people';
-import { buildEmployeeLabels, formatDate, statusColor, statusLabelKey } from './utils';
+import { formatDate, statusColor, statusLabelKey } from './utils';
 
 const EMPTY_RECORD = {
   employee: '',
@@ -64,7 +55,7 @@ const EMPTY_RECORD = {
 
 const EMPTY_ENT = {
   employee: '',
-  year: '',
+  year: String(new Date().getFullYear()),
   leave_type: '',
   entitled_days: '',
   used_days: '0',
@@ -74,16 +65,25 @@ const EMPTY_ENT = {
 
 const LEAVE_STATUSES = ['draft', 'submitted', 'approved', 'rejected', 'cancelled'];
 
+function employeeLabel(row) {
+  if (!row) return '—';
+  const name = row.employee_name || row.full_name;
+  const no = row.employee_no;
+  if (name && no) return `${name} (${no})`;
+  return name || no || String(row.employee ?? row.id ?? '—');
+}
+
 export default function LeavePage() {
   const { t } = useTranslation('people');
   const { t: tCommon } = useTranslation('common');
   useDocumentTitle(t('leaveTitle'));
   const { token } = useAuth();
+  const leaveTypes = useReferenceOptions('leave_type');
 
+  const [tab, setTab] = useState(0);
   const [records, setRecords] = useState([]);
   const [entitlements, setEntitlements] = useState([]);
-  const [employees, setEmployees] = useState([]);
-  const [employeeLabels, setEmployeeLabels] = useState({});
+  const [employeeOptions, setEmployeeOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -97,35 +97,60 @@ export default function LeavePage() {
 
   const [saving, setSaving] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
-  // Pending delete target (record or entitlement) — confirmed via ConfirmDialog (no window.confirm).
   const [deleteTarget, setDeleteTarget] = useState(null);
+
+  const [recordSearch, setRecordSearch] = useState('');
+  const [recordFilters, setRecordFilters] = useState({ status: '' });
+  const [entSearch, setEntSearch] = useState('');
+  const [entFilters, setEntFilters] = useState({
+    year: String(new Date().getFullYear()),
+    leave_type: '',
+  });
+
+  const loadPickerEmployees = useCallback(async () => {
+    if (!token) return;
+    try {
+      // One page is enough for SearchSelect local filter; avoids walking 555+.
+      const data = await fetchEmployees(token, { page: 1, page_size: 200 });
+      const list = Array.isArray(data) ? data : data?.results || [];
+      setEmployeeOptions(
+        list.map((e) => ({
+          value: e.id,
+          label: employeeLabel(e),
+        })),
+      );
+    } catch {
+      /* picker failure is non-fatal — grid still works via embedded names */
+    }
+  }, [token]);
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const [employeesData, recordsData, entitlementsData] = await Promise.all([
-        fetchEmployees(token),
+      const year = entFilters.year ? Number(entFilters.year) : new Date().getFullYear();
+      const [recordsData, entitlementsData] = await Promise.all([
         fetchLeaveRecords(token),
-        fetchLeaveEntitlements(token),
+        fetchLeaveEntitlements(token, { year }),
       ]);
-      const employeeList = Array.isArray(employeesData) ? employeesData : employeesData?.results || [];
-      setEmployees(employeeList);
-      setEmployeeLabels(buildEmployeeLabels(employeeList));
       setRecords(Array.isArray(recordsData) ? recordsData : recordsData?.results || []);
-      setEntitlements(Array.isArray(entitlementsData) ? entitlementsData : entitlementsData?.results || []);
+      setEntitlements(
+        Array.isArray(entitlementsData) ? entitlementsData : entitlementsData?.results || [],
+      );
     } catch (err) {
       setError(err?.message || t('leaveLoadError'));
     } finally {
       setLoading(false);
     }
-  }, [token, t]);
+  }, [token, t, entFilters.year]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  const employeeName = (id) => employeeLabels[id] ?? id ?? '—';
+  useEffect(() => {
+    loadPickerEmployees();
+  }, [loadPickerEmployees]);
 
   const showError = (err) => {
     setSnackbar({
@@ -134,8 +159,6 @@ export default function LeavePage() {
       severity: 'error',
     });
   };
-
-  // ---- Leave Records ----
 
   const openCreateRecord = () => {
     setEditingRecord(null);
@@ -161,15 +184,10 @@ export default function LeavePage() {
     setEditingRecord(null);
   };
 
-  const handleRecordChange = (event) => {
-    const { name, value } = event.target;
-    setRecordForm((prev) => ({ ...prev, [name]: value }));
-  };
-
   const handleSaveRecord = async () => {
     if (
       !recordForm.employee ||
-      !recordForm.leave_type.trim() ||
+      !recordForm.leave_type ||
       !recordForm.start_date ||
       !recordForm.end_date ||
       !String(recordForm.days).trim()
@@ -177,16 +195,14 @@ export default function LeavePage() {
       setSnackbar({ open: true, message: tCommon('allFieldsRequired'), severity: 'error' });
       return;
     }
-
     const payload = {
       employee: Number(recordForm.employee),
-      leave_type: recordForm.leave_type.trim(),
+      leave_type: recordForm.leave_type,
       start_date: recordForm.start_date,
       end_date: recordForm.end_date,
       days: String(recordForm.days).trim(),
       status: recordForm.status,
     };
-
     setSaving(true);
     try {
       if (editingRecord) {
@@ -224,15 +240,9 @@ export default function LeavePage() {
     }
   };
 
-  const handleDeleteRecord = (record) => {
-    setDeleteTarget({ kind: 'record', item: record });
-  };
-
-  // ---- Leave Entitlements ----
-
   const openCreateEnt = () => {
     setEditingEnt(null);
-    setEntForm({ ...EMPTY_ENT });
+    setEntForm({ ...EMPTY_ENT, year: entFilters.year || String(new Date().getFullYear()) });
     setEntDialogOpen(true);
   };
 
@@ -240,7 +250,7 @@ export default function LeavePage() {
     setEditingEnt(entitlement);
     setEntForm({
       employee: entitlement.employee ?? '',
-      year: entitlement.year ?? '',
+      year: entitlement.year != null ? String(entitlement.year) : '',
       leave_type: entitlement.leave_type ?? '',
       entitled_days: entitlement.entitled_days != null ? String(entitlement.entitled_days) : '',
       used_days: entitlement.used_days != null ? String(entitlement.used_days) : '0',
@@ -255,34 +265,25 @@ export default function LeavePage() {
     setEditingEnt(null);
   };
 
-  const handleEntChange = (event) => {
-    const { name, value } = event.target;
-    setEntForm((prev) => ({ ...prev, [name]: value }));
-  };
-
   const handleSaveEnt = async () => {
     if (
       !entForm.employee ||
       !entForm.year ||
-      !entForm.leave_type.trim() ||
+      !entForm.leave_type ||
       !String(entForm.entitled_days).trim()
     ) {
       setSnackbar({ open: true, message: tCommon('allFieldsRequired'), severity: 'error' });
       return;
     }
-
     const payload = {
       employee: Number(entForm.employee),
       year: Number(entForm.year),
-      leave_type: entForm.leave_type.trim(),
+      leave_type: entForm.leave_type,
       entitled_days: String(entForm.entitled_days).trim(),
-      used_days: String(entForm.used_days).trim(),
-      carried_forward: String(entForm.carried_forward).trim(),
+      used_days: String(entForm.used_days || '0').trim(),
+      carried_forward: String(entForm.carried_forward || '0').trim(),
+      notes: entForm.notes || '',
     };
-    if (entForm.notes && entForm.notes.trim()) {
-      payload.notes = entForm.notes.trim();
-    }
-
     setSaving(true);
     try {
       if (editingEnt) {
@@ -298,10 +299,6 @@ export default function LeavePage() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleDeleteEnt = (entitlement) => {
-    setDeleteTarget({ kind: 'ent', item: entitlement });
   };
 
   const confirmDelete = async () => {
@@ -321,10 +318,359 @@ export default function LeavePage() {
     }
   };
 
-  const closeSnackbar = () => setSnackbar((prev) => ({ ...prev, open: false }));
+  const recordFilterDefs = useMemo(
+    () => [
+      {
+        key: 'status',
+        label: t('colStatus'),
+        options: LEAVE_STATUSES.map((s) => ({
+          value: s,
+          label: t(statusLabelKey(s)),
+        })),
+      },
+    ],
+    [t],
+  );
 
-  const renderDialogs = () => (
+  const yearOptions = useMemo(() => {
+    const y = new Date().getFullYear();
+    return [y, y - 1, y - 2, y + 1].map((n) => ({ value: String(n), label: String(n) }));
+  }, []);
+
+  const entFilterDefs = useMemo(
+    () => [
+      {
+        key: 'year',
+        label: t('colYear'),
+        options: yearOptions,
+      },
+      {
+        key: 'leave_type',
+        label: t('colLeaveType'),
+        options: leaveTypes.options,
+      },
+    ],
+    [t, yearOptions, leaveTypes.options],
+  );
+
+  const filteredRecords = useMemo(() => {
+    const q = recordSearch.trim().toLowerCase();
+    return records.filter((row) => {
+      if (recordFilters.status && row.status !== recordFilters.status) return false;
+      if (q) {
+        const hay = [
+          row.employee_name,
+          row.employee_no,
+          row.leave_type,
+          row.leave_type_label,
+          row.status,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [records, recordSearch, recordFilters]);
+
+  const filteredEntitlements = useMemo(() => {
+    const q = entSearch.trim().toLowerCase();
+    return entitlements.filter((row) => {
+      if (entFilters.leave_type && row.leave_type !== entFilters.leave_type) return false;
+      if (q) {
+        const hay = [
+          row.employee_name,
+          row.employee_no,
+          row.leave_type,
+          row.leave_type_label,
+          row.year,
+          row.notes,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [entitlements, entSearch, entFilters.leave_type]);
+
+  const recordColumns = useMemo(
+    () => [
+      {
+        field: 'employee_name',
+        headerName: t('colEmployee'),
+        flex: 1.2,
+        minWidth: 180,
+        valueGetter: (value, row) => employeeLabel(row),
+      },
+      {
+        field: 'leave_type',
+        headerName: t('colLeaveType'),
+        flex: 1,
+        minWidth: 120,
+        valueGetter: (value, row) => row.leave_type_label || row.leave_type || '—',
+      },
+      {
+        field: 'start_date',
+        headerName: t('colStartDate'),
+        width: 120,
+        valueGetter: (value, row) => formatDate(row.start_date),
+      },
+      {
+        field: 'end_date',
+        headerName: t('colEndDate'),
+        width: 120,
+        valueGetter: (value, row) => formatDate(row.end_date),
+      },
+      {
+        field: 'days',
+        headerName: t('colDays'),
+        width: 90,
+        valueGetter: (value, row) => (row.days != null ? row.days : '—'),
+      },
+      {
+        field: 'status',
+        headerName: t('colStatus'),
+        width: 130,
+        renderCell: (params) => {
+          const statusKey = statusLabelKey(params.row.status);
+          return (
+            <Chip
+              size="small"
+              variant="outlined"
+              color={statusColor(params.row.status)}
+              label={statusKey ? t(statusKey) : params.row.status}
+            />
+          );
+        },
+      },
+      {
+        field: 'actions',
+        headerName: t('colActions'),
+        width: 140,
+        sortable: false,
+        filterable: false,
+        renderCell: (params) => {
+          const record = params.row;
+          const actionable = record.status === 'draft' || record.status === 'submitted';
+          return (
+            <Box>
+              {actionable && (
+                <>
+                  <Tooltip title={t('actionApprove')}>
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleApprove(record);
+                      }}
+                      sx={{ color: 'success.main' }}
+                    >
+                      <CheckCircleIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title={t('actionReject')}>
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleReject(record);
+                      }}
+                      sx={{ color: 'warning.main' }}
+                    >
+                      <CancelIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </>
+              )}
+              <Tooltip title={tCommon('edit')}>
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openEditRecord(record);
+                  }}
+                >
+                  <EditIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title={tCommon('delete')}>
+                <IconButton
+                  size="small"
+                  sx={{ color: 'error.main' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteTarget({ kind: 'record', item: record });
+                  }}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          );
+        },
+      },
+    ],
+    [t, tCommon],
+  );
+
+  const entColumns = useMemo(
+    () => [
+      {
+        field: 'employee_name',
+        headerName: t('colEmployee'),
+        flex: 1.2,
+        minWidth: 180,
+        valueGetter: (value, row) => employeeLabel(row),
+      },
+      {
+        field: 'year',
+        headerName: t('colYear'),
+        width: 90,
+      },
+      {
+        field: 'leave_type',
+        headerName: t('colLeaveType'),
+        flex: 1,
+        minWidth: 120,
+        valueGetter: (value, row) => row.leave_type_label || row.leave_type || '—',
+      },
+      {
+        field: 'entitled_days',
+        headerName: t('colEntitledDays'),
+        width: 110,
+      },
+      {
+        field: 'used_days',
+        headerName: t('colUsedDays'),
+        width: 100,
+      },
+      {
+        field: 'carried_forward',
+        headerName: t('formCarriedForward'),
+        width: 120,
+      },
+      {
+        field: 'actions',
+        headerName: t('colActions'),
+        width: 100,
+        sortable: false,
+        filterable: false,
+        renderCell: (params) => (
+          <Box>
+            <Tooltip title={tCommon('edit')}>
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openEditEnt(params.row);
+                }}
+              >
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={tCommon('delete')}>
+              <IconButton
+                size="small"
+                sx={{ color: 'error.main' }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDeleteTarget({ kind: 'ent', item: params.row });
+                }}
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        ),
+      },
+    ],
+    [t, tCommon],
+  );
+
+  const selectedEmployeeOption = (id) =>
+    employeeOptions.find((o) => String(o.value) === String(id)) || null;
+
+  const selectedLeaveTypeOption = (code) =>
+    leaveTypes.options.find((o) => o.value === code) || (code ? { value: code, label: code } : null);
+
+  return (
     <>
+      {error && (
+        <Alert severity="error" sx={{ mx: 1, mt: 1 }} onClose={() => setError(null)} action={
+          <Button color="inherit" size="small" onClick={loadData}>{tCommon('retry')}</Button>
+        }>
+          {error}
+        </Alert>
+      )}
+
+      <Box sx={{ px: 1, pt: 1 }}>
+        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 1 }}>
+          <Tab label={t('leaveRecordsTitle')} />
+          <Tab label={t('leaveEntitlementsTitle')} />
+        </Tabs>
+      </Box>
+
+      {tab === 0 ? (
+        <FilteredDataGrid
+          title={t('leaveTitle')}
+          subtitle={t('leaveSubtitle')}
+          actions={
+            <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={openCreateRecord}>
+              {t('actionAddLeaveRecord')}
+            </Button>
+          }
+          rows={filteredRecords}
+          columns={recordColumns}
+          loading={loading}
+          getRowId={(row) => row.id}
+          countLabel={`${filteredRecords.length} of ${records.length}`}
+          searchValue={recordSearch}
+          onSearchChange={setRecordSearch}
+          searchPlaceholder={t('leaveSearchPlaceholder')}
+          filterDefs={recordFilterDefs}
+          filterValues={recordFilters}
+          onFilterChange={(key, value) => setRecordFilters((prev) => ({ ...prev, [key]: value }))}
+          onClearFilters={() => {
+            setRecordSearch('');
+            setRecordFilters({ status: '' });
+          }}
+          emptyMessage={t('leaveEmpty')}
+          emptySubtext={t('leaveEmptyDesc')}
+          height={520}
+        />
+      ) : (
+        <FilteredDataGrid
+          title={t('leaveEntitlementsTitle')}
+          subtitle={t('leaveSubtitle')}
+          actions={
+            <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={openCreateEnt}>
+              {t('actionAddLeaveEntitlement')}
+            </Button>
+          }
+          rows={filteredEntitlements}
+          columns={entColumns}
+          loading={loading}
+          getRowId={(row) => row.id}
+          countLabel={`${filteredEntitlements.length} of ${entitlements.length}`}
+          searchValue={entSearch}
+          onSearchChange={setEntSearch}
+          searchPlaceholder={t('leaveSearchPlaceholder')}
+          filterDefs={entFilterDefs}
+          filterValues={entFilters}
+          onFilterChange={(key, value) => setEntFilters((prev) => ({ ...prev, [key]: value }))}
+          onClearFilters={() => {
+            setEntSearch('');
+            setEntFilters({ year: String(new Date().getFullYear()), leave_type: '' });
+          }}
+          emptyMessage={t('leaveEmpty')}
+          emptySubtext={t('leaveEmptyDesc')}
+          height={520}
+        />
+      )}
+
       <SystemDialog
         open={recordDialogOpen}
         title={editingRecord ? t('leaveRecordEditTitle') : t('leaveRecordCreateTitle')}
@@ -338,71 +684,68 @@ export default function LeavePage() {
         }
       >
         <Stack spacing={2}>
-          <TextField
-            select
+          <SearchSelect
             label={t('colEmployee')}
-            name="employee"
-            value={recordForm.employee}
-            onChange={handleRecordChange}
-            fullWidth
+            options={employeeOptions}
+            valueKey="value"
+            labelKey="label"
+            value={selectedEmployeeOption(recordForm.employee)}
+            onChange={(opt) => setRecordForm((prev) => ({ ...prev, employee: opt?.value ?? '' }))}
             required
-          >
-            <MenuItem value="" disabled>{t('colEmployee')}</MenuItem>
-            {employees.map((emp) => (
-              <MenuItem key={emp.id} value={emp.id}>{employeeName(emp.id)}</MenuItem>
-            ))}
-          </TextField>
-          <TextField
+            size="small"
+          />
+          <SearchSelect
             label={t('colLeaveType')}
-            name="leave_type"
-            value={recordForm.leave_type}
-            onChange={handleRecordChange}
-            fullWidth
+            options={leaveTypes.options}
+            valueKey="value"
+            labelKey="label"
+            value={selectedLeaveTypeOption(recordForm.leave_type)}
+            onChange={(opt) => setRecordForm((prev) => ({ ...prev, leave_type: opt?.value ?? '' }))}
+            loading={leaveTypes.loading}
+            error={leaveTypes.error}
+            onRetry={leaveTypes.refetch}
             required
+            size="small"
           />
           <TextField
             label={t('colStartDate')}
-            name="start_date"
             value={recordForm.start_date}
-            onChange={handleRecordChange}
+            onChange={(e) => setRecordForm((prev) => ({ ...prev, start_date: e.target.value }))}
             type="date"
             slotProps={{ inputLabel: { shrink: true } }}
             fullWidth
             required
+            size="small"
           />
           <TextField
             label={t('colEndDate')}
-            name="end_date"
             value={recordForm.end_date}
-            onChange={handleRecordChange}
+            onChange={(e) => setRecordForm((prev) => ({ ...prev, end_date: e.target.value }))}
             type="date"
             slotProps={{ inputLabel: { shrink: true } }}
             fullWidth
             required
+            size="small"
           />
           <TextField
             label={t('colDays')}
-            name="days"
             value={recordForm.days}
-            onChange={handleRecordChange}
+            onChange={(e) => setRecordForm((prev) => ({ ...prev, days: e.target.value }))}
             type="number"
-            slotProps={{ htmlInput: { step: '0.01' } }}
             fullWidth
             required
+            size="small"
           />
-          <TextField
-            select
+          <SearchSelect
             label={t('colStatus')}
-            name="status"
-            value={recordForm.status}
-            onChange={handleRecordChange}
-            fullWidth
-            required
-          >
-            {LEAVE_STATUSES.map((status) => (
-              <MenuItem key={status} value={status}>{t(statusLabelKey(status))}</MenuItem>
-            ))}
-          </TextField>
+            options={LEAVE_STATUSES.map((s) => ({ value: s, label: t(statusLabelKey(s)) }))}
+            valueKey="value"
+            labelKey="label"
+            value={{ value: recordForm.status, label: t(statusLabelKey(recordForm.status)) }}
+            onChange={(opt) => setRecordForm((prev) => ({ ...prev, status: opt?.value ?? 'draft' }))}
+            clearable={false}
+            size="small"
+          />
         </Stack>
       </SystemDialog>
 
@@ -419,276 +762,94 @@ export default function LeavePage() {
         }
       >
         <Stack spacing={2}>
-          <TextField
-            select
+          <SearchSelect
             label={t('colEmployee')}
-            name="employee"
-            value={entForm.employee}
-            onChange={handleEntChange}
-            fullWidth
+            options={employeeOptions}
+            valueKey="value"
+            labelKey="label"
+            value={selectedEmployeeOption(entForm.employee)}
+            onChange={(opt) => setEntForm((prev) => ({ ...prev, employee: opt?.value ?? '' }))}
             required
-          >
-            <MenuItem value="" disabled>{t('colEmployee')}</MenuItem>
-            {employees.map((emp) => (
-              <MenuItem key={emp.id} value={emp.id}>{employeeName(emp.id)}</MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            label={t('colYear')}
-            name="year"
-            value={entForm.year}
-            onChange={handleEntChange}
-            type="number"
-            slotProps={{ htmlInput: { step: '1', min: '2000' } }}
-            fullWidth
-            required
+            size="small"
           />
           <TextField
-            label={t('colLeaveType')}
-            name="leave_type"
-            value={entForm.leave_type}
-            onChange={handleEntChange}
+            label={t('colYear')}
+            value={entForm.year}
+            onChange={(e) => setEntForm((prev) => ({ ...prev, year: e.target.value }))}
+            type="number"
             fullWidth
             required
+            size="small"
+          />
+          <SearchSelect
+            label={t('colLeaveType')}
+            options={leaveTypes.options}
+            valueKey="value"
+            labelKey="label"
+            value={selectedLeaveTypeOption(entForm.leave_type)}
+            onChange={(opt) => setEntForm((prev) => ({ ...prev, leave_type: opt?.value ?? '' }))}
+            loading={leaveTypes.loading}
+            error={leaveTypes.error}
+            onRetry={leaveTypes.refetch}
+            required
+            size="small"
           />
           <TextField
             label={t('colEntitledDays')}
-            name="entitled_days"
             value={entForm.entitled_days}
-            onChange={handleEntChange}
+            onChange={(e) => setEntForm((prev) => ({ ...prev, entitled_days: e.target.value }))}
             type="number"
-            slotProps={{ htmlInput: { step: '0.01' } }}
             fullWidth
             required
+            size="small"
           />
           <TextField
             label={t('colUsedDays')}
-            name="used_days"
             value={entForm.used_days}
-            onChange={handleEntChange}
+            onChange={(e) => setEntForm((prev) => ({ ...prev, used_days: e.target.value }))}
             type="number"
-            slotProps={{ htmlInput: { step: '0.01' } }}
             fullWidth
+            size="small"
           />
           <TextField
             label={t('formCarriedForward')}
-            name="carried_forward"
             value={entForm.carried_forward}
-            onChange={handleEntChange}
+            onChange={(e) => setEntForm((prev) => ({ ...prev, carried_forward: e.target.value }))}
             type="number"
-            slotProps={{ htmlInput: { step: '0.01' } }}
             fullWidth
+            size="small"
           />
           <TextField
             label={t('formNotes')}
-            name="notes"
             value={entForm.notes}
-            onChange={handleEntChange}
+            onChange={(e) => setEntForm((prev) => ({ ...prev, notes: e.target.value }))}
             multiline
             minRows={2}
             fullWidth
+            size="small"
           />
         </Stack>
       </SystemDialog>
 
       <ConfirmDialog
         open={!!deleteTarget}
-        message={deleteTarget?.kind === 'ent' ? t('leaveEntitlementDeleteConfirm') : t('leaveRecordDeleteConfirm')}
+        message={
+          deleteTarget?.kind === 'ent'
+            ? t('leaveEntitlementDeleteConfirm')
+            : t('leaveRecordDeleteConfirm')
+        }
         confirmLabel={tCommon('delete')}
         destructive
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}
       />
-    </>
-  );
-
-  const header = <PageHeader icon={EventAvailableIcon} title={t('leaveTitle')} subtitle={t('leaveSubtitle')} />;
-
-  if (loading) {
-    return (
-      <PageContainer>
-        {header}
-        <LoadingSkeleton variant="console" />
-      </PageContainer>
-    );
-  }
-
-  if (error) {
-    return (
-      <PageContainer>
-        {header}
-        <ErrorAlert message={error} onRetry={loadData} />
-      </PageContainer>
-    );
-  }
-
-  if (records.length === 0 && entitlements.length === 0) {
-    return (
-      <PageContainer>
-        {header}
-        <EmptyState
-          icon={<EventAvailableIcon />}
-          title={t('leaveEmpty')}
-          description={t('leaveEmptyDesc')}
-          actionLabel={t('actionAddLeaveRecord')}
-          onAction={openCreateRecord}
-        />
-        {renderDialogs()}
-      </PageContainer>
-    );
-  }
-
-  return (
-    <PageContainer>
-      {header}
-
-      <Stack spacing={2}>
-        <Box>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-            <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>{t('leaveRecordsTitle')}</Typography>
-            <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={openCreateRecord}>
-              {t('actionAddLeaveRecord')}
-            </Button>
-          </Stack>
-          <TableContainer component={Paper} variant="outlined">
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colEmployee')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colLeaveType')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colStartDate')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colEndDate')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colDays')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colStatus')}</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colActions')}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {records.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} align="center" sx={{ color: 'text.secondary' }}>{t('leaveEmpty')}</TableCell>
-                  </TableRow>
-                ) : (
-                  records.map((record) => {
-                    const statusKey = statusLabelKey(record.status);
-                    const actionable = record.status === 'draft' || record.status === 'submitted';
-                    return (
-                      <TableRow key={record.id} hover>
-                        <TableCell>{employeeName(record.employee)}</TableCell>
-                        <TableCell>{record.leave_type ?? '—'}</TableCell>
-                        <TableCell>{formatDate(record.start_date)}</TableCell>
-                        <TableCell>{formatDate(record.end_date)}</TableCell>
-                        <TableCell>{record.days ?? '—'}</TableCell>
-                        <TableCell>
-                          <Chip
-                            size="small"
-                            variant="outlined"
-                            color={statusColor(record.status)}
-                            label={statusKey ? t(statusKey) : record.status}
-                          />
-                        </TableCell>
-                        <TableCell align="right">
-                          {actionable && (
-                            <>
-                              <Tooltip title={t('actionApprove')}>
-                                <IconButton size="small" onClick={() => handleApprove(record)} sx={{ color: 'success.main' }}>
-                                  <CheckCircleIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                              <Tooltip title={t('actionReject')}>
-                                <IconButton size="small" onClick={() => handleReject(record)} sx={{ color: 'warning.main' }}>
-                                  <CancelIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                            </>
-                          )}
-                          <Tooltip title={tCommon('edit')}>
-                            <IconButton size="small" onClick={() => openEditRecord(record)} sx={{ color: 'primary.main' }}>
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title={tCommon('delete')}>
-                            <IconButton size="small" onClick={() => handleDeleteRecord(record)} sx={{ color: 'error.main' }}>
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Box>
-
-        <Box>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-            <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>{t('leaveEntitlementsTitle')}</Typography>
-            <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={openCreateEnt}>
-              {t('actionAddLeaveEntitlement')}
-            </Button>
-          </Stack>
-          <TableContainer component={Paper} variant="outlined">
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colEmployee')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colYear')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colLeaveType')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colEntitledDays')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colUsedDays')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colCarriedForward')}</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colActions')}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {entitlements.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} align="center" sx={{ color: 'text.secondary' }}>{t('leaveEmpty')}</TableCell>
-                  </TableRow>
-                ) : (
-                  entitlements.map((entitlement) => (
-                    <TableRow key={entitlement.id} hover>
-                      <TableCell>{employeeName(entitlement.employee)}</TableCell>
-                      <TableCell>{entitlement.year ?? '—'}</TableCell>
-                      <TableCell>{entitlement.leave_type ?? '—'}</TableCell>
-                      <TableCell>{entitlement.entitled_days ?? '—'}</TableCell>
-                      <TableCell>{entitlement.used_days ?? '—'}</TableCell>
-                      <TableCell>{entitlement.carried_forward ?? '—'}</TableCell>
-                      <TableCell align="right">
-                        <Tooltip title={tCommon('edit')}>
-                          <IconButton size="small" onClick={() => openEditEnt(entitlement)} sx={{ color: 'primary.main' }}>
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title={tCommon('delete')}>
-                          <IconButton size="small" onClick={() => handleDeleteEnt(entitlement)} sx={{ color: 'error.main' }}>
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Box>
-      </Stack>
-
-      {renderDialogs()}
 
       <Snackbar
         open={snackbar.open}
         autoHideDuration={4000}
-        onClose={closeSnackbar}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert severity={snackbar.severity} variant="filled" sx={{ width: '100%' }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-    </PageContainer>
+        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+        message={snackbar.message}
+      />
+    </>
   );
 }

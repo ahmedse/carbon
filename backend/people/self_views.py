@@ -11,7 +11,7 @@ touched — only ``fsm``, ``serializers``, ``models`` and the exception types.
 """
 
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
@@ -30,21 +30,31 @@ from correspondence.policies import PolicyNotFound
 from correspondence.serializers import CorrespondenceDetailSerializer
 from mdm.models import ReferenceValue
 
-from .models import LeaveEntitlement, LeaveRecord, Loan, PayslipLine
-from .permissions import IsActiveEmployee
+from .models import AttendancePermission, Employee, LeaveEntitlement, LeaveRecord, Loan, PayslipLine
+from .permissions import IsActiveEmployee, HasTeamAccess
+from .leave_days import leave_days_json
+from .leave_type_resolve import allowed_leave_type_payload, resolve_leave_type
+from .manager_routing import manager_routing_block_response
 from .self_serializers import (
     EmployeeSummarySerializer,
     LeaveBalanceSerializer,
     LeaveRecordDetailSerializer,
     LeaveRecordSerializer,
+    TeamLeaveRecordSerializer,
 )
-from .serializers import LoanSerializer, PayslipLineSerializer
+from .serializers import AttendancePermissionSerializer, LoanSerializer, PayslipLineSerializer
 
 SUBJECT_TYPE = 'people.LeaveRecord'
 
 # Payroll run statuses whose payslip lines are final and safe to expose to the
 # employee (F10). Draft/computed runs are internal and stay hidden.
 COMMITTED_RUN_STATUSES = ('validated', 'committed')
+
+# Retroactive filing is legitimate (sick leave is reported after the fact),
+# but only within living memory. Beyond this window a start date is a data
+# error — an assistant with no clock reading "1 October" as a year long gone —
+# and the request would be scored against a balance year that has closed.
+MAX_BACKDATED_LEAVE_DAYS = 30
 
 
 # ── helpers ────────────────────────────────────────────────────────────────
@@ -168,36 +178,80 @@ class LeaveSelfCollectionView(APIView):
 
     def post(self, request):
         profile = request.user.employee_profile
+        blocked = manager_routing_block_response(profile)
+        if blocked is not None:
+            return blocked
         data = request.data or {}
 
-        leave_type = data.get('leave_type')
-        if not isinstance(leave_type, str) or not leave_type.strip():
+        leave_type_raw = data.get('leave_type')
+        if not isinstance(leave_type_raw, str) or not leave_type_raw.strip():
             return Response(
-                {'detail': 'leave_type is required'},
+                {
+                    'detail': 'leave_type is required',
+                    'error_kind': 'leave_type_required',
+                    'hints': {'allowed_types': allowed_leave_type_payload()},
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        leave_type_value = ReferenceValue.objects.filter(
-            reference_set__name='leave_type', code=leave_type,
-        ).first()
+        leave_type_value = resolve_leave_type(leave_type_raw)
         if leave_type_value is None:
             return Response(
-                {'detail': 'Invalid leave_type'},
+                {
+                    'detail': (
+                        f'"{leave_type_raw.strip()}" is not a recognised leave type. '
+                        'Pick one of the allowed types.'
+                    ),
+                    'error_kind': 'invalid_leave_type',
+                    'hints': {
+                        'requested': leave_type_raw.strip(),
+                        'allowed_types': allowed_leave_type_payload(),
+                    },
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        leave_type = leave_type_value.code
 
         try:
             start_date = date.fromisoformat(str(data.get('start_date', '')))
             end_date = date.fromisoformat(str(data.get('end_date', '')))
         except (ValueError, TypeError):
             return Response(
-                {'detail': 'Invalid start_date/end_date (expected ISO date)'},
+                {
+                    'detail': 'Invalid start_date/end_date (expected ISO date)',
+                    'error_kind': 'invalid_dates',
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         if end_date < start_date:
             return Response(
-                {'detail': 'end_date must be on or after start_date'},
+                {
+                    'detail': 'end_date must be on or after start_date',
+                    'error_kind': 'invalid_dates',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        today = timezone.localdate()
+        if start_date < today - timedelta(days=MAX_BACKDATED_LEAVE_DAYS):
+            return Response(
+                {
+                    'detail': (
+                        f'Leave cannot start on {start_date} — that is more '
+                        f'than {MAX_BACKDATED_LEAVE_DAYS} days before today '
+                        f'({today}).'
+                    ),
+                    'error_kind': 'invalid_dates',
+                    'hints': {
+                        'requested_start': str(start_date),
+                        'today': str(today),
+                        'earliest_allowed': str(
+                            today - timedelta(days=MAX_BACKDATED_LEAVE_DAYS)
+                        ),
+                        'suggestion': 'Use the intended date this year.',
+                    },
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -205,12 +259,18 @@ class LeaveSelfCollectionView(APIView):
             days = Decimal(str(data.get('days')))
         except (InvalidOperation, ValueError, TypeError):
             return Response(
-                {'detail': 'days must be a positive number'},
+                {
+                    'detail': 'days must be a positive number',
+                    'error_kind': 'invalid_days',
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if days <= 0:
             return Response(
-                {'detail': 'days must be a positive number'},
+                {
+                    'detail': 'days must be a positive number',
+                    'error_kind': 'invalid_days',
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -218,7 +278,21 @@ class LeaveSelfCollectionView(APIView):
         _, _, _, _, remaining = _compute_balance(profile, leave_type, year)
         if days > remaining:
             return Response(
-                {'detail': 'Insufficient leave balance', 'remaining': remaining},
+                {
+                    'detail': (
+                        f'Insufficient {leave_type} leave balance '
+                        f'(requested {leave_days_json(days)}, '
+                        f'remaining {leave_days_json(remaining)}).'
+                    ),
+                    'error_kind': 'insufficient_balance',
+                    'remaining': leave_days_json(remaining),
+                    'hints': {
+                        'leave_type': leave_type,
+                        'requested_days': leave_days_json(days),
+                        'remaining': leave_days_json(remaining),
+                        'suggestion': 'Pick another leave type or a shorter period.',
+                    },
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -227,7 +301,21 @@ class LeaveSelfCollectionView(APIView):
                 continue
             if record.start_date <= end_date and record.end_date >= start_date:
                 return Response(
-                    {'detail': 'Overlaps existing leave request'},
+                    {
+                        'detail': (
+                            f'Those dates overlap an existing {record.leave_type.code} '
+                            f'leave ({record.start_date}→{record.end_date}, '
+                            f'status={record.status}).'
+                        ),
+                        'error_kind': 'overlap',
+                        'hints': {
+                            'overlapping_start': str(record.start_date),
+                            'overlapping_end': str(record.end_date),
+                            'overlapping_type': record.leave_type.code,
+                            'overlapping_status': record.status,
+                            'suggestion': 'Pick another day that is free.',
+                        },
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -254,7 +342,7 @@ class LeaveSelfCollectionView(APIView):
                         'leave_type': leave_type,
                         'start_date': str(start_date),
                         'end_date': str(end_date),
-                        'days': str(days),
+                        'days': leave_days_json(days),
                         'note': note,
                     },
                     status='draft',
@@ -307,6 +395,9 @@ class LoanSelfCollectionView(APIView):
 
     def post(self, request):
         profile = request.user.employee_profile
+        blocked = manager_routing_block_response(profile)
+        if blocked is not None:
+            return blocked
         data = request.data or {}
 
         loan_type = data.get('loan_type')
@@ -530,3 +621,95 @@ class ProfileChangeSelfView(APIView):
             CorrespondenceDetailSerializer(corr).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+class AttendancePermissionSelfCollectionView(APIView):
+    """GET lists my attendance permissions; POST submits via Correspondence."""
+
+    permission_classes = [IsAuthenticated, IsActiveEmployee]
+
+    def get(self, request):
+        profile = request.user.employee_profile
+        qs = AttendancePermission.objects.filter(employee=profile)
+        return Response(AttendancePermissionSerializer(qs, many=True).data)
+
+    def post(self, request):
+        from people.attendance_ess import (
+            AttendanceESSError,
+            submit_my_attendance_permission,
+        )
+
+        try:
+            corr = submit_my_attendance_permission(request.user, request.data or {})
+        except AttendanceESSError as exc:
+            body = {"detail": exc.detail, **exc.extra}
+            return Response(body, status=exc.status)
+
+        return Response(
+            CorrespondenceDetailSerializer(corr).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+def _month_bounds(year: int, month: int) -> tuple[date, date]:
+    start = date(year, month, 1)
+    if month == 12:
+        end = date(year + 1, 1, 1) - timedelta(days=1)
+    else:
+        end = date(year, month + 1, 1) - timedelta(days=1)
+    return start, end
+
+
+class DirectReportsView(APIView):
+    """GET — employees who report to the current manager (Team Directory)."""
+
+    permission_classes = [IsAuthenticated, IsActiveEmployee, HasTeamAccess]
+
+    def get(self, request):
+        profile = request.user.employee_profile
+        qs = (
+            Employee.objects.filter(manager=profile)
+            .select_related('position', 'org_unit', 'manager')
+            .order_by('employee_no')
+        )
+        return Response(EmployeeSummarySerializer(qs, many=True).data)
+
+
+class TeamLeaveView(APIView):
+    """GET — leave overlapping a calendar month for direct reports (Who's Out)."""
+
+    permission_classes = [IsAuthenticated, IsActiveEmployee, HasTeamAccess]
+
+    def get(self, request):
+        profile = request.user.employee_profile
+        today = timezone.localdate()
+        try:
+            year = int(request.query_params.get('year', today.year))
+            month = int(request.query_params.get('month', today.month))
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': 'year and month must be integers', 'error_kind': 'invalid_month'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if month < 1 or month > 12 or year < 2000 or year > 2100:
+            return Response(
+                {'detail': 'year/month out of range', 'error_kind': 'invalid_month'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        start, end = _month_bounds(year, month)
+        qs = (
+            LeaveRecord.objects.filter(
+                employee__manager=profile,
+                start_date__lte=end,
+                end_date__gte=start,
+                status__in=('submitted', 'approved'),
+            )
+            .select_related('employee', 'leave_type')
+            .order_by('start_date', 'employee__employee_no')
+        )
+        return Response({
+            'year': year,
+            'month': month,
+            'items': TeamLeaveRecordSerializer(qs, many=True).data,
+        })

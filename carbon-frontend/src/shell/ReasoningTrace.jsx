@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../i18n/useLanguage';
 import { formatDisplayDateTime } from '../utils/dateUtils';
 import { normalizeProvenanceSource } from '../utils/aiProvenance';
+import { presentSources } from './presentationPlane';
 
 // RULE_23 — drop any line that leaks engine internals before rendering.
 // Covers engine_turn_id ("Turn: …"), raw guard_results ("Guards: …"),
@@ -182,16 +183,17 @@ function ReasoningTrace({
                   {t('provenance.sources')}
                 </Typography>
                 {sourceItems.map((src, i) => {
-                  const parts = [];
-                  if (src.tool) parts.push(src.tool);
-                  if (src.rows_returned != null)
-                    parts.push(t('provenance.rows', { count: src.rows_returned }));
-                  if (src.truncated) parts.push(t('provenance.truncated'));
-                  const resolvedLabel = formatResolvedAt(src.resolved_at);
+                  const { chips } = presentSources([src], 'proof', {
+                    rows: (count) => t('provenance.rows', { count }),
+                    truncated: t('provenance.truncated'),
+                  });
+                  const chip = chips[0];
+                  if (!chip) return null;
+                  const resolvedLabel = formatResolvedAt(chip.resolvedAt);
                   return (
                     <Box key={`${src.tool || 'source'}-${i}`}>
                       <Typography variant="caption" sx={{ display: 'block' }}>
-                        {parts.join(' · ') || t('provenance.noData')}
+                        {chip.label || t('provenance.noData')}
                       </Typography>
                       {resolvedLabel && (
                         <Typography

@@ -20,8 +20,8 @@ import { test, expect, Page } from '@playwright/test';
 import { login, navigateTo } from '../fixtures/users';
 
 const EMPLOYEE = {
-  username: process.env.NIBRAS_EMPLOYEE_USER || 'emp_1001',
-  password: process.env.NIBRAS_EMPLOYEE_PASSWORD || process.env.EMPLOYEE_DEFAULT_PASSWORD || 'ChangeMe_132',
+  username: process.env.NIBRAS_EMPLOYEE_USER || 'emp_1067',
+  password: process.env.NIBRAS_EMPLOYEE_PASSWORD || process.env.EMPLOYEE_DEFAULT_PASSWORD || 'mozafNibrasPa_132',
   role: 'employee',
   isGlobalAdmin: false,
   expectations: {
@@ -35,8 +35,8 @@ const EMPLOYEE = {
 };
 
 const MANAGER = {
-  username: process.env.NIBRAS_MANAGER_USER || 'emp_1399',
-  password: process.env.NIBRAS_MANAGER_PASSWORD || process.env.EMPLOYEE_DEFAULT_PASSWORD || 'ChangeMe_132',
+  username: process.env.NIBRAS_MANAGER_USER || 'emp_1712',
+  password: process.env.NIBRAS_MANAGER_PASSWORD || process.env.EMPLOYEE_DEFAULT_PASSWORD || 'mozafNibrasPa_132',
   role: 'manager',
   isGlobalAdmin: false,
   expectations: {
@@ -134,10 +134,10 @@ test.describe.serial('NSR-9: Nibras leave request → manager approve', () => {
     await navigateTo(page, '/team');
     await expect(page.getByText(/Approvals Inbox/i).first()).toBeVisible({ timeout: 15000 });
 
-    // Open first actionable row (or matching reference).
+    // Open first actionable DataGrid row (or matching reference).
     const row = leaveReferenceHint
-      ? page.getByRole('button', { name: new RegExp(leaveReferenceHint.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') }).first()
-      : page.locator('table tbody tr[role="button"]').first();
+      ? page.getByText(leaveReferenceHint, { exact: false }).first()
+      : page.locator('.MuiDataGrid-row').first();
 
     await expect(row).toBeVisible({ timeout: 20000 });
     await row.click();

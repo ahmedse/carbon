@@ -13,6 +13,7 @@ import { Box, Button, Chip, Paper, Stack, Typography } from '@mui/material';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { toolLabel } from './aiTaskStatus';
+import { presentToolLabel } from './presentationPlane';
 
 const STORAGE_KEY = 'pulse.planningHeader.expanded';
 const SUMMARY_MAX = 48;
@@ -54,9 +55,14 @@ function formatDuration(ms) {
 function sanitizeInput(tool, raw) {
   if (!raw || typeof raw !== 'string') return '';
   if (String(tool).includes('call_host_api') || /api_name\s*=/.test(raw)) {
-    const m = raw.match(/api_name\s*=\s*([\w]+)/);
-    if (m) return m[1].replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-    return '';
+    const m = raw.match(/api_name\s*=\s*([\w./]+)/);
+    if (m) {
+      return (
+        presentToolLabel('call_host_api', { audience: 'operator', apiName: m[1] })
+        || m[1].replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+      );
+    }
+    return presentToolLabel('call_host_api', { audience: 'operator' }) || '';
   }
   return raw;
 }
@@ -64,7 +70,10 @@ function sanitizeInput(tool, raw) {
 function buildDetail(step) {
   if (!step || typeof step !== 'object') return '';
   const rawTool = typeof step.tool === 'string' ? step.tool.trim() : '';
-  const label = rawTool ? toolLabel(rawTool) : '';
+  const apiMatch = typeof step.input === 'string' ? step.input.match(/api_name\s*=\s*([\w./]+)/) : null;
+  const label = rawTool
+    ? (presentToolLabel(rawTool, { audience: 'operator', apiName: apiMatch?.[1] }) || toolLabel(rawTool))
+    : '';
   const input = sanitizeInput(rawTool, typeof step.input === 'string' ? step.input.trim() : '');
   const output = typeof step.output === 'string' ? step.output.trim() : '';
   const parts = [];

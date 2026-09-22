@@ -31,6 +31,12 @@ export default function OrgUnitOverviewTab({ entityData }) {
   }
 
   const parentUnit = entityData.allOrgUnits?.find(u => u.id === entityData.parent)?.name || '—';
+  const managerEmp = (entityData.employees || []).find(
+    (e) => e.id === entityData.manager_employee_id,
+  );
+  const managerLabel = managerEmp
+    ? `${managerEmp.employee_no} — ${managerEmp.full_name}`
+    : (entityData.manager_employee_id ? `Employee #${entityData.manager_employee_id}` : '—');
 
   const attributes = [
     { label: 'ID', value: entityData.id },
@@ -38,6 +44,7 @@ export default function OrgUnitOverviewTab({ entityData }) {
     { label: 'Type', value: ORG_TYPES[entityData.org_type] || entityData.org_type },
     { label: 'Code', value: entityData.code || '—' },
     { label: 'Parent Unit', value: parentUnit },
+    { label: 'Unit manager', value: managerLabel },
     { label: 'Description', value: entityData.description || '—' },
   ];
 

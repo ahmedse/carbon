@@ -38,6 +38,10 @@ import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from '../utils/dateUtils';
 import { formatContextLines, normalizeProvenanceSources } from '../utils/aiProvenance';
 import { isSafeInternalRoute } from '../utils/navigation';
+import {
+  presentConsentExpandLabel,
+  presentTechnicalDetailsLabel,
+} from './presentationPlane';
 import { resolveBackendUrl } from '../config';
 import {
   cleanPlainText,
@@ -65,18 +69,21 @@ import SuggestionDiff from './SuggestionDiff';
 
 const CarbonDataGrid = lazy(() => import('../components/DataGrid/CarbonDataGrid'));
 
-// User: flat right-aligned row, no bubble border
+// User: compact right-aligned row
 const USER_BUBBLE_SX = {
   alignSelf: 'flex-end',
-  maxWidth: '88%',
+  maxWidth: 'min(42rem, 88%)',
   px: 1.25, py: 0.625,
   borderRadius: 1,
   bgcolor: 'action.hover',
 };
 
-// AI: full-width, no background, no border
+// AI: capped width so dir=auto Arabic does not park text on the far right
+// while chrome (AI badge, navigate buttons) stays on the far left — that
+// regression left a hollow rail after RTL polish (8587c39).
 const AI_BUBBLE_SX = {
   alignSelf: 'flex-start',
+  maxWidth: 'min(42rem, 96%)',
   width: '100%',
   px: 0, py: 0,
 };
@@ -312,7 +319,8 @@ function AIMessageBubble({
   const [editText, setEditText] = useState('');
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   // Pending-action proposal review (details + modify before confirm).
-  const [detailsOpenId, setDetailsOpenId] = useState(null); // execution_id expanded
+  const [detailsOpenId, setDetailsOpenId] = useState(null); // execution_id — L1 prep
+  const [techOpenId, setTechOpenId] = useState(null); // execution_id — L2 JSON
   const [editAction, setEditAction] = useState(null);       // pending action being edited
   const [editJson, setEditJson] = useState('');
   const [editJsonError, setEditJsonError] = useState('');
@@ -876,10 +884,7 @@ function AIMessageBubble({
   );
 
   // ── Pending-action proposal review ────────────────────────────────────
-  // Each staged execution renders as a card: Confirm & create / Edit & confirm
-  // / Decline plus an expandable "Details & JSON" section showing the proposed
-  // rule definition and the exact body that will be POSTed. Editing validates
-  // the JSON, then confirms the edited version in one atomic call.
+  // Confirm / Decline + L1 "How this was prepared" + nested L2 technical JSON.
   const jsonBlock = (label, value) => (
     <Box sx={{ minWidth: 0 }}>
       <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>
@@ -947,6 +952,7 @@ function AIMessageBubble({
           ? pending.confirmation_message || 'this memory'
           : proposed.name || pending.confirmation_message || 'this proposal';
         const detailsOpen = detailsOpenId === executionId;
+        const techOpen = techOpenId === executionId;
         const validation = pending.validation;
         const validationLabel =
           validation?.passed === true
@@ -1022,48 +1028,62 @@ function AIMessageBubble({
                 <Button
                   size="small"
                   variant="text"
-                  onClick={() => setDetailsOpenId(detailsOpen ? null : executionId)}
+                  onClick={() => {
+                    setDetailsOpenId(detailsOpen ? null : executionId);
+                    if (detailsOpen) setTechOpenId(null);
+                  }}
                   aria-expanded={detailsOpen}
-                  aria-label={`${detailsOpen ? 'Hide' : 'Show'} details for ${proposedName}`}
+                  aria-label={`${presentConsentExpandLabel({ open: detailsOpen })} for ${proposedName}`}
                 >
-                  {detailsOpen ? 'Hide details' : 'Details & JSON'}
+                  {presentConsentExpandLabel({ open: detailsOpen })}
                 </Button>
               </Stack>
 
               {detailsOpen && (
-                <Stack spacing={1} sx={{ pt: 0.5 }}>
+                <Stack spacing={1} sx={{ pt: 0.5 }} data-testid="consent-prep-details">
                   <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                     {pending.confirmation_message || `Create DQ rule "${proposedName}"?`}
                   </Typography>
-                  {isMemory ? (
-                    <>
-                      {jsonBlock('Fact', pending.fact || pending.confirmation_message || '')}
-                      {pending.category ? (
-                        <Typography variant="caption" color="text.secondary">
-                          Category: {pending.category}
-                        </Typography>
-                      ) : null}
-                    </>
-                  ) : (
-                    <>
-                      <Chip
-                        size="small"
-                        variant="outlined"
-                        color={validationColor}
-                        label={validationLabel}
-                        sx={{ alignSelf: 'flex-start' }}
-                      />
-                      {validation?.passed === false && Array.isArray(validation.errors) && (
-                        <Typography variant="caption" color="error">
-                          {validation.errors.join(' · ')}
-                        </Typography>
+                  {isMemory && pending.category ? (
+                    <Typography variant="caption" color="text.secondary">
+                      Category: {pending.category}
+                    </Typography>
+                  ) : null}
+                  {!isMemory && validation?.passed === false && Array.isArray(validation.errors) && (
+                    <Typography variant="caption" color="error">
+                      {validation.errors.join(' · ')}
+                    </Typography>
+                  )}
+                  <Button
+                    size="small"
+                    variant="text"
+                    onClick={() => setTechOpenId(techOpen ? null : executionId)}
+                    aria-expanded={techOpen}
+                    sx={{ alignSelf: 'flex-start', px: 0, minWidth: 0 }}
+                  >
+                    {presentTechnicalDetailsLabel({ open: techOpen })}
+                  </Button>
+                  {techOpen && (
+                    <Stack spacing={1} data-testid="consent-tech-details">
+                      {isMemory ? (
+                        jsonBlock('Fact', pending.fact || pending.confirmation_message || '')
+                      ) : (
+                        <>
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            color={validationColor}
+                            label={validationLabel}
+                            sx={{ alignSelf: 'flex-start' }}
+                          />
+                          {kind !== 'host' && jsonBlock('Proposed rule (definition JSON)', JSON.stringify(proposed, null, 2))}
+                          {jsonBlock(
+                            'Body that will be POSTed',
+                            JSON.stringify(pending.proposed_body || pending.body || {}, null, 2),
+                          )}
+                        </>
                       )}
-                      {kind !== 'host' && jsonBlock('Proposed rule (definition JSON)', JSON.stringify(proposed, null, 2))}
-                      {jsonBlock(
-                        'Body that will be POSTed',
-                        JSON.stringify(pending.proposed_body || pending.body || {}, null, 2),
-                      )}
-                    </>
+                    </Stack>
                   )}
                 </Stack>
               )}
@@ -1071,13 +1091,50 @@ function AIMessageBubble({
           </Paper>
         );
       })}
+      {panelActions.length > 0 && (
+        <Box
+          data-testid="message-panel-actions"
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 0.75,
+            alignSelf: 'stretch',
+            justifyContent: 'flex-start',
+          }}
+          dir="auto"
+        >
+          {panelActions.map((act, idx) => (
+            <Button
+              key={`${act.panel}-${act.plan_id || ''}-${idx}`}
+              size="small"
+              variant={panelActions.length === 1 && navigateActions.length === 0 ? 'contained' : (idx === 0 ? 'contained' : 'outlined')}
+              disabled={!onOpenPanel}
+              onClick={() => onOpenPanel?.(act.panel, act.plan_id)}
+              aria-label={act.label || 'Open'}
+            >
+              {act.label || 'Open'}
+            </Button>
+          ))}
+        </Box>
+      )}
       {navigateActions.length > 0 && (
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+        <Box
+          data-testid="message-navigate-actions"
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 0.75,
+            // Sit with the reply column (not a full-rail flex-start island).
+            alignSelf: 'stretch',
+            justifyContent: 'flex-start',
+          }}
+          dir="auto"
+        >
           {navigateActions.map((nav, idx) => (
             <Button
               key={`${nav.route}-${idx}`}
               size="small"
-              variant={navigateActions.length === 1 ? 'contained' : 'outlined'}
+              variant={navigateActions.length === 1 && panelActions.length === 0 ? 'contained' : 'outlined'}
               component={Link}
               to={nav.route}
               aria-label={nav.label || 'Open'}
@@ -1108,22 +1165,6 @@ function AIMessageBubble({
               </Button>
             );
           })}
-        </Box>
-      )}
-      {panelActions.length > 0 && (
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-          {panelActions.map((act, idx) => (
-            <Button
-              key={`${act.panel}-${act.plan_id || ''}-${idx}`}
-              size="small"
-              variant={panelActions.length === 1 ? 'contained' : 'outlined'}
-              disabled={!onOpenPanel}
-              onClick={() => onOpenPanel?.(act.panel, act.plan_id)}
-              aria-label={act.label || 'Open'}
-            >
-              {act.label || 'Open'}
-            </Button>
-          ))}
         </Box>
       )}
     </Stack>

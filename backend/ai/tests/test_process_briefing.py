@@ -4,6 +4,7 @@ from __future__ import annotations
 from ai.engine.cognition.turn.process_brief import (
     extract_process_id,
     format_process_briefing,
+    is_deliverable_request,
     is_process_briefing,
     try_process_briefing,
 )
@@ -75,3 +76,17 @@ def test_try_process_briefing_round_trip():
     assert pid == "payroll.run.lifecycle"
     assert "compute" in reply
     assert "commit" in reply
+
+
+def test_salary_report_ask_is_deliverable_not_nav():
+    """Arabic/EN report asks mention payroll nouns but must not open-app."""
+    ar = (
+        "لو سمحت عاوز تقرير شامل عن المرتبات، حسب الجنسية و الوظيفة و الموقع، "
+        "في شكل word file. مدعم بالرسومات و الجداول الواضحة. شكرا"
+    )
+    en = "Please generate a comprehensive payroll report as a Word file with charts."
+    assert is_deliverable_request(ar)
+    assert is_deliverable_request(en)
+    assert not is_process_briefing(ar)
+    assert not is_deliverable_request("take me to payroll")
+    assert not is_deliverable_request("open People & Payroll")

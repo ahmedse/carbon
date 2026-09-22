@@ -10,7 +10,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 from .loan_service import materialize_loan_installments
-from .models import Employee, LeaveRecord, Loan
+from .models import AttendancePermission, Employee, LeaveRecord, Loan
 from .profile_change_service import apply_profile_change
 
 
@@ -98,6 +98,22 @@ def sync_leave_status_from_correspondence(sender, instance, **kwargs):
         LeaveRecord.objects.filter(pk=instance.subject_id, status='draft').update(
             status='cancelled',
         )
+
+
+@receiver(post_save, sender='correspondence.Correspondence')
+def sync_attendance_permission_from_correspondence(sender, instance, **kwargs):
+    """Flip ``AttendancePermission.approved`` when ESS correspondence resolves.
+
+    Approve → ``approved=True`` (idempotent). Reject/cancel leave the row
+    pending (``approved=False``) — the bool model has no rejected state; the
+    correspondence record is the audit trail for refusal.
+    """
+    if instance.subject_type != 'people.AttendancePermission' or not instance.subject_id:
+        return
+    if instance.status == 'approved':
+        AttendancePermission.objects.filter(
+            pk=instance.subject_id, approved=False,
+        ).update(approved=True)
 
 
 @receiver(post_save, sender='correspondence.Correspondence')

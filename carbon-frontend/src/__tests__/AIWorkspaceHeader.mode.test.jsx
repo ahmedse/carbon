@@ -53,11 +53,12 @@ describe('AIWorkspaceHeader mode toggle + safety contract (W5-A / ADR-0014)', ()
     ).toBeInTheDocument();
   });
 
-  it('shows the autonomy dial only in Agent mode', () => {
+  it('hides the autonomy dial (default balanced; less Operator chrome)', () => {
     const { rerender } = render(<AIWorkspaceHeader onClose={vi.fn()} mode="chat" />);
     expect(screen.queryByLabelText(/Autonomy/i)).not.toBeInTheDocument();
     rerender(<AIWorkspaceHeader onClose={vi.fn()} mode="agent" agentLifecycleState="idle" />);
-    expect(screen.getByLabelText(/Autonomy/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Autonomy/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Balanced/i)).not.toBeInTheDocument();
   });
 
   it('reports a mode change via onModeChange when Agent is clicked', () => {

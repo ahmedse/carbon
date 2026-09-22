@@ -60,6 +60,16 @@ HOST_ACTION_REGISTRY: dict[str, str] = {
     "leave.request.recorded_and_entitlement_decremented": (
         "ai.predicates:leave_request_recorded_and_entitlement_decremented"
     ),
+    # ── Nibras Attendance permission lifecycle ───────────────────────────
+    # submit (mutation) → review (human task) → approve (mutation) → verify
+    # (assertion). Mutations/reads bind to People attendance-permission views;
+    # review uses the inbox sentinel.
+    "attendance.permission.submit": "people.self_views:AttendancePermissionSelfCollectionView",
+    "attendance.permission.approve": "people.views:AttendancePermissionDetailView",
+    "attendance.permission.list": "people.views:AttendancePermissionListCreateView",
+    "attendance.permission.approved_and_recorded": (
+        "ai.predicates:attendance_permission_approved_and_recorded"
+    ),
     # ── Nibras Loan request lifecycle (domain_packs/nibras) ────────────────
     # submit (mutation) → review (human task) → activate (mutation) → verify
     # (assertion). Mutations/reads bind to People loan views; review uses the
@@ -87,9 +97,9 @@ HOST_ACTION_REGISTRY: dict[str, str] = {
     # (assertion). Generate/submit bind to the existing WPS export view;
     # validate binds to payroll validations list; review uses the inbox
     # sentinel. Values resolve lazily (no people import here).
-    "gosi_wps.sif.generate": "people.views:PayrollRunWPSExportView",
-    "gosi_wps.sif.validate": "people.views:PayrollRunValidationsListView",
-    "gosi_wps.sif.submit": "people.views:PayrollRunWPSExportView",
+    "gosi_wps.sif.generate": "people.views:PayrollRunWpsGenerateView",
+    "gosi_wps.sif.validate": "people.views:PayrollRunWpsValidateFilingView",
+    "gosi_wps.sif.submit": "people.views:PayrollRunWpsSubmitFilingView",
     "gosi_wps.sif.submitted_and_reconciled": (
         "ai.predicates:gosi_wps_sif_submitted_and_reconciled"
     ),

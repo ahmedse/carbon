@@ -68,7 +68,7 @@ const AT_KINDS = ['table', 'rule', 'module', 'org-unit'];
 const SLASH_COMMANDS = [
   { name: 'summarize',  kind: 'directive', label: 'Summarize this conversation so far', description: 'Ask for a summary of the thread' },
   { name: 'plan',       kind: 'directive', label: 'Plan a task to',                   description: 'Draft a plan before anything runs' },
-  { name: 'clear',      kind: 'action',    label: 'Clear working context',            description: 'Drop the in-progress context, keep history' },
+  { name: 'clear',      kind: 'action',    label: 'Clear working context',            description: 'Empty the thread — Restore brings it back' },
   { name: 'checkpoint', kind: 'action',    label: 'Save a checkpoint',                description: 'Snapshot the current context' },
   { name: 'fork',       kind: 'action',    label: 'Fork this conversation',           description: 'Branch from a saved checkpoint' },
   { name: 'export',     kind: 'action',    label: 'Export conversation',              description: 'Download this thread as Markdown' },

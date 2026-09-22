@@ -19,6 +19,7 @@ KNOWN_PROCESS_IDS: tuple[str, ...] = (
     "payroll.run.lifecycle",
     "gosi_wps.sif.lifecycle",
     "employee.onboarding.lifecycle",
+    "attendance.permission.lifecycle",
 )
 
 # Explicit process id token (backticks optional).
@@ -55,7 +56,30 @@ _STEP_LABELS: dict[str, tuple[str, str]] = {
     "commit": ("Commit", "اعتماد / ترحيل"),
     "generate": ("Generate", "توليد"),
     "activate": ("Activate", "تفعيل"),
+    "approve": ("Approve", "موافقة"),
 }
+
+
+# Mentions of place nouns inside a *deliverable* ask (report / Word / tables)
+# must NOT short-circuit to open-app propose. "تقرير عن المرتبات … word file"
+# mentions payroll but wants a document, not /people.
+_DELIVERABLE_ASK_RE = re.compile(
+    r"(?is)("
+    r"\b(report|reports|document|documents|word|docx|xlsx|excel|pdf|csv|"
+    r"export|generate|produce|create|draft|write|summar(y|ise|ize)|"
+    r"breakdown|comprehensive|analysis|analyse|analyze)\b"
+    r"|تقرير|تقارير|ملف|مستند|وورد|اكسل|إكسل|رسوم|جداول|جدول|صدّر|صدر|"
+    r"أنشئ|انشئ|ولّد|ولد|اكتب|تحليل|ملخص"
+    r")",
+)
+
+
+def is_deliverable_request(text: str) -> bool:
+    """True when the utterance asks for a produced artifact, not navigation."""
+    raw = (text or "").strip()
+    if not raw:
+        return False
+    return bool(_DELIVERABLE_ASK_RE.search(raw))
 
 
 def is_process_briefing(text: str) -> bool:
@@ -92,6 +116,10 @@ def extract_process_id(text: str) -> str | None:
         ("payroll.run.lifecycle", ("payroll.run", "payroll lifecycle", "payroll process", "رواتب")),
         ("gosi_wps.sif.lifecycle", ("gosi", "wps", "sif", "تأمينات")),
         ("employee.onboarding.lifecycle", ("onboarding", "onboard", "توظيف", "تعيين")),
+        ("attendance.permission.lifecycle", (
+            "attendance.permission", "attendance permission", "attendance lifecycle",
+            "short hours", "إذن حضور", "اذن حضور", "صلاحية حضور",
+        )),
     )
     if not _BRIEFING_ASK_RE.search(raw):
         return None

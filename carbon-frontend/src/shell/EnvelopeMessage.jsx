@@ -40,6 +40,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import MarkdownMessage from './MarkdownMessage';
 import { formatDisplayDateTime } from '../utils/dateUtils';
+import { presentCaveats, presentSources } from './presentationPlane';
 import { Bar, Doughnut, Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -470,11 +471,14 @@ const CAVEAT_LEVEL = {
 };
 
 function EnvelopeCaveats({ caveats, t }) {
-  if (!Array.isArray(caveats) || caveats.length === 0) return null;
+  const presented = presentCaveats(caveats, 'operator', {
+    chatCannotSubmit: t('envelope.chatCannotSubmit'),
+  });
+  if (presented.length === 0) return null;
   return (
     <Box>
       <SectionLabel>{t('envelope.caveats')}</SectionLabel>
-      {caveats.map((c, i) => {
+      {presented.map((c, i) => {
         const level = CAVEAT_LEVEL[c?.level] || CAVEAT_LEVEL.info;
         const Icon = level.Icon;
         return (
@@ -496,7 +500,7 @@ function EnvelopeCaveats({ caveats, t }) {
           >
             <Icon sx={{ fontSize: 16, color: `${level.color}.main`, mt: 0.125 }} />
             <Typography variant="body2" sx={{ color: 'text.primary', lineHeight: 1.5 }}>
-              {c?.text}
+              {c.text}
             </Typography>
           </Box>
         );
@@ -513,33 +517,39 @@ EnvelopeCaveats.propTypes = {
 // ── Sources — provenance chips ───────────────────────────────────────────────
 
 function EnvelopeSources({ sources, t }) {
-  if (!Array.isArray(sources) || sources.length === 0) return null;
+  const { chips, softFallback } = presentSources(sources, 'operator', {
+    rows: (count) => t('envelope.rows', { count }),
+    truncated: t('envelope.truncated'),
+  });
+  if (!chips.length && !softFallback) return null;
   return (
-    <Box>
-      <SectionLabel>{t('envelope.sources')}</SectionLabel>
+    <Box data-testid="envelope-sources">
+      <SectionLabel>{t('envelope.basedOn')}</SectionLabel>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-        {sources.map((src, i) => {
-          const parts = [];
-          if (src?.tool) parts.push(src.tool);
-          if (src?.rows_returned != null) parts.push(t('envelope.rows', { count: src.rows_returned }));
-          if (src?.truncated) parts.push(t('envelope.truncated'));
-          const resolvedLabel = formatResolvedAt(src?.resolved_at);
-          return (
+        {softFallback ? (
+          <Chip
+            data-testid="envelope-source"
+            size="small"
+            variant="outlined"
+            label={t('envelope.yourRecords')}
+          />
+        ) : (
+          chips.map((chip, i) => (
             <Box key={i} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.25 }}>
               <Chip
                 data-testid="envelope-source"
                 size="small"
                 variant="outlined"
-                label={parts.join(' · ') || t('envelope.noData')}
+                label={chip.label}
               />
-              {resolvedLabel ? (
+              {chip.resolvedAt ? (
                 <Typography variant="caption" sx={{ color: 'text.disabled', px: 0.25 }}>
-                  {resolvedLabel}
+                  {formatResolvedAt(chip.resolvedAt)}
                 </Typography>
               ) : null}
             </Box>
-          );
-        })}
+          ))
+        )}
       </Box>
     </Box>
   );

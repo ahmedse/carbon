@@ -1,0 +1,25 @@
+---
+description: Universal platform superuser ahmed across all brands/DBs
+alwaysApply: true
+---
+
+# Universal superuser — `ahmed`
+
+`ahmed` is the **platform SUPERUSER for every brand** (nibras, eduos, tectona, medos, aastmt, …). Same username and password on each brand DB.
+
+| Field | Value |
+|-------|--------|
+| Username | `ahmed` |
+| Password | `AdminPa_132` (env override: `CARBON_ADMIN_PASSWORD`) |
+| Flags | `is_superuser=True`, `is_staff=True`, `is_active=True` |
+
+## Rules for agents
+
+1. **Never invent a different password** for `ahmed`. Use `CARBON_ADMIN_PASSWORD` or default `AdminPa_132`.
+2. **Do not demote** `ahmed` (no `is_superuser=False`). Brand-scoped admins (`admin`, etc.) are separate and are **not** Django superusers.
+3. After `./manage.sh brand <id>`, if login fails for `ahmed`, run the brand’s ensure command (e.g. `ensure_nibras_admins`, `ensure_eduos_admins`) or set password via `CARBON_ADMIN_PASSWORD` — do not guess other passwords.
+4. When documenting seed/demo users, keep `ahmed` listed as the universal superuser; brand `admin` accounts stay brand-local.
+5. Prefer env `CARBON_ADMIN_PASSWORD` in scripts; hardcode `AdminPa_132` only as the documented local default (same as ensure_*_admins).
+6. **Login failures are usually browser autofill**, not a password change. `AdminPa_132` is **11** chars; `AdmEduos_132` is **12**. If the password field shows 12 dots, clear it and type `AdminPa_132` manually.
+7. `ensure_*_admins` must **never** call `set_password` when `check_password` already succeeds — only repair flags/roles, or set password when it does not match.
+8. On **Nibras**, also see `.cursor/rules/nibras-dev-credentials.mdc`: `admin`/`AdmNibras_132`, employees `emp_*`/`mozafNibrasPa_132`.

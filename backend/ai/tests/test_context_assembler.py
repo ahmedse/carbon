@@ -389,6 +389,36 @@ def test_assemble_context_no_summary_is_history_only(user):
 
 
 @pytest.mark.django_db
+def test_assemble_context_skips_history_before_clear_break(user):
+    conversation = _make_conversation(user, "chat", summary="")
+    msgs = [
+        AIMessage.objects.create(conversation=conversation, role="user", content=f"m{i}")
+        for i in range(4)
+    ]
+    conversation.context_snapshot_json = {
+        "_clear_break": {
+            "summary": "old",
+            "prior_snapshot": {},
+            "message_boundary_id": str(msgs[1].id),
+            "cleared_at": timezone.now().isoformat(),
+        },
+    }
+    conversation.save(update_fields=["context_snapshot_json"])
+
+    history = list(
+        conversation.messages.order_by("created_at").values(
+            "id", "role", "content", "created_at", "is_deleted",
+        )
+    )
+    result = assemble_context(
+        conversation, history, scope=None, recent_turns=8,
+    )
+
+    contents = [m["content"] for m in result["messages"] if m["role"] == "user"]
+    assert contents == ["m2", "m3"]
+
+
+@pytest.mark.django_db
 def test_assemble_context_resolves_workspace_mentions(user):
     org_unit = OrgUnit.objects.create(name="Mentions Org", code="MNT", org_type="division")
     module = Module.objects.create(name="Mentions Module", org_unit=org_unit)

@@ -22,21 +22,12 @@ import {
   Typography,
 } from '@mui/material';
 import AddCommentOutlinedIcon from '@mui/icons-material/AddCommentOutlined';
-import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
-import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
-import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import DataUsageIcon from '@mui/icons-material/DataUsage';
 import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
-import ManageSearchIcon from '@mui/icons-material/ManageSearch';
-import NotificationsActiveOutlinedIcon from '@mui/icons-material/NotificationsActiveOutlined';
-import PsychologyOutlinedIcon from '@mui/icons-material/PsychologyOutlined';
-import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import TaskAltOutlinedIcon from '@mui/icons-material/TaskAltOutlined';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../i18n/useLanguage';
@@ -417,10 +408,13 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
 
   // W2-C — restore / clear-context return the *same* conversation with an
   // updated working context (summary + snapshot); merge so the context panel
-  // telemetry refreshes in place.
+  // telemetry refreshes in place. Pulse the active thread so /clear shows the
+  // Restore divider without a full reload.
+  const [contextPulse, setContextPulse] = useState(null);
   const handleConversationUpdated = useCallback((updated) => {
     if (!updated?.id) return;
     setById((prev) => ({ ...prev, [updated.id]: { ...prev[updated.id], ...updated } }));
+    setContextPulse({ id: updated.id, at: Date.now(), conversation: updated });
   }, []);
 
   // Context-menu archive/restore toggle.
@@ -675,6 +669,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
                   onOpenPanel={handleOpenPanel}
                   onForked={handleForked}
                   onConversationUpdated={handleConversationUpdated}
+                  contextPulse={contextPulse}
                   seedDraft={chatSeedDraft}
                   onSeedDraftConsumed={() => setChatSeedDraft(null)}
                 />
@@ -874,17 +869,8 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
                 ));
               })()
             : [
-                { id: 'sessions',    icon: <ForumOutlinedIcon sx={{ fontSize: 16 }} />,             label: t('panel.sessions')    },
-                { id: 'context',     icon: <InfoOutlinedIcon sx={{ fontSize: 16 }} />,               label: t('panel.context')     },
-                { id: 'investigate', icon: <ManageSearchIcon sx={{ fontSize: 16 }} />,               label: t('panel.investigate') },
-                { id: 'artifacts',   icon: <Inventory2OutlinedIcon sx={{ fontSize: 16 }} />,         label: t('panel.artifacts')   },
-                { id: 'memory',      icon: <PsychologyOutlinedIcon sx={{ fontSize: 16 }} />,         label: t('panel.memory')      },
-                { id: 'usage',       icon: <DataUsageIcon sx={{ fontSize: 16 }} />,                  label: t('panel.usage')       },
-                { id: 'processes',   icon: <AccountTreeOutlinedIcon sx={{ fontSize: 16 }} />,        label: t('panel.processes')   },
-                { id: 'skills',      icon: <AutoAwesomeOutlinedIcon sx={{ fontSize: 16 }} />,         label: t('panel.skills')      },
-                { id: 'capabilities', icon: <CategoryOutlinedIcon sx={{ fontSize: 16 }} />,           label: t('panel.capabilities') },
-                { id: 'watches',     icon: <NotificationsActiveOutlinedIcon sx={{ fontSize: 16 }} />, label: t('panel.watches')     },
-                { id: 'settings',    icon: <SettingsOutlinedIcon sx={{ fontSize: 16 }} />,           label: t('panel.settings')    },
+                { id: 'sessions',  icon: <ForumOutlinedIcon sx={{ fontSize: 16 }} />,       label: t('panel.sessions')  },
+                { id: 'artifacts', icon: <Inventory2OutlinedIcon sx={{ fontSize: 16 }} />, label: t('panel.artifacts') },
               ].map(({ id, icon, label }) => (
                 <Tooltip key={id} title={label} placement="left">
                   <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', borderRight: 2, borderColor: activePanel === id ? 'primary.main' : 'transparent' }}>

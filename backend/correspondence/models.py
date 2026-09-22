@@ -16,6 +16,11 @@ STATUS_CHOICES = [
 ACTIONABLE = ('submitted', 'in_review')
 TERMINAL = ('approved', 'rejected', 'cancelled', 'expired', 'archived')
 
+# Decision events a manager/approver records — Team History is keyed on these.
+ACTOR_HISTORY_EVENTS = (
+    'approved', 'rejected', 'sent_back', 'acknowledged', 'reviewed',
+)
+
 ROLE_CHOICES = [
     ('manager', 'Manager'), ('hr', 'HR'), ('finance', 'Finance'),
     ('specific_user', 'Specific User'), ('any_admin', 'Any Admin'),
@@ -96,6 +101,14 @@ class WorkflowPolicyStep(models.Model):
     )
     order = models.PositiveSmallIntegerField()
     role = models.CharField(max_length=24, choices=ROLE_CHOICES)
+    fallback_role = models.CharField(
+        max_length=24, choices=ROLE_CHOICES, blank=True, default='',
+        help_text=(
+            'Who approves when nobody holds `role` (an employee with no '
+            'manager). Left blank, such a request waits for routing rather '
+            'than passing unapproved.'
+        ),
+    )
     intent = models.CharField(max_length=16, choices=INTENT_CHOICES, default='approve')
     specific_user = models.ForeignKey(
         'accounts.User', null=True, blank=True, on_delete=models.SET_NULL

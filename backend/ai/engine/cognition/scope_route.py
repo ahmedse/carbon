@@ -102,8 +102,8 @@ def _leave_cards(*, personal_primary: bool) -> list[dict[str, Any]]:
     return [
         {
             "id": "leave_request",
-            "label": "Request personal leave",
-            "hint": "Open Chat / People for a leave request — not an Agent plan",
+            "label": "Create a leave-request plan",
+            "hint": "Stay in Agent — draft a reviewable plan you can edit before approving",
             "primary": personal_primary,
         },
         {
@@ -160,9 +160,9 @@ def scope_route(text: str, *, stage: str = "brief") -> ScopeRoute:
             cls="TRANSACTION" if personal else "PLAN_AMBIG",
             message=(
                 "That sounds like a personal leave request. "
-                "Agent plans platform work (reports, data-quality rules, board packs) — "
-                "it doesn't file leave by chatting in a plan. "
-                "If you meant a compliance report for the board, choose that instead."
+                "I can draft a reviewable leave-request plan here for you to edit "
+                "and approve — or plan a leave-compliance board pack instead. "
+                "Chat stays available if you only want advice."
             ),
             recommended="leave_request",
             plannable=False,

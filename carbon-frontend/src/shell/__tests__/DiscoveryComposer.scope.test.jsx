@@ -12,10 +12,12 @@ vi.mock('../../components/NotificationProvider', () => ({
 const startDiscoveryPlan = vi.fn();
 const advanceDiscovery = vi.fn();
 const finalizeDiscovery = vi.fn();
+const createPlan = vi.fn();
 vi.mock('../../api/aiWorkspace', () => ({
   startDiscoveryPlan: (...a) => startDiscoveryPlan(...a),
   advanceDiscovery: (...a) => advanceDiscovery(...a),
   finalizeDiscovery: (...a) => finalizeDiscovery(...a),
+  createPlan: (...a) => createPlan(...a),
 }));
 
 vi.mock('../AIMessageBubble', () => ({
@@ -35,6 +37,7 @@ describe('DiscoveryComposer scope gate', () => {
     startDiscoveryPlan.mockReset();
     advanceDiscovery.mockReset();
     finalizeDiscovery.mockReset();
+    createPlan.mockReset();
   });
 
   it('shows recommended leave cards and does not enable Plan now', async () => {
@@ -48,8 +51,9 @@ describe('DiscoveryComposer scope gate', () => {
         recommended: 'leave_request',
         plannable: false,
         cards: [
-          { id: 'leave_request', label: 'Request personal leave', primary: true },
+          { id: 'leave_request', label: 'Create a leave-request plan', primary: true },
           { id: 'compliance_report', label: 'Plan a leave-compliance report', primary: false },
+          { id: 'handoff_chat', label: 'Ask in Chat instead', primary: false },
         ],
       },
       turns: [],
@@ -59,7 +63,85 @@ describe('DiscoveryComposer scope gate', () => {
     fireEvent.click(screen.getByRole('button', { name: 'send-brief' }));
 
     expect(await screen.findByTestId('scope-route-card')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Request personal leave/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Create a leave-request plan/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Plan now' })).not.toBeInTheDocument();
+  });
+
+  it('leave_request creates an Agent plan and stays off Chat', async () => {
+    const onPlanReady = vi.fn();
+    const onSwitchToChat = vi.fn();
+    startDiscoveryPlan.mockResolvedValue({
+      id: null,
+      status: 'recommended',
+      plannable: false,
+      brief: 'أريد عمل اجازه',
+      route: {
+        class: 'TRANSACTION',
+        message: 'That sounds like a personal leave request.',
+        recommended: 'leave_request',
+        plannable: false,
+        cards: [
+          { id: 'leave_request', label: 'Create a leave-request plan', primary: true },
+          { id: 'handoff_chat', label: 'Ask in Chat instead', primary: false },
+        ],
+      },
+      turns: [],
+    });
+    createPlan.mockResolvedValue({
+      id: 'plan-leave-1',
+      status: 'pending_approval',
+      brief: 'أريد عمل اجازه',
+      steps: [{ step_id: 1, intent: 'Submit leave' }],
+    });
+
+    render(
+      <DiscoveryComposer
+        conversationId="c1"
+        onPlanReady={onPlanReady}
+        onSwitchToChat={onSwitchToChat}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'send-brief' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Create a leave-request plan/i }));
+
+    await waitFor(() => {
+      expect(createPlan).toHaveBeenCalledWith('t', {
+        brief: 'أريد عمل اجازه',
+        conversation_id: 'c1',
+      });
+    });
+    expect(onPlanReady).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'plan-leave-1', status: 'pending_approval' }),
+    );
+    expect(onSwitchToChat).not.toHaveBeenCalled();
+  });
+
+  it('Ask in Chat remains an explicit opt-in handoff', async () => {
+    const onSwitchToChat = vi.fn();
+    startDiscoveryPlan.mockResolvedValue({
+      id: null,
+      status: 'recommended',
+      plannable: false,
+      brief: 'أريد عمل اجازه',
+      route: {
+        class: 'TRANSACTION',
+        recommended: 'leave_request',
+        plannable: false,
+        cards: [
+          { id: 'leave_request', label: 'Create a leave-request plan', primary: true },
+          { id: 'handoff_chat', label: 'Ask in Chat instead', primary: false },
+        ],
+      },
+      turns: [],
+    });
+
+    render(
+      <DiscoveryComposer conversationId="c1" onSwitchToChat={onSwitchToChat} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'send-brief' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Ask in Chat instead/i }));
+
+    expect(onSwitchToChat).toHaveBeenCalledWith('أريد عمل اجازه');
+    expect(createPlan).not.toHaveBeenCalled();
   });
 });

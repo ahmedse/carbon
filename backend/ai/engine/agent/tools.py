@@ -519,30 +519,123 @@ async def execute_search_knowledge(
     return {"entities": entities, "count": len(entities)}
 
 
+#: Words that carry no meaning when matching an asked-for entity against a
+#: catalog endpoint name: ``leave_balance`` and ``get_my_leave_balance`` are
+#: the same thing.
+_CATALOG_ALIAS_STOPWORDS: frozenset[str] = frozenset({
+    "get", "list", "fetch", "show", "read", "view", "retrieve",
+    "my", "me", "mine", "own", "self",
+    "the", "a", "an", "all", "current",
+    "data", "details", "detail", "info", "information", "record", "records",
+})
+
+
+#: Verbs that read naturally at the front of a confirm prompt.
+_CONFIRM_VERBS: dict[str, str] = {
+    "submit": "Submit", "create": "Create", "add": "Add", "update": "Update",
+    "patch": "Update", "delete": "Delete", "cancel": "Cancel",
+    "approve": "Approve", "reject": "Reject", "generate": "Generate",
+    "validate": "Validate", "compute": "Compute", "commit": "Commit",
+}
+
+
+def _default_confirmation_message(api_name: str) -> str:
+    """Human confirm prompt for an endpoint with no configured message.
+
+    The old default put "This will execute POST /carbon-api/people/me/leave/"
+    in front of the user (RULE_23 — outcome words, never method and path).
+    """
+    words = [w for w in re.split(r"[^a-z0-9]+", (api_name or "").lower()) if w]
+    if not words:
+        return "Go ahead with this action?"
+    verb = _CONFIRM_VERBS.get(words[0])
+    rest = [("your" if w == "my" else w) for w in (words[1:] if verb else words)]
+    subject = " ".join(rest).strip()
+    if verb and subject:
+        return f"{verb} {subject}?"
+    if subject:
+        return f"Go ahead with {subject}?"
+    return "Go ahead with this action?"
+
+
+def _catalog_alias_tokens(name: str) -> frozenset[str]:
+    return frozenset(
+        t for t in re.split(r"[^a-z0-9]+", (name or "").lower())
+        if t and t not in _CATALOG_ALIAS_STOPWORDS
+    )
+
+
+def _resolve_catalog_alias(entity_name: str, instance_config: dict | None) -> str | None:
+    """Map a knowledge-entity name onto a READ endpoint in the brand catalog.
+
+    The model routinely asks ``get_entity_details("leave_balance")`` when it
+    means the ``get_my_leave_balance`` endpoint. Exact-name aliasing missed
+    that and the turn dead-ended on "Entity 'leave_balance' not found" while a
+    live endpoint sat right there.
+
+    Only GET endpoints are eligible — an entity lookup must never resolve into
+    a mutation. Returns ``None`` unless exactly one endpoint wins, so an
+    ambiguous name still falls through to the knowledge store.
+    """
+    catalog = (instance_config or {}).get("api_catalog") or []
+    endpoints = [ep for ep in catalog if isinstance(ep, dict) and ep.get("name")]
+    if not entity_name or not endpoints:
+        return None
+
+    by_name = {str(ep["name"]): ep for ep in endpoints}
+    if entity_name in by_name:
+        return entity_name
+
+    wanted = _catalog_alias_tokens(entity_name)
+    if not wanted:
+        return None
+
+    exact: list[str] = []
+    partial: list[str] = []
+    for name, ep in by_name.items():
+        if str(ep.get("method") or "GET").upper() != "GET":
+            continue
+        tokens = _catalog_alias_tokens(name)
+        if not tokens:
+            continue
+        if tokens == wanted:
+            exact.append(name)
+        elif wanted < tokens:
+            partial.append(name)
+
+    for bucket in (exact, partial):
+        if len(bucket) == 1:
+            return bucket[0]
+        if len(bucket) > 1:
+            # Prefer the employee's own-data endpoint, then the simplest name.
+            selfies = [n for n in bucket if re.search(r"(^|_)(my|me)(_|$)", n)]
+            pool = selfies or bucket
+            return sorted(pool, key=lambda n: (len(_catalog_alias_tokens(n)), n))[0]
+    return None
+
+
 async def execute_get_entity_details(
     entity_name: str, knowledge_store=None, instance_id: str = "", **kwargs
 ) -> dict:
     """Lookup entity by name from knowledge store. Returns schema + description.
 
-    Safety net (SIM-20260919-N10): if ``entity_name`` is a brand ``api_catalog``
-    endpoint, delegate to ``call_host_api`` — Agent plans historically mistook
-    catalog names for knowledge entities and soft-missed with
-    ``Entity '…' not found``.
+    Safety net (SIM-20260919-N10): if ``entity_name`` names a brand
+    ``api_catalog`` READ endpoint — exactly, or once stop-words are folded
+    away (``leave_balance`` → ``get_my_leave_balance``) — delegate to
+    ``call_host_api``. Plans historically mistook catalog names for knowledge
+    entities and soft-missed with ``Entity '…' not found`` even though the
+    live endpoint existed.
     """
     executor = kwargs.get("executor")
+    cfg = getattr(executor, "instance_config", None) or {} if executor is not None else {}
     if executor is not None and entity_name:
-        cfg = getattr(executor, "instance_config", None) or {}
-        catalog_names = {
-            ep.get("name")
-            for ep in (cfg.get("api_catalog") or [])
-            if isinstance(ep, dict) and ep.get("name")
-        }
-        if entity_name in catalog_names:
+        resolved = _resolve_catalog_alias(entity_name, cfg)
+        if resolved:
             return await execute_call_host_api(
-                api_name=entity_name,
+                api_name=resolved,
                 explanation=(
                     f"Aliased get_entity_details → call_host_api "
-                    f"(catalog name {entity_name!r})"
+                    f"(catalog name {resolved!r})"
                 ),
                 executor=executor,
                 instance_id=instance_id,
@@ -560,7 +653,37 @@ async def execute_get_entity_details(
     entity = await knowledge_store.get_entity(instance_id, entity_name)
     if entity:
         return {"entity": entity}
-    return {"entity": None, "message": f"Entity '{entity_name}' not found"}
+    # Dead end — hand back the live endpoints closest to what was asked so the
+    # turn can pivot to real data instead of reporting "not found".
+    suggestions = _nearest_catalog_reads(entity_name, cfg)
+    miss = {"entity": None, "message": f"Entity '{entity_name}' not found"}
+    if suggestions:
+        miss["available_apis"] = suggestions
+        miss["message"] = (
+            f"'{entity_name}' is not a knowledge entity. Live platform data "
+            f"for it is available via call_host_api: {', '.join(suggestions)}."
+        )
+    return miss
+
+
+def _nearest_catalog_reads(
+    entity_name: str, instance_config: dict | None, limit: int = 3,
+) -> list[str]:
+    """READ endpoints sharing the most words with ``entity_name``."""
+    wanted = _catalog_alias_tokens(entity_name)
+    if not wanted:
+        return []
+    scored: list[tuple[int, int, str]] = []
+    for ep in (instance_config or {}).get("api_catalog") or []:
+        if not isinstance(ep, dict) or not ep.get("name"):
+            continue
+        if str(ep.get("method") or "GET").upper() != "GET":
+            continue
+        name = str(ep["name"])
+        overlap = len(wanted & _catalog_alias_tokens(name))
+        if overlap:
+            scored.append((-overlap, len(name), name))
+    return [name for _, _, name in sorted(scored)[:limit]]
 
 
 async def execute_inspect_case(
@@ -1112,9 +1235,9 @@ async def execute_call_host_api(
     async def _host_effect(command=None) -> dict:
         # Non-GET methods ALWAYS require confirmation regardless of catalog entry
         if needs_confirmation:
-            confirmation_msg = entry.get(
-                "confirmation_message",
-                f"This will execute {method} {path}. Do you want to proceed?",
+            confirmation_msg = (
+                entry.get("confirmation_message")
+                or _default_confirmation_message(api_name)
             )
             execution = await executor.create_pending_execution(
                 conversation_id=conversation_id,
@@ -1131,6 +1254,11 @@ async def execute_call_host_api(
                 "method": method,
                 "endpoint": path,
                 "confirmation_message": confirmation_msg,
+                # Echo what was staged so the confirm card and the grounded
+                # note can show the user WHAT they are approving. Without it
+                # the card reads "ready to go" with no content.
+                "body": body or {},
+                "params": query_params or {},
             }
 
         # Direct execution for read-only endpoints

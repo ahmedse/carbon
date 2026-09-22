@@ -25,6 +25,7 @@ export default {
     items: [
       { label: 'Dashboard', path: '/my', role: '*' },
       { label: 'My Leave', path: '/my/leave', role: '*' },
+      { label: 'My Attendance', path: '/my/attendance', role: '*' },
       { label: 'My Requests', path: '/my/requests', role: '*' },
     ],
   },

@@ -213,3 +213,9 @@ Track: NSR-9 Playwright leave UI
 Ask: Closed. Playwright nibras-leave-approve 3/3 PASS on live nibras stack after emp_* --reset-password to ChangeMe_132. J-EMP-06 already product-fixed (onboard 8/8). Evidence docs/nibras/evidence/NSR-9-go-live-gate.md. Pulse seat unchanged.
 Paths: TASKS.md, docs/nibras/evidence/NSR-9-go-live-gate.md, docs/nibras/GOFSCO-ONBOARDING-RUNBOOK.md
 Blockers: none
+
+## [2026-09-21T16:24:00+03:00] FROM:Nibras TO:ALL TYPE:DONE ID:20260921-2
+Track: NPS-1…4 process security + Attendance ESS UI + 6/6 regression
+Ask: Closed as Nibras Master seat. Host SoD (NPS-1), Pulse review→HR CBAC (NPS-2), attendance ESS Correspondence (NPS-3), me POST leave/loan/attendance + `/my/attendance` UI (NPS-4). Deep 6/6 PASS + operator 6/6 PASS. Pulse: no engine ownership change; catalog/instance tools + planner coerce only.
+Paths: TASKS.md NPS-4, SCOREBOARD C Nibras-6/6, SESSION-20260921-132047 / 132248, people/attendance_ess.py, apps/my/MyAttendance.jsx, ai/host_executor._people_me, ADR-0045
+Blockers: none

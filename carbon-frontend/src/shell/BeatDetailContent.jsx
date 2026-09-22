@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { FONT } from '../theme/themeTokens';
 import { stepStatusMeta, toolLabel } from './aiTaskStatus';
 import { stripEngineJargon } from './humanizeOperatorCopy';
+import { presentToolLabel } from './presentationPlane';
 
 function formatDuration(ms) {
   if (ms == null || !Number.isFinite(ms)) return null;
@@ -41,8 +42,18 @@ function formatWhen(iso) {
 function humanAction(step) {
   const args = step?.tool_args;
   const api = args && typeof args === 'object' ? args.api_name : '';
-  if (api) return toolLabel(api) || String(api).replace(/_/g, ' ');
-  return stripEngineJargon(step?.intent || `Step ${step?.step_id}`);
+  if (api) {
+    return (
+      presentToolLabel('call_host_api', { audience: 'operator', apiName: api })
+      || toolLabel(api)
+      || String(api).replace(/_/g, ' ')
+    );
+  }
+  return (
+    presentToolLabel(step?.tool_name, { audience: 'operator' })
+    || toolLabel(step?.tool_name)
+    || stripEngineJargon(step?.intent || `Step ${step?.step_id}`)
+  );
 }
 
 /**
@@ -55,6 +66,7 @@ export default function BeatDetailContent({
   step,
   event = null,
   busy = false, // kept for call-site compatibility
+  hideConsentHint = false,
 }) {
   const { t } = useTranslation('ai');
   if (!step) return null;
@@ -93,7 +105,7 @@ export default function BeatDetailContent({
         />
       </Stack>
 
-      {needsYou && (
+      {needsYou && !hideConsentHint && (
         <Box
           sx={{
             p: 1.25,
@@ -109,7 +121,7 @@ export default function BeatDetailContent({
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
             {event?.detail || t('beatNeedsYouHint')}
             {' '}
-            Approve or decline on the timeline step.
+            Approve or decline in this panel.
           </Typography>
         </Box>
       )}
@@ -162,4 +174,5 @@ BeatDetailContent.propTypes = {
   onApprove: PropTypes.func,
   onDecline: PropTypes.func,
   busy: PropTypes.bool,
+  hideConsentHint: PropTypes.bool,
 };

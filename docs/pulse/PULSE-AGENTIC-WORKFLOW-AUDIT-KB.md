@@ -220,8 +220,13 @@ Debug: `localStorage carbon-ai-cockpit=off` restores classic multi-tab IA.
 | **RULE_20** | Engine isolation; no upward domain imports | Documented; `INVARIANTS.md` historically lists **partial/violated** — do not assume perfect |
 | **RULE_21** | No silent mutation | Plan approve + step confirm; `requires_confirmation`; CommandBoundary consent stage |
 | **RULE_23** | Outcome copy only | SSE product terms; UI sanitize; no engine jargon in operator copy |
+| **RULE_34** | Process YAML ≠ host ACL | ADR-0045: Nibras SoD dials vs Correspondence/host gate; honesty matrix CI |
 | **CBAC** | Capability / ownership | Plan owner; People capabilities; PDP permits |
 | **dry_run** | Preview vs commit | Critic / pending ToolExecution patterns |
+
+**Nibras process SoD:** Leave/loan host SoD = Correspondence (ADR-0030). Payroll / GOSI /
+onboarding / attendance irreversibles = org-scoped `people:manage` until shared host SoD
+gate (ADR-0045). Pulse consent alone does not close DRF.
 
 **Effect-path inventory:** `docs/pulse/EFFECT-PATHS.md` lists residual PARTIAL/NO paths (some GETs, MCP, skills, export outside plan path). Treat as first-class auditor input.
 
@@ -237,6 +242,7 @@ Debug: `localStorage carbon-ai-cockpit=off` restores classic multi-tab IA.
 | “Always rich Word reports” | Depends on prior tools + **deterministic bind**; hollow exports **refused**. |
 | LLM vs bind | Draft may invent placeholders; **bind is deterministic**. Answer synthesis is LLM (+ fallback). |
 | Chat Job Brief vs Agent Job Map | Different modes (ADR-0041); do not merge. |
+| “Process YAML SoD = secured” | **False** unless host enforces (ADR-0045). Leave/loan yes; payroll/GOSI/onboard/attendance dial-only. |
 
 ---
 

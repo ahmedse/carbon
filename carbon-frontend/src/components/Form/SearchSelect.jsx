@@ -84,7 +84,8 @@ function SearchSelect({
         .map((v) => normalized.find((o) => optionValue(o) === v) || null)
         .filter(Boolean);
     }
-    if (value === null || value === undefined || value === '') return null;
+    // null/undefined = no selection. Empty string is a valid option key (e.g. filter "All").
+    if (value === null || value === undefined) return null;
     return normalized.find((o) => optionValue(o) === value) || null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, multiple, normalized]);

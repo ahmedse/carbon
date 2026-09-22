@@ -87,10 +87,19 @@ persona: >
   You have full read access to People & Payroll data. For any question
   about headcount, payroll runs, payslips, leave balances, or loans —
   call the relevant endpoint first, then answer from the tool result.
-  Never estimate or invent a number you could look up. Mutations (running
-  payroll stages, recording leave, creating loans) go through a
-  confirmation step — explain what will happen, then let the user confirm
-  before the action executes.
+  Never estimate or invent a number you could look up.
+
+  ## Actions (leave, loans, payroll stages) — Chat vs Agent
+  Chat is advisory (ADR-0046 / G2): never call submit_my_leave,
+  submit_my_loan, submit_my_attendance_permission, or any other host
+  mutation via call_host_api. Do not stage a confirm card in Chat —
+  Confirm is Agent-only. When the employee asks to request/submit leave
+  (or loan / attendance permission), explain briefly and direct them to:
+  (1) Agent mode — governed process (e.g. leave.request.lifecycle), or
+  (2) My Leave / My Loans / My Attendance in the host app (/my/leave etc.).
+  You MAY answer balance/list reads (get_my_leave_balance, list_my_leave).
+  If a detail is missing for advice (which leave type, which date), ask
+  ONE short question.
   Questions about carbon emissions, greenhouse gases, data quality rules,
   the data catalog, or other platform domains are outside your scope —
   redirect politely to your areas.
@@ -196,6 +205,27 @@ api_catalog:
       onboarding lifecycle submit — NEVER submit_my_leave.
     requires_auth: true
     requires_confirmation: true
+    write_slots:
+      - field: employee_no
+        label: Employee number
+        type: text
+        required: true
+      - field: full_name
+        label: Full name
+        type: text
+        required: true
+      - field: org_unit
+        label: Org unit id
+        type: number
+        required: true
+      - field: join_date
+        label: Join date
+        type: date
+        required: true
+      - field: basic_salary
+        label: Basic salary
+        type: text
+        required: true
 
   - name: update_employee
     method: PATCH
@@ -285,10 +315,49 @@ api_catalog:
     method: POST
     path: /carbon-api/people/payroll-runs/{id}/commit/
     description: >
-      Commit a VALIDATED payroll run — final, irreversible. Triggers WPS
-      SIF file generation. Path param {id} is the run id. No body.
+      Commit a VALIDATED payroll run — final, irreversible. After commit,
+      use generate_gosi_wps_sif to build the WPS/SIF filing for this run.
+      Path param {id} is the run id. No body.
     requires_auth: true
     requires_confirmation: true
+
+  - name: generate_gosi_wps_sif
+    method: POST
+    path: /carbon-api/people/payroll-runs/{id}/wps/generate/
+    description: >
+      Generate and persist the GOSI/WPS SIF artifact for a COMMITTED payroll
+      run. Returns content_hash and record_count. Refuses (409) if the run is
+      not committed. Path param {id} is the run id. No body.
+    requires_auth: true
+    requires_confirmation: true
+
+  - name: validate_gosi_wps_sif
+    method: POST
+    path: /carbon-api/people/payroll-runs/{id}/wps/validate/
+    description: >
+      Validate a generated WPS/SIF filing (structure + authoritative WPS rule).
+      Must generate first. Returns passed + issues. Path param {id} = run id.
+    requires_auth: true
+    requires_confirmation: true
+
+  - name: submit_gosi_wps_sif
+    method: POST
+    path: /carbon-api/people/payroll-runs/{id}/wps/submit/
+    description: >
+      Irreversibly mark a VALIDATED WPS/SIF filing as submitted (idempotent).
+      Refuses if not generated+validated. Returns receipt_id. Human consent
+      required. Path param {id} is the run id. No body.
+    requires_auth: true
+    requires_confirmation: true
+
+  - name: get_gosi_wps_sif
+    method: GET
+    path: /carbon-api/people/payroll-runs/{id}/wps/filing/
+    description: >
+      Read current WPS/SIF filing status for a payroll run (generated /
+      validated / submitted, receipt_id, reconciled). Path param {id} = run id.
+    requires_auth: true
+    requires_confirmation: false
 
   # ── Self-service ("my …") — resolves to the LOGGED-IN employee only ──
   # Use these for ANY first-person request ("my leave", "اجازاتي", "who am I").
@@ -324,13 +393,38 @@ api_catalog:
     path: /carbon-api/people/me/leave/
     description: >
       Submit a leave request for the logged-in employee (self-service). Body:
-      {leave_type: code (annual|sick|emergency|…), start_date: YYYY-MM-DD,
-      end_date: YYYY-MM-DD, days: number, note: optional string}. Use for
-      "I want leave", "request leave", "أريد إجازة", "تقديم إجازة", "عارضة",
-      "emergency leave". Prefer this over create_leave_record for first-person
-      requests — employee is implied from the session; do NOT send employee id.
+      {leave_type: code, start_date: YYYY-MM-DD, end_date: YYYY-MM-DD,
+      days: number, note: optional string}. Governed leave_type codes:
+      annual | sick | emergency | unpaid | maternity | paternity.
+      Synonyms (host resolves before write): عارضة / casual / طارئة → emergency;
+      سنوية / vacation → annual; مرضية → sick. Prefer this over
+      create_leave_record for first-person requests — employee is implied from
+      the session; do NOT send employee id. Use for "I want leave", "request
+      leave", "أريد إجازة", "تقديم إجازة", "عارضة", "emergency leave".
+      On validation deny the host returns error_kind
+      (invalid_leave_type | insufficient_balance | overlap | invalid_dates |
+      invalid_days) with a human detail — explain that and ask for another
+      day/type; never claim the leave was submitted.
     requires_auth: true
     requires_confirmation: true
+    # Slots the platform resolves from the operator's own words before the
+    # consent card opens (governed codes via MDM, dates via the platform
+    # clock). Never ask for something the request already stated.
+    write_slots:
+      - field: leave_type
+        governed: true
+        required: true
+      - field: start_date
+        type: date
+        future: true
+        required: true
+      - field: end_date
+        type: date
+        future: true
+        required: true
+      - field: days
+        type: days
+        required: true
 
   - name: get_my_leave_balance
     method: GET
@@ -363,6 +457,14 @@ api_catalog:
       NEVER use submit_my_leave for loans.
     requires_auth: true
     requires_confirmation: true
+    write_slots:
+      - field: loan_type
+        governed: true
+        required: true
+      - field: start_date
+        type: date
+        future: true
+        required: true
 
   - name: list_my_payslips
     method: GET
@@ -444,6 +546,66 @@ api_catalog:
       check_in, check_out, status.
     requires_auth: true
     requires_confirmation: false
+
+  - name: list_my_attendance_permissions
+    method: GET
+    path: /carbon-api/people/me/attendance-permissions/
+    description: >
+      List the caller's own attendance permissions (short-hours /
+      no-deduction). Self-service only — never returns another employee's rows.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: submit_my_attendance_permission
+    method: POST
+    path: /carbon-api/people/me/attendance-permissions/
+    description: >
+      Employee self-service: submit a short-hours attendance permission for
+      myself. Creates AttendancePermission(approved=false) + Correspondence
+      (manager approve, skip_if_self). Body: {date: YYYY-MM-DD,
+      permission_type: personal|medical|official|emergency, hours: number,
+      notes?: string}. Prefer for attendance.permission.lifecycle submit /
+      "إذن حضور" / short hours. NEVER use submit_my_leave. Admin-on-behalf
+      remains create_attendance_permission (ops only).
+    requires_auth: true
+    requires_confirmation: true
+    write_slots:
+      - field: permission_type
+        governed: true
+        required: true
+      - field: date
+        type: date
+        future: true
+        required: true
+
+  - name: list_attendance_permissions
+    method: GET
+    path: /carbon-api/people/attendance-permissions/
+    description: >
+      Admin list of short-hours attendance permissions (people:view/manage).
+      Filter by employee=<id>. Prefer list_my_attendance_permissions for self.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: create_attendance_permission
+    method: POST
+    path: /carbon-api/people/attendance-permissions/
+    description: >
+      Admin-on-behalf create of a pending attendance permission (ops /
+      people:manage). Prefer submit_my_attendance_permission for the employee's
+      own ask. Body includes employee id. NEVER use submit_my_leave.
+    requires_auth: true
+    requires_confirmation: true
+
+  - name: approve_attendance_permission
+    method: PATCH
+    path: /carbon-api/people/attendance-permissions/{id}/
+    description: >
+      Admin ops approve (people:manage + NPS-1 SoD). ESS happy path is manager
+      Correspondence approve after submit_my_attendance_permission — do not use
+      this PATCH as the first-person path.
+    requires_auth: true
+    requires_confirmation: true
 
 navigation_routes:
   - name: people_home

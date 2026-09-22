@@ -18,6 +18,9 @@ Guarantees, on every run (no-op unless DJANGO_BRAND == "nibras"):
         Nibras admin        → is_superuser=False, is_staff=True, active,
                               admins_group + global ScopedRole
                               (resolves to global admin via user_is_global_admin)
+  * Employees (ESS) — not provisioned here; forever-dev password is
+        emp_* / {EMPLOYEE_DEFAULT_PASSWORD|mozafNibrasPa_132}
+        (canonical demo: emp_1067)
 
 Credentials are read from the environment with the documented defaults; nothing
 new is hardcoded beyond those defaults (matching existing practice in the repo).
@@ -58,8 +61,13 @@ class Command(BaseCommand):
         admins_group, _ = Group.objects.get_or_create(name=ADMINS_GROUP)
 
         # ── 1. ahmed → platform SUPERUSER ─────────────────────────────────────
+        # Only set_password when the hash does not already match — unconditional
+        # rehash on every ensure/entrypoint run looks like "password keeps changing".
         ahmed, _ = User.objects.get_or_create(username=superuser_username)
-        ahmed.set_password(superuser_password)
+        ahmed_pwd_touched = False
+        if not ahmed.check_password(superuser_password):
+            ahmed.set_password(superuser_password)
+            ahmed_pwd_touched = True
         ahmed.is_active = True
         ahmed.is_staff = True
         ahmed.is_superuser = True
@@ -67,7 +75,10 @@ class Command(BaseCommand):
 
         # ── 2. admin → Nibras admin (NOT a superuser) ────────────────────────
         admin, _ = User.objects.get_or_create(username=admin_username)
-        admin.set_password(admin_password)
+        admin_pwd_touched = False
+        if not admin.check_password(admin_password):
+            admin.set_password(admin_password)
+            admin_pwd_touched = True
         admin.is_active = True
         admin.is_staff = True
         admin.is_superuser = False
@@ -87,11 +98,26 @@ class Command(BaseCommand):
                 role.is_active = True
                 role.save(update_fields=["is_active"])
 
+        # ── 4. Leave-type MDM aliases (عارضة→emergency, …) ───────────────────
+        # Idempotent SSOT for ESS + Chat recovery (people.leave_type_resolve).
+        aliases_updated = 0
+        try:
+            from people.leave_type_resolve import ensure_leave_type_aliases
+
+            aliases_updated = ensure_leave_type_aliases()
+        except Exception as exc:  # noqa: BLE001 — never block admin ensure
+            self.stdout.write(self.style.WARNING(
+                f"  leave_type aliases skipped: {exc}"
+            ))
+
         self.stdout.write(self.style.SUCCESS(
             f"✓ Nibras admins ensured (brand={brand}):\n"
             f"    {ahmed.username:8s} superuser=True  staff=True  "
-            f"password_ok={ahmed.check_password(superuser_password)}\n"
+            f"password_ok={ahmed.check_password(superuser_password)}  "
+            f"pwd_updated={ahmed_pwd_touched}\n"
             f"    {admin.username:8s} superuser=False staff=True  "
-            f"password_ok={admin.check_password(admin_password)}\n"
-            f"    both in {ADMINS_GROUP} with a global ScopedRole."
+            f"password_ok={admin.check_password(admin_password)}  "
+            f"pwd_updated={admin_pwd_touched}\n"
+            f"    both in {ADMINS_GROUP} with a global ScopedRole.\n"
+            f"    leave_type aliases updated={aliases_updated}."
         ))

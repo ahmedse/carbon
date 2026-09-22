@@ -90,8 +90,22 @@ def test_me_fails_closed_for_inactive_profile(people_world):
 
 
 @pytest.mark.django_db
-def test_me_is_read_only(people_world):
-    out = _people_me(people_world.user_a, 'leave', 'POST')
+def test_me_leave_post_is_a_governed_write_not_a_405(people_world):
+    """Self-service submit is supported; an empty body fails validation.
+
+    The assistant submits leave through this seam, so the write exists — but
+    it is governed: no leave_type means the host answers with its own
+    "which value?" contract instead of writing a row.
+    """
+    out = _people_me(people_world.user_a, 'leave', 'POST', body={})
+    assert out['status_code'] == 400
+    assert out['data']['error_kind'] == 'leave_type_required'
+    assert out['data']['hints']['allowed_types']
+
+
+@pytest.mark.django_db
+def test_me_payslips_stay_read_only(people_world):
+    out = _people_me(people_world.user_a, 'payslips', 'POST')
     assert out['status_code'] == 405
 
 

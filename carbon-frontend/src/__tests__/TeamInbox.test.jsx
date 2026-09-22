@@ -1,6 +1,7 @@
-// NSR-9 — TeamInbox smoke: inbox chrome + empty / row render (QA C1).
+// NSR-9 — TeamInbox smoke: inbox chrome + empty / row render + eye opens detail.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 
 const navigateMock = vi.fn();
@@ -69,5 +70,37 @@ describe('TeamInbox smoke (NSR-9)', () => {
     expect(await screen.findByText('LR-2026-0001')).toBeInTheDocument();
     expect(screen.getByText('Alice')).toBeInTheDocument();
     expect(screen.getByText(/Leave Request/i)).toBeInTheDocument();
+  });
+
+  it('opens detail via eye icon, not row click', async () => {
+    const user = userEvent.setup();
+    fetchInbox.mockResolvedValue({
+      items: [
+        {
+          id: 42,
+          reference_no: 'CRS-2026-0077',
+          title: 'Leave request',
+          requester_name: 'emp_1067',
+          corr_type_label: 'Leave Request',
+          corr_type_code: 'leave_request',
+          status: 'submitted',
+          created_at: '2026-09-21T18:38:00Z',
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <TeamInbox />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('CRS-2026-0077')).toBeInTheDocument();
+
+    await user.click(screen.getByText('CRS-2026-0077'));
+    expect(navigateMock).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: /Open request CRS-2026-0077/i }));
+    expect(navigateMock).toHaveBeenCalledWith('/team/42');
   });
 });

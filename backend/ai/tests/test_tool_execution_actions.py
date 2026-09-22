@@ -205,10 +205,8 @@ def test_grounded_note_staged_not_created():
 
 
 def test_grounded_note_error_is_outcome_oriented():
-    # RULE_23 (QA F2): raw tool exception text must never reach the user; the
-    # note reports the outcome, never the internal error. Covers both the
-    # top-level ``error`` key (make_executor catch-all) and an error embedded
-    # in the tool result JSON.
+    # RULE_23 (QA F2): raw tool exception text must never reach the user.
+    # All-failed turns leave the warning to the main reply (no duplicate note).
     tools = [
         {
             "tool_name": "create_dq_rule",
@@ -220,10 +218,108 @@ def test_grounded_note_error_is_outcome_oriented():
         },
     ]
     note = _grounded_outcome_note(tools)
-    assert "⚠️" in note
-    assert "nothing was created or changed" in note
+    assert note == ""
     assert "refresh_from_db" not in note
     assert "internal traceback" not in note
+
+
+def test_grounded_note_mixed_success_keeps_fail_copy_for_mutation():
+    tools = [
+        {
+            "tool_name": "call_host_api",
+            "tool_args": {"api_name": "list_my_leave", "method": "GET"},
+            "result": json.dumps({"results": []}),
+        },
+        {
+            "tool_name": "call_host_api",
+            "tool_args": {"api_name": "submit_my_leave", "method": "POST"},
+            "error": "timeout",
+        },
+    ]
+    note = _grounded_outcome_note(tools)
+    assert "nothing was created or changed" in note
+    assert "lookup didn't complete" not in note
+    assert "timeout" not in note
+    assert "no answer was invented" not in note.lower()
+    assert "invented" not in note.lower()
+
+
+def test_fail_copy_lookup_has_no_invention_meta():
+    from ai.engine_runtime import _FAILED_LOOKUP_COPY, _FAILED_ACTION_COPY
+
+    assert "invented" not in _FAILED_LOOKUP_COPY.lower()
+    assert "invented" not in _FAILED_ACTION_COPY.lower()
+    assert "try again" in _FAILED_LOOKUP_COPY.lower()
+
+
+def test_all_failed_reply_mutation_from_tool_name_suffix():
+    """Error paths used to omit tool_args — still classify submit_* as mutation."""
+    from ai.engine_runtime import fail_reply_when_all_tools_failed, _grounded_outcome_note
+
+    tools = [
+        {
+            "tool_name": "call_host_api:submit_my_leave",
+            "error": "HTTP 400",
+            "result": None,
+        },
+    ]
+    reply = fail_reply_when_all_tools_failed(tools)
+    assert "nothing was submitted" in reply
+    assert "lookup" not in reply.lower()
+    assert "invented" not in reply.lower()
+    assert _grounded_outcome_note(tools) == ""
+
+
+def test_all_failed_reply_mutation_from_api_name_without_tool_args():
+    from ai.engine_runtime import fail_reply_when_all_tools_failed
+
+    tools = [
+        {
+            "tool_name": "call_host_api",
+            "tool_args": {"api_name": "submit_my_leave", "method": "POST"},
+            "error": "timeout",
+        },
+    ]
+    reply = fail_reply_when_all_tools_failed(tools)
+    assert "nothing was submitted" in reply
+    assert "lookup" not in reply.lower()
+
+
+def test_all_failed_reply_prefers_host_overlap_detail():
+    from ai.engine_runtime import fail_reply_when_all_tools_failed
+
+    tools = [
+        {
+            "tool_name": "call_host_api:submit_my_leave",
+            "tool_args": {"api_name": "submit_my_leave", "method": "POST"},
+            "error": "Those dates overlap an existing emergency leave.",
+            "result": {
+                "status_code": 400,
+                "data": {
+                    "detail": "Those dates overlap an existing emergency leave.",
+                    "error_kind": "overlap",
+                    "hints": {"suggestion": "Pick another day that is free."},
+                },
+            },
+        },
+    ]
+    reply = fail_reply_when_all_tools_failed(tools)
+    assert "overlap" in reply.lower()
+    assert "Pick another day" in reply
+    assert "nothing was submitted" in reply.lower()
+    assert "invented" not in reply.lower()
+    assert "lookup" not in reply.lower()
+
+
+def test_tool_item_failed_detects_host_4xx_envelope():
+    from ai.engine_runtime import _tool_item_failed, _tools_all_failed
+
+    item = {
+        "tool_name": "call_host_api:submit_my_leave",
+        "result": {"status_code": 400, "data": {"detail": "bad", "error_kind": "overlap"}},
+    }
+    assert _tool_item_failed(item) is True
+    assert _tools_all_failed([item]) is True
 
 
 def test_grounded_note_navigate_summary():

@@ -134,7 +134,8 @@ Effort: **S** ≤2d · **M** ≤1wk · **L** >1wk. Each phase: Goal · Why · Sc
   `Capability`s with autonomy dials, not learned guesses. P0 did payroll; this extends it.
 - **Scope:**
   - Governed processes: **leave** (request→approve, calendar-split), **loans** (schedule→installment
-    reconciliation), **GOSI/WPS** compliance (SIF generation), **onboarding**. Each with per-step
+    reconciliation), **GOSI/WPS** compliance (SIF generation), **onboarding**, **attendance
+    permission** (short-hours submit→review→approve). Each with per-step
     autonomy (`human_only` on statutory/irreversible steps), `refuse_if`/`ask_if`, `kill_switch`, tests.
   - Register the host actions in `capability_registry.py`; seed idempotently (mirror
     `seed_nibras_processes.py`).
@@ -143,6 +144,12 @@ Effort: **S** ≤2d · **M** ≤1wk · **L** >1wk. Each phase: Goal · Why · Sc
     **F2**: today only `employee_group` is populated, so role-scoped behavior is under-tested.
 - **Acceptance (evidence):** each new process validates + seeds; a live turn walks a governed leave/
   loan flow with correct autonomy gating; per-role QA turns pass in the harness.
+  **“Proper” (2026-09-21):** catalog parity (pack tools ⊆ instance.yaml), honest GOSI generate→validate→submit
+  (`WpsFiling`), Operator Chat·Plan·Run evidence (`simulate_nibras_operator_processes`), deep sim 5/5.
+  **Attendance (2026-09-21):** 6th process `attendance.permission.lifecycle` — deep+operator 6/6 PASS.
+  **Security honesty (2026-09-21):** ADR-0045 / RULE_34 — YAML SoD ≠ host ACL; leave/loan = Correspondence;
+  payroll/GOSI/onboard/attendance irreversibles dial-only until NPS-1 shared host gate.
+  See ADR-0044 · ADR-0045.
 - **Effort:** L · **Risk:** statutory correctness — keep rates rule-driven, never hardcoded ·
   **Depends-on:** P0, ideally P4 (to measure).
 

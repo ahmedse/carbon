@@ -1,4 +1,4 @@
-# Registry: Frontend Components  (auto-generated 2026-09-19 10:12 — DO NOT EDIT)
+# Registry: Frontend Components  (auto-generated 2026-09-21 14:41 — DO NOT EDIT)
 
 > REUSE BEFORE CREATE. Before building any component, search here first.
 
@@ -39,6 +39,7 @@ carbon-frontend//src/components/Page/ErrorAlert.jsx
 carbon-frontend//src/components/Page/LoadingSkeleton.jsx
 carbon-frontend//src/components/Page/PageHeader.jsx
 carbon-frontend//src/components/ResizableLayout.jsx
+carbon-frontend//src/components/RichContent.jsx
 carbon-frontend//src/components/StandardDataGrid.jsx
 carbon-frontend//src/components/SystemDialog.jsx
 carbon-frontend//src/components/TableDataPage.jsx
@@ -60,6 +61,11 @@ carbon-frontend//src/components/dq/RuleJsonEditor.jsx
 carbon-frontend//src/components/dq/__tests__/RuleJsonEditor.test.jsx
 carbon-frontend//src/components/evidence/EvidenceUploader.jsx
 carbon-frontend//src/components/evidence/EvidenceViewer.jsx
+carbon-frontend//src/components/gradevance/LctCodesTable.jsx
+carbon-frontend//src/components/gradevance/LearnReadingWidth.jsx
+carbon-frontend//src/components/gradevance/SegmentationEditor.jsx
+carbon-frontend//src/components/gradevance/SkipToMain.jsx
+carbon-frontend//src/components/gradevance/WaveChart.jsx
 carbon-frontend//src/components/graph/AgentTopologyGraph.jsx
 carbon-frontend//src/components/graph/EnterpriseGraph.jsx
 carbon-frontend//src/components/graph/ForceGraph.jsx
@@ -92,6 +98,7 @@ carbon-frontend//src/hooks/useOptimisticItem.js
 carbon-frontend//src/hooks/useOptimisticList.js
 carbon-frontend//src/hooks/usePresence.js
 carbon-frontend//src/hooks/useReferenceOptions.js
+carbon-frontend//src/hooks/useVisualViewportHeight.js
 ```
 
 ## API modules (src/api)

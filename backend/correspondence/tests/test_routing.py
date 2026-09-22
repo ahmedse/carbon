@@ -71,6 +71,59 @@ def test_manager_role_empty_when_no_manager(org, create_user):
 
 
 @pytest.mark.django_db
+def test_manager_role_falls_back_to_org_unit_manager(org, create_user):
+    unit_mgr_user = create_user('of4_ou_mgr')
+    requester_user = create_user('of4_req_ou')
+    unit_mgr_emp = _make_employee(org, user=unit_mgr_user, employee_no='E-OU-MGR')
+    org.manager_employee_id = unit_mgr_emp.id
+    org.save(update_fields=['manager_employee_id'])
+    _make_employee(org, user=requester_user, employee_no='E-REQ-OU')  # no line manager
+
+    ids = resolve_step_approvers(
+        step=_step('manager'), requester=requester_user, org_unit=org,
+    )
+
+    assert ids == [unit_mgr_user.id]
+
+
+@pytest.mark.django_db
+def test_manager_role_falls_back_to_parent_org_unit_manager(org, create_user):
+    child = OrgUnit.objects.create(
+        name='Subteam', slug='subteam-mgr', code='SUB', org_type='team', parent=org,
+    )
+    unit_mgr_user = create_user('of4_parent_mgr')
+    requester_user = create_user('of4_req_parent')
+    unit_mgr_emp = _make_employee(org, user=unit_mgr_user, employee_no='E-PAR-MGR')
+    org.manager_employee_id = unit_mgr_emp.id
+    org.save(update_fields=['manager_employee_id'])
+    _make_employee(child, user=requester_user, employee_no='E-REQ-PAR')
+
+    ids = resolve_step_approvers(
+        step=_step('manager'), requester=requester_user, org_unit=child,
+    )
+
+    assert ids == [unit_mgr_user.id]
+
+
+@pytest.mark.django_db
+def test_manager_role_prefers_line_manager_over_org_unit(org, create_user):
+    line_user = create_user('of4_line')
+    ou_user = create_user('of4_ou_alt')
+    requester_user = create_user('of4_req_pref')
+    line_emp = _make_employee(org, user=line_user, employee_no='E-LINE')
+    ou_emp = _make_employee(org, user=ou_user, employee_no='E-OU2')
+    org.manager_employee_id = ou_emp.id
+    org.save(update_fields=['manager_employee_id'])
+    _make_employee(org, user=requester_user, employee_no='E-REQ-PREF', manager=line_emp)
+
+    ids = resolve_step_approvers(
+        step=_step('manager'), requester=requester_user, org_unit=org,
+    )
+
+    assert ids == [line_user.id]
+
+
+@pytest.mark.django_db
 def test_manager_role_empty_when_no_employee_profile(create_user):
     requester_user = create_user('of4_req_noprofile')
 

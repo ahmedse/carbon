@@ -98,7 +98,7 @@ describe('PlanDagGraph', () => {
     expect(y2).toBeGreaterThan(y0);
   });
 
-  it('renders agent role · tool on each DAG node (not tool alone)', () => {
+  it('renders intent on DAG nodes without tool noise', () => {
     const multiAgentPlan = {
       id: 'plan-agents',
       status: 'completed',
@@ -132,35 +132,33 @@ describe('PlanDagGraph', () => {
     };
     renderGraph({ plan: multiAgentPlan });
 
-    expect(screen.getByText(/Domain specialist · call_host_api/)).toBeInTheDocument();
-    expect(screen.getByText(/Critic · Reasoning \(LLM\)/)).toBeInTheDocument();
-    expect(screen.getByText(/Orchestrator · export_document/)).toBeInTheDocument();
-
-    // Aria includes the cast so screen readers hear the agent, not only the tool.
+    expect(screen.getAllByText(/Fetch headcount/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/call_host_api/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/export_document/)).not.toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /Step 1:.*Critic/ }),
     ).toBeInTheDocument();
   });
 
-  it('opens a detailed inspection pane when a node is clicked', () => {
+  it('opens a light business inspection pane when a node is clicked', () => {
     renderGraph({ plan: PLAN });
 
     expect(screen.queryByTestId('plan-step-detail')).not.toBeInTheDocument();
 
-    // Step 0 is a source (no depends_on) → "Nothing — starts the workflow".
     const step0 = screen.getByRole('button', { name: /Step 0:/ });
     fireEvent.click(step0);
 
     const pane = screen.getByTestId('plan-step-detail');
     expect(pane).toBeInTheDocument();
-    expect(within(pane).getByText('Step 0')).toBeInTheDocument();
+    expect(within(pane).getByText('This step')).toBeInTheDocument();
     expect(within(pane).getByText('Search for duplicate records')).toBeInTheDocument();
-    expect(within(pane).getByText('search_entity')).toBeInTheDocument();
-    expect(within(pane).getByText(/Nothing — starts the workflow/)).toBeInTheDocument();
-    expect(within(pane).getByText(/Create a rule to prevent duplicates/)).toBeInTheDocument(); // feeds into
+    expect(within(pane).getByText(/Next: Create a rule/)).toBeInTheDocument();
+    expect(within(pane).queryByText('search_entity')).not.toBeInTheDocument();
+    expect(within(pane).queryByText(/More detail/)).not.toBeInTheDocument();
+    expect(within(pane).queryByText(/Show inputs/)).not.toBeInTheDocument();
+    expect(within(pane).queryByText(/Show output/)).not.toBeInTheDocument();
 
-    // Closing the pane hides it again.
-    fireEvent.click(screen.getByRole('button', { name: /Close/ }));
+    fireEvent.click(within(pane).getByRole('button', { name: /Close step details/ }));
     expect(screen.queryByTestId('plan-step-detail')).not.toBeInTheDocument();
   });
 

@@ -151,7 +151,9 @@ class _FakeExecution:
         self.completed_tools = completed_tools or []
 
 
-async def _run_step_with_tool_output(completed_tools, tool_name="create_dq_rule"):
+async def _run_step_with_tool_output(
+    completed_tools, tool_name="create_dq_rule", is_mutation=False,
+):
     """Run the real ReActLoop._execute_step with a mocked ExecuteWitness that
     reports the given ``completed_tools`` for a confirmation tool step."""
     from ai.engine.cognition.plan.loop import ReActLoop
@@ -181,6 +183,7 @@ async def _run_step_with_tool_output(completed_tools, tool_name="create_dq_rule"
     step = PlanStep(
         step_id=0, intent="Create a DQ rule", tool_name=tool_name,
         tool_args={"rule_type": "general"}, depends_on=[], agent_role="worker",
+        is_mutation=is_mutation,
     )
 
     return await loop._execute_step(  # noqa: SLF001
@@ -234,3 +237,26 @@ async def test_confirmation_tool_valid_proposal_not_failed():
     assert result.paused is True
     assert result.error is None
     assert result.confirmation_token is not None
+
+
+# ── Fix 4 — mutation step that called no tool at all ──────────────────────
+
+
+@pytest.mark.asyncio
+async def test_mutation_step_without_tool_call_fails_step():
+    """Narrating a write without calling the tool must not read "completed".
+
+    The model drafted prose ("submitted — please confirm") and called nothing,
+    so no effect exists: the step fails instead of reporting done.
+    """
+    result = await _run_step_with_tool_output([], is_mutation=True)
+    assert result.tool_output is None
+    assert result.error, result
+    assert "nothing was written" in result.error
+
+
+@pytest.mark.asyncio
+async def test_readonly_step_without_tool_call_is_not_failed():
+    """The guard is scoped to mutations — a read-only answer step still passes."""
+    result = await _run_step_with_tool_output([], is_mutation=False)
+    assert result.error is None

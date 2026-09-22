@@ -130,9 +130,14 @@ def test_leave_balance(workflow, api_client, get_token_for_user):
     assert set(by_type) == {'annual', 'sick'}
     assert _dec(by_type['annual']['entitled']) == Decimal('20')
     assert _dec(by_type['annual']['remaining']) == Decimal('20')
+    # Whole days serialize as JSON ints (not "20.00" strings).
+    assert by_type['annual']['entitled'] == 20
+    assert isinstance(by_type['annual']['entitled'], int)
+    assert by_type['annual']['remaining'] == 20
     # No entitlement seeded → entitled/remaining are 0 (never negative).
     assert _dec(by_type['sick']['entitled']) == Decimal('0')
     assert _dec(by_type['sick']['remaining']) == Decimal('0')
+    assert by_type['sick']['entitled'] == 0
 
 
 # ── 3. submit happy path ───────────────────────────────────────────────────
@@ -163,6 +168,40 @@ def test_submit_leave_happy_path(workflow, api_client, get_token_for_user):
     assert corr.subject_id == record.pk
 
 
+@pytest.mark.django_db
+def test_submit_leave_no_manager_400(workflow, api_client, get_token_for_user):
+    wf = workflow
+    wf.requester_emp.manager = None
+    wf.requester_emp.save(update_fields=['manager'])
+    LeaveEntitlement.objects.create(
+        employee=wf.requester_emp, year=date.today().year, leave_type=wf.leave_annual,
+        entitled_days=Decimal('20'),
+    )
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    resp = api_client.post(LEAVE_URL, _payload(), format='json')
+    assert resp.status_code == 400, resp.content
+    data = resp.json()
+    assert data['error_kind'] == 'no_manager'
+    assert LeaveRecord.objects.count() == 0
+    assert Correspondence.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_submit_leave_manager_no_user_400(workflow, api_client, get_token_for_user):
+    wf = workflow
+    wf.manager_emp.user = None
+    wf.manager_emp.save(update_fields=['user'])
+    LeaveEntitlement.objects.create(
+        employee=wf.requester_emp, year=date.today().year, leave_type=wf.leave_annual,
+        entitled_days=Decimal('20'),
+    )
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    resp = api_client.post(LEAVE_URL, _payload(), format='json')
+    assert resp.status_code == 400, resp.content
+    assert resp.json()['error_kind'] == 'manager_no_user'
+    assert LeaveRecord.objects.count() == 0
+
+
 # ── 4. insufficient balance ────────────────────────────────────────────────
 
 @pytest.mark.django_db
@@ -176,8 +215,10 @@ def test_submit_insufficient_balance_400(workflow, api_client, get_token_for_use
     resp = api_client.post(LEAVE_URL, _payload(days='5'), format='json')
     assert resp.status_code == 400
     data = resp.json()
-    assert data['detail'] == 'Insufficient leave balance'
+    assert data['error_kind'] == 'insufficient_balance'
+    assert 'insufficient' in data['detail'].lower()
     assert _dec(data['remaining']) == Decimal('1')
+    assert data.get('hints', {}).get('suggestion')
     assert LeaveRecord.objects.count() == 0
 
 
@@ -203,7 +244,10 @@ def test_submit_overlap_400(workflow, api_client, get_token_for_user):
         LEAVE_URL, _payload(start=overlap_start, days='3'), format='json',
     )
     assert second.status_code == 400
-    assert second.json()['detail'] == 'Overlaps existing leave request'
+    body = second.json()
+    assert body['error_kind'] == 'overlap'
+    assert 'overlap' in body['detail'].lower()
+    assert body.get('hints', {}).get('suggestion')
 
 
 # ── 6. validation: days <= 0 and end < start ───────────────────────────────
@@ -234,6 +278,42 @@ def test_submit_end_before_start_400(workflow, api_client, get_token_for_user):
     resp = api_client.post(LEAVE_URL, _payload(start=start, end=end), format='json')
     assert resp.status_code == 400
     assert LeaveRecord.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_submit_long_past_start_400(workflow, api_client, get_token_for_user):
+    """A year-old start date is a clockless assistant, not a real request."""
+    wf = workflow
+    LeaveEntitlement.objects.create(
+        employee=wf.requester_emp, year=date.today().year, leave_type=wf.leave_annual,
+        entitled_days=Decimal('20'),
+    )
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    stale = date.today().replace(year=date.today().year - 1)
+    resp = api_client.post(
+        LEAVE_URL, _payload(start=stale, end=stale), format='json',
+    )
+    assert resp.status_code == 400
+    body = resp.json()
+    assert body['error_kind'] == 'invalid_dates'
+    assert body['hints']['earliest_allowed']
+    assert LeaveRecord.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_submit_recent_backdate_allowed(workflow, api_client, get_token_for_user):
+    """Sick leave reported after the fact still goes through."""
+    wf = workflow
+    LeaveEntitlement.objects.create(
+        employee=wf.requester_emp, year=date.today().year, leave_type=wf.leave_annual,
+        entitled_days=Decimal('20'),
+    )
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    yesterday = date.today() - timedelta(days=1)
+    resp = api_client.post(
+        LEAVE_URL, _payload(start=yesterday, end=yesterday), format='json',
+    )
+    assert resp.status_code == 201, resp.content
 
 
 # ── 7. cross-user isolation ────────────────────────────────────────────────
@@ -303,5 +383,35 @@ def test_submit_unknown_leave_type_400(workflow, api_client, get_token_for_user)
         LEAVE_URL, _payload(leave_type='bereavement'), format='json',
     )
     assert resp.status_code == 400
-    assert resp.json()['detail'] == 'Invalid leave_type'
+    body = resp.json()
+    assert body['error_kind'] == 'invalid_leave_type'
+    assert 'bereavement' in body['detail']
+    assert 'allowed_types' in body.get('hints', {})
     assert LeaveRecord.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_submit_arada_alias_resolves_to_emergency(workflow, api_client, get_token_for_user):
+    """عارضة must resolve to emergency via host leave_type_resolve (not Chat)."""
+    from people.leave_type_resolve import ensure_leave_type_aliases
+    from people.tests.ref_helpers import ensure_ref
+
+    wf = workflow
+    ensure_ref('leave_type', 'emergency', 'Emergency')
+    ensure_leave_type_aliases()
+    LeaveEntitlement.objects.create(
+        employee=wf.requester_emp, year=date.today().year,
+        leave_type=ensure_ref('leave_type', 'emergency', 'Emergency'),
+        entitled_days=Decimal('5'),
+    )
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    start = date.today() + timedelta(days=40)
+    resp = api_client.post(
+        LEAVE_URL,
+        _payload(leave_type='عارضة', start=start, days='1'),
+        format='json',
+    )
+    assert resp.status_code == 201, resp.content
+    assert LeaveRecord.objects.filter(
+        employee=wf.requester_emp, leave_type__code='emergency',
+    ).exists()

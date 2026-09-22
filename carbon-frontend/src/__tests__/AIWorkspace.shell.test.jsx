@@ -34,6 +34,9 @@ vi.mock('../shell/AIAgentPanel', () => ({ default: () => <div data-testid="agent
 vi.mock('../shell/AITaskPanel', () => ({
   default: ({ externalTab }) => <div data-testid="task-panel" data-tab={externalTab ?? 'tasks'} />,
 }));
+vi.mock('../shell/OpsCanvasShelf', () => ({
+  default: () => <div data-testid="ops-canvas-shelf" />,
+}));
 
 vi.mock('../pages/admin/ai/SkillsPanel', () => ({ default: () => <div data-testid="skills-tab" /> }));
 vi.mock('../pages/admin/ai/WatchesPanel', () => ({ default: () => <div data-testid="watches-tab" /> }));
@@ -176,47 +179,31 @@ describe('AIWorkspace reopens the last active session', () => {
   });
 });
 
-describe('AIWorkspace Memory console (G2)', () => {
-  it('renders AIMemoryConsole when Memory icon is clicked', async () => {
+describe('AIWorkspace Chat activity bar (Operator calm)', () => {
+  it('exposes only Sessions and Artifacts (other panels deferred)', async () => {
     render(<AIWorkspace onClose={vi.fn()} />);
 
-    const memoryButton = await screen.findByRole('button', { name: 'Memory' });
-    fireEvent.click(memoryButton);
-
-    expect(await screen.findByTestId('memory-console')).toBeInTheDocument();
-    expect(memoryButton).toHaveAttribute('aria-pressed', 'true');
-  });
-});
-
-describe('AIWorkspace Skills + Watches console (P6b)', () => {
-  it('renders SkillsPanel when the Skills icon is clicked', async () => {
-    render(<AIWorkspace onClose={vi.fn()} />);
-
-    const skillsButton = await screen.findByRole('button', { name: 'Skills' });
-    fireEvent.click(skillsButton);
-
-    expect(await screen.findByTestId('skills-tab')).toBeInTheDocument();
-    expect(skillsButton).toHaveAttribute('aria-pressed', 'true');
+    expect(await screen.findByRole('button', { name: 'Sessions' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Artifacts' })).toBeInTheDocument();
+    for (const name of [
+      'Context',
+      'Investigate',
+      'Memory',
+      'Usage',
+      'Processes',
+      'Skills',
+      'Capabilities',
+      'Watches',
+      'Settings',
+    ]) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+    }
   });
 
-  it('renders WatchesPanel when the Watches icon is clicked', async () => {
+  it('opens the Artifacts shelf from the activity bar', async () => {
     render(<AIWorkspace onClose={vi.fn()} />);
-
-    const watchesButton = await screen.findByRole('button', { name: 'Watches' });
-    fireEvent.click(watchesButton);
-
-    expect(await screen.findByTestId('watches-tab')).toBeInTheDocument();
-  });
-});
-
-describe('AIWorkspace Investigate mode tab (Phase 9-B)', () => {
-  it('renders the InvestigateTab when Investigate mode is selected', async () => {
-    render(<AIWorkspace onClose={vi.fn()} />);
-
-    const investigateButton = await screen.findByRole('button', { name: 'Investigate' });
-    fireEvent.click(investigateButton);
-
-    expect(await screen.findByTestId('investigate-tab')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Artifacts' }));
+    expect(await screen.findByTestId('ops-canvas-shelf')).toBeInTheDocument();
   });
 });
 
@@ -228,6 +215,7 @@ describe('AIWorkspace mode split (Phase W5-A / ADR-0014)', () => {
       await screen.findByText(/Answers and advice only\. Nothing is created or changed/i),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sessions' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Artifacts' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Tasks' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Monitor' })).not.toBeInTheDocument();
   });
@@ -312,27 +300,13 @@ describe('AIWorkspace mode split (Phase W5-A / ADR-0014)', () => {
   });
 });
 
-describe('AIWorkspace Usage tab (Phase 21-B)', () => {
-  it('renders the Usage panel when Usage is selected from the activity bar', async () => {
+describe('AIWorkspace deferred activity panels', () => {
+  it('keeps Usage / Settings / Memory off the Chat activity bar for now', async () => {
     render(<AIWorkspace onClose={vi.fn()} />);
-
-    const usageButton = await screen.findByRole('button', { name: 'Usage' });
-    fireEvent.click(usageButton);
-
-    expect(await screen.findByTestId('usage-tab')).toBeInTheDocument();
-    expect(usageButton).toHaveAttribute('aria-pressed', 'true');
-  });
-});
-
-describe('AIWorkspace Settings tab (Phase 22-B)', () => {
-  it('renders the Settings panel when Settings is selected from the activity bar', async () => {
-    render(<AIWorkspace onClose={vi.fn()} />);
-
-    const settingsButton = await screen.findByRole('button', { name: 'Settings' });
-    fireEvent.click(settingsButton);
-
-    expect(await screen.findByTestId('settings-tab')).toBeInTheDocument();
-    expect(settingsButton).toHaveAttribute('aria-pressed', 'true');
+    await screen.findByRole('button', { name: 'Sessions' });
+    expect(screen.queryByRole('button', { name: 'Usage' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Memory' })).not.toBeInTheDocument();
   });
 });
 

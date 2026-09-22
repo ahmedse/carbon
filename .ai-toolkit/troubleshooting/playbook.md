@@ -567,7 +567,7 @@ Append a new entry every time you confirm+fix a non-trivial bug (see `shared/deb
 - Symptom: User asks `كم موظف كويتي؟` (or any metric). UI shows `Running aggregate_entity…` then "Here's what I found: One step couldn't be completed, so nothing was changed" + toast "That action didn't complete — nothing was created or changed." No integer; English; sounds like a failed write.
 - Layer: backend (ECF metric + Chat fail-path UX)
 - Root cause: (1) `kuwaiti` metric filtered `nationality_code=KW` but live ORM is FK `nationality__code=KWT` → `FieldError` inside `aggregate_entity`. (2) Tool-only turn + `_build_tool_result_summary` / `_FAILED_ACTION_COPY` used **mutation** abort copy for every tool error, including read-only Chat lookups.
-- Fix: (1) Descriptor `nationality__code: KWT` + host filter aliases. (2) Gate: all-failed tools → calibration refuse ("couldn't complete that lookup… no answer was invented"); read tools use `_FAILED_LOOKUP_COPY` not mutation copy.
+- Fix: (1) Descriptor `nationality__code: KWT` + host filter aliases. (2) Gate: all-failed tools → clear lookup refuse ("couldn't complete that lookup… try again"); read tools use `_FAILED_LOOKUP_COPY` not mutation copy. Never tell the user "no answer was invented."
 - Best practice note: Never promote tool-only summaries that claim "changed/created" in Chat mode. Fail copy must be intent-aware (lookup vs mutation) and language-aware (still EN stub — AR localize next). Prefer fixing the metric over masking.
 - Regression guard: `ai/tests/test_ecf_aggregate.py` · `ai/tests/test_tool_only_response.py` (all-failed gate) · live Chat `كم موظف كويتي نشط؟` → **55** Arabic.
 - First seen: 2026-09-16 (Pulse Chat Wave A/C A9).
@@ -625,3 +625,35 @@ Append a new entry every time you confirm+fix a non-trivial bug (see `shared/deb
 - Best practice note: Session memory must retain prior people by stable id, not only the latest surface name.
 - Regression guard: `ai/tests/test_c7_focus_restore.py` · evidence `CHAT-C7-FOCUS-RESTORE-2026-09-17.md`.
 - First seen: 2026-09-16 (Pulse Chat Wave C C7).
+
+### PB-60 — Agent plans GOSI / create_employee but tool missing or confirm 404
+- Symptom: Plan shows `generate_gosi_wps_sif` or `create_employee`, Run Approve fails (unknown tool / host 404), or GOSI "submit" only re-downloads CSV.
+- Layer: backend (instance.yaml + host_executor + people WPS filing)
+- Root cause: Pack advertised tools not present in live `instance.yaml`; GOSI generate/submit both bound to WPS GET; employees POST missing from in-process host.
+- Fix: ADR-0044 dual-catalog SSOT + drift test; `WpsFiling` generate/validate/submit endpoints; employees POST/PATCH in `_people_execute`.
+- Best practice note: instance.yaml is Agent SSOT; pack tools ⊆ instance; statutory submit must persist state.
+- Regression guard: `ai/tests/test_nibras_catalog_parity.py` · `people/tests/test_wps_filing.py` · `simulate_nibras_pulse_processes` / `simulate_nibras_operator_processes`.
+- First seen: 2026-09-21 (Nibras processes proper).
+
+### PB-61 — “Process has SoD” but admin solo-commits / solo-approves
+- Symptom: Process YAML shows `human_only` + `separation_of_duties` / `refuse_if`; Operator or SCOREBOARD wording implies role SoD; a `people:manage` user can still compute→commit payroll, WPS-submit, activate hire, or set attendance `approved=true` alone via DRF; Pulse inbox review still requires only `ai:operator`.
+- Layer: security (People host vs Pulse dials)
+- Root cause: Two planes (ADR-0045). YAML/Pulse consent/grant do not close the host DRF door. Leave/loan SoD is Correspondence (ADR-0030); other processes were dial-only. Inbox defaulted `required_authority=ai:operator`.
+- Fix: ADR-0045 honesty matrix + **NPS-1** `people.governance.sod` / `SoDPreparation` wired into payroll commit, WPS submit, employee activate, attendance approve (DRF + host_executor). Sims use preparer≠approver (`ahmed`/`admin`). **NPS-2** `ai.governance.review_authority` binds Nibras review caps to `correspondence:act` / `correspondence:finance` / `people:manage`.
+- Best practice note: Security claims follow host enforcement. Dial ≠ ACL. RULE_34.
+- Regression guard: `people/tests/test_host_sod.py` · `ai/tests/test_nibras_process_security_planes.py` · `ai/tests/test_review_authority.py` · ADR-0045 · `.ai-toolkit/shared/security.md` RULE 11.
+- First seen: 2026-09-21 (Nibras process security honesty).
+
+### PB-62 — Chat stages leave / host write; Confirm hidden (“Agent mode is OFF”)
+- Symptom: User asks Chat (Arabic/EN) to submit leave/loan/attendance; reply looks like a staged confirmation; UI shows *Agent mode is OFF — switch to Agent to confirm*; no Confirm/Decline in Chat. Feels like a broken consent card.
+- Layer: cross-cutting (Chat/Agent contract · tool policy · persona prompts · `AIMessageBubble`)
+- Root cause: **G2 drift.** ADR-0014 + QA bank G2 require Chat = zero mutations / zero `pending_exec`. Chat nonetheless called `call_host_api` / `submit_my_*` and created a pending execution (prompt/persona pressure to “CALL THE TOOL”). Frontend correctly gates non-memory confirms behind Agent mode — so the banner is the **right** gate on the **wrong** Chat side-effect.
+- Fix (proper — not a bandaid): ADR-0046 + RULE_35. **Implemented:**
+  `chat_surface_hook` (before consent) cancels Chat host mutations →
+  `chat_handoff` CTAs (Agent Tasks + My route); Chat write-intent backstop
+  synthesizes the same handoff (no “CALL THE TOOL” force-stage); prompts /
+  Nibras persona no longer instruct Chat to stage `submit_my_*`. Agent/plan
+  surfaces still stage. Memory Chat-confirm stays.
+- Best practice note: Awkward banner ≠ missing Chat button. System change through Pulse = Agent task. Host Plane A (My/Team/People) stays. RULE_35.
+- Regression guard: `ai/tests/test_chat_surface_handoff.py` · G2 — Chat leave utterance → no host `pending_actions`; Agent process + My submit still work. ADR-0046 · `.cursor/rules/pulse-chat-agent-mode-contract.mdc`.
+- First seen: 2026-09-22 (Nibras ESS QA emp_1067 · E-031).

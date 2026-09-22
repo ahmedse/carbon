@@ -51,14 +51,24 @@ import EmployeeTimelineTab from './tabs/EmployeeTimelineTab';
 import OpsCanvasAttachButton from './OpsCanvasAttachButton';
 import EmployeeLeaveTab from './tabs/EmployeeLeaveTab';
 import EmployeePayTab from './tabs/EmployeePayTab';
+import EmployeeEosiTab from './tabs/EmployeeEosiTab';
 import EmployeeBenefitsTab from './tabs/EmployeeBenefitsTab';
 import EmployeeCertsTab from './tabs/EmployeeCertsTab';
 import EmployeeRequestsTab from './tabs/EmployeeRequestsTab';
 import { tenureLabel, totalLeaveBalance, expiryUrgency, refLabel, refCode } from './utils';
 
 const STORAGE_KEY = 'carbonEmployee360';
-const TAB_KEYS = ['Profile', 'Timeline', 'Leave', 'Pay', 'Benefits', 'Certs', 'Requests'];
-const TAB_COMPONENTS = [EmployeeProfileTab, EmployeeTimelineTab, EmployeeLeaveTab, EmployeePayTab, EmployeeBenefitsTab, EmployeeCertsTab, EmployeeRequestsTab];
+const TAB_KEYS = ['Profile', 'Timeline', 'Leave', 'Pay', 'Eosi', 'Benefits', 'Certs', 'Requests'];
+const TAB_COMPONENTS = [
+  EmployeeProfileTab,
+  EmployeeTimelineTab,
+  EmployeeLeaveTab,
+  EmployeePayTab,
+  EmployeeEosiTab,
+  EmployeeBenefitsTab,
+  EmployeeCertsTab,
+  EmployeeRequestsTab,
+];
 
 function getInitials(emp) {
   if (emp.name_en_given && emp.name_en_family) {

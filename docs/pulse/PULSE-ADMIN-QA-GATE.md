@@ -84,7 +84,7 @@ Each level is **blocking** for the next. No “mostly green” promotion.
 | Level | Name | Modality | Blocking artifact | Owner |
 |-------|------|----------|-------------------|-------|
 | **L0** | Contract freeze | Static | ADR-0036 + remake doc + no new sidebar peers in PR checklist | Architect |
-| **L1** | Unit / component | Vitest | ProcessObjectPage, ProcessRegistry, pulseControlIa redirects, key panels | Frontend |
+| **L1** | Unit / component | Vitest | ProcessObjectPage, ProcessRegistry, pulseControlIa redirects, P0 panel smoke | Frontend |
 | **L2** | API steward pack | Pytest | `test_steward_journeys.py` + control + prompt/knowledge + registry reject | Backend |
 | **L3** | CBAC deny matrix | Pytest | Every mutation endpoint: anon 401, view-only 403, authorized 2xx | Backend |
 | **L4** | Playwright steward | E2E | journey-09 (read CBAC) + journey-17 (mutations + UI) + **new** journey-18 full UI depth | QA |
@@ -284,7 +284,7 @@ Admin QA only asserts those **metrics endpoints are readable, honest, and surfac
 | Layer | Baseline (2026-09-18) | Target | Status |
 |-------|----------------------|--------|--------|
 | L0 Freeze / ADR | Done | Hold | **DONE** |
-| L1 Vitest | Partial (process object, registry, IA) | Full P0 panels smoke | PARTIAL |
+| L1 Vitest | Partial (process object, registry, IA) | Full P0 panels smoke | **DONE** — `adminControlP0Panels.smoke.test.jsx` (**6 passed**) |
 | L2 Steward API | **16 passed** (J1–J7 + packs) | Keep green + expand reuse arc | **DONE** |
 | L3 CBAC matrix | Fragmented | One parametrized matrix file | **DONE** — `test_admin_cbac_matrix.py` (**73 passed**) |
 | L4 Playwright | J9 + J17 (partial) | J9 + J17 + **J18** full P0 UI | **DONE** — `journey-18-steward-admin-depth` **8 passed** |

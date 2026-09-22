@@ -9,6 +9,7 @@ import { Box } from '@mui/material';
 import HomeIcon from '@mui/icons-material/Home';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import { fetchOrgUnits } from '../../api/orgUnits';
+import { fetchEmployees } from '../../api/people';
 import BaseDetailPage from '../../components/detail/BaseDetailPage';
 import DetailHeader from '../../components/detail/DetailHeader';
 import OrgUnitOverviewTab from './tabs/OrgUnitOverviewTab';
@@ -26,6 +27,7 @@ export default function OrgUnitDetailPage() {
 
   const [orgUnit, setOrgUnit] = useState(null);
   const [allOrgUnits, setAllOrgUnits] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -39,9 +41,13 @@ export default function OrgUnitDetailPage() {
 
       try {
         setLoading(true);
-        const units = await fetchOrgUnits(user.token);
+        const [units, empList] = await Promise.all([
+          fetchOrgUnits(user.token),
+          fetchEmployees(user.token).catch(() => []),
+        ]);
         setAllOrgUnits(units);
-        
+        setEmployees(Array.isArray(empList) ? empList : []);
+
         const found = units.find(u => u.id === parseInt(orgUnitId, 10));
         if (!found) {
           throw new Error('OrgUnit not found');
@@ -69,9 +75,9 @@ export default function OrgUnitDetailPage() {
       entityType: 'org-unit',
       entityId: orgUnitId,
       label: orgUnit?.name,
-      payload: { entityData: { ...orgUnit, allOrgUnits } },
+      payload: { entityData: { ...orgUnit, allOrgUnits, employees } },
     }],
-    [orgUnitId, orgUnit, allOrgUnits],
+    [orgUnitId, orgUnit, allOrgUnits, employees],
   );
   useEffect(() => {
     setContexts(inspectorContext);

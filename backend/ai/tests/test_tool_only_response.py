@@ -28,7 +28,8 @@ class TestToolResultSummary:
     def test_tool_with_error_is_outcome_only(self):
         # C-F4b / RULE_23: a failed tool must NOT leak the internal tool id or the
         # raw error text into user-facing chat — describe the outcome only.
-        # All-failed gate: calibration refuse, not mutation "nothing was changed".
+        # All-failed gate: clear lookup refuse, not mutation "nothing was changed".
+        # Never meta-copy about invention / fabrication.
         summary = _build_tool_result_summary([
             {"tool_name": "get_chairman_overview", "result": {},
              "error": "Calculation summary failed"},
@@ -38,6 +39,35 @@ class TestToolResultSummary:
         assert "nothing was changed" not in summary
         assert "Here's what I found" not in summary
         assert "couldn't complete that lookup" in summary
+        assert "no answer was invented" not in summary.lower()
+        assert "invented" not in summary.lower()
+
+    def test_all_failed_mutation_is_action_copy(self):
+        summary = _build_tool_result_summary([
+            {
+                "tool_name": "call_host_api",
+                "tool_args": {"api_name": "submit_my_leave", "method": "POST"},
+                "result": {},
+                "error": "HTTP 400",
+            },
+        ])
+        assert "nothing was submitted" in summary
+        assert "lookup" not in summary.lower()
+        assert "no answer was invented" not in summary.lower()
+        assert "invented" not in summary.lower()
+        assert "try again" in summary.lower()
+
+    def test_all_failed_mutation_from_tool_name_suffix(self):
+        summary = _build_tool_result_summary([
+            {
+                "tool_name": "call_host_api:submit_my_leave",
+                "result": {},
+                "error": "boom",
+            },
+        ])
+        assert "nothing was submitted" in summary
+        assert "lookup" not in summary.lower()
+        assert "invented" not in summary.lower()
 
     def test_mixed_success_and_error_keeps_found_wrapper(self):
         summary = _build_tool_result_summary([

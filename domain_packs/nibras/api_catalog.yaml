@@ -62,6 +62,58 @@ tools:
     requires_confirmation: true
     source_type: carbon_api
 
+  - name: list_my_leave
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: get_my_leave_balance
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  # ── Loan lifecycle (self-service + admin reads) ───────────────────────
+  - name: submit_my_loan
+    kind: confirm
+    requires_confirmation: true
+    source_type: carbon_api
+
+  - name: list_my_loans
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: list_loans
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: list_loan_installments
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  # ── Onboarding / employees ────────────────────────────────────────────
+  - name: list_employees
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: get_employee
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: create_employee
+    kind: confirm
+    requires_confirmation: true
+    source_type: carbon_api
+
+  - name: update_employee
+    kind: confirm
+    requires_confirmation: true
+    source_type: carbon_api
+
   # ── GOSI/WPS SIF filing (staged + confirmed; RULE_21) ─────────────────
   - name: generate_gosi_wps_sif
     kind: confirm
@@ -74,6 +126,37 @@ tools:
     source_type: carbon_api
 
   - name: submit_gosi_wps_sif
+    kind: confirm
+    requires_confirmation: true
+    source_type: carbon_api
+
+  - name: get_gosi_wps_sif
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  # ── Attendance permission lifecycle (ESS + admin ops; RULE_21) ────────
+  - name: list_my_attendance_permissions
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: submit_my_attendance_permission
+    kind: confirm
+    requires_confirmation: true
+    source_type: carbon_api
+
+  - name: list_attendance_permissions
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: create_attendance_permission
+    kind: confirm
+    requires_confirmation: true
+    source_type: carbon_api
+
+  - name: approve_attendance_permission
     kind: confirm
     requires_confirmation: true
     source_type: carbon_api
@@ -474,6 +557,147 @@ capabilities:
     owner: ai
     version: "1.0"
     host_action: leave.request.recorded_and_entitlement_decremented
+
+  # ── Attendance permission lifecycle ─────────────────────────────────────
+  - capability_id: attendance.permission.list
+    business_name: List attendance permissions
+    purpose: List short-hours attendance permissions visible to the requester.
+    kind: read_only
+    inputs: {}
+    preconditions: {}
+    permissions:
+      - attendance.permission.list
+    effects: {}
+    side_effects: []
+    approval_requirements: {}
+    requires_confirmation: false
+    idempotency: "true (read-only)"
+    verification:
+      predicate: attendance.permission.results_returned
+    failure_semantics: abort
+    recovery: retry
+    owner: ai
+    version: "1.0"
+    host_action: attendance.permission.list
+
+  - capability_id: attendance.permission.submit
+    business_name: Submit attendance permission
+    purpose: >
+      Create a pending short-hours attendance permission (approved=false)
+      for human review — no-deduction leave category.
+    kind: mutation
+    inputs:
+      permission:
+        type: attendance.permission
+    preconditions:
+      employee_is_active: true
+      permission_type_is_valid: true
+      hours_are_positive: true
+    permissions:
+      - attendance.permission.submit
+    effects:
+      mutates: attendance.permission
+      sets: approved=false
+      produces: AttendancePermission
+    side_effects:
+      - attendance_permission_created
+    approval_requirements:
+      requires_grant: true
+    requires_confirmation: true
+    idempotency: dedupe by employee+date+permission_type+hours
+    verification:
+      predicate: attendance.permission.status_is_pending
+    failure_semantics: abort
+    recovery: retry_after_fix
+    owner: ai
+    version: "1.0"
+    host_action: attendance.permission.submit
+
+  - capability_id: attendance.permission.review
+    business_name: Review attendance permission
+    purpose: >
+      Create a durable human review task so an approver distinct from the
+      requester decides the attendance permission before it is approved.
+    kind: human_task
+    inputs:
+      permission_id:
+        type: string
+    preconditions:
+      permission_is_pending: true
+    permissions:
+      - attendance.permission.review
+    effects:
+      creates: HumanTask
+    side_effects:
+      - inbox_task
+    approval_requirements:
+      human_reviewer: true
+    requires_confirmation: false
+    idempotency: dedupe by permission_id
+    verification:
+      predicate: attendance.permission.review_completed
+    failure_semantics: suspend
+    recovery: human_decision
+    owner: ai
+    version: "1.0"
+    host_action: human_task:inbox
+
+  - capability_id: attendance.permission.approve
+    business_name: Approve attendance permission
+    purpose: >
+      Finalize a reviewed attendance permission by setting approved=true
+      after human review (SoD).
+    kind: mutation
+    inputs:
+      permission_id:
+        type: string
+    preconditions:
+      permission_is_pending: true
+      review_approved: true
+    permissions:
+      - attendance.permission.approve
+    effects:
+      mutates: attendance.permission
+      sets: approved=true
+      produces: AttendancePermission
+    side_effects:
+      - attendance_permission_approved
+    approval_requirements:
+      requires_grant: true
+      human_reviewer: true
+    requires_confirmation: true
+    idempotency: dedupe by permission_id
+    verification:
+      predicate: attendance.permission.approved_and_recorded
+    failure_semantics: abort
+    recovery: manual_reconciliation
+    owner: ai
+    version: "1.0"
+    host_action: attendance.permission.approve
+
+  - capability_id: attendance.permission.approved_and_recorded
+    business_name: Verify attendance permission approved and recorded
+    purpose: >
+      Assert the attendance permission exists and approved=true after
+      the approve step.
+    kind: assertion
+    inputs:
+      permission:
+        type: attendance.permission
+    preconditions: {}
+    permissions:
+      - attendance.permission.approved_and_recorded
+    effects: {}
+    side_effects: []
+    approval_requirements: {}
+    requires_confirmation: false
+    idempotency: "true (read-only)"
+    verification: {}
+    failure_semantics: fail
+    recovery: escalate
+    owner: ai
+    version: "1.0"
+    host_action: attendance.permission.approved_and_recorded
 
   # ── Loan reads ──────────────────────────────────────────────────────────
   - capability_id: loan.list

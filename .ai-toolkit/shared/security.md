@@ -226,3 +226,63 @@ class AuditTrail:
 [ ] No domain code imports from ai/providers/
 [ ] No raw SQL from provider executed without parameterization
 ```
+
+---
+
+## RULE 11 — Process Governance ≠ Host ACL (Nibras / Pulse)
+
+**ADR-0045.** Governed `ProcessDefinition` YAML (`human_only`, `separation_of_duties`,
+`refuse_if`) is a **dial contract** for Agent/Pulse. It is **not** the host access-control
+list.
+
+| Plane | Enforces | Examples |
+|-------|----------|----------|
+| **A — Host** | CBAC + org scope + Correspondence FSM | `PeopleAccess`, `_people_scope`, leave/loan `skip_if_self` |
+| **B — Pulse** | Consent (RULE_21), grants, YAML autonomy dials | CommandBoundary, `ApprovalGrant`, process YAML |
+
+**Rules for workers:**
+
+1. Never claim “SoD / roles secured” unless the **DRF/service path that commits the effect**
+   enforces distinct actors (or Correspondence routing). YAML alone is insufficient.
+2. Closing host SoD gaps uses a **shared platform gate** (ADR-0030 correspondence for
+   employee requests; one reusable host SoD module for admin irreversibles) — **never**
+   scattered `if user == preparer` one-offs or Agent-only patches while DRF stays open.
+3. Pulse inbox `ai:operator` ≠ HR manager/finance. Do not substitute.
+   **NPS-2:** Nibras `*.review` human tasks resolve via `ai.governance.review_authority`
+   to `correspondence:act` / `correspondence:finance` / `people:manage`.
+4. Catalog capability `permissions:` are capability-id echoes until a CBAC-mapping ADR;
+   do not invent Django perms ad hoc. Review authority mapping is the approved CBAC bridge.
+5. Honesty matrix + CI: `ai/tests/test_nibras_process_security_planes.py`. Update ADR-0045
+   and the matrix in the **same** change when host SoD lands. **NPS-1:** payroll/GOSI/
+   onboard are `host_gate` via `people.governance.sod`. **NPS-2:** review
+   authority tests in `ai/tests/test_review_authority.py`. **NPS-3:** attendance ESS is
+   `correspondence` (like leave); admin PATCH remains SoD-gated ops fallback.
+
+Checklist before shipping a process mutation endpoint:
+
+```
+[ ] Org-scoped queryset (Plane A)
+[ ] Explicit permission_classes / CBAC cap
+[ ] If step claims SoD: host enforcer named (correspondence | host_gate via people.governance.sod)
+[ ] If human_task review: required_authority from ai.governance.review_authority (not ai:operator for HR)
+[ ] Agent path still RULE_21 + grant where capability requires it (Plane B)
+[ ] No “secure because YAML” wording in README/SCOREBOARD
+```
+
+---
+
+## RULE 12 — Chat Never Stages Host Writes (Pulse mode contract)
+
+**ADR-0046 · RULE_35 · QA G2.** Chat header promises *nothing is created or changed*.
+That is a **security and trust** claim, not marketing.
+
+| Surface | Host write? |
+|---------|-------------|
+| Pulse **Chat** | **No** — no `pending_exec` for `call_host_api` / DQ create / ESS submit |
+| Pulse **Agent** | **Yes** — plan + Run consent (RULE_21) only |
+| Host **My / Team / People** | **Yes** — CBAC + Correspondence / SoD (Plane A) |
+| Chat **memory** confirm | Yes — personal exception only (`learn_fact`) |
+
+**Forbidden:** enabling Chat Confirm for host APIs to silence the “Agent mode is OFF”
+banner; teaching Chat to stage leave/loan/payroll. **Proper:** stop Chat staging + hand
+off to Agent or My. See PB-62.

@@ -4,8 +4,8 @@
  * Refine drafts must NOT paste the prior final_response: that text often
  * contains task verbs ("analyze", "call the endpoint") which trip Chat into
  * skill match / invoke_skill / ReAct instead of a prose suggestion.
- * Markers ("DISCUSSION ONLY", Fork/Replan) are detected server-side so Chat
- * stays tool-free until the operator explicitly confirms.
+ * Markers ("DISCUSSION ONLY") are detected server-side so Chat stays
+ * tool-free until the operator explicitly confirms.
  */
 export function buildDiscussDraft(plan, finalResponse, { refine = false } = {}) {
   const brief = (plan?.brief || '').trim() || 'this agent run';
@@ -16,7 +16,7 @@ export function buildDiscussDraft(plan, finalResponse, { refine = false } = {}) 
       '',
       'DISCUSSION ONLY — reply in Chat with one improved brief and a short numbered step list.',
       'Do not call tools, invoke_skill, plan_task, or re-run the analysis.',
-      'Do not change the Agent plan until I say to Fork or Replan.',
+      'Do not change the Agent plan until I explicitly ask you to apply changes.',
     ].join('\n').trim();
   }
   const body = (finalResponse || '').trim();
@@ -27,7 +27,7 @@ export function buildDiscussDraft(plan, finalResponse, { refine = false } = {}) 
     '',
     'DISCUSSION ONLY — answer in Chat about findings, downloads, steps, or how to refine.',
     'Do not call tools or re-run the analysis unless I explicitly ask.',
-    'Do not change the Agent plan until I say to Fork or Replan.',
+    'Do not change the Agent plan until I explicitly ask you to apply changes.',
   ];
   return parts.join('\n').trim();
 }

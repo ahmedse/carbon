@@ -34,12 +34,12 @@ function AgentReviewSurface({
     >
       <Box
         data-testid="plan-dag-graph-wrap"
-        sx={{ flex: 1, minHeight: 520, display: 'flex', flexDirection: 'column' }}
+        sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
       >
         <PlanDagGraph
           plan={plan}
-          mode="structure"
-          height={560}
+          mode="execution"
+          height={420}
           fill
           live={false}
           onConfirmStep={onConfirmStep}

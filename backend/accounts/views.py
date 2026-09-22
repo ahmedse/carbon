@@ -272,7 +272,10 @@ class UserViewSet(viewsets.ModelViewSet):
     """
     CRUD for users.
     """
-    queryset = User.objects.all()
+    queryset = User.objects.select_related(
+        'employee_profile',
+        'employee_profile__org_unit',
+    ).all()
     serializer_class = UserSerializer
     permission_classes = [AdminOrSuperuserOnly]
     required_capability = 'platform:manage_users'

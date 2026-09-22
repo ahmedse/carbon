@@ -115,6 +115,26 @@ export function submitLoanRequest(token, payload) {
 }
 
 /**
+ * Current employee attendance permissions (GET people/me/attendance-permissions/).
+ * Returns an array (or empty).
+ */
+export function fetchMyAttendancePermissions(token) {
+  return apiFetch(`${PROFILE_ROOT}attendance-permissions/`, { token });
+}
+
+/**
+ * Submit a short-hours attendance permission (POST people/me/attendance-permissions/).
+ * On success returns the Correspondence detail object.
+ */
+export function submitAttendancePermission(token, payload) {
+  return apiFetch(`${PROFILE_ROOT}attendance-permissions/`, {
+    method: 'POST',
+    body: payload,
+    token,
+  });
+}
+
+/**
  * Submit a profile-change request (POST people/me/profile-change/).
  * Payload: { changes: { <field>: { from?, to } } }.
  */

@@ -1,0 +1,25 @@
+---
+description: Pulse chat AI bubbles — keep RTL replies cohesive (no hollow rail)
+globs: carbon-frontend/src/shell/AIMessageBubble.jsx,carbon-frontend/src/shell/MarkdownMessage.jsx
+alwaysApply: false
+---
+
+# Pulse chat bubble layout (anti-regression)
+
+## Problem (8587c39 + dir=auto)
+
+`dir="auto"` on Arabic assistant text inside a **full-width** AI bubble parks the
+prose on the far right while LTR chrome (AI badge, navigate buttons) stays on
+the far left — a hollow middle rail.
+
+## Required
+
+- Cap AI bubble width (`maxWidth: min(42rem, 96%)`), not bare `width: 100%`.
+- Keep navigate / download action chips in the **same column** as the reply
+  (`dir="auto"` on the action row is OK).
+- Do not “fix” RTL by stretching the assistant bubble edge-to-edge.
+
+## Related product guard
+
+Deliverable asks (“تقرير … word file”) must not NAV-GATE to open Payroll —
+see `is_deliverable_request` in `process_brief.py`.

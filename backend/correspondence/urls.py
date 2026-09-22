@@ -13,6 +13,8 @@ urlpatterns = [
          name='correspondence-list'),
     path('inbox/', CorrespondenceViewSet.as_view({'get': 'inbox'}),
          name='correspondence-inbox'),
+    path('history/', CorrespondenceViewSet.as_view({'get': 'history'}),
+         name='correspondence-history'),
     path('<int:pk>/', CorrespondenceViewSet.as_view({'get': 'retrieve'}),
          name='correspondence-detail'),
     path('<int:pk>/approve/', CorrespondenceViewSet.as_view({'post': 'approve'}),

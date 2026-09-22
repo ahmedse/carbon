@@ -1,0 +1,29 @@
+---
+description: Nibras process security planes — YAML SoD is dial not host ACL (ADR-0045 / RULE_34)
+globs:
+  - domain_packs/nibras/**
+  - backend/ai/capability_registry.py
+  - backend/ai/host_executor.py
+  - backend/people/views.py
+  - backend/people/self_views.py
+  - backend/people/governance/**
+  - backend/ai/governance/**
+  - backend/ai/task_inbox.py
+  - backend/ai/task_inbox_api.py
+  - backend/people/payroll_service.py
+  - backend/ai/management/commands/seed_nibras_processes.py
+  - backend/ai/management/commands/simulate_nibras_*.py
+  - backend/ai/tests/test_nibras_*.py
+alwaysApply: false
+---
+
+# Nibras process security (ADR-0045 / NPS-1 / NPS-2 / NPS-3)
+
+- Process YAML `human_only` / `separation_of_duties` / `refuse_if` = **Pulse dials**, not host ACL alone.
+- Host SoD: leave/loan/**attendance ESS** via Correspondence; payroll commit / GOSI submit / onboarding activate via **`people.governance.sod`**. Attendance admin PATCH remains SoD-gated ops fallback.
+- Stamp preparer on staging (compute/generate/create); refuse on irreversible (commit/submit/activate/approve). Wire **DRF + host_executor** — never Agent-only.
+- **NPS-2:** Pulse inbox `required_authority` for Nibras `*.review` via **`ai.governance.review_authority`** → `correspondence:act` / `correspondence:finance` / `people:manage`.
+- **NPS-3:** Attendance happy path = `POST /me/attendance-permissions/` + manager corr (`people.attendance_ess`); Agent tools `submit_my_attendance_permission`.
+- **Forbidden:** scattered per-view SoD one-offs; ORM bypass of SoD; inventing Django perms from capability `permissions:` lists.
+- Honesty matrix CI: `ai/tests/test_nibras_process_security_planes.py` · host tests: `people/tests/test_host_sod.py` · review authority: `ai/tests/test_review_authority.py` · ESS: `people/tests/test_attendance_ess.py`.
+- Read: `.ai-toolkit/decisions/0045-nibras-process-security-planes.md` · `shared/security.md` RULE 11 · PB-61 · RULE_34.

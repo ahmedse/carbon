@@ -10,8 +10,9 @@ Covers the intelligence layer + REST surface for the context-lifecycle seam:
     checkpoint boundary; the new id never aliases the source row.
   * clear-context — resets the working context levers; leaves the message log,
     per-message provenance, and learned facts untouched.
-  * CBAC — mutating actions require ``ai:manage_console``; the checkpoints
-    read requires ``ai:view_console``.
+  * CBAC — checkpoint / restore / fork require ``ai:manage_console``;
+    checkpoints list requires ``ai:view_console``.  Clear-context is an
+    owner action (own conversation); non-owners need ``ai:manage_console``.
 
 Acceptance bar (Notes for the Master):
   1. Fork must produce a NEW conversation id — explicit test below.
@@ -390,9 +391,12 @@ def test_clear_context_resets_working_context_keeps_log_and_provenance(owner):
 
     result = CarbonIntelligence().clear_context(owner, str(conversation.id))
 
-    # Working-context levers reset…
+    # Working-context levers reset (summary empty; snapshot holds clear-break)…
     assert result["summary"] == ""
-    assert result["context_snapshot_json"] == {}
+    clear_break = result["context_snapshot_json"]["_clear_break"]
+    assert clear_break["summary"] == "some summary"
+    assert clear_break["prior_snapshot"]["budget"] == {"T2_history": 3}
+    assert clear_break["message_boundary_id"] is not None
     # …but the conversation row, message log, and per-message provenance
     # (metadata_json["context_snapshot"]) are untouched.
     conversation.refresh_from_db()
@@ -405,6 +409,30 @@ def test_clear_context_resets_working_context_keeps_log_and_provenance(owner):
         )
     assert conversation.visibility == "private"
     assert conversation.title == "Thread"
+
+
+@pytest.mark.django_db
+def test_undo_clear_context_restores_working_context(owner):
+    conversation = _make_conversation(owner, n_messages=2, summary="keep me")
+    conversation.context_snapshot_json = {"budget": {"T2_history": 2}}
+    conversation.save(update_fields=["context_snapshot_json"])
+    ci = CarbonIntelligence()
+
+    cleared = ci.clear_context(owner, str(conversation.id))
+    assert cleared["summary"] == ""
+    assert "_clear_break" in cleared["context_snapshot_json"]
+
+    restored = ci.undo_clear_context(owner, str(conversation.id))
+    assert restored["summary"] == "keep me"
+    assert restored["context_snapshot_json"] == {"budget": {"T2_history": 2}}
+    assert "_clear_break" not in restored["context_snapshot_json"]
+
+
+@pytest.mark.django_db
+def test_undo_clear_context_without_break_raises(owner):
+    conversation = _make_conversation(owner, n_messages=1)
+    with pytest.raises(ValueError, match="No cleared context"):
+        CarbonIntelligence().undo_clear_context(owner, str(conversation.id))
 
 
 @pytest.mark.django_db
@@ -459,7 +487,8 @@ def test_checkpoint_endpoint_roundtrip(manager):
     cleared = client.post(_clear_url(conversation))
     assert cleared.status_code == 200, cleared.content
     assert cleared.data["summary"] == ""
-    assert cleared.data["context_snapshot_json"] == {}
+    assert "_clear_break" in cleared.data["context_snapshot_json"]
+    assert cleared.data["context_snapshot_json"]["_clear_break"]["message_boundary_id"]
 
 
 @pytest.mark.django_db
@@ -516,7 +545,23 @@ def test_mutating_actions_require_manage_console(owner, plain_user):
     assert client.post(
         _fork_url(conversation), {"checkpoint_id": checkpoint["id"]}, format="json",
     ).status_code == 403
-    assert client.post(_clear_url(conversation)).status_code == 403
+    # Private thread of another user — no access → 404 (not a capability leak).
+    assert client.post(_clear_url(conversation)).status_code == 404
+
+
+@pytest.mark.django_db
+def test_owner_can_clear_context_without_manage_console(owner):
+    """ESS / Chat: conversation owners clear working context without console CBAC."""
+    conversation = _make_conversation(owner, n_messages=2, summary="stale")
+    conversation.context_snapshot_json = {"kg_entities": ["kg-1"]}
+    conversation.save(update_fields=["context_snapshot_json"])
+    client = _client(owner)
+
+    resp = client.post(_clear_url(conversation))
+    assert resp.status_code == 200, resp.content
+    assert resp.data["summary"] == ""
+    assert "_clear_break" in resp.data["context_snapshot_json"]
+    assert resp.data["context_snapshot_json"]["_clear_break"]["summary"] == "stale"
 
 
 @pytest.mark.django_db
@@ -544,6 +589,7 @@ def test_view_only_user_can_list_but_not_mutate(
     assert client.post(
         _checkpoint_url(conversation), {"name": "x"}, format="json",
     ).status_code == 403
+    # Shared access alone does not allow clearing someone else's thread.
     assert client.post(_clear_url(conversation)).status_code == 403
 
 

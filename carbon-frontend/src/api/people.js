@@ -105,14 +105,50 @@ export function fetchPayslipLines({ payrollRun } = {}, token) {
   return apiFetch(`${ROOT}payslip-lines/${query}`, { token });
 }
 
-/** List leave entitlements. */
-export function fetchLeaveEntitlements(token) {
-  return apiFetch(`${ROOT}leave-entitlements/`, { token });
+/**
+ * Walk a paginated people list endpoint into { count, results }.
+ * Caps page_size at 200 (server max) so we never reintroduce unbounded GETs.
+ */
+async function fetchAllPages(path, token, params = {}) {
+  const pageSize = Math.min(Math.max(Number(params.page_size) || 100, 1), 200);
+  const base = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (k === 'page' || k === 'page_size') return;
+    if (v != null && v !== '') base.set(k, String(v));
+  });
+  base.set('page', '1');
+  base.set('page_size', String(pageSize));
+  const first = await apiFetch(`${ROOT}${path}?${base}`, { token });
+  if (Array.isArray(first)) {
+    return { count: first.length, page_size: pageSize, results: first };
+  }
+  const results = [...(first?.results || [])];
+  const total = Number(first?.count ?? results.length);
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  if (pages > 1) {
+    const rest = await Promise.all(
+      Array.from({ length: pages - 1 }, (_, i) => {
+        const qs = new URLSearchParams(base);
+        qs.set('page', String(i + 2));
+        return apiFetch(`${ROOT}${path}?${qs}`, { token });
+      }),
+    );
+    for (const chunk of rest) {
+      results.push(...(chunk?.results || []));
+    }
+  }
+  return { count: total, page_size: pageSize, results };
 }
 
-/** List leave records. */
-export function fetchLeaveRecords(token) {
-  return apiFetch(`${ROOT}leave-records/`, { token });
+/** List leave entitlements (paginated; optional year / q). */
+export function fetchLeaveEntitlements(token, params = {}) {
+  const year = params.year ?? new Date().getFullYear();
+  return fetchAllPages('leave-entitlements/', token, { ...params, year });
+}
+
+/** List leave records (paginated; optional status / q). */
+export function fetchLeaveRecords(token, params = {}) {
+  return fetchAllPages('leave-records/', token, params);
 }
 
 /** Create a leave record. */
@@ -399,6 +435,22 @@ export function fetchEmployee(id, token) {
 /** Chronicle events for one employee. */
 export function fetchEmployeeTimeline(id, token) {
   return apiFetch(`${ROOT}employees/${encodeURIComponent(id)}/timeline/`, { token });
+}
+
+/**
+ * EOSI (end-of-service indemnity) provision with lineage.
+ * GET people/employees/<id>/eosi/?as_of=YYYY-MM-DD
+ * Returns { value, lineage: { rule_id, rule_version, inputs }, as_of }.
+ * 409 when no authoritative eosi ComplianceRule exists.
+ */
+export function fetchEmployeeEosi(id, token, { asOf } = {}) {
+  const params = new URLSearchParams();
+  if (asOf) params.set('as_of', asOf);
+  const qs = params.toString() ? `?${params}` : '';
+  return apiFetch(
+    `${ROOT}employees/${encodeURIComponent(id)}/eosi/${qs}`,
+    { token },
+  );
 }
 
 /** Governed correspondence for one employee (HR 360 Requests tab). */

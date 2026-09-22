@@ -100,17 +100,28 @@ Frontend worker required Screen Spec (`docs/SCREEN-SPEC-AGENT-FOUR-VIEW-COCKPIT.
 2. **Run health** moves from Output → **Run** (collapsible; auto-open when settled still allowed). Output stays Answer + filings only.
 3. **Canvas** remains `OpsCanvasHost` (no new library) but Operator copy is story-first; tool / CBAC / QoS / rule ids demoted behind expand or Analyst density.
 4. **Artifact Delete** on Output cards uses existing `DELETE ai/artifacts/:id/` with confirm (ux-patterns destructive).
-5. Autonomy dial still density-only — never bypasses RULE_21.
+5. Autonomy dial still density-only — never bypasses RULE_21. Header Select deferred; default `balanced`.
+6. **Presentation plane** (`presentationPlane.js`): Chat + Agent Operator surfaces show outcome labels only (L0). Proof (L1) and technical JSON (L2) are opt-in. Forbidden on L0: raw `call_host_api`, snake_case tools, “0 rows” as chrome, “Details & JSON” as primary expand.
 
 ### V6 Plan structure (binding — supersedes V5 Plan body)
 
 1. **Plan hero = graph only** (`PlanDagGraph mode="structure"`). No stage list; no Show/Hide graph toggle.
 2. **Do not mingle Run status on Plan:** no Finished / Running / Needs approval chips or status legend on Plan nodes. Run owns execution state.
 3. **Tooltips** on nodes and edges. **Click** opens a **docked scrollable pane inside the graph** (never an overlay Drawer) with Operator-light markdown via **`RichContent`** (`MarkdownMessage` — the shared Chat-grade formatter for Agent surfaces and domain apps).
-4. **Plan chrome is a toolbar under the cockpit tabs** (`AgentPlanToolbar`): read-only label · Approve / Cancel / Discuss · More for Fork / Replan. **Do not** edit the prompt/brief by clicking the label — changing the brief is **Replan** or **Discuss in Chat** only.
+4. **Plan chrome is a toolbar under the cockpit tabs** (`AgentPlanToolbar`): scrollable brief label (2–3 lines) · Approve / Cancel / Discuss. **Do not** edit the prompt/brief by clicking the label — changing the brief is **Discuss in Chat** only. Fork / Replan More-menu deferred (product simplicity; RULE_21 consent unchanged).
 5. Execution-mode DAG (status + analyst dock) remains for classic hatch — not the Plan segment default.
-6. **Structure layout is top→bottom** (parallel siblings side-by-side); fit-by-width so nodes stay readable and vertical space is used.
-7. **Shapes follow BPMN / flowchart conventions** (`planGraphShapes.js`): roundedRect=orchestrator task, parallelogram=researcher, hexagon=domain specialist, chamfer=critic, stadium=planner; diamonds for choice/parallel; circles for wait/observe/end. Edges: solid sequence, dashed conditional, open arrowhead for guarded.
+6. **Structure layout is top→bottom** (parallel siblings side-by-side); **`fitMode: contain`** so skinny spines stay readable (never `width`-only fit — that blew cards up). V7+.
+7. **Shapes follow BPMN / flowchart conventions** (`planGraphShapes.js`): roundedRect=orchestrator task, parallelogram=researcher, hexagon=domain specialist, chamfer=critic, stadium=planner; diamonds for choice/parallel; circles for wait/observe/end; doubleRoundedRect for loop/subflow. Edges: solid sequence, dashed conditional, open arrowhead for guarded; orthogonal TB elbows + corridor stagger (V7).
+8. **Autonomy dial** (`careful` / `balanced` / `fast`) defaults to `balanced` via `autonomyMode.js` — header chrome dial is **hidden** for Operator calm (Track D density preference still honored if localStorage set). Never bypasses RULE_21.
+
+### V7–V10 visualization phases (north star)
+
+| Phase | Deliverable |
+|-------|-------------|
+| **V7** | Orthogonal TB edges · corridor offsets · role shapes · dummy channel align · contain fit |
+| **V8** | Phase/parallel collapse · focus-path dimming · minimap when graph exceeds rail |
+| **V9** | Run `mode="token"` strip · Plan stays structure-only |
+| **V10** | Back-edge (loop/catch) routing · edge dock guards · subflow collapse |
 
 ## Alternatives Considered
 
@@ -127,6 +138,7 @@ Frontend worker required Screen Spec (`docs/SCREEN-SPEC-AGENT-FOUR-VIEW-COCKPIT.
 - **Positive:** one question per view; Consent visible; Job Map readable; Operator chrome calm (V5).
 - **Negative / trade-off:** one more product rename (Steps→Run); Metrics no longer a top segment; Analyst must expand for DAG / Run health / tool args.
 - **Do NOT re-try:** gluing Ops Canvas under the live DAG; dual always-on plan lists; Output-as-ops-console.
+- **Do NOT re-try (V6 layout — regression 565ba71):** forcing Plan `mode="structure"` to `direction: 'lr'` “to fill the wide rail.” That collapses sequential plans into one cramped horizontal card strip with truncated labels and empty vertical gutter. Structure is **top→bottom** (V6 §6). Fix letterboxing with fit/pan/node size — never by flipping to LR. Guard: `STRUCTURE_LAYOUT_OPTIONS.direction === 'tb'` + Vitest in `PlanDagGraph.test.jsx`.
 
 ## References
 

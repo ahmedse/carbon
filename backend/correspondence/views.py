@@ -27,7 +27,7 @@ from .exceptions import (
     NotActorError,
     SubmissionBlocked,
 )
-from .models import ACTIONABLE, Correspondence, Notification, WorkflowPolicy
+from .models import ACTIONABLE, ACTOR_HISTORY_EVENTS, Correspondence, Notification, WorkflowPolicy
 from .permissions import (
     CanActOnCorrespondence,
     CanSubmitCorrespondence,
@@ -245,6 +245,50 @@ class CorrespondenceViewSet(viewsets.ReadOnlyModelViewSet):
         qs = self.get_queryset().filter(
             status__in=ACTIONABLE,
             current_approver_ids__contains=request.user.id,
+        )
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            response = self.get_paginated_response(serializer.data)
+        else:
+            serializer = self.get_serializer(qs, many=True)
+            response = Response(serializer.data)
+
+        # Staff/superuser: surface orphan count so Team empty-state can explain
+        # routing gaps (submitted/in_review with no current approver).
+        if request.user.is_staff or request.user.is_superuser:
+            orphans = (
+                Correspondence.objects.filter(status__in=ACTIONABLE)
+                .filter(current_approver_ids=[])
+                .count()
+            )
+            data = response.data
+            if isinstance(data, list):
+                response.data = {
+                    'results': data,
+                    'count': len(data),
+                    'routing_orphans': orphans,
+                }
+            elif isinstance(data, dict):
+                data = dict(data)
+                data['routing_orphans'] = orphans
+                response.data = data
+        return response
+
+    @action(detail=False, methods=['get'], url_path='history')
+    def history(self, request):
+        """Items the current user decided on (any type / any outcome).
+
+        Distinct from ``inbox`` (still actionable). Used by Team → History.
+        """
+        qs = (
+            self.get_queryset()
+            .filter(
+                events__actor=request.user,
+                events__event_type__in=ACTOR_HISTORY_EVENTS,
+            )
+            .distinct()
+            .order_by('-updated_at', '-id')
         )
         page = self.paginate_queryset(qs)
         if page is not None:

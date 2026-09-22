@@ -93,3 +93,27 @@ and not "generate an ad-hoc Cairo weather tool."
 
 The test: **would a competent intern pick the right tool from your catalog?** If the
 answer requires per-question tools, your catalog is wrong, not your tooling.
+
+---
+
+## Nibras (HRMS) — `call_host_api` examples
+
+Live names live in `backend/ai/engine/instances/nibras/instance.yaml` (ADR-0044).  
+Pack `domain_packs/nibras/api_catalog.yaml` `tools:` must stay ⊆ that catalog.
+
+| Intent | `api_name` | Notes |
+|--------|------------|-------|
+| Request vacation / leave | `submit_my_leave` | Self-service; never `create_leave_record` for "my leave" |
+| Leave balance | `get_my_leave_balance` | Read |
+| Request loan | `submit_my_loan` | Never bind `submit_my_leave` |
+| Hire employee | `create_employee` | Confirm + fill body if empty (Run timeline form) |
+| Activate hire | `update_employee` | PATCH `is_active` |
+| Payroll compute/validate/commit | `compute_payroll_run` / `validate_payroll_run` / `commit_payroll_run` | Path `{id}` |
+| GOSI/WPS SIF | `generate_gosi_wps_sif` → `validate_gosi_wps_sif` → `submit_gosi_wps_sif` | Committed run only; submit persists receipt |
+| Attendance permission | `create_attendance_permission` → `approve_attendance_permission` | Admin path today; SoD dial ≠ host ACL (ADR-0045) |
+
+**Security (ADR-0045 / RULE_34):** Leave/loan final effect uses Correspondence SoD. Payroll /
+GOSI / onboarding / attendance irreversibles are **org-scoped `people:manage`** until the
+shared host SoD gate lands — do not document them as role-SoD-complete.
+
+One capability per row — do not invent per-question tools ("get_cairo_leave").

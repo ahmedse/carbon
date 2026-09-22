@@ -212,6 +212,11 @@ class EmployeeListCreateView(APIView):
             .defer('photo')
             .order_by('id')
         )
+        q = (request.query_params.get('q') or '').strip()
+        if q:
+            qs = qs.filter(
+                Q(employee_no__icontains=q) | Q(full_name__icontains=q),
+            )
         total = qs.count()
         try:
             page = max(1, int(request.query_params.get('page', 1)))
@@ -250,6 +255,14 @@ class EmployeeListCreateView(APIView):
                 {'employee_no': 'This employee number is already taken.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        from people.governance.sod import SUBJECT_EMPLOYEE, record_preparer
+
+        record_preparer(
+            subject_type=SUBJECT_EMPLOYEE,
+            subject_id=serializer.instance.pk,
+            user=request.user,
+            process_key="employee.onboarding.lifecycle",
+        )
         record_event(
             entity_type='Employee', entity_id=serializer.instance.pk, event_kind='hired',
             effective_date=timezone.localdate(), user=request.user,
@@ -323,6 +336,31 @@ class EmployeeDetailView(APIView):
                 )
         serializer = EmployeeSerializer(employee, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+        activating = (
+            'is_active' in serializer.validated_data
+            and bool(serializer.validated_data['is_active'])
+            and not bool(before.get('is_active'))
+        )
+        if activating:
+            from people.governance.sod import (
+                ACTION_ACTIVATE,
+                SUBJECT_EMPLOYEE,
+                SoDViolation,
+                require_distinct_actor,
+            )
+
+            try:
+                require_distinct_actor(
+                    subject_type=SUBJECT_EMPLOYEE,
+                    subject_id=employee.pk,
+                    actor=request.user,
+                    action=ACTION_ACTIVATE,
+                )
+            except SoDViolation as exc:
+                return Response(
+                    {"detail": str(exc), "code": exc.code},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
         for field, value in serializer.validated_data.items():
             setattr(employee, field, value)
         blocked = _blocked_write_response(employee)
@@ -1021,6 +1059,54 @@ class LeaveEntitlementListCreateView(_GatedListCreateView):
     model = LeaveEntitlement
     serializer_class = LeaveEntitlementSerializer
     org_lookup = 'employee__org_unit_id__in'
+    _DEFAULT_PAGE_SIZE = 100
+    _MAX_PAGE_SIZE = 200
+
+    def get_queryset(self):
+        # N+1 on leave_type/policy/employee timed out the FE (~2680 rows on
+        # nibras_dev) — always select_related for list/detail.
+        return LeaveEntitlement.objects.select_related(
+            'employee', 'leave_type', 'policy', 'policy_version',
+        ).order_by('-year', 'employee_id', 'id')
+
+    def get(self, request):
+        qs = self.get_queryset()
+        if self.org_lookup is not None:
+            qs = _scoped(request.user, qs, self.org_lookup)
+        year = request.query_params.get('year')
+        if year not in (None, ''):
+            try:
+                qs = qs.filter(year=int(year))
+            except (TypeError, ValueError):
+                pass
+        q = (request.query_params.get('q') or '').strip()
+        if q:
+            qs = qs.filter(
+                Q(employee__employee_no__icontains=q)
+                | Q(employee__full_name__icontains=q)
+                | Q(leave_type__code__icontains=q)
+                | Q(leave_type__label__icontains=q)
+            )
+        total = qs.count()
+        try:
+            page = max(1, int(request.query_params.get('page', 1)))
+        except (TypeError, ValueError):
+            page = 1
+        try:
+            page_size = int(
+                request.query_params.get('page_size', self._DEFAULT_PAGE_SIZE),
+            )
+        except (TypeError, ValueError):
+            page_size = self._DEFAULT_PAGE_SIZE
+        page_size = max(1, min(page_size, self._MAX_PAGE_SIZE))
+        start = (page - 1) * page_size
+        page_qs = qs[start:start + page_size]
+        return Response({
+            'count': total,
+            'page': page,
+            'page_size': page_size,
+            'results': self.serializer_class(page_qs, many=True).data,
+        })
 
 
 class LeaveEntitlementDetailView(_GatedDetailView):
@@ -1028,18 +1114,75 @@ class LeaveEntitlementDetailView(_GatedDetailView):
     serializer_class = LeaveEntitlementSerializer
     org_lookup = 'employee__org_unit_id__in'
 
+    def _get_queryset(self, user):
+        qs = LeaveEntitlement.objects.select_related(
+            'employee', 'leave_type', 'policy', 'policy_version',
+        )
+        if self.org_lookup is not None:
+            qs = _scoped(user, qs, self.org_lookup)
+        return qs
+
 
 # LeaveRecord (employee-linked)
 class LeaveRecordListCreateView(_GatedListCreateView):
     model = LeaveRecord
     serializer_class = LeaveRecordSerializer
     org_lookup = 'employee__org_unit_id__in'
+    _DEFAULT_PAGE_SIZE = 100
+    _MAX_PAGE_SIZE = 200
+
+    def get_queryset(self):
+        return LeaveRecord.objects.select_related(
+            'employee', 'leave_type',
+        ).order_by('-start_date', '-id')
+
+    def get(self, request):
+        qs = self.get_queryset()
+        if self.org_lookup is not None:
+            qs = _scoped(request.user, qs, self.org_lookup)
+        status_param = (request.query_params.get('status') or '').strip()
+        if status_param:
+            qs = qs.filter(status=status_param)
+        q = (request.query_params.get('q') or '').strip()
+        if q:
+            qs = qs.filter(
+                Q(employee__employee_no__icontains=q)
+                | Q(employee__full_name__icontains=q)
+                | Q(leave_type__code__icontains=q)
+                | Q(leave_type__label__icontains=q)
+            )
+        total = qs.count()
+        try:
+            page = max(1, int(request.query_params.get('page', 1)))
+        except (TypeError, ValueError):
+            page = 1
+        try:
+            page_size = int(
+                request.query_params.get('page_size', self._DEFAULT_PAGE_SIZE),
+            )
+        except (TypeError, ValueError):
+            page_size = self._DEFAULT_PAGE_SIZE
+        page_size = max(1, min(page_size, self._MAX_PAGE_SIZE))
+        start = (page - 1) * page_size
+        page_qs = qs[start:start + page_size]
+        return Response({
+            'count': total,
+            'page': page,
+            'page_size': page_size,
+            'results': self.serializer_class(page_qs, many=True).data,
+        })
 
 
 class LeaveRecordDetailView(_GatedDetailView):
     model = LeaveRecord
     serializer_class = LeaveRecordSerializer
     org_lookup = 'employee__org_unit_id__in'
+
+    def _get_queryset(self, user):
+        qs = LeaveRecord.objects.select_related('employee', 'leave_type')
+        if self.org_lookup is not None:
+            qs = _scoped(user, qs, self.org_lookup)
+        return qs
 
 
 # BenefitType (global reference data — no org scope)
@@ -1179,11 +1322,68 @@ class AttendancePermissionListCreateView(_GatedListCreateView):
     serializer_class = AttendancePermissionSerializer
     org_lookup = 'employee__org_unit_id__in'
 
+    def post(self, request):
+        from people.governance.sod import SUBJECT_ATTENDANCE_PERMISSION, record_preparer
+
+        data = dict(request.data)
+        data['approved'] = False  # approve is a distinct SoD step
+        serializer = self.serializer_class(data=data)
+        serializer.is_valid(raise_exception=True)
+        instance = self.model(**{**serializer.validated_data, 'approved': False})
+        blocked = _blocked_write_response(instance)
+        if blocked is not None:
+            return blocked
+        serializer.save(approved=False)
+        record_preparer(
+            subject_type=SUBJECT_ATTENDANCE_PERMISSION,
+            subject_id=serializer.instance.pk,
+            user=request.user,
+            process_key="attendance.permission.lifecycle",
+        )
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
 
 class AttendancePermissionDetailView(_GatedDetailView):
     model = AttendancePermission
     serializer_class = AttendancePermissionSerializer
     org_lookup = 'employee__org_unit_id__in'
+
+    def patch(self, request, pk):
+        from people.governance.sod import (
+            ACTION_APPROVE,
+            SUBJECT_ATTENDANCE_PERMISSION,
+            SoDViolation,
+            require_distinct_actor,
+        )
+
+        instance = get_object_or_404(self._get_queryset(request.user), pk=pk)
+        serializer = self.serializer_class(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        approving = (
+            'approved' in serializer.validated_data
+            and bool(serializer.validated_data['approved'])
+            and not bool(instance.approved)
+        )
+        if approving:
+            try:
+                require_distinct_actor(
+                    subject_type=SUBJECT_ATTENDANCE_PERMISSION,
+                    subject_id=instance.pk,
+                    actor=request.user,
+                    action=ACTION_APPROVE,
+                )
+            except SoDViolation as exc:
+                return Response(
+                    {"detail": str(exc), "code": exc.code},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        for field, value in serializer.validated_data.items():
+            setattr(instance, field, value)
+        blocked = _blocked_write_response(instance)
+        if blocked is not None:
+            return blocked
+        serializer.save()
+        return Response(serializer.data)
 
 
 # Certification (employee-linked)
@@ -1234,12 +1434,19 @@ class PayrollRunComputeView(APIView):
     permission_classes = [IsAuthenticated, PeopleAccess]
 
     def post(self, request, pk):
+        from people.governance.sod import SoDViolation
+
         run = get_object_or_404(
             _scoped(request.user, PayrollRun.objects.all(), 'org_unit_id__in'), pk=pk,
         )
         service = PayrollRunService()
         try:
-            result = service.compute(run)
+            result = service.compute(run, user=request.user)
+        except SoDViolation as exc:
+            return Response(
+                {"detail": str(exc), "code": exc.code},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         except PayrollServiceError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         except NonAuthoritativeRuleError as exc:
@@ -1251,12 +1458,19 @@ class PayrollRunValidateView(APIView):
     permission_classes = [IsAuthenticated, PeopleAccess]
 
     def post(self, request, pk):
+        from people.governance.sod import SoDViolation
+
         run = get_object_or_404(
             _scoped(request.user, PayrollRun.objects.all(), 'org_unit_id__in'), pk=pk,
         )
         service = PayrollRunService()
         try:
-            result = service.validate(run)
+            result = service.validate(run, user=request.user)
+        except SoDViolation as exc:
+            return Response(
+                {"detail": str(exc), "code": exc.code},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         except PayrollServiceError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         persist_findings(run, result.get("findings", []))
@@ -1267,12 +1481,19 @@ class PayrollRunCommitView(APIView):
     permission_classes = [IsAuthenticated, PeopleAccess]
 
     def post(self, request, pk):
+        from people.governance.sod import SoDViolation
+
         run = get_object_or_404(
             _scoped(request.user, PayrollRun.objects.all(), 'org_unit_id__in'), pk=pk,
         )
         service = PayrollRunService()
         try:
-            result = service.commit(run)
+            result = service.commit(run, user=request.user)
+        except SoDViolation as exc:
+            return Response(
+                {"detail": str(exc), "code": exc.code},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         except PayrollServiceError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         persist_findings(run, result.get("findings", []))
@@ -1323,6 +1544,114 @@ class PayrollRunWPSExportView(APIView):
             f'attachment; filename="wps_run_{run.pk}.csv"'
         )
         return response
+
+
+class PayrollRunWpsGenerateView(APIView):
+    """POST generate — persist WPS/SIF artifact for a committed run."""
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def post(self, request, pk):
+        from people.governance.sod import SoDViolation
+
+        run = get_object_or_404(
+            _scoped(request.user, PayrollRun.objects.all(), "org_unit_id__in"), pk=pk,
+        )
+        service = PayrollRunService()
+        try:
+            result = service.wps_generate(run, user=request.user)
+        except SoDViolation as exc:
+            return Response(
+                {"detail": str(exc), "code": exc.code},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except PayrollServiceError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response(result, status=status.HTTP_200_OK)
+
+
+class PayrollRunWpsValidateFilingView(APIView):
+    """POST validate — structure/rule checks on a generated filing."""
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def post(self, request, pk):
+        from people.governance.sod import SoDViolation
+
+        run = get_object_or_404(
+            _scoped(request.user, PayrollRun.objects.all(), "org_unit_id__in"), pk=pk,
+        )
+        service = PayrollRunService()
+        try:
+            result = service.wps_validate_filing(run, user=request.user)
+        except SoDViolation as exc:
+            return Response(
+                {"detail": str(exc), "code": exc.code},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except PayrollServiceError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        code = status.HTTP_200_OK if result.get("passed") else status.HTTP_422_UNPROCESSABLE_ENTITY
+        return Response(result, status=code)
+
+
+class PayrollRunWpsSubmitFilingView(APIView):
+    """POST submit — irreversible filing record (idempotent)."""
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def post(self, request, pk):
+        from people.governance.sod import SoDViolation
+
+        run = get_object_or_404(
+            _scoped(request.user, PayrollRun.objects.all(), "org_unit_id__in"), pk=pk,
+        )
+        service = PayrollRunService()
+        try:
+            result = service.wps_submit_filing(run, user=request.user)
+        except SoDViolation as exc:
+            return Response(
+                {"detail": str(exc), "code": exc.code},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except PayrollServiceError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response(result, status=status.HTTP_200_OK)
+
+
+class PayrollRunWpsFilingDetailView(APIView):
+    """GET current WPS filing status for a run."""
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def get(self, request, pk):
+        from people.models import WpsFiling
+
+        run = get_object_or_404(
+            _scoped(request.user, PayrollRun.objects.all(), "org_unit_id__in"), pk=pk,
+        )
+        try:
+            filing = run.wps_filing
+        except WpsFiling.DoesNotExist:
+            return Response(
+                {"detail": "No WPS filing for this run."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(
+            {
+                "run_id": run.pk,
+                "status": filing.status,
+                "content_hash": filing.content_hash,
+                "record_count": filing.record_count,
+                "validation_passed": filing.validation_passed,
+                "validation_issues": filing.validation_issues,
+                "generated_at": filing.generated_at,
+                "validated_at": filing.validated_at,
+                "submitted_at": filing.submitted_at,
+                "receipt_id": filing.receipt_id,
+                "reconciled": filing.reconciled,
+            }
+        )
 
 
 # ── P1: PersonnelEvent chronicle (append-only read endpoints) ──────────────

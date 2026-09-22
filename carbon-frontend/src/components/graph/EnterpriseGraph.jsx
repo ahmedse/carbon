@@ -45,32 +45,37 @@ import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import { nodeShapePath, nodeShapeInnerPath } from './planGraphShapes';
+import {
+  computeEdgePath,
+  computeBackEdgePath,
+  assignCorridorOffsets,
+} from '../../utils/graphEdgePath';
 
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 1.15;
 /** Prefer pan/scroll over shrinking node type below readable size in the Pulse rail. */
-const FIT_ZOOM_FLOOR = 0.7;
-/** Allow modest scale-up so small plans fill the rail instead of floating in a hole. */
-const FIT_ZOOM_CEIL = 1.45;
+const FIT_ZOOM_FLOOR = 0.55;
+/**
+ * Never auto-upscale. SVG `meet` + zoom>1 double-scales and blows compact
+ * plans into a single giant clipped card ("graph corrupted"). Letterbox via
+ * viewBox padding instead so small DAGs stay native size in the rail.
+ */
+const FIT_ZOOM_CEIL = 1;
 const NODE_MIN_W = 120;
 const NODE_MAX_W = 640;
 const NODE_MIN_H = 48;
 const NODE_MAX_H = 320;
 const DRAG_THRESHOLD = 3;
+const MINIMAP_NODE_THRESHOLD = 12;
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
-/**
- * Cubic bezier between node anchors. LR: right→left edges; TB: bottom→top.
- */
-function edgePath(sx, sy, tx, ty, direction = 'lr') {
-  if (direction === 'tb') {
-    const dy = Math.max((ty - sy) * 0.5, 12);
-    return `M ${sx} ${sy} C ${sx} ${sy + dy}, ${tx} ${ty - dy}, ${tx} ${ty}`;
+function edgePath(sx, sy, tx, ty, direction = 'lr', laneOffset = 0, isBack = false) {
+  if (isBack && direction === 'tb') {
+    return computeBackEdgePath(sx, sy, tx, ty, Math.min(sx, tx) - 28 + (laneOffset || 0));
   }
-  const dx = Math.max((tx - sx) * 0.5, 12);
-  return `M ${sx} ${sy} C ${sx + dx} ${sy}, ${tx - dx} ${ty}, ${tx} ${ty}`;
+  return computeEdgePath(sx, sy, tx, ty, direction, laneOffset);
 }
 
 /**
@@ -214,6 +219,16 @@ export default function EnterpriseGraph({
   direction = 'lr',
   /** 'contain' = fit both axes (may shrink); 'width' = fit width only; 'none' = 1× */
   fitMode = 'contain',
+  /** Cap auto-fit scale-up (Plan graphs pass 1 — never blow up skinny DAGs). */
+  fitZoomCeil = FIT_ZOOM_CEIL,
+  /** Size the canvas to layoutHeight instead of stretching SVG into a tall empty rail. */
+  contentSized = false,
+  /** Set of node ids on the focus path — others are dimmed. Null = no dimming. */
+  focusIds = null,
+  /** Active step id for token accent (Run token strip). */
+  tokenNodeId = null,
+  /** Force minimap on/off; null = auto when visible nodes exceed threshold. */
+  showMinimap = null,
 }) {
   const theme = useTheme();
   const svgRef = useRef(null);
@@ -267,42 +282,63 @@ export default function EnterpriseGraph({
   }, [effectiveNodes]);
 
   // Edges are re-anchored to the CURRENT node geometry so they stay glued to
-  // nodes as the user drags/resizes them.
+  // nodes as the user drags/resizes them. Corridor offsets stagger parallel links.
   const effectiveEdges = useMemo(
-    () =>
-      edges
+    () => {
+      const anchored = edges
         .map((e) => {
           const s = nodeById.get(e.source);
           const t = nodeById.get(e.target);
           if (!s || !t) return null;
+          // Dummies are point nodes (w/h = 0, x/y already the channel mid).
+          const sDummy = Boolean(s.is_dummy) || !(s.w > 0);
+          const tDummy = Boolean(t.is_dummy) || !(t.w > 0);
           if (direction === 'tb') {
             return {
               ...e,
-              sourceX: s.x + s.w / 2,
-              sourceY: s.y + s.h,
-              targetX: t.x + t.w / 2,
-              targetY: t.y,
+              sourceX: sDummy ? s.x : s.x + s.w / 2,
+              sourceY: sDummy ? s.y : (e.is_back_edge ? s.y : s.y + s.h),
+              targetX: tDummy ? t.x : t.x + t.w / 2,
+              targetY: tDummy ? t.y : (e.is_back_edge ? t.y + t.h : t.y),
             };
           }
           return {
             ...e,
-            sourceX: s.x + s.w,
-            sourceY: s.y + s.h / 2,
-            targetX: t.x,
-            targetY: t.y + t.h / 2,
+            sourceX: sDummy ? s.x : (e.is_back_edge ? s.x : s.x + s.w),
+            sourceY: sDummy ? s.y : s.y + s.h / 2,
+            targetX: tDummy ? t.x : (e.is_back_edge ? t.x + t.w : t.x),
+            targetY: tDummy ? t.y : t.y + t.h / 2,
           };
         })
-        .filter(Boolean),
+        .filter(Boolean);
+      return assignCorridorOffsets(anchored, direction, 6);
+    },
     [edges, nodeById, direction],
   );
 
-  // Content-sized viewBox — never inflate to 640×viewport (that left empty
-  // gutters around skinny Plan DAGs). The host Box owns the visible rail size;
-  // fitView scales the content into it.
-  const viewW = Math.max(1, width);
-  const viewH = Math.max(1, layoutHeight);
-  // Prefer top-left of the content after zoom — centering skinny/tall DAGs
-  // left empty gutters on both sides of the Plan rail.
+  const visibleCount = useMemo(
+    () => effectiveNodes.filter((n) => !n.is_dummy).length,
+    [effectiveNodes],
+  );
+  const minimapOn = showMinimap == null
+    ? visibleCount > MINIMAP_NODE_THRESHOLD || layoutHeight > height * 1.6
+    : Boolean(showMinimap);
+
+  const isDimmed = useCallback(
+    (id) => focusIds != null && focusIds.size > 0 && !focusIds.has(id),
+    [focusIds],
+  );
+  const edgeDimmed = useCallback(
+    (e) => focusIds != null && focusIds.size > 0
+      && (!focusIds.has(e.source) || !focusIds.has(e.target)),
+    [focusIds],
+  );
+
+  // ViewBox is at least the canvas box (in px ≅ user units at zoom 1) so
+  // preserveAspectRatio=meet cannot upscale a skinny DAG into a giant card.
+  // Layout content sits top-left; extra space is empty letterboxing.
+  const viewW = Math.max(1, width, viewport.w || 0);
+  const viewH = Math.max(1, layoutHeight, viewport.h || 0);
   const transform = `translate(${pan.x}, ${pan.y}) scale(${zoom})`;
 
   // ── Pointer interaction (pan canvas / drag node / resize node) ──────────
@@ -434,16 +470,18 @@ export default function EnterpriseGraph({
       setPan({ x: 0, y: 0 });
       return;
     }
-    const availW = viewport.w > 0 ? viewport.w : viewW;
+    const availW = viewport.w > 0 ? viewport.w : Math.max(width, 1);
     const availH = viewport.h > 0 ? viewport.h : Math.max(height, layoutHeight);
+    // Fit against the *layout* size (not padded viewBox) so large DAGs shrink.
     const fitX = availW / Math.max(width, 1);
     const fitY = availH / Math.max(layoutHeight, 1);
-    // width: use horizontal space; contain: fit both axes; allow mild scale-up
-    // so compact plans fill the rail instead of a tiny cluster in empty space.
     const fitted = fitMode === 'width' ? fitX : Math.min(fitX, fitY);
-    setZoomClamped(clamp(fitted, FIT_ZOOM_FLOOR, FIT_ZOOM_CEIL));
+    // Default ceil 1 — padded viewBox already prevents meet-upscale; zoom>1
+    // is opt-in via fitZoomCeil for surfaces that truly want scale-up.
+    const ceil = Number.isFinite(fitZoomCeil) ? fitZoomCeil : FIT_ZOOM_CEIL;
+    setZoomClamped(clamp(fitted, FIT_ZOOM_FLOOR, ceil));
     setPan({ x: 0, y: 0 });
-  }, [setZoomClamped, viewport.w, viewport.h, viewW, width, height, layoutHeight, fitMode]);
+  }, [setZoomClamped, viewport.w, viewport.h, width, height, layoutHeight, fitMode, fitZoomCeil]);
 
   // Graph-first Run: fit the DAG when the layout size changes so the hero
   // isn't a tiny cluster in a sea of empty canvas.
@@ -452,7 +490,11 @@ export default function EnterpriseGraph({
   }, [fitView, nodes.length, width, layoutHeight, direction]);
 
   // ── Shared canvas renderer (inline + modal) ─────────────────────────────
-  const renderCanvas = (canvasFill, marker = markerId) => (
+  const renderCanvas = (canvasFill, marker = markerId) => {
+    const boxH = canvasFill
+      ? '100%'
+      : (contentSized ? Math.max(layoutHeight + 8, 120) : height);
+    return (
     <Box
       ref={(el) => {
         // Keep measuring the visible canvas (inline or full-screen).
@@ -461,7 +503,7 @@ export default function EnterpriseGraph({
       sx={{
         position: 'relative',
         overflow: 'auto',
-        height: canvasFill ? '100%' : height,
+        height: boxH,
         minHeight: 0,
         cursor: dragging ? 'grabbing' : 'grab',
         userSelect: 'none',
@@ -474,7 +516,7 @@ export default function EnterpriseGraph({
         ref={svgRef}
         viewBox={`0 0 ${viewW} ${viewH}`}
         width="100%"
-        height="100%"
+        height={contentSized && !canvasFill ? layoutHeight : '100%'}
         preserveAspectRatio="xMinYMin meet"
         role="img"
         aria-label="Graph — drag to pan, wheel to zoom, drag nodes to move or resize them"
@@ -584,11 +626,25 @@ export default function EnterpriseGraph({
               : markerKind === 'arrowThin'
                 ? `url(#${marker}-thin)`
                 : `url(#${marker})`;
-            const d = edgePath(e.sourceX, e.sourceY, e.targetX, e.targetY, direction);
+            const d = edgePath(
+              e.sourceX,
+              e.sourceY,
+              e.targetX,
+              e.targetY,
+              direction,
+              e.laneOffset || 0,
+              Boolean(e.is_back_edge),
+            );
             const tip = edgeTitle ? edgeTitle(e) : (e.label || '');
-            const edgeKey = `e-${e.source}-${e.target}`;
+            const edgeKey = `e-${e.source}-${e.target}-${e.is_back_edge ? 'b' : 'f'}`;
+            const dim = edgeDimmed(e);
             return (
-              <g key={edgeKey} data-testid={`${testId}-edge-${e.source}-${e.target}`} data-edge-kind={styled?.kind || branch}>
+              <g
+                key={edgeKey}
+                data-testid={`${testId}-edge-${e.source}-${e.target}`}
+                data-edge-kind={styled?.kind || branch}
+                opacity={dim ? 0.18 : 1}
+              >
                 <path
                   d={d}
                   fill="none"
@@ -633,6 +689,8 @@ export default function EnterpriseGraph({
             const fillBg = isSelected
               ? theme.palette.action.selected
               : theme.palette.background.paper;
+            const isToken = tokenNodeId != null && String(tokenNodeId) === String(n.id);
+            const dim = isDimmed(n.id);
             return (
               <g
                 key={`n-${n.id}`}
@@ -645,6 +703,8 @@ export default function EnterpriseGraph({
                 data-shape={shape}
                 data-node-w={n.w}
                 data-node-h={n.h}
+                data-token={isToken ? '1' : undefined}
+                opacity={dim ? 0.22 : 1}
               >
                 {tip ? <title>{tip}</title> : null}
                 {/* Soft drop shadow for card boxes */}
@@ -667,11 +727,23 @@ export default function EnterpriseGraph({
                     <animate attributeName="opacity" values="0.9;0.15;0.9" dur="1.1s" repeatCount="indefinite" />
                   </path>
                 )}
+                {isToken && (
+                  <path
+                    d={framePath}
+                    fill="none"
+                    stroke={theme.palette.primary.main}
+                    strokeWidth={2.5}
+                    data-testid={`${testId}-token-${n.id}`}
+                    transform="translate(-3,-3) scale(1.06)"
+                  >
+                    <animate attributeName="opacity" values="1;0.35;1" dur="1.4s" repeatCount="indefinite" />
+                  </path>
+                )}
                 <path
                   d={framePath}
                   fill={fillBg}
-                  stroke={strokeColor}
-                  strokeWidth={strokeW}
+                  stroke={isToken ? theme.palette.primary.main : strokeColor}
+                  strokeWidth={isToken ? Math.max(strokeW, 2.25) : strokeW}
                 />
                 {innerPath && (
                   <path
@@ -718,8 +790,52 @@ export default function EnterpriseGraph({
             );
           })}        </g>
       </svg>
+      {minimapOn && (
+        <Box
+          data-testid={`${testId}-minimap`}
+          sx={{
+            position: 'absolute',
+            right: 8,
+            bottom: 8,
+            width: 120,
+            height: 80,
+            border: 1,
+            borderColor: 'divider',
+            borderRadius: 1,
+            bgcolor: 'background.paper',
+            opacity: 0.92,
+            overflow: 'hidden',
+            pointerEvents: 'none',
+            boxShadow: 1,
+          }}
+        >
+          <svg
+            viewBox={`0 0 ${viewW} ${viewH}`}
+            width="100%"
+            height="100%"
+            preserveAspectRatio="xMinYMin meet"
+            aria-hidden
+          >
+            {effectiveNodes.filter((n) => !n.is_dummy).map((n) => (
+              <rect
+                key={`mm-${n.id}`}
+                x={n.x}
+                y={n.y}
+                width={Math.max(n.w, 4)}
+                height={Math.max(n.h, 4)}
+                fill={tokenNodeId != null && String(tokenNodeId) === String(n.id)
+                  ? theme.palette.primary.main
+                  : theme.palette.text.disabled}
+                opacity={0.55}
+                rx={1}
+              />
+            ))}
+          </svg>
+        </Box>
+      )}
     </Box>
   );
+  };
 
   // ── Header (title + live + summary + toolbar) ───────────────────────────
   const renderHeader = (closeButton, headerTitle = title) => (
@@ -804,7 +920,7 @@ export default function EnterpriseGraph({
             </Typography>
           </Box>
         ) : (
-          <Stack direction="row" alignItems="stretch" sx={{ width: '100%', minHeight: height }}>
+          <Stack direction="row" alignItems="stretch" sx={{ width: '100%', minHeight: contentSized ? undefined : height }}>
             <Box sx={{ flex: 1, minWidth: 0, position: 'relative', minHeight: 0 }}>
               {legend}
               {renderCanvas(false, markerId)}
@@ -884,4 +1000,9 @@ EnterpriseGraph.propTypes = {
   exportFileName: PropTypes.string,
   direction: PropTypes.oneOf(['lr', 'tb']),
   fitMode: PropTypes.oneOf(['contain', 'width', 'none']),
+  fitZoomCeil: PropTypes.number,
+  contentSized: PropTypes.bool,
+  focusIds: PropTypes.object,
+  tokenNodeId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  showMinimap: PropTypes.bool,
 };

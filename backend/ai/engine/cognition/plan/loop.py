@@ -308,6 +308,8 @@ class ReActLoop:
             "host_user_id": host_user_id,
             "instance_config": instance_config,
             "user_message": user_message or "",
+            # ADR-0046: ReAct / plan loops are agentic — may stage mutations.
+            "surface": "plan",
         }
         if self.executor is not None:
             ex = self.executor
@@ -1386,7 +1388,18 @@ class ReActLoop:
                 instance_id=instance_id,
                 gap_step_ids=sorted(_gap_step_ids),
             )
-            if not (final_response or "").strip():
+            host_actions_md = self._host_actions_markdown(step_results)
+            if host_actions_md:
+                # Always surface host write receipts (details + deep link).
+                if not (final_response or "").strip():
+                    final_response = host_actions_md
+                elif "/my/" not in (final_response or "") and "](/" not in (
+                    final_response or ""
+                ):
+                    final_response = (
+                        f"{final_response.strip()}\n\n{host_actions_md}"
+                    )[:2000]
+            elif not (final_response or "").strip():
                 final_response = self._fallback_final_response(step_results)
             ok_results = [
                 r for r in step_results
@@ -1759,6 +1772,23 @@ class ReActLoop:
                     _step_index_context(None)
             result.executed = True
             result.tool_output = execution.completed_tools[0] if execution.completed_tools else None
+
+            # ── No-op mutation guard (RULE_21 honesty) ────────────────────
+            # A mutation step that produced no tool result wrote nothing:
+            # the model narrated the effect ("submitted", "please confirm")
+            # instead of calling the tool. Drafted prose is not an effect, so
+            # the step fails visibly rather than reporting "done" on a plan
+            # whose whole purpose was the write.
+            if step.is_mutation and result.tool_output is None and not result.error:
+                result.error = (
+                    "No tool call was made, so nothing was written. "
+                    "Re-run this step to apply the change."
+                )
+                logger.warning(
+                    "ReActLoop: mutation step %d completed without a tool call "
+                    "(tool=%s) — surfaced as failure",
+                    step.step_id, step.tool_name or "?",
+                )
 
             # ── Tool-error propagation + bounded retry (W-4 policy) ───────
             # Per-node ``retry`` from the workflow graph wins; otherwise the
@@ -2452,8 +2482,31 @@ class ReActLoop:
     # ── Synthesis ──────────────────────────────────────────────────────────
 
     @staticmethod
+    def _host_actions_markdown(step_results: list[StepResult]) -> str:
+        """Collect host navigate receipts for Output (Chat-compatible contract)."""
+        from ai.host_receipt import collect_navigate_actions, format_actions_markdown
+
+        outputs = [
+            (r.tool_output if isinstance(r.tool_output, dict) else {})
+            for r in (step_results or [])
+            if not (r.error and not str(r.error).startswith("[caught]"))
+        ]
+        return format_actions_markdown(collect_navigate_actions(outputs))
+
+    @staticmethod
     def _fallback_final_response(step_results: list[StepResult]) -> str:
         """Operator-facing Answer when LLM synthesis is empty (RULE_23)."""
+        from ai.host_receipt import collect_navigate_actions, format_actions_markdown
+
+        actions_md = format_actions_markdown(
+            collect_navigate_actions([
+                (r.tool_output if isinstance(r.tool_output, dict) else {})
+                for r in (step_results or [])
+            ]),
+        )
+        if actions_md:
+            return actions_md
+
         lines: list[str] = []
         export_names: list[str] = []
         for r in step_results or []:
@@ -2467,7 +2520,6 @@ class ReActLoop:
             for f in files:
                 if isinstance(f, dict) and f.get("filename"):
                     export_names.append(str(f["filename"]))
-            # Nested result JSON may also carry files
             raw = out.get("result")
             if isinstance(raw, str):
                 try:

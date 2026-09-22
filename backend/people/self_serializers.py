@@ -12,6 +12,7 @@ from correspondence.models import Correspondence
 from correspondence.serializers import CorrespondenceEventSerializer
 
 from .models import Employee, LeaveRecord
+from .leave_days import LeaveDaysField
 
 SUBJECT_TYPE = 'people.LeaveRecord'
 
@@ -51,12 +52,12 @@ class LeaveBalanceSerializer(serializers.Serializer):
     """One leave-type balance row."""
 
     leave_type = serializers.CharField()
-    entitled = serializers.DecimalField(max_digits=8, decimal_places=2)
-    carried_forward = serializers.DecimalField(max_digits=8, decimal_places=2)
-    opening_balance = serializers.DecimalField(max_digits=8, decimal_places=2)
-    used = serializers.DecimalField(max_digits=8, decimal_places=2)
-    pending = serializers.DecimalField(max_digits=8, decimal_places=2)
-    remaining = serializers.DecimalField(max_digits=8, decimal_places=2)
+    entitled = LeaveDaysField()
+    carried_forward = LeaveDaysField()
+    opening_balance = LeaveDaysField()
+    used = LeaveDaysField()
+    pending = LeaveDaysField()
+    remaining = LeaveDaysField()
 
 
 class LeaveRecordSerializer(serializers.ModelSerializer):
@@ -67,6 +68,7 @@ class LeaveRecordSerializer(serializers.ModelSerializer):
     correspondence_status = serializers.SerializerMethodField()
     leave_type = serializers.SerializerMethodField()
     leave_type_label = serializers.SerializerMethodField()
+    days = LeaveDaysField(read_only=True)
 
     class Meta:
         model = LeaveRecord
@@ -106,6 +108,19 @@ class LeaveRecordSerializer(serializers.ModelSerializer):
     def get_correspondence_status(self, obj):
         corr = self._correspondence(obj)
         return corr.status if corr else obj.status
+
+
+class TeamLeaveRecordSerializer(LeaveRecordSerializer):
+    """Leave row for a manager's direct report (Who's Out)."""
+
+    employee_id = serializers.IntegerField(source='employee.id', read_only=True)
+    employee_no = serializers.CharField(source='employee.employee_no', read_only=True)
+    employee_name = serializers.CharField(source='employee.full_name', read_only=True)
+
+    class Meta(LeaveRecordSerializer.Meta):
+        fields = LeaveRecordSerializer.Meta.fields + [
+            'employee_id', 'employee_no', 'employee_name',
+        ]
 
 
 class LeaveRecordDetailSerializer(LeaveRecordSerializer):

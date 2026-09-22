@@ -119,6 +119,7 @@ class ExecuteWitness:
                             await progress_callback(_narrate_tool(
                                 tc.get("function", {}).get("name", "tool"),
                                 _parse_tool_args(tc),
+                                surface=ctx_defaults.get("surface", "chat"),
                             ))
                         except Exception:
                             pass
@@ -167,7 +168,11 @@ class ExecuteWitness:
                 tc_id = tc.get("id", "")
                 if progress_callback:
                     try:
-                        await progress_callback(_narrate_tool(tool_name, _parse_tool_args(tc)))
+                        await progress_callback(_narrate_tool(
+                            tool_name,
+                            _parse_tool_args(tc),
+                            surface=ctx_defaults.get("surface", "chat"),
+                        ))
                     except Exception:
                         pass
 
@@ -323,27 +328,67 @@ def _split_by_dependencies(tool_calls: list[dict]) -> tuple[list[dict], list[dic
     return independent, dependent
 
 
-def _narrate_tool(tool_name: str, args: dict | None) -> str:
+def _narrate_tool(
+    tool_name: str,
+    args: dict | None,
+    *,
+    surface: str = "chat",
+) -> str:
     """Human, first-person narration of what the assistant is doing right now.
 
     Richer than "Running <tool>" so the thinking timeline reads like real
-    self-talk (VS Code Copilot style).
+    self-talk (VS Code Copilot style). Never leak raw catalog ids to the user.
+
+    On Chat surface, mutation tools are blocked (ADR-0046) — never say
+    "Submitting…" for them; say we are preparing next steps instead.
     """
+    from ai.engine.agent.chat_surface import (
+        chat_mutation_narration,
+        is_chat_surface,
+        is_host_mutation_tool,
+    )
+
     a = args or {}
     name = tool_name or "tool"
+    if is_chat_surface(surface) and is_host_mutation_tool(name, a):
+        api = (a.get("api_name") or a.get("api") or name or "").strip()
+        return f"✍️ {chat_mutation_narration(api)}"
+
     if name == "resolve_entity":
         q = (a.get("query") or "").strip()
         return f"🔎 Searching every record for “{q}”…" if q else "🔎 Searching the records…"
-    if name.startswith("call_host_api"):
-        api = (a.get("api_name") or a.get("api") or "").strip()
-        if api == "analyze_employees":
-            dim = a.get("dimension") or (a.get("query_params") or {}).get("dimension")
-            return f"📊 Analysing employees by {dim}…" if dim else "📊 Analysing the workforce…"
+    if name.startswith("call_host_api") or name in (
+        "submit_my_leave", "create_leave_record", "submit_my_loan",
+        "create_employee", "update_employee",
+    ):
+        api = (a.get("api_name") or a.get("api") or name or "").strip()
+        method = str(a.get("method") or "").strip().upper()
+        friendly = {
+            "submit_my_leave": "Submitting your leave request",
+            "create_leave_record": "Submitting a leave request",
+            "get_my_leave_balance": "Checking your leave balance",
+            "list_my_leave": "Listing your leave records",
+            "submit_my_loan": "Submitting your loan request",
+            "create_employee": "Creating an employee record",
+            "update_employee": "Updating the employee record",
+            "submit_my_attendance_permission": "Submitting an attendance permission",
+        }.get(api)
+        if friendly:
+            return f"✍️ {friendly}…"
+        if method in ("POST", "PUT", "PATCH", "DELETE") or api.startswith(
+            ("submit_", "create_", "update_", "delete_")
+        ):
+            label = api.removeprefix("submit_").removeprefix("create_").removeprefix("update_")
+            label = label.replace("_", " ").strip() or "your request"
+            return f"✍️ Submitting {label}…"
         if api.startswith("list_"):
             return f"📇 Fetching {api.removeprefix('list_').replace('_', ' ')}…"
         if api.startswith("get_"):
             return f"📄 Looking up {api.removeprefix('get_').replace('_', ' ')}…"
-        return f"📊 Querying live data{f' ({api})' if api else ''}…"
+        if api == "analyze_employees":
+            dim = a.get("dimension") or (a.get("query_params") or {}).get("dimension")
+            return f"📊 Analysing employees by {dim}…" if dim else "📊 Analysing the workforce…"
+        return "📊 Checking your records…"
     if name == "search_knowledge":
         q = (a.get("query") or "").strip()
         return f"📚 Checking what I know about “{q}”…" if q else "📚 Checking what I know…"
@@ -357,7 +402,7 @@ def _narrate_tool(tool_name: str, args: dict | None) -> str:
         return "🔍 Inspecting the process case…"
     if name == "ask_clarification":
         return "🤔 Working out what to ask you…"
-    return f"Running {name}…"
+    return "Working on the next step…"
 
 
 async def _execute_single_tool(
@@ -399,6 +444,7 @@ async def _execute_single_tool(
             "result": None,
             "error": f"Invalid JSON arguments: {args_str[:100]}",
             "latency_ms": elapsed,
+            "tool_args": {},
         }
 
     # ── P3.3: Before-hook pipeline ──────────────────────────────────────
@@ -416,6 +462,8 @@ async def _execute_single_tool(
             agent_role=ctx_defaults.get("agent_role", "orchestrator"),
             is_worker=ctx_defaults.get("is_worker", False),
             instance_config=ctx_defaults.get("instance_config"),
+            surface=ctx_defaults.get("surface", "chat"),
+            user_message=str(ctx_defaults.get("user_message") or ""),
         )
 
         try:
@@ -425,6 +473,32 @@ async def _execute_single_tool(
 
             if before_result.action == "cancel":
                 elapsed = (time.monotonic() - t0) * 1000
+                # ADR-0046: Chat mutation handoff is intentional — not a tool
+                # failure. Emit a structured result so the turn can show
+                # Agent/My CTAs without creating pending_exec.
+                if "chat_no_host_mutation" in (before_result.flags or []):
+                    handoff = before_result.payload
+                    if not isinstance(handoff, dict):
+                        from ai.engine.agent.chat_surface import (
+                            build_chat_handoff_result,
+                        )
+                        handoff = build_chat_handoff_result(
+                            tool_name, args,
+                            user_message=str(ctx_defaults.get("user_message") or ""),
+                        )
+                    logger.info(
+                        "Chat surface blocked host mutation tool=%s api=%s",
+                        tool_name,
+                        (args or {}).get("api_name", ""),
+                    )
+                    return {
+                        "tool_name": tool_name,
+                        "result": handoff,
+                        "error": None,
+                        "latency_ms": elapsed,
+                        "guardrail_flags": guardrail_flags,
+                        "tool_args": args,
+                    }
                 logger.warning(
                     "Guardrail cancelled tool=%s reason=%s",
                     tool_name, before_result.reason,
@@ -435,6 +509,7 @@ async def _execute_single_tool(
                     "error": f"Tool cancelled by guardrail: {before_result.reason}",
                     "latency_ms": elapsed,
                     "guardrail_flags": guardrail_flags,
+                    "tool_args": args,
                 }
 
             if before_result.action == "redirect" and before_result.modified_args:
@@ -458,6 +533,7 @@ async def _execute_single_tool(
                 "result": None,
                 "error": f"Unknown tool: {tool_name}",
                 "latency_ms": elapsed,
+                "tool_args": args,
             }
 
         t_exec = time.monotonic()
@@ -514,22 +590,77 @@ async def _execute_single_tool(
                     _ks = None
         if _ks is not None and "knowledge_store" not in _call_args:
             _call_args["knowledge_store"] = _ks
-        try:
-            _sig = _inspect.signature(executor_fn)
-            _has_var_kw = any(
-                p.kind == _inspect.Parameter.VAR_KEYWORD
-                for p in _sig.parameters.values()
-            )
-            _all_named = bool(_call_args) and all(
-                k in _sig.parameters for k in _call_args
-            )
-        except (TypeError, ValueError):
-            _has_var_kw, _all_named = False, False
 
-        if _has_var_kw or _all_named:
-            result = await executor_fn(**_call_args)
-        else:
-            result = await executor_fn(_call_args)
+        async def _invoke(fn, call_args: dict):
+            """Dispatch by signature — kwargs when accepted, else positional."""
+            try:
+                _sig = _inspect.signature(fn)
+                _has_var_kw = any(
+                    p.kind == _inspect.Parameter.VAR_KEYWORD
+                    for p in _sig.parameters.values()
+                )
+                _all_named = bool(call_args) and all(
+                    k in _sig.parameters for k in call_args
+                )
+            except (TypeError, ValueError):
+                _has_var_kw, _all_named = False, False
+            if _has_var_kw or _all_named:
+                return await fn(**call_args)
+            return await fn(call_args)
+
+        result = await _invoke(executor_fn, _call_args)
+
+        # ── Self-heal: one bounded, read-only repair hop ────────────────
+        # A lookup that missed by a naming hair ("leave_balance" when the
+        # live endpoint is "get_my_leave_balance") is retried once against
+        # the capability that actually exists, instead of dead-ending on
+        # "not found". Mutations are never repaired (RULE_21), and a repair
+        # that also misses falls back to the original result so recovery
+        # synthesis explains the real gap.
+        _repair = None
+        try:
+            from ai.engine.cognition.turn.self_heal import (
+                annotate_repair,
+                is_repairable_miss,
+                propose_repair,
+            )
+
+            _repair = propose_repair(
+                tool_name, args, result,
+                instance_config=_hook_defaults.get("instance_config")
+                or getattr(executor_override, "instance_config", None),
+            )
+            if _repair is not None:
+                _repair_fn = executors.get(_repair.tool_name)
+                if _repair_fn is not None:
+                    _repair_args = {
+                        k: v for k, v in _call_args.items()
+                        if k in ("executor", "instance_id", "conversation_id",
+                                 "instance_config", "knowledge_store",
+                                 "user_message")
+                    }
+                    _repair_args.update(_repair.tool_args)
+                    _repaired = await _invoke(_repair_fn, _repair_args)
+                    if is_repairable_miss(_repair.tool_name, _repaired):
+                        logger.info(
+                            "self-heal: %s → %s still missed; keeping the "
+                            "original result",
+                            tool_name, _repair.strategy,
+                        )
+                        _repair = None
+                    else:
+                        logger.info(
+                            "self-heal: %s → %s via %s",
+                            tool_name, _repair.tool_name, _repair.strategy,
+                        )
+                        result = annotate_repair(_repaired, _repair, tool_name)
+                        guardrail_flags.append(f"self_heal:{_repair.strategy}")
+                else:
+                    _repair = None
+        except Exception:  # noqa: BLE001 - self-heal must never break a turn
+            logger.exception("self-heal hop failed; using the original result")
+            _repair = None
+
         elapsed = (time.monotonic() - t_exec) * 1000
 
         # ── P3.3: After-hook pipeline ───────────────────────────────────
@@ -563,6 +694,7 @@ async def _execute_single_tool(
                 "error": _msg,
                 "latency_ms": elapsed,
                 "guardrail_flags": guardrail_flags,
+                "tool_args": args,
             }
 
         # ── Nested tool-error promotion ───────────────────────────────────
@@ -584,7 +716,34 @@ async def _execute_single_tool(
                 "error": str(_inner_err),
                 "latency_ms": elapsed,
                 "guardrail_flags": guardrail_flags,
+                "tool_args": args,
             }
+
+        # Promote host HTTP 4xx/5xx envelopes to top-level error so Chat
+        # recovery synthesis (ADR-0021 failure branch) sees the outcome
+        # detail — not a silent "success" with a non-2xx body.
+        if isinstance(result, dict) and "status_code" in result:
+            try:
+                _code = int(result.get("status_code"))
+            except (TypeError, ValueError):
+                _code = None
+            if _code is not None and _code >= 400:
+                _data = result.get("data")
+                _detail = ""
+                if isinstance(_data, dict):
+                    _detail = str(_data.get("detail") or "").strip()
+                if not _detail:
+                    _detail = str(result.get("detail") or "").strip()
+                _msg = _detail or f"Host returned HTTP {_code}"
+                logger.warning("Tool %s host HTTP %s: %s", tool_name, _code, _msg[:160])
+                return {
+                    "tool_name": tool_name,
+                    "result": _safe_serialize(result),
+                    "error": _msg,
+                    "latency_ms": elapsed,
+                    "guardrail_flags": guardrail_flags,
+                    "tool_args": args,
+                }
 
         result_str = _safe_serialize(result)
 
@@ -622,6 +781,7 @@ async def _execute_single_tool(
             "result": None,
             "error": str(e),
             "latency_ms": elapsed,
+            "tool_args": args if isinstance(args, dict) else {},
         }
 
 
@@ -680,8 +840,8 @@ def _build_tool_result_summary(completed_tools: list[dict]) -> str:
 
     Gate (Chat QA A9 / M08): when **every** tool errored, do **not** wrap in
     "Here's what I found" + mutation language ("nothing was changed"). That
-    dump reads as an unintelligent engagement. Use a read-safe calibration
-    refuse instead — Chat is advisory; a failed lookup is not a write abort.
+    dump reads as an unintelligent engagement. Prefer a clear business refuse
+    with a next step — never meta-copy about invention / fabrication.
     """
     if not completed_tools:
         return ""
@@ -722,12 +882,10 @@ def _build_tool_result_summary(completed_tools: list[dict]) -> str:
                     return raw[key]
         return raw
 
-    # All-failed gate — refuse calibration, never mutation-abort dump.
+    # All-failed gate — single mutation-aware refuse (shared with ``_run_chat``).
     if all(isinstance(t, dict) and t.get("error") for t in completed_tools):
-        return (
-            "I couldn't complete that lookup just now. "
-            "Please try again in a moment — no answer was invented."
-        )
+        from ai.engine_runtime import fail_reply_when_all_tools_failed
+        return fail_reply_when_all_tools_failed(completed_tools)
 
     tool_summaries: list[str] = []
     for tool_result in completed_tools:

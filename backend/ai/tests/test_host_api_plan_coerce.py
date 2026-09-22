@@ -120,6 +120,39 @@ def test_coerce_leave_brief_keeps_submit_my_leave():
     )
     assert step.tool_args.get("api_name") == "submit_my_leave"
 
+
+def test_coerce_create_attendance_to_submit_my():
+    from ai.engine.cognition.plan.planner import PlanStep, _coerce_host_api_steps
+
+    catalog = {
+        "create_attendance_permission",
+        "submit_my_attendance_permission",
+        "approve_attendance_permission",
+        "submit_my_leave",
+    }
+    step = PlanStep(
+        step_id=0,
+        intent="Submit attendance",
+        tool_name="call_host_api",
+        tool_args={
+            "api_name": "create_attendance_permission",
+            "body": {
+                "employee": 1,
+                "date": "2026-10-01",
+                "permission_type": "personal",
+                "hours": "2",
+            },
+        },
+        is_mutation=True,
+    )
+    _coerce_host_api_steps(
+        [step],
+        catalog,
+        utterance="Execute attendance.permission.lifecycle Prefer submit_my_attendance_permission",
+    )
+    assert step.tool_args.get("api_name") == "submit_my_attendance_permission"
+    assert "employee" not in (step.tool_args.get("body") or {})
+
 def test_coerce_tool_name_that_is_catalog_api():
     from ai.engine.cognition.plan.planner import PlanStep, _coerce_host_api_steps
 

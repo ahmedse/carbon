@@ -10,11 +10,45 @@ class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
         write_only=True, required=False, allow_blank=True, style={'input_type': 'password'}
     )
+    # Read-only identity from linked Employee (people.Employee.user → related_name
+    # employee_profile). Lets platform admins see who emp_* accounts are without
+    # browsing People. Null when no employee is linked.
+    employee_full_name = serializers.SerializerMethodField(read_only=True)
+    employee_org_unit = serializers.SerializerMethodField(read_only=True)
+    employee_no = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'is_active', 'is_staff', 'language', 'password']
-        read_only_fields = ['id']
+        fields = [
+            'id', 'username', 'email', 'is_active', 'is_staff', 'language', 'password',
+            'employee_full_name', 'employee_org_unit', 'employee_no',
+        ]
+        read_only_fields = [
+            'id', 'employee_full_name', 'employee_org_unit', 'employee_no',
+        ]
+
+    def _employee(self, obj):
+        return getattr(obj, 'employee_profile', None)
+
+    def get_employee_full_name(self, obj):
+        emp = self._employee(obj)
+        return emp.full_name if emp else None
+
+    def get_employee_org_unit(self, obj):
+        emp = self._employee(obj)
+        if not emp or not getattr(emp, 'org_unit_id', None):
+            return None
+        ou = emp.org_unit
+        # OrgUnit.full_path is a method — must call it (returning the bound
+        # method blows up JSON encoding with TypeError).
+        path_fn = getattr(ou, 'full_path', None)
+        if callable(path_fn):
+            return path_fn()
+        return ou.name
+
+    def get_employee_no(self, obj):
+        emp = self._employee(obj)
+        return emp.employee_no if emp else None
 
     def create(self, validated_data):
         password = validated_data.pop('password', None)

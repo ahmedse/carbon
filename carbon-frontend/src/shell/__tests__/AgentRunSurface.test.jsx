@@ -1,6 +1,6 @@
 // src/shell/__tests__/AgentRunSurface.test.jsx
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import AgentRunSurface, { mergePlanWithRunSteps } from '../AgentRunSurface';
 
 const PLAN = {
@@ -39,7 +39,7 @@ describe('mergePlanWithRunSteps', () => {
 });
 
 describe('AgentRunSurface', () => {
-  it('does not stack Job Map or DAG on the Run surface', () => {
+  it('does not stack Job Map, DAG, token strip, or bottom details list on Run', () => {
     render(
       <AgentRunSurface
         plan={PLAN}
@@ -52,6 +52,10 @@ describe('AgentRunSurface', () => {
     expect(screen.queryByTestId('agent-run-job-map')).toBeNull();
     expect(screen.queryByTestId('agent-run-job-map-board')).toBeNull();
     expect(screen.queryByTestId('plan-dag-graph')).toBeNull();
+    expect(screen.queryByTestId('agent-run-token-strip')).toBeNull();
+    expect(screen.queryByTestId('plan-dag-token')).toBeNull();
+    expect(screen.queryByTestId('agent-run-list')).toBeNull();
+    expect(screen.queryByTestId('agent-run-toggle-details')).toBeNull();
   });
 
   it('renders visual timeline spine with beat nodes', () => {
@@ -61,7 +65,6 @@ describe('AgentRunSurface', () => {
         runSteps={[]}
         phase="finished"
         artifacts={[{ id: 1, name: 'report.csv' }]}
-        listContent={<div>Step list body</div>}
       />,
     );
 
@@ -71,63 +74,25 @@ describe('AgentRunSurface', () => {
     expect(timeline).toHaveTextContent('Search for duplicate records');
     expect(screen.getByTestId('run-timeline-node-0')).toBeInTheDocument();
     expect(screen.getByTestId('agent-run-progress')).toHaveTextContent(/2\/2/);
-    expect(screen.queryByTestId('agent-run-list')).not.toBeInTheDocument();
     expect(screen.queryByText('report.csv')).toBeNull();
   });
 
-  it('hands off to Output when deliverables exist after a finished run', () => {
-    const onOpenOutput = vi.fn();
+  it('opens collapsible step detail drawer on beat select', async () => {
     render(
       <AgentRunSurface
         plan={PLAN}
         runSteps={[]}
         phase="finished"
-        artifacts={[{ id: 1, name: 'report.csv' }, { id: 2, name: 'chart.png' }]}
-        listContent={<div>Step list body</div>}
-        onOpenOutput={onOpenOutput}
       />,
     );
-    expect(screen.getByTestId('agent-run-output-handoff')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Open Output' }));
-    expect(onOpenOutput).toHaveBeenCalledTimes(1);
-  });
-
-  it('shows post-done Rerun and Edit on Plan CTAs when settled', () => {
-    const onRerun = vi.fn();
-    const onOpenPlan = vi.fn();
-    render(
-      <AgentRunSurface
-        plan={PLAN}
-        runSteps={[]}
-        phase="finished"
-        listContent={<div>Step list body</div>}
-        onRerun={onRerun}
-        onOpenPlan={onOpenPlan}
-        canRerun
-      />,
-    );
-    expect(screen.getByTestId('agent-run-post-done')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Rerun' }));
-    expect(onRerun).toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Edit on Plan' }));
-    expect(onOpenPlan).toHaveBeenCalled();
-  });
-
-  it('toggles step details without losing chronicle', () => {
-    render(
-      <AgentRunSurface
-        plan={PLAN}
-        runSteps={[]}
-        phase="finished"
-        listContent={<div>Step list body</div>}
-      />,
-    );
-
-    expect(screen.getByTestId('agent-run-chronicle')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('agent-run-toggle-details'));
-    expect(screen.getByTestId('agent-run-list')).toHaveTextContent('Step list body');
-    fireEvent.click(screen.getByTestId('agent-run-toggle-details'));
-    expect(screen.queryByTestId('agent-run-list')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('run-step-detail-drawer')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('run-timeline-open-0'));
+    expect(screen.getByTestId('run-step-detail-drawer')).toBeInTheDocument();
+    expect(screen.getByTestId('beat-detail-body')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('run-step-detail-close'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('run-step-detail-drawer')).not.toBeInTheDocument();
+    });
   });
 
   it('does not host Run health accordion', () => {
@@ -141,34 +106,44 @@ describe('AgentRunSurface', () => {
     expect(screen.queryByTestId('agent-run-health')).toBeNull();
   });
 
-  it('opens docked side pane from timeline beat click', async () => {
-    render(
-      <AgentRunSurface
-        plan={PLAN}
-        runSteps={[]}
-        phase="finished"
-      />,
-    );
-    expect(screen.getByTestId('run-structure-detail')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('run-timeline-open-0'));
-    expect(await screen.findByTestId('beat-detail-body')).toBeInTheDocument();
-    expect(screen.getByTestId('beat-detail-body')).toHaveTextContent('Search for duplicate records');
-    expect(screen.queryByRole('dialog')).toBeNull();
-  });
-
-  it('shows one Approve control on the consent timeline node only', () => {
+  it('shows summary Approve for a resolved consent step (no blank form)', () => {
     const onConfirm = vi.fn();
     const onDecline = vi.fn();
     const consentPlan = {
       id: 'plan-consent',
       status: 'paused',
-      brief: 'Hire someone',
+      brief: 'تقديم طلب إجازة مرضية ليوم واحد غدًا',
       steps: [
         {
           step_id: 0,
-          intent: 'Create employee',
+          intent: 'Submit leave',
           tool_name: 'call_host_api',
-          tool_args: { api_name: 'create_employee', body: {} },
+          // Slots + governed options come from the host catalog; the body was
+          // already resolved server-side (governed code, grounded dates).
+          consent_slots: [
+            {
+              field: 'leave_type',
+              label: 'Leave Type',
+              type: 'governed',
+              required: true,
+              options: [
+                { code: 'annual', label: 'Annual Leave' },
+                { code: 'sick', label: 'Sick Leave' },
+              ],
+            },
+            { field: 'start_date', label: 'Start Date', type: 'date', required: true },
+            { field: 'end_date', label: 'End Date', type: 'date', required: true },
+            { field: 'days', label: 'Days', type: 'days', required: true },
+          ],
+          tool_args: {
+            api_name: 'submit_my_leave',
+            body: {
+              leave_type: 'sick',
+              start_date: '2026-09-22',
+              end_date: '2026-09-22',
+              days: 1,
+            },
+          },
           status: 'awaiting_approval',
           depends_on: [],
         },
@@ -189,11 +164,21 @@ describe('AgentRunSurface', () => {
         )}
       />,
     );
-    expect(screen.getByTestId('timeline-consent-0')).toBeInTheDocument();
+    expect(screen.getByTestId('run-step-detail-drawer')).toBeInTheDocument();
+    expect(screen.getByTestId('timeline-consent-0')).toHaveAttribute('data-consent-mode', 'summary');
+    expect(screen.getByTestId('timeline-consent-summary-0')).toHaveTextContent(/Sick Leave/i);
+    expect(screen.queryByTestId('timeline-consent-form-0')).toBeNull();
     expect(screen.getAllByRole('button', { name: /^Approve$/i })).toHaveLength(1);
-    expect(screen.getByTestId('consent-hero-card')).toHaveAttribute('data-consent-mode', 'status-strip');
-    // No operator JSON dump of api_name in the dock / timeline
-    expect(screen.queryByText(/"api_name"/)).not.toBeInTheDocument();
-    expect(screen.getByTestId('timeline-consent-form-0')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('timeline-approve-0'));
+    expect(onConfirm).toHaveBeenCalledWith(0, {
+      body: {
+        leave_type: 'sick',
+        start_date: '2026-09-22',
+        end_date: '2026-09-22',
+        days: 1,
+      },
+    });
+    const row = screen.getByTestId('run-chronicle-row-0');
+    expect(row.querySelector('[data-testid="timeline-consent-0"]')).toBeNull();
   });
 });

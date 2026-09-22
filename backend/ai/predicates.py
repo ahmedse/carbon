@@ -111,6 +111,26 @@ def leave_request_recorded_and_entitlement_decremented(record: Any) -> bool:
     return False
 
 
+def attendance_permission_approved_and_recorded(record: Any) -> bool:
+    """True iff attendance permission is approved and recorded.
+
+    The Nibras ``attendance.permission.lifecycle`` postcondition: the
+    short-hours permission exists with ``approved=True``. Reads an
+    already-loaded record-like object (mapping or plain object) with no
+    DB access (RULE_21). Fail-closed: missing/incoercible signals return
+    ``False``.
+    """
+    approved = _field(record, "approved")
+    if approved is not None:
+        return bool(approved)
+
+    status = _field(record, "status")
+    if status is not None and str(status).lower() in ("approved", "recorded"):
+        return True
+
+    return False
+
+
 def loan_request_activated_and_scheduled(record: Any) -> bool:
     """True iff loan is active and installment schedule is verifiable.
 

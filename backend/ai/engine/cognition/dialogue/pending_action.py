@@ -18,6 +18,9 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+from ai.engine.cognition.dialogue.affirmation import is_affirmation
+from ai.engine.cognition.dialogue.affirmation import normalize as normalize_affirmation
+
 
 @dataclass
 class PendingAction:
@@ -33,15 +36,12 @@ class PendingAction:
 # ── Confirmation signals ─────────────────────────────────────────────────────
 # Short affirmative messages only. A long message containing "yes" is NOT a
 # confirmation — it is a fresh query that must flow through the normal pipeline.
-_CONFIRMATION_SIGNALS: frozenset[str] = frozenset({
-    "yes", "yeah", "yep", "ok", "okay", "sure",
-    "do it", "go ahead", "please", "store it", "remember it",
-    "yes please",
-    # Arabic affirmatives (same set as deixis.is_confirm_reply)
-    "نعم", "ايوه", "أيوه", "صح", "تمام", "موافق",
+# The general vocabulary lives in ``dialogue.affirmation`` (shared with the
+# deixis gate and consent resume); these are the memory-card-specific extras.
+_MEMORY_CONFIRMATION_SIGNALS: frozenset[str] = frozenset({
+    "store it", "remember it", "save it", "keep it",
+    "احفظها", "تذكرها", "سجلها",
 })
-
-_MAX_CONFIRMATION_WORDS = 4
 
 # ── Proposal detection (regex only, no LLM, no domain terms) ──────────────────
 _PROPOSAL_PATTERN = re.compile(
@@ -108,15 +108,14 @@ class PendingActionStore:
         if not user_message:
             return None
 
-        normalized = user_message.strip().lower()
-        normalized = _TRAILING_PUNCT.sub("", normalized).strip()
+        normalized = normalize_affirmation(user_message)
         if not normalized:
             return None
 
-        if len(normalized.split()) > _MAX_CONFIRMATION_WORDS:
-            return None
-
-        if normalized not in _CONFIRMATION_SIGNALS:
+        if not (
+            is_affirmation(user_message)
+            or normalized in _MEMORY_CONFIRMATION_SIGNALS
+        ):
             return None
 
         with self._lock:

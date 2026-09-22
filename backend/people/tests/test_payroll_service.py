@@ -188,6 +188,11 @@ class PayrollRunServiceTests(TestCase):
 
         self.seam = StubValidationSeam()
         self.service = PayrollRunService(validation_seam=self.seam)
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        self.prep = User.objects.create_user("payroll_prep", password="x")
+        self.appr = User.objects.create_user("payroll_appr", password="x")
 
     def _run(self, org=None):
         return PayrollRun.objects.create(
@@ -195,6 +200,15 @@ class PayrollRunServiceTests(TestCase):
             period_start=date(2026, 8, 1),
             period_end=date(2026, 8, 31),
         )
+
+    def _compute(self, run):
+        return self.service.compute(run, user=self.prep)
+
+    def _validate(self, run):
+        return self.service.validate(run, user=self.prep)
+
+    def _commit(self, run):
+        return self.service.commit(run, user=self.appr)
 
     def test_happy_path_draft_compute_validate_commit(self):
         run = self._run()
@@ -205,7 +219,7 @@ class PayrollRunServiceTests(TestCase):
             term_months=12, start_date=date(2026, 8, 1),
         )
 
-        result = self.service.compute(run)
+        result = self._compute(run)
         self.assertEqual(result["status"], "computed")
         self.assertEqual(result["employees"], 2)
         run.refresh_from_db()
@@ -235,11 +249,11 @@ class PayrollRunServiceTests(TestCase):
             {"gross", "gosi", "net"},
         )
 
-        self.service.validate(run)
+        self._validate(run)
         run.refresh_from_db()
         self.assertEqual(run.status, "validated")
 
-        commit_result = self.service.commit(run)
+        commit_result = self._commit(run)
         self.assertFalse(commit_result["has_errors"])
         run.refresh_from_db()
         self.assertEqual(run.status, "committed")
@@ -247,7 +261,7 @@ class PayrollRunServiceTests(TestCase):
 
     def test_org_scoping_excludes_other_unit(self):
         run = self._run(self.hq)
-        self.service.compute(run)
+        self._compute(run)
 
         self.assertTrue(PayslipLine.objects.filter(employee=self.in_scope).exists())
         self.assertTrue(PayslipLine.objects.filter(employee=self.sub_scope).exists())
@@ -256,7 +270,7 @@ class PayrollRunServiceTests(TestCase):
     def test_org_scoping_parent_not_in_child_scope(self):
         # A run scoped to a child unit must never include the parent unit's employee.
         sub_run = self._run(self.sub)
-        self.service.compute(sub_run)
+        self._compute(sub_run)
 
         self.assertTrue(
             PayslipLine.objects.filter(employee=self.sub_scope, payroll_run=sub_run).exists()
@@ -267,8 +281,8 @@ class PayrollRunServiceTests(TestCase):
 
     def test_commit_blocked_on_validation_error(self):
         run = self._run()
-        self.service.compute(run)
-        self.service.validate(run)
+        self._compute(run)
+        self._validate(run)
         self.assertEqual(run.status, "validated")
 
         self.seam.findings = [
@@ -277,7 +291,7 @@ class PayrollRunServiceTests(TestCase):
                 checked=1, failed=1, sample_failures=["E-1"],
             )
         ]
-        result = self.service.commit(run)
+        result = self._commit(run)
         self.assertTrue(result["has_errors"])
         self.assertEqual(result["error_count"], 1)
         run.refresh_from_db()
@@ -286,9 +300,9 @@ class PayrollRunServiceTests(TestCase):
 
     def test_commit_requires_validated_status(self):
         run = self._run()
-        self.service.compute(run)  # → computed
+        self._compute(run)  # → computed
         with self.assertRaises(PayrollServiceError):
-            self.service.commit(run)  # skip: computed → commit is illegal
+            self._commit(run)  # skip: computed → commit is illegal
 
     def test_provenance_line_carries_data_row_id_and_hash(self):
         run = self._run()
@@ -303,7 +317,7 @@ class PayrollRunServiceTests(TestCase):
             status="present", source_row=data_row,
         )
 
-        self.service.compute(run)
+        self._compute(run)
 
         gross = PayslipLine.objects.get(employee=self.in_scope, line_type__code='gross')
         self.assertEqual(gross.inputs["data_row_id"], data_row.pk)
@@ -328,17 +342,18 @@ class PayrollRunServiceTests(TestCase):
             period_end=date(2026, 8, 31),
         )
         with self.assertRaises(PayrollServiceError) as ctx:
-            self.service.compute(run)
+            self._compute(run)
         self.assertIn("E-NO-LEDGER", str(ctx.exception))
         self.assertIn("verified", str(ctx.exception).lower())
         self.assertFalse(PayslipLine.objects.filter(payroll_run=run).exists())
 
     # --- WPS export (NIR-5H) ----------------------------------------------
 
-    def _commit(self, run):
-        self.service.compute(run)
-        self.service.validate(run)
-        self.service.commit(run)
+    def _committed_run(self, run=None):
+        run = run or self._run()
+        self._compute(run)
+        self._validate(run)
+        self._commit(run)
         run.refresh_from_db()
         return run
 
@@ -349,13 +364,13 @@ class PayrollRunServiceTests(TestCase):
 
     def test_wps_export_requires_authoritative_rule(self):
         _wps_rule(authoritative=False)
-        run = self._commit(self._run())
+        run = self._committed_run()
         with self.assertRaises(PayrollServiceError):
             self.service.wps_export(run)
 
     def test_wps_export_success(self):
         _wps_rule(authoritative=True)
-        run = self._commit(self._run())
+        run = self._committed_run()
         result = self.service.wps_export(run)
         records = result["records"]
 

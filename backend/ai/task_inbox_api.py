@@ -9,12 +9,13 @@ declared in ``ai.task_inbox_urls``:
     POST   /tasks/{id}/decline/     designated authority declines (no grant)
     GET    /stream/                 SSE stream of pending-task updates
 
-Permission model (CBAC): reads (list/retrieve/stream) require ``ai:operator``
-or ``ai:auditor`` via :func:`accounts.capabilities.has_any_capability`; the
-approve/decline actions are the *designated-authority* gate — the service
-enforces ``has_capability(user, task.required_authority)`` per task and the
-view maps the fail-closed refusals to HTTP (403/404/409).  Group/role names
-are never hardcoded here.
+Permission model (CBAC): reads (list/retrieve/stream) require ``ai:operator``,
+``ai:auditor``, **or** any Nibras HR review authority
+(:func:`ai.governance.review_authority.known_hr_review_authorities`) so
+managers/finance/people_lead can see tasks they may decide. Approve/decline
+remain the *designated-authority* gate —
+``has_capability(user, task.required_authority)`` per task (NPS-2). Group/role
+names are never hardcoded here.
 """
 
 from __future__ import annotations
@@ -38,6 +39,7 @@ from accounts.capabilities import (
     AI_OPERATOR,
     has_any_capability,
 )
+from ai.governance.review_authority import known_hr_review_authorities
 from ai.models.human_task import STATUS_PENDING, HumanTask
 from ai.task_inbox import (
     TaskExpired,
@@ -56,15 +58,19 @@ _STREAM_POLL_SECONDS = 2.0
 # ── Capability permission classes ──────────────────────────────────────────
 
 class InboxReadPermission(BasePermission):
-    """Read access: operator or auditor (superusers pass via the ``*`` cap)."""
+    """Read access: operator/auditor **or** an HR review authority (NPS-2)."""
 
-    message = "Reading the task inbox requires ai:operator or ai:auditor."
+    message = (
+        "Reading the task inbox requires ai:operator, ai:auditor, "
+        "or a process review authority (e.g. correspondence:act, people:manage)."
+    )
 
     def has_permission(self, request, view):
         user = getattr(request, "user", None)
         if user is None or not user.is_authenticated:
             return False
-        return has_any_capability(user, {AI_OPERATOR.key, AI_AUDITOR.key})
+        allowed = {AI_OPERATOR.key, AI_AUDITOR.key} | set(known_hr_review_authorities())
+        return has_any_capability(user, allowed)
 
 
 # ── Serializers ────────────────────────────────────────────────────────────
@@ -144,14 +150,27 @@ class TaskInboxViewSet(viewsets.GenericViewSet):
     # ── reads ──────────────────────────────────────────────────────────
 
     def list(self, request):
-        qs = self._scoped_queryset(request).filter(
-            status=STATUS_PENDING, expires_at__gt=timezone.now()
-        )
-        qs = qs.order_by("created_at")
+        # Prefer service path so designated authorities only see tasks they
+        # may decide (operators/auditors still see the full scoped inbox).
+        qs = TaskInbox().list_pending(user=request.user)
         return Response(HumanTaskSerializer(qs, many=True).data)
 
     def retrieve(self, request, pk=None):
         task = self.get_object()
+        # Non-console readers may only retrieve tasks they are authorized to decide.
+        from accounts.capabilities import (
+            AI_AUDITOR,
+            AI_OPERATOR,
+            get_user_capabilities,
+            has_any_capability,
+            has_capability,
+        )
+
+        user = request.user
+        if not has_any_capability(user, {AI_OPERATOR.key, AI_AUDITOR.key}):
+            caps = get_user_capabilities(user)
+            if "*" not in caps and not has_capability(user, task.required_authority):
+                return self._not_found()
         return Response(HumanTaskSerializer(task).data)
 
     # ── decide actions (RULE_21: explicit human action) ────────────────

@@ -84,6 +84,7 @@ def _known() -> set[str]:
         "payroll.run.lifecycle",
         "employee.onboarding.lifecycle",
         "gosi_wps.sif.lifecycle",
+        "attendance.permission.lifecycle",
     ],
 )
 def test_pa100_matrix_process_still_validates(process_id):
@@ -251,6 +252,36 @@ def test_pa152_gosi_sod_and_validate_before_submit():
     assert "validate" in (review.get("depends_on") or [])
 
 
+# ── Attendance permission — PA-160…163 ─────────────────────────────────────
+
+
+def test_pa160_attendance_submit_staged():
+    submit = _step(_doc("attendance.permission.lifecycle"), "submit")
+    assert submit["autonomy"] == "act_confirm"
+    assert submit["consent"] is True
+    assert submit["capability"] == "attendance.permission.submit"
+
+
+def test_pa161_attendance_review_human_gate():
+    review = _step(_doc("attendance.permission.lifecycle"), "review")
+    assert review["kind"] == "human_task"
+    assert review["autonomy"] == "human_only"
+    assert review["separation_of_duties"] == ["requester", "approver"]
+
+
+def test_pa162_attendance_sod_deny():
+    refuse = _refuse(_doc("attendance.permission.lifecycle"))
+    assert any("requester equals approver" in r for r in refuse)
+
+
+def test_pa163_attendance_approve_gated_after_review():
+    doc = _doc("attendance.permission.lifecycle")
+    approve = _step(doc, "approve")
+    assert "review" in (approve.get("depends_on") or [])
+    assert approve["consent"] is True
+    assert any("not reviewed before approve" in r for r in _refuse(doc))
+
+
 # ── Cross-cutting: irreversible steps never auto (role-agnostic deny) ─────
 
 
@@ -262,6 +293,7 @@ def test_pa152_gosi_sod_and_validate_before_submit():
         ("payroll.run.lifecycle", "commit", "PA-130"),
         ("employee.onboarding.lifecycle", "activate", "PA-140"),
         ("gosi_wps.sif.lifecycle", "submit", "PA-150"),
+        ("attendance.permission.lifecycle", "review", "PA-161"),
     ],
 )
 def test_pa100_irreversible_steps_never_auto(process_id, step_id, pa_id):

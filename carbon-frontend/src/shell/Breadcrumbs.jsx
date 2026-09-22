@@ -28,6 +28,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import RuleIcon from '@mui/icons-material/Rule';
 import Diversity3Icon from '@mui/icons-material/Diversity3';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import BadgeIcon from '@mui/icons-material/Badge';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
@@ -491,6 +492,11 @@ const ROUTE_CONFIG = {
     icon: EventAvailableIcon,
     parent: '/my',
   },
+  '/my/attendance': {
+    label: 'My Attendance',
+    icon: AccessTimeIcon,
+    parent: '/my',
+  },
   '/my/requests': {
     label: 'My Requests',
     icon: AssignmentIcon,
@@ -502,11 +508,26 @@ const ROUTE_CONFIG = {
     parent: '/my/requests',
   },
 
-  // Team (manager approvals) — NSR-5C breadcrumb honesty
+  // Team (manager) — inbox, history, directory, who's out
   '/team': {
     label: 'Team',
     icon: GroupsIcon,
     parent: null,
+  },
+  '/team/history': {
+    label: 'History',
+    icon: AssignmentIcon,
+    parent: '/team',
+  },
+  '/team/directory': {
+    label: 'Team Directory',
+    icon: GroupsIcon,
+    parent: '/team',
+  },
+  '/team/leave': {
+    label: "Who's Out",
+    icon: EventAvailableIcon,
+    parent: '/team',
   },
   '/team/:id': {
     label: 'Request Detail',

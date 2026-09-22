@@ -8,8 +8,9 @@ describe('stripEngineJargon', () => {
     expect(stripEngineJargon('deny under RULE_21 consent')).toBe('deny under consent');
   });
 
-  it('humanizes snake_case tool ids', () => {
-    expect(stripEngineJargon('call_host_api for leave')).toMatch(/call host api/i);
+  it('humanizes snake_case tool ids toward outcome language', () => {
+    expect(stripEngineJargon('call_host_api for leave')).toMatch(/system check/i);
+    expect(stripEngineJargon('call_host_api for leave')).not.toMatch(/call_host_api/);
   });
 });
 
@@ -45,12 +46,12 @@ describe('ConsentHeroCard', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('can link to timeline via Open on timeline', () => {
+  it('links to the step details panel where approve/decline live', () => {
     const onReview = vi.fn();
     render(
       <ConsentHeroCard step={step} onReviewStep={onReview} />,
     );
-    fireEvent.click(screen.getByRole('button', { name: /Open on timeline/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Open step details/i }));
     expect(onReview).toHaveBeenCalled();
   });
 });
