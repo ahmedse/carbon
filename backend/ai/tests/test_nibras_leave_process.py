@@ -105,19 +105,15 @@ def test_review_step_is_human_only_with_separation_of_duties():
     assert review["capability"] == "leave.request.review"
 
 
-def test_record_step_requires_consent_and_confirmation():
+def test_record_step_is_host_effect_not_agent_mutation():
+    """ADR-0045: record is Correspondence approve → signal, not Agent act_confirm."""
     doc = _document()
     record = next(s for s in doc["steps"] if s["id"] == "record")
 
     assert record["kind"] == "command"
-    assert record["autonomy"] == "act_confirm"
-    assert record["consent"] is True
+    assert record["autonomy"] == "observe"
+    assert record["consent"] is False
     assert record["capability"] == "leave.request.record"
-
-    caps_by_id = {cap.capability_id: cap for cap in load_capabilities(_pack())}
-    record_cap = caps_by_id["leave.request.record"]
-    assert record_cap.kind == "mutation"
-    assert record_cap.requires_confirmation is True
 
 
 # -- (d) seed command is idempotent -----------------------------------------

@@ -87,13 +87,17 @@ def _as_decimal(value: Any) -> Decimal | None:
 
 
 def leave_request_recorded_and_entitlement_decremented(record: Any) -> bool:
-    """True iff leave is approved and entitlement decrement is verifiable.
+    """True iff leave is approved and entitlement consumption is verifiable.
 
-    The Nibras ``leave.request.lifecycle`` postcondition: the request is
-    approved/recorded and the entitlement ledger moved down for that request.
-    Reads an already-loaded record-like object (mapping or plain object) with
-    no DB access (RULE_21). Fail-closed: if status/decrement signals are
-    missing or incoercible, return ``False``.
+    Host Plane A (ADR-0045): manager Correspondence approve flips
+    ``LeaveRecord.status`` to ``approved`` and refreshes
+    ``LeaveEntitlement.used_days`` from approved records (same basis as
+    ``compute_balance``). There is no separate Agent ``record`` mutation.
+
+    Accepts an already-loaded record-like object (mapping or plain object)
+    with no DB access (RULE_21). Fail-closed when status is not approved.
+    Optional sim fields (``entitlement_decremented``, remaining delta) remain
+    valid when present.
     """
     status = _field(record, "status")
     if status is None or str(status).lower() != "approved":
@@ -108,7 +112,8 @@ def leave_request_recorded_and_entitlement_decremented(record: Any) -> bool:
     if remaining_before is not None and remaining_after is not None:
         return remaining_after < remaining_before
 
-    return False
+    # Approved leave is the entitlement consumption unit on host.
+    return True
 
 
 def attendance_permission_approved_and_recorded(record: Any) -> bool:

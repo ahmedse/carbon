@@ -53,6 +53,17 @@ _API_HANDOFF: dict[str, dict[str, str]] = {
         "topic_en": "attendance permission",
         "topic_ar": "استئذان حضور",
     },
+    "submit_my_profile_change": {
+        "my_route": "/my/requests",
+        "my_label_en": "Open My Requests",
+        "my_label_ar": "فتح طلباتي",
+        "process": "",
+        "agent_label_en": "Open in Agent",
+        "agent_label_ar": "فتح الوكيل",
+        "topic_en": "profile change",
+        "topic_ar": "تغيير البيانات",
+        "my_only": "1",
+    },
 }
 
 _LEAVE_INTENT = re.compile(
@@ -65,13 +76,20 @@ _ATTENDANCE_INTENT = re.compile(
     r"\b(?:attendance|permission|excuse)\b|استئذان|حضور",
     re.IGNORECASE,
 )
-#: Manager wants to act on Team inbox (approve leave/loan) — host /team, not Pulse.
+#: Manager wants to act on Team inbox (approve leave/loan/attendance) — host /team.
 _MANAGER_REVIEW_INTENT = re.compile(
-    r"(?:\b(?:approve|reject|review)\b.{0,40}\b(?:leave|loan|request|inbox)\b)"
-    r"|(?:\b(?:leave|loan|request)\b.{0,40}\b(?:approve|reject|review)\b)"
+    r"(?:\b(?:approve|reject|review)\b.{0,48}\b"
+    r"(?:leave|loan|request|inbox|attendance|permission)\b)"
+    r"|(?:\b(?:leave|loan|request|attendance|permission)\b.{0,48}\b"
+    r"(?:approve|reject|review)\b)"
     r"|(?:\bteam\s+inbox\b|\bapprovals?\s+inbox\b)"
-    r"|موافق على|اعتماد\s*(?:ال)?(?:إجاز|اجاز|طلب)|رفض\s*(?:ال)?(?:إجاز|اجاز)",
+    r"|موافق على|اعتماد\s*(?:ال)?(?:إجاز|اجاز|طلب|استئذان)|رفض\s*(?:ال)?(?:إجاز|اجاز|استئذان)",
     re.IGNORECASE | re.DOTALL,
+)
+_PROFILE_CHANGE_INTENT = re.compile(
+    r"\b(?:profile\s+change|update\s+(?:my\s+)?(?:phone|email|address|iban|bank))\b"
+    r"|تغيير\s*(?:ال)?(?:ملف|بيانات)|تحديث\s*(?:رقم|جوال|بريد|عنوان|آيبان|ايبان)",
+    re.IGNORECASE,
 )
 _ARABIC_SCRIPT = re.compile(r"[\u0600-\u06FF]")
 
@@ -188,6 +206,8 @@ def handoff_spec_for_intent(user_message: str) -> dict[str, str]:
             "topic_ar": "اعتماد الفريق",
             "manager_only": "1",
         }
+    if _PROFILE_CHANGE_INTENT.search(text):
+        return handoff_spec_for_api("submit_my_profile_change")
     if _LEAVE_INTENT.search(text):
         return handoff_spec_for_api("submit_my_leave")
     if _LOAN_INTENT.search(text):
@@ -210,17 +230,22 @@ def _label(spec: dict[str, str], key: str, locale: str) -> str:
 def build_handoff_actions(spec: dict[str, str], *, locale: str = "en") -> list[dict[str, Any]]:
     """Machine-readable CTAs — Agent first, then My (AIMessageBubble order).
 
-    Manager Team-review intents skip Agent (host SoD lives on /team).
+    Manager Team-review and My-only profile intents skip Agent.
     """
     route = (spec.get("my_route") or "").strip()
-    if spec.get("manager_only"):
+    if spec.get("manager_only") or spec.get("my_only"):
         if not route:
             return []
+        summary = (
+            "Approve or reject in Team"
+            if spec.get("manager_only")
+            else "Submit in the host ESS app"
+        )
         return [{
             "type": "navigate",
             "route": route,
             "label": _label(spec, "my_label", locale),
-            "summary": "Approve or reject in Team",
+            "summary": summary,
         }]
     actions: list[dict[str, Any]] = [
         {
@@ -263,6 +288,16 @@ def handoff_copy(
         return (
             "Approvals happen in the Team app — not in Chat or Agent.\n\n"
             f"Open {my_label} to review and Approve or Decline."
+        )
+    if spec.get("my_only"):
+        if locale == "ar":
+            return (
+                f"تغيير الملف الشخصي يُقدَّم من تطبيقاتي فقط (وليس عبر الوكيل).\n\n"
+                f"افتح «{my_label}» وقدّم طلب التغيير هناك."
+            )
+        return (
+            f"Profile changes are submitted in My — not via Agent.\n\n"
+            f"Open {my_label} and submit the change there."
         )
     if locale == "ar":
         lines = [

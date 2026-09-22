@@ -6,10 +6,13 @@ from datetime import date
 import pytest
 
 from ai.engine.cognition.plan.process_dial import (
+    PROCESS_ATTENDANCE,
     PROCESS_LEAVE,
     PROCESS_LOAN,
+    is_personal_attendance_brief,
     is_personal_leave_brief,
     is_personal_loan_brief,
+    materialize_attendance_permission_plan,
     materialize_leave_request_plan,
     materialize_loan_request_plan,
 )
@@ -21,6 +24,7 @@ from ai.engine.cognition.plan.process_dial import (
     ("leave compliance board pack for October", False),
     ("analyze salary distribution", False),
     ("أريد قرض طوارئ 5000 لمدة 12 شهر", False),  # loan, not leave
+    ("استئذان حضور ساعتين غدا شخصي", False),
     ("", False),
 ])
 def test_personal_leave_brief_detection(text, expect):
@@ -37,6 +41,18 @@ def test_personal_leave_brief_detection(text, expect):
 ])
 def test_personal_loan_brief_detection(text, expect):
     assert is_personal_loan_brief(text) is expect
+
+
+@pytest.mark.parametrize("text,expect", [
+    ("استئذان حضور ساعتين غدا شخصي", True),
+    ("I need an attendance permission for 2 hours tomorrow personal", True),
+    ("short hours permission tomorrow medical", True),
+    ("arbitrarily grant permission only", False),
+    ("أريد قرض", False),
+    ("", False),
+])
+def test_personal_attendance_brief_detection(text, expect):
+    assert is_personal_attendance_brief(text) is expect
 
 
 @pytest.mark.django_db
@@ -117,11 +133,43 @@ def test_loan_dial_plan_spine_and_slots():
     assert "finance" in (submit.tool_args.get("explanation") or "").lower()
 
 
+@pytest.mark.django_db
+def test_attendance_dial_plan_spine_and_slots():
+    from mdm.models import ReferenceSet, ReferenceValue
+
+    rs, _ = ReferenceSet.objects.get_or_create(
+        name="permission_type", defaults={"description": "Permission types"},
+    )
+    ReferenceValue.objects.get_or_create(
+        reference_set=rs, code="personal",
+        defaults={
+            "label": "Personal",
+            "metadata": {"aliases": ["شخصي", "personal"]},
+        },
+    )
+
+    plan = materialize_attendance_permission_plan(
+        "استئذان حضور ساعتين غدا شخصي",
+        today=date(2026, 9, 22),
+    )
+    assert plan.source == "process_dial"
+    assert plan.skill_name == PROCESS_ATTENDANCE
+    assert plan.steps[0].tool_args.get("api_name") == "list_my_attendance_permissions"
+    submit = plan.steps[1]
+    assert submit.tool_args.get("api_name") == "submit_my_attendance_permission"
+    body = submit.tool_args.get("body") or {}
+    assert body.get("permission_type") == "personal"
+    assert body.get("date") == "2026-09-23"
+    assert float(body.get("hours")) == 2.0
+
+
 def test_planner_imports_process_dial_helpers():
     """Decompose short-circuit depends on these exports."""
     from ai.engine.cognition.plan.process_dial import (
+        is_personal_attendance_brief,
         is_personal_leave_brief,
         is_personal_loan_brief,
+        materialize_attendance_permission_plan,
         materialize_leave_request_plan,
         materialize_loan_request_plan,
     )
@@ -129,5 +177,8 @@ def test_planner_imports_process_dial_helpers():
     assert callable(materialize_leave_request_plan)
     assert callable(is_personal_loan_brief)
     assert callable(materialize_loan_request_plan)
+    assert callable(is_personal_attendance_brief)
+    assert callable(materialize_attendance_permission_plan)
     assert is_personal_leave_brief("اريد اجازة غدا عادي") is True
     assert is_personal_loan_brief("أريد قرض طوارئ") is True
+    assert is_personal_attendance_brief("استئذان حضور ساعتين") is True

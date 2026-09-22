@@ -96,19 +96,15 @@ def test_review_step_is_human_only_with_separation_of_duties():
     assert review["capability"] == "attendance.permission.review"
 
 
-def test_approve_step_requires_consent_and_confirmation():
+def test_approve_step_is_host_effect_not_agent_mutation():
+    """ADR-0045: approve is Team corr → signal, not Agent act_confirm."""
     doc = _document()
     approve = next(s for s in doc["steps"] if s["id"] == "approve")
 
     assert approve["kind"] == "command"
-    assert approve["autonomy"] == "act_confirm"
-    assert approve["consent"] is True
+    assert approve["autonomy"] == "observe"
+    assert approve["consent"] is False
     assert approve["capability"] == "attendance.permission.approve"
-
-    caps_by_id = {cap.capability_id: cap for cap in load_capabilities(_pack())}
-    approve_cap = caps_by_id["attendance.permission.approve"]
-    assert approve_cap.kind == "mutation"
-    assert approve_cap.requires_confirmation is True
 
 
 @pytest.mark.django_db

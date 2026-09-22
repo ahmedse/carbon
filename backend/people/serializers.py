@@ -12,6 +12,7 @@
 
 from rest_framework import serializers
 
+from correspondence.models import Correspondence
 from mdm.models import ReferenceValue
 from mdm.serializers import GovernedValueField
 
@@ -374,6 +375,54 @@ class LoanSerializer(serializers.ModelSerializer):
         read_only_fields = ['id']
 
 
+class SelfLoanSerializer(LoanSerializer):
+    """ESS loan list — expose Correspondence status for in-flight drafts.
+
+    Loan subject stays ``draft`` until terminal approve→``active`` (same
+    pattern as LeaveRecord). UI must not show eternal ``draft`` while the
+    request is awaiting manager/finance in Team (ADR-0045 Plane A).
+    """
+
+    reference_no = serializers.SerializerMethodField()
+    correspondence_id = serializers.SerializerMethodField()
+    correspondence_status = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
+
+    class Meta(LoanSerializer.Meta):
+        fields = LoanSerializer.Meta.fields + [
+            'reference_no', 'correspondence_id', 'correspondence_status',
+        ]
+        read_only_fields = fields
+
+    def _correspondence(self, obj):
+        cache = getattr(self, '_corr_cache', None)
+        if cache is None:
+            cache = self._corr_cache = {}
+        if obj.pk not in cache:
+            cache[obj.pk] = Correspondence.objects.filter(
+                subject_type='people.Loan', subject_id=obj.pk,
+            ).first()
+        return cache[obj.pk]
+
+    def get_reference_no(self, obj):
+        corr = self._correspondence(obj)
+        return corr.reference_no if corr else None
+
+    def get_correspondence_id(self, obj):
+        corr = self._correspondence(obj)
+        return corr.id if corr else None
+
+    def get_correspondence_status(self, obj):
+        corr = self._correspondence(obj)
+        return corr.status if corr else obj.status
+
+    def get_status(self, obj):
+        corr_status = self.get_correspondence_status(obj)
+        if obj.status == 'draft' and corr_status and corr_status != 'draft':
+            return corr_status
+        return obj.status
+
+
 class LoanInstallmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = LoanInstallment
@@ -401,9 +450,9 @@ class AttendancePermissionSerializer(serializers.ModelSerializer):
         model = AttendancePermission
         fields = [
             'id', 'employee', 'date', 'permission_type', 'hours',
-            'approved', 'notes',
+            'status', 'approved', 'notes',
         ]
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'status']
 
 
 class CertificationSerializer(serializers.ModelSerializer):

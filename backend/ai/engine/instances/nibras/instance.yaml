@@ -586,6 +586,9 @@ api_catalog:
         type: date
         future: true
         required: true
+      - field: hours
+        type: hours
+        required: true
 
   - name: list_attendance_permissions
     method: GET

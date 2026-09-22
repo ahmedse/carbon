@@ -74,6 +74,15 @@ def test_loan_amount_and_months_from_wording():
     assert parse_months("no term") is None
 
 
+def test_hours_from_wording():
+    from ai.write_slots import parse_hours
+
+    assert parse_hours("ساعتين") == 2.0
+    assert parse_hours("for 3 hours") == 3.0
+    assert parse_hours("one hour") == 1.0
+    assert parse_hours("no hours") is None
+
+
 def test_date_field_detection():
     assert is_date_field("start_date")
     assert is_date_field("date")

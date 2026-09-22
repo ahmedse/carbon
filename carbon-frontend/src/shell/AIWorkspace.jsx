@@ -115,6 +115,8 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   const [tasksFocusPlanId, setTasksFocusPlanId] = useState(null);
   // Agent Done → Chat: prefill composer with plan outcome context.
   const [chatSeedDraft, setChatSeedDraft] = useState(null);
+  // ADR-0046 Chat→Agent: seed discovery with handoff draft / process hint.
+  const [agentSeedBrief, setAgentSeedBrief] = useState(null);
   // DW-P1-2 — persistent Chat↔Agent link after Discuss / Open in Tasks.
   const [linkedPlan, setLinkedPlan] = useState(null); // { id, brief } | null
 
@@ -572,10 +574,16 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   // a useCallback) so it can be defined alongside the other render helpers.
   // Tasks/Agent actions now enter Agent mode (ADR-0014): the workspace
   // switches mode and, for tasks, hands the plan id to AITaskPanel.
-  const handleOpenPanel = (panel, planId) => {
+  const handleOpenPanel = (panel, planId, opts = {}) => {
     if (panel === 'tasks' || panel === 'agent') {
       setActivePanel(null);
       setMode('agent');
+      // ADR-0046: Chat handoff carries process_hint + draft so Agent can start
+      // the governed dial — never stages host writes in Chat.
+      const brief = String(opts?.draft || opts?.processHint || '').trim();
+      if (brief) {
+        setAgentSeedBrief(brief);
+      }
       if (panel === 'tasks' && planId) {
         setTasksFocusPlanId(planId);
         setLinkedPlan((prev) => (prev?.id === planId ? prev : { id: planId, brief: prev?.brief || '' }));
@@ -631,6 +639,8 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
               conversationId={activeConversation?.id ?? null}
               focusPlanId={tasksFocusPlanId}
               onFocusPlanConsumed={() => setTasksFocusPlanId(null)}
+              seedBrief={agentSeedBrief}
+              onSeedBriefConsumed={() => setAgentSeedBrief(null)}
               onLifecycleStateChange={handleLifecycleStateChange}
               onSwitchToChat={(payload) => {
                 applyDiscussHandoff(payload);

@@ -2,7 +2,7 @@
 // My (employee self-service) — Request detail page (route /my/requests/:id).
 // Layout: Summary → Stepper|Graph toggle → Timeline.
 // Graph = WorkflowGraph → EnterpriseGraph (same Pulse agent canvas).
-// sent_back: Edit payload (leave SystemDialog) then Resubmit — separate actions.
+// sent_back: Edit payload (typed SystemDialog) then Resubmit — separate actions.
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Box, Button, Skeleton, Stack, ToggleButton, ToggleButtonGroup } from '@mui/material';
@@ -28,8 +28,28 @@ import ApproverChainStepper from './ApproverChainStepper';
 import WorkflowGraph from './WorkflowGraph';
 import RequestTimeline from './RequestTimeline';
 import RequestLeaveDialog from './RequestLeaveDialog';
+import RequestLoanDialog from './RequestLoanDialog';
+import RequestAttendanceDialog from './RequestAttendanceDialog';
+import RequestProfileChangeDialog from './RequestProfileChangeDialog';
+import RequestMemoDialog from './RequestMemoDialog';
 
 const CANCELLABLE = new Set(['draft', 'submitted', 'in_review', 'sent_back']);
+
+function resolveEditKind(data) {
+  if (!data) return null;
+  const code = data.corr_type_code || '';
+  const subject = data.subject_type || '';
+  if (code === 'leave_request' || subject === 'people.LeaveRecord') return 'leave';
+  if (code === 'loan_request' || subject === 'people.Loan') return 'loan';
+  if (code === 'attendance_permission' || subject === 'people.AttendancePermission') {
+    return 'attendance';
+  }
+  if (code === 'profile_change' || subject === 'people.Employee') return 'profile';
+  if (code === 'internal_memo' || code === 'circular' || code === 'decision') {
+    return 'memo';
+  }
+  return null;
+}
 
 export default function RequestDetail() {
   const { t } = useTranslation('my');
@@ -72,20 +92,28 @@ export default function RequestDetail() {
     load();
   }, [load]);
 
+  const editKind = resolveEditKind(data);
+  const canCancel = data && CANCELLABLE.has(data.status);
+  const canResubmit = data && data.status === 'sent_back';
+  const canEdit = Boolean(canResubmit && editKind);
+
   const openEdit = useCallback(async () => {
     setEditOpen(true);
+    if (editKind !== 'leave' && editKind !== 'attendance') return;
     try {
-      const [bal, prof] = await Promise.all([
-        fetchLeaveBalance(token),
-        fetchMyProfile(token),
-      ]);
-      setBalances(Array.isArray(bal) ? bal : []);
-      setProfile(prof || null);
+      const tasks = [fetchMyProfile(token)];
+      if (editKind === 'leave') tasks.unshift(fetchLeaveBalance(token));
+      const results = await Promise.all(tasks);
+      if (editKind === 'leave') {
+        setBalances(Array.isArray(results[0]) ? results[0] : []);
+        setProfile(results[1] || null);
+      } else {
+        setProfile(results[0] || null);
+      }
     } catch {
-      // Dialog still opens; leave-type select may be empty — save will surface API errors.
       setBalances([]);
     }
-  }, [token]);
+  }, [token, editKind]);
 
   const handleCancel = useCallback(async () => {
     if (!window.confirm(t('cancelRequestConfirm'))) return;
@@ -121,13 +149,6 @@ export default function RequestDetail() {
     await load();
   }, [notify, t, load]);
 
-  const canCancel = data && CANCELLABLE.has(data.status);
-  const canResubmit = data && data.status === 'sent_back';
-  const canEditLeave =
-    canResubmit &&
-    (data?.corr_type_code === 'leave_request' ||
-      data?.subject_type === 'people.LeaveRecord');
-
   return (
     <Box
       component="main"
@@ -139,7 +160,7 @@ export default function RequestDetail() {
           subtitle={t('detailSubtitle')}
           actions={
             <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-              {canEditLeave ? (
+              {canEdit ? (
                 <Button
                   size="small"
                   variant="outlined"
@@ -254,7 +275,7 @@ export default function RequestDetail() {
         ) : null}
       </PageContainer>
 
-      {canEditLeave ? (
+      {canEdit && editKind === 'leave' ? (
         <RequestLeaveDialog
           open={editOpen}
           onClose={() => setEditOpen(false)}
@@ -263,6 +284,47 @@ export default function RequestDetail() {
           mode="edit"
           correspondenceId={data?.id}
           initialPayload={data?.payload}
+          onSubmitted={handleEdited}
+        />
+      ) : null}
+      {canEdit && editKind === 'loan' ? (
+        <RequestLoanDialog
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          mode="edit"
+          correspondenceId={data?.id}
+          initialPayload={data?.payload}
+          onSubmitted={handleEdited}
+        />
+      ) : null}
+      {canEdit && editKind === 'attendance' ? (
+        <RequestAttendanceDialog
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          profile={profile}
+          mode="edit"
+          correspondenceId={data?.id}
+          initialPayload={data?.payload}
+          onSubmitted={handleEdited}
+        />
+      ) : null}
+      {canEdit && editKind === 'profile' ? (
+        <RequestProfileChangeDialog
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          correspondenceId={data?.id}
+          initialPayload={data?.payload}
+          onSubmitted={handleEdited}
+        />
+      ) : null}
+      {canEdit && editKind === 'memo' ? (
+        <RequestMemoDialog
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          correspondenceId={data?.id}
+          initialTitle={data?.title}
+          initialPayload={data?.payload}
+          corrTypeCode={data?.corr_type_code}
           onSubmitted={handleEdited}
         />
       ) : null}

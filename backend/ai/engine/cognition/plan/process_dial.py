@@ -23,14 +23,18 @@ from typing import Any
 logger = logging.getLogger("pulse.cognition.plan.process_dial")
 
 PROCESS_LEAVE = "leave.request.lifecycle"
-PROCESS_LEAVE_VERSION = "1.0"
+PROCESS_LEAVE_VERSION = "1.1"
 PROCESS_LOAN = "loan.request.lifecycle"
-PROCESS_LOAN_VERSION = "1.0"
+PROCESS_LOAN_VERSION = "1.1"
+PROCESS_ATTENDANCE = "attendance.permission.lifecycle"
+PROCESS_ATTENDANCE_VERSION = "1.1"
 
+# Dates: no ``future: true`` — host ESS owns backdate window
+# (``leave_guards.MAX_BACKDATED_LEAVE_DAYS``). Agent must not invent dates.
 _LEAVE_SLOTS: list[dict[str, Any]] = [
     {"field": "leave_type", "governed": True, "required": True},
-    {"field": "start_date", "type": "date", "future": True, "required": True},
-    {"field": "end_date", "type": "date", "future": True, "required": True},
+    {"field": "start_date", "type": "date", "required": True},
+    {"field": "end_date", "type": "date", "required": True},
     {"field": "days", "type": "days", "required": True},
 ]
 
@@ -42,8 +46,19 @@ _LOAN_SLOTS: list[dict[str, Any]] = [
     {"field": "start_date", "type": "date", "future": True, "required": True},
 ]
 
+_ATTENDANCE_SLOTS: list[dict[str, Any]] = [
+    {"field": "permission_type", "governed": True, "required": True},
+    {"field": "date", "type": "date", "future": True, "required": True},
+    {"field": "hours", "type": "hours", "required": True},
+]
+
 _LOAN_BRIEF = re.compile(
     r"\bloan\b|قرض|قروضي|أريد\s*قرض|اريد\s*قرض|تقديم\s*قرض",
+    re.IGNORECASE,
+)
+_ATTENDANCE_BRIEF = re.compile(
+    r"\b(?:attendance\s+permission|short\s+hours|early\s+leave|permission)\b"
+    r"|استئذان|إذن\s*حضور|اذن\s*حضور|ساعات\s*قصيرة",
     re.IGNORECASE,
 )
 
@@ -59,8 +74,8 @@ def is_personal_leave_brief(utterance: str) -> bool:
     text = (utterance or "").strip()
     if not text:
         return False
-    # Loan wins over leave when both words appear.
-    if is_personal_loan_brief(text):
+    # More specific ESS dials win.
+    if is_personal_loan_brief(text) or is_personal_attendance_brief(text):
         return False
     if _LEAVE_COMPLIANCE.search(text):
         return False
@@ -88,6 +103,26 @@ def is_personal_loan_brief(utterance: str) -> bool:
         r"|قروض\s*الموظفين",
         text,
         re.IGNORECASE,
+    ):
+        return False
+    return True
+
+
+def is_personal_attendance_brief(utterance: str) -> bool:
+    """True when Agent should materialize attendance permission dial."""
+    text = (utterance or "").strip()
+    if not text:
+        return False
+    if is_personal_loan_brief(text):
+        return False
+    if not _ATTENDANCE_BRIEF.search(text):
+        return False
+    # Bare "permission" without attendance/استئذان context is too weak.
+    if re.search(r"\bpermission\b", text, re.I) and not re.search(
+        r"\b(?:attendance|hours|early|short|medical|official|emergency)\b"
+        r"|استئذان|حضور|ساعة",
+        text,
+        re.I,
     ):
         return False
     return True
@@ -325,6 +360,118 @@ def materialize_loan_request_plan(
     return plan
 
 
+def materialize_attendance_permission_plan(
+    utterance: str,
+    *,
+    today: date | None = None,
+):
+    """Build a reviewable Plan from ``attendance.permission.lifecycle``."""
+    from ai.engine.cognition.plan.planner import Plan, PlanPhase, PlanStep
+    from ai.write_slots import fill_write_body
+
+    brief = (utterance or "").strip()
+    body = fill_write_body(
+        {},
+        slots=_ATTENDANCE_SLOTS,
+        text=brief,
+        today=today or date.today(),
+    )
+
+    process_meta = {
+        "process_id": PROCESS_ATTENDANCE,
+        "process_version": PROCESS_ATTENDANCE_VERSION,
+        "process_step": "submit",
+        "capability": "attendance.permission.submit",
+    }
+
+    list_step = PlanStep(
+        step_id=0,
+        intent="Check existing attendance permissions",
+        tool_name="call_host_api",
+        tool_args={
+            "api_name": "list_my_attendance_permissions",
+            "explanation": "Read current permissions before staging a new one.",
+            "_process": {
+                **process_meta,
+                "process_step": "prepare",
+                "capability": "attendance.permission.submit",
+                "role": "observe",
+            },
+        },
+        depends_on=[],
+        is_mutation=False,
+        agent_role="orchestrator",
+    )
+
+    submit_args: dict[str, Any] = {
+        "api_name": "submit_my_attendance_permission",
+        "body": body,
+        "explanation": (
+            "Submit personal attendance permission via "
+            "attendance.permission.lifecycle (submit). "
+            "Manager review continues in Team after you Approve here."
+        ),
+        "_process": process_meta,
+    }
+    submit_step = PlanStep(
+        step_id=1,
+        intent=_attendance_submit_intent(brief, body),
+        tool_name="call_host_api",
+        tool_args=submit_args,
+        depends_on=[0],
+        is_mutation=True,
+        agent_role="orchestrator",
+    )
+
+    required = ("permission_type", "date", "hours")
+    grounded = [k for k in required if body.get(k) not in (None, "")]
+    missing = [k for k in required if k not in grounded]
+
+    synthesis = (
+        "Attendance permission follows process dial "
+        "attendance.permission.lifecycle: Pulse lists existing permissions "
+        "then stages submit (consent). After you Approve, your manager "
+        "reviews in Team (/team). Track status in My Attendance."
+    )
+    if missing:
+        synthesis += (
+            f" Ungrounded slots for consent: {', '.join(missing)} "
+            "(operator fills on Approve; do not invent codes)."
+        )
+
+    plan = Plan(
+        pattern="attendance_permission",
+        steps=[list_step, submit_step],
+        synthesis_instruction=synthesis,
+        source="process_dial",
+        skill_name=PROCESS_ATTENDANCE,
+        needs_confirmation=True,
+        phases=[
+            PlanPhase(
+                phase_id=0,
+                name="Prepare",
+                goal="List existing permissions",
+                strategy="sequential",
+                step_ids=[0],
+            ),
+            PlanPhase(
+                phase_id=1,
+                name="Submit",
+                goal="Stage attendance.permission.submit for consent",
+                strategy="sequential",
+                step_ids=[1],
+            ),
+        ],
+    )
+    logger.info(
+        "process_dial attendance plan: grounded=%s missing=%s body_keys=%s",
+        grounded,
+        missing,
+        sorted(body.keys()),
+    )
+    return plan
+
+
 def _leave_submit_intent(brief: str, body: dict[str, Any]) -> str:
     """Human intent line — product language, no engine jargon."""
     parts = ["Submit leave request"]
@@ -360,6 +507,23 @@ def _loan_submit_intent(brief: str, body: dict[str, Any]) -> str:
     start = body.get("start_date")
     if start:
         parts.append(f"from {start}")
+    if len(parts) == 1 and brief:
+        snippet = re.sub(r"\s+", " ", brief).strip()[:80]
+        parts.append(f"— {snippet}")
+    return " ".join(parts)
+
+
+def _attendance_submit_intent(brief: str, body: dict[str, Any]) -> str:
+    parts = ["Submit attendance permission"]
+    pt = body.get("permission_type")
+    if pt:
+        parts.append(f"({pt})")
+    day = body.get("date")
+    if day:
+        parts.append(f"on {day}")
+    hours = body.get("hours")
+    if hours not in (None, ""):
+        parts.append(f"· {hours}h")
     if len(parts) == 1 and brief:
         snippet = re.sub(r"\s+", " ", brief).strip()[:80]
         parts.append(f"— {snippet}")

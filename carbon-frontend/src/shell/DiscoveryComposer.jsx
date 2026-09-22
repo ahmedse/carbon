@@ -7,7 +7,7 @@
 // completes, a reviewable plan is produced (RULE_21 — nothing executes until
 // approved and run). Theme tokens only (RULE_8); outcome copy only (RULE_23).
 // Track B — scope_route gates: refuse / recommend / handoff before Plan now.
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   Box,
@@ -118,6 +118,8 @@ function DiscoveryComposer({
   onSwitchToChat,
   resumePlanId = null,
   resumeTurns = null,
+  seedBrief = null,
+  onSeedBriefConsumed,
 }) {
   const { token } = useAuth();
   const { notifyFromError } = useNotification();
@@ -128,6 +130,7 @@ function DiscoveryComposer({
   const [readyPlan, setReadyPlan] = useState(null);
   const [route, setRoute] = useState(null);
   const [lastBrief, setLastBrief] = useState('');
+  const seedConsumedRef = useRef(null);
 
   useEffect(() => {
     if (!resumePlanId) return;
@@ -172,6 +175,13 @@ function DiscoveryComposer({
     if (applyRoutePayload(started, text)) {
       return;
     }
+    // ESS process dials (loan / attendance) skip clarifying and land a plan.
+    if (started?.status === 'plan_ready' && started.plan) {
+      setLastBrief(text);
+      handlePlanReady(started.plan);
+      onPlanReady?.(started.plan);
+      return;
+    }
     setPlanId(started.id);
     setTurns(
       Array.isArray(started.turns)
@@ -181,6 +191,30 @@ function DiscoveryComposer({
     setLastBrief(text);
     onStarted?.({ ...started, brief: text });
   };
+
+  // ADR-0046 Chat→Agent handoff: start discovery with the Chat draft so the
+  // process dial materializes without retyping (never stages in Chat).
+  useEffect(() => {
+    const text = typeof seedBrief === 'string' ? seedBrief.trim() : '';
+    if (!text || seedConsumedRef.current === text || planId || busy) return;
+    seedConsumedRef.current = text;
+    onSeedBriefConsumed?.();
+    let cancelled = false;
+    setBusy(true);
+    (async () => {
+      try {
+        await startWithBrief(text);
+      } catch (err) {
+        if (!cancelled) {
+          notifyFromError(err, 'Could not start planning from Chat handoff');
+        }
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seedBrief is the intentional trigger
+  }, [seedBrief]);
 
   const handleSubmit = async (value) => {
     const text = (value || '').trim();
@@ -381,6 +415,8 @@ DiscoveryComposer.propTypes = {
     question: PropTypes.string,
     reply: PropTypes.string,
   })),
+  seedBrief: PropTypes.string,
+  onSeedBriefConsumed: PropTypes.func,
 };
 
 export default DiscoveryComposer;

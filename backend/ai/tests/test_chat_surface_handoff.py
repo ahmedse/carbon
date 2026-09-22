@@ -210,6 +210,25 @@ def test_manager_review_intent_hands_off_to_team():
     assert "Agent" in copy  # says not in Agent
     assert "Open" in copy or "inbox" in copy.lower()
 
+    att = handoff_spec_for_intent("approve attendance permission")
+    assert att["my_route"] == "/team"
+
+
+def test_profile_change_intent_is_my_only():
+    from ai.engine.agent.chat_surface import (
+        build_handoff_actions,
+        handoff_copy,
+        handoff_spec_for_intent,
+    )
+
+    spec = handoff_spec_for_intent("I need to update my phone number")
+    assert spec["my_route"] == "/my/requests"
+    assert spec.get("my_only")
+    acts = build_handoff_actions(spec)
+    assert len(acts) == 1
+    assert acts[0]["route"] == "/my/requests"
+    assert "Agent" not in handoff_copy(spec) or "not via Agent" in handoff_copy(spec)
+
 
 def test_chat_narration_never_says_submitting():
     msg = _narrate_tool(

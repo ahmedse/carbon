@@ -105,19 +105,15 @@ def test_review_step_is_human_only_with_separation_of_duties():
     assert review["capability"] == "loan.request.review"
 
 
-def test_activate_step_requires_consent_and_confirmation():
+def test_activate_step_is_host_effect_not_agent_mutation():
+    """ADR-0045: activate is final corr approve → signal, not Agent act_confirm."""
     doc = _document()
     activate = next(s for s in doc["steps"] if s["id"] == "activate")
 
     assert activate["kind"] == "command"
-    assert activate["autonomy"] == "act_confirm"
-    assert activate["consent"] is True
+    assert activate["autonomy"] == "observe"
+    assert activate["consent"] is False
     assert activate["capability"] == "loan.request.activate"
-
-    caps_by_id = {cap.capability_id: cap for cap in load_capabilities(_pack())}
-    activate_cap = caps_by_id["loan.request.activate"]
-    assert activate_cap.kind == "mutation"
-    assert activate_cap.requires_confirmation is True
 
 
 # -- (d) seed command is idempotent -----------------------------------------

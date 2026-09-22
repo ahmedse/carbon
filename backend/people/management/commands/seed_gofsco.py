@@ -120,6 +120,8 @@ class Command(BaseCommand):
         ])
         from people.leave_type_resolve import ensure_leave_type_aliases
         ensure_leave_type_aliases()
+        from people.loan_type_resolve import ensure_loan_type_aliases
+        ensure_loan_type_aliases()
 
         # ── Compensation components (the governed catalog) ─────────────────
         # These replace PayslipLine.line_type free text. Policy flags feed the

@@ -999,7 +999,13 @@ export function finalizeDiscovery(token, planId) {
  * @returns {Promise<object>} Plan payload
  */
 export function getPlan(token, planId) {
-  return apiFetch(`${PLANS_BASE}${planId}/`, { token });
+  // Live run polling + 429 backoff must not trip the default 15s abort
+  // (that surfaces as "The request timed out" while the plan is fine).
+  return apiFetch(`${PLANS_BASE}${planId}/`, {
+    token,
+    timeoutMs: 60000,
+    rateLimitRetries: 4,
+  });
 }
 
 /**

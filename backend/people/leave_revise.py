@@ -3,6 +3,10 @@
 Layering: domain owns LeaveRecord field rules (balance, overlap, dates). The
 correspondence edit view calls ``apply_leave_payload_edit`` — fsm never imports
 people.
+
+If the linked LeaveRecord was deleted while the correspondence stayed open
+(orphan ``subject_id``), recreate a draft subject from the edited payload and
+re-point ``corr.subject_id`` so Edit/Resubmit can complete.
 """
 
 from __future__ import annotations
@@ -10,6 +14,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.utils import timezone
 
@@ -96,63 +101,111 @@ def _parse_leave_fields(payload: dict):
     return leave_type_value, start_date, end_date, days, note
 
 
+def _requester_profile(corr):
+    try:
+        return corr.requester.employee_profile
+    except ObjectDoesNotExist:
+        return None
+    except AttributeError:
+        return None
+
+
+def _ensure_draft_leave_record(corr, leave_type_value, start_date, end_date, days):
+    """Return the draft LeaveRecord for ``corr``, recreating if the link is orphaned."""
+    record = None
+    if corr.subject_id:
+        record = LeaveRecord.objects.select_related('employee', 'leave_type').filter(
+            pk=corr.subject_id,
+        ).first()
+
+    if record is not None:
+        if record.status != 'draft':
+            # send_back keeps the subject draft; repair drift so edit can proceed.
+            if corr.status == 'sent_back':
+                record.status = 'draft'
+                record.save(update_fields=['status'])
+            else:
+                raise LeaveReviseError(
+                    f'Cannot revise leave in status {record.status!r}',
+                    error_kind='invalid_status',
+                    status_code=409,
+                )
+        return record
+
+    profile = _requester_profile(corr)
+    if profile is None:
+        raise LeaveReviseError(
+            'Requester has no employee profile to attach leave',
+            error_kind='no_profile',
+            status_code=409,
+        )
+
+    record = LeaveRecord.objects.create(
+        employee=profile,
+        leave_type=leave_type_value,
+        start_date=start_date,
+        end_date=end_date,
+        days=days,
+        status='draft',
+    )
+    corr.subject_type = SUBJECT_TYPE
+    corr.subject_id = record.pk
+    corr.save(update_fields=['subject_type', 'subject_id', 'updated_at'])
+    return record
+
+
 def apply_leave_payload_edit(corr, payload: dict) -> tuple[dict, str]:
     """Validate payload, update linked LeaveRecord, return (normalized_payload, title).
 
     Raises ``LeaveReviseError`` on domain failure.
     """
-    if corr.subject_type != SUBJECT_TYPE or not corr.subject_id:
+    if corr.subject_type and corr.subject_type != SUBJECT_TYPE:
         raise LeaveReviseError(
-            'Correspondence has no leave subject to revise',
-            error_kind='no_subject',
-            status_code=409,
-        )
-
-    record = LeaveRecord.objects.select_related('employee', 'leave_type').filter(
-        pk=corr.subject_id,
-    ).first()
-    if record is None:
-        raise LeaveReviseError(
-            'Linked leave record not found',
-            error_kind='no_subject',
-            status_code=409,
-        )
-    if record.status != 'draft':
-        raise LeaveReviseError(
-            f'Cannot revise leave in status {record.status!r}',
-            error_kind='invalid_status',
+            'Correspondence subject is not a leave record',
+            error_kind='wrong_subject',
             status_code=409,
         )
 
     leave_type_value, start_date, end_date, days, note = _parse_leave_fields(payload)
     leave_type = leave_type_value.code
-    profile = record.employee
 
-    year = timezone.now().year
-    _, _, _, _, remaining = compute_balance(profile, leave_type, year)
-    if days > remaining:
-        raise LeaveReviseError(
-            (
-                f'Insufficient {leave_type} leave balance '
-                f'(requested {leave_days_json(days)}, '
-                f'remaining {leave_days_json(remaining)}).'
-            ),
-            error_kind='insufficient_balance',
-            remaining=leave_days_json(remaining),
+    with transaction.atomic():
+        record = _ensure_draft_leave_record(
+            corr, leave_type_value, start_date, end_date, days,
         )
+        profile = record.employee
 
-    for other in LeaveRecord.objects.filter(employee=profile).exclude(pk=record.pk):
-        if not record_blocks_overlap(other):
-            continue
-        if other.start_date <= end_date and other.end_date >= start_date:
+        year = start_date.year
+        _, _, _, _, remaining = compute_balance(profile, leave_type, year)
+        if days > remaining:
             raise LeaveReviseError(
                 (
-                    f'Those dates overlap an existing {other.leave_type.code} '
-                    f'leave ({other.start_date}→{other.end_date}, '
-                    f'status={other.status}).'
+                    f'Insufficient {leave_type} leave balance '
+                    f'(requested {leave_days_json(days)}, '
+                    f'remaining {leave_days_json(remaining)}).'
                 ),
-                error_kind='overlap',
+                error_kind='insufficient_balance',
+                remaining=leave_days_json(remaining),
             )
+
+        for other in LeaveRecord.objects.filter(employee=profile).exclude(pk=record.pk):
+            if not record_blocks_overlap(other):
+                continue
+            if other.start_date <= end_date and other.end_date >= start_date:
+                raise LeaveReviseError(
+                    (
+                        f'Those dates overlap an existing {other.leave_type.code} '
+                        f'leave ({other.start_date}→{other.end_date}, '
+                        f'status={other.status}).'
+                    ),
+                    error_kind='overlap',
+                )
+
+        record.leave_type = leave_type_value
+        record.start_date = start_date
+        record.end_date = end_date
+        record.days = days
+        record.save(update_fields=['leave_type', 'start_date', 'end_date', 'days'])
 
     normalized = {
         'leave_type': leave_type,
@@ -162,12 +215,4 @@ def apply_leave_payload_edit(corr, payload: dict) -> tuple[dict, str]:
         'note': note,
     }
     title = f'Leave request {leave_type} {start_date}→{end_date}'
-
-    with transaction.atomic():
-        record.leave_type = leave_type_value
-        record.start_date = start_date
-        record.end_date = end_date
-        record.days = days
-        record.save(update_fields=['leave_type', 'start_date', 'end_date', 'days'])
-
     return normalized, title

@@ -2370,10 +2370,7 @@ class PlansService:
         if getattr(plan, "source", "") == "process_dial" and getattr(
             plan, "skill_name", None
         ):
-            from ai.engine.cognition.plan.process_dial import PROCESS_LEAVE_VERSION
-
-            version = PROCESS_LEAVE_VERSION
-            # Prefer version from submit step metadata when present.
+            version = "1.0"
             for step in plan.steps:
                 meta = (step.tool_args or {}).get("_process") or {}
                 if meta.get("process_version"):
@@ -2579,6 +2576,50 @@ class PlansService:
                 "plannable": False,
             }
 
+        # ESS process dials (loan / attendance): skip clarifying — the brief
+        # already feeds write_slots; discovery LLM only invents empty asks.
+        try:
+            from ai.engine.cognition.plan.process_dial import (
+                is_personal_attendance_brief,
+                is_personal_loan_brief,
+            )
+
+            if is_personal_loan_brief(brief) or is_personal_attendance_brief(brief):
+                plan_dto = self.create_plan(
+                    user, brief=brief, conversation_id=conversation_id,
+                )
+                logger.info(
+                    "Discovery skipped for process_dial ESS brief id=%s",
+                    plan_dto.get("id"),
+                )
+                return {
+                    "id": plan_dto.get("id"),
+                    "status": "plan_ready",
+                    "run_status": plan_dto.get("status") or STATUS_PENDING_APPROVAL,
+                    "brief": brief,
+                    "question": None,
+                    "turns": [],
+                    "conversation_id": conversation_id or "",
+                    "plan": plan_dto,
+                    "plannable": True,
+                    "route": {
+                        "class": "TRANSACTION",
+                        "message": "",
+                        "recommended": (
+                            "loan_request"
+                            if is_personal_loan_brief(brief)
+                            else "attendance_permission"
+                        ),
+                        "cards": [],
+                        "handoff_target": None,
+                        "plannable": True,
+                    },
+                }
+        except Exception:
+            logger.exception(
+                "process_dial discovery short-circuit failed — falling through"
+            )
+
         first = self._ask_discovery_llm(brief, [])
         turns = [{"question": first["question"], "reply": None}]
 
@@ -2667,6 +2708,31 @@ class PlansService:
                 "route": reply_route.to_dict(),
                 "plannable": False,
             }
+
+        # ESS process dials: brief (or a restated reply) already carries slots —
+        # stop the empty clarify loop and materialize the plan.
+        try:
+            from ai.engine.cognition.plan.process_dial import (
+                is_personal_attendance_brief,
+                is_personal_loan_brief,
+            )
+
+            gate = self._enrich_brief(brief, turns) or brief or reply
+            if (
+                is_personal_loan_brief(gate)
+                or is_personal_attendance_brief(gate)
+                or is_personal_loan_brief(reply)
+                or is_personal_attendance_brief(reply)
+            ):
+                logger.info(
+                    "Discovery advance short-circuit process_dial id=%s",
+                    run.id,
+                )
+                return self._finalize_discovery_run(user, run, brief, turns)
+        except Exception:
+            logger.exception(
+                "process_dial discovery advance short-circuit failed"
+            )
 
         if len(turns) >= self.DISCOVERY_MAX_TURNS:
             decision = {"action": "complete", "question": None}
@@ -4407,6 +4473,184 @@ class PlansService:
             out["summary"] = api_result.get("summary") or ""
         return out
 
+    # Pulse-wide RULE_21: Approve on a paused Agent step must either commit
+    # the host effect or fail visibly. Pre-execution consent never staged an
+    # execution_id — when the step already carries ``call_host_api`` tool_args
+    # we stage+confirm here (any catalog mutation, not an ESS allow-list).
+    # Token-only unstaged grant + LLM resume is a last resort for tools that
+    # cannot be bound from tool_args (e.g. export_document).
+
+    def _step_mutation_api_name(self, step) -> str | None:
+        """Return catalog api_name when this step is a host API mutation."""
+        args = step.tool_args_json if isinstance(step.tool_args_json, dict) else {}
+        api_name = str(args.get("api_name") or "").strip()
+        tool_name = (step.tool_name or "").strip()
+        if tool_name and tool_name not in ("call_host_api", ""):
+            # Plugin tools (create_dq_rule, …) stage their own execution_id.
+            return None
+        if not api_name and tool_name == "call_host_api":
+            return None
+        return api_name or None
+
+    def _commit_unstaged_from_tool_args(
+        self, user, run, step, *, body_override=None,
+    ) -> dict | None:
+        """Stage+confirm from plan ``tool_args`` when Approve has no execution_id.
+
+        Pulse contract (ADR-0046 / RULE_21): any Agent step Approve with a
+        bound host mutation must write now — not silently re-pause on resume.
+        Returns a confirm payload on success, or ``None`` when the step is not
+        a bindable ``call_host_api`` mutation (caller may unstaged-resume or
+        fail visibly).
+        """
+        from asgiref.sync import async_to_sync
+
+        from ai.engine.agent.tools import execute_call_host_api
+        from ai.engine.core.database import get_session_factory
+        from ai.host_executor import CarbonHostExecutor
+        from ai.models.core import RunStep
+
+        api_name = self._step_mutation_api_name(step)
+        if not api_name:
+            return None
+        args = step.tool_args_json if isinstance(step.tool_args_json, dict) else {}
+        body = args.get("body") if isinstance(args.get("body"), dict) else {}
+        if body_override and isinstance(body_override, dict):
+            body = {**body, **body_override}
+        path_params = (
+            args.get("path_params")
+            if isinstance(args.get("path_params"), dict) else None
+        )
+        query_params = (
+            args.get("query_params")
+            if isinstance(args.get("query_params"), dict) else None
+        )
+
+        user_pk = str(user.pk)
+        instance_config = _plan_instance_config(user_pk)
+        factory = get_session_factory(PLAN_INSTANCE_ID)
+        conversation_id = run.conversation_id or f"plan-{run.id}"
+
+        async def _stage_and_confirm():
+            async with factory() as db:
+                executor = CarbonHostExecutor(
+                    db=db,
+                    instance_config=instance_config,
+                    user_token=f"inproc:carbon:{user_pk}",
+                    host_user_id=user_pk,
+                )
+                entry = executor.get_catalog_entry(api_name)
+                if not entry:
+                    raise PlanStepError(
+                        f"Unknown host API '{api_name}' — cannot complete Approve."
+                    )
+                method = str(entry.get("method") or "GET").upper()
+                needs_confirm = (
+                    method != "GET"
+                    or bool(getattr(executor, "requires_confirmation", lambda _n: False)(api_name))
+                )
+                if not needs_confirm:
+                    # Read-shaped step should not be on the consent gate.
+                    raise PlanStepError(
+                        f"'{api_name}' is read-only — nothing to Approve."
+                    )
+                staged = await execute_call_host_api(
+                    api_name=api_name,
+                    explanation=str(
+                        args.get("explanation")
+                        or f"Approved plan step: {api_name}"
+                    ),
+                    body=body or None,
+                    path_params=path_params,
+                    query_params=query_params,
+                    executor=executor,
+                    conversation_id=conversation_id,
+                    host_user_id=user_pk,
+                    instance_id=PLAN_INSTANCE_ID,
+                )
+                if not isinstance(staged, dict):
+                    raise PlanStepError(
+                        "Approve could not stage the write (empty tool result)."
+                    )
+                if staged.get("error"):
+                    raise PlanStepError(str(staged["error"]))
+                exec_id = str(staged.get("execution_id") or "").strip()
+                if not exec_id:
+                    raise PlanStepError(
+                        "Approve could not stage the write (no execution id)."
+                    )
+                api_result = await executor.confirm_execution(
+                    exec_id, expected_host_user_id=user_pk,
+                )
+                return api_result, staged
+
+        try:
+            api_result, staged = async_to_sync(_stage_and_confirm)()
+        except PlanStepError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - fail-visible for the operator
+            logger.warning(
+                "Plan step inline commit failed plan=%s step=%s api=%s: %s",
+                run.id, step.step_index, api_name, exc, exc_info=True,
+            )
+            raise PlanStepError(f"Confirmation failed: {exc}") from exc
+
+        tool_output = {
+            "tool_name": "call_host_api",
+            "tool_args": {
+                "api_name": api_name,
+                "body": body,
+                "path_params": path_params,
+                "query_params": query_params,
+                "explanation": args.get("explanation"),
+            },
+            "result": json.dumps(staged, default=str),
+        }
+        step.status = STEP_COMPLETED
+        flags = step.critic_flags_json if isinstance(step.critic_flags_json, dict) else {}
+        flags = {
+            **(flags or {}),
+            "consent_granted": True,
+            "effect_committed": True,
+            "inline_commit": True,
+        }
+        step.critic_flags_json = flags
+        step.tool_output_json = self._committed_tool_output(tool_output, api_result)
+        step.draft_text = (
+            (step.tool_output_json.get("summary") or "").strip()
+            or step.draft_text
+            or "Submitted."
+        )
+        step.save(update_fields=[
+            "status", "critic_flags_json", "tool_output_json", "draft_text", "updated_at",
+        ])
+        StepJournal.append(
+            run.id, canonical_step_id(step), EVENT_STEP_CONSENT_GRANTED,
+            payload={"inline_commit": True, "api_name": api_name},
+        )
+        StepJournal.append(
+            run.id, canonical_step_id(step), EVENT_STEP_COMPLETED,
+        )
+        siblings = list(RunStep.objects.filter(run_id=run.id).order_by("step_index"))
+        _reconcile_run_status_from_steps(run, siblings)
+        summary = (
+            (step.tool_output_json.get("summary") or "").strip()
+            if isinstance(step.tool_output_json, dict) else ""
+        )
+        if summary:
+            run.final_response = summary
+            run.save(update_fields=["final_response", "updated_at"])
+        logger.info(
+            "Plan step confirmed inline plan=%s step=%s api=%s user=%s",
+            run.id, step.step_index, api_name, user_pk,
+        )
+        return {
+            "status": "confirmed",
+            "plan_id": run.id,
+            "step_id": step.step_index,
+            "committed_inline": True,
+        }
+
     def confirm_step(self, user, plan_id: str, step_id, body_override=None) -> dict:
         """Confirm a paused consent step — executes the staged mutation.
 
@@ -4521,6 +4765,21 @@ class PlansService:
             }
 
         if not execution_id:
+            # Pulse-wide: bound host mutations commit on Approve. Unstaged
+            # token+resume is only for tools that cannot be rebound from
+            # tool_args (export_document, etc.).
+            inline = self._commit_unstaged_from_tool_args(
+                user, run, step, body_override=body_override,
+            )
+            if inline is not None:
+                return inline
+            # call_host_api without api_name cannot be rebound — fail visible
+            # rather than silent re-pause (RULE_21 / ADR-0046).
+            if (step.tool_name or "").strip() == "call_host_api":
+                raise PlanStepError(
+                    "Approve could not complete this write: the step has no "
+                    "host API name. Decline and re-run, or use My."
+                )
             return _grant_unstaged_consent(reason="no_execution_id")
 
         try:
@@ -4540,6 +4799,16 @@ class PlansService:
                     "plan=%s step=%s execution=%s: %s",
                     plan_id, step.step_index, execution_id, msg,
                 )
+                inline = self._commit_unstaged_from_tool_args(
+                    user, run, step, body_override=body_override,
+                )
+                if inline is not None:
+                    return inline
+                if (step.tool_name or "").strip() == "call_host_api":
+                    raise PlanStepError(
+                        f"Confirmation failed: staged write is gone ({msg}). "
+                        "Decline and re-run, or use My."
+                    )
                 return _grant_unstaged_consent(reason="dead_staged_execution")
             logger.warning(
                 "Plan step confirm failed plan=%s step=%s: %s",

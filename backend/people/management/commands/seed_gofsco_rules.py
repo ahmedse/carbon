@@ -54,7 +54,13 @@ def _ensure_reference_set(name, slug, values, description=''):
                 'description': f'{label_en} ({label_ar})',
                 'is_active': True,
                 'sort_order': idx,
-                'metadata': {'label_ar': label_ar, 'sort': idx},
+                # label_ar is searchable via reference_resolve needles; also
+                # mirror into aliases so older matchers / exports stay honest.
+                'metadata': {
+                    'label_ar': label_ar,
+                    'aliases': [label_ar],
+                    'sort': idx,
+                },
             }
         else:
             code, label_en = entry

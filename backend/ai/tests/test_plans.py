@@ -185,6 +185,18 @@ class _FakeHostExecutor:
         self.kwargs = kwargs
         self.confirmed = []
         self.declined = []
+        self.instance_config = kwargs.get("instance_config") or {}
+
+    def get_catalog_entry(self, api_name: str):
+        # Enough for inline Approve commits in tests (any non-GET).
+        return {
+            "method": "POST",
+            "path": f"/carbon-api/test/{api_name}",
+            "confirmation_message": f"Confirm {api_name}?",
+        }
+
+    def requires_confirmation(self, api_name: str) -> bool:
+        return True
 
     async def confirm_execution(self, execution_id, expected_host_user_id=None):
         self.confirmed.append((execution_id, expected_host_user_id))
@@ -627,6 +639,92 @@ def test_discovery_gates_personal_leave_without_run(user, patch_engine_seams, mo
 
 
 @pytest.mark.django_db
+def test_discovery_skips_clarify_for_loan_process_dial(
+    user, patch_engine_seams, run_ids_cleanup, monkeypatch,
+):
+    """Loan briefs must not loop on empty clarifying questions — process dial."""
+    from mdm.models import ReferenceSet, ReferenceValue
+
+    rs, _ = ReferenceSet.objects.get_or_create(
+        name="loan_type", defaults={"description": "Loan types"},
+    )
+    ReferenceValue.objects.get_or_create(
+        reference_set=rs, code="emergency",
+        defaults={
+            "label": "Emergency",
+            "metadata": {"aliases": ["طوارئ", "emergency"]},
+        },
+    )
+
+    # If short-circuit fails, LLM would return empty ask — prove we never call it.
+    called = {"n": 0}
+
+    async def _boom(*_a, **_k):
+        called["n"] += 1
+        return {
+            "content": '{"action":"ask","question":""}',
+            "tool_calls": None,
+            "finish_reason": "stop",
+            "model": "test",
+        }
+
+    monkeypatch.setattr("ai.engine.llm.router.route_chat", _boom)
+
+    service = PlansService()
+    result = service.start_discovery(
+        user,
+        brief="أريد قرض طوارئ 5000 لمدة 12 شهر غدا",
+    )
+    assert called["n"] == 0
+    assert result["status"] == "plan_ready"
+    assert result["plan"] is not None
+    assert result["plan"]["status"] == "pending_approval"
+    assert result["id"]
+    # FakePlanner stands in for SkillAwarePlanner in this suite — the
+    # important contract is: no discovering run, no clarify LLM.
+    assert Run.objects.filter(host_user_id=str(user.pk), status="discovering").count() == 0
+    assert result.get("question") in (None, "")
+    assert result.get("turns") == []
+
+
+@pytest.mark.django_db
+def test_discovery_advance_short_circuits_loan_reply(
+    user, patch_engine_seams, run_ids_cleanup, monkeypatch,
+):
+    """Stuck clarifying runs escape when the reply restates a loan brief."""
+    called = {"n": 0}
+
+    async def _boom(*_a, **_k):
+        called["n"] += 1
+        return {
+            "content": '{"action":"ask","question":"Could you tell me more?"}',
+            "tool_calls": None,
+            "finish_reason": "stop",
+            "model": "test",
+        }
+
+    monkeypatch.setattr("ai.engine.llm.router.route_chat", _boom)
+
+    service = PlansService()
+    # Force a discovering run (non-loan brief) then reply with a loan brief.
+    started = service.start_discovery(user, brief="Build a compliance report pack")
+    assert started["status"] == "needs_input"
+    assert started["id"]
+    assert called["n"] == 1  # opening question only
+
+    result = service.advance_discovery(
+        user,
+        started["id"],
+        user_reply="أريد قرض طوارئ 5000 لمدة 12 شهر غدا",
+    )
+    assert called["n"] == 1  # no second LLM ask
+    assert result["status"] == "plan_ready"
+    assert result["plan"] is not None
+    assert result["plan"]["status"] == "pending_approval"
+    assert Run.objects.get(id=started["id"]).status == "pending_approval"
+
+
+@pytest.mark.django_db
 def test_discovery_gates_who_is_advisory(user, patch_engine_seams):
     service = PlansService()
     result = service.start_discovery(user, brief="من هو سلمان")
@@ -957,6 +1055,114 @@ def test_confirm_step_executes_staged_mutation(user, patch_engine_seams, run_ids
     assert committed == {"data": {"id": "rule-1", "name": "Test rule"}}
     assert step.tool_output_json.get("confirmed") is True
     assert "execution_id" not in step.tool_output_json
+
+
+@pytest.mark.django_db
+def test_confirm_step_inline_commits_loan_without_execution_id(
+    user, patch_engine_seams, run_ids_cleanup, monkeypatch,
+):
+    """Pre-execution consent (no execution_id) must still write on Approve.
+
+    Process-dial (and any bound call_host_api mutation) pauses before staging.
+    Approve used to only set consent_granted and resume — which silently
+    re-paused. Inline commit stages+confirms from tool_args so Approve is
+    the write (Pulse-wide RULE_21, not an ESS allow-list).
+    """
+    plan = _make_plan(user, status="paused")
+    step = _make_step(
+        plan,
+        step_index=1,
+        status="awaiting_approval",
+        token="tok-pre",
+        tool_output={},
+    )
+    step.tool_name = "call_host_api"
+    step.tool_args_json = {
+        "api_name": "submit_my_loan",
+        "body": {
+            "loan_type": "emergency",
+            "principal": 5000,
+            "term_months": 12,
+            "start_date": "2026-09-23",
+            "interest_rate": 0,
+        },
+        "explanation": "Submit emergency loan",
+    }
+    step.save(update_fields=["tool_name", "tool_args_json", "updated_at"])
+    # Sibling completed so reconcile can mark the plan completed.
+    _make_step(plan, step_index=0, status="completed")
+    run_ids_cleanup.append(plan.id)
+
+    async def _fake_stage(**kwargs):
+        assert kwargs.get("api_name") == "submit_my_loan"
+        assert kwargs.get("body", {}).get("loan_type") == "emergency"
+        return {
+            "requires_confirmation": True,
+            "execution_id": "exec-inline-loan",
+            "body": kwargs.get("body") or {},
+        }
+
+    monkeypatch.setattr(
+        "ai.engine.agent.tools.execute_call_host_api", _fake_stage,
+    )
+
+    service = PlansService()
+    result = service.confirm_step(user, plan.id, 1)
+
+    assert result.get("status") == "confirmed"
+    assert result.get("committed_inline") is True
+    assert result.get("unstaged") is not True
+    step = RunStep.objects.get(run_id=plan.id, step_index=1)
+    assert step.status == "completed"
+    assert step.critic_flags_json.get("consent_granted") is True
+    assert step.critic_flags_json.get("effect_committed") is True
+    assert step.critic_flags_json.get("inline_commit") is True
+    assert step.tool_output_json.get("confirmed") is True
+    plan.refresh_from_db()
+    assert plan.status == "completed"
+
+
+@pytest.mark.django_db
+def test_confirm_step_inline_commits_any_host_mutation(
+    user, patch_engine_seams, run_ids_cleanup, monkeypatch,
+):
+    """Inline Approve commit is Pulse-wide — not limited to loan/leave APIs."""
+    plan = _make_plan(user, status="paused")
+    step = _make_step(plan, step_index=0, status="awaiting_approval", token="tok")
+    step.tool_name = "call_host_api"
+    step.tool_args_json = {
+        "api_name": "create_employee",
+        "body": {"employee_no": "E9", "full_name": "Test"},
+    }
+    step.save(update_fields=["tool_name", "tool_args_json", "updated_at"])
+    run_ids_cleanup.append(plan.id)
+
+    async def _fake_stage(**kwargs):
+        assert kwargs["api_name"] == "create_employee"
+        return {"requires_confirmation": True, "execution_id": "exec-hire"}
+
+    monkeypatch.setattr(
+        "ai.engine.agent.tools.execute_call_host_api", _fake_stage,
+    )
+    result = PlansService().confirm_step(user, plan.id, 0)
+    assert result.get("committed_inline") is True
+    assert RunStep.objects.get(run_id=plan.id, step_index=0).status == "completed"
+
+
+@pytest.mark.django_db
+def test_confirm_step_fails_visible_when_host_api_unbound(
+    user, patch_engine_seams, run_ids_cleanup,
+):
+    """call_host_api without api_name must not silent-unstaged."""
+    plan = _make_plan(user, status="paused")
+    step = _make_step(plan, step_index=0, status="awaiting_approval", token="tok")
+    step.tool_name = "call_host_api"
+    step.tool_args_json = {}
+    step.save(update_fields=["tool_name", "tool_args_json", "updated_at"])
+    run_ids_cleanup.append(plan.id)
+
+    with pytest.raises(PlanStepError, match="no host API name"):
+        PlansService().confirm_step(user, plan.id, 0)
 
 
 @pytest.mark.django_db

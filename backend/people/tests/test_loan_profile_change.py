@@ -176,6 +176,177 @@ def test_submit_loan_invalid_term_months_400(workflow, api_client, get_token_for
     assert resp.status_code == 400
 
 
+@pytest.mark.django_db
+def test_edit_then_resubmit_loan_subject(workflow, api_client, get_token_for_user):
+    """sent_back → edit payload (+ Loan sync) → resubmit with DQ subject."""
+    from people.tests.ref_helpers import ensure_ref
+    ensure_ref('loan_type', 'housing')
+    wf = workflow
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    resp = api_client.post(LOAN_URL, _loan_payload(), format='json')
+    assert resp.status_code == 201, resp.content
+    corr_id = resp.json()['id']
+    loan_id = resp.json()['subject_id']
+
+    _auth(api_client, wf.manager_user, get_token_for_user)
+    assert api_client.post(
+        f'{PREFIX}/correspondence/{corr_id}/send-back/',
+        {'comment': 'lower principal'}, format='json',
+    ).status_code == 200
+
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    edit = api_client.post(
+        f'{PREFIX}/correspondence/{corr_id}/edit/',
+        {
+            'payload': {
+                'loan_type': 'housing',
+                'principal': '4000.000',
+                'interest_rate': '2.0',
+                'term_months': 10,
+                'start_date': '2026-07-01',
+                'notes': 'revised',
+            },
+        },
+        format='json',
+    )
+    assert edit.status_code == 200, edit.content
+    body = edit.json()
+    assert body['status'] == 'sent_back'
+    assert body['payload']['principal'] == '4000.000'
+    loan = Loan.objects.get(pk=loan_id)
+    assert loan.principal == Decimal('4000.000')
+    assert loan.term_months == 10
+    assert loan.status == 'draft'
+
+    resub = api_client.post(
+        f'{PREFIX}/correspondence/{corr_id}/resubmit/', {}, format='json',
+    )
+    assert resub.status_code == 200
+    assert resub.json()['status'] == 'submitted'
+
+
+@pytest.mark.django_db
+def test_edit_rehydrates_orphaned_loan_subject(workflow, api_client, get_token_for_user):
+    from people.tests.ref_helpers import ensure_ref
+    ensure_ref('loan_type', 'housing')
+    wf = workflow
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    resp = api_client.post(LOAN_URL, _loan_payload(), format='json')
+    assert resp.status_code == 201, resp.content
+    corr_id = resp.json()['id']
+    orphan_id = resp.json()['subject_id']
+
+    _auth(api_client, wf.manager_user, get_token_for_user)
+    assert api_client.post(
+        f'{PREFIX}/correspondence/{corr_id}/send-back/',
+        {'comment': 'fix'}, format='json',
+    ).status_code == 200
+
+    Loan.objects.filter(pk=orphan_id).delete()
+
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    edit = api_client.post(
+        f'{PREFIX}/correspondence/{corr_id}/edit/',
+        {
+            'payload': {
+                'loan_type': 'housing',
+                'principal': '3500.000',
+                'interest_rate': '1.0',
+                'term_months': 6,
+                'start_date': '2026-08-01',
+                'notes': 'rehydrate',
+            },
+        },
+        format='json',
+    )
+    assert edit.status_code == 200, edit.content
+    corr = Correspondence.objects.get(pk=corr_id)
+    assert corr.subject_id != orphan_id
+    restored = Loan.objects.get(pk=corr.subject_id)
+    assert restored.principal == Decimal('3500.000')
+    assert restored.status == 'draft'
+
+
+@pytest.mark.django_db
+def test_edit_then_resubmit_profile_change(workflow, api_client, get_token_for_user):
+    """sent_back profile_change → edit allowlisted changes → resubmit (no Employee write)."""
+    wf = workflow
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    payload = {
+        'changes': {
+            'full_name': {'from': 'Requester', 'to': 'Requester Updated'},
+        },
+    }
+    resp = api_client.post(PROFILE_CHANGE_URL, payload, format='json')
+    assert resp.status_code == 201, resp.content
+    corr_id = resp.json()['id']
+    emp_before = Employee.objects.get(pk=wf.requester_emp.pk)
+    name_before = emp_before.full_name
+
+    _auth(api_client, wf.hr_user, get_token_for_user)
+    assert api_client.post(
+        f'{PREFIX}/correspondence/{corr_id}/send-back/',
+        {'comment': 'fix spelling'}, format='json',
+    ).status_code == 200
+
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    edit = api_client.post(
+        f'{PREFIX}/correspondence/{corr_id}/edit/',
+        {
+            'payload': {
+                'changes': {
+                    'full_name': {'from': 'Requester', 'to': 'Requester Final'},
+                    'nationality': {'from': '', 'to': 'KW'},
+                },
+            },
+        },
+        format='json',
+    )
+    assert edit.status_code == 200, edit.content
+    body = edit.json()
+    assert body['status'] == 'sent_back'
+    assert body['payload']['changes']['full_name']['to'] == 'Requester Final'
+    assert body['payload']['changes']['nationality']['to'] == 'KW'
+    emp_before.refresh_from_db()
+    assert emp_before.full_name == name_before  # no Employee write on edit
+
+    resub = api_client.post(
+        f'{PREFIX}/correspondence/{corr_id}/resubmit/', {}, format='json',
+    )
+    assert resub.status_code == 200
+    assert resub.json()['status'] == 'submitted'
+
+
+@pytest.mark.django_db
+def test_edit_profile_change_rejects_non_allowlisted(
+    workflow, api_client, get_token_for_user,
+):
+    wf = workflow
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    resp = api_client.post(
+        PROFILE_CHANGE_URL,
+        {'changes': {'full_name': {'to': 'Temp'}}},
+        format='json',
+    )
+    assert resp.status_code == 201, resp.content
+    corr_id = resp.json()['id']
+
+    _auth(api_client, wf.hr_user, get_token_for_user)
+    assert api_client.post(
+        f'{PREFIX}/correspondence/{corr_id}/send-back/',
+        {'comment': 'no'}, format='json',
+    ).status_code == 200
+
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    edit = api_client.post(
+        f'{PREFIX}/correspondence/{corr_id}/edit/',
+        {'payload': {'changes': {'basic_salary': {'to': '9999'}}}},
+        format='json',
+    )
+    assert edit.status_code == 400
+    assert edit.json().get('error_kind') == 'field_not_allowed'
+
+
 # ── profile-change submission ──────────────────────────────────────────────
 
 @pytest.mark.django_db
@@ -185,8 +356,8 @@ def test_submit_profile_change_happy_path(workflow, api_client, get_token_for_us
 
     payload = {
         'changes': {
-            'mobile_number': {'from': '0100', 'to': '0111'},
-            'marital_status': {'from': 'single', 'to': 'married'},
+            'full_name': {'from': 'Requester', 'to': 'Requester New'},
+            'nationality': {'from': '', 'to': 'KW'},
         },
     }
     resp = api_client.post(PROFILE_CHANGE_URL, payload, format='json')
@@ -223,7 +394,24 @@ def test_submit_profile_change_bad_field_400(
     _auth(api_client, wf.requester_user, get_token_for_user)
 
     resp = api_client.post(
-        PROFILE_CHANGE_URL, {'changes': {'mobile_number': '0111'}}, format='json',
+        PROFILE_CHANGE_URL, {'changes': {'full_name': '0111'}}, format='json',
     )
 
     assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+def test_submit_profile_change_non_allowlisted_400(
+    workflow, api_client, get_token_for_user,
+):
+    wf = workflow
+    _auth(api_client, wf.requester_user, get_token_for_user)
+
+    resp = api_client.post(
+        PROFILE_CHANGE_URL,
+        {'changes': {'basic_salary': {'to': '9999'}}},
+        format='json',
+    )
+
+    assert resp.status_code == 400
+    assert resp.json().get('error_kind') == 'field_not_allowed'

@@ -55,6 +55,20 @@ function formatDate(value, lang) {
   });
 }
 
+function attendanceStatusLabel(t, row) {
+  const status = row?.status || (row?.approved ? 'approved' : 'pending');
+  switch (status) {
+    case 'approved':
+      return { label: t('statusApproved'), color: 'success' };
+    case 'rejected':
+      return { label: t('statusRejected'), color: 'error' };
+    case 'cancelled':
+      return { label: t('statusCancelled'), color: 'default' };
+    default:
+      return { label: t('statusPending', { defaultValue: t('statusSubmitted') }), color: 'info' };
+  }
+}
+
 /** GovernedValueField reads as {id, code, label}; writes may be a bare code string. */
 function permissionTypeLabel(t, value) {
   if (value == null || value === '') return '—';
@@ -106,12 +120,15 @@ export default function AttendanceHistoryTable({ records, loading, error, onRetr
             items={sorted}
             getKey={(row) => row.id}
             emptyLabel={t('attendanceHistoryEmpty')}
-            renderCard={(row) => ({
-              title: permissionTypeLabel(t, row.permission_type),
-              meta: `${formatDate(row.date, i18n.language)} · ${row.hours}h`,
-              status: row.approved ? t('statusApproved') : t('statusSubmitted'),
-              statusColor: row.approved ? 'success' : 'info',
-            })}
+            renderCard={(row) => {
+              const st = attendanceStatusLabel(t, row);
+              return {
+                title: permissionTypeLabel(t, row.permission_type),
+                meta: `${formatDate(row.date, i18n.language)} · ${row.hours}h`,
+                status: st.label,
+                statusColor: st.color,
+              };
+            }}
             table={
               <TableContainer>
                 <Table size="small">
@@ -138,11 +155,16 @@ export default function AttendanceHistoryTable({ records, loading, error, onRetr
                         <TableCell>{permissionTypeLabel(t, row.permission_type)}</TableCell>
                         <TableCell>{row.hours}</TableCell>
                         <TableCell>
-                          <Chip
-                            size="small"
-                            label={row.approved ? t('statusApproved') : t('statusSubmitted')}
-                            color={row.approved ? 'success' : 'info'}
-                          />
+                          {(() => {
+                            const st = attendanceStatusLabel(t, row);
+                            return (
+                              <Chip
+                                size="small"
+                                label={st.label}
+                                color={st.color}
+                              />
+                            );
+                          })()}
                         </TableCell>
                       </TableRow>
                     ))}

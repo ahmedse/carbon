@@ -856,7 +856,7 @@ class Loan(models.Model):
     interest_rate = models.DecimalField(max_digits=6, decimal_places=3, default=0)
     term_months = models.PositiveSmallIntegerField()
     start_date = models.DateField()
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
     notes = models.TextField(blank=True)
 
     class Meta:
@@ -939,7 +939,18 @@ class AttendancePermission(models.Model):
     Named ``AttendancePermission`` (not ``Permission``) to avoid colliding with
     ``django.contrib.auth.models.Permission`` when the NIR-3E API surface
     imports both.
+
+    ``status`` is the workflow outcome mirror (pending / approved / rejected /
+    cancelled). ``approved`` is kept in sync (True iff status == approved) for
+    existing API/FE readers.
     """
+
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+        ('cancelled', 'Cancelled'),
+    ]
 
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='permissions')
     date = models.DateField()
@@ -950,6 +961,9 @@ class AttendancePermission(models.Model):
         help_text="Permission type from ReferenceSet 'permission_type'",
     )
     hours = models.DecimalField(max_digits=6, decimal_places=2)
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True,
+    )
     approved = models.BooleanField(default=False)
     notes = models.TextField(blank=True)
 
@@ -961,6 +975,14 @@ class AttendancePermission(models.Model):
     def __str__(self):
         code = self.permission_type.code if self.permission_type_id else self.permission_type
         return f"{self.employee} {self.date} {code} ({self.hours}h)"
+
+    def save(self, *args, **kwargs):
+        # ``approved`` mirrors ``status``; accept legacy writers that only flip
+        # the bool (admin PATCH / seeds) by promoting pending → approved.
+        if self.approved and self.status in ('pending', ''):
+            self.status = 'approved'
+        self.approved = self.status == 'approved'
+        super().save(*args, **kwargs)
 
 
 class Certification(models.Model):

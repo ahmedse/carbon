@@ -1252,6 +1252,28 @@ class LeaveRecordDetailView(_GatedDetailView):
             qs = _scoped(user, qs, self.org_lookup)
         return qs
 
+    def delete_guard(self, instance):
+        """Block deleting leave still tied to an open correspondence."""
+        from correspondence.models import OPEN_SUBJECT, Correspondence
+
+        open_corr = Correspondence.objects.filter(
+            subject_type='people.LeaveRecord',
+            subject_id=instance.pk,
+            status__in=OPEN_SUBJECT,
+        ).exists()
+        if open_corr:
+            return AppFeedback(
+                code='leave_linked_to_correspondence',
+                title='Cannot delete leave with an open request',
+                detail=(
+                    'This leave record is linked to an in-flight correspondence. '
+                    'Cancel or resolve the request first.'
+                ),
+                context={'leave_id': instance.pk},
+                status_code=status.HTTP_409_CONFLICT,
+            )
+        return None
+
     def patch(self, request, pk):
         """Refuse direct approve/reject — NSR spine is Correspondence / Team."""
         instance = get_object_or_404(self._get_queryset(request.user), pk=pk)
@@ -1363,6 +1385,19 @@ class LoanDetailView(_GatedDetailView):
     org_lookup = 'employee__org_unit_id__in'
 
     def delete_guard(self, instance):
+        from correspondence.models import OPEN_SUBJECT, Correspondence
+
+        if instance.installments.filter(status='paid').exists():
+            return AppFeedback(
+                code='loan_has_paid_installments',
+                title='Cannot delete: loan has paid installments',
+                detail=(
+                    f"Loan #{instance.pk} has paid installment(s); void via "
+                    "correspondence or reverse payroll first."
+                ),
+                context={'loan_id': instance.pk},
+                status_code=status.HTTP_409_CONFLICT,
+            )
         if instance.installments.exists():
             return AppFeedback(
                 code='loan_has_installments',
@@ -1375,6 +1410,22 @@ class LoanDetailView(_GatedDetailView):
                     'installment_count': instance.installments.count(),
                 },
                 status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        open_corr = Correspondence.objects.filter(
+            subject_type='people.Loan',
+            subject_id=instance.pk,
+            status__in=OPEN_SUBJECT,
+        ).exists()
+        if open_corr:
+            return AppFeedback(
+                code='loan_linked_to_correspondence',
+                title='Cannot delete loan with an open request',
+                detail=(
+                    'This loan is linked to an in-flight correspondence. '
+                    'Cancel or resolve the request first.'
+                ),
+                context={'loan_id': instance.pk},
+                status_code=status.HTTP_409_CONFLICT,
             )
         return None
 
@@ -1436,6 +1487,27 @@ class AttendancePermissionDetailView(_GatedDetailView):
     model = AttendancePermission
     serializer_class = AttendancePermissionSerializer
     org_lookup = 'employee__org_unit_id__in'
+
+    def delete_guard(self, instance):
+        from correspondence.models import OPEN_SUBJECT, Correspondence
+
+        open_corr = Correspondence.objects.filter(
+            subject_type='people.AttendancePermission',
+            subject_id=instance.pk,
+            status__in=OPEN_SUBJECT,
+        ).exists()
+        if open_corr:
+            return AppFeedback(
+                code='attendance_linked_to_correspondence',
+                title='Cannot delete permission with an open request',
+                detail=(
+                    'This attendance permission is linked to an in-flight '
+                    'correspondence. Cancel or resolve the request first.'
+                ),
+                context={'permission_id': instance.pk},
+                status_code=status.HTTP_409_CONFLICT,
+            )
+        return None
 
     def patch(self, request, pk):
         from people.governance.sod import (

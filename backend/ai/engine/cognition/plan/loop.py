@@ -391,31 +391,56 @@ class ReActLoop:
                 existing_steps = await _db.select(RunStep, ("run_id", run_id))
                 existing_steps.sort(key=lambda s: s.step_index)
                 for s in existing_steps:
-                    if s.status == "awaiting_approval" and s.confirmation_token:
-                        resume_tokens[s.step_index] = s.confirmation_token
+                    # Keys must be int — PlanStep.step_id is int; a str key
+                    # from a coerced ORM value would miss resume_tokens.get().
+                    try:
+                        _sid = int(s.step_index)
+                    except (TypeError, ValueError):
+                        continue
+                    _flags = _coerce_json_field(
+                        s.critic_flags_json, default={},
+                    ) or {}
+                    _granted = bool(
+                        isinstance(_flags, dict) and _flags.get("consent_granted")
+                    )
+                    _tok = (s.confirmation_token or "").strip() or None
+                    if s.status == "awaiting_approval" and (_tok or _granted):
+                        if not _tok:
+                            from uuid import uuid4
+                            _tok = str(uuid4())
+                            s.confirmation_token = _tok
+                        resume_tokens[_sid] = _tok
                     if s.status in ("completed", "skipped"):
-                        completed_ids.add(s.step_index)
+                        completed_ids.add(_sid)
                         if s.draft_text:
-                            step_contexts[s.step_index] = s.draft_text
+                            step_contexts[_sid] = s.draft_text
                     # Also add prior step_results for synthesis
                     if s.status in ("completed", "skipped", "awaiting_approval"):
+                        _step_flags = _coerce_json_field(
+                            s.critic_flags_json, default=[],
+                        ) or []
+                        if isinstance(_step_flags, dict):
+                            _step_flags = list(
+                                _step_flags.get("critic_flags") or []
+                            )
                         step_results.append(StepResult(
-                            step_id=s.step_index,
+                            step_id=_sid,
                             intent=s.intent,
                             draft_text=s.draft_text or "",
                             critic_verdict=s.critic_verdict or "pass",
-                            critic_flags=_coerce_json_field(
-                                s.critic_flags_json, default=[],
-                            ) or [],
+                            critic_flags=_step_flags if isinstance(_step_flags, list) else [],
                             executed=s.status == "completed",
                             tool_output=_coerce_json_field(
                                 s.tool_output_json, default=None,
                             ),
                             error=s.error,
                         ))
-                logger.debug(
-                    "ReActLoop: resumed run id=%s, completed_ids=%s",
-                    run_id, completed_ids,
+                if resume_tokens:
+                    # Persist any minted tokens so a later re-entry sees them.
+                    await _db.commit()
+                logger.info(
+                    "ReActLoop: resumed run id=%s, completed_ids=%s, resume_tokens=%s",
+                    run_id, completed_ids, sorted(resume_tokens),
                 )
             else:
                 # ── New run ───────────────────────────────────────────
@@ -936,7 +961,11 @@ class ReActLoop:
                     progress_callback=progress_callback,
                     stream_callback=stream_callback,
                     dry_run=dry_run,
-                    confirmation_token=resume_tokens.get(step.step_id),
+                    confirmation_token=resume_tokens.get(
+                        int(step.step_id)
+                        if not isinstance(step.step_id, int)
+                        else step.step_id
+                    ),
                     step_contexts=step_contexts,
                     agent_role=step.agent_role,
                     plan_source=plan.source,
@@ -1728,22 +1757,98 @@ class ReActLoop:
                     _requires_consent = bool(_consent.get("requires_confirmation"))
 
                 if _requires_consent:
-                    from uuid import uuid4
-                    result.paused = True
-                    result.confirmation_token = str(uuid4())
-                    result.executed = False
-                    result.error = None
-                    result.critic_verdict = "pass"
-                    logger.info(
-                        "ReActLoop: consent gate hit step=%d tool=%s token=%s "
-                        "(mutation requires confirmation)",
-                        step.step_id, step.tool_name or "?",
-                        result.confirmation_token[:8],
-                    )
-                    return result
+                    # Recover a missed resume token from the durable step when
+                    # the operator already Approved (consent_granted). Never
+                    # silently re-pause — that left loan submits stuck forever.
+                    _already_granted = False
+                    _recovered_tok = None
+                    _db_ref = self.db
+                    _run_ref = getattr(ex, "run_id", None)
+                    if _db_ref is not None and _run_ref:
+                        try:
+                            from ai.engine.core.models import RunStep as _RS
+                            _rows = await _db_ref.select(
+                                _RS,
+                                ("run_id", str(_run_ref)),
+                                ("step_index", int(step.step_id)),
+                            )
+                            _row = _rows[0] if _rows else None
+                            if _row is not None:
+                                _f = _coerce_json_field(
+                                    getattr(_row, "critic_flags_json", None),
+                                    default={},
+                                ) or {}
+                                _already_granted = bool(
+                                    isinstance(_f, dict) and _f.get("consent_granted")
+                                )
+                                _recovered_tok = (
+                                    (getattr(_row, "confirmation_token", None) or "")
+                                    .strip()
+                                    or None
+                                )
+                        except Exception:  # noqa: BLE001 - never fail the gate
+                            logger.exception(
+                                "ReActLoop: consent_granted recovery failed "
+                                "step=%d",
+                                step.step_id,
+                            )
+                    if _already_granted and _recovered_tok:
+                        logger.warning(
+                            "ReActLoop: consent_granted step=%d recovered "
+                            "token from RunStep; continuing instead of re-pause",
+                            step.step_id,
+                        )
+                        confirmation_token = _recovered_tok
+                        critic = await cw.review(
+                            draft=draft,
+                            retrieval=retrieval_stub,
+                            is_mutation=step.is_mutation,
+                            dry_run=dry_run,
+                            confirmation_token=confirmation_token,
+                        )
+                        result.critic_verdict = critic.verdict
+                        result.critic_flags = critic.flags.copy()
+                        if critic.verdict == "veto":
+                            result.error = (
+                                critic.veto_reason or "Step vetoed by critic"
+                            )
+                            return result
+                        # Fall through to execute with the recovered token.
+                    elif _already_granted:
+                        result.paused = False
+                        result.executed = False
+                        result.error = (
+                            "This step was already approved, but the write "
+                            "could not continue. Decline and re-run, or "
+                            "submit from My."
+                        )
+                        result.critic_verdict = "veto"
+                        if "consent_repause_blocked" not in result.critic_flags:
+                            result.critic_flags.append("consent_repause_blocked")
+                        logger.error(
+                            "ReActLoop: blocked silent re-pause step=%d "
+                            "tool=%s (consent already granted)",
+                            step.step_id, step.tool_name or "?",
+                        )
+                        return result
+                    else:
+                        from uuid import uuid4
+                        result.paused = True
+                        result.confirmation_token = str(uuid4())
+                        result.executed = False
+                        result.error = None
+                        result.critic_verdict = "pass"
+                        logger.info(
+                            "ReActLoop: consent gate hit step=%d tool=%s token=%s "
+                            "(mutation requires confirmation)",
+                            step.step_id, step.tool_name or "?",
+                            result.confirmation_token[:8],
+                        )
+                        return result
 
-            result.error = critic.veto_reason or "Step vetoed by critic"
-            return result
+            if critic.verdict == "veto":
+                result.error = critic.veto_reason or "Step vetoed by critic"
+                return result
 
         # Execute (only if not vetoed)
         if not dry_run:
@@ -1993,6 +2098,26 @@ class ReActLoop:
                                 result.critic_flags.append("auto_confirm_failed")
                             return result
                     else:
+                        # Token present but nothing to auto-confirm (no
+                        # execution_id) — fail visibly; never mint a fresh
+                        # pause after the operator already Approved.
+                        if confirmation_token:
+                            result.paused = False
+                            result.executed = False
+                            result.error = (
+                                "Approved, but nothing was staged to confirm. "
+                                "Re-run the step or submit from My."
+                            )
+                            result.confirmation_token = confirmation_token
+                            result.critic_verdict = "veto"
+                            if "staged_confirm_missing" not in result.critic_flags:
+                                result.critic_flags.append("staged_confirm_missing")
+                            logger.error(
+                                "ReActLoop: blocked re-pause after Approve "
+                                "step=%d (token present, no execution_id)",
+                                step.step_id,
+                            )
+                            return result
                         from uuid import uuid4
                         result.paused = True
                         result.confirmation_token = str(uuid4())
@@ -2436,18 +2561,42 @@ class ReActLoop:
             existing.status = step_status
             existing.draft_text = result.draft_text or existing.draft_text
             existing.critic_verdict = result.critic_verdict or existing.critic_verdict
-            existing.critic_flags_json = (
-                json.dumps(result.critic_flags) if result.critic_flags
-                else existing.critic_flags_json
+            # Merge flags — never drop consent_granted once Approve was recorded
+            # (a re-pause used to wipe it and loop Approve forever).
+            _prev_flags = _coerce_json_field(
+                existing.critic_flags_json, default={},
+            ) or {}
+            if not isinstance(_prev_flags, dict):
+                _prev_flags = {}
+            _next_flags = (
+                list(result.critic_flags) if result.critic_flags else None
             )
+            if _next_flags is not None:
+                _merged: dict = {**_prev_flags}
+                if _prev_flags.get("consent_granted"):
+                    _merged["consent_granted"] = True
+                    if _prev_flags.get("consent_recovery"):
+                        _merged["consent_recovery"] = _prev_flags["consent_recovery"]
+                # Keep list-shaped critic flags discoverable for debug.
+                _merged["critic_flags"] = _next_flags
+                # Django JSONField wants native objects — json.dumps would
+                # store a string scalar and break consent_granted reads.
+                existing.critic_flags_json = _merged
             existing.tool_output_json = (
-                json.dumps(result.tool_output) if result.tool_output
+                result.tool_output if result.tool_output is not None
                 else existing.tool_output_json
             )
             existing.error = result.error
             existing.latency_ms = step_latency_ms
             if result.confirmation_token:
-                existing.confirmation_token = result.confirmation_token
+                # Keep a previously granted token unless this result also pauses
+                # without a prior grant (fresh consent gate).
+                _prev_tok = (existing.confirmation_token or "").strip()
+                _prev_granted = bool(_prev_flags.get("consent_granted"))
+                if result.paused and _prev_granted and _prev_tok:
+                    existing.confirmation_token = _prev_tok
+                else:
+                    existing.confirmation_token = result.confirmation_token
             existing.updated_at = utcnow()
             await _db.commit()
             logger.debug(
@@ -2462,13 +2611,16 @@ class ReActLoop:
                 step_index=step.step_id,
                 intent=step.intent,
                 tool_name=step.tool_name,
-                tool_args_json=json.dumps(step.tool_args) if step.tool_args else None,
-                depends_on_json=json.dumps(step.depends_on) if step.depends_on else None,
+                tool_args_json=step.tool_args if step.tool_args else None,
+                depends_on_json=step.depends_on if step.depends_on else None,
                 status=step_status,
                 draft_text=result.draft_text or None,
                 critic_verdict=result.critic_verdict or None,
-                critic_flags_json=json.dumps(result.critic_flags) if result.critic_flags else None,
-                tool_output_json=json.dumps(result.tool_output) if result.tool_output else None,
+                critic_flags_json=(
+                    {"critic_flags": list(result.critic_flags)}
+                    if result.critic_flags else None
+                ),
+                tool_output_json=result.tool_output if result.tool_output else None,
                 error=result.error,
                 latency_ms=step_latency_ms,
                 confirmation_token=result.confirmation_token,
@@ -2582,7 +2734,12 @@ class ReActLoop:
 
     @staticmethod
     def _has_confirmed_host_write(step_results: list[StepResult]) -> bool:
-        """True when a step already committed a host mutation with a receipt."""
+        """True when a step already committed a host mutation with a receipt.
+
+        RULE_23 honesty: only ``confirmed`` host writes count. A bare
+        ``navigate`` crumb (deep-link without confirm) must not trigger
+        past-tense ESS copy.
+        """
         for r in step_results or []:
             if r.error and not str(r.error).startswith("[caught]"):
                 continue
@@ -2590,8 +2747,6 @@ class ReActLoop:
             if out.get("confirmed") and (
                 out.get("action") == "navigate" or (out.get("summary") or "").strip()
             ):
-                return True
-            if out.get("action") == "navigate" and (out.get("route") or "").startswith("/"):
                 return True
         return False
 
@@ -2634,6 +2789,7 @@ class ReActLoop:
         actions_md = format_actions_markdown(collect_navigate_actions(outputs))
         leave_submit_done = False
         loan_submit_done = False
+        attendance_submit_done = False
         for r in step_results or []:
             if r.error and not str(r.error).startswith("[caught]"):
                 continue
@@ -2667,25 +2823,38 @@ class ReActLoop:
                     code_int = int(code) if code is not None else None
                 except (TypeError, ValueError):
                     code_int = None
-                if api == "submit_my_leave" or ctype == "leave_request":
-                    if code_int in (200, 201) or status in (
-                        "submitted", "in_review", "approved", "draft",
-                    ):
-                        leave_submit_done = True
-                        break
-                if api == "submit_my_loan" or ctype == "loan_request":
-                    if code_int in (200, 201) or status in (
-                        "submitted", "in_review", "approved", "draft",
-                    ):
-                        loan_submit_done = True
-                        break
+                # Past-tense ESS copy only after a confirmed host write
+                # (RULE_23). ``draft`` never counts as submitted.
+                host_ok = bool(out.get("confirmed")) and (
+                    code_int in (200, 201)
+                    or status in ("submitted", "in_review", "approved")
+                )
+                if host_ok and (
+                    api == "submit_my_leave" or ctype == "leave_request"
+                ):
+                    leave_submit_done = True
+                    break
+                if host_ok and (
+                    api == "submit_my_loan" or ctype == "loan_request"
+                ):
+                    loan_submit_done = True
+                    break
+                if host_ok and (
+                    api == "submit_my_attendance_permission"
+                    or ctype == "attendance_permission"
+                ):
+                    attendance_submit_done = True
+                    break
                 if out.get("confirmed") and ctype == "leave_request":
                     leave_submit_done = True
                     break
                 if out.get("confirmed") and ctype == "loan_request":
                     loan_submit_done = True
                     break
-            if leave_submit_done or loan_submit_done:
+                if out.get("confirmed") and ctype == "attendance_permission":
+                    attendance_submit_done = True
+                    break
+            if leave_submit_done or loan_submit_done or attendance_submit_done:
                 break
             intent = (r.intent or "").lower()
             if (
@@ -2702,6 +2871,13 @@ class ReActLoop:
             ):
                 loan_submit_done = True
                 break
+            if (
+                "attendance permission" in intent
+                and out.get("confirmed")
+                and not (r.error and not str(r.error).startswith("[caught]"))
+            ):
+                attendance_submit_done = True
+                break
 
         if leave_submit_done:
             head = (
@@ -2716,6 +2892,15 @@ class ReActLoop:
             head = (
                 "Your loan request was submitted. "
                 "Manager then finance review it in Team — track status in My Requests."
+            )
+            if actions_md:
+                return f"{head}\n\n{actions_md}".strip()[:2000]
+            return head
+
+        if attendance_submit_done:
+            head = (
+                "Your attendance permission was submitted. "
+                "Your manager reviews it in Team — track status in My Attendance."
             )
             if actions_md:
                 return f"{head}\n\n{actions_md}".strip()[:2000]

@@ -939,8 +939,10 @@ class SkillAwarePlanner:
             from asgiref.sync import sync_to_async
 
             from ai.engine.cognition.plan.process_dial import (
+                is_personal_attendance_brief,
                 is_personal_leave_brief,
                 is_personal_loan_brief,
+                materialize_attendance_permission_plan,
                 materialize_leave_request_plan,
                 materialize_loan_request_plan,
             )
@@ -951,6 +953,15 @@ class SkillAwarePlanner:
                 )(utterance)
                 logger.info(
                     "SkillAwarePlanner: process_dial loan (%d steps)",
+                    len(plan.steps),
+                )
+                return plan
+            if is_personal_attendance_brief(utterance):
+                plan = await sync_to_async(
+                    materialize_attendance_permission_plan, thread_sensitive=True,
+                )(utterance)
+                logger.info(
+                    "SkillAwarePlanner: process_dial attendance (%d steps)",
                     len(plan.steps),
                 )
                 return plan

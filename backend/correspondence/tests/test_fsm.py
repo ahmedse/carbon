@@ -409,10 +409,10 @@ def test_archive_by_admin(leave_workflow, create_user):
 # ── skip_if_self ────────────────────────────────────────────────────────────
 
 @pytest.mark.django_db
-def test_skip_if_self_auto_approves(leave_workflow):
+def test_skip_if_self_never_auto_approves_without_fallback(leave_workflow):
+    """Self-manager with skip_if_self and no fallback waits — never silent approve."""
     wf = leave_workflow
     requester = wf.requester_user
-    # Make the requester their own manager (only one employee profile remains).
     Employee.objects.filter(user=requester).delete()
     emp = Employee.objects.create(
         org_unit=wf.org, employee_no='E-SELF', full_name='Self Manager',
@@ -421,14 +421,49 @@ def test_skip_if_self_auto_approves(leave_workflow):
     emp.manager = emp
     emp.save()
     wf.step.skip_if_self = True
+    wf.step.fallback_role = ''
     wf.step.save()
 
     corr = _draft(wf.corr_type, wf.org, requester)
     corr = submit_correspondence(corr=corr, by=requester)
 
-    assert corr.status == 'approved'
+    assert corr.status == 'submitted'
+    assert corr.resolved_at is None
     assert corr.current_approver_ids == []
-    assert corr.resolved_at is not None
+    step = corr.approver_chain[0]
+    assert step.get('unrouted') is True
+    assert step.get('decision') != 'auto'
+
+
+@pytest.mark.django_db
+def test_skip_if_self_escalates_to_fallback_hr(leave_workflow, create_user):
+    """Self-manager sits out; HR (fallback_role) must approve (ADR-0045 SoD)."""
+    wf = leave_workflow
+    requester = wf.requester_user
+    hr_user = create_user('fsm_hr_self_skip', is_superuser=True)
+    Employee.objects.filter(user=requester).delete()
+    emp = Employee.objects.create(
+        org_unit=wf.org, employee_no='E-SELF2', full_name='Self Manager 2',
+        basic_salary='1000.000', join_date=date(2026, 1, 1), user=requester,
+    )
+    emp.manager = emp
+    emp.save()
+    wf.step.skip_if_self = True
+    wf.step.fallback_role = 'hr'
+    wf.step.save()
+
+    corr = _draft(wf.corr_type, wf.org, requester)
+    corr = submit_correspondence(corr=corr, by=requester)
+
+    assert corr.status == 'submitted'
+    assert hr_user.id in corr.current_approver_ids
+    step = corr.approver_chain[0]
+    assert step['routed_via'] == 'fallback'
+    assert step['acting_role'] == 'hr'
+    assert 'unrouted' not in step
+
+    corr = approve(corr, hr_user)
+    assert corr.status == 'approved'
 
 
 # ── unrouted step (no approver holds the role) ─────────────────────────────

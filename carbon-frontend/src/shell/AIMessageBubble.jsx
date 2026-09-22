@@ -1109,7 +1109,10 @@ function AIMessageBubble({
               size="small"
               variant={panelActions.length === 1 && navigateActions.length === 0 ? 'contained' : (idx === 0 ? 'contained' : 'outlined')}
               disabled={!onOpenPanel}
-              onClick={() => onOpenPanel?.(act.panel, act.plan_id)}
+              onClick={() => onOpenPanel?.(act.panel, act.plan_id, {
+                processHint: act.process_hint || metadata.process_hint || '',
+                draft: metadata.draft || act.summary || '',
+              })}
               aria-label={act.label || 'Open'}
             >
               {act.label || 'Open'}

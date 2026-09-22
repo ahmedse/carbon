@@ -1,10 +1,13 @@
 # Nibras leave request lifecycle — governed ProcessDefinition (P5a).
 #
-# submit → (human review) → record → verify.
-# Autonomy dials keep this flow deterministic and admin-governed: the AI may
-# stage submit/record for confirmation, while review is explicitly human-only.
+# Plane A (ADR-0045): ESS submit → Team Correspondence review → host signal
+# records LeaveRecord + entitlement used_days. Agent dial (Plane B) stages
+# **submit only** with RULE_21 consent; it does not run record/activate.
+#
+# submit (act_confirm) → review (human_only / Team) → record (host effect of
+# approve — observe) → verify (observe).
 id: leave.request.lifecycle
-version: "1.0"
+version: "1.1"
 owner: ai
 status: active
 
@@ -42,6 +45,7 @@ steps:
     separation_of_duties:
       - requester
       - approver
+    # Plane A surface: Team Approvals Inbox (Correspondence), not Pulse Agent.
     binds_to: inbox
     consent: false
     approval_ref: leave.request.review
@@ -51,9 +55,11 @@ steps:
     capability: leave.request.record
     depends_on:
       - review
-    autonomy: act_confirm
+    # Host side-effect of Team approve (correspondence_subject_sync) — not an
+    # Agent mutation. Autonomy observe keeps the dial honest (ADR-0045).
+    autonomy: observe
     binds_to: leave.request
-    consent: true
+    consent: false
     idempotency_scope: request_id
     unknown_outcome: escalate
 
@@ -82,15 +88,16 @@ evidence:
     from_step: review
   - type: LeaveRecord
     from_step: record
-  - type: LeaveEntitlementDelta
+  - type: LeaveEntitlement
     from_step: record
 
 policies:
   refuse_if:
     - requester equals approver
     - request is not reviewed before record
+  # ask_if thresholds are dial advisory until host ESS enforces them.
   ask_if:
-    - requested days exceed remaining entitlement
+    - entitlement would go negative
 
 exceptions: []
 
@@ -99,4 +106,4 @@ kill_switch: false
 tests:
   - name: happy-path-recorded-and-entitlement-decremented
   - name: refuse-record-when-not-reviewed
-  - name: record-requires-human-consent
+  - name: submit-requires-human-consent

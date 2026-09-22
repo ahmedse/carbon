@@ -1,10 +1,14 @@
 # Nibras loan request lifecycle — governed ProcessDefinition (P5b).
 #
-# submit → (human review) → activate → verify.
-# Autonomy dials keep this flow deterministic and admin-governed: the AI may
-# stage submit/activate for confirmation, while review is explicitly human-only.
+# Plane A (ADR-0045): ESS submit → Team Correspondence (manager → finance) →
+# host signal activates Loan + installments. Agent dial stages **submit only**.
+# Pulse HumanTask authority for loan.request.review is finance-shaped (NPS-2);
+# manager step-1 lives on Team Correspondence.
+#
+# submit (act_confirm) → review (human_only / Team) → activate (host effect) →
+# verify (observe).
 id: loan.request.lifecycle
-version: "1.0"
+version: "1.1"
 owner: ai
 status: active
 
@@ -51,9 +55,10 @@ steps:
     capability: loan.request.activate
     depends_on:
       - review
-    autonomy: act_confirm
+    # Host side-effect of final Correspondence approve — not Agent act_confirm.
+    autonomy: observe
     binds_to: loan.request
-    consent: true
+    consent: false
     idempotency_scope: request_id
     unknown_outcome: escalate
 
@@ -89,6 +94,7 @@ policies:
   refuse_if:
     - requester equals approver
     - request is not reviewed before activate
+  # ask_if: dial advisory until host ESS enforces principal thresholds.
   ask_if:
     - principal exceeds configured approval threshold
 
@@ -99,4 +105,4 @@ kill_switch: false
 tests:
   - name: happy-path-activated-and-scheduled
   - name: refuse-activate-when-not-reviewed
-  - name: activate-requires-human-consent
+  - name: submit-requires-human-consent

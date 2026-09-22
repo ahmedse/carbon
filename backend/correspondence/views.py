@@ -393,8 +393,8 @@ class CorrespondenceViewSet(viewsets.ReadOnlyModelViewSet):
     def edit(self, request, pk=None):
         """Edit payload while ``sent_back`` (requester only). Status unchanged.
 
-        Leave subjects: domain validation + LeaveRecord field sync, then
-        ``fsm.edit_payload``. Payload-only types: engine edit alone.
+        Domain subjects (leave / loan / attendance) sync via people.*_revise;
+        profile_change validates allowlisted ``changes`` only (no Employee write).
         """
         corr = self.get_object()
         data = request.data or {}
@@ -406,10 +406,19 @@ class CorrespondenceViewSet(viewsets.ReadOnlyModelViewSet):
             )
         title = data.get('title')
 
+        def _domain_error(exc):
+            body = {'detail': exc.detail}
+            if getattr(exc, 'error_kind', None):
+                body['error_kind'] = exc.error_kind
+            body.update(getattr(exc, 'extra', {}) or {})
+            return Response(body, status=exc.status_code)
+
         try:
             with transaction.atomic():
-                if corr.subject_type == 'people.LeaveRecord':
-                    # Domain owns leave field rules (balance / overlap / dates).
+                subject = corr.subject_type or ''
+                corr_code = corr.corr_type.code if corr.corr_type_id else ''
+
+                if subject == 'people.LeaveRecord':
                     from people.leave_revise import (  # noqa: PLC0415
                         LeaveReviseError,
                         apply_leave_payload_edit,
@@ -417,11 +426,37 @@ class CorrespondenceViewSet(viewsets.ReadOnlyModelViewSet):
                     try:
                         payload, title = apply_leave_payload_edit(corr, payload)
                     except LeaveReviseError as exc:
-                        body = {'detail': exc.detail}
-                        if exc.error_kind:
-                            body['error_kind'] = exc.error_kind
-                        body.update(exc.extra)
-                        return Response(body, status=exc.status_code)
+                        return _domain_error(exc)
+
+                elif subject == 'people.Loan':
+                    from people.loan_revise import (  # noqa: PLC0415
+                        LoanReviseError,
+                        apply_loan_payload_edit,
+                    )
+                    try:
+                        payload, title = apply_loan_payload_edit(corr, payload)
+                    except LoanReviseError as exc:
+                        return _domain_error(exc)
+
+                elif subject == 'people.AttendancePermission':
+                    from people.attendance_revise import (  # noqa: PLC0415
+                        AttendanceReviseError,
+                        apply_attendance_payload_edit,
+                    )
+                    try:
+                        payload, title = apply_attendance_payload_edit(corr, payload)
+                    except AttendanceReviseError as exc:
+                        return _domain_error(exc)
+
+                elif subject == 'people.Employee' or corr_code == 'profile_change':
+                    from people.profile_change_revise import (  # noqa: PLC0415
+                        ProfileChangeReviseError,
+                        apply_profile_change_payload_edit,
+                    )
+                    try:
+                        payload, title = apply_profile_change_payload_edit(corr, payload)
+                    except ProfileChangeReviseError as exc:
+                        return _domain_error(exc)
 
                 corr = fsm.edit_payload(
                     corr, request.user, payload=payload, title=title,

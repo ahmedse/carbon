@@ -751,7 +751,7 @@ ResultArtifactCard.propTypes = {
  *   (tasks|monitor|results) that drives this panel's internal tab, so the
  *   Monitor and Results activity icons open the right internal view.
  */
-function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, onLifecycleStateChange, onSwitchToChat, externalTab = 'tasks' }) {
+function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, seedBrief = null, onSeedBriefConsumed, onLifecycleStateChange, onSwitchToChat, externalTab = 'tasks' }) {
   const { token } = useAuth();
   const { notify, notifyFromError } = useNotification();
   const { t } = useTranslation('ai');
@@ -1007,7 +1007,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     }
   };
 
-  const refreshPlan = useCallback(async (planId) => {
+  const refreshPlan = useCallback(async (planId, { quiet = false } = {}) => {
     try {
       const plan = await getPlan(token, planId);
       setSelectedPlan(plan);
@@ -1016,7 +1016,9 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       setPlans((prev) => prev.map((p) => (p.id === planId ? { ...p, ...plan } : p)));
       return plan;
     } catch (err) {
-      notifyFromErrorRef.current(err, 'Could not refresh the plan');
+      if (!quiet) {
+        notifyFromErrorRef.current(err, 'Could not refresh the plan');
+      }
       return null;
     }
   }, [token]);
@@ -1027,7 +1029,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     const planId = selectedPlan?.id;
     if (!planId || phase !== 'working') return undefined;
     const timer = setInterval(() => {
-      refreshPlan(planId);
+      refreshPlan(planId, { quiet: true });
     }, 3000);
     return () => clearInterval(timer);
   }, [selectedPlan?.id, phase, refreshPlan]);
@@ -1283,17 +1285,23 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
 
   const stopRequestedRef = useRef(false);
 
-  const handleRun = async () => {
+  const handleRun = async ({ forceResume = false } = {}) => {
     if (!selectedPlan) return;
     const planId = selectedPlan.id;
-    const streamFn = selectedPlan.status === 'paused' ? resumePlanStream : runPlanStream;
+    // Prefer resume whenever the durable plan is paused — stale FE status
+    // after a failed refresh used to call /run/ and re-open the consent gate.
+    const streamFn = (
+      forceResume
+      || selectedPlan.status === 'paused'
+      || phase === 'paused'
+    ) ? resumePlanStream : runPlanStream;
     stopRequestedRef.current = false;
     setPhase('working');
     setErrorMessage(null);
     setLedger(null);
-    setRunSteps((prev) =>
-      prev.map((s) => (s.status === 'awaiting_approval' ? { ...s, status: 'running' } : s)),
-    );
+    // Do NOT flip awaiting_approval → running here: Approve already owns
+    // that transition, and a premature "Running…" hides the consent surface
+    // when the stream pauses again or times out mid-poll.
 
     try {
       await streamFn(token, planId, {
@@ -1377,14 +1385,17 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     try {
       const result = await confirmPlanStep(token, selectedPlan.id, stepId, opts);
       if (result?.unstaged) {
-        // Pre-execution consent: the step hasn't run yet; token is now set.
-        // Auto-resume so the user only needs one click instead of Approve → Resume.
-        await handleRun();
+        // Pre-execution consent: token recorded — force resume so
+        // resume_tokens load (never /run/ from a stale non-paused FE status).
+        setSelectedPlan((prev) => (
+          prev ? { ...prev, status: 'paused' } : prev
+        ));
+        await handleRun({ forceResume: true });
       } else {
         // Post-execution confirmation: the staged host mutation ran; step done.
         upsertStep({ step_id: stepId, status: 'completed' });
+        await refreshPlan(selectedPlan.id);
       }
-      await refreshPlan(selectedPlan.id);
     } catch (err) {
       notifyFromErrorRef.current(err, 'Could not approve the step');
     } finally {
@@ -1820,6 +1831,8 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
         onPlanReady={handleDiscoveryReady}
         onStarted={handleDiscoveryStarted}
         onSwitchToChat={onSwitchToChat}
+        seedBrief={seedBrief}
+        onSeedBriefConsumed={onSeedBriefConsumed}
       />
       <AgentTaskPicker
         plans={plans}
@@ -2801,6 +2814,8 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
               onSwitchToChat={onSwitchToChat}
               resumePlanId={clarifying ? selectedPlan.id : null}
               resumeTurns={clarifying ? (selectedPlan.discovery_turns || []) : null}
+              seedBrief={seedBrief}
+              onSeedBriefConsumed={onSeedBriefConsumed}
             />
           </Box>
         )}
@@ -3020,7 +3035,10 @@ AITaskPanel.propTypes = {
   conversationId: PropTypes.string,
   focusPlanId: PropTypes.string,
   onFocusPlanConsumed: PropTypes.func,
+  seedBrief: PropTypes.string,
+  onSeedBriefConsumed: PropTypes.func,
   onLifecycleStateChange: PropTypes.func,
+  onSwitchToChat: PropTypes.func,
   externalTab: PropTypes.oneOf(['tasks', 'run', 'monitor', 'results', 'templates', 'scheduled']),
 };
 

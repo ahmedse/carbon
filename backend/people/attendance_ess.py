@@ -72,15 +72,24 @@ def submit_my_attendance_permission(user, data: dict[str, Any]) -> Correspondenc
 
     data = data or {}
     permission_type = data.get("permission_type")
-    if not isinstance(permission_type, str) or not permission_type.strip():
+    if permission_type is None or (
+        isinstance(permission_type, str) and not permission_type.strip()
+    ):
         raise AttendanceESSError("permission_type is required")
 
-    perm_value = ReferenceValue.objects.filter(
-        reference_set__name="permission_type",
-        code=permission_type.strip(),
-    ).first()
+    try:
+        from mdm.governed import resolve_reference_value
+
+        perm_value = resolve_reference_value(
+            "permission_type",
+            permission_type.strip() if isinstance(permission_type, str) else permission_type,
+            require_current=False,
+        )
+    except Exception:
+        perm_value = None
     if perm_value is None:
         raise AttendanceESSError("Invalid permission_type")
+    permission_type = perm_value.code
 
     try:
         day = date.fromisoformat(str(data.get("date", "")))
@@ -103,6 +112,7 @@ def submit_my_attendance_permission(user, data: dict[str, Any]) -> Correspondenc
                 date=day,
                 permission_type=perm_value,
                 hours=hours,
+                status='pending',
                 approved=False,
                 notes=notes,
             )

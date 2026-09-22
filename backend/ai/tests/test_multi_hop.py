@@ -158,7 +158,14 @@ def test_has_confirmed_host_write():
         critic_verdict="pass",
         tool_output={"confirmed": True, "action": "navigate", "route": "/my/x", "summary": "ok"},
     )
+    navigate_only = StepResult(
+        step_id=2,
+        intent="peek",
+        critic_verdict="pass",
+        tool_output={"action": "navigate", "route": "/my/x"},
+    )
     assert ReActLoop._has_confirmed_host_write([empty]) is False
+    assert ReActLoop._has_confirmed_host_write([navigate_only]) is False
     assert ReActLoop._has_confirmed_host_write([empty, done]) is True
 
 

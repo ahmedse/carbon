@@ -24,7 +24,7 @@ from rest_framework.views import APIView
 
 from correspondence import fsm
 from correspondence.exceptions import InvalidTransition, SubmissionBlocked
-from correspondence.models import ACTIONABLE, Correspondence
+from correspondence.models import IN_FLIGHT, Correspondence
 from correspondence.policies import PolicyNotFound
 from correspondence.serializers import CorrespondenceDetailSerializer
 from mdm.models import ReferenceValue
@@ -42,6 +42,7 @@ from .leave_guards import (
 )
 from .leave_type_resolve import allowed_leave_type_payload, resolve_leave_type
 from .manager_routing import manager_routing_block_response
+from .profile_change_service import PROFILE_CHANGE_ALLOWLIST
 from .self_serializers import (
     EmployeeSummarySerializer,
     LeaveBalanceSerializer,
@@ -49,7 +50,12 @@ from .self_serializers import (
     LeaveRecordSerializer,
     TeamLeaveRecordSerializer,
 )
-from .serializers import AttendancePermissionSerializer, LoanSerializer, PayslipLineSerializer
+from .serializers import (
+    AttendancePermissionSerializer,
+    LoanSerializer,
+    PayslipLineSerializer,
+    SelfLoanSerializer,
+)
 
 # Payroll run statuses whose payslip lines are final and safe to expose to the
 # employee (F10). Draft/computed runs are internal and stay hidden.
@@ -212,7 +218,7 @@ class LeaveSelfCollectionView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        year = timezone.now().year
+        year = start_date.year
         _, _, _, _, remaining = _compute_balance(profile, leave_type, year)
         if days > remaining:
             return Response(
@@ -329,7 +335,7 @@ class LoanSelfCollectionView(APIView):
     def get(self, request):
         profile = request.user.employee_profile
         qs = Loan.objects.filter(employee=profile)
-        return Response(LoanSerializer(qs, many=True).data)
+        return Response(SelfLoanSerializer(qs, many=True).data)
 
     def post(self, request):
         profile = request.user.employee_profile
@@ -516,6 +522,14 @@ class ProfileChangeSelfView(APIView):
             )
 
         for field, change in changes.items():
+            if field not in PROFILE_CHANGE_ALLOWLIST:
+                return Response(
+                    {
+                        'detail': f'Field {field!r} is not allowed on profile change',
+                        'error_kind': 'field_not_allowed',
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             if not isinstance(change, dict) or 'to' not in change:
                 return Response(
                     {'detail': f'change for {field!r} must be an object with a "to" value'},
@@ -645,7 +659,7 @@ class TeamLeaveView(APIView):
         pending_corr = Correspondence.objects.filter(
             subject_type=SUBJECT_TYPE,
             subject_id=OuterRef('pk'),
-            status__in=ACTIONABLE,
+            status__in=IN_FLIGHT,
         )
         qs = (
             LeaveRecord.objects.filter(

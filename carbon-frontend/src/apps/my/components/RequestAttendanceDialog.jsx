@@ -1,7 +1,6 @@
 // src/apps/my/components/RequestAttendanceDialog.jsx
-// Request short-hours attendance permission (SystemDialog). Submits via
-// submitAttendancePermission → POST people/me/attendance-permissions/.
-// permission_type from governed ReferenceSet (ADR-0027 / NSR-7).
+// Request short-hours attendance permission (SystemDialog).
+// Create → POST people/me/attendance-permissions/; edit → correspondence edit.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
@@ -19,7 +18,7 @@ import SystemDialog from '../../../components/SystemDialog';
 import { SearchSelect } from '../../../components/Form';
 import { useAuth } from '../../../auth/AuthContext';
 import { useReferenceOptions } from '../../../hooks/useReferenceOptions';
-import { submitAttendancePermission } from '../../../api/my';
+import { editCorrespondence, submitAttendancePermission } from '../../../api/my';
 
 function mapSubmitError(t, err) {
   const detail = err?.data?.detail;
@@ -48,10 +47,19 @@ function mapSubmitError(t, err) {
   return err?.message || t('submitError');
 }
 
-export default function RequestAttendanceDialog({ open, onClose, profile, onSubmitted }) {
+export default function RequestAttendanceDialog({
+  open,
+  onClose,
+  profile,
+  onSubmitted,
+  mode,
+  correspondenceId,
+  initialPayload,
+}) {
   const { t } = useTranslation('my');
   const { token } = useAuth();
   const permTypeRef = useReferenceOptions('permission_type');
+  const isEdit = mode === 'edit';
 
   const [permissionType, setPermissionType] = useState('');
   const [dateValue, setDateValue] = useState('');
@@ -65,26 +73,33 @@ export default function RequestAttendanceDialog({ open, onClose, profile, onSubm
   useEffect(() => {
     if (open) {
       openedRef.current = true;
-      setPermissionType('');
-      setDateValue('');
-      setHours('2');
-      setNotes('');
+      if (isEdit && initialPayload && typeof initialPayload === 'object') {
+        setPermissionType(initialPayload.permission_type || '');
+        setDateValue(String(initialPayload.date || '').slice(0, 10));
+        setHours(String(initialPayload.hours ?? '2'));
+        setNotes(initialPayload.notes || '');
+      } else {
+        setPermissionType('');
+        setDateValue('');
+        setHours('2');
+        setNotes('');
+      }
       setSubmitError(null);
       setFieldError(null);
       setSubmitting(false);
     } else {
       openedRef.current = false;
     }
-  }, [open]);
+  }, [open, isEdit, initialPayload]);
 
-  // Prefer seeded "personal" when present; else first catalog value.
+  // Prefer seeded "personal" when present; else first catalog value (create only).
   useEffect(() => {
-    if (!open || !openedRef.current || permissionType) return;
+    if (!open || !openedRef.current || permissionType || isEdit) return;
     const opts = permTypeRef.options || [];
     if (!opts.length) return;
     const personal = opts.find((o) => o.value === 'personal');
     setPermissionType(personal?.value ?? opts[0].value);
-  }, [open, permissionType, permTypeRef.options]);
+  }, [open, permissionType, permTypeRef.options, isEdit]);
 
   const canSubmit =
     Boolean(permissionType && dateValue && hours) &&
@@ -102,20 +117,28 @@ export default function RequestAttendanceDialog({ open, onClose, profile, onSubm
     setSubmitting(true);
     setSubmitError(null);
     setFieldError(null);
+    const body = {
+      permission_type: permissionType,
+      date: dateValue,
+      hours: String(hours),
+      notes: notes || '',
+    };
     try {
-      await submitAttendancePermission(token, {
-        permission_type: permissionType,
-        date: dateValue,
-        hours: String(hours),
-        notes: notes || '',
-      });
+      if (isEdit) {
+        await editCorrespondence(token, correspondenceId, { payload: body });
+      } else {
+        await submitAttendancePermission(token, body);
+      }
       onSubmitted();
     } catch (err) {
       setSubmitError(mapSubmitError(t, err));
     } finally {
       setSubmitting(false);
     }
-  }, [canSubmit, token, permissionType, dateValue, hours, notes, onSubmitted, t]);
+  }, [
+    canSubmit, token, permissionType, dateValue, hours, notes,
+    onSubmitted, t, isEdit, correspondenceId,
+  ]);
 
   const managerName = profile?.manager?.full_name || profile?.manager_name;
 
@@ -123,7 +146,7 @@ export default function RequestAttendanceDialog({ open, onClose, profile, onSubm
     <SystemDialog
       open={open}
       onClose={submitting ? undefined : onClose}
-      title={t('attendanceDialogTitle')}
+      title={isEdit ? t('editAttendanceDialogTitle') : t('attendanceDialogTitle')}
       actions={
         <>
           <Button onClick={onClose} disabled={submitting}>
@@ -135,7 +158,7 @@ export default function RequestAttendanceDialog({ open, onClose, profile, onSubm
             disabled={!canSubmit}
             startIcon={submitting ? <CircularProgress size={14} color="inherit" /> : null}
           >
-            {t('confirmButton')}
+            {isEdit ? t('saveEditsButton') : t('confirmButton')}
           </Button>
         </>
       }
@@ -146,6 +169,7 @@ export default function RequestAttendanceDialog({ open, onClose, profile, onSubm
             {submitError}
           </Alert>
         )}
+        {isEdit ? <Alert severity="info">{t('editLeaveHint')}</Alert> : null}
         <SearchSelect
           label={t('fieldPermissionType')}
           options={permTypeRef.options}
@@ -190,16 +214,18 @@ export default function RequestAttendanceDialog({ open, onClose, profile, onSubm
           multiline
           minRows={2}
         />
-        <Box>
-          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
-            {t('approverTitle')}
-          </Typography>
-          <Typography variant="body2">
-            {managerName
-              ? t('approverManagerNamed', { name: managerName, defaultValue: managerName })
-              : t('approverLineManagerWillApprove')}
-          </Typography>
-        </Box>
+        {!isEdit ? (
+          <Box>
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+              {t('approverTitle')}
+            </Typography>
+            <Typography variant="body2">
+              {managerName
+                ? t('approverManagerNamed', { name: managerName, defaultValue: managerName })
+                : t('approverLineManagerWillApprove')}
+            </Typography>
+          </Box>
+        ) : null}
       </Stack>
     </SystemDialog>
   );
@@ -210,8 +236,14 @@ RequestAttendanceDialog.propTypes = {
   onClose: PropTypes.func.isRequired,
   profile: PropTypes.object,
   onSubmitted: PropTypes.func.isRequired,
+  mode: PropTypes.oneOf(['create', 'edit']),
+  correspondenceId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+  initialPayload: PropTypes.object,
 };
 
 RequestAttendanceDialog.defaultProps = {
   profile: null,
+  mode: 'create',
+  correspondenceId: null,
+  initialPayload: null,
 };

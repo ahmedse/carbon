@@ -486,4 +486,24 @@ def apply_bind_to_tool_calls(
                 "arguments": json.dumps(bound, ensure_ascii=False, default=str),
             },
         }]
+
+    # Process-dial / bound plan steps: when the draft narrates instead of
+    # calling the tool, synthesize from the plan's tool_args so Approve→resume
+    # still writes (loan/leave/attendance). Never invent args — only when the
+    # step already carries them.
+    if (
+        (step_tool_name or "") == "call_host_api"
+        and isinstance(step_tool_args, dict)
+        and step_tool_args.get("api_name")
+    ):
+        return [{
+            "id": "plan_step_bind_synth",
+            "type": "function",
+            "function": {
+                "name": "call_host_api",
+                "arguments": json.dumps(
+                    step_tool_args, ensure_ascii=False, default=str,
+                ),
+            },
+        }]
     return calls

@@ -9,9 +9,9 @@
 #
 # Structural / payroll / identity-control fields (org_unit, employee_no,
 # basic_salary, manager, position, civil_id, is_active, employment/contract
-# codes, kuwaitization, …) are intentionally excluded. ``mobile_number`` /
-# ``marital_status`` appear in submit fixtures but are not Employee columns
-# yet — they are ignored until the model grows those fields.
+# codes, kuwaitization, …) are intentionally excluded. Submit and edit both
+# reject non-allowlisted keys (parity); apply still ignores unknowns as a
+# defense-in-depth on approve.
 
 from __future__ import annotations
 
@@ -141,6 +141,70 @@ def apply_profile_change(*, employee: Employee, changes: dict | None, actor) -> 
             entity_type='Employee',
             entity_id=employee.pk,
             action='profile_change_applied',
+            before={k: before.get(k) for k in pending},
+            after={k: after.get(k) for k in pending},
+            user=actor,
+        )
+
+    return pending
+
+
+def reverse_profile_change(
+    *,
+    employee: Employee,
+    changes: dict | None,
+    actor,
+    reason: str = 'Reverted profile_change correspondence',
+) -> dict[str, Any]:
+    """Restore allowlisted fields from payload ``from`` values when present.
+
+    Fields without a usable ``from`` are skipped (cannot safely invent prior
+    state). No-ops when nothing reverseable remains.
+    """
+    if not isinstance(changes, dict) or not changes:
+        return {}
+
+    pending: dict[str, Any] = {}
+    for field, change in changes.items():
+        if field not in PROFILE_CHANGE_ALLOWLIST:
+            continue
+        if not isinstance(change, dict) or 'from' not in change:
+            continue
+        try:
+            value = _coerce_value(field, change['from'])
+        except (TypeError, ValueError) as exc:
+            logger.warning(
+                'profile_change reverse: skip field %r — coerce failed: %s',
+                field, exc,
+            )
+            continue
+        if getattr(employee, field) != value:
+            pending[field] = value
+
+    if not pending:
+        return {}
+
+    before = snapshot_employee(employee)
+    with transaction.atomic():
+        for field, value in pending.items():
+            setattr(employee, field, value)
+        employee.save(update_fields=[*pending.keys(), 'updated_at'])
+
+        after = snapshot_employee(employee)
+        record_event(
+            entity_type='Employee',
+            entity_id=employee.pk,
+            event_kind='profile_updated',
+            effective_date=timezone.localdate(),
+            user=actor,
+            before=before,
+            after=after,
+            notes=reason,
+        )
+        emit_governance_event(
+            entity_type='Employee',
+            entity_id=employee.pk,
+            action='profile_change_reverted',
             before={k: before.get(k) for k in pending},
             after={k: after.get(k) for k in pending},
             user=actor,

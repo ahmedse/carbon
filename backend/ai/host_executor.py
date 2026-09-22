@@ -1052,6 +1052,22 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
                 data["caveat"] = f"Showing first {len(results)} of {total} leave records."
             return {"status_code": 200, "data": data}
         if method == "POST":
+            # ADR-0045: Agent happy path is ESS ``submit_my_leave`` + Correspondence.
+            # Admin leave-records create remains ops-only (people:manage).
+            from accounts.capabilities import has_capability
+
+            if not has_capability(user, "people:manage"):
+                return {
+                    "status_code": 403,
+                    "data": {
+                        "detail": (
+                            "Personal leave must use submit_my_leave "
+                            "(My Leave / Agent process dial). "
+                            "Admin leave-records create requires people:manage."
+                        ),
+                        "error_kind": "ess_path_required",
+                    },
+                }
             serializer = S.LeaveRecordSerializer(data=body)
             if not serializer.is_valid():
                 return {
@@ -1189,6 +1205,27 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
                     "data": S.AttendancePermissionSerializer(perm).data,
                 }
             # approve_attendance_permission — partial update (typically approved=true)
+            # ADR-0045: Agent/employee happy path is Team Correspondence approve.
+            # Admin PATCH remains ops-only (people:manage + NPS-1 SoD).
+            from accounts.capabilities import has_capability
+
+            approving = (
+                isinstance(body, dict)
+                and "approved" in body
+                and bool(body.get("approved"))
+                and not bool(perm.approved)
+            )
+            if approving and not has_capability(user, "people:manage"):
+                return {
+                    "status_code": 403,
+                    "data": {
+                        "detail": (
+                            "Attendance permission approval is manager Team "
+                            "(Correspondence). Admin PATCH requires people:manage."
+                        ),
+                        "error_kind": "team_path_required",
+                    },
+                }
             serializer = S.AttendancePermissionSerializer(
                 perm, data=body or {}, partial=True,
             )

@@ -7,7 +7,7 @@ from decimal import Decimal
 
 from django.db.models import Sum
 
-from correspondence.models import ACTIONABLE, Correspondence
+from correspondence.models import IN_FLIGHT, Correspondence
 
 from .models import LeaveEntitlement, LeaveRecord
 
@@ -19,13 +19,17 @@ SUBJECT_TYPE = 'people.LeaveRecord'
 MAX_BACKDATED_LEAVE_DAYS = 30
 
 
-def linked_actionable_corr(record) -> bool:
-    """True if this leave record has a workflow correspondence awaiting action."""
+def linked_in_flight_corr(record) -> bool:
+    """True if this leave has a correspondence still in the workflow (incl. sent_back)."""
     return Correspondence.objects.filter(
         subject_type=SUBJECT_TYPE,
         subject_id=record.pk,
-        status__in=ACTIONABLE,
+        status__in=IN_FLIGHT,
     ).exists()
+
+
+# Back-compat alias used by older call sites / tests.
+linked_actionable_corr = linked_in_flight_corr
 
 
 def linked_approved_corr(record) -> bool:
@@ -41,11 +45,15 @@ def record_blocks_overlap(record) -> bool:
     """Whether an existing leave record should block a new/revised request."""
     if record.status in ('approved', 'submitted'):
         return True
-    return linked_actionable_corr(record)
+    return linked_in_flight_corr(record)
 
 
 def compute_balance(profile, code, year):
-    """Return ``(entitled, carried_forward, used, pending, remaining)`` Decimals."""
+    """Return ``(entitled, carried_forward, used, pending, remaining)`` Decimals.
+
+    ``used`` and ``pending`` are scoped to ``start_date`` in ``year`` so
+    cross-year leave does not drain the wrong entitlement bucket.
+    """
     agg = LeaveEntitlement.objects.filter(
         employee=profile, year=year, leave_type__code=code,
     ).aggregate(
@@ -64,8 +72,10 @@ def compute_balance(profile, code, year):
             used += record.days
 
     pending = Decimal('0')
-    for record in LeaveRecord.objects.filter(employee=profile, leave_type__code=code):
-        if linked_actionable_corr(record):
+    for record in LeaveRecord.objects.filter(
+        employee=profile, leave_type__code=code, start_date__year=year,
+    ):
+        if linked_in_flight_corr(record):
             pending += record.days
 
     remaining = max(Decimal('0'), opening_balance - used - pending)

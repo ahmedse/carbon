@@ -153,9 +153,23 @@ def scope_route(text: str, *, stage: str = "brief") -> ScopeRoute:
             cards=_leave_cards(personal_primary=False),
         )
 
+    # Personal leave → recommend leave path (asymmetric vs compliance).
+    # Loan / attendance must not fall into generic clarifying — they have
+    # process dials (handled in plans_service.start_discovery short-circuit).
     if _LEAVE_PERSONAL.search(raw) or _BARE_LEAVE.search(raw):
+        # Loan/attendance briefs can contain "leave early" etc. — check first.
+        from ai.engine.cognition.plan.process_dial import (
+            is_personal_attendance_brief,
+            is_personal_loan_brief,
+        )
+
+        if is_personal_loan_brief(raw) or is_personal_attendance_brief(raw):
+            return ScopeRoute(
+                cls="PLAN_CLEAR",
+                message="",
+                plannable=True,
+            )
         personal = bool(_LEAVE_PERSONAL.search(raw)) or bool(_BARE_LEAVE.search(raw))
-        # Bare "leave" / first-person leave → recommend personal path (asymmetric).
         return ScopeRoute(
             cls="TRANSACTION" if personal else "PLAN_AMBIG",
             message=(
@@ -169,6 +183,22 @@ def scope_route(text: str, *, stage: str = "brief") -> ScopeRoute:
             handoff_target="chat",
             cards=_leave_cards(personal_primary=True),
         )
+
+    # Loan / attendance without leave words — still plannable for dial short-circuit.
+    try:
+        from ai.engine.cognition.plan.process_dial import (
+            is_personal_attendance_brief,
+            is_personal_loan_brief,
+        )
+
+        if is_personal_loan_brief(raw) or is_personal_attendance_brief(raw):
+            return ScopeRoute(
+                cls="PLAN_CLEAR",
+                message="",
+                plannable=True,
+            )
+    except Exception:  # noqa: BLE001
+        pass
 
     if _ADVISORY.search(raw) and not _PLAN_SIGNAL.search(raw):
         return ScopeRoute(

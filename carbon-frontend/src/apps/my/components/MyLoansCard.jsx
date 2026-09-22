@@ -69,11 +69,17 @@ function InlineError({ message, onRetry }) {
 function loanStatusColor(status) {
   switch (status) {
     case 'active':
+    case 'approved':
       return 'success';
     case 'paid_off':
       return 'info';
     case 'cancelled':
+    case 'rejected':
       return 'warning';
+    case 'submitted':
+    case 'in_review':
+    case 'sent_back':
+      return 'info';
     case 'draft':
       return 'default';
     default:
@@ -89,11 +95,26 @@ function loanStatusLabel(status, t) {
       return t('loanStatusPaidOff');
     case 'cancelled':
       return t('loanStatusCancelled');
+    case 'rejected':
+      return t('statusRejected', { defaultValue: 'Rejected' });
+    case 'submitted':
+      return t('statusSubmitted', { defaultValue: 'Submitted' });
+    case 'in_review':
+      return t('statusInReview', { defaultValue: 'In review' });
+    case 'sent_back':
+      return t('statusSentBack', { defaultValue: 'Sent back' });
+    case 'approved':
+      return t('statusApproved', { defaultValue: 'Approved' });
     case 'draft':
       return t('loanStatusDraft');
     default:
       return status ?? '—';
   }
+}
+
+/** Prefer serializer remapped status (corr for in-flight drafts). */
+function loanDisplayStatus(loan) {
+  return loan?.status || loan?.correspondence_status || 'draft';
 }
 
 function formatAmount(amount) {
@@ -158,12 +179,15 @@ export default function MyLoansCard({ loans, loading, error, onRetry }) {
           items={loans}
           getKey={(loan) => loan.id}
           emptyLabel={t('loansEmpty')}
-          renderCard={(loan) => ({
-            title: loanTypeLabel(loan.loan_type),
-            status: loanStatusLabel(loan.status, t),
-            statusColor: loanStatusColor(loan.status),
-            meta: formatAmount(loan.principal),
-          })}
+          renderCard={(loan) => {
+            const st = loanDisplayStatus(loan);
+            return {
+              title: loanTypeLabel(loan.loan_type),
+              status: loanStatusLabel(st, t),
+              statusColor: loanStatusColor(st),
+              meta: formatAmount(loan.principal),
+            };
+          }}
           table={
             <TableContainer>
               <Table size="small">
@@ -209,8 +233,8 @@ export default function MyLoansCard({ loans, loading, error, onRetry }) {
                         <Chip
                           size="small"
                           variant="outlined"
-                          color={loanStatusColor(loan.status)}
-                          label={loanStatusLabel(loan.status, t)}
+                          color={loanStatusColor(loanDisplayStatus(loan))}
+                          label={loanStatusLabel(loanDisplayStatus(loan), t)}
                         />
                       </TableCell>
                     </TableRow>

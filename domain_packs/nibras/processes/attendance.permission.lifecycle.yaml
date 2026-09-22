@@ -1,10 +1,13 @@
 # Nibras attendance permission lifecycle — governed ProcessDefinition.
 #
-# submit (ESS /me) → (human review via Correspondence) → approve → verify.
-# Happy path: employee self-service + manager Correspondence (ADR-0030).
-# Admin create/PATCH + NPS-1 SoD remains ops fallback only.
+# Plane A (ADR-0045): ESS /me submit → Team Correspondence review → host
+# signal sets AttendancePermission.status. Agent dial stages **submit only**.
+# Admin create/PATCH + NPS-1 SoD remains ops fallback — not the Agent happy path.
+#
+# submit (act_confirm) → review (human_only / Team) → approve (host effect) →
+# verify (observe).
 id: attendance.permission.lifecycle
-version: "1.0"
+version: "1.1"
 owner: ai
 status: active
 
@@ -51,9 +54,10 @@ steps:
     capability: attendance.permission.approve
     depends_on:
       - review
-    autonomy: act_confirm
+    # Host side-effect of Team approve — not Agent act_confirm.
+    autonomy: observe
     binds_to: attendance.permission
-    consent: true
+    consent: false
     idempotency_scope: permission_id
     unknown_outcome: escalate
 
@@ -87,6 +91,7 @@ policies:
   refuse_if:
     - requester equals approver
     - permission is not reviewed before approve
+  # ask_if: dial advisory until host ESS enforces hours thresholds.
   ask_if:
     - hours exceed daily threshold
 

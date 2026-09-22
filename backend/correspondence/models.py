@@ -14,6 +14,11 @@ STATUS_CHOICES = [
     ('sent_back', 'Sent Back'), ('expired', 'Expired'), ('archived', 'Archived'),
 ]
 ACTIONABLE = ('submitted', 'in_review')
+# In-flight for the requester: awaiting action OR sent back for revise.
+# Used by leave overlap / pending balance so send-back does not free the slot.
+IN_FLIGHT = ('submitted', 'in_review', 'sent_back')
+# Open correspondence still linked to a domain subject (blocks subject delete).
+OPEN_SUBJECT = ('draft', 'submitted', 'in_review', 'sent_back')
 TERMINAL = ('approved', 'rejected', 'cancelled', 'expired', 'archived')
 
 # Decision events a manager/approver records — Team History is keyed on these.

@@ -359,6 +359,90 @@ def test_edit_then_resubmit_leave_subject(workflow, api_client, get_token_for_us
 
 
 @pytest.mark.django_db
+def test_edit_rehydrates_orphaned_leave_subject(workflow, api_client, get_token_for_user):
+    """If LeaveRecord was deleted under an open corr, edit recreates + re-links it."""
+    from datetime import date as date_cls
+    from decimal import Decimal
+
+    from people.models import LeaveEntitlement, LeaveRecord
+    from mdm.models import ReferenceSet, ReferenceValue
+
+    wf = workflow
+    leave_set, _ = ReferenceSet.objects.get_or_create(
+        name='leave_type', defaults={'slug': 'leave-type'},
+    )
+    annual, _ = ReferenceValue.objects.get_or_create(
+        reference_set=leave_set, code='annual',
+        defaults={'label': 'Annual Leave'},
+    )
+    emp = Employee.objects.get(user=wf.requester_user)
+    LeaveEntitlement.objects.get_or_create(
+        employee=emp, year=2026, leave_type=annual,
+        defaults={'entitled_days': Decimal('30'), 'used_days': Decimal('0')},
+    )
+    record = LeaveRecord.objects.create(
+        employee=emp,
+        leave_type=annual,
+        start_date=date_cls(2026, 10, 6),
+        end_date=date_cls(2026, 10, 6),
+        days=Decimal('1'),
+        status='draft',
+    )
+    orphan_id = record.pk
+    corr = _draft(
+        wf.corr_type, wf.org, wf.requester_user,
+        subject_type='people.LeaveRecord',
+        subject_id=orphan_id,
+        title='Leave request annual 2026-10-06→2026-10-06',
+        payload={
+            'leave_type': 'annual',
+            'start_date': '2026-10-06',
+            'end_date': '2026-10-06',
+            'days': '1',
+            'note': '',
+        },
+    )
+    submit_correspondence(
+        corr=corr, by=wf.requester_user, subject=record,
+        subject_label='people.LeaveRecord',
+    )
+    _auth(api_client, wf.manager_user, get_token_for_user)
+    assert api_client.post(
+        f'{PREFIX}/correspondence/{corr.id}/send-back/',
+        {'comment': 'change day'}, format='json',
+    ).status_code == 200
+
+    # Simulate admin delete of the subject while corr stays sent_back.
+    LeaveRecord.objects.filter(pk=orphan_id).delete()
+    assert not LeaveRecord.objects.filter(pk=orphan_id).exists()
+
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    resp = api_client.post(
+        f'{PREFIX}/correspondence/{corr.id}/edit/',
+        {
+            'payload': {
+                'leave_type': 'annual',
+                'start_date': '2026-10-08',
+                'end_date': '2026-10-09',
+                'days': '2',
+                'note': 'please!',
+            },
+        },
+        format='json',
+    )
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
+    assert body['status'] == 'sent_back'
+    assert body['payload']['start_date'] == '2026-10-08'
+    corr.refresh_from_db()
+    assert corr.subject_id != orphan_id
+    restored = LeaveRecord.objects.get(pk=corr.subject_id)
+    assert restored.status == 'draft'
+    assert restored.start_date == date_cls(2026, 10, 8)
+    assert restored.end_date == date_cls(2026, 10, 9)
+
+
+@pytest.mark.django_db
 def test_cancel_by_requester_and_non_requester(
     workflow, api_client, get_token_for_user, create_user,
 ):

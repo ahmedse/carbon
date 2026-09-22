@@ -144,4 +144,34 @@ describe('DiscoveryComposer scope gate', () => {
     expect(onSwitchToChat).toHaveBeenCalledWith('أريد عمل اجازه');
     expect(createPlan).not.toHaveBeenCalled();
   });
+
+  it('loan process-dial plan_ready skips clarifying UI', async () => {
+    const onPlanReady = vi.fn();
+    startDiscoveryPlan.mockResolvedValue({
+      id: 'plan-loan-1',
+      status: 'plan_ready',
+      plannable: true,
+      plan: {
+        id: 'plan-loan-1',
+        status: 'pending_approval',
+        brief: 'أريد قرض طوارئ 5000 لمدة 12 شهر غدا',
+        steps: [{ step_id: 1, intent: 'Submit loan', tool_args: { api_name: 'submit_my_loan' } }],
+      },
+      turns: [],
+      route: { class: 'TRANSACTION', plannable: true, cards: [] },
+    });
+
+    render(
+      <DiscoveryComposer conversationId="c1" onPlanReady={onPlanReady} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'send-brief' }));
+
+    await waitFor(() => {
+      expect(onPlanReady).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'plan-loan-1', status: 'pending_approval' }),
+      );
+    });
+    expect(screen.queryByTestId('scope-route-card')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Plan now' })).not.toBeInTheDocument();
+  });
 });

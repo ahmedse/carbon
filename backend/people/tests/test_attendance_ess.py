@@ -130,3 +130,99 @@ def test_list_my_attendance_permissions(att_workflow, api_client, get_token_for_
     listed = api_client.get(ME_ATT_URL)
     assert listed.status_code == 200
     assert len(listed.json()) == 1
+
+
+@pytest.mark.django_db
+def test_edit_then_resubmit_attendance_subject(
+    att_workflow, api_client, get_token_for_user,
+):
+    """sent_back → edit payload (+ AttendancePermission sync) → resubmit."""
+    from datetime import date as date_cls
+
+    wf = att_workflow
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    day = date_cls.today() + timedelta(days=10)
+    resp = api_client.post(ME_ATT_URL, _payload(day=day), format='json')
+    assert resp.status_code == 201, resp.content
+    corr_id = resp.json()['id']
+    subject_id = resp.json()['subject_id']
+
+    _auth(api_client, wf.manager_user, get_token_for_user)
+    assert api_client.post(
+        f'{PREFIX}/correspondence/{corr_id}/send-back/',
+        {'comment': 'change hours'}, format='json',
+    ).status_code == 200
+
+    new_day = day + timedelta(days=1)
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    edit = api_client.post(
+        f'{PREFIX}/correspondence/{corr_id}/edit/',
+        {
+            'payload': {
+                'permission_type': 'personal',
+                'date': new_day.isoformat(),
+                'hours': '3.50',
+                'notes': 'revised',
+            },
+        },
+        format='json',
+    )
+    assert edit.status_code == 200, edit.content
+    body = edit.json()
+    assert body['status'] == 'sent_back'
+    assert body['payload']['hours'] == '3.50'
+    assert body['payload']['date'] == new_day.isoformat()
+    record = AttendancePermission.objects.get(pk=subject_id)
+    assert record.hours == Decimal('3.50')
+    assert record.date == new_day
+    assert record.approved is False
+
+    resub = api_client.post(
+        f'{PREFIX}/correspondence/{corr_id}/resubmit/', {}, format='json',
+    )
+    assert resub.status_code == 200
+    assert resub.json()['status'] == 'submitted'
+
+
+@pytest.mark.django_db
+def test_edit_rehydrates_orphaned_attendance_subject(
+    att_workflow, api_client, get_token_for_user,
+):
+    """If AttendancePermission was deleted under an open corr, edit recreates it."""
+    from datetime import date as date_cls
+
+    wf = att_workflow
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    day = date_cls.today() + timedelta(days=14)
+    resp = api_client.post(ME_ATT_URL, _payload(day=day), format='json')
+    assert resp.status_code == 201, resp.content
+    corr_id = resp.json()['id']
+    orphan_id = resp.json()['subject_id']
+
+    _auth(api_client, wf.manager_user, get_token_for_user)
+    assert api_client.post(
+        f'{PREFIX}/correspondence/{corr_id}/send-back/',
+        {'comment': 'fix'}, format='json',
+    ).status_code == 200
+
+    AttendancePermission.objects.filter(pk=orphan_id).delete()
+
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    edit = api_client.post(
+        f'{PREFIX}/correspondence/{corr_id}/edit/',
+        {
+            'payload': {
+                'permission_type': 'personal',
+                'date': day.isoformat(),
+                'hours': '1.00',
+                'notes': 'rehydrate',
+            },
+        },
+        format='json',
+    )
+    assert edit.status_code == 200, edit.content
+    corr = Correspondence.objects.get(pk=corr_id)
+    assert corr.subject_id != orphan_id
+    restored = AttendancePermission.objects.get(pk=corr.subject_id)
+    assert restored.hours == Decimal('1.00')
+    assert restored.approved is False

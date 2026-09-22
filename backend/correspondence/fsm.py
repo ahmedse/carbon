@@ -180,25 +180,37 @@ def _resolve_user_ids(fields, *, corr, by):
     says whether the role named anyone at all, BEFORE ``skip_if_self`` dropped
     the requester — "the policy says this approver sits their own request out"
     and "nobody holds this role" both end in an empty list but mean opposite
-    things, and only the first one may pass unapproved.
+    things.
 
-    When the primary role is unfilled and the policy names a ``fallback_role``
-    (leave goes to HR for an employee with no manager), the backup answers and
-    ``routed_via`` records that it did.
+    Fallback runs when:
+      * the primary role is vacant (no manager on file), or
+      * the primary role was filled but ``skip_if_self`` emptied the list
+        (requester is their own manager) — SoD must escalate, never
+        auto-approve (ADR-0030 / ADR-0045 Plane A).
+
+    ``routed_via`` is ``fallback`` when the backup role answers.
     """
     user_ids, role_is_filled = _approvers_for_role(
         fields['role'], fields, corr=corr, by=by,
     )
-    if role_is_filled:
+    # Primary role still has human approvers after self-skip.
+    if user_ids:
         return user_ids, True, 'role'
 
     fallback = str(fields.get('fallback_role') or '').strip()
     if not fallback:
-        return user_ids, False, 'role'
-    user_ids, fallback_is_filled = _approvers_for_role(
+        # Vacant role → unrouted; self-skip with no fallback → also unrouted
+        # (wait — never terminal auto). role_is_filled distinguishes the two
+        # for timeline / routing_gap notifications.
+        return user_ids, role_is_filled, 'role'
+
+    fb_ids, fallback_is_filled = _approvers_for_role(
         fallback, fields, corr=corr, by=by,
     )
-    return user_ids, fallback_is_filled, 'fallback' if fallback_is_filled else 'role'
+    if fallback_is_filled and fb_ids:
+        return fb_ids, True, 'fallback'
+    # Fallback vacant too — keep primary's fill signal for unrouted/gap.
+    return [], role_is_filled or fallback_is_filled, 'role'
 
 
 def _build_chain(steps, *, corr, by):
@@ -218,7 +230,7 @@ def _build_chain(steps, *, corr, by):
                 'decision': 'skip',
             })
             continue
-        user_ids, role_is_filled, routed_via = _resolve_user_ids(
+        user_ids, _role_is_filled, routed_via = _resolve_user_ids(
             fields, corr=corr, by=by,
         )
         entry = {
@@ -232,10 +244,12 @@ def _build_chain(steps, *, corr, by):
         }
         if routed_via == 'fallback':
             # Who actually holds this step, so the timeline does not claim the
-            # manager approved when HR stood in for a vacant role.
+            # manager approved when HR stood in for a vacant / self-skipped role.
             entry['routed_via'] = 'fallback'
             entry['acting_role'] = fields['fallback_role']
-        if not user_ids and not role_is_filled:
+        if not user_ids:
+            # Empty approvers after resolve (vacant role, or self-skip with no
+            # usable fallback) — wait for a human; never auto-pass.
             entry['unrouted'] = True
         chain.append(entry)
     return chain
@@ -246,13 +260,11 @@ def _advance(chain, from_step, now):
     one. Returns ``(current_step, current_approver_ids)``, or
     ``(len(chain), [])`` when the chain is exhausted. Mutates chain in place.
 
-    A step is waived only when the policy says so: a failed condition, an
-    ``auto_approve`` step, or ``skip_if_self`` dropping the requester from a
-    role somebody does hold. An ``unrouted`` step — the role exists but nobody
-    fills it (an employee with no manager) — is NOT waived: it becomes the
-    current step with no approvers, so the request waits instead of being
-    granted an approval nobody gave. ``_reroute`` picks it up once the role is
-    filled.
+    A step is waived only when the policy says so: a failed condition, or an
+    ``auto_approve`` flag. Empty ``user_ids`` is **not** a waiver — that is
+    ``unrouted`` (wait for a human / ``_reroute``). Self-skip must escalate to
+    ``fallback_role`` in ``_resolve_user_ids``, not silently approve here
+    (ADR-0030 / ADR-0045 Plane A SoD).
     """
     i = from_step + 1
     while i < len(chain):
@@ -260,9 +272,11 @@ def _advance(chain, from_step, now):
         if entry.get('decision') == 'skip':
             i += 1
             continue
-        if entry.get('unrouted'):
+        if entry.get('unrouted') or not entry.get('user_ids'):
+            if not entry.get('user_ids'):
+                entry['unrouted'] = True
             return i, []
-        if entry.get('auto_approve') or not entry.get('user_ids'):
+        if entry.get('auto_approve'):
             entry['decision'] = 'auto'
             entry['decided_at'] = now.isoformat()
             i += 1

@@ -2,9 +2,9 @@
 
 ``mdm.ReferenceValue`` is the SSOT for governed slots (``leave_type``,
 ``loan_type``, ``permission_type``, …). Resolution matches, in order, the
-value's ``code``, its ``label``, then ``metadata.aliases`` — so adding an
-Arabic/English synonym is a **data** change in MDM, never a regex branch in
-Chat, Agent or the frontend.
+value's ``code``, its ``label``, ``metadata.label_ar``, then
+``metadata.aliases`` — so adding an Arabic/English synonym is a **data**
+change in MDM, never a regex branch in Chat, Agent or the frontend.
 
 Callers: host ESS validation, Agent plan slot filling, consent forms. No
 surface may keep its own synonym table.
@@ -30,8 +30,15 @@ def _active(set_name: str) -> list[ReferenceValue]:
 
 def _needles(value: ReferenceValue) -> list[str]:
     """Every spelling that identifies this value, longest first."""
-    aliases = (value.metadata or {}).get("aliases") or []
-    raw = [value.code, value.label, *(aliases if isinstance(aliases, list) else [])]
+    meta = value.metadata or {}
+    aliases = meta.get("aliases") or []
+    label_ar = meta.get("label_ar") or ""
+    raw = [
+        value.code,
+        value.label,
+        label_ar,
+        *(aliases if isinstance(aliases, list) else []),
+    ]
     seen: set[str] = set()
     out: list[str] = []
     for item in raw:

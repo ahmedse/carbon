@@ -118,11 +118,12 @@ def test_pa112_leave_sod_self_approve_deny():
 
 
 def test_pa113_leave_record_gated_after_review():
-    """Record (effect) only after review; consent-required."""
+    """Record is host side-effect of Team approve (ADR-0045) — not Agent consent."""
     doc = _doc("leave.request.lifecycle")
     record = _step(doc, "record")
     assert "review" in (record.get("depends_on") or [])
-    assert record["consent"] is True
+    assert record["autonomy"] == "observe"
+    assert record["consent"] is False
     assert any("not reviewed before record" in r for r in _refuse(doc))
 
 
@@ -147,10 +148,12 @@ def test_pa122_loan_sod_deny():
 
 
 def test_pa123_loan_activate_gated():
+    """Activate is host side-effect of final corr approve — not Agent consent."""
     doc = _doc("loan.request.lifecycle")
     activate = _step(doc, "activate")
     assert "review" in (activate.get("depends_on") or [])
-    assert activate["consent"] is True
+    assert activate["autonomy"] == "observe"
+    assert activate["consent"] is False
     assert any("not reviewed before activate" in r for r in _refuse(doc))
 
 
@@ -275,10 +278,12 @@ def test_pa162_attendance_sod_deny():
 
 
 def test_pa163_attendance_approve_gated_after_review():
+    """Approve effect is Team corr → signal (ADR-0045) — not Agent consent."""
     doc = _doc("attendance.permission.lifecycle")
     approve = _step(doc, "approve")
     assert "review" in (approve.get("depends_on") or [])
-    assert approve["consent"] is True
+    assert approve["autonomy"] == "observe"
+    assert approve["consent"] is False
     assert any("not reviewed before approve" in r for r in _refuse(doc))
 
 
