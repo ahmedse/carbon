@@ -1,0 +1,66 @@
+id: payroll-followup-en-01
+objective_ids: [C1, C2]
+language: en
+surface: chat
+persona: emp_1067
+turns:
+  - user: "What was my net pay last month?"
+    stub_reply: "Your net pay for last month was 4,500 SAR, calculated as gross salary minus deductions."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 2
+      mentions_any: ["4500", "4,500"]
+  
+  - user: "What deductions were applied?"
+    stub_reply: "The deductions include GOSI contribution (1,200 SAR) and loan installment (800 SAR)."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["GOSI", "1200", "1,200"]
+  
+  - user: "And after GOSI is deducted, what is my take-home?"
+    stub_reply: "After the GOSI deduction of 1,200 SAR, your take-home before other deductions is 3,700 SAR."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["3700", "3,700"]
+  
+  - user: "Is the GOSI calculated correctly?"
+    stub_reply: "Yes, GOSI is 15% of your gross salary, which is correct for Nibras employees."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+  
+  - user: "What was the loan amount?"
+    stub_reply: "The loan installment deducted was 800 SAR."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["800"]
+  
+  - user: "So my total deductions are 2,000 SAR?"
+    stub_reply: "That's correct. GOSI (1,200) + Loan (800) = 2,000 SAR in total deductions."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["2000", "2,000"]
+  
+  - user: "When will next month's payroll be processed?"
+    stub_reply: "Next month's payroll will be processed on the 25th of next month."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+  
+  - user: "Can I download my payslip?"
+    stub_reply: "Yes, you can download your payslip from the People app under Payroll."
+    expect:
+      decision_in: [answer, handoff_agent]
+      language: en
+      max_llm_calls: 1

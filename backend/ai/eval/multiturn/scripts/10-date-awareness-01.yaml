@@ -1,0 +1,66 @@
+id: date-awareness-01
+objective_ids: [C6]
+language: en
+surface: chat
+persona: emp_1067
+turns:
+  - user: "What is today's date?"
+    stub_reply: "Today is September 22, 2026."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 0
+      mentions_any: ["September", "22", "2026"]
+      mentions_none: ["what is today"]
+  
+  - user: "How many days until end of month?"
+    stub_reply: "There are 8 days remaining in September 2026."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+  
+  - user: "When is my next payday?"
+    stub_reply: "Your next payday is September 25, 2026."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["25", "September"]
+  
+  - user: "Is that before the end of the month?"
+    stub_reply: "Yes, September 25 is before the end of September."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 0
+  
+  - user: "When does my leave start?"
+    stub_reply: "Your leave starts on October 1, 2026."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["October"]
+  
+  - user: "How many days from now until my leave?"
+    stub_reply: "Your leave is 9 days from today (September 22 to October 1)."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+  
+  - user: "What month are we in?"
+    stub_reply: "We are in September 2026."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 0
+      mentions_none: ["what month"]
+  
+  - user: "Thanks for the information"
+    stub_reply: "You're welcome. Let me know if you need anything else."
+    expect:
+      decision_in: [answer, navigate]
+      language: en
+      max_llm_calls: 0

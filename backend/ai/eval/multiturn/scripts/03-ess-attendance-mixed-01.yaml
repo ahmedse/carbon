@@ -1,0 +1,64 @@
+id: ess-attendance-mixed-01
+objective_ids: [C2, C7]
+language: mixed
+surface: chat
+persona: emp_1067
+turns:
+  - user: "أريد الإبلاغ عن غياب اليوم"
+    stub_reply: "I understand you want to report an absence for today. Let me note that for you."
+    expect:
+      decision_in: [answer, clarify]
+      language: mixed
+      max_llm_calls: 2
+  
+  - user: "Yes, I was sick today"
+    stub_reply: "حسناً، سأسجل غيابك برسبب المرض اليوم."
+    expect:
+      decision_in: [answer]
+      language: mixed
+      max_llm_calls: 1
+      must_not_reask_slots: [date, reason]
+      mentions_any: ["sick", "مرض"]
+  
+  - user: "Is it marked as sick leave?"
+    stub_reply: "نعم، تم تسجيله كغياب بسبب مرض."
+    expect:
+      decision_in: [answer]
+      language: mixed
+      max_llm_calls: 1
+      mentions_any: ["sick", "مرض"]
+  
+  - user: "Will I need a medical certificate?"
+    stub_reply: "Yes, you'll need to submit a medical certificate for absences exceeding 2 consecutive days."
+    expect:
+      decision_in: [answer]
+      language: mixed
+      max_llm_calls: 1
+  
+  - user: "كم عدد ساعات الغياب؟"
+    stub_reply: "The absence is for the full working day (8 hours)."
+    expect:
+      decision_in: [answer]
+      language: mixed
+      max_llm_calls: 1
+  
+  - user: "Can I appeal this?"
+    stub_reply: "You can appeal through your manager if you believe the marking is incorrect."
+    expect:
+      decision_in: [answer]
+      language: mixed
+      max_llm_calls: 1
+  
+  - user: "متى سيظهر هذا في ملفي؟"
+    stub_reply: "It will appear in your file within 24 hours."
+    expect:
+      decision_in: [answer]
+      language: mixed
+      max_llm_calls: 1
+  
+  - user: "Thank you"
+    stub_reply: "مرحباً. إذا احتجت أي شيء آخر، أنا هنا."
+    expect:
+      decision_in: [answer, navigate]
+      language: mixed
+      max_llm_calls: 0

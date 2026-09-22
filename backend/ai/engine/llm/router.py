@@ -27,6 +27,7 @@ import time
 from datetime import datetime, timezone
 
 from ai.engine.core.config import get_settings
+from ai.engine.llm.call_meter import record_call
 
 logger = logging.getLogger("pulse.llm.router")
 
@@ -356,6 +357,13 @@ async def route_chat(
         total_tokens = response.usage.total_tokens if response.usage else 0
         cost_usd = estimate_cost(model, input_tokens, output_tokens)
 
+        record_call(
+            duration_ms,
+            input_tokens,
+            output_tokens,
+            model,
+        )
+
         # Log to llm_call_logs (independent short-lived session)
         await _log_call(
             instance_id=instance_id,
@@ -387,6 +395,7 @@ async def route_chat(
 
     except Exception as exc:
         duration_ms = int((time.monotonic() - t0) * 1000)
+        record_call(duration_ms, 0, 0, model)
         logger.error("LLM call failed (task=%s, model=%s): %s", task, model, exc)
         await _log_call(
             instance_id=instance_id,

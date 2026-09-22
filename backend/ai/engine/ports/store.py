@@ -32,7 +32,13 @@ class Session(Protocol):
     async def commit(self) -> None:
         ...
 
-    async def select(self, model: Any, *filters: Any) -> Any:
+    async def select(
+        self,
+        model: Any,
+        *filters: Any,
+        order_by: tuple[str, ...] | None = None,
+        limit: int | None = None,
+    ) -> Any:
         ...
 
     async def get(self, model: Any, pk: Any) -> Any:

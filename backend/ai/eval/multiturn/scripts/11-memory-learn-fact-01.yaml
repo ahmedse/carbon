@@ -1,0 +1,68 @@
+id: memory-learn-fact-01
+objective_ids: [C10]
+language: en
+surface: chat
+persona: emp_1067
+turns:
+  - user: "My project code is ALPHA-2025"
+    stub_reply: "Got it. I've noted that your project code is ALPHA-2025. This will help me assist you better."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["ALPHA-2025"]
+  
+  - user: "Can you confirm you have that?"
+    stub_reply: "Yes, confirmed. Your project code is ALPHA-2025."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 0
+      mentions_any: ["ALPHA-2025"]
+  
+  - user: "I work on three projects"
+    stub_reply: "I see. You mentioned your main project code is ALPHA-2025. Do you want to tell me about the other projects?"
+    expect:
+      decision_in: [clarify, answer]
+      language: en
+      max_llm_calls: 1
+  
+  - user: "What is my project code?"
+    stub_reply: "Your project code is ALPHA-2025."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 0
+      mentions_any: ["ALPHA-2025"]
+  
+  - user: "Tell me about ALPHA-2025"
+    stub_reply: "ALPHA-2025 is your primary project code. You previously noted this is your main project."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["ALPHA-2025"]
+  
+  - user: "Is that still my project?"
+    stub_reply: "Yes, ALPHA-2025 is still your active project."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 0
+      mentions_any: ["ALPHA-2025"]
+  
+  - user: "Can you remember project codes?"
+    stub_reply: "Yes, I remember that your project code is ALPHA-2025."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 0
+      mentions_any: ["ALPHA-2025"]
+  
+  - user: "Thank you"
+    stub_reply: "You're welcome. I'll keep remembering your project code ALPHA-2025."
+    expect:
+      decision_in: [answer, navigate]
+      language: en
+      max_llm_calls: 0
+      mentions_any: ["ALPHA-2025"]

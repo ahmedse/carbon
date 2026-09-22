@@ -84,6 +84,7 @@ class Settings(BaseSettings):
     AGENT_MAX_WORKERS: int = 6          # P3.1: max parallel workers per run
     AGENT_WORKER_TIMEOUT_SEC: int = 60  # P3.1: per-worker timeout
     AGENT_ORCHESTRATOR_ENABLED: bool = True  # P3.2: orchestrator fan-out gate
+    FANOUT_PROBE_MIN_TOKENS: int = 12   # PV2-1B: utterances shorter than this (words) never pay the fan-out probe call
 
     # ── Guardrails (P3.3) ──
     GUARDRAIL_MAX_TOOL_CALLS_PER_RUN: int = 20

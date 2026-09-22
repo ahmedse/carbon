@@ -92,9 +92,11 @@ async def _run_chat(
     Tool outcomes are surfaced deterministically as ``actions`` (navigate) and
     ``pending_actions`` (staged confirmations) — never as LLM prose.
     """
+    from ai.engine.cognition.tool_digest import build_tool_digest
     from ai.engine.cognition.turn.runner import TurnPipelineRunner
     from ai.engine.core.database import get_session_factory
     from ai.engine.knowledge.store import KnowledgeStore
+    from ai.engine.memory.manager import MemoryManager
     from ai.host_executor import CarbonHostExecutor
     from ai.envelope_service import synthesize_envelope
     from ai.plugins import web_research
@@ -178,10 +180,13 @@ async def _run_chat(
         # answers in the indexed People & Payroll process docs (previously the
         # runner was built WITHOUT a store, and every search returned
         # "Knowledge store not available" regardless of what was indexed).
+        # PV2-1C: confirmed ``learn_fact`` facts reach the S2 memory block.
+        # Bound to the host user so private facts stay owner-scoped (RULE_20).
         runner = TurnPipelineRunner(
             db=db,
             executor=executor,
             knowledge_store=KnowledgeStore(db),
+            memory_manager=MemoryManager(db, host_user_id=host_user_id),
             weather_extractor=weather_extractor,
             envelope_synthesizer=synthesize_envelope,
             domain_context_assembler=CarbonContextAssembler,
@@ -252,6 +257,10 @@ async def _run_chat(
         if handoff_forced_actions:
             actions = _merge_surface_actions(actions, handoff_forced_actions)
         tool_trace = _build_tool_trace(completed_tools)
+        # PV2-1C — ≤ 200-char digest of this turn's tool facts, filtered by the
+        # user's retrieval org-unit scope; persisted on the assistant message
+        # and replayed into history by ``assemble_context``.
+        tool_digest = build_tool_digest(completed_tools, knowledge_scope)
         # ECF-3 — boundary contracts on entity tool results + answer prose.
         # Flag-gated (ECF_ENABLED=False by default); never raises.
         completed_tools, ecf_prose = _apply_ecf_entity_contracts(
@@ -404,9 +413,17 @@ async def _run_chat(
                 # F3-B — read-only, outcome-language tool trace for the
                 # frontend "Considered…" planning pill (multi-step only).
                 "tool_trace": tool_trace,
+                "tool_digest": tool_digest,
                 # S1.5-zone — four-zone intent provenance for the frontend
                 # badge (platform|concept|real_time|general|off_limits).
                 "intent_zone": getattr(ledger, "intent_zone", "platform"),
+                "turn_decision": getattr(ledger, "turn_decision", ""),
+                "llm_calls": int(getattr(ledger, "llm_calls_measured", 0) or 0),
+                "llm_calls_by_stage": dict(
+                    getattr(ledger, "llm_calls_by_stage", None) or {}
+                ),
+                "state_saved": bool(getattr(ledger, "state_saved", False)),
+                "state_size": int(getattr(ledger, "state_size", 0) or 0),
                 # Wave I3-B — external web sources the answer drew on
                 # ({"title","url","source","retrieved_at"}), independent of
                 # the multi-step tool_trace filter.

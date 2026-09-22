@@ -114,3 +114,11 @@ class TurnLedger:
     verification_passed: bool | None = None
     verification_unsupported: list = field(default_factory=list)
     verification_error: str = ""
+    # PV2-0A — measured LLM calls + turn routing signals (log-only).
+    llm_calls_by_stage: dict | None = None
+    llm_calls_measured: int = 0
+    decision_signals: list | None = None
+    turn_decision: str = ""
+    # PV2-1A — durable ConversationState written at turn exit.
+    state_saved: bool = False
+    state_size: int = 0

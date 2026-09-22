@@ -1,0 +1,61 @@
+id: nav-zero-llm-01
+objective_ids: [C8, A2]
+language: en
+surface: chat
+persona: emp_1067
+turns:
+  - user: "Show me the loans section"
+    stub_reply: "Here's the loans section. You can view your active loans and apply for new ones."
+    expect:
+      decision_in: [navigate, answer]
+      language: en
+      max_llm_calls: 0
+  
+  - user: "How do I apply for a new loan?"
+    stub_reply: "Click the 'Apply for Loan' button in the loans section."
+    expect:
+      decision_in: [answer, navigate]
+      language: en
+      max_llm_calls: 0
+  
+  - user: "What types of loans are available?"
+    stub_reply: "We offer emergency loans, personal loans, and auto loans."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+  
+  - user: "Go to the payroll section"
+    stub_reply: "I'm navigating you to the payroll section now."
+    expect:
+      decision_in: [navigate]
+      language: en
+      max_llm_calls: 0
+  
+  - user: "Show my payslips"
+    stub_reply: "Here are your payslips. You can download them as PDF."
+    expect:
+      decision_in: [navigate, answer]
+      language: en
+      max_llm_calls: 0
+  
+  - user: "Go back to home"
+    stub_reply: "Taking you back to the home page."
+    expect:
+      decision_in: [navigate]
+      language: en
+      max_llm_calls: 0
+  
+  - user: "Where can I find my leave balance?"
+    stub_reply: "Your leave balance is in the Time Off section."
+    expect:
+      decision_in: [navigate, answer]
+      language: en
+      max_llm_calls: 0
+  
+  - user: "Show me the notifications"
+    stub_reply: "Here are your notifications. You have 3 new messages."
+    expect:
+      decision_in: [navigate, answer]
+      language: en
+      max_llm_calls: 0

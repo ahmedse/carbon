@@ -287,12 +287,68 @@ def ground_navigation(
     )
 
 
+# ── Interrogative guard (fast path only) ──────────────────────────────────────
+# A question that merely names a module ("When will next month's payroll be
+# processed?", «هل ستتم الموافقة عليه؟») is not a navigation command. The raw
+# fast path grounds the whole utterance, so it needs this guard; the LLM-intent
+# path (``ground_navigation`` on a chosen concept) does not.
+
+_QUESTION_WORDS_EN: frozenset[str] = frozenset({
+    "when", "how", "why", "what", "is", "will", "can", "does",
+})
+# Normalised forms (see ``normalize_text``): hamza/alef folded.
+_QUESTION_WORDS_AR: frozenset[str] = frozenset({
+    "متي", "هل", "كيف", "لماذا", "ما", "ماذا",
+})
+_NAV_VERB_EN_RE = re.compile(
+    r"\b(?:open|go\s+to|goto|navigate\s+to|take\s+me\s+to|show\s+me)\b"
+)
+# Normalised Arabic imperative/request stems: افتح / اذهب / أرني (→ ارني) /
+# روح / ودّيني (→ وديني).
+_NAV_VERB_AR_RE = re.compile(
+    r"(?:^|\s)(?:و|ف)?(?:افتح|تفتح|اذهب|تذهب|ارني|روح|وديني|خذني)"
+)
+_INTERROGATIVE_MIN_TOKENS = 3
+
+
+def _has_nav_verb(norm: str) -> bool:
+    return bool(_NAV_VERB_EN_RE.search(norm) or _NAV_VERB_AR_RE.search(norm))
+
+
+def is_interrogative_non_command(message: str) -> bool:
+    """True when ``message`` is a question (> 3 tokens) without a nav verb.
+
+    Interrogative = ends with ``?``/``؟`` or starts with an EN/AR question word.
+    Pure noun phrases ("payroll", "الرواتب") and explicit commands
+    ("Can you open payroll?") are not affected.
+    """
+    raw = (message or "").strip()
+    if not raw:
+        return False
+    norm = normalize_text(raw)
+    tokens = re.findall(r"[\w']+", norm)
+    if len(tokens) <= _INTERROGATIVE_MIN_TOKENS:
+        return False
+    first = tokens[0]
+    interrogative = (
+        raw.endswith(("?", "؟"))
+        or first in _QUESTION_WORDS_EN
+        or first in _QUESTION_WORDS_AR
+    )
+    if not interrogative:
+        return False
+    return not _has_nav_verb(norm)
+
+
 def resolve_navigation(
     message: str, instance_config: dict | None,
 ) -> NavigationResolution:
     """Deterministic zero-token fast path used by the turn runner.
 
     Grounds the raw user message against declared routes. Same contract as
-    :func:`ground_navigation` — never invents destinations.
+    :func:`ground_navigation` — never invents destinations. Questions that
+    merely mention a module noun return ``none`` (the normal pipeline answers).
     """
+    if is_interrogative_non_command(message):
+        return NavigationResolution(lang=detect_lang(message or ""))
     return ground_navigation(message or "", instance_config)

@@ -510,6 +510,7 @@ class PulseProvider(AIProvider):
                 actions=result.get("actions") or [],
                 pending_actions=result.get("pending_actions") or [],
                 tool_trace=result.get("tool_trace") or [],
+                tool_digest=result.get("tool_digest") or "",
                 intent_zone=result.get("intent_zone") or "",
                 external_sources=result.get("external_sources") or [],
                 code_result=result.get("code_result"),

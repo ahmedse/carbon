@@ -22,6 +22,35 @@ logger = logging.getLogger("pulse.cognition.turn.runner")
 broadcast_run_event = None
 
 
+def _signal(ledger: TurnLedger, gate: str, fired: bool, **detail) -> None:
+    if ledger.decision_signals is None:
+        ledger.decision_signals = []
+    ledger.decision_signals.append(
+        {"gate": gate, "fired": fired, "detail": detail or {}}
+    )
+
+
+def _finalize_meter(ledger: TurnLedger, meter, decision: str) -> None:
+    from ai.engine.llm.call_meter import CallMeter
+
+    if not isinstance(meter, CallMeter):
+        return
+    ledger.turn_decision = decision
+    ledger.llm_calls_by_stage = meter.by_stage()
+    ledger.llm_calls_measured = meter.total
+    fired_gates = [
+        s["gate"] for s in (ledger.decision_signals or []) if s.get("fired")
+    ]
+    logger.info(
+        "[turn-decision] conv=%s decision=%s llm=%d by_stage=%s fired=%s",
+        ledger.conversation_id,
+        decision,
+        meter.total,
+        meter.by_stage(),
+        fired_gates,
+    )
+
+
 # ── GAP-M7: capability-tool salience guard ────────────────────────────────
 
 _CAPABILITY_QUERY_PATTERN = re.compile(
@@ -76,6 +105,131 @@ def _is_text_transform_request(text: str) -> bool:
     if not text:
         return False
     return bool(_TEXT_TRANSFORM_RE.search(text))
+
+
+# ── F-LIVE-5: fan-out probe gate ──────────────────────────────────────────
+# The orchestrator decision is a full LLM call that almost always declines.
+# Only long, analytical, non-self-service turns are worth probing.
+_ESS_TOPIC_RE = re.compile(
+    r"(?i)\b(?:leave|loan|attendance|vacation|payslip|salary|absence|overtime|"
+    r"time\s*off)s?\b"
+    r"|إجاز|اجاز|قرض|راتب|رواتب|حضور|غياب|قسيم|استئذان|سلف"
+)
+_FIRST_PERSON_RE = re.compile(
+    r"(?i)\b(?:i|i'm|i've|i'd|my|me|mine)\b"
+    r"|(?:^|\s)(?:أنا|انا|عندي|لدي|أريد|اريد|طلبت)(?:\s|$)"
+    r"|(?:راتب|إجازت|اجازت|قرض|حضور|رصيد|قسيمت)ي"
+)
+_MY_ENDPOINT_RE = re.compile(r"(?:^|_)my(?:_|$)")
+
+
+def _history_has_active_process(conversation_history: list[dict] | None) -> bool:
+    """True when a recent message names a governed process id (brief/dial)."""
+    from ai.engine.cognition.turn.process_brief import KNOWN_PROCESS_IDS
+
+    for msg in (conversation_history or [])[-6:]:
+        content = str((msg or {}).get("content") or "")
+        if any(pid in content for pid in KNOWN_PROCESS_IDS):
+            return True
+    return False
+
+
+def _fanout_skip_reason(
+    user_message: str,
+    intent_resolution,
+    conversation_history: list[dict] | None,
+    *,
+    min_tokens: int,
+) -> str | None:
+    """Return why the fan-out probe should be skipped, or ``None`` to probe."""
+    text = (user_message or "").strip()
+    if len(text.split()) < min_tokens:
+        return "short_utterance"
+    if intent_resolution is not None:
+        action = getattr(intent_resolution, "action", "")
+        if action == "navigate":
+            return "nav"
+        if action in ("clarify", "disambiguate"):
+            return "clarify"
+        candidates = getattr(intent_resolution, "candidates", None) or []
+        if candidates and _MY_ENDPOINT_RE.search(str(candidates[0].name)):
+            return "ess"
+    try:
+        from ai.engine.agent.chat_surface import is_ess_write_intent
+
+        if is_ess_write_intent(text):
+            return "ess"
+    except Exception:  # noqa: BLE001 — classification only
+        pass
+    if _ESS_TOPIC_RE.search(text) and _FIRST_PERSON_RE.search(text):
+        return "ess"
+    if _history_has_active_process(conversation_history):
+        return "active_process"
+    return None
+
+
+# ── F-LIVE-1: scope refusal ───────────────────────────────────────────────
+_DEFAULT_REFUSAL_EN = (
+    "I'm not able to help with that request. "
+    "If you have a question about your platform data, emissions, "
+    "or data quality, I'm here to help."
+)
+_DEFAULT_REFUSAL_AR = (
+    "لا أستطيع المساعدة في هذا الطلب. "
+    "إذا كان لديك سؤال عن بيانات منصتك، فأنا هنا للمساعدة."
+)
+# Wording that keeps a refusal even when the ask names an in-scope topic.
+_SCOPE_BYPASS_RE = re.compile(
+    r"(?i)\b(?:ignore|disregard|bypass|override|jailbreak|pretend|"
+    r"system\s+prompt|developer\s+mode|you\s+are\s+now|"
+    r"passwords?|credentials?|api\s*keys?|secret\s+keys?|access\s+controls?)\b"
+    r"|تجاهل|تجاوز\s*(?:ال)?(?:صلاحيات|قيود|حماي)|"
+    r"كلمة\s*المرور|كلمات\s*المرور|كلمات\s*مرور|كلمة\s*السر|"
+    r"موجه\s*النظام|صلاحيات\s*المدير"
+)
+
+
+def _is_declared_in_scope(user_message: str, instance_config: dict | None) -> bool:
+    """True when the ask names a topic in ``topic_guard.in_scope`` (EN/AR).
+
+    Used to narrow the classifier's ``off_limits`` refusal: an in-scope HR ask
+    («أريد قرض طارئ») must not be scope-refused. Bypass / credential wording
+    is never treated as in scope.
+    """
+    from ai.engine.cognition.turn.navigation import normalize_text
+
+    declared = ((instance_config or {}).get("topic_guard") or {}).get("in_scope") or {}
+    if isinstance(declared, list):
+        declared = {"en": declared}
+    keywords = [
+        normalize_text(str(k))
+        for lang in ("en", "ar")
+        for k in (declared.get(lang) or [])
+        if str(k).strip()
+    ]
+    if not keywords:
+        return False
+    raw = user_message or ""
+    if _SCOPE_BYPASS_RE.search(raw):
+        return False
+    norm = normalize_text(raw)
+    for kw in keywords:
+        if re.search(r"[\u0600-\u06FF]", kw):
+            if kw in norm:
+                return True
+        elif re.search(r"\b" + re.escape(kw), norm):
+            return True
+    return False
+
+
+def _refusal_text(instance_config: dict | None, user_message: str) -> str:
+    """Instance refusal in the user's language (``refusal`` / ``refusal_ar``)."""
+    from ai.engine.cognition.turn.language import detect_reply_language
+
+    guard = (instance_config or {}).get("topic_guard") or {}
+    if detect_reply_language(user_message) == "ar":
+        return (guard.get("refusal_ar") or "").strip() or _DEFAULT_REFUSAL_AR
+    return (guard.get("refusal") or "").strip() or _DEFAULT_REFUSAL_EN
 
 
 def _filter_draft_tools(
@@ -1325,7 +1479,100 @@ class TurnPipelineRunner:
         except Exception:  # noqa: BLE001 - detector must never crash a turn
             return False
 
-    async def run(
+    async def run(self, *args, **kwargs) -> tuple:
+        """Execute one turn under a turn-scoped LLM call meter.
+
+        PV2-1A: the durable ConversationState is loaded before the pipeline
+        and saved after it — every ``return`` in :meth:`_run_metered` exits
+        through here, so state is written on every completed turn.
+
+        Returns (AgentResponse, TurnLedger). See :meth:`_run_metered`.
+        """
+        import inspect
+
+        from ai.engine.llm.call_meter import meter_scope
+
+        turn_args = inspect.signature(self._run_metered).bind_partial(
+            *args, **kwargs,
+        ).arguments
+        state_ctx = await self._load_conversation_state(turn_args)
+        with meter_scope() as meter:
+            response, ledger = await self._run_metered(
+                *args, meter=meter, state_ctx=state_ctx, **kwargs,
+            )
+        await self._save_conversation_state(state_ctx, turn_args, response, ledger)
+        return response, ledger
+
+    async def _load_conversation_state(self, turn_args: dict):
+        from ai.engine.cognition.state_store import (
+            ConversationState,
+            ConversationStateStore,
+            TurnStateContext,
+            seed_working_memory,
+        )
+
+        conversation_id = turn_args.get("conversation_id") or ""
+        try:
+            state = await ConversationStateStore(self.db).load(
+                turn_args.get("instance_id") or "",
+                conversation_id,
+                turn_args.get("host_user_id"),
+                scope=turn_args.get("scope"),
+            )
+        except Exception:  # noqa: BLE001 — state must never block a turn
+            logger.warning(
+                "ConversationState load failed conv=%s", conversation_id[:8],
+                exc_info=True,
+            )
+            state = ConversationState()
+        try:
+            from ai.engine.memory.working import get_working_memory
+
+            seed_working_memory(get_working_memory(), conversation_id, state)
+        except Exception:  # noqa: BLE001
+            logger.debug("working-memory seed skipped", exc_info=True)
+        return TurnStateContext(state=state)
+
+    async def _save_conversation_state(self, state_ctx, turn_args: dict, response, ledger) -> None:
+        from ai.engine.cognition.state_store import (
+            ConversationStateStore,
+            update_state_from_turn,
+        )
+
+        conversation_id = turn_args.get("conversation_id") or ""
+        try:
+            from ai.engine.memory.working import get_working_memory
+
+            execution = getattr(ledger, "execution", None)
+            draft = getattr(ledger, "draft", None)
+            state = update_state_from_turn(
+                state_ctx.state,
+                decision=ledger.turn_decision,
+                user_message=turn_args.get("user_message") or "",
+                response_text=getattr(response, "text", "") or "",
+                fired_gates=[
+                    s.get("gate") for s in (ledger.decision_signals or []) if s.get("fired")
+                ],
+                intent=state_ctx.intent,
+                completed_tools=getattr(execution, "completed_tools", None),
+                draft_tool_calls=getattr(draft, "tool_calls", None),
+                focus_stack=get_working_memory().get_focus_stack(conversation_id),
+                scope=turn_args.get("scope"),
+            )
+            ledger.state_saved = await ConversationStateStore(self.db).save(
+                turn_args.get("instance_id") or "",
+                conversation_id,
+                turn_args.get("host_user_id"),
+                state,
+            )
+            ledger.state_size = state.size()
+        except Exception:  # noqa: BLE001 — state must never fail a turn
+            logger.warning(
+                "ConversationState save failed conv=%s", conversation_id[:8],
+                exc_info=True,
+            )
+
+    async def _run_metered(
         self,
         instance_id: str,
         conversation_id: str,
@@ -1347,6 +1594,9 @@ class TurnPipelineRunner:
         knowledge_items: list | None = None,
         scope: dict | None = None,
         process_state: dict | None = None,
+        *,
+        meter=None,
+        state_ctx=None,
     ) -> tuple:
         """Execute one turn. Returns (AgentResponse, TurnLedger)."""
         from ai.engine.agent.reasoning import AgentResponse
@@ -1361,6 +1611,8 @@ class TurnPipelineRunner:
                 d for d in self._draft_tools
                 if d.get("function", {}).get("name") not in excluded_tools
             ]
+        from ai.engine.llm.call_meter import stage
+
         turn_id = str(uuid.uuid4())
         created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         t0 = time.monotonic()
@@ -1401,6 +1653,7 @@ class TurnPipelineRunner:
         # If the user is answering Pulse's own "shall I remember X?" with a
         # short affirmative, prepare the memory card directly — never route
         # "yes" through the LLM as a decontextualized query.
+        _pending_fired = False
         try:
             from ai.engine.cognition.dialogue.pending_action import (
                 get_pending_action_store,
@@ -1408,6 +1661,7 @@ class TurnPipelineRunner:
             _pending_store = get_pending_action_store()
             _pending = _pending_store.check_confirmation(conversation_id, user_message)
             if _pending and self.executor is not None and instance_id:
+                _pending_fired = True
                 from ai.engine.agent.tools import execute_learn_fact
                 await execute_learn_fact(
                     fact=_pending["fact"],
@@ -1456,6 +1710,8 @@ class TurnPipelineRunner:
                     "total_llm_calls": 0,
                     "pending_confirmation_shortcircuit": True,
                 })
+                _signal(ledger, "pending_confirm", True, action="memory_confirm")
+                _finalize_meter(ledger, meter, "memory_confirm")
                 return response, ledger
         except Exception:  # noqa: BLE001 - memory hook must never block the turn
             logger.warning(
@@ -1463,6 +1719,7 @@ class TurnPipelineRunner:
                 "continuing normal pipeline",
                 turn_id[:8], exc_info=True,
             )
+        _signal(ledger, "pending_confirm", _pending_fired)
 
         # ── [NAV-GATE] Deterministic zero-token navigation fast path ──
         # The canonical comprehension path is the LLM intent classifier, but
@@ -1485,6 +1742,7 @@ class TurnPipelineRunner:
             or _is_agent_discuss_turn(user_message)
             or _history_has_discuss_markers(conversation_history)
         )
+        _nav_fast_fired = False
         if settings.NAVIGATION_RESOLVER_ENABLED and not _discuss_thread:
             try:
                 from ai.engine.cognition.turn.process_brief import (
@@ -1501,14 +1759,17 @@ class TurnPipelineRunner:
                         "[%s] Skipping navigation fast-path (process briefing)",
                         turn_id[:8],
                     )
+                    _signal(ledger, "nav_fast_path", False, reason="process_briefing")
                 elif is_deliverable_request(user_message):
                     logger.info(
                         "[%s] Skipping navigation fast-path (deliverable request)",
                         turn_id[:8],
                     )
+                    _signal(ledger, "nav_fast_path", False, reason="deliverable_request")
                 else:
                     _nav = resolve_navigation(user_message, instance_config)
                     if _nav.action in ("navigate", "disambiguate"):
+                        _nav_fast_fired = True
                         total_latency = (time.monotonic() - t0) * 1000
                         await self._write_ledger_row(
                             turn_id, instance_id, conversation_id, host_user_id,
@@ -1538,20 +1799,36 @@ class TurnPipelineRunner:
                             "total_llm_calls": 0,
                             "navigation_shortcircuit": _nav.action,
                         })
+                        _signal(ledger, "nav_fast_path", True, action=_nav.action)
+                        _finalize_meter(ledger, meter, "navigate")
                         return response, ledger
+                    _signal(
+                        ledger, "nav_fast_path", False,
+                        action=getattr(_nav, "action", "none"),
+                    )
             except Exception:  # noqa: BLE001 - navigation gate must never block the turn
                 logger.warning(
                     "[%s] Navigation short-circuit failed; continuing normal pipeline",
                     turn_id[:8], exc_info=True,
                 )
+                _signal(ledger, "nav_fast_path", False, error="exception")
         elif _discuss_thread and settings.NAVIGATION_RESOLVER_ENABLED:
             logger.info(
                 "[%s] Skipping navigation short-circuit (Agent discuss thread)",
                 turn_id[:8],
             )
+            _signal(ledger, "nav_fast_path", False, reason="discuss_thread")
+        elif not settings.NAVIGATION_RESOLVER_ENABLED:
+            _signal(ledger, "nav_fast_path", False, reason="disabled")
+        if not _nav_fast_fired and ledger.decision_signals is not None:
+            if not any(
+                s.get("gate") == "nav_fast_path" for s in ledger.decision_signals
+            ):
+                _signal(ledger, "nav_fast_path", False)
 
         # Also run process briefing *before* salience when nav was skipped —
         # zero-token concept answer for governed process ids.
+        _process_brief_early_fired = False
         if not _discuss_thread:
             try:
                 from asgiref.sync import sync_to_async
@@ -1561,6 +1838,7 @@ class TurnPipelineRunner:
                     try_process_briefing, thread_sensitive=True,
                 )(user_message)
                 if _early_brief is not None:
+                    _process_brief_early_fired = True
                     _pid, _brief_text = _early_brief
                     total_latency = (time.monotonic() - t0) * 1000
                     ledger.intent_zone = "concept"
@@ -1582,12 +1860,15 @@ class TurnPipelineRunner:
                         "process_briefing": _pid,
                         "navigation_source": "skipped_for_process_brief",
                     })
+                    _signal(ledger, "process_brief_early", True, process_id=_pid)
+                    _finalize_meter(ledger, meter, "process_brief")
                     return response, ledger
             except Exception:  # noqa: BLE001
                 logger.warning(
                     "[%s] Process briefing early gate failed; continuing",
                     turn_id[:8], exc_info=True,
                 )
+        _signal(ledger, "process_brief_early", _process_brief_early_fired)
 
         # S1 — Salience
         s1_start = time.monotonic()
@@ -1600,6 +1881,10 @@ class TurnPipelineRunner:
         salience_witness = SalienceWitness()
         salience = await salience_witness.assess(user_message)
         ledger.salience = salience
+        _signal(
+            ledger, "salience", False,
+            domain=salience.domain, route=salience.route,
+        )
         s1_latency = (time.monotonic() - s1_start) * 1000
         await _broadcast_run(instance_id, "run.step.completed", {
             "run_id": turn_id,
@@ -1637,14 +1922,15 @@ class TurnPipelineRunner:
             # keyless exact-match geocoder resolves it instead of no-matching.
             # Grounded in the conversation so far (the assistant's prior
             # clarification listed the candidate cities the user is choosing).
-            _normalized_location = await _normalize_weather_location(
-                instance_id=instance_id,
-                conversation_id=conversation_id,
-                original_question=_pending_weather_query,
-                user_reply=user_message.strip(),
-                conversation_history=conversation_history,
-                model=model,
-            )
+            with stage("weather_normalize"):
+                _normalized_location = await _normalize_weather_location(
+                    instance_id=instance_id,
+                    conversation_id=conversation_id,
+                    original_question=_pending_weather_query,
+                    user_reply=user_message.strip(),
+                    conversation_history=conversation_history,
+                    model=model,
+                )
             user_message = f"weather in {_normalized_location}"
             logger.info(
                 "[WEATHER-FT] Rewrote bare location reply to: %r", user_message
@@ -1721,12 +2007,15 @@ class TurnPipelineRunner:
                     "total_llm_calls": total_llm_calls,
                     "intent_shortcircuit": "deixis",
                 })
+                _signal(ledger, "deixis", True)
+                _finalize_meter(ledger, meter, "clarify")
                 return response, ledger
         except Exception:
             logger.warning(
                 "[%s] Deixis gate failed; continuing",
                 turn_id[:8], exc_info=True,
             )
+        _signal(ledger, "deixis", False)
 
         # ── S1.5 — Intent Resolution (LLM-as-classifier, no local models) ──
         # Recognises which read-only endpoint the user is after, with a
@@ -1740,25 +2029,28 @@ class TurnPipelineRunner:
                 _resolved_for_intent = AnaphoraResolver(_wm).resolve(
                     conversation_id, user_message
                 )
-                _intent_resolution = await IntentResolver().resolve(
-                    user_message=_resolved_for_intent,
-                    api_catalog=(instance_config or {}).get("api_catalog"),
-                    navigation_routes=(instance_config or {}).get("navigation_routes"),
-                    tenant_org=(instance_config or {}).get("tenant_org"),
-                    conversation_history=conversation_history,
-                    instance_id=instance_id,
-                    conversation_id=conversation_id,
-                    db=self.db,
-                    model=settings.INTENT_RESOLVER_MODEL or None,
-                    min_confidence=settings.INTENT_RESOLVER_MIN_CONFIDENCE,
-                    ambiguity_gap=settings.INTENT_RESOLVER_AMBIGUITY_GAP,
-                )
+                with stage("intent"):
+                    _intent_resolution = await IntentResolver().resolve(
+                        user_message=_resolved_for_intent,
+                        api_catalog=(instance_config or {}).get("api_catalog"),
+                        navigation_routes=(instance_config or {}).get("navigation_routes"),
+                        tenant_org=(instance_config or {}).get("tenant_org"),
+                        conversation_history=conversation_history,
+                        instance_id=instance_id,
+                        conversation_id=conversation_id,
+                        db=self.db,
+                        model=settings.INTENT_RESOLVER_MODEL or None,
+                        min_confidence=settings.INTENT_RESOLVER_MIN_CONFIDENCE,
+                        ambiguity_gap=settings.INTENT_RESOLVER_AMBIGUITY_GAP,
+                    )
             except Exception:
                 logger.warning(
                     "[%s] Intent resolution failed; continuing without it",
                     turn_id[:8], exc_info=True,
                 )
 
+        if state_ctx is not None:
+            state_ctx.intent = _intent_resolution
         if _intent_resolution is not None:
             total_llm_calls += 1
             total_tokens += (
@@ -1831,6 +2123,11 @@ class TurnPipelineRunner:
                         "total_llm_calls": total_llm_calls,
                         "process_briefing": _pid,
                     })
+                    _signal(ledger, "process_brief", True, process_id=_pid)
+                    _signal(ledger, "intent_short_circuit", False, action="process_brief")
+                    _signal(ledger, "nav_ground", False)
+                    _signal(ledger, "off_limits", False)
+                    _finalize_meter(ledger, meter, "process_brief")
                     return response, ledger
 
             # [NAV] LLM-recognised navigation: ground the target *concept*
@@ -1883,9 +2180,17 @@ class TurnPipelineRunner:
                         "total_llm_calls": total_llm_calls,
                         "navigation_shortcircuit": _nav.action,
                     })
+                    _signal(ledger, "nav_ground", True, action=_nav.action)
+                    _signal(ledger, "process_brief", False)
+                    _signal(ledger, "intent_short_circuit", False, action="navigate")
+                    _signal(ledger, "off_limits", False)
+                    _finalize_meter(ledger, meter, "navigate")
                     return response, ledger
+                _signal(ledger, "nav_ground", False, action="navigate")
                 # else: navigation intent but the concept didn't ground to any
                 # declared destination → fall through to the normal pipeline.
+            else:
+                _signal(ledger, "nav_ground", False)
 
             # [S1.5-zone] Hard refuse — off_limits (jailbreak/PII/security) is a
             # GATE layered on top of any zone. Mirrors the clarify/disambiguate
@@ -1903,16 +2208,22 @@ class TurnPipelineRunner:
                         "[%s] Confirm reply reclassified off_limits → platform",
                         turn_id[:8],
                     )
-            if _intent_resolution.zone == "off_limits":
-                _tg = (instance_config or {}).get("topic_guard") or {}
-                _refuse_text = (
-                    (_tg.get("refusal") or "").strip()
-                    or (
-                        "I'm not able to help with that request. "
-                        "If you have a question about your platform data, emissions, "
-                        "or data quality, I'm here to help."
-                    )
+            # An ask naming a declared in-scope topic (loan/leave/payroll/…)
+            # is a misclassification, not a scope violation (F-LIVE-1).
+            _off_limits_override = ""
+            if (
+                _intent_resolution.zone == "off_limits"
+                and _is_declared_in_scope(user_message, instance_config)
+            ):
+                _intent_resolution.zone = "platform"
+                ledger.intent_zone = "platform"
+                _off_limits_override = "declared_in_scope"
+                logger.info(
+                    "[%s] In-scope ask reclassified off_limits → platform",
+                    turn_id[:8],
                 )
+            if _intent_resolution.zone == "off_limits":
+                _refuse_text = _refusal_text(instance_config, user_message)
                 total_latency = (time.monotonic() - t0) * 1000
                 await self._write_ledger_row(
                     turn_id, instance_id, conversation_id, host_user_id,
@@ -1951,7 +2262,18 @@ class TurnPipelineRunner:
                     "total_llm_calls": total_llm_calls,
                     "intent_shortcircuit": "off_limits",
                 })
+                _signal(ledger, "off_limits", True, zone="off_limits")
+                _signal(ledger, "intent_short_circuit", True, action="off_limits")
+                _signal(ledger, "process_brief", False)
+                _finalize_meter(ledger, meter, "refuse")
                 return response, ledger
+            if _off_limits_override:
+                _signal(
+                    ledger, "off_limits", False,
+                    zone=_intent_resolution.zone, override=_off_limits_override,
+                )
+            else:
+                _signal(ledger, "off_limits", False, zone=_intent_resolution.zone)
 
             # Confidence ladder short-circuits: ask / offer options instead of
             # guessing. These return before S2/S3 so no hallucinated tool runs.
@@ -2016,7 +2338,23 @@ class TurnPipelineRunner:
                         "[WEATHER-FT] Intent shortcircuit — stored pending_weather: %r",
                         user_message,
                     )
+                _signal(
+                    ledger, "intent_short_circuit", True,
+                    action=_intent_resolution.action,
+                )
+                _signal(ledger, "process_brief", False)
+                _finalize_meter(ledger, meter, "clarify")
                 return response, ledger
+            _signal(
+                ledger, "intent_short_circuit", False,
+                action=_intent_resolution.action,
+            )
+            _signal(ledger, "process_brief", False)
+        else:
+            _signal(ledger, "intent_short_circuit", False, action="none")
+            _signal(ledger, "process_brief", False)
+            _signal(ledger, "nav_ground", False)
+            _signal(ledger, "off_limits", False)
 
         # [PROCESS BRIEF] Fallback when intent resolver was disabled / None —
         # still never navigate for lifecycle explanations.
@@ -2048,6 +2386,8 @@ class TurnPipelineRunner:
                     "run_id": turn_id,
                     "process_briefing": _pid,
                 })
+                _signal(ledger, "process_brief", True, process_id=_pid)
+                _finalize_meter(ledger, meter, "process_brief")
                 return response, ledger
 
         # S2 — Retrieval
@@ -2067,6 +2407,7 @@ class TurnPipelineRunner:
             knowledge_items=knowledge_items,
             scope=scope,
             process_state=process_state,
+            host_user_id=str(host_user_id) if host_user_id else None,
         )
         ledger.retrieval = retrieval
         s2_latency = retrieval.retrieval_latency_ms
@@ -2086,21 +2427,37 @@ class TurnPipelineRunner:
         # If an orchestrator agent is active and the user message warrants
         # parallel decomposition, fan out to workers and synthesize results.
         fan_out_result = None
+        _fanout_skip = None
         if settings.AGENT_ORCHESTRATOR_ENABLED and self.db is not None:
-            try:
-                fan_out_result = await self._try_fan_out(
-                    instance_id=instance_id,
-                    conversation_id=conversation_id,
-                    user_message=user_message,
-                    host_user_id=host_user_id,
-                    page_context=page_context,
-                    conversation_history=conversation_history,
-                    instance_config=instance_config,
-                    user_info=user_info,
-                    retrieval=retrieval,
-                    turn_id=turn_id,
-                    budget_tracker=budget,
+            _fanout_skip = _fanout_skip_reason(
+                user_message, _intent_resolution, conversation_history,
+                min_tokens=settings.FANOUT_PROBE_MIN_TOKENS,
+            )
+            if _fanout_skip:
+                logger.info(
+                    "[%s] fanout_skipped reason=%s", turn_id[:8], _fanout_skip,
                 )
+                _signal(ledger, "fanout_probe", False, reason=_fanout_skip)
+        if (
+            settings.AGENT_ORCHESTRATOR_ENABLED
+            and self.db is not None
+            and not _fanout_skip
+        ):
+            try:
+                with stage("fanout"):
+                    fan_out_result = await self._try_fan_out(
+                        instance_id=instance_id,
+                        conversation_id=conversation_id,
+                        user_message=user_message,
+                        host_user_id=host_user_id,
+                        page_context=page_context,
+                        conversation_history=conversation_history,
+                        instance_config=instance_config,
+                        user_info=user_info,
+                        retrieval=retrieval,
+                        turn_id=turn_id,
+                        budget_tracker=budget,
+                    )
             except Exception:
                 logger.exception("Fan-out attempt failed; falling back to multi-step / single-pass")
 
@@ -2171,6 +2528,10 @@ class TurnPipelineRunner:
                 "total_llm_calls": total_llm_calls,
                 "fan_out_path": True,
             })
+            _signal(ledger, "skill_router", False)
+            _signal(ledger, "chat_handoff", False)
+            _signal(ledger, "weather_force", False)
+            _finalize_meter(ledger, meter, "answer")
             return response, ledger
 
         # ── Pulse v2 Phase 1: adaptive ReAct loop gate (before PR-20) ─────
@@ -2199,15 +2560,16 @@ class TurnPipelineRunner:
             and _pulse_is_platform_zone
         ):
             try:
-                pulse_loop_result = await self._try_pulse_loop(
-                    instance_id=instance_id, conversation_id=conversation_id,
-                    user_message=user_message, host_user_id=host_user_id,
-                    page_context=page_context, conversation_history=conversation_history,
-                    instance_config=instance_config, user_info=user_info,
-                    retrieval=retrieval, progress_callback=progress_callback,
-                    stream_callback=stream_callback, turn_id=turn_id,
-                    intent_resolution=_intent_resolution,
-                )
+                with stage("pulse_loop"):
+                    pulse_loop_result = await self._try_pulse_loop(
+                        instance_id=instance_id, conversation_id=conversation_id,
+                        user_message=user_message, host_user_id=host_user_id,
+                        page_context=page_context, conversation_history=conversation_history,
+                        instance_config=instance_config, user_info=user_info,
+                        retrieval=retrieval, progress_callback=progress_callback,
+                        stream_callback=stream_callback, turn_id=turn_id,
+                        intent_resolution=_intent_resolution,
+                    )
             except Exception:
                 logger.exception("[%s] Pulse loop attempt failed; falling back to single-pass", turn_id[:8])
 
@@ -2258,12 +2620,13 @@ class TurnPipelineRunner:
 
             # P4.1: Write trajectory (fire-and-forget, own session)
             _ = asyncio.ensure_future(_write_trajectory_own_session(turn_id))
-            asyncio.ensure_future(AutoMemoryExtractor.try_extract(
-                user_message=user_message,
-                instance_id=instance_id,
-                host_user_id=host_user_id,
-                db_session=self.db,
-            ))
+            with stage("auto_memory"):
+                asyncio.ensure_future(AutoMemoryExtractor.try_extract(
+                    user_message=user_message,
+                    instance_id=instance_id,
+                    host_user_id=host_user_id,
+                    db_session=self.db,
+                ))
 
             # Populate completed_tools so _run_chat's surfacing layer fires on ReAct turns
             _react_completed_tools = [
@@ -2316,6 +2679,10 @@ class TurnPipelineRunner:
                 "total_tokens": total_tokens,
                 "total_llm_calls": total_llm_calls,
             })
+            _signal(ledger, "skill_router", False)
+            _signal(ledger, "chat_handoff", False)
+            _signal(ledger, "weather_force", False)
+            _finalize_meter(ledger, meter, "tool_answer")
             return response, ledger
 
         # ── PR-20: Multi-step planning gate (after S2, before S3) ──────────
@@ -2323,19 +2690,20 @@ class TurnPipelineRunner:
         react_result = None
         if settings.KG_MULTI_STEP_ENABLED and self.db is not None:
             try:
-                react_result = await self._try_multi_step_plan(
-                    instance_id=instance_id,
-                    conversation_id=conversation_id,
-                    user_message=user_message,
-                    host_user_id=host_user_id,
-                    page_context=page_context,
-                    conversation_history=conversation_history,
-                    instance_config=instance_config,
-                    user_info=user_info,
-                    retrieval=retrieval,
-                    progress_callback=progress_callback,
-                    stream_callback=stream_callback,
-                )
+                with stage("multi_step_plan"):
+                    react_result = await self._try_multi_step_plan(
+                        instance_id=instance_id,
+                        conversation_id=conversation_id,
+                        user_message=user_message,
+                        host_user_id=host_user_id,
+                        page_context=page_context,
+                        conversation_history=conversation_history,
+                        instance_config=instance_config,
+                        user_info=user_info,
+                        retrieval=retrieval,
+                        progress_callback=progress_callback,
+                        stream_callback=stream_callback,
+                    )
             except Exception:
                 logger.exception("Multi-step plan attempt failed; falling back to single-pass")
 
@@ -2386,12 +2754,13 @@ class TurnPipelineRunner:
 
             # P4.1: Write trajectory (fire-and-forget, own session)
             _ = asyncio.ensure_future(_write_trajectory_own_session(turn_id))
-            asyncio.ensure_future(AutoMemoryExtractor.try_extract(
-                user_message=user_message,
-                instance_id=instance_id,
-                host_user_id=host_user_id,
-                db_session=self.db,
-            ))
+            with stage("auto_memory"):
+                asyncio.ensure_future(AutoMemoryExtractor.try_extract(
+                    user_message=user_message,
+                    instance_id=instance_id,
+                    host_user_id=host_user_id,
+                    db_session=self.db,
+                ))
 
             # Populate completed_tools so _run_chat's surfacing layer fires on ReAct turns
             _react_completed_tools = [
@@ -2444,6 +2813,10 @@ class TurnPipelineRunner:
                 "total_tokens": total_tokens,
                 "total_llm_calls": total_llm_calls,
             })
+            _signal(ledger, "skill_router", False)
+            _signal(ledger, "chat_handoff", False)
+            _signal(ledger, "weather_force", False)
+            _finalize_meter(ledger, meter, "tool_answer")
             return response, ledger
 
         # ── Existing single-pass S3→S5 path ────────────────────────────────
@@ -2708,6 +3081,14 @@ class TurnPipelineRunner:
         if _wm_fragment:
             system_prompt = f"{system_prompt}\n\n{_wm_fragment}"
 
+        # [PV2-1A] StateBlock — durable ConversationState from earlier turns.
+        if state_ctx is not None:
+            from ai.engine.cognition.state_store import render_state_block
+
+            _state_block = render_state_block(state_ctx.state)
+            if _state_block:
+                system_prompt = f"{system_prompt}\n\n{_state_block}"
+
         # [GAP-4] Inject session preference constraints into system prompt
         _pref_constraints = ""
         if host_user_id:
@@ -2727,6 +3108,7 @@ class TurnPipelineRunner:
 
         # [GAP-5/6] Load skill terminology + route query to matching skills
         _skill_terminology: dict[str, str] = {}
+        _skill_router_fired = False
         if self.db is not None:
             try:
                 from ai.engine.skills.registry import SkillRegistry
@@ -2736,11 +3118,16 @@ class TurnPipelineRunner:
                 _router = SkillRouter()
                 _matched_skills = _router.find_matching_skills(user_message, _promoted_skills)
                 _skill_terminology = _router.get_terminology(_matched_skills)
+                _skill_router_fired = bool(_matched_skills)
             except Exception:
                 logger.warning(
                     "Skill routing failed; continuing without terminology injection",
                     exc_info=True,
                 )
+        _signal(
+            ledger, "skill_router", _skill_router_fired,
+            matched=len(_skill_terminology),
+        )
         if _skill_terminology:
             from ai.engine.knowledge.terminology import TerminologyResolver
             system_prompt = TerminologyResolver().inject(system_prompt, _skill_terminology)
@@ -2790,19 +3177,20 @@ class TurnPipelineRunner:
                 "verdict_after": None,
             }
 
-        draft = await draft_witness.draft(
-            instance_id=instance_id,
-            conversation_id=conversation_id,
-            user_message=_resolved_user_message,
-            system_prompt=system_prompt,
-            conversation_history=conversation_history,
-            instance_config=instance_config,
-            user_info=user_info,
-            budget_tracker=budget,
-            model=_draft_model,
-            tools=draft_tools,
-            temperature=temperature,
-        )
+        with stage("draft"):
+            draft = await draft_witness.draft(
+                instance_id=instance_id,
+                conversation_id=conversation_id,
+                user_message=_resolved_user_message,
+                system_prompt=system_prompt,
+                conversation_history=conversation_history,
+                instance_config=instance_config,
+                user_info=user_info,
+                budget_tracker=budget,
+                model=_draft_model,
+                tools=draft_tools,
+                temperature=temperature,
+            )
         # [GAP-1] Fallback handler: ensure non-empty response.
         # Skip when the draft already has tool calls — a tool-only turn (LLM
         # emits no prose but calls a tool to answer) is legitimate and GAP-W8
@@ -2857,15 +3245,16 @@ class TurnPipelineRunner:
         })
         from ai.engine.cognition.turn.critic import CriticWitness
         critic_witness = CriticWitness()
-        critic = await critic_witness.review(
-            draft,
-            retrieval,
-            enable_llm_critic=True,
-            instance_id=instance_id,
-            conversation_id=conversation_id,
-            user_message=_resolved_user_message,
-            salience=salience,
-        )
+        with stage("critic"):
+            critic = await critic_witness.review(
+                draft,
+                retrieval,
+                enable_llm_critic=True,
+                instance_id=instance_id,
+                conversation_id=conversation_id,
+                user_message=_resolved_user_message,
+                salience=salience,
+            )
 
         # [knowledge_gap routing] Escalate via the reason lane or return
         # honest uncertainty — never mask. (C1: the reason lane resolves
@@ -2883,32 +3272,33 @@ class TurnPipelineRunner:
                     "[%s] knowledge_gap detected — escalating to reason lane (%s)",
                     turn_id[:8], escalation_model,
                 )
-                draft = await draft_witness.draft(
-                    instance_id=instance_id,
-                    conversation_id=conversation_id,
-                    user_message=_resolved_user_message,
-                    system_prompt=system_prompt,
-                    conversation_history=conversation_history,
-                    instance_config=instance_config,
-                    user_info=user_info,
-                    budget_tracker=budget,
-                    model=escalation_model,
-                    tools=draft_tools,
-                    temperature=temperature,
-                )
-                total_tokens += draft.tokens_used
-                total_llm_calls += 1
-                # Re-run FallbackHandler in case escalated model also returns
-                # empty (but not for a tool-only turn — see GAP-1 above).
-                _fallback_text = FallbackHandler().handle(_resolved_user_message, draft.text)
-                if _fallback_text != draft.text and not draft.tool_calls:
-                    import dataclasses as _dc
-                    draft = _dc.replace(draft, text=_fallback_text, confidence=0.4)
-                critic = await critic_witness.review(
-                    draft, retrieval, enable_llm_critic=False,
-                    instance_id=instance_id, conversation_id=conversation_id,
-                    user_message=_resolved_user_message, salience=salience,
-                )
+                with stage("escalate"):
+                    draft = await draft_witness.draft(
+                        instance_id=instance_id,
+                        conversation_id=conversation_id,
+                        user_message=_resolved_user_message,
+                        system_prompt=system_prompt,
+                        conversation_history=conversation_history,
+                        instance_config=instance_config,
+                        user_info=user_info,
+                        budget_tracker=budget,
+                        model=escalation_model,
+                        tools=draft_tools,
+                        temperature=temperature,
+                    )
+                    total_tokens += draft.tokens_used
+                    total_llm_calls += 1
+                    # Re-run FallbackHandler in case escalated model also returns
+                    # empty (but not for a tool-only turn — see GAP-1 above).
+                    _fallback_text = FallbackHandler().handle(_resolved_user_message, draft.text)
+                    if _fallback_text != draft.text and not draft.tool_calls:
+                        import dataclasses as _dc
+                        draft = _dc.replace(draft, text=_fallback_text, confidence=0.4)
+                    critic = await critic_witness.review(
+                        draft, retrieval, enable_llm_critic=False,
+                        instance_id=instance_id, conversation_id=conversation_id,
+                        user_message=_resolved_user_message, salience=salience,
+                    )
                 # C1: record the escalation + quality signal (critic verdict
                 # before/after) so the delta is measurable (L7).
                 ledger.reason_escalation = {
@@ -2996,6 +3386,7 @@ class TurnPipelineRunner:
         # patch on the user's phrasing.
         # NOTE: skipped when S4 vetoed (P1-02) — re-forcing a tool call here
         # would defeat the fail-closed gate that stripped ``draft.tool_calls``.
+        _weather_force_fired = False
         if (
             self.executor is not None
             and _is_wq(_resolved_user_message)
@@ -3007,15 +3398,17 @@ class TurnPipelineRunner:
                 for tc in (draft.tool_calls or [])
             )
             if not _has_weather_call:
+                _weather_force_fired = True
                 import json as _json
-                _place = await _normalize_weather_question(
-                    instance_id=instance_id,
-                    conversation_id=conversation_id,
-                    question=_resolved_user_message,
-                    conversation_history=conversation_history,
-                    model=model,
-                    weather_extractor=self.weather_extractor,
-                )
+                with stage("weather_normalize"):
+                    _place = await _normalize_weather_question(
+                        instance_id=instance_id,
+                        conversation_id=conversation_id,
+                        question=_resolved_user_message,
+                        conversation_history=conversation_history,
+                        model=model,
+                        weather_extractor=self.weather_extractor,
+                    )
                 draft = _dc.replace(
                     draft,
                     tool_calls=[{
@@ -3038,6 +3431,7 @@ class TurnPipelineRunner:
                     "[WEATHER-DETERMINISTIC] Forced web_research for %r -> %r",
                     _resolved_user_message, _place,
                 )
+        _signal(ledger, "weather_force", _weather_force_fired)
 
         # S5 — Execute (real parallel tool dispatch + streaming)
         s5_start = time.monotonic()
@@ -3139,18 +3533,19 @@ class TurnPipelineRunner:
         except Exception:  # noqa: BLE001 — never block synthesis
             logger.debug("B5 compensation soft-empty stamp skipped", exc_info=True)
 
-        _synth = await _synthesize_tool_results(
-            instance_id=instance_id,
-            conversation_id=conversation_id,
-            user_message=_resolved_user_message,
-            completed_tools=execution.completed_tools,
-            draft_text=final_text,
-            model=draft.model_used or model,
-            delivery=_intent_resolution.delivery if _intent_resolution else "explain",
-            envelope_synthesizer=self.envelope_synthesizer,
-            stream_callback=stream_callback,
-            progress_callback=progress_callback,
-        )
+        with stage("synthesis"):
+            _synth = await _synthesize_tool_results(
+                instance_id=instance_id,
+                conversation_id=conversation_id,
+                user_message=_resolved_user_message,
+                completed_tools=execution.completed_tools,
+                draft_text=final_text,
+                model=draft.model_used or model,
+                delivery=_intent_resolution.delivery if _intent_resolution else "explain",
+                envelope_synthesizer=self.envelope_synthesizer,
+                stream_callback=stream_callback,
+                progress_callback=progress_callback,
+            )
         if _synth and _synth.get("text"):
             final_text = _synth["text"]
             total_tokens += int(_synth.get("tokens") or 0)
@@ -3195,14 +3590,15 @@ class TurnPipelineRunner:
                 from ai.engine.cognition.turn.verify import VerificationWitness
                 from ai.engine.llm.router import model_for_profile
                 _vw = VerificationWitness()
-                _vr = await _vw.verify(
-                    answer=final_text,
-                    tool_results=execution.completed_tools,
-                    user_message=_resolved_user_message,
-                    instance_id=instance_id,
-                    conversation_id=conversation_id,
-                    model=model_for_profile("verify") or draft.model_used or model,
-                )
+                with stage("verify"):
+                    _vr = await _vw.verify(
+                        answer=final_text,
+                        tool_results=execution.completed_tools,
+                        user_message=_resolved_user_message,
+                        instance_id=instance_id,
+                        conversation_id=conversation_id,
+                        model=model_for_profile("verify") or draft.model_used or model,
+                    )
                 if not _vr.passed and _vr.corrected_text:
                     final_text = _vr.corrected_text
                     logger.info(
@@ -3293,12 +3689,13 @@ class TurnPipelineRunner:
             model=draft.model_used,
             envelope=_synth.get("envelope") if _synth else None,
         )
-        asyncio.ensure_future(AutoMemoryExtractor.try_extract(
-            user_message=user_message,
-            instance_id=instance_id,
-            host_user_id=host_user_id,
-            db_session=self.db,
-        ))
+        with stage("auto_memory"):
+            asyncio.ensure_future(AutoMemoryExtractor.try_extract(
+                user_message=user_message,
+                instance_id=instance_id,
+                host_user_id=host_user_id,
+                db_session=self.db,
+            ))
 
         await _broadcast_run(instance_id, "run.step.completed", {
             "run_id": turn_id,
@@ -3331,6 +3728,27 @@ class TurnPipelineRunner:
                 turn_id[:8], exc_info=True,
             )
 
+        _chat_handoff_fired = False
+        for _tool in execution.completed_tools or []:
+            _raw = _tool.get("result") if isinstance(_tool, dict) else None
+            _parsed = _raw
+            if isinstance(_raw, str):
+                try:
+                    import json as _json_handoff
+                    _parsed = _json_handoff.loads(_raw)
+                except (TypeError, ValueError):
+                    _parsed = None
+            if isinstance(_parsed, dict) and _parsed.get("action") == "chat_handoff":
+                _chat_handoff_fired = True
+                break
+        _signal(ledger, "chat_handoff", _chat_handoff_fired)
+        if _chat_handoff_fired:
+            _turn_decision = "handoff_agent"
+        elif execution.completed_tools:
+            _turn_decision = "tool_answer"
+        else:
+            _turn_decision = "answer"
+        _finalize_meter(ledger, meter, _turn_decision)
         return response, ledger
 
     async def _write_ledger_row(

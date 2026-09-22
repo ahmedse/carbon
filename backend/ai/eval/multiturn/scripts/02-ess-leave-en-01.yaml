@@ -1,0 +1,67 @@
+id: ess-leave-en-01
+objective_ids: [C1, C3, C8]
+language: en
+surface: chat
+persona: emp_1067
+turns:
+  - user: "I need to take annual leave from January 15 to January 22, 2025"
+    stub_reply: "I understand you want annual leave from January 15 to January 22, 2025. Let me confirm those dates."
+    expect:
+      decision_in: [answer, clarify]
+      language: en
+      max_llm_calls: 2
+      mentions_any: ["January 15", "January 22", "2025"]
+  
+  - user: "Yes, that's correct"
+    stub_reply: "Got it. Your leave request: annual leave, 15-22 January 2025 (8 days)."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      must_not_reask_slots: [start_date, end_date, leave_type]
+      mentions_any: ["15", "22", "January"]
+  
+  - user: "Is there anything else you need?"
+    stub_reply: "No, I have all the details. I'll submit your leave request now."
+    expect:
+      decision_in: [handoff_agent, answer]
+      language: en
+      max_llm_calls: 1
+      must_not_reask_slots: [start_date, end_date]
+  
+  - user: "What type of leave did I request?"
+    stub_reply: "You requested annual leave."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["annual"]
+  
+  - user: "What are the dates again?"
+    stub_reply: "Your leave dates are January 15 to January 22, 2025."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["15", "22"]
+  
+  - user: "How many days is that?"
+    stub_reply: "That's 8 days of leave."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+  
+  - user: "Will it be approved?"
+    stub_reply: "Your request will be reviewed and approved by your manager."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+  
+  - user: "When will I know the status?"
+    stub_reply: "You'll receive a notification within 24 hours."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1

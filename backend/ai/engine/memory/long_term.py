@@ -27,6 +27,19 @@ from ai.engine.core.query import first, scope
 
 from ai.engine.core.models import MemoryLongTerm, generate_uuid
 
+_STOPWORDS = frozenset({
+    "the", "and", "for", "are", "but", "not", "you", "all", "can",
+    "had", "her", "was", "one", "our", "out", "has", "his", "how",
+    "its", "may", "new", "now", "old", "see", "way", "who", "did",
+    "get", "let", "say", "she", "too", "use", "what", "when", "where",
+    "which", "with", "this", "that", "from", "have", "been", "will",
+    "more", "show", "list", "give", "tell", "many", "much", "some",
+    "your", "my", "me", "is", "do", "does", "please", "remember",
+})
+_TOKEN_RE = re.compile(r"[\w-]+", re.UNICODE)
+# Lexical recall scans only the most recent active facts in scope.
+KEYWORD_SCAN_LIMIT = 500
+
 logger = logging.getLogger("pulse.memory.long_term")
 
 
@@ -254,9 +267,9 @@ class LongTermMemory:
                 instance_id=instance_id,
             )
         except Exception:
-            return list(facts_by_id.values())
+            results = {"ids": []}
 
-        if results["ids"] and results["ids"][0]:
+        if results.get("ids") and results["ids"][0]:
             for fid in results["ids"][0]:
                 if fid in facts_by_id:
                     continue  # already found by keyword search
@@ -277,6 +290,22 @@ class LongTermMemory:
                         "confidence": fact.confidence,
                         "use_count": fact.use_count,
                     }
+
+        # 3. Lexical lane — a confirmed fact must be recallable even when the
+        #    vector backend is down or has no embedding for it.
+        semantic_count = sum(
+            1 for f in facts_by_id.values()
+            if f["category"] not in ("correction", "business_rule")
+        )
+        if semantic_count < top_k:
+            try:
+                for f in await self._keyword_match_facts(
+                    instance_id, query, limit=top_k - semantic_count,
+                    host_user_id=host_user_id, exclude_ids=set(facts_by_id),
+                ):
+                    facts_by_id[f["id"]] = f
+            except Exception as e:
+                logger.warning(f"Lexical fact recall failed: {e}")
 
         await self.db.commit()
         # Return corrections first, then others
@@ -335,17 +364,9 @@ class LongTermMemory:
         Results are filtered by the tenancy triplet.
         """
         # Extract significant keywords (3+ chars, not stopwords)
-        _stopwords = {
-            "the", "and", "for", "are", "but", "not", "you", "all", "can",
-            "had", "her", "was", "one", "our", "out", "has", "his", "how",
-            "its", "may", "new", "now", "old", "see", "way", "who", "did",
-            "get", "let", "say", "she", "too", "use", "what", "when", "where",
-            "which", "with", "this", "that", "from", "have", "been", "will",
-            "more", "show", "list", "give", "tell", "many", "much", "some",
-        }
         words = [
             w.lower() for w in query.split()
-            if len(w) >= 3 and w.lower() not in _stopwords
+            if len(w) >= 3 and w.lower() not in _STOPWORDS
         ]
         if not words:
             return []
@@ -381,6 +402,60 @@ class LongTermMemory:
         # Sort by number of matching words (most relevant first)
         matched.sort(key=lambda x: x[0], reverse=True)
         return [m[1] for m in matched[:limit]]
+
+    async def _keyword_match_facts(
+        self,
+        instance_id: str,
+        query: str,
+        limit: int = 5,
+        host_user_id: str | None = None,
+        exclude_ids: set[str] | None = None,
+    ) -> list[dict]:
+        """Lexical recall over the ``KEYWORD_SCAN_LIMIT`` most recent active
+        non-constraint facts (tenancy-filtered).
+
+        Tokens are punctuation-stripped so "what's my cost centre?" matches a
+        stored "my cost centre is CC-42". Ranked by distinct matching tokens.
+        """
+        words = {
+            w for w in _TOKEN_RE.findall((query or "").lower())
+            if len(w) >= 3 and w not in _STOPWORDS
+        }
+        if not words or limit <= 0:
+            return []
+        now = utcnow()
+        rows = await self.db.select(
+            MemoryLongTerm,
+            scope(instance_id, host_user_id),
+            ("archived", False),
+            order_by=("-created_at",),
+            limit=KEYWORD_SCAN_LIMIT,
+        )
+        exclude_ids = exclude_ids or set()
+        scored: list[tuple[int, object]] = []
+        for fact in rows:
+            if fact.id in exclude_ids or fact.category in ("correction", "business_rule"):
+                continue
+            if fact.valid_to is not None and fact.valid_to <= now:
+                continue
+            tokens = set(_TOKEN_RE.findall((fact.content or "").lower()))
+            hits = len(words & tokens)
+            if hits:
+                scored.append((hits, fact))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        out = []
+        for _hits, fact in scored[:limit]:
+            fact.last_used = utcnow()
+            fact.use_count += 1
+            out.append({
+                "id": fact.id,
+                "category": fact.category,
+                "content": fact.content,
+                "source": fact.source,
+                "confidence": fact.confidence,
+                "use_count": fact.use_count,
+            })
+        return out
 
     async def update_fact(
         self,

@@ -496,6 +496,9 @@ class ChatResponse:
     # F3-B — read-only, outcome-language tool trace ({"step_label", "tool_id",
     # "duration_ms"}) for the frontend "Considered…" planning pill.
     tool_trace: list[dict] = field(default_factory=list)
+    # PV2-1C — ≤ 200-char, scope-filtered digest of the turn's tool facts;
+    # persisted in message metadata and replayed into history.
+    tool_digest: str = ""
     # S1.5-zone — four-zone intent provenance for the frontend badge
     # (platform|concept|real_time|general|off_limits).
     intent_zone: str = ""

@@ -69,6 +69,14 @@ Workers get narrow context. You hold the architecture, the history, and the cons
 Master Architect** runs **DeepSeek V4-Pro**. Kimi / V3 / R1 are OFF roster. Full
 tiering + cache + off-peak rules: `shared/model-budgeting.md`.
 
+**Cursor-native dispatch (2026-09-22):** inside Cursor, dispatch each phase as a
+Task subagent on the cheapest capable roster model (`composer-2.5-fast` mechanical
+edits · `claude-4.5-haiku-thinking` design-heavy tests/eval/debug). The subagent
+prompt = the Section 9 delegation prompt (base-rules) + "read project.config,
+base-rules, role file, TASKS.md Phase X; run the gate; append TASK-RESULTS.md".
+Run parallel workers only on disjoint file sets. You still audit: read the diff,
+re-run the gate yourself, reject thin work (RULE_28) — never trust the summary.
+
 ---
 
 ## Writing a TASKS.md Phase Spec

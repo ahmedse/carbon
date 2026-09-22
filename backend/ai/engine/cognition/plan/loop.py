@@ -199,6 +199,10 @@ class StepResult:
     followup: ObservationResult | None = None
     # Token usage from the draft LLM call (Monitor / ledger).
     tokens_used: int = 0
+    # PV2-0A — measured LLM calls for this step (log-only).
+    llm_calls: int = 0
+    llm_ms: float = 0.0
+    llm_by_stage: dict | None = None
 
 
 @dataclass
@@ -1061,7 +1065,8 @@ class ReActLoop:
             stopped_for_pause = False
             for step, result, step_latency in executed:
                 step_results.append(result)
-                total_llm_calls += 1  # each step involves at least one LLM call
+                _step_llm = int(getattr(result, "llm_calls", 0) or 0)
+                total_llm_calls += _step_llm
                 total_tokens += int(getattr(result, "tokens_used", 0) or 0)
 
                 # ── Step event based on result ────────────────────────
@@ -1558,7 +1563,18 @@ class ReActLoop:
 
     # ── Step execution ─────────────────────────────────────────────────────
 
-    async def _execute_step(
+    async def _execute_step(self, *args, **kwargs) -> StepResult:
+        """Execute one plan step under a step-scoped LLM call meter."""
+        from ai.engine.llm.call_meter import meter_scope
+
+        with meter_scope() as step_meter:
+            result = await self._execute_step_metered(*args, **kwargs)
+        result.llm_calls = step_meter.total
+        result.llm_ms = step_meter.total_ms()
+        result.llm_by_stage = step_meter.by_stage()
+        return result
+
+    async def _execute_step_metered(
         self,
         step: PlanStep,
         dw,         # DraftWitness
@@ -1585,6 +1601,7 @@ class ReActLoop:
         prior_results: list | None = None,
     ) -> StepResult:
         """Execute one plan step: draft → critic → execute → observe."""
+        from ai.engine.llm.call_meter import stage
 
         # Build step-prompt with dependents' context
         enriched_prompt = self._build_step_prompt(
@@ -1693,17 +1710,19 @@ class ReActLoop:
         )
         if prep is not None and prep.model_override:
             _draft_kwargs["model"] = prep.model_override
-        draft = await dw.draft(**_draft_kwargs)
+        with stage("draft"):
+            draft = await dw.draft(**_draft_kwargs)
 
         # Critic
         retrieval_stub = retrieval or RetrievalResult()
-        critic = await cw.review(
-            draft=draft,
-            retrieval=retrieval_stub,
-            is_mutation=step.is_mutation,
-            dry_run=dry_run,
-            confirmation_token=confirmation_token,
-        )
+        with stage("critic"):
+            critic = await cw.review(
+                draft=draft,
+                retrieval=retrieval_stub,
+                is_mutation=step.is_mutation,
+                dry_run=dry_run,
+                confirmation_token=confirmation_token,
+            )
 
         result = StepResult(
             step_id=step.step_id,
@@ -2329,17 +2348,20 @@ class ReActLoop:
             "- Ground your answer ONLY in the given results — never invent data."
         )
 
-        obs_draft = await dw.draft(
-            instance_id="",
-            conversation_id="",
-            user_message=observation_prompt,
-            system_prompt=system_prompt,
-            conversation_history=conversation_history,
-            instance_config=instance_config,
-            user_info=user_info,
-            tools=None,
-            model=model,
-        )
+        from ai.engine.llm.call_meter import stage
+
+        with stage("observe"):
+            obs_draft = await dw.draft(
+                instance_id="",
+                conversation_id="",
+                user_message=observation_prompt,
+                system_prompt=system_prompt,
+                conversation_history=conversation_history,
+                instance_config=instance_config,
+                user_info=user_info,
+                tools=None,
+                model=model,
+            )
 
         text = (obs_draft.text or "").strip()
         if not text:
@@ -2549,6 +2571,12 @@ class ReActLoop:
         else:
             step_status = "completed" if result.executed else "completed"
 
+        _llm_meter = {
+            "llm_calls": int(result.llm_calls or 0),
+            "llm_ms": float(result.llm_ms or 0.0),
+            "llm_by_stage": dict(result.llm_by_stage or {}),
+        }
+
         # Check if a row already exists for this run+step (resume path)
         existing = first(await _db.select(
             RunStep,
@@ -2566,22 +2594,26 @@ class ReActLoop:
             _prev_flags = _coerce_json_field(
                 existing.critic_flags_json, default={},
             ) or {}
+            _legacy_flags = _prev_flags if isinstance(_prev_flags, list) else None
             if not isinstance(_prev_flags, dict):
                 _prev_flags = {}
             _next_flags = (
                 list(result.critic_flags) if result.critic_flags else None
             )
+            _merged: dict = {**_prev_flags}
+            if _legacy_flags:
+                _merged["critic_flags"] = _legacy_flags
             if _next_flags is not None:
-                _merged: dict = {**_prev_flags}
                 if _prev_flags.get("consent_granted"):
                     _merged["consent_granted"] = True
                     if _prev_flags.get("consent_recovery"):
                         _merged["consent_recovery"] = _prev_flags["consent_recovery"]
                 # Keep list-shaped critic flags discoverable for debug.
                 _merged["critic_flags"] = _next_flags
-                # Django JSONField wants native objects — json.dumps would
-                # store a string scalar and break consent_granted reads.
-                existing.critic_flags_json = _merged
+            _merged["llm_meter"] = _llm_meter
+            # Django JSONField wants native objects — json.dumps would
+            # store a string scalar and break consent_granted reads.
+            existing.critic_flags_json = _merged
             existing.tool_output_json = (
                 result.tool_output if result.tool_output is not None
                 else existing.tool_output_json
@@ -2617,8 +2649,8 @@ class ReActLoop:
                 draft_text=result.draft_text or None,
                 critic_verdict=result.critic_verdict or None,
                 critic_flags_json=(
-                    {"critic_flags": list(result.critic_flags)}
-                    if result.critic_flags else None
+                    {"critic_flags": list(result.critic_flags), "llm_meter": _llm_meter}
+                    if result.critic_flags else {"llm_meter": _llm_meter}
                 ),
                 tool_output_json=result.tool_output if result.tool_output else None,
                 error=result.error,
@@ -3012,17 +3044,19 @@ class ReActLoop:
     async def _llm_synthesise(self, synthesis_prompt: str, system_prompt: str, instance_id: str = "") -> str:
         """Use LLM to synthesise step results."""
         try:
+            from ai.engine.llm.call_meter import stage
             from ai.engine.llm.router import route_chat
-            router_result = await route_chat(
-                task="cognition",
-                instance_id=instance_id,
-                conversation_id=f"plan-synthesise-{instance_id or 'unknown'}",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": synthesis_prompt},
-                ],
-                temperature=0.3,
-            )
+            with stage("plan_synthesis"):
+                router_result = await route_chat(
+                    task="cognition",
+                    instance_id=instance_id,
+                    conversation_id=f"plan-synthesise-{instance_id or 'unknown'}",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": synthesis_prompt},
+                    ],
+                    temperature=0.3,
+                )
             return router_result["content"] or ""
         except Exception as e:
             logger.warning("LLM synthesis failed: %s", e)

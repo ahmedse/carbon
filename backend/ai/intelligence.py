@@ -41,6 +41,43 @@ def _snapshot_with_clear_break(conversation, snapshot: dict[str, Any]) -> dict[s
         out[CLEAR_BREAK_KEY] = prior
     return out
 
+
+def _run_state_store(op):
+    """Run ``op(ConversationStateStore)`` on a fresh engine session (sync)."""
+    from asgiref.sync import async_to_sync
+
+    from ai.engine.cognition.state_store import ConversationStateStore
+    from ai.store import get_store
+
+    async def _go():
+        async with get_store().get_session_factory()() as db:
+            return await op(ConversationStateStore(db))
+
+    return async_to_sync(_go)()
+
+
+def _clear_conversation_state(conversation_id: str) -> dict | None:
+    """PV2-1A: /clear drops the durable ConversationState; the removed
+    snapshot rides the clear-break marker so undo can restore it."""
+    try:
+        return _run_state_store(lambda store: store.clear(conversation_id))
+    except Exception:  # noqa: BLE001 — clearing chat must not fail on state
+        logger.warning(
+            "ConversationState clear failed conv=%s", conversation_id[:8], exc_info=True,
+        )
+        return None
+
+
+def _restore_conversation_state(conversation_id: str, snapshot: dict | None) -> None:
+    if not snapshot:
+        return
+    try:
+        _run_state_store(lambda store: store.restore(conversation_id, snapshot))
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "ConversationState restore failed conv=%s", conversation_id[:8], exc_info=True,
+        )
+
 from ai.engine_runtime import dispatch_task, get_task
 from ai.audit_service import AuditService
 from ai.protocol import (
@@ -416,7 +453,7 @@ class CarbonIntelligence:
         # Assemble tiered, budgeted context from history (Sprint 15).
         history = list(
             conversation.messages.order_by("created_at").values(
-                "id", "role", "content", "created_at", "is_deleted",
+                "id", "role", "content", "created_at", "is_deleted", "metadata_json",
             )
         )
         assembled = assemble_context(
@@ -573,7 +610,7 @@ class CarbonIntelligence:
             # Assemble tiered, budgeted context from history (Sprint 15).
             history = list(
                 conversation.messages.order_by("created_at").values(
-                    "id", "role", "content", "created_at", "is_deleted",
+                    "id", "role", "content", "created_at", "is_deleted", "metadata_json",
                 )
             )
             assembled = assemble_context(
@@ -697,6 +734,7 @@ class CarbonIntelligence:
                             external_sources=res.get("external_sources"),
                             code_result=res.get("code_result"),
                             envelope=res.get("envelope"),
+                            tool_digest=res.get("tool_digest") or "",
                         )
                         _finalize_generation("completed", usage)
                         done_frame = {
@@ -1944,7 +1982,7 @@ class CarbonIntelligence:
         """
         history = list(
             conversation.messages.order_by("created_at").values(
-                "id", "role", "content", "created_at", "is_deleted",
+                "id", "role", "content", "created_at", "is_deleted", "metadata_json",
             )
         )
         scope = build_scope(user)
@@ -2140,6 +2178,7 @@ class CarbonIntelligence:
             CLEAR_BREAK_KEY: {
                 "summary": prior_summary,
                 "prior_snapshot": prior_snapshot,
+                "prior_state": _clear_conversation_state(str(conversation.id)),
                 "message_boundary_id": str(last_msg_id) if last_msg_id else None,
                 "cleared_at": timezone.now().isoformat(),
             },
@@ -2178,6 +2217,7 @@ class CarbonIntelligence:
         conversation.save(
             update_fields=["summary", "context_snapshot_json", "updated_at"],
         )
+        _restore_conversation_state(str(conversation.id), clear_break.get("prior_state"))
         return _serialize_conversation(conversation)
 
     def regenerate_message(
@@ -2356,7 +2396,7 @@ class CarbonIntelligence:
                 created_at__lte=turn.created_at,
             )
             .order_by("created_at")
-            .values("id", "role", "content", "created_at", "is_deleted")
+            .values("id", "role", "content", "created_at", "is_deleted", "metadata_json")
         )
         assembled = assemble_context(
             conversation, history, scope, model=resolved_model, adapter=self.adapter,
@@ -2461,7 +2501,7 @@ class CarbonIntelligence:
         history = list(
             conversation.messages.filter(created_at__lte=turn.created_at)
             .order_by("created_at")
-            .values("id", "role", "content", "created_at", "is_deleted")
+            .values("id", "role", "content", "created_at", "is_deleted", "metadata_json")
         )
         assembled = assemble_context(
             conversation, history, scope, model=resolved_model, adapter=self.adapter,
@@ -2608,6 +2648,7 @@ class CarbonIntelligence:
                             external_sources=res.get("external_sources"),
                             code_result=res.get("code_result"),
                             envelope=res.get("envelope"),
+                            tool_digest=res.get("tool_digest") or "",
                         )
                         _finalize_generation("completed", usage)
                         done_frame = {
@@ -3794,6 +3835,7 @@ class CarbonIntelligence:
             external_sources=chat_response.external_sources,
             code_result=chat_response.code_result,
             envelope=chat_response.envelope,
+            tool_digest=getattr(chat_response, "tool_digest", "") or "",
         )
 
     def _prepend_workspace_context(
@@ -4061,6 +4103,7 @@ class CarbonIntelligence:
         external_sources: list[dict] | None = None,
         code_result: dict | None = None,
         envelope: dict | None = None,
+        tool_digest: str = "",
     ) -> dict[str, Any]:
         """Save AI response message and update conversation status."""
         if status == "provider_unavailable":
@@ -4083,6 +4126,8 @@ class CarbonIntelligence:
         # F3-B — read-only tool trace for the frontend "Considered…" pill.
         if tool_trace:
             metadata["tool_trace"] = tool_trace
+        if tool_digest:
+            metadata["tool_digest"] = tool_digest
         # S1.5-zone — four-zone intent provenance for the frontend badge.
         if intent_zone:
             metadata["intent_zone"] = intent_zone

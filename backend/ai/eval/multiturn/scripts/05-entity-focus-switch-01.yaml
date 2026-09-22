@@ -1,0 +1,76 @@
+id: entity-focus-switch-01
+objective_ids: [C1, C4]
+language: en
+surface: chat
+persona: emp_1067
+turns:
+  - user: "Tell me about Reena"
+    stub_reply: "Reena is a Senior Analyst in the Finance department."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 2
+      focus_entity: "Reena"
+  
+  - user: "What is her position?"
+    stub_reply: "Her position is Senior Analyst."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["Reena", "Senior Analyst"]
+      focus_entity: "Reena"
+  
+  - user: "What department does she work in?"
+    stub_reply: "Reena works in the Finance department."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["Reena", "Finance"]
+      focus_entity: "Reena"
+  
+  - user: "Now tell me about Salman"
+    stub_reply: "Salman is a Project Manager in the Operations department."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 2
+      mentions_any: ["Salman"]
+      focus_entity: "Salman"
+  
+  - user: "What is his role?"
+    stub_reply: "His role is Project Manager."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["Salman", "Project Manager"]
+      focus_entity: "Salman"
+  
+  - user: "Which department is he in?"
+    stub_reply: "Salman works in the Operations department."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["Salman", "Operations"]
+      focus_entity: "Salman"
+  
+  - user: "Back to Reena - is she a manager?"
+    stub_reply: "Reena is a Senior Analyst, not a manager role."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["Reena", "Senior Analyst"]
+      focus_entity: "Reena"
+  
+  - user: "How many people report to Salman?"
+    stub_reply: "Salman manages a team of 5 people."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["Salman", "5"]
+      focus_entity: "Salman"

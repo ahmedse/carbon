@@ -385,7 +385,9 @@ DATABASES = {
         'PORT': get_env("DB_PORT", "5432"),
         "ATOMIC_REQUESTS": True,
         'TEST': {
-            'NAME': f'test_{DB_NAME}',
+            # TEST_DB_NAME lets parallel workers (Master + subagents) run pytest
+            # concurrently without colliding on the same test database.
+            'NAME': get_env("TEST_DB_NAME", None) or f'test_{DB_NAME}',
         },
     }
 }

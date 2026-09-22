@@ -58,6 +58,7 @@ evidence → not done.
 | **DTR** (Data Trust / Catalog Index) | **Catalog** | **ACTIVE** | Stewardship nudges + FilteredDataGrid→SearchSelect · DTR-3 = Pulse (other master) |
 | **GradeVance E2E QA** | **EduOS** | **DONE** | Seed 6 runs + LCT report · `docs/eduos/qa-evidence/E2E-SUMMARY.json` |
 | **GradeVance HITL P2** | **EduOS** | **ACTIVE** | Learning loop proven: edit→proposal→accept→bump→repin · `docs/eduos/qa-evidence/HITL-LEARNING-LOOP.json` · next: UI path + Phase C depth |
+| **PV2** (Pulse v2 Intelligence Contract, ADR-0047) | **Pulse** | **ACTIVE** | Plan `docs/pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md` · canvas `pulse-v2-intelligence-objectives` · **P0 DONE 2026-09-23** (baseline `docs/pulse/evidence/PV2-baseline-2026-09-22.md`: live router 0.50–0.625, llm p50 3–5, 8 findings) · P1 dispatching · P2–P6 PLANNED |
 
 **Multi-Master:** `.ai-toolkit/shared/multi-master.md` · seats · `docs/ops/MASTERS-COMMS.md` · RULE_30. · **This session seat: Nibras.**
 
@@ -2702,3 +2703,377 @@ Onboarded `LeaveRecord` as entity #2 via **only** a descriptor entry in `nibras/
 | Canonical metric stability | ECF-6 | headcount_stable / kuwaiti_count_stable |
 | New entity (no code change) | ECF-8 | LeaveRecord descriptor only |
 
+
+---
+
+## PV2 — Pulse v2 Intelligence Contract (ADR-0047) · DISPATCH 2026-09-22
+## Owner Master: Pulse · Seat law: `.ai-toolkit/shared/multi-master.md`
+## Plan: `docs/pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md` · Objectives C1–C10 / A1–A10
+## Safety: P0 is LOG-ONLY. No behavior change to routing, prompts, consent, or ADR-0046.
+## ════════════════════════════════════════════════════════════════════
+
+**Scope:** `backend/ai/**` (engine + host), `docs/pulse/**`, `.ai-toolkit/decisions/0047*`.
+**Out of scope:** `backend/people/**`, `carbon-frontend/src/apps/{people,my,team}/**`, EduOS/GradeVance, Catalog/DQ.
+**Contracts:** `shared/{ai-contract,testing,definition-of-done,logging,git-workflow}.md` · ADR-0014 · ADR-0046 · ADR-0047 · RULE_21 · RULE_23 · RULE_28 · RULE_35.
+**Test law:** TASKS.md MASTER DIRECTIVE — one app at a time (`pytest ai/tests/<file> -q`), never full suite, never xdist.
+
+### Wave map
+
+| Wave | Phases | Parallel? | Outcome |
+|------|--------|-----------|---------|
+| **W0** | PV2-0A ∥ PV2-0B → PV2-0C | 0A ∥ 0B (disjoint files), 0C after both | Truthful instrumentation + multi-turn bank + baseline numbers |
+| **W1** | PV2-1A → PV2-1B → PV2-1C | Sequential | ConversationState store · tool digests in history · memory_manager wired |
+| **W2** | PV2-2A → PV2-2B | Sequential | IdentityBlock/ContextPack · all stages consume it |
+| **W3** | PV2-3A ∥ PV2-3B | Parallel (loop.py vs runner.py) | Deterministic-first bound steps · surface-truthful Chat prompt |
+| **W4** | PV2-4A → PV2-4B → PV2-4C | Sequential | Arbiter signals (shadow) · conflict tests · flip + kill switch |
+| **W5** | PV2-5A → PV2-5B | Sequential | Agent inherits ConversationState · plan_status + active_plans write-back |
+| **W6** | PV2-6A | After W1–W5 | Multi-turn bank blocking in CI · G5 Coherence · rule file |
+
+Phases PV2-1A … PV2-6A are **PLANNED** (spec pending; Master writes each after the previous wave's baseline numbers). Only W0 is READY below.
+
+---
+
+### Phase PV2-0A — Backend: truthful LLM-call meter + turn-decision signals (LOG-ONLY)
+**Date:** 2026-09-22  
+**Worker Role:** backend-worker  
+**Recommended Model:** Cursor `composer-2.5-fast` (Zoo Code path: DeepSeek V4.1-Flash) → escalated to `claude-opus-5-5-medium` for rev2/rev2b  
+**Status:** DONE — 2026-09-23 Master audit (8/8 new tests, 6× deterministic; 85/1 regression = pre-existing nav failure; import boundary unchanged at 9). rev1 composer had 3 RULE_28 defects (dead journal hook, meter clobber, `unattributed` = AutoMemoryExtractor); fixed on opus. Evidence `docs/pulse/evidence/PV2-baseline-2026-09-22.md` §1  
+**Owner Master:** Pulse  
+**Objectives served:** C4 (decision log), C8/A2/A9 (LLM-call budgets) — measurement only.
+
+#### Objective
+Today `TurnLedger.total_llm_calls` is hand-incremented in `runner.py` and `loop.py:1064` **assumes** "each step involves at least one LLM call" (`total_llm_calls += 1`). Nothing records *which stage* called the LLM, and nothing records *which gate* ended a turn. P0 needs truthful numbers before any behavior change. Build a context-local call meter that `route_chat` increments, tag each call with the active stage, and record which routing gates fired and which one decided the turn. **Zero behavior change** — no routing, prompt, consent, or response text may differ.
+
+#### Files to Read First
+- `backend/ai/engine/llm/router.py` (lines ~253–370, `route_chat`) — the single LLM entry point; where usage is read.
+- `backend/ai/engine/cognition/turn/witnesses.py` (`TurnLedger`, lines 76–116).
+- `backend/ai/engine/cognition/turn/runner.py` lines 1328–2060 (`run()` and every early `return` — pending confirm, nav fast-path, process_brief, deixis, intent short-circuit, weather force, handoff) and lines 2987–3036 (weather force).
+- `backend/ai/engine/cognition/plan/loop.py` lines 340–380 and 1040–1110 (`total_llm_calls`, step latency) and ~1700–1720 (draft tokens).
+- `backend/ai/step_journal.py` (`StepJournal.append`, `EVENT_*`).
+- `backend/ai/engine_runtime.py` lines 395–440 (chat result dict — where `intent_zone` is surfaced).
+- `backend/ai/tests/test_chat_wiring.py` — the pattern for driving a stubbed turn (`patch("ai.engine.llm.provider.get_llm_client")`).
+- `backend/ai/tests/test_plans.py` `patch_engine_seams` — pattern for stubbing `route_chat` in plan tests.
+
+#### What to Build
+1. **CREATE `backend/ai/engine/llm/call_meter.py`**
+   - `@dataclass class LLMCallRecord: stage: str; latency_ms: float; prompt_tokens: int; completion_tokens: int; model: str`
+   - `@dataclass class CallMeter: records: list[LLMCallRecord]` with `total` (property), `by_stage() -> dict[str,int]`, `total_ms()`, `record(...)`.
+   - `contextvars.ContextVar` pair: `_active_meter: ContextVar[CallMeter | None]`, `_active_stage: ContextVar[str]` (default `"unattributed"`).
+   - Public API: `start_meter() -> CallMeter` (sets contextvar, returns it), `current_meter() -> CallMeter | None`, `stage(name: str)` as a context manager that sets/restores `_active_stage`, `record_call(latency_ms, prompt_tokens, completion_tokens, model)` — no-op when no meter is active.
+   - Pure stdlib; import nothing from Django or host.
+2. **MODIFY `backend/ai/engine/llm/router.py` `route_chat`**: after the provider call returns (where `input_tokens/output_tokens` are read, ~line 354) call `record_call(...)` with wall-clock latency of the provider call and the resolved model. Also record on the exception path with `prompt_tokens=0`. Do not change any return value or error behavior.
+3. **MODIFY `backend/ai/engine/cognition/turn/witnesses.py` `TurnLedger`**: add fields  
+   `llm_calls_by_stage: dict | None = None` · `llm_calls_measured: int = 0` · `decision_signals: list | None = None` · `turn_decision: str = ""`.
+4. **MODIFY `backend/ai/engine/cognition/turn/runner.py`**:
+   - At the top of `run()` call `meter = start_meter()`.
+   - Wrap each LLM-bearing stage body in `with stage("<name>")` using exactly these names: `intent`, `retrieval_rerank`, `draft`, `critic`, `escalate`, `synthesis`, `verify`, `weather_normalize`, `fanout`, `pulse_loop`. Anything else stays `unattributed`.
+   - Add a tiny helper `_signal(ledger, gate: str, fired: bool, **detail)` that appends `{"gate", "fired", "detail"}` to `ledger.decision_signals` (create the list lazily). Call it at every gate in `run()` in evaluation order with these exact gate names: `pending_confirm`, `nav_fast_path`, `process_brief_early`, `salience`, `deixis`, `intent_short_circuit`, `process_brief`, `nav_ground`, `off_limits`, `weather_force`, `skill_router`, `chat_handoff`. `fired=True` only when that gate changed the turn's path (early return or forced route); otherwise record `fired=False` with a one-key detail (e.g. `{"zone": ...}`, `{"domain": ...}`).
+   - At **every** return point set `ledger.turn_decision` to one of: `memory_confirm`, `navigate`, `process_brief`, `clarify`, `refuse`, `answer`, `handoff_agent`, `tool_answer` (pick the closest; `answer` is the default for the normal draft path), and before returning copy `meter.by_stage()` → `ledger.llm_calls_by_stage`, `meter.total` → `ledger.llm_calls_measured`. Prefer one small `_finalize_meter(ledger, meter)` helper called at each return rather than duplicated code.
+   - Emit **one** `logger.info("[turn-decision] conv=%s decision=%s llm=%d by_stage=%s fired=%s", ...)` per turn from `_finalize_meter` (fired = list of gate names with `fired=True`). No other new log lines.
+   - Leave `total_llm_calls` hand-counting untouched (it is compared against the meter in tests; a mismatch is a finding to report, not to "fix" in this phase).
+5. **MODIFY `backend/ai/engine/cognition/plan/loop.py`**:
+   - Around each step execution start a step-scoped meter (`start_meter()` at step start; capture `by_stage/total/total_ms` at step end). Wrap draft / observe / synthesise / critic LLM calls with `stage("draft")`, `stage("observe")`, `stage("plan_synthesis")`, `stage("critic")`.
+   - Replace the assumption at ~line 1064 (`total_llm_calls += 1`) with `total_llm_calls += step_meter.total`.
+   - Add `llm_calls`, `llm_ms`, `llm_by_stage` to the payload of the existing `StepJournal.append(... EVENT_STEP_COMPLETED ...)` and paused/awaiting events for that step (add keys to the existing payload dict — do not add new events).
+6. **MODIFY `backend/ai/engine_runtime.py`** chat result dict (~line 409, next to `intent_zone`): add `"turn_decision": getattr(ledger, "turn_decision", "")`, `"llm_calls": int(getattr(ledger, "llm_calls_measured", 0) or 0)`, `"llm_calls_by_stage": dict(getattr(ledger, "llm_calls_by_stage", None) or {})`. Frontend ignores unknown keys; no FE change.
+7. **CREATE `backend/ai/tests/test_pv2_instrumentation.py`** (django_db where needed):
+   - `test_call_meter_counts_per_stage` — unit: two `record_call` under `stage("draft")`, one under `stage("critic")` → `by_stage == {"draft": 2, "critic": 1}`, `total == 3`; no meter → `record_call` is a no-op.
+   - `test_chat_turn_reports_decision_and_meter` — reuse `test_chat_wiring.py` fixtures (`django_store`, `single_pass`, stub client) → `dispatch_task("chat", …)`; assert `result["turn_decision"]` in the allowed set, `result["llm_calls"] >= 1`, `"draft" in result["llm_calls_by_stage"]`, and the ledger row / response is unchanged (`content == "This is a stubbed chat reply."`).
+   - `test_nav_fast_path_records_zero_llm_and_navigate_decision` — drive a navigation utterance that today hits the deterministic nav fast-path (grep `runner.py` ~1500–1540 for the trigger; use an existing nav test's input) → `turn_decision == "navigate"`, `llm_calls == 0`, a `decision_signals` entry `nav_fast_path` with `fired=True`.
+   - `test_plan_step_journal_carries_llm_calls` — reuse `test_plans.py` `patch_engine_seams` style: run one plan step with stubbed `route_chat`; assert the `EVENT_STEP_COMPLETED` (or awaiting) journal payload has integer `llm_calls` and `llm_ms >= 0`.
+   - `test_meter_matches_hand_count_or_reports` — for the stubbed chat turn assert `abs(ledger.total_llm_calls - ledger.llm_calls_measured) <= 1`; if it fails, **do not loosen** — record the numbers under Issues Found in TASK-RESULTS.md and mark the test `xfail(strict=False, reason="PV2-0A baseline: hand count drift")`.
+
+#### DO NOT TOUCH
+- Any routing condition, prompt text, consent/`chat_surface_hook`, `plans_service.py`, `export_bind.py`, frontend, `backend/people/**`, `.github/workflows/**`, `docs/**` (Master owns docs).
+- Do not remove or rename `total_llm_calls`; do not change any return payload other than the three additive keys in step 6.
+
+#### Verification Gate (run + paste literal output)
+```bash
+cd /home/ahmed/ws/carbon/backend && ../.venv/bin/python manage.py check
+cd /home/ahmed/ws/carbon/backend && ../.venv/bin/python -m pytest ai/tests/test_pv2_instrumentation.py -v -p no:cacheprovider 2>&1 | tail -30
+cd /home/ahmed/ws/carbon/backend && ../.venv/bin/python -m pytest ai/tests/test_chat_wiring.py ai/tests/test_plans.py ai/tests/test_pulse_loop.py ai/tests/test_react_consent_boundary.py -q -p no:cacheprovider 2>&1 | tail -8
+cd /home/ahmed/ws/carbon && python3 .ai-toolkit/scripts/import-boundary-lint.py
+cd /home/ahmed/ws/carbon && ./.ai-toolkit/scripts/verify.sh antipatterns 2>&1 | tail -12
+```
+Expected: check clean · new tests pass (or the single documented xfail) · regression files unchanged green · import boundary clean · antipatterns no new failures.
+Append to `TASK-RESULTS.md` as `## PV2-0A` (Summary · Task Results · Files Changed · Verification Output · Deviations · Issues Found). Report the observed `total_llm_calls` vs `llm_calls_measured` numbers.
+
+- **Master notes** — Hand-count drift confirmed: `total_llm_calls` undercounts by the intent call; PV2-1x may retire hand counting in favour of the meter.
+
+---
+
+### Phase PV2-0B — QA: multi-turn coherence golden bank + offline runner (REPORT-ONLY)
+**Date:** 2026-09-22  
+**Worker Role:** qa-validator  
+**Recommended Model:** Cursor `claude-4.5-haiku-thinking` (Zoo Code path: DeepSeek V4.1-Flash) → escalated to `claude-opus-5-5-medium` for rev3  
+**Status:** DONE — 2026-09-23 Master audit (23 pass / 12 xfail coherence; CLI exit 0/2/3; isolated test DB proven `LLMCallLog` 3364→3364; full offline bank run by Master). rev1+rev2 haiku rejected: no DB bootstrap, exit 0 on engine error, "0.0 is correct" misreport. Known harness defect carried: stub advances per LLM call not per turn (fix in PV2-1x). Evidence §2  
+**Owner Master:** Pulse  
+**Objectives served:** C1, C2, C3, C6, C7, C8, C9, A1 — measurement harness only.
+
+#### Objective
+The CI eval (`ai/eval/run_harness.py`) measures single-turn grounding/deny/fabrication. Nothing measures whether Pulse **remembers the conversation**. Build a declarative multi-turn golden bank plus an offline runner that drives real `dispatch_task("chat", …)` turns with a **scripted stub LLM** (same seam as `test_chat_wiring.py`), feeds each turn the accumulated conversation history exactly as the product does, and scores coherence metrics from the response + ledger. Baseline is expected to be red — encode expectations as `xfail(strict=False)` like ECF-0. **No runtime code changes.**
+
+#### Files to Read First
+- `backend/ai/tests/test_chat_wiring.py` — stub client + `dispatch_task` pattern (copy the fixture approach).
+- `backend/ai/engine_runtime.py` lines 100–125 (payload shape: `conversation_history: {conversation_id, messages:[{role,content}]}`) and 395–440 (result keys; after PV2-0A also `turn_decision`, `llm_calls`, `llm_calls_by_stage` — read them with `.get()` defaults so 0B does not depend on 0A landing first).
+- `backend/ai/eval/run_harness.py` + `ai/eval/test_harness_golden.py` — metrics JSON + pass^k conventions to mirror.
+- `backend/ai/eval/scenarios_nibras.py` — declarative scenario style.
+- `docs/pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md` §3 — objective definitions and thresholds (C1 ≥ 95%, C3 ≥ 95%, C2 100%, C7 100%, C8 ≤ 2 LLM calls).
+- `docs/pulse/QA-CHAT-AGENTIC-SCENARIO-BANK.md` — existing scenario ids (PC-090/091/350) so scripts reference, not duplicate.
+
+#### What to Build
+1. **CREATE `backend/ai/eval/multiturn/__init__.py`**, **`bank.py`**, **`runner.py`**, **`scripts/*.yaml`** (12 files).
+2. **Script schema (`bank.py`, dataclasses + YAML loader with validation):**
+   ```yaml
+   id: ess-loan-ar-01
+   objective_ids: [C1, C3, C8]
+   language: ar            # ar | en | mixed
+   surface: chat           # chat only in P0
+   persona: emp_1067
+   turns:
+     - user: "أريد قرض طارئ ٥٠٠٠ دينار"
+       stub_reply: "..."                 # what the scripted LLM returns for THIS turn
+       expect:
+         decision_in: [clarify, answer, handoff_agent]
+         must_not_reask_slots: [amount, loan_type]   # checked against reply text via slot patterns
+         language: ar
+         max_llm_calls: 2
+         mentions_any: ["٥٠٠٠", "5000"]  # grounded recall of a prior fact
+   ```
+   Fields: `id`, `objective_ids`, `language`, `persona`, `turns[]` with `user`, `stub_reply`, optional `stub_tool_calls` (list; pass through to the stub as `tool_calls=None` for P0 unless trivially supportable), and `expect{decision_in, must_not_reask_slots, language, max_llm_calls, mentions_any, mentions_none, focus_entity}`. Validate on load; a malformed script fails loudly.
+3. **Slot / language detectors (`bank.py`):** small deterministic helpers — `detect_language(text) -> "ar"|"en"|"mixed"` (Arabic Unicode range ratio), `reasks_slot(reply, slot) -> bool` using a per-slot bilingual regex table for: `amount`, `loan_type`, `leave_type`, `start_date`, `end_date`, `reason`, `date`, `time_from`, `time_to`, `employee`. Keep the table in one dict; unit-test it.
+4. **Runner (`runner.py`):**
+   - `run_script(script, *, instance_id="nibras") -> ScriptResult` — for each turn: build the stub client returning `stub_reply`, call `dispatch_task("chat", payload, instance_id=instance_id)` with `conversation_history.messages` = all prior `{role,content}` pairs (user + assistant content actually returned), then evaluate `expect` and collect per-turn `{decision, llm_calls, language_ok, reask_violations, mentions_ok, passed}`.
+   - `run_bank(paths) -> BankReport` with metrics: `focus_retention` (turns with `mentions_any`/`focus_entity` satisfied ÷ applicable), `slot_carry_over` (1 − reask violations ÷ applicable), `tool_recall` (mentions of prior stub facts), `language_fidelity`, `router_agreement` (turns whose `decision` ∈ `decision_in` ÷ applicable), `llm_calls_p50`, `llm_calls_max`, `turns_over_budget`, and per-objective pass ratios keyed by `objective_ids`.
+   - CLI: `python -m ai.eval.multiturn.runner --report /tmp/pv2-multiturn.json [--scripts <glob>]` prints a PASS/FAIL table + metrics JSON; **exit 0 always in P0** (report-only) unless a script is malformed or the engine raises.
+   - Reuse `test_chat_wiring.py` env switches (`AGENT_ORCHESTRATOR_ENABLED=false`, `KG_MULTI_STEP_ENABLED=false`) so the single-pass spine runs; document in the module docstring which paths the offline tier cannot exercise (fan-out, live tools).
+5. **12 scripts (`scripts/`)** — 8–12 turns each, bilingual where marked, each tagged with objective ids:
+   `ess-loan-ar-01` (slot carry-over + no re-ask) · `ess-leave-en-01` (dates given turn 1, never re-asked) · `ess-attendance-mixed-01` · `payroll-followup-en-01` (net pay asked, then "and after GOSI?" → C1/C2) · `entity-focus-switch-01` ("tell me about Reena" → "her position?" → "now Salman" → "his?") · `grounded-recall-01` ("what was the number you gave me?") · `plan-status-01` ("what happened to my loan request?" → C9; expect `decision_in: [answer, handoff_agent]`, no re-derivation) · `chat-handoff-write-01` (write intent → `handoff_agent`, PC-090/091/350 semantics, never `tool_answer`) · `language-fidelity-ar-01` (Arabic throughout incl. after English tool-ish content) · `date-awareness-01` ("today's date?" never asked back) · `memory-learn-fact-01` (turn 1 teaches a fact + confirm, turn 3 uses it → C10) · `nav-zero-llm-01` (navigation turns expect `max_llm_calls: 0`).
+6. **CREATE `backend/ai/eval/test_multiturn_bank.py`** marked `pytest.mark.eval_multiturn` (register the marker in `backend/pytest.ini` — additive line only): structural tests (12 scripts load, every script has ≥ 8 turns and ≥ 1 objective id, all objective ids ∈ C1–C10/A1–A10, slot regex table covers every slot referenced) **PASS**; per-script coherence expectations run under `xfail(strict=False, reason="PV2-0B baseline — Pulse v2 not yet implemented")` so red baselines show as XFAIL, never ERROR. Detector unit tests (language, reask) PASS.
+
+#### DO NOT TOUCH
+- Any runtime file under `backend/ai/engine/**`, `engine_runtime.py`, `plans_service.py`; `run_harness.py`; CI workflows; `docs/**` (Master owns docs); frontend; `backend/people/**`.
+
+#### Verification Gate (run + paste literal output)
+```bash
+cd /home/ahmed/ws/carbon/backend && ../.venv/bin/python -m pytest ai/eval/test_multiturn_bank.py -v -p no:cacheprovider 2>&1 | tail -40
+cd /home/ahmed/ws/carbon/backend && ../.venv/bin/python -m ai.eval.multiturn.runner --report /tmp/pv2-multiturn.json 2>&1 | tail -40
+cd /home/ahmed/ws/carbon/backend && ../.venv/bin/python -m pytest ai/eval/test_harness_golden.py -q -p no:cacheprovider 2>&1 | tail -5
+cd /home/ahmed/ws/carbon && python3 .ai-toolkit/scripts/import-boundary-lint.py
+```
+Expected: structural + detector tests PASS, coherence rows XFAIL (0 ERROR) · runner prints 12 scripts + metrics JSON and exits 0 · existing harness still green · import boundary clean.
+Append to `TASK-RESULTS.md` as `## PV2-0B` with the metrics JSON block verbatim.
+
+---
+
+### Phase PV2-0C — QA: P0 baseline report (after 0A + 0B)
+**Date:** 2026-09-22  
+**Worker Role:** qa-validator  
+**Recommended Model:** Cursor `composer-2.5-fast`  
+**Status:** DONE — 2026-09-23 run by Master (both workers died 20:47 on shared test-DB collision). Offline 12×8 + live 3×8 as `emp_1067` with real LLM. Runner gained `--live/--host-user/--no-isolated-db`. Baseline: live router_agreement 0.50–0.625, llm p50=3 (answer) / 5 (tool), 19/24 turns over budget; 8 findings F-LIVE-1…8 in `docs/pulse/evidence/PV2-baseline-2026-09-22.md` §3–4  
+**Owner Master:** Pulse
+
+#### Objective
+Run the multi-turn bank (offline tier) and, when `LLM_API_KEY` is present in `backend/.env`, one live pass of three scripts (`ess-loan-ar-01`, `payroll-followup-en-01`, `chat-handoff-write-01`) against the nibras dev stack as `emp_1067` (credentials per `.cursor/rules/nibras-dev-credentials.mdc`; **STACK-HOLD** in COMMS first). Record baseline numbers per objective in `docs/pulse/evidence/PV2-baseline-2026-09-22.md` (Master-reviewed) and paste the metrics JSON in TASK-RESULTS.md. No code changes.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && ../.venv/bin/python -m ai.eval.multiturn.runner --report /tmp/pv2-baseline.json 2>&1 | tail -40
+```
+
+---
+
+### Wave W1 (P1) — dispatch order
+```
+W1a  PV2-1B (baseline defects, runner.py gates)  ∥  PV2-1C (memory wired + tool digests)
+W1b  PV2-1A (ConversationState store + StateBlock)   — after 1B, same file runner.py
+```
+Parallel workers MUST set a distinct `TEST_DB_NAME` (see `config/settings.py`) — W0 workers died on a shared test-DB collision.
+
+### Phase PV2-1B — Backend: baseline defects F-LIVE-1/3/5 (behaviour change, tested)
+**Date:** 2026-09-23  
+**Worker Role:** backend-worker  
+**Recommended Model:** Cursor `claude-opus-5-5-medium` (runner.py → opus per ladder)  
+**Status:** DONE — 2026-09-23 Master audit (25/25 new; 170 regression incl. previously-failing `test_dispatch_chat_returns_completed` — it was a nav over-fire; offline router 0.781→0.917, llm max 5→3, p50 3; import boundary 9). Config-driven scope: `topic_guard.in_scope{en,ar}` + `refusal_ar` in nibras `instance.yaml`; `FANOUT_PROBE_MIN_TOKENS` setting; `turn/language.py` helper.  
+**Master notes / carried:** (a) nav still over-fires on *statements* ("I need to take annual leave from Jan 15…") — P4 Arbiter scope; (b) pre-LLM topic guard in `engine_runtime.py` refuses English-only → PV2-1D; (c) **security review**: two `intent.py` overrides (compensation; instruction-shaped-name) rewrite jailbreak-shaped messages so they are never refused — open a Sec item before P4 flip; (d) `turns_over_budget` 83→86 because ex-nav turns are now answered (2–3 calls) against YAML budgets of 0–1 — YAML untouched per RULE_28, revisit budgets in P6.  
+**Owner Master:** Pulse  
+**Evidence driving it:** `docs/pulse/evidence/PV2-baseline-2026-09-22.md` §3
+
+#### Objective
+Remove three deterministic defects that the live baseline proved on every turn, without touching routing precedence (that is P4):
+1. **F-LIVE-5 fan-out probe.** `_try_fan_out` spends one LLM call on every answer turn (`by_stage` = `intent+fanout+draft`) and returns `None` almost always. Gate it: skip the probe when the intent zone is `ess`/`nav`/`clarify` or when `conversation_history` shows an active process brief; keep it for analytical/multi-entity questions. Add setting `FANOUT_PROBE_MIN_TOKENS` (default 12 words) — short utterances never probe. Log `fanout_skipped reason=…`.
+2. **F-LIVE-1 refuse template.** The scope-refusal path (`runner.py` ≈ 2040–2051, decision `refuse`) fired on «أريد قرض طارئ ٥٠٠٠ دينار» and answered in English while listing loans as in-scope. (a) The refusal must never fire when IntentResolver's zone is in the instance's declared scope (loan/leave/payroll/attendance) — treat as `answer`/`clarify`. (b) When it does fire, the template must follow the user's language (AR/EN detection already exists — reuse `detect_language`-equivalent in engine, do not import from `ai.eval`).
+3. **F-LIVE-3 nav over-fire.** Navigation short-circuit fired on questions («هل ستتم الموافقة عليه؟», "When will next month's payroll be processed?") because they contain a module noun. Rule: an utterance that is interrogative (ends with `?`/`؟`, or starts with AR/EN question words: متى/هل/كيف/لماذا/ما/when/how/why/what/is/will/can/does) and is longer than 3 tokens is **not** a navigation command unless it also contains an explicit nav verb (open/go to/show me/افتح/اذهب/أرني). Pure noun phrases ("payroll", "الرواتب") still navigate.
+
+#### DO NOT TOUCH
+`plan/loop.py`, `plans_service.py`, `engine_runtime.py`, `context_assembler.py`, `memory/**`, prompts (`prompts.py`) other than the refuse template, `ai/eval/**` (1C/1A own those).
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && ../.venv/bin/python manage.py check
+cd /home/ahmed/ws/carbon/backend && TEST_DB_NAME=test_nibras_dev_w1b ../.venv/bin/python -m pytest ai/tests/test_pv2_baseline_defects.py -v -p no:cacheprovider
+cd /home/ahmed/ws/carbon/backend && TEST_DB_NAME=test_nibras_dev_w1b ../.venv/bin/python -m pytest ai/tests/test_pv2_instrumentation.py ai/tests/test_chat_wiring.py ai/tests/test_navigation_resolver.py ai/tests/test_intent_resolver.py ai/tests/test_intent_zone.py ai/tests/test_named_leave_intent.py ai/tests/test_pulse_loop.py -q -p no:cacheprovider
+cd /home/ahmed/ws/carbon/backend && TEST_DB_NAME=test_nibras_dev_w1b ../.venv/bin/python -m ai.eval.multiturn.runner --report /tmp/pv2-1b-offline.json 2>/dev/null | grep -v "Registered plugin" | tail -16
+cd /home/ahmed/ws/carbon && python3 .ai-toolkit/scripts/import-boundary-lint.py 2>&1 | tail -2
+```
+**Acceptance:** new tests (≥ 8: fanout skipped on ESS/short; probe still runs on a long analytical question; AR loan not refused; refuse template AR; 4 nav-question negatives + 2 nav-noun positives) green · regression green except the known `test_dispatch_chat_returns_completed` · offline bank `router_agreement ≥ 0.85` (was 0.781) and `llm_calls_p50 ≤ 3` (was 4) · import boundary still 9.
+
+---
+
+### Phase PV2-1C — Backend: memory_manager wired + per-message tool digests
+**Date:** 2026-09-23  
+**Worker Role:** backend-worker  
+**Recommended Model:** Cursor `claude-opus-5-5-medium`  
+**Status:** DONE — 2026-09-23 Master audit (11/11 new; 80 regression incl. `test_chat_wiring` now green; import boundary 9). `MemoryManager(db, host_user_id)` wired; lexical recall lane in `LongTermMemory` (vector store returns nothing for facts locally); `tool_digest` persisted in `metadata_json` and replayed via `render_history_content` (≤ 200 chars, scope-filtered); runner `engine_single_pass()` fixes the ineffective `override_settings` — **PV2-0B/0C baselines ran with fan-out ON**.  
+**Master notes:** (a) `_keyword_match_facts` scans all active facts in scope in Python — bound it (recency cap 500 rows) in PV2-1A or 2A; (b) `RetrievalWitness` still doesn't pass `host_user_id` — clean fix belongs to 1A (`runner.py`); (c) QA follow-up for the offline tier: authenticated persona + `learn_fact`/tool stubs so memory/digests are measurable offline.  
+**Owner Master:** Pulse
+
+#### Objective
+Plan §5 P1 bullets 3–4. (1) `memory_manager=MemoryManager(db)` is constructed and passed to `TurnPipelineRunner` in `engine_runtime._run_chat` (≈ lines 181–203) so `learn_fact` recall works in Chat; regression test: turn 1 `learn_fact("my cost centre is CC-42")` (Chat-confirm path per ADR-0046) → turn 3 "what's my cost centre?" answers `CC-42` with stub LLM given the memory block. (2) `assemble_context` (`context_assembler.py`) appends a per-message tool digest (≤ 200 chars, built from `tool_trace`/`RunStep.tool_output_json` through the retrieval RBAC scope — never raw payloads) to each assistant history message that had tool results, so the model can recall "eligible=true, max=8000 SAR" three turns later. (3) Fix the offline runner caveat: `override_settings` does not reach the engine's pydantic `Settings` — set `AGENT_ORCHESTRATOR_ENABLED`/`KG_MULTI_STEP_ENABLED` via `monkeypatch.setenv` + `get_settings.cache_clear()` (or an explicit `Settings` override hook) and correct the `CAVEATS` text.
+
+#### DO NOT TOUCH
+`turn/runner.py` (1B owns it), `plan/loop.py`, `plans_service.py`, prompts other than the memory/history blocks.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && ../.venv/bin/python manage.py check
+cd /home/ahmed/ws/carbon/backend && TEST_DB_NAME=test_nibras_dev_w1c ../.venv/bin/python -m pytest ai/tests/test_pv2_memory_digests.py -v -p no:cacheprovider
+cd /home/ahmed/ws/carbon/backend && TEST_DB_NAME=test_nibras_dev_w1c ../.venv/bin/python -m pytest ai/tests/test_memory_api.py ai/tests/test_gap9_memory_confirm.py ai/tests/test_gap2_working_memory.py ai/tests/test_auto_memory.py ai/tests/test_context_assembler.py ai/tests/test_context_lifecycle.py ai/tests/test_chat_wiring.py ai/eval/test_multiturn_bank.py -q -p no:cacheprovider
+cd /home/ahmed/ws/carbon && python3 .ai-toolkit/scripts/import-boundary-lint.py 2>&1 | tail -2
+```
+**Acceptance:** `learn_fact` recall test green · digest test proves ≤ 200 chars + RBAC scoping (a field outside scope is absent) · `grounded-recall-01` and `memory-learn-fact-01` scripts improve on the offline bank (report before/after) · import boundary 9.
+
+---
+
+### Phase PV2-1A — Backend: durable ConversationState + StateBlock in draft prompt
+**Date:** 2026-09-23  
+**Worker Role:** backend-worker  
+**Recommended Model:** Cursor `claude-opus-5-5-medium`  
+**Status:** DONE — 2026-09-23 00:55 Master audit (15/15 new; 195 passed / 12 xfail across the PV2 + adjacent suites; import boundary 9; antipatterns GATE PASSED). `state_store.py` (709 lines: schema v1, bounded, RBAC redaction on load, owner check, Redis mirror best-effort, `render_state_block` ≤ 600), loaded in `run()` and saved through the single exit seam; `TurnLedger.state_saved/state_size`; clear/undo wired; `host_user_id` reaches `RetrievalWitness`; lexical recall bounded to 500 newest rows in SQL (`Session.select` gained `order_by/limit`). Offline bank unchanged (router 0.917, p50 3, slot 1.0) — `focus_retention` cannot move in the stub tier; proven instead by a prompt-reading stub test (slots reach turns 2–3, no re-ask).  
+**Master notes / carried:** (a) **bank flakiness** — `auto_memory` fire-and-forget call is counted only if it finishes before finalize → `turns_passed` swings 3–7/96 between runs. Fix in PV2-2C: report `llm_calls` = foreground only, add `llm_calls_background`; (b) topic-guard-refused turns (pre-LLM, `engine_runtime.py`) write no state → 2C; (c) `open_question.slot` empty until a slot-level clarify signal exists (3C); (d) ReAct/multi-step paths don't get the StateBlock yet → 2B.  
+**Owner Master:** Pulse
+**Also absorbs (from 1B/1C notes):** pass `host_user_id` through `RetrievalWitness` (`turn/retrieve.py` ← `runner.py`) instead of relying on the `MemoryManager` binding; bound `LongTermMemory._keyword_match_facts` to the 500 most-recent active rows.
+
+#### Objective
+Plan §4.2 + §5 P1 bullets 1–2, 5. New `engine/cognition/state_store.py`: `ConversationState` dataclass (schema v1 exactly as §4.2: focus, intent, slots, open_question, last_results, active_plans, decisions, language, surface_last) + `ConversationStateStore` (load/save/redact/clear; Django `ConversationContextRecord.session_json` primary, Redis mirror best-effort; v1 `version` key; bounded lists — focus 5, last_results 8, decisions 12). Populate at end of every turn in `TurnPipelineRunner` from existing signals: intent (IntentResolver), focus (`WorkingMemory`), slots (`process_brief`/`write_slots` when present), `last_results` digests (1C's digest builder), `open_question` (clarify decision + slot), `decisions` (PV2-0A `turn_decision`), `language`, `surface_last="chat"`. Render `StateBlock` (≤ 600 chars) into the draft prompt via the existing assembler. Clear on `_snapshot_with_clear_break` semantics. Tenancy: keyed by `(instance_id, conversation_id)`; redact on load by host user RBAC scope.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && TEST_DB_NAME=test_nibras_dev_w1a ../.venv/bin/python -m pytest ai/tests/test_pv2_state_store.py -v -p no:cacheprovider
+cd /home/ahmed/ws/carbon/backend && TEST_DB_NAME=test_nibras_dev_w1a ../.venv/bin/python -m pytest ai/tests/test_pv2_instrumentation.py ai/tests/test_chat_wiring.py ai/tests/test_pulse_loop.py ai/eval/test_multiturn_bank.py -q -p no:cacheprovider
+cd /home/ahmed/ws/carbon/backend && TEST_DB_NAME=test_nibras_dev_w1a ../.venv/bin/python -m ai.eval.multiturn.runner --report /tmp/pv2-1a-offline.json 2>/dev/null | grep -v "Registered plugin" | tail -16
+```
+**Acceptance:** store round-trip/redact/clear/bounded tests green · state written on 100 % of turns (assert via ledger) · offline `slot_carry_over` stays 1.0, `focus_retention` improves vs baseline (report numbers) · tenancy isolation test · import boundary 9.
+
+---
+
+### Wave W2 (P2) — dispatch order
+```
+W2a  PV2-2C role-scoped tool catalog + audience-aware persona (closes F-LIVE-6)   — after 1A (runner.py)
+W2b  PV2-2A IdentityBlock + ContextPack for chat stages (draft/critic/intent/synthesis/verify)
+W2c  PV2-2B ContextPack for plan stages (planner decompose / observe / plan synthesis / discovery)
+```
+All on `claude-opus-5-5-medium`; distinct `TEST_DB_NAME` each.
+
+### Phase PV2-2C — Backend: role-scoped tool catalog + audience-aware persona guidance
+**Date:** 2026-09-23  
+**Worker Role:** backend-worker  
+**Recommended Model:** Cursor `claude-opus-5-5-medium`  
+**Status:** READY (1A DONE) — dispatched 2026-09-23 00:58  
+**Owner Master:** Pulse  
+**Evidence:** F-LIVE-6 root cause in `docs/pulse/evidence/PV2-baseline-2026-09-22.md` §3 — an employee was steered to `list_payslip_lines` (HR API, host 403) because the persona prompt says "You have full read access … using list_payslip_lines" and the catalog is not filtered by role.
+
+#### Objective
+1. `api_catalog` entries in `instance.yaml` gain `audience: [ess|hr|admin]` (default `hr` for unmarked; all `*_my_*` + nav routes → `ess` and `hr`). Loader validates the enum.
+2. The tool list offered to the model (chat draft, tool-synthesis, discovery, planner) is filtered by the user's audience, derived once per turn from the Django user (`is_staff`/`is_superuser` → admin; People HR role/group → hr; linked `Employee` only → ess). One helper `audience_for_user(user) -> set[str]` in the host (`ai/identity_propagation.py` is the natural home) passed through `user_info`; engine filters on `user_info["audience"]` — no host import in the engine.
+3. Persona guidance becomes audience-blocks: `system_prompt` keeps the shared identity; new `guidance_by_audience: {ess: …, hr: …}` in `instance.yaml`; the runner appends only the user's block. The ESS block says "use `list_my_payslips` / `list_my_leave` / `list_my_loans`; you can only read your own records"; the HR block keeps today's text. This is a precursor of P2's `IdentityBlock` — put the assembly in the new `engine/cognition/context_pack.py` as `IdentityBlock(persona, audience, guidance)` so 2A extends rather than rewrites it.
+4. Host 403 on `call_host_api` must produce an honest, actionable reply in the user's language ("I can only read your own payslips — here they are" and retry with the `*_my_*` twin when one exists in the catalog), not "permission issue on your account".
+5. **Deterministic LLM accounting (from 1A notes):** `_finalize_meter` reports `llm_calls` = foreground calls only (exclude stages tagged background: `auto_memory`) and adds `llm_calls_background`; ledger + chat result + multiturn runner (`ai/eval/multiturn/runner.py` reads `llm_calls`) follow. Test: 6 consecutive stubbed turns give identical `llm_calls`. This removes the 3–7/96 swing in `turns_passed`.
+6. Turns refused by the pre-LLM topic guard in `engine_runtime.py` must still save `ConversationState` (decision `refuse`) — reuse the store; test.
+
+#### DO NOT TOUCH
+`plan/loop.py`, `plans_service.py` (2B), `ai/eval/**` YAML expectations. `state_store.py` may be read and called, not restructured.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && ../.venv/bin/python manage.py check
+cd /home/ahmed/ws/carbon/backend && TEST_DB_NAME=test_nibras_dev_w2c ../.venv/bin/python -m pytest ai/tests/test_pv2_audience_catalog.py -v -p no:cacheprovider
+cd /home/ahmed/ws/carbon/backend && TEST_DB_NAME=test_nibras_dev_w2c ../.venv/bin/python -m pytest ai/tests/test_pv2_baseline_defects.py ai/tests/test_pv2_state_store.py ai/tests/test_chat_wiring.py ai/tests/test_tool_execution_actions.py ai/tests/test_plans.py ai/eval/test_multiturn_bank.py -q -p no:cacheprovider
+cd /home/ahmed/ws/carbon && python3 .ai-toolkit/scripts/import-boundary-lint.py 2>&1 | tail -2
+```
+**Acceptance:** `emp_1067` tool list contains `list_my_payslips` and **not** `list_payslip_lines`/`list_employees`; `admin` sees both; unknown audience → ess (least privilege); 403 twin-retry test; persona block test (ESS text present, HR text absent for an employee); regression green; import boundary 9. Live check by Master: payroll-followup t1 answers from `list_my_payslips`.
+
+---
+
+### Phase PV2-2A — Backend: IdentityBlock + ContextPack for every chat-turn LLM stage
+**Date:** 2026-09-23  
+**Worker Role:** backend-worker  
+**Recommended Model:** Cursor `claude-opus-5-5-medium`  
+**Status:** PLANNED (READY when PV2-2C is DONE)  
+**Owner Master:** Pulse
+
+#### Objective
+Plan §4.3 + §5 P2 for the chat turn. `engine/cognition/context_pack.py`: `IdentityBlock` (persona · today's date + tz · user name/role/employee_no/audience · language · surface `chat` · autonomy rules for the surface = ADR-0046 wording), `StateBlock` (1A), `HistoryBlock` (1C digests), `KnowledgeBlock`/`MemoryBlock` (as today), `TaskBlock` (stage-specific). `build_context_pack(state, surface, stage, …) -> ContextPack` with `.system_prompt()` and `.user_prompt()`; hard budgets per block. Refactor consumers so **every** `route_chat` in the chat turn takes its system prompt from the pack: draft (`build_chat_prompt`), critic (`CRITIC_SYSTEM_PROMPT` → TaskBlock only), IntentResolver, tool-synthesis, verify, escalate, weather-normalize. Static test: AST/grep test asserting no `route_chat(` call site in `turn/**` passes a literal or module-level system prompt string — only `pack.system_prompt()`.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && TEST_DB_NAME=test_nibras_dev_w2a ../.venv/bin/python -m pytest ai/tests/test_pv2_context_pack.py -v -p no:cacheprovider
+cd /home/ahmed/ws/carbon/backend && TEST_DB_NAME=test_nibras_dev_w2a ../.venv/bin/python -m pytest ai/tests/test_pv2_*.py ai/tests/test_chat_wiring.py ai/tests/test_intent_resolver.py ai/tests/test_critic*.py ai/eval/test_multiturn_bank.py -q -p no:cacheprovider
+cd /home/ahmed/ws/carbon/backend && TEST_DB_NAME=test_nibras_dev_w2a ../.venv/bin/python -m ai.eval.multiturn.runner --report /tmp/pv2-2a-offline.json 2>/dev/null | grep -v "Registered plugin" | tail -16
+```
+**Acceptance:** static test green (0 stage-local identity prompts in `turn/**`); date-class golden ("what is today's date" answered from IdentityBlock, 0 tool calls); `language_fidelity` ≥ baseline; offline router/llm metrics not worse; existing harness pass^k = 3 (`ai/eval/run_harness.py` ×3).
+
+---
+
+### Phase PV2-2B — Backend: ContextPack for plan stages (Agent surface)
+**Date:** 2026-09-23  
+**Worker Role:** backend-worker  
+**Recommended Model:** Cursor `claude-opus-5-5-medium`  
+**Status:** PLANNED (READY when PV2-2A is DONE)  
+**Owner Master:** Pulse
+
+#### Objective
+Same pack, `surface="agent_plan" | "agent_discovery"`, consumed by planner decompose (`plan/planner.py`), step draft/observe/plan-synthesis (`plan/loop.py` ≈ 2312–2337, 2957–2988), discovery (`plans_service.start_discovery`, `plans_service.py` ≈ 2434–2457, 3887). Autonomy rules for the Agent surface = RULE_21 wording (stage with consent; never claim commit before receipt). A5 legibility: each step's pre-consent text is rendered from bound values in the user's language via TaskBlock templates (AR/EN) — no free-form identity text. Static test extended to `plan/**` and `plans_service.py`.
+
+**Acceptance:** static test covers `plan/**`; `test_plans.py`, `test_pulse_loop.py`, `test_react_consent_boundary.py`, `test_plan_lifecycle.py` green; loan/leave/attendance ESS plan goldens produce identical step wording at pass^k = 3; import boundary 9.
+
+---
+
+### Wave W3 (P3) — dispatch order (after W2; files disjoint → 3A ∥ 3B, then 3C)
+```
+W3a  PV2-3A deterministic-first plan steps (plan/loop.py, export_bind.py)   ∥   PV2-3B truthful Chat surface + handoff_agent (turn/runner.py, engine_runtime.py)
+W3b  PV2-3C discovery: no LLM on scope_route; StateBlock-aware (plans_service.start_discovery)
+```
+
+### Phase PV2-3A — Backend: deterministic-first `process_dial` steps (A2, A4, A9)
+**Worker Role:** backend-worker · **Model:** `claude-opus-5-5-medium` · **Status:** PLANNED (READY after W2) · **Owner:** Pulse
+
+#### Objective
+Plan §4.4/§5 P3. In `ReActLoop`, a step whose `tool_name == call_host_api` and whose `tool_args` are fully bound from `write_slots` (no `{{…}}` placeholders, all required catalog params present) skips DraftWitness and observe entirely: bind → stage (consent, RULE_21) → commit → deterministic summary. Summaries come from bilingual templates keyed by `api_name` (AR/EN, QA-reviewed strings in `instance.yaml` `step_templates`), rendered from bound values — never LLM prose. The `llm_meter` for such a step must read `llm_calls == 0`. Unbound/partial steps keep today's path. `_INLINE_COMMIT` path in `plans_service.confirm_step` reuses the same template for `run.final_response`.
+
+**Acceptance:** `test_pv2_deterministic_steps.py`: loan/leave/attendance bound steps → `llm_calls == 0`, AR + EN summary snapshots, consent still required (`mutation_not_confirmed` when not granted), partial-binding step still drafts; `test_plans.py`, `test_pulse_loop.py`, `test_react_consent_boundary.py`, `test_plan_lifecycle.py` green; import boundary 9; ESS plan p50 latency (stub) reported before/after.
+
+---
+
+### Phase PV2-3B — Backend: truthful Chat surface — `handoff_agent` decision (C5, F-LIVE-2, F-LIVE-4)
+**Worker Role:** backend-worker · **Model:** `claude-opus-5-5-medium` · **Status:** PLANNED (READY after W2) · **Owner:** Pulse
+
+#### Objective
+Root cause (Master, PV2-0C): `_try_multi_step_plan` (`runner.py` ≈ 2691) runs a `process_dial` ReActLoop **inside Chat**; the mutation step pauses for consent that Chat can never grant (ADR-0046) and the user sees "I need your approval before I can proceed." Fix: (1) before running the loop in Chat, inspect the plan; if any step is a mutating `call_host_api` (catalog `requires_confirmation` or non-GET), do **not** execute — emit `TurnDecision = handoff_agent` with a deterministic bilingual reply built from the brief + bound slots ("I have: emergency loan, 5,000 SAR, 12 months. To submit it, switch to Agent — I'll carry these details over." / AR equivalent) and persist `intent`/`slots`/`open_question` into `ConversationState` (1A) so P5 can inherit them. Read-only plans still run. (2) `_should_force_action` (`engine_runtime.py:793`) becomes a logged fallback: the Chat grounding block (2A `IdentityBlock` autonomy rules) tells the model it hands off rather than calls write tools; count `force_action_fired` in the ledger; target 0 on the bank. (3) The Chat prompt must never say "CALL THE TOOL" for a write API (grep test on assembled prompt for an ESS write utterance).
+
+**Acceptance:** `chat-handoff-write-01` t1–t3 → `handoff_agent` with slots in state and 0 host staging (`Run`/`RunStep` rows unchanged, assert); `ess-loan-ar-01` t8 no longer "approval" text; `force_action_fired == 0` on the offline bank; `test_chat_wiring.py`, `test_pv2_baseline_defects.py`, `test_pv2_state_store.py`, G2 QA bank items PC-090/091/350 (see `docs/qa`) green; import boundary 9.
+
+---
+
+### Phase PV2-3C — Backend: discovery without LLM on `scope_route`; never re-ask known slots (A4)
+**Worker Role:** backend-worker · **Model:** `claude-opus-5-5-medium` · **Status:** PLANNED (READY after 3A/3B) · **Owner:** Pulse
+
+#### Objective
+`plans_service.start_discovery`: when `scope_route` short-circuits to a known process dial, no LLM call is made (meter = 0); otherwise discovery receives the `StateBlock` (1A) and the `ContextPack(surface="agent_discovery")` (2B) and must not ask for any slot already present in `ConversationState.slots` or the brief. Clarification wording from bilingual templates.
+
+**Acceptance:** `test_pv2_discovery.py`: short-circuit → 0 LLM calls; state with `amount` → discovery never asks amount (AR/EN); regression `test_plans.py`, `test_plan_lifecycle.py`; import boundary 9.
+
+---
+
+### Phases PV2-4A … PV2-6A — PLANNED
+P4 Arbiter (shadow → flip, `PULSE_ARBITER=legacy` kill switch), P5 Chat↔Agent continuity, P6 eval gate — specs written by the Pulse Master after W3 numbers exist. Calendar-bound criteria (P4 shadow week, P6 nightly ×5) are marked `SOAKING` until elapsed. Scope and acceptance per `docs/pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md` §5 (P1 ConversationState + tool digests + memory wired · P2 IdentityBlock/ContextPack · P3 deterministic-first + truthful Chat prompt · P4 Arbiter shadow→flip · P5 Chat↔Agent continuity · P6 CI gate G5).

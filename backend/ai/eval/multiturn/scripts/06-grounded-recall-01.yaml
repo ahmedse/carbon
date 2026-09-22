@@ -1,0 +1,68 @@
+id: grounded-recall-01
+objective_ids: [C2, C10]
+language: en
+surface: chat
+persona: emp_1067
+turns:
+  - user: "What is my employee number?"
+    stub_reply: "Your employee number is 1067."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 2
+      mentions_any: ["1067"]
+  
+  - user: "What department am I in?"
+    stub_reply: "You are in the Engineering department."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["Engineering"]
+  
+  - user: "And who is my manager?"
+    stub_reply: "Your manager is Ahmed Ali."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["Ahmed", "Ali"]
+  
+  - user: "Correct. My name is Mohamed Hassan"
+    stub_reply: "Got it. I've noted that your name is Mohamed Hassan."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+  
+  - user: "What number did you give me?"
+    stub_reply: "I told you your employee number is 1067."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["1067"]
+  
+  - user: "And what department did I mention?"
+    stub_reply: "You work in the Engineering department."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["Engineering"]
+  
+  - user: "My manager's name is?"
+    stub_reply: "Your manager's name is Ahmed Ali."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["Ahmed", "Ali"]
+  
+  - user: "What is my full name?"
+    stub_reply: "Your full name is Mohamed Hassan."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["Mohamed", "Hassan"]

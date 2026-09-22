@@ -214,6 +214,7 @@ class ConversationContextRecord:
     conversation_id: Optional[str] = None
     instance_id: Optional[str] = None
     session_json: Optional[str] = None
+    host_user_id: Optional[str] = None
     updated_at: Optional[datetime] = None
 
 

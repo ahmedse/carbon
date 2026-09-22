@@ -363,6 +363,20 @@ _ADVANCE_EVENT_BY_STATE = {
 }
 
 
+def _step_llm_meter(step) -> dict | None:
+    """PV2-0A: the engine's per-step ``llm_meter`` from ``critic_flags_json`` (log-only)."""
+    flags = getattr(step, "critic_flags_json", None)
+    if isinstance(flags, str):
+        try:
+            flags = json.loads(flags)
+        except (TypeError, ValueError):
+            return None
+    if not isinstance(flags, dict):
+        return None
+    meter = flags.get("llm_meter")
+    return meter if isinstance(meter, dict) else None
+
+
 def _replay_result(action: str, recon: dict) -> dict:
     """Shape the replay decision response (RULE_23 outcome terms only)."""
     return {
@@ -934,11 +948,15 @@ class PlansService:
         # consent/cancel events by their own seams.
         event_type = _ADVANCE_EVENT_BY_STATE.get(new_state)
         if event_type:
+            _payload = {"outcome": outcome} if outcome else {}
+            _llm_meter = _step_llm_meter(step)
+            if _llm_meter is not None:
+                _payload["llm_meter"] = _llm_meter
             StepJournal.append(
                 step.run_id,
                 canonical_step_id(step),
                 event_type,
-                payload={"outcome": outcome} if outcome else {},
+                payload=_payload,
             )
         # ADR-0041 — keep Agent Job Map live_run in sync with execution.
         try:

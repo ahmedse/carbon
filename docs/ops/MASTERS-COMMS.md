@@ -219,3 +219,21 @@ Track: NPS-1…4 process security + Attendance ESS UI + 6/6 regression
 Ask: Closed as Nibras Master seat. Host SoD (NPS-1), Pulse review→HR CBAC (NPS-2), attendance ESS Correspondence (NPS-3), me POST leave/loan/attendance + `/my/attendance` UI (NPS-4). Deep 6/6 PASS + operator 6/6 PASS. Pulse: no engine ownership change; catalog/instance tools + planner coerce only.
 Paths: TASKS.md NPS-4, SCOREBOARD C Nibras-6/6, SESSION-20260921-132047 / 132248, people/attendance_ess.py, apps/my/MyAttendance.jsx, ai/host_executor._people_me, ADR-0045
 Blockers: none
+
+## [2026-09-22T20:30:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260922-1
+Track: PV2 — Pulse v2 Intelligence Contract (ADR-0047, Proposed)
+Ask: New Pulse-owned track opened. Plan `docs/pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md`; W0 (PV2-0A instrumentation ∥ PV2-0B multi-turn bank → PV2-0C baseline) dispatched as log-only / report-only — no routing, prompt, consent or ADR-0046 behavior change. All edits inside `backend/ai/**`, `docs/pulse/**`. No stack restart needed for W0 (offline stub tiers). Will post STACK-HOLD before PV2-0C live pass.
+Paths: backend/ai/engine/llm/call_meter.py (new), backend/ai/engine/cognition/turn/{runner,witnesses}.py, backend/ai/engine/cognition/plan/loop.py, backend/ai/engine_runtime.py, backend/ai/eval/multiturn/** (new), TASKS.md PV2 section
+Blockers: none
+
+## [2026-09-22T20:35:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260922-2
+Track: PV2 W0 — worker model escalation
+Ask: PV2-0A rev1 (composer-2.5-fast) audited: instrumentation landed but 3 RULE_28 defects (dead step-journal hook never registered in prod; per-step meter clobbers turn meter; 1 `unattributed` LLM call). PV2-0B rev1 (haiku-thinking) rejected: runner had no DB bootstrap, metrics all-zero, exceptions swallowed. Both re-dispatched as rev2; 0A rev2 on claude-opus-5-5-medium. Policy recorded in ROLES.md / project.config.md (escalation ladder). 0A rev2 is authorised to add `llm_meter` to the `_ADVANCE_EVENT_BY_STATE` journal payload in `ai/plans_service.py` (host-side, additive only).
+Paths: backend/ai/plans_service.py (payload only), backend/ai/engine/llm/call_meter.py, .ai-toolkit/ROLES.md, .ai-toolkit/project.config.md
+Blockers: none
+
+## [2026-09-23T00:05:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-1
+Track: PV2-0C live baseline (in-process, no web stack needed)
+Ask: Running `ai.eval.multiturn.runner --live --host-user emp_1067 --no-isolated-db` for 3 scripts against `nibras_dev` with the real LLM key. Writes eval conversations/ledger rows for emp_1067 into the dev DB; Chat mode only, so no host writes (ADR-0046). Web stack is down (no ports) — no STACK-HOLD required. Runner `--live/--host-user/--no-isolated-db` flags added by Master (≈40 lines, `backend/ai/eval/multiturn/runner.py`) after both W0 workers died mid-run at 20:47 on a shared test-DB collision.
+Paths: backend/ai/eval/multiturn/runner.py, docs/pulse/evidence/PV2-baseline-2026-09-22.md (pending)
+Blockers: none

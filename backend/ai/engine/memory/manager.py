@@ -91,10 +91,13 @@ def get_short_term_memory() -> ShortTermMemory:
 class MemoryManager:
     """Unified memory retrieval across all three memory types."""
 
-    def __init__(self, db_session):
+    def __init__(self, db_session, host_user_id: str | None = None):
         self.short_term = get_short_term_memory()
         self.long_term = LongTermMemory(db_session)
         self.episodic = EpisodicMemory(db_session)
+        # Per-turn owner: callers that do not know the host user (e.g. the S2
+        # RetrievalWitness) still get private facts scoped to this user only.
+        self.host_user_id = str(host_user_id) if host_user_id else None
 
     async def retrieve_relevant_context(
         self,
@@ -112,6 +115,8 @@ class MemoryManager:
         3. Episodic: relevant past events (tenancy-filtered)
         4. Insights: active instance insights (tenancy-filtered)
         """
+        host_user_id = host_user_id or self.host_user_id
+
         # 1. Short-term context
         recent = self.short_term.get_context_window(
             conversation_id, max_tokens=max_tokens

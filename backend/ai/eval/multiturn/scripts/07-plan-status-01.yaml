@@ -1,0 +1,64 @@
+id: plan-status-01
+objective_ids: [C9, A1]
+language: en
+surface: chat
+persona: emp_1067
+turns:
+  - user: "I want to request a loan"
+    stub_reply: "I can help you request a loan. Let me ask you a few questions. What type of loan are you interested in?"
+    expect:
+      decision_in: [clarify, answer]
+      language: en
+      max_llm_calls: 2
+  
+  - user: "Emergency loan"
+    stub_reply: "Understood. You're interested in an emergency loan. How much do you need?"
+    expect:
+      decision_in: [clarify, answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["emergency"]
+  
+  - user: "5000 SAR"
+    stub_reply: "Got it. You're requesting an emergency loan for 5000 SAR. I'll now proceed with your request."
+    expect:
+      decision_in: [handoff_agent]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["5000", "emergency"]
+  
+  - user: "What is the status of my request?"
+    stub_reply: "Your emergency loan request for 5000 SAR is currently under review. It should be processed within 2-3 days."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 0
+      mentions_any: ["5000", "emergency", "review"]
+  
+  - user: "Will it be approved?"
+    stub_reply: "Based on your profile, you are eligible for the emergency loan. Final approval depends on the review."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+  
+  - user: "How long until I hear back?"
+    stub_reply: "You should hear back within 2-3 business days."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+  
+  - user: "Can I check the status again later?"
+    stub_reply: "Yes, you can check the status of your request anytime from the loans section."
+    expect:
+      decision_in: [answer, navigate]
+      language: en
+      max_llm_calls: 1
+  
+  - user: "Thanks for helping"
+    stub_reply: "You're welcome. Feel free to reach out if you need anything else."
+    expect:
+      decision_in: [answer, navigate]
+      language: en
+      max_llm_calls: 0

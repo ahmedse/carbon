@@ -1,0 +1,64 @@
+id: language-fidelity-ar-01
+objective_ids: [C7]
+language: ar
+surface: chat
+persona: emp_1067
+turns:
+  - user: "أريد معرفة راتبي"
+    stub_reply: "سأساعدك في معرفة راتبك. دعني أتحقق من معلوماتك."
+    expect:
+      decision_in: [answer]
+      language: ar
+      max_llm_calls: 2
+  
+  - user: "كم هو راتبي الشهري؟"
+    stub_reply: "راتبك الشهري الإجمالي هو ٦٠٠٠ دينار."
+    expect:
+      decision_in: [answer]
+      language: ar
+      max_llm_calls: 1
+      mentions_any: ["٦٠٠٠", "dinar"]
+  
+  - user: "كم يتم خصمه من راتبي؟"
+    stub_reply: "يتم خصم ١٥٠٠ دينار من راتبك (بما فيها GOSI والقروض)."
+    expect:
+      decision_in: [answer]
+      language: ar
+      max_llm_calls: 1
+      mentions_any: ["١٥٠٠", "GOSI"]
+  
+  - user: "فما صافي راتبي؟"
+    stub_reply: "صافي راتبك هو ٤٥٠٠ دينار بعد جميع الخصومات."
+    expect:
+      decision_in: [answer]
+      language: ar
+      max_llm_calls: 1
+      mentions_any: ["٤٥٠٠", "4500"]
+  
+  - user: "هل يمكنني الاعتراض على الخصومات؟"
+    stub_reply: "نعم، يمكنك الاعتراض على أي خصومات من خلال قسم الموارد البشرية."
+    expect:
+      decision_in: [answer]
+      language: ar
+      max_llm_calls: 1
+  
+  - user: "متى سيكون الراتب القادم؟"
+    stub_reply: "الراتب القادم سيتم صرفه في اليوم الخمسة والعشرون من الشهر القادم."
+    expect:
+      decision_in: [answer]
+      language: ar
+      max_llm_calls: 1
+  
+  - user: "هل هناك أي تغييرات في راتبي؟"
+    stub_reply: "لا توجد تغييرات في راتبك الأساسي، الخصومات كما هي."
+    expect:
+      decision_in: [answer]
+      language: ar
+      max_llm_calls: 1
+  
+  - user: "شكراً على المساعدة"
+    stub_reply: "على الرحب والسعة. إذا احتجت لأي معلومة أخرى، أنا هنا دائماً."
+    expect:
+      decision_in: [answer, navigate]
+      language: ar
+      max_llm_calls: 0

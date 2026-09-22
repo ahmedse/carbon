@@ -204,6 +204,7 @@ FRONTEND_MANIFEST=carbon-frontend/src/apps/carbon/manifest.js
 ## WORKER MODEL POLICY (budget directive, updated 2026-08-18 — DeepSeek V3/R1 RETIRED)
 WORKER_MODEL_POLICY=ALL worker roles (backend, frontend, devops, data-ml, debugger-fixer, qa-validator, product-designer, researcher, curator)=DeepSeek V4.1-Flash (deepseek-flash); ONLY master-architect=DeepSeek V4-Pro (deepseek-v4-pro); Kimi models OFF roster (cost). V3/R1 are RETIRED on the provider — never reference them.
 WORKER_MODEL_RUNTIME=Workers run on DeepSeek via VSCode Copilot custom models.
+WORKER_MODEL_CURSOR=Cursor-native dispatch (2026-09-22): Master session model = master; workers = Task subagents on composer-2.5-fast (mechanical edits) or claude-4.5-haiku-thinking (design-heavy tests/eval/debug). Same worker protocol + gates; Master re-runs the gate before DONE. Escalation: one RULE_28 rejection → rev2 on claude-opus-5-5-medium; turn/runner.py + plan/loop.py edits start at opus. See ROLES.md "Cursor-native dispatch".
 
 ## DEEPSEEK PRICING (effective 2026-09-10, per 1M tokens — V4.1-Flash schedule)
 # Official: https://api-docs.deepseek.com/quick_start/pricing

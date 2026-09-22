@@ -1,0 +1,1314 @@
+{
+  "tier": "offline_stub",
+  "caveats": [
+    "Tier offline_stub: every LLM call returns canned stub_reply text from the script YAML, so reply-text metrics mostly measure the stub, not the engine.",
+    "Engine-attributable in this tier: router_agreement (turn_decision), llm_calls_p50 / llm_calls_max / turns_over_budget (LLM call counting), and slot_carry_over only where the engine itself re-asks deterministically (e.g. a clarify template) instead of passing the stub text through.",
+    "Stub-dominated in this tier: focus_retention (mentions_any), mentions_none, language_fidelity, and per_objective_pass for text-based objectives; treat them as harness plumbing checks until the live tier (PV2-0C).",
+    "KNOWN DEFECT (not fixed in PV2-0B rev3): the stub client advances one stub_reply per LLM call, not per turn. Turns that make 2-4 LLM calls consume later turns' stub text, so replies drift out of alignment and, once the script's stubs are exhausted (often by turn 3), the reply is the literal fallback 'End of script.'. See turns_detail[].reply.",
+    "host_user_id=None: call_host_api fails with 'requires an authenticated session' in ESS scripts; the live tier (PV2-0C) will pass a real user.",
+    "Fan-out agents and multi-step planning are disabled (AGENT_ORCHESTRATOR_ENABLED=false, KG_MULTI_STEP_ENABLED=false)."
+  ],
+  "database": "test_nibras_dev_multiturn",
+  "errors": [],
+  "scripts_run": 12,
+  "scripts_passed": 0,
+  "total_turns": 96,
+  "turns_passed": 4,
+  "focus_retention": 0.082,
+  "slot_carry_over": 1.0,
+  "language_fidelity": 0.865,
+  "router_agreement": 0.781,
+  "llm_calls_p50": 4,
+  "llm_calls_max": 4,
+  "turns_over_budget": 83,
+  "per_objective_pass": {
+    "C1": 0.0,
+    "C3": 0.0,
+    "C8": 0.167,
+    "C2": 0.0,
+    "C7": 0.0,
+    "C4": 0.0,
+    "C10": 0.0,
+    "C9": 0.0,
+    "A1": 0.0,
+    "C5": 0.0,
+    "C6": 0.0,
+    "A2": 0.5
+  },
+  "scripts": [
+    {
+      "script_id": "ess-loan-ar-01",
+      "turns": 8,
+      "turns_passed": 0,
+      "language_failures": 7,
+      "reask_violations": 0,
+      "decision_failures": 3,
+      "llm_budget_failures": 7,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "tool_answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['answer', 'clarify']",
+            "lang=en expected ar",
+            "mentions_any missing ['٥٠٠٠', '5000', 'قرض', 'emergency']",
+            "llm_calls=4 > 2"
+          ],
+          "reply": "I need your approval before I can proceed."
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "ar",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['٥٠٠٠', 'dinar']",
+            "llm_calls=3 > 1"
+          ],
+          "reply": "نوع القرض الذي طلبته هو قرض طارئ."
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "lang=en expected ar",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "lang=en expected ar",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "lang=en expected ar",
+            "mentions_any missing ['٥٠٠٠', '5000']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 6,
+          "decision": "navigate",
+          "llm_calls": 0,
+          "language": "mixed",
+          "passed": false,
+          "fail_reasons": [
+            "decision=navigate not in ['answer']",
+            "lang=mixed expected ar"
+          ],
+          "reply": "هل تريد فتح **People & Payroll**؟"
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "lang=en expected ar",
+            "llm_calls=4 > 0"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 8,
+          "decision": "tool_answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['answer']",
+            "lang=en expected ar",
+            "mentions_any missing ['طارئ', 'emergency']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "I need your approval before I can proceed."
+        }
+      ]
+    },
+    {
+      "script_id": "ess-leave-en-01",
+      "turns": 8,
+      "turns_passed": 0,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 2,
+      "llm_budget_failures": 6,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "navigate",
+          "llm_calls": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=navigate not in ['answer', 'clarify']",
+            "mentions_any missing ['January 15', 'January 22', '2025']"
+          ],
+          "reply": "Would you like to open **Leave**?"
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['15', '22', 'January']",
+            "llm_calls=3 > 1"
+          ],
+          "reply": "No, I have all the details. I'll submit your leave request now."
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=4 > 1"
+          ],
+          "reply": "Your request will be reviewed and approved by your manager."
+        },
+        {
+          "turn": 4,
+          "decision": "navigate",
+          "llm_calls": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=navigate not in ['answer']",
+            "mentions_any missing ['annual']"
+          ],
+          "reply": "Would you like to open **Leave**?"
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['15', '22']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        }
+      ]
+    },
+    {
+      "script_id": "ess-attendance-mixed-01",
+      "turns": 8,
+      "turns_passed": 0,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 1,
+      "llm_budget_failures": 7,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "ar",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=4 > 2"
+          ],
+          "reply": "نعم، تم تسجيله كغياب بسبب مرض."
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['sick', 'مرض']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "It will appear in your file within 24 hours."
+        },
+        {
+          "turn": 3,
+          "decision": "navigate",
+          "llm_calls": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=navigate not in ['answer']",
+            "mentions_any missing ['sick', 'مرض']"
+          ],
+          "reply": "Would you like to open **Leave**?"
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 0"
+          ],
+          "reply": "End of script."
+        }
+      ]
+    },
+    {
+      "script_id": "payroll-followup-en-01",
+      "turns": 8,
+      "turns_passed": 0,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 2,
+      "llm_budget_failures": 7,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['4500', '4,500']",
+            "llm_calls=4 > 2"
+          ],
+          "reply": "After the GOSI deduction of 1,200 SAR, your take-home before other deductions is 3,700 SAR."
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['GOSI', '1200', '1,200']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "Next month's payroll will be processed on the 25th of next month."
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['3700', '3,700']",
+            "llm_calls=3 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 5,
+          "decision": "tool_answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['answer']",
+            "mentions_any missing ['800']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "I need your approval before I can proceed."
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['2000', '2,000']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 7,
+          "decision": "navigate",
+          "llm_calls": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=navigate not in ['answer']"
+          ],
+          "reply": "Would you like to open **Payroll**?"
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 1"
+          ],
+          "reply": "End of script."
+        }
+      ]
+    },
+    {
+      "script_id": "entity-focus-switch-01",
+      "turns": 8,
+      "turns_passed": 0,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 0,
+      "llm_budget_failures": 8,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=4 > 2"
+          ],
+          "reply": "Reena works in the Finance department."
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=4 > 1"
+          ],
+          "reply": "Reena is a Senior Analyst, not a manager role."
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['Reena', 'Finance']",
+            "llm_calls=3 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['Salman']",
+            "llm_calls=4 > 2"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['Salman', 'Project Manager']",
+            "llm_calls=3 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['Salman', 'Operations']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['Reena', 'Senior Analyst']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['Salman', '5']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        }
+      ]
+    },
+    {
+      "script_id": "grounded-recall-01",
+      "turns": 8,
+      "turns_passed": 0,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 0,
+      "llm_budget_failures": 8,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['1067']",
+            "llm_calls=4 > 2"
+          ],
+          "reply": "Your manager is Ahmed Ali."
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['Engineering']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "Your manager's name is Ahmed Ali."
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['Ahmed', 'Ali']",
+            "llm_calls=3 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['1067']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['Engineering']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['Ahmed', 'Ali']",
+            "llm_calls=3 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['Mohamed', 'Hassan']",
+            "llm_calls=3 > 1"
+          ],
+          "reply": "End of script."
+        }
+      ]
+    },
+    {
+      "script_id": "plan-status-01",
+      "turns": 8,
+      "turns_passed": 0,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 3,
+      "llm_budget_failures": 8,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "tool_answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['clarify', 'answer']",
+            "llm_calls=4 > 2"
+          ],
+          "reply": "I need your approval before I can proceed."
+        },
+        {
+          "turn": 2,
+          "decision": "tool_answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['clarify', 'answer']",
+            "mentions_any missing ['emergency']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "I need your approval before I can proceed."
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=answer not in ['handoff_agent']",
+            "mentions_any missing ['5000', 'emergency']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['5000', 'emergency', 'review']",
+            "llm_calls=4 > 0"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=4 > 0"
+          ],
+          "reply": "End of script."
+        }
+      ]
+    },
+    {
+      "script_id": "chat-handoff-write-01",
+      "turns": 8,
+      "turns_passed": 0,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 4,
+      "llm_budget_failures": 8,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "tool_answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['clarify']",
+            "llm_calls=4 > 2"
+          ],
+          "reply": "I need your approval before I can proceed."
+        },
+        {
+          "turn": 2,
+          "decision": "tool_answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['clarify']",
+            "mentions_any missing ['emergency']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "I need your approval before I can proceed."
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=answer not in ['handoff_agent']",
+            "mentions_any missing ['3000', 'emergency']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['emergency', '3000']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['3000', 'emergency']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=answer not in ['handoff_agent']",
+            "llm_calls=4 > 0"
+          ],
+          "reply": "End of script."
+        }
+      ]
+    },
+    {
+      "script_id": "language-fidelity-ar-01",
+      "turns": 8,
+      "turns_passed": 0,
+      "language_failures": 6,
+      "reask_violations": 0,
+      "decision_failures": 0,
+      "llm_budget_failures": 8,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "ar",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 2"
+          ],
+          "reply": "يتم خصم ١٥٠٠ دينار من راتبك (بما فيها GOSI والقروض)."
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "ar",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['٦٠٠٠', 'dinar']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "لا توجد تغييرات في راتبك الأساسي، الخصومات كما هي."
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "lang=en expected ar",
+            "mentions_any missing ['١٥٠٠', 'GOSI']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "lang=en expected ar",
+            "mentions_any missing ['٤٥٠٠', '4500']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "lang=en expected ar",
+            "llm_calls=3 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "lang=en expected ar",
+            "llm_calls=3 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "lang=en expected ar",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "lang=en expected ar",
+            "llm_calls=4 > 0"
+          ],
+          "reply": "End of script."
+        }
+      ]
+    },
+    {
+      "script_id": "date-awareness-01",
+      "turns": 8,
+      "turns_passed": 0,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 2,
+      "llm_budget_failures": 6,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=4 > 0"
+          ],
+          "reply": "Your next payday is September 25, 2026."
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 1"
+          ],
+          "reply": "We are in September 2026."
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['25', 'September']",
+            "llm_calls=4 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 0"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 5,
+          "decision": "navigate",
+          "llm_calls": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=navigate not in ['answer']",
+            "mentions_any missing ['October']"
+          ],
+          "reply": "Would you like to open **Leave**?"
+        },
+        {
+          "turn": 6,
+          "decision": "navigate",
+          "llm_calls": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=navigate not in ['answer']"
+          ],
+          "reply": "Would you like to open **Leave**?"
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=4 > 0"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=4 > 0"
+          ],
+          "reply": "End of script."
+        }
+      ]
+    },
+    {
+      "script_id": "memory-learn-fact-01",
+      "turns": 8,
+      "turns_passed": 0,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 1,
+      "llm_budget_failures": 7,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=4 > 1"
+          ],
+          "reply": "I see. You mentioned your main project code is ALPHA-2025. Do you want to tell me about the other projects?"
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=4 > 0"
+          ],
+          "reply": "Yes, I remember that your project code is ALPHA-2025."
+        },
+        {
+          "turn": 3,
+          "decision": "navigate",
+          "llm_calls": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=navigate not in ['clarify', 'answer']"
+          ],
+          "reply": "Would you like to open **People & Payroll**?"
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['ALPHA-2025']",
+            "llm_calls=3 > 0"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['ALPHA-2025']",
+            "llm_calls=3 > 1"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['ALPHA-2025']",
+            "llm_calls=4 > 0"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['ALPHA-2025']",
+            "llm_calls=3 > 0"
+          ],
+          "reply": "End of script."
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['ALPHA-2025']",
+            "llm_calls=3 > 0"
+          ],
+          "reply": "End of script."
+        }
+      ]
+    },
+    {
+      "script_id": "nav-zero-llm-01",
+      "turns": 8,
+      "turns_passed": 4,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 3,
+      "llm_budget_failures": 3,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "navigate",
+          "llm_calls": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Would you like to open **Loans**?"
+        },
+        {
+          "turn": 2,
+          "decision": "tool_answer",
+          "llm_calls": 4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['answer', 'navigate']",
+            "llm_calls=4 > 0"
+          ],
+          "reply": "I need your approval before I can proceed."
+        },
+        {
+          "turn": 3,
+          "decision": "navigate",
+          "llm_calls": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=navigate not in ['answer']"
+          ],
+          "reply": "Would you like to open **Loans**?"
+        },
+        {
+          "turn": 4,
+          "decision": "navigate",
+          "llm_calls": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Would you like to open **Payroll**?"
+        },
+        {
+          "turn": 5,
+          "decision": "navigate",
+          "llm_calls": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Would you like to open **Payroll**?"
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=answer not in ['navigate']",
+            "llm_calls=3 > 0"
+          ],
+          "reply": "Here are your notifications. You have 3 new messages."
+        },
+        {
+          "turn": 7,
+          "decision": "navigate",
+          "llm_calls": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Would you like to open **Leave**?"
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 0"
+          ],
+          "reply": "End of script."
+        }
+      ]
+    }
+  ]
+}

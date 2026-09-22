@@ -758,6 +758,19 @@ topic_guard:
     I'm the Nibras People & Payroll assistant — that topic is outside my
     scope. I can help with payroll runs, payslips, GOSI/WPS, leave,
     loans, attendance, and HR advisory. What would you like to know?
+  # Same refusal for Arabic users (the runner picks by message language).
+  refusal_ar: >
+    أنا مساعد نبراس للموارد البشرية والرواتب — هذا الموضوع خارج نطاقي.
+    يمكنني المساعدة في مسيرات الرواتب، وقسائم الراتب، والتأمينات الاجتماعية
+    وحماية الأجور، والإجازات، والقروض، والحضور، والاستشارات الخاصة بالموارد
+    البشرية. بماذا يمكنني مساعدتك؟
+  # Declared scope: an ask naming one of these is never scope-refused by the
+  # intent classifier's off_limits zone (jailbreak / bypass wording still is).
+  in_scope:
+    en: [loan, leave, vacation, time off, payroll, payslip, salary, salaries,
+         net pay, attendance, absence, overtime, gosi, wps, deduction]
+    ar: [قرض, سلفه, سلفة, اجازه, إجازة, رواتب, راتب, مرتب, قسيمه, قسيمة,
+         حضور, غياب, دوام, استئذان, تامينات, تأمينات, خصم]
   patterns:
     - "(?i)global\\s+warming\\s+potential|\\bGWP\\b"
     - "(?i)emission\\s+factor|emissions?\\s+factor"

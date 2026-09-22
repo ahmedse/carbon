@@ -1,0 +1,351 @@
+{
+  "tier": "live_dev",
+  "caveats": [
+    "Tier live_dev: real LLM provider (LLM_API_KEY) and the configured dev DB, dispatched as an authenticated employee. Reply-text metrics are engine-attributable but non-deterministic across runs (LLM variance).",
+    "Chat mode only (ADR-0046): host writes are never committed from these turns; process dials may create Plan/Run rows awaiting consent in the dev DB.",
+    "Fan-out agents and multi-step planning are disabled (AGENT_ORCHESTRATOR_ENABLED=false, KG_MULTI_STEP_ENABLED=false)."
+  ],
+  "host_user": "emp_1067",
+  "database": "nibras_dev",
+  "errors": [],
+  "scripts_run": 3,
+  "scripts_passed": 0,
+  "total_turns": 24,
+  "turns_passed": 0,
+  "focus_retention": 0.5,
+  "slot_carry_over": 1.0,
+  "language_fidelity": 0.812,
+  "router_agreement": 0.5,
+  "llm_calls_p50": 3,
+  "llm_calls_max": 5,
+  "turns_over_budget": 19,
+  "per_objective_pass": {
+    "C1": 0.0,
+    "C3": 0.0,
+    "C8": 0.0,
+    "C5": 0.0,
+    "C6": 0.0
+  },
+  "scripts": [
+    {
+      "script_id": "ess-loan-ar-01",
+      "turns": 8,
+      "turns_passed": 0,
+      "language_failures": 3,
+      "reask_violations": 0,
+      "decision_failures": 3,
+      "llm_budget_failures": 6,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "refuse",
+          "llm_calls": 1,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=refuse not in ['answer', 'clarify']",
+            "lang=en expected ar",
+            "mentions_any missing ['٥٠٠٠', '5000', 'قرض', 'emergency']"
+          ],
+          "reply": "I'm the Nibras People & Payroll assistant — that topic is outside my scope. I can help with payroll runs, payslips, GOSI/WPS, leave, loans, attendance, and HR a"
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "ar",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['٥٠٠٠', 'dinar']",
+            "llm_calls=3 > 1"
+          ],
+          "reply": "حسناً، أريد أن أساعدك في طلب القرض. لديّ بعض التفاصيل المطلوبة: **ما هي مدة القرض (بالأشهر)؟** على سبيل المثال: 12 شهر، 24 شهر، إلخ. بعد أن تخبرني بمدة السداد، "
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "ar",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 1"
+          ],
+          "reply": "حسناً، أفهم أنك تريد قرضاً طارئاً بمبلغ 5000 دينار، لكن **مدة السداد (عدد الأشهر) مطلوبة** لإكمال الطلب. بما أن هذا طلب قرض ذاتي (من قبلك)، يمكنك: 1. **الذهاب إ"
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "ar",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 1"
+          ],
+          "reply": "لا أملك معلومات عن **مواعيد البت في طلبات القروض** — هذا يعتمد على سياسات الشركة وعملية الموارد البشرية. **ما يمكنني قوله:**\n- بعد تقديم طلب القرض، سيكون له **ح"
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "ar",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 1"
+          ],
+          "reply": "المبلغ الذي طلبته هو **5000 دينار** (قرض طارئ)."
+        },
+        {
+          "turn": 6,
+          "decision": "navigate",
+          "llm_calls": 0,
+          "language": "mixed",
+          "passed": false,
+          "fail_reasons": [
+            "decision=navigate not in ['answer']",
+            "lang=mixed expected ar"
+          ],
+          "reply": "هل تريد فتح **People & Payroll**؟"
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "ar",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 0"
+          ],
+          "reply": "على الرحب والسعة! 😊 إذا احتجت إلى مساعدة بخصوص الرواتب أو الإجازات أو أي استفسار آخر عن الموارد البشرية، أنا هنا للمساعدة. بالتوفيق مع طلب القرض! 🙏"
+        },
+        {
+          "turn": 8,
+          "decision": "tool_answer",
+          "llm_calls": 5,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['answer']",
+            "lang=en expected ar",
+            "mentions_any missing ['طارئ', 'emergency']",
+            "llm_calls=5 > 1"
+          ],
+          "reply": "I need your approval before I can proceed."
+        }
+      ]
+    },
+    {
+      "script_id": "chat-handoff-write-01",
+      "turns": 8,
+      "turns_passed": 0,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 5,
+      "llm_budget_failures": 7,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "tool_answer",
+          "llm_calls": 5,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['clarify']",
+            "llm_calls=5 > 2"
+          ],
+          "reply": "I need your approval before I can proceed."
+        },
+        {
+          "turn": 2,
+          "decision": "tool_answer",
+          "llm_calls": 5,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['clarify']",
+            "mentions_any missing ['emergency']",
+            "llm_calls=5 > 1"
+          ],
+          "reply": "I need your approval before I can proceed."
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=answer not in ['handoff_agent']",
+            "llm_calls=3 > 1"
+          ],
+          "reply": "I can help you request an emergency loan for 3,000 SAR. To submit your request, I need one more detail: **What start date would you like for the loan?** (format"
+        },
+        {
+          "turn": 4,
+          "decision": "clarify",
+          "llm_calls": 1,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=clarify not in ['answer']"
+          ],
+          "reply": "Do you mean: (1) has your emergency loan request been submitted/processed, or (2) are you asking about something else?"
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 1"
+          ],
+          "reply": "No information has been sent to an agent yet. We're still in Chat mode, where I'm gathering the details for your emergency loan request. Here's what I have so f"
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 1"
+          ],
+          "reply": "No, you won't need to repeat it. Once you give me the start date, I'll have your complete request (emergency loan, 3,000 SAR, start date). If you then move to A"
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 1"
+          ],
+          "reply": "Here's what happens next: 1. **You provide the start date** — I'll have your complete emergency loan request (3,000 SAR, start date). 2. **I show you a summary*"
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=answer not in ['handoff_agent']",
+            "llm_calls=3 > 0"
+          ],
+          "reply": "You're welcome! If you'd like to move forward with the emergency loan request, just let me know the start date and I'll help you complete it. If you have any ot"
+        }
+      ]
+    },
+    {
+      "script_id": "payroll-followup-en-01",
+      "turns": 8,
+      "turns_passed": 0,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 3,
+      "llm_budget_failures": 6,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "tool_answer",
+          "llm_calls": 5,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['answer']",
+            "mentions_any missing ['4500', '4,500']",
+            "llm_calls=5 > 2"
+          ],
+          "reply": "I'm unable to access your pay information right now due to a permission issue. This could mean your account doesn't have access to view payroll details, or ther"
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 1"
+          ],
+          "reply": "I don't have access to your payslip details at the moment due to a permission restriction on your account. To see what deductions were applied to your pay, you "
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['3700', '3,700']",
+            "llm_calls=3 > 1"
+          ],
+          "reply": "I'm unable to access your payslip data due to a permission restriction on your account, so I cannot tell you your actual take-home pay. However, I can explain h"
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 1"
+          ],
+          "reply": "I can't verify whether your GOSI calculation is correct because I don't have access to your payslip data due to a permission restriction on your account. To hav"
+        },
+        {
+          "turn": 5,
+          "decision": "clarify",
+          "llm_calls": 1,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=clarify not in ['answer']",
+            "mentions_any missing ['800']"
+          ],
+          "reply": "Which loan are you asking about — a specific loan you have, or a loan mentioned earlier in our conversation?"
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 1"
+          ],
+          "reply": "I don't have access to your payslip data, so I can't confirm whether your total deductions are 2,000 SAR or verify that figure against your actual records. To c"
+        },
+        {
+          "turn": 7,
+          "decision": "navigate",
+          "llm_calls": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=navigate not in ['answer']"
+          ],
+          "reply": "Would you like to open **Payroll**?"
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 3,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 1"
+          ],
+          "reply": "I don't have direct access to download your payslip for you, but here's how you can get it: 1. **Through the People app** — check if there's a payslip or docume"
+        }
+      ]
+    }
+  ],
+  "note": "merged from two CLI runs (scripts 01+08, then 04); ratio metrics are per-run, see scripts[]"
+}

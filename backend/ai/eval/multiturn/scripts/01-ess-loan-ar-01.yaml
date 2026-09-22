@@ -1,0 +1,67 @@
+id: ess-loan-ar-01
+objective_ids: [C1, C3, C8]
+language: ar
+surface: chat
+persona: emp_1067
+turns:
+  - user: "أريد قرض طارئ ٥٠٠٠ دينار"
+    stub_reply: "فهمت أنك تريد قرض طارئ بمبلغ ٥٠٠٠ دينار. هل هذا صحيح؟"
+    expect:
+      decision_in: [answer, clarify]
+      language: ar
+      max_llm_calls: 2
+      mentions_any: ["٥٠٠٠", "5000", "قرض", "emergency"]
+  
+  - user: "نعم، أريد ٥٠٠٠ بالضبط"
+    stub_reply: "جيد. المبلغ المطلوب ٥٠٠٠ دينار. هل هناك أي متطلبات إضافية؟"
+    expect:
+      decision_in: [answer]
+      language: ar
+      max_llm_calls: 1
+      must_not_reask_slots: [amount]
+      mentions_any: ["٥٠٠٠", "dinar"]
+  
+  - user: "لا، هذا كل شيء"
+    stub_reply: "حسناً، سأقوم بمساعدتك في طلب القرض الطارئ بمبلغ ٥٠٠٠ دينار."
+    expect:
+      decision_in: [handoff_agent, answer]
+      language: ar
+      max_llm_calls: 1
+      must_not_reask_slots: [amount, loan_type]
+  
+  - user: "متى سأتلقى قراري؟"
+    stub_reply: "ستتلقى قراراً خلال 2-3 أيام عمل."
+    expect:
+      decision_in: [answer]
+      language: ar
+      max_llm_calls: 1
+  
+  - user: "ما هو المبلغ الذي طلبته؟"
+    stub_reply: "المبلغ الذي طلبته هو ٥٠٠٠ دينار."
+    expect:
+      decision_in: [answer]
+      language: ar
+      max_llm_calls: 1
+      mentions_any: ["٥٠٠٠", "5000"]
+  
+  - user: "هل ستتم الموافقة عليه؟"
+    stub_reply: "بناءً على ملفك، أنت مؤهل للقرض الطارئ. سنقدم طلبك للمراجعة."
+    expect:
+      decision_in: [answer]
+      language: ar
+      max_llm_calls: 1
+  
+  - user: "شكراً لك"
+    stub_reply: "على الرحب والسعة! إذا كان لديك أي أسئلة أخرى، أنا هنا للمساعدة."
+    expect:
+      decision_in: [answer, navigate]
+      language: ar
+      max_llm_calls: 0
+  
+  - user: "ما نوع القرض الذي طلبته؟"
+    stub_reply: "نوع القرض الذي طلبته هو قرض طارئ."
+    expect:
+      decision_in: [answer]
+      language: ar
+      max_llm_calls: 1
+      mentions_any: ["طارئ", "emergency"]

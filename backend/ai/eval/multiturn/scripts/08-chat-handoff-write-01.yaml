@@ -1,0 +1,65 @@
+id: chat-handoff-write-01
+objective_ids: [C5, C6]
+language: en
+surface: chat
+persona: emp_1067
+turns:
+  - user: "I want to apply for a loan"
+    stub_reply: "I can help you with that. Let me gather some information first. What type of loan are you interested in?"
+    expect:
+      decision_in: [clarify]
+      language: en
+      max_llm_calls: 2
+  
+  - user: "An emergency loan"
+    stub_reply: "Emergency loan. Got it. How much do you need to borrow?"
+    expect:
+      decision_in: [clarify]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["emergency"]
+  
+  - user: "I need 3000 SAR"
+    stub_reply: "3000 SAR for an emergency loan. I have all the information I need. I'll now hand you off to the agent to complete your application."
+    expect:
+      decision_in: [handoff_agent]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["3000", "emergency"]
+  
+  - user: "Is the handoff complete?"
+    stub_reply: "Yes, your application details have been transferred to the agent who will help you complete the loan request."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+  
+  - user: "What information was sent to the agent?"
+    stub_reply: "The agent has your loan type (emergency) and the amount (3000 SAR)."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["emergency", "3000"]
+  
+  - user: "Will I need to repeat my information?"
+    stub_reply: "No, the agent already has your emergency loan request for 3000 SAR, so you won't need to repeat it."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 1
+      mentions_any: ["3000", "emergency"]
+  
+  - user: "What happens next?"
+    stub_reply: "The agent will present the loan request for your approval and then submit it to the system."
+    expect:
+      decision_in: [answer, handoff_agent]
+      language: en
+      max_llm_calls: 1
+  
+  - user: "Thank you for the help"
+    stub_reply: "You're welcome! The agent is ready to assist you. Let me hand you over now."
+    expect:
+      decision_in: [handoff_agent]
+      language: en
+      max_llm_calls: 0

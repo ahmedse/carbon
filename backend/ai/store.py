@@ -233,7 +233,13 @@ class Session(ABC):
         ...
 
     @abstractmethod
-    async def select(self, model: Any, *filters: Any) -> Any:
+    async def select(
+        self,
+        model: Any,
+        *filters: Any,
+        order_by: tuple[str, ...] | None = None,
+        limit: int | None = None,
+    ) -> Any:
         ...
 
     @abstractmethod
@@ -327,12 +333,25 @@ class _InMemorySession(Session):
             namespace[key] = obj
         self._store._pending[self._name] = []
 
-    async def select(self, model: Any, *filters: Any) -> list[Any]:
+    async def select(
+        self,
+        model: Any,
+        *filters: Any,
+        order_by: tuple[str, ...] | None = None,
+        limit: int | None = None,
+    ) -> list[Any]:
         # Filters are opaque in the in-memory backend; return all objects
         # whose class matches ``model``.
         resolved = resolve_model(model)
         namespace = self._store._engine(self._name)
-        return [o for o in namespace.values() if isinstance(o, resolved)]
+        rows = [o for o in namespace.values() if isinstance(o, resolved)]
+        for key in reversed(order_by or ()):
+            name = key.lstrip("-")
+            present = [r for r in rows if getattr(r, name, None) is not None]
+            missing = [r for r in rows if getattr(r, name, None) is None]
+            present.sort(key=lambda r: getattr(r, name), reverse=key.startswith("-"))
+            rows = present + missing
+        return rows[:limit] if limit is not None else rows
 
     async def get(self, model: Any, pk: Any) -> Any:
         return self._store._engine(self._name).get(pk)
@@ -470,7 +489,13 @@ class _DjangoSession(Session):
 
         await sync_to_async(_commit, thread_sensitive=True)()
 
-    async def select(self, model: Any, *filters: Any) -> list[Any]:
+    async def select(
+        self,
+        model: Any,
+        *filters: Any,
+        order_by: tuple[str, ...] | None = None,
+        limit: int | None = None,
+    ) -> list[Any]:
         from asgiref.sync import sync_to_async
 
         resolved = resolve_model(model)
@@ -480,6 +505,10 @@ class _DjangoSession(Session):
             qs = resolved.objects.all()
             if coerced:
                 qs = qs.filter(*coerced)
+            if order_by:
+                qs = qs.order_by(*order_by)
+            if limit is not None:
+                qs = qs[:limit]
             return list(qs)
 
         rows = await sync_to_async(_select, thread_sensitive=True)()

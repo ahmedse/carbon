@@ -97,6 +97,7 @@ class RetrievalWitness:
         knowledge_items: list[KnowledgeItemProjection] | None = None,
         scope: dict | None = None,
         process_state: dict | None = None,
+        host_user_id: str | None = None,
     ) -> RetrievalResult:
         t0 = time.monotonic()
         relevant_knowledge = _NO_KNOWLEDGE_PLACEHOLDER
@@ -140,6 +141,7 @@ class RetrievalWitness:
             memory_context = await self.memory_manager.retrieve_relevant_context(
                 instance_id, conversation_id, user_message,
                 user_identifier=user_info.get("username") if user_info else None,
+                host_user_id=host_user_id,
             )
             relevant_memories = memory_context.to_prompt_text()
             logger.debug("Memory context for conv=%s: %s", conversation_id[:8], relevant_memories[:300])

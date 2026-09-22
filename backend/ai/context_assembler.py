@@ -14,9 +14,33 @@ from typing import Any
 from ai.protocol import WorkspaceContext
 
 
+#: Hard cap on how much a persisted tool digest may grow one history message.
+HISTORY_DIGEST_MAX_CHARS = 200
+_DIGEST_PREFIX = "\n[Tool results] "
+
+
 def _estimate_tokens(text: str) -> int:
     """Approximate token count at ~4 characters per token."""
     return max(0, len(text or "") // 4)
+
+
+def render_history_content(message: dict[str, Any]) -> str:
+    """History text for one message: assistant turns carry their tool digest.
+
+    The digest (``metadata_json["tool_digest"]``) was built at turn time from
+    the scope-filtered tool results; here it is only re-clipped so a message
+    never grows by more than ``HISTORY_DIGEST_MAX_CHARS``.
+    """
+    content = message.get("content") or ""
+    if message.get("role") != "assistant":
+        return content
+    digest = ((message.get("metadata_json") or {}).get("tool_digest") or "").strip()
+    if not digest:
+        return content
+    room = HISTORY_DIGEST_MAX_CHARS - len(_DIGEST_PREFIX)
+    if len(digest) > room:
+        digest = digest[: room - 1] + "…"
+    return f"{content}{_DIGEST_PREFIX}{digest}"
 
 
 def _message_created_after(created_at, cleared_at: str) -> bool:
@@ -300,14 +324,18 @@ def assemble_context(
                     if _message_created_after(m.get("created_at"), cleared_at)
                 ]
 
-    # T2 — most recent turns verbatim; anything older is NOT sent.
+    # T2 — most recent turns verbatim (assistant turns + their PV2-1C tool
+    # digest); anything older is NOT sent.
     recent = list(live_messages[-recent_turns:])
+    history_tokens = 0
     for message in recent:
         created_at = message.get("created_at")
+        content = render_history_content(message)
+        history_tokens += _estimate_tokens(content)
         tiered.append(
             {
                 "role": message.get("role"),
-                "content": message.get("content"),
+                "content": content,
                 "timestamp": (
                     created_at.isoformat() if created_at is not None else None
                 ),
@@ -315,7 +343,7 @@ def assemble_context(
         )
 
     budget = {
-        "T2_history": sum(_estimate_tokens(m["content"]) for m in recent),
+        "T2_history": history_tokens,
         "T2b_summary": summary_tokens if include_summary else 0,
         "T3_retrieval": kg_tokens,
         "T4_memory": memory_tokens,
