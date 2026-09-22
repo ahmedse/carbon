@@ -1,6 +1,6 @@
 /**
- * Consent review — summary + Approve when the staged write is complete, one
- * short question when it is not.
+ * Consent review — "What will change" summary + Approve when the staged write
+ * is complete; one short question when a slot is still missing.
  *
  * Fields and governed options come from the step's ``consent_slots``, so this
  * component is the same for leave, loans, attendance permissions and hires —
@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import {
   bodySummary,
+  bodySummaryRows,
   consentFormValid,
   consentInputSpec,
   firstMissingField,
@@ -139,6 +140,111 @@ MissingSlotPrompt.propTypes = {
   onPick: PropTypes.func.isRequired,
 };
 
+function ChangePreviewPanel({
+  stepId,
+  actionLabel,
+  consequence,
+  rows,
+  partial = false,
+}) {
+  return (
+    <Box
+      data-testid={`timeline-consent-summary-${stepId}`}
+      data-consent-preview={partial ? 'partial' : 'ready'}
+      sx={{
+        mb: 1,
+        p: 1.25,
+        borderRadius: 1,
+        border: 1,
+        borderColor: partial ? 'divider' : 'warning.main',
+        bgcolor: partial ? 'background.default' : 'warning.soft',
+      }}
+    >
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{
+          fontSize: '0.625rem',
+          fontWeight: 700,
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+          display: 'block',
+          mb: 0.5,
+        }}
+      >
+        {partial ? 'So far' : 'What will change'}
+      </Typography>
+      {actionLabel ? (
+        <Typography
+          variant="body2"
+          data-testid={`timeline-consent-action-${stepId}`}
+          sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: rows.length ? 0.75 : 0 }}
+        >
+          {actionLabel}
+        </Typography>
+      ) : null}
+      {rows.length ? (
+        <Stack spacing={0.4} sx={{ mb: consequence && !partial ? 0.75 : 0 }}>
+          {rows.map((row) => (
+            <Stack
+              key={row.label}
+              direction="row"
+              spacing={1}
+              alignItems="baseline"
+              data-testid={`timeline-consent-row-${stepId}-${row.label}`}
+            >
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{
+                  width: 88,
+                  flexShrink: 0,
+                  fontSize: '0.6875rem',
+                  fontWeight: 600,
+                }}
+              >
+                {row.label}
+              </Typography>
+              <Typography variant="body2" sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>
+                {row.value}
+              </Typography>
+            </Stack>
+          ))}
+        </Stack>
+      ) : null}
+      {!partial && consequence ? (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          data-testid={`timeline-consent-consequence-${stepId}`}
+          sx={{ display: 'block', fontSize: '0.6875rem', lineHeight: 1.4 }}
+        >
+          {consequence}
+        </Typography>
+      ) : null}
+      {!partial ? (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', mt: 0.5, fontSize: '0.625rem' }}
+        >
+          Nothing is submitted until you Approve.
+        </Typography>
+      ) : null}
+    </Box>
+  );
+}
+
+ChangePreviewPanel.propTypes = {
+  stepId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+  actionLabel: PropTypes.string,
+  consequence: PropTypes.string,
+  rows: PropTypes.arrayOf(
+    PropTypes.shape({ label: PropTypes.string, value: PropTypes.string }),
+  ),
+  partial: PropTypes.bool,
+};
+
 export default function TimelineConsentForm({
   step,
   confirming,
@@ -153,12 +259,15 @@ export default function TimelineConsentForm({
   }, [step?.step_id, step?.status, step?.tool_args, step?.consent_slots]);
 
   if (!step || step.status !== 'awaiting_approval') return null;
-
+  // Spec can be null only for non-write awaits; still allow Approve/Decline.
   const fields = spec?.fields || [];
   const busy = Boolean(confirming);
-  const ready = consentFormValid(fields, values);
-  const missing = firstMissingField(fields, values);
+  const ready = !spec || consentFormValid(fields, values);
+  const missing = fields.length ? firstMissingField(fields, values) : null;
+  const rows = bodySummaryRows(fields, values);
   const summary = bodySummary(fields, values);
+  const actionLabel = spec?.actionLabel || '';
+  const consequence = spec?.consequence || '';
 
   const handleApprove = (e) => {
     e?.stopPropagation?.();
@@ -179,29 +288,13 @@ export default function TimelineConsentForm({
       onKeyDown={(e) => e.stopPropagation()}
       sx={{ mt: 0.5 }}
     >
-      {ready && summary ? (
-        <Box
-          data-testid={`timeline-consent-summary-${step.step_id}`}
-          sx={{
-            mb: 1,
-            p: 1,
-            borderRadius: 1,
-            border: 1,
-            borderColor: 'divider',
-            bgcolor: 'background.default',
-          }}
-        >
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ fontSize: '0.625rem', display: 'block', mb: 0.35 }}
-          >
-            From your request
-          </Typography>
-          <Typography variant="body2" sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>
-            {summary}
-          </Typography>
-        </Box>
+      {ready && (actionLabel || rows.length || consequence) ? (
+        <ChangePreviewPanel
+          stepId={step.step_id}
+          actionLabel={actionLabel}
+          consequence={consequence}
+          rows={rows}
+        />
       ) : null}
 
       {!ready && missing ? (
@@ -210,11 +303,20 @@ export default function TimelineConsentForm({
           sx={{ mb: 1 }}
           data-testid={`timeline-consent-ask-${step.step_id}`}
         >
+          {(rows.length || actionLabel) ? (
+            <ChangePreviewPanel
+              stepId={step.step_id}
+              actionLabel={actionLabel}
+              consequence={consequence}
+              rows={rows}
+              partial
+            />
+          ) : null}
           <MissingSlotPrompt
             field={missing}
             onPick={(patch) => setValues((prev) => ({ ...prev, ...patch }))}
           />
-          {summary ? (
+          {!rows.length && summary ? (
             <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.625rem' }}>
               So far: {summary}
             </Typography>

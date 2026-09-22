@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   bodySummary,
+  changePreview,
   consentFormValid,
   consentInputSpec,
+  consequenceForApi,
   firstMissingField,
 } from '../consentInputSpec';
 
@@ -34,6 +36,8 @@ describe('consentInputSpec', () => {
       { value: 'emergency', label: 'Emergency Leave' },
     ]);
     expect(spec.prefilled).toBe(false);
+    expect(spec.actionLabel).toMatch(/leave/i);
+    expect(spec.actionLabel).not.toMatch(/system check/i);
   });
 
   it('asks nothing when the platform already resolved every slot', () => {
@@ -48,6 +52,12 @@ describe('consentInputSpec', () => {
     expect(bodySummary(spec.fields, spec.values)).toBe(
       'Leave Type: Annual Leave · Start Date: 2026-10-01 · Days: 1',
     );
+    expect(spec.rows).toEqual([
+      { label: 'Leave Type', value: 'Annual Leave' },
+      { label: 'Start Date', value: '2026-10-01' },
+      { label: 'Days', value: '1' },
+    ]);
+    expect(spec.consequence).toMatch(/Creates a leave request/i);
   });
 
   it('asks only for the first genuinely missing slot', () => {
@@ -63,13 +73,33 @@ describe('consentInputSpec', () => {
     expect(consentFormValid(spec.fields, spec.values)).toBe(false);
   });
 
-  it('returns null without slots or for non-consent steps', () => {
-    expect(
-      consentInputSpec({
-        status: 'awaiting_approval',
-        tool_args: { api_name: 'submit_my_leave', body: {} },
-      }),
-    ).toBeNull();
+  it('falls back to body keys when consent_slots were omitted', () => {
+    const body = { leave_type: 'annual', start_date: '2026-09-23', days: 1 };
+    const spec = consentInputSpec({
+      status: 'awaiting_approval',
+      tool_args: { api_name: 'submit_my_leave', body },
+    });
+    expect(spec).not.toBeNull();
+    expect(spec.prefilled).toBe(true);
+    expect(spec.rows.map((r) => r.label)).toEqual(['Leave type', 'Start date', 'Days']);
+    expect(changePreview({
+      status: 'awaiting_approval',
+      tool_args: { api_name: 'submit_my_leave', body },
+    }).summary).toMatch(/annual/i);
+  });
+
+  it('still returns an action preview when body is empty but api is known', () => {
+    const spec = consentInputSpec({
+      status: 'awaiting_approval',
+      tool_args: { api_name: 'submit_my_leave', body: {} },
+    });
+    expect(spec).not.toBeNull();
+    expect(spec.actionLabel).toMatch(/leave/i);
+    expect(spec.consequence).toBe(consequenceForApi('submit_my_leave'));
+    expect(spec.requiresForm).toBe(false);
+  });
+
+  it('returns null for non-consent steps', () => {
     expect(
       consentInputSpec({
         status: 'completed',

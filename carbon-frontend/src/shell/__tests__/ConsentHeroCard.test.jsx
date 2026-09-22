@@ -54,4 +54,18 @@ describe('ConsentHeroCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /Open step details/i }));
     expect(onReview).toHaveBeenCalled();
   });
+
+  it('names the host write from api_name, never System check', () => {
+    render(
+      <ConsentHeroCard
+        step={{
+          ...step,
+          tool_name: 'call_host_api',
+          tool_args: { api_name: 'submit_my_leave', body: { leave_type: 'annual' } },
+        }}
+      />,
+    );
+    expect(screen.getByTestId('consent-hero-card')).toHaveTextContent(/Submit leave request/i);
+    expect(screen.getByTestId('consent-hero-card')).not.toHaveTextContent(/System check/i);
+  });
 });

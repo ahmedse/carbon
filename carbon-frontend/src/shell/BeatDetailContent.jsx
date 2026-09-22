@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { FONT } from '../theme/themeTokens';
 import { stepStatusMeta, toolLabel } from './aiTaskStatus';
 import { stripEngineJargon } from './humanizeOperatorCopy';
+import { actionLabelForApi } from './consentInputSpec';
 import { presentToolLabel } from './presentationPlane';
 
 function formatDuration(ms) {
@@ -39,16 +40,15 @@ function formatWhen(iso) {
   }
 }
 
-function humanAction(step) {
+function stepApiName(step) {
   const args = step?.tool_args;
-  const api = args && typeof args === 'object' ? args.api_name : '';
-  if (api) {
-    return (
-      presentToolLabel('call_host_api', { audience: 'operator', apiName: api })
-      || toolLabel(api)
-      || String(api).replace(/_/g, ' ')
-    );
-  }
+  if (!args || typeof args !== 'object') return '';
+  return String(args.api_name || '').trim();
+}
+
+function humanAction(step) {
+  const api = stepApiName(step);
+  if (api) return actionLabelForApi(api);
   return (
     presentToolLabel(step?.tool_name, { audience: 'operator' })
     || toolLabel(step?.tool_name)
@@ -82,9 +82,16 @@ export default function BeatDetailContent({
     typeof step.latency_ms === 'number' ? step.latency_ms : event?.latencyMs,
   );
 
+  const api = stepApiName(step);
+  const toolPresented = toolLabel(step.tool_name, { apiName: api });
+  // call_host_api title already carries the business action — never show the
+  // thin "System check" (or a duplicate Submit leave…) tool row beside it.
+  const showToolRow = Boolean(toolPresented)
+    && step.tool_name !== 'call_host_api'
+    && toolPresented !== intent;
   const rows = [
     { label: t('beatStatus'), value: meta.label },
-    toolLabel(step.tool_name) ? { label: t('beatTool'), value: toolLabel(step.tool_name) } : null,
+    showToolRow ? { label: t('beatTool'), value: toolPresented } : null,
     started ? { label: t('beatStarted'), value: started } : null,
     finished ? { label: t('beatFinished'), value: finished } : null,
     latency ? { label: t('beatDuration'), value: latency } : null,

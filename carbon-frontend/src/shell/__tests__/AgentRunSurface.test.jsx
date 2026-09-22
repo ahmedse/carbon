@@ -166,7 +166,13 @@ describe('AgentRunSurface', () => {
     );
     expect(screen.getByTestId('run-step-detail-drawer')).toBeInTheDocument();
     expect(screen.getByTestId('timeline-consent-0')).toHaveAttribute('data-consent-mode', 'summary');
-    expect(screen.getByTestId('timeline-consent-summary-0')).toHaveTextContent(/Sick Leave/i);
+    const preview = screen.getByTestId('timeline-consent-summary-0');
+    expect(preview).toHaveTextContent(/What will change/i);
+    expect(preview).toHaveTextContent(/Submit leave request/i);
+    expect(preview).toHaveTextContent(/Sick Leave/i);
+    expect(preview).toHaveTextContent(/Creates a leave request/i);
+    expect(preview).toHaveTextContent(/Nothing is submitted until you Approve/i);
+    expect(preview).not.toHaveTextContent(/System check/i);
     expect(screen.queryByTestId('timeline-consent-form-0')).toBeNull();
     expect(screen.getAllByRole('button', { name: /^Approve$/i })).toHaveLength(1);
     fireEvent.click(screen.getByTestId('timeline-approve-0'));

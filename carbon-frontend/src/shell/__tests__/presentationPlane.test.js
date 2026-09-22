@@ -19,6 +19,18 @@ describe('presentationPlane', () => {
         apiName: 'people.self.leave_balance',
       }),
     ).toBe('Leave balance');
+    expect(
+      presentToolLabel('call_host_api', {
+        audience: 'operator',
+        apiName: 'submit_my_leave',
+      }),
+    ).toBe('Submit leave request');
+    expect(
+      presentToolLabel('call_host_api', {
+        audience: 'operator',
+        apiName: 'submit_my_leave',
+      }),
+    ).not.toMatch(/system check|leave records/i);
     expect(hasEngineLeakage(presentToolLabel('call_host_api', { audience: 'operator' }))).toBe(false);
   });
 

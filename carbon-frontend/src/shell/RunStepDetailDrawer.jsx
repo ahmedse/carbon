@@ -38,7 +38,7 @@ export default function RunStepDetailDrawer({
       <Box
         data-testid="run-step-detail-drawer"
         sx={{
-          width: { xs: 260, sm: 280 },
+          width: { xs: 280, sm: 320 },
           height: '100%',
           minHeight: 280,
           borderLeft: 1,

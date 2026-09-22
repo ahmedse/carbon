@@ -4,21 +4,15 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import { Box, Button, Typography } from '@mui/material';
 import { stripEngineJargon } from './humanizeOperatorCopy';
-import { toolLabel } from './aiTaskStatus';
+import { actionLabelForApi } from './consentInputSpec';
 import { presentToolLabel } from './presentationPlane';
 
 function actionLabel(step) {
   const args = step?.tool_args;
-  const api = args && typeof args === 'object' ? args.api_name : '';
-  if (api) {
-    return (
-      presentToolLabel('call_host_api', { audience: 'operator', apiName: api })
-      || toolLabel(api)
-      || String(api).replace(/_/g, ' ')
-    );
-  }
+  const api = args && typeof args === 'object' ? String(args.api_name || '').trim() : '';
+  if (api) return actionLabelForApi(api);
   const fromTool = presentToolLabel(step?.tool_name, { audience: 'operator', apiName: api });
-  if (fromTool) return fromTool;
+  if (fromTool && fromTool !== 'System check') return fromTool;
   return stripEngineJargon(step?.intent || `Step ${step?.step_id}`);
 }
 
