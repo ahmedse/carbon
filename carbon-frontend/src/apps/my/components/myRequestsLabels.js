@@ -50,6 +50,7 @@ export const EVENT_SUFFIX = {
   archived: 'archived',
   voided: 'voided',
   reopened: 'reopened',
+  edited: 'edited',
 };
 
 export const ROLE_SUFFIX = {

@@ -19,7 +19,7 @@ const MUTATION_CONSEQUENCE = {
   create_leave_record:
     'Creates a leave record in the system.',
   submit_my_loan:
-    'Creates a loan request. Your manager reviews it in Team.',
+    'Creates a loan request. Manager then finance review it in Team — not approved until both steps complete.',
   submit_my_attendance_permission:
     'Creates an attendance permission request. Your manager reviews it in Team.',
   create_employee:
@@ -38,8 +38,12 @@ const FIELD_LABEL_FALLBACK = {
   note: 'Note',
   reason: 'Reason',
   loan_type: 'Loan type',
+  principal: 'Principal',
+  term_months: 'Term (months)',
+  interest_rate: 'Interest rate',
   amount: 'Amount',
   permission_type: 'Permission type',
+  hours: 'Hours',
 };
 
 function stagedBody(step) {

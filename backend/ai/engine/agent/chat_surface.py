@@ -84,6 +84,12 @@ _FIELD_LABELS = {
     "end_date": ("End date", "تاريخ النهاية"),
     "days": ("Days", "الأيام"),
     "reason": ("Reason", "السبب"),
+    "loan_type": ("Loan type", "نوع القرض"),
+    "principal": ("Principal", "المبلغ"),
+    "term_months": ("Term (months)", "المدة (أشهر)"),
+    "interest_rate": ("Interest rate", "الفائدة"),
+    "permission_type": ("Permission type", "نوع الاستئذان"),
+    "hours": ("Hours", "الساعات"),
 }
 
 

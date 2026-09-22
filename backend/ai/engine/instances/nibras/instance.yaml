@@ -461,6 +461,15 @@ api_catalog:
       - field: loan_type
         governed: true
         required: true
+      - field: principal
+        type: amount
+        required: true
+      - field: term_months
+        type: months
+        required: true
+      - field: interest_rate
+        type: rate
+        required: false
       - field: start_date
         type: date
         future: true

@@ -56,6 +56,11 @@ _RATE = re.compile(
     r"|([0-9]+(?:[.,][0-9]+)?)\s*%\s*(?:interest|rate|فائدة)?",
     re.I,
 )
+_HOURS = re.compile(
+    r"(?:لمدة|مدة|for)?\s*([0-9]+(?:[.,][0-9]+)?)\s*(?:hour|hours|ساعة|ساعات)"
+    r"|(?:ساعتين|ساعه\s*واحده|ساعة\s*واحدة|one\s*hour|two\s*hours)",
+    re.I,
+)
 
 # Calendar localization (platform data, not domain logic).
 _MONTHS: dict[str, int] = {
@@ -244,6 +249,28 @@ def parse_rate(text: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return value if value >= 0 else None
+
+
+def parse_hours(text: Any) -> float | None:
+    """Attendance permission hours the text states, if any."""
+    raw = _clean(text)
+    if not raw.strip():
+        return None
+    if re.search(r"ساعتين|two\s*hours", raw, re.I):
+        return 2.0
+    if re.search(r"ساعة\s*واحدة|ساعه\s*واحده|one\s*hour", raw, re.I):
+        return 1.0
+    match = _HOURS.search(raw)
+    if not match:
+        return None
+    token = match.group(1)
+    if not token:
+        return None
+    try:
+        value = float(str(token).replace(",", ""))
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
 
 
 def _governed_code(field: str, raw: Any) -> str | None:
@@ -481,23 +508,16 @@ def fill_write_body(
                 out[field] = months
             continue
         if kind in ("amount", "number", "principal") or field in (
-            "principal", "amount", "hours",
+            "principal", "amount",
         ):
             amount = parse_amount(seed)
             if amount is not None:
-                # Hours are usually small; prefer bare digits for hours field.
-                if field == "hours" and amount >= 24:
-                    hours_m = re.search(
-                        r"\b([0-9]+(?:[.,][0-9]+)?)\s*(?:hour|hours|ساعة|ساعات)?\b",
-                        seed,
-                        re.I,
-                    )
-                    if hours_m:
-                        try:
-                            amount = float(hours_m.group(1).replace(",", ""))
-                        except (TypeError, ValueError):
-                            pass
                 out[field] = amount
+            continue
+        if kind == "hours" or field == "hours":
+            hours = parse_hours(seed)
+            if hours is not None:
+                out[field] = hours
             continue
         if kind in ("rate", "interest_rate") or field in ("interest_rate", "rate"):
             rate = parse_rate(seed)

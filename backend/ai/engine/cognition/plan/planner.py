@@ -932,17 +932,28 @@ class SkillAwarePlanner:
                 )],
             )
 
-        # ── Path B hybrid: personal leave → process dial spine ───────────
-        # Process owns DAG (leave.request.lifecycle prefix); write_slots own
-        # codes/dates; LLM must not invent a freeform leave topology.
+        # ── Path B hybrid: personal loan / leave → process dial spine ────
+        # Process owns DAG; write_slots own codes/amounts; LLM must not invent
+        # a freeform ESS topology.
         try:
             from asgiref.sync import sync_to_async
 
             from ai.engine.cognition.plan.process_dial import (
                 is_personal_leave_brief,
+                is_personal_loan_brief,
                 materialize_leave_request_plan,
+                materialize_loan_request_plan,
             )
 
+            if is_personal_loan_brief(utterance):
+                plan = await sync_to_async(
+                    materialize_loan_request_plan, thread_sensitive=True,
+                )(utterance)
+                logger.info(
+                    "SkillAwarePlanner: process_dial loan (%d steps)",
+                    len(plan.steps),
+                )
+                return plan
             if is_personal_leave_brief(utterance):
                 plan = await sync_to_async(
                     materialize_leave_request_plan, thread_sensitive=True,
@@ -954,7 +965,7 @@ class SkillAwarePlanner:
                 return plan
         except Exception:
             logger.exception(
-                "process_dial leave materialization failed — falling through"
+                "process_dial materialization failed — falling through"
             )
 
         # "I need a task / create a task" → Chat owns plan_task (PLAN FIRST).

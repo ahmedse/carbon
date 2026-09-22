@@ -86,6 +86,12 @@
   "statusExpired": "منتهية",
   "statusArchived": "مؤرشفة",
   "dialogTitle": "طلب إجازة",
+  "editLeaveDialogTitle": "تعديل طلب الإجازة",
+  "editLeaveHint": "احفظ التعديلات ثم استخدم «إعادة الإرسال» لإعادة الطلب إلى مديرك.",
+  "saveEditsButton": "حفظ التعديلات",
+  "editRequest": "تعديل",
+  "sentBackHint": "أعاد المدير هذا الطلب. عدّل الطلب إن لزم ثم أعد الإرسال.",
+  "successEdited": "تم حفظ التعديلات. أعد الإرسال عندما تكون جاهزاً.",
   "fieldLeaveType": "نوع الإجازة",
   "fieldStartDate": "تاريخ البداية",
   "fieldEndDate": "تاريخ النهاية",
@@ -279,7 +285,8 @@
     "resubmitted": "إعادة إرسال",
     "archived": "مؤرشف",
     "voided": "ملغى إدارياً",
-    "reopened": "أُعيد فتحه"
+    "reopened": "أُعيد فتحه",
+    "edited": "تم التعديل"
   },
   "role": {
     "manager": "المدير",

@@ -86,6 +86,12 @@
   "statusExpired": "Expired",
   "statusArchived": "Archived",
   "dialogTitle": "Request Leave",
+  "editLeaveDialogTitle": "Edit leave request",
+  "editLeaveHint": "Save your changes, then use Resubmit to send the request back to your manager.",
+  "saveEditsButton": "Save changes",
+  "editRequest": "Edit",
+  "sentBackHint": "Your manager sent this back. Edit the request if needed, then Resubmit.",
+  "successEdited": "Changes saved. Resubmit when ready.",
   "fieldLeaveType": "Leave Type",
   "fieldStartDate": "Start Date",
   "fieldEndDate": "End Date",
@@ -279,7 +285,8 @@
     "resubmitted": "Resubmitted",
     "archived": "Archived",
     "voided": "Voided",
-    "reopened": "Reopened"
+    "reopened": "Reopened",
+    "edited": "Edited"
   },
   "role": {
     "manager": "Manager",

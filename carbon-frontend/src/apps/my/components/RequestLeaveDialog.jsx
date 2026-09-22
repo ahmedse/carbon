@@ -314,16 +314,19 @@ export default function RequestLeaveDialog({
 
         {/* Approver chain preview (create only — edit keeps existing chain) */}
         {!isEdit ? (
-        <Box>
-          <Typography variant="overline" color="text.secondary" sx={{ display: 'block' }}>
-            {t('approverTitle')}
-          </Typography>
-          <Typography variant="body2">
-            {managerName
-              ? `${t('approverManagerWillApprove')} — ${managerName}`
-              : t('approverLineManagerWillApprove')}
-          </Typography>
-        </Box>
+          <Box>
+            <Typography variant="overline" color="text.secondary" sx={{ display: 'block' }}>
+              {t('approverTitle')}
+            </Typography>
+            <Typography variant="body2">
+              {managerName
+                ? `${t('approverManagerWillApprove')} — ${managerName}`
+                : t('approverLineManagerWillApprove')}
+            </Typography>
+          </Box>
+        ) : (
+          <Alert severity="info">{t('editLeaveHint')}</Alert>
+        )}
       </Stack>
     </SystemDialog>
   );
@@ -335,9 +338,15 @@ RequestLeaveDialog.propTypes = {
   balances: PropTypes.array,
   profile: PropTypes.object,
   onSubmitted: PropTypes.func.isRequired,
+  mode: PropTypes.oneOf(['create', 'edit']),
+  correspondenceId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+  initialPayload: PropTypes.object,
 };
 
 RequestLeaveDialog.defaultProps = {
   balances: [],
   profile: null,
+  mode: 'create',
+  correspondenceId: null,
+  initialPayload: null,
 };

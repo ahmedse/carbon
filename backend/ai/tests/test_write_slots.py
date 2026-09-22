@@ -16,8 +16,10 @@ import pytest
 from ai.write_slots import (
     ground_future_date,
     is_date_field,
+    parse_amount,
     parse_date_expression,
     parse_days,
+    parse_months,
     write_slots_for,
 )
 
@@ -61,6 +63,15 @@ def test_days_from_wording():
     assert parse_days("for 3 days") == 3
     assert parse_days("لمدة 5 ايام") == 5
     assert parse_days("no duration here") is None
+
+
+def test_loan_amount_and_months_from_wording():
+    assert parse_amount("أريد قرض طوارئ 5000 لمدة 12 شهر") == 5000.0
+    assert parse_amount("emergency loan of 2500 SAR") == 2500.0
+    assert parse_amount("hello") is None
+    assert parse_months("لمدة 12 شهر") == 12
+    assert parse_months("for 6 months") == 6
+    assert parse_months("no term") is None
 
 
 def test_date_field_detection():

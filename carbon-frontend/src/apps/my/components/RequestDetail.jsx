@@ -2,10 +2,12 @@
 // My (employee self-service) — Request detail page (route /my/requests/:id).
 // Layout: Summary → Stepper|Graph toggle → Timeline.
 // Graph = WorkflowGraph → EnterpriseGraph (same Pulse agent canvas).
+// sent_back: Edit payload (leave SystemDialog) then Resubmit — separate actions.
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Box, Button, Skeleton, Stack, ToggleButton, ToggleButtonGroup } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import EditIcon from '@mui/icons-material/Edit';
 import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -17,12 +19,15 @@ import { useNotification } from '../../../components/NotificationProvider';
 import {
   cancelCorrespondence,
   fetchCorrespondenceDetail,
+  fetchLeaveBalance,
+  fetchMyProfile,
   resubmitCorrespondence,
 } from '../../../api/my';
 import SummaryCard from './SummaryCard';
 import ApproverChainStepper from './ApproverChainStepper';
 import WorkflowGraph from './WorkflowGraph';
 import RequestTimeline from './RequestTimeline';
+import RequestLeaveDialog from './RequestLeaveDialog';
 
 const CANCELLABLE = new Set(['draft', 'submitted', 'in_review', 'sent_back']);
 
@@ -42,6 +47,9 @@ export default function RequestDetail() {
   const [notFound, setNotFound] = useState(false);
   const [view, setView] = useState('graph');
   const [busy, setBusy] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [balances, setBalances] = useState([]);
+  const [profile, setProfile] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,6 +71,21 @@ export default function RequestDetail() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const openEdit = useCallback(async () => {
+    setEditOpen(true);
+    try {
+      const [bal, prof] = await Promise.all([
+        fetchLeaveBalance(token),
+        fetchMyProfile(token),
+      ]);
+      setBalances(Array.isArray(bal) ? bal : []);
+      setProfile(prof || null);
+    } catch {
+      // Dialog still opens; leave-type select may be empty — save will surface API errors.
+      setBalances([]);
+    }
+  }, [token]);
 
   const handleCancel = useCallback(async () => {
     if (!window.confirm(t('cancelRequestConfirm'))) return;
@@ -92,8 +115,18 @@ export default function RequestDetail() {
     }
   }, [token, id, t, notify, load]);
 
+  const handleEdited = useCallback(async () => {
+    setEditOpen(false);
+    notify({ message: t('successEdited'), type: 'success' });
+    await load();
+  }, [notify, t, load]);
+
   const canCancel = data && CANCELLABLE.has(data.status);
   const canResubmit = data && data.status === 'sent_back';
+  const canEditLeave =
+    canResubmit &&
+    (data?.corr_type_code === 'leave_request' ||
+      data?.subject_type === 'people.LeaveRecord');
 
   return (
     <Box
@@ -105,7 +138,19 @@ export default function RequestDetail() {
           title={t('detailTitle')}
           subtitle={t('detailSubtitle')}
           actions={
-            <Stack direction="row" spacing={1}>
+            <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+              {canEditLeave ? (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="primary"
+                  startIcon={<EditIcon />}
+                  disabled={busy}
+                  onClick={openEdit}
+                >
+                  {t('editRequest')}
+                </Button>
+              ) : null}
               {canResubmit ? (
                 <Button
                   size="small"
@@ -171,6 +216,11 @@ export default function RequestDetail() {
           </Alert>
         ) : data ? (
           <Stack spacing={1}>
+            {canResubmit ? (
+              <Alert severity="warning">
+                {t('sentBackHint')}
+              </Alert>
+            ) : null}
             <SummaryCard item={data} />
             <Stack direction="row" justifyContent="flex-end">
               <ToggleButtonGroup
@@ -203,6 +253,19 @@ export default function RequestDetail() {
           </Stack>
         ) : null}
       </PageContainer>
+
+      {canEditLeave ? (
+        <RequestLeaveDialog
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          balances={balances}
+          profile={profile}
+          mode="edit"
+          correspondenceId={data?.id}
+          initialPayload={data?.payload}
+          onSubmitted={handleEdited}
+        />
+      ) : null}
     </Box>
   );
 }

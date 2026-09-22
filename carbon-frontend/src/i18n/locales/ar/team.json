@@ -91,7 +91,8 @@
     "resubmitted": "إعادة إرسال",
     "archived": "مؤرشف",
     "voided": "ملغى إدارياً",
-    "reopened": "أُعيد فتحه"
+    "reopened": "أُعيد فتحه",
+    "edited": "تم التعديل"
   },
   "role": {
     "manager": "المدير",

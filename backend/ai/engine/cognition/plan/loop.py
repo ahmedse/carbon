@@ -2633,6 +2633,7 @@ class ReActLoop:
         ]
         actions_md = format_actions_markdown(collect_navigate_actions(outputs))
         leave_submit_done = False
+        loan_submit_done = False
         for r in step_results or []:
             if r.error and not str(r.error).startswith("[caught]"):
                 continue
@@ -2672,10 +2673,19 @@ class ReActLoop:
                     ):
                         leave_submit_done = True
                         break
+                if api == "submit_my_loan" or ctype == "loan_request":
+                    if code_int in (200, 201) or status in (
+                        "submitted", "in_review", "approved", "draft",
+                    ):
+                        loan_submit_done = True
+                        break
                 if out.get("confirmed") and ctype == "leave_request":
                     leave_submit_done = True
                     break
-            if leave_submit_done:
+                if out.get("confirmed") and ctype == "loan_request":
+                    loan_submit_done = True
+                    break
+            if leave_submit_done or loan_submit_done:
                 break
             intent = (r.intent or "").lower()
             if (
@@ -2685,11 +2695,27 @@ class ReActLoop:
             ):
                 leave_submit_done = True
                 break
+            if (
+                "submit loan" in intent
+                and out.get("confirmed")
+                and not (r.error and not str(r.error).startswith("[caught]"))
+            ):
+                loan_submit_done = True
+                break
 
         if leave_submit_done:
             head = (
                 "Your leave request was submitted. "
                 "Your manager reviews it in Team — track status in My Leave."
+            )
+            if actions_md:
+                return f"{head}\n\n{actions_md}".strip()[:2000]
+            return head
+
+        if loan_submit_done:
+            head = (
+                "Your loan request was submitted. "
+                "Manager then finance review it in Team — track status in My Requests."
             )
             if actions_md:
                 return f"{head}\n\n{actions_md}".strip()[:2000]
