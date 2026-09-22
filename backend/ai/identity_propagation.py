@@ -147,14 +147,10 @@ def audience_for_user(user) -> set[str]:
         pass
 
     try:
-        # OneToOne related_name on people.Employee.user
-        if getattr(user, "employee_profile", None) is not None:
-            audiences.add("ess")
-        else:
-            from people.models import Employee
+        from people.models import Employee
 
-            if Employee.objects.filter(user_id=user.pk).exists():
-                audiences.add("ess")
+        if Employee.objects.filter(user_id=getattr(user, "pk", None)).exists():
+            audiences.add("ess")
     except Exception:  # noqa: BLE001
         pass
 

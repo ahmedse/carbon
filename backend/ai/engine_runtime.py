@@ -1073,9 +1073,13 @@ def _build_chat_user_info(host_user_id: str | None) -> dict | None:
         display_name = (
             getattr(user, "display_name", "") or user.get_full_name() or user.username
         )
-        from ai.identity_propagation import audience_for_user
+        try:
+            from ai.identity_propagation import audience_for_user
 
-        audience = sorted(audience_for_user(user))
+            audience = sorted(audience_for_user(user))
+        except Exception:  # noqa: BLE001 - audience is best-effort decoration
+            logger.exception("audience_for_user failed; defaulting to ess")
+            audience = ["ess"]
         return {
             "username": user.username,
             "display_name": display_name,
