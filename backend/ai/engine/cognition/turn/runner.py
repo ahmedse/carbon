@@ -30,24 +30,70 @@ def _signal(ledger: TurnLedger, gate: str, fired: bool, **detail) -> None:
     )
 
 
+# Stages whose LLM calls are background / fire-and-forget — excluded from
+# the foreground ``llm_calls`` budget (PV2-2C deterministic accounting).
+_BACKGROUND_LLM_STAGES = frozenset({"auto_memory"})
+
+
 def _finalize_meter(ledger: TurnLedger, meter, decision: str) -> None:
     from ai.engine.llm.call_meter import CallMeter
 
     if not isinstance(meter, CallMeter):
         return
+    by_stage = meter.by_stage()
+    background = sum(by_stage.get(s, 0) for s in _BACKGROUND_LLM_STAGES)
+    foreground = max(0, int(meter.total) - int(background))
     ledger.turn_decision = decision
-    ledger.llm_calls_by_stage = meter.by_stage()
-    ledger.llm_calls_measured = meter.total
+    ledger.llm_calls_by_stage = by_stage
+    ledger.llm_calls_measured = foreground
+    ledger.llm_calls_background = background
     fired_gates = [
         s["gate"] for s in (ledger.decision_signals or []) if s.get("fired")
     ]
     logger.info(
-        "[turn-decision] conv=%s decision=%s llm=%d by_stage=%s fired=%s",
+        "[turn-decision] conv=%s decision=%s llm=%d bg=%d by_stage=%s fired=%s",
         ledger.conversation_id,
         decision,
-        meter.total,
-        meter.by_stage(),
+        foreground,
+        background,
+        by_stage,
         fired_gates,
+    )
+
+
+def _audience_from_user_info(user_info: dict | None) -> list[str]:
+    if not isinstance(user_info, dict):
+        return ["ess"]
+    aud = user_info.get("audience")
+    if isinstance(aud, (list, tuple, set)) and aud:
+        return [str(a) for a in aud]
+    return ["ess"]
+
+
+def _scoped_api_catalog(instance_config: dict | None, user_info: dict | None) -> list:
+    from ai.engine.cognition.context_pack import filter_catalog_by_audience
+
+    return filter_catalog_by_audience(
+        (instance_config or {}).get("api_catalog") or [],
+        _audience_from_user_info(user_info),
+    )
+
+
+def _scoped_navigation_routes(instance_config: dict | None, user_info: dict | None) -> list:
+    from ai.engine.cognition.context_pack import filter_catalog_by_audience
+
+    return filter_catalog_by_audience(
+        (instance_config or {}).get("navigation_routes") or [],
+        _audience_from_user_info(user_info),
+    )
+
+
+def _audience_persona(instance_config: dict | None, user_info: dict | None) -> str:
+    from ai.engine.cognition.context_pack import compose_persona_for_audience
+
+    return compose_persona_for_audience(
+        instance_config,
+        _audience_from_user_info(user_info),
     )
 
 
@@ -2032,8 +2078,10 @@ class TurnPipelineRunner:
                 with stage("intent"):
                     _intent_resolution = await IntentResolver().resolve(
                         user_message=_resolved_for_intent,
-                        api_catalog=(instance_config or {}).get("api_catalog"),
-                        navigation_routes=(instance_config or {}).get("navigation_routes"),
+                        api_catalog=_scoped_api_catalog(instance_config, user_info),
+                        navigation_routes=_scoped_navigation_routes(
+                            instance_config, user_info,
+                        ),
                         tenant_org=(instance_config or {}).get("tenant_org"),
                         conversation_history=conversation_history,
                         instance_id=instance_id,
@@ -2851,11 +2899,15 @@ class TurnPipelineRunner:
             ),
             page_context=page_context or "unknown",
             user_info=user_info,
-            persona=config.get("persona"),
-            api_catalog=config.get("api_catalog"),
-            navigation_routes=config.get("navigation_routes"),
+            persona=_audience_persona(config, user_info),
+            api_catalog=_scoped_api_catalog(config, user_info),
+            navigation_routes=_scoped_navigation_routes(config, user_info),
             domain_topics=config.get("domain_topics"),
-            instance_config=config,
+            instance_config={
+                **config,
+                "persona": _audience_persona(config, user_info),
+                "api_catalog": _scoped_api_catalog(config, user_info),
+            },
             conversation_id=conversation_id,
             instance_id=instance_id,
         )
@@ -3843,11 +3895,15 @@ class TurnPipelineRunner:
                 ),
                 page_context=page_context or "unknown",
                 user_info=user_info,
-                persona=config.get("persona"),
-                api_catalog=config.get("api_catalog"),
-                navigation_routes=config.get("navigation_routes"),
+                persona=_audience_persona(config, user_info),
+                api_catalog=_scoped_api_catalog(config, user_info),
+                navigation_routes=_scoped_navigation_routes(config, user_info),
                 domain_topics=config.get("domain_topics"),
-                instance_config=config,
+                instance_config={
+                    **config,
+                    "persona": _audience_persona(config, user_info),
+                    "api_catalog": _scoped_api_catalog(config, user_info),
+                },
                 conversation_id=conversation_id,
                 instance_id=instance_id,
             )
@@ -4019,11 +4075,15 @@ class TurnPipelineRunner:
             ),
             page_context=page_context or "unknown",
             user_info=user_info,
-            persona=config.get("persona"),
-            api_catalog=config.get("api_catalog"),
-            navigation_routes=config.get("navigation_routes"),
+            persona=_audience_persona(config, user_info),
+            api_catalog=_scoped_api_catalog(config, user_info),
+            navigation_routes=_scoped_navigation_routes(config, user_info),
             domain_topics=config.get("domain_topics"),
-            instance_config=config,
+            instance_config={
+                **config,
+                "persona": _audience_persona(config, user_info),
+                "api_catalog": _scoped_api_catalog(config, user_info),
+            },
             conversation_id=conversation_id,
             instance_id=instance_id,
         )

@@ -419,6 +419,9 @@ async def _run_chat(
                 "intent_zone": getattr(ledger, "intent_zone", "platform"),
                 "turn_decision": getattr(ledger, "turn_decision", ""),
                 "llm_calls": int(getattr(ledger, "llm_calls_measured", 0) or 0),
+                "llm_calls_background": int(
+                    getattr(ledger, "llm_calls_background", 0) or 0
+                ),
                 "llm_calls_by_stage": dict(
                     getattr(ledger, "llm_calls_by_stage", None) or {}
                 ),
