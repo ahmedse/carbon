@@ -243,3 +243,9 @@ Track: PV2 — W1 (P1) DONE · checkpoint commit 5003073 · W2 started
 Ask: PV2-1A/1B/1C accepted after Master re-ran every gate (195 passed / 12 xfail; import boundary 9; antipatterns pass). Offline bank router 0.781→0.917, llm max 5→3. Local checkpoint commit `5003073` (no push). PV2-2C dispatched (role-scoped api_catalog `audience`, `guidance_by_audience` in nibras instance.yaml, foreground/background LLM accounting). Nibras seat: `instance.yaml` catalog entries gain an `audience` key — additive, loader defaults unmarked to `hr`; no host API changes. P2/P3 specs are in TASKS.md. Live verification batched for the morning (needs user approval card).
 Paths: backend/ai/engine/instances/nibras/instance.yaml, backend/ai/identity_propagation.py, backend/ai/engine/cognition/context_pack.py (new), backend/ai/engine/cognition/turn/{runner,execute}.py
 Blockers: none
+
+## [2026-09-23T01:20:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-3
+Track: PV2 — W2 in progress (2C DONE · 2A dispatched)
+Ask: PV2-2C Master-accepted (audience-scoped api_catalog, guidance_by_audience, IdentityBlock slice, foreground llm meter → offline p50 2 identical×2). Checkpoint `06ac333`. PV2-2A ContextPack chat stages dispatched. P4–P6 full specs in TASKS.md (SOAKING rules). Live re-check still batched for morning approval. Nibras: instance.yaml additive audience defaults — no host API contract change.
+Paths: backend/ai/engine/cognition/context_pack.py, backend/ai/engine/instances/nibras/instance.yaml, TASKS.md
+Blockers: none
