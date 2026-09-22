@@ -3618,3 +3618,94 @@ Adjacent regression (touched seams: memory, clear/undo, store, nav/intent, conse
 | I4 | Info | The ReAct paths (`pulse_loop`, KG multi-step) build their draft prompts in `plan/loop.py` and don't get the StateBlock. The state is still saved on those exits. | P2 ContextPack. |
 | I5 | Info | `_clear_break.prior_state` is serialised with the conversation, like the existing `prior_snapshot`. It is the owner's own state, and clear requires owner or `ai:manage_console`. | — |
 | I6 | Info | On the in-memory store backend (tests only), `select` filters are opaque and rows are engine objects, so `ConversationStateStore` is effectively Django-only. | Production runs Django. |
+
+## PV2-2C
+
+**Date:** 2026-09-23  
+**Worker:** backend-worker (Composer)  
+**Status:** GATE PASSED  
+**Commit base:** `5003073` (clean tree except Master-owned `docs/ops/MASTERS-COMMS.md`)
+
+### Files changed
+| Path | Change |
+|---|---|
+| `backend/ai/tests/test_pv2_audience_catalog.py` | NEW — 11 tests (audience, catalog, IdentityBlock, 403 twin, meter, topic-guard) |
+| `backend/ai/identity_propagation.py` | `audience_for_user(user) -> set[str]` |
+| `backend/ai/engine/cognition/context_pack.py` | NEW — `IdentityBlock`, `filter_catalog_by_audience`, audience helpers |
+| `backend/ai/engine/core/archetypes.py` | Load-time audience normalize + `validate_catalog_audiences` |
+| `backend/ai/engine/instances/nibras/instance.yaml` | Shared `persona:`; new `guidance_by_audience: {ess,hr,admin}`; net-pay / live-data moved out of shared persona |
+| `backend/ai/engine_runtime.py` | `audience` on `user_info`; topic-guard refuse → ConversationState save; `llm_calls_background` on chat result |
+| `backend/ai/engine/cognition/turn/runner.py` | Scoped catalog/nav/persona; `_finalize_meter` foreground vs `auto_memory` |
+| `backend/ai/engine/cognition/turn/witnesses.py` | `llm_calls_background` on TurnLedger |
+| `backend/ai/engine/cognition/turn/execute.py` | 403 twin-retry (`find_my_api_twin`, `maybe_retry_my_twin_on_403`, bilingual message) |
+| `backend/ai/eval/multiturn/runner.py` | Surface `llm_calls_background` on TurnResult/JSON (YAML expectations unchanged) |
+
+### Per-objective evidence
+1. **Catalog `audience`** — loader materialises defaults (`hr` unmarked; `*_my_*` / nav → `ess+hr`); enum validated. Test: `test_nibras_loader_validates_audience_enum`, `test_filter_catalog_defaults_and_my_routes`.
+2. **Role-scoped tool list** — `audience_for_user` (staff/superuser→admin+hr+ess; people_lead/data-owners/analysts→hr; linked Employee→ess; else ess). Engine filters on `user_info["audience"]` only. Tests: emp catalog has `list_my_payslips` not `list_payslip_lines`/`list_employees`; admin sees both.
+3. **IdentityBlock** — ESS guidance present / HR "full read access" absent for employee. `compose_persona_for_audience` used on all draft/intent catalog paths in `runner.py`.
+4. **403 twin-retry** — `list_payslip_lines` → one retry of `list_my_payslips`; bilingual honest message when no twin / twin denied. Consent/ADR-0046 untouched.
+5. **Deterministic LLM accounting** — `llm_calls` = foreground only (excludes `auto_memory`); `llm_calls_background` on ledger + chat result + multiturn JSON. Six stubbed turns identical; two bank runs identical (`turns_passed` / `turns_over_budget` / `llm_calls_p50`).
+6. **Topic-guard state** — pre-LLM refuse still `ConversationStateStore.save` with `decision=refuse` (`turn_decision=refuse`, `state_saved=True`).
+
+### Gate output (literal)
+```
+$ cd backend && ../.venv/bin/python manage.py check
+System check identified no issues (0 silenced).
+
+$ TEST_DB_NAME=test_nibras_dev_w2c ../.venv/bin/python -m pytest ai/tests/test_pv2_audience_catalog.py -v -p no:cacheprovider
+============================== 11 passed in 4.95s ==============================
+
+$ TEST_DB_NAME=test_nibras_dev_w2c ../.venv/bin/python -m pytest ai/tests/test_pv2_baseline_defects.py ai/tests/test_pv2_state_store.py ai/tests/test_pv2_instrumentation.py ai/tests/test_pv2_memory_digests.py ai/tests/test_chat_wiring.py ai/tests/test_tool_execution_actions.py ai/tests/test_plans.py ai/eval/test_multiturn_bank.py -q -p no:cacheprovider
+193 passed, 12 xfailed in 51.00s
+
+$ … multiturn.runner --report /tmp/pv2-2c-offline-a.json | tail -16
+  scripts_run: 12
+  scripts_passed: 0
+  total_turns: 96
+  turns_passed: 8
+  focus_retention: 0.184
+  slot_carry_over: 1.0
+  language_fidelity: 0.896
+  router_agreement: 0.917
+  llm_calls_p50: 2
+  llm_calls_max: 2
+  turns_over_budget: 82
+
+$ … multiturn.runner --report /tmp/pv2-2c-offline-b.json | tail -16
+  (identical to a)
+
+DIFF a vs b: turns_passed=8/8 · turns_over_budget=82/82 · llm_calls_p50=2/2 · router=0.917 · slot=1.0 — all match
+
+$ python3 .ai-toolkit/scripts/import-boundary-lint.py
+Import boundary: 9 violation(s) — (unchanged pre-existing set; no new engine→host imports)
+
+$ ./.ai-toolkit/scripts/verify.sh antipatterns
+GATE PASSED
+```
+
+### Offline bank (stub) — identical ×2
+| Metric | A | B | Acceptance |
+|---|---|---|---|
+| turns_passed | 8 | 8 | identical ✔ |
+| turns_over_budget | 82 | 82 | identical ✔ |
+| llm_calls_p50 / max | 2 / 2 | 2 / 2 | ≤ 3 ✔ · identical ✔ |
+| router_agreement | 0.917 | 0.917 | ≥ 0.917 ✔ |
+| slot_carry_over | 1.0 | 1.0 | 1.0 ✔ |
+
+Foreground-only meter removed the auto_memory scheduling swing (was 3↔6 / 86↔91).
+
+### Deviations
+1. Catalog `audience:` tags are materialised at load via defaults rather than hand-editing every YAML row; explicit tags still validated when present.
+2. Admin audience expands to `{admin,hr,ess}` so intersection with default `[hr]` entries works without tagging every HR tool `[hr,admin]`.
+3. ESS guidance may mention `list_payslip_lines` as forbidden; IdentityBlock test asserts HR "full read access" block is absent.
+4. `_build_chat_user_info` from bare sync pytest can still return `None` (pre-existing `_run_async` bridge); chat path and `audience_for_user` are what the engine uses.
+
+### Issues found (not fixed)
+| ID | Severity | Finding | Notes |
+|---|---|---|---|
+| I1 | Info | Offline `scripts_passed` still 0 — YAML goldens unchanged (RULE_28); gains are meter stability + routing metrics. | P3/P4/P6 |
+| I2 | Info | Plan/loop.py draft prompts not yet IdentityBlock-scoped (Chat runner paths are). | PV2-2A/2B |
+| I3 | Resolved | Topic-guard pre-LLM refuse now saves ConversationState. | Was I3 in PV2-1A notes |
+
+**GATE PASSED** — import boundary 9 · antipatterns green · bank runs identical · audience catalog 11/11.

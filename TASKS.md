@@ -2978,8 +2978,8 @@ All on `claude-opus-5-5-medium`; distinct `TEST_DB_NAME` each.
 ### Phase PV2-2C — Backend: role-scoped tool catalog + audience-aware persona guidance
 **Date:** 2026-09-23  
 **Worker Role:** backend-worker  
-**Recommended Model:** Cursor `claude-opus-5-5-medium`  
-**Status:** READY (1A DONE) — dispatched 2026-09-23 00:58  
+**Recommended Model:** inherit Master (Task may only list composer — omit model)  
+**Status:** DONE — 2026-09-23 01:15 Master audit (11/11 new; 193 passed / 12 xfail; import boundary 9; antipatterns GATE PASSED; two offline bank runs identical: turns_passed 8, over_budget 82, llm p50/max **2/2**, router 0.917, slot 1.0). Foreground-only meter killed auto_memory flakiness. F-LIVE-6 closed offline (catalog + IdentityBlock + 403 twin-retry). Live payroll re-check batched for morning.  
 **Owner Master:** Pulse  
 **Evidence:** F-LIVE-6 root cause in `docs/pulse/evidence/PV2-baseline-2026-09-22.md` §3 — an employee was steered to `list_payslip_lines` (HR API, host 403) because the persona prompt says "You have full read access … using list_payslip_lines" and the catalog is not filtered by role.
 
@@ -3008,8 +3008,8 @@ cd /home/ahmed/ws/carbon && python3 .ai-toolkit/scripts/import-boundary-lint.py 
 ### Phase PV2-2A — Backend: IdentityBlock + ContextPack for every chat-turn LLM stage
 **Date:** 2026-09-23  
 **Worker Role:** backend-worker  
-**Recommended Model:** Cursor `claude-opus-5-5-medium`  
-**Status:** PLANNED (READY when PV2-2C is DONE)  
+**Recommended Model:** inherit Master  
+**Status:** READY (2C DONE) — dispatched 2026-09-23 01:16  
 **Owner Master:** Pulse
 
 #### Objective
