@@ -335,7 +335,16 @@ class Settings(BaseSettings):
     _EXPENSIVE_MODEL_MARKERS = (
         "opus", "gpt-5", "gpt-4.5", "o1-", "o1 ", "claude-sonnet-4",
         "claude-3-opus", "claude-opus",
+        # Mid/high tiers that must never be silent defaults (override via
+        # PULSE_ALLOW_EXPENSIVE_MODELS=true). ``gpt-4o-mini`` is excluded below.
+        "claude-3-5-sonnet", "claude-3.5-sonnet", "claude-sonnet-4.6",
+        "claude-sonnet-4.5",
     )
+    # Exact / suffix matches for models whose cheap cousins share a prefix
+    # (e.g. gpt-4o vs gpt-4o-mini). Checked after substring markers.
+    _EXPENSIVE_MODEL_EXACT = frozenset({
+        "gpt-4o", "openai/gpt-4o", "chatgpt-4o-latest",
+    })
     # Models retired/disabled on the provider (return 500 non_owner_disabled).
     # Matched case-insensitively as substrings; auto-healed to the cheap
     # fallback so a stale production .env can never 500 the whole service.
@@ -396,8 +405,17 @@ class Settings(BaseSettings):
         log = logging.getLogger("pulse.config")
         for field in self._MODEL_FIELDS:
             value = getattr(self, field, "") or ""
-            low = value.lower()
-            if any(marker in low for marker in self._EXPENSIVE_MODEL_MARKERS):
+            low = value.lower().strip()
+            # Never treat mini / flash / haiku cousins as expensive via prefix.
+            if any(tok in low for tok in ("mini", "flash", "haiku", "deepseek")):
+                expensive = False
+            else:
+                expensive = (
+                    any(marker in low for marker in self._EXPENSIVE_MODEL_MARKERS)
+                    or low in self._EXPENSIVE_MODEL_EXACT
+                    or low.rsplit("/", 1)[-1] in self._EXPENSIVE_MODEL_EXACT
+                )
+            if expensive:
                 log.warning(
                     "Cost guardrail: %s=%r is a forbidden expensive model. "
                     "Auto-downgrading to %s. Set PULSE_ALLOW_EXPENSIVE_MODELS=true "

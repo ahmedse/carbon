@@ -174,6 +174,15 @@ def test_intent_handoff_for_arabic_leave():
     assert "ADR" not in str(envelope)
 
 
+def test_chat_ess_write_intent_detects_leave_not_balance():
+    from ai.engine.agent.chat_surface import is_ess_write_intent
+
+    assert is_ess_write_intent("اريد اجازة، ليوم واحد غدا، عادي")
+    assert is_ess_write_intent("I want to request annual leave tomorrow")
+    assert not is_ess_write_intent("what is my leave balance")
+    assert not is_ess_write_intent("hello")
+
+
 def test_leave_handoff_spec():
     spec = handoff_spec_for_api("submit_my_leave")
     assert spec["process"] == "leave.request.lifecycle"

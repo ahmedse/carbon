@@ -823,30 +823,11 @@ def _is_chat_host_write_proposal(original: str, proposal: str) -> bool:
     Leave/loan/attendance "shall I submit?" must not become CALL THE TOOL
     on Chat (ADR-0046 / G2).
     """
-    blob = f"{original or ''}\n{proposal or ''}"
-    if not blob.strip():
-        return False
-    try:
-        from ai.engine.cognition.turn.intent import _is_mutation_request
-    except Exception:  # noqa: BLE001
-        return False
-    if not (
-        _is_mutation_request(original or "")
-        or _is_mutation_request(proposal or "")
-        or _is_mutation_request(blob)
-    ):
-        return False
-    # Narrow to ESS host writes — not every mutation verb (e.g. replan).
-    return bool(
-        re.search(
-            r"\b(?:leave|loan|attendance|vacation|permission)\b"
-            r"|إجاز|اجاز|قرض|استئذان"
-            r"|submit_my_(?:leave|loan|attendance)"
-            r"|تقديم\s*(?:ال)?(?:طلب\s*)?(?:إجاز|اجاز)",
-            blob,
-            re.IGNORECASE,
-        )
-    )
+    from ai.engine.agent.chat_surface import is_ess_write_intent
+
+    return is_ess_write_intent(original or "") or is_ess_write_intent(
+        proposal or ""
+    ) or is_ess_write_intent(f"{original or ''}\n{proposal or ''}")
 
 
 def _apply_consent_resume(conversation_id: str, message: str) -> tuple[str, bool]:

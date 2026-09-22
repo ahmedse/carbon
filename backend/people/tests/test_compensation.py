@@ -17,6 +17,7 @@ from catalog.models import GovernanceEvent
 from people.compensation_service import CompensationService
 from people.models import (
     CompensationComponent,
+    CompensationPlan,
     Employee,
     EmployeeCompensation,
     PersonnelEvent,
@@ -313,3 +314,77 @@ def test_cannot_reveal_other_org_employee(
 
     other = client.get(comp_url(employee_b))
     assert other.status_code == 404
+
+
+# ── Catalog mutate (PATCH / soft-DELETE) ─────────────────────────────────────
+
+COMP_CATALOG_URL = '/carbon-api/people/compensation-components/'
+PLAN_CATALOG_URL = '/carbon-api/people/compensation-plan/'
+
+
+@pytest.mark.django_db
+def test_component_patch_and_soft_delete(auth, create_user, earning_component):
+    client = auth(create_user('comp_cfg_admin', is_superuser=True))
+    detail = f'{COMP_CATALOG_URL}{earning_component.pk}/'
+
+    patch = client.patch(detail, {'name': 'Basic Updated', 'sort_order': 10}, format='json')
+    assert patch.status_code == 200, patch.content
+    assert patch.json()['name'] == 'Basic Updated'
+    earning_component.refresh_from_db()
+    assert earning_component.name == 'Basic Updated'
+    assert earning_component.sort_order == 10
+
+    delete = client.delete(detail)
+    assert delete.status_code == 204
+    earning_component.refresh_from_db()
+    assert earning_component.is_active is False
+
+    listed = client.get(COMP_CATALOG_URL)
+    assert listed.status_code == 200
+    assert all(row['id'] != earning_component.pk for row in listed.json())
+
+
+@pytest.mark.django_db
+def test_component_mutate_admin_only(auth, create_user, create_scoped_role, earning_component):
+    user = create_user('comp_cfg_viewer')
+    create_scoped_role(user, 'viewers_group')
+    client = auth(user)
+    detail = f'{COMP_CATALOG_URL}{earning_component.pk}/'
+    assert client.patch(detail, {'name': 'Nope'}, format='json').status_code == 403
+    assert client.delete(detail).status_code == 403
+
+
+@pytest.mark.django_db
+def test_plan_patch_and_soft_delete(auth, create_user, earning_component):
+    client = auth(create_user('plan_cfg_admin', is_superuser=True))
+    create = client.post(
+        PLAN_CATALOG_URL,
+        {
+            'pay_grade_code': 'G5',
+            'job_family_code': '',
+            'component': earning_component.pk,
+            'amount': '250.000',
+            'currency': 'KWD',
+            'frequency': 'monthly',
+            'effective_start': '2026-01-01',
+            'is_active': True,
+        },
+        format='json',
+    )
+    assert create.status_code == 201, create.content
+    plan_id = create.json()['id']
+    detail = f'{PLAN_CATALOG_URL}{plan_id}/'
+
+    patch = client.patch(detail, {'amount': '300.000', 'pay_grade_code': 'G6'}, format='json')
+    assert patch.status_code == 200, patch.content
+    assert patch.json()['amount'] == '300.000'
+    assert patch.json()['pay_grade_code'] == 'G6'
+
+    delete = client.delete(detail)
+    assert delete.status_code == 204
+    plan = CompensationPlan.objects.get(pk=plan_id)
+    assert plan.is_active is False
+
+    listed = client.get(PLAN_CATALOG_URL)
+    assert listed.status_code == 200
+    assert all(row['id'] != plan_id for row in listed.json())

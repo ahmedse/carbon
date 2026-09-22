@@ -413,6 +413,20 @@ export function createCompensationComponent(data, token) {
   return apiFetch(`${ROOT}compensation-components/`, { method: 'POST', body: data, token });
 }
 
+/** Update a compensation component (admin only). */
+export function updateCompensationComponent(id, data, token) {
+  return apiFetch(`${ROOT}compensation-components/${encodeURIComponent(id)}/`, {
+    method: 'PATCH', body: data, token,
+  });
+}
+
+/** Soft-deactivate a compensation component (admin only). */
+export function deleteCompensationComponent(id, token) {
+  return apiFetch(`${ROOT}compensation-components/${encodeURIComponent(id)}/`, {
+    method: 'DELETE', token,
+  });
+}
+
 /** Compensation plan matrix (config layer above the per-employee ledger). */
 export function fetchCompensationPlan(token, { payGrade, jobFamily } = {}) {
   const params = new URLSearchParams();
@@ -425,6 +439,20 @@ export function fetchCompensationPlan(token, { payGrade, jobFamily } = {}) {
 /** Create a compensation plan row (admin only on the API). */
 export function createCompensationPlan(data, token) {
   return apiFetch(`${ROOT}compensation-plan/`, { method: 'POST', body: data, token });
+}
+
+/** Update a compensation plan row (admin only). */
+export function updateCompensationPlan(id, data, token) {
+  return apiFetch(`${ROOT}compensation-plan/${encodeURIComponent(id)}/`, {
+    method: 'PATCH', body: data, token,
+  });
+}
+
+/** Soft-deactivate a compensation plan row (admin only). */
+export function deleteCompensationPlan(id, token) {
+  return apiFetch(`${ROOT}compensation-plan/${encodeURIComponent(id)}/`, {
+    method: 'DELETE', token,
+  });
 }
 
 /** Single employee. */

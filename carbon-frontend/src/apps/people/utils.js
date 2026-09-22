@@ -137,6 +137,18 @@ export function expiryUrgency(expiryDate) {
   return null;
 }
 
+/** Host SoD code from apiFetch error (`err.data.code` — ADR-0045 / NPS-1). */
+export function sodErrorCode(err) {
+  const code = err?.data?.code || err?.code;
+  if (typeof code === 'string' && code.startsWith('sod_')) return code;
+  return null;
+}
+
+/** True when API refused for separation of duties. */
+export function isSodError(err) {
+  return Boolean(sodErrorCode(err));
+}
+
 /** Total remaining leave balance (entitled - used + carried_forward) across entitlement rows. */
 export function totalLeaveBalance(entitlements) {
   return entitlements.reduce(

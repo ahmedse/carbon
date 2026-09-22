@@ -119,6 +119,31 @@ def is_host_mutation_tool(tool_name: str, tool_args: dict | None) -> bool:
     return api.startswith(("submit_", "create_", "update_", "delete_", "post_", "put_", "patch_"))
 
 
+_ESS_TOPIC_RE = re.compile(
+    r"\b(?:leave|loan|attendance|vacation|permission)\b"
+    r"|إجاز|اجاز|قرض|استئذان"
+    r"|submit_my_(?:leave|loan|attendance)"
+    r"|تقديم\s*(?:ال)?(?:طلب\s*)?(?:إجاز|اجاز)",
+    re.IGNORECASE,
+)
+
+
+def is_ess_write_intent(message: str) -> bool:
+    """True for leave/loan/attendance *submit* asks (not balance reads).
+
+    Used to skip orchestrator fan-out (those turns belong to process_dial /
+    Chat handoff) without blocking other mutation or analytics fan-outs.
+    """
+    text = (message or "").strip()
+    if not text or not _ESS_TOPIC_RE.search(text):
+        return False
+    try:
+        from ai.engine.cognition.turn.intent import _is_mutation_request
+    except Exception:  # noqa: BLE001
+        return False
+    return bool(_is_mutation_request(text))
+
+
 def handoff_spec_for_api(api_name: str | None) -> dict[str, str]:
     api = (api_name or "").strip().lower()
     if api in _API_HANDOFF:

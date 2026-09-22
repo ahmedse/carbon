@@ -121,7 +121,7 @@
   "fieldBodyPlaceholder": "أدخل النص",
   "fieldOrgUnit": "الوحدة التنظيمية",
   "fieldLoanType": "نوع القرض",
-  "fieldLoanTypePlaceholder": "مثال: شخصي، طارئ",
+  "fieldLoanTypePlaceholder": "ابحث عن نوع القرض…",
   "fieldPrincipal": "المبلغ",
   "fieldInterestRate": "سعر الفائدة",
   "fieldTermMonths": "المدة (بالأشهر)",

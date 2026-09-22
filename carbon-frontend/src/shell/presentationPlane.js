@@ -50,7 +50,15 @@ const TOOL_OUTCOME = {
 
 /** Refine call_host_api (and similar) from api_name / path hints. */
 const API_HINTS = [
-  [/leave.?balance|balances/i, 'Leave balance'],
+  // Mutations first — never collapse submit_* into a vague "records" read label.
+  [/submit_my_leave|create_leave_record/i, 'Submit leave request'],
+  [/submit_my_loan/i, 'Submit loan request'],
+  [/submit_my_attendance/i, 'Submit attendance permission'],
+  [/create_employee/i, 'Create employee'],
+  [/update_employee/i, 'Update employee'],
+  [/get_my_leave_balance|leave.?balance/i, 'Leave balance'],
+  [/list_my_leave/i, 'Leave history'],
+  [/list_my_loan/i, 'Loan history'],
   [/leave|vacation|annual/i, 'Leave records'],
   [/loan/i, 'Loan records'],
   [/payroll|salary|gosi/i, 'Payroll records'],

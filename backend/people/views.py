@@ -507,6 +507,32 @@ class CompensationComponentListView(APIView):
         return Response(ser.data, status=status.HTTP_201_CREATED)
 
 
+class CompensationComponentDetailView(APIView):
+    """PATCH / soft-DELETE a compensation component (admin only)."""
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def patch(self, request, pk):
+        if not is_global_admin(request.user):
+            return Response({'detail': 'Admin only.'}, status=status.HTTP_403_FORBIDDEN)
+        obj = get_object_or_404(CompensationComponent, pk=pk)
+        ser = CompensationComponentSerializer(obj, data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        ser.save()
+        return Response(ser.data)
+
+    def delete(self, request, pk):
+        """Soft-deactivate — hard delete would break PROTECT FKs on plan/ledger rows."""
+        if not is_global_admin(request.user):
+            return Response({'detail': 'Admin only.'}, status=status.HTTP_403_FORBIDDEN)
+        obj = get_object_or_404(CompensationComponent, pk=pk)
+        if not obj.is_active:
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        obj.is_active = False
+        obj.save(update_fields=['is_active'])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class CompensationPlanListView(APIView):
     """The compensation matrix (config layer above the per-employee ledger)."""
 
@@ -527,6 +553,31 @@ class CompensationPlanListView(APIView):
         ser.is_valid(raise_exception=True)
         ser.save()
         return Response(ser.data, status=status.HTTP_201_CREATED)
+
+
+class CompensationPlanDetailView(APIView):
+    """PATCH / soft-DELETE a compensation plan row (admin only)."""
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def patch(self, request, pk):
+        if not is_global_admin(request.user):
+            return Response({'detail': 'Admin only.'}, status=status.HTTP_403_FORBIDDEN)
+        obj = get_object_or_404(CompensationPlan, pk=pk)
+        ser = CompensationPlanSerializer(obj, data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        ser.save()
+        return Response(ser.data)
+
+    def delete(self, request, pk):
+        if not is_global_admin(request.user):
+            return Response({'detail': 'Admin only.'}, status=status.HTTP_403_FORBIDDEN)
+        obj = get_object_or_404(CompensationPlan, pk=pk)
+        if not obj.is_active:
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        obj.is_active = False
+        obj.save(update_fields=['is_active'])
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class EmployeeCompensationVerifyView(APIView):

@@ -2364,6 +2364,24 @@ class PlansService:
         )
         run.save()
 
+        # Path B hybrid: pin governed ProcessDefinition when the plan came
+        # from a process dial (leave.request.lifecycle, …) — kill-switch /
+        # preflight / audit read definition_id (explore: pin was missing).
+        if getattr(plan, "source", "") == "process_dial" and getattr(
+            plan, "skill_name", None
+        ):
+            from ai.engine.cognition.plan.process_dial import PROCESS_LEAVE_VERSION
+
+            version = PROCESS_LEAVE_VERSION
+            # Prefer version from submit step metadata when present.
+            for step in plan.steps:
+                meta = (step.tool_args or {}).get("_process") or {}
+                if meta.get("process_version"):
+                    version = str(meta["process_version"])
+                    break
+            run.pin_definition(str(plan.skill_name), version)
+            run.save(update_fields=["definition_id", "definition_version"])
+
         for step in plan.steps:
             RunStep.objects.create(
                 run_id=run_id,

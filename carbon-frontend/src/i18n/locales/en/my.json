@@ -121,7 +121,7 @@
   "fieldBodyPlaceholder": "Enter the body",
   "fieldOrgUnit": "Org Unit",
   "fieldLoanType": "Loan Type",
-  "fieldLoanTypePlaceholder": "e.g. Personal, Emergency",
+  "fieldLoanTypePlaceholder": "Search loan type…",
   "fieldPrincipal": "Amount",
   "fieldInterestRate": "Interest Rate",
   "fieldTermMonths": "Term (months)",

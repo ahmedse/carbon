@@ -22,7 +22,9 @@ import AddIcon from '@mui/icons-material/Add';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import { useTranslation } from 'react-i18next';
 import SystemDialog from '../../../components/SystemDialog';
+import { SearchSelect } from '../../../components/Form';
 import { useAuth } from '../../../auth/AuthContext';
+import { useReferenceOptions } from '../../../hooks/useReferenceOptions';
 import {
   submitLeaveRequest,
   submitLoanRequest,
@@ -191,6 +193,10 @@ function RequestFormSwitch({
   hasBalances,
   leaveDays,
   leaveEndBeforeStart,
+  loanTypeOptions,
+  loanTypeLoading,
+  loanTypeError,
+  loanTypeRetry,
   onAddChange,
   onRemoveChange,
   onUpdateChange,
@@ -279,16 +285,18 @@ function RequestFormSwitch({
     case 'loan_request':
       return (
         <>
-          <TextField
-            size="small"
-            fullWidth
-            required
+          <SearchSelect
             label={t('fieldLoanType')}
-            placeholder={t('fieldLoanTypePlaceholder')}
+            options={loanTypeOptions}
             value={form.loan_type}
-            onChange={(e) => setField('loan_type', e.target.value)}
-            error={Boolean(errors.loan_type)}
-            helperText={errors.loan_type}
+            onChange={(v) => setField('loan_type', v?.value ?? '')}
+            loading={loanTypeLoading}
+            error={errors.loan_type || loanTypeError}
+            helperText={errors.loan_type || undefined}
+            onRetry={loanTypeRetry}
+            required
+            clearable={false}
+            placeholder={t('fieldLoanTypePlaceholder')}
           />
           <TextField
             size="small"
@@ -447,6 +455,10 @@ RequestFormSwitch.propTypes = {
   hasBalances: PropTypes.bool.isRequired,
   leaveDays: PropTypes.number,
   leaveEndBeforeStart: PropTypes.bool.isRequired,
+  loanTypeOptions: PropTypes.array,
+  loanTypeLoading: PropTypes.bool,
+  loanTypeError: PropTypes.string,
+  loanTypeRetry: PropTypes.func,
   onAddChange: PropTypes.func.isRequired,
   onRemoveChange: PropTypes.func.isRequired,
   onUpdateChange: PropTypes.func.isRequired,
@@ -454,6 +466,10 @@ RequestFormSwitch.propTypes = {
 
 RequestFormSwitch.defaultProps = {
   leaveDays: null,
+  loanTypeOptions: [],
+  loanTypeLoading: false,
+  loanTypeError: null,
+  loanTypeRetry: undefined,
 };
 
 // ── Main dialog ────────────────────────────────────────────────────────
@@ -461,6 +477,7 @@ RequestFormSwitch.defaultProps = {
 export default function NewRequestDialog({ open, onClose, profile, balances, onSubmitted }) {
   const { t } = useTranslation('my');
   const { token } = useAuth();
+  const loanTypeRef = useReferenceOptions('loan_type');
 
   const [requestType, setRequestType] = useState('');
   const [form, setForm] = useState(makeInitialForm);
@@ -747,6 +764,10 @@ export default function NewRequestDialog({ open, onClose, profile, balances, onS
           hasBalances={hasBalances}
           leaveDays={leaveDays}
           leaveEndBeforeStart={leaveEndBeforeStart}
+          loanTypeOptions={loanTypeRef.options}
+          loanTypeLoading={loanTypeRef.loading}
+          loanTypeError={loanTypeRef.error}
+          loanTypeRetry={loanTypeRef.refetch}
           onAddChange={addChange}
           onRemoveChange={removeChange}
           onUpdateChange={updateChange}

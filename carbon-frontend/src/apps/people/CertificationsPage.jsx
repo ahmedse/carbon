@@ -1,14 +1,13 @@
 // src/apps/people/CertificationsPage.jsx
-// People & Payroll — Certifications (full CRUD): create, read, update, delete.
-// All colours via theme tokens; apiFetch only; SystemDialog for the form.
+// People & Payroll — Certifications (full CRUD) with expiry urgency (NSR-6A).
+// Sorted expired → soonest; Status chip; SearchSelect pickers; ConfirmDialog delete.
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
-  Autocomplete,
+  Box,
   Button,
   IconButton,
-  MenuItem,
   Paper,
   Snackbar,
   Stack,
@@ -20,6 +19,7 @@ import {
   TableRow,
   TextField,
   Tooltip,
+  Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -32,6 +32,8 @@ import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
 import ErrorAlert from '../../components/Page/ErrorAlert';
 import EmptyState from '../../components/Page/EmptyState';
 import SystemDialog from '../../components/SystemDialog';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import { SearchSelect } from '../../components/Form';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useReferenceOptions } from '../../hooks/useReferenceOptions';
 import { useAuth } from '../../auth/AuthContext';
@@ -42,7 +44,15 @@ import {
   updateCertification,
   deleteCertification,
 } from '../../api/people';
-import { buildEmployeeLabels, formatDate, refCode, refLabel } from './utils';
+import CertExpiryChip, { CertExpiryLegend } from './components/CertExpiryChip';
+import {
+  buildEmployeeLabels,
+  daysUntilExpiry,
+  expiryUrgency,
+  formatDate,
+  refCode,
+  refLabel,
+} from './utils';
 
 const EMPTY_FORM = {
   employee: '',
@@ -70,6 +80,8 @@ export default function CertificationsPage() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -79,8 +91,12 @@ export default function CertificationsPage() {
         fetchCertifications(token),
         fetchEmployees(token),
       ]);
-      const certificationList = Array.isArray(certificationsData) ? certificationsData : certificationsData?.results || [];
-      const employeeList = Array.isArray(employeesData) ? employeesData : employeesData?.results || [];
+      const certificationList = Array.isArray(certificationsData)
+        ? certificationsData
+        : certificationsData?.results || [];
+      const employeeList = Array.isArray(employeesData)
+        ? employeesData
+        : employeesData?.results || [];
       setCertifications(certificationList);
       setEmployees(employeeList);
       setEmployeeLabels(buildEmployeeLabels(employeeList));
@@ -94,6 +110,23 @@ export default function CertificationsPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const sortedCertifications = useMemo(() => {
+    return [...certifications].sort((a, b) => {
+      const da = daysUntilExpiry(a.expiry_date) ?? Infinity;
+      const db = daysUntilExpiry(b.expiry_date) ?? Infinity;
+      return da - db;
+    });
+  }, [certifications]);
+
+  const employeeOptions = useMemo(
+    () =>
+      employees.map((employee) => ({
+        value: employee.id,
+        label: `${employee.employee_no ?? '—'} — ${employee.full_name ?? ''}`,
+      })),
+    [employees],
+  );
 
   const employeeName = (id) => employeeLabels[id] ?? id ?? '—';
 
@@ -117,8 +150,12 @@ export default function CertificationsPage() {
       employee: certification.employee ?? '',
       cert_type: refCode(certification.cert_type),
       number: certification.number ?? '',
-      issued_date: certification.issued_date ? String(certification.issued_date).slice(0, 10) : '',
-      expiry_date: certification.expiry_date ? String(certification.expiry_date).slice(0, 10) : '',
+      issued_date: certification.issued_date
+        ? String(certification.issued_date).slice(0, 10)
+        : '',
+      expiry_date: certification.expiry_date
+        ? String(certification.expiry_date).slice(0, 10)
+        : '',
       notes: certification.notes ?? '',
     });
     setOpenDialog(true);
@@ -168,14 +205,18 @@ export default function CertificationsPage() {
     }
   };
 
-  const handleDelete = async (certification) => {
-    if (!window.confirm(t('certificationDeleteConfirm'))) return;
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
     try {
-      await deleteCertification(certification.id, token);
+      await deleteCertification(deleteTarget.id, token);
+      setDeleteTarget(null);
       setSnackbar({ open: true, message: t('certificationDeleted'), severity: 'success' });
       await loadData();
     } catch (err) {
       showError(err);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -208,45 +249,78 @@ export default function CertificationsPage() {
           onAction={openCreate}
         />
       ) : (
-        <TableContainer component={Paper} variant="outlined">
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colEmployee')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colCertType')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colCertNumber')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colIssuedDate')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colExpiryDate')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colNotes')}</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colActions')}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {certifications.map((certification) => (
-                <TableRow key={certification.id} hover>
-                  <TableCell>{employeeName(certification.employee)}</TableCell>
-                  <TableCell>{refLabel(certification.cert_type) || refCode(certification.cert_type) || '—'}</TableCell>
-                  <TableCell>{certification.number ?? '—'}</TableCell>
-                  <TableCell>{formatDate(certification.issued_date)}</TableCell>
-                  <TableCell>{formatDate(certification.expiry_date)}</TableCell>
-                  <TableCell>{certification.notes || '—'}</TableCell>
-                  <TableCell align="right">
-                    <Tooltip title={t('actionEditCertification')}>
-                      <IconButton size="small" onClick={() => openEdit(certification)} sx={{ color: 'primary.main' }}>
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title={t('actionDeleteCertification')}>
-                      <IconButton size="small" onClick={() => handleDelete(certification)} sx={{ color: 'error.main' }}>
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </TableCell>
+        <Box>
+          <TableContainer component={Paper} variant="outlined">
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colEmployee')}</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colCertType')}</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colCertNumber')}</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colIssuedDate')}</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colExpiryDate')}</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colStatus')}</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colNotes')}</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colActions')}</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              </TableHead>
+              <TableBody>
+                {sortedCertifications.map((certification) => {
+                  const urg = expiryUrgency(certification.expiry_date);
+                  const isUrgent = urg === 'expired' || urg === 'critical';
+                  return (
+                    <TableRow
+                      key={certification.id}
+                      hover
+                      sx={{ bgcolor: isUrgent ? 'error.50' : undefined }}
+                    >
+                      <TableCell>{employeeName(certification.employee)}</TableCell>
+                      <TableCell>
+                        {refLabel(certification.cert_type) || refCode(certification.cert_type) || '—'}
+                      </TableCell>
+                      <TableCell>{certification.number ?? '—'}</TableCell>
+                      <TableCell>{formatDate(certification.issued_date)}</TableCell>
+                      <TableCell>
+                        {certification.expiry_date ? (
+                          formatDate(certification.expiry_date)
+                        ) : (
+                          <Typography component="span" variant="body2" color="text.disabled">
+                            {t('certsTabNoExpiry')}
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <CertExpiryChip expiryDate={certification.expiry_date} />
+                      </TableCell>
+                      <TableCell>{certification.notes || '—'}</TableCell>
+                      <TableCell align="right">
+                        <Tooltip title={t('actionEditCertification')}>
+                          <IconButton
+                            size="small"
+                            onClick={() => openEdit(certification)}
+                            sx={{ color: 'primary.main' }}
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title={t('actionDeleteCertification')}>
+                          <IconButton
+                            size="small"
+                            onClick={() => setDeleteTarget(certification)}
+                            sx={{ color: 'error.main' }}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          <CertExpiryLegend />
+        </Box>
       )}
 
       <SystemDialog
@@ -262,32 +336,24 @@ export default function CertificationsPage() {
         }
       >
         <Stack spacing={2}>
-          <TextField
-            select
+          <SearchSelect
             label={t('colEmployee')}
-            name="employee"
+            options={employeeOptions}
             value={form.employee}
-            onChange={handleChange}
-            fullWidth
+            onChange={(v) => setForm((prev) => ({ ...prev, employee: v?.value ?? '' }))}
             required
-          >
-            <MenuItem value="" disabled>{t('colEmployee')}</MenuItem>
-            {employees.map((employee) => (
-              <MenuItem key={employee.id} value={employee.id}>
-                {employee.employee_no ?? '—'} — {employee.full_name ?? ''}
-              </MenuItem>
-            ))}
-          </TextField>
-          <Autocomplete
-            size="small"
+            clearable={false}
+          />
+          <SearchSelect
+            label={t('colCertType')}
             options={certTypeRef.options}
-            value={certTypeRef.options.find((o) => o.value === form.cert_type) || null}
-            onChange={(e, v) => setForm((prev) => ({ ...prev, cert_type: v ? v.value : '' }))}
-            getOptionLabel={(o) => o.label}
-            isOptionEqualToValue={(a, b) => a.value === b.value}
-            renderInput={(params) => (
-              <TextField {...params} label={t('colCertType')} required />
-            )}
+            value={form.cert_type}
+            onChange={(v) => setForm((prev) => ({ ...prev, cert_type: v?.value ?? '' }))}
+            loading={certTypeRef.loading}
+            error={certTypeRef.error}
+            onRetry={certTypeRef.refetch}
+            required
+            clearable={false}
           />
           <TextField
             label={t('colCertNumber')}
@@ -328,6 +394,17 @@ export default function CertificationsPage() {
           />
         </Stack>
       </SystemDialog>
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title={t('certificationDeleteTitle')}
+        message={t('certificationDeleteConfirm')}
+        confirmLabel={tCommon('delete')}
+        cancelLabel={tCommon('cancel')}
+        destructive
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
 
       <Snackbar
         open={snackbar.open}

@@ -53,7 +53,7 @@ import {
   orgUnitOptionLabel,
   prepareOrgUnitsForPicker,
 } from '../../api/orgUnits';
-import { formatDate, statusColor, statusLabelKey } from './utils';
+import { formatDate, statusColor, statusLabelKey, isSodError, sodErrorCode } from './utils';
 
 const ACTION_FUNCS = {
   compute: computePayrollRun,
@@ -81,6 +81,14 @@ function isLedgerMissingError(err) {
     || msg.includes('no verified monthly')
     || (msg.includes('compensation ledger') && msg.includes('basic'))
   );
+}
+
+/** Map host SoD codes to i18n detail keys (ADR-0045). */
+function sodDetailKey(code) {
+  if (code === 'sod_same_actor') return 'payrollSodSameActorDetail';
+  if (code === 'sod_missing_preparer') return 'payrollSodMissingPreparerDetail';
+  if (code === 'sod_missing_actor') return 'payrollSodMissingActorDetail';
+  return 'payrollSodGenericDetail';
 }
 
 export default function PayrollRunsPage() {
@@ -233,7 +241,13 @@ export default function PayrollRunsPage() {
         .then(() => loadData())
         .catch((err) => {
           const apiMsg = err?.message || err?.feedback?.title || err?.detail || t('actionError');
-          if (action === 'compute' && isLedgerMissingError(err)) {
+          if (isSodError(err)) {
+            setActionError({
+              title: t('payrollSodTitle'),
+              detail: t(sodDetailKey(sodErrorCode(err))),
+              apiMsg,
+            });
+          } else if (action === 'compute' && isLedgerMissingError(err)) {
             setActionError({
               title: t('payrollLedgerMissingTitle'),
               detail: t('payrollLedgerMissingDetail'),

@@ -932,6 +932,31 @@ class SkillAwarePlanner:
                 )],
             )
 
+        # ── Path B hybrid: personal leave → process dial spine ───────────
+        # Process owns DAG (leave.request.lifecycle prefix); write_slots own
+        # codes/dates; LLM must not invent a freeform leave topology.
+        try:
+            from asgiref.sync import sync_to_async
+
+            from ai.engine.cognition.plan.process_dial import (
+                is_personal_leave_brief,
+                materialize_leave_request_plan,
+            )
+
+            if is_personal_leave_brief(utterance):
+                plan = await sync_to_async(
+                    materialize_leave_request_plan, thread_sensitive=True,
+                )(utterance)
+                logger.info(
+                    "SkillAwarePlanner: process_dial leave (%d steps)",
+                    len(plan.steps),
+                )
+                return plan
+        except Exception:
+            logger.exception(
+                "process_dial leave materialization failed — falling through"
+            )
+
         # "I need a task / create a task" → Chat owns plan_task (PLAN FIRST).
         # Never hot-path a loosely matched skill (e.g. payroll variance) into
         # invoke_skill and fail the turn.

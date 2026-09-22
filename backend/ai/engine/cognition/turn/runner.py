@@ -3682,6 +3682,20 @@ class TurnPipelineRunner:
 
         settings = get_settings()
 
+        # Balanced budget gate: skip orchestrator only for clear ESS host
+        # writes (leave/loan/attendance) — process_dial / Chat handoff own
+        # those. Other mutations and analytics still get a fan-out decision.
+        try:
+            from ai.engine.agent.chat_surface import is_ess_write_intent
+
+            if is_ess_write_intent(user_message or ""):
+                logger.debug(
+                    "TurnPipelineRunner: skip fan-out for ESS write intent"
+                )
+                return None
+        except Exception:  # noqa: BLE001 — never block the turn
+            pass
+
         # Look up orchestrator agent
         registry = AgentRegistry(self.db)
         await registry.seed_defaults(instance_id)

@@ -1,6 +1,6 @@
 // src/apps/people/CompensationConfigPanel.jsx
 // Compensation components + plan matrix admin for People Config (NSR-5B).
-// API supports POST create only (no PATCH/detail) — create + list UI.
+// Full CRUD: create / PATCH / soft-DELETE (deactivate).
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -9,30 +9,39 @@ import {
   Button,
   Chip,
   FormControlLabel,
+  IconButton,
   MenuItem,
   Snackbar,
   Stack,
   Switch,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import { useTranslation } from 'react-i18next';
 import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
 import ErrorAlert from '../../components/Page/ErrorAlert';
 import EmptyState from '../../components/Page/EmptyState';
 import SystemDialog from '../../components/SystemDialog';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import StandardDataGrid from '../../components/StandardDataGrid';
+import { SearchSelect } from '../../components/Form';
 import { useAuth } from '../../auth/AuthContext';
 import {
   fetchCompensationComponents,
   createCompensationComponent,
+  updateCompensationComponent,
+  deleteCompensationComponent,
   fetchCompensationPlan,
   createCompensationPlan,
+  updateCompensationPlan,
+  deleteCompensationPlan,
 } from '../../api/people';
 import { formatDate } from './utils';
-import { FONT } from '../../theme/themeTokens';
 
 const DIRECTIONS = ['earning', 'deduction'];
 const FREQUENCIES = ['monthly', 'annual'];
@@ -68,7 +77,7 @@ export default function CompensationConfigPanel() {
   const { t } = useTranslation('people');
   const { t: tCommon } = useTranslation('common');
   const { token, isGlobalAdminFlag } = useAuth();
-  const canCreate = isGlobalAdminFlag === true;
+  const canMutate = isGlobalAdminFlag === true;
 
   const [components, setComponents] = useState([]);
   const [plans, setPlans] = useState([]);
@@ -77,9 +86,13 @@ export default function CompensationConfigPanel() {
 
   const [compDialog, setCompDialog] = useState(false);
   const [planDialog, setPlanDialog] = useState(false);
+  const [editingComp, setEditingComp] = useState(null);
+  const [editingPlan, setEditingPlan] = useState(null);
   const [compForm, setCompForm] = useState({ ...EMPTY_COMPONENT });
   const [planForm, setPlanForm] = useState({ ...EMPTY_PLAN });
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null); // { kind: 'comp'|'plan', row }
+  const [deleting, setDeleting] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   const loadData = useCallback(async () => {
@@ -118,12 +131,49 @@ export default function CompensationConfigPanel() {
   };
 
   const openCompCreate = () => {
+    setEditingComp(null);
     setCompForm({ ...EMPTY_COMPONENT });
     setCompDialog(true);
   };
 
+  const openCompEdit = (row) => {
+    setEditingComp(row);
+    setCompForm({
+      code: row.code || '',
+      name: row.name || '',
+      name_ar: row.name_ar || '',
+      direction: row.direction || 'earning',
+      category: row.category || '',
+      is_eosi_base: Boolean(row.is_eosi_base),
+      is_gosi_base: Boolean(row.is_gosi_base),
+      is_wps_relevant: row.is_wps_relevant !== false,
+      is_taxable: Boolean(row.is_taxable),
+      is_variable: Boolean(row.is_variable),
+      sort_order: String(row.sort_order ?? 100),
+      is_active: row.is_active !== false,
+    });
+    setCompDialog(true);
+  };
+
   const openPlanCreate = () => {
+    setEditingPlan(null);
     setPlanForm({ ...EMPTY_PLAN });
+    setPlanDialog(true);
+  };
+
+  const openPlanEdit = (row) => {
+    setEditingPlan(row);
+    setPlanForm({
+      pay_grade_code: row.pay_grade_code || '',
+      job_family_code: row.job_family_code || '',
+      component: String(row.component ?? ''),
+      amount: row.amount != null ? String(row.amount) : '',
+      currency: row.currency || 'KWD',
+      frequency: row.frequency || 'monthly',
+      effective_start: row.effective_start || '',
+      effective_end: row.effective_end || '',
+      is_active: row.is_active !== false,
+    });
     setPlanDialog(true);
   };
 
@@ -148,8 +198,13 @@ export default function CompensationConfigPanel() {
     };
     setSaving(true);
     try {
-      await createCompensationComponent(payload, token);
+      if (editingComp) {
+        await updateCompensationComponent(editingComp.id, payload, token);
+      } else {
+        await createCompensationComponent(payload, token);
+      }
       setCompDialog(false);
+      setEditingComp(null);
       setSnackbar({ open: true, message: t('compensationComponentSaved'), severity: 'success' });
       await loadData();
     } catch (err) {
@@ -183,8 +238,13 @@ export default function CompensationConfigPanel() {
     };
     setSaving(true);
     try {
-      await createCompensationPlan(payload, token);
+      if (editingPlan) {
+        await updateCompensationPlan(editingPlan.id, payload, token);
+      } else {
+        await createCompensationPlan(payload, token);
+      }
       setPlanDialog(false);
+      setEditingPlan(null);
       setSnackbar({ open: true, message: t('compensationPlanSaved'), severity: 'success' });
       await loadData();
     } catch (err) {
@@ -194,87 +254,163 @@ export default function CompensationConfigPanel() {
     }
   };
 
-  const componentColumns = useMemo(() => [
-    { field: 'code', headerName: t('colCode'), flex: 1, minWidth: 110 },
-    { field: 'name', headerName: t('colName'), flex: 1.4, minWidth: 160 },
-    {
-      field: 'direction',
-      headerName: t('colDirection'),
-      width: 110,
-      renderCell: (p) => (
-        <Chip
-          size="small"
-          color={p.value === 'earning' ? 'success' : 'warning'}
-          variant="outlined"
-          label={t(`compDirection_${p.value}`, { defaultValue: p.value || '—' })}
-        />
-      ),
-    },
-    { field: 'category', headerName: t('colCategory'), width: 120, valueGetter: (v) => v || '—' },
-    {
-      field: 'is_eosi_base',
-      headerName: t('colEosiBase'),
-      width: 100,
-      renderCell: (p) => (p.value ? t('yes') : t('no')),
-    },
-    {
-      field: 'is_gosi_base',
-      headerName: t('colGosiBase'),
-      width: 100,
-      renderCell: (p) => (p.value ? t('yes') : t('no')),
-    },
-    { field: 'sort_order', headerName: t('colSortOrder'), width: 90 },
-  ], [t]);
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    try {
+      if (deleteTarget.kind === 'comp') {
+        await deleteCompensationComponent(deleteTarget.row.id, token);
+        setSnackbar({ open: true, message: t('compensationComponentDeleted'), severity: 'success' });
+      } else {
+        await deleteCompensationPlan(deleteTarget.row.id, token);
+        setSnackbar({ open: true, message: t('compensationPlanDeleted'), severity: 'success' });
+      }
+      setDeleteTarget(null);
+      await loadData();
+    } catch (err) {
+      showError(err);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
-  const planColumns = useMemo(() => [
-    { field: 'pay_grade_code', headerName: t('colPayGrade'), width: 110, valueGetter: (v) => v || '—' },
-    { field: 'job_family_code', headerName: t('colJobFamily'), width: 120, valueGetter: (v) => v || '—' },
-    {
-      field: 'component_code',
-      headerName: t('colComponent'),
-      flex: 1,
-      minWidth: 120,
-      valueGetter: (_v, row) => row.component_code || row.component || '—',
-    },
-    {
-      field: 'amount',
-      headerName: t('colAmount'),
-      width: 110,
-      valueGetter: (_v, row) => `${row.amount ?? '—'} ${row.currency || ''}`.trim(),
-    },
-    {
-      field: 'frequency',
-      headerName: t('colFrequency'),
-      width: 100,
-      valueGetter: (v) => (v ? t(`compFrequency_${v}`, { defaultValue: v }) : '—'),
-    },
-    {
-      field: 'effective_start',
-      headerName: t('colEffectiveFrom'),
-      width: 120,
-      valueGetter: (v) => formatDate(v),
-    },
-    {
-      field: 'effective_end',
-      headerName: t('colEffectiveTo'),
-      width: 120,
-      valueGetter: (v) => formatDate(v),
-    },
-  ], [t]);
+  const componentOptions = useMemo(
+    () => components.map((c) => ({ value: String(c.id), label: `${c.code} — ${c.name}` })),
+    [components],
+  );
+
+  const componentColumns = useMemo(() => {
+    const cols = [
+      { field: 'code', headerName: t('colCode'), flex: 1, minWidth: 110 },
+      { field: 'name', headerName: t('colName'), flex: 1.4, minWidth: 160 },
+      {
+        field: 'direction',
+        headerName: t('colDirection'),
+        width: 110,
+        renderCell: (p) => (
+          <Chip
+            size="small"
+            color={p.value === 'earning' ? 'success' : 'warning'}
+            variant="outlined"
+            label={t(`compDirection_${p.value}`, { defaultValue: p.value || '—' })}
+          />
+        ),
+      },
+      { field: 'category', headerName: t('colCategory'), width: 120, valueGetter: (v) => v || '—' },
+      {
+        field: 'is_eosi_base',
+        headerName: t('colEosiBase'),
+        width: 100,
+        renderCell: (p) => (p.value ? t('yes') : t('no')),
+      },
+      {
+        field: 'is_gosi_base',
+        headerName: t('colGosiBase'),
+        width: 100,
+        renderCell: (p) => (p.value ? t('yes') : t('no')),
+      },
+      { field: 'sort_order', headerName: t('colSortOrder'), width: 90 },
+    ];
+    if (canMutate) {
+      cols.push({
+        field: 'actions',
+        headerName: t('colActions'),
+        width: 90,
+        sortable: false,
+        filterable: false,
+        renderCell: (p) => (
+          <Box sx={{ display: 'flex', gap: 0.25 }}>
+            <Tooltip title={tCommon('edit')}>
+              <IconButton size="small" aria-label={tCommon('edit')} onClick={() => openCompEdit(p.row)} sx={{ color: 'primary.main' }}>
+                <EditIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={tCommon('delete')}>
+              <IconButton size="small" aria-label={tCommon('delete')} onClick={() => setDeleteTarget({ kind: 'comp', row: p.row })} sx={{ color: 'error.main' }}>
+                <DeleteIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        ),
+      });
+    }
+    return cols;
+  }, [t, tCommon, canMutate]);
+
+  const planColumns = useMemo(() => {
+    const cols = [
+      { field: 'pay_grade_code', headerName: t('colPayGrade'), width: 110, valueGetter: (v) => v || '—' },
+      { field: 'job_family_code', headerName: t('colJobFamily'), width: 120, valueGetter: (v) => v || '—' },
+      {
+        field: 'component_code',
+        headerName: t('colComponent'),
+        flex: 1,
+        minWidth: 120,
+        valueGetter: (_v, row) => row.component_code || row.component || '—',
+      },
+      {
+        field: 'amount',
+        headerName: t('colAmount'),
+        width: 110,
+        valueGetter: (_v, row) => `${row.amount ?? '—'} ${row.currency || ''}`.trim(),
+      },
+      {
+        field: 'frequency',
+        headerName: t('colFrequency'),
+        width: 100,
+        valueGetter: (v) => (v ? t(`compFrequency_${v}`, { defaultValue: v }) : '—'),
+      },
+      {
+        field: 'effective_start',
+        headerName: t('colEffectiveFrom'),
+        width: 120,
+        valueGetter: (v) => formatDate(v),
+      },
+      {
+        field: 'effective_end',
+        headerName: t('colEffectiveTo'),
+        width: 120,
+        valueGetter: (v) => formatDate(v),
+      },
+    ];
+    if (canMutate) {
+      cols.push({
+        field: 'actions',
+        headerName: t('colActions'),
+        width: 90,
+        sortable: false,
+        filterable: false,
+        renderCell: (p) => (
+          <Box sx={{ display: 'flex', gap: 0.25 }}>
+            <Tooltip title={tCommon('edit')}>
+              <IconButton size="small" aria-label={tCommon('edit')} onClick={() => openPlanEdit(p.row)} sx={{ color: 'primary.main' }}>
+                <EditIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={tCommon('delete')}>
+              <IconButton size="small" aria-label={tCommon('delete')} onClick={() => setDeleteTarget({ kind: 'plan', row: p.row })} sx={{ color: 'error.main' }}>
+                <DeleteIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        ),
+      });
+    }
+    return cols;
+  }, [t, tCommon, canMutate]);
 
   if (loading) return <LoadingSkeleton variant="table" />;
   if (error) return <ErrorAlert message={error} onRetry={loadData} />;
 
   return (
     <Stack spacing={3}>
-      {/* Components */}
       <Box>
         <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} sx={{ mb: 1 }}>
           <Box>
-            <Typography sx={{ ...FONT.heading }}>{t('compensationComponentsTitle')}</Typography>
-            <Typography sx={{ ...FONT.caption, color: 'text.secondary' }}>{t('compensationComponentsHint')}</Typography>
+            <Typography variant="subtitle1">{t('compensationComponentsTitle')}</Typography>
+            <Typography variant="caption" color="text.secondary">{t('compensationComponentsHint')}</Typography>
           </Box>
-          {canCreate && (
+          {canMutate && (
             <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={openCompCreate}>
               {t('actionAddCompensationComponent')}
             </Button>
@@ -285,8 +421,8 @@ export default function CompensationConfigPanel() {
             icon={<AccountBalanceWalletIcon />}
             title={t('compensationComponentsEmpty')}
             description={t('compensationComponentsEmptyDesc')}
-            actionLabel={canCreate ? t('actionAddCompensationComponent') : undefined}
-            onAction={canCreate ? openCompCreate : undefined}
+            actionLabel={canMutate ? t('actionAddCompensationComponent') : undefined}
+            onAction={canMutate ? openCompCreate : undefined}
           />
         ) : (
           <StandardDataGrid
@@ -301,14 +437,13 @@ export default function CompensationConfigPanel() {
         )}
       </Box>
 
-      {/* Plans */}
       <Box>
         <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} sx={{ mb: 1 }}>
           <Box>
-            <Typography sx={{ ...FONT.heading }}>{t('compensationPlanTitle')}</Typography>
-            <Typography sx={{ ...FONT.caption, color: 'text.secondary' }}>{t('compensationPlanHint')}</Typography>
+            <Typography variant="subtitle1">{t('compensationPlanTitle')}</Typography>
+            <Typography variant="caption" color="text.secondary">{t('compensationPlanHint')}</Typography>
           </Box>
-          {canCreate && (
+          {canMutate && (
             <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={openPlanCreate} disabled={components.length === 0}>
               {t('actionAddCompensationPlan')}
             </Button>
@@ -319,8 +454,8 @@ export default function CompensationConfigPanel() {
             icon={<AccountBalanceWalletIcon />}
             title={t('compensationPlanEmpty')}
             description={t('compensationPlanEmptyDesc')}
-            actionLabel={canCreate && components.length > 0 ? t('actionAddCompensationPlan') : undefined}
-            onAction={canCreate && components.length > 0 ? openPlanCreate : undefined}
+            actionLabel={canMutate && components.length > 0 ? t('actionAddCompensationPlan') : undefined}
+            onAction={canMutate && components.length > 0 ? openPlanCreate : undefined}
           />
         ) : (
           <StandardDataGrid
@@ -337,7 +472,7 @@ export default function CompensationConfigPanel() {
 
       <SystemDialog
         open={compDialog}
-        title={t('compensationComponentCreateTitle')}
+        title={editingComp ? t('compensationComponentEditTitle') : t('compensationComponentCreateTitle')}
         onClose={() => setCompDialog(false)}
         onCancel={() => setCompDialog(false)}
         height={520}
@@ -349,7 +484,16 @@ export default function CompensationConfigPanel() {
       >
         <Stack spacing={1.5} sx={{ pt: 0.5 }}>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-            <TextField size="small" fullWidth required name="code" label={t('colCode')} value={compForm.code} onChange={handleCompChange} />
+            <TextField
+              size="small"
+              fullWidth
+              required
+              name="code"
+              label={t('colCode')}
+              value={compForm.code}
+              onChange={handleCompChange}
+              disabled={Boolean(editingComp)}
+            />
             <TextField size="small" fullWidth required select name="direction" label={t('colDirection')} value={compForm.direction} onChange={handleCompChange}>
               {DIRECTIONS.map((d) => (
                 <MenuItem key={d} value={d}>{t(`compDirection_${d}`)}</MenuItem>
@@ -375,7 +519,7 @@ export default function CompensationConfigPanel() {
 
       <SystemDialog
         open={planDialog}
-        title={t('compensationPlanCreateTitle')}
+        title={editingPlan ? t('compensationPlanEditTitle') : t('compensationPlanCreateTitle')}
         onClose={() => setPlanDialog(false)}
         onCancel={() => setPlanDialog(false)}
         height={480}
@@ -386,11 +530,14 @@ export default function CompensationConfigPanel() {
         )}
       >
         <Stack spacing={1.5} sx={{ pt: 0.5 }}>
-          <TextField size="small" fullWidth required select name="component" label={t('colComponent')} value={planForm.component} onChange={handlePlanChange}>
-            {components.map((c) => (
-              <MenuItem key={c.id} value={String(c.id)}>{c.code} — {c.name}</MenuItem>
-            ))}
-          </TextField>
+          <SearchSelect
+            label={t('colComponent')}
+            options={componentOptions}
+            value={planForm.component}
+            onChange={(v) => setPlanForm((prev) => ({ ...prev, component: v?.value ?? '' }))}
+            required
+            clearable={false}
+          />
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
             <TextField size="small" fullWidth name="pay_grade_code" label={t('colPayGrade')} value={planForm.pay_grade_code} onChange={handlePlanChange} />
             <TextField size="small" fullWidth name="job_family_code" label={t('colJobFamily')} value={planForm.job_family_code} onChange={handlePlanChange} />
@@ -433,6 +580,17 @@ export default function CompensationConfigPanel() {
           />
         </Stack>
       </SystemDialog>
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title={deleteTarget?.kind === 'plan' ? t('compensationPlanDeleteTitle') : t('compensationComponentDeleteTitle')}
+        message={deleteTarget?.kind === 'plan' ? t('compensationPlanDeleteConfirm') : t('compensationComponentDeleteConfirm')}
+        confirmLabel={tCommon('delete')}
+        cancelLabel={tCommon('cancel')}
+        destructive
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
 
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar((s) => ({ ...s, open: false }))}>
         <Alert severity={snackbar.severity} variant="filled" onClose={() => setSnackbar((s) => ({ ...s, open: false }))}>
