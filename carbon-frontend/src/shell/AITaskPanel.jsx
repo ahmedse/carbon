@@ -781,8 +781,6 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   // Soft lifecycle defaults: after the user picks a segment for a plan, keep it.
   const segmentOverrideRef = useRef(null);
   const [runHealthOpen, setRunHealthOpen] = useState(false);
-  // Library overflow (Templates / Scheduled): null | 'templates' | 'scheduled'.
-  const [libraryView, setLibraryView] = useState(null);
 
   // Task list + composer
   const [plans, setPlans] = useState([]);
@@ -867,16 +865,6 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       // storage may be unavailable — segment still switches in-memory
     }
   }, [selectedPlan?.id]);
-
-  // Debug: restore classic 6-tab layout without a reload.
-  const switchToClassic = useCallback(() => {
-    try {
-      localStorage.setItem(COCKPIT_KEY, 'off');
-    } catch {
-      // storage may be unavailable — still flips in-memory for this session
-    }
-    setChatFirst(false);
-  }, []);
 
   // W5-D — the workspace activity bar (Monitor 📊 / Results 📦) drives this
   // panel's internal tab. Only external *changes* move the tab, so the RULE_17
@@ -2825,15 +2813,11 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             segment={segment}
             onSegment={(value) => handleSegmentChange(value, { user: true })}
             plan={selectedPlan}
-            header={null}
             toolbar={cockpitToolbar}
             renderPlan={renderCockpitPlan}
             renderRun={renderCockpitRun}
             renderCanvas={renderCockpitCanvas}
             renderOutput={renderCockpitOutput}
-            onOpenTemplates={() => { loadTemplates(); setLibraryView('templates'); }}
-            onOpenScheduled={() => { loadSchedules(); setLibraryView('scheduled'); }}
-            onSwitchToClassic={switchToClassic}
           />
         ) : (
           <AgentStage
@@ -2900,27 +2884,6 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           </Button>
         </>
       )}
-
-      {/* U-1 — Library overflow: Templates / Scheduled demoted from primary nav.
-          Rendered as dialogs over the cockpit; reuse the tab-body renderers. */}
-      <Dialog open={libraryView === 'templates'} onClose={() => setLibraryView(null)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontSize: '0.875rem', fontWeight: 700, py: 1.25, display: 'flex', alignItems: 'center' }}>
-          <Box sx={{ flex: 1 }}>{t('templates')}</Box>
-          <IconButton size="small" aria-label="Close" onClick={() => setLibraryView(null)} sx={{ p: 0.375 }}>
-            <CloseIcon sx={{ fontSize: 16 }} />
-          </IconButton>
-        </DialogTitle>
-        <DialogContent dividers>{renderTemplates()}</DialogContent>
-      </Dialog>
-      <Dialog open={libraryView === 'scheduled'} onClose={() => setLibraryView(null)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontSize: '0.875rem', fontWeight: 700, py: 1.25, display: 'flex', alignItems: 'center' }}>
-          <Box sx={{ flex: 1 }}>{t('scheduled')}</Box>
-          <IconButton size="small" aria-label="Close" onClick={() => setLibraryView(null)} sx={{ p: 0.375 }}>
-            <CloseIcon sx={{ fontSize: 16 }} />
-          </IconButton>
-        </DialogTitle>
-        <DialogContent dividers>{renderScheduled()}</DialogContent>
-      </Dialog>
 
       {/* W3-F — diff-review consent gate + step edit dialog (survive tab switches) */}
       <PlanDiffReviewDialog

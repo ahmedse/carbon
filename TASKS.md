@@ -3075,5 +3075,105 @@ Root cause (Master, PV2-0C): `_try_multi_step_plan` (`runner.py` ≈ 2691) runs 
 
 ---
 
-### Phases PV2-4A … PV2-6A — PLANNED
-P4 Arbiter (shadow → flip, `PULSE_ARBITER=legacy` kill switch), P5 Chat↔Agent continuity, P6 eval gate — specs written by the Pulse Master after W3 numbers exist. Calendar-bound criteria (P4 shadow week, P6 nightly ×5) are marked `SOAKING` until elapsed. Scope and acceptance per `docs/pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md` §5 (P1 ConversationState + tool digests + memory wired · P2 IdentityBlock/ContextPack · P3 deterministic-first + truthful Chat prompt · P4 Arbiter shadow→flip · P5 Chat↔Agent continuity · P6 CI gate G5).
+### Wave W4 (P4) — Arbiter shadow → flip
+```
+W4a  PV2-4A TurnDecision + Arbiter.decide + signal producers (shadow log)     — after W3
+W4b  PV2-4B Flip default to Arbiter; PULSE_ARBITER=legacy kill switch         — after soak evidence
+```
+Calendar: W4a lands code + shadow logging → status **SOAKING** for ≥7 days of disagreement logs before W4b.
+
+### Phase PV2-4A — Backend: Arbiter in shadow mode (C4, A10)
+**Worker Role:** backend-worker · **Model:** inherit Master · **Status:** PLANNED (READY after W3) · **Owner:** Pulse
+
+#### Objective
+Plan §4.1/§5 P4. New `engine/cognition/turn/arbiter.py`: `TurnDecision` enum (`refuse`, `navigate`, `clarify`, `handoff_agent`, `answer`, `tool_answer`, `memory_confirm`, … — extend from PV2-0A `turn_decision` strings already logged) + `Arbiter.decide(signals) -> TurnDecision` with documented precedence: safety/topic refuse > pending memory confirm > explicit process brief > handoff_agent (P3) > navigation > deixis/clarify > intent zone > default answer. Convert early-exit gates in `runner.py` into **signal producers** that always populate `ledger.decision_signals`; in shadow mode (`PULSE_ARBITER=shadow`, default for one release) the runner still executes the **legacy** early-exit path but logs `[arbiter-shadow] legacy=X arbiter=Y agree=bool`. Persist both to `ConversationState.decisions`. Conflict-pair unit tests (same utterance, two gates that used to race). No behavior change when agree=true; when disagree, log only.
+
+**Acceptance:** decision log on 100% turns; shadow disagreement rate reported on offline bank; zero behavior change vs W3 offline metrics (router/llm within noise); `test_pv2_arbiter.py` green; import boundary 9. Status after merge: **SOAKING** until Master posts 7-day shadow summary.
+
+---
+
+### Phase PV2-4B — Backend: Arbiter flip (after soak)
+**Worker Role:** backend-worker · **Model:** inherit Master · **Status:** PLANNED (READY when PV2-4A SOAKING evidence exists) · **Owner:** Pulse
+
+#### Objective
+Default `PULSE_ARBITER=on`; runner executes only Arbiter's decision; `PULSE_ARBITER=legacy` kill switch for one release. Remove duplicate early-exit execution paths (signals remain). Offline router_agreement ≥ 0.98 target or document remaining gaps as explicit exceptions.
+
+**Acceptance:** live + offline gates; kill-switch test; G2 bank still green.
+
+---
+
+### Wave W5 (P5) — Chat ↔ Agent continuity
+```
+W5a  PV2-5A Discovery/Run inherit ConversationState + ContextPack(surface=agent_*)
+W5b  PV2-5B Plan lifecycle → active_plans; Chat plan_status from state (0 LLM)
+W5c  PV2-5C FE: Active-plans chip + Run drawer inherited-context (RULE_23 wording)
+```
+
+### Phase PV2-5A — Backend: Agent inherits Chat state (A1)
+**Worker Role:** backend-worker · **Model:** inherit Master · **Status:** PLANNED (READY after W4a or after W3 if P4 shadowing) · **Owner:** Pulse
+
+#### Objective
+`start_discovery` and `_execute_plan_once` build `ContextPack(surface="agent_discovery"|"agent_plan")` from `ConversationStateStore.load`; brief enriched with slots + last_results digests. Tenancy: state keyed by `(instance_id, conversation_id)`; test isolation. Closes F-LIVE-4 carry-over of slots into Agent.
+
+**Acceptance:** Chat→Agent golden: slots from Chat appear in discovery brief 100%; no re-ask of amount/type; `test_plans.py` + PC-090/091/350 green; import boundary 9.
+
+---
+
+### Phase PV2-5B — Backend: active_plans write-back + Chat plan_status (C9, A8)
+**Worker Role:** backend-worker · **Model:** inherit Master · **Status:** PLANNED (READY after 5A) · **Owner:** Pulse
+
+#### Objective
+Plan lifecycle events (created/paused/completed/failed) update `ConversationState.active_plans`. Chat `plan_status` / "status of my request?" answered from state + `RunStep` rows with **0 LLM calls** when state has an active plan.
+
+**Acceptance:** active_plans reflects lifecycle 100%; plan_status golden 0 LLM; regression green.
+
+---
+
+### Phase PV2-5C — Frontend: continuity widgets
+**Worker Role:** frontend-worker · **Model:** inherit Master or composer for pure UI · **Status:** PLANNED (READY after 5B) · **Owner:** Pulse · **FE seats:** Pulse (+ Nibras for copy review)
+
+#### Objective
+Active-plans chip in Chat; inherited-context panel in Agent Run drawer. RULE_23 outcome wording only. No Chat Confirm for host APIs (ADR-0046). i18n AR/EN.
+
+**Acceptance:** vitest + Playwright smoke; no new host-mutation from Chat UI.
+
+---
+
+### Wave W6 (P6) — Eval gate & hardening
+```
+W6a  PV2-6A Multi-turn bank blocking in CI (G5 Coherence) + llm_calls / latency gates
+W6b  PV2-6B Nightly live Nibras smoke job (emp_1067) — SOAKING ×5 days
+W6c  PV2-6C ADR-0047 Accepted; pulse-intelligence-contract rule; YAML budget revisit
+```
+
+### Phase PV2-6A — QA/CI: multi-turn bank as blocking gate
+**Worker Role:** qa-validator · **Model:** inherit Master · **Status:** PLANNED (READY after W5) · **Owner:** Pulse
+
+#### Objective
+Wire `ai.eval.multiturn.runner` into CI with §3 thresholds (router ≥ 0.90, slot_carry 1.0, llm p50 ≤ 2 after P3, over_budget ≤ 10%). Fix stub-per-LLM-call harness defect (advance stub per *turn*, not per call). Revisit YAML `max_llm_calls` budgets that became wrong after nav-over-fire fix (RULE_28: change budgets with Master-approved evidence, not to hide regressions).
+
+**Acceptance:** CI red on intentional break; green on main; document thresholds in QA bank G5.
+
+---
+
+### Phase PV2-6B — Ops: nightly live smoke — SOAKING
+**Worker Role:** qa-validator · **Model:** inherit Master · **Status:** PLANNED · **Owner:** Pulse
+
+#### Objective
+Scheduled job: 3 ESS journeys Chat→Agent→Approve as `emp_1067` on Nibras dev; assert host rows + IC metrics. Status **SOAKING** until 5 consecutive green nights. STACK-HOLD / COMMS before first run.
+
+**Acceptance:** 5 consecutive greens recorded in evidence/; then flip DONE.
+
+---
+
+### Phase PV2-6C — Docs/rules: ADR-0047 Accepted + intelligence contract rule
+**Worker Role:** docs / Master · **Status:** PLANNED (READY when G5 + soak evidence exist) · **Owner:** Pulse
+
+#### Objective
+ADR-0047 → Accepted; `.cursor/rules/pulse-intelligence-contract.mdc`; canvas + plan doc marked v2 exit criteria met.
+
+**Acceptance:** ADR status Accepted; rule file present; Master close-out in TASK-RESULTS.
+
+---
+
+*End of PV2 phase specs. Calendar-bound phases stay SOAKING until elapsed — never fake a week.*

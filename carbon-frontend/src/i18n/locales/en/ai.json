@@ -80,7 +80,6 @@
   "library": "Library",
   "templates": "Templates",
   "scheduled": "Scheduled",
-  "switchClassic": "Switch to classic view",
   "cockpitView": "Run cockpit view",
   "cockpitPlan": "Plan",
   "cockpitRun": "Run",

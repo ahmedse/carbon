@@ -1,29 +1,18 @@
 // src/shell/AgentCockpit.jsx
 // ADR-0043 — presentational run-cockpit shell: Plan · Run · Canvas · Output
 // (exclusive heroes). Parent owns state/handlers; this is pure layout (RULE_2).
-import React, { useState } from 'react';
+import React from 'react';
 import PropTypes from 'prop-types';
 import {
   Box,
-  Divider,
-  IconButton,
-  ListItemIcon,
-  ListItemText,
-  Menu,
-  MenuItem,
   Stack,
   ToggleButton,
   ToggleButtonGroup,
-  Tooltip,
 } from '@mui/material';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
-import BookmarksOutlinedIcon from '@mui/icons-material/BookmarksOutlined';
-import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
-import ViewColumnOutlinedIcon from '@mui/icons-material/ViewColumnOutlined';
 import { useTranslation } from 'react-i18next';
 
 const SEGMENTS = [
@@ -45,9 +34,6 @@ const SEGMENTS = [
  * @param {function} props.renderCanvas
  * @param {function} props.renderOutput
  * @param {React.ReactNode} [props.toolbar] — segment toolbar under tabs (e.g. Plan chrome)
- * @param {function} [props.onOpenTemplates]
- * @param {function} [props.onOpenScheduled]
- * @param {function} [props.onSwitchToClassic]
  */
 function AgentCockpit({
   segment,
@@ -59,14 +45,8 @@ function AgentCockpit({
   renderCanvas,
   renderOutput,
   toolbar = null,
-  onOpenTemplates,
-  onOpenScheduled,
-  onSwitchToClassic,
 }) {
   const { t } = useTranslation('ai');
-  const [libraryAnchor, setLibraryAnchor] = useState(null);
-  const libraryOpen = Boolean(libraryAnchor);
-  const closeLibrary = () => setLibraryAnchor(null);
 
   const heroTestId = {
     plan: 'agent-cockpit-hero-plan',
@@ -96,40 +76,16 @@ function AgentCockpit({
       data-segment={segment}
       sx={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}
     >
-      <Stack
-        direction="row"
-        alignItems="center"
-        spacing={1}
-        sx={{ px: 1, py: 0.5, borderBottom: 1, borderColor: 'divider' }}
-      >
-        <Box sx={{ flex: 1, minWidth: 0 }}>{header}</Box>
-        <Tooltip title={t('library')}>
-          <IconButton
-            size="small"
-            aria-label={t('library')}
-            aria-haspopup="menu"
-            onClick={(e) => setLibraryAnchor(e.currentTarget)}
-            sx={{ p: 0.375 }}
-          >
-            <MoreVertIcon sx={{ fontSize: 18 }} />
-          </IconButton>
-        </Tooltip>
-        <Menu anchorEl={libraryAnchor} open={libraryOpen} onClose={closeLibrary}>
-          <MenuItem onClick={() => { closeLibrary(); onOpenTemplates?.(); }}>
-            <ListItemIcon><BookmarksOutlinedIcon sx={{ fontSize: 16 }} /></ListItemIcon>
-            <ListItemText primaryTypographyProps={{ fontSize: '0.75rem' }}>{t('templates')}</ListItemText>
-          </MenuItem>
-          <MenuItem onClick={() => { closeLibrary(); onOpenScheduled?.(); }}>
-            <ListItemIcon><ScheduleOutlinedIcon sx={{ fontSize: 16 }} /></ListItemIcon>
-            <ListItemText primaryTypographyProps={{ fontSize: '0.75rem' }}>{t('scheduled')}</ListItemText>
-          </MenuItem>
-          <Divider />
-          <MenuItem onClick={() => { closeLibrary(); onSwitchToClassic?.(); }}>
-            <ListItemIcon><ViewColumnOutlinedIcon sx={{ fontSize: 16 }} /></ListItemIcon>
-            <ListItemText primaryTypographyProps={{ fontSize: '0.75rem' }}>{t('switchClassic')}</ListItemText>
-          </MenuItem>
-        </Menu>
-      </Stack>
+      {header ? (
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={1}
+          sx={{ px: 1, py: 0.5, borderBottom: 1, borderColor: 'divider' }}
+        >
+          <Box sx={{ flex: 1, minWidth: 0 }}>{header}</Box>
+        </Stack>
+      ) : null}
 
       <Box sx={{ px: 1, py: 0.5, borderBottom: 1, borderColor: 'divider' }}>
         <ToggleButtonGroup
@@ -186,9 +142,6 @@ AgentCockpit.propTypes = {
   renderCanvas: PropTypes.func.isRequired,
   renderOutput: PropTypes.func.isRequired,
   toolbar: PropTypes.node,
-  onOpenTemplates: PropTypes.func,
-  onOpenScheduled: PropTypes.func,
-  onSwitchToClassic: PropTypes.func,
 };
 
 export default AgentCockpit;

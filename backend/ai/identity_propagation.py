@@ -95,8 +95,75 @@ def attribution_from_command(command: Any) -> dict[str, Any]:
     }
 
 
+def audience_for_user(user) -> set[str]:
+    """Return Pulse catalog audiences for a Django user (host-side).
+
+    Rules (PV2-2C / least privilege):
+    * ``is_superuser`` / ``is_staff`` → include ``admin`` (and hr/ess so
+      admins see the full catalog).
+    * People HR role/group (``people_lead``, people data-owners/analysts) →
+      include ``hr``.
+    * Linked ``Employee`` only → ``ess``.
+    * Unknown / unlinked → ``ess``.
+    """
+    if user is None:
+        return {"ess"}
+
+    audiences: set[str] = set()
+    if getattr(user, "is_superuser", False) or getattr(user, "is_staff", False):
+        audiences.update({"admin", "hr", "ess"})
+
+    try:
+        from accounts.constants import (
+            PEOPLE_ANALYSTS_GROUP,
+            PEOPLE_DATA_OWNERS_GROUP,
+            PEOPLE_LEAD_GROUP,
+        )
+
+        hr_groups = {
+            PEOPLE_LEAD_GROUP,
+            PEOPLE_DATA_OWNERS_GROUP,
+            PEOPLE_ANALYSTS_GROUP,
+        }
+        group_names: set[str] = set()
+        try:
+            group_names.update(
+                user.groups.values_list("name", flat=True)
+            )
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            from accounts.models import ScopedRole
+
+            group_names.update(
+                ScopedRole.objects.filter(user=user, is_active=True)
+                .values_list("group__name", flat=True)
+            )
+        except Exception:  # noqa: BLE001
+            pass
+        if group_names & hr_groups:
+            audiences.add("hr")
+    except Exception:  # noqa: BLE001
+        pass
+
+    try:
+        # OneToOne related_name on people.Employee.user
+        if getattr(user, "employee_profile", None) is not None:
+            audiences.add("ess")
+        else:
+            from people.models import Employee
+
+            if Employee.objects.filter(user_id=user.pk).exists():
+                audiences.add("ess")
+    except Exception:  # noqa: BLE001
+        pass
+
+    return audiences or {"ess"}
+
+
 __all__ = [
     "attribution_from_command",
+    "audience_for_user",
     "build_actor_chain",
     "new_request_id",
     "resolve_request_id",

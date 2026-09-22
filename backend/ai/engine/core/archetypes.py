@@ -253,13 +253,44 @@ def get_instance_config_path(instance_name: str) -> Path:
     return _PROJECT_ROOT / "instances" / instance_name / "instance.yaml"
 
 
+def validate_catalog_audiences(catalog: list | None) -> list[str]:
+    """Validate ``audience`` tags on api_catalog entries (PV2-2C).
+
+    Re-exported from context_pack so loaders / tests can call the archetypes
+    module without importing cognition internals twice.
+    """
+    from ai.engine.cognition.context_pack import (
+        validate_catalog_audiences as _validate,
+    )
+
+    return _validate(catalog)
+
+
 def load_instance_config(instance_name: str) -> dict[str, Any]:
     """Load and parse an existing instance's YAML config.
 
-    Returns empty dict if not found.
+    Returns empty dict if not found. When ``api_catalog`` declares
+    ``audience`` tags, they are validated against ``{ess, hr, admin}``.
     """
     path = get_instance_config_path(instance_name)
     if not path.exists():
         return {}
     with open(path, "r") as f:
-        return yaml.safe_load(f) or {}
+        config = yaml.safe_load(f) or {}
+    if not isinstance(config, dict):
+        return {}
+    catalog = config.get("api_catalog")
+    if catalog:
+        errors = validate_catalog_audiences(catalog)
+        if errors:
+            raise ValueError(errors[0])
+        # Materialise defaults so downstream consumers see explicit tags.
+        from ai.engine.cognition.context_pack import normalize_catalog_audiences
+
+        config["api_catalog"] = normalize_catalog_audiences(catalog)
+    nav = config.get("navigation_routes")
+    if isinstance(nav, list) and nav:
+        from ai.engine.cognition.context_pack import normalize_catalog_audiences
+
+        config["navigation_routes"] = normalize_catalog_audiences(nav)
+    return config

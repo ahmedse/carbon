@@ -1,7 +1,7 @@
 // src/shell/__tests__/AgentCockpit.test.jsx
 // ADR-0043 — Plan · Run · Canvas · Output exclusive heroes.
 import React, { useState } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import AgentCockpit, { defaultCockpitSegment, normalizeCockpitSegment } from '../AgentCockpit';
 
@@ -50,34 +50,12 @@ describe('AgentCockpit — segmented control', () => {
   });
 });
 
-describe('AgentCockpit — Library overflow', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('exposes Templates, Scheduled and classic-view and fires their callbacks', () => {
-    const onOpenTemplates = vi.fn();
-    const onOpenScheduled = vi.fn();
-    const onSwitchToClassic = vi.fn();
-    render(
-      <Harness
-        onOpenTemplates={onOpenTemplates}
-        onOpenScheduled={onOpenScheduled}
-        onSwitchToClassic={onSwitchToClassic}
-      />,
-    );
-
+describe('AgentCockpit — no library overflow', () => {
+  it('does not render Library / Templates / Scheduled controls', () => {
+    render(<Harness />);
+    expect(screen.queryByRole('button', { name: 'Library' })).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'Templates' })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Library' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Templates' }));
-    expect(onOpenTemplates).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Library' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Scheduled' }));
-    expect(onOpenScheduled).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Library' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Switch to classic view' }));
-    expect(onSwitchToClassic).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('menuitem', { name: 'Scheduled' })).not.toBeInTheDocument();
   });
 });
 

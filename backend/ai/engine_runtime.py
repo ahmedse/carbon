@@ -993,11 +993,15 @@ def _build_chat_user_info(host_user_id: str | None) -> dict | None:
         display_name = (
             getattr(user, "display_name", "") or user.get_full_name() or user.username
         )
+        from ai.identity_propagation import audience_for_user
+
+        audience = sorted(audience_for_user(user))
         return {
             "username": user.username,
             "display_name": display_name,
             "email": user.email or "",
             "roles": roles,
+            "audience": audience,
         }
 
     try:

@@ -237,3 +237,9 @@ Track: PV2-0C live baseline (in-process, no web stack needed)
 Ask: Running `ai.eval.multiturn.runner --live --host-user emp_1067 --no-isolated-db` for 3 scripts against `nibras_dev` with the real LLM key. Writes eval conversations/ledger rows for emp_1067 into the dev DB; Chat mode only, so no host writes (ADR-0046). Web stack is down (no ports) — no STACK-HOLD required. Runner `--live/--host-user/--no-isolated-db` flags added by Master (≈40 lines, `backend/ai/eval/multiturn/runner.py`) after both W0 workers died mid-run at 20:47 on a shared test-DB collision.
 Paths: backend/ai/eval/multiturn/runner.py, docs/pulse/evidence/PV2-baseline-2026-09-22.md (pending)
 Blockers: none
+
+## [2026-09-23T01:00:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-2
+Track: PV2 — W1 (P1) DONE · checkpoint commit 5003073 · W2 started
+Ask: PV2-1A/1B/1C accepted after Master re-ran every gate (195 passed / 12 xfail; import boundary 9; antipatterns pass). Offline bank router 0.781→0.917, llm max 5→3. Local checkpoint commit `5003073` (no push). PV2-2C dispatched (role-scoped api_catalog `audience`, `guidance_by_audience` in nibras instance.yaml, foreground/background LLM accounting). Nibras seat: `instance.yaml` catalog entries gain an `audience` key — additive, loader defaults unmarked to `hr`; no host API changes. P2/P3 specs are in TASKS.md. Live verification batched for the morning (needs user approval card).
+Paths: backend/ai/engine/instances/nibras/instance.yaml, backend/ai/identity_propagation.py, backend/ai/engine/cognition/context_pack.py (new), backend/ai/engine/cognition/turn/{runner,execute}.py
+Blockers: none
