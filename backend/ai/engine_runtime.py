@@ -138,6 +138,13 @@ async def _run_chat(
     # or training-knowledge bypass cannot circumvent the instance's prohibitions.
     guard_refusal = _check_topic_guard(instance_config, message)
     if guard_refusal:
+        state_saved = _persist_topic_guard_refuse(
+            instance_id=instance_id,
+            conversation_id=conversation_id,
+            host_user_id=host_user_id,
+            user_message=message,
+            refusal_text=guard_refusal,
+        )
         return {
             "status": "completed",
             "task_id": task_id,
@@ -147,6 +154,12 @@ async def _run_chat(
                 "pending_actions": [],
                 "tool_trace": [],
                 "intent_zone": "off_limits",
+                "turn_decision": "refuse",
+                "llm_calls": 0,
+                "llm_calls_background": 0,
+                "llm_calls_by_stage": {},
+                "state_saved": state_saved,
+                "state_size": 0,
                 "confidence_label": "confident",
                 "honest_uncertainty": False,
                 "truthfulness_flags": [],
@@ -953,6 +966,13 @@ def _check_topic_guard(instance_config: dict, message: str) -> str | None:
     for pat in patterns:
         try:
             if re.search(pat, msg):
+                from ai.engine.cognition.turn.language import detect_reply_language
+
+                lang = detect_reply_language(msg)
+                if lang == "ar":
+                    ar = (guard.get("refusal_ar") or "").strip()
+                    if ar:
+                        return ar
                 return (guard.get("refusal") or "").strip() or (
                     "That topic is outside my scope. How can I help you with "
                     "People & Payroll instead?"
@@ -960,6 +980,62 @@ def _check_topic_guard(instance_config: dict, message: str) -> str | None:
         except re.error:
             logger.warning("instance_registry: invalid topic_guard pattern %r", pat)
     return None
+
+
+def _persist_topic_guard_refuse(
+    *,
+    instance_id: str,
+    conversation_id: str,
+    host_user_id: str | None,
+    user_message: str,
+    refusal_text: str,
+) -> bool:
+    """Persist ConversationState with decision=refuse for a pre-LLM topic guard.
+
+    PV2-2C obj 6: the early return must still write state (reuse the store).
+    Best-effort — never raises into the chat path.
+    """
+    try:
+        from ai.engine.cognition.state_store import (
+            ConversationState,
+            ConversationStateStore,
+            update_state_from_turn,
+        )
+        from ai.engine.core.database import get_session_factory
+
+        async def _save() -> bool:
+            factory = get_session_factory(instance_id)
+            async with factory() as db:
+                store = ConversationStateStore(db)
+                state = await store.load(
+                    instance_id, conversation_id, host_user_id,
+                )
+                if state is None:
+                    state = ConversationState()
+                state = update_state_from_turn(
+                    state,
+                    decision="refuse",
+                    user_message=user_message,
+                    response_text=refusal_text,
+                    fired_gates=["topic_guard"],
+                    surface="chat",
+                )
+                # Mark zone so dumps show off_limits for the guard path.
+                intent = dict(state.intent or {})
+                intent["zone"] = "off_limits"
+                intent["action"] = "refuse"
+                intent.setdefault("since_turn", state.next_turn() - 1 or 1)
+                state.intent = intent
+                ok = await store.save(
+                    instance_id, conversation_id, host_user_id, state,
+                )
+                await db.commit()
+                return bool(ok)
+
+        return bool(_run_async(_save()))
+    except Exception:  # noqa: BLE001 - never break the refuse path
+        logger.exception("topic_guard ConversationState save failed")
+        return False
 
 
 def _build_chat_user_info(host_user_id: str | None) -> dict | None:
