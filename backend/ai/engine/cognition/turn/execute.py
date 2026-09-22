@@ -23,6 +23,126 @@ logger = logging.getLogger("pulse.cognition.turn.execute")
 # Lazy import — avoids circular dependency with notifier
 broadcast_run_event = None
 
+# Known HR → ESS twin map for self-service retries on host 403 (PV2-2C).
+_MY_API_TWINS: dict[str, str] = {
+    "list_payslip_lines": "list_my_payslips",
+    "list_leave_records": "list_my_leave",
+    "list_leave_entitlements": "list_my_leave",
+    "list_loans": "list_my_loans",
+    "list_loan_installments": "list_my_loans",
+    "list_attendance_permissions": "list_my_attendance_permissions",
+    "get_leave_balance": "get_my_leave_balance",
+}
+
+
+def find_my_api_twin(api_name: str, catalog: list | None) -> str | None:
+    """Return the ``*_my_*`` twin for ``api_name`` when present in ``catalog``."""
+    name = (api_name or "").strip()
+    if not name or "_my_" in name:
+        return None
+    names = {
+        str(e.get("name") or "")
+        for e in (catalog or [])
+        if isinstance(e, dict) and e.get("name")
+    }
+    mapped = _MY_API_TWINS.get(name)
+    if mapped and mapped in names:
+        return mapped
+    # Heuristic: list_foo_bar → list_my_foo_bar / list_my_foos
+    for prefix in ("list_", "get_", "submit_"):
+        if not name.startswith(prefix):
+            continue
+        rest = name[len(prefix):]
+        candidates = [
+            f"{prefix}my_{rest}",
+            f"{prefix}my_{rest.rstrip('s')}",
+        ]
+        if rest.endswith("_lines"):
+            candidates.append(f"{prefix}my_{rest[:-6]}s")
+        if rest.endswith("_records"):
+            candidates.append(f"{prefix}my_{rest[:-8]}")
+        for cand in candidates:
+            if cand in names:
+                return cand
+    return None
+
+
+def own_records_403_message(lang: str, api_name: str = "") -> str:
+    """Honest bilingual message when the host denies an org-wide read."""
+    from ai.engine.cognition.turn.language import detect_reply_language
+
+    # Allow callers to pass a user message as lang when they already detected.
+    code = lang if lang in ("ar", "en") else detect_reply_language(lang or "")
+    if code == "ar":
+        return (
+            "يمكنني فقط قراءة سجلاتك الخاصة — مثل قسائم راتبك عبر "
+            "list_my_payslips، أو إجازاتك وقروضك الذاتية. "
+            "لا أملك صلاحية قوائم الموارد البشرية على مستوى المؤسسة."
+        )
+    return (
+        "I can only read your own records — for example your payslips via "
+        "list_my_payslips, or your own leave and loans. "
+        "I don't have access to organisation-wide HR lists."
+    )
+
+
+async def maybe_retry_my_twin_on_403(
+    first: dict,
+    *,
+    args: dict,
+    invoke,
+    instance_config: dict | None,
+    user_message: str = "",
+) -> dict:
+    """On host HTTP 403, retry once with the ``*_my_*`` twin when catalogued.
+
+    Does not weaken consent / ADR-0046 — only catalogued twins, one hop.
+    ``invoke`` is ``async (api_name: str) -> result_dict``.
+    """
+    api_name = str((args or {}).get("api_name") or (args or {}).get("api") or "")
+    catalog = (instance_config or {}).get("api_catalog") or []
+    twin = find_my_api_twin(api_name, catalog)
+    flags = list(first.get("guardrail_flags") or [])
+    from ai.engine.cognition.turn.language import detect_reply_language
+
+    lang = detect_reply_language(user_message or "")
+    if not twin:
+        out = dict(first)
+        out["error"] = own_records_403_message(lang, api_name)
+        out["guardrail_flags"] = flags + ["host_403_no_twin"]
+        return out
+
+    try:
+        repaired = await invoke(twin)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("403 twin-retry invoke failed: %s", exc)
+        out = dict(first)
+        out["error"] = own_records_403_message(lang, api_name)
+        out["guardrail_flags"] = flags + ["host_403_twin_failed"]
+        return out
+
+    if isinstance(repaired, dict) and "status_code" in repaired:
+        try:
+            code = int(repaired.get("status_code"))
+        except (TypeError, ValueError):
+            code = None
+        if code is not None and code >= 400:
+            out = dict(first)
+            out["error"] = own_records_403_message(lang, api_name)
+            out["guardrail_flags"] = flags + ["host_403_twin_denied"]
+            out["result"] = _safe_serialize(repaired)
+            return out
+
+    return {
+        "tool_name": first.get("tool_name") or "call_host_api",
+        "result": _safe_serialize(repaired),
+        "error": None,
+        "latency_ms": first.get("latency_ms") or 0,
+        "guardrail_flags": flags + ["twin_retry", f"twin_retry:{api_name}->{twin}"],
+        "tool_args": {**(args or {}), "api_name": twin},
+    }
+
+
 # Host-injected adapter provider (constructed once in host code). The engine
 # never imports ``ai.adapters``; callers wire it during bootstrap.
 _evidence_store_provider: Callable[[], EvidenceStore] | None = None
@@ -736,7 +856,7 @@ async def _execute_single_tool(
                     _detail = str(result.get("detail") or "").strip()
                 _msg = _detail or f"Host returned HTTP {_code}"
                 logger.warning("Tool %s host HTTP %s: %s", tool_name, _code, _msg[:160])
-                return {
+                _err_payload = {
                     "tool_name": tool_name,
                     "result": _safe_serialize(result),
                     "error": _msg,
@@ -744,6 +864,40 @@ async def _execute_single_tool(
                     "guardrail_flags": guardrail_flags,
                     "tool_args": args,
                 }
+                # PV2-2C: one honest twin-retry on 403 for call_host_api.
+                if (
+                    _code == 403
+                    and tool_name == "call_host_api"
+                    and isinstance(args, dict)
+                    and (args.get("api_name") or args.get("api"))
+                ):
+                    _cfg = (hook_ctx_defaults or {}).get("instance_config") or {}
+                    _user_msg = str(
+                        (hook_ctx_defaults or {}).get("user_message") or ""
+                    )
+
+                    async def _invoke_twin(twin_name: str):
+                        twin_args = {**args, "api_name": twin_name}
+                        return await _invoke(executor_fn, {
+                            **{
+                                k: v for k, v in _call_args.items()
+                                if k in (
+                                    "executor", "instance_id", "conversation_id",
+                                    "instance_config", "knowledge_store",
+                                    "user_message",
+                                )
+                            },
+                            **twin_args,
+                        })
+
+                    return await maybe_retry_my_twin_on_403(
+                        _err_payload,
+                        args=args,
+                        invoke=_invoke_twin,
+                        instance_config=_cfg,
+                        user_message=_user_msg,
+                    )
+                return _err_payload
 
         result_str = _safe_serialize(result)
 

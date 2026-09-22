@@ -1012,20 +1012,21 @@ def _persist_topic_guard_refuse(
                 )
                 if state is None:
                     state = ConversationState()
+                intent = types.SimpleNamespace(
+                    zone="off_limits",
+                    action="refuse",
+                    confidence=1.0,
+                    candidates=[],
+                )
                 state = update_state_from_turn(
                     state,
                     decision="refuse",
                     user_message=user_message,
                     response_text=refusal_text,
                     fired_gates=["topic_guard"],
+                    intent=intent,
                     surface="chat",
                 )
-                # Mark zone so dumps show off_limits for the guard path.
-                intent = dict(state.intent or {})
-                intent["zone"] = "off_limits"
-                intent["action"] = "refuse"
-                intent.setdefault("since_turn", state.next_turn() - 1 or 1)
-                state.intent = intent
                 ok = await store.save(
                     instance_id, conversation_id, host_user_id, state,
                 )

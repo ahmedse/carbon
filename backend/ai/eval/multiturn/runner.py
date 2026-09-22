@@ -138,6 +138,7 @@ class TurnResult:
     expect: Optional["ExpectationBlock"] = None  # the expectation this turn was validated against
     decision: Optional[str] = None
     llm_calls: Optional[int] = None  # None = unmeasured (before PV2-0A); int = measured
+    llm_calls_background: Optional[int] = None  # PV2-2C — auto_memory etc.
     language_detected: str = "en"
     language_ok: bool = True
     reask_violations: list[str] = field(default_factory=list)
@@ -282,6 +283,7 @@ def run_script(
                 reply_content = response.get("content", "")
                 turn_decision = response.get("turn_decision") or "unknown"
                 llm_calls = response.get("llm_calls")  # None if not measured (pre-PV2-0A)
+                llm_calls_background = response.get("llm_calls_background")
                 
                 # Build turn result
                 turn_result = TurnResult(
@@ -290,6 +292,7 @@ def run_script(
                     expect=turn.expect,
                     decision=turn_decision,
                     llm_calls=llm_calls,
+                    llm_calls_background=llm_calls_background,
                     language_detected=detect_language(reply_content),
                 )
                 
@@ -616,6 +619,7 @@ def report_to_json(
                         "turn": i + 1,
                         "decision": t.decision,
                         "llm_calls": t.llm_calls,
+                        "llm_calls_background": t.llm_calls_background,
                         "language": t.language_detected,
                         "passed": t.passed,
                         "fail_reasons": t.fail_reasons,

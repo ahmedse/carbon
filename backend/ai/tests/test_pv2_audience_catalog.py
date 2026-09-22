@@ -14,7 +14,7 @@ from django.contrib.auth.models import Group
 from django.test import override_settings
 
 from ai.engine.core.config import get_settings
-from ai.engine.llm.call_meter import CallMeter, meter_scope, record_call, stage
+from ai.engine.llm.call_meter import meter_scope, record_call, stage
 from ai.store import reset_store
 
 
@@ -211,6 +211,11 @@ def test_nibras_loader_validates_audience_enum():
     cfg = load_instance_config("nibras")
     errors = validate_catalog_audiences(cfg.get("api_catalog") or [])
     assert errors == [], errors
+    # Defaults materialised
+    by_name = {e["name"]: e for e in cfg["api_catalog"] if e.get("name")}
+    assert "ess" in by_name["list_my_payslips"]["audience"]
+    assert "hr" in by_name["list_payslip_lines"]["audience"]
+    assert "ess" not in by_name["list_payslip_lines"]["audience"]
 
 
 @pytest.mark.django_db(transaction=True)
@@ -348,7 +353,7 @@ def test_403_retries_my_twin_once():
 
     calls: list[str] = []
 
-    async def fake_invoke(api_name: str, **kwargs):
+    async def fake_invoke(api_name: str):
         calls.append(api_name)
         if api_name == "list_payslip_lines":
             return {"status_code": 403, "data": {"detail": "Forbidden"}}
@@ -434,9 +439,9 @@ def test_six_stubbed_turns_identical_llm_calls(
 
 @pytest.mark.django_db(transaction=True)
 def test_topic_guard_refuse_saves_conversation_state(django_store, cfg):
-    from ai.engine.cognition.state_store import ConversationStateStore
+    from ai.engine.cognition.state_store import ConversationState
     from ai.engine_runtime import dispatch_task
-    from ai.store import get_store
+    from ai.models import ConversationContextRecord
 
     conv = f"conv-pv2c-guard-{uuid.uuid4().hex[:8]}"
     data = dispatch_task(
@@ -455,9 +460,6 @@ def test_topic_guard_refuse_saves_conversation_state(django_store, cfg):
     result = data.get("result") or {}
     assert result.get("turn_decision") == "refuse" or result.get("intent_zone") == "off_limits"
     assert result.get("state_saved") is True
-
-    from ai.models import ConversationContextRecord
-    from ai.engine.cognition.state_store import ConversationState
 
     row = ConversationContextRecord.objects.get(conversation_id=conv)
     state = ConversationState.from_dict(row.session_json)
