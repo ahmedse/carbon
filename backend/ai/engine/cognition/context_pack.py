@@ -1,11 +1,13 @@
-"""ContextPack + IdentityBlock for every chat-turn LLM stage (PV2-2A).
+"""ContextPack + IdentityBlock for every Chat and Agent LLM stage (PV2-2A/2B).
 
 Engine-only: no Django / host imports. Audience values arrive via
 ``user_info["audience"]`` from the host.
 
-Every ``route_chat`` system prompt in ``turn/**`` must originate from
-``build_context_pack(...).system_prompt()``. Stage-specific wording lives
-only in TaskBlock — never as a stage-local identity prompt (ADR-0047).
+Every ``route_chat`` system prompt in ``turn/**`` and ``plan/**`` must
+originate from ``build_context_pack(...).system_prompt()``. Stage-specific
+wording lives only in TaskBlock — never as a stage-local identity prompt
+(ADR-0047). Agent surfaces use RULE_21 autonomy
+(``AGENT_PLAN_AUTONOMY`` / ``AGENT_DISCOVERY_AUTONOMY``).
 """
 from __future__ import annotations
 
@@ -41,6 +43,11 @@ VALID_STAGES = frozenset({
     "recovery",
     "fanout",
     "fanout_synthesis",
+    # Agent plan / discovery stages (PV2-2B)
+    "decompose",
+    "observe",
+    "plan_synthesis",
+    "discovery_clarify",
 })
 
 # ADR-0046 Chat autonomy (one-liner). Agent surfaces get RULE_21 wording.
@@ -162,6 +169,88 @@ TASK_FANOUT_SYNTHESIS = """TASK — Orchestrator synthesis:
 Synthesize the following worker findings into a single coherent response to the user's
 original request. Do NOT mention workers or internal mechanics — just present the combined
 answer naturally."""
+
+# ── Agent plan / discovery TaskBlocks (PV2-2B) ─────────────────────────────
+
+TASK_DECOMPOSE = """TASK — Plan decompose:
+Decompose the user task into phases and steps. Respond with JSON only — no markdown,
+no code fences, no prose outside the JSON object.
+Available tools, host API catalog names, and registered skills appear in the user
+message — use only those names.
+Each step's intent must describe the action with bound values (amounts, dates,
+leave types, api_name) — never invent free-form identity text for the user or org.
+Mutations stage with consent (RULE_21); never claim a host write already committed."""
+
+TASK_OBSERVE = """TASK — Observe tool result:
+Decide whether the tool result (plus any prior step results) fully answers the
+original question, or whether ONE more read-only tool call is needed.
+Reply with ONLY a JSON object — no prose, no markdown fences:
+{"answer": "final or interim answer text", "needs_followup": false,
+ "followup_tool": null, "followup_args": null}
+Rules:
+- If it fully answers, set needs_followup=false and write the grounded answer.
+- If you need another tool, set needs_followup=true, name a followup_tool from
+  the allowed read-only set in the user message, and set followup_args.
+- Ground the answer ONLY in the given results — never invent data.
+- Pre-consent / step wording uses bound values and catalog confirmation
+  templates only — never invent free-form identity text."""
+
+TASK_PLAN_SYNTHESIS = """TASK — Plan synthesis:
+Combine the step results into one final user-facing response, following the plan's
+synthesis_instruction. Report what completed and what failed honestly.
+Do not claim a host write succeeded unless a step result confirms receipt.
+Do not invent identity, amounts, or dates absent from the step results.
+Keep the reply concise and in the user's language when known."""
+
+TASK_DISCOVERY_CLARIFY = """TASK — Discovery clarify:
+Before proposing a plan, clarify the user's outcome with short focused questions.
+Ask ONE concise question at a time. When you have enough information, complete.
+Scope rules (critical):
+- Only clarify outcomes Agent can plan: reports, board packs, data-quality rules,
+  data workflows, exports.
+- Never map personal leave / vacation / إجازة to DQ rules, approvals, or
+  data-source onboarding. If the user wants personal leave, respond with
+  {"action":"complete"} only if they clearly asked for a leave-compliance
+  REPORT; otherwise keep asking for the report outcome — the host may already
+  have redirected them.
+- Do not ask 'what outcome on the Carbon Data Trust Platform' for trivia, names,
+  or personal HR actions.
+- If the user wants a data-quality rule (validate/check/flag a field, not-null,
+  unique, allowed values, range, regex, format like an email or phone number),
+  you MUST find out exactly WHICH field and table the rule applies to before
+  completing — ask for the specific field/column name (or DataField id) and
+  table. Never complete discovery for a DQ rule while the target field is still
+  unknown.
+Never invent free-form identity text; slot labels come from the brief and
+bound values only."""
+
+TASK_AGENT_PLAN_DRAFT = """TASK — Agent plan step draft:
+Execute the current plan step using the tools and bound args in the user message.
+GROUNDING RULES — follow them exactly:
+- You have tools available. Use them to do real work instead of guessing. When a
+  tool matches the step, call it right away — do not answer in prose instead of
+  using it, and do not say you cannot run/execute tasks.
+- When the user asks you to plan, orchestrate, or run a task (e.g. 'run agent
+  planner', 'plan a data quality audit'), call plan_task IMMEDIATELY with their
+  request as the brief — do not ask for more details first.
+- NEVER claim an action succeeded (e.g. 'rule created') unless a tool result
+  confirms it.
+- The create_dq_rule tool only STAGES a proposal — it returns a confirmation
+  execution. Nothing is written until the user confirms. Tell the user a
+  confirmation button appeared; do NOT say the rule was created.
+- The plan_task tool DRAFTS a plan and returns a plan id in pending_approval; it
+  does not execute anything. After calling it, tell the user the plan id and that
+  it awaits approval in the Tasks panel. Never claim a task ran or completed.
+- If a tool errors, report the error plainly.
+- When the user asks what you can do, use the capability-list tool so the app can
+  attach the matching page links as small buttons under your reply.
+A5 legibility: pre-consent step text must use bound values and bilingual catalog
+confirmation templates — never invent free-form identity text."""
+
+TASK_AGENT_PLAN_REASON = """TASK — Agent plan reasoning step:
+Reason from prior step results to complete this step. No tool calls.
+Do not invent numbers, dates, or identity absent from prior results.
+Do not claim any host write succeeded."""
 
 
 def entry_audience(entry: dict | None) -> tuple[str, ...]:
@@ -585,6 +674,14 @@ def _default_task_for_stage(
         return TASK_FANOUT
     if stage == "fanout_synthesis":
         return TASK_FANOUT_SYNTHESIS
+    if stage == "decompose":
+        return TASK_DECOMPOSE
+    if stage == "observe":
+        return TASK_OBSERVE
+    if stage == "plan_synthesis":
+        return TASK_PLAN_SYNTHESIS
+    if stage == "discovery_clarify":
+        return TASK_DISCOVERY_CLARIFY
     if stage == "draft":
         return TASK_DRAFT
     if stage == "intent":

@@ -1442,6 +1442,8 @@ class ReActLoop:
                     plan, step_results, user_message, system_prompt, step_contexts,
                     instance_id=instance_id,
                     gap_step_ids=sorted(_gap_step_ids),
+                    user_info=user_info,
+                    instance_config=instance_config,
                 )
             host_actions_md = self._host_actions_markdown(step_results)
             if host_actions_md:
@@ -1670,31 +1672,42 @@ class ReActLoop:
             step_tools = None
 
         if step_tools:
-            system_prompt = (
-                f"{system_prompt}\n\n"
-                "GROUNDING RULES — follow them exactly:\n"
-                "- You have tools available. Use them to do real work instead "
-                "of guessing. When a tool matches the user's request, call it "
-                "right away — do not answer in prose instead of using it, and "
-                "do not say you cannot run/execute tasks.\n"
-                "- When the user asks you to plan, orchestrate, or run a task "
-                "(e.g. 'run agent planner', 'plan a data quality audit'), call "
-                "plan_task IMMEDIATELY with their request as the brief — do "
-                "not ask for more details first.\n"
-                "- NEVER claim an action succeeded (e.g. 'rule created') unless "
-                "a tool result confirms it.\n"
-                "- The create_dq_rule tool only STAGES a proposal — it returns "
-                "a confirmation execution. Nothing is written until the user "
-                "confirms. Tell the user a confirmation button appeared; do "
-                "NOT say the rule was created.\n"
-                "- The plan_task tool DRAFTS a plan and returns a plan id in "
-                "pending_approval; it does not execute anything. After calling "
-                "it, tell the user the plan id and that it awaits approval in "
-                "the Tasks panel. Never claim a task ran or completed.\n"
-                "- If a tool errors, report the error plainly.\n"
-                "- When the user asks what you can do, use the capability-list "
-                "tool so the app can attach the matching page links as small "
-                "buttons under your reply."
+            from ai.engine.cognition.context_pack import (
+                TASK_AGENT_PLAN_DRAFT,
+                build_context_pack,
+            )
+            draft_pack = build_context_pack(
+                None,
+                surface="agent_plan",
+                stage="draft",
+                user_info=user_info,
+                instance_config=instance_config,
+                conversation_history=conversation_history,
+                language=str((user_info or {}).get("language") or ""),
+                task_body=TASK_AGENT_PLAN_DRAFT,
+                include_history=False,
+                include_state=False,
+                include_knowledge=False,
+                include_memory=False,
+            )
+        else:
+            from ai.engine.cognition.context_pack import (
+                TASK_AGENT_PLAN_REASON,
+                build_context_pack,
+            )
+            draft_pack = build_context_pack(
+                None,
+                surface="agent_plan",
+                stage="draft",
+                user_info=user_info,
+                instance_config=instance_config,
+                conversation_history=conversation_history,
+                language=str((user_info or {}).get("language") or ""),
+                task_body=TASK_AGENT_PLAN_REASON,
+                include_history=False,
+                include_state=False,
+                include_knowledge=False,
+                include_memory=False,
             )
 
         # Draft
@@ -1702,11 +1715,12 @@ class ReActLoop:
             instance_id=instance_id,
             conversation_id=conversation_id,
             user_message=enriched_prompt,
-            system_prompt=system_prompt,
+            system_prompt="",
             conversation_history=conversation_history,
             instance_config=instance_config,
             user_info=user_info,
             tools=step_tools,
+            pack=draft_pack,
         )
         if prep is not None and prep.model_override:
             _draft_kwargs["model"] = prep.model_override
@@ -1722,6 +1736,14 @@ class ReActLoop:
                 is_mutation=step.is_mutation,
                 dry_run=dry_run,
                 confirmation_token=confirmation_token,
+                instance_id=instance_id,
+                conversation_id=conversation_id,
+                user_message=user_message,
+                user_info=user_info,
+                instance_config=instance_config,
+                conversation_history=conversation_history,
+                language=str((user_info or {}).get("language") or ""),
+                surface="agent_plan",
             )
 
         result = StepResult(
@@ -1824,6 +1846,14 @@ class ReActLoop:
                             is_mutation=step.is_mutation,
                             dry_run=dry_run,
                             confirmation_token=confirmation_token,
+                            instance_id=instance_id,
+                            conversation_id=conversation_id,
+                            user_message=user_message,
+                            user_info=user_info,
+                            instance_config=instance_config,
+                            conversation_history=conversation_history,
+                            language=str((user_info or {}).get("language") or ""),
+                            surface="agent_plan",
                         )
                         result.critic_verdict = critic.verdict
                         result.critic_flags = critic.flags.copy()
@@ -2211,12 +2241,13 @@ class ReActLoop:
                             instance_id=instance_id,
                             conversation_id=conversation_id,
                             user_message=_retry_prompt,
-                            system_prompt=system_prompt,
+                            system_prompt="",
                             conversation_history=conversation_history,
                             instance_config=instance_config,
                             user_info=user_info,
                             tools=step_tools,
                             model=flight_director.escalation_model(),
+                            pack=draft_pack,
                         )
                         _critic2 = await cw.review(
                             draft=_draft2,
@@ -2224,6 +2255,14 @@ class ReActLoop:
                             is_mutation=step.is_mutation,
                             dry_run=dry_run,
                             confirmation_token=confirmation_token,
+                            instance_id=instance_id,
+                            conversation_id=conversation_id,
+                            user_message=user_message,
+                            user_info=user_info,
+                            instance_config=instance_config,
+                            conversation_history=conversation_history,
+                            language=str((user_info or {}).get("language") or ""),
+                            surface="agent_plan",
                         )
                         if _critic2.verdict != "veto":
                             if _step_index_context is not None:
@@ -2348,19 +2387,35 @@ class ReActLoop:
             "- Ground your answer ONLY in the given results — never invent data."
         )
 
+        from ai.engine.cognition.context_pack import build_context_pack
         from ai.engine.llm.call_meter import stage
+
+        observe_pack = build_context_pack(
+            None,
+            surface="agent_plan",
+            stage="observe",
+            user_info=user_info,
+            instance_config=instance_config,
+            conversation_history=conversation_history,
+            language=str((user_info or {}).get("language") or ""),
+            include_history=False,
+            include_state=False,
+            include_knowledge=False,
+            include_memory=False,
+        )
 
         with stage("observe"):
             obs_draft = await dw.draft(
                 instance_id="",
                 conversation_id="",
                 user_message=observation_prompt,
-                system_prompt=system_prompt,
+                system_prompt="",
                 conversation_history=conversation_history,
                 instance_config=instance_config,
                 user_info=user_info,
                 tools=None,
                 model=model,
+                pack=observe_pack,
             )
 
         text = (obs_draft.text or "").strip()
@@ -2985,6 +3040,8 @@ class ReActLoop:
         step_contexts: dict[int, str],
         instance_id: str = "",
         gap_step_ids: list[int] | None = None,
+        user_info: dict | None = None,
+        instance_config: dict | None = None,
     ) -> str:
         """Combine step results into a final response using the plan's synthesis_instruction."""
         if len(step_results) == 1 and plan.source == "single_step" and not gap_step_ids:
@@ -3017,7 +3074,12 @@ class ReActLoop:
 
         # If we have an LLM, use it for synthesis; otherwise concatenate
         if self.llm_client is not None and self.model:
-            return await self._llm_synthesise("\n".join(parts), system_prompt, instance_id=instance_id)
+            return await self._llm_synthesise(
+                "\n".join(parts),
+                instance_id=instance_id,
+                user_info=user_info,
+                instance_config=instance_config,
+            )
         else:
             # Simple concatenation fallback
             texts = [r.draft_text for r in step_results if r.draft_text]
@@ -3041,19 +3103,40 @@ class ReActLoop:
         from ai.engine.core.config import get_settings
         return get_settings().LLM_MODEL
 
-    async def _llm_synthesise(self, synthesis_prompt: str, system_prompt: str, instance_id: str = "") -> str:
-        """Use LLM to synthesise step results."""
+    async def _llm_synthesise(
+        self,
+        synthesis_prompt: str,
+        instance_id: str = "",
+        user_info: dict | None = None,
+        instance_config: dict | None = None,
+    ) -> str:
+        """Use LLM to synthesise step results via ContextPack (PV2-2B)."""
         try:
+            from ai.engine.cognition.context_pack import build_context_pack
             from ai.engine.llm.call_meter import stage
             from ai.engine.llm.router import route_chat
+
+            pack = build_context_pack(
+                None,
+                surface="agent_plan",
+                stage="plan_synthesis",
+                user_info=user_info,
+                instance_config=instance_config,
+                language=str((user_info or {}).get("language") or ""),
+                user_body=synthesis_prompt,
+                include_history=False,
+                include_state=False,
+                include_knowledge=False,
+                include_memory=False,
+            )
             with stage("plan_synthesis"):
                 router_result = await route_chat(
                     task="cognition",
                     instance_id=instance_id,
                     conversation_id=f"plan-synthesise-{instance_id or 'unknown'}",
                     messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": synthesis_prompt},
+                        {"role": "system", "content": pack.system_prompt()},
+                        {"role": "user", "content": pack.user_prompt()},
                     ],
                     temperature=0.3,
                 )

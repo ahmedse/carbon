@@ -135,8 +135,9 @@ def _wants_explicit_task_creation(utterance: str) -> bool:
 # ── LLM decompose prompt (agentic tool format, not SQL) ────────────────────────
 
 _DECOMPOSE_AGENT_PROMPT = """\
-You are an agentic planning assistant. The user asked a task that may need
-multiple tool calls. Decompose it into phases (workflow stages) and steps.
+TASK — Plan decompose (tool catalog + rules):
+The user asked a task that may need multiple tool calls. Decompose it into
+phases (workflow stages) and steps.
 
 Available tools:
 {tools_list}
@@ -228,6 +229,8 @@ Rules:
   the user for the specific field/table before any create_dq_rule step.
   NEVER emit a create_dq_rule step for a deterministic rule without its
   data_table and data_field.
+- Step intents and pre-consent wording must use bound values only — never
+  invent free-form identity text for the user or organisation.
 
 User task: {task}
 """
@@ -1180,6 +1183,7 @@ class SkillAwarePlanner:
         # steps soft-miss (N-AG-LV-01 / SIM-20260919-N10).
         catalog_names: set[str] = set()
         api_catalog: list = []
+        cfg: dict = {}
         host_api_list = "- (none configured for this instance)"
         try:
             from ai.engine_runtime import _instance_config
@@ -1191,6 +1195,7 @@ class SkillAwarePlanner:
                 host_api_list = "\n".join(f"- {n}" for n in sorted(catalog_names))
         except Exception as exc:  # noqa: BLE001 - planning must still run
             logger.warning("api_catalog load failed for plan decompose: %s", exc)
+            cfg = {}
 
         # Only advertise real, registered skills — the LLM must never invent
         # a skill name for invoke_skill (reasoning is the LLM's job, not a
@@ -1209,13 +1214,28 @@ class SkillAwarePlanner:
         )
 
         try:
+            from ai.engine.cognition.context_pack import build_context_pack
+
+            pack = build_context_pack(
+                None,
+                surface="agent_plan",
+                stage="decompose",
+                instance_config=cfg if isinstance(cfg, dict) else None,
+                user_info={"username": user_id} if user_id else None,
+                task_body=prompt,
+                user_message=utterance,
+                include_history=False,
+                include_state=False,
+                include_knowledge=False,
+                include_memory=False,
+            )
             router_result = await route_chat(
                 task="cognition",
                 instance_id=instance_id,
                 conversation_id=f"plan-decompose-{instance_id}",
                 messages=[
-                    {"role": "system", "content": "You are an agentic planning assistant. Respond with JSON only."},
-                    {"role": "user", "content": prompt},
+                    {"role": "system", "content": pack.system_prompt()},
+                    {"role": "user", "content": pack.user_prompt() or utterance},
                 ],
                 temperature=0.1,
             )

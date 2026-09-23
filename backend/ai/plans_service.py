@@ -2449,35 +2449,32 @@ class PlansService:
 
     DISCOVERY_MAX_TURNS = 5
 
-    DISCOVERY_SYSTEM_PROMPT = (
-        "You are Pulse, the planning assistant for the Carbon / EduOS platform. "
-        "Before proposing a plan, you clarify the user's outcome "
-        "with a short series of focused questions. Ask ONE concise question "
-        "at a time. When you have enough information, respond with complete."
-        "\n\n"
-        "Scope rules (critical):\n"
-        "- Only clarify outcomes Agent can plan: reports, board packs, data-quality "
-        "rules, data workflows, exports.\n"
-        "- Never map personal leave / vacation / إجازة to DQ rules, approvals, or "
-        "data-source onboarding. If the user wants personal leave, respond with "
-        '{"action":"complete"} only if they clearly asked for a leave-compliance '
-        "REPORT; otherwise keep asking for the report outcome — the host may "
-        "already have redirected them.\n"
-        "- Do not ask 'what outcome on the Carbon Data Trust Platform' for "
-        "trivia, names, or personal HR actions.\n"
-        "\n"
-        "If the user wants a data-quality rule (validate/check/flag a field, "
-        "not-null, unique, allowed values, range, regex, format like an email "
-        "or phone number), you MUST find out exactly WHICH field and table the "
-        "rule applies to before completing — ask for the specific field/column "
-        "name (or DataField id) and table. Never complete discovery for a DQ "
-        "rule while the target field is still unknown."
-    )
+    def _discovery_prompt(
+        self,
+        brief: str,
+        turns: list,
+        *,
+        user_info: dict | None = None,
+        instance_config: dict | None = None,
+        language: str = "",
+    ) -> list:
+        """Build the chat messages for one discovery round (ContextPack PV2-2B)."""
+        from ai.engine.cognition.context_pack import build_context_pack
 
-    def _discovery_prompt(self, brief: str, turns: list) -> list:
-        """Build the chat messages for one discovery round."""
+        pack = build_context_pack(
+            None,
+            surface="agent_discovery",
+            stage="discovery_clarify",
+            user_info=user_info,
+            instance_config=instance_config,
+            language=language or str((user_info or {}).get("language") or ""),
+            include_history=False,
+            include_state=False,
+            include_knowledge=False,
+            include_memory=False,
+        )
         messages = [
-            {"role": "system", "content": self.DISCOVERY_SYSTEM_PROMPT},
+            {"role": "system", "content": pack.system_prompt()},
             {"role": "user", "content": f"Outcome to plan: {brief}"},
         ]
         for turn in turns:
@@ -2500,7 +2497,7 @@ class PlansService:
         )
         return messages
 
-    def _ask_discovery_llm(self, brief: str, turns: list) -> dict:
+    def _ask_discovery_llm(self, brief: str, turns: list, user=None) -> dict:
         """One discovery round → ``{"action": "ask"|"complete", "question": ...}``.
 
         Routes through ``route_chat`` (lazily imported, mirroring
@@ -2508,6 +2505,11 @@ class PlansService:
         """
         from ai.engine.core.config import get_settings
         from ai.engine.llm.router import route_chat
+        from ai.engine_runtime import _build_chat_user_info
+
+        user_pk = str(getattr(user, "pk", "") or "") if user is not None else ""
+        user_info = _build_chat_user_info(user_pk) if user_pk else None
+        instance_config = _plan_instance_config(user_pk or None)
 
         settings = get_settings()
         result = _run_async(
@@ -2515,7 +2517,12 @@ class PlansService:
                 task="deep",
                 instance_id=PLAN_INSTANCE_ID,
                 conversation_id="discovery",
-                messages=self._discovery_prompt(brief, turns),
+                messages=self._discovery_prompt(
+                    brief,
+                    turns,
+                    user_info=user_info,
+                    instance_config=instance_config,
+                ),
                 model=settings.LLM_MODEL,
                 temperature=0.3,
                 response_format={"type": "json_object"},
@@ -2638,7 +2645,7 @@ class PlansService:
                 "process_dial discovery short-circuit failed — falling through"
             )
 
-        first = self._ask_discovery_llm(brief, [])
+        first = self._ask_discovery_llm(brief, [], user=user)
         turns = [{"question": first["question"], "reply": None}]
 
         run_id = generate_uuid()
@@ -2755,7 +2762,7 @@ class PlansService:
         if len(turns) >= self.DISCOVERY_MAX_TURNS:
             decision = {"action": "complete", "question": None}
         else:
-            decision = self._ask_discovery_llm(brief, turns)
+            decision = self._ask_discovery_llm(brief, turns, user=user)
 
         if decision.get("action") == "complete":
             return self._finalize_discovery_run(user, run, brief, turns)
@@ -3890,11 +3897,9 @@ class PlansService:
         from ai.engine.cognition.turn.draft import DraftWitness
         from ai.engine.cognition.turn.critic import CriticWitness
         from ai.engine.cognition.turn.execute import ExecuteWitness
-        from ai.engine.llm.prompts import build_chat_prompt
         from ai.host_executor import CarbonHostExecutor
         from ai.flight_director import FlightDirector
 
-        config = instance_config or {}
         async with get_session_factory(PLAN_INSTANCE_ID)() as db:
             executor = CarbonHostExecutor(
                 db=db,
@@ -3902,18 +3907,9 @@ class PlansService:
                 user_token=f"inproc:carbon:{user_pk}",
                 host_user_id=user_pk,
             )
-            system_prompt = await build_chat_prompt(
-                instance_name=config.get("display_name", "Carbon"),
-                system_description=config.get("description", ""),
-                user_info=user_info,
-                persona=config.get("persona"),
-                api_catalog=config.get("api_catalog"),
-                navigation_routes=config.get("navigation_routes"),
-                domain_topics=config.get("domain_topics"),
-                instance_config=config,
-                conversation_id=conversation_id,
-                instance_id=PLAN_INSTANCE_ID,
-            )
+            # PV2-2B: Identity + TaskBlock come from ContextPack inside ReActLoop
+            # (surface=agent_plan). Do not build a stage-local persona prompt here.
+            system_prompt = ""
             execute_witness = ExecuteWitness(
                 executor=executor,
                 run_id=str(run.id),

@@ -54,6 +54,7 @@ class CriticWitness:
         conversation_history: list[dict] | None = None,
         language: str = "",
         state=None,
+        surface: str = "chat",
     ) -> CriticVerdict:
         """Review a draft against retrieval evidence and quality rules and deterministic hard gates.
 
@@ -67,6 +68,7 @@ class CriticWitness:
             instance_id: Pulse instance ID (for LLM critic routing)
             conversation_id: Conversation UUID (for LLM critic routing)
             user_message: Original user message (for context in LLM review)
+            surface: ContextPack surface (``chat`` | ``agent_plan`` | …)
         """
         flags: list[str] = []
 
@@ -159,6 +161,7 @@ class CriticWitness:
                 conversation_history=conversation_history,
                 language=language,
                 state=state,
+                surface=surface,
             )
 
         # ── Fallback: rules-only verdict ────────────────────────────────────
@@ -208,6 +211,7 @@ class CriticWitness:
         conversation_history: list[dict] | None = None,
         language: str = "",
         state=None,
+        surface: str = "chat",
     ) -> CriticVerdict:
         """Run LLM-tier plausibility/quality review (advisory)."""
         from ai.engine.cognition.context_pack import build_context_pack
@@ -218,7 +222,7 @@ class CriticWitness:
         )
         pack = build_context_pack(
             state,
-            surface="chat",
+            surface=surface or "chat",
             stage="critic",
             user_info=user_info,
             instance_config=instance_config,

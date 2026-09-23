@@ -58,7 +58,7 @@ evidence → not done.
 | **DTR** (Data Trust / Catalog Index) | **Catalog** | **ACTIVE** | Stewardship nudges + FilteredDataGrid→SearchSelect · DTR-3 = Pulse (other master) |
 | **GradeVance E2E QA** | **EduOS** | **DONE** | Seed 6 runs + LCT report · `docs/eduos/qa-evidence/E2E-SUMMARY.json` |
 | **GradeVance HITL P2** | **EduOS** | **ACTIVE** | Learning loop proven: edit→proposal→accept→bump→repin · `docs/eduos/qa-evidence/HITL-LEARNING-LOOP.json` · next: UI path + Phase C depth |
-| **PV2** (Pulse v2 Intelligence Contract, ADR-0047) | **Pulse** | **ACTIVE** | Plan `docs/pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md` · canvas `pulse-v2-intelligence-objectives` · **P0 DONE 2026-09-23** (baseline `docs/pulse/evidence/PV2-baseline-2026-09-22.md`: live router 0.50–0.625, llm p50 3–5, 8 findings) · P1 dispatching · P2–P6 PLANNED |
+| **PV2** (Pulse v2 Intelligence Contract, ADR-0047) | **Pulse** | **ACTIVE** | Plan docs/pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md · **P0+P1+P2 DONE** · W3 (P3) dispatched · P4–P6 spec\'d (SOAKING rules) |
 
 **Multi-Master:** `.ai-toolkit/shared/multi-master.md` · seats · `docs/ops/MASTERS-COMMS.md` · RULE_30. · **This session seat: Nibras.**
 
@@ -3029,7 +3029,7 @@ cd /home/ahmed/ws/carbon/backend && TEST_DB_NAME=test_nibras_dev_w2a ../.venv/bi
 **Date:** 2026-09-23  
 **Worker Role:** backend-worker  
 **Recommended Model:** Cursor `claude-opus-5-5-medium`  
-**Status:** READY (2A DONE) — dispatching 2026-09-23 09:20  
+**Status:** DONE — 2026-09-23 09:30 Master audit (16 ContextPack; 169 regression; import boundary 9; antipatterns GATE PASSED). W2 (P2) complete.  
 **Owner Master:** Pulse
 
 #### Objective
@@ -3046,7 +3046,7 @@ W3b  PV2-3C discovery: no LLM on scope_route; StateBlock-aware (plans_service.st
 ```
 
 ### Phase PV2-3A — Backend: deterministic-first `process_dial` steps (A2, A4, A9)
-**Worker Role:** backend-worker · **Model:** `claude-opus-5-5-medium` · **Status:** PLANNED (READY after W2) · **Owner:** Pulse
+**Worker Role:** backend-worker · **Model:** inherit Master · **Status:** READY (W2 DONE) — dispatched 2026-09-23 09:30 · **Owner:** Pulse
 
 #### Objective
 Plan §4.4/§5 P3. In `ReActLoop`, a step whose `tool_name == call_host_api` and whose `tool_args` are fully bound from `write_slots` (no `{{…}}` placeholders, all required catalog params present) skips DraftWitness and observe entirely: bind → stage (consent, RULE_21) → commit → deterministic summary. Summaries come from bilingual templates keyed by `api_name` (AR/EN, QA-reviewed strings in `instance.yaml` `step_templates`), rendered from bound values — never LLM prose. The `llm_meter` for such a step must read `llm_calls == 0`. Unbound/partial steps keep today's path. `_INLINE_COMMIT` path in `plans_service.confirm_step` reuses the same template for `run.final_response`.
@@ -3056,7 +3056,7 @@ Plan §4.4/§5 P3. In `ReActLoop`, a step whose `tool_name == call_host_api` and
 ---
 
 ### Phase PV2-3B — Backend: truthful Chat surface — `handoff_agent` decision (C5, F-LIVE-2, F-LIVE-4)
-**Worker Role:** backend-worker · **Model:** `claude-opus-5-5-medium` · **Status:** PLANNED (READY after W2) · **Owner:** Pulse
+**Worker Role:** backend-worker · **Model:** inherit Master · **Status:** READY (W2 DONE) — dispatched 2026-09-23 09:30 · **Owner:** Pulse
 
 #### Objective
 Root cause (Master, PV2-0C): `_try_multi_step_plan` (`runner.py` ≈ 2691) runs a `process_dial` ReActLoop **inside Chat**; the mutation step pauses for consent that Chat can never grant (ADR-0046) and the user sees "I need your approval before I can proceed." Fix: (1) before running the loop in Chat, inspect the plan; if any step is a mutating `call_host_api` (catalog `requires_confirmation` or non-GET), do **not** execute — emit `TurnDecision = handoff_agent` with a deterministic bilingual reply built from the brief + bound slots ("I have: emergency loan, 5,000 SAR, 12 months. To submit it, switch to Agent — I'll carry these details over." / AR equivalent) and persist `intent`/`slots`/`open_question` into `ConversationState` (1A) so P5 can inherit them. Read-only plans still run. (2) `_should_force_action` (`engine_runtime.py:793`) becomes a logged fallback: the Chat grounding block (2A `IdentityBlock` autonomy rules) tells the model it hands off rather than calls write tools; count `force_action_fired` in the ledger; target 0 on the bank. (3) The Chat prompt must never say "CALL THE TOOL" for a write API (grep test on assembled prompt for an ESS write utterance).

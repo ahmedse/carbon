@@ -3780,3 +3780,54 @@ GATE PASSED
 | I3 | Info | Draft task_body still carries full `build_chat_prompt` (persona duplicated with IdentityBlock). | Optional cleanup |
 
 **GATE PASSED** — import boundary 9 · antipatterns green · offline metrics hold vs 2C · 5/5 context-pack tests.
+
+## PV2-2B
+
+**Date:** 2026-09-23  
+**Worker:** backend-worker (Composer)  
+**Status:** GATE PASSED  
+**DB:** `TEST_DB_NAME=test_nibras_dev_w2b`
+
+### Summary
+Same ContextPack builder for Agent LLM stages: `surface=agent_plan|agent_discovery` with RULE_21 autonomy. Plan-stage TaskBlocks (`decompose`, `observe`, `plan_synthesis`, `discovery_clarify`, agent draft/reason) live in `context_pack.py`. Planner decompose, ReActLoop draft/observe/synthesis, and discovery prompts consume `build_context_pack(...).system_prompt()`. A5: TaskBlocks require bound values + catalog confirmation templates — no free-form identity. Chat wiring (2A) untouched.
+
+### Files changed
+| Path | Change |
+|---|---|
+| `backend/ai/engine/cognition/context_pack.py` | Agent stages + TaskBlocks; VALID_STAGES extended |
+| `backend/ai/engine/cognition/plan/planner.py` | `_llm_decompose` → ContextPack `agent_plan`/`decompose` |
+| `backend/ai/engine/cognition/plan/loop.py` | Draft/observe/synthesis + critic via `agent_plan` packs |
+| `backend/ai/engine/cognition/turn/critic.py` | `surface=` kwarg (default `chat`) |
+| `backend/ai/plans_service.py` | Discovery ContextPack; `_execute_plan_once` drops `build_chat_prompt` |
+| `backend/ai/tests/test_pv2_context_pack_plan.py` | NEW — AST for `plan/**` + discovery; runtime pack markers |
+
+### Gate output (literal)
+```
+$ cd backend && ../.venv/bin/python manage.py check
+System check identified no issues (0 silenced).
+
+$ TEST_DB_NAME=test_nibras_dev_w2b ../.venv/bin/python -m pytest ai/tests/test_pv2_context_pack.py ai/tests/test_pv2_context_pack_plan.py -v -p no:cacheprovider
+============================== 16 passed in 3.41s ==============================
+
+$ TEST_DB_NAME=test_nibras_dev_w2b ../.venv/bin/python -m pytest ai/tests/test_plans.py ai/tests/test_pulse_loop.py ai/tests/test_react_consent_boundary.py ai/tests/test_plan_lifecycle.py ai/tests/test_pv2_*.py -q -p no:cacheprovider
+169 passed in 33.74s
+
+$ python3 .ai-toolkit/scripts/import-boundary-lint.py
+Import boundary: 9 violation(s) — engine must only import engine/stdlib/SDK.
+
+$ ./.ai-toolkit/scripts/verify.sh antipatterns
+GATE PASSED
+```
+
+### Deviations
+1. Decompose still passes the catalog/rules blob as `task_body` (override) so host-API coercion rules stay identical; IdentityBlock + RULE_21 come from the pack.
+2. Observation JSON schema remains in the user message (tools list is dynamic); TaskBlock `TASK_OBSERVE` carries the stage contract.
+3. `_execute_plan_once` no longer builds `build_chat_prompt`; loop owns Identity+Task per stage.
+
+### Issues found (not fixed)
+| ID | Severity | Finding | Notes |
+|---|---|---|---|
+| I1 | Info | Deterministic-first bound steps still LLM-draft (P3 / PV2-3A). | Next wave |
+| I2 | Info | Discovery still LLM-asks on known process dials except loan/attendance short-circuit (PV2-3C). | Next wave |
+
+**GATE PASSED** — import boundary 9 · antipatterns green · 16 context-pack tests · 169 regression.
