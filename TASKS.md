@@ -58,7 +58,7 @@ evidence → not done.
 | **DTR** (Data Trust / Catalog Index) | **Catalog** | **ACTIVE** | Stewardship nudges + FilteredDataGrid→SearchSelect · DTR-3 = Pulse (other master) |
 | **GradeVance E2E QA** | **EduOS** | **DONE** | Seed 6 runs + LCT report · `docs/eduos/qa-evidence/E2E-SUMMARY.json` |
 | **GradeVance HITL P2** | **EduOS** | **ACTIVE** | Learning loop proven: edit→proposal→accept→bump→repin · `docs/eduos/qa-evidence/HITL-LEARNING-LOOP.json` · next: UI path + Phase C depth |
-| **PV2** (Pulse v2 Intelligence Contract, ADR-0047) | **Pulse** | **ACTIVE** | P0–P3 + P5 + 6A + C8/C10 0-LLM DONE · 4A SOAKING (flip ≥2026-09-30) · **6B SOAKING 0/5 nights** · 6C after five greens |
+| **PV2** (Pulse v2 Intelligence Contract, ADR-0047) | **Pulse** | **ACTIVE** | P0–P3 + P5 + 6A + C8/C10 + C5 clarify DONE · G5 94/96 · 4A SOAKING (flip ≥2026-09-30) · **6B SOAKING 0/5 nights** · 6C after five greens |
 
 **Multi-Master:** `.ai-toolkit/shared/multi-master.md` · seats · `docs/ops/MASTERS-COMMS.md` · RULE_30. · **This session seat: Nibras.**
 

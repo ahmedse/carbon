@@ -842,6 +842,16 @@ def _should_force_action(message: str, response, ledger) -> bool:
             or is_ess_write_intent(message or "")
         ):
             return False
+        decided = str(getattr(ledger, "turn_decision", "") or "")
+        if decided in {"clarify", "handoff_agent", "refuse", "navigate"}:
+            return False
+        signals = getattr(ledger, "decision_signals", None) or []
+        if any(
+            s.get("fired") and str(s.get("gate") or "").startswith("chat_")
+            for s in signals
+            if isinstance(s, dict)
+        ):
+            return False
         if _staged_or_acted(ledger) or _attempted_mutation(ledger):
             return False
         # Already produced a chat_handoff this turn — do not re-synthesize.

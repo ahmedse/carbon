@@ -303,3 +303,9 @@ Track: PV2 — C8/C10 0-LLM residual DONE
 Ask: Nav/thanks/clock/stated-fact recall/date deixis fire before IntentResolver. G5: router 0.938, slot 1.0, llm p50/max 2, turns 89/96, raw over_budget 0, C10 1.0. Goldens not loosened. 4B still blocked until 2026-09-30. 6B first night still needs STACK-HOLD + approval. 6C waits on five green nights.
 Paths: backend/ai/engine/cognition/turn/{zero_llm.py,memory_recall.py,runner.py,navigation.py}
 Blockers: live 6B night + morning 3-script re-check need approval; 4B soak until 2026-09-30
+
+## [2026-09-23T10:55:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-13
+Track: PV2 — C5 residual DONE (lexical clarify)
+Ask: Incomplete ESS writes clarify at 0 LLM; complete writes still hand off. Force-action fallback no longer replaces a finished Chat decision. G5: router 0.979, turns 94/96, scripts 10/12, C5 1.0. Goldens not loosened. Assurance trees not touched. 4B still blocked until 2026-09-30. 6B live still needs STACK-HOLD + approval.
+Paths: backend/ai/engine/cognition/turn/handoff_agent.py, turn/runner.py, engine_runtime.py
+Blockers: live 6B night + morning 3-script re-check need approval; 4B soak until 2026-09-30

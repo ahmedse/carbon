@@ -196,7 +196,7 @@ def build_chat_write_clarify(
         else:
             text = (
                 f"I understand you want {leave} leave from {start} to {end}. "
-                "Let me confirm those dates."
+                "Let me confirm those dates?"
             )
     else:
         missing = missing_slots_for_chat(api, body)
@@ -374,6 +374,12 @@ def is_ess_write_utterance(text: str) -> bool:
     if not brief:
         return False
     if _PAYROLL_OR_STATUS_ASK_RE.search(brief):
+        return False
+    if re.search(
+        r"\b(?:ignore|disregard|bypass|override|jailbreak)\b|تجاهل|تجاوز",
+        brief,
+        re.IGNORECASE,
+    ):
         return False
     try:
         from ai.engine.cognition.plan.process_dial import (

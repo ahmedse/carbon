@@ -4148,3 +4148,15 @@ Nightly ESS smoke is a real job, not a calendar placeholder. Three journeys (lea
 Thanks, clock, how/where UI, nav, stated-fact recall, and date deixis no longer spend intent+draft. `nav-zero-llm-01` PASS. `memory-learn-fact-01` PASS (C10 = 1.0). `date-awareness-01` PASS. G5 still green: router **0.938**, slot 1.0, llm p50/max 2, turns **89/96**, raw over_budget **19→0**. Remaining 7 misses are decision mismatches (handoff vs answer), not budget. Import boundary 9. Goldens not loosened.
 
 **GATE PASSED** — C8 simple-turn cap held; 0-LLM class closed without hiding misses.
+
+## PV2-C5 residual (lexical clarify)
+
+**Date:** 2026-09-23  
+**Status:** DONE  
+**DB:** `TEST_DB_NAME=test_nibras_dev_master`
+
+Incomplete ESS writes now `clarify` at 0 LLM instead of falling through to draft + force-action generic handoff. Named leave dates bind. Slot-status asks answer from state. Payroll recall is not a loan write. `engine_runtime` force-action no longer overwrites a finished `clarify`/`handoff_agent`. Goldens not loosened.
+
+G5: router **0.979**, slot 1.0, llm p50/max 2, turns **94/96**, scripts **10/12**, C5 **1.0**, raw over_budget 0. Remaining 2 misses are thanks-after-handoff (`handoff_agent` vs `answer`) on loan-ar t7 and plan-status t8 — same policy as chat-handoff t8. Import boundary 9.
+
+**GATE PASSED** — C5 complete-write handoff and incomplete-write clarify now match the contract.
