@@ -134,9 +134,13 @@ def test_leave_balance(workflow, api_client, get_token_for_user):
     assert by_type['annual']['entitled'] == 20
     assert isinstance(by_type['annual']['entitled'], int)
     assert by_type['annual']['remaining'] == 20
+    assert by_type['annual']['remaining_signed'] == 20
+    assert by_type['annual']['overdrawn'] is False
     # No entitlement seeded → entitled/remaining are 0 (never negative).
     assert _dec(by_type['sick']['entitled']) == Decimal('0')
     assert _dec(by_type['sick']['remaining']) == Decimal('0')
+    assert by_type['sick']['remaining_signed'] == 0
+    assert by_type['sick']['overdrawn'] is False
     assert by_type['sick']['entitled'] == 0
 
 

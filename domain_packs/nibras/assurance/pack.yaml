@@ -1,0 +1,30 @@
+id: nibras
+title: Nibras People and Payroll
+brand: nibras
+journeys:
+  - id: J4
+    title: Payroll commit
+  - id: J5
+    title: WPS submit
+  - id: J1
+    title: Leave
+  - id: J8
+    title: Pulse Chat
+blocks_release:
+  - NR-HONEST-01
+  - NR-CALC-01
+  - NR-BAL-01
+  - NR-PAY-01
+  - NR-PAY-02
+  - NR-PAY-03
+  - NR-WPS-01
+  - NR-WPS-02
+  - NR-EOSI-01
+  - NR-LV-04
+  - NR-AI-01
+  - NR-PAY-04
+  - NR-NAT-01
+  - NR-GOSI-01
+  - NR-ONB-01
+  - NR-LOAN-01
+  - NR-360-01

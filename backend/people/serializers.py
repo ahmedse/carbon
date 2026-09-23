@@ -124,13 +124,57 @@ class EmployeeSerializer(serializers.ModelSerializer):
 
 
 class PayrollRunSerializer(serializers.ModelSerializer):
+    preparer_username = serializers.SerializerMethodField()
+    commit_requires_other_user = serializers.SerializerMethodField()
+
     class Meta:
         model = PayrollRun
         fields = [
             'id', 'org_unit', 'period_start', 'period_end', 'status',
             'created_at', 'committed_at',
+            'preparer_username', 'commit_requires_other_user',
         ]
-        read_only_fields = ['id', 'status', 'created_at', 'committed_at']
+        read_only_fields = [
+            'id', 'status', 'created_at', 'committed_at',
+            'preparer_username', 'commit_requires_other_user',
+        ]
+
+    def validate(self, attrs):
+        org_unit = attrs.get('org_unit', getattr(self.instance, 'org_unit', None))
+        period_start = attrs.get(
+            'period_start', getattr(self.instance, 'period_start', None),
+        )
+        period_end = attrs.get(
+            'period_end', getattr(self.instance, 'period_end', None),
+        )
+        if org_unit and period_start and period_end:
+            from people.payroll_service import (
+                PayrollServiceError,
+                assert_unique_active_period,
+            )
+
+            try:
+                assert_unique_active_period(
+                    org_unit,
+                    period_start,
+                    period_end,
+                    exclude_pk=getattr(self.instance, 'pk', None),
+                )
+            except PayrollServiceError as exc:
+                raise serializers.ValidationError(str(exc))
+        return attrs
+
+    def get_preparer_username(self, obj):
+        from people.governance.sod import SUBJECT_PAYROLL_RUN, get_preparer
+
+        preparer = get_preparer(subject_type=SUBJECT_PAYROLL_RUN, subject_id=obj.pk)
+        return preparer.username if preparer is not None else None
+
+    def get_commit_requires_other_user(self, obj):
+        return (
+            obj.status in ('computed', 'validated')
+            and self.get_preparer_username(obj) is not None
+        )
 
 
 class CompensationComponentSerializer(serializers.ModelSerializer):

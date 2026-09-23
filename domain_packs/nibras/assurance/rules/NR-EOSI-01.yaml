@@ -1,0 +1,11 @@
+id: NR-EOSI-01
+journey: J4 Payroll / EOSI
+meaning: Every regulated figure that depends on basic pay uses the verified compensation ledger.
+source: ADR-0029 · people/calculation_engine.calculate_eosi
+owner: people
+failure: Indemnity computed from Employee.basic_salary while payroll refuses that field.
+validation: static binding on _require_verified_basic
+implementation: calculation_engine.calculate_eosi
+confidence: high-code
+catalogue: configured
+residual: Not a Kuwait legal opinion. Live GOFSCO rows without a verified ledger line fail closed (HTTP 409).

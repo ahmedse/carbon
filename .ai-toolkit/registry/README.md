@@ -1,6 +1,6 @@
 # Registry — Auto-Generated Codebase Inventory
 
-Generated: 2026-09-21 14:41
+Generated: 2026-09-23 10:44
 Command: `./.ai-toolkit/scripts/scan.sh`
 
 **Purpose:** the single source of truth for WHAT ALREADY EXISTS.

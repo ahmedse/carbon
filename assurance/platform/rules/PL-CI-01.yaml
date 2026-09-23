@@ -1,0 +1,11 @@
+id: PL-CI-01
+journey: Pull request
+meaning: CI runs lint, backend pytest, frontend, and Playwright. Tag deploy is SSH plus a health curl.
+source: .github/workflows/ci.yml
+owner: platform
+failure: A required check is skipped or the log hides later failures.
+validation: Workflow file. Branch protection was not read.
+implementation: .github/workflows/ci.yml
+confidence: high-code
+catalogue: configured
+residual: Merge enforcement is unverified. Backend pytest stops at the first failure.

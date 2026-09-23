@@ -31,7 +31,7 @@ from django.utils import timezone
 
 from . import calculation_engine
 from .compensation_service import CompensationService
-from .models import AttendanceRecord, ComplianceRule, Employee, PayslipLine
+from .models import AttendanceRecord, ComplianceRule, Employee, PayrollRun, PayslipLine
 
 SEVERITY_ERROR = "error"
 SEVERITY_WARNING = "warning"
@@ -40,6 +40,31 @@ SEVERITY_INFO = "info"
 
 class PayrollServiceError(Exception):
     """Raised when a payroll run is asked to perform an illegal transition."""
+
+
+ACTIVE_PERIOD_STATUSES = ("draft", "computed", "validated", "committed")
+
+
+def assert_unique_active_period(org_unit, period_start, period_end, *, exclude_pk=None):
+    """Refuse a second active run for the same org unit and period.
+
+    Failed runs may be superseded. Historical duplicates stay in the table —
+    this is a service-level refuse, not a database unique constraint.
+    """
+    qs = PayrollRun.objects.filter(
+        org_unit=org_unit,
+        period_start=period_start,
+        period_end=period_end,
+        status__in=ACTIVE_PERIOD_STATUSES,
+    )
+    if exclude_pk:
+        qs = qs.exclude(pk=exclude_pk)
+    other = qs.order_by("pk").first()
+    if other is not None:
+        raise PayrollServiceError(
+            f"An active payroll run already exists for this organization and "
+            f"period (run #{other.pk}, status={other.status})."
+        )
 
 
 _line_type_cache: dict[str, int] = {}
@@ -183,6 +208,9 @@ class PayrollRunService:
 
     def compute(self, run, *, user=None):
         self._require_status(run, self.ALLOWED_TRANSITIONS["compute"])
+        assert_unique_active_period(
+            run.org_unit, run.period_start, run.period_end, exclude_pk=run.pk,
+        )
 
         rules = ComplianceRule.objects
         gosi_rule = self._resolve_rule(rules, "gosi")
@@ -422,32 +450,43 @@ class PayrollRunService:
     # --- commit ------------------------------------------------------------
 
     def commit(self, run, *, user=None):
-        self._require_status(run, self.ALLOWED_TRANSITIONS["commit"])
         from people.governance.sod import (
             ACTION_COMMIT,
             SUBJECT_PAYROLL_RUN,
             require_distinct_actor,
         )
 
-        require_distinct_actor(
-            subject_type=SUBJECT_PAYROLL_RUN,
-            subject_id=run.pk,
-            actor=user,
-            action=ACTION_COMMIT,
-        )
-        result = self._run_validation(run)
-        if result["has_errors"]:
-            run.status = "failed"
-            run.save(update_fields=["status"])
-            result["run"] = run.pk
-            result["status"] = run.status
+        with transaction.atomic():
+            locked = PayrollRun.objects.select_for_update().get(pk=run.pk)
+            if locked.status == "committed":
+                return {
+                    "run": locked.pk,
+                    "status": "committed",
+                    "idempotent": True,
+                    "has_errors": False,
+                }
+            self._require_status(locked, self.ALLOWED_TRANSITIONS["commit"])
+            require_distinct_actor(
+                subject_type=SUBJECT_PAYROLL_RUN,
+                subject_id=locked.pk,
+                actor=user,
+                action=ACTION_COMMIT,
+            )
+            result = self._run_validation(locked)
+            if result["has_errors"]:
+                locked.status = "failed"
+                locked.save(update_fields=["status"])
+                result["run"] = locked.pk
+                result["status"] = locked.status
+                result["idempotent"] = False
+                return result
+            locked.status = "committed"
+            locked.committed_at = timezone.now()
+            locked.save(update_fields=["status", "committed_at"])
+            result["run"] = locked.pk
+            result["status"] = locked.status
+            result["idempotent"] = False
             return result
-        run.status = "committed"
-        run.committed_at = timezone.now()
-        run.save(update_fields=["status", "committed_at"])
-        result["run"] = run.pk
-        result["status"] = run.status
-        return result
 
     def _run_validation(self, run):
         findings = self.validation_seam.validate_run(run)
@@ -630,6 +669,7 @@ class PayrollRunService:
                 "run_id": run.pk,
                 "status": "submitted",
                 "receipt_id": filing.receipt_id,
+                "receipt_kind": "local_export",
                 "submitted_at": filing.submitted_at.isoformat(),
                 "reconciled": filing.reconciled,
                 "idempotent": True,
@@ -651,8 +691,9 @@ class PayrollRunService:
         filing.status = "submitted"
         filing.submitted_at = now
         filing.submitted_by = user
-        filing.receipt_id = filing.receipt_id or f"WPS-{run.pk}-{now.strftime('%Y%m%d%H%M%S')}"
-        filing.reconciled = True
+        # Local Carbon export id — not a PAM/bank acknowledgement (NR-WPS-02).
+        filing.receipt_id = filing.receipt_id or f"LOCAL-WPS-{run.pk}-{now.strftime('%Y%m%d%H%M%S')}"
+        filing.reconciled = False
         filing.save(
             update_fields=[
                 "status",
@@ -666,6 +707,7 @@ class PayrollRunService:
             "run_id": run.pk,
             "status": "submitted",
             "receipt_id": filing.receipt_id,
+            "receipt_kind": "local_export",
             "submitted_at": filing.submitted_at.isoformat(),
             "reconciled": filing.reconciled,
             "content_hash": filing.content_hash,

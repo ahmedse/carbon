@@ -20,7 +20,10 @@ Guarantees, on every run (no-op unless DJANGO_BRAND == "nibras"):
                               (resolves to global admin via user_is_global_admin)
   * Employees (ESS) — not provisioned here; forever-dev password is
         emp_* / {EMPLOYEE_DEFAULT_PASSWORD|mozafNibrasPa_132}
-        (canonical demo: emp_1067)
+        (canonical My: emp_1067, Team: emp_1712)
+  * emp_2400 (Abdullah Mubarak Rashed AlHajri, Senior HR Specialist)
+        GOFSCO HR staff persona → people_lead (People/Payroll), not Django staff
+        Password unchanged unless hash drifts from EMPLOYEE_DEFAULT_PASSWORD.
 
 Credentials are read from the environment with the documented defaults; nothing
 new is hardcoded beyond those defaults (matching existing practice in the repo).
@@ -35,8 +38,10 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand
 
-from accounts.constants import ADMINS_GROUP
+from accounts.constants import ADMINS_GROUP, PEOPLE_LEAD_GROUP
 from accounts.models import ScopedRole
+
+GOFSCO_HR_STAFF_USERNAME = "emp_2400"
 
 
 class Command(BaseCommand):
@@ -110,6 +115,38 @@ class Command(BaseCommand):
                 f"  leave_type aliases skipped: {exc}"
             ))
 
+        # ── 5. GOFSCO HR staff persona (People app, not brand admin) ─────────
+        hr_line = f"    {GOFSCO_HR_STAFF_USERNAME} skipped (no user)."
+        hr_user = User.objects.filter(username=GOFSCO_HR_STAFF_USERNAME).first()
+        if hr_user:
+            emp_password = os.environ.get("EMPLOYEE_DEFAULT_PASSWORD", "mozafNibrasPa_132")
+            hr_pwd_touched = False
+            if not hr_user.check_password(emp_password):
+                hr_user.set_password(emp_password)
+                hr_pwd_touched = True
+            hr_user.is_active = True
+            if hr_pwd_touched:
+                hr_user.save(update_fields=["password", "is_active"])
+            elif not hr_user.is_active:
+                hr_user.save(update_fields=["is_active"])
+            people_lead, _ = Group.objects.get_or_create(name=PEOPLE_LEAD_GROUP)
+            hr_user.groups.add(people_lead)
+            role, _ = ScopedRole.objects.get_or_create(
+                user=hr_user,
+                group=people_lead,
+                org_unit=None,
+                module=None,
+                defaults={"is_active": True},
+            )
+            if not role.is_active:
+                role.is_active = True
+                role.save(update_fields=["is_active"])
+            hr_line = (
+                f"    {hr_user.username:8s} people_lead  staff={hr_user.is_staff}  "
+                f"password_ok={hr_user.check_password(emp_password)}  "
+                f"pwd_updated={hr_pwd_touched}"
+            )
+
         self.stdout.write(self.style.SUCCESS(
             f"✓ Nibras admins ensured (brand={brand}):\n"
             f"    {ahmed.username:8s} superuser=True  staff=True  "
@@ -119,5 +156,6 @@ class Command(BaseCommand):
             f"password_ok={admin.check_password(admin_password)}  "
             f"pwd_updated={admin_pwd_touched}\n"
             f"    both in {ADMINS_GROUP} with a global ScopedRole.\n"
+            f"{hr_line}\n"
             f"    leave_type aliases updated={aliases_updated}."
         ))

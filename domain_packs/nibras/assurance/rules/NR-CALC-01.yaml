@@ -1,0 +1,11 @@
+id: NR-CALC-01
+journey: J4 Payroll commit
+meaning: sum, multiply, and tiered_accrual match hand-computed fixtures in an oracle that does not import people.calculation_engine.
+source: domain_packs/nibras/assurance/oracles/formulas.yaml
+owner: unconfirmed
+failure: The only expected values are produced by the engine under test.
+validation: assurance formula probe
+implementation: assurance/oracles/formula.py
+confidence: high-code
+catalogue: configured
+residual: Fixtures are examples of the formula shapes. They are not PIFSS or KLL rates.

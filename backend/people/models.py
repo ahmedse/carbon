@@ -312,8 +312,16 @@ class WpsFiling(models.Model):
         blank=True,
         related_name="+",
     )
-    receipt_id = models.CharField(max_length=64, blank=True, default="")
-    reconciled = models.BooleanField(default=False)
+    receipt_id = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="LOCAL-WPS-* is a Carbon export id. PAM/bank receipt is recorded separately.",
+    )
+    reconciled = models.BooleanField(
+        default=False,
+        help_text="True only after an external PAM or bank acknowledgement. Local submit does not set this.",
+    )
 
     class Meta:
         verbose_name = "WPS Filing"

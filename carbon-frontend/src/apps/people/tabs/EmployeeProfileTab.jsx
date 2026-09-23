@@ -376,6 +376,7 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
     : t('restrictedLabel');
 
   const startEdit = (key) => {
+    additionalProps?.loadPickers?.();
     const fieldsBySection = {
       identity: ['name_en_given', 'name_en_family', 'name_ar_given', 'name_ar_family', 'gender', 'civil_id', 'date_of_birth', 'nationality'],
       employment: ['employment_type', 'contract_type', 'join_date', 'rotation', 'kuwaitization', 'position'],

@@ -34,6 +34,7 @@ class ChatHandoffOutcome:
     api_name: str = ""
     slots: dict = field(default_factory=dict)
     tool_result: dict = field(default_factory=dict)
+    decision: str = "handoff_agent"
 
 
 def plan_has_mutating_host_api(
@@ -126,6 +127,114 @@ def enough_slots_for_chat_handoff(api_name: str, slots: dict | None) -> bool:
     if api == "submit_my_leave":
         return any(body.get(k) not in (None, "", [], {}) for k in _LEAVE_DATE_SLOTS)
     return True
+
+
+def missing_slots_for_chat(api_name: str, slots: dict | None) -> list[str]:
+    """Required slot keys still empty — used for 0-LLM clarify."""
+    body = {
+        k: v for k, v in (slots or {}).items()
+        if v not in (None, "", [], {})
+    }
+    api = (api_name or "").strip().lower()
+    if api == "submit_my_loan" and "principal" not in body and "amount" in body:
+        body = {**body, "principal": body["amount"]}
+    required = list(_MIN_SLOTS.get(api) or ())
+    missing = [k for k in required if body.get(k) in (None, "", [], {})]
+    if api == "submit_my_leave" and not any(
+        body.get(k) not in (None, "", [], {}) for k in _LEAVE_DATE_SLOTS
+    ):
+        missing.append("start_date")
+    return missing
+
+
+def is_slot_status_ask(text: str) -> bool:
+    """True for 'what type / dates / amount did I request?' — not a new write."""
+    return bool(_SLOT_STATUS_RE.search(text or ""))
+
+
+def render_slot_status(text: str, slots: dict | None) -> str:
+    body = {
+        k: v for k, v in (slots or {}).items()
+        if v not in (None, "", [], {})
+    }
+    leave = str(body.get("leave_type") or "").strip()
+    if leave and re.search(r"\btype\b|\bleave\b", text or "", re.I):
+        return f"You requested {leave} leave."
+    loan = str(body.get("loan_type") or "").strip()
+    amount = body.get("principal", body.get("amount"))
+    if loan or amount not in (None, ""):
+        bits = []
+        if loan:
+            bits.append(f"{loan} loan")
+        if amount not in (None, ""):
+            bits.append(str(amount))
+        return "The agent has " + " and ".join(bits) + "."
+    if not body:
+        return "I do not have those details on record yet."
+    return "I have: " + "; ".join(f"{k} {v}" for k, v in list(body.items())[:6]) + "."
+
+
+def build_chat_write_clarify(
+    *,
+    api_name: str,
+    slots: dict,
+    user_message: str = "",
+    echo: bool = False,
+) -> ChatHandoffOutcome:
+    """0-LLM clarify — seed slots, never stage a host write."""
+    from ai.engine.agent.chat_surface import detect_locale
+
+    locale = detect_locale(user_message)
+    api = (api_name or "").strip()
+    body = dict(slots or {})
+    if echo and api == "submit_my_leave":
+        leave = str(body.get("leave_type") or "leave").strip()
+        start = _pretty_date(body.get("start_date"))
+        end = _pretty_date(body.get("end_date"))
+        if locale == "ar":
+            text = f"فهمت: إجازة {leave} من {start} إلى {end}. أأكد التواريخ؟"
+        else:
+            text = (
+                f"I understand you want {leave} leave from {start} to {end}. "
+                "Let me confirm those dates."
+            )
+    else:
+        missing = missing_slots_for_chat(api, body)
+        key = missing[0] if missing else "loan_type"
+        pack = (_CLARIFY_TEXT.get(api) or {}).get(key) or {}
+        text = pack.get(locale) or pack.get("en") or "What else do I need to know?"
+        loan = str(body.get("loan_type") or "").strip()
+        if api == "submit_my_loan" and loan and key == "principal":
+            if locale == "ar":
+                text = f"قرض {loan}. كم المبلغ الذي تحتاجه؟"
+            else:
+                text = f"{loan.title()} loan. How much do you need to borrow?"
+    return ChatHandoffOutcome(
+        text=text,
+        actions=[],
+        envelope=None,
+        api_name=api,
+        slots=body,
+        tool_result={},
+        decision="clarify",
+    )
+
+
+def build_slot_status_answer(
+    *,
+    api_name: str,
+    slots: dict,
+    user_message: str = "",
+) -> ChatHandoffOutcome:
+    return ChatHandoffOutcome(
+        text=render_slot_status(user_message, slots),
+        actions=[],
+        envelope=None,
+        api_name=api_name,
+        slots=dict(slots or {}),
+        tool_result={},
+        decision="answer",
+    )
 
 
 def combine_user_brief(
@@ -243,15 +352,28 @@ def build_chat_write_handoff(
     )
 
 
+_PAYROLL_OR_STATUS_ASK_RE = re.compile(
+    r"("
+    r"\b(?:what was|what were|what is my|how much was|when will)\b"
+    r"|\b(?:net pay|take-home|payslip|deductions?|gosi|payroll)\b"
+    r"|\bcan i download\b"
+    r")",
+    re.IGNORECASE,
+)
+
+
 def is_ess_write_utterance(text: str) -> bool:
     """True when the utterance is a personal loan / leave / attendance write.
 
     Used by the Chat handoff path and the ``_should_force_action`` fallback so
     ESS writes are not gated only on ``_is_mutation_request`` (which is leave-
-    and DQ-shaped and misses "apply for a loan").
+    and DQ-shaped and misses "apply for a loan"). Payroll recall
+    ("what was the loan amount?") is not a write.
     """
     brief = (text or "").strip()
     if not brief:
+        return False
+    if _PAYROLL_OR_STATUS_ASK_RE.search(brief):
         return False
     try:
         from ai.engine.cognition.plan.process_dial import (
@@ -267,6 +389,30 @@ def is_ess_write_utterance(text: str) -> bool:
         or is_personal_leave_brief(brief)
         or is_personal_attendance_brief(brief)
     )
+
+
+def is_ess_slot_continuation(text: str, api_name: str | None) -> bool:
+    """True when the turn only fills a slot for an already-open ESS write."""
+    api = (api_name or "").strip().lower()
+    raw = (text or "").strip()
+    if not api.startswith("submit_my_") or not raw:
+        return False
+    if api == "submit_my_loan":
+        return bool(_parse_amount(raw) or _first_alias(raw, _LOAN_TYPE_ALIASES))
+    if api == "submit_my_leave":
+        return bool(
+            _first_alias(raw, _LEAVE_TYPE_ALIASES)
+            or _parse_iso_date(raw)
+            or _parse_named_dates(raw)
+            or _parse_int(_DAYS_RE, raw)
+        )
+    if api == "submit_my_attendance_permission":
+        return bool(
+            _first_alias(raw, _PERMISSION_TYPE_ALIASES)
+            or _parse_iso_date(raw)
+            or _parse_hours(raw)
+        )
+    return False
 
 
 # Lexical codes for Chat handoff only. Agent re-resolves via MDM on inherit.
@@ -310,6 +456,55 @@ _MONTHS_RE = re.compile(r"\b(\d{1,2})\s*(?:month|months|شهر|أشهر|اشهر
 _DAYS_RE = re.compile(r"\b(\d{1,3})\s*(?:day|days|يوم|أيام|ايام)\b", re.I)
 _HOURS_RE = re.compile(r"\b(\d{1,2}(?:\.\d+)?)\s*(?:hour|hours|ساعة|ساعات)\b", re.I)
 _ISO_DATE_RE = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
+_MONTH_NAMES = (
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december",
+)
+_MONTH_INDEX = {name: i for i, name in enumerate(_MONTH_NAMES, 1)}
+_NAMED_DATE_RE = re.compile(
+    r"\b(" + "|".join(_MONTH_NAMES) + r")\s+(\d{1,2})(?:st|nd|rd|th)?"
+    r"(?:,\s*(\d{4}))?\b"
+    r"|\b(\d{1,2})(?:st|nd|rd|th)?\s+(" + "|".join(_MONTH_NAMES) + r")"
+    r"(?:,\s*(\d{4}))?\b",
+    re.IGNORECASE,
+)
+_SLOT_STATUS_RE = re.compile(
+    r"("
+    r"\bwhat (?:type|dates?|amount|information)\b"
+    r"|\bhow much\b"
+    r"|\bwhat (?:did i|was)\b"
+    r"|\bwhich dates?\b"
+    r")",
+    re.IGNORECASE,
+)
+_CLARIFY_TEXT = {
+    "submit_my_loan": {
+        "loan_type": {
+            "en": "What type of loan are you interested in?",
+            "ar": "أي نوع قرض تريد؟",
+        },
+        "principal": {
+            "en": "How much do you need?",
+            "ar": "كم المبلغ الذي تحتاجه؟",
+        },
+    },
+    "submit_my_leave": {
+        "leave_type": {
+            "en": "What type of leave do you want to take?",
+            "ar": "أي نوع إجازة تريد؟",
+        },
+        "start_date": {
+            "en": "Which dates do you want to take leave?",
+            "ar": "ما تواريخ الإجازة؟",
+        },
+    },
+    "submit_my_attendance_permission": {
+        "permission_type": {
+            "en": "What type of permission do you need?",
+            "ar": "أي نوع استئذان تحتاج؟",
+        },
+    },
+}
 
 
 def _latin_digits(text: str) -> str:
@@ -349,9 +544,51 @@ def _parse_hours(text: str) -> float | None:
         return None
 
 
+def _pretty_date(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    try:
+        from datetime import date as _date
+        day = _date.fromisoformat(raw[:10])
+        return f"{day.strftime('%B')} {day.day}, {day.year}"
+    except ValueError:
+        return raw
+
+
 def _parse_iso_date(text: str) -> str | None:
     match = _ISO_DATE_RE.search(_latin_digits(text))
     return match.group(1) if match else None
+
+
+def _parse_named_dates(text: str) -> list[str]:
+    """English month-name dates → ISO strings (year inferred from later hits)."""
+    raw = _latin_digits(text or "")
+    parsed: list[tuple[int, int, int | None]] = []
+    for match in _NAMED_DATE_RE.finditer(raw):
+        if match.group(1):
+            month = _MONTH_INDEX.get(match.group(1).lower(), 0)
+            day = int(match.group(2))
+            year = int(match.group(3)) if match.group(3) else None
+        else:
+            day = int(match.group(4))
+            month = _MONTH_INDEX.get((match.group(5) or "").lower(), 0)
+            year = int(match.group(6)) if match.group(6) else None
+        if month and 1 <= day <= 31:
+            parsed.append((month, day, year))
+    if not parsed:
+        return []
+    fallback_year = next((y for _m, _d, y in parsed if y), None)
+    from datetime import date as _date
+    if fallback_year is None:
+        fallback_year = _date.today().year
+    out: list[str] = []
+    for month, day, year in parsed:
+        try:
+            out.append(_date(year or fallback_year, month, day).isoformat())
+        except ValueError:
+            continue
+    return out
 
 
 def resolve_ess_write_from_brief(
@@ -412,8 +649,13 @@ def resolve_ess_write_from_brief(
         if code:
             body["leave_type"] = code
         parsed = _parse_iso_date(text)
+        named = _parse_named_dates(text)
         if parsed:
             body["start_date"] = parsed
+        if named:
+            body["start_date"] = named[0]
+            if len(named) > 1:
+                body["end_date"] = named[-1]
         days = _parse_int(_DAYS_RE, text)
         if days:
             body["days"] = days

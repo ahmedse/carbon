@@ -1,0 +1,11 @@
+id: NR-360-01
+journey: J4 Payroll / EOSI
+meaning: Employee 360 loads one employee and employee-scoped lists. It does not walk the full directory on open.
+source: carbon-frontend/src/apps/people/EmployeeDetailPage.jsx
+owner: people
+failure: Opening one profile times out after fetching every employee, entitlement, loan, and certification.
+validation: static binding on employee-scoped fetches
+implementation: Initial load uses ?employee= and fetchEmployee(manager). Directory pickers load on edit.
+confidence: high-code
+catalogue: configured
+residual: Edit-all still walks the directory for manager/position pickers. Org units and positions still load on open.

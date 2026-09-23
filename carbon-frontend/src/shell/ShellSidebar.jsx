@@ -45,6 +45,8 @@ import GroupIcon from '@mui/icons-material/Group';
 import AppsIcon from '@mui/icons-material/Apps';
 import GridViewIcon from '@mui/icons-material/GridView';
 import SettingsIcon from '@mui/icons-material/Settings';
+import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
+import KeyboardIcon from '@mui/icons-material/Keyboard';
 import CalculateIcon from '@mui/icons-material/Calculate';
 import TrackChangesIcon from '@mui/icons-material/TrackChanges';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
@@ -283,8 +285,10 @@ function getSidebarItems(studioId, helpApps = []) {
     
     case 'settings':
       return [
-        { label: 'Profile', path: '/settings/profile', icon: PeopleIcon },
-        { label: 'Preferences', path: '/settings/preferences', icon: RuleIcon },
+        { label: 'Account', path: '/settings?tab=account', icon: ManageAccountsIcon },
+        { label: 'Security', path: '/settings?tab=security', icon: SecurityIcon },
+        { label: 'Preferences', path: '/settings?tab=preferences', icon: SettingsIcon },
+        { label: 'Shortcuts', path: '/settings?tab=shortcuts', icon: KeyboardIcon },
       ];
     
     case 'help':
@@ -449,7 +453,7 @@ function filterItemsByCapability(items, user, authCtx) {
     if (item.role && item.role !== '*') {
       // Admin-gated items: check via can() access_route
       if (item.path) {
-        return can(user, 'access_route', item.path, authCtx);
+        return can(user, 'access_route', item.path.split('?')[0], authCtx);
       }
     }
 
@@ -458,9 +462,9 @@ function filterItemsByCapability(items, user, authCtx) {
       return can(user, 'view_menu', item.label, authCtx);
     }
 
-    // If item has a path, try route-based check
+    // If item has a path, try route-based check (ignore query for CBAC)
     if (item.path && item.path !== '/') {
-      return can(user, 'access_route', item.path, authCtx);
+      return can(user, 'access_route', item.path.split('?')[0], authCtx);
     }
 
     // No capability requirement → visible to all authenticated users
@@ -687,18 +691,24 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
 
               // Regular navigation items — prefer longest matching path so
               // `/admin/ai` does not stay active on `/admin/ai/domain` (ADR-0036).
+              // Paths may include a query (e.g. `/settings?tab=account`).
               const Icon = item.icon;
-              const itemPath = item.path ? item.path.replace(/\/+$|^\/+/, '') : '';
+              const [itemPathname, itemQuery = ''] = (item.path || '').split('?');
+              const itemPath = itemPathname.replace(/\/+$|^\/+/, '');
               const pathMatches = (candidate) =>
                 candidate
                 && (normalizedLocation === candidate
                   || normalizedLocation.startsWith(`${candidate}/`));
+              const queryMatches = !itemQuery
+                || location.search.replace(/^\?/, '') === itemQuery
+                || new URLSearchParams(location.search).get('tab')
+                  === new URLSearchParams(itemQuery).get('tab');
               const longerSiblingWins = items.some((other) => {
                 if (!other.path || other.path === item.path) return false;
-                const otherPath = other.path.replace(/\/+$|^\/+/, '');
+                const otherPath = other.path.split('?')[0].replace(/\/+$|^\/+/, '');
                 return otherPath.length > itemPath.length && pathMatches(otherPath);
               });
-              const isActive = pathMatches(itemPath) && !longerSiblingWins;
+              const isActive = pathMatches(itemPath) && queryMatches && !longerSiblingWins;
 
               rendered.push(
                 <Box

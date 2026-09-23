@@ -1,0 +1,11 @@
+id: NR-PAY-01
+journey: J4 Payroll commit
+meaning: Compute uses a verified compensation-ledger basic line, not Employee.basic_salary.
+source: ADR-0029; people/payroll_service.py
+owner: unconfirmed
+failure: Payslip basic taken from an estimated hire field.
+validation: people/tests/test_payroll_service.py
+implementation: PayrollRunService + CompensationService.verified_basic_amount
+confidence: high-code
+catalogue: not-executed
+residual: GOFSCO import may estimate basic_salary from job title. Fail-closed only when no verified line exists.

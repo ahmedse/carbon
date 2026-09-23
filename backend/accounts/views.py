@@ -222,6 +222,21 @@ def me_context(request):
     # Pre-resolved authorization manifest for frontend authz.js
     authz_manifest = _resolve_authz_manifest(user, is_global, capabilities)
 
+    # Linked Employee identity for shell display (person-first; null when unlinked).
+    # Mirrors UserSerializer.employee_* — do not call people/me from the header.
+    employee_payload = None
+    emp = getattr(user, 'employee_profile', None)
+    if emp is not None:
+        job_title = emp.position.title if getattr(emp, 'position_id', None) else None
+        org_unit_name = emp.org_unit.name if getattr(emp, 'org_unit_id', None) else None
+        employee_payload = {
+            'id': emp.id,
+            'employee_no': emp.employee_no,
+            'full_name': emp.full_name,
+            'job_title': job_title,
+            'org_unit_name': org_unit_name,
+        }
+
     return Response({
         'user': {
             'id': user.id,
@@ -230,6 +245,7 @@ def me_context(request):
             'language': user.language,
             'full_name': f"{user.first_name} {user.last_name}".strip() or user.username,
         },
+        'employee': employee_payload,
         'roles': role_names,
         'is_global_admin': is_global,
         'perspectives': perspectives,

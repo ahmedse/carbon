@@ -246,9 +246,11 @@ export default function App() {
                 <Route path="help/:appId" element={<AppHelp />} />
                 <Route path="feedback" element={<Feedback />} />
                 <Route path="/settings" element={<SettingsPage />} />
-                {/* Settings sub-nav aliases — sidebar links Profile/Preferences to the tabbed Settings page. RULE_22. */}
-                <Route path="/settings/profile" element={<Navigate to="/settings" replace />} />
-                <Route path="/settings/preferences" element={<Navigate to="/settings" replace />} />
+                {/* Settings sub-nav aliases → tabbed Account Settings. RULE_22. */}
+                <Route path="/settings/profile" element={<Navigate to="/settings?tab=account" replace />} />
+                <Route path="/settings/preferences" element={<Navigate to="/settings?tab=preferences" replace />} />
+                <Route path="/settings/security" element={<Navigate to="/settings?tab=security" replace />} />
+                <Route path="/settings/shortcuts" element={<Navigate to="/settings?tab=shortcuts" replace />} />
                 <Route path="/" element={<RoleAwareLanding />} />
                 
                 {/* /dashboard redirects to PlatformHome (/) — backward compat */}

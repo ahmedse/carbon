@@ -4,6 +4,7 @@
 import React, { useState } from "react";
 import { AppBar, Toolbar, Typography, IconButton, Menu, MenuItem, Tooltip, Box, Avatar, Divider, Popover, Tabs, Tab, useTheme, Badge, Chip, ListItemIcon, ListItemText } from "@mui/material";
 import { useAuth } from "../auth/AuthContext";
+import { resolveDisplayName, resolveInitials } from "../auth/shellIdentity";
 import { useNavigate } from "react-router-dom";
 import { INSTANCE_LOGO, PLATFORM_TITLE } from "../config/branding";
 import { 
@@ -15,6 +16,7 @@ import {
   Logout as LogoutIcon,
   Settings as SettingsIcon,
   Person as PersonIcon,
+  ManageAccounts as ManageAccountsIcon,
   Keyboard as KeyboardIcon,
   DarkMode,
   LightMode,
@@ -94,7 +96,7 @@ export default function HeaderEnhanced({
 }) {
   const { t } = useTranslation('shell');
   const { t: tAuth } = useTranslation('auth');
-  const { user, logout, availablePerspectives } = useAuth();
+  const { user, logout, availablePerspectives, employee } = useAuth();
   const { unreadCount } = useNotifications();
   const { unreadCount: insightUnreadCount } = useInsightStream();
   const { mode, toggle } = useThemeMode();
@@ -106,8 +108,16 @@ export default function HeaderEnhanced({
   const [insightAnchor, setInsightAnchor] = useState(null);
   const [studioAnchor, setStudioAnchor] = useState(null);
 
-  const initials = user?.username?.slice(0, 2).toUpperCase() || "U";
+  const displayName = resolveDisplayName(user, employee);
+  const initials = resolveInitials(displayName);
   const primaryRole = user?.roles?.[0]?.role;
+  const hasEmployee = Boolean(employee?.full_name || employee?.id);
+  const chipBadge = hasEmployee
+    ? t('ui.employee')
+    : (availablePerspectives?.includes("admin") ? t('ui.administrator') : t('ui.operator'));
+  const identityCaption = hasEmployee
+    ? [employee.job_title, employee.employee_no].filter(Boolean).join(' · ')
+    : (user?.email || '');
 
   const handleMenuOpen = (e) => setAnchorEl(e.currentTarget);
   const handleMenuClose = () => setAnchorEl(null);
@@ -311,7 +321,7 @@ export default function HeaderEnhanced({
               </Avatar>
               <Box sx={{ display: { xs: "none", sm: "block" } }}>
                 <Typography fontSize="0.8125rem" fontWeight={600} color="text.primary" lineHeight={1.2}>
-                  {user?.username}
+                  {displayName}
                 </Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
                   <Box sx={{ 
@@ -320,7 +330,7 @@ export default function HeaderEnhanced({
                     display: 'inline-block',
                   }}>
                     <Typography fontSize="0.5625rem" fontWeight={700} color={availablePerspectives?.includes("admin") ? "primary.dark" : "success.dark"} textTransform="uppercase" letterSpacing="0.05em">
-                      {availablePerspectives?.includes("admin") ? "Admin" : "User"}
+                      {chipBadge}
                     </Typography>
                   </Box>
                 </Box>
@@ -372,25 +382,48 @@ export default function HeaderEnhanced({
               </Box>
               <Box sx={{ minWidth: 0 }}>
                 <Typography sx={{ fontSize: "0.75rem", fontWeight: 600, color: "text.primary", lineHeight: 1.3 }}>
-                  {user?.username || "—"}
+                  {displayName}
                 </Typography>
-                {user?.email && (
+                {identityCaption ? (
                   <Typography sx={{ fontSize: "0.5625rem", color: "text.disabled", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {user.email}
+                    {identityCaption}
                   </Typography>
-                )}
+                ) : null}
+                {hasEmployee && user?.username ? (
+                  <Typography sx={{ fontSize: "0.5625rem", color: "text.disabled", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {user.username}
+                  </Typography>
+                ) : null}
               </Box>
             </Box>
             {primaryRole && <RoleBadge role={primaryRole} theme={theme} />}
+            {hasEmployee && !primaryRole && (
+              <Box sx={{ display: "inline-flex", px: 0.75, py: 0.125, borderRadius: 0.5, bgcolor: `${theme.palette.success.main}15` }}>
+                <Typography sx={{ fontSize: "0.5625rem", fontWeight: 700, color: "success.main", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  {t('ui.employee')}
+                </Typography>
+              </Box>
+            )}
           </Box>
 
           <Divider sx={{ my: 0.5 }} />
 
+          {hasEmployee && (
+            <MenuRow
+              icon={PersonIcon}
+              label={t('ui.myProfile')}
+              onClick={() => {
+                navigate("/my");
+                handleMenuClose();
+              }}
+            />
+          )}
+          {hasEmployee && <Divider sx={{ my: 0.5 }} />}
           <MenuRow
-            icon={PersonIcon}
-            label={t('ui.accountSettings')}
+            icon={ManageAccountsIcon}
+            label={t('ui.account')}
             onClick={() => {
-              navigate("/settings?tab=profile");
+              navigate("/settings?tab=account");
               handleMenuClose();
             }}
           />

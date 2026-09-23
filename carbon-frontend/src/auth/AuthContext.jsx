@@ -21,6 +21,14 @@ export const AuthProvider = ({ children }) => {
   const [availablePerspectives, setAvailablePerspectives] = useState([]);
   const [isGlobalAdminFlag, setIsGlobalAdminFlag] = useState(false);
   const [userCapabilities, setUserCapabilities] = useState(null);
+  // Linked Employee from me/context (shell identity — person-first display).
+  const [employee, setEmployee] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("shell_employee") || "null");
+    } catch {
+      return null;
+    }
+  });
   const [currentPerspective, setCurrentPerspective] = useState(() => {
     return localStorage.getItem("carbon_perspective") || "dashboards";
   });
@@ -67,7 +75,20 @@ export const AuthProvider = ({ children }) => {
       // ownership checks can compare conversation.user_id against user.id.
       if (data?.user?.id != null) {
         localStorage.setItem("user_id", String(data.user.id));
-        setUser((prev) => (prev ? { ...prev, id: data.user.id } : prev));
+        setUser((prev) => (prev ? {
+          ...prev,
+          id: data.user.id,
+          email: data.user.email ?? prev.email,
+          full_name: data.user.full_name ?? prev.full_name,
+        } : prev));
+      }
+      // Shell identity: linked Employee summary (null when unlinked).
+      const emp = data.employee ?? null;
+      setEmployee(emp);
+      if (emp) {
+        localStorage.setItem("shell_employee", JSON.stringify(emp));
+      } else {
+        localStorage.removeItem("shell_employee");
       }
       setAvailablePerspectives(data.perspectives || []);
       setIsGlobalAdminFlag(data.is_global_admin === true);
@@ -346,6 +367,7 @@ export const AuthProvider = ({ children }) => {
     }
 
     setUser(null);
+    setEmployee(null);
     setProjects([]);
     setContext(null);
     setTablesByModule({});
@@ -433,6 +455,7 @@ export const AuthProvider = ({ children }) => {
         availablePerspectives,
         isGlobalAdminFlag,
         userCapabilities,
+        employee,
       }}
     >
       {children}
@@ -460,4 +483,5 @@ export const useAuth = () => useContext(AuthContext) || {
   setPerspective: () => {},
   availablePerspectives: [],
   isGlobalAdminFlag: false,
+  employee: null,
 };

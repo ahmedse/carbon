@@ -111,6 +111,14 @@ class PayrollSoDServiceTests(TestCase):
         result = PayrollRunService().commit(run, user=self.appr)
         self.assertEqual(result["status"], "committed")
 
+    def test_serializer_exposes_preparer_for_hr(self):
+        from people.serializers import PayrollRunSerializer
+
+        run = self._validated_run()
+        data = PayrollRunSerializer(run).data
+        self.assertEqual(data["preparer_username"], "pay_prep")
+        self.assertTrue(data["commit_requires_other_user"])
+
 
 class WpsSoDServiceTests(TestCase):
     def setUp(self):

@@ -192,3 +192,25 @@ def test_management_command_dry_run(
 
     # Dry-run must not write anything.
     assert LeaveEntitlement.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_kuwaiti_only_excludes_blank_nationality(leave_type, org):
+    Employee.objects.create(
+        org_unit=org, employee_no='E-KWT', full_name='Has Nationality',
+        basic_salary='1000.000', join_date=date.today() - timedelta(days=400),
+        kuwaitization=True,
+        nationality=ensure_ref('nationality', 'KWT', 'Kuwaiti'),
+        is_active=True,
+    )
+    Employee.objects.create(
+        org_unit=org, employee_no='E-BLANK', full_name='Blank Nationality',
+        basic_salary='1000.000', join_date=date.today() - timedelta(days=400),
+        kuwaitization=True,
+        is_active=True,
+    )
+    policy = _make_policy(
+        leave_type, applies_to_kuwaitization=LeavePolicy.KUWAIT_ONLY,
+    )
+    result = propagate_policy(policy, date.today().year, dry_run=True)
+    assert result['eligible'] == 1

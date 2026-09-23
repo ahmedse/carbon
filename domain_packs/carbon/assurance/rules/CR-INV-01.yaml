@@ -1,0 +1,11 @@
+id: CR-INV-01
+journey: Organizational inventory
+meaning: The emissions app accounts an organizational inventory with scopes 1, 2, and 3.
+source: backend/emissions/models.py; emissions/services.py SCOPE_NAMES
+owner: unconfirmed
+failure: Tests mix inventory, product LCA, and project accounting.
+validation: Model inspection. Methodology is not frozen.
+implementation: emissions.ReportingPeriod, Calculation, OrganizationalBoundary
+confidence: medium
+catalogue: planned
+residual: GHG Protocol Corporate Standard version 3 is a draft. Do not treat it as binding.

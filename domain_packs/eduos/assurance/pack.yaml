@@ -1,0 +1,7 @@
+id: eduos
+title: EduOS GradeVance packs
+brand: eduos
+journeys:
+  - id: GOLD
+    title: Grade pack acceptance
+blocks_release: []

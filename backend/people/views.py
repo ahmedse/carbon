@@ -29,7 +29,11 @@ from accounts.rbac_utils import get_visible_org_units
 from catalog.audit_utils import emit_governance_event
 from core.feedback import AppFeedback
 
-from .calculation_engine import NonAuthoritativeRuleError
+from .calculation_engine import (
+    MissingNationalityError,
+    MissingVerifiedBasicError,
+    NonAuthoritativeRuleError,
+)
 from .chronicle import record_event, snapshot_employee, snapshot_position
 from .compensation_service import CompensationService
 from .employee_onboard_service import onboard_employee
@@ -113,6 +117,17 @@ def _scoped(user, queryset, org_lookup):
     if is_global_admin(user):
         return queryset
     return queryset.filter(**{org_lookup: _visible_org_unit_ids(user)})
+
+
+def _filter_employee_id(qs, request):
+    """Optional ``?employee=<id>`` filter for employee-linked list endpoints."""
+    raw = (request.query_params.get('employee') or '').strip()
+    if not raw:
+        return qs
+    try:
+        return qs.filter(employee_id=int(raw))
+    except (TypeError, ValueError):
+        return qs.none()
 
 
 def _blocked_write_response(instance):
@@ -766,6 +781,8 @@ class _GatedListCreateView(APIView):
         qs = self.get_queryset()
         if self.org_lookup is not None:
             qs = _scoped(request.user, qs, self.org_lookup)
+        if hasattr(self.model, 'employee'):
+            qs = _filter_employee_id(qs, request)
         return Response({
             'count': qs.count(),
             'results': self.serializer_class(qs, many=True).data,
@@ -1138,6 +1155,7 @@ class LeaveEntitlementListCreateView(_GatedListCreateView):
                 | Q(leave_type__code__icontains=q)
                 | Q(leave_type__label__icontains=q)
             )
+        qs = _filter_employee_id(qs, request)
         total = qs.count()
         try:
             page = max(1, int(request.query_params.get('page', 1)))
@@ -1219,6 +1237,7 @@ class LeaveRecordListCreateView(_GatedListCreateView):
                 | Q(leave_type__code__icontains=q)
                 | Q(leave_type__label__icontains=q)
             )
+        qs = _filter_employee_id(qs, request)
         total = qs.count()
         try:
             page = max(1, int(request.query_params.get('page', 1)))
@@ -1810,6 +1829,7 @@ class PayrollRunWpsFilingDetailView(APIView):
                 "validated_at": filing.validated_at,
                 "submitted_at": filing.submitted_at,
                 "receipt_id": filing.receipt_id,
+                "receipt_kind": "local_export" if str(filing.receipt_id).startswith("LOCAL-") else "",
                 "reconciled": filing.reconciled,
             }
         )
@@ -1935,13 +1955,18 @@ class EmployeeEOSIView(APIView):
 
         try:
             result = CalculationService.calculate_eosi(employee, as_of=as_of)
-        except NonAuthoritativeRuleError as exc:
+        except (
+            NonAuthoritativeRuleError,
+            MissingVerifiedBasicError,
+            MissingNationalityError,
+        ) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
 
         payload = _json_safe({
             'value': result['value'],
             'lineage': result['lineage'],
             'as_of': as_of or timezone.localdate(),
+            'basic_source': (result.get('lineage') or {}).get('basic_source'),
         })
         return Response(payload)
 

@@ -1,0 +1,11 @@
+id: NR-PAY-04
+journey: J4 Payroll commit
+meaning: An organization may have only one active payroll run per period.
+source: people/payroll_service.assert_unique_active_period
+owner: people
+failure: Two computed or committed runs for the same org and month overwrite each other in staff workflow.
+validation: people/tests/test_payroll_service.py
+implementation: Create and compute refuse a second draft/computed/validated/committed run. Failed runs may be superseded.
+confidence: high-code
+catalogue: configured
+residual: Historical duplicates already in nibras_dev are not deleted. No database unique constraint on dirty history.

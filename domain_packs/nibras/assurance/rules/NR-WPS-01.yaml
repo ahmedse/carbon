@@ -1,0 +1,11 @@
+id: NR-WPS-01
+journey: J5 WPS submit
+meaning: Submit requires a committed run, a passed filing validation, and a distinct actor.
+source: domain_packs/nibras/processes/gosi_wps.sif.lifecycle.yaml; wps_submit_filing
+owner: unconfirmed
+failure: Statutory file marked submitted from an unvalidated or self-approved run.
+validation: people/tests/test_wps_filing.py
+implementation: PayrollRunService.wps_submit_filing
+confidence: high-code
+catalogue: not-executed
+residual: receipt_id is generated locally. No external PAM acknowledgement is checked.

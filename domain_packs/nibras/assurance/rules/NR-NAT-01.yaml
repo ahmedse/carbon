@@ -1,0 +1,11 @@
+id: NR-NAT-01
+journey: J4 Payroll / EOSI
+meaning: Kuwaiti-only rules do not fire when nationality is blank.
+source: people/calculation_engine._find_nationality_scoped_rule; people/leave_policy_service
+owner: people
+failure: A blank GOFSCO nationality row receives the Kuwaiti EOSI divisor or 42-day leave.
+validation: people/tests/test_eosi.py; people/tests/test_leave_policy_service.py
+implementation: EOSI/leave-accrual refuse HTTP 409; Kuwaiti-only leave policy requires nationality FK.
+confidence: high-code
+catalogue: configured
+residual: Seed uses nationality code KWT. This is not a PIFSS or KLL legal opinion.

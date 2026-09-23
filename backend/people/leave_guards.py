@@ -78,5 +78,18 @@ def compute_balance(profile, code, year):
         if linked_in_flight_corr(record):
             pending += record.days
 
-    remaining = max(Decimal('0'), opening_balance - used - pending)
+    remaining_signed = opening_balance - used - pending
+    remaining = max(Decimal('0'), remaining_signed)
     return entitled, carried_forward, used, pending, remaining
+
+
+def remaining_identity(entitled, carried_forward, used, pending):
+    """Accounting remaining (may be negative) and the floored display value."""
+    signed = (
+        Decimal(str(entitled or 0))
+        + Decimal(str(carried_forward or 0))
+        - Decimal(str(used or 0))
+        - Decimal(str(pending or 0))
+    )
+    display = max(Decimal('0'), signed)
+    return signed, display

@@ -1,0 +1,11 @@
+id: NR-HONEST-01
+journey: All six Nibras processes
+meaning: Every process has a host plane. YAML SoD is a dial. dial_only is empty.
+source: ADR-0045; domain_packs/nibras/assurance/honesty.yaml
+owner: unconfirmed
+failure: A SCOREBOARD or Agent claim treats process YAML as host ACL.
+validation: assurance honesty probe over processes/*.yaml
+implementation: Pulse dials in YAML; host in sod.py or Correspondence
+confidence: high-code
+catalogue: configured
+residual: This probe does not execute a same-actor HTTP commit. That remains a host test.

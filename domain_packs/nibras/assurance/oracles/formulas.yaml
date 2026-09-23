@@ -1,0 +1,44 @@
+# Hand-computed. Do not generate these numbers from people.calculation_engine.
+cases:
+  - id: gross-basic-only
+    type: sum
+    params:
+      components: [basic]
+    inputs:
+      basic: "1000.000"
+    expected: "1000.000"
+  - id: overtime-hours
+    type: multiply
+    params:
+      a: rate
+      b: hours
+    inputs:
+      rate: "1.500"
+      hours: "8"
+    expected: "12.000"
+  - id: eosi-five-years
+    type: tiered_accrual
+    params:
+      base_inputs: [basic_salary]
+      years_input: service_years
+      divisor: "26"
+      tiers:
+        - {up_to: 5, days_per_year: 15}
+        - {up_to: null, days_per_year: 30}
+    inputs:
+      basic_salary: "780.000"
+      service_years: "5"
+    expected: "2250.000"
+  - id: eosi-six-years
+    type: tiered_accrual
+    params:
+      base_inputs: [basic_salary]
+      years_input: service_years
+      divisor: "26"
+      tiers:
+        - {up_to: 5, days_per_year: 15}
+        - {up_to: null, days_per_year: 30}
+    inputs:
+      basic_salary: "780.000"
+      service_years: "6"
+    expected: "5400.000"

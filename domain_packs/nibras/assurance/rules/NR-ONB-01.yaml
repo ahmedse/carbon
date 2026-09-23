@@ -1,0 +1,11 @@
+id: NR-ONB-01
+journey: J1 Leave
+meaning: Hire runs onboard hooks. An opening basic ledger line is created unverified.
+source: people/employee_onboard_service.onboard_employee
+owner: people
+failure: A new hire is paid from an unverified opening amount, or leave entitlements are skipped.
+validation: static binding on onboard_employee
+implementation: Employee create calls onboard_employee. Opening lines stay is_verified=False until HR verifies.
+confidence: high-code
+catalogue: configured
+residual: Live GOFSCO imports may skip opening_basic. Payroll still fail-closes without a verified line.

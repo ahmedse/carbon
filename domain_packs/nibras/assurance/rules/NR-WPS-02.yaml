@@ -1,0 +1,11 @@
+id: NR-WPS-02
+journey: J5 WPS submit
+meaning: reconciled on a WPS filing means an external PAM or bank receipt, not a local flag set in the same function that submits.
+source: gosi_wps.sif.lifecycle.yaml
+owner: people
+failure: A run is marked reconciled without PAM or bank acknowledgement.
+validation: static binding on wps_submit_filing
+implementation: PayrollRunService.wps_submit_filing
+confidence: high-code
+catalogue: configured
+residual: PAM/bank acknowledgement is not wired. Local submit stamps LOCAL-WPS-* and keeps reconciled=False.

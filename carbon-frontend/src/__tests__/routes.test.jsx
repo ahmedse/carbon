@@ -31,9 +31,9 @@ describe('namespace-root index redirects (RULE_22)', () => {
     expect(redirects.get('/admin')).toBe('/admin/users');
   });
 
-  it('redirects /settings/profile and /settings/preferences to /settings', () => {
-    expect(redirects.get('/settings/profile')).toBe('/settings');
-    expect(redirects.get('/settings/preferences')).toBe('/settings');
+  it('redirects /settings/profile and /settings/preferences to tabbed settings', () => {
+    expect(redirects.get('/settings/profile')).toBe('/settings?tab=account');
+    expect(redirects.get('/settings/preferences')).toBe('/settings?tab=preferences');
   });
 
   it('redirects legacy /emissions/dashboard to the canonical dashboard', () => {

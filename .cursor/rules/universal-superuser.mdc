@@ -22,4 +22,4 @@ alwaysApply: true
 5. Prefer env `CARBON_ADMIN_PASSWORD` in scripts; hardcode `AdminPa_132` only as the documented local default (same as ensure_*_admins).
 6. **Login failures are usually browser autofill**, not a password change. `AdminPa_132` is **11** chars; `AdmEduos_132` is **12**. If the password field shows 12 dots, clear it and type `AdminPa_132` manually.
 7. `ensure_*_admins` must **never** call `set_password` when `check_password` already succeeds — only repair flags/roles, or set password when it does not match.
-8. On **Nibras**, also see `.cursor/rules/nibras-dev-credentials.mdc`: `admin`/`AdmNibras_132`, employees `emp_*`/`mozafNibrasPa_132`.
+8. On **Nibras**, also see `.cursor/rules/nibras-dev-credentials.mdc`: `admin`/`AdmNibras_132`, HR `emp_2400`, My `emp_1067`, Team `emp_1712`, employees `emp_*`/`mozafNibrasPa_132`.

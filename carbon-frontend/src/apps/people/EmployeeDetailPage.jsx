@@ -138,32 +138,49 @@ export default function EmployeeDetailPage() {
     [canViewRequests],
   );
 
+  const loadPickers = useCallback(async () => {
+    if (!token) return;
+    try {
+      const [allEmps, positions] = await Promise.all([
+        fetchEmployees(token),
+        fetchPositions(token).catch(() => []),
+      ]);
+      const toArr = (v) => (Array.isArray(v?.results) ? v.results : (Array.isArray(v) ? v : []));
+      setData((prev) => (prev ? {
+        ...prev,
+        allEmployees: Array.isArray(allEmps) ? allEmps : (allEmps?.results || []),
+        positions: toArr(positions),
+      } : prev));
+    } catch {
+      // Picker lists are optional; view mode already loaded the employee.
+    }
+  }, [token]);
+
   const loadData = useCallback(async () => {
     if (!employeeId || !token) return;
     try {
       setLoading(true);
       setError(null);
-      const [emp, orgUnits, allEmps, leaveEnts, leaveRecs, bens, loans, certs, positions, timeline] = await Promise.all([
-        fetchEmployee(employeeId, token),
+      const emp = await fetchEmployee(employeeId, token);
+      const managerId = emp.manager;
+      const [orgUnits, leaveEnts, leaveRecs, bens, loans, certs, positions, timeline, managerEmp] = await Promise.all([
         fetchOrgUnits(token),
-        fetchEmployees(token),
-        fetchLeaveEntitlements(token),
-        fetchLeaveRecords(token),
-        fetchEmployeeBenefits(token),
-        fetchLoans(token),
-        fetchCertifications(token),
+        fetchLeaveEntitlements(token, { employee: employeeId }),
+        fetchLeaveRecords(token, { employee: employeeId }),
+        fetchEmployeeBenefits(token, { employee: employeeId }),
+        fetchLoans(token, { employee: employeeId }),
+        fetchCertifications(token, { employee: employeeId }),
         fetchPositions(token).catch(() => []),
         fetchEmployeeTimeline(employeeId, token).catch(() => []),
+        managerId ? fetchEmployee(managerId, token).catch(() => null) : Promise.resolve(null),
       ]);
 
       const allOrgUnits = Array.isArray(orgUnits) ? orgUnits : [];
-      const allEmployees = Array.isArray(allEmps) ? allEmps : (allEmps?.results || []);
       const orgUnitName = allOrgUnits.find(u => u.id === emp.org_unit)?.full_path
         || allOrgUnits.find(u => u.id === emp.org_unit)?.name
         || null;
-      const manager = allEmployees.find(e => e.id === emp.manager);
-      const managerLabel = manager
-        ? `${manager.employee_no ?? '—'} — ${manager.full_name ?? ''}`
+      const managerLabel = managerEmp
+        ? `${managerEmp.employee_no ?? '—'} — ${managerEmp.full_name ?? ''}`
         : t('managerUnassigned');
 
       const toArr = v => Array.isArray(v?.results) ? v.results : (Array.isArray(v) ? v : []);
@@ -173,7 +190,7 @@ export default function EmployeeDetailPage() {
         orgUnitName,
         managerLabel,
         allOrgUnits,
-        allEmployees,
+        allEmployees: [],
         leaveEntitlements: toArr(leaveEnts),
         leaveRecords: toArr(leaveRecs),
         benefits: toArr(bens),
@@ -213,10 +230,11 @@ export default function EmployeeDetailPage() {
 
   // --- One-shot "edit all sections" mode (drives the Profile tab) ---
   const [editAll, setEditAll] = useState(false);
-  const enterEditAll = () => {
+  const enterEditAll = async () => {
     setTabIndex(0);
     localStorage.setItem(`${STORAGE_KEY}:tab`, '0');
     setEditAll(true);
+    await loadPickers();
   };
 
   // --- Governed lifecycle ops (deactivate / reactivate), moved off the grid ---
@@ -445,7 +463,7 @@ export default function EmployeeDetailPage() {
       {/* ── Tab content ── */}
       <Box sx={{ flex: 1, overflow: 'auto', bgcolor: 'background.paper' }}>
         {TabComponent && (
-          <TabComponent entityData={data} additionalProps={{ onSaved: loadData, token, editAll, onEditAllChange: setEditAll }} />
+          <TabComponent entityData={data} additionalProps={{ onSaved: loadData, token, editAll, onEditAllChange: setEditAll, loadPickers }} />
         )}
       </Box>
 

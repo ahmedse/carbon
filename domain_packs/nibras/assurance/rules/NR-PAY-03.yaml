@@ -1,0 +1,11 @@
+id: NR-PAY-03
+journey: J4 Payroll commit
+meaning: Commit is legal only from validated. A retry after a lost response on an already-committed run is idempotent.
+source: people/payroll_service.py commit
+owner: people
+failure: Duplicate pay month, or a client retry creating a second committed month.
+validation: select_for_update + committed short-circuit
+implementation: PayrollRunService.commit
+confidence: high-code
+catalogue: configured
+residual: Idempotency is by run status, not a client-supplied key. Two different validated runs for the same org/month are a separate uniqueness question.

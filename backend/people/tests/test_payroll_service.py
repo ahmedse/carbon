@@ -217,6 +217,7 @@ class PayrollRunServiceTests(TestCase):
             employee=self.in_scope, loan_type=ensure_ref('loan_type', 'advance'),
             principal=Decimal("1200.000"), interest_rate=Decimal("0"),
             term_months=12, start_date=date(2026, 8, 1),
+            status="active",
         )
 
         result = self._compute(run)
@@ -303,6 +304,56 @@ class PayrollRunServiceTests(TestCase):
         self._compute(run)  # → computed
         with self.assertRaises(PayrollServiceError):
             self._commit(run)  # skip: computed → commit is illegal
+
+    def test_commit_is_idempotent_when_already_committed(self):
+        run = self._run()
+        self._compute(run)
+        self._validate(run)
+        first = self._commit(run)
+        self.assertEqual(first["status"], "committed")
+        self.assertFalse(first["idempotent"])
+        second = self._commit(run)
+        self.assertEqual(second["status"], "committed")
+        self.assertTrue(second["idempotent"])
+        run.refresh_from_db()
+        self.assertEqual(run.status, "committed")
+
+    def test_second_active_run_same_period_refused(self):
+        first = self._run()
+        self._compute(first)
+        second = PayrollRun.objects.create(
+            org_unit=self.hq,
+            period_start=date(2026, 8, 1),
+            period_end=date(2026, 8, 31),
+        )
+        with self.assertRaises(PayrollServiceError) as ctx:
+            self._compute(second)
+        self.assertIn("already exists", str(ctx.exception))
+        self.assertFalse(PayslipLine.objects.filter(payroll_run=second).exists())
+
+    def test_failed_run_can_be_superseded(self):
+        first = self._run()
+        first.status = "failed"
+        first.save(update_fields=["status"])
+        second = PayrollRun.objects.create(
+            org_unit=self.hq,
+            period_start=date(2026, 8, 1),
+            period_end=date(2026, 8, 31),
+        )
+        self._compute(second)
+        second.refresh_from_db()
+        self.assertEqual(second.status, "computed")
+
+    def test_create_serializer_refuses_duplicate_period(self):
+        from people.serializers import PayrollRunSerializer
+
+        self._run()
+        serializer = PayrollRunSerializer(data={
+            "org_unit": self.hq.pk,
+            "period_start": "2026-08-01",
+            "period_end": "2026-08-31",
+        })
+        self.assertFalse(serializer.is_valid())
 
     def test_provenance_line_carries_data_row_id_and_hash(self):
         run = self._run()

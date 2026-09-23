@@ -44,6 +44,22 @@ class NonAuthoritativeRuleError(Exception):
     missing or non-authoritative rule (without an explicit opt-in)."""
 
 
+class MissingVerifiedBasicError(Exception):
+    """Raised when a regulated figure would otherwise read Employee.basic_salary.
+
+    ADR-0029: payroll and indemnity share one authority — the verified
+    monthly ``basic`` compensation-ledger line.
+    """
+
+
+class MissingNationalityError(Exception):
+    """Raised when a Kuwaiti-scoped rule exists and nationality is blank.
+
+    Seed/import use nationality code ``KWT`` for Kuwaiti nationals. Do not
+    invent a code when the FK is empty — refuse the figure instead.
+    """
+
+
 _QUANT = Decimal("0.001")
 _YEARS_QUANT = Decimal("0.0001")
 
@@ -149,15 +165,75 @@ def _find_rule(rules, category: str):
 
     "Active" = latest ``effective_date`` (ties broken by ``updated_at``).
     """
+    matching = _rules_for_category(rules, category)
+    return _latest_rule(matching)
+
+
+def _rules_for_category(rules, category: str) -> list:
     if rules is None:
-        return None
+        return []
     if hasattr(rules, "filter"):
-        return rules.filter(category__code=category).order_by("-effective_date", "-updated_at").first()
-    matching = [r for r in rules if getattr(r, "category", None) == category]
+        return list(rules.filter(category__code=category))
+    out = []
+    for rule in rules:
+        cat = getattr(rule, "category", None)
+        code = getattr(cat, "code", cat)
+        if code == category:
+            out.append(rule)
+    return out
+
+
+def _latest_rule(matching):
     if not matching:
         return None
+    matching = list(matching)
     matching.sort(key=lambda r: (r.effective_date, r.updated_at), reverse=True)
     return matching[0]
+
+
+def _nationality_code(employee) -> str:
+    nat = _get_field(employee, "nationality")
+    if nat is None:
+        return ""
+    if isinstance(nat, dict):
+        return str(nat.get("code") or "").strip()
+    return str(getattr(nat, "code", "") or "").strip()
+
+
+def _is_kuwaiti_scoped_rule(rule) -> bool:
+    rid = (getattr(rule, "rule_id", "") or "").lower()
+    name = (getattr(rule, "name", "") or "").lower()
+    return "kuwaiti" in rid or "kuwaiti national" in name
+
+
+def _find_nationality_scoped_rule(rules, category: str, employee):
+    """Pick a category rule, fail-closed when Kuwaiti-only rules exist.
+
+    Observed seed rule ids use a ``-kuwaiti`` suffix (``KWT`` nationality).
+    If any such rule is in the set and the employee has no nationality, refuse
+    rather than defaulting to the latest row (which can be the Kuwaiti divisor).
+    """
+    matching = _rules_for_category(rules, category)
+    if not matching:
+        return None
+    kuwaiti = [rule for rule in matching if _is_kuwaiti_scoped_rule(rule)]
+    generic = [rule for rule in matching if not _is_kuwaiti_scoped_rule(rule)]
+    if not kuwaiti:
+        return _latest_rule(matching)
+    code = _nationality_code(employee)
+    if not code:
+        raise MissingNationalityError(
+            f"Employee has no nationality; refusing Kuwaiti-scoped {category} "
+            "rule selection."
+        )
+    if code == "KWT":
+        return _latest_rule(kuwaiti)
+    if generic:
+        return _latest_rule(generic)
+    raise MissingNationalityError(
+        f"Employee nationality {code} does not match a Kuwaiti-scoped "
+        f"{category} rule and no general {category} rule exists."
+    )
 
 
 def _service_years(employee, as_of: date) -> Decimal:
@@ -167,26 +243,54 @@ def _service_years(employee, as_of: date) -> Decimal:
     return (Decimal(days) / Decimal(365)).quantize(_YEARS_QUANT, rounding=ROUND_HALF_UP)
 
 
+def _require_verified_basic(employee, as_of: date):
+    """Return the verified ledger basic or refuse (ADR-0029 / NR-EOSI-01)."""
+    from people.compensation_service import CompensationService
+
+    amount = CompensationService.verified_basic_amount(employee, as_of=as_of)
+    if amount is None:
+        emp_no = getattr(employee, "employee_no", "?")
+        raise MissingVerifiedBasicError(
+            f"Employee {emp_no} has no verified monthly 'basic' compensation "
+            "ledger line; refusing to compute from Employee.basic_salary."
+        )
+    return amount
+
+
 def calculate_eosi(employee, rules, *, allow_non_authoritative: bool = False, as_of: date = None) -> dict:
     """Compute the EOSI (end-of-service indemnity) accrual for an employee."""
-    rule = _find_rule(rules, "eosi")
+    rule = _find_nationality_scoped_rule(rules, "eosi", employee)
     as_of = as_of or timezone.now().date()
+    if rule is None:
+        return calculate(None, {}, allow_non_authoritative=allow_non_authoritative)
+    basic = _require_verified_basic(employee, as_of)
     inputs = {
-        "basic_salary": employee.basic_salary,
+        "basic_salary": basic,
         "service_years": _service_years(employee, as_of),
     }
-    return calculate(rule, inputs, allow_non_authoritative=allow_non_authoritative)
+    result = calculate(rule, inputs, allow_non_authoritative=allow_non_authoritative)
+    lineage = dict(result.get("lineage") or {})
+    lineage["basic_source"] = "verified_ledger"
+    result["lineage"] = lineage
+    return result
 
 
 def calculate_leave_accrual(employee, rules, *, allow_non_authoritative: bool = False, as_of: date = None) -> dict:
     """Compute annual leave accrual for an employee."""
-    rule = _find_rule(rules, "leave")
+    rule = _find_nationality_scoped_rule(rules, "leave", employee)
     as_of = as_of or timezone.now().date()
+    if rule is None:
+        return calculate(None, {}, allow_non_authoritative=allow_non_authoritative)
+    basic = _require_verified_basic(employee, as_of)
     inputs = {
-        "basic_salary": employee.basic_salary,
+        "basic_salary": basic,
         "service_years": _service_years(employee, as_of),
     }
-    return calculate(rule, inputs, allow_non_authoritative=allow_non_authoritative)
+    result = calculate(rule, inputs, allow_non_authoritative=allow_non_authoritative)
+    lineage = dict(result.get("lineage") or {})
+    lineage["basic_source"] = "verified_ledger"
+    result["lineage"] = lineage
+    return result
 
 
 def calculate_overtime(employee, inputs: dict, rules, *, allow_non_authoritative: bool = False) -> dict:
@@ -233,7 +337,9 @@ def calculate_gross_pay(employee, inputs: dict, rules, *, allow_non_authoritativ
         base_input = _formula_params(rule).get("base_input")
         if base_input and base_input not in inputs:
             inputs = dict(inputs)
-            inputs[base_input] = employee.basic_salary
+            inputs[base_input] = _require_verified_basic(
+                employee, timezone.now().date(),
+            )
     return calculate(rule, inputs, allow_non_authoritative=allow_non_authoritative)
 
 

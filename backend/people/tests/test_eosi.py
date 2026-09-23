@@ -10,6 +10,7 @@
 #   6. org-scoped (RULE_12) non-admin cannot read another org's employee → 404
 
 from datetime import date
+from decimal import Decimal
 
 import pytest
 
@@ -23,6 +24,7 @@ from people.tests.test_api import (  # noqa: F401
     org_b,
 )
 from people.tests.ref_helpers import compliance_rule_defaults, ensure_ref
+from people.tests.test_payroll_service import _verified_basic_line
 
 PEOPLE_API = '/carbon-api/people/'
 
@@ -93,6 +95,7 @@ def test_eosi_no_capability_403(auth, create_user, employee_a):
 def test_eosi_happy_path(auth, create_user, org_a):
     _eosi_rule(authoritative=True)
     emp = _employee(org_a)
+    _verified_basic_line(emp, amount=Decimal('780.000'), start=date(2024, 3, 1))
     client = auth(create_user('people_eosi_ok', is_superuser=True))
     resp = client.get(_eosi_url(emp), {'as_of': '2026-03-01'})
     assert resp.status_code == 200
@@ -100,6 +103,16 @@ def test_eosi_happy_path(auth, create_user, org_a):
     assert body['value'] == '900.000'
     assert body['lineage']['rule_id'] == 'kw-eosi-test'
     assert body['as_of'] == '2026-03-01'
+
+
+@pytest.mark.django_db
+def test_eosi_missing_verified_ledger_409(auth, create_user, org_a):
+    _eosi_rule(authoritative=True)
+    emp = _employee(org_a)
+    client = auth(create_user('people_eosi_noledger', is_superuser=True))
+    resp = client.get(_eosi_url(emp), {'as_of': '2026-03-01'})
+    assert resp.status_code == 409
+    assert 'verified' in resp.json()['detail'].lower()
 
 
 # ── 4. No authoritative rule → 409 (no-fabrication guard) ──────────────────
@@ -112,6 +125,57 @@ def test_eosi_no_authoritative_rule_409(auth, create_user, org_a):
     resp = client.get(_eosi_url(emp))
     assert resp.status_code == 409
     assert 'detail' in resp.json()
+
+
+def _kuwaiti_eosi_rule():
+    return ComplianceRule.objects.create(
+        rule_id="kw-eosi-accrual-kuwaiti",
+        version="2026.1",
+        name="EOSI indemnity — Kuwaiti national (daily-rate divisor 21)",
+        category=ensure_ref('compliance_category', 'eosi'),
+        jurisdiction=ensure_ref('jurisdiction', 'KW'),
+        effective_date=date(2026, 1, 1),
+        inputs_schema={
+            "inputs": ["basic_salary", "service_years"],
+            "formula": {
+                "type": "tiered_accrual",
+                "params": {
+                    "base_inputs": ["basic_salary"],
+                    "years_input": "service_years",
+                    "divisor": 21,
+                    "tiers": [
+                        {"up_to": 5, "days_per_year": 15},
+                        {"up_to": None, "days_per_year": 30},
+                    ],
+                },
+            },
+        },
+        is_authoritative=True,
+    )
+
+
+@pytest.mark.django_db
+def test_eosi_blank_nationality_refuses_kuwaiti_rule(auth, create_user, org_a):
+    _eosi_rule(authoritative=True)
+    _kuwaiti_eosi_rule()
+    emp = _employee(org_a)
+    _verified_basic_line(emp, amount=Decimal('780.000'), start=date(2024, 3, 1))
+    client = auth(create_user('people_eosi_nat', is_superuser=True))
+    resp = client.get(_eosi_url(emp), {'as_of': '2026-03-01'})
+    assert resp.status_code == 409
+    assert 'nationality' in resp.json()['detail'].lower()
+
+
+@pytest.mark.django_db
+def test_eosi_kwt_uses_kuwaiti_rule(auth, create_user, org_a):
+    _eosi_rule(authoritative=True)
+    _kuwaiti_eosi_rule()
+    emp = _employee(org_a, nationality=ensure_ref('nationality', 'KWT', 'Kuwaiti'))
+    _verified_basic_line(emp, amount=Decimal('780.000'), start=date(2024, 3, 1))
+    client = auth(create_user('people_eosi_kwt', is_superuser=True))
+    resp = client.get(_eosi_url(emp), {'as_of': '2026-03-01'})
+    assert resp.status_code == 200
+    assert resp.json()['lineage']['rule_id'] == 'kw-eosi-accrual-kuwaiti'
 
 
 # ── 5. Invalid as_of → 400 ─────────────────────────────────────────────────

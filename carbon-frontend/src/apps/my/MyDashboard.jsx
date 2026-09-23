@@ -226,6 +226,19 @@ function LeaveBalanceCard({ balances, loading, error, onRetry }) {
             {t('leaveBalanceEmpty')}
           </Typography>
         ) : (
+          <>
+          {balances.some((row) => Number(row.pending ?? 0) > 0) && (
+            <Typography sx={{ ...FONT.bodySmall, color: 'text.secondary', mb: 1 }}>
+              {t('leaveBalancePendingHint')}
+            </Typography>
+          )}
+          {balances.some((row) => row.overdrawn) && (
+            <Typography sx={{ ...FONT.bodySmall, color: 'warning.main', mb: 1 }}>
+              {t('leaveBalanceOverdrawnDetail', {
+                signed: balances.find((row) => row.overdrawn)?.remaining_signed,
+              })}
+            </Typography>
+          )}
           <ResponsiveList
             items={balances}
             getKey={(balance) => balance.leave_type || String(balance.id ?? balance.entitled)}
@@ -236,7 +249,11 @@ function LeaveBalanceCard({ balances, loading, error, onRetry }) {
                 : t('profileNotAvailable'),
               meta: `${t('leaveBalanceRemaining')}: ${balance.remaining ?? 0}`,
               status: String(balance.remaining ?? 0),
-              statusColor: (balance.remaining ?? 0) > 0 ? 'success' : 'default',
+              statusColor: balance.overdrawn
+                ? 'warning'
+                : (balance.remaining ?? 0) > 0
+                  ? 'success'
+                  : 'default',
             })}
             table={
               <TableContainer>
@@ -266,6 +283,7 @@ function LeaveBalanceCard({ balances, loading, error, onRetry }) {
                       const remaining = balance.remaining ?? 0;
                       const hasPending = pending > 0;
                       const hasRemaining = remaining > 0;
+                      const overdrawn = Boolean(balance.overdrawn);
                       return (
                         <TableRow key={`${balance.leave_type}-${index}`} hover>
                           <TableCell sx={{ ...FONT.body2 }}>
@@ -319,7 +337,11 @@ function LeaveBalanceCard({ balances, loading, error, onRetry }) {
                                 sx={{
                                   ...FONT.body2,
                                   fontWeight: 600,
-                                  color: hasRemaining ? 'success.main' : 'text.primary',
+                                  color: overdrawn
+                                    ? 'warning.main'
+                                    : hasRemaining
+                                      ? 'success.main'
+                                      : 'text.primary',
                                 }}
                               >
                                 {remaining}
@@ -334,6 +356,7 @@ function LeaveBalanceCard({ balances, loading, error, onRetry }) {
               </TableContainer>
             }
           />
+          </>
         )}
       </CardContent>
     </Card>
@@ -397,6 +420,9 @@ function PayslipsCard({ payslips, loading, error, onRetry }) {
       <Card variant="outlined">
         <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
           <SectionTitle icon={ReceiptLongIcon} title={t('payslipsTitle')} />
+          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mb: 0.5 }}>
+            {t('payslipsHonesty')}
+          </Typography>
           <Typography sx={{ ...FONT.body2, color: 'text.secondary' }}>
             {t('payslipsEmpty')}
           </Typography>
@@ -424,6 +450,9 @@ function PayslipsCard({ payslips, loading, error, onRetry }) {
     <Card variant="outlined">
       <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
         <SectionTitle icon={ReceiptLongIcon} title={t('payslipsTitle')} />
+        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mb: 0.5 }}>
+          {t('payslipsHonesty')}
+        </Typography>
         <Stack spacing={1.5}>
           {runs.map((run) => (
             <Stack key={String(run.id)} spacing={0.5}>

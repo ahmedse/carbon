@@ -129,6 +129,7 @@ export default function EmployeeEosiTab({ entityData }) {
 
       {!loading && !conflict && !error && result && (
         <Stack spacing={2}>
+          <Alert severity="info">{t('eosiBasicSourceWarning')}</Alert>
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Typography
               variant="caption"

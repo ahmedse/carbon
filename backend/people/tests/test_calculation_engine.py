@@ -5,6 +5,7 @@ from django.test import TestCase
 
 from mdm.models import OrgUnit
 from people.calculation_engine import (
+    MissingVerifiedBasicError,
     NonAuthoritativeRuleError,
     calculate,
     calculate_eosi,
@@ -18,6 +19,7 @@ from people.calculation_engine import (
     format_wps_record,
 )
 from people.models import ComplianceRule, Employee
+from people.tests.test_payroll_service import _verified_basic_line
 from people.tests.ref_helpers import compliance_rule_defaults, ensure_ref
 
 
@@ -97,9 +99,11 @@ class CalculationEngineHighLevelTests(TestCase):
             org_unit=self.org,
             employee_no="E-1001",
             full_name="Test Employee",
-            basic_salary=Decimal("780.000"),
+            basic_salary=Decimal("9999.000"),
             join_date=date(2024, 3, 1),
         )
+        # Profile basic is a decoy — engine must use the verified ledger (780).
+        _verified_basic_line(self.employee, Decimal("780.000"), start=date(2024, 3, 1))
 
     def test_calculate_eosi_looks_up_rule_and_uses_service_years(self):
         _eosi_rule(authoritative=False)
@@ -114,6 +118,21 @@ class CalculationEngineHighLevelTests(TestCase):
     def test_calculate_eosi_raises_when_no_rule(self):
         with self.assertRaises(NonAuthoritativeRuleError):
             calculate_eosi(self.employee, ComplianceRule.objects)
+
+    def test_calculate_eosi_refuses_profile_basic_without_ledger(self):
+        _eosi_rule(authoritative=False)
+        decoy = Employee.objects.create(
+            org_unit=self.org,
+            employee_no="E-NOLEDGER",
+            full_name="No Ledger",
+            basic_salary=Decimal("780.000"),
+            join_date=date(2024, 3, 1),
+        )
+        with self.assertRaises(MissingVerifiedBasicError):
+            calculate_eosi(
+                decoy, ComplianceRule.objects,
+                allow_non_authoritative=True, as_of=date(2026, 3, 1),
+            )
 
     def test_calculate_leave_accrual(self):
         ComplianceRule.objects.create(
@@ -184,9 +203,10 @@ class CalculationEngineExpansionTests(TestCase):
             org_unit=self.org,
             employee_no="E-2001",
             full_name="Expansion Employee",
-            basic_salary=Decimal("780.000"),
+            basic_salary=Decimal("9999.000"),
             join_date=date(2024, 3, 1),
         )
+        _verified_basic_line(self.employee, Decimal("780.000"), start=date(2024, 3, 1))
 
     # --- GOSI ---
 

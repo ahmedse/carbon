@@ -1,0 +1,11 @@
+id: NR-BAL-01
+journey: J1 Leave
+meaning: remaining_signed = entitled + carried - used - pending. Display remaining is max(0, signed). An overdraw case must exist.
+source: people/leave_guards.py compute_balance; Deep QA M-BAL-01
+owner: unconfirmed
+failure: Over-allocation is hidden because the API only shows a floored remaining.
+validation: assurance conservation probe
+implementation: assurance/oracles/conservation.py
+confidence: high-code
+catalogue: configured
+residual: Host compute_balance floors remaining. ESS refuses new requests against the floor, not the signed identity.

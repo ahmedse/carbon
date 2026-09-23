@@ -1,0 +1,11 @@
+id: PL-VERIFY-01
+journey: Local gate
+meaning: verify.sh is the local structural gate. Its default backend tests include ai, dq, accounts, and people.
+source: .ai-toolkit/scripts/verify.sh
+owner: platform
+failure: A green local gate hides a broken payroll rule.
+validation: Default test arguments are ai, dq, accounts, and people.
+implementation: .ai-toolkit/scripts/verify.sh
+confidence: high-code
+catalogue: configured
+residual: A green local gate does not prove GitHub merge protection. People tests make the gate slower.

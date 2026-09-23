@@ -1,0 +1,11 @@
+# Host plane for each process. YAML SoD is a Pulse dial, not this map.
+# host_gate = people.governance.sod on the irreversible host call.
+# correspondence = ADR-0030 skip_if_self on Team approve.
+# dial_only is forbidden after NPS-1.
+planes:
+  leave.request.lifecycle: correspondence
+  loan.request.lifecycle: correspondence
+  payroll.run.lifecycle: host_gate
+  gosi_wps.sif.lifecycle: host_gate
+  employee.onboarding.lifecycle: host_gate
+  attendance.permission.lifecycle: correspondence

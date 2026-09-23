@@ -4175,10 +4175,14 @@ class TurnPipelineRunner:
         utterance is not an ESS write. Never stages host mutations.
         """
         from ai.engine.cognition.turn.handoff_agent import (
+            build_chat_write_clarify,
             build_chat_write_handoff,
+            build_slot_status_answer,
             combine_user_brief,
             enough_slots_for_chat_handoff,
+            is_ess_slot_continuation,
             is_ess_write_utterance,
+            is_slot_status_ask,
             merge_slots,
             resolve_ess_write_from_brief,
             seed_slots_into_state,
@@ -4194,6 +4198,12 @@ class TurnPipelineRunner:
             prior_api and enough_slots_for_chat_handoff(prior_api, prior)
         )
         current_is_write = is_ess_write_utterance(user_message)
+        if prior and is_slot_status_ask(user_message):
+            return build_slot_status_answer(
+                api_name=prior_api,
+                slots=prior,
+                user_message=user_message,
+            )
         # Already handed off — do not re-fire on meta follow-ups
         # ("is the handoff complete?"). Thanks restates the same handoff at 0 LLM
         # (C8 / chat-handoff-write-01 t8).
@@ -4207,9 +4217,10 @@ class TurnPipelineRunner:
                     user_message=user_message,
                 )
             return None
-        active_write = prior_api.startswith("submit_my_")
-        # Fresh write ask, or slot continuation while a write is open.
-        if not current_is_write and not active_write:
+        # Fresh write, or a bare slot fill for an already-open write.
+        if not current_is_write and not is_ess_slot_continuation(
+            user_message, prior_api,
+        ):
             return None
 
         brief = combine_user_brief(user_message, conversation_history, prior)
@@ -4229,10 +4240,26 @@ class TurnPipelineRunner:
         if not enough_slots_for_chat_handoff(api_name, slots):
             logger.info(
                 "TurnPipelineRunner: ESS write incomplete slots api=%s — "
-                "seed state, fall through (no ReAct mutation)",
+                "lexical clarify (no ReAct mutation)",
                 api_name,
             )
-            return None
+            return build_chat_write_clarify(
+                api_name=api_name,
+                slots=slots,
+                user_message=user_message,
+            )
+        first_leave_dump = (
+            api_name == "submit_my_leave"
+            and not any(prior.get(k) for k in ("start_date", "end_date", "days"))
+            and bool(body.get("start_date") or body.get("end_date") or body.get("days"))
+        )
+        if first_leave_dump:
+            return build_chat_write_clarify(
+                api_name=api_name,
+                slots=slots,
+                user_message=user_message,
+                echo=True,
+            )
         logger.info(
             "TurnPipelineRunner: Chat handoff_agent api=%s slots=%s",
             api_name, sorted(slots.keys()),
@@ -4255,29 +4282,31 @@ class TurnPipelineRunner:
         host_user_id: str | None,
         t0: float,
     ):
-        """Finalize a ChatHandoffOutcome as handoff_agent (0 host staging)."""
+        """Finalize a ChatHandoffOutcome as handoff_agent / clarify / answer."""
         from types import SimpleNamespace
 
         from ai.engine.agent.reasoning import AgentResponse
         from ai.engine.cognition.notifier import broadcast_run_event as _broadcast_run
 
+        decision = str(getattr(outcome, "decision", None) or "handoff_agent")
         final_text = outcome.text
         total_latency = (time.monotonic() - t0) * 1000
-        handoff_tool = {
-            "tool_name": "call_host_api",
-            "tool_args": {
-                "api_name": outcome.api_name,
-                "body": outcome.slots,
-            },
-            "result": outcome.tool_result,
-            "error": None,
-            "latency_ms": 0.0,
-            "guardrail_flags": ["chat_no_host_mutation"],
-        }
-        if ledger.execution is not None:
-            ledger.execution.completed_tools = [handoff_tool]
-        else:
-            ledger.execution = SimpleNamespace(completed_tools=[handoff_tool])
+        if decision == "handoff_agent":
+            handoff_tool = {
+                "tool_name": "call_host_api",
+                "tool_args": {
+                    "api_name": outcome.api_name,
+                    "body": outcome.slots,
+                },
+                "result": outcome.tool_result,
+                "error": None,
+                "latency_ms": 0.0,
+                "guardrail_flags": ["chat_no_host_mutation"],
+            }
+            if ledger.execution is not None:
+                ledger.execution.completed_tools = [handoff_tool]
+            else:
+                ledger.execution = SimpleNamespace(completed_tools=[handoff_tool])
 
         ledger.final_response = (final_text or "")[:500]
         ledger.total_latency_ms = total_latency
@@ -4292,8 +4321,9 @@ class TurnPipelineRunner:
                     "final", 5,
                     {
                         "total_latency_ms": total_latency,
-                        "handoff_agent": True,
+                        "handoff_agent": decision == "handoff_agent",
                         "api_name": outcome.api_name,
+                        "chat_write_decision": decision,
                     },
                     0.0, verdict="pass",
                 )
@@ -4318,13 +4348,19 @@ class TurnPipelineRunner:
             "total_latency_ms": total_latency,
             "total_tokens": 0,
             "total_llm_calls": 0,
-            "handoff_agent": True,
+            "handoff_agent": decision == "handoff_agent",
+            "chat_write_decision": decision,
         })
         _signal(ledger, "skill_router", False)
-        _signal(ledger, "chat_handoff", True, api=outcome.api_name)
+        _signal(
+            ledger,
+            "chat_handoff" if decision == "handoff_agent" else f"chat_{decision}",
+            True,
+            api=outcome.api_name,
+        )
         _signal(ledger, "weather_force", False)
-        ledger.turn_decision = "handoff_agent"
-        _finalize_meter(ledger, meter, "handoff_agent")
+        ledger.turn_decision = decision
+        _finalize_meter(ledger, meter, decision)
         return response, ledger
 
     async def _try_multi_step_plan(

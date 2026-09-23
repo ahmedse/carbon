@@ -32,6 +32,7 @@ describe('EmployeeEosiTab smoke (A17)', () => {
     render(<EmployeeEosiTab entityData={{ empId: 42, id: 42 }} />);
 
     expect(await screen.findByText(/900/)).toBeInTheDocument();
+    expect(screen.getByText(/verified compensation ledger/i)).toBeInTheDocument();
     expect(screen.getByText(/kw-eosi-test/)).toBeInTheDocument();
     expect(screen.getByText(/2026\.1/)).toBeInTheDocument();
     await waitFor(() => expect(fetchEmployeeEosi).toHaveBeenCalled());

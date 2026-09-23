@@ -1,0 +1,11 @@
+id: NR-AI-01
+journey: J8 Pulse Chat
+meaning: Chat does not stage host writes for leave, loan, payroll, or attendance.
+source: ADR-0046; docs/pulse/QA-CHAT-AGENTIC-SCENARIO-BANK.md G2
+owner: architect-documented
+failure: A chat turn submits leave or payroll without Agent consent.
+validation: Scenario bank PC-090, PC-091, PC-350
+implementation: backend/ai/engine_runtime.py
+confidence: high-code
+catalogue: configured
+residual: Not re-executed by this framework. A green row requires an evidence event on the current commit.

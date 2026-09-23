@@ -1,0 +1,11 @@
+id: NR-LOAN-01
+journey: J4 Payroll commit
+meaning: Payroll prefers a persisted LoanInstallment due in the run month over an in-memory schedule.
+source: people/payroll_service._loan_installment_for_run
+owner: people
+failure: A recomputed engine schedule disagrees with the installment the employee was shown.
+validation: static binding on persisted_loan_installment
+implementation: Hybrid NSR-3A — persisted rows first, engine schedule only when none exist.
+confidence: high-code
+catalogue: configured
+residual: Loans with no materialized installments still use the engine schedule.

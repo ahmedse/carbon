@@ -39,6 +39,7 @@ from .leave_guards import (
     linked_actionable_corr as _linked_actionable_corr,
     linked_approved_corr as _linked_approved_corr,
     record_blocks_overlap as _record_blocks_overlap,
+    remaining_identity as _remaining_identity,
 )
 from .leave_type_resolve import allowed_leave_type_payload, resolve_leave_type
 from .manager_routing import manager_routing_block_response
@@ -98,6 +99,9 @@ class LeaveBalanceView(APIView):
             entitled, carried_forward, used, pending, remaining = _compute_balance(
                 profile, code, year,
             )
+            remaining_signed, _display = _remaining_identity(
+                entitled, carried_forward, used, pending,
+            )
             balances.append({
                 'leave_type': code,
                 'entitled': entitled,
@@ -106,6 +110,8 @@ class LeaveBalanceView(APIView):
                 'used': used,
                 'pending': pending,
                 'remaining': remaining,
+                'remaining_signed': remaining_signed,
+                'overdrawn': remaining_signed < 0,
             })
         return Response(LeaveBalanceSerializer(balances, many=True).data)
 

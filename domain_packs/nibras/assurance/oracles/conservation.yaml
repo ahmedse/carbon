@@ -1,0 +1,23 @@
+# signed = entitled + carried - used - pending. display = max(0, signed).
+cases:
+  - id: ordinary
+    entitled: "30"
+    carried: "2"
+    used: "10"
+    pending: "5"
+    signed: "17"
+    display: "17"
+  - id: pending-does-not-become-used
+    entitled: "20"
+    carried: "0"
+    used: "0"
+    pending: "5"
+    signed: "15"
+    display: "15"
+  - id: hidden-overdraw
+    entitled: "20"
+    carried: "0"
+    used: "15"
+    pending: "10"
+    signed: "-5"
+    display: "0"

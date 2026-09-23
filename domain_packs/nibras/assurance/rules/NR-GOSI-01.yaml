@@ -1,0 +1,11 @@
+id: NR-GOSI-01
+journey: J4 Payroll commit
+meaning: GOSI employee and employer shares come from the active ComplianceRule bands, not constants in code.
+source: people/calculation_engine.calculate_gosi
+owner: people
+failure: A hardcoded rate is paid after the rule row changes.
+validation: static binding on calculate_gosi + _formula_params
+implementation: calculate_gosi reads employee_bands / employer_bands from the rule.
+confidence: high-code
+catalogue: configured
+residual: Rule amounts are data. This rule does not attest PIFSS rates.

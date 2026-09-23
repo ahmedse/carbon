@@ -1,0 +1,125 @@
+bindings:
+  - rule_id: NR-PAY-01
+    file: backend/people/payroll_service.py
+    must_contain:
+      - verified_basic_amount
+      - "no verified monthly"
+      - refusing to compute payroll from
+    must_not_contain:
+      - "basic = employee.basic_salary"
+    detail: Compute fail-closes without a verified ledger basic line.
+
+  - rule_id: NR-PAY-02
+    file: backend/people/payroll_service.py
+    must_contain:
+      - "def commit"
+      - require_distinct_actor
+      - SUBJECT_PAYROLL_RUN
+    detail: Commit still calls the host SoD gate.
+
+  - rule_id: NR-PAY-03
+    file: backend/people/payroll_service.py
+    must_contain:
+      - '"commit": ("validated",)'
+      - 'if locked.status == "committed"'
+      - '"idempotent": True'
+    detail: A second commit on an already-committed run returns idempotent success.
+
+  - rule_id: NR-WPS-01
+    file: backend/people/payroll_service.py
+    must_contain:
+      - "def wps_submit_filing"
+      - require_distinct_actor
+      - "Filing must be validated"
+    detail: WPS submit still requires validation and a distinct actor.
+
+  - rule_id: NR-WPS-02
+    file: backend/people/payroll_service.py
+    must_contain:
+      - "filing.reconciled = False"
+      - LOCAL-WPS-
+      - local_export
+    must_not_contain:
+      - "filing.reconciled = True"
+    detail: Local submit stamps LOCAL-WPS-* and leaves reconciled False. PAM receipt is a separate event.
+
+  - rule_id: NR-EOSI-01
+    file: backend/people/calculation_engine.py
+    must_contain:
+      - "def calculate_eosi"
+      - _require_verified_basic
+      - 'basic_source"] = "verified_ledger"'
+    must_not_contain:
+      - '"basic_salary": employee.basic_salary'
+    detail: EOSI and leave accrual read the verified ledger basic. Profile salary is refused.
+
+  - rule_id: NR-LV-04
+    file: domain_packs/nibras/processes/leave.request.lifecycle.yaml
+    must_contain:
+      - "entitlement would go negative"
+      - "Host ESS (self_views / leave_revise) returns HTTP 400"
+    must_not_contain:
+      - "ask_if thresholds are dial advisory"
+    detail: Process YAML refuse_if matches ESS HTTP 400 for over-balance.
+
+  - rule_id: NR-AI-01
+    file: backend/ai/engine_runtime.py
+    must_contain:
+      - "G2"
+      - pending_actions
+    detail: Chat path still contains the G2 pending_actions strip.
+
+  - rule_id: NR-PAY-04
+    file: backend/people/payroll_service.py
+    must_contain:
+      - "def assert_unique_active_period"
+      - ACTIVE_PERIOD_STATUSES
+      - already exists
+    detail: Create and compute refuse a second active run for the same org and period.
+
+  - rule_id: NR-NAT-01
+    file: backend/people/calculation_engine.py
+    must_contain:
+      - "def _find_nationality_scoped_rule"
+      - MissingNationalityError
+      - refusing Kuwaiti-scoped
+    detail: EOSI and leave-accrual refuse when a Kuwaiti-scoped rule exists and nationality is blank.
+
+  - rule_id: NR-NAT-01
+    file: backend/people/leave_policy_service.py
+    must_contain:
+      - nationality__isnull=False
+      - LeavePolicy.KUWAIT_ONLY
+    detail: Kuwaiti-only leave propagation excludes blank nationality.
+
+  - rule_id: NR-GOSI-01
+    file: backend/people/calculation_engine.py
+    must_contain:
+      - "def calculate_gosi"
+      - employee_bands
+      - employer_bands
+      - _formula_params
+    detail: GOSI shares are read from the rule bands, not from constants in this function.
+
+  - rule_id: NR-ONB-01
+    file: backend/people/employee_onboard_service.py
+    must_contain:
+      - "def onboard_employee"
+      - propagate_for_employee
+      - is_verified=False
+    detail: Opening basic on hire stays unverified until HR verifies the ledger line.
+
+  - rule_id: NR-LOAN-01
+    file: backend/people/payroll_service.py
+    must_contain:
+      - "def _loan_installment_for_run"
+      - persisted_loan_installment
+    detail: Payroll prefers a persisted installment due in the run month.
+
+  - rule_id: NR-360-01
+    file: carbon-frontend/src/apps/people/EmployeeDetailPage.jsx
+    must_contain:
+      - "fetchLeaveEntitlements(token, { employee: employeeId })"
+      - "fetchLeaveRecords(token, { employee: employeeId })"
+      - "allEmployees: []"
+    detail: Opening 360 does not walk the full employee directory.

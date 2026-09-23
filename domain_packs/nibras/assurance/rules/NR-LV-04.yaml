@@ -1,0 +1,11 @@
+id: NR-LV-04
+journey: J1 Leave
+meaning: A request that would make remaining leave negative is refused by host ESS (HTTP 400) and declared in process YAML refuse_if.
+source: people/self_views.py; people/leave_revise.py; leave.request.lifecycle.yaml
+owner: host-observed
+failure: Over-grant leave, or a dial that still calls the refuse advisory.
+validation: Binding plus ESS 400 path
+implementation: days > remaining → HTTP 400
+confidence: high-code
+catalogue: configured
+residual: Display remaining is floored. Signed remaining is on the employee balance API.

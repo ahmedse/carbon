@@ -107,10 +107,17 @@ export default function LeaveBalanceCards({ balances, loading, error, onRetry })
             {t('leaveBalanceEmpty')}
           </Typography>
         ) : (
-          <Grid container spacing={1}>
+          <Stack spacing={1}>
+            {balances.some((row) => Number(row.pending ?? 0) > 0) && (
+              <Typography sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>
+                {t('leaveBalancePendingHint')}
+              </Typography>
+            )}
+            <Grid container spacing={1}>
             {balances.map((balance, index) => {
               const pending = Number(balance.pending ?? 0);
               const remaining = Number(balance.remaining ?? 0);
+              const overdrawn = Boolean(balance.overdrawn);
               return (
                 <Grid key={`${balance.leave_type}-${index}`} size={{ xs: 12, sm: 6, md: 4 }}>
                   <Card variant="outlined">
@@ -121,6 +128,13 @@ export default function LeaveBalanceCards({ balances, loading, error, onRetry })
                       >
                         {leaveTypeLabel(i18n, t, balance.leave_type)}
                       </Typography>
+                      {overdrawn && (
+                        <Alert severity="warning" sx={{ mb: 1, py: 0.25 }}>
+                          {t('leaveBalanceOverdrawnDetail', {
+                            signed: balance.remaining_signed,
+                          })}
+                        </Alert>
+                      )}
                       <Stack direction="row" spacing={1.5} useFlexGap flexWrap="wrap" rowGap={1}>
                         {Number(balance.carried_forward ?? 0) > 0 && (
                           <Metric
@@ -139,7 +153,7 @@ export default function LeaveBalanceCards({ balances, loading, error, onRetry })
                         <Metric
                           label={t('leaveBalanceRemaining')}
                           value={balance.remaining}
-                          tone={remaining > 0 ? 'success.main' : null}
+                          tone={overdrawn ? 'warning.main' : remaining > 0 ? 'success.main' : null}
                         />
                       </Stack>
                     </CardContent>
@@ -147,7 +161,8 @@ export default function LeaveBalanceCards({ balances, loading, error, onRetry })
                 </Grid>
               );
             })}
-          </Grid>
+            </Grid>
+          </Stack>
         )}
       </CardContent>
     </Card>

@@ -1,4 +1,4 @@
-# Registry: Backend Services & Utilities  (auto-generated 2026-09-21 14:41 — DO NOT EDIT)
+# Registry: Backend Services & Utilities  (auto-generated 2026-09-23 10:44 — DO NOT EDIT)
 
 > Business logic lives in services. Before writing a new one, check this list — extend, don't duplicate.
 
@@ -10,7 +10,7 @@ backend/accounts/services.py:61:class AppManifestService:
 backend/ai/audit_service.py:23:class AuditService:
 backend/ai/catalog_service.py:60:class CatalogService:
 backend/ai/durable_service.py:101:class DurableExecutionService:
-backend/ai/plans_service.py:778:class PlansService:
+backend/ai/plans_service.py:833:class PlansService:
 backend/ai/subagent_service.py:68:class SubagentService:
 backend/appregistry/services.py:13:class AppRegistryService:
 backend/connections/services.py:22:class ConnectionService:
@@ -69,6 +69,8 @@ backend/people/loan_service.py:24:class LoanServiceError(Exception):
 backend/people/payroll_service.py:142:class PayrollRunService:
 backend/people/payroll_service.py:41:class PayrollServiceError(Exception):
 backend/people/services.py:13:class CalculationService:
+backend/people/tests/test_host_sod.py:123:class WpsSoDServiceTests(TestCase):
+backend/people/tests/test_host_sod.py:82:class PayrollSoDServiceTests(TestCase):
 backend/people/tests/test_payroll_service.py:161:class PayrollRunServiceTests(TestCase):
 ```
 
@@ -111,6 +113,7 @@ backend/core/management/commands/seed_aastmt_showcase.py
 backend/core/management/commands/seed_carbon_coverage.py
 backend/core/management/commands/seed_carbon_metadata.py
 backend/core/management/commands/seed_carbon_raw.py
+backend/correspondence/management/commands/reroute_orphaned_correspondence.py
 backend/correspondence/management/commands/seed_correspondence.py
 backend/dq/management/commands/check_freshness.py
 backend/dq/management/commands/profile_all.py
@@ -133,6 +136,7 @@ backend/gradevance/management/commands/sync_eduos_packs.py
 backend/healthy/management/commands/register_healthy_app.py
 backend/mdm/management/commands/seed_gofsco_org.py
 backend/people/management/commands/apply_gofsco_kuwaitization.py
+backend/people/management/commands/assign_employee_managers.py
 backend/people/management/commands/backfill_salary_estimates.py
 backend/people/management/commands/import_gofsco_employees.py
 backend/people/management/commands/link_employee_users.py

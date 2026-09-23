@@ -1,0 +1,3 @@
+probes:
+  - {type: binding, rule_id: PL-VERIFY-01}
+  - {type: binding, rule_id: PL-CI-01}

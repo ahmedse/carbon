@@ -27,7 +27,8 @@ def _eligible_queryset(policy):
       - org-unit scope (``applies_to_org_units``; empty = all);
       - contract-type scope (``applies_to_contract_types``; empty = all);
       - Kuwaitization scope (``applies_to_kuwaitization``: Kuwaiti / non-Kuwaiti
-        / any — GOFSCO 42-day vs 30-day leave);
+        / any — GOFSCO 42-day vs 30-day leave). Kuwaiti-only also requires a
+        populated nationality FK (blank nationality is excluded, not inferred);
       - rotation-pattern scope (``applies_to_rotations``; empty = all).
     """
     employees = Employee.objects.filter(is_active=True, join_date__isnull=False)
@@ -46,7 +47,10 @@ def _eligible_queryset(policy):
             contract_type__code__in=policy.applies_to_contract_types,
         )
     if policy.applies_to_kuwaitization == LeavePolicy.KUWAIT_ONLY:
-        employees = employees.filter(kuwaitization=True)
+        employees = employees.filter(
+            kuwaitization=True,
+            nationality__isnull=False,
+        )
     elif policy.applies_to_kuwaitization == LeavePolicy.KUWAIT_NON:
         employees = employees.filter(kuwaitization=False)
     if policy.applies_to_rotations:

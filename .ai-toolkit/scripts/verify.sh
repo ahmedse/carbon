@@ -54,7 +54,7 @@ verify_tests() {
   local PY; PY="$(_py)"
   local _prev="$PWD"
   cd "$BACKEND_DIR" || return
-  if "$PY" -m pytest ${TEST_ARGS:-ai dq accounts -q} >/tmp/vt.log 2>&1; then
+  if "$PY" -m pytest ${TEST_ARGS:-ai dq accounts people -q} >/tmp/vt.log 2>&1; then
     pass "backend tests ($(grep -oE '[0-9]+ passed' /tmp/vt.log | head -1 || echo ok))"
   else
     fail "backend tests (see /tmp/vt.log)"; tail -25 /tmp/vt.log

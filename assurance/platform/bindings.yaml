@@ -1,0 +1,13 @@
+bindings:
+  - rule_id: PL-VERIFY-01
+    file: .ai-toolkit/scripts/verify.sh
+    must_contain:
+      - "ai dq accounts people"
+    detail: Default local pytest set includes people.
+
+  - rule_id: PL-CI-01
+    file: .github/workflows/ci.yml
+    must_contain:
+      - "python -m pytest"
+      - "working-directory: backend"
+    detail: CI backend job runs pytest. Merge protection was not read from GitHub.

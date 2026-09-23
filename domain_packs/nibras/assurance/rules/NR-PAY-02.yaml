@@ -1,0 +1,11 @@
+id: NR-PAY-02
+journey: J4 Payroll commit
+meaning: The user who commits a payroll run is not the preparer stamped at compute.
+source: ADR-0045; domain_packs/nibras/processes/payroll.run.lifecycle.yaml
+owner: unconfirmed
+failure: One operator both prepares and commits a pay month.
+validation: people/tests/test_host_sod.py
+implementation: people/governance/sod.py via PayrollRunService.commit
+confidence: high-code
+catalogue: not-executed
+residual: Process YAML is a Pulse dial. Host enforcement is the SoD module.

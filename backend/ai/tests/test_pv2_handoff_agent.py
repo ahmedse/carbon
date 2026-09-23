@@ -16,14 +16,20 @@ from ai.engine.cognition.plan.planner import Plan, PlanStep
 from ai.engine.cognition.state_store import ConversationState
 from ai.engine.cognition.turn.handoff_agent import (
     ChatHandoffOutcome,
+    build_chat_write_clarify,
     build_chat_write_handoff,
+    build_slot_status_answer,
     chat_grounding_rules_block,
     combine_user_brief,
     enough_slots_for_chat_handoff,
     extract_plan_write,
+    is_ess_slot_continuation,
     is_ess_write_utterance,
+    is_slot_status_ask,
     merge_slots,
+    missing_slots_for_chat,
     plan_has_mutating_host_api,
+    resolve_ess_write_from_brief,
     seed_slots_into_state,
 )
 from ai.engine.cognition.turn.witnesses import TurnLedger
@@ -114,6 +120,47 @@ def test_extract_and_enough_slots():
     ) is True
     assert enough_slots_for_chat_handoff("submit_my_other", {"x": 1}) is True
     assert enough_slots_for_chat_handoff("submit_my_other", {}) is False
+
+
+def test_incomplete_loan_clarifies_and_named_leave_dates_bind():
+    assert missing_slots_for_chat("submit_my_loan", {}) == ["loan_type", "principal"]
+    ask = build_chat_write_clarify(
+        api_name="submit_my_loan",
+        slots={},
+        user_message="I want to apply for a loan",
+    )
+    assert ask.decision == "clarify"
+    assert "type" in ask.text.lower()
+    amount = build_chat_write_clarify(
+        api_name="submit_my_loan",
+        slots={"loan_type": "emergency"},
+        user_message="An emergency loan",
+    )
+    assert amount.decision == "clarify"
+    assert "emergency" in amount.text.lower()
+    assert is_slot_status_ask("What type of leave did I request?")
+    recall = build_slot_status_answer(
+        api_name="submit_my_leave",
+        slots={"leave_type": "annual", "start_date": "2025-01-15"},
+        user_message="What type of leave did I request?",
+    )
+    assert recall.decision == "answer"
+    assert "annual" in recall.text.lower()
+    api, body = resolve_ess_write_from_brief(
+        "I need to take annual leave from January 15 to January 22, 2025",
+    )
+    assert api == "submit_my_leave"
+    assert body.get("leave_type") == "annual"
+    assert body.get("start_date") == "2025-01-15"
+    assert body.get("end_date") == "2025-01-22"
+    assert not is_ess_write_utterance("What was the loan amount?")
+    assert not is_ess_write_utterance("What was my net pay last month?")
+    assert is_ess_write_utterance("I want to apply for a loan")
+    assert is_ess_slot_continuation("An emergency loan", "submit_my_loan")
+    assert is_ess_slot_continuation("3000 SAR", "submit_my_loan")
+    assert not is_ess_slot_continuation(
+        "What was the loan amount?", "submit_my_loan",
+    )
 
 
 def test_merge_slots_and_brief():
@@ -268,7 +315,10 @@ async def test_try_chat_write_handoff_incomplete_seeds_state():
         state_ctx=ctx,
         instance_config={"api_catalog": _LOAN_CATALOG},
     )
-    assert outcome is None
+    assert isinstance(outcome, ChatHandoffOutcome)
+    assert outcome.decision == "clarify"
+    assert "type" in outcome.text.lower()
+    assert (ctx.state.intent or {}).get("api") == "submit_my_loan"
 
 
 @pytest.mark.asyncio

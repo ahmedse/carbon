@@ -50,6 +50,50 @@ def test_me_context_returns_perspectives_for_scoped_roles(api_client, create_use
     data = response.json()
     assert "admin" in data["perspectives"]
     assert "data-owner" in data["perspectives"]
+    # Unlinked account → employee is null (shell identity contract)
+    assert data.get("employee") is None
+
+
+@pytest.mark.django_db
+def test_me_context_includes_linked_employee_summary(api_client, create_user, get_token_for_user):
+    """Shell bootstrap: linked ESS users get employee.full_name for display."""
+    from mdm.models import OrgUnit
+    from people.models import Employee, Position
+
+    emp_user = create_user("emp_shell_id")
+    root = OrgUnit.objects.create(
+        name='Shell Root', slug='shell-id-root', org_type='company',
+    )
+    org = OrgUnit.objects.create(
+        name='Coiled Tubing', slug='shell-id-ct', code='CT-SHELL',
+        org_type='department', parent=root,
+    )
+    position = Position.objects.create(
+        code='FT-SHELL', title='Field Technician', org_unit=org,
+    )
+    Employee.objects.create(
+        org_unit=org,
+        employee_no='SHELL-1067',
+        full_name='Bilagot Panta Suerte',
+        user=emp_user,
+        is_active=True,
+        basic_salary='0.000',
+        position=position,
+    )
+
+    token = get_token_for_user(emp_user)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+    response = api_client.get(reverse("me-context"))
+
+    assert response.status_code == 200
+    data = response.json()
+    emp = data.get("employee")
+    assert emp is not None
+    assert emp["full_name"] == "Bilagot Panta Suerte"
+    assert emp["employee_no"] == "SHELL-1067"
+    assert emp["job_title"] == "Field Technician"
+    assert emp["org_unit_name"] == "Coiled Tubing"
+    assert emp["id"] is not None
 
 
 @pytest.mark.django_db

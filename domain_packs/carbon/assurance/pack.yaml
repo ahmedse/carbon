@@ -1,0 +1,7 @@
+id: carbon
+title: Carbon organizational inventory
+brand: carbon
+journeys:
+  - id: INV
+    title: Organizational GHG inventory
+blocks_release: []

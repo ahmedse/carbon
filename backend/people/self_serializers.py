@@ -58,6 +58,8 @@ class LeaveBalanceSerializer(serializers.Serializer):
     used = LeaveDaysField()
     pending = LeaveDaysField()
     remaining = LeaveDaysField()
+    remaining_signed = LeaveDaysField()
+    overdrawn = serializers.BooleanField()
 
 
 class LeaveRecordSerializer(serializers.ModelSerializer):

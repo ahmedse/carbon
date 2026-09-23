@@ -1,0 +1,18 @@
+probes:
+  - {type: honesty, rule_id: NR-HONEST-01}
+  - {type: formula, rule_id: NR-CALC-01}
+  - {type: conservation, rule_id: NR-BAL-01}
+  - {type: binding, rule_id: NR-PAY-01}
+  - {type: binding, rule_id: NR-PAY-02}
+  - {type: binding, rule_id: NR-PAY-03}
+  - {type: binding, rule_id: NR-WPS-01}
+  - {type: binding, rule_id: NR-WPS-02}
+  - {type: binding, rule_id: NR-EOSI-01}
+  - {type: binding, rule_id: NR-LV-04}
+  - {type: binding, rule_id: NR-AI-01}
+  - {type: binding, rule_id: NR-PAY-04}
+  - {type: binding, rule_id: NR-NAT-01}
+  - {type: binding, rule_id: NR-GOSI-01}
+  - {type: binding, rule_id: NR-ONB-01}
+  - {type: binding, rule_id: NR-LOAN-01}
+  - {type: binding, rule_id: NR-360-01}

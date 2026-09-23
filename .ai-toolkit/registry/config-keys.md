@@ -1,4 +1,4 @@
-# Registry: Configuration Keys  (auto-generated 2026-09-21 14:41 — DO NOT EDIT)
+# Registry: Configuration Keys  (auto-generated 2026-09-23 10:44 — DO NOT EDIT)
 
 > Every env var the app reads. NEVER hardcode these — always read from env with a safe default.
 
@@ -17,6 +17,7 @@ DJANGO_ENV
 EDUOS_ADMIN_PASSWORD
 EDUOS_ADMIN_USERNAME
 EDUOS_SUPERUSER_USERNAME
+EMPLOYEE_DEFAULT_PASSWORD
 EVAL_PASS_K
 KG_MULTI_STEP_ENABLED
 LLM_API_KEY
@@ -45,6 +46,7 @@ SMTP_PORT
 SMTP_USERNAME
 SMTP_USE_SSL
 SMTP_USE_TLS
+TEST_DB_NAME
 ```
 
 ## Frontend env vars (import.meta.env)

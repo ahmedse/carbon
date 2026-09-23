@@ -95,7 +95,7 @@ export default function PayrollRunsPage() {
   const { t } = useTranslation('people');
   const { t: tCommon } = useTranslation('common');
   useDocumentTitle(t('payrollTitle'));
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [runs, setRuns] = useState([]);
   const [orgUnits, setOrgUnits] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -334,6 +334,10 @@ export default function PayrollRunsPage() {
         />
       ) : (
       <Stack spacing={2}>
+        <Alert severity="info">{t('payrollSodBanner')}</Alert>
+        {runs.some((run) => run.status === 'committed') && (
+          <Alert severity="warning">{t('wpsExportHonesty')}</Alert>
+        )}
         <TableContainer component={Paper} variant="outlined">
           <Table size="small">
             <TableHead>
@@ -342,6 +346,7 @@ export default function PayrollRunsPage() {
                 <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colPeriodEnd')}</TableCell>
                 <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colOrgUnit')}</TableCell>
                 <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colStatus')}</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colPreparer')}</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colActions')}</TableCell>
               </TableRow>
             </TableHead>
@@ -367,6 +372,7 @@ export default function PayrollRunsPage() {
                         label={statusKey ? t(statusKey) : run.status}
                       />
                     </TableCell>
+                    <TableCell>{run.preparer_username || '—'}</TableCell>
                     <TableCell align="right">
                       <Stack direction="row" spacing={0.5} justifyContent="flex-end" alignItems="center">
                         {['compute', 'validate', 'commit'].map((action) => (
@@ -374,7 +380,15 @@ export default function PayrollRunsPage() {
                             key={action}
                             size="small"
                             variant="outlined"
-                            disabled={!ACTION_ENABLED[action](run.status) || busyId === run.id}
+                            disabled={
+                              !ACTION_ENABLED[action](run.status)
+                              || busyId === run.id
+                              || (
+                                action === 'commit'
+                                && Boolean(user?.username)
+                                && run.preparer_username === user.username
+                              )
+                            }
                             onClick={(event) => {
                               event.stopPropagation();
                               handleAction(run, action);

@@ -95,9 +95,9 @@ policies:
   refuse_if:
     - requester equals approver
     - request is not reviewed before record
-  # ask_if thresholds are dial advisory until host ESS enforces them.
-  ask_if:
+    # Host ESS (self_views / leave_revise) returns HTTP 400 when days > remaining.
     - entitlement would go negative
+  ask_if: []
 
 exceptions: []
 

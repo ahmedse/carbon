@@ -80,8 +80,11 @@ class WpsFilingLifecycleTests(TestCase):
         body = r3.json()
         self.assertEqual(body["status"], "submitted")
         self.assertTrue(body["receipt_id"])
+        self.assertTrue(str(body["receipt_id"]).startswith("LOCAL-WPS-"))
+        self.assertFalse(body["reconciled"])
+        self.assertEqual(body.get("receipt_kind"), "local_export")
         filing = WpsFiling.objects.get(payroll_run=run)
-        self.assertTrue(filing.reconciled)
+        self.assertFalse(filing.reconciled)
 
         r4 = self.client.post(f"/carbon-api/people/payroll-runs/{run.pk}/wps/submit/")
         self.assertEqual(r4.status_code, 200)

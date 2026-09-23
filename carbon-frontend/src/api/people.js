@@ -239,9 +239,14 @@ export function fetchBenefitTypes(token) {
   return apiFetch(`${ROOT}benefit-types/`, { token });
 }
 
-/** List employee benefits. */
-export function fetchEmployeeBenefits(token) {
-  return apiFetch(`${ROOT}benefits/`, { token });
+/** List employee benefits (optional ``employee`` filter). */
+export function fetchEmployeeBenefits(token, params = {}) {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v != null && v !== '') qs.set(k, String(v));
+  });
+  const suffix = qs.toString() ? `?${qs}` : '';
+  return apiFetch(`${ROOT}benefits/${suffix}`, { token });
 }
 
 /** Create a benefit type. */
@@ -495,9 +500,14 @@ export function fetchEmployeeCorrespondenceDetail(id, corrId, token) {
   );
 }
 
-/** List employee loans. */
-export function fetchLoans(token) {
-  return apiFetch(`${ROOT}loans/`, { token });
+/** List employee loans (optional ``employee`` filter). */
+export function fetchLoans(token, params = {}) {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v != null && v !== '') qs.set(k, String(v));
+  });
+  const suffix = qs.toString() ? `?${qs}` : '';
+  return apiFetch(`${ROOT}loans/${suffix}`, { token });
 }
 
 /** Create a loan. */
@@ -520,9 +530,14 @@ export function fetchLoanInstallments(token) {
   return apiFetch(`${ROOT}loan-installments/`, { token });
 }
 
-/** List employee certifications. */
-export function fetchCertifications(token) {
-  return apiFetch(`${ROOT}certifications/`, { token });
+/** List employee certifications (optional ``employee`` filter). */
+export function fetchCertifications(token, params = {}) {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v != null && v !== '') qs.set(k, String(v));
+  });
+  const suffix = qs.toString() ? `?${qs}` : '';
+  return apiFetch(`${ROOT}certifications/${suffix}`, { token });
 }
 
 /** Create a certification. */

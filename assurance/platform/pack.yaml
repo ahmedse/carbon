@@ -1,0 +1,13 @@
+id: platform
+title: Platform engineering gates
+brand: "*"
+journeys:
+  - id: LOCAL
+    title: Local gate
+  - id: PR
+    title: Pull request
+  - id: STREAM
+    title: Live stream
+blocks_release:
+  - PL-VERIFY-01
+  - PL-CI-01
