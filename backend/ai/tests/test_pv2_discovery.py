@@ -124,6 +124,39 @@ def test_chat_slots_appear_in_agent_discovery_brief(user, monkeypatch):
     assert "Inherited from Chat" in seen["brief"]
 
 
+def test_public_inherited_context_is_outcome_only(user):
+    conv = "conv-5c-inherit"
+    _seed_state(conv, loan_type="emergency", amount=3000, principal=3000, api="submit_my_loan")
+    items = PlansService()._public_inherited_context(conv)
+    keys = {i["key"] for i in items}
+    assert keys == {"amount", "loan_type"}
+    values = {i["key"]: i["value"] for i in items}
+    assert values["amount"] == "3000"
+    assert values["loan_type"] == "emergency"
+    assert "api" not in keys
+
+
+def test_serialize_run_includes_inherited_context(user):
+    from ai.models.core import Run, generate_uuid
+    from ai.plans_service import PLAN_INSTANCE_ID, STATUS_PENDING_APPROVAL
+
+    conv = "conv-5c-ser"
+    _seed_state(conv, leave_type="sick", start_date="2026-09-24")
+    run = Run.objects.create(
+        id=generate_uuid(),
+        instance_id=PLAN_INSTANCE_ID,
+        conversation_id=conv,
+        host_user_id=str(user.pk),
+        user_message="sick leave tomorrow",
+        status=STATUS_PENDING_APPROVAL,
+        plan_json={"pattern": "custom", "steps": []},
+    )
+    dto = PlansService._serialize_run(run)
+    keys = {i["key"] for i in dto.get("inherited_context") or []}
+    assert "leave_type" in keys
+    assert "start_date" in keys
+
+
 def test_discovery_prompt_includes_stateblock(user):
     conv = "conv-3c-pack"
     _seed_state(conv, amount=5000, loan_type="emergency")

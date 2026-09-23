@@ -1834,7 +1834,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   );
 
   // ── Run: graph-first surface (DAG hero; list behind toggle) ───────────
-  const renderRun = () => {
+  const renderRun = ({ hideInherited = false } = {}) => {
     if (detailLoading) {
       return <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={22} /></Box>;
     }
@@ -2038,6 +2038,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
         )}
 
         <AgentRunSurface
+          hideInherited={hideInherited}
           plan={selectedPlan}
           runSteps={runSteps}
           phase={phase}
@@ -2695,7 +2696,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
 
     const cockpitToolbar = segment === 'plan' ? planToolbar : segment === 'run' ? runToolbar : null;
 
-    const renderCockpitRun = () => renderRun();
+    const renderCockpitRun = () => renderRun({ hideInherited: true });
 
     const renderCockpitCanvas = () => {
       const journeySteps = runSteps.length

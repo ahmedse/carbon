@@ -50,6 +50,23 @@ describe('AgentCockpit — segmented control', () => {
   });
 });
 
+describe('AgentCockpit — inherited Chat context', () => {
+  it('shows carried conversation details on every segment', () => {
+    render(
+      <Harness
+        plan={{
+          id: 'p1',
+          inherited_context: [{ key: 'amount', value: '3000' }],
+        }}
+      />,
+    );
+    const panel = screen.getByTestId('agent-run-inherited-context');
+    expect(panel).toHaveTextContent(/Carried from this conversation/i);
+    expect(panel).toHaveTextContent(/Amount · 3000/);
+    expect(panel).not.toHaveTextContent(/ConversationState|Pulse|slots/i);
+  });
+});
+
 describe('AgentCockpit — no library overflow', () => {
   it('does not render Library / Templates / Scheduled controls', () => {
     render(<Harness />);

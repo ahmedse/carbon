@@ -82,11 +82,12 @@ function AIWorkspaceHeader({
       : CONTRACT_TEXT_KEYS[agentLifecycleState] || CONTRACT_TEXT_KEYS.idle;
 
   const linkedBrief = (linkedPlan?.brief || '').trim();
+  const showContinuityChip = mode === 'chat' && Boolean(linkedPlan?.id || linkedBrief);
   const linkedLabel = linkedBrief
     ? t('continuity.openPlan', {
       brief: linkedBrief.length > 36 ? `${linkedBrief.slice(0, 36)}…` : linkedBrief,
     })
-    : t('continuity.openPlanShort');
+    : t('continuity.continueInAgent');
 
   const handleSaveCheckpoint = async () => {
     if (!conversationId || !canManageConsole) return;
@@ -117,7 +118,7 @@ function AIWorkspaceHeader({
         }}
       >
         <PulseLogo size={20} showWordmark />
-        {mode === 'chat' && linkedPlan?.id ? (
+        {showContinuityChip ? (
           <Chip
             size="small"
             color="primary"
@@ -259,8 +260,9 @@ AIWorkspaceHeader.propTypes = {
     'error',
   ]),
   linkedPlan: PropTypes.shape({
-    id: PropTypes.string.isRequired,
+    id: PropTypes.string,
     brief: PropTypes.string,
+    status: PropTypes.string,
   }),
   onOpenLinkedPlan: PropTypes.func,
   onDismissLinkedPlan: PropTypes.func,

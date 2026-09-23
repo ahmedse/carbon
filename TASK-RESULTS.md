@@ -3929,14 +3929,19 @@ GATE PASSED
 
 ### Deviations
 1. Chat slot bind is lexical (engine-local aliases + amount regex). Agent still MDM-resolves on inherit — Chat run() is async and must not import `fill_write_body`.
-2. Offline bank / live 3-script re-check still batched (needs approval). `force_action_fired` target 0 not re-measured on the bank this morning.
-3. Complete loan briefs hand off before draft — 1A StateBlock-in-draft assertion on that loan conversation was updated to persist/no-reask.
+2. Complete loan briefs hand off before draft — 1A StateBlock-in-draft assertion on that loan conversation was updated to persist/no-reask.
+
+### Offline bank (w3b worker re-gate 2026-09-23)
+`TEST_DB_NAME=test_nibras_dev_w3b` · `scripts/08-chat-handoff-write-01.yaml` → **PASS 8/8**  
+t1–t2 clarify/answer (incomplete) · **t3 `handoff_agent`** (type+amount) · t4–t8 answer (no re-handoff) · router_agreement 1.0 · C5/C6 1.0.  
+Regression: 94 passed, 12 xfailed · import boundary 9 · antipatterns GATE PASSED.
 
 ### Issues found (not fixed)
 | ID | Severity | Finding | Notes |
 |---|---|---|---|
 | I1 | Info | Live F-LIVE-2/4 re-check still pending approval | Morning batch |
-| I2 | Info | Offline `force_action_fired` count not re-run | Run with 4A shadow bank |
+
+**GATE PASSED** — import boundary 9 · antipatterns green · chat-handoff-write-01 8/8 · F-LIVE-2/4 closed.
 
 **GATE PASSED** — Chat write path is handoff_agent; 0 host staging on the unit seam.
 
@@ -4052,5 +4057,39 @@ Import boundary 9.
 
 **GATE PASSED** — lifecycle write-back + 0-LLM plan_status.
 
+## PV2-5C
 
+**Date:** 2026-09-23  
+**Worker:** Master  
+**Status:** GATE PASSED  
+**DB:** `TEST_DB_NAME=test_nibras_dev_master`
 
+### Summary
+Chat surfaces `active_plans` on the conversation + assistant metadata. The header chip opens Agent (plan id or inherited brief). Agent cockpit / Run show an outcome-only "Carried from this conversation" panel (RULE_23). Chat chrome still has no host-API Confirm.
+
+### Files changed
+| Path | Change |
+|---|---|
+| `backend/ai/intelligence.py` | Persist + return `active_plans` |
+| `backend/ai/engine_runtime.py` / `protocol.py` / `providers/pulse.py` | Result + ChatResponse field |
+| `backend/ai/plans_service.py` | `_public_inherited_context` on plan DTO |
+| `carbon-frontend/src/shell/{AIWorkspaceHeader,AgentCockpit,InheritedContextPanel,activePlans}.*` | Chip + inherited panel |
+| `carbon-frontend/e2e/journeys/pv2-5c-continuity-widgets.spec.ts` | Playwright smoke |
+
+```
+$ TEST_DB_NAME=test_nibras_dev_master ../.venv/bin/python -m pytest ai/tests/test_pv2_discovery.py ai/tests/test_pv2_plan_status.py -q
+14 passed
+
+$ … test_plans.py + test_pv2_handoff_agent.py + test_pv2_state_store.py
+91 passed
+
+$ ./node_modules/.bin/vitest run …continuity… AgentRunSurface AgentCockpit activePlans
+24 passed
+
+$ PLAYWRIGHT_BROWSERS_PATH=… playwright test e2e/journeys/pv2-5c-continuity-widgets.spec.ts
+2 passed
+```
+
+Import boundary 9. i18n keys 4148 EN===AR.
+
+**GATE PASSED** — continuity widgets; no Chat host Confirm.

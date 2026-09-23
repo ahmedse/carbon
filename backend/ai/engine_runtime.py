@@ -160,6 +160,7 @@ async def _run_chat(
                 "llm_calls_by_stage": {},
                 "state_saved": state_saved,
                 "state_size": 0,
+                "active_plans": [],
                 "confidence_label": "confident",
                 "honest_uncertainty": False,
                 "truthfulness_flags": [],
@@ -453,6 +454,7 @@ async def _run_chat(
                 ),
                 "state_saved": bool(getattr(ledger, "state_saved", False)),
                 "state_size": int(getattr(ledger, "state_size", 0) or 0),
+                "active_plans": list(getattr(ledger, "active_plans", None) or []),
                 # Wave I3-B — external web sources the answer drew on
                 # ({"title","url","source","retrieved_at"}), independent of
                 # the multi-step tool_trace filter.

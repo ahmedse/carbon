@@ -61,6 +61,7 @@ import AITaskPanel from './AITaskPanel';
 import InvestigateTab from './InvestigateTab';
 import { useAITaskTransfer } from './useAITaskTransfer';
 import { ExecuteModeProvider } from './ExecuteModeContext';
+import { pickOpenActivePlan } from './activePlans';
 
 const LOCAL_STORAGE_KEY = 'carbon-ai-active-conversation';
 
@@ -119,6 +120,8 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   const [agentSeedBrief, setAgentSeedBrief] = useState(null);
   // DW-P1-2 — persistent Chat↔Agent link after Discuss / Open in Tasks.
   const [linkedPlan, setLinkedPlan] = useState(null); // { id, brief } | null
+  // PV2-5C — ConversationState.active_plans snapshot from the last Chat turn.
+  const [chatActivePlans, setChatActivePlans] = useState([]);
 
   const applyDiscussHandoff = useCallback((payload) => {
     if (payload == null) return;
@@ -139,13 +142,33 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
     }
   }, []);
 
-  const openLinkedPlan = useCallback(() => {
-    if (!linkedPlan?.id) return;
-    setTasksFocusPlanId(linkedPlan.id);
-    setMode('agent');
-  }, [linkedPlan]);
+  const headerLinkedPlan = useMemo(() => {
+    const open = pickOpenActivePlan(chatActivePlans);
+    if (open) {
+      return {
+        id: String(open.plan_id || ''),
+        brief: String(open.title || ''),
+        status: String(open.status || ''),
+      };
+    }
+    return linkedPlan;
+  }, [chatActivePlans, linkedPlan]);
 
-  const dismissLinkedPlan = useCallback(() => setLinkedPlan(null), []);
+  const openLinkedPlan = useCallback(() => {
+    if (headerLinkedPlan?.id) {
+      setTasksFocusPlanId(headerLinkedPlan.id);
+      setMode('agent');
+      return;
+    }
+    const brief = (headerLinkedPlan?.brief || '').trim();
+    if (brief) setAgentSeedBrief(brief);
+    setMode('agent');
+  }, [headerLinkedPlan]);
+
+  const dismissLinkedPlan = useCallback(() => {
+    setLinkedPlan(null);
+    setChatActivePlans([]);
+  }, []);
 
   const [drawerWidth, setDrawerWidth] = useState(200);
   const dragRef = useRef(null);
@@ -494,6 +517,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   const handleSelect = useCallback(
     (convId) => {
       const conv = byId[convId];
+      setChatActivePlans([]);
       if (conv?.is_archived) handleRestore(convId);
       else setActiveId(convId);
     },
@@ -613,7 +637,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
             mode={mode}
             onModeChange={handleModeChange}
             agentLifecycleState={agentLifecycleState}
-            linkedPlan={mode === 'chat' ? linkedPlan : null}
+            linkedPlan={mode === 'chat' ? headerLinkedPlan : null}
             onOpenLinkedPlan={openLinkedPlan}
             onDismissLinkedPlan={dismissLinkedPlan}
           />
@@ -682,6 +706,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
                   contextPulse={contextPulse}
                   seedDraft={chatSeedDraft}
                   onSeedDraftConsumed={() => setChatSeedDraft(null)}
+                  onActivePlans={setChatActivePlans}
                 />
               ) : (
                 <AIEmptyState onStartChat={handleNewChat} manifests={manifests} onStartStarter={handleStartStarter} />

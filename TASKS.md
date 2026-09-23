@@ -2726,7 +2726,7 @@ Onboarded `LeaveRecord` as entity #2 via **only** a descriptor entry in `nibras/
 | **W2** | PV2-2A → PV2-2B | Sequential | IdentityBlock/ContextPack · all stages consume it |
 | **W3** | PV2-3A ∥ PV2-3B | Parallel (loop.py vs runner.py) | Deterministic-first bound steps · surface-truthful Chat prompt |
 | **W4** | PV2-4A → PV2-4B → PV2-4C | Sequential | Arbiter signals (shadow) · conflict tests · flip + kill switch |
-| **W5** | PV2-5A → PV2-5B | Sequential | Agent inherits ConversationState · plan_status + active_plans write-back |
+| **W5** | PV2-5A → PV2-5B → PV2-5C | Sequential | Agent inherits ConversationState · plan_status + Chat/Agent continuity widgets |
 | **W6** | PV2-6A | After W1–W5 | Multi-turn bank blocking in CI · G5 Coherence · rule file |
 
 Phases PV2-1A … PV2-6A are **PLANNED** (spec pending; Master writes each after the previous wave's baseline numbers). Only W0 is READY below.
@@ -3130,7 +3130,7 @@ Plan lifecycle events (created/paused/completed/failed) update `ConversationStat
 ---
 
 ### Phase PV2-5C — Frontend: continuity widgets
-**Worker Role:** frontend-worker · **Model:** inherit Master or composer for pure UI · **Status:** PLANNED (READY after 5B) · **Owner:** Pulse · **FE seats:** Pulse (+ Nibras for copy review)
+**Worker Role:** frontend-worker · **Model:** inherit Master or composer for pure UI · **Status:** DONE — 2026-09-23 10:08 Master · **Owner:** Pulse · **FE seats:** Pulse (+ Nibras for copy review)
 
 #### Objective
 Active-plans chip in Chat; inherited-context panel in Agent Run drawer. RULE_23 outcome wording only. No Chat Confirm for host APIs (ADR-0046). i18n AR/EN.

@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { buildRunChronicle } from '../utils/runChronicle';
 import RunTimeline from './RunTimeline';
 import RunStepDetailDrawer from './RunStepDetailDrawer';
+import InheritedContextPanel from './InheritedContextPanel';
 
 function formatDuration(ms) {
   if (ms == null || !Number.isFinite(ms)) return null;
@@ -64,6 +65,7 @@ function AgentRunSurface({
   onConfirmStep = null,
   onDeclineStep = null,
   confirmingId = null,
+  hideInherited = false,
 }) {
   const { t } = useTranslation('ai');
   const isMobile = useIsMobile();
@@ -145,6 +147,8 @@ function AgentRunSurface({
     <Stack spacing={1} data-testid="agent-run-surface">
       {banner}
       {consentHero}
+
+      {hideInherited ? null : <InheritedContextPanel plan={plan} />}
 
       <Stack
         direction="row"
@@ -315,6 +319,7 @@ AgentRunSurface.propTypes = {
   onConfirmStep: PropTypes.func,
   onDeclineStep: PropTypes.func,
   confirmingId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+  hideInherited: PropTypes.bool,
 };
 
 export default AgentRunSurface;

@@ -14,6 +14,7 @@ import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import { useTranslation } from 'react-i18next';
+import InheritedContextPanel from './InheritedContextPanel';
 
 const SEGMENTS = [
   { value: 'plan', labelKey: 'cockpitPlan', icon: AccountTreeOutlinedIcon },
@@ -125,6 +126,9 @@ function AgentCockpit({
         data-hero={segment}
       >
         <Box data-testid={heroTestId}>
+          <Box sx={{ mb: 1 }}>
+            <InheritedContextPanel plan={plan} />
+          </Box>
           {body()}
         </Box>
       </Box>

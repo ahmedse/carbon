@@ -127,3 +127,5 @@ class TurnLedger:
     # PV2-1A — durable ConversationState written at turn exit.
     state_saved: bool = False
     state_size: int = 0
+    # PV2-5B/5C — snapshot for Chat chip / Agent inherit panel.
+    active_plans: list | None = None

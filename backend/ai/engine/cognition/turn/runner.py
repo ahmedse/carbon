@@ -1633,6 +1633,10 @@ class TurnPipelineRunner:
                 scope=turn_args.get("scope"),
                 arbiter_shadow=getattr(ledger, "arbiter_shadow", None),
             )
+            try:
+                ledger.active_plans = list(state.active_plans or [])
+            except Exception:  # noqa: BLE001
+                ledger.active_plans = []
             ledger.state_saved = await ConversationStateStore(self.db).save(
                 turn_args.get("instance_id") or "",
                 conversation_id,

@@ -187,4 +187,26 @@ describe('AgentRunSurface', () => {
     const row = screen.getByTestId('run-chronicle-row-0');
     expect(row.querySelector('[data-testid="timeline-consent-0"]')).toBeNull();
   });
+
+  it('shows inherited Chat details without engine jargon', () => {
+    render(
+      <AgentRunSurface
+        plan={{
+          ...PLAN,
+          inherited_context: [
+            { key: 'loan_type', value: 'emergency' },
+            { key: 'amount', value: '3000' },
+          ],
+        }}
+        runSteps={[]}
+        phase="idle"
+      />,
+    );
+    const panel = screen.getByTestId('agent-run-inherited-context');
+    expect(panel).toHaveTextContent(/Carried from this conversation/i);
+    expect(panel).toHaveTextContent(/Loan type · emergency/i);
+    expect(panel).toHaveTextContent(/Amount · 3000/i);
+    expect(panel).not.toHaveTextContent(/ConversationState|active_plans|Pulse|slots/i);
+    expect(screen.queryByRole('button', { name: /Confirm/i })).toBeNull();
+  });
 });

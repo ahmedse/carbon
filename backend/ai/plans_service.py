@@ -1525,6 +1525,10 @@ class PlansService:
             "definition_id": run.definition_id,
             "status": run.status,
             "brief": run.user_message,
+            "inherited_context": (
+                plan_json.get("inherited_context")
+                or PlansService()._public_inherited_context(run.conversation_id)
+            ),
             "forked_from": (
                 (run.working_notes or {}).get("forked_from")
                 if run.working_notes else None
@@ -2371,6 +2375,10 @@ class PlansService:
         plan = self._decompose(user, brief)
 
         run_id = generate_uuid()
+        plan_payload = self._plan_to_dict(plan)
+        inherited = self._public_inherited_context(conversation_id)
+        if inherited:
+            plan_payload["inherited_context"] = inherited
         run = Run(
             id=run_id,
             instance_id=PLAN_INSTANCE_ID,
@@ -2378,7 +2386,7 @@ class PlansService:
             host_user_id=user_pk,
             user_message=brief,
             status=STATUS_PENDING_APPROVAL,
-            plan_json=self._plan_to_dict(plan),
+            plan_json=plan_payload,
         )
         run.save()
         self._sync_active_plan(run, title=(brief or "")[:80])
@@ -2524,6 +2532,31 @@ class PlansService:
         if not bits:
             return brief
         return f"{brief}\n\nInherited from Chat: {'; '.join(bits[:16])}"
+
+    _PUBLIC_SLOT_KEYS = (
+        ("amount", "amount"),
+        ("principal", "amount"),
+        ("loan_type", "loan_type"),
+        ("leave_type", "leave_type"),
+        ("start_date", "start_date"),
+        ("end_date", "end_date"),
+        ("days", "days"),
+        ("reason", "reason"),
+    )
+
+    def _public_inherited_context(self, conversation_id: str) -> list[dict]:
+        """Outcome-facing Chat slots for the Agent Run drawer (RULE_23)."""
+        state = self._load_conversation_state(conversation_id)
+        slots = dict(getattr(state, "slots", None) or {}) if state is not None else {}
+        items: list[dict] = []
+        seen: set[str] = set()
+        for src, key in self._PUBLIC_SLOT_KEYS:
+            value = slots.get(src)
+            if value in (None, "", [], {}) or key in seen:
+                continue
+            seen.add(key)
+            items.append({"key": key, "value": str(value)})
+        return items
 
     def _sync_active_plan(self, run, *, title: str = "", slots: dict | None = None) -> None:
         """PV2-5B: write plan lifecycle onto ConversationState.active_plans."""

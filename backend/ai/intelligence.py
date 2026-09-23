@@ -735,6 +735,7 @@ class CarbonIntelligence:
                             code_result=res.get("code_result"),
                             envelope=res.get("envelope"),
                             tool_digest=res.get("tool_digest") or "",
+                            active_plans=res.get("active_plans"),
                         )
                         _finalize_generation("completed", usage)
                         done_frame = {
@@ -1135,6 +1136,7 @@ class CarbonIntelligence:
             _serialize_message(m)
             for m in conversation.messages.order_by("created_at")
         ]
+        data["active_plans"] = _conversation_active_plans(conversation.id)
         return data
 
     def record_feedback(
@@ -2649,6 +2651,7 @@ class CarbonIntelligence:
                             code_result=res.get("code_result"),
                             envelope=res.get("envelope"),
                             tool_digest=res.get("tool_digest") or "",
+                            active_plans=res.get("active_plans"),
                         )
                         _finalize_generation("completed", usage)
                         done_frame = {
@@ -3836,6 +3839,7 @@ class CarbonIntelligence:
             code_result=chat_response.code_result,
             envelope=chat_response.envelope,
             tool_digest=getattr(chat_response, "tool_digest", "") or "",
+            active_plans=getattr(chat_response, "active_plans", None) or [],
         )
 
     def _prepend_workspace_context(
@@ -4104,6 +4108,7 @@ class CarbonIntelligence:
         code_result: dict | None = None,
         envelope: dict | None = None,
         tool_digest: str = "",
+        active_plans: list[dict] | None = None,
     ) -> dict[str, Any]:
         """Save AI response message and update conversation status."""
         if status == "provider_unavailable":
@@ -4143,6 +4148,8 @@ class CarbonIntelligence:
             metadata["confidence_label"] = confidence_label
         if honest_uncertainty:
             metadata["honest_uncertainty"] = True
+        if active_plans:
+            metadata["active_plans"] = list(active_plans)
 
         return self._save_assistant_message(
             conversation,
@@ -4201,6 +4208,26 @@ def _rule_fields(rule) -> list[str]:
 
 
 # ── Workspace serialization helpers ───────────────────────────────────────
+
+
+def _conversation_active_plans(conversation_id) -> list[dict]:
+    """PV2-5C — latest ConversationState.active_plans for the Chat chip."""
+    cid = str(conversation_id or "").strip()
+    if not cid:
+        return []
+    try:
+        from ai.engine.cognition.state_store import ConversationState
+        from ai.models import ConversationContextRecord
+
+        row = ConversationContextRecord.objects.filter(conversation_id=cid).first()
+        if row is None:
+            return []
+        state = ConversationState.from_dict(getattr(row, "session_json", None))
+        plans = list(getattr(state, "active_plans", None) or [])
+        return [p for p in plans if isinstance(p, dict)]
+    except Exception:  # noqa: BLE001 — chip is best-effort
+        logger.debug("active_plans conversation load skipped", exc_info=True)
+        return []
 
 
 def _serialize_conversation(conversation) -> dict[str, Any]:
@@ -4300,6 +4327,7 @@ def _serialize_message(message) -> dict[str, Any]:
         # the turn (RULE_23 — outcome copy only, never raw critic internals).
         "confidence_label": metadata.get("confidence_label") or "",
         "honest_uncertainty": bool(metadata.get("honest_uncertainty")),
+        "active_plans": metadata.get("active_plans") or [],
         # F3-B — read-only tool trace for the frontend "Considered…" pill.
         "tool_trace": metadata.get("tool_trace") or [],
         # S1.5-zone — four-zone intent provenance for the frontend badge.

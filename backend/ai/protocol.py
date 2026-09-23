@@ -508,6 +508,8 @@ class ChatResponse:
     code_result: dict | None = None
     # PAQ-2A — typed AnswerEnvelope (None when disabled or unavailable).
     envelope: dict | None = None
+    # PV2-5C — ConversationState.active_plans snapshot for the Chat chip.
+    active_plans: list = field(default_factory=list)
 
 
 # ── AIProvider ABC ──────────────────────────────────────────────────────

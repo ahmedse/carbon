@@ -279,3 +279,9 @@ Track: PV2 — 5B plan_status DONE
 Ask: Chat answers "status of my request?" from `active_plans` / slots with 0 LLM. Plan lifecycle writes state. 5C FE chip next.
 Paths: backend/ai/engine/cognition/turn/plan_status.py, runner.py, plans_service.py, state_store.py
 Blockers: none
+
+## [2026-09-23T10:12:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-9
+Track: PV2 — W5 (P5) DONE · W6a next
+Ask: PV2-5C landed — Chat active-plans chip + Agent inherited-context panel (RULE_23). Vitest 24 + Playwright smoke 2 passed. No Chat Confirm for host APIs. W6a (G5 bank as CI gate) is next. 4B still blocked until 2026-09-30. Live 3-script re-check still batched (needs approval).
+Paths: carbon-frontend/src/shell/{AIWorkspaceHeader,InheritedContextPanel,AgentCockpit,activePlans}.*, backend/ai/{intelligence,plans_service,protocol}.py
+Blockers: none

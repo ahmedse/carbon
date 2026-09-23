@@ -89,6 +89,7 @@ function AIConversationView({
   seedDraft = null,
   onSeedDraftConsumed,
   contextPulse = null,
+  onActivePlans,
 }) {
   const { t } = useTranslation('ai');
   const { token, user, userCapabilities, isGlobalAdminFlag } = useAuth();
@@ -1125,6 +1126,19 @@ function AIConversationView({
     [conversationId, token, notify, notifyFromError, onForked],
   );
 
+  useEffect(() => {
+    if (typeof onActivePlans !== 'function') return;
+    const fromConv = Array.isArray(conversation?.active_plans) ? conversation.active_plans : [];
+    if (fromConv.length) {
+      onActivePlans(fromConv);
+      return;
+    }
+    const last = [...messages].reverse().find((m) => m.role === 'assistant');
+    const meta = last?.metadata || last?.metadata_json || {};
+    const fromMeta = Array.isArray(meta.active_plans) ? meta.active_plans : [];
+    onActivePlans(fromMeta);
+  }, [conversation, messages, onActivePlans]);
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -1764,6 +1778,7 @@ AIConversationView.propTypes = {
     at: PropTypes.number,
     conversation: PropTypes.object,
   }),
+  onActivePlans: PropTypes.func,
 };
 
 export default AIConversationView;

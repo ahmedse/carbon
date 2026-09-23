@@ -517,6 +517,7 @@ class PulseProvider(AIProvider):
                 envelope=result.get("envelope"),
                 confidence_label=result.get("confidence_label", ""),
                 honest_uncertainty=bool(result.get("honest_uncertainty", False)),
+                active_plans=result.get("active_plans") or [],
             )
 
         return ChatResponse(

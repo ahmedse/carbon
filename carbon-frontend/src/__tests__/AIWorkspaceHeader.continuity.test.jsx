@@ -33,4 +33,21 @@ describe('AIWorkspaceHeader continuity chip (DW-P1-2)', () => {
     );
     expect(screen.queryByTestId('chat-agent-continuity-chip')).not.toBeInTheDocument();
   });
+
+  it('shows a Chat chip for a handoff-ready request without a plan id', () => {
+    const onOpen = vi.fn();
+    render(
+      <AIWorkspaceHeader
+        onClose={vi.fn()}
+        mode="chat"
+        linkedPlan={{ id: '', brief: 'emergency loan', status: 'handoff_ready' }}
+        onOpenLinkedPlan={onOpen}
+      />,
+    );
+    const chip = screen.getByTestId('chat-agent-continuity-chip');
+    expect(chip).toHaveTextContent(/emergency loan/i);
+    expect(chip).not.toHaveTextContent(/Confirm/i);
+    fireEvent.click(chip);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
 });

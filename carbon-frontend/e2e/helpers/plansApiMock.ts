@@ -54,6 +54,7 @@ export interface PlanFixture {
   updated_at?: string;
   completed_at?: string | null;
   final_response?: string | null;
+  inherited_context?: { key: string; value: string }[];
 }
 
 export type Frame = Record<string, unknown>;
@@ -105,6 +106,7 @@ export function makePlan(
     updated_at: rest.updated_at ?? now,
     completed_at: rest.completed_at ?? null,
     final_response: rest.final_response ?? null,
+    inherited_context: rest.inherited_context,
   };
 }
 
