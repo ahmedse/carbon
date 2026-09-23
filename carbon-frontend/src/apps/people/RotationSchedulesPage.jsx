@@ -41,12 +41,12 @@ import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
 import {
   fetchRotationSchedules,
-  fetchEmployees,
   createRotationSchedule,
   updateRotationSchedule,
   deleteRotationSchedule,
 } from '../../api/people';
-import { buildEmployeeLabels, formatDate } from './utils';
+import { labelsFromRows, formatDate } from './utils';
+import EmployeePicker from './EmployeePicker';
 
 const EMPTY_FORM = {
   employee: '',
@@ -80,7 +80,6 @@ export default function RotationSchedulesPage() {
   const { token } = useAuth();
 
   const [schedules, setSchedules] = useState([]);
-  const [employees, setEmployees] = useState([]);
   const [employeeLabels, setEmployeeLabels] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -95,15 +94,10 @@ export default function RotationSchedulesPage() {
     try {
       setLoading(true);
       setError(null);
-      const [schedulesData, employeesData] = await Promise.all([
-        fetchRotationSchedules(token),
-        fetchEmployees(token),
-      ]);
+      const schedulesData = await fetchRotationSchedules(token);
       const scheduleList = Array.isArray(schedulesData) ? schedulesData : schedulesData?.results || [];
-      const employeeList = Array.isArray(employeesData) ? employeesData : employeesData?.results || [];
       setSchedules(scheduleList);
-      setEmployees(employeeList);
-      setEmployeeLabels(buildEmployeeLabels(employeeList));
+      setEmployeeLabels(labelsFromRows(scheduleList));
     } catch (err) {
       setError(err?.message || t('rotationLoadError'));
     } finally {
@@ -305,22 +299,14 @@ export default function RotationSchedulesPage() {
         }
       >
         <Stack spacing={2}>
-          <TextField
-            select
+          <EmployeePicker
+            token={token}
             label={t('colEmployee')}
-            name="employee"
             value={form.employee}
-            onChange={handleChange}
-            fullWidth
+            initialLabel={employeeLabels[form.employee]}
             required
-          >
-            <MenuItem value="" disabled>{t('colEmployee')}</MenuItem>
-            {employees.map((employee) => (
-              <MenuItem key={employee.id} value={employee.id}>
-                {employee.employee_no ?? '—'} — {employee.full_name ?? ''}
-              </MenuItem>
-            ))}
-          </TextField>
+            onChange={(id) => setForm((prev) => ({ ...prev, employee: id || '' }))}
+          />
           <TextField
             label={t('colPattern')}
             name="pattern"

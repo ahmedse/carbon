@@ -9,6 +9,7 @@
 // NSR-7C: form stores codes under FK names; payload never emits `*_code`.
 
 import React, { useMemo, useState } from 'react';
+import EmployeePicker from './EmployeePicker';
 import { useTranslation } from 'react-i18next';
 import {
   Alert,
@@ -116,7 +117,7 @@ function OptionAutocomplete({
 export default function EmployeeWizard({
   orgUnits,
   positions,
-  employees,
+  token,
   canViewCompensation,
   saving,
   onSave,
@@ -127,6 +128,7 @@ export default function EmployeeWizard({
   const lang = i18n.language && i18n.language.startsWith('ar') ? 'ar' : 'en';
 
   const [form, setForm] = useState(() => formFromEmployee(employee));
+  const [managerLabel, setManagerLabel] = useState(employee?.manager_label || '');
 
   const nationality = useReferenceOptions('nationality');
   const employmentType = useReferenceOptions('employment_type');
@@ -143,10 +145,6 @@ export default function EmployeeWizard({
   const positionOptions = useMemo(
     () => positions.map((p) => ({ value: String(p.id), label: p.title || p.code || String(p.id) })),
     [positions],
-  );
-  const managerOptions = useMemo(
-    () => employees.map((e) => ({ value: String(e.id), label: `${e.employee_no} — ${e.full_name}` })),
-    [employees],
   );
 
   const civilIdDisplay = formatCivilId(form.civil_id);
@@ -302,13 +300,17 @@ export default function EmployeeWizard({
             label={t('colPosition')}
             placeholder={t('managerUnassigned')}
           />
-          <OptionAutocomplete
-            value={form.manager}
-            onChange={(v) => setField('manager', v)}
-            options={managerOptions}
+          <EmployeePicker
+            token={token}
             label={t('formManager')}
+            value={form.manager}
+            initialLabel={managerLabel}
             required
-            placeholder={t('managerUnassigned')}
+            excludeId={employee?.id}
+            onChange={(id, label) => {
+              setField('manager', id ? String(id) : '');
+              setManagerLabel(label || '');
+            }}
           />
           <OptionAutocomplete
             value={form.employment_type}
@@ -410,7 +412,7 @@ export default function EmployeeWizard({
           <ReviewRow label={t('formGender')} value={labelOf(gender.options, form.gender)} />
           <ReviewRow label={t('formCivilId')} value={civilIdDisplay || '—'} />
           <ReviewRow label={t('formJoinDate')} value={form.join_date || '—'} />
-          <ReviewRow label={t('formManager')} value={labelOf(managerOptions, form.manager)} />
+          <ReviewRow label={t('formManager')} value={managerLabel || '—'} />
           <ReviewRow label={t('formOrgUnit')} value={labelOf(orgUnitOptions, form.org_unit)} />
           <ReviewRow label={t('colPosition')} value={labelOf(positionOptions, form.position)} />
           <ReviewRow label={t('formEmploymentType')} value={labelOf(employmentType.options, form.employment_type)} />

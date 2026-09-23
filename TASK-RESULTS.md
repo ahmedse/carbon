@@ -4160,3 +4160,33 @@ Incomplete ESS writes now `clarify` at 0 LLM instead of falling through to draft
 G5: router **0.979**, slot 1.0, llm p50/max 2, turns **94/96**, scripts **10/12**, C5 **1.0**, raw over_budget 0. Remaining 2 misses are thanks-after-handoff (`handoff_agent` vs `answer`) on loan-ar t7 and plan-status t8 — same policy as chat-handoff t8. Import boundary 9.
 
 **GATE PASSED** — C5 complete-write handoff and incomplete-write clarify now match the contract.
+
+## PV2-0C live 3-script re-check
+
+**Date:** 2026-09-23  
+**Worker:** Master  
+**Status:** MEASURED — 13/24 (was 0/24)  
+**DB:** `nibras_dev` as `emp_1067` · Chat only
+
+Human approved. `--live --host-user emp_1067 --no-isolated-db`. 129 s. Exit 0.
+
+```
+turns_passed 13/24   router 0.667   language 1.0   focus 0.615
+slot_carry 1.0       llm p50 2      llm max 5      over_budget 5/24
+loan-ar 6/8          handoff 7/8    payroll 0/8
+```
+
+F-LIVE-1/2/3/4 closed on live. F-LIVE-9 open (payroll numbers). Goldens not edited.
+
+Evidence: `docs/pulse/evidence/PV2-live-recheck-2026-09-23.{md,json}`
+
+## PV2-6B night 2026-09-23
+
+**Date:** 2026-09-23  
+**Worker:** Master  
+**Status:** FAIL — streak **0/5**  
+**DB:** `nibras_dev` host writes attempted as `emp_1067`
+
+Chat: `handoff_agent`, no mutation, slot_carry on all three journeys. Approve HTTP 200. `host_row` missed on leave/loan/attendance. 14.8 s. Night recorded; not rewritten; not counted as green.
+
+Evidence: `docs/pulse/evidence/PV2-6B-{nights.json,soak.md,night-2026-09-23.md}`

@@ -3157,12 +3157,12 @@ Wire `ai.eval.multiturn.runner` into CI with §3 thresholds (router ≥ 0.90, sl
 ---
 
 ### Phase PV2-6B — Ops: nightly live smoke — SOAKING
-**Worker Role:** qa-validator · **Model:** inherit Master · **Status:** SOAKING — job landed 2026-09-23 10:30; live nights 0/5 · **Owner:** Pulse
+**Worker Role:** qa-validator · **Model:** inherit Master · **Status:** SOAKING — night 2026-09-23 FAIL (host_row); streak 0/5 · **Owner:** Pulse
 
 #### Objective
 Scheduled job: 3 ESS journeys Chat→Agent→Approve as `emp_1067` on Nibras dev; assert host rows + IC metrics. Status **SOAKING** until 5 consecutive green nights. STACK-HOLD / COMMS before first run.
 
-**Landed:** `python -m ai.eval.nightly_ess_smoke` · GH catalog dry-run cron `0 2 * * *` · ledger `docs/pulse/evidence/PV2-6B-{soak.md,nights.json}`. Mutating run refused unless `--live --i-have-stack-hold --host-user emp_1067` and `PULSE_NIGHTLY_LIVE=1`. Dry-run / SKIP do not increment the streak. Do not back-date nights.
+**Landed:** `python -m ai.eval.nightly_ess_smoke` · GH catalog dry-run cron `0 2 * * *` · ledger `docs/pulse/evidence/PV2-6B-{soak.md,nights.json}`. Mutating run refused unless `--live --i-have-stack-hold --host-user emp_1067` and `PULSE_NIGHTLY_LIVE=1`. Dry-run / SKIP / FAIL do not increment the streak. Do not back-date nights. Night 2026-09-23: Chat handoff + slot_carry held; Agent Approve 200; no host row. See `PV2-6B-night-2026-09-23.md`.
 
 **Acceptance:** 5 consecutive greens recorded in evidence/; then flip DONE.
 

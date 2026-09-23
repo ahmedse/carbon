@@ -39,14 +39,14 @@ import { useReferenceOptions } from '../../hooks/useReferenceOptions';
 import { useAuth } from '../../auth/AuthContext';
 import {
   fetchCertifications,
-  fetchEmployees,
   createCertification,
   updateCertification,
   deleteCertification,
 } from '../../api/people';
 import CertExpiryChip, { CertExpiryLegend } from './components/CertExpiryChip';
+import EmployeePicker from './EmployeePicker';
 import {
-  buildEmployeeLabels,
+  labelsFromRows,
   daysUntilExpiry,
   expiryUrgency,
   formatDate,
@@ -71,7 +71,6 @@ export default function CertificationsPage() {
   const certTypeRef = useReferenceOptions('cert_type');
 
   const [certifications, setCertifications] = useState([]);
-  const [employees, setEmployees] = useState([]);
   const [employeeLabels, setEmployeeLabels] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -87,19 +86,12 @@ export default function CertificationsPage() {
     try {
       setLoading(true);
       setError(null);
-      const [certificationsData, employeesData] = await Promise.all([
-        fetchCertifications(token),
-        fetchEmployees(token),
-      ]);
+      const certificationsData = await fetchCertifications(token);
       const certificationList = Array.isArray(certificationsData)
         ? certificationsData
         : certificationsData?.results || [];
-      const employeeList = Array.isArray(employeesData)
-        ? employeesData
-        : employeesData?.results || [];
       setCertifications(certificationList);
-      setEmployees(employeeList);
-      setEmployeeLabels(buildEmployeeLabels(employeeList));
+      setEmployeeLabels(labelsFromRows(certificationList));
     } catch (err) {
       setError(err?.message || t('certificationsLoadError'));
     } finally {
@@ -118,15 +110,6 @@ export default function CertificationsPage() {
       return da - db;
     });
   }, [certifications]);
-
-  const employeeOptions = useMemo(
-    () =>
-      employees.map((employee) => ({
-        value: employee.id,
-        label: `${employee.employee_no ?? '—'} — ${employee.full_name ?? ''}`,
-      })),
-    [employees],
-  );
 
   const employeeName = (id) => employeeLabels[id] ?? id ?? '—';
 
@@ -336,13 +319,13 @@ export default function CertificationsPage() {
         }
       >
         <Stack spacing={2}>
-          <SearchSelect
+          <EmployeePicker
+            token={token}
             label={t('colEmployee')}
-            options={employeeOptions}
             value={form.employee}
-            onChange={(v) => setForm((prev) => ({ ...prev, employee: v?.value ?? '' }))}
+            initialLabel={employeeLabels[form.employee]}
             required
-            clearable={false}
+            onChange={(id) => setForm((prev) => ({ ...prev, employee: id || '' }))}
           />
           <SearchSelect
             label={t('colCertType')}

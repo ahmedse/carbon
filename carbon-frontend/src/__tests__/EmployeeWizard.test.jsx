@@ -10,6 +10,13 @@ vi.mock('../components/MicroHelp', () => ({
   default: () => null,
 }));
 
+vi.mock('../api/people', () => ({
+  fetchEmployees: vi.fn(async () => ({
+    count: 1,
+    results: [{ id: 5, employee_no: '1001', full_name: 'Sara Manager' }],
+  })),
+}));
+
 import EmployeeWizard from '../apps/people/EmployeeWizard';
 import { buildEmployeeWizardPayload } from '../apps/people/employeeWizardPayload';
 
@@ -102,6 +109,7 @@ describe('EmployeeWizard validation (NSR-4B)', () => {
       <EmployeeWizard
         orgUnits={ORG_UNITS}
         positions={POSITIONS}
+        token="tok"
         employees={EMPLOYEES}
         canViewCompensation
         saving={false}
@@ -139,6 +147,7 @@ describe('EmployeeWizard validation (NSR-4B)', () => {
       <EmployeeWizard
         orgUnits={ORG_UNITS}
         positions={POSITIONS}
+        token="tok"
         employees={EMPLOYEES}
         canViewCompensation
         saving={false}
@@ -189,6 +198,7 @@ describe('EmployeeWizard validation (NSR-4B)', () => {
       <EmployeeWizard
         orgUnits={ORG_UNITS}
         positions={POSITIONS}
+        token="tok"
         employees={EMPLOYEES}
         canViewCompensation={false}
         saving={false}
@@ -228,6 +238,7 @@ describe('EmployeeWizard validation (NSR-4B)', () => {
       <EmployeeWizard
         orgUnits={ORG_UNITS}
         positions={POSITIONS}
+        token="tok"
         employees={EMPLOYEES}
         canViewCompensation
         saving={false}

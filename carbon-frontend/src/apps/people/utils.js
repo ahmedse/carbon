@@ -4,6 +4,17 @@
 // (react-refresh/only-export-components) and tests can unit-test these helpers
 // without rendering.
 
+/** Labels already carried on list rows (employee_no / employee_name). */
+export function labelsFromRows(rows) {
+  const map = {};
+  for (const row of rows || []) {
+    if (row?.employee == null) continue;
+    if (!row.employee_no && !row.employee_name) continue;
+    map[row.employee] = `${row.employee_no ?? '—'} — ${row.employee_name ?? ''}`;
+  }
+  return map;
+}
+
 /** Map employee id → "employee_no — full_name" label. */
 export function buildEmployeeLabels(employees) {
   const map = {};

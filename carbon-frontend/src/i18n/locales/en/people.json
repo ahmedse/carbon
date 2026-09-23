@@ -326,6 +326,7 @@
   "formKuwaitization": "Kuwaitization",
   "formLoanType": "Loan Type",
   "formManager": "Manager",
+  "employeeSearchHint": "Type a name or employee number",
   "formNameArFamily": "Arabic Family Name",
   "formNameArGiven": "Arabic Given Name",
   "formNameEnFamily": "English Family Name",

@@ -121,5 +121,6 @@ bindings:
     must_contain:
       - "fetchLeaveEntitlements(token, { employee: employeeId })"
       - "fetchLeaveRecords(token, { employee: employeeId })"
-      - "allEmployees: []"
-    detail: Opening 360 does not walk the full employee directory.
+    must_not_contain:
+      - fetchEmployees
+    detail: Opening 360 does not walk the full employee directory. Manager search is a separate picker.

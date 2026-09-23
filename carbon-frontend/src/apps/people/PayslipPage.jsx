@@ -26,15 +26,14 @@ import ErrorAlert from '../../components/Page/ErrorAlert';
 import EmptyState from '../../components/Page/EmptyState';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
-import { fetchEmployees, fetchPayrollRuns, fetchPayslipLines } from '../../api/people';
-import { buildEmployeeLabels, formatAmount, formatDate } from './utils';
+import { fetchPayrollRuns, fetchPayslipLines } from '../../api/people';
+import { formatAmount, formatDate } from './utils';
 
 export default function PayslipPage() {
   const { t } = useTranslation('people');
   useDocumentTitle(t('payslipTitle'));
   const { token } = useAuth();
   const [runs, setRuns] = useState([]);
-  const [employeeLabels, setEmployeeLabels] = useState({});
   const [lines, setLines] = useState([]);
   const [selectedRun, setSelectedRun] = useState('');
   const [loading, setLoading] = useState(true);
@@ -45,9 +44,8 @@ export default function PayslipPage() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    Promise.all([fetchEmployees(token), fetchPayrollRuns(token)])
-      .then(([employees, runData]) => {
-        setEmployeeLabels(buildEmployeeLabels(Array.isArray(employees?.results) ? employees.results : []));
+    fetchPayrollRuns(token)
+      .then((runData) => {
         setRuns(Array.isArray(runData?.results) ? runData.results : []);
       })
       .catch((err) => setError(err?.message || t('payslipLoadError')))
@@ -152,7 +150,7 @@ export default function PayslipPage() {
               <TableBody>
                 {lines.map((line) => (
                   <TableRow key={line.id} hover>
-                    <TableCell>{employeeLabels[line.employee] ?? line.employee ?? '—'}</TableCell>
+                    <TableCell>{line.employee_no || line.employee_name ? `${line.employee_no ?? '—'} — ${line.employee_name ?? ''}` : (line.employee ?? '—')}</TableCell>
                     <TableCell>{line.line_type ?? '—'}</TableCell>
                     <TableCell>{formatAmount(line.amount)}</TableCell>
                     <TableCell>{line.rule_id ?? '—'}</TableCell>

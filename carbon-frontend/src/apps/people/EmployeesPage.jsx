@@ -32,11 +32,11 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import FilteredDataGrid from '../../components/FilteredDataGrid';
 import SystemDialog from '../../components/SystemDialog';
-import { SearchSelect } from '../../components/Form';
 import PageContainer from '../../components/layout/PageContainer';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import ErrorAlert from '../../components/Page/ErrorAlert';
 import EmployeeWizard from './EmployeeWizard';
+import EmployeePicker from './EmployeePicker';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useReferenceOptions } from '../../hooks/useReferenceOptions';
 import { useAuth } from '../../auth/AuthContext';
@@ -99,6 +99,8 @@ export default function EmployeesPage() {
   const isMobile = useIsMobile();
 
   const [employees, setEmployees] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [debouncedQ, setDebouncedQ] = useState('');
   const [orgUnits, setOrgUnits] = useState([]);
   const [positions, setPositions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -126,16 +128,32 @@ export default function EmployeesPage() {
   const [createdAccount, setCreatedAccount] = useState(null);
   const [copiedField, setCopiedField] = useState(null);
 
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedQ(searchValue.trim()), 300);
+    return () => clearTimeout(handle);
+  }, [searchValue]);
+
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
+      const params = { page: 1, page_size: 100 };
+      if (debouncedQ) params.q = debouncedQ;
+      if (filters.status === 'active') params.is_active = 'true';
+      if (filters.status === 'inactive') params.is_active = 'false';
+      if (filters.org_unit) params.org_unit = filters.org_unit;
+      if (filters.rotation) params.rotation = filters.rotation;
+      if (filters.kuwaitization) params.kuwaitization = filters.kuwaitization;
+      if (filters.nationality) params.nationality = filters.nationality;
+      if (filters.manager) params.manager = filters.manager;
       const [employeesData, orgUnitsData, positionsData] = await Promise.all([
-        fetchEmployees(token),
+        fetchEmployees(token, params),
         fetchOrgUnits(token),
         fetchPositions(token),
       ]);
-      setEmployees(Array.isArray(employeesData) ? employeesData : employeesData?.results || []);
+      const rows = Array.isArray(employeesData) ? employeesData : employeesData?.results || [];
+      setEmployees(rows);
+      setTotal(Number(employeesData?.count ?? rows.length));
       setOrgUnits(Array.isArray(orgUnitsData) ? orgUnitsData : []);
       setPositions(Array.isArray(positionsData) ? positionsData : positionsData?.results || []);
     } catch (err) {
@@ -143,7 +161,7 @@ export default function EmployeesPage() {
     } finally {
       setLoading(false);
     }
-  }, [token, t]);
+  }, [token, t, debouncedQ, filters]);
 
   useEffect(() => {
     loadData();
@@ -154,18 +172,6 @@ export default function EmployeesPage() {
     for (const u of orgUnits) if (u?.id != null) map[u.id] = u;
     return map;
   }, [orgUnits]);
-
-  const positionMap = useMemo(() => {
-    const map = {};
-    for (const p of positions) if (p?.id != null) map[p.id] = p;
-    return map;
-  }, [positions]);
-
-  const employeeMap = useMemo(() => {
-    const map = {};
-    for (const e of employees) if (e?.id != null) map[e.id] = e;
-    return map;
-  }, [employees]);
 
   const orgUnitOptions = useMemo(
     () => orgUnitSelectOptions(orgUnits),
@@ -287,19 +293,6 @@ export default function EmployeesPage() {
 
   const closeSnackbar = () => setSnackbar((prev) => ({ ...prev, open: false }));
 
-  const managerOptions = useMemo(
-    () => [
-      { value: '', label: t('managerUnassigned') },
-      ...employees
-        .filter((e) => e.is_active !== false)
-        .map((e) => ({
-          value: String(e.id),
-          label: `${e.employee_no} — ${e.full_name}`,
-        })),
-    ],
-    [employees, t],
-  );
-
   const openBulkManager = useCallback(() => {
     setBulkManagerId('');
     setBulkManagerOpen(true);
@@ -373,10 +366,7 @@ export default function EmployeesPage() {
       </Box>
     );
 
-    const managerName = (v) => {
-      const m = employeeMap[v];
-      return m ? `${m.employee_no} — ${m.full_name}` : '—';
-    };
+    const managerName = (_v, row) => row?.manager_label || '—';
     const mapLabel = (map, v) => {
       const code = refCode(v);
       return (code && map[code]) || governedLabel(v) || '—';
@@ -397,9 +387,9 @@ export default function EmployeesPage() {
       { field: 'gender', headerName: t('colGender'), width: 90, valueGetter: (v) => mapLabel(genderMap, v) },
       { field: 'date_of_birth', headerName: t('colDateOfBirth'), width: 110, valueGetter: (v) => formatDate(v) },
       { field: 'join_date', headerName: t('colJoinDate'), width: 110, valueGetter: (v) => formatDate(v) },
-      { field: 'position', headerName: t('colPosition'), width: 140, valueGetter: (v) => positionMap[v]?.title ?? '—' },
+      { field: 'position', headerName: t('colPosition'), width: 140, valueGetter: (_v, row) => row?.position_title || '—' },
       { field: 'org_unit', headerName: t('colOrgUnit'), width: 200, valueGetter: (v) => orgUnitMap[v]?.full_path || orgUnitMap[v]?.name || '—' },
-      { field: 'manager', headerName: t('colManager'), width: 160, valueGetter: (v) => managerName(v) },
+      { field: 'manager', headerName: t('colManager'), width: 160, valueGetter: managerName },
       { field: 'employment_type', headerName: t('colEmploymentType'), width: 130, valueGetter: (v) => mapLabel(employmentTypeMap, v) },
       { field: 'contract_type', headerName: t('colContractType'), width: 130, valueGetter: (v) => mapLabel(contractTypeMap, v) },
       { field: 'nationality', headerName: t('colNationality'), width: 100, valueGetter: (v) => mapLabel(nationalityMap, v) },
@@ -465,7 +455,7 @@ export default function EmployeesPage() {
         },
       },
     ];
-  }, [t, orgUnitMap, positionMap, employeeMap, genderMap, employmentTypeMap, contractTypeMap, nationalityMap, rotationMap, handleView, openEdit]);
+  }, [t, orgUnitMap, genderMap, employmentTypeMap, contractTypeMap, nationalityMap, rotationMap, handleView, openEdit]);
 
   if (error) {
     return (
@@ -501,7 +491,7 @@ export default function EmployeesPage() {
         rows={filteredRows}
         columns={columns}
         loading={loading}
-        countLabel={t('employeesCount', { count: filteredRows.length, total: employees.length })}
+        countLabel={t('employeesCount', { count: filteredRows.length, total })}
         searchValue={searchValue}
         onSearchChange={setSearchValue}
         filterDefs={filterDefs}
@@ -543,16 +533,11 @@ export default function EmployeesPage() {
           <Typography variant="body2" color="text.secondary">
             {t('bulkManagerBody', { count: selectedIds.length })}
           </Typography>
-          <SearchSelect
-            options={managerOptions}
-            valueKey="value"
-            labelKey="label"
+          <EmployeePicker
+            token={token}
             label={t('formManager')}
             value={bulkManagerId}
-            onChange={(v) => setBulkManagerId(v?.value ?? '')}
-            clearable
-            size="small"
-            placeholder={t('managerUnassigned')}
+            onChange={(id) => setBulkManagerId(id ? String(id) : '')}
           />
         </Stack>
       </SystemDialog>
@@ -582,7 +567,7 @@ export default function EmployeesPage() {
             employee={editingEmployee}
             orgUnits={orgUnits}
             positions={positions}
-            employees={employees}
+            token={token}
             canViewCompensation={canViewCompensation}
             saving={saving}
             onSave={handleSaveWizard}

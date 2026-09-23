@@ -326,6 +326,7 @@
   "formKuwaitization": "التكويت",
   "formLoanType": "نوع القرض",
   "formManager": "المدير المباشر",
+  "employeeSearchHint": "اكتب الاسم أو الرقم الوظيفي",
   "formNameArFamily": "الاسم العربي (العائلة)",
   "formNameArGiven": "الاسم العربي (الاسم)",
   "formNameEnFamily": "الاسم الإنجليزي (العائلة)",

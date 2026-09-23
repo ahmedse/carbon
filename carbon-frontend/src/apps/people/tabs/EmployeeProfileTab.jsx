@@ -47,6 +47,7 @@ import { useNotification } from '../../../components/NotificationProvider';
 import { useReferenceOptions } from '../../../hooks/useReferenceOptions';
 import { useCompensationAccess } from '../useCompensationAccess';
 import { updateEmployee, fetchCompensationLedger } from '../../../api/people';
+import EmployeePicker from '../EmployeePicker';
 import { daysUntilExpiry, expiryUrgency, formatAmount, formatDate, refCode, refLabel } from '../utils';
 import {
   orgUnitDepth,
@@ -360,7 +361,7 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
     for (const u of orgUnitsForPicker) map.set(u.id, u);
     return map;
   }, [orgUnitsForPicker]);
-  const positionTitle = positions.find((p) => p.id === emp.position)?.title || null;
+  const positionTitle = emp.position_title || positions.find((p) => p.id === emp.position)?.title || null;
   const managerLabel = emp.managerLabel || t('managerUnassigned');
 
   const identitySummary = [emp.civil_id, refLabel(emp.nationality) || refCode(emp.nationality)].filter(Boolean).join(' · ');
@@ -376,7 +377,7 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
     : t('restrictedLabel');
 
   const startEdit = (key) => {
-    additionalProps?.loadPickers?.();
+    if (key === 'employment') additionalProps?.loadPositions?.();
     const fieldsBySection = {
       identity: ['name_en_given', 'name_en_family', 'name_ar_given', 'name_ar_family', 'gender', 'civil_id', 'date_of_birth', 'nationality'],
       employment: ['employment_type', 'contract_type', 'join_date', 'rotation', 'kuwaitization', 'position'],
@@ -599,12 +600,14 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
               </TextField>
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField fullWidth size="small" select label={t('formManager')} name="manager" value={editAllDraft.manager ?? ''} onChange={handleEditAllChange}>
-                <MenuItem value="">{t('managerUnassigned')}</MenuItem>
-                {(emp.allEmployees || []).filter((e) => e.id !== emp.id).map((e) => (
-                  <MenuItem key={e.id} value={e.id}>{`${e.employee_no ?? '—'} — ${e.full_name ?? ''}`}</MenuItem>
-                ))}
-              </TextField>
+              <EmployeePicker
+                token={token}
+                label={t('formManager')}
+                value={editAllDraft.manager ?? ''}
+                initialLabel={emp.manager_label || emp.managerLabel}
+                excludeId={emp.id}
+                onChange={(id) => setEditAllField('manager', id || '')}
+              />
             </Grid>
           </Grid>
 
@@ -806,12 +809,14 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
                 </MenuItem>
               ))}
             </TextField>
-            <TextField fullWidth size="small" select label={t('formManager')} name="manager" value={draft.manager ?? ''} onChange={handleChange}>
-              <MenuItem value="">{t('managerUnassigned')}</MenuItem>
-              {(emp.allEmployees || []).filter((e) => e.id !== emp.id).map((e) => (
-                <MenuItem key={e.id} value={e.id}>{`${e.employee_no ?? '—'} — ${e.full_name ?? ''}`}</MenuItem>
-              ))}
-            </TextField>
+            <EmployeePicker
+              token={token}
+              label={t('formManager')}
+              value={draft.manager ?? ''}
+              initialLabel={emp.manager_label || emp.managerLabel}
+              excludeId={emp.id}
+              onChange={(id) => setDraft((prev) => ({ ...prev, manager: id || '' }))}
+            />
             <SectionActions editing onSave={() => save('organization')} onCancel={cancelEdit} saving={saving} />
           </Stack>
         ) : (

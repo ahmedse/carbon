@@ -61,6 +61,8 @@ class ComplianceRuleSerializer(serializers.ModelSerializer):
 
 
 class EmployeeSerializer(serializers.ModelSerializer):
+    position_title = serializers.SerializerMethodField()
+    manager_label = serializers.SerializerMethodField()
     manager = serializers.PrimaryKeyRelatedField(
         queryset=Employee.objects.all(), required=False, allow_null=True,
     )
@@ -91,10 +93,26 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'name_en_given', 'name_en_family', 'name_ar_given', 'name_ar_family',
             'civil_id', 'date_of_birth', 'gender',
             'employment_type', 'contract_type', 'kuwaitization',
-            'manager', 'position', 'user_id', 'username', 'opening_basic',
+            'manager', 'manager_label', 'position', 'position_title',
+            'user_id', 'username', 'opening_basic',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'user_id', 'username', 'created_at', 'updated_at']
+        read_only_fields = [
+            'id', 'user_id', 'username', 'manager_label', 'position_title',
+            'created_at', 'updated_at',
+        ]
+
+    def get_position_title(self, obj):
+        position = getattr(obj, 'position', None)
+        if position is None:
+            return None
+        return position.title or position.code or None
+
+    def get_manager_label(self, obj):
+        manager = getattr(obj, 'manager', None)
+        if manager is None:
+            return None
+        return f"{manager.employee_no or '—'} — {manager.full_name or ''}"
 
     def create(self, validated_data):
         validated_data.pop('opening_basic', None)
@@ -238,27 +256,38 @@ class EmployeeCompensationSerializer(serializers.ModelSerializer):
 
 class PayslipLineSerializer(serializers.ModelSerializer):
     line_type = GovernedValueField(set_name='payslip_line_type', allow_null=False)
+    employee_no = serializers.CharField(source='employee.employee_no', read_only=True)
+    employee_name = serializers.CharField(source='employee.full_name', read_only=True)
 
     class Meta:
         model = PayslipLine
         fields = [
-            'id', 'payroll_run', 'employee', 'line_type', 'amount',
+            'id', 'payroll_run', 'employee', 'employee_no', 'employee_name',
+            'line_type', 'amount',
             'rule_id', 'rule_version', 'inputs', 'created_at',
         ]
-        read_only_fields = ['id', 'created_at']
+        read_only_fields = ['id', 'employee_no', 'employee_name', 'created_at']
 
 
 class PositionSerializer(serializers.ModelSerializer):
     grade = GovernedValueField(set_name='grade', required=False)
     job_family = GovernedValueField(set_name='job_family', required=False)
+    incumbent_label = serializers.SerializerMethodField()
 
     class Meta:
         model = Position
         fields = [
             'id', 'org_unit', 'code', 'title', 'grade', 'reports_to',
-            'is_management', 'status', 'fte', 'job_family',
+            'is_management', 'status', 'fte', 'job_family', 'incumbent_label',
         ]
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'incumbent_label']
+
+    def get_incumbent_label(self, obj):
+        no = getattr(obj, 'incumbent_no', None)
+        name = getattr(obj, 'incumbent_name', None)
+        if not no and not name:
+            return None
+        return f"{no or '—'} — {name or ''}"
 
 
 class LeaveEntitlementSerializer(serializers.ModelSerializer):
@@ -409,14 +438,17 @@ class EmployeeBenefitSerializer(serializers.ModelSerializer):
 
 class LoanSerializer(serializers.ModelSerializer):
     loan_type = GovernedValueField(set_name='loan_type', allow_null=False)
+    employee_no = serializers.CharField(source='employee.employee_no', read_only=True)
+    employee_name = serializers.CharField(source='employee.full_name', read_only=True)
 
     class Meta:
         model = Loan
         fields = [
-            'id', 'employee', 'loan_type', 'principal', 'interest_rate',
+            'id', 'employee', 'employee_no', 'employee_name',
+            'loan_type', 'principal', 'interest_rate',
             'term_months', 'start_date', 'status', 'notes',
         ]
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'employee_no', 'employee_name']
 
 
 class SelfLoanSerializer(LoanSerializer):
@@ -478,48 +510,61 @@ class LoanInstallmentSerializer(serializers.ModelSerializer):
 
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):
+    employee_no = serializers.CharField(source='employee.employee_no', read_only=True)
+    employee_name = serializers.CharField(source='employee.full_name', read_only=True)
+
     class Meta:
         model = AttendanceRecord
         fields = [
-            'id', 'employee', 'date', 'hours_worked', 'overtime_hours',
+            'id', 'employee', 'employee_no', 'employee_name',
+            'date', 'hours_worked', 'overtime_hours',
             'status', 'source_row',
         ]
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'employee_no', 'employee_name']
 
 
 class AttendancePermissionSerializer(serializers.ModelSerializer):
     permission_type = GovernedValueField(set_name='permission_type', allow_null=False)
+    employee_no = serializers.CharField(source='employee.employee_no', read_only=True)
+    employee_name = serializers.CharField(source='employee.full_name', read_only=True)
 
     class Meta:
         model = AttendancePermission
         fields = [
-            'id', 'employee', 'date', 'permission_type', 'hours',
+            'id', 'employee', 'employee_no', 'employee_name',
+            'date', 'permission_type', 'hours',
             'status', 'approved', 'notes',
         ]
-        read_only_fields = ['id', 'status']
+        read_only_fields = ['id', 'employee_no', 'employee_name', 'status']
 
 
 class CertificationSerializer(serializers.ModelSerializer):
     cert_type = GovernedValueField(set_name='cert_type', allow_null=False)
+    employee_no = serializers.CharField(source='employee.employee_no', read_only=True)
+    employee_name = serializers.CharField(source='employee.full_name', read_only=True)
 
     class Meta:
         model = Certification
         fields = [
-            'id', 'employee', 'cert_type', 'number', 'issued_date',
+            'id', 'employee', 'employee_no', 'employee_name',
+            'cert_type', 'number', 'issued_date',
             'expiry_date', 'notes',
         ]
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'employee_no', 'employee_name']
 
 
 class RotationScheduleSerializer(serializers.ModelSerializer):
     pattern = GovernedValueField(set_name='rotation_pattern', allow_null=False)
+    employee_no = serializers.CharField(source='employee.employee_no', read_only=True)
+    employee_name = serializers.CharField(source='employee.full_name', read_only=True)
 
     class Meta:
         model = RotationSchedule
         fields = [
-            'id', 'employee', 'pattern', 'start_date', 'config', 'is_active',
+            'id', 'employee', 'employee_no', 'employee_name',
+            'pattern', 'start_date', 'config', 'is_active',
         ]
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'employee_no', 'employee_name']
 
 
 class PayrollRunValidationSerializer(serializers.ModelSerializer):

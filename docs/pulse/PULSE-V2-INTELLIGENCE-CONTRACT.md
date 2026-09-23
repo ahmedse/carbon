@@ -207,7 +207,7 @@ Replace the "CALL THE TOOL" grounding block with a surface-aware block: on Chat 
 ### P6 — Evaluation as a gate + hardening (1 week, low risk)
 
 - Multi-turn bank blocking in CI with §3 thresholds; `latency_budget` and `llm_calls` regression gates.
-- Nightly live smoke on Nibras dev (`emp_1067`) for the three ESS journeys Chat→Agent→Approve, asserting host rows + IC metrics. Job: `python -m ai.eval.nightly_ess_smoke`. SOAKING until 5 consecutive live PASS nights (`docs/pulse/evidence/PV2-6B-soak.md`). First mutating night needs STACK-HOLD + `PULSE_NIGHTLY_LIVE=1`. Dry-run does not count.
+- Nightly live smoke on Nibras dev (`emp_1067`) for the three ESS journeys Chat→Agent→Approve, asserting host rows + IC metrics. Job: `python -m ai.eval.nightly_ess_smoke`. SOAKING until 5 consecutive live PASS nights (`docs/pulse/evidence/PV2-6B-soak.md`). Night 2026-09-23 FAIL (`host_row` on leave/loan/attendance). Dry-run / FAIL do not count.
 - ADR-0047 accepted; QA bank gate **G5 — Coherence**; `.cursor/rules/pulse-intelligence-contract.mdc`.
 
 ### QA bank G5 — Coherence (PV2-6A)

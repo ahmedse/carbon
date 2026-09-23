@@ -44,12 +44,12 @@ import { useAuth } from '../../auth/AuthContext';
 import {
   fetchLoans,
   fetchLoanInstallments,
-  fetchEmployees,
   createLoan,
   updateLoan,
   deleteLoan,
 } from '../../api/people';
-import { buildEmployeeLabels, formatAmount, formatDate, refCode, refLabel } from './utils';
+import { labelsFromRows, formatAmount, formatDate, refCode, refLabel } from './utils';
+import EmployeePicker from './EmployeePicker';
 
 const LOAN_STATUSES = ['active', 'paid_off', 'cancelled'];
 
@@ -100,7 +100,6 @@ export default function LoansPage() {
   const loanTypeRef = useReferenceOptions('loan_type');
 
   const [loans, setLoans] = useState([]);
-  const [employees, setEmployees] = useState([]);
   const [employeeLabels, setEmployeeLabels] = useState({});
   const [installments, setInstallments] = useState([]);
   const [installmentsLoading, setInstallmentsLoading] = useState(true);
@@ -118,15 +117,10 @@ export default function LoansPage() {
     try {
       setLoading(true);
       setError(null);
-      const [loansData, employeesData] = await Promise.all([
-        fetchLoans(token),
-        fetchEmployees(token),
-      ]);
+      const loansData = await fetchLoans(token);
       const loanList = Array.isArray(loansData) ? loansData : loansData?.results || [];
-      const employeeList = Array.isArray(employeesData) ? employeesData : employeesData?.results || [];
       setLoans(loanList);
-      setEmployees(employeeList);
-      setEmployeeLabels(buildEmployeeLabels(employeeList));
+      setEmployeeLabels(labelsFromRows(loanList));
     } catch (err) {
       setError(err?.message || t('loansLoadError'));
     } finally {
@@ -456,22 +450,14 @@ export default function LoansPage() {
         }
       >
         <Stack spacing={2}>
-          <TextField
-            select
+          <EmployeePicker
+            token={token}
             label={t('colEmployee')}
-            name="employee"
             value={form.employee}
-            onChange={handleChange}
-            fullWidth
+            initialLabel={employeeLabels[form.employee]}
             required
-          >
-            <MenuItem value="" disabled>{t('colEmployee')}</MenuItem>
-            {employees.map((employee) => (
-              <MenuItem key={employee.id} value={employee.id}>
-                {employee.employee_no ?? '—'} — {employee.full_name ?? ''}
-              </MenuItem>
-            ))}
-          </TextField>
+            onChange={(id) => setForm((prev) => ({ ...prev, employee: id || '' }))}
+          />
           <Autocomplete
             size="small"
             options={loanTypeRef.options}

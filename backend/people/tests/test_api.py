@@ -13,6 +13,7 @@
 from datetime import date
 
 import pytest
+from rest_framework.test import APIClient
 
 from dq.models import DQRule, ModelRuleAssignment
 from mdm.models import OrgUnit, ReferenceSet, ReferenceValue
@@ -347,13 +348,17 @@ def _wps_rule(authoritative=True):
 
 
 @pytest.mark.django_db
-def test_run_lifecycle_happy_path(auth, create_user, org_a, employee_a):
+def test_run_lifecycle_happy_path(auth, create_user, get_token_for_user, org_a, employee_a):
     _gross_rule()
     _gosi_rule()
     _loan_rule()
     _net_rule()
 
     client = auth(create_user('people_run_writer', is_superuser=True))
+    committer = APIClient()
+    committer.credentials(HTTP_AUTHORIZATION=(
+        'Bearer ' + get_token_for_user(create_user('people_run_committer', is_superuser=True))
+    ))
     run = PayrollRun.objects.create(
         org_unit=org_a,
         period_start=date(2026, 8, 1),
@@ -373,7 +378,7 @@ def test_run_lifecycle_happy_path(auth, create_user, org_a, employee_a):
     assert run.status == 'validated'
     assert PayrollRunValidation.objects.filter(payroll_run=run).exists()
 
-    resp = client.post(PAYROLL_RUNS_URL + f'{run.pk}/commit/')
+    resp = committer.post(PAYROLL_RUNS_URL + f'{run.pk}/commit/')
     assert resp.status_code == 200
     assert resp.json()['status'] == 'committed'
     run.refresh_from_db()
@@ -404,26 +409,30 @@ def test_illegal_transition_returns_409(auth, create_user, org_a, employee_a):
 
 # ── NIR-5H: WPS export endpoint ────────────────────────────────────────────
 
-def _commit_run(client, run):
+def _commit_run(client, run, committer=None):
     client.post(PAYROLL_RUNS_URL + f'{run.pk}/compute/')
     client.post(PAYROLL_RUNS_URL + f'{run.pk}/validate/')
-    client.post(PAYROLL_RUNS_URL + f'{run.pk}/commit/')
+    (committer or client).post(PAYROLL_RUNS_URL + f'{run.pk}/commit/')
 
 
 @pytest.mark.django_db
-def test_wps_export_happy_path(auth, create_user, org_a, employee_a):
+def test_wps_export_happy_path(auth, create_user, get_token_for_user, org_a, employee_a):
     _gross_rule()
     _gosi_rule()
     _net_rule()
     _wps_rule(authoritative=True)
 
     client = auth(create_user('people_wps_writer', is_superuser=True))
+    committer = APIClient()
+    committer.credentials(HTTP_AUTHORIZATION=(
+        'Bearer ' + get_token_for_user(create_user('people_wps_committer', is_superuser=True))
+    ))
     run = PayrollRun.objects.create(
         org_unit=org_a,
         period_start=date(2026, 8, 1),
         period_end=date(2026, 8, 31),
     )
-    _commit_run(client, run)
+    _commit_run(client, run, committer)
     run.refresh_from_db()
     assert run.status == 'committed'
 

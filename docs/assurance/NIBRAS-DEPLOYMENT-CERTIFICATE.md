@@ -66,7 +66,7 @@ Do **not** use Chat to submit leave or payroll.
 - WPS file download / `LOCAL-WPS-*` is Carbon output. **No PAM or bank receipt.**
 - Historical runs may show **Prepared by —**. Commit still fail-closes if preparer is missing.
 - Live nationality is often empty. Those rows now **refuse** Kuwaiti-scoped EOSI/leave instead of guessing.
-- Employee 360 no longer walks the full directory on open. Edit-all still loads the directory for pickers.
+- Employee 360 and People lists no longer download the full roster to label a row. Directory search and filters are one page of 100. Pickers search 20 matches. Rows past that page are reached by search, not by loading everyone.
 - Two active runs for the same org/month are refused in create/compute. Historical duplicates were not deleted; there is no DB unique constraint.
 - Platform CI merge protection and the live assurance SSE board are **not** certified.
 - GOSI/EOSI **formula rates** are data. This certificate does not attest PIFSS or KLL amounts.

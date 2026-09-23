@@ -2,5 +2,127 @@
   "phase": "PV2-6B",
   "required_consecutive": 5,
   "soak_complete": false,
-  "nights": []
+  "nights": [
+    {
+      "night_id": "2026-09-23",
+      "status": "FAIL",
+      "host_user": "emp_1067",
+      "journeys": [
+        {
+          "id": "leave",
+          "process": "leave.request.lifecycle",
+          "api_name": "submit_my_leave",
+          "conversation_id": "4f032164-5000-4380-8ed9-b136c5210552",
+          "plan_id": "2a788330-72a4-4a64-8111-5a573c0f3abf",
+          "chat_decision": "handoff_agent",
+          "handoff_ready": true,
+          "active_plans": true,
+          "chat_mutated": false,
+          "inherited_context": [
+            {
+              "key": "leave_type",
+              "value": "annual"
+            },
+            {
+              "key": "start_date",
+              "value": "2027-08-30"
+            },
+            {
+              "key": "days",
+              "value": "1"
+            }
+          ],
+          "slot_carry": true,
+          "approve_http": 200,
+          "host_row_after_agent": false,
+          "fingerprint": {
+            "start_date": "2027-08-30"
+          },
+          "utterance": "I want annual leave from 2027-08-30 for 1 day",
+          "passed": false,
+          "status": "FAIL",
+          "notes": "host_row"
+        },
+        {
+          "id": "loan",
+          "process": "loan.request.lifecycle",
+          "api_name": "submit_my_loan",
+          "conversation_id": "30289a04-5191-4e3d-956a-8642c5c8d912",
+          "plan_id": "5f5eb3db-f44b-4749-8fc6-a1a8f6115ef7",
+          "chat_decision": "handoff_agent",
+          "handoff_ready": true,
+          "active_plans": true,
+          "chat_mutated": false,
+          "inherited_context": [
+            {
+              "key": "amount",
+              "value": "520.0"
+            },
+            {
+              "key": "loan_type",
+              "value": "personal"
+            },
+            {
+              "key": "start_date",
+              "value": "2027-09-13"
+            },
+            {
+              "key": "term_months",
+              "value": "12"
+            }
+          ],
+          "slot_carry": true,
+          "approve_http": 200,
+          "host_row_after_agent": false,
+          "fingerprint": {
+            "principal": 520,
+            "term_months": 12
+          },
+          "utterance": "I need a personal loan of 520 KWD for 12 months starting 2027-09-13",
+          "passed": false,
+          "status": "FAIL",
+          "notes": "host_row"
+        },
+        {
+          "id": "attendance",
+          "process": "attendance.permission.lifecycle",
+          "api_name": "submit_my_attendance_permission",
+          "conversation_id": "b17fd496-6b0f-4ca4-9d72-45056328f485",
+          "plan_id": "11f40d37-2f67-4047-a0ac-2d3492365bc4",
+          "chat_decision": "handoff_agent",
+          "handoff_ready": true,
+          "active_plans": true,
+          "chat_mutated": false,
+          "inherited_context": [
+            {
+              "key": "permission_type",
+              "value": "official"
+            },
+            {
+              "key": "date",
+              "value": "2027-09-20"
+            },
+            {
+              "key": "hours",
+              "value": "2.0"
+            }
+          ],
+          "slot_carry": true,
+          "approve_http": 200,
+          "host_row_after_agent": false,
+          "fingerprint": {
+            "date": "2027-09-20",
+            "hours": 2
+          },
+          "utterance": "Request attendance permission official 2 hours on 2027-09-20",
+          "passed": false,
+          "status": "FAIL",
+          "notes": "host_row"
+        }
+      ],
+      "consecutive_green": 0,
+      "notes": "live Chat→Agent→Approve",
+      "recorded_at": "2026-09-23T07:59:17.364653+00:00"
+    }
+  ]
 }

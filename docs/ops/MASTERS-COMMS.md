@@ -309,3 +309,27 @@ Track: PV2 — C5 residual DONE (lexical clarify)
 Ask: Incomplete ESS writes clarify at 0 LLM; complete writes still hand off. Force-action fallback no longer replaces a finished Chat decision. G5: router 0.979, turns 94/96, scripts 10/12, C5 1.0. Goldens not loosened. Assurance trees not touched. 4B still blocked until 2026-09-30. 6B live still needs STACK-HOLD + approval.
 Paths: backend/ai/engine/cognition/turn/handoff_agent.py, turn/runner.py, engine_runtime.py
 Blockers: live 6B night + morning 3-script re-check need approval; 4B soak until 2026-09-30
+
+## [2026-09-23T10:56:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-14
+Track: PV2 — 0C live 3-script re-check (approved)
+Ask: Human approved. Running `ai.eval.multiturn.runner --live --host-user emp_1067 --no-isolated-db` for scripts 01/04/08 against nibras_dev. Chat mode only — no host writes (ADR-0046). No manage.sh start/restart/kill. Stack already RUNNING :8009/:5179. 6B mutating night follows after this report + STACK-HOLD.
+Paths: backend/ai/eval/multiturn/runner.py, nibras_dev, /tmp/pv2-0c-live-recheck-20260923.json
+Blockers: 4B soak until 2026-09-30; 6C waits on five green nights
+
+## [2026-09-23T10:56:30+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-15
+Track: PV2 — STACK-HOLD Pulse for 6B night 1
+Ask: STACK-HOLD Nibras until 12:30+03 — Pulse 6B first mutating night as emp_1067 (leave/loan/attendance Chat→Agent→Approve). Human approved. Do not manage.sh start/restart/kill :8009/:5179 without ACK. Stack already RUNNING. Live 3-script Chat-only is in-process first; 6B starts after that report.
+Paths: manage.sh, :8009, :5179, backend/ai/eval/nightly_ess_smoke.py
+Blockers: 4B soak until 2026-09-30
+
+## [2026-09-23T11:00:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-16
+Track: PV2 — 0C live 3-script re-check DONE
+Ask: emp_1067 / nibras_dev / Chat only / 129s. turns 0/24 → 13/24. router 0.667. language 1.0. llm p50 3→2. over_budget 19→5. loan-ar 6/8, handoff 7/8, payroll 0/8. F-LIVE-1/2/3/4 closed on live. F-LIVE-9 open (payslip numbers). Goldens not edited. Evidence: docs/pulse/evidence/PV2-live-recheck-2026-09-23.md
+Paths: docs/pulse/evidence/PV2-live-recheck-2026-09-23.{md,json}, nibras_dev
+Blockers: F-LIVE-9 payroll numbers; 4B until 2026-09-30; 6C waits on five green nights
+
+## [2026-09-23T11:01:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-17
+Track: PV2 — 6B night 2026-09-23 FAIL · STACK-RELEASE
+Ask: First mutating night recorded. Chat handoff + no Chat mutation + slot_carry on leave/loan/attendance. Approve 200. host_row missed on all three (streak stays 0/5). Do not rewrite the night to PASS. STACK-RELEASE Nibras — :8009/:5179 free. Hold 20260923-15 closed.
+Paths: docs/pulse/evidence/PV2-6B-{nights.json,soak.md,night-2026-09-23.md}, manage.sh, :8009, :5179
+Blockers: 6B soak 0/5 (FAIL breaks streak); 4B until 2026-09-30

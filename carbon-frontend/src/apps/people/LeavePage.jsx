@@ -30,7 +30,6 @@ import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useReferenceOptions } from '../../hooks/useReferenceOptions';
 import { useAuth } from '../../auth/AuthContext';
 import {
-  fetchEmployees,
   fetchLeaveRecords,
   fetchLeaveEntitlements,
   createLeaveRecord,
@@ -41,6 +40,7 @@ import {
   deleteLeaveEntitlement,
 } from '../../api/people';
 import { formatDate, statusColor, statusLabelKey } from './utils';
+import EmployeePicker from './EmployeePicker';
 
 const EMPTY_RECORD = {
   employee: '',
@@ -81,7 +81,6 @@ export default function LeavePage() {
   const [tab, setTab] = useState(0);
   const [records, setRecords] = useState([]);
   const [entitlements, setEntitlements] = useState([]);
-  const [employeeOptions, setEmployeeOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -104,23 +103,6 @@ export default function LeavePage() {
     year: String(new Date().getFullYear()),
     leave_type: '',
   });
-
-  const loadPickerEmployees = useCallback(async () => {
-    if (!token) return;
-    try {
-      // One page is enough for SearchSelect local filter; avoids walking 555+.
-      const data = await fetchEmployees(token, { page: 1, page_size: 200 });
-      const list = Array.isArray(data) ? data : data?.results || [];
-      setEmployeeOptions(
-        list.map((e) => ({
-          value: e.id,
-          label: employeeLabel(e),
-        })),
-      );
-    } catch {
-      /* picker failure is non-fatal — grid still works via embedded names */
-    }
-  }, [token]);
 
   const loadData = useCallback(async () => {
     try {
@@ -145,10 +127,6 @@ export default function LeavePage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
-
-  useEffect(() => {
-    loadPickerEmployees();
-  }, [loadPickerEmployees]);
 
   const showError = (err) => {
     setSnackbar({
@@ -544,9 +522,6 @@ export default function LeavePage() {
     [t, tCommon],
   );
 
-  const selectedEmployeeOption = (id) =>
-    employeeOptions.find((o) => String(o.value) === String(id)) || null;
-
   const selectedLeaveTypeOption = (code) =>
     leaveTypes.options.find((o) => o.value === code) || (code ? { value: code, label: code } : null);
 
@@ -641,15 +616,12 @@ export default function LeavePage() {
           <Alert severity="info" variant="outlined">
             {t('leaveApproveViaTeamHint')}
           </Alert>
-          <SearchSelect
+          <EmployeePicker
+            token={token}
             label={t('colEmployee')}
-            options={employeeOptions}
-            valueKey="value"
-            labelKey="label"
-            value={selectedEmployeeOption(recordForm.employee)}
-            onChange={(opt) => setRecordForm((prev) => ({ ...prev, employee: opt?.value ?? '' }))}
+            value={recordForm.employee}
             required
-            size="small"
+            onChange={(id) => setRecordForm((prev) => ({ ...prev, employee: id || '' }))}
           />
           <SearchSelect
             label={t('colLeaveType')}
@@ -722,15 +694,12 @@ export default function LeavePage() {
         }
       >
         <Stack spacing={2}>
-          <SearchSelect
+          <EmployeePicker
+            token={token}
             label={t('colEmployee')}
-            options={employeeOptions}
-            valueKey="value"
-            labelKey="label"
-            value={selectedEmployeeOption(entForm.employee)}
-            onChange={(opt) => setEntForm((prev) => ({ ...prev, employee: opt?.value ?? '' }))}
+            value={entForm.employee}
             required
-            size="small"
+            onChange={(id) => setEntForm((prev) => ({ ...prev, employee: id || '' }))}
           />
           <TextField
             label={t('colYear')}

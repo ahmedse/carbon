@@ -40,7 +40,6 @@ import { useReferenceOptions } from '../../hooks/useReferenceOptions';
 import { useAuth } from '../../auth/AuthContext';
 import {
   fetchPositions,
-  fetchEmployees,
   createPosition,
   updatePosition,
   deletePosition,
@@ -70,7 +69,6 @@ export default function PositionsPage() {
 
   const [positions, setPositions] = useState([]);
   const [orgUnits, setOrgUnits] = useState([]);
-  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
@@ -83,14 +81,12 @@ export default function PositionsPage() {
     try {
       setLoading(true);
       setError(null);
-      const [positionsData, orgUnitsData, employeesData] = await Promise.all([
+      const [positionsData, orgUnitsData] = await Promise.all([
         fetchPositions(token),
         fetchOrgUnits(token),
-        fetchEmployees(token),
       ]);
       setPositions(Array.isArray(positionsData) ? positionsData : positionsData?.results || []);
       setOrgUnits(Array.isArray(orgUnitsData) ? orgUnitsData : []);
-      setEmployees(Array.isArray(employeesData) ? employeesData : employeesData?.results || []);
     } catch (err) {
       setError(err?.message || t('positionsLoadError'));
     } finally {
@@ -123,8 +119,8 @@ export default function PositionsPage() {
   };
 
   const incumbentLabel = (positionId) => {
-    const employee = employees.find((e) => e.position === positionId);
-    return employee ? `${employee.employee_no} — ${employee.full_name}` : t('incumbentUnassigned');
+    const position = positions.find((p) => p.id === positionId);
+    return position?.incumbent_label || t('incumbentUnassigned');
   };
 
   const openCreate = () => {

@@ -38,7 +38,6 @@ import SystemDialog from '../../components/SystemDialog';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
 import {
-  fetchEmployees,
   fetchAttendanceRecords,
   fetchAttendancePermissions,
   createAttendanceRecord,
@@ -48,7 +47,8 @@ import {
   updateAttendancePermission,
   deleteAttendancePermission,
 } from '../../api/people';
-import { buildEmployeeLabels, formatDate, statusColor, statusLabelKey } from './utils';
+import { labelsFromRows, formatDate, statusColor, statusLabelKey } from './utils';
+import EmployeePicker from './EmployeePicker';
 
 const EMPTY_RECORD = {
   employee: '',
@@ -77,7 +77,6 @@ export default function AttendancePage() {
 
   const [records, setRecords] = useState([]);
   const [permissions, setPermissions] = useState([]);
-  const [employees, setEmployees] = useState([]);
   const [employeeLabels, setEmployeeLabels] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -97,16 +96,15 @@ export default function AttendancePage() {
     try {
       setLoading(true);
       setError(null);
-      const [employeesData, recordsData, permissionsData] = await Promise.all([
-        fetchEmployees(token),
+      const [recordsData, permissionsData] = await Promise.all([
         fetchAttendanceRecords(token),
         fetchAttendancePermissions(token),
       ]);
-      const employeeList = Array.isArray(employeesData) ? employeesData : employeesData?.results || [];
-      setEmployees(employeeList);
-      setEmployeeLabels(buildEmployeeLabels(employeeList));
-      setRecords(Array.isArray(recordsData) ? recordsData : recordsData?.results || []);
-      setPermissions(Array.isArray(permissionsData) ? permissionsData : permissionsData?.results || []);
+      const recordList = Array.isArray(recordsData) ? recordsData : recordsData?.results || [];
+      const permissionList = Array.isArray(permissionsData) ? permissionsData : permissionsData?.results || [];
+      setRecords(recordList);
+      setPermissions(permissionList);
+      setEmployeeLabels(labelsFromRows([...recordList, ...permissionList]));
     } catch (err) {
       setError(err?.message || t('attendanceLoadError'));
     } finally {
@@ -293,20 +291,14 @@ export default function AttendancePage() {
         }
       >
         <Stack spacing={2}>
-          <TextField
-            select
+          <EmployeePicker
+            token={token}
             label={t('colEmployee')}
-            name="employee"
             value={recordForm.employee}
-            onChange={handleRecordChange}
-            fullWidth
+            initialLabel={employeeLabels[recordForm.employee]}
             required
-          >
-            <MenuItem value="" disabled>{t('colEmployee')}</MenuItem>
-            {employees.map((emp) => (
-              <MenuItem key={emp.id} value={emp.id}>{employeeName(emp.id)}</MenuItem>
-            ))}
-          </TextField>
+            onChange={(id) => setRecordForm((prev) => ({ ...prev, employee: id || '' }))}
+          />
           <TextField
             label={t('colDate')}
             name="date"
@@ -364,20 +356,14 @@ export default function AttendancePage() {
         }
       >
         <Stack spacing={2}>
-          <TextField
-            select
+          <EmployeePicker
+            token={token}
             label={t('colEmployee')}
-            name="employee"
             value={permissionForm.employee}
-            onChange={handlePermissionChange}
-            fullWidth
+            initialLabel={employeeLabels[permissionForm.employee]}
             required
-          >
-            <MenuItem value="" disabled>{t('colEmployee')}</MenuItem>
-            {employees.map((emp) => (
-              <MenuItem key={emp.id} value={emp.id}>{employeeName(emp.id)}</MenuItem>
-            ))}
-          </TextField>
+            onChange={(id) => setPermissionForm((prev) => ({ ...prev, employee: id || '' }))}
+          />
           <TextField
             label={t('colDate')}
             name="date"

@@ -198,6 +198,7 @@ class EmployeeListCreateView(APIView):
         'user',
         'manager',
         'position',
+        'manager',
         'org_unit',
         'nationality',
         'nationality__reference_set',
@@ -230,8 +231,37 @@ class EmployeeListCreateView(APIView):
         q = (request.query_params.get('q') or '').strip()
         if q:
             qs = qs.filter(
-                Q(employee_no__icontains=q) | Q(full_name__icontains=q),
+                Q(employee_no__icontains=q)
+                | Q(full_name__icontains=q)
+                | Q(civil_id__icontains=q)
             )
+        active = (request.query_params.get('is_active') or '').strip().lower()
+        if active in ('true', '1', 'yes'):
+            qs = qs.filter(is_active=True)
+        elif active in ('false', '0', 'no'):
+            qs = qs.filter(is_active=False)
+        org_unit = (request.query_params.get('org_unit') or '').strip()
+        if org_unit:
+            try:
+                qs = qs.filter(org_unit_id=int(org_unit))
+            except (TypeError, ValueError):
+                qs = qs.none()
+        rotation = (request.query_params.get('rotation') or '').strip()
+        if rotation:
+            qs = qs.filter(rotation__code=rotation)
+        nationality = (request.query_params.get('nationality') or '').strip()
+        if nationality:
+            qs = qs.filter(nationality__code=nationality)
+        kuwait = (request.query_params.get('kuwaitization') or '').strip().lower()
+        if kuwait in ('true', '1', 'yes'):
+            qs = qs.filter(kuwaitization=True)
+        elif kuwait in ('false', '0', 'no'):
+            qs = qs.filter(kuwaitization=False)
+        manager = (request.query_params.get('manager') or '').strip().lower()
+        if manager == 'assigned':
+            qs = qs.filter(manager__isnull=False)
+        elif manager == 'unassigned':
+            qs = qs.filter(manager__isnull=True)
         total = qs.count()
         try:
             page = max(1, int(request.query_params.get('page', 1)))
@@ -751,7 +781,7 @@ class PayslipLineListView(APIView):
     permission_classes = [IsAuthenticated, PeopleAccess]
 
     def get(self, request):
-        qs = PayslipLine.objects.all()
+        qs = PayslipLine.objects.select_related('employee', 'line_type')
         run_id = request.query_params.get('payroll_run')
         if run_id:
             qs = qs.filter(payroll_run_id=run_id)
@@ -890,6 +920,16 @@ class _GatedDetailView(APIView):
 
 # Position (org-scoped via its own org_unit FK)
 class PositionListCreateView(_GatedListCreateView):
+    def get_queryset(self):
+        from django.db.models import OuterRef, Subquery
+
+        holder = Employee.objects.filter(
+            position_id=OuterRef('pk'), is_active=True,
+        ).order_by('employee_no')
+        return Position.objects.annotate(
+            incumbent_no=Subquery(holder.values('employee_no')[:1]),
+            incumbent_name=Subquery(holder.values('full_name')[:1]),
+        )
     model = Position
     serializer_class = PositionSerializer
     org_lookup = 'org_unit_id__in'
@@ -1397,6 +1437,9 @@ class LoanListCreateView(_GatedListCreateView):
     serializer_class = LoanSerializer
     org_lookup = 'employee__org_unit_id__in'
 
+    def get_queryset(self):
+        return Loan.objects.select_related('employee', 'loan_type')
+
 
 class LoanDetailView(_GatedDetailView):
     model = Loan
@@ -1468,6 +1511,9 @@ class AttendanceRecordListCreateView(_GatedListCreateView):
     serializer_class = AttendanceRecordSerializer
     org_lookup = 'employee__org_unit_id__in'
 
+    def get_queryset(self):
+        return AttendanceRecord.objects.select_related('employee')
+
 
 class AttendanceRecordDetailView(_GatedDetailView):
     model = AttendanceRecord
@@ -1480,6 +1526,9 @@ class AttendancePermissionListCreateView(_GatedListCreateView):
     model = AttendancePermission
     serializer_class = AttendancePermissionSerializer
     org_lookup = 'employee__org_unit_id__in'
+
+    def get_queryset(self):
+        return AttendancePermission.objects.select_related('employee', 'permission_type')
 
     def post(self, request):
         from people.governance.sod import SUBJECT_ATTENDANCE_PERMISSION, record_preparer
@@ -1572,6 +1621,9 @@ class CertificationListCreateView(_GatedListCreateView):
     serializer_class = CertificationSerializer
     org_lookup = 'employee__org_unit_id__in'
 
+    def get_queryset(self):
+        return Certification.objects.select_related('employee', 'cert_type')
+
 
 class CertificationDetailView(_GatedDetailView):
     model = Certification
@@ -1584,6 +1636,9 @@ class RotationScheduleListCreateView(_GatedListCreateView):
     model = RotationSchedule
     serializer_class = RotationScheduleSerializer
     org_lookup = 'employee__org_unit_id__in'
+
+    def get_queryset(self):
+        return RotationSchedule.objects.select_related('employee', 'pattern')
 
 
 class RotationScheduleDetailView(_GatedDetailView):
