@@ -32,6 +32,7 @@ import { AI_MANAGE_CONSOLE, expandCapabilities, hasCap } from '../capabilities';
 import PulseLogo from './PulseLogo';
 import AIContextMenu from './AIContextMenu';
 import CheckpointPicker from './CheckpointPicker';
+import { isPulseAgentUiEnabled } from './pulseAgentUi';
 
 function capabilityKeys(caps) {
   if (!Array.isArray(caps)) return [];
@@ -75,6 +76,7 @@ function AIWorkspaceHeader({
   );
   const [pickerOpen, setPickerOpen] = useState(false);
   const [snackbar, setSnackbar] = useState(null); // { message }
+  const agentUiOn = isPulseAgentUiEnabled();
 
   const contractKey =
     mode === 'chat'
@@ -151,20 +153,22 @@ function AIWorkspaceHeader({
         >
           {t(contractKey)}
         </Typography>
-        <ToggleButtonGroup
-          exclusive
-          size="small"
-          value={mode}
-          onChange={(event, next) => next && onModeChange?.(next)}
-          aria-label={t('pulseMode')}
-        >
-          <ToggleButton value="chat" aria-label={t('chatMode')}>
-            💬 {t('modeChat')}
-          </ToggleButton>
-          <ToggleButton value="agent" aria-label={t('agentMode')}>
-            🤖 {t('modeAgent')}
-          </ToggleButton>
-        </ToggleButtonGroup>
+        {agentUiOn ? (
+          <ToggleButtonGroup
+            exclusive
+            size="small"
+            value={mode}
+            onChange={(event, next) => next && onModeChange?.(next)}
+            aria-label={t('pulseMode')}
+          >
+            <ToggleButton value="chat" aria-label={t('chatMode')}>
+              💬 {t('modeChat')}
+            </ToggleButton>
+            <ToggleButton value="agent" aria-label={t('agentMode')}>
+              🤖 {t('modeAgent')}
+            </ToggleButton>
+          </ToggleButtonGroup>
+        ) : null}
         {canManageConsole ? (
           <>
             <Tooltip title={t('saveCheckpoint')}>

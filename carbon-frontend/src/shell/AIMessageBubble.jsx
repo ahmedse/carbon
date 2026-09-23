@@ -66,6 +66,7 @@ import AIGeneratedBadge from './AIGeneratedBadge';
 import ReasoningTrace from './ReasoningTrace';
 import PlanningHeader from './PlanningHeader';
 import SuggestionDiff from './SuggestionDiff';
+import { isPulseAgentUiEnabled } from './pulseAgentUi';
 
 const CarbonDataGrid = lazy(() => import('../components/DataGrid/CarbonDataGrid'));
 
@@ -874,7 +875,10 @@ function AIMessageBubble({
   // open_panel action → switch the workspace to a panel (e.g. Tasks) and
   // focus the referenced object (plan created from chat). Rendered as a
   // button (NOT a route Link — the panel is a workspace surface).
-  const panelActions = rawActions.filter((a) => a?.type === 'open_panel');
+  // Suppressed when Agent UI is retired — My/Team navigate CTAs remain.
+  const panelActions = isPulseAgentUiEnabled()
+    ? rawActions.filter((a) => a?.type === 'open_panel')
+    : [];
   const pendingActions = Array.isArray(metadata.pending_actions) ? metadata.pending_actions : [];
   const showActionRow = Boolean(
     !isUser && (

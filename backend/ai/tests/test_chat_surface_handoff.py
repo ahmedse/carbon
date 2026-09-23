@@ -79,9 +79,9 @@ async def test_chat_surface_hook_cancels_leave_submit():
     assert env.get("caveats") == []
     assert "ADR" not in str(env)
     actions = result.payload.get("actions") or []
-    assert actions[0].get("type") == "open_panel"
-    routes = {a.get("route") for a in actions if a.get("type") == "navigate"}
-    assert "/my/leave" in routes
+    assert actions[0].get("type") == "navigate"
+    assert actions[0].get("route") == "/my/leave"
+    assert not any(a.get("type") == "open_panel" for a in actions)
 
 
 @pytest.mark.asyncio
@@ -132,7 +132,7 @@ def test_extract_tool_actions_promotes_chat_handoff_ctas():
         },
     ])
     assert pending == []
-    assert any(a.get("type") == "open_panel" for a in actions)
+    assert not any(a.get("type") == "open_panel" for a in actions)
     assert any(
         a.get("type") == "navigate" and a.get("route") == "/my/leave"
         for a in actions
@@ -151,9 +151,11 @@ def test_chat_handoff_note_owns_copy_no_adr():
         "guardrail_flags": ["chat_no_host_mutation"],
     }])
     assert "Chat does not submit" in note
-    assert "Agent" in note
+    assert "My Leave" in note or "my/leave" in note.lower() or "Open" in note
     assert "ADR" not in note
     assert "G2" not in note
+    # Agent UI retired — copy must not push Agent as a path
+    assert "Agent" not in note or "not in Chat" in note
     env = _chat_handoff_envelope([{
         "tool_name": "call_host_api",
         "result": handoff,
@@ -168,7 +170,7 @@ def test_intent_handoff_for_arabic_leave():
     )
     assert "الدردشة" in text or "إجازة" in text
     assert "ADR" not in text
-    assert any(a.get("type") == "open_panel" for a in actions)
+    assert not any(a.get("type") == "open_panel" for a in actions)
     assert any(a.get("route") == "/my/leave" for a in actions)
     assert envelope.get("caveats") == []
     assert "ADR" not in str(envelope)
@@ -188,8 +190,9 @@ def test_leave_handoff_spec():
     assert spec["process"] == "leave.request.lifecycle"
     assert spec["my_route"] == "/my/leave"
     acts = build_handoff_actions(spec)
-    assert acts[0]["type"] == "open_panel"
-    assert len(acts) >= 2
+    assert acts[0]["type"] == "navigate"
+    assert acts[0]["route"] == "/my/leave"
+    assert len(acts) == 1
 
 
 def test_manager_review_intent_hands_off_to_team():
@@ -207,7 +210,6 @@ def test_manager_review_intent_hands_off_to_team():
     assert acts[0]["route"] == "/team"
     copy = handoff_copy(spec)
     assert "Team" in copy
-    assert "Agent" in copy  # says not in Agent
     assert "Open" in copy or "inbox" in copy.lower()
 
     att = handoff_spec_for_intent("approve attendance permission")
