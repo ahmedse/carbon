@@ -249,3 +249,9 @@ Track: PV2 — W2 in progress (2C DONE · 2A dispatched)
 Ask: PV2-2C Master-accepted (audience-scoped api_catalog, guidance_by_audience, IdentityBlock slice, foreground llm meter → offline p50 2 identical×2). Checkpoint `06ac333`. PV2-2A ContextPack chat stages dispatched. P4–P6 full specs in TASKS.md (SOAKING rules). Live re-check still batched for morning approval. Nibras: instance.yaml additive audience defaults — no host API contract change.
 Paths: backend/ai/engine/cognition/context_pack.py, backend/ai/engine/instances/nibras/instance.yaml, TASKS.md
 Blockers: none
+
+## [2026-09-23T09:25:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-4
+Track: PV2 — 2A DONE · 2B dispatching
+Ask: PV2-2A Master-accepted (ContextPack for chat stages). Checkpoint pending with this COMMS. PV2-2B (plan/discovery ContextPack) next. Overnight 2A worker died; Master finished gate + fixed one new import-boundary violation.
+Paths: backend/ai/engine/cognition/context_pack.py, turn/{draft,critic,intent,verify,runner}.py
+Blockers: none
