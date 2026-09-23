@@ -9,18 +9,18 @@ from core.throttling import RefreshRateThrottle
 from django.conf import settings
 from django.contrib.auth.models import Group
 from drf_spectacular.utils import extend_schema
-from .models import User, ScopedRole, RoleAssignmentAuditLog, PlatformAppConfig
+from .models import User, ScopedRole, RoleAssignmentAuditLog, PlatformAppConfig, DutyProfile
 from .serializers import (
     UserSerializer, GroupSerializer,
     ScopedRoleSerializer, ScopedRoleCreateSerializer,
     RoleAssignmentAuditLogSerializer, PlatformAppConfigSerializer,
-    MePreferencesSerializer,
+    MePreferencesSerializer, DutyProfileSerializer,
 )
 from .permissions import AdminOrSuperuserOnly
 from .rbac_utils import user_is_global_admin, get_steward_org_unit_ids
 from .services import RoleResolutionService, AppManifestService
 from .constants import PROTECTED_GROUPS
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from django.db.models import Q
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
@@ -140,7 +140,7 @@ def my_roles(request):
     Returns the current user's scoped roles in a flat format for the frontend.
     """
     user = request.user
-    scoped_roles = user.scoped_roles.filter(is_active=True).select_related(
+    scoped_roles = user.scoped_roles.live().select_related(
         'org_unit', 'module', 'group'
     )
 
@@ -179,7 +179,7 @@ def me_context(request):
 
     user = request.user
 
-    scoped_roles = user.scoped_roles.filter(is_active=True).select_related('group', 'org_unit')
+    scoped_roles = user.scoped_roles.live().select_related('group', 'org_unit', 'module')
     role_names = [r.group.name for r in scoped_roles]
     is_global = user_is_global_admin(user)
 
@@ -291,6 +291,7 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.select_related(
         'employee_profile',
         'employee_profile__org_unit',
+        'employee_profile__position',
     ).all()
     serializer_class = UserSerializer
     permission_classes = [AdminOrSuperuserOnly]
@@ -348,18 +349,28 @@ class GroupViewSet(viewsets.ModelViewSet):
         """List scoped role assignments for this role."""
         group = self.get_object()
         scoped_roles = ScopedRole.objects.filter(group=group).select_related(
-            'user', 'org_unit', 'module'
+            'user', 'user__employee_profile', 'org_unit', 'module'
         )
+        from accounts.birthright import group_to_duty
+        duty = group_to_duty(group.name)
         assignments = [
             {
                 'id': role.id,
                 'user_id': role.user.id,
                 'group_id': group.id,
+                'duty': duty,
                 'user': str(role.user),
+                'employee_name': (
+                    role.user.employee_profile.full_name
+                    if getattr(role.user, 'employee_profile', None) else ''
+                ),
                 'org_unit': str(role.org_unit) if role.org_unit else None,
                 'module': str(role.module) if role.module else None,
                 'org_unit_id': role.org_unit_id,
                 'module_id': role.module_id,
+                'provenance': role.provenance,
+                'valid_from': role.valid_from,
+                'valid_to': role.valid_to,
                 'is_active': role.is_active,
                 'created_at': role.created_at,
             }
@@ -399,10 +410,12 @@ class ScopedRoleViewSet(viewsets.ModelViewSet):
             return ScopedRole.objects.none()
         user = self.request.user
         if user_is_global_admin(user):
-            return ScopedRole.objects.all()
+            return ScopedRole.objects.select_related('user', 'user__employee_profile', 'group', 'org_unit')
         allowed = get_steward_org_unit_ids(user)
         # Only assignments whose target org (directly or via module) is in the steward's subtree.
-        return ScopedRole.objects.filter(
+        return ScopedRole.objects.select_related(
+            'user', 'user__employee_profile', 'group', 'org_unit',
+        ).filter(
             Q(org_unit_id__in=allowed) | Q(module__org_unit_id__in=allowed)
         )
 
@@ -444,6 +457,23 @@ class ScopedRoleViewSet(viewsets.ModelViewSet):
             serializer.validated_data.get('org_unit'),
             serializer.validated_data.get('module'),
         )
+        from accounts.birthright import group_to_duty, live_duties, sod_conflict
+        user = serializer.validated_data.get('user')
+        group = serializer.validated_data.get('group')
+        duty = group_to_duty(group.name) if group is not None else ''
+        conflict = sod_conflict(duty, live_duties(user))
+        if conflict:
+            self._write_audit(
+                action='refused',
+                user=user,
+                group=group,
+                org_unit=serializer.validated_data.get('org_unit'),
+                module=None,
+                extra={'provenance': 'exception', 'duty': duty, 'sod_conflict': conflict},
+            )
+            raise ValidationError({
+                'duty': f'{duty} conflicts with the live duty {conflict}.',
+            })
         instance = serializer.save()
         self._write_audit(
             action='assigned',
@@ -477,6 +507,42 @@ class ScopedRoleViewSet(viewsets.ModelViewSet):
             module=instance.module,
         )
         instance.delete()
+
+
+class DutyProfileViewSet(viewsets.ModelViewSet):
+    """Position code → domain duty. Saving a row recalculates matching employees."""
+
+    queryset = DutyProfile.objects.all().order_by('position_code', 'duty')
+    serializer_class = DutyProfileSerializer
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = 'platform:manage_access'
+
+    def _apply(self, codes):
+        from people.access_sync import sync_employee_access
+        from people.models import Employee
+
+        codes = {code for code in codes if code}
+        if not codes:
+            return
+        employees = Employee.objects.filter(
+            position__code__in=codes, user__isnull=False,
+        ).select_related('user', 'position', 'org_unit')
+        for employee in employees:
+            sync_employee_access(employee, trigger='duty_profile', actor=self.request.user)
+
+    def perform_create(self, serializer):
+        profile = serializer.save()
+        self._apply([profile.position_code])
+
+    def perform_update(self, serializer):
+        previous = serializer.instance.position_code
+        profile = serializer.save()
+        self._apply([previous, profile.position_code])
+
+    def perform_destroy(self, instance):
+        code = instance.position_code
+        instance.delete()
+        self._apply([code])
 
 
 @extend_schema(
@@ -513,7 +579,22 @@ def role_registry(request):
             'roles': app_manifest.get('roles', []),
         })
 
-    return Response({'apps': role_data})
+    from accounts.birthright import duty_catalog, duty_conflicts
+    return Response({'apps': role_data, 'duties': duty_catalog(), 'conflicts': duty_conflicts()})
+
+
+@extend_schema(
+    methods=['GET'],
+    description='Domain duty catalog used by Assignments and Position profiles.',
+    responses={200: {'type': 'object'}},
+)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def duties(request):
+    if not user_is_global_admin(request.user) and not request.user.is_superuser:
+        return Response({'detail': 'You do not have permission to access this endpoint.'}, status=403)
+    from accounts.birthright import duty_catalog, duty_conflicts
+    return Response({'duties': duty_catalog(), 'conflicts': duty_conflicts()})
 
 
 class RoleAssignmentAuditLogViewSet(viewsets.ReadOnlyModelViewSet):

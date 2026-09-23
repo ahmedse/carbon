@@ -38,20 +38,21 @@ _BACKGROUND_LLM_STAGES = frozenset({"auto_memory"})
 def _finalize_meter(ledger: TurnLedger, meter, decision: str) -> None:
     from ai.engine.llm.call_meter import CallMeter
 
-    ledger.turn_decision = decision
     try:
         from ai.engine.core.config import get_settings
         from ai.engine.cognition.turn.arbiter import shadow_compare
 
-        mode = (getattr(get_settings(), "PULSE_ARBITER", "shadow") or "shadow").strip().lower()
-        if mode == "shadow":
-            ledger.arbiter_shadow = shadow_compare(decision, ledger.decision_signals)
-        elif mode == "legacy":
+        mode = (getattr(get_settings(), "PULSE_ARBITER", "on") or "on").strip().lower()
+        if mode == "legacy":
+            ledger.turn_decision = decision
             ledger.arbiter_shadow = None
         else:
-            # ``on`` is 4B — still compare+log in this release; execute stays legacy.
-            ledger.arbiter_shadow = shadow_compare(decision, ledger.decision_signals)
-    except Exception:  # noqa: BLE001 — shadow must never break a turn
+            shadow = shadow_compare(decision, ledger.decision_signals)
+            ledger.arbiter_shadow = shadow
+            # ``on`` records the Arbiter decision. ``shadow`` keeps the caller.
+            ledger.turn_decision = shadow["arbiter"] if mode == "on" else decision
+    except Exception:  # noqa: BLE001 — arbiter must never break a turn
+        ledger.turn_decision = decision
         logger.debug("arbiter shadow skipped", exc_info=True)
     if not isinstance(meter, CallMeter):
         return
@@ -354,6 +355,41 @@ async def _write_trajectory_own_session(run_id: str) -> None:
     factory = get_store().get_session_factory()
     async with factory() as traj_db:
         await write_trajectory(run_id, traj_db)
+
+
+def _completed_tools_from_react(step_results) -> list[dict]:
+    """Flatten ReAct ``StepResult.tool_output`` into host completed_tools.
+
+    StepResult stores ``{tool_name, tool_args, result}``. Stuffing that dict
+    into ``item['result']`` hid ``api_name`` and the host payload from
+    ``build_tool_digest``, so the next turn re-fetched instead of recalling.
+    """
+    out: list[dict] = []
+    for i, sr in enumerate(step_results or []):
+        if not getattr(sr, "executed", True):
+            continue
+        raw = getattr(sr, "tool_output", None)
+        if raw is None:
+            raw = getattr(sr, "tool_result", None)
+        payload = raw if isinstance(raw, dict) else {}
+        nested = payload.get("result") if "result" in payload else payload
+        out.append({
+            "tool_name": (
+                payload.get("tool_name")
+                or getattr(sr, "tool_name", None)
+                or f"react_step_{i}"
+            ),
+            "tool_args": (
+                payload.get("tool_args")
+                if isinstance(payload.get("tool_args"), dict)
+                else {}
+            ),
+            "result": nested,
+            "error": getattr(sr, "error", None),
+            "latency_ms": getattr(sr, "latency_ms", 0.0) or 0.0,
+            "guardrail_flags": list(getattr(sr, "critic_flags", None) or []),
+        })
+    return out
 
 
 def _render_tool_results_for_synthesis(
@@ -2775,17 +2811,9 @@ class TurnPipelineRunner:
                 ))
 
             # Populate completed_tools so _run_chat's surfacing layer fires on ReAct turns
-            _react_completed_tools = [
-                {
-                    "tool_name": getattr(sr, "tool_name", None) or f"react_step_{i}",
-                    "result":    sr.tool_result if hasattr(sr, "tool_result") else (sr.tool_output if hasattr(sr, "tool_output") else {}),
-                    "error":     sr.error if hasattr(sr, "error") else None,
-                    "latency_ms": sr.latency_ms if hasattr(sr, "latency_ms") else 0.0,
-                    "guardrail_flags": sr.critic_flags if hasattr(sr, "critic_flags") else [],
-                }
-                for i, sr in enumerate(pulse_loop_result.step_results)
-                if getattr(sr, "executed", True)
-            ]
+            _react_completed_tools = _completed_tools_from_react(
+                pulse_loop_result.step_results,
+            )
             if ledger.execution is not None:
                 ledger.execution.completed_tools = _react_completed_tools
             else:
@@ -2925,17 +2953,9 @@ class TurnPipelineRunner:
                 ))
 
             # Populate completed_tools so _run_chat's surfacing layer fires on ReAct turns
-            _react_completed_tools = [
-                {
-                    "tool_name": getattr(sr, "tool_name", None) or f"react_step_{i}",
-                    "result":    sr.tool_result if hasattr(sr, "tool_result") else (sr.tool_output if hasattr(sr, "tool_output") else {}),
-                    "error":     sr.error if hasattr(sr, "error") else None,
-                    "latency_ms": sr.latency_ms if hasattr(sr, "latency_ms") else 0.0,
-                    "guardrail_flags": sr.critic_flags if hasattr(sr, "critic_flags") else [],
-                }
-                for i, sr in enumerate(react_result.step_results)
-                if getattr(sr, "executed", True)
-            ]
+            _react_completed_tools = _completed_tools_from_react(
+                react_result.step_results,
+            )
             if ledger.execution is not None:
                 ledger.execution.completed_tools = _react_completed_tools
             else:
@@ -3628,22 +3648,39 @@ class TurnPipelineRunner:
         except Exception:  # noqa: BLE001 — never block synthesis
             logger.debug("B5 compensation soft-empty stamp skipped", exc_info=True)
 
-        with stage("synthesis"):
-            _synth = await _synthesize_tool_results(
-                instance_id=instance_id,
-                conversation_id=conversation_id,
-                user_message=_resolved_user_message,
-                completed_tools=execution.completed_tools,
-                draft_text=final_text,
-                model=draft.model_used or model,
-                delivery=_intent_resolution.delivery if _intent_resolution else "explain",
-                envelope_synthesizer=self.envelope_synthesizer,
-                stream_callback=stream_callback,
-                progress_callback=progress_callback,
-                user_info=user_info,
-                instance_config=instance_config,
-                state=state_ctx.state if state_ctx is not None else None,
-            )
+        from ai.engine.cognition.turn.zero_llm import (
+            is_empty_payslip_tool_result,
+            render_empty_payslip_answer,
+        )
+
+        if is_empty_payslip_tool_result(execution.completed_tools):
+            final_text = render_empty_payslip_answer(_resolved_user_message)
+            _synth = None
+            if state_ctx is not None and getattr(state_ctx, "state", None) is not None:
+                rows = list(state_ctx.state.last_results or [])
+                rows.append({
+                    "tool": "call_host_api",
+                    "api": "list_my_payslips",
+                    "digest": "call_host_api list_my_payslips: count=0",
+                })
+                state_ctx.state.last_results = rows
+        else:
+            with stage("synthesis"):
+                _synth = await _synthesize_tool_results(
+                    instance_id=instance_id,
+                    conversation_id=conversation_id,
+                    user_message=_resolved_user_message,
+                    completed_tools=execution.completed_tools,
+                    draft_text=final_text,
+                    model=draft.model_used or model,
+                    delivery=_intent_resolution.delivery if _intent_resolution else "explain",
+                    envelope_synthesizer=self.envelope_synthesizer,
+                    stream_callback=stream_callback,
+                    progress_callback=progress_callback,
+                    user_info=user_info,
+                    instance_config=instance_config,
+                    state=state_ctx.state if state_ctx is not None else None,
+                )
         if _synth and _synth.get("text"):
             final_text = _synth["text"]
             total_tokens += int(_synth.get("tokens") or 0)
@@ -3846,6 +3883,7 @@ class TurnPipelineRunner:
         if _chat_handoff_fired:
             _turn_decision = "handoff_agent"
         elif execution.completed_tools:
+            _signal(ledger, "tools_executed", True)
             _turn_decision = "tool_answer"
         else:
             _turn_decision = "answer"
@@ -3908,13 +3946,42 @@ class TurnPipelineRunner:
 
             # Hand-built single-step plan — the tool wiring in _execute_step
             # keys off plan_source == "single_step".
+            from ai.engine.agent.tools import (
+                extract_named_coworker_query,
+                first_person_profile_ask,
+            )
+
+            _profile_bound = bool(
+                host_user_id and first_person_profile_ask(user_message)
+            )
+            _coworker_q = (
+                extract_named_coworker_query(user_message)
+                if host_user_id and not _profile_bound
+                else None
+            )
+            if _profile_bound:
+                _step_tool, _step_args = "call_host_api", {
+                    "api_name": "get_my_profile",
+                    "explanation": (
+                        "First-person identity is the logged-in "
+                        "employee record"
+                    ),
+                }
+            elif _coworker_q:
+                _step_tool, _step_args = "resolve_entity", {
+                    "entity_type": "employee",
+                    "query": _coworker_q,
+                    "explanation": "Named coworker lookup",
+                }
+            else:
+                _step_tool, _step_args = None, {}
             plan = Plan(
                 pattern="single_step",
                 steps=[PlanStep(
                     step_id=0,
                     intent=user_message,
-                    tool_name=None,
-                    tool_args={},
+                    tool_name=_step_tool,
+                    tool_args=_step_args,
                     depends_on=[],
                     is_mutation=False,
                     agent_role="orchestrator",
@@ -4129,6 +4196,7 @@ class TurnPipelineRunner:
             facts=known,
             history=conversation_history,
             newly_stored=bool(newly),
+            last_results=getattr(state, "last_results", None) if state is not None else None,
         )
         if hit is None:
             return None
@@ -4182,8 +4250,11 @@ class TurnPipelineRunner:
             enough_slots_for_chat_handoff,
             is_ess_slot_continuation,
             is_ess_write_utterance,
+            is_bound_write_affirmation,
+            is_ready_to_submit_ask,
             is_slot_status_ask,
             merge_slots,
+            build_bound_write_confirmation_answer,
             resolve_ess_write_from_brief,
             seed_slots_into_state,
         )
@@ -4204,18 +4275,37 @@ class TurnPipelineRunner:
                 slots=prior,
                 user_message=user_message,
             )
+        if prior_enough and is_ready_to_submit_ask(user_message):
+            return build_chat_write_handoff(
+                api_name=prior_api,
+                slots=prior,
+                user_message=user_message,
+            )
         # Already handed off — do not re-fire on meta follow-ups
-        # ("is the handoff complete?"). Thanks restates the same handoff at 0 LLM
-        # (C8 / chat-handoff-write-01 t8).
-        if prior_enough and not current_is_write:
-            from ai.engine.cognition.turn.zero_llm import is_thanks
-
-            if is_thanks(user_message):
+        # ("is the handoff complete?", thanks). Thanks is a 0-LLM ack
+        # (C8 / F-LIVE-10). A confirmation of the bound write restates the
+        # handoff at 0 LLM, echoing the user's digits.
+        last_decision = ""
+        if state_ctx is not None and getattr(state_ctx, "state", None) is not None:
+            decisions = getattr(state_ctx.state, "decisions", None) or []
+            if decisions and isinstance(decisions[-1], dict):
+                last_decision = str(decisions[-1].get("decision") or "")
+        # Only restate after a handoff. "Yes, that's correct" while Chat is
+        # still clarifying (leave t2) must stay an answer.
+        if prior_enough and is_bound_write_affirmation(user_message, prior):
+            if last_decision == "handoff_agent":
                 return build_chat_write_handoff(
                     api_name=prior_api,
                     slots=prior,
                     user_message=user_message,
                 )
+            if last_decision == "clarify":
+                return build_bound_write_confirmation_answer(
+                    api_name=prior_api,
+                    slots=prior,
+                    user_message=user_message,
+                )
+        if prior_enough and not current_is_write:
             return None
         # Fresh write, or a bare slot fill for an already-open write.
         if not current_is_write and not is_ess_slot_continuation(
@@ -4259,6 +4349,17 @@ class TurnPipelineRunner:
                 slots=slots,
                 user_message=user_message,
                 echo=True,
+            )
+        just_completed_leave = (
+            api_name == "submit_my_leave"
+            and last_decision == "clarify"
+            and not prior_enough
+        )
+        if just_completed_leave:
+            return build_bound_write_confirmation_answer(
+                api_name=api_name,
+                slots=slots,
+                user_message=user_message,
             )
         logger.info(
             "TurnPipelineRunner: Chat handoff_agent api=%s slots=%s",

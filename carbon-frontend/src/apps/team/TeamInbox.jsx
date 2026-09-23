@@ -20,8 +20,10 @@ import {
   CORR_FILTER_TYPES,
   codeLabel,
   corrTypeLabel,
+  displayTitle,
   formatDateTime,
   payloadSummary,
+  requestTypeLabel,
 } from '../my/components/myRequestsLabels';
 
 /** requester may be a serialized object ({id, name/username}) or a plain PK. */
@@ -40,13 +42,7 @@ function requesterLabel(requester) {
 }
 
 function inboxTypeLabel(t, row) {
-  if (row?.corr_type_label) return row.corr_type_label;
-  if (row?.corr_type_code) return corrTypeLabel(t, row.corr_type_code);
-  const ct = row?.corr_type;
-  if (ct && typeof ct === 'object') {
-    return corrTypeLabel(t, ct.code || ct.name) || ct.label || '—';
-  }
-  return corrTypeLabel(t, ct);
+  return requestTypeLabel(t, row);
 }
 
 function recencyKey(row) {
@@ -137,6 +133,7 @@ export default function TeamInbox() {
         const type = inboxTypeLabel(t, row);
         const hay = [
           row.reference_no,
+          displayTitle(t, row, tMy),
           row.title,
           requester,
           type,
@@ -150,7 +147,7 @@ export default function TeamInbox() {
       }
       return true;
     });
-  }, [items, searchValue, filters, t]);
+  }, [items, searchValue, filters, t, tMy]);
 
   const columns = useMemo(
     () => [
@@ -166,7 +163,7 @@ export default function TeamInbox() {
         headerName: t('tableTitle'),
         flex: 1.4,
         minWidth: 180,
-        valueGetter: (value, row) => row.title || '—',
+        valueGetter: (value, row) => displayTitle(t, row, tMy),
       },
       {
         field: 'requester',

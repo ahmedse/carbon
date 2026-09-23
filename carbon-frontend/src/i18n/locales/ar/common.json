@@ -269,5 +269,26 @@
   "allX": "كل {{label}}",
   "noRecordsFound": "لم يتم العثور على سجلات",
   "tryAdjustingFilters": "جرّب تعديل عوامل التصفية.",
-  "noDataAvailable": "لا توجد بيانات متاحة بعد."
+  "noDataAvailable": "لا توجد بيانات متاحة بعد.",
+
+  "graphZoomIn": "تكبير",
+  "graphZoomOut": "تصغير العرض",
+  "graphZoomFit": "ملء المساحة",
+  "graphReset": "إعادة ضبط العرض",
+  "graphRedraw": "إعادة الرسم",
+  "graphExport": "تصدير صورة",
+  "graphMaximize": "تكبير للشاشة",
+  "graphMinimize": "تصغير",
+  "graphLive": "مباشر",
+  "graphCanvasHelp": "المخطط — اسحب للتحريك، العجلة للتكبير، واسحب العناصر لتحريكها أو تغيير حجمها",
+  "graphStatusPending": "بانتظار",
+  "graphStatusRunning": "جارٍ",
+  "graphStatusApproval": "يحتاج اعتماداً",
+  "graphStatusFinished": "تم",
+  "graphStatusFailed": "فشل",
+  "graphStatusSkipped": "تُرك",
+  "graphShape_roundedRect": "مهمة",
+  "graphShape_diamond": "قرار",
+  "graphShape_diamondPlus": "توازٍ",
+  "graphShape_doubleCircle": "انتظار"
 }

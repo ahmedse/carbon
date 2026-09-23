@@ -301,6 +301,50 @@ def test_digest_carries_scalar_fields_within_budget():
     assert len(digest) <= DIGEST_MAX_CHARS
 
 
+def test_digest_compacts_payslip_identity():
+    from ai.engine.cognition.tool_digest import DIGEST_MAX_CHARS, build_tool_digest
+
+    rows = [
+        {"line_type": {"code": "gross", "label": "Gross"}, "amount": "6500.000",
+         "employee_name": "Bilagot Panta Suerte", "rule_id": "pulse_audit_c2"},
+        {"line_type": {"code": "gosi", "label": "GOSI"}, "amount": "1200.000"},
+        {"line_type": {"code": "loan_installment", "label": "Loan"}, "amount": "800.000"},
+        {"line_type": {"code": "net", "label": "Net"}, "amount": "4500.000"},
+    ]
+    digest = build_tool_digest(
+        [_host_api_tool({"count": 4, "results": rows}, api_name="list_my_payslips")],
+        scope=None,
+    )
+    assert "list_my_payslips" in digest
+    assert "gross=6500" in digest
+    assert "gosi=1200" in digest
+    assert "loan_installment=800" in digest
+    assert "net=4500" in digest
+    assert "Bilagot" not in digest
+    assert len(digest) <= DIGEST_MAX_CHARS
+
+
+def test_digest_compacts_profile_identity():
+    from ai.engine.cognition.tool_digest import DIGEST_MAX_CHARS, build_tool_digest
+
+    digest = build_tool_digest(
+        [_host_api_tool({
+            "employee_no": "1067",
+            "full_name": "Bilagot Panta Suerte",
+            "job_title": "Heavy Duty Driver",
+            "org_unit": {"id": 6, "name": "Coiled Tubing"},
+            "manager": {"id": 3, "name": "Mohammad Bolto Ali"},
+        }, api_name="get_my_profile")],
+        scope=None,
+    )
+    assert "get_my_profile" in digest
+    assert "employee_no=1067" in digest
+    assert "department=Coiled Tubing" in digest
+    assert "manager=Mohammad Bolto Ali" in digest
+    assert digest.count("name=") == 0
+    assert len(digest) <= DIGEST_MAX_CHARS
+
+
 def test_digest_drops_records_outside_retrieval_scope():
     from ai.engine.cognition.tool_digest import build_tool_digest
 

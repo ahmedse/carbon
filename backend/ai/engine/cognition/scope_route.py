@@ -25,6 +25,8 @@ _LEAVE_PERSONAL = re.compile(
     r"(annual\s+)?(leave|time\s*off|vacation|pto|holiday)\b"
     r"|\b(أريد|ابغى|أبغى|عايز|عاوز|اريد)\s*.{0,12}(إجازة|اجازة|اجازه)"
     r"|(إجازة|اجازة|اجازه)\s*(من فضلك|لو سمحت)?"
+    r"|report(?:ing)?\s+(?:an\s+)?absence"
+    r"|الإبلاغ عن غياب|الابلاغ عن غياب|أبلغ عن غياب|ابلغ عن غياب"
     r")",
     re.IGNORECASE | re.UNICODE,
 )

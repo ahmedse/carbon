@@ -244,6 +244,7 @@
   "graphTitle": "مخطط سير الاعتماد",
   "graphEmpty": "لا يوجد مسار اعتماد",
   "graphLegend": "مفتاح الرموز",
+  "graphSummary": "{{steps}} خطوات · {{links}} روابط",
   "graphNodePending": "معلّق",
   "graphNodeCurrent": "الحالي",
   "graphNodeApproved": "معتمد",

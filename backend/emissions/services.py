@@ -23,7 +23,9 @@ from core.models import Module
 from core.services import NotificationService
 from catalog.models import AssetProfile
 from dataschema.models import DataRow, DataTable
-from accounts.rbac_utils import get_visible_module_ids, get_visible_org_units
+from accounts.rbac_utils import module_ids_for_capability, org_units_for_capability
+
+CARBON_READ = 'carbon:view_console'
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +36,9 @@ def scope_calculations(user, queryset):
     """Restrict a Calculation queryset to the modules the user may see.
 
     Superusers / global admins are unrestricted
-    (get_visible_module_ids returns None).
+    (module_ids_for_capability returns None).
     """
-    allowed = get_visible_module_ids(user)
+    allowed = module_ids_for_capability(user, CARBON_READ)
     if allowed is None:
         return queryset
     return queryset.filter(module_id__in=allowed)
@@ -1003,22 +1005,13 @@ class OwnerService:
 
     @staticmethod
     def get_org_units(user):
-        """Return org units the user may access for owner pages.
-        Returns None for unrestricted (superuser/staff/global visibility role)."""
-        from accounts.models import ScopedRole
-        from accounts.rbac_utils import VISIBILITY_ROLES
-        if user.is_superuser or user.is_staff:
-            return None  # unrestricted
-        # Users with a global visibility role (org_unit=None, module=None) can see all org units
-        if ScopedRole.objects.filter(
-            user=user, is_active=True, org_unit=None, module=None,
-            group__name__in=VISIBILITY_ROLES,
-        ).exists():
-            return None  # unrestricted
-        return list(
-            ScopedRole.objects.filter(user=user, is_active=True)
-            .values_list('org_unit_id', flat=True).distinct()
-        )
+        """Org unit ids for carbon reads. None means do not filter."""
+        from accounts.rbac_utils import org_scope_for_capability
+
+        scope = org_scope_for_capability(user, CARBON_READ)
+        if scope.unrestricted:
+            return None
+        return list(scope.ids)
 
     @staticmethod
     def get_owner_dashboard(user, period_id=None):
@@ -1100,7 +1093,7 @@ class OwnerService:
 
     @staticmethod
     def get_owner_summary(user):
-        org_units = get_visible_org_units(user)
+        org_units = org_units_for_capability(user, CARBON_READ)
         if not org_units:
             return None
 
@@ -1141,7 +1134,7 @@ class OwnerService:
 
     @staticmethod
     def get_owner_assets(user, search=None, scope=None):
-        org_units = get_visible_org_units(user)
+        org_units = org_units_for_capability(user, CARBON_READ)
         if not org_units:
             return None
 
@@ -1183,7 +1176,7 @@ class OwnerService:
 
     @staticmethod
     def get_owner_activity(user):
-        org_units = get_visible_org_units(user)
+        org_units = org_units_for_capability(user, CARBON_READ)
         if not org_units:
             return None
 
@@ -1214,7 +1207,7 @@ class MyDataService:
 
     @staticmethod
     def get_my_data(user):
-        org_units = get_visible_org_units(user)
+        org_units = org_units_for_capability(user, CARBON_READ)
         if not org_units:
             return None
 
@@ -1360,7 +1353,7 @@ class ConsoleService:
                 'days_remaining': (active_period.end_date - today).days,
             }
 
-        visible_module_ids = get_visible_module_ids(user)
+        visible_module_ids = module_ids_for_capability(user, CARBON_READ)
         module_filter = {} if visible_module_ids is None else {'id__in': visible_module_ids}
 
         module_agg = Module.objects.filter(**module_filter).aggregate(
@@ -1898,7 +1891,7 @@ class ChairmanService:
     universe across every reporting period), not a single period. No new
     persistence — every number traces to existing Calculation / InventorySource /
     SBTiTarget records, and org-scope visibility is respected via
-    scope_calculations + get_visible_org_units.
+    scope_calculations and live carbon:view_console assignments.
     """
 
     @staticmethod
@@ -1952,7 +1945,7 @@ class ChairmanService:
         last_updated = calc_qs.order_by('-calculated_at').values_list('calculated_at', flat=True).first()
 
         # 2) Coverage — full declared universe across ALL periods (org-scoped).
-        visible_ous = get_visible_org_units(user)
+        visible_ous = org_units_for_capability(user, CARBON_READ)
         visible_ou_ids = [ou.id for ou in visible_ous]
 
         sources = InventorySource.objects.filter(

@@ -447,10 +447,21 @@ def awaiting_mutation_steps(plan: dict, api_name: str) -> list[dict]:
 def confirm_body_for(journey: Journey, slots: dict[str, Any]) -> dict[str, Any]:
     """Slot body for step Confirm when the staged mutation is incomplete."""
     if journey.id == "leave":
+        start = slots.get("start_date")
+        days = int(slots.get("days") or 1)
+        end = slots.get("end_date")
+        if not end and start:
+            try:
+                end = (
+                    date.fromisoformat(str(start)) + timedelta(days=max(days, 1) - 1)
+                ).isoformat()
+            except ValueError:
+                end = start
         return {
             "leave_type": slots.get("leave_type"),
-            "start_date": slots.get("start_date"),
-            "days": slots.get("days"),
+            "start_date": start,
+            "end_date": end,
+            "days": days,
         }
     if journey.id == "loan":
         return {
@@ -507,6 +518,12 @@ def complete_agent_write(
                 payload["body"] = body
             conf = client.post(f"/ai/plans/{plan_id}/steps/confirm/", payload)
             trace["confirm_http"].append(conf.status_code)
+            try:
+                err_body = conf.json() if conf.status_code >= 400 else {}
+            except Exception:  # noqa: BLE001
+                err_body = {"text": (conf.text or "")[:300]}
+            if conf.status_code >= 400:
+                trace.setdefault("confirm_error", []).append(err_body)
         nxt = client.sse(f"/ai/plans/{plan_id}/run/", timeout=180)
         trace["run_http"].append(nxt.get("http_status"))
     return trace
@@ -608,6 +625,7 @@ def run_journey(
         "slot_carry": carry,
         "approve_http": approve_http,
         "confirm_http": agent_trace.get("confirm_http") or [],
+        "confirm_error": agent_trace.get("confirm_error") or [],
         "run_http": agent_trace.get("run_http") or [],
         "plan_status": agent_trace.get("plan_status") or "",
         "host_list_http": [list_http_before, list_http_after],

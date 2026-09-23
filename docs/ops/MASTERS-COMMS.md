@@ -333,3 +333,123 @@ Track: PV2 — 6B night 2026-09-23 FAIL · STACK-RELEASE
 Ask: First mutating night recorded. Chat handoff + no Chat mutation + slot_carry on leave/loan/attendance. Approve 200. host_row missed on all three (streak stays 0/5). Do not rewrite the night to PASS. STACK-RELEASE Nibras — :8009/:5179 free. Hold 20260923-15 closed.
 Paths: docs/pulse/evidence/PV2-6B-{nights.json,soak.md,night-2026-09-23.md}, manage.sh, :8009, :5179
 Blockers: 6B soak 0/5 (FAIL breaks streak); 4B until 2026-09-30
+
+## [2026-09-23T11:40:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-18
+Track: PV2 — F-LIVE-9 routing + 6B RULE_21 confirm
+Ask: Night 2026-09-23 FAIL root cause: smoke stopped after plan Approve+Run; write steps stay awaiting_approval until /steps/confirm/ (RULE_21). Runner now confirms; that night is not rewritten. F-LIVE-9: "net pay last month" / take-home / GOSI now stay on list_my_payslips; "my salary" still get_my_profile. Goldens not loosened. Live re-measure and next 6B night still need approval. Import boundary 9.
+Paths: backend/ai/engine/agent/tools.py, cognition/turn/intent.py, llm/prompts.py, ai/eval/nightly_ess_smoke.py
+Blockers: 6B soak 0/5; live payroll re-check; 4B until 2026-09-30
+
+## [2026-09-23T11:49:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-19
+Track: PV2 — STACK-HOLD Pulse · live payroll + 6B confirm verify
+Ask: STACK-HOLD Nibras until 13:00+03. Stack is STOPPED; Pulse will `manage.sh start` (nibras already selected). Human said next: (1) Chat-only payroll-followup live as emp_1067 — no host writes; (2) 6B confirm-path verify WITHOUT --record so night 2026-09-23 FAIL is not rewritten. Do not kill/restart :8009/:5179 without ACK.
+Paths: manage.sh, :8009, :5179, nibras_dev
+Blockers: 4B until 2026-09-30
+
+## [2026-09-23T11:53:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-20
+Track: PV2 — payroll re-measure + 6B verify · STACK-RELEASE
+Ask: Payroll live still 0/8. Intent now list_my_payslips; execute still 403-twin. 6B verify (no --record): loan+attendance host_row PASS; leave confirm 400 (missing end_date — smoke now sends it). Night 2026-09-23 FAIL not rewritten. Streak 0/5. STACK-RELEASE Nibras — :8009/:5179 free. Hold 20260923-19 closed.
+Paths: docs/pulse/evidence/PV2-payroll-live-2026-09-23b.md, docs/pulse/evidence/PV2-6B-verify-2026-09-23.md
+Blockers: list_my_payslips execute 403; leave end_date on next official night; 4B until 2026-09-30
+
+## [2026-09-23T11:56:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-21
+Track: PV2 — F-LIVE-9 execute: empty me/payslips is 200
+Ask: `_people_me` no longer fakes 403 on empty ESS payslips. `stamp_compensation_deny_on_soft_empty` skips net-pay / take-home (still stamps "my salary"). 13 unit tests green. Re-measuring payroll-followup live as emp_1067 (Chat only). Goldens not loosened. No stack restart.
+Paths: backend/ai/host_executor.py, engine/agent/tools.py, tests/test_people_me_ess_post.py, tests/test_ecf_contracts.py
+Blockers: 4B until 2026-09-30; 6B soak 0/5
+
+## [2026-09-23T11:58:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-22
+Track: PV2 — F-LIVE-9 execute 403 closed on live
+Ask: Payroll live 23c: 1/8, router 0.50, llm max 3. t1 honest empty payslips (no 403). Goldens still want 4500 — emp_1067 has no committed PayslipLine. Not loosened. 6B soak still 0/5. 4B until 2026-09-30.
+Paths: docs/pulse/evidence/PV2-payroll-live-2026-09-23c.md, backend/ai/host_executor.py
+Blockers: 6B official night (leave end_date); 4B until 2026-09-30
+
+## [2026-09-23T12:15:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-23
+Track: PV2 — F-LIVE-10 thanks after complete write
+Ask: Thanks after a bound Chat handoff is now 0-LLM answer, not a second handoff. Offline G5 96/96, router 1.0, all objectives 1.0. 08 t8 golden decision_in corrected to answer (max_llm_calls stays 0) — Master evidence: C8 + loan-ar t7 + plan-status t8. Live 3-script not re-run. 6B night 2026-09-23 stays FAIL. 4B until 2026-09-30. 6C waits on five green nights. Import boundary 9.
+Paths: backend/ai/engine/cognition/turn/runner.py, ai/eval/multiturn/scripts/08-chat-handoff-write-01.yaml, docs/pulse/evidence/PV2-F-LIVE-10.md
+Blockers: 6B official night 2 (calendar ≥2026-09-24 + approval); F-LIVE-9 host payslip rows; 4B until 2026-09-30
+
+## [2026-09-23T12:28:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-24
+Track: PV2 — live 3-script re-check after F-LIVE-10 (human waived date gates)
+Ask: Human said go, do not wait on plan dates. Running Chat-only `multiturn.runner --live --host-user emp_1067 --no-isolated-db` for scripts 01/04/08. No host writes (ADR-0046). No manage.sh start/restart/kill. Stack already RUNNING :8009/:5179. Night 2026-09-23 FAIL is not rewritten. 4B flip follows this measurement; five green nights are still not faked.
+Paths: backend/ai/eval/multiturn/runner.py, nibras_dev
+Blockers: do not --record over night 2026-09-23; do not invent five soak nights
+
+## [2026-09-23T12:32:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-25
+Track: PV2 — live 23d + 4B decision flip
+Ask: Live 3-script 16/24 (was 13). chat-handoff-write-01 PASS 8/8. loan-ar 7/8, t7 thanks=answer llm=0. payroll 1/8, still no 4500. router 0.833, llm max 3. Human waived the 4B date: PULSE_ARBITER default is now on (recorded decision = Arbiter; legacy kill switch). Offline G5 stayed 96/96. Early-return bodies were not deleted. Night 2026-09-23 FAIL not rewritten. Five green nights not invented. Import boundary 9.
+Paths: backend/ai/engine/cognition/turn/{arbiter.py,runner.py}, backend/ai/engine/core/config.py, docs/pulse/evidence/PV2-live-recheck-2026-09-23d.md, docs/pulse/evidence/PV2-4B.md
+Blockers: 6B streak 0/5; F-LIVE-9 host payslip rows; 6C waits on five real green nights
+
+## [2026-09-23T12:55:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-26
+Track: PV2 — loan confirm restates handoff
+Ask: Live 23d loan t2 was answer at 3 LLM and missed ٥٠٠٠. Confirmation after handoff_agent now restates at 0 LLM and echoes the user's digits. Clarify-then-yes (leave t2) stays answer. Offline G5 96/96. ess-loan-ar-01 8/8 offline. Live not re-run. Goldens not edited. Night 2026-09-23 FAIL not rewritten.
+Paths: backend/ai/engine/cognition/turn/{handoff_agent.py,runner.py}
+Blockers: 6B streak 0/5; F-LIVE-9 host payslip rows; 6C waits on five real green nights
+
+## [2026-09-23T13:00:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-27
+Track: PV2 — A10 plan shape + payroll FAQ 0-LLM
+Ask: A10 closed offline: same loan/leave/attendance brief, identical plan shape ×3. Payroll schedule and payslip-download asks are 0-LLM answers; no guessed payday. G5 96/96. C8 stays partial until a live re-measure. Goldens not edited. No payslip rows invented. Night 2026-09-23 FAIL not rewritten.
+Paths: backend/ai/engine/cognition/turn/zero_llm.py, backend/ai/tests/test_pv2_deterministic_steps.py
+Blockers: 6B streak 0/5; F-LIVE-9 host payslip rows; live C1/C2/C8; 6C waits on five real green nights
+
+## [2026-09-23T13:05:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-28
+Track: PV2 — live 3-script re-check after loan confirm + payroll FAQ
+Ask: Human said go. Chat-only multiturn.runner --live --host-user emp_1067 --no-isolated-db for scripts 01/04/08. In-process against nibras_dev. No host writes. :8009 is STOPPED; not calling manage.sh start/restart/kill. :5179 left running. Night 2026-09-23 FAIL is not rewritten.
+Paths: backend/ai/eval/multiturn/runner.py, nibras_dev
+Blockers: do not invent payslip figures; do not --record over night 2026-09-23
+
+## [2026-09-23T13:06:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-29
+Track: PV2 — live 23e measured
+Ask: Chat-only 82s. turns 16/24 → 19/24. scripts 2/3 (loan 8/8, handoff 8/8). router 1.0. focus 0.692. llm p50 1, max 3, over 4/24. payroll 3/8. 4500/3700/800 still absent. Goldens not edited. Night 2026-09-23 FAIL not rewritten. :8009 was left stopped.
+Paths: docs/pulse/evidence/PV2-live-recheck-2026-09-23e.md
+Blockers: C2 host payslip rows; C8 four payroll turns at 3 LLM; 6B streak 0/5
+
+## [2026-09-23T13:10:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-30
+Track: PV2 — empty payslip recall 0-LLM
+Ask: After list_my_payslips count=0, follow-ups answer from the digest at 0 LLM. No invented 4500/3700/800. User-typed figures are echoed as unconfirmed. First empty fetch skips synthesis. G5 96/96. Live 23e not rewritten. Night 2026-09-23 FAIL not rewritten. Measuring Chat-only 01/04/08 as emp_1067 next (in-process; :8009 stays stopped).
+Paths: backend/ai/engine/cognition/turn/{zero_llm.py,runner.py}
+Blockers: C2 still needs committed PayslipLine for 4500 goldens; 6B streak 0/5
+
+## [2026-09-23T13:22:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-31
+Track: PV2 — live 23h empty-payslip recall proven
+Ask: Chat-only 56s as emp_1067. turns 19/24 → 21/24. scripts 2/3. router 1.0. focus 0.769. llm p50 0, max 3, over 1/24. payroll 5/8: t2–t8 are 0 LLM; t1 still synthesis (3). No invented 4500/3700/800. User-typed 2,000 echoed as unconfirmed. G5 96/96. Night 2026-09-23 FAIL not rewritten. :8009 not started.
+Paths: docs/pulse/evidence/PV2-live-recheck-2026-09-23h.md, backend/ai/engine/cognition/turn/zero_llm.py, backend/ai/engine/cognition/state_store.py
+Blockers: C2 host payslip rows; C8 first empty fetch still 3 LLM; 6B streak 0/5
+
+## [2026-09-23T13:52:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-32
+Track: PV2 — live 23i first empty fetch ≤ 2 LLM
+Ask: ReAct observe no longer spends an LLM on empty list_my_payslips. Chat-only 23i: 21/24, over 0/24, llm max 2 (was 3), p50 0. payroll t1 is 2 LLM and still misses 4500. Goldens not edited. G5 96/96. Night 2026-09-23 FAIL not rewritten. :8009 not started.
+Paths: docs/pulse/evidence/PV2-live-recheck-2026-09-23i.md, backend/ai/engine/cognition/plan/loop.py
+Blockers: C2 host payslip rows; 6B streak 0/5
+
+## [2026-09-23T14:10:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-33
+Track: PV2 — nibras_dev emp_1067 payslip seed + live 23k
+Ask: Human override seeded last-month committed lines for emp_1067 only (gross 6500 / gosi 1200 / loan 800 / net 4500). Chat-only 23k: 23/24, focus 0.923, router 1.0, over 0, max 2. Payroll 7/8 — t1 reads 4500 from host; t2–t8 recall at 0 LLM. t3 says 5300 (6500−1200); golden still wants 3700. Goldens not edited. Night 2026-09-23 FAIL not rewritten. :8009 not restarted.
+Paths: backend/ai/management/commands/seed_pulse_audit_payslips.py, docs/pulse/evidence/PV2-live-recheck-2026-09-23k.md
+Blockers: 04 t3 golden 3700 ≠ identity; 6B streak 0/5 (mutating; STACK-HOLD)
+
+## [2026-09-23T14:16:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-34
+Track: PV2 — G5 still 96/96; live rest-bank 33/48
+Ask: Offline G5 12/12 scripts, 96/96. Chat-only rest (02/03/05/06/07/09) 33/48: focus-switch and plan-status PASS; leave/attendance/grounded-recall/language fail on LLM budget or missing host/digest facts. Goldens not edited. 6B not run.
+Paths: docs/pulse/evidence/PV2-live-rest-2026-09-23k.md, docs/pulse/evidence/PV2-g5-2026-09-23k.json
+Blockers: rest-bank C8/C2/C7; 6B streak 0/5
+
+## [2026-09-23T14:22:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-35
+Track: PV2 — live leave 8/8, attendance 8/8, Arabic payroll 7/8
+Ask: Bound leave confirm is 0-LLM answer; "anything else?" hands off. Absence report is a leave write. Arabic payslip recall stays Arabic and does not hijack اعتراض. G5 96/96. language-fidelity t2 still wants ٦٠٠٠/dinar; host is 6500. Goldens not edited. 6B not run.
+Paths: docs/pulse/evidence/PV2-live-leave-att-ar-2026-09-23l.md
+Blockers: 06 grounded-recall Engineering/Ahmed Ali vs Coiled Tubing; 6B 0/5
+
+## [2026-09-23T14:32:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-36
+Track: PV2 — live 06 grounded-recall 6/8 from host profile
+Ask: First-person identity binds get_my_profile (/people/me/) when a host session exists; draft skipped. Chat-only 23m as emp_1067: 6/8, router 1.0, llm max 1, over 0. t1 is 1067 at 1 LLM. t2/t6 say Coiled Tubing (host); golden still wants Engineering. Stated name Mohamed Hassan is not used for manager asks. G5 96/96. Goldens not edited. Night 2026-09-23 FAIL not rewritten. 6B not run.
+Paths: docs/pulse/evidence/PV2-live-06-2026-09-23m.md, backend/ai/engine/cognition/plan/export_bind.py, backend/ai/engine/cognition/turn/runner.py
+Blockers: 06 Engineering golden ≠ host Coiled Tubing; 04 t3 3700 ≠ 5300; 6B 0/5 (mutating; STACK-HOLD)
+
+## [2026-09-23T14:40:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-37
+Track: PV2 — named coworker is CBAC deny, not a missing id
+Ask: emp_1067 Chat now calls resolve_entity for "tell me about Reena". Host 403 people:view is the answer (Reena Sekaran 1009 / CEO Office exists). Did not invent Senior Analyst / Finance. Live 05 1/8. G5 96/96. Goldens not edited. 6B not run.
+Paths: backend/ai/engine/cognition/turn/intent.py, backend/ai/engine/cognition/turn/execute.py
+Blockers: 05 goldens assume coworker read; ESS Chat lacks people:view; 6B 0/5

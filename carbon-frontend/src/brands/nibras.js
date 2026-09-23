@@ -18,6 +18,14 @@ export default {
     primary: { main: '#f59e0b', light: '#fbbf24', dark: '#d97706', contrastText: '#0b1220' },
     secondary: { main: '#1e293b', light: '#334155', dark: '#0f172a', contrastText: '#FFFFFF' },
   },
-  enabledAppIds: ['people'],
+  enabledAppIds: ['people', 'my', 'team'],
   pulseInstanceId: 'nibras',
+  // Jobs this brand grants. People is the HR app. My and Team are the
+  // employee and manager baselines. platform:admin runs the instance.
+  duties: [
+    { id: 'people:lead', app: 'People' },
+    { id: 'platform:employee', app: 'My' },
+    { id: 'platform:manager', app: 'Team' },
+    { id: 'platform:admin', app: 'Platform' },
+  ],
 };

@@ -208,6 +208,35 @@ def test_state_round_trip_has_exact_v1_keys_and_tolerates_missing_keys():
         assert ConversationState.from_dict(junk).is_empty()
 
 
+def test_empty_payslip_reply_seeds_last_results():
+    state = ConversationState()
+    update_state_from_turn(
+        state,
+        decision="answer",
+        user_message="What was my net pay last month?",
+        response_text="I checked your payslip records and found no payslips on file.",
+    )
+    assert any(
+        row.get("api") == "list_my_payslips" and "count=0" in str(row.get("digest") or "")
+        for row in state.last_results
+    )
+    before = list(state.last_results)
+    update_state_from_turn(
+        state,
+        decision="answer",
+        user_message="What deductions were applied?",
+        response_text="No committed payslips were found, so I do not have net pay.",
+    )
+    seeded = [
+        row for row in state.last_results
+        if row.get("api") == "list_my_payslips" and "count=0" in str(row.get("digest") or "")
+    ]
+    assert len(seeded) == len([
+        row for row in before
+        if row.get("api") == "list_my_payslips" and "count=0" in str(row.get("digest") or "")
+    ])
+
+
 def test_lists_are_bounded_and_turns_keep_counting():
     state = ConversationState()
     for i in range(15):

@@ -3,7 +3,7 @@
 // `config` is a JSON object — edited as a JSON textarea and validated with JSON.parse.
 // All colours via theme tokens; apiFetch only; SystemDialog for the form.
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -12,16 +12,9 @@ import {
   FormControlLabel,
   IconButton,
   MenuItem,
-  Paper,
   Snackbar,
   Stack,
   Switch,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Tooltip,
   Typography,
@@ -35,8 +28,8 @@ import PageContainer from '../../components/layout/PageContainer';
 import PageHeader from '../../components/Page/PageHeader';
 import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
 import ErrorAlert from '../../components/Page/ErrorAlert';
-import EmptyState from '../../components/Page/EmptyState';
 import SystemDialog from '../../components/SystemDialog';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
 import {
@@ -89,6 +82,8 @@ export default function RotationSchedulesPage() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [configError, setConfigError] = useState('');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [searchValue, setSearchValue] = useState('');
+  const [gridFilters, setGridFilters] = useState({ is_active: '' });
 
   const loadData = useCallback(async () => {
     try {
@@ -206,6 +201,91 @@ export default function RotationSchedulesPage() {
 
   const closeSnackbar = () => setSnackbar((prev) => ({ ...prev, open: false }));
 
+  const filteredSchedules = useMemo(() => {
+    const q = searchValue.trim().toLowerCase();
+    return schedules.filter((schedule) => {
+      if (gridFilters.is_active === 'yes' && !schedule.is_active) return false;
+      if (gridFilters.is_active === 'no' && schedule.is_active) return false;
+      if (!q) return true;
+      const hay = [
+        employeeName(schedule.employee),
+        schedule.pattern,
+        formatDate(schedule.start_date),
+        configSummary(schedule.config),
+      ].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }, [schedules, searchValue, gridFilters, employeeLabels]);
+
+  const filterDefs = useMemo(() => [
+    {
+      key: 'is_active',
+      label: t('colIsActive'),
+      emptyLabel: t('filterAll'),
+      options: [
+        { value: 'yes', label: t('yes') },
+        { value: 'no', label: t('no') },
+      ],
+    },
+  ], [t]);
+
+  const columns = useMemo(() => [
+    {
+      field: 'employee',
+      headerName: t('colEmployee'),
+      flex: 1,
+      minWidth: 160,
+      valueGetter: (value) => employeeName(value),
+    },
+    { field: 'pattern', headerName: t('colPattern'), width: 160, valueGetter: (value) => value || '—' },
+    { field: 'start_date', headerName: t('colStartDate'), width: 140, valueGetter: (value) => formatDate(value) },
+    {
+      field: 'is_active',
+      headerName: t('colIsActive'),
+      width: 120,
+      valueGetter: (value) => (value ? t('yes') : t('no')),
+      renderCell: (params) => (
+        <Chip
+          size="small"
+          variant="outlined"
+          color={params.row.is_active ? 'success' : 'default'}
+          label={params.value}
+        />
+      ),
+    },
+    {
+      field: 'config',
+      headerName: t('colConfig'),
+      flex: 1,
+      minWidth: 180,
+      valueGetter: (value) => configSummary(value),
+      renderCell: (params) => (
+        <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>{params.value}</Typography>
+      ),
+    },
+    {
+      field: 'actions',
+      headerName: t('colActions'),
+      width: 110,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => (
+        <>
+          <Tooltip title={t('actionEditRotation')}>
+            <IconButton size="small" onClick={() => openEdit(params.row)} sx={{ color: 'primary.main' }}>
+              <EditIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={t('actionDeleteRotation')}>
+            <IconButton size="small" onClick={() => handleDelete(params.row)} sx={{ color: 'error.main' }}>
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </>
+      ),
+    },
+  ], [t, employeeLabels]);
+
   return (
     <PageContainer>
       <PageHeader
@@ -224,66 +304,25 @@ export default function RotationSchedulesPage() {
         <LoadingSkeleton variant="console" />
       ) : error ? (
         <ErrorAlert message={error} onRetry={loadData} />
-      ) : schedules.length === 0 ? (
-        <EmptyState
-          icon={<AutorenewIcon />}
-          title={t('rotationEmpty')}
-          description={t('rotationEmptyDesc')}
-          actionLabel={t('actionAddRotation')}
-          onAction={openCreate}
-        />
       ) : (
-        <TableContainer component={Paper} variant="outlined">
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colEmployee')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colPattern')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colStartDate')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colIsActive')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colConfig')}</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colActions')}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {schedules.map((schedule) => (
-                <TableRow key={schedule.id} hover>
-                  <TableCell>{employeeName(schedule.employee)}</TableCell>
-                  <TableCell>{schedule.pattern ?? '—'}</TableCell>
-                  <TableCell>{formatDate(schedule.start_date)}</TableCell>
-                  <TableCell>
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      color={schedule.is_active ? 'success' : 'default'}
-                      label={schedule.is_active ? t('yes') : t('no')}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Typography
-                      component="span"
-                      sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'text.secondary' }}
-                    >
-                      {configSummary(schedule.config)}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Tooltip title={t('actionEditRotation')}>
-                      <IconButton size="small" onClick={() => openEdit(schedule)} sx={{ color: 'primary.main' }}>
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title={t('actionDeleteRotation')}>
-                      <IconButton size="small" onClick={() => handleDelete(schedule)} sx={{ color: 'error.main' }}>
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <FilteredDataGrid
+          embedded
+          rows={filteredSchedules}
+          columns={columns}
+          searchValue={searchValue}
+          onSearchChange={setSearchValue}
+          filterDefs={filterDefs}
+          filterValues={gridFilters}
+          onFilterChange={(key, value) => setGridFilters((prev) => ({ ...prev, [key]: value }))}
+          onClearFilters={() => {
+            setSearchValue('');
+            setGridFilters({ is_active: '' });
+          }}
+          emptyMessage={t('rotationEmpty')}
+          emptySubtext={t('rotationEmptyDesc')}
+          pageSize={25}
+          height={560}
+        />
       )}
 
       <SystemDialog

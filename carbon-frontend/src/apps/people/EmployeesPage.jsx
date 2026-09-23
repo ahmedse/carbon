@@ -100,6 +100,8 @@ export default function EmployeesPage() {
 
   const [employees, setEmployees] = useState([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(50);
   const [debouncedQ, setDebouncedQ] = useState('');
   const [orgUnits, setOrgUnits] = useState([]);
   const [positions, setPositions] = useState([]);
@@ -137,7 +139,7 @@ export default function EmployeesPage() {
     try {
       setLoading(true);
       setError(null);
-      const params = { page: 1, page_size: 100 };
+      const params = { page: page + 1, page_size: pageSize };
       if (debouncedQ) params.q = debouncedQ;
       if (filters.status === 'active') params.is_active = 'true';
       if (filters.status === 'inactive') params.is_active = 'false';
@@ -161,7 +163,7 @@ export default function EmployeesPage() {
     } finally {
       setLoading(false);
     }
-  }, [token, t, debouncedQ, filters]);
+  }, [token, t, debouncedQ, filters, page, pageSize]);
 
   useEffect(() => {
     loadData();
@@ -224,26 +226,7 @@ export default function EmployeesPage() {
     },
   ], [t, orgUnitOptions, rotationOptions, nationalityOptions]);
 
-  const filteredRows = useMemo(() => {
-    const q = searchValue.trim().toLowerCase();
-    return employees.filter((emp) => {
-      if (q) {
-        const natHay = `${refCode(emp.nationality)} ${governedLabel(emp.nationality)}`;
-        const hay = `${emp.employee_no ?? ''} ${emp.full_name ?? ''} ${natHay} ${emp.civil_id ?? ''}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      if (filters.status === 'active' && !emp.is_active) return false;
-      if (filters.status === 'inactive' && emp.is_active) return false;
-      if (filters.org_unit && String(emp.org_unit) !== String(filters.org_unit)) return false;
-      if (filters.rotation && refCode(emp.rotation) !== filters.rotation) return false;
-      if (filters.kuwaitization === 'true' && !emp.kuwaitization) return false;
-      if (filters.kuwaitization === 'false' && emp.kuwaitization) return false;
-      if (filters.nationality && refCode(emp.nationality) !== filters.nationality) return false;
-      if (filters.manager === 'assigned' && !emp.manager) return false;
-      if (filters.manager === 'unassigned' && emp.manager) return false;
-      return true;
-    });
-  }, [employees, searchValue, filters]);
+  const resetPage = () => setPage(0);
 
   const handleView = useCallback((id) => navigate(`/people/employees/${id}`), [navigate]);
 
@@ -488,20 +471,29 @@ export default function EmployeesPage() {
             </Button>
           </Stack>
         }
-        rows={filteredRows}
+        rows={employees}
         columns={columns}
         loading={loading}
-        countLabel={t('employeesCount', { count: filteredRows.length, total })}
+        countLabel={t('employeesCount', { count: employees.length, total })}
         searchValue={searchValue}
-        onSearchChange={setSearchValue}
+        onSearchChange={(value) => { setSearchValue(value); resetPage(); }}
         filterDefs={filterDefs}
         filterValues={filters}
-        onFilterChange={(key, value) => setFilters((prev) => ({ ...prev, [key]: value }))}
+        onFilterChange={(key, value) => { setFilters((prev) => ({ ...prev, [key]: value })); resetPage(); }}
         onClearFilters={() => {
           setSearchValue('');
+          resetPage();
           setFilters({
             status: '', org_unit: '', rotation: '', kuwaitization: '', nationality: '', manager: '',
           });
+        }}
+        pageSize={pageSize}
+        paginationMode="server"
+        rowCount={total}
+        paginationModel={{ page, pageSize }}
+        onPaginationModelChange={(model) => {
+          setPage(model.pageSize === pageSize ? model.page : 0);
+          setPageSize(model.pageSize);
         }}
         emptyMessage={t('employeesEmpty')}
         emptySubtext={t('employeesEmptyDesc')}

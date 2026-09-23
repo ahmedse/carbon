@@ -13,17 +13,29 @@ const ROOT = 'people/';
  * screens still get the full scoped population — never a single unbounded
  * response (SIM-QA N-HR-UI-01).
  */
+function employeeListQuery(params, page, pageSize) {
+  const qs = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+  });
+  for (const [key, value] of Object.entries(params)) {
+    if (key === 'page' || key === 'page_size') continue;
+    if (value == null || value === '') continue;
+    qs.set(key, String(value));
+  }
+  return qs.toString();
+}
+
 export async function fetchEmployees(token, params = {}) {
   const pageSize = Math.min(Math.max(Number(params.page_size) || 100, 1), 200);
   if (params.page != null) {
-    const qs = new URLSearchParams({
-      page: String(params.page),
-      page_size: String(pageSize),
-    });
-    return apiFetch(`${ROOT}employees/?${qs}`, { token });
+    return apiFetch(
+      `${ROOT}employees/?${employeeListQuery(params, params.page, pageSize)}`,
+      { token },
+    );
   }
   const first = await apiFetch(
-    `${ROOT}employees/?page=1&page_size=${pageSize}`,
+    `${ROOT}employees/?${employeeListQuery(params, 1, pageSize)}`,
     { token },
   );
   const results = [...(first?.results || [])];
@@ -33,7 +45,7 @@ export async function fetchEmployees(token, params = {}) {
     const rest = await Promise.all(
       Array.from({ length: pages - 1 }, (_, i) =>
         apiFetch(
-          `${ROOT}employees/?page=${i + 2}&page_size=${pageSize}`,
+          `${ROOT}employees/?${employeeListQuery(params, i + 2, pageSize)}`,
           { token },
         ),
       ),

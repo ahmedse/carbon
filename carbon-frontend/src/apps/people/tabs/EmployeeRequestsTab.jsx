@@ -49,6 +49,7 @@ import {
   STATUS_CODES,
   codeLabel,
   corrTypeLabel,
+  displayTitle,
   requestTypeLabel,
   formatDate,
 } from '../../my/components/myRequestsLabels';
@@ -293,7 +294,7 @@ export default function EmployeeRequestsTab({ entityData }) {
                           {row.reference_no || '—'}
                         </TableCell>
                         <TableCell sx={{ fontSize: '0.75rem' }}>{requestTypeLabel(tMy, row)}</TableCell>
-                        <TableCell sx={{ fontSize: '0.75rem' }}>{row.title || '—'}</TableCell>
+                        <TableCell sx={{ fontSize: '0.75rem' }}>{displayTitle(tMy, row)}</TableCell>
                         <TableCell>
                           <Chip
                             size="small"

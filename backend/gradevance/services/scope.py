@@ -75,9 +75,10 @@ def courses_for_teacher(user) -> QuerySet[Course]:
 def teach_course_scope_ids(user) -> Optional[list[UUID]]:
     """Return course UUID list to filter teach APIs, or None if unrestricted.
 
-    - Superuser / global admin (via ``_can``) with mark/manage and zero enrollments → None
-    - Instructor/TA enrollments present → those course ids
-    - Mark/manage with zero enrollments → None (compat, unscoped)
+    Instructor/TA enrollments win. Otherwise live duties that grant
+    ``gradevance:view`` supply the org units, and courses on those units
+    (and their children) are included. A global duty with no deployment
+    root stays unrestricted.
     """
     if not user or not getattr(user, "is_authenticated", False):
         return []
@@ -86,7 +87,16 @@ def teach_course_scope_ids(user) -> Optional[list[UUID]]:
     ids = teacher_enrollment_course_ids(user)
     if ids:
         return ids
-    return None
+    from accounts.rbac_utils import org_scope_for_capability
+
+    scope = org_scope_for_capability(user, "gradevance:view")
+    if scope.unrestricted:
+        return None
+    if not scope.ids:
+        return []
+    return list(
+        Course.objects.filter(org_unit_id__in=scope.ids).values_list("id", flat=True)
+    )
 
 
 def student_can_access_assignment(user, assignment: Assignment) -> bool:

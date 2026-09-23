@@ -567,6 +567,13 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
         parent = serializer.validated_data.get('parent')
         base = f"{parent.slug}-{slugify(name)}" if parent else slugify(name)
         instance = serializer.save(slug=base)
+        if instance.manager_employee_id:
+            from people.access_sync import sync_org_managers
+            sync_org_managers(
+                [instance.manager_employee_id],
+                trigger="org_unit",
+                actor=self.request.user,
+            )
         emit_governance_event(
             entity_type='OrgUnit',
             entity_id=instance.id,
@@ -593,15 +600,29 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
             'name': obj.name,
             'org_type': obj.org_type,
             'parent': obj.parent_id,
+            'manager_employee_id': obj.manager_employee_id,
             'is_active': obj.is_active,
         }
+        previous_manager_id = obj.manager_employee_id
+        previous_parent_id = obj.parent_id
         instance = serializer.save()
         after = {
             'name': instance.name,
             'org_type': instance.org_type,
             'parent': instance.parent_id,
+            'manager_employee_id': instance.manager_employee_id,
             'is_active': instance.is_active,
         }
+        if (
+            instance.manager_employee_id != previous_manager_id
+            or instance.parent_id != previous_parent_id
+        ):
+            from people.access_sync import sync_org_managers
+            sync_org_managers(
+                [previous_manager_id, instance.manager_employee_id],
+                trigger="org_unit",
+                actor=self.request.user,
+            )
         changed = {k: after[k] for k in before if before.get(k) != after.get(k)}
         if changed:
             emit_governance_event(
@@ -618,8 +639,12 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
         if instance.children.filter(is_active=True).exists():
             raise PermissionDenied("Cannot delete org unit with active children")
         before = {'is_active': instance.is_active}
+        manager_id = instance.manager_employee_id
         instance.is_active = False
         instance.save(update_fields=['is_active'])
+        if manager_id:
+            from people.access_sync import sync_org_managers
+            sync_org_managers([manager_id], trigger="org_unit", actor=self.request.user)
         emit_governance_event(
             entity_type='OrgUnit',
             entity_id=instance.id,

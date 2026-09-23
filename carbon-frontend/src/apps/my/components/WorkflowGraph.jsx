@@ -7,13 +7,15 @@ import PropTypes from 'prop-types';
 import { Box, Stack, Typography, useTheme } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import EnterpriseGraph from '../../../components/graph/EnterpriseGraph';
+import { GraphNodeForeign } from '../../../components/graph/GraphNodeLabel';
+import { dominantDir } from '../../../components/graph/graphText';
 import { codeLabel, ROLE_SUFFIX, INTENT_SUFFIX } from './myRequestsLabels';
 
 /** Layout mirrors EXEC_LAYOUT density (ADR-0012 / planGraph.js) — compact for detail pages. */
 const LAYOUT = {
-  nodeW: 180,
-  nodeH: 52,
-  colGap: 40,
+  nodeW: 196,
+  nodeH: 72,
+  colGap: 36,
   padX: 20,
   padY: 16,
 };
@@ -215,30 +217,35 @@ function WorkflowGraph({ chain, currentStep, status, height }) {
     [theme],
   );
 
+  const nodeShape = useCallback((n) => {
+    if (n.id === 'submitted' || n.id === 'terminal') return 'stadium';
+    return 'roundedRect';
+  }, []);
+
   const renderNode = useCallback(
     (n) => {
       const color = nodeColor(n);
-      const titleMax = Math.max(8, Math.floor((n.w - 78) / 6.6));
-      const rawTitle = String(n.label || '');
-      const title = rawTitle.length > titleMax ? `${rawTitle.slice(0, titleMax - 1)}…` : rawTitle;
-      const statusText = String(n.statusLabel || '').toUpperCase();
-      const sub = n.subtitle || n.metaText || '';
-      const subMax = Math.max(8, Math.floor((n.w - 28) / 5.6));
-      const subShown = sub.length > subMax ? `${sub.slice(0, subMax - 1)}…` : sub;
+      const title = String(n.label || '');
+      const sub = [n.subtitle, n.metaText].filter(Boolean).join(' · ');
+      const rtl = dominantDir(title) === 'rtl';
+      const terminal = n.id === 'submitted' || n.id === 'terminal';
       return (
         <>
-          <rect x={4} y={6} width={3} height={n.h - 12} rx={1.5} fill={color} />
-          <text x={16} y={n.h / 2 - 2} fontSize={13} fontWeight={650} fill={theme.palette.text.primary}>
-            {title}
-          </text>
-          <text x={n.w - 10} y={n.h / 2 + 1} fontSize={10} fontWeight={700} fill={color} textAnchor="end">
-            {statusText}
-          </text>
-          {subShown ? (
-            <text x={16} y={n.h / 2 + 14} fontSize={11} fill={theme.palette.text.secondary}>
-              {subShown}
-            </text>
-          ) : null}
+          {terminal ? null : (
+            <rect x={rtl ? n.w - 4 : 0} y={0} width={4} height={n.h} fill={color} />
+          )}
+          <GraphNodeForeign
+            width={n.w}
+            height={n.h}
+            title={title}
+            meta={sub}
+            status={n.statusLabel || ''}
+            statusColor={color}
+            center={terminal}
+            fontFamily={theme.typography?.fontFamily}
+            color={theme.palette.text.primary}
+            tip={`${title}${sub ? ` — ${sub}` : ''} — ${n.statusLabel || ''}`}
+          />
         </>
       );
     },
@@ -279,7 +286,7 @@ function WorkflowGraph({ chain, currentStep, status, height }) {
     );
   }, [presentStates, t, theme]);
 
-  const summary = `${nodes.length} step${nodes.length !== 1 ? 's' : ''} · ${edges.length} link${edges.length !== 1 ? 's' : ''}`;
+  const summary = t('graphSummary', { steps: nodes.length, links: edges.length });
 
   return (
     <EnterpriseGraph
@@ -290,6 +297,7 @@ function WorkflowGraph({ chain, currentStep, status, height }) {
       height={height}
       phaseBands={[]}
       nodeColor={nodeColor}
+      nodeShape={nodeShape}
       renderNode={renderNode}
       selected={selected}
       onSelect={setSelected}
@@ -309,7 +317,7 @@ function WorkflowGraph({ chain, currentStep, status, height }) {
       exportFileName="approval-workflow"
       fill={false}
       contentSized
-      fitZoomCeil={1}
+      fitZoomCeil={1.75}
     />
   );
 }

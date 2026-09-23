@@ -58,8 +58,8 @@ turns:
       max_llm_calls: 2
   
   - user: "Thank you for the help"
-    stub_reply: "You're welcome! The agent is ready to assist you. Let me hand you over now."
+    stub_reply: "You're welcome. Ask if you need anything else."
     expect:
-      decision_in: [handoff_agent]
+      decision_in: [answer]
       language: en
       max_llm_calls: 0

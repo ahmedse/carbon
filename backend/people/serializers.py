@@ -63,6 +63,7 @@ class ComplianceRuleSerializer(serializers.ModelSerializer):
 class EmployeeSerializer(serializers.ModelSerializer):
     position_title = serializers.SerializerMethodField()
     manager_label = serializers.SerializerMethodField()
+    org_unit_label = serializers.SerializerMethodField()
     manager = serializers.PrimaryKeyRelatedField(
         queryset=Employee.objects.all(), required=False, allow_null=True,
     )
@@ -88,7 +89,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
         fields = [
-            'id', 'org_unit', 'employee_no', 'full_name', 'nationality',
+            'id', 'org_unit', 'org_unit_label', 'employee_no', 'full_name', 'nationality',
             'basic_salary', 'join_date', 'rotation', 'is_active', 'photo',
             'name_en_given', 'name_en_family', 'name_ar_given', 'name_ar_family',
             'civil_id', 'date_of_birth', 'gender',
@@ -98,9 +99,15 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         ]
         read_only_fields = [
-            'id', 'user_id', 'username', 'manager_label', 'position_title',
+            'id', 'user_id', 'username', 'manager_label', 'position_title', 'org_unit_label',
             'created_at', 'updated_at',
         ]
+
+    def get_org_unit_label(self, obj):
+        unit = getattr(obj, 'org_unit', None)
+        if unit is None:
+            return None
+        return unit.name or None
 
     def get_position_title(self, obj):
         position = getattr(obj, 'position', None)

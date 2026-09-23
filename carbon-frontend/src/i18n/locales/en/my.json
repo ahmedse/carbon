@@ -244,6 +244,7 @@
   "graphTitle": "Approval workflow",
   "graphEmpty": "No approver chain",
   "graphLegend": "Legend",
+  "graphSummary": "{{steps}} steps · {{links}} links",
   "graphNodePending": "Pending",
   "graphNodeCurrent": "Current",
   "graphNodeApproved": "Approved",

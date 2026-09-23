@@ -21,12 +21,14 @@ turns:
       mentions_any: ["GOSI", "1200", "1,200"]
   
   - user: "And after GOSI is deducted, what is my take-home?"
-    stub_reply: "After the GOSI deduction of 1,200 SAR, your take-home before other deductions is 3,700 SAR."
+    # Host identity (seed_pulse_audit_payslips): 6500 − 1200 = 5300.
+    # 3700 was 4500 − 800, not after-GOSI. Master alignment 2026-09-23, not a budget loosen.
+    stub_reply: "After the GOSI deduction of 1,200 SAR, take-home before the loan installment is 5,300 SAR."
     expect:
       decision_in: [answer]
       language: en
       max_llm_calls: 2
-      mentions_any: ["3700", "3,700"]
+      mentions_any: ["5300", "5,300"]
   
   - user: "Is the GOSI calculated correctly?"
     stub_reply: "Yes, GOSI is 15% of your gross salary, which is correct for Nibras employees."

@@ -48,8 +48,9 @@ ACTIVE_PERIOD_STATUSES = ("draft", "computed", "validated", "committed")
 def assert_unique_active_period(org_unit, period_start, period_end, *, exclude_pk=None):
     """Refuse a second active run for the same org unit and period.
 
-    Failed runs may be superseded. Historical duplicates stay in the table —
-    this is a service-level refuse, not a database unique constraint.
+    Failed runs may be superseded. The database enforces the same rule for
+    draft, computed, validated, and committed runs. Existing duplicate
+    committed rows are not rewritten by this check.
     """
     qs = PayrollRun.objects.filter(
         org_unit=org_unit,

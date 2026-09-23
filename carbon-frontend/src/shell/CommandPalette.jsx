@@ -122,11 +122,19 @@ const COMMANDS = [
   },
   {
     id: 'admin-access',
-    label: 'Access Control',
-    description: 'Configure roles and permissions',
+    label: 'Assignments',
+    description: 'Grant a domain duty on an org unit',
     path: '/admin/access',
     icon: SecurityIcon,
-    keywords: ['access', 'roles', 'permissions', 'security', 'rbac'],
+    keywords: ['access', 'assignments', 'duties', 'roles', 'permissions', 'rbac'],
+  },
+  {
+    id: 'admin-position-profiles',
+    label: 'Position profiles',
+    description: 'Map a position code to a domain duty',
+    path: '/admin/position-profiles',
+    icon: SecurityIcon,
+    keywords: ['position', 'duty', 'birthright', 'profile', 'hr'],
   },
   {
     id: 'admin-orgunits',

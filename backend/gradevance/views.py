@@ -146,9 +146,14 @@ class CourseDetailView(APIView):
     permission_classes = [IsAuthenticated, GradevanceViewAccess]
 
     def get(self, request, course_id):
+        from gradevance.services.scope import teach_course_scope_ids
+
         try:
             course = Course.objects.get(pk=course_id)
         except Course.DoesNotExist:
+            return Response({"detail": "Not found"}, status=404)
+        scope = teach_course_scope_ids(request.user)
+        if scope is not None and course.id not in scope:
             return Response({"detail": "Not found"}, status=404)
         asgs = Assignment.objects.filter(course=course)[:100]
         return Response(

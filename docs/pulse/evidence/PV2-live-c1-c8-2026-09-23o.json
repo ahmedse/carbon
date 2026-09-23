@@ -1,0 +1,345 @@
+{
+  "tier": "live_dev",
+  "caveats": [
+    "Tier live_dev: real LLM provider (LLM_API_KEY) and the configured dev DB, dispatched as an authenticated employee. Reply-text metrics are engine-attributable but non-deterministic across runs (LLM variance).",
+    "Chat mode only (ADR-0046): host writes are never committed from these turns; process dials may create Plan/Run rows awaiting consent in the dev DB.",
+    "Fan-out agents and multi-step planning are disabled in the engine Settings (os.environ + get_settings.cache_clear() since PV2-1C). The PV2-0C live baseline ran WITH fan-out on (override_settings does not reach the engine Settings) — compare llm_calls against it accordingly."
+  ],
+  "host_user": "emp_1067",
+  "database": "nibras_dev",
+  "errors": [],
+  "scripts_run": 3,
+  "scripts_passed": 3,
+  "total_turns": 24,
+  "turns_passed": 24,
+  "focus_retention": 1.0,
+  "slot_carry_over": 1.0,
+  "language_fidelity": 1.0,
+  "router_agreement": 1.0,
+  "llm_calls_p50": 0,
+  "llm_calls_max": 2,
+  "turns_over_budget": 0,
+  "latency_p50_ms": 68.7,
+  "latency_max_ms": 8941.0,
+  "latency_samples": 24,
+  "latency_histogram": {
+    "0-250ms": 13,
+    "250-500ms": 1,
+    "500-1000ms": 0,
+    "1000-2000ms": 0,
+    "2000-4000ms": 0,
+    "4000ms+": 10
+  },
+  "per_objective_pass": {
+    "C1": 1.0,
+    "C3": 1.0,
+    "C8": 1.0,
+    "C5": 1.0,
+    "C6": 1.0
+  },
+  "scripts": [
+    {
+      "script_id": "ess-loan-ar-01",
+      "turns": 8,
+      "turns_passed": 8,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 0,
+      "llm_budget_failures": 0,
+      "passed": true,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "handoff_agent",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 357.0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "لدي: نوع القرض: emergency؛ المبلغ: ٥٠٠٠؛ amount: ٥٠٠٠.\n\nلإرسال الطلب بدّل إلى وضع الوكيل (Agent) — سأنقل هذه التفاصيل معك. أو قدّم من تطبيقاتي. الدردشة لا تُرسل"
+        },
+        {
+          "turn": 2,
+          "decision": "handoff_agent",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 67.9,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "لدي: amount: ٥٠٠٠؛ نوع القرض: emergency؛ المبلغ: ٥٠٠٠.\n\nلإرسال الطلب بدّل إلى وضع الوكيل (Agent) — سأنقل هذه التفاصيل معك. أو قدّم من تطبيقاتي. الدردشة لا تُرسل"
+        },
+        {
+          "turn": 3,
+          "decision": "handoff_agent",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 66.8,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "لدي: amount: 5000؛ نوع القرض: emergency؛ المبلغ: 5000.\n\nلإرسال الطلب بدّل إلى وضع الوكيل (Agent) — سأنقل هذه التفاصيل معك. أو قدّم من تطبيقاتي. الدردشة لا تُرسل"
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "latency_ms": 8941.0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "قرار طلب القرض الطارئ يعتمد على: 1. **مراحل المعالجة**: - استقبال الطلب من قبل HR - التحقق من الأهلية (الراتب، السجل الائتماني، الحد الأقصى للقروض) - موافقة الم"
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "latency_ms": 7189.1,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "المبلغ الذي طلبته: **٥٠٠٠ دينار** نوع القرض: **طارئ (emergency)** هذا ما أكدته للتو."
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "latency_ms": 7799.3,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "لا يمكنني التنبؤ بقرار الموافقة — هذا يعتمد على معايير الأهلية التي تحددها الشركة والإدارة المالية. **العوامل التي عادة تؤثر على الموافقة:** 1. **الراتب والدخل*"
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 56.6,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "على الرحب والسعة. أنا هنا إذا احتجت شيئاً آخر."
+        },
+        {
+          "turn": 8,
+          "decision": "handoff_agent",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 62.5,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "لدي: amount: 5000؛ نوع القرض: emergency؛ المبلغ: 5000.\n\nلإرسال الطلب بدّل إلى وضع الوكيل (Agent) — سأنقل هذه التفاصيل معك. أو قدّم من تطبيقاتي. الدردشة لا تُرسل"
+        }
+      ]
+    },
+    {
+      "script_id": "ess-leave-en-01",
+      "turns": 8,
+      "turns_passed": 8,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 0,
+      "llm_budget_failures": 0,
+      "passed": true,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "clarify",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 68.7,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "I understand you want annual leave from January 15, 2025 to January 22, 2025. Let me confirm those dates?"
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 56.0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Your leave request: annual leave, January 15, 2025 to January 22, 2025."
+        },
+        {
+          "turn": 3,
+          "decision": "handoff_agent",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 58.0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "I have: End date: 2025-01-22; Leave type: annual; Start date: 2025-01-15.\n\nTo submit it, switch to Agent — I'll carry these details over. Or open My and submit "
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 56.8,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "You requested annual leave."
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "latency_ms": 4374.2,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Your leave dates are:\n- **Start date:** January 15, 2025\n- **End date:** January 22, 2025"
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "latency_ms": 4245.1,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "From January 15 to January 22, 2025 is **8 days** (inclusive of both the start and end dates)."
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "latency_ms": 5391.9,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "I cannot predict approval — that depends on your manager's decision and your leave balance. To check if you have enough annual leave available, I can look up yo"
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "latency_ms": 6063.2,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "The status depends on your manager's review process. Typically: 1. **After submission** — your request goes to your manager for approval\n2. **Manager review** —"
+        }
+      ]
+    },
+    {
+      "script_id": "chat-handoff-write-01",
+      "turns": 8,
+      "turns_passed": 8,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 0,
+      "llm_budget_failures": 0,
+      "passed": true,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "clarify",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 67.3,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "What type of loan are you interested in?"
+        },
+        {
+          "turn": 2,
+          "decision": "clarify",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 54.7,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Emergency loan. How much do you need to borrow?"
+        },
+        {
+          "turn": 3,
+          "decision": "handoff_agent",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 57.1,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "I have: Loan type: emergency; Principal: 3000; amount: 3000.\n\nTo submit it, switch to Agent — I'll carry these details over. Or open My and submit there. Chat d"
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "latency_ms": 6398.7,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Not yet — I'm ready to hand off, but you need to take the next step. **What you have:**\n- Loan type: emergency\n- Principal: 3,000 SAR **What happens next:**\n1. "
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 67.1,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "The agent has emergency loan and 3000.0."
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "latency_ms": 4707.4,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "No — the agent has your loan details (emergency loan, 3,000 SAR). You should not need to repeat them. When you switch to Agent, those details should already be "
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "latency_ms": 7051.2,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Once you're in Agent with your loan details: 1. **Review & confirm** — Agent will show your emergency loan request (3,000 SAR) for you to verify\n2. **Fill in re"
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 60.1,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "You're welcome. Ask if you need anything else."
+        }
+      ]
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 // Wave I4-F — a self-contained subagent result card that owns its own
 // progress polling. One card per dispatched subagent, nested under the
 // AITaskPanel "Subagents" section (never flattened into run steps). Polls
-// GET …/subagents/{id}/ every ~1.5s (backing off to ~3s after ~5 polls)
+// GET …/subagents/{id}/ every ~1.5s (backing off to 2s after ~5 polls; A6)
 // until the subagent reaches a terminal status, then stops — no leaked
 // timers. Outcome copy + icon+label only (RULE_23); theme tokens only
 // (RULE_8).
@@ -26,13 +26,15 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { useTranslation } from 'react-i18next';
 import { getSubagent } from '../api/aiWorkspace';
+import {
+  SUBAGENT_BACKOFF_AFTER_POLLS,
+  SUBAGENT_FAST_POLL_MS,
+  SUBAGENT_SLOW_POLL_MS,
+} from './pulseProgressCadence';
 import { KeyValueOutput } from '../components/ai/StepOutputRenderer';
 import AIGeneratedBadge from './AIGeneratedBadge';
 
-// Poll cadence: start fast, back off after ~5 polls to bound chatter.
-const FAST_POLL_MS = 1500;
-const SLOW_POLL_MS = 3000;
-const BACKOFF_AFTER_POLLS = 5;
+// Poll cadence: start fast, back off after ~5 polls. Slow cap is A6 (≤2s).
 
 function statusIcon(status) {
   if (status === 'running') {
@@ -89,7 +91,7 @@ function SubagentResultCard({ subagent, token, conversationId, onResolved }) {
             return;
           }
           pollCount += 1;
-          schedule(pollCount >= BACKOFF_AFTER_POLLS ? SLOW_POLL_MS : FAST_POLL_MS);
+          schedule(pollCount >= SUBAGENT_BACKOFF_AFTER_POLLS ? SUBAGENT_SLOW_POLL_MS : SUBAGENT_FAST_POLL_MS);
         } catch (err) {
           if (cancelled) return;
           if (err?.status === 404 || err?.status === 403) {
@@ -98,12 +100,12 @@ function SubagentResultCard({ subagent, token, conversationId, onResolved }) {
           }
           setPollFailed(true);
           pollCount += 1;
-          schedule(pollCount >= BACKOFF_AFTER_POLLS ? SLOW_POLL_MS : FAST_POLL_MS);
+          schedule(pollCount >= SUBAGENT_BACKOFF_AFTER_POLLS ? SUBAGENT_SLOW_POLL_MS : SUBAGENT_FAST_POLL_MS);
         }
       }, delay);
     };
 
-    schedule(FAST_POLL_MS);
+    schedule(SUBAGENT_FAST_POLL_MS);
 
     return () => {
       cancelled = true;

@@ -20,6 +20,10 @@ _FACT_EN_RE = re.compile(
     r"([A-Za-z0-9][A-Za-z0-9._/-]{1,48})\b",
     re.IGNORECASE,
 )
+_FACT_NAME_RE = re.compile(
+    r"\bmy\s+((?:full\s+)?name)\s+is\s+([A-Za-z][A-Za-z .'-]{1,60})\b",
+    re.IGNORECASE,
+)
 _RECALL_RE = re.compile(
     r"("
     r"\b(?:can you )?(?:confirm you have|confirm that)\b"
@@ -31,6 +35,14 @@ _RECALL_RE = re.compile(
     re.IGNORECASE,
 )
 _TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9_-]{1,}", re.IGNORECASE)
+_HOST_IDENTITY_RE = re.compile(
+    r"\b("
+    r"manager|department|employee\s*(?:number|no)|job\s*title|"
+    r"org(?:anisation|anization| unit)"
+    r"|مدير|قسم|رقم\s*ال?موظف"
+    r")\b",
+    re.IGNORECASE,
+)
 _STOP = frozenset({
     "the", "and", "for", "that", "this", "still", "have", "you", "can",
     "about", "tell", "what", "your", "my", "is", "are", "was", "were",
@@ -50,10 +62,18 @@ def extract_stated_facts(text: str) -> list[dict[str, str]]:
     if is_remember_store(text):
         return []
     out: list[dict[str, str]] = []
+    for match in _FACT_NAME_RE.finditer(text or ""):
+        label = " ".join(match.group(1).split()).strip().lower()
+        value = " ".join(match.group(2).split()).strip(" .")
+        if label and value and " " in value:
+            out.append({"key": label, "value": value})
+    seen_keys = {row["key"] for row in out}
     for match in _FACT_EN_RE.finditer(text or ""):
         label = " ".join(match.group(1).split()).strip().lower()
         value = match.group(2).strip()
         if not label or not value or not _looks_like_code(value):
+            continue
+        if label in seen_keys:
             continue
         out.append({"key": label, "value": value})
     return out
@@ -108,6 +128,10 @@ def remember_facts(state: Any, facts: list[dict[str, str]]) -> list[dict[str, st
 def is_memory_use(text: str, facts: list[dict[str, str]]) -> bool:
     if not facts or not (text or "").strip():
         return False
+    host = _HOST_IDENTITY_RE.search(text)
+    if host:
+        facet = _tokens(host.group(0))
+        return any(bool(facet & _tokens(f.get("key") or "")) for f in facts)
     if _RECALL_RE.search(text):
         return True
     blob = " ".join(f"{f['key']} {f['value']}" for f in facts)

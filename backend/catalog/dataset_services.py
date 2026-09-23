@@ -58,8 +58,8 @@ def get_dataset_access(user, dataset) -> dict:
 
     # Module-level ScopedRole — resolved by the viewset queryset; here we
     # conservatively answer with the user's visibility on the module.
-    from accounts.rbac_utils import get_visible_module_ids
-    visible = get_visible_module_ids(user)
+    from accounts.rbac_utils import module_ids_for_capability
+    visible = module_ids_for_capability(user, 'catalog:view')
     if visible is None or dataset.module_id in visible:
         can_view = True
         can_ingest = True  # ingest is capability-gated separately; policy is per-dataset

@@ -1,0 +1,216 @@
+{
+  "tier": "live_dev",
+  "caveats": [
+    "Tier live_dev: real LLM provider (LLM_API_KEY) and the configured dev DB, dispatched as an authenticated employee. Reply-text metrics are engine-attributable but non-deterministic across runs (LLM variance).",
+    "Chat mode only (ADR-0046): host writes are never committed from these turns; process dials may create Plan/Run rows awaiting consent in the dev DB.",
+    "Fan-out agents and multi-step planning are disabled in the engine Settings (os.environ + get_settings.cache_clear() since PV2-1C). The PV2-0C live baseline ran WITH fan-out on (override_settings does not reach the engine Settings) — compare llm_calls against it accordingly."
+  ],
+  "host_user": "emp_1067",
+  "database": "nibras_dev",
+  "errors": [],
+  "scripts_run": 2,
+  "scripts_passed": 1,
+  "total_turns": 16,
+  "turns_passed": 15,
+  "focus_retention": 0.8,
+  "slot_carry_over": 1.0,
+  "language_fidelity": 1.0,
+  "router_agreement": 1.0,
+  "llm_calls_p50": 0,
+  "llm_calls_max": 2,
+  "turns_over_budget": 0,
+  "per_objective_pass": {
+    "C2": 1.0,
+    "C7": 0.938
+  },
+  "scripts": [
+    {
+      "script_id": "ess-attendance-mixed-01",
+      "turns": 8,
+      "turns_passed": 8,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 0,
+      "llm_budget_failures": 0,
+      "passed": true,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "clarify",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "أي نوع إجازة تريد؟"
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Your leave request: sick leave, September 23, 2026 to September 23, 2026."
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "You requested sick leave."
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "That's a good question. Medical certificate requirements for sick leave depend on your organisation's policy and the length of the absence. **Typical rules:**\n-"
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "هل تقصد عدد ساعات الغياب لليوم (23 سبتمبر)، أم تريد معرفة رصيد إجازاتك المتبقي؟"
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "What would you like to appeal? Your sick leave request for today (September 23), a decision about it, or something else?"
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "What would you like to see appear in your file — the sick leave request for today (September 23), or something else?"
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "You're welcome. Ask if you need anything else."
+        }
+      ]
+    },
+    {
+      "script_id": "language-fidelity-ar-01",
+      "turns": 8,
+      "turns_passed": 7,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 0,
+      "llm_budget_failures": 0,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "صافي الراتب المعتمد هو 4500."
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['٦٠٠٠', 'dinar']"
+          ],
+          "reply": "الراتب الإجمالي المعتمد هو 6500. الصافي 4500."
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "الاستقطاعات المعتمدة: GOSI 1200 وقسط القرض 800."
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "صافي الراتب المعتمد هو 4500."
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "نعم، يمكنك الاعتراض على الخصومات. إليك الخيارات: **بخصوص خصم GOSI (1200):**\n- هذا الخصم يُحتسب وفقاً لقواعد نظام التأمينات الاجتماعية (GOSI) وهو إلزامي قانوناً\n"
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "ليس لدي تاريخ معالجة رواتب الشهر القادم. التاريخ على مسير الرواتب المعتمد في تطبيقاتي، ولن أخمنه."
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "صافي الراتب المعتمد هو 4500."
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "على الرحب والسعة. أنا هنا إذا احتجت شيئاً آخر."
+        }
+      ]
+    }
+  ]
+}

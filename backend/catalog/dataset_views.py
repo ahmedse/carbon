@@ -23,7 +23,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.permissions import AdminOrSuperuserOnly, ReadAnyWriteAdmin
-from accounts.rbac_utils import get_visible_module_ids
+from accounts.rbac_utils import module_ids_for_capability
 
 from . import dataset_ingest as ingest_service
 from . import dataset_services as datahub_services
@@ -43,7 +43,7 @@ def dataset_qs_for_user(user):
 
     Returns None for unrestricted (superuser / global admin) users.
     """
-    visible = get_visible_module_ids(user)
+    visible = module_ids_for_capability(user, 'catalog:view')
     if visible is None:
         return Dataset.objects.select_related(
             'module', 'domain', 'owner', 'current_version',
@@ -63,7 +63,7 @@ def dataset_qs_for_user(user):
 
 def _check_module_visible(user, module_id):
     """Reject writes that target a module the user cannot see (CBAC boundary)."""
-    visible = get_visible_module_ids(user)
+    visible = module_ids_for_capability(user, 'catalog:view')
     if visible is not None and module_id not in visible:
         raise PermissionDenied('You do not have access to datasets in this module.')
 

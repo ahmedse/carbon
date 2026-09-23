@@ -58,7 +58,7 @@ evidence → not done.
 | **DTR** (Data Trust / Catalog Index) | **Catalog** | **ACTIVE** | Stewardship nudges + FilteredDataGrid→SearchSelect · DTR-3 = Pulse (other master) |
 | **GradeVance E2E QA** | **EduOS** | **DONE** | Seed 6 runs + LCT report · `docs/eduos/qa-evidence/E2E-SUMMARY.json` |
 | **GradeVance HITL P2** | **EduOS** | **ACTIVE** | Learning loop proven: edit→proposal→accept→bump→repin · `docs/eduos/qa-evidence/HITL-LEARNING-LOOP.json` · next: UI path + Phase C depth |
-| **PV2** (Pulse v2 Intelligence Contract, ADR-0047) | **Pulse** | **ACTIVE** | P0–P3 + P5 + 6A + C8/C10 + C5 clarify DONE · G5 94/96 · 4A SOAKING (flip ≥2026-09-30) · **6B SOAKING 0/5 nights** · 6C after five greens |
+| **PV2** (Pulse v2 Intelligence Contract, ADR-0047) | **Pulse** | **ACTIVE** | **18/20** · C2 reached 23p (host identity) · remaining A5 (Nibras QA G5 sign-off), A9 (mutating Agent + STACK-HOLD) · **6B SOAKING 0/5** · 6C after five greens |
 
 **Multi-Master:** `.ai-toolkit/shared/multi-master.md` · seats · `docs/ops/MASTERS-COMMS.md` · RULE_30. · **This session seat: Nibras.**
 
@@ -3093,7 +3093,7 @@ Plan §4.1/§5 P4. New `engine/cognition/turn/arbiter.py`: `TurnDecision` enum (
 ---
 
 ### Phase PV2-4B — Backend: Arbiter flip (after soak)
-**Worker Role:** backend-worker · **Model:** inherit Master · **Status:** PLANNED (READY when PV2-4A SOAKING evidence exists) · **Owner:** Pulse
+**Worker Role:** backend-worker · **Model:** inherit Master · **Status:** DONE 2026-09-23 — human waived the 2026-09-30 date. Default `PULSE_ARBITER=on`; recorded decision is Arbiter; `legacy` kill switch. Offline G5 stayed 96/96. Early-return bodies were not collapsed (they agree on the bank). · **Owner:** Pulse
 
 #### Objective
 Default `PULSE_ARBITER=on`; runner executes only Arbiter's decision; `PULSE_ARBITER=legacy` kill switch for one release. Remove duplicate early-exit execution paths (signals remain). Offline router_agreement ≥ 0.98 target or document remaining gaps as explicit exceptions.
@@ -3163,6 +3163,8 @@ Wire `ai.eval.multiturn.runner` into CI with §3 thresholds (router ≥ 0.90, sl
 Scheduled job: 3 ESS journeys Chat→Agent→Approve as `emp_1067` on Nibras dev; assert host rows + IC metrics. Status **SOAKING** until 5 consecutive green nights. STACK-HOLD / COMMS before first run.
 
 **Landed:** `python -m ai.eval.nightly_ess_smoke` · GH catalog dry-run cron `0 2 * * *` · ledger `docs/pulse/evidence/PV2-6B-{soak.md,nights.json}`. Mutating run refused unless `--live --i-have-stack-hold --host-user emp_1067` and `PULSE_NIGHTLY_LIVE=1`. Dry-run / SKIP / FAIL do not increment the streak. Do not back-date nights. Night 2026-09-23: Chat handoff + slot_carry held; Agent Approve 200; no host row. See `PV2-6B-night-2026-09-23.md`.
+
+**2026-09-23k (Chat, not 6B):** `seed_pulse_audit_payslips` wrote emp_1067 Aug 2026 committed identity 6500/1200/800/4500 on `nibras_dev`. Live 01/04/08 is 23/24. 6B streak stays 0/5.
 
 **Acceptance:** 5 consecutive greens recorded in evidence/; then flip DONE.
 

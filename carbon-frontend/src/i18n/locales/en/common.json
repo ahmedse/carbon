@@ -269,5 +269,26 @@
   "allX": "All {{label}}",
   "noRecordsFound": "No records found",
   "tryAdjustingFilters": "Try adjusting your filters.",
-  "noDataAvailable": "No data is available yet."
+  "noDataAvailable": "No data is available yet.",
+
+  "graphZoomIn": "Zoom in",
+  "graphZoomOut": "Zoom out",
+  "graphZoomFit": "Zoom to fit",
+  "graphReset": "Reset view",
+  "graphRedraw": "Redraw layout",
+  "graphExport": "Export as PNG",
+  "graphMaximize": "Maximize",
+  "graphMinimize": "Minimize",
+  "graphLive": "Live",
+  "graphCanvasHelp": "Graph — drag to pan, wheel to zoom, drag nodes to move or resize them",
+  "graphStatusPending": "Pending",
+  "graphStatusRunning": "Running",
+  "graphStatusApproval": "Needs approval",
+  "graphStatusFinished": "Finished",
+  "graphStatusFailed": "Failed",
+  "graphStatusSkipped": "Skipped",
+  "graphShape_roundedRect": "Task",
+  "graphShape_diamond": "Choice",
+  "graphShape_diamondPlus": "Parallel",
+  "graphShape_doubleCircle": "Wait"
 }

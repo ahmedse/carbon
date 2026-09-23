@@ -319,17 +319,25 @@ class PayrollRunServiceTests(TestCase):
         self.assertEqual(run.status, "committed")
 
     def test_second_active_run_same_period_refused(self):
+        from django.db import IntegrityError, transaction
+
         first = self._run()
         self._compute(first)
-        second = PayrollRun.objects.create(
-            org_unit=self.hq,
-            period_start=date(2026, 8, 1),
-            period_end=date(2026, 8, 31),
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                PayrollRun.objects.create(
+                org_unit=self.hq,
+                period_start=date(2026, 8, 1),
+                period_end=date(2026, 8, 31),
+            )
+        self.assertEqual(
+            PayrollRun.objects.filter(
+                org_unit=self.hq,
+                period_start=date(2026, 8, 1),
+                period_end=date(2026, 8, 31),
+            ).count(),
+            1,
         )
-        with self.assertRaises(PayrollServiceError) as ctx:
-            self._compute(second)
-        self.assertIn("already exists", str(ctx.exception))
-        self.assertFalse(PayslipLine.objects.filter(payroll_run=second).exists())
 
     def test_failed_run_can_be_superseded(self):
         first = self._run()

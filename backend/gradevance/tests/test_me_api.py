@@ -163,6 +163,33 @@ def test_teacher_with_enrollments_sees_scoped_courses(campus, django_user_model)
 
 
 @pytest.mark.django_db
+def test_org_scoped_lead_sees_only_anchor_courses(django_user_model):
+    from accounts.models import ScopedRole
+    from mdm.models import OrgUnit
+
+    root = OrgUnit.objects.create(name="Campus", slug="gv-campus", org_type="company")
+    nursing = OrgUnit.objects.create(
+        name="Nursing", slug="gv-nursing", parent=root, org_type="department",
+    )
+    engineering = OrgUnit.objects.create(
+        name="Engineering", slug="gv-eng", parent=root, org_type="department",
+    )
+    Course.objects.create(code="NURS201", name="Nursing", org_unit=nursing)
+    other = Course.objects.create(code="ENG201", name="Engineering", org_unit=engineering)
+    lead = django_user_model.objects.create_user("gv_org_lead", "gv-org@test.local", "x")
+    group, _ = Group.objects.get_or_create(name="gradevance_lead")
+    ScopedRole.objects.create(user=lead, group=group, org_unit=nursing, module=None, is_active=True)
+    client = APIClient()
+    client.force_authenticate(lead)
+    res = client.get(f"{BASE}/courses/")
+    assert res.status_code == 200
+    codes = {row["code"] for row in res.data["results"]}
+    assert codes == {"NURS201"}
+    denied = client.get(f"{BASE}/courses/{other.id}/")
+    assert denied.status_code == 404
+
+
+@pytest.mark.django_db
 def test_teacher_with_zero_enrollments_sees_all(campus, django_user_model):
     lead = _lead(django_user_model, "compat_prof")
     client = APIClient()

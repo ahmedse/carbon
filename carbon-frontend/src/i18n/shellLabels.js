@@ -142,9 +142,28 @@ export const NAV_LABEL_KEYS = {
   Attendance: 'nav.attendance',
   'App Config': 'nav.appConfig',
   'My Leave': 'nav.myLeave',
+  'My Attendance': 'nav.myAttendance',
   'My Requests': 'nav.myRequests',
   My: 'nav.my',
   Team: 'nav.team',
+  'Approvals Inbox': 'nav.approvalsInbox',
+  History: 'nav.teamHistory',
+  'Team Directory': 'nav.teamDirectory',
+  "Who's Out": 'nav.whosOut',
+  'Chairman Overview': 'nav.chairmanOverview',
+  'Inventory Coverage': 'nav.inventoryCoverage',
+  Stems: 'nav.stems',
+  Calibration: 'nav.calibration',
+  'Marking queue': 'nav.markingQueue',
+  Appeals: 'nav.appeals',
+  Proposals: 'nav.proposals',
+  'Pack library': 'nav.packLibrary',
+  QA: 'nav.qa',
+  Accessibility: 'nav.accessibility',
+  LTI: 'nav.lti',
+  'My assignments': 'nav.myAssignments',
+  Progress: 'nav.progress',
+  'Stub Home': 'nav.stubHome',
   'Request Detail': 'nav.requestDetail',
   'Reference Data': 'nav.referenceData',
   Processes: 'nav.processes',
@@ -188,6 +207,8 @@ export const GROUP_LABEL_KEYS = {
   Organization: 'group.organization',
   Workforce: 'group.workforce',
   'Payroll & Benefits': 'group.payrollBenefits',
+  Executive: 'group.executive',
+  'BI & Analytics': 'group.biAnalytics',
 };
 
 // ActivityBar studio labels -> shell.studio.* (keyed by studio id)
@@ -202,6 +223,11 @@ export const STUDIO_LABEL_KEYS = {
   my: 'studio.my',
   people: 'studio.people',
   team: 'studio.team',
+  learn: 'studio.learn',
+  teach: 'studio.teach',
+  gradevance: 'studio.gradevance',
+  healthy: 'studio.healthy',
+  stub: 'studio.stub',
 };
 
 // Sidebar header titles -> shell.studio.* (keyed by studio id)
@@ -215,6 +241,13 @@ export const STUDIO_TITLE_KEYS = {
   help: 'studio.helpSupport',
   apps: 'studio.apps',
   my: 'studio.my',
+  people: 'studio.people',
+  team: 'studio.team',
+  learn: 'studio.learn',
+  teach: 'studio.teach',
+  gradevance: 'studio.gradevance',
+  healthy: 'studio.healthy',
+  stub: 'studio.stub',
 };
 
 // Translate a raw English nav/group label into the current language.

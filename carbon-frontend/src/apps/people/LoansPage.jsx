@@ -2,25 +2,17 @@
 // People & Payroll — Loans (full CRUD) with a read-only installments expander.
 // All colours via theme tokens; apiFetch only; SystemDialog for the form.
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Autocomplete,
   Box,
   Button,
   Chip,
-  Collapse,
   IconButton,
   MenuItem,
-  Paper,
   Snackbar,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Tooltip,
   Typography,
@@ -29,15 +21,14 @@ import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import { useTranslation } from 'react-i18next';
 import PageContainer from '../../components/layout/PageContainer';
 import PageHeader from '../../components/Page/PageHeader';
 import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
 import ErrorAlert from '../../components/Page/ErrorAlert';
-import EmptyState from '../../components/Page/EmptyState';
 import SystemDialog from '../../components/SystemDialog';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
+import StandardDataGrid from '../../components/StandardDataGrid';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useReferenceOptions } from '../../hooks/useReferenceOptions';
 import { useAuth } from '../../auth/AuthContext';
@@ -112,6 +103,8 @@ export default function LoansPage() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [expandedLoanId, setExpandedLoanId] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [searchValue, setSearchValue] = useState('');
+  const [gridFilters, setGridFilters] = useState({ status: '' });
 
   const loadData = useCallback(async () => {
     try {
@@ -276,65 +269,117 @@ export default function LoansPage() {
     }
   };
 
-  const toggleExpand = (loanId) => {
-    setExpandedLoanId((prev) => (prev === loanId ? null : loanId));
-  };
-
   const closeSnackbar = () => setSnackbar((prev) => ({ ...prev, open: false }));
 
-  const renderInstallments = (loan) => {
-    const rows = loanInstallments(loan.id);
-    if (installmentsLoading) {
-      return (
-        <Typography sx={{ color: 'text.secondary', fontSize: '0.8125rem', p: 2 }}>
-          {t('loading')}
-        </Typography>
-      );
-    }
-    if (installmentsError) {
-      return <ErrorAlert message={installmentsError} onRetry={loadInstallments} />;
-    }
-    if (rows.length === 0) {
-      return (
-        <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
-          {t('loanInstallmentsEmpty')}
-        </Typography>
-      );
-    }
-    return (
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colInstallmentNo')}</TableCell>
-            <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colDueDate')}</TableCell>
-            <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colAmount')}</TableCell>
-            <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colPrincipalPortion')}</TableCell>
-            <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colInterestPortion')}</TableCell>
-            <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colStatus')}</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {rows.map((inst) => (
-            <TableRow key={inst.id} hover>
-              <TableCell>{inst.installment_no ?? '—'}</TableCell>
-              <TableCell>{formatDate(inst.due_date)}</TableCell>
-              <TableCell>{formatAmount(inst.amount)}</TableCell>
-              <TableCell>{formatAmount(inst.principal_portion)}</TableCell>
-              <TableCell>{formatAmount(inst.interest_portion)}</TableCell>
-              <TableCell>
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  color={installmentStatusColor(inst.status)}
-                  label={installmentStatusLabel(inst.status)}
-                />
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    );
-  };
+  const filteredLoans = useMemo(() => {
+    const q = searchValue.trim().toLowerCase();
+    return loans.filter((loan) => {
+      if (gridFilters.status && loan.status !== gridFilters.status) return false;
+      if (!q) return true;
+      const hay = [
+        employeeName(loan.employee),
+        refLabel(loan.loan_type),
+        refCode(loan.loan_type),
+        formatAmount(loan.principal),
+        loan.interest_rate,
+        loan.term_months,
+        formatDate(loan.start_date),
+        loanStatusLabel(loan.status),
+        loan.notes,
+      ].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }, [loans, searchValue, gridFilters, employeeLabels, t]);
+
+  const filterDefs = useMemo(() => [
+    {
+      key: 'status',
+      label: t('filterStatus'),
+      emptyLabel: t('filterAll'),
+      options: LOAN_STATUSES.map((value) => ({ value, label: loanStatusLabel(value) })),
+    },
+  ], [t]);
+
+  const loanColumns = useMemo(() => [
+    {
+      field: 'employee',
+      headerName: t('colEmployee'),
+      flex: 1,
+      minWidth: 160,
+      valueGetter: (value) => employeeName(value),
+    },
+    {
+      field: 'loan_type',
+      headerName: t('colLoanType'),
+      width: 150,
+      valueGetter: (value) => refLabel(value) || refCode(value) || '—',
+    },
+    { field: 'principal', headerName: t('colPrincipal'), width: 130, valueGetter: (value) => formatAmount(value) },
+    {
+      field: 'interest_rate',
+      headerName: t('colInterestRate'),
+      width: 120,
+      valueGetter: (value) => (value != null ? `${value}%` : '—'),
+    },
+    { field: 'term_months', headerName: t('colTermMonths'), width: 120, valueGetter: (value) => value ?? '—' },
+    { field: 'start_date', headerName: t('colStartDate'), width: 130, valueGetter: (value) => formatDate(value) },
+    {
+      field: 'status',
+      headerName: t('colStatus'),
+      width: 130,
+      valueGetter: (value) => loanStatusLabel(value),
+      renderCell: (params) => (
+        <Chip size="small" variant="outlined" color={loanStatusColor(params.row.status)} label={params.value} />
+      ),
+    },
+    { field: 'notes', headerName: t('colNotes'), flex: 1, minWidth: 140, valueGetter: (value) => value || '—' },
+    {
+      field: 'actions',
+      headerName: t('colActions'),
+      width: 110,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => (
+        <>
+          <Tooltip title={t('actionEditLoan')}>
+            <IconButton
+              size="small"
+              onClick={(event) => { event.stopPropagation(); openEdit(params.row); }}
+              sx={{ color: 'primary.main' }}
+            >
+              <EditIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={t('actionDeleteLoan')}>
+            <IconButton
+              size="small"
+              onClick={(event) => { event.stopPropagation(); handleDelete(params.row); }}
+              sx={{ color: 'error.main' }}
+            >
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </>
+      ),
+    },
+  ], [t, employeeLabels]);
+
+  const installmentColumns = useMemo(() => [
+    { field: 'installment_no', headerName: t('colInstallmentNo'), width: 130, valueGetter: (value) => value ?? '—' },
+    { field: 'due_date', headerName: t('colDueDate'), width: 140, valueGetter: (value) => formatDate(value) },
+    { field: 'amount', headerName: t('colAmount'), width: 130, valueGetter: (value) => formatAmount(value) },
+    { field: 'principal_portion', headerName: t('colPrincipalPortion'), width: 150, valueGetter: (value) => formatAmount(value) },
+    { field: 'interest_portion', headerName: t('colInterestPortion'), width: 150, valueGetter: (value) => formatAmount(value) },
+    {
+      field: 'status',
+      headerName: t('colStatus'),
+      width: 130,
+      valueGetter: (value) => installmentStatusLabel(value),
+      renderCell: (params) => (
+        <Chip size="small" variant="outlined" color={installmentStatusColor(params.row.status)} label={params.value} />
+      ),
+    },
+  ], [t]);
 
   return (
     <PageContainer>
@@ -354,87 +399,50 @@ export default function LoansPage() {
         <LoadingSkeleton variant="console" />
       ) : error ? (
         <ErrorAlert message={error} onRetry={loadData} />
-      ) : loans.length === 0 ? (
-        <EmptyState
-          icon={<AccountBalanceWalletIcon />}
-          title={t('loansEmpty')}
-          description={t('loansEmptyDesc')}
-          actionLabel={t('actionAddLoan')}
-          onAction={openCreate}
-        />
       ) : (
-        <TableContainer component={Paper} variant="outlined">
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colInstallments')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colEmployee')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colLoanType')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colPrincipal')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colInterestRate')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colTermMonths')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colStartDate')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colStatus')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colNotes')}</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colActions')}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {loans.map((loan) => (
-                <React.Fragment key={loan.id}>
-                  <TableRow hover>
-                    <TableCell>
-                      <Tooltip title={t('actionViewInstallments')}>
-                        <IconButton size="small" onClick={() => toggleExpand(loan.id)} sx={{ color: 'primary.main' }}>
-                          {expandedLoanId === loan.id ? <KeyboardArrowUpIcon fontSize="small" /> : <KeyboardArrowDownIcon fontSize="small" />}
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
-                    <TableCell>{employeeName(loan.employee)}</TableCell>
-                    <TableCell>{refLabel(loan.loan_type) || refCode(loan.loan_type) || '—'}</TableCell>
-                    <TableCell>{formatAmount(loan.principal)}</TableCell>
-                    <TableCell>{loan.interest_rate != null ? `${loan.interest_rate}%` : '—'}</TableCell>
-                    <TableCell>{loan.term_months ?? '—'}</TableCell>
-                    <TableCell>{formatDate(loan.start_date)}</TableCell>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        variant="outlined"
-                        color={loanStatusColor(loan.status)}
-                        label={loanStatusLabel(loan.status)}
-                      />
-                    </TableCell>
-                    <TableCell>{loan.notes || '—'}</TableCell>
-                    <TableCell align="right">
-                      <Tooltip title={t('actionEditLoan')}>
-                        <IconButton size="small" onClick={() => openEdit(loan)} sx={{ color: 'primary.main' }}>
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title={t('actionDeleteLoan')}>
-                        <IconButton size="small" onClick={() => handleDelete(loan)} sx={{ color: 'error.main' }}>
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell sx={{ p: 0 }} colSpan={10}>
-                      <Collapse in={expandedLoanId === loan.id} timeout="auto" unmountOnExit>
-                        <Box sx={{ p: 2, bgcolor: 'action.hover' }}>
-                          <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary' }}>
-                            {t('colInstallments')}
-                          </Typography>
-                          {renderInstallments(loan)}
-                        </Box>
-                      </Collapse>
-                    </TableCell>
-                  </TableRow>
-                </React.Fragment>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <Stack spacing={2}>
+          <FilteredDataGrid
+            embedded
+            rows={filteredLoans}
+            columns={loanColumns}
+            searchValue={searchValue}
+            onSearchChange={setSearchValue}
+            filterDefs={filterDefs}
+            filterValues={gridFilters}
+            onFilterChange={(key, value) => setGridFilters((prev) => ({ ...prev, [key]: value }))}
+            onClearFilters={() => {
+              setSearchValue('');
+              setGridFilters({ status: '' });
+            }}
+            emptyMessage={t('loansEmpty')}
+            emptySubtext={t('loansEmptyDesc')}
+            pageSize={25}
+            height={520}
+            onRowClick={(params) => setExpandedLoanId((prev) => (prev === params.row.id ? null : params.row.id))}
+            highlightRow={(row) => row.id === expandedLoanId}
+          />
+          {expandedLoanId != null && (
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>{t('colInstallments')}</Typography>
+              {installmentsLoading ? (
+                <LoadingSkeleton variant="table" />
+              ) : installmentsError ? (
+                <ErrorAlert message={installmentsError} onRetry={loadInstallments} />
+              ) : loanInstallments(expandedLoanId).length === 0 ? (
+                <Typography variant="body2" color="text.secondary">{t('loanInstallmentsEmpty')}</Typography>
+              ) : (
+                <StandardDataGrid
+                  rows={loanInstallments(expandedLoanId)}
+                  columns={installmentColumns}
+                  pageSize={10}
+                  rowsPerPageOptions={[10, 25]}
+                  height={280}
+                  getRowId={(row) => row.id}
+                />
+              )}
+            </Box>
+          )}
+        </Stack>
       )}
 
       <SystemDialog

@@ -9,21 +9,123 @@ from .constants import (
 )
 
 
+def visible_org_ids(user, duty):
+    """Org subtree for one domain duty. ``duty`` is ``people:lead`` or a group name."""
+    from accounts.birthright import resolve_group_name
+    return get_allowed_org_unit_ids(user, {resolve_group_name(duty)})
+
+
+class CapabilityOrgScope:
+    """Where a user may read data for one capability.
+
+    ``unrestricted`` is a global grant when this deployment has no single
+    root yet (the caller does not filter). Otherwise ``ids`` is the anchor
+    orgs plus their children, clipped to the deployment tree when one exists.
+    """
+
+    __slots__ = ("unrestricted", "ids")
+
+    def __init__(self, unrestricted, ids):
+        self.unrestricted = unrestricted
+        self.ids = frozenset(ids)
+
+
+def groups_granting(capability):
+    """Django group names whose expanded capabilities include ``capability``."""
+    from accounts.birthright import resolve_group_name
+    from accounts.capabilities import GROUP_CAPABILITIES, _expand_capabilities
+
+    names = []
+    for name, caps in GROUP_CAPABILITIES.items():
+        if "*" in caps or capability in _expand_capabilities(set(caps)):
+            names.append(resolve_group_name(name))
+    return names
+
+
+def _deployment_org_ids():
+    """Deployment org ids, or None when there is no single root to clip to."""
+    from mdm.services import get_deployment_org_unit_ids
+
+    try:
+        return get_deployment_org_unit_ids(include_self=True)
+    except RuntimeError:
+        return None
+
+
+def org_scope_for_capability(user, capability):
+    """Live ledger rows that grant ``capability``, expanded to child org units."""
+    if not user or not getattr(user, "is_authenticated", False):
+        return CapabilityOrgScope(False, ())
+    granting = groups_granting(capability)
+    deployment = _deployment_org_ids()
+    global_grant = user_is_global_admin(user) or ScopedRole.objects.filter(
+        user=user, org_unit=None, module=None, group__name__in=granting,
+    ).live().exists()
+    if global_grant:
+        if not deployment:
+            return CapabilityOrgScope(True, ())
+        return CapabilityOrgScope(False, deployment)
+    ids = set()
+    live_names = (
+        ScopedRole.objects.filter(user=user, group__name__in=granting)
+        .live()
+        .values_list("group__name", flat=True)
+        .distinct()
+    )
+    for name in live_names:
+        ids |= visible_org_ids(user, name)
+    if deployment:
+        ids &= deployment
+    return CapabilityOrgScope(False, ids)
+
+
+def org_units_for_capability(user, capability):
+    """Active org units the user may read for ``capability``."""
+    from mdm.models import OrgUnit
+
+    scope = org_scope_for_capability(user, capability)
+    qs = OrgUnit.objects.filter(is_active=True)
+    if not scope.unrestricted:
+        if not scope.ids:
+            return []
+        qs = qs.filter(id__in=scope.ids)
+    return list(qs.order_by("name"))
+
+
+def module_ids_for_capability(user, capability):
+    """Module ids for ``capability``. None means do not filter."""
+    scope = org_scope_for_capability(user, capability)
+    if scope.unrestricted:
+        return None
+    granting = groups_granting(capability)
+    module_ids = set(
+        ScopedRole.objects.filter(user=user, group__name__in=granting)
+        .live()
+        .exclude(module=None)
+        .values_list("module_id", flat=True)
+    )
+    if scope.ids:
+        module_ids |= set(
+            Module.objects.filter(org_unit_id__in=scope.ids).values_list("id", flat=True)
+        )
+    return module_ids
+
+
 def user_has_global_role(user, roles):
     """True if the user has any of these roles globally (no org_unit, no module)."""
     if not user or not roles:
         return False
     return ScopedRole.objects.filter(
-        user=user, is_active=True, org_unit=None, module=None, group__name__in=roles
-    ).exists()
+        user=user, org_unit=None, module=None, group__name__in=roles,
+    ).live().exists()
 
 
 def user_has_module_role(user, module_id, roles):
     if not user or not module_id or not roles:
         return False
     return ScopedRole.objects.filter(
-        user=user, is_active=True, module_id=module_id, group__name__in=roles
-    ).exists()
+        user=user, module_id=module_id, group__name__in=roles
+    ).live().exists()
 
 
 def get_allowed_org_unit_ids(user, roles):
@@ -33,8 +135,8 @@ def get_allowed_org_unit_ids(user, roles):
     from mdm.models import OrgUnit
     direct = set(
         ScopedRole.objects.filter(
-            user=user, is_active=True, group__name__in=roles
-        ).exclude(org_unit=None).values_list('org_unit_id', flat=True)
+            user=user, group__name__in=roles,
+        ).live().exclude(org_unit=None).values_list('org_unit_id', flat=True)
     )
     allowed = set()
     for ou in OrgUnit.objects.filter(id__in=direct):
@@ -56,8 +158,8 @@ def get_allowed_module_ids(user, roles):
         return set()
     module_ids = set(
         ScopedRole.objects.filter(
-            user=user, is_active=True, group__name__in=roles
-        ).exclude(module=None).values_list('module_id', flat=True)
+            user=user, group__name__in=roles
+        ).live().exclude(module=None).values_list('module_id', flat=True)
     )
     org_ids = get_allowed_org_unit_ids(user, roles)
     if org_ids:
@@ -93,9 +195,9 @@ def get_visible_org_units(user):
     # Users with a global visibility role (org_unit=None, module=None) can see
     # all org units within the deployment root subtree.
     if ScopedRole.objects.filter(
-        user=user, is_active=True, org_unit=None, module=None,
+        user=user, org_unit=None, module=None,
         group__name__in=VISIBILITY_ROLES,
-    ).exists():
+    ).live().exists():
         return list(_scope(OrgUnit.objects.filter(is_active=True)).order_by('name'))
 
     allowed_ids = get_allowed_org_unit_ids(user, VISIBILITY_ROLES)
@@ -136,8 +238,8 @@ def user_is_domain_lead(user, app_name=None):
         return False
     from .constants import DOMAIN_LEAD_GROUPS
     qs = ScopedRole.objects.filter(
-        user=user, is_active=True,
-    )
+        user=user,
+    ).live()
     if app_name:
         lead_group = f"{app_name}_lead"
         # Only check if this is a known domain lead group
@@ -158,9 +260,9 @@ def get_visible_module_ids(user):
         return None
     # Users with a global visibility role (org_unit=None, module=None) can see all modules
     if ScopedRole.objects.filter(
-        user=user, is_active=True, org_unit=None, module=None,
+        user=user, org_unit=None, module=None,
         group__name__in=VISIBILITY_ROLES,
-    ).exists():
+    ).live().exists():
         return None
     return get_allowed_module_ids(user, VISIBILITY_ROLES)
 

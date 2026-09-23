@@ -54,7 +54,6 @@ function AIStatusBar({ variant = 'ready', label = 'Ready', onRetry }) {
             py: 0.25,
             fontSize: '0.65rem',
             textTransform: 'none',
-            lineHeight: 1,
           }}
         >
           {t('retry')}

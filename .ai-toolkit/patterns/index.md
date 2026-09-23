@@ -62,6 +62,12 @@ Each pattern: **trap → correct practice → detectable?**. Stable ids `UP-NNNN
 - **Seen in:** carbon (QA Nibras payroll cycle; Catalog Studio DTR).
 - **Detectable:** grep `<Select |<TextField select|Autocomplete` across `src/pages/catalog/**` and `FilteredDataGrid.jsx`; flag any not wrapped by `SearchSelect`.
 
+### UP-0010 — A record list without search and relevant filters is unfinished
+- **Trap:** A page renders a raw MUI `<Table>` or a bare DataGrid that can sort and page, and stops there. The user cannot find a row by name or narrow by the dimension that splits the list (type, parent, status, org unit). Organisation Units shipped this way: name, type, parent, code, path, and no query chrome.
+- **Correct:** Record lists are `FilteredDataGrid` (design-system RULE 14). Search the fields a person would type. Add only the filters that split that list; pickers are `SearchSelect` (UP-0009). Keep column sort and paging. Row click highlights; open/edit/delete stay explicit actions. Server-page when the list can grow past one response.
+- **Seen in:** carbon (admin Organisation Units, then People lists).
+- **Detectable:** grep `<Table` / `<TableBody` in `src/pages` and `src/apps` list screens; a list with no `FilteredDataGrid` and no search field fails the rule.
+
 ---
 
 *Source: ~/ai-toolkit/patterns/index.md — symlinked into every project*

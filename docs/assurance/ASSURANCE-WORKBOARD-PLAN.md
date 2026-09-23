@@ -2,7 +2,7 @@
 
 **Status:** Catalogue + probe layer implemented 23 Sep 2026.  
 Nibras probes were executed (honesty, independent formulas, signed conservation, static host bindings).  
-The HTTP stream, frontend route, and Django host tests are not built.  
+Staff route `/admin/assurance`, `GET /assurance/report/`, and `GET /assurance/stream/` are built. The stream reads a ledger file. It does not run pytest.  
 Static binding is not a same-actor HTTP test and not a PIFSS legal check.  
 **Companion canvas:** the Assurance workboard canvas beside chat (design board, not the product stream).
 
@@ -211,7 +211,7 @@ Every gate row in the catalogue has: purpose, packs, tool, pass/fail, environmen
 |---|---|---|
 | Local | Scoped pytest + `verify.sh` emit events | Configured. `verify.sh` default tests are `ai dq accounts`, not `people` |
 | Pull request | Existing `.github/workflows/ci.yml` backend job | Configured. `pytest -x` stops at first failure and the log is `tail -40`. Python 3.11 / Postgres 17 vs local 3.12 / Postgres 16 in the docs |
-| Merge | Required checks on `main` | **Unverified.** No ruleset was read |
+| Merge | Required checks on `main` | **Read 23 Sep 2026.** `ahmedse/carbon` branch protection returned 404. Rulesets were empty. A merge is not blocked by GitHub. |
 | Release candidate | Tag `v*` already runs CI then SSH deploy | Deploy has a health curl. No provenance (SLSA v1.2 not applied) |
 | Deploy verify | Health URL only | Configured in the workflow. Not a domain invariant |
 | Runtime | Later | No consequence SLO catalogue |

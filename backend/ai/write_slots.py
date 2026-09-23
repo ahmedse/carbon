@@ -34,14 +34,17 @@ _ISO_IN_TEXT = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 _TOMORROW = re.compile(r"غدًا|غداً|غدا|بكرة|tomorrow", re.I)
 _TODAY = re.compile(r"اليوم|today", re.I)
 _ONE_DAY = re.compile(r"يوم\s*واحد|one\s*day|single\s*day", re.I)
+# Unit is required. An optional day unit made "لمدة 3 شهور" look like 3 days.
+_DAY_UNIT = r"يوم|أيام|ايام|day|days"
+_MONTH_UNIT = r"شهر|أشهر|اشهر|شهور|شهرين|month|months"
 _N_DAYS = re.compile(
-    r"(?:ليوم|لمدة|مدة|for)\s*(\d+)\s*(?:يوم|أيام|ايام|day|days)?"
-    r"|\b(\d+)\s*(?:يوم|أيام|ايام|day|days)\b",
+    rf"(?:ليوم|لمدة|مدة|for)\s*(\d+)\s*(?:{_DAY_UNIT})"
+    rf"|\b(\d+)\s*(?:{_DAY_UNIT})\b",
     re.I,
 )
 _N_MONTHS = re.compile(
-    r"(?:لمدة|مدة|for|over)\s*(\d+)\s*(?:شهر|أشهر|اشهر|month|months)?"
-    r"|\b(\d+)\s*(?:شهر|أشهر|اشهر|month|months)\b",
+    rf"(?:لمدة|مدة|for|over)\s*(\d+)\s*(?:{_MONTH_UNIT})"
+    rf"|\b(\d+)\s*(?:{_MONTH_UNIT})\b",
     re.I,
 )
 # Principal / amount — prefer figures next to currency or loan wording.
@@ -289,7 +292,12 @@ def _governed_code(field: str, raw: Any) -> str | None:
 def _governed_from_text(field: str, text: Any) -> str | None:
     from mdm.reference_resolve import find_reference_in_text
 
-    value = find_reference_in_text(field, text)
+    if field == "leave_type":
+        from people.leave_type_resolve import find_leave_type_in_text
+
+        value = find_leave_type_in_text(text)
+    else:
+        value = find_reference_in_text(field, text)
     return value.code if value is not None else None
 
 
@@ -496,6 +504,19 @@ def fill_write_body(
                 out[field] = parsed.isoformat()
             continue
         if kind == "days":
+            # "لمدة 3 شهور" is a span, not 3 days. Calendar months from the
+            # stated start; _stretch_end_to_days then keeps the end in step.
+            months = parse_months(seed)
+            if months and parse_days(seed) is None:
+                start_raw = out.get("start_date")
+                if isinstance(start_raw, str) and _ISO.match(start_raw):
+                    start = date.fromisoformat(start_raw)
+                    end = _add_months(start, months) - timedelta(days=1)
+                    if end < start:
+                        end = start
+                    out["end_date"] = end.isoformat()
+                    out[field] = (end - start).days + 1
+                continue
             days = parse_days(seed)
             if days is None:
                 days = _days_from_span(out)
@@ -528,6 +549,17 @@ def fill_write_body(
     if not end_given:
         _stretch_end_to_days(out)
     return out
+
+
+def _add_months(start: date, months: int) -> date:
+    """Same day ``months`` ahead, clamped to the target month's last day."""
+    import calendar
+
+    index = start.month - 1 + months
+    year = start.year + index // 12
+    month = index % 12 + 1
+    day = min(start.day, calendar.monthrange(year, month)[1])
+    return date(year, month, day)
 
 
 def _stretch_end_to_days(body: dict[str, Any]) -> None:

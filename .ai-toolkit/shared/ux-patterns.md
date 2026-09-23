@@ -33,6 +33,9 @@ Primary action is ONE button, top-right, semantic color. Secondary actions are s
 - Destructive/irreversible submit → confirmation with the consequence spelled out.
 
 ## Data Tables & Lists (enterprise density)
+- **Record lists use `FilteredDataGrid`** (design-system RULE 14): search, relevant
+  filters (not one per column), column sort, and paging. A raw table or a bare
+  grid with only sort and page controls is not a finished list.
 - Compact by default; column choices reflect the user's scan priority (id, status, key metric, time).
 - Sort on the columns that matter; persist sort/filter in the URL for shareability.
 - Row actions on hover or in an overflow menu — not a wall of buttons per row.

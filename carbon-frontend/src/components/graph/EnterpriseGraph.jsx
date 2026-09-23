@@ -38,13 +38,16 @@ import {
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import AutoFixHighOutlinedIcon from '@mui/icons-material/AutoFixHighOutlined';
 import CenterFocusStrongOutlinedIcon from '@mui/icons-material/CenterFocusStrongOutlined';
-import CloseIcon from '@mui/icons-material/Close';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
+import { useTranslation } from 'react-i18next';
 import { nodeShapePath, nodeShapeInnerPath } from './planGraphShapes';
+import { GraphNodeForeign } from './GraphNodeLabel';
+import { dominantDir, dragPoint, finiteGeometry } from './graphText';
 import {
   computeEdgePath,
   computeBackEdgePath,
@@ -61,7 +64,10 @@ const FIT_ZOOM_FLOOR = 0.55;
  * plans into a single giant clipped card ("graph corrupted"). Letterbox via
  * viewBox padding instead so small DAGs stay native size in the rail.
  */
-const FIT_ZOOM_CEIL = 1;
+/** Inner zoom only. The viewBox is already padded to the viewport, so this
+ *  does not stack on top of SVG `meet` upscale. 1.75 lets Fit fill empty
+ *  canvas without turning a two-node plan into one clipped card. */
+const FIT_ZOOM_CEIL = 1.75;
 const NODE_MIN_W = 120;
 const NODE_MAX_W = 640;
 const NODE_MIN_H = 48;
@@ -96,6 +102,29 @@ function exportSvgToPng(svgEl, viewW, viewH, background, fileName) {
     bg.setAttribute('height', '100%');
     bg.setAttribute('fill', background);
     clone.insertBefore(bg, clone.firstChild);
+
+    // HTML labels do not always survive SVG→canvas. Swap each foreignObject
+    // for isolated SVG text so the PNG still carries the words.
+    clone.querySelectorAll('foreignObject').forEach((fo) => {
+      const title = fo.getAttribute('data-title') || '';
+      const meta = fo.getAttribute('data-meta') || '';
+      const status = fo.getAttribute('data-status') || '';
+      const dir = fo.getAttribute('data-dir') || 'ltr';
+      const x = Number(fo.getAttribute('x') || 0);
+      const y = Number(fo.getAttribute('y') || 0);
+      const w = Number(fo.getAttribute('width') || 0);
+      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      const anchorX = dir === 'rtl' ? x + Math.max(w - 12, 0) : x + 14;
+      text.setAttribute('x', String(anchorX));
+      text.setAttribute('y', String(y + 22));
+      text.setAttribute('text-anchor', dir === 'rtl' ? 'end' : 'start');
+      text.setAttribute('direction', dir);
+      text.setAttribute('unicode-bidi', 'isolate');
+      text.setAttribute('font-size', '12');
+      text.textContent = [title, meta, status].filter(Boolean).join(' · ');
+      fo.parentNode?.insertBefore(text, fo);
+      fo.remove();
+    });
 
     const xml = new XMLSerializer().serializeToString(clone);
     const blob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
@@ -231,6 +260,7 @@ export default function EnterpriseGraph({
   showMinimap = null,
 }) {
   const theme = useTheme();
+  const { t } = useTranslation('common');
   const svgRef = useRef(null);
   const canvasRef = useRef(null);
   const drag = useRef(null);
@@ -268,10 +298,7 @@ export default function EnterpriseGraph({
   // collapsed to 0×0 and a resized node rendered `translate(NaN, NaN)`.
   const effectiveNodes = useMemo(
     () =>
-      nodes.map((n) => {
-        const o = overrides[n.id];
-        return o ? { ...n, ...o } : n;
-      }),
+      nodes.map((n) => finiteGeometry(n, overrides[n.id])),
     [nodes, overrides],
   );
 
@@ -357,7 +384,14 @@ export default function EnterpriseGraph({
     // drag that follows a resize starts from the resized position, not a
     // stale layout position (W5-E drag/resize NaN fix).
     const en = nodeById.get(node.id) || node;
-    drag.current = { mode: 'node', id: node.id, startX: e.clientX, startY: e.clientY, origX: en.x, origY: en.y };
+    drag.current = {
+      mode: 'node',
+      id: node.id,
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: Number.isFinite(en.x) ? en.x : 0,
+      origY: Number.isFinite(en.y) ? en.y : 0,
+    };
     setDragging(true);
   };
 
@@ -368,7 +402,16 @@ export default function EnterpriseGraph({
     // Snapshot w/h from the EFFECTIVE node so a resize that follows a drag
     // keeps the dragged x/y and never computes NaN from a missing origin.
     const en = nodeById.get(node.id) || node;
-    drag.current = { mode: 'resize', id: node.id, startX: e.clientX, startY: e.clientY, origW: en.w ?? node.w, origH: en.h ?? node.h };
+    const origW = Number.isFinite(en.w) ? en.w : node.w;
+    const origH = Number.isFinite(en.h) ? en.h : node.h;
+    drag.current = {
+      mode: 'resize',
+      id: node.id,
+      startX: e.clientX,
+      startY: e.clientY,
+      origW: Number.isFinite(origW) ? origW : NODE_MIN_W,
+      origH: Number.isFinite(origH) ? origH : NODE_MIN_H,
+    };
     setDragging(true);
   };
 
@@ -385,25 +428,26 @@ export default function EnterpriseGraph({
       // node's own onClick never fires and selection silently breaks.
       if (!moved.current) return;
 
-      if (drag.current.mode === 'pan') {
-        setPan({ x: drag.current.panX + dx, y: drag.current.panY + dy });
-      } else if (drag.current.mode === 'node') {
+      const gesture = drag.current;
+      if (!gesture) return;
+      if (gesture.mode === 'pan') {
+        const x = dragPoint(gesture.panX, dx, 1);
+        const y = dragPoint(gesture.panY, dy, 1);
+        setPan({ x, y });
+      } else if (gesture.mode === 'node') {
+        const x = dragPoint(gesture.origX, dx, zoom);
+        const y = dragPoint(gesture.origY, dy, zoom);
         setOverrides((prev) => ({
           ...prev,
-          [drag.current.id]: { ...prev[drag.current.id], x: drag.current.origX + dx / zoom, y: drag.current.origY + dy / zoom },
+          [gesture.id]: { ...prev[gesture.id], x, y },
         }));
-      } else if (drag.current.mode === 'resize') {
-        setOverrides((prev) => {
-          const prevO = prev[drag.current.id];
-          return {
-            ...prev,
-            [drag.current.id]: {
-              ...prevO,
-              w: clamp(drag.current.origW + dx / zoom, NODE_MIN_W, NODE_MAX_W),
-              h: clamp(drag.current.origH + dy / zoom, NODE_MIN_H, NODE_MAX_H),
-            },
-          };
-        });
+      } else if (gesture.mode === 'resize') {
+        const w = clamp(dragPoint(gesture.origW, dx, zoom), NODE_MIN_W, NODE_MAX_W);
+        const h = clamp(dragPoint(gesture.origH, dy, zoom), NODE_MIN_H, NODE_MAX_H);
+        setOverrides((prev) => ({
+          ...prev,
+          [gesture.id]: { ...prev[gesture.id], w, h },
+        }));
       }
     },
     [zoom],
@@ -427,6 +471,12 @@ export default function EnterpriseGraph({
       window.removeEventListener('mouseup', endDrag);
     };
   }, [dragging, onMouseMove, endDrag]);
+
+  const onWheel = useCallback((e) => {
+    e.preventDefault();
+    const factor = e.deltaY > 0 ? 1 / ZOOM_STEP : ZOOM_STEP;
+    setZoomClamped((z) => z * factor);
+  }, [setZoomClamped]);
 
   const onNodeClick = (node) => {
     if (moved.current) return; // a drag, not a click
@@ -508,9 +558,12 @@ export default function EnterpriseGraph({
         cursor: dragging ? 'grabbing' : 'grab',
         userSelect: 'none',
         touchAction: 'none',
+        // Geometry is always LTR. Page RTL must not flip clientX or clip SVG text.
+        direction: 'ltr',
       }}
       data-testid={canvasFill ? `${testId}-modal` : testId}
       onMouseDown={startPan}
+      onWheel={onWheel}
     >
       <svg
         ref={svgRef}
@@ -519,7 +572,8 @@ export default function EnterpriseGraph({
         height={contentSized && !canvasFill ? layoutHeight : '100%'}
         preserveAspectRatio="xMinYMin meet"
         role="img"
-        aria-label="Graph — drag to pan, wheel to zoom, drag nodes to move or resize them"
+        aria-label={t('graphCanvasHelp', { defaultValue: 'Graph — drag to pan, wheel to zoom, drag nodes to move or resize them' })}
+        style={{ direction: 'ltr' }}
       >
         <defs>
           <marker
@@ -581,7 +635,15 @@ export default function EnterpriseGraph({
                   strokeOpacity={0.35}
                   strokeWidth={1.25}
                 />
-                <text x={b.x - 12 + 8} y={bandY + 16} fontSize={11} fill={bandColor} fontWeight={650} letterSpacing={0.4}>
+                <text
+                  x={b.x - 12 + 8}
+                  y={bandY + 16}
+                  fontSize={11}
+                  fill={bandColor}
+                  fontWeight={650}
+                  direction={dominantDir(b.name)}
+                  unicodeBidi="isolate"
+                >
                   {b.name}
                   {b.strategy === 'parallel' ? ' · parallel' : ''}
                 </text>
@@ -667,6 +729,20 @@ export default function EnterpriseGraph({
                   pointerEvents="none"
                   data-branch={branch}
                 />
+                {e.label ? (
+                  <text
+                    x={(e.sourceX + e.targetX) / 2}
+                    y={(e.sourceY + e.targetY) / 2 - 6}
+                    textAnchor="middle"
+                    fontSize={10}
+                    fill={theme.palette.text.secondary}
+                    direction={dominantDir(e.label)}
+                    unicodeBidi="isolate"
+                    pointerEvents="none"
+                  >
+                    {e.label}
+                  </text>
+                ) : null}
               </g>
             );
           })}
@@ -707,15 +783,6 @@ export default function EnterpriseGraph({
                 opacity={dim ? 0.22 : 1}
               >
                 {tip ? <title>{tip}</title> : null}
-                {/* Soft drop shadow for card boxes */}
-                {isCard && (
-                  <path
-                    d={framePath}
-                    fill={theme.palette.common.black}
-                    opacity={0.06}
-                    transform="translate(0, 1.5)"
-                  />
-                )}
                 {isRunning && (
                   <path
                     d={framePath}
@@ -762,11 +829,18 @@ export default function EnterpriseGraph({
                 )}
                 {renderNode ? renderNode(n) : (
                   <>
-                    <rect x={3} y={5} width={3} height={n.h - 10} rx={1.5} fill={fill} />
-                    <circle cx={13} cy={n.h / 2} r={4} fill={fill} />
-                    <text x={22} y={n.h / 2 + 4} fontSize={11} fontWeight={600} fill={theme.palette.text.primary}>
-                      {String(n.label || `Node ${n.id}`).slice(0, 26)}
-                    </text>
+                    <rect x={0} y={0} width={4} height={n.h} fill={fill} />
+                    <GraphNodeForeign
+                      width={n.w}
+                      height={n.h}
+                      title={n.label || `Node ${n.id}`}
+                      meta={n.subtitle || n.metaText || ''}
+                      status={n.statusLabel || ''}
+                      statusColor={fill}
+                      fontFamily={theme.typography?.fontFamily}
+                      color={theme.palette.text.primary}
+                      tip={tip}
+                    />
                   </>
                 )}
                 {/* Resize handle (bottom-right) */}
@@ -806,7 +880,6 @@ export default function EnterpriseGraph({
             opacity: 0.92,
             overflow: 'hidden',
             pointerEvents: 'none',
-            boxShadow: 1,
           }}
         >
           <svg
@@ -875,7 +948,7 @@ export default function EnterpriseGraph({
               animation: 'egPulse 1.2s ease-in-out infinite',
             }}
           />
-          Live
+          {t('graphLive', { defaultValue: 'Live' })}
         </Box>
       )}
       {summary && (
@@ -883,26 +956,26 @@ export default function EnterpriseGraph({
           {summary}
         </Typography>
       )}
-      <Tool label="Zoom out" testId={`${testId}-zoom-out`} onClick={() => setZoomClamped((z) => z / ZOOM_STEP)}>
+      <Tool label={t('graphZoomOut', { defaultValue: 'Zoom out' })} testId={`${testId}-zoom-out`} onClick={() => setZoomClamped((z) => z / ZOOM_STEP)}>
         <ZoomOutIcon sx={{ fontSize: '0.9375rem' }} />
       </Tool>
-      <Tool label="Zoom in" testId={`${testId}-zoom-in`} onClick={() => setZoomClamped((z) => z * ZOOM_STEP)}>
+      <Tool label={t('graphZoomIn', { defaultValue: 'Zoom in' })} testId={`${testId}-zoom-in`} onClick={() => setZoomClamped((z) => z * ZOOM_STEP)}>
         <ZoomInIcon sx={{ fontSize: '0.9375rem' }} />
       </Tool>
-      <Tool label="Zoom to fit" testId={`${testId}-fit`} onClick={fitView}>
+      <Tool label={t('graphZoomFit', { defaultValue: 'Zoom to fit' })} testId={`${testId}-fit`} onClick={fitView}>
         <CenterFocusStrongOutlinedIcon sx={{ fontSize: '0.9375rem' }} />
       </Tool>
-      <Tool label="Reset view" testId={`${testId}-reset`} onClick={resetView}>
+      <Tool label={t('graphReset', { defaultValue: 'Reset view' })} testId={`${testId}-reset`} onClick={resetView}>
         <RestartAltIcon sx={{ fontSize: '0.9375rem' }} />
       </Tool>
-      <Tool label="Redraw layout" testId={`${testId}-redraw`} onClick={redraw}>
+      <Tool label={t('graphRedraw', { defaultValue: 'Redraw layout' })} testId={`${testId}-redraw`} onClick={redraw}>
         <AutoFixHighOutlinedIcon sx={{ fontSize: '0.9375rem' }} />
       </Tool>
-      <Tool label="Export as PNG" testId={`${testId}-export`} onClick={exportPng}>
+      <Tool label={t('graphExport', { defaultValue: 'Export as PNG' })} testId={`${testId}-export`} onClick={exportPng}>
         <FileDownloadOutlinedIcon sx={{ fontSize: '0.9375rem' }} />
       </Tool>
       {closeButton || (
-        <Tool label="Maximize" testId={expandTestId} onClick={() => setExpanded(true)}>
+        <Tool label={t('graphMaximize', { defaultValue: 'Maximize' })} testId={expandTestId} onClick={() => setExpanded(true)}>
           <FullscreenIcon sx={{ fontSize: '0.9375rem' }} />
         </Tool>
       )}
@@ -934,8 +1007,8 @@ export default function EnterpriseGraph({
       <Dialog fullScreen open={expanded} onClose={() => setExpanded(false)} data-testid={modalTestId}>
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
           {renderHeader(
-            <Tool label="Close full view" testId={modalCloseTestId} onClick={() => setExpanded(false)}>
-              <CloseIcon sx={{ fontSize: '1.125rem' }} />
+            <Tool label={t('graphMinimize', { defaultValue: 'Minimize' })} testId={modalCloseTestId} onClick={() => setExpanded(false)}>
+              <FullscreenExitIcon sx={{ fontSize: '1.125rem' }} />
             </Tool>,
             modalTitle,
           )}

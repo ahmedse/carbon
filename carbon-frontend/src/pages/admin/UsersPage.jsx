@@ -64,6 +64,7 @@ export default function UsersPage() {
             full_name: u.employee_full_name || null,
             employee_no: u.employee_no || null,
             org_unit: u.employee_org_unit || null,
+            position: u.employee_position || null,
           }
         : null
     );
@@ -143,6 +144,7 @@ export default function UsersPage() {
           u.employee_full_name,
           u.employee_no,
           u.employee_org_unit,
+          u.employee_position,
         ]
           .filter(Boolean)
           .join(' ')
@@ -181,10 +183,17 @@ export default function UsersPage() {
       },
       {
         field: 'employee_org_unit',
-        headerName: 'Org unit',
+        headerName: 'Home org',
         flex: 1.2,
         minWidth: 180,
         valueGetter: (value, row) => row.employee_org_unit || '—',
+      },
+      {
+        field: 'employee_position',
+        headerName: 'Position',
+        flex: 1,
+        minWidth: 180,
+        valueGetter: (value, row) => row.employee_position || '—',
       },
       {
         field: 'email',
@@ -247,7 +256,7 @@ export default function UsersPage() {
 
       <FilteredDataGrid
         title="Users"
-        description="Create and manage user accounts. Linked employee name and org unit are read-only (edit people in Employees). Assign roles on Access Control."
+        description="Accounts, linked employee, home org, and position. Position profiles and Assignments grant duties."
         actions={
           <Button variant="contained" size="small" startIcon={<AddRounded />} onClick={openCreate}>
             New User
@@ -302,6 +311,7 @@ export default function UsersPage() {
                 Linked employee: {linkedEmployee.full_name || '—'}
                 {linkedEmployee.employee_no ? ` (${linkedEmployee.employee_no})` : ''}
                 {linkedEmployee.org_unit ? ` · ${linkedEmployee.org_unit}` : ''}
+                {linkedEmployee.position ? ` · ${linkedEmployee.position}` : ''}
                 . Edit people records in Employees — not here.
               </Alert>
             )}

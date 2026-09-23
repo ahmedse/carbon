@@ -8,8 +8,10 @@ short-circuits that must not spend intent+draft.
 from __future__ import annotations
 
 import calendar
+import json
 import re
 from datetime import date
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from ai.engine.cognition.turn.navigation import detect_lang, normalize_text
@@ -70,6 +72,60 @@ _NOTIFICATION_TEXT = {
     "en": "Notifications are in the bell in the header — there is no separate notifications page.",
     "ar": "الإشعارات في الجرس أعلى الصفحة — لا توجد صفحة منفصلة للإشعارات.",
 }
+_PAYROLL_SCHEDULE_RE = re.compile(
+    r"when will (?:next month'?s )?payroll be processed"
+    r"|when (?:is|does) (?:the )?payroll (?:run|get processed)"
+    r"|متى (?:ستتم|يتم) معالجة الرواتب"
+    r"|متى سيكون الراتب",
+    re.IGNORECASE,
+)
+_PAYSLIP_DOWNLOAD_RE = re.compile(
+    r"\b(?:can i download|download) (?:my )?payslips?\b"
+    r"|تحميل (?:قسيمة|القسيمة)",
+    re.IGNORECASE,
+)
+_PAYROLL_SCHEDULE_TEXT = {
+    "en": (
+        "I don't have next month's payroll run date. "
+        "That date is on the committed run in People — I won't guess it."
+    ),
+    "ar": (
+        "ليس لدي تاريخ معالجة رواتب الشهر القادم. "
+        "التاريخ على مسير الرواتب المعتمد في تطبيقاتي، ولن أخمنه."
+    ),
+}
+_PAYSLIP_DOWNLOAD_TEXT = {
+    "en": (
+        "Payslips are in My. If none are committed yet, there is nothing to download."
+    ),
+    "ar": (
+        "القسائم في تطبيقاتي. إذا لم تُعتمد قسيمة بعد، فلا يوجد ما يُحمَّل."
+    ),
+}
+_PAYROLL_FOLLOWUP_RE = re.compile(
+    r"("
+    r"deductions?|take[\s_-]*home|net\s*pay|gosi|loan amount"
+    r"|total deductions|after gosi"
+    r"|راتبي|الراتب|صافي|الاستقطاعات|خصومات|قسيمة"
+    r")",
+    re.IGNORECASE,
+)
+_PAYROLL_POLICY_RE = re.compile(
+    r"("
+    r"\bappeal\b|\bobject(?:ion)?\b|\bcertificate\b"
+    r"|اعتراض|شهادة طبية|سياسة"
+    r")",
+    re.IGNORECASE,
+)
+_EMPTY_PAYSLIP_DIGEST_RE = re.compile(
+    r"count\s*=\s*0|count\"\s*:\s*0|results\s*=\s*\[\]|results\"\s*:\s*\[\]"
+    r"|no payslips|0 rows?",
+    re.I,
+)
+_USER_AMOUNT_RE = re.compile(
+    r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+|\d+"
+    r"|[٠-٩]+",
+)
 
 
 def is_thanks(text: str) -> bool:
@@ -84,6 +140,503 @@ def is_clock_ask(text: str) -> bool:
     """True for today's date / current month — not leave-start or payroll when."""
     raw = (text or "").strip()
     return bool(raw and _CLOCK_RE.search(raw))
+
+
+def is_payroll_schedule_ask(text: str) -> bool:
+    """When is payroll processed — not leave start, not net pay."""
+    raw = (text or "").strip()
+    return bool(raw and _PAYROLL_SCHEDULE_RE.search(raw))
+
+
+_EMPTY_PAYSLIP_REPLY_RE = re.compile(
+    r"no (?:committed )?payslips"
+    r"|found no payslips"
+    r"|no payslips (?:are |were )?(?:on file|found)"
+    r"|لم أجد قسائم",
+    re.IGNORECASE,
+)
+
+
+def _history_text(msg: dict) -> str:
+    content = msg.get("content")
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, list):
+        parts = []
+        for part in content:
+            if isinstance(part, dict):
+                parts.append(str(part.get("text") or part.get("content") or ""))
+            else:
+                parts.append(str(part))
+        text = " ".join(parts)
+    else:
+        text = ""
+    extra = msg.get("text")
+    if extra:
+        return f"{text} {extra}"
+    return text
+
+
+def _unwrap_tool_json(raw: Any) -> Any:
+    data = raw
+    for _ in range(3):
+        if isinstance(data, str):
+            text = data.strip()
+            if not text:
+                return data
+            try:
+                import json
+                data = json.loads(text)
+            except (TypeError, ValueError):
+                return data
+            continue
+        if isinstance(data, dict) and "data" in data and (
+            "status_code" in data or "results" in (data.get("data") or {})
+        ):
+            data = data.get("data")
+            continue
+        break
+    return data
+
+
+def last_payslip_was_empty(
+    last_results: list[dict] | None,
+    history: list[dict] | None = None,
+) -> bool:
+    """True when a prior turn already established empty ESS payslips."""
+    for row in reversed(last_results or []):
+        if not isinstance(row, dict):
+            continue
+        api = str(row.get("api") or "")
+        digest = str(row.get("digest") or "")
+        if "list_my_payslips" not in api and "list_my_payslips" not in digest:
+            continue
+        if _EMPTY_PAYSLIP_DIGEST_RE.search(digest) or "count=0" in digest:
+            return True
+        if re.search(r"count=[1-9]", digest) or payslip_lines_from_state([row]):
+            return False
+        # A payslip digest that is not clearly empty is not evidence of rows
+        # either — keep scanning older rows and history. Do not return False.
+    for msg in reversed(history or []):
+        if not isinstance(msg, dict):
+            continue
+        role = str(msg.get("role") or "").lower()
+        if role not in ("assistant", "ai", "model"):
+            continue
+        if _EMPTY_PAYSLIP_REPLY_RE.search(_history_text(msg)):
+            return True
+    return False
+
+
+def is_empty_payslip_tool_result(completed_tools: list | None) -> bool:
+    """True when this turn's payslip tool returned no committed rows."""
+    for item in completed_tools or []:
+        if not isinstance(item, dict):
+            continue
+        args = item.get("tool_args") if isinstance(item.get("tool_args"), dict) else {}
+        api = str(
+            args.get("api_name") or args.get("name") or args.get("api") or ""
+        )
+        blob = f"{args} {api} {item.get('tool_name') or ''} {item.get('result') or ''}"
+        looks_payslip = (
+            "payslip" in blob.lower()
+            or "قسيمة" in blob
+            or "list_my_payslips" in api
+        )
+        if not looks_payslip:
+            continue
+        data = _unwrap_tool_json(item.get("result"))
+        if isinstance(data, dict):
+            results = data.get("results")
+            try:
+                count = int(data.get("count")) if data.get("count") is not None else None
+            except (TypeError, ValueError):
+                count = None
+            if count == 0 or results == []:
+                return True
+        if isinstance(data, list) and len(data) == 0:
+            return True
+    return False
+
+
+_PAYSLIP_LINE_CODES = ("gross", "gosi", "loan_installment", "net")
+_DIGEST_AMOUNT_RE = re.compile(
+    r"\b(gross|gosi|loan_installment|net)\s*=\s*([0-9]+(?:\.[0-9]+)?)",
+    re.I,
+)
+
+
+def _fmt_amount(value: Any) -> str | None:
+    try:
+        number = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    if number == number.to_integral_value():
+        return str(int(number))
+    return format(number, "f").rstrip("0").rstrip(".")
+
+
+def _line_type_code(value: Any) -> str:
+    if isinstance(value, dict):
+        return str(value.get("code") or value.get("name") or "").strip().lower()
+    return str(value or "").strip().lower()
+
+
+def payslip_lines_from_payload(data: Any) -> dict[str, str]:
+    """Map line_type → amount from a host payslip payload."""
+    records: list[dict] = []
+    if isinstance(data, list):
+        records = [row for row in data if isinstance(row, dict)]
+    elif isinstance(data, dict):
+        raw = data.get("results")
+        if isinstance(raw, list):
+            records = [row for row in raw if isinstance(row, dict)]
+    out: dict[str, str] = {}
+    for row in records:
+        code = _line_type_code(row.get("line_type"))
+        if code not in _PAYSLIP_LINE_CODES:
+            continue
+        amount = _fmt_amount(row.get("amount"))
+        if amount is not None:
+            out[code] = amount
+    return out
+
+
+def payslip_lines_from_tools(completed_tools: list | None) -> dict[str, str]:
+    """Read committed payslip amounts from this turn's tool results."""
+    out: dict[str, str] = {}
+    for item in completed_tools or []:
+        if not isinstance(item, dict):
+            continue
+        args = item.get("tool_args") if isinstance(item.get("tool_args"), dict) else {}
+        api = str(args.get("api_name") or args.get("name") or args.get("api") or "")
+        blob = f"{args} {api} {item.get('tool_name') or ''} {item.get('result') or ''}"
+        if (
+            "payslip" not in blob.lower()
+            and "قسيمة" not in blob
+            and "list_my_payslips" not in api
+        ):
+            continue
+        out.update(payslip_lines_from_payload(_unwrap_tool_json(item.get("result"))))
+    return out
+
+
+def payslip_lines_from_state(
+    last_results: list[dict] | None,
+    completed_tools: list | None = None,
+) -> dict[str, str]:
+    """Prefer this turn's tools; else parse last_results digests."""
+    from_tools = payslip_lines_from_tools(completed_tools)
+    if from_tools:
+        return from_tools
+    out: dict[str, str] = {}
+    for row in reversed(last_results or []):
+        if not isinstance(row, dict):
+            continue
+        blob = f"{row.get('api') or ''} {row.get('digest') or ''}"
+        looks_payslip = (
+            "list_my_payslips" in blob
+            or "payslip" in blob.lower()
+            or bool(_DIGEST_AMOUNT_RE.search(str(row.get("digest") or "")))
+        )
+        if not looks_payslip:
+            continue
+        for match in _DIGEST_AMOUNT_RE.finditer(str(row.get("digest") or "")):
+            out[match.group(1).lower()] = _fmt_amount(match.group(2)) or match.group(2)
+        if out:
+            break
+    return {key: value for key, value in out.items() if value}
+
+
+def render_payslip_grounded(text: str, lines: dict[str, str]) -> str | None:
+    """Answer a payroll follow-up from committed line amounts. Invents none."""
+    if not lines:
+        return None
+    raw = (text or "").strip()
+    if _PAYROLL_POLICY_RE.search(raw):
+        return None
+    net = lines.get("net")
+    gosi = lines.get("gosi")
+    loan = lines.get("loan_installment")
+    gross = lines.get("gross")
+    after_gosi = None
+    total = None
+    try:
+        if gross and gosi:
+            after_gosi = _fmt_amount(Decimal(gross) - Decimal(gosi))
+        if gosi and loan:
+            total = _fmt_amount(Decimal(gosi) + Decimal(loan))
+    except (InvalidOperation, TypeError, ValueError):
+        after_gosi = after_gosi
+        total = total
+    lower = raw.lower()
+    lang = "ar" if detect_lang(raw) == "ar" else "en"
+    if re.search(r"deductions? were|what deductions|applied|خصم|استقطاع", lower):
+        parts = []
+        if gosi:
+            parts.append(f"GOSI {gosi}")
+        if loan:
+            parts.append(
+                f"قسط القرض {loan}" if lang == "ar" else f"loan installment {loan}"
+            )
+        if parts:
+            if lang == "ar":
+                return "الاستقطاعات المعتمدة: " + " و".join(parts) + "."
+            return "Committed deductions: " + " and ".join(parts) + "."
+        return None
+    if re.search(r"after gosi|take[\s_-]*home|بعد.{0,12}gosi|صافي.{0,8}بعد", lower):
+        if after_gosi:
+            if lang == "ar":
+                return (
+                    f"بعد خصم GOSI البالغ {gosi}، المتبقي قبل قسط القرض هو {after_gosi}."
+                )
+            return (
+                f"After the GOSI deduction of {gosi}, take-home before the "
+                f"loan installment is {after_gosi}."
+            )
+        if net:
+            return (
+                f"صافي الراتب المعتمد هو {net}."
+                if lang == "ar"
+                else f"Committed take-home (net) is {net}."
+            )
+        return None
+    if re.search(r"net\s*pay|last month|صافي|راتبي|الراتب", lower) and net:
+        if lang == "ar":
+            if gross and re.search(r"شهري|إجمالي|اجمالي", raw):
+                return f"الراتب الإجمالي المعتمد هو {gross}. الصافي {net}."
+            return f"صافي الراتب المعتمد هو {net}."
+        return f"Last month's committed net pay is {net}."
+    if re.search(r"loan amount|قسط.{0,8}قرض", lower) and loan:
+        return (
+            f"قسط القرض المعتمد هو {loan}."
+            if lang == "ar"
+            else f"The committed loan installment is {loan}."
+        )
+    if re.search(r"total deductions|إجمالي.{0,8}خصم|اجمالي.{0,8}خصم", lower) and total:
+        stated = [m.group(0) for m in _USER_AMOUNT_RE.finditer(raw)]
+        base = (
+            f"إجمالي الاستقطاعات المعتمدة {total} (GOSI {gosi} + قرض {loan})."
+            if lang == "ar"
+            else f"Committed total deductions are {total} (GOSI {gosi} + loan {loan})."
+        )
+        if stated and _fmt_amount(stated[-1].replace(",", "")) == total:
+            return f"Yes. {base}" if lang != "ar" else f"نعم. {base}"
+        if stated:
+            return f"{base} You mentioned {stated[-1]} — that does not match."
+        return base
+    if re.search(r"gosi", lower) and gosi:
+        return (
+            f"بند GOSI المعتمد هو {gosi}. لن أخترع نسبة نظامية أبعد من هذا البند."
+            if lang == "ar"
+            else (
+                f"The committed GOSI line is {gosi}. "
+                "I will not invent a statutory rate beyond that line."
+            )
+        )
+    if net and _PAYROLL_FOLLOWUP_RE.search(raw):
+        return (
+            f"صافي الراتب المعتمد هو {net}."
+            if lang == "ar"
+            else f"Committed net pay is {net}."
+        )
+    return None
+
+
+_PROFILE_DIGEST_RE = re.compile(
+    r"\b(employee_no|department|manager|job_title|full_name)\s*=\s*([^,]+)",
+    re.I,
+)
+_PROFILE_ASK_RE = re.compile(
+    r"("
+    r"employee number|employee no|what number"
+    r"|department|manager"
+    r"|رقم الموظف|قسم|مدير"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _nested_label(value: Any) -> str | None:
+    if isinstance(value, dict):
+        text = value.get("name") or value.get("full_name") or value.get("label")
+        return str(text).strip() if text else None
+    if isinstance(value, str) and value.strip():
+        return value.split(" — ", 1)[-1].strip()
+    return None
+
+
+def profile_from_payload(data: Any) -> dict[str, str]:
+    if not isinstance(data, dict):
+        return {}
+    out: dict[str, str] = {}
+    emp = data.get("employee_no")
+    if emp not in (None, ""):
+        out["employee_no"] = str(emp)
+    dept = _nested_label(data.get("org_unit")) or data.get("department")
+    if dept:
+        out["department"] = str(dept)
+    manager = _nested_label(data.get("manager")) or data.get("manager_label")
+    if manager:
+        out["manager"] = str(manager)
+    if data.get("job_title"):
+        out["job_title"] = str(data["job_title"])
+    if data.get("full_name"):
+        out["full_name"] = str(data["full_name"])
+    return out
+
+
+def profile_from_tools(completed_tools: list | None) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for item in completed_tools or []:
+        if not isinstance(item, dict):
+            continue
+        args = item.get("tool_args") if isinstance(item.get("tool_args"), dict) else {}
+        api = str(args.get("api_name") or args.get("name") or args.get("api") or "")
+        blob = f"{args} {api} {item.get('tool_name') or ''}"
+        if "get_my_profile" not in blob and "profile" not in blob.lower():
+            data = _unwrap_tool_json(item.get("result"))
+            parsed = profile_from_payload(data)
+            if "employee_no" not in parsed:
+                continue
+            out.update(parsed)
+            continue
+        out.update(profile_from_payload(_unwrap_tool_json(item.get("result"))))
+    return out
+
+
+def profile_from_state(
+    last_results: list[dict] | None,
+    completed_tools: list | None = None,
+) -> dict[str, str]:
+    from_tools = profile_from_tools(completed_tools)
+    if from_tools:
+        return from_tools
+    out: dict[str, str] = {}
+    for row in reversed(last_results or []):
+        if not isinstance(row, dict):
+            continue
+        digest = str(row.get("digest") or "")
+        if "employee_no=" not in digest and "get_my_profile" not in digest:
+            continue
+        for match in _PROFILE_DIGEST_RE.finditer(digest):
+            out[match.group(1).lower()] = match.group(2).strip()
+        if out:
+            break
+    return out
+
+
+def render_resolve_grounded(text: str, payload: Any) -> str | None:
+    """Restate a resolve_entity payload. Invents no job title or department."""
+    data = payload
+    if isinstance(payload, str):
+        try:
+            data = json.loads(payload)
+        except (TypeError, ValueError):
+            return None
+    if not isinstance(data, dict):
+        return None
+    if data.get("error") and not data.get("unauthorized"):
+        return None
+    if data.get("unauthorized"):
+        return str(
+            data.get("message")
+            or "Not authorized to look up other employees."
+        ).strip()
+    if data.get("action") == "disambiguate" or (
+        not data.get("found") and data.get("candidates")
+    ):
+        names = []
+        for row in data.get("candidates") or []:
+            if not isinstance(row, dict):
+                continue
+            label = (
+                row.get("full_name")
+                or row.get("name")
+                or row.get("employee_no")
+            )
+            if label:
+                names.append(str(label))
+        if names:
+            return (
+                f"Multiple records match. Which did you mean: "
+                + "; ".join(names[:5])
+                + "?"
+            )
+        return str(data.get("message") or "").strip() or None
+    if data.get("found") and isinstance(data.get("record"), dict):
+        rec = data["record"]
+        name = rec.get("full_name") or rec.get("name")
+        emp = rec.get("employee_no")
+        dept = _nested_label(rec.get("org_unit")) or rec.get("department")
+        title = rec.get("job_title") or rec.get("position")
+        if isinstance(title, dict):
+            title = title.get("name") or title.get("label")
+        bits = []
+        if name:
+            bits.append(str(name))
+        if emp:
+            bits.append(f"employee {emp}")
+        if title:
+            bits.append(str(title))
+        if dept:
+            bits.append(str(dept))
+        if bits:
+            return ", ".join(bits) + "."
+    if data.get("found") is False:
+        return str(data.get("message") or "No matching employee for that query.").strip()
+    return None
+
+
+def render_profile_grounded(text: str, profile: dict[str, str]) -> str | None:
+    """Answer a profile ask from the host record. Invents no department."""
+    if not profile:
+        return None
+    raw = (text or "").strip()
+    if not _PROFILE_ASK_RE.search(raw):
+        return None
+    lower = raw.lower()
+    emp = profile.get("employee_no")
+    dept = profile.get("department")
+    manager = profile.get("manager")
+    if re.search(r"employee number|employee no|what number|رقم الموظف", lower) and emp:
+        return f"Your employee number is {emp}."
+    if re.search(r"department|قسم", lower) and dept:
+        if re.search(r"did i mention|i mention", lower):
+            return (
+                f"You did not mention a department. "
+                f"Your record shows {dept}."
+            )
+        return f"You are in the {dept} department."
+    if re.search(r"manager|مدير", lower) and manager:
+        return f"Your manager is {manager}."
+    return None
+
+
+def render_empty_payslip_answer(text: str) -> str:
+    """Honest empty-payslip copy. Echoes figures the user typed; invents none."""
+    lang = "ar" if detect_lang(text) == "ar" else "en"
+    stated = [m.group(0) for m in _USER_AMOUNT_RE.finditer(text or "")]
+    if lang == "ar":
+        base = (
+            "لم أجد قسائم معتمدة، لذلك لا يوجد صافي راتب أو استقطاعات "
+            "أو قسط قرض من قسيمة."
+        )
+        if stated:
+            return f"{base} ذكرت {stated[-1]} — لا أستطيع تأكيد هذا الرقم."
+        return base
+    base = (
+        "No committed payslips were found, so I do not have net pay, "
+        "deductions, GOSI, or a loan installment from a payslip."
+    )
+    if stated:
+        return f"{base} You mentioned {stated[-1]} — I cannot confirm that figure."
+    return base
+
+
+def is_payslip_download_ask(text: str) -> bool:
+    raw = (text or "").strip()
+    return bool(raw and _PAYSLIP_DOWNLOAD_RE.search(raw))
 
 
 def is_notification_faq(text: str) -> bool:
@@ -187,6 +740,7 @@ def try_zero_llm_answer(
     facts: list[dict[str, str]] | None = None,
     history: list[dict] | None = None,
     newly_stored: bool = False,
+    last_results: list[dict] | None = None,
 ) -> dict[str, Any] | None:
     """Return ``{decision, text}`` when the utterance is a 0-LLM surface."""
     from ai.engine.cognition.turn.memory_recall import (
@@ -212,6 +766,48 @@ def try_zero_llm_answer(
             "decision": "answer",
             "text": render_notification_faq(raw),
             "gate": "notification_faq",
+        }
+    if is_payroll_schedule_ask(raw):
+        lang = "ar" if detect_lang(raw) == "ar" else "en"
+        return {
+            "decision": "answer",
+            "text": _PAYROLL_SCHEDULE_TEXT[lang],
+            "gate": "payroll_schedule",
+        }
+    if is_payslip_download_ask(raw):
+        lang = "ar" if detect_lang(raw) == "ar" else "en"
+        return {
+            "decision": "answer",
+            "text": _PAYSLIP_DOWNLOAD_TEXT[lang],
+            "gate": "payslip_download",
+        }
+    profile = profile_from_state(last_results)
+    if profile and _PROFILE_ASK_RE.search(raw):
+        grounded = render_profile_grounded(raw, profile)
+        if grounded:
+            return {
+                "decision": "answer",
+                "text": grounded,
+                "gate": "profile_recall",
+            }
+    lines = payslip_lines_from_state(last_results)
+    if (
+        lines
+        and _PAYROLL_FOLLOWUP_RE.search(raw)
+        and not _PAYROLL_POLICY_RE.search(raw)
+    ):
+        grounded = render_payslip_grounded(raw, lines)
+        if grounded:
+            return {
+                "decision": "answer",
+                "text": grounded,
+                "gate": "payslip_recall",
+            }
+    if last_payslip_was_empty(last_results, history) and _PAYROLL_FOLLOWUP_RE.search(raw):
+        return {
+            "decision": "answer",
+            "text": render_empty_payslip_answer(raw),
+            "gate": "empty_payslip_recall",
         }
     deixis = render_date_deixis(raw, history, today)
     if deixis:

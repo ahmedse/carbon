@@ -1,37 +1,44 @@
-// src/pages/admin/AccessControlPage.jsx
-// Admin page: assign users a role scoped to an org unit. Role-gated by AdminRoute.
-import React, { useEffect, useState, useCallback } from "react";
-import {
-  Box, Typography, Button, Table, TableHead, TableRow, TableCell, TableBody,
-  IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  MenuItem, Chip, CircularProgress, Alert,
-} from "@mui/material";
-import useDocumentTitle from '../../hooks/useDocumentTitle';
-
+// Assignments ledger (ADR-0048). One row = one user, one duty, one anchor org unit.
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Alert, Box, Button, IconButton, TextField, Tooltip, Typography } from "@mui/material";
 import AddRounded from "@mui/icons-material/AddRounded";
 import DeleteRounded from "@mui/icons-material/DeleteRounded";
+import VisibilityRounded from "@mui/icons-material/VisibilityRounded";
+import useDocumentTitle from "../../hooks/useDocumentTitle";
+import FilteredDataGrid from "../../components/FilteredDataGrid";
+import SystemDialog from "../../components/SystemDialog";
+import ConfirmDialog from "../../components/ConfirmDialog";
+import { SearchSelect } from "../../components/Form";
 import { useAuth } from "../../auth/AuthContext";
 import { fetchOrgUnits } from "../../api/orgUnits";
-import {
-  fetchUsers, fetchGroups, fetchScopedRoles, createScopedRole, deleteScopedRole,
-} from "../../api/accessControl";
+import { fetchUsers, fetchScopedRoles, createScopedRole, deleteScopedRole } from "../../api/accessControl";
+import { apiFetch } from "../../api/api";
 
-const EMPTY_FORM = { user: "", group: "", org_unit: "" };
+const EMPTY_FORM = { user: "", duty: "", org_unit: "", valid_from: "", valid_to: "" };
+
+function dateLabel(value) {
+  return value || "Open";
+}
 
 export default function AccessControlPage() {
-  useDocumentTitle("Access Control");
+  useDocumentTitle("Assignments");
   const { user } = useAuth();
   const token = user?.token;
 
   const [assignments, setAssignments] = useState([]);
   const [users, setUsers] = useState([]);
-  const [groups, setGroups] = useState([]);
+  const [duties, setDuties] = useState([]);
   const [orgUnits, setOrgUnits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [viewRow, setViewRow] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [searchValue, setSearchValue] = useState("");
+  const [filters, setFilters] = useState({ duty: "", provenance: "", scope: "" });
+  const [highlightRow, setHighlightRow] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -39,36 +46,34 @@ export default function AccessControlPage() {
     Promise.all([
       fetchScopedRoles(token),
       fetchUsers(token),
-      fetchGroups(token),
+      apiFetch("accounts/duties/", { token }),
       fetchOrgUnits(token),
     ])
-      .then(([a, u, g, o]) => {
+      .then(([a, u, catalog, o]) => {
         setAssignments(a);
         setUsers(u);
-        setGroups(g);
+        setDuties(Array.isArray(catalog?.duties) ? catalog.duties : []);
         setOrgUnits(o);
       })
-      .catch((e) => setError(e.message || "Failed to load access data"))
+      .catch((e) => setError(e.message || "Failed to load assignments"))
       .finally(() => setLoading(false));
   }, [token]);
 
   useEffect(() => { load(); }, [load]);
 
-  const openCreate = () => { setForm(EMPTY_FORM); setDialogOpen(true); };
-
   const handleSave = async () => {
-    if (!form.user || !form.group) { setError("User and Role are required."); return; }
+    if (!form.user || !form.duty) { setError("User and duty are required."); return; }
     setSaving(true);
     setError("");
-    const payload = {
-      user: form.user,
-      group: form.group,
-      org_unit: form.org_unit === "" ? null : form.org_unit,
-      module: null,
-      is_active: true,
-    };
     try {
-      await createScopedRole(token, payload);
+      await createScopedRole(token, {
+        user: form.user,
+        duty: form.duty,
+        org_unit: form.org_unit === "" ? null : form.org_unit,
+        valid_from: form.valid_from || null,
+        valid_to: form.valid_to || null,
+        is_active: true,
+      });
       setDialogOpen(false);
       load();
     } catch (e) {
@@ -78,102 +83,258 @@ export default function AccessControlPage() {
     }
   };
 
-  const handleDelete = async (a) => {
-    if (!window.confirm(`Remove ${a.user}'s "${a.group}" role${a.org_unit ? " on " + a.org_unit : " (global)"}?`)) return;
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
     setError("");
     try {
-      await deleteScopedRole(token, a.id);
+      await deleteScopedRole(token, deleteTarget.id);
+      setDeleteTarget(null);
       load();
     } catch (e) {
       setError(e.message || "Delete failed");
     }
   };
 
-  return (
-    <Box sx={{ p: 3 }}>
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
-        <Box>
-          <Typography variant="h5" fontWeight={700}>Access Control</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Assign users a role scoped to an org unit. A role on an org unit also applies to its sub-units.
-          </Typography>
+  const filterDefs = useMemo(() => [
+    {
+      key: "duty",
+      label: "Duty",
+      emptyLabel: "All duties",
+      options: duties.map((d) => ({ value: d.duty, label: d.duty })),
+    },
+    {
+      key: "provenance",
+      label: "Provenance",
+      emptyLabel: "All",
+      options: [
+        { value: "birthright", label: "Birthright" },
+        { value: "exception", label: "Exception" },
+      ],
+    },
+    {
+      key: "scope",
+      label: "Anchor",
+      emptyLabel: "All anchors",
+      options: [
+        { value: "global", label: "Global" },
+        { value: "org", label: "One org unit" },
+      ],
+    },
+  ], [duties]);
+
+  const filteredRows = useMemo(() => {
+    const q = searchValue.trim().toLowerCase();
+    return assignments.filter((a) => {
+      if (filters.duty && (a.duty || a.group) !== filters.duty) return false;
+      if (filters.provenance && a.provenance !== filters.provenance) return false;
+      if (filters.scope === "global" && a.org_unit) return false;
+      if (filters.scope === "org" && !a.org_unit) return false;
+      if (!q) return true;
+      return [a.employee_name, a.user, a.duty, a.group, a.org_unit].filter(Boolean).join(" ").toLowerCase().includes(q);
+    });
+  }, [assignments, searchValue, filters]);
+
+  const columns = useMemo(() => [
+    {
+      field: "employee_name",
+      headerName: "Employee",
+      flex: 1.3,
+      minWidth: 200,
+      valueGetter: (value, row) => row.employee_name || row.user,
+      renderCell: (p) => (
+        <Box sx={{ lineHeight: 1.2 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>{p.row.employee_name || p.row.user}</Typography>
+          {p.row.employee_name ? (
+            <Typography variant="caption" color="text.secondary">{p.row.user}</Typography>
+          ) : null}
         </Box>
-        <Button variant="contained" startIcon={<AddRounded />} onClick={openCreate}>
-          Assign Role
-        </Button>
-      </Box>
+      ),
+    },
+    {
+      field: "duty",
+      headerName: "Duty",
+      flex: 1,
+      minWidth: 160,
+      valueGetter: (value, row) => row.duty || row.group,
+      renderCell: (p) => <Typography variant="body2" sx={{ fontFamily: "monospace" }}>{p.value}</Typography>,
+    },
+    {
+      field: "org_unit",
+      headerName: "Anchor org unit",
+      flex: 1.2,
+      minWidth: 180,
+      valueGetter: (value, row) => row.org_unit || "Global",
+    },
+    {
+      field: "provenance",
+      headerName: "Provenance",
+      width: 120,
+      valueGetter: (value, row) => (row.provenance === "birthright" ? "Birthright" : "Exception"),
+    },
+    { field: "valid_from", headerName: "From", width: 110, valueGetter: (value, row) => dateLabel(row.valid_from) },
+    { field: "valid_to", headerName: "Until", width: 110, valueGetter: (value, row) => dateLabel(row.valid_to) },
+    {
+      field: "is_active",
+      headerName: "Active",
+      width: 90,
+      valueGetter: (value, row) => (row.is_active ? "Yes" : "No"),
+    },
+    {
+      field: "actions",
+      headerName: "",
+      width: 90,
+      sortable: false,
+      filterable: false,
+      renderCell: (p) => (
+        <Box>
+          <Tooltip title="View assignment">
+            <IconButton size="small" aria-label="View assignment" onClick={(e) => { e.stopPropagation(); setViewRow(p.row); }}>
+              <VisibilityRounded fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={p.row.provenance === "birthright" ? "Birthright is changed from position, manager, or profile" : "Remove exception"}>
+            <span>
+              <IconButton
+                size="small"
+                aria-label="Remove exception"
+                disabled={p.row.provenance === "birthright"}
+                sx={{ color: "error.main" }}
+                onClick={(e) => { e.stopPropagation(); setDeleteTarget(p.row); }}
+              >
+                <DeleteRounded fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Box>
+      ),
+    },
+  ], []);
 
-      {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>{error}</Alert>}
+  const orgOptions = orgUnits.map((o) => ({ id: o.id, name: o.full_path || o.name }));
 
-      {loading ? (
-        <Box sx={{ textAlign: "center", py: 6 }}><CircularProgress /></Box>
-      ) : (
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>User</TableCell>
-              <TableCell>Role</TableCell>
-              <TableCell>Org Unit</TableCell>
-              <TableCell>Scope</TableCell>
-              <TableCell>Active</TableCell>
-              <TableCell align="right">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {assignments.length === 0 && (
-              <TableRow><TableCell colSpan={6}>No role assignments yet.</TableCell></TableRow>
-            )}
-            {assignments.map((a) => (
-              <TableRow key={a.id}>
-                <TableCell><b>{a.user}</b></TableCell>
-                <TableCell><Chip size="small" label={a.group} /></TableCell>
-                <TableCell>{a.org_unit || "—"}</TableCell>
-                <TableCell>{a.org_unit ? "Org unit" : "Global"}</TableCell>
-                <TableCell>{a.is_active ? "Yes" : "No"}</TableCell>
-                <TableCell align="right">
-                  <IconButton size="small" color="error" onClick={() => handleDelete(a)}>
-                    <DeleteRounded fontSize="small" />
-                  </IconButton>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
-
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Assign Role</DialogTitle>
-        <DialogContent>
-          <TextField
-            label="User" select fullWidth required margin="normal"
-            value={form.user} onChange={(e) => setForm({ ...form, user: e.target.value })}
-          >
-            {users.map((u) => <MenuItem key={u.id} value={u.id}>{u.username}</MenuItem>)}
-          </TextField>
-          <TextField
-            label="Role" select fullWidth required margin="normal"
-            value={form.group} onChange={(e) => setForm({ ...form, group: e.target.value })}
-          >
-            {groups.map((g) => <MenuItem key={g.id} value={g.id}>{g.name}</MenuItem>)}
-          </TextField>
-          <TextField
-            label="Org Unit" select fullWidth margin="normal"
-            value={form.org_unit} onChange={(e) => setForm({ ...form, org_unit: e.target.value })}
-            helperText="Leave as Global to grant across the whole organisation."
-          >
-            <MenuItem value="">— Global (whole organisation) —</MenuItem>
-            {orgUnits.map((o) => (
-              <MenuItem key={o.id} value={o.id}>{o.full_path || o.name}</MenuItem>
-            ))}
-          </TextField>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleSave} disabled={saving}>
-            {saving ? "Saving…" : "Assign"}
+  return (
+    <>
+      {error && <Alert severity="error" sx={{ mx: 1, mt: 1 }} onClose={() => setError("")}>{error}</Alert>}
+      <FilteredDataGrid
+        title="Assignments"
+        description="One row is one user, one duty, and one anchor org unit. Global means no anchor. Child units are included when access is checked, not stored as more rows."
+        actions={
+          <Button variant="contained" size="small" startIcon={<AddRounded />} onClick={() => { setForm(EMPTY_FORM); setDialogOpen(true); }}>
+            Grant exception
           </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+        }
+        rows={filteredRows}
+        columns={columns}
+        loading={loading}
+        countLabel={`${filteredRows.length} of ${assignments.length} assignments`}
+        searchValue={searchValue}
+        onSearchChange={setSearchValue}
+        searchPlaceholder="Search user, duty, org unit…"
+        filterDefs={filterDefs}
+        filterValues={filters}
+        onFilterChange={(key, value) => setFilters((prev) => ({ ...prev, [key]: value }))}
+        onClearFilters={() => { setSearchValue(""); setFilters({ duty: "", provenance: "", scope: "" }); }}
+        emptyMessage="No assignments match."
+        highlightRow={(row) => row.id === highlightRow}
+        onRowClick={(params) => setHighlightRow(params.row.id)}
+      />
+
+      <SystemDialog
+        open={dialogOpen}
+        title="Grant exception"
+        onClose={() => setDialogOpen(false)}
+        onCancel={() => setDialogOpen(false)}
+        cancelLabel="Cancel"
+        actions={
+          <Button variant="contained" size="small" onClick={handleSave} disabled={saving}>
+            {saving ? "Saving…" : "Grant"}
+          </Button>
+        }
+        width={520}
+        height={520}
+        minWidth={420}
+        minHeight={420}
+      >
+        <Box px={2} py={1} sx={{ display: "grid", gap: 2 }}>
+          <SearchSelect
+            label="User"
+            required
+            options={users}
+            valueKey="id"
+            labelKey="username"
+            value={form.user}
+            onChange={(v) => setForm({ ...form, user: v?.id ?? "" })}
+          />
+          <SearchSelect
+            label="Duty"
+            required
+            options={duties}
+            valueKey="duty"
+            labelKey="duty"
+            groupBy={(o) => o.domain}
+            value={form.duty}
+            onChange={(v) => setForm({ ...form, duty: v?.duty ?? "" })}
+            helperText="One duty on this row. The same person can have more rows on other anchors."
+          />
+          <SearchSelect
+            label="Anchor org unit"
+            options={orgOptions}
+            valueKey="id"
+            labelKey="name"
+            value={form.org_unit}
+            onChange={(v) => setForm({ ...form, org_unit: v?.id ?? "" })}
+            helperText="One anchor, or empty for global. Descendants are included at read time."
+          />
+          <TextField
+            label="Valid from" type="date" fullWidth size="small"
+            value={form.valid_from} onChange={(e) => setForm({ ...form, valid_from: e.target.value })}
+            InputLabelProps={{ shrink: true }}
+          />
+          <TextField
+            label="Valid until" type="date" fullWidth size="small"
+            value={form.valid_to} onChange={(e) => setForm({ ...form, valid_to: e.target.value })}
+            InputLabelProps={{ shrink: true }}
+            helperText="Empty means the exception does not expire."
+          />
+        </Box>
+      </SystemDialog>
+
+      <SystemDialog
+        open={Boolean(viewRow)}
+        title="Assignment"
+        onClose={() => setViewRow(null)}
+        onCancel={() => setViewRow(null)}
+        cancelLabel="Close"
+        showCancel={false}
+        width={480}
+        height={360}
+        minWidth={400}
+        minHeight={280}
+      >
+        {viewRow && (
+          <Box px={2} py={1} sx={{ display: "grid", gap: 1 }}>
+            <Typography variant="body2"><b>Employee.</b> {viewRow.employee_name || viewRow.user}</Typography>
+            <Typography variant="body2"><b>User.</b> {viewRow.user}</Typography>
+            <Typography variant="body2"><b>Duty.</b> {viewRow.duty || viewRow.group}</Typography>
+            <Typography variant="body2"><b>Anchor org unit.</b> {viewRow.org_unit || "Global"}</Typography>
+            <Typography variant="body2"><b>Provenance.</b> {viewRow.provenance === "birthright" ? "Birthright" : "Exception"}</Typography>
+            <Typography variant="body2"><b>From.</b> {dateLabel(viewRow.valid_from)} <b>Until.</b> {dateLabel(viewRow.valid_to)}</Typography>
+            <Typography variant="body2" color="text.secondary">
+              This row is not a list of org units. Another anchor is another assignment.
+            </Typography>
+          </Box>
+        )}
+      </SystemDialog>
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Remove exception"
+        message={deleteTarget ? `Remove ${deleteTarget.employee_name || deleteTarget.user}'s ${deleteTarget.duty || deleteTarget.group} on ${deleteTarget.org_unit || "global"}?` : ""}
+        confirmLabel="Remove"
+        destructive
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
+    </>
   );
 }

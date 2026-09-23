@@ -27,6 +27,18 @@ import AIWorkingIndicator from './AIWorkingIndicator';
 
 const COMPLIANCE_BRIEF = 'Prepare a leave-compliance board pack summarizing risk for the latest period';
 
+/** Text the operator actually stated. Discovery often starts on a non-leave
+ *  seed ("Run via Agent"); the leave sentence is the later reply. */
+function statedBrief(turns, lastBrief) {
+  const replies = (Array.isArray(turns) ? turns : [])
+    .map((turn) => (turn?.reply || '').trim())
+    .filter(Boolean);
+  const latest = replies.length ? replies[replies.length - 1] : '';
+  const seed = (lastBrief || '').trim();
+  if (latest && seed && latest !== seed) return `${seed}\n${latest}`;
+  return latest || seed;
+}
+
 function turnsToMessages(turns) {
   const messages = [];
   turns.forEach((turn, i) => {
@@ -263,8 +275,7 @@ function DiscoveryComposer({
     if (busy) return;
     // Explicit Chat opt-in only — never bounce new-task creation into Chat.
     if (cardId === 'handoff_chat') {
-      const draft = lastBrief || '';
-      onSwitchToChat?.(draft);
+      onSwitchToChat?.(statedBrief(turns, lastBrief));
       reset();
       return;
     }
@@ -272,7 +283,7 @@ function DiscoveryComposer({
     if (cardId === 'leave_request') {
       setBusy(true);
       try {
-        const brief = (lastBrief || 'Submit a leave request').trim();
+        const brief = statedBrief(turns, lastBrief) || 'Submit a leave request';
         const plan = await createPlan(token, {
           brief,
           conversation_id: conversationId || '',

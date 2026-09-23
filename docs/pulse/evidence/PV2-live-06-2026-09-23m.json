@@ -1,0 +1,125 @@
+{
+  "tier": "live_dev",
+  "caveats": [
+    "Tier live_dev: real LLM provider (LLM_API_KEY) and the configured dev DB, dispatched as an authenticated employee. Reply-text metrics are engine-attributable but non-deterministic across runs (LLM variance).",
+    "Chat mode only (ADR-0046): host writes are never committed from these turns; process dials may create Plan/Run rows awaiting consent in the dev DB.",
+    "Fan-out agents and multi-step planning are disabled in the engine Settings (os.environ + get_settings.cache_clear() since PV2-1C). The PV2-0C live baseline ran WITH fan-out on (override_settings does not reach the engine Settings) — compare llm_calls against it accordingly."
+  ],
+  "host_user": "emp_1067",
+  "database": "nibras_dev",
+  "errors": [],
+  "scripts_run": 1,
+  "scripts_passed": 0,
+  "total_turns": 8,
+  "turns_passed": 6,
+  "focus_retention": 0.714,
+  "slot_carry_over": 0.0,
+  "language_fidelity": 1.0,
+  "router_agreement": 1.0,
+  "llm_calls_p50": 0,
+  "llm_calls_max": 1,
+  "turns_over_budget": 0,
+  "per_objective_pass": {
+    "C2": 0.75,
+    "C10": 0.75
+  },
+  "scripts": [
+    {
+      "script_id": "grounded-recall-01",
+      "turns": 8,
+      "turns_passed": 6,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 0,
+      "llm_budget_failures": 0,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "answer",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Your employee number is 1067."
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['Engineering']"
+          ],
+          "reply": "You are in the Coiled Tubing department."
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Your manager is Mohammad Bolto Ali."
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Your name is Mohamed Hassan."
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Your employee number is 1067."
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['Engineering']"
+          ],
+          "reply": "You did not mention a department. Your record shows Coiled Tubing."
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Your manager is Mohammad Bolto Ali."
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Your name is Mohamed Hassan."
+        }
+      ]
+    }
+  ]
+}

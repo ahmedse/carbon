@@ -66,8 +66,9 @@ Do **not** use Chat to submit leave or payroll.
 - WPS file download / `LOCAL-WPS-*` is Carbon output. **No PAM or bank receipt.**
 - Historical runs may show **Prepared by —**. Commit still fail-closes if preparer is missing.
 - Live nationality is often empty. Those rows now **refuse** Kuwaiti-scoped EOSI/leave instead of guessing.
-- Employee 360 and People lists no longer download the full roster to label a row. Directory search and filters are one page of 100. Pickers search 20 matches. Rows past that page are reached by search, not by loading everyone.
-- Two active runs for the same org/month are refused in create/compute. Historical duplicates were not deleted; there is no DB unique constraint.
+- Employee 360 and People lists no longer download the full roster to label a row. The directory asks the server for one page at a time and keeps search and filters on that request. The grid footer moves to the next page. Pickers search 20 matches.
+- Two active runs for the same org/month are refused in create/compute, and the database has the same unique rule for a clean database. nibras_dev still has duplicate committed runs (Maintenance Department 2027-01, runs 22–28; QA Payroll Leaf 2026-09, runs 17 and 29). Those rows were not deleted, so that database does not have the constraint yet.
+- Payroll **Prepared by** shows the username when compute recorded one, and a dash when it did not. The dash is not a name. Old runs were not given a preparer. Commit stays closed when the stamp is missing.
 - GitHub `ahmedse/carbon` `main` was read on 23 Sep 2026. Branch protection returned 404. Rulesets were empty. A merge is not blocked by GitHub.
 - The assurance board is a staff page. It is not a PAM receipt and it does not run the test suite.
 - GOSI/EOSI **formula rates** are data. This certificate does not attest PIFSS or KLL amounts.

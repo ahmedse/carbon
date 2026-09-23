@@ -50,6 +50,7 @@ import { updateEmployee, fetchCompensationLedger } from '../../../api/people';
 import EmployeePicker from '../EmployeePicker';
 import { daysUntilExpiry, expiryUrgency, formatAmount, formatDate, refCode, refLabel } from '../utils';
 import {
+  fetchOrgUnits,
   orgUnitDepth,
   orgUnitOptionLabel,
   prepareOrgUnitsForPicker,
@@ -352,10 +353,25 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
   );
 
   const positions = Array.isArray(emp.positions) ? emp.positions : [];
-  const orgUnitsForPicker = useMemo(
-    () => prepareOrgUnitsForPicker(emp.allOrgUnits || []),
-    [emp.allOrgUnits],
-  );
+  const [orgCatalog, setOrgCatalog] = useState(null);
+  const editingOrg = editAll || editing === 'organization';
+  useEffect(() => {
+    if (!editingOrg || orgCatalog || !token) return undefined;
+    let cancelled = false;
+    fetchOrgUnits(token)
+      .then((rows) => { if (!cancelled) setOrgCatalog(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (!cancelled) setOrgCatalog([]); });
+    return () => { cancelled = true; };
+  }, [editingOrg, orgCatalog, token]);
+  const orgUnitsForPicker = useMemo(() => {
+    if (orgCatalog) return prepareOrgUnitsForPicker(orgCatalog);
+    if (!emp.org_unit) return [];
+    return prepareOrgUnitsForPicker([{
+      id: emp.org_unit,
+      name: emp.orgUnitName || String(emp.org_unit),
+      parent: null,
+    }]);
+  }, [orgCatalog, emp.org_unit, emp.orgUnitName]);
   const orgUnitById = useMemo(() => {
     const map = new Map();
     for (const u of orgUnitsForPicker) map.set(u.id, u);

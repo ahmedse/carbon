@@ -238,22 +238,27 @@ const ROUTE_CONFIG = {
     parent: '/admin/org-units',
   },
   '/admin/access': {
-    label: 'Access Control',
+    label: 'Assignments',
+    icon: SecurityIcon,
+    parent: '/admin',
+  },
+  '/admin/position-profiles': {
+    label: 'Position profiles',
     icon: SecurityIcon,
     parent: '/admin',
   },
   '/admin/groups': {
-    label: 'Groups',
+    label: 'Duties',
     icon: AdminPanelSettingsIcon,
     parent: '/admin',
   },
   '/admin/groups/:groupId': {
-    label: 'Group Detail',
+    label: 'Duty',
     icon: AdminPanelSettingsIcon,
     parent: '/admin/groups',
   },
   '/admin/role-matrix': {
-    label: 'Role Matrix',
+    label: 'Role Registry',
     icon: AdminPanelSettingsIcon,
     parent: '/admin',
   },

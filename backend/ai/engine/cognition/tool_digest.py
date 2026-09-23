@@ -127,10 +127,104 @@ def _tool_label(item: dict) -> str:
     return f"{name} {api_name}" if api_name else name
 
 
+_PAYSLIP_IDENTITY_CODES = ("gross", "gosi", "loan_installment", "net")
+
+
+def _line_type_code(value: Any) -> str:
+    if isinstance(value, dict):
+        return str(value.get("code") or value.get("name") or "").strip().lower()
+    return str(value or "").strip().lower()
+
+
+def _fmt_amount(value: Any) -> str | None:
+    text = _fmt_value(value)
+    if text is None:
+        return None
+    try:
+        number = float(text.replace(",", ""))
+    except (TypeError, ValueError):
+        return text
+    if number == int(number):
+        return str(int(number))
+    return f"{number:g}"
+
+
+def _compact_payslip_identity(data: Any) -> str | None:
+    """One identity chunk: ``count=4, gross=6500, gosi=1200, …``.
+
+    Default per-record digest is 200-char and drops net when four lines
+    are present. Payslip recall needs the identity, not employee_name.
+    """
+    records: list[dict] = []
+    if isinstance(data, list):
+        records = [row for row in data if isinstance(row, dict)]
+    elif isinstance(data, dict):
+        raw = data.get("results")
+        if not isinstance(raw, list):
+            return None
+        records = [row for row in raw if isinstance(row, dict)]
+    else:
+        return None
+    lines: dict[str, str] = {}
+    for row in records:
+        code = _line_type_code(row.get("line_type"))
+        if code not in _PAYSLIP_IDENTITY_CODES:
+            continue
+        amount = _fmt_amount(row.get("amount"))
+        if amount is not None:
+            lines[code] = amount
+    if not lines:
+        return None
+    parts = [f"count={len(records)}"]
+    for code in _PAYSLIP_IDENTITY_CODES:
+        if code in lines:
+            parts.append(f"{code}={lines[code]}")
+    return ", ".join(parts)
+
+
+def _nested_name(value: Any) -> str | None:
+    if isinstance(value, dict):
+        text = value.get("name") or value.get("full_name") or value.get("label")
+        return str(text).strip() if text else None
+    if isinstance(value, str) and value.strip():
+        if " — " in value:
+            return value.split(" — ", 1)[1].strip()
+        return value.strip()
+    return None
+
+
+def _compact_profile_identity(data: Any) -> str | None:
+    """One identity chunk for get_my_profile — not two colliding name= fields."""
+    if not isinstance(data, dict) or isinstance(data.get("results"), list):
+        return None
+    emp = data.get("employee_no")
+    if emp in (None, ""):
+        return None
+    if not (data.get("org_unit") or data.get("manager") or data.get("job_title")):
+        return None
+    parts = [f"employee_no={emp}"]
+    dept = _nested_name(data.get("org_unit")) or data.get("org_unit_label") or data.get("department")
+    if dept:
+        parts.append(f"department={dept}")
+    manager = _nested_name(data.get("manager")) or data.get("manager_label")
+    if manager:
+        parts.append(f"manager={manager}")
+    title = data.get("job_title")
+    if title:
+        parts.append(f"job_title={title}")
+    return ", ".join(str(p) for p in parts)
+
+
 def _digest_payload(data: Any, allowed: set[str]) -> list[str]:
     """Return one ``k=v, …`` chunk per in-scope record."""
     if isinstance(data, dict) and "data" in data and "status_code" in data:
         data = data["data"]
+    compact = _compact_payslip_identity(data)
+    if compact:
+        return [compact]
+    profile = _compact_profile_identity(data)
+    if profile:
+        return [profile]
 
     records: list[dict] = []
     header: list[str] = []

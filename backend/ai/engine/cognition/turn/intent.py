@@ -546,6 +546,38 @@ def _apply_compensation_override(
     return resolution
 
 
+def _apply_named_coworker_override(
+    resolution: IntentResolution,
+    *,
+    user_message: str,
+    labels: list[dict],
+) -> IntentResolution:
+    """C1: 'tell me about Reena' is resolve_entity, not a clarify for an id."""
+    from ai.engine.agent.tools import extract_named_coworker_query
+
+    if not extract_named_coworker_query(user_message):
+        return resolution
+    pick = "resolve_entity"
+    top = resolution.candidates[0].name if resolution.candidates else ""
+    if top == pick and resolution.action == "answer":
+        return resolution
+    resolution.action = "answer"
+    resolution.clarification = ""
+    resolution.options = []
+    resolution.zone = "platform"
+    resolution.delivery = "lookup"
+    resolution.needs_host_data = True
+    resolution.candidates = [
+        IntentCandidate(
+            name=pick,
+            confidence=max(resolution.confidence, 0.9),
+            reason="named coworker → resolve_entity",
+        )
+    ]
+    resolution.confidence = max(resolution.confidence, 0.9)
+    return resolution
+
+
 def _apply_named_leave_override(
     resolution: IntentResolution,
     *,
@@ -878,6 +910,11 @@ class IntentResolver:
             labels=labels,
         )
         resolution = _apply_named_leave_override(
+            resolution,
+            user_message=user_message,
+            labels=labels,
+        )
+        resolution = _apply_named_coworker_override(
             resolution,
             user_message=user_message,
             labels=labels,

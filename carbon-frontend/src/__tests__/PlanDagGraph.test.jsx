@@ -64,10 +64,10 @@ describe('PlanDagGraph', () => {
     expect(screen.getByTestId('plan-dag-graph')).toBeInTheDocument();
     expect(screen.getByText('Plan graph')).toBeInTheDocument();
     expect(screen.getByText('3 steps · 3 links')).toBeInTheDocument();
-    expect(screen.getByText('Pending')).toBeInTheDocument();
-    expect(screen.getByText('Running')).toBeInTheDocument();
+    expect(screen.getAllByText('Pending').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Running').length).toBeGreaterThan(0);
     expect(screen.getByText('Needs approval')).toBeInTheDocument();
-    expect(screen.getByText('Finished')).toBeInTheDocument();
+    expect(screen.getAllByText('Finished').length).toBeGreaterThan(0);
     expect(screen.getByText('Failed')).toBeInTheDocument();
   });
 
@@ -369,11 +369,34 @@ describe('EnterpriseGraph interactions (movable/resizable nodes, live status, to
     expect(doneNode.querySelector('animate')).toBeNull();
   });
 
+  it('keeps a full title instead of clipping the first glyphs', () => {
+    const { container } = renderGraph({
+      plan: {
+        ...PLAN,
+        steps: [
+          { step_id: 0, intent: 'Submitting the leave request', status: 'running', depends_on: [] },
+          { step_id: 1, intent: 'تقديم الطلب حتى 2026-07-01', status: 'pending', depends_on: [0] },
+        ],
+      },
+    });
+    const arabic = container.querySelector('foreignObject[data-title*="تقديم"]');
+    expect(arabic).not.toBeNull();
+    expect(arabic.getAttribute('data-dir')).toBe('rtl');
+    expect(arabic.textContent).toContain('تقديم الطلب');
+    expect(arabic.textContent).toContain('2026-07-01');
+    const date = [...arabic.querySelectorAll('[dir="ltr"]')].find((el) => el.textContent.includes('2026-07-01'));
+    expect(date).toBeTruthy();
+    const english = container.querySelector('foreignObject[data-title="Submitting the leave request"]');
+    expect(english?.getAttribute('data-dir')).toBe('ltr');
+    expect(arabic.textContent).not.toContain(':7-02-01');
+    expect(container.textContent).not.toContain('bmiting');
+  });
+
   it('shows a status pill on each node', () => {
     const { container } = renderGraph({ plan: PLAN });
 
-    expect(container.querySelector('[role="button"][aria-label^="Step 1:"]').textContent).toContain('RUNNING');
-    expect(container.querySelector('[role="button"][aria-label^="Step 0:"]').textContent).toContain('FINISHED');
+    expect(container.querySelector('[role="button"][aria-label^="Step 1:"]').textContent).toContain('Running');
+    expect(container.querySelector('[role="button"][aria-label^="Step 0:"]').textContent).toContain('Finished');
   });
 });
 

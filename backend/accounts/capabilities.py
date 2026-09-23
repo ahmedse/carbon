@@ -1311,7 +1311,7 @@ def get_user_capabilities(user) -> FrozenSet[str]:
     # group capabilities. Org- or module-scoped roles grant READ-ONLY view
     # capabilities only — a wildcard ("*") group scoped to an org unit must
     # NOT turn the member into a platform-wide writer.
-    roles = ScopedRole.objects.filter(user=user, is_active=True)
+    roles = ScopedRole.objects.filter(user=user).live()
     global_roles = roles.filter(org_unit__isnull=True, module__isnull=True)
     scoped_roles = roles.exclude(org_unit__isnull=True, module__isnull=True)
 

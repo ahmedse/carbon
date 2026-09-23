@@ -110,12 +110,13 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
   };
   const isRtl = direction === 'rtl';
 
-  // RTL (Arabic): Cairo leads the font stack with a taller line height for
-  // Arabic glyphs; LTR keeps the existing Inter stack untouched.
+  // RTL (Arabic): Cairo leads the font stack. Its hhea/typo metrics are
+  // 1.874em, so a shorter line box plus overflow:hidden shaves the glyphs.
+  // LTR keeps the existing Inter stack untouched.
   const fontFamily = isRtl
     ? '"Cairo", "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
     : '"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-  const bodyLineHeight = isRtl ? 1.6 : 1.35;
+  const bodyLineHeight = isRtl ? 1.9 : 1.35;
 
   return createTheme({
     direction,
@@ -243,7 +244,7 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
           },
           body: {
             fontSize: 13,
-            lineHeight: isRtl ? 1.6 : 1.4,
+            lineHeight: isRtl ? bodyLineHeight : 1.4,
             letterSpacing: '-0.008em',
             WebkitFontSmoothing: 'antialiased',
             MozOsxFontSmoothing: 'grayscale',
@@ -273,9 +274,10 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
             padding: '4px 10px',
             fontSize: '0.8125rem',
             fontWeight: 500,
+            ...(isRtl ? { lineHeight: bodyLineHeight } : {}),
             textTransform: 'none',
             boxShadow: 'none',
-            minHeight: '28px',
+            minHeight: isRtl ? '32px' : '28px',
             transition: 'all 150ms ease',
             '&:hover': {
               boxShadow: '0 2px 4px rgba(0, 0, 0, 0.08)',
@@ -392,7 +394,8 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
             borderRadius: 3,
             fontWeight: 500,
             fontSize: '0.75rem',
-            height: '20px',
+            height: isRtl ? '26px' : '20px',
+            ...(isRtl ? { lineHeight: bodyLineHeight } : {}),
           },
           colorSuccess: {
             backgroundColor: mode === 'light' ? '#e7f9f3' : 'rgba(16, 185, 129, 0.15)',
@@ -442,6 +445,7 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
           root: {
             padding: '4px 8px',
             fontSize: '0.8125rem',
+            ...(isRtl ? { lineHeight: bodyLineHeight } : {}),
             borderBottom: `1px solid ${colors.divider}`,
           },
         },
@@ -609,11 +613,12 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
               fontWeight: 600,
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
+              ...(isRtl ? { lineHeight: bodyLineHeight } : {}),
             },
             '& .MuiDataGrid-cell': {
               borderBottom: `1px solid ${colors.divider}`,
               padding: '4px 8px',
-              lineHeight: '1.3',
+              lineHeight: isRtl ? bodyLineHeight : 1.3,
             },
             '& .MuiDataGrid-row:hover': {
               backgroundColor: mode === 'light' ? 'rgba(37, 99, 235, 0.04)' : 'rgba(255, 255, 255, 0.03)',
@@ -675,7 +680,8 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
         styleOverrides: {
           root: {
             fontSize: '0.875rem',
-            minHeight: 34,
+            ...(isRtl ? { lineHeight: bodyLineHeight } : {}),
+            minHeight: isRtl ? 40 : 34,
             padding: '4px 8px',
           },
         },

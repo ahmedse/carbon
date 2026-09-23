@@ -16,15 +16,18 @@ from ai.engine.cognition.plan.planner import Plan, PlanStep
 from ai.engine.cognition.state_store import ConversationState
 from ai.engine.cognition.turn.handoff_agent import (
     ChatHandoffOutcome,
+    build_bound_write_confirmation_answer,
     build_chat_write_clarify,
     build_chat_write_handoff,
     build_slot_status_answer,
     chat_grounding_rules_block,
     combine_user_brief,
     enough_slots_for_chat_handoff,
+    is_bound_write_affirmation,
     extract_plan_write,
     is_ess_slot_continuation,
     is_ess_write_utterance,
+    is_ready_to_submit_ask,
     is_slot_status_ask,
     merge_slots,
     missing_slots_for_chat,
@@ -300,6 +303,111 @@ async def test_try_chat_write_handoff_complete_loan():
     assert ctx.state.slots.get("loan_type")
     assert ctx.state.slots.get("principal") in (3000, "3000", 3000.0)
     assert "3000" in outcome.text or "3,000" in outcome.text or "emergency" in outcome.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_thanks_after_complete_write_does_not_rehandoff():
+    """F-LIVE-10: thanks after a bound write is an ack, not a second handoff."""
+    from ai.engine.cognition.turn.runner import TurnPipelineRunner
+
+    runner = TurnPipelineRunner.__new__(TurnPipelineRunner)
+    ctx = _StateCtx()
+    ctx.state.intent = {"api": "submit_my_loan", "zone": "ess"}
+    ctx.state.slots = {"loan_type": "emergency", "principal": 3000}
+    outcome = await runner._try_chat_write_handoff(  # noqa: SLF001
+        user_message="Thank you for the help",
+        conversation_history=[
+            {"role": "user", "content": "I need 3000 SAR for an emergency loan"},
+            {"role": "assistant", "content": "Switch to Agent — I will carry these details."},
+        ],
+        state_ctx=ctx,
+        instance_config={"api_catalog": _LOAN_CATALOG},
+    )
+    assert outcome is None
+
+
+def test_affirmation_of_bound_loan_restates_user_digits():
+    assert is_bound_write_affirmation(
+        "نعم، أريد ٥٠٠٠ بالضبط",
+        {"loan_type": "emergency", "principal": 5000},
+    )
+    assert not is_bound_write_affirmation(
+        "متى سأتلقى قراري؟",
+        {"loan_type": "emergency", "principal": 5000},
+    )
+    assert not is_bound_write_affirmation(
+        "نعم، أريد ٨٠٠٠",
+        {"loan_type": "emergency", "principal": 5000},
+    )
+    outcome = build_chat_write_handoff(
+        api_name="submit_my_loan",
+        slots={"loan_type": "emergency", "principal": 5000.0},
+        user_message="نعم، أريد ٥٠٠٠ بالضبط",
+    )
+    assert outcome.decision == "handoff_agent"
+    assert "٥٠٠٠" in outcome.text
+    assert "متى" not in outcome.text
+
+
+@pytest.mark.asyncio
+async def test_affirmation_after_handoff_is_zero_llm_restatement():
+    from ai.engine.cognition.turn.runner import TurnPipelineRunner
+
+    runner = TurnPipelineRunner.__new__(TurnPipelineRunner)
+    ctx = _StateCtx()
+    ctx.state.intent = {"api": "submit_my_loan", "zone": "ess"}
+    ctx.state.slots = {"loan_type": "emergency", "principal": 5000}
+    ctx.state.decisions = [{"decision": "handoff_agent"}]
+    outcome = await runner._try_chat_write_handoff(  # noqa: SLF001
+        user_message="نعم، أريد ٥٠٠٠ بالضبط",
+        conversation_history=[],
+        state_ctx=ctx,
+        instance_config={"api_catalog": _LOAN_CATALOG},
+    )
+    assert isinstance(outcome, ChatHandoffOutcome)
+    assert outcome.decision == "handoff_agent"
+    assert "٥٠٠٠" in outcome.text
+
+
+@pytest.mark.asyncio
+async def test_yes_while_clarifying_does_not_handoff():
+    from ai.engine.cognition.turn.runner import TurnPipelineRunner
+
+    runner = TurnPipelineRunner.__new__(TurnPipelineRunner)
+    ctx = _StateCtx()
+    ctx.state.intent = {"api": "submit_my_leave", "zone": "ess"}
+    ctx.state.slots = {
+        "leave_type": "annual",
+        "start_date": "2025-01-15",
+        "end_date": "2025-01-22",
+    }
+    ctx.state.decisions = [{"decision": "clarify"}]
+    outcome = await runner._try_chat_write_handoff(  # noqa: SLF001
+        user_message="Yes, that's correct",
+        conversation_history=[],
+        state_ctx=ctx,
+        instance_config={"api_catalog": _LOAN_CATALOG},
+    )
+    assert isinstance(outcome, ChatHandoffOutcome)
+    assert outcome.decision == "answer"
+    assert "January 15" in outcome.text and "January 22" in outcome.text
+    assert "annual" in outcome.text.lower()
+
+
+def test_ready_to_submit_and_absence_are_writes():
+    assert is_ready_to_submit_ask("Is there anything else you need?")
+    assert is_ess_write_utterance("أريد الإبلاغ عن غياب اليوم")
+    assert not is_ess_write_utterance("كم عدد ساعات الغياب؟")
+    confirm = build_bound_write_confirmation_answer(
+        api_name="submit_my_leave",
+        slots={
+            "leave_type": "sick",
+            "start_date": "2026-09-23",
+        },
+        user_message="Yes, I was sick today",
+    )
+    assert confirm.decision == "answer"
+    assert "sick" in confirm.text.lower()
 
 
 @pytest.mark.django_db(transaction=True)

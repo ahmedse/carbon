@@ -242,9 +242,9 @@ class Settings(BaseSettings):
     # ── Pulse v2 Phase 7 — post-result verification (on by default, fail-closed) ──
     PULSE_VERIFY_ENABLED: bool = True
 
-    # PV2-4A — Arbiter shadow (legacy path still executes). Values:
-    #   shadow (default) · on (4B flip) · legacy (kill switch, no compare)
-    PULSE_ARBITER: str = "shadow"
+    # PV2-4B — Arbiter owns the recorded turn decision. Values:
+    #   on (default) · shadow (compare, keep caller label) · legacy (kill switch)
+    PULSE_ARBITER: str = "on"
 
     # ── Answer Envelope (PAQ-2A) — typed structured-output synthesis ──
     # When True, data-bearing turns synthesize a typed AnswerEnvelope (tables/

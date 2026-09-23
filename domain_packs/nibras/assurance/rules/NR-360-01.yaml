@@ -8,4 +8,4 @@ validation: static binding on employee-scoped fetches
 implementation: Initial load uses ?employee= and fetchEmployee(manager). Directory pickers load on edit.
 confidence: high-code
 catalogue: configured
-residual: Org units still load on open. Position titles come from the employee payload. The position catalog loads when employment is edited. Manager choice is a 20-row search.
+residual: The header shows the org unit name from the employee payload. The org-unit catalog loads when organization is edited. Position titles come from the employee payload. The position catalog loads when employment is edited. Manager choice is a 20-row search.

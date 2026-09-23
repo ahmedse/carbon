@@ -107,6 +107,99 @@ async def test_observe_returns_none_for_no_match():
     assert dw.call_kwargs is None
 
 
+async def test_observe_skips_llm_for_empty_payslips():
+    """Empty ESS payslips are stated in copy — observe must not spend a draft."""
+    loop = ReActLoop()
+    dw = _FakeDraftWitness("should not invent 4500")
+    tool_output = {
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": "list_my_payslips"},
+        "result": json.dumps({"status_code": 200, "data": {"count": 0, "results": []}}),
+    }
+    out = await loop._observe(
+        step=_step(),
+        tool_output=tool_output,
+        user_message="What was my net pay last month?",
+        system_prompt="sys",
+        conversation_history=None,
+        instance_config=None,
+        user_info=None,
+        dw=dw,
+    )
+    assert out is not None
+    assert out.needs_followup is False
+    assert dw.call_kwargs is None
+    assert "4500" not in (out.answer or "") and "4,500" not in (out.answer or "")
+    assert "payslip" in (out.answer or "").lower()
+
+
+async def test_observe_skips_llm_for_committed_payslips():
+    """Committed identity is restated from the tool — observe must not draft."""
+    loop = ReActLoop()
+    dw = _FakeDraftWitness("should not invent 3700")
+    tool_output = {
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": "list_my_payslips"},
+        "result": json.dumps({
+            "status_code": 200,
+            "data": {
+                "count": 4,
+                "results": [
+                    {"line_type": {"code": "gross"}, "amount": "6500.000"},
+                    {"line_type": {"code": "gosi"}, "amount": "1200.000"},
+                    {"line_type": {"code": "loan_installment"}, "amount": "800.000"},
+                    {"line_type": {"code": "net"}, "amount": "4500.000"},
+                ],
+            },
+        }),
+    }
+    out = await loop._observe(
+        step=_step(),
+        tool_output=tool_output,
+        user_message="What was my net pay last month?",
+        system_prompt="sys",
+        conversation_history=None,
+        instance_config=None,
+        user_info=None,
+        dw=dw,
+    )
+    assert out is not None
+    assert dw.call_kwargs is None
+    assert "4500" in (out.answer or "")
+    assert "3700" not in (out.answer or "")
+
+
+async def test_observe_skips_llm_for_profile():
+    loop = ReActLoop()
+    dw = _FakeDraftWitness("should not invent Engineering")
+    tool_output = {
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": "get_my_profile"},
+        "result": json.dumps({
+            "status_code": 200,
+            "data": {
+                "employee_no": "1067",
+                "org_unit": {"id": 6, "name": "Coiled Tubing"},
+                "manager": {"id": 3, "name": "Mohammad Bolto Ali"},
+            },
+        }),
+    }
+    out = await loop._observe(
+        step=_step(),
+        tool_output=tool_output,
+        user_message="What department am I in?",
+        system_prompt="sys",
+        conversation_history=None,
+        instance_config=None,
+        user_info=None,
+        dw=dw,
+    )
+    assert out is not None
+    assert dw.call_kwargs is None
+    assert "Coiled Tubing" in (out.answer or "")
+    assert "Engineering" not in (out.answer or "")
+
+
 async def test_pulse_loop_settings_exist():
     """PULSE_LOOP_* settings expose the Phase 1 defaults."""
     from ai.engine.core.config import Settings

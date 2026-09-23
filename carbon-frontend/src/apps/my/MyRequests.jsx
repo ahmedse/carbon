@@ -19,6 +19,7 @@ import {
   CORR_FILTER_TYPES,
   codeLabel,
   corrTypeLabel,
+  displayTitle,
   requestTypeLabel,
   payloadSummary,
   formatDateTime,
@@ -104,6 +105,7 @@ export default function MyRequests() {
         const summary = payloadSummary(t, row, i18n.language) || '';
         const hay = [
           row.reference_no,
+          displayTitle(t, row),
           row.title,
           typeLabel,
           summary,
@@ -140,7 +142,7 @@ export default function MyRequests() {
         headerName: t('tableTitle'),
         flex: 1.4,
         minWidth: 200,
-        valueGetter: (value, row) => row.title || '—',
+        valueGetter: (value, row) => displayTitle(t, row),
       },
       {
         field: 'summary',

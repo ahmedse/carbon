@@ -762,6 +762,7 @@
   "payrollSodMissingActorDetail": "An authenticated user is required to complete this payroll step.",
   "payrollSodGenericDetail": "This payroll step was refused for separation of duties. A different authorized user must complete the irreversible action.",
   "colPreparer": "Prepared by",
+  "payrollPreparerNotRecorded": "No preparer was recorded for this run. The dash is not a name. Commit stays closed until compute records one.",
   "payrollSodBanner": "The person who computes a run cannot commit it. Commit is disabled for the preparer.",
   "wpsExportHonesty": "This downloads a WPS file from Carbon. It is not a submission receipt from PAM or the bank.",
   "eosiBasicSourceWarning": "This provision uses the verified compensation ledger basic — the same source as payroll. Profile salary is not used."

@@ -1,7 +1,6 @@
 // src/pages/admin/tabs/GroupOverviewTab.jsx
 import React from 'react';
 import { Box, Typography, Grid, Chip } from '@mui/material';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
 function InfoRow({ label, value }) {
   return (
@@ -17,13 +16,16 @@ export default function GroupOverviewTab({ entityData: group }) {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant='h6' gutterBottom>Role Summary</Typography>
+      <Typography variant='h6' gutterBottom>Duty</Typography>
+      <Typography variant='body2' color='text.secondary' sx={{ mb: 2 }}>
+        A duty is a capability bundle. It is not tied to an org unit. Open Assignment Management to see each grant: one user, this duty, and one anchor org unit. Child units are included when access is checked. They are not extra rows.
+      </Typography>
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 6 }}>
-          <InfoRow label='Group Name' value={group.name} />
-          <InfoRow label='Type' value={group.role_type === 'platform' ? 'Platform Role' : 'App Role'} />
-          <InfoRow label='App ID' value={group.app_id} />
-          <InfoRow label='Manifest Key' value={group.manifest_key} />
+          <InfoRow label='Duty' value={group.duty || group.name} />
+          <InfoRow label='Stored group' value={group.name} />
+          <InfoRow label='Type' value={group.role_type === 'platform' ? 'Platform' : 'App'} />
+          <InfoRow label='App' value={group.app_id} />
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
           <InfoRow label='Scoped' value={group.is_scoped ? 'Yes' : 'No'} />

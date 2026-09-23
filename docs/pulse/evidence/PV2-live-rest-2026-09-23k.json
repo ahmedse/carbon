@@ -1,0 +1,627 @@
+{
+  "tier": "live_dev",
+  "caveats": [
+    "Tier live_dev: real LLM provider (LLM_API_KEY) and the configured dev DB, dispatched as an authenticated employee. Reply-text metrics are engine-attributable but non-deterministic across runs (LLM variance).",
+    "Chat mode only (ADR-0046): host writes are never committed from these turns; process dials may create Plan/Run rows awaiting consent in the dev DB.",
+    "Fan-out agents and multi-step planning are disabled in the engine Settings (os.environ + get_settings.cache_clear() since PV2-1C). The PV2-0C live baseline ran WITH fan-out on (override_settings does not reach the engine Settings) — compare llm_calls against it accordingly."
+  ],
+  "host_user": "emp_1067",
+  "database": "nibras_dev",
+  "errors": [],
+  "scripts_run": 6,
+  "scripts_passed": 2,
+  "total_turns": 48,
+  "turns_passed": 33,
+  "focus_retention": 0.885,
+  "slot_carry_over": 1.0,
+  "language_fidelity": 0.958,
+  "router_agreement": 0.958,
+  "llm_calls_p50": 2,
+  "llm_calls_max": 6,
+  "turns_over_budget": 12,
+  "per_objective_pass": {
+    "C1": 0.875,
+    "C3": 0.75,
+    "C8": 0.75,
+    "C2": 0.562,
+    "C7": 0.5,
+    "C4": 1.0,
+    "C10": 0.375,
+    "C9": 1.0,
+    "A1": 1.0
+  },
+  "scripts": [
+    {
+      "script_id": "ess-leave-en-01",
+      "turns": 8,
+      "turns_passed": 6,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 1,
+      "llm_budget_failures": 2,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "clarify",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "I understand you want annual leave from January 15, 2025 to January 22, 2025. Let me confirm those dates?"
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 3,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 2"
+          ],
+          "reply": "Your leave request for January 15–22, 2025 (8 days) is ready to submit. Based on your leave history, you have approved annual leave records on file. To proceed,"
+        },
+        {
+          "turn": 3,
+          "decision": "tool_answer",
+          "llm_calls": 5,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['handoff_agent', 'answer']",
+            "llm_calls=5 > 2"
+          ],
+          "reply": "You have 19 days of annual leave remaining, with 1 day pending approval. Your leave balance shows 19 days of annual leave available after using 10 days this per"
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "You requested annual leave."
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "The dates for your annual leave request are: - **Start date:** January 15, 2025\n- **End date:** January 22, 2025\n- **Duration:** 8 days"
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "That is **8 days** of annual leave (January 15–22, 2025)."
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "I cannot predict whether your leave request will be approved — that depends on your manager's review and any organisational policies around leave timing and cov"
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "The timing depends on your manager's review process. Typically: - **Submission:** Once you submit the request, it enters your manager's queue for approval.\n- **"
+        }
+      ]
+    },
+    {
+      "script_id": "ess-attendance-mixed-01",
+      "turns": 8,
+      "turns_passed": 6,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 0,
+      "llm_budget_failures": 2,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "answer",
+          "llm_calls": 3,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 2"
+          ],
+          "reply": "أنت تريد الإبلاغ عن غياب اليوم. للأسف، قائمة الإمكانيات المتاحة لك لا تتضمن أداة للإبلاغ عن الغياب أو تسجيل الحضور والغياب. الأدوات المتاحة تقتصر على: - عرض سجل"
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 3,
+          "llm_calls_background": 1,
+          "language": "ar",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 2"
+          ],
+          "reply": "فهمت أنك كنت مريضاً اليوم. بدلاً من الإبلاغ عن غياب، يمكنك **تقديم طلب إجازة مرضية** (sick leave) — وهذا هو الخيار الأنسب في هذه الحالة. هل تريد أن **أساعدك في "
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Do you mean: (a) Is today's absence already recorded in the system as sick leave, or (b) Do you want to know if your sick leave request has been approved/marked"
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "نعم، عادة ما تتطلب الإجازة المرضية شهادة طبية، خاصة إذا استمرت لأكثر من يوم واحد. **السياسة الدقيقة تعتمد على:**\n- عدد أيام الغياب المرضي\n- سياسة الشركة (GOFSCO"
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "هل تقصد عدد ساعات الغياب لليوم (23 سبتمبر 2026)، أم تريد معرفة إجمالي ساعات الغياب المسجلة لديك في النظام؟"
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "What are you appealing? Your sick leave request, an attendance record, a payslip deduction, or something else?"
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "What is 'this' that you're asking about — the absence record, the sick leave request status, or the appeal outcome?"
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "You're welcome. Ask if you need anything else."
+        }
+      ]
+    },
+    {
+      "script_id": "entity-focus-switch-01",
+      "turns": 8,
+      "turns_passed": 8,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 0,
+      "llm_budget_failures": 0,
+      "passed": true,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "answer",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Who is Reena? Please provide their employee number or full name so I can look up their profile."
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "I don't have a record of who 'Reena' is from your previous message. Could you provide Reena's employee number or full name so I can look up her position?"
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "I still need Reena's employee number or full name to look up her department. Could you provide that?"
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Could you provide Salman's employee number so I can look up their profile?"
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Could you provide Salman's employee number so I can look up his role?"
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Could you provide Salman's employee number so I can look up his department?"
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Could you provide Reena's employee number so I can look up her role and manager status?"
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Could you provide Salman's employee number so I can look up his direct reports?"
+        }
+      ]
+    },
+    {
+      "script_id": "grounded-recall-01",
+      "turns": 8,
+      "turns_passed": 3,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 1,
+      "llm_budget_failures": 4,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "answer",
+          "llm_calls": 3,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 2"
+          ],
+          "reply": "Your employee number is emp_1067. This is the identifier you use to access the Nibras People & Payroll system for GOFSCO. The system has you registered under th"
+        },
+        {
+          "turn": 2,
+          "decision": "tool_answer",
+          "llm_calls": 6,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['answer']",
+            "mentions_any missing ['Engineering']",
+            "llm_calls=6 > 2"
+          ],
+          "reply": "**You are in the Coiled Tubing department.** Your job title is Heavy Duty Driver, and your manager is Mohammad Bolto Ali. This information is current in your em"
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 3,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 2"
+          ],
+          "reply": "Your manager is **Mohammad Bolto Ali**."
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Thank you for confirming. Your name is **Mohamed Hassan**, and you are registered in the system as: - **Employee ID:** emp_1067\n- **Name:** Mohamed Hassan\n- **J"
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "I gave you the employee number **emp_1067**. That is your employee ID in the Nibras People & Payroll system for GOFSCO."
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['Engineering']"
+          ],
+          "reply": "You didn't mention a department. I told you that you are in the **Coiled Tubing** department based on your employee record in the system. You only confirmed you"
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Your manager's name is **Mohammad Bolto Ali**."
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 3,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 2"
+          ],
+          "reply": "Your full name is **Mohamed Hassan**."
+        }
+      ]
+    },
+    {
+      "script_id": "plan-status-01",
+      "turns": 8,
+      "turns_passed": 8,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 0,
+      "llm_budget_failures": 0,
+      "passed": true,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "clarify",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "What type of loan are you interested in?"
+        },
+        {
+          "turn": 2,
+          "decision": "clarify",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Emergency loan. How much do you need to borrow?"
+        },
+        {
+          "turn": 3,
+          "decision": "handoff_agent",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "I have: Loan type: emergency; Principal: 5000; amount: 5000.\n\nTo submit it, switch to Agent — I'll carry these details over. Or open My and submit there. Chat d"
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "I have: emergency loan; 5000 SAR. It is ready to submit in Agent — not under review until you submit."
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "I cannot predict approval. Loan requests are reviewed by HR based on your eligibility, employment status, and company policy. Factors typically include: - Your "
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "I don't have access to your organisation's loan review SLA (service level agreement) or current HR queue status. The timeline depends on: - **Your company's pol"
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Yes. Once you submit the loan request via Agent or My, you can check its status anytime by: 1. **In My** — go to Loans or Requests section and view your submitt"
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "You're welcome. Ask if you need anything else."
+        }
+      ]
+    },
+    {
+      "script_id": "language-fidelity-ar-01",
+      "turns": 8,
+      "turns_passed": 2,
+      "language_failures": 2,
+      "reask_violations": 0,
+      "decision_failures": 0,
+      "llm_budget_failures": 4,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "answer",
+          "llm_calls": 3,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 2"
+          ],
+          "reply": "راتبك (قسيمتك) من الدورة 30: • الراتب الإجمالي (Gross): 6,500.00\n• خصم GOSI / PIFSS: 1,200.00\n• خصم قسط القرض: 800.00\n• **الراتب الصافي (Net): 4,500.00** إجمالي"
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 3,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['٦٠٠٠', 'dinar']",
+            "llm_calls=3 > 2"
+          ],
+          "reply": "راتبك الصافي (Net Pay) من الدورة 30 هو: **4,500.00** تفاصيل قسيمتك:\n• الراتب الإجمالي (Gross): 6,500.00\n• خصم GOSI / PIFSS: 1,200.00\n• خصم قسط القرض (Loan Insta"
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 3,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 2"
+          ],
+          "reply": "إجمالي الخصومات من راتبك الشهري هي: **2,000.00** تفصيل الخصومات: | نوع الخصم | المبلغ |\n|---|---|\n| خصم GOSI / PIFSS | 1,200.00 |\n| خصم قسط القرض | 800.00 |\n| *"
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "lang=en expected ar"
+          ],
+          "reply": "Committed net pay is 4500."
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "lang=en expected ar"
+          ],
+          "reply": "Committed net pay is 4500."
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "لا أملك معلومات عن موعد الراتب القادم من البيانات المتاحة لي حالياً. لمعرفة موعد الراتب القادم، يرجى:\n- التواصل مع **قسم الموارد البشرية / الرواتب** في الشركة\n-"
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 3,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 2"
+          ],
+          "reply": "بناءً على بيانات الدورة 30 (آخر دورة متاحة)، راتبك الحالي هو:\n• الراتب الإجمالي (Gross): 6,500.00\n• خصم GOSI / PIFSS: 1,200.00\n• خصم قسط القرض: 800.00\n• الراتب "
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "على الرحب والسعة. أنا هنا إذا احتجت شيئاً آخر."
+        }
+      ]
+    }
+  ]
+}

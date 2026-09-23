@@ -151,3 +151,24 @@ def test_org_scoped_user_cannot_detail_outside_scope(
     client = auth(user)
     resp = client.get(EMPLOYEES_URL + f'{employee_b.pk}/')
     assert resp.status_code == 404
+
+
+@pytest.mark.django_db
+def test_people_lead_anchor_includes_child_org_employees(
+    auth, create_user, create_scoped_role, org_a, employee_b,
+):
+    child = OrgUnit.objects.create(
+        name='Child', slug='org-a-child', parent=org_a, org_type='department',
+    )
+    Employee.objects.create(
+        org_unit=child, employee_no='E-C', full_name='Cara',
+        basic_salary='1000.000', join_date=date(2026, 1, 1),
+    )
+    user = create_user('people_lead_parent')
+    create_scoped_role(user, 'people_lead', org_unit=org_a)
+    client = auth(user)
+    resp = client.get(EMPLOYEES_URL)
+    assert resp.status_code == 200
+    employee_nos = {e['employee_no'] for e in resp.json()['results']}
+    assert employee_nos == {'E-C'}
+    assert 'E-B' not in employee_nos

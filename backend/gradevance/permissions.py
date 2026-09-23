@@ -13,11 +13,10 @@ def _can(user, capability: str) -> bool:
 
     if ScopedRole.objects.filter(
         user=user,
-        is_active=True,
         group__name__in=["admin", "admins_group"],
         org_unit__isnull=True,
         module__isnull=True,
-    ).exists():
+    ).live().exists():
         return True
     return has_capability(user, capability)
 

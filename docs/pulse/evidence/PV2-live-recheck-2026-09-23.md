@@ -77,7 +77,7 @@ C2 live on this script is **0.0**. Do not treat 2C as “payslip recall done.”
 | F-LIVE-7 | holds | handoff t4–t7 honest boundary |
 | F-LIVE-8 | holds | Arabic + amount + type carried |
 | F-LIVE-9 | **open** | payroll live cannot surface emp_1067 net/GOSI/loan figures |
-| F-LIVE-10 | known | thanks after a complete write restates `handoff_agent` (loan-ar t7 golden wants ack) |
+| F-LIVE-10 | closed offline | thanks after a complete write is 0-LLM ack (live 3-script not re-run) |
 
 ## Per-objective (this 3-script slice)
 

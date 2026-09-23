@@ -47,3 +47,6 @@ export const DEV_BANNER_PLATFORM = brand.devBannerPlatform || PLATFORM_NAME;
 // Informational mirror of the backend app-enablement preset. Not enforced here —
 // the real gate is PlatformAppConfig.is_enabled via useEnabledApps().
 export const BRAND_ENABLED_APP_IDS = brand.enabledAppIds || [];
+
+// Duties this brand grants. Each entry is { id, app }.
+export const BRAND_DUTIES = Array.isArray(brand.duties) ? brand.duties : [];

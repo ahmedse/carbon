@@ -3,7 +3,9 @@
 
 from rest_framework import serializers
 from django.contrib.auth.models import Group
-from .models import User, ScopedRole, RoleAssignmentAuditLog, GroupMetadata, PlatformAppConfig
+from .models import (
+    User, ScopedRole, RoleAssignmentAuditLog, GroupMetadata, PlatformAppConfig, DutyProfile,
+)
 
 class UserSerializer(serializers.ModelSerializer):
     # Write-only: accepted on create/update, never returned in responses.
@@ -16,15 +18,16 @@ class UserSerializer(serializers.ModelSerializer):
     employee_full_name = serializers.SerializerMethodField(read_only=True)
     employee_org_unit = serializers.SerializerMethodField(read_only=True)
     employee_no = serializers.SerializerMethodField(read_only=True)
+    employee_position = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = User
         fields = [
             'id', 'username', 'email', 'is_active', 'is_staff', 'language', 'password',
-            'employee_full_name', 'employee_org_unit', 'employee_no',
+            'employee_full_name', 'employee_org_unit', 'employee_no', 'employee_position',
         ]
         read_only_fields = [
-            'id', 'employee_full_name', 'employee_org_unit', 'employee_no',
+            'id', 'employee_full_name', 'employee_org_unit', 'employee_no', 'employee_position',
         ]
 
     def _employee(self, obj):
@@ -49,6 +52,15 @@ class UserSerializer(serializers.ModelSerializer):
     def get_employee_no(self, obj):
         emp = self._employee(obj)
         return emp.employee_no if emp else None
+
+    def get_employee_position(self, obj):
+        emp = self._employee(obj)
+        position = getattr(emp, 'position', None) if emp else None
+        if position is None:
+            return None
+        if position.code:
+            return f'{position.title} ({position.code})'
+        return position.title
 
     def create(self, validated_data):
         password = validated_data.pop('password', None)
@@ -91,6 +103,7 @@ class GroupSerializer(serializers.ModelSerializer):
     role_type = serializers.SerializerMethodField()
     app_id = serializers.SerializerMethodField()
     manifest_key = serializers.SerializerMethodField()
+    duty = serializers.SerializerMethodField()
     is_scoped = serializers.SerializerMethodField()
     is_protected = serializers.SerializerMethodField()
     description = serializers.CharField(allow_blank=True, required=False, default='')
@@ -106,17 +119,21 @@ class GroupSerializer(serializers.ModelSerializer):
             'role_type',
             'app_id',
             'manifest_key',
+            'duty',
             'is_scoped',
             'is_protected',
         ]
-        read_only_fields = ['id', 'permissions_count', 'users_count', 'role_type', 'app_id', 'manifest_key', 'is_scoped', 'is_protected']
+        read_only_fields = [
+            'id', 'permissions_count', 'users_count', 'role_type', 'app_id',
+            'manifest_key', 'duty', 'is_scoped', 'is_protected',
+        ]
 
     def get_permissions_count(self, obj):
         return obj.permissions.count()
 
     def get_users_count(self, obj):
         from .models import ScopedRole
-        return ScopedRole.objects.filter(group=obj, is_active=True).values('user').distinct().count()
+        return ScopedRole.objects.filter(group=obj).live().values('user').distinct().count()
 
     def get_role_type(self, obj):
         from .constants import VISIBILITY_ROLES, ADMINS_GROUP, ADMIN_GROUP
@@ -136,6 +153,10 @@ class GroupSerializer(serializers.ModelSerializer):
         if name in {ADMINS_GROUP, ADMIN_GROUP, 'audit', 'steward'}:
             return None
         return name.split('_', 1)[0]
+
+    def get_duty(self, obj):
+        from accounts.birthright import group_to_duty
+        return group_to_duty(obj.name)
 
     def get_manifest_key(self, obj):
         app_id = self.get_app_id(obj)
@@ -187,22 +208,79 @@ class GroupSerializer(serializers.ModelSerializer):
 
 class ScopedRoleSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField()
+    user_id = serializers.IntegerField(source='user.id', read_only=True)
+    employee_name = serializers.SerializerMethodField()
     group = serializers.StringRelatedField()
+    group_id = serializers.IntegerField(source='group.id', read_only=True)
+    duty = serializers.SerializerMethodField()
     org_unit = serializers.StringRelatedField()
+    org_unit_id = serializers.IntegerField(read_only=True)
     module = serializers.StringRelatedField()
 
     class Meta:
         model = ScopedRole
         fields = [
-            'id', 'user', 'group', 'org_unit', 'module', 'is_active', 'created_at'
+            'id', 'user', 'user_id', 'employee_name', 'group', 'group_id', 'duty',
+            'org_unit', 'org_unit_id', 'module',
+            'provenance', 'valid_from', 'valid_to', 'is_active', 'created_at',
         ]
 
+    def get_duty(self, obj):
+        from accounts.birthright import group_to_duty
+        return group_to_duty(obj.group.name)
+
+    def get_employee_name(self, obj):
+        emp = getattr(obj.user, 'employee_profile', None)
+        return (emp.full_name or '') if emp else ''
+
+
 class ScopedRoleCreateSerializer(serializers.ModelSerializer):
+    """Admin grants are exceptions. ``duty`` is the domain id (``people:lead``)."""
+
+    duty = serializers.CharField(required=False, allow_blank=True, write_only=True)
+
     class Meta:
         model = ScopedRole
         fields = [
-            'user', 'group', 'org_unit', 'module', 'is_active'
+            'user', 'group', 'duty', 'org_unit', 'module',
+            'provenance', 'valid_from', 'valid_to', 'is_active',
         ]
+        extra_kwargs = {
+            'group': {'required': False},
+            'provenance': {'required': False},
+        }
+
+    def validate(self, attrs):
+        duty = (attrs.pop('duty', '') or '').strip()
+        if duty:
+            from accounts.birthright import resolve_group_name
+            group, _created = Group.objects.get_or_create(name=resolve_group_name(duty))
+            attrs['group'] = group
+        if not attrs.get('group') and not getattr(self.instance, 'group_id', None):
+            raise serializers.ValidationError({'duty': 'Choose a duty.'})
+        attrs['provenance'] = ScopedRole.PROVENANCE_EXCEPTION
+        attrs['module'] = None
+        return attrs
+
+
+class DutyProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DutyProfile
+        fields = ['id', 'position_code', 'duty', 'scope']
+
+    def validate_duty(self, value):
+        from accounts.birthright import DUTY_GROUP
+        if value not in DUTY_GROUP:
+            raise serializers.ValidationError(
+                f"Unknown duty '{value}'. Use a domain duty such as people:lead."
+            )
+        return value
+
+    def validate_position_code(self, value):
+        code = (value or '').strip()
+        if not code:
+            raise serializers.ValidationError('Position code is required.')
+        return code
 
 class RoleAssignmentAuditLogSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField()
@@ -214,7 +292,8 @@ class RoleAssignmentAuditLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = RoleAssignmentAuditLog
         fields = [
-            'id', 'user', 'actor', 'group', 'org_unit', 'module', 'action', 'timestamp'
+            'id', 'user', 'actor', 'group', 'org_unit', 'module',
+            'action', 'timestamp', 'extra',
         ]
 
 

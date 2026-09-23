@@ -21,7 +21,6 @@ import re
 from dataclasses import dataclass
 
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group
 from django.utils.crypto import get_random_string
 
 from accounts.models import ScopedRole
@@ -110,9 +109,6 @@ def provision_employee_user(
         result.linked = employee.user_id is None
         return result
 
-    employee_group, _ = Group.objects.get_or_create(name=EMPLOYEE_GROUP)
-    manager_group, _ = Group.objects.get_or_create(name=MANAGER_GROUP)
-
     user = employee.user
     if user is None:
         user, result.created = User.objects.get_or_create(username=username)
@@ -133,41 +129,19 @@ def provision_employee_user(
         user.save(update_fields=["password", "is_active"])
     result.user = user
 
-    # Django auth group membership (visible in admin; legacy surface).
-    user.groups.add(employee_group)
-    if is_manager:
-        user.groups.add(manager_group)
+    # Structural birthright (ADR-0048). Callers may still pass is_manager;
+    # the engine reads direct reports and OrgUnit.manager_employee_id.
+    _ = is_manager
+    from people.access_sync import sync_employee_access
 
-    # 1) GLOBAL employee_group → "all employees" (my app baseline).
-    _, created = ScopedRole.objects.get_or_create(
-        user=user,
-        group=employee_group,
-        org_unit=None,
-        module=None,
-        defaults={"is_active": True},
-    )
-    result.employee_global = int(created)
-
-    # 2) ORG-UNIT employee_group → "employee → org unit".
-    if employee.org_unit_id is not None:
-        _, created = ScopedRole.objects.get_or_create(
-            user=user,
-            group=employee_group,
-            org_unit=employee.org_unit,
-            module=None,
-            defaults={"is_active": True},
-        )
-        result.employee_org = int(created)
-
-        # 3) ORG-UNIT manager_group → "manager → org unit".
-        if is_manager:
-            _, created = ScopedRole.objects.get_or_create(
-                user=user,
-                group=manager_group,
-                org_unit=employee.org_unit,
-                module=None,
-                defaults={"is_active": True},
-            )
-            result.manager_org = int(created)
-
+    sync_employee_access(employee, trigger="provision")
+    result.employee_global = int(ScopedRole.objects.filter(
+        user=user, group__name=EMPLOYEE_GROUP, org_unit=None, is_active=True,
+    ).exists())
+    result.employee_org = int(ScopedRole.objects.filter(
+        user=user, group__name=EMPLOYEE_GROUP, org_unit=employee.org_unit, is_active=True,
+    ).exists()) if employee.org_unit_id else 0
+    result.manager_org = int(ScopedRole.objects.filter(
+        user=user, group__name=MANAGER_GROUP, org_unit=employee.org_unit, is_active=True,
+    ).exists()) if employee.org_unit_id else 0
     return result

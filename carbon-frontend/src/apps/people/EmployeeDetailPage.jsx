@@ -42,7 +42,6 @@ import {
   fetchEmployeeTimeline, fetchPositions,
   deactivateEmployee, reactivateEmployee,
 } from '../../api/people';
-import { fetchOrgUnits } from '../../api/orgUnits';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import PageContainer from '../../components/layout/PageContainer';
 import SystemDialog from '../../components/SystemDialog';
@@ -156,8 +155,7 @@ export default function EmployeeDetailPage() {
       setError(null);
       const emp = await fetchEmployee(employeeId, token);
       const managerId = emp.manager;
-      const [orgUnits, leaveEnts, leaveRecs, bens, loans, certs, timeline, managerEmp] = await Promise.all([
-        fetchOrgUnits(token),
+      const [leaveEnts, leaveRecs, bens, loans, certs, timeline, managerEmp] = await Promise.all([
         fetchLeaveEntitlements(token, { employee: employeeId }),
         fetchLeaveRecords(token, { employee: employeeId }),
         fetchEmployeeBenefits(token, { employee: employeeId }),
@@ -167,10 +165,7 @@ export default function EmployeeDetailPage() {
         managerId ? fetchEmployee(managerId, token).catch(() => null) : Promise.resolve(null),
       ]);
 
-      const allOrgUnits = Array.isArray(orgUnits) ? orgUnits : [];
-      const orgUnitName = allOrgUnits.find(u => u.id === emp.org_unit)?.full_path
-        || allOrgUnits.find(u => u.id === emp.org_unit)?.name
-        || null;
+      const orgUnitName = emp.org_unit_label || null;
       const managerLabel = managerEmp
         ? `${managerEmp.employee_no ?? '—'} — ${managerEmp.full_name ?? ''}`
         : t('managerUnassigned');
@@ -181,7 +176,7 @@ export default function EmployeeDetailPage() {
         ...emp,
         orgUnitName,
         managerLabel,
-        allOrgUnits,
+        allOrgUnits: [],
         leaveEntitlements: toArr(leaveEnts),
         leaveRecords: toArr(leaveRecs),
         benefits: toArr(bens),

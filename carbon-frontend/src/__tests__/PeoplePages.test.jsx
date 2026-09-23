@@ -169,6 +169,19 @@ describe('People & Payroll pages (NIR-4A)', () => {
     }
   });
 
+  it('keeps search filters on a single employee page', async () => {
+    apiFetch.mockResolvedValue({ count: 1, results: [] });
+    await peopleApi.fetchEmployees('tk', {
+      page: 2, page_size: 50, q: 'ali', is_active: 'true', org_unit: 9,
+    });
+    const url = String(apiFetch.mock.calls.at(-1)[0]);
+    expect(url).toContain('page=2');
+    expect(url).toContain('page_size=50');
+    expect(url).toContain('q=ali');
+    expect(url).toContain('is_active=true');
+    expect(url).toContain('org_unit=9');
+  });
+
   it('builds the payroll_run query for payslip lines', () => {
     peopleApi.fetchPayslipLines({ payrollRun: 7 }, 'tk');
     expect(apiFetch).toHaveBeenCalledWith('people/payslip-lines/?payroll_run=7', { token: 'tk' });

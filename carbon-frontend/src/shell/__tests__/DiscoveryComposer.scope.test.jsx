@@ -9,6 +9,7 @@ vi.mock('../../components/NotificationProvider', () => ({
   useNotification: () => ({ notifyFromError: vi.fn() }),
 }));
 
+const sendBox = vi.hoisted(() => ({ text: 'أريد عمل اجازه' }));
 const startDiscoveryPlan = vi.fn();
 const advanceDiscovery = vi.fn();
 const finalizeDiscovery = vi.fn();
@@ -26,7 +27,7 @@ vi.mock('../AIMessageBubble', () => ({
 vi.mock('../AIWorkingIndicator', () => ({ default: () => null }));
 vi.mock('../AIInputBar', () => ({
   default: ({ onSend }) => (
-    <button type="button" onClick={() => onSend('أريد عمل اجازه')}>
+    <button type="button" onClick={() => onSend(sendBox.text)}>
       send-brief
     </button>
   ),
@@ -34,6 +35,7 @@ vi.mock('../AIInputBar', () => ({
 
 describe('DiscoveryComposer scope gate', () => {
   beforeEach(() => {
+    sendBox.text = 'أريد عمل اجازه';
     startDiscoveryPlan.mockReset();
     advanceDiscovery.mockReset();
     finalizeDiscovery.mockReset();
@@ -143,6 +145,56 @@ describe('DiscoveryComposer scope gate', () => {
 
     expect(onSwitchToChat).toHaveBeenCalledWith('أريد عمل اجازه');
     expect(createPlan).not.toHaveBeenCalled();
+  });
+
+  it('leave card plans the leave reply, not the non-leave discovery seed', async () => {
+    const onPlanReady = vi.fn();
+    const leaveReply = 'اريد طلب اجازة بدون مرتب لمدة 3 شهور, نبدأ من 1 فبراير 2027';
+    startDiscoveryPlan.mockResolvedValue({
+      id: 'disc-1',
+      status: 'needs_input',
+      plannable: true,
+      question: 'Could you tell me a bit more about what you want to accomplish?',
+      turns: [{ question: 'Could you tell me a bit more about what you want to accomplish?', reply: null }],
+    });
+    advanceDiscovery.mockResolvedValue({
+      id: 'disc-1',
+      status: 'recommended',
+      plannable: false,
+      turns: [{
+        question: 'Could you tell me a bit more about what you want to accomplish?',
+        reply: leaveReply,
+      }],
+      route: {
+        class: 'TRANSACTION',
+        recommended: 'leave_request',
+        plannable: false,
+        cards: [
+          { id: 'leave_request', label: 'Create a leave-request plan', primary: true },
+        ],
+      },
+    });
+    createPlan.mockResolvedValue({
+      id: 'plan-leave-2',
+      status: 'pending_approval',
+      steps: [{ step_id: 1, intent: 'Submit leave' }],
+    });
+
+    render(<DiscoveryComposer conversationId="c1" onPlanReady={onPlanReady} />);
+    sendBox.text = 'Run via Agent';
+    fireEvent.click(screen.getByRole('button', { name: 'send-brief' }));
+    expect(await screen.findByText(/Could you tell me a bit more/)).toBeInTheDocument();
+    sendBox.text = leaveReply;
+    fireEvent.click(screen.getByRole('button', { name: 'send-brief' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Create a leave-request plan/i }));
+
+    await waitFor(() => {
+      expect(createPlan).toHaveBeenCalledWith('t', {
+        brief: `Run via Agent\n${leaveReply}`,
+        conversation_id: 'c1',
+      });
+    });
+    expect(onPlanReady).toHaveBeenCalled();
   });
 
   it('loan process-dial plan_ready skips clarifying UI', async () => {

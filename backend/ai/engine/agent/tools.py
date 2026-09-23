@@ -1188,8 +1188,21 @@ async def execute_call_host_api(
         )
 
     entry = executor.get_catalog_entry(api_name)
+    user_message = str(kwargs.get("user_message") or "")
+    if not entry and first_person_profile_ask(user_message):
+        entry = executor.get_catalog_entry("get_my_profile")
+        if entry:
+            api_name = "get_my_profile"
     if not entry:
         return {"error": f"Unknown API endpoint: '{api_name}'. Check the api_catalog."}
+
+    # First-person identity is /people/me/ — never get_employee + list_employees.
+    if api_name == "get_employee" and first_person_profile_ask(user_message):
+        self_entry = executor.get_catalog_entry("get_my_profile")
+        if self_entry:
+            api_name = "get_my_profile"
+            entry = self_entry
+            path_params = None
 
     # B1: person-scoped leave/loan lists inherit focused employee_no when omitted.
     query_params = _inject_focus_employee_params(api_name, query_params, conversation_id)
@@ -2506,6 +2519,62 @@ def first_person_compensation_ask(text: str | None) -> bool:
     )
 
 
+_FIRST_PERSON_PROFILE_RE = re.compile(
+    r"("
+    r"employee\s*(?:number|no\.?|#)"
+    r"|رقم\s*ال?موظف"
+    r"|what department am i|department am i|which department am i|my department"
+    r"|who is my manager|my manager|manager'?s?\s+name"
+    r"|who am i\b|my profile|بياناتي"
+    r"|قسمي|مديري"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def first_person_profile_ask(text: str | None) -> bool:
+    """True for first-person identity (number / department / manager / who am I).
+
+    Catalog contract: these reads are ``get_my_profile`` (``/people/me/``),
+    never ``get_employee`` + ``list_employees``. Compensation / راتبي stays
+    on the CBAC path and is not claimed here.
+    """
+    raw = text or ""
+    if first_person_compensation_ask(raw):
+        return False
+    return bool(_FIRST_PERSON_PROFILE_RE.search(raw))
+
+
+_NAMED_COWORKER_RE = re.compile(
+    r"(?:"
+    r"(?:now\s+)?tell me about\s+"
+    r"|who is\s+"
+    r"|back to\s+"
+    r")"
+    r"([A-Za-z][A-Za-z']+(?:\s+[A-Za-z][A-Za-z']+){0,3})",
+    re.IGNORECASE,
+)
+_NAMED_COWORKER_STOP = frozenset({
+    "my", "me", "i", "you", "the", "a", "an", "this", "that",
+    "payroll", "leave", "loan", "today", "tomorrow",
+})
+
+
+def extract_named_coworker_query(text: str | None) -> str | None:
+    """Name in 'tell me about X' / 'who is X' / 'back to X' — not first-person."""
+    if first_person_profile_ask(text) or first_person_compensation_ask(text or ""):
+        return None
+    match = _NAMED_COWORKER_RE.search(text or "")
+    if not match:
+        return None
+    name = (match.group(1) or "").strip(" .,-")
+    if not name or name.casefold() in _NAMED_COWORKER_STOP:
+        return None
+    if len(name) < 2:
+        return None
+    return name
+
+
 _LEAVE_BALANCE_INTENT_RE = re.compile(
     r"("
     r"leave\s+balance|remaining\s+leave|leave\s+remaining|"
@@ -2616,6 +2685,9 @@ def stamp_compensation_deny_on_soft_empty(
     lookups so synthesis cannot invent absence.
     """
     if not completed_tools or not compensation_intent_asked(user_message):
+        return completed_tools
+    if payslip_specific_ask(user_message):
+        # Net pay / take-home / last payslip: empty list is the truth.
         return completed_tools
     if caps and "people:view_compensation" in caps:
         return completed_tools

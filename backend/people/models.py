@@ -216,6 +216,13 @@ class PayrollRun(models.Model):
         ordering = ['-period_start']
         verbose_name = "Payroll Run"
         verbose_name_plural = "Payroll Runs"
+        constraints = [
+            models.UniqueConstraint(
+                fields=['org_unit', 'period_start', 'period_end'],
+                condition=models.Q(status__in=['draft', 'computed', 'validated', 'committed']),
+                name='people_payrollrun_one_active_period',
+            ),
+        ]
 
     def __str__(self):
         return f"Payroll #{self.pk} {self.org_unit} {self.period_start}→{self.period_end} ({self.status})"

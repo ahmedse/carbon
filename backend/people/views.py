@@ -3,8 +3,8 @@
 #
 # CBAC (NIR-1C): reads → ``people:view``, writes → ``people:manage``.
 # Superusers and global admins bypass capability checks (full access).
-# RULE_12: employee/payroll reads are org-scoped for non-admin users via
-# ``accounts.rbac_utils.get_visible_org_units``.
+# Employee and payroll reads use live assignment rows that grant people:view.
+# Child org units of each anchor are included.
 
 import csv
 import io
@@ -25,7 +25,6 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
-from accounts.rbac_utils import get_visible_org_units
 from catalog.audit_utils import emit_governance_event
 from core.feedback import AppFeedback
 
@@ -108,8 +107,18 @@ from correspondence.serializers import (
 
 
 def _visible_org_unit_ids(user):
-    """Org unit ids the user may view (RULE_12 org scoping)."""
-    return [ou.id for ou in get_visible_org_units(user)]
+    """Org units whose employees this user may read.
+
+    The verb is ``people:view``. Places come from live assignment rows.
+    A global admin is handled by the callers that skip this helper.
+    """
+    from accounts.rbac_utils import org_scope_for_capability
+    from mdm.models import OrgUnit
+
+    scope = org_scope_for_capability(user, 'people:view')
+    if scope.unrestricted:
+        return list(OrgUnit.objects.filter(is_active=True).values_list('id', flat=True))
+    return list(scope.ids)
 
 
 def _scoped(user, queryset, org_lookup):
@@ -357,11 +366,15 @@ class EmployeeDetailView(APIView):
         )
 
     def get(self, request, pk):
-        employee = get_object_or_404(self._get_queryset(request.user), pk=pk)
+        employee = get_object_or_404(
+            self._get_queryset(request.user).select_related('org_unit', 'manager', 'position', 'user'),
+            pk=pk,
+        )
         return Response(mask_employee(EmployeeSerializer(employee).data, request.user))
 
     def patch(self, request, pk):
         employee = get_object_or_404(self._get_queryset(request.user), pk=pk)
+        previous_manager_id = employee.manager_id
         before = snapshot_employee(employee)
         old_salary = employee.basic_salary
         # ADR-0029 / NSR-2A: payroll SoT is the verified ledger. Reject client
@@ -423,6 +436,11 @@ class EmployeeDetailView(APIView):
             effective_date=timezone.localdate(), user=request.user,
             before=before, after=snapshot_employee(employee),
         )
+        from people.access_sync import sync_employee_and_managers
+        sync_employee_and_managers(
+            employee, previous_manager_id=previous_manager_id,
+            actor=request.user, trigger='employee',
+        )
         return Response(serializer.data)
 
     def delete(self, request, pk):
@@ -444,6 +462,11 @@ class EmployeeDetailView(APIView):
             effective_date=timezone.localdate(), user=request.user,
             before=before, after=None,
             notes='Soft delete (is_active=False)',
+        )
+        from people.access_sync import sync_employee_and_managers
+        sync_employee_and_managers(
+            employee, previous_manager_id=employee.manager_id,
+            actor=request.user, trigger='deactivated',
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
 

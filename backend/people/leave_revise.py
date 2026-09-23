@@ -24,6 +24,7 @@ from .leave_guards import (
     SUBJECT_TYPE,
     compute_balance,
     record_blocks_overlap,
+    resolve_balance_year,
 )
 from .leave_type_resolve import resolve_leave_type
 from .models import LeaveRecord
@@ -175,7 +176,7 @@ def apply_leave_payload_edit(corr, payload: dict) -> tuple[dict, str]:
         )
         profile = record.employee
 
-        year = start_date.year
+        year = resolve_balance_year(profile, leave_type, start_date)
         _, _, _, _, remaining = compute_balance(profile, leave_type, year)
         if days > remaining:
             raise LeaveReviseError(

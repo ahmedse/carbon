@@ -1,0 +1,142 @@
+{
+  "tier": "live_dev",
+  "caveats": [
+    "Tier live_dev: real LLM provider (LLM_API_KEY) and the configured dev DB, dispatched as an authenticated employee. Reply-text metrics are engine-attributable but non-deterministic across runs (LLM variance).",
+    "Chat mode only (ADR-0046): host writes are never committed from these turns; process dials may create Plan/Run rows awaiting consent in the dev DB.",
+    "Fan-out agents and multi-step planning are disabled in the engine Settings (os.environ + get_settings.cache_clear() since PV2-1C). The PV2-0C live baseline ran WITH fan-out on (override_settings does not reach the engine Settings) — compare llm_calls against it accordingly."
+  ],
+  "host_user": "emp_1067",
+  "database": "nibras_dev",
+  "errors": [],
+  "scripts_run": 1,
+  "scripts_passed": 0,
+  "total_turns": 8,
+  "turns_passed": 1,
+  "focus_retention": 0.2,
+  "slot_carry_over": 0.0,
+  "language_fidelity": 1.0,
+  "router_agreement": 0.5,
+  "llm_calls_p50": 3,
+  "llm_calls_max": 3,
+  "turns_over_budget": 6,
+  "per_objective_pass": {
+    "C1": 0.125,
+    "C2": 0.125
+  },
+  "scripts": [
+    {
+      "script_id": "payroll-followup-en-01",
+      "turns": 8,
+      "turns_passed": 1,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 4,
+      "llm_budget_failures": 6,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "tool_answer",
+          "llm_calls": 3,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['answer']",
+            "mentions_any missing ['4500', '4,500']",
+            "llm_calls=3 > 2"
+          ],
+          "reply": "I checked your payslip records, but no payslips were found. This could mean either no payslips have been issued yet, or they may not be visible in the system at"
+        },
+        {
+          "turn": 2,
+          "decision": "tool_answer",
+          "llm_calls": 3,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['answer']",
+            "mentions_any missing ['GOSI', '1200', '1,200']",
+            "llm_calls=3 > 2"
+          ],
+          "reply": "No payslips are currently available in the system, so I cannot retrieve information about deductions applied. There are no records to analyze. Please contact yo"
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 3,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['3700', '3,700']",
+            "llm_calls=3 > 2"
+          ],
+          "reply": "I cannot calculate your take-home pay because no payslip records are available in the system at this time. Without access to your actual payslip data—including "
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "I cannot verify whether GOSI is calculated correctly because no payslip records are available in the system for me to review. **To assess GOSI accuracy, I would"
+        },
+        {
+          "turn": 5,
+          "decision": "tool_answer",
+          "llm_calls": 3,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['answer']",
+            "mentions_any missing ['800']",
+            "llm_calls=3 > 2"
+          ],
+          "reply": "You have 5 loan records in draft status: 1. **Personal Loan** (ID 44): Principal 520.000 | 12 months | Start: 2027-09-13\n2. **Personal Loan** (ID 43): Principal"
+        },
+        {
+          "turn": 6,
+          "decision": "clarify",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=clarify not in ['answer']"
+          ],
+          "reply": "Are you asking whether your total deductions across all loans equal 2,000 SAR, or whether 2,000 SAR is your total monthly payroll deduction (GOSI + loans + othe"
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 3,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 2"
+          ],
+          "reply": "I don't have access to the payroll processing schedule in the system. The timing of payroll runs—including when next month's payroll will be drafted, computed, "
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 3,
+          "llm_calls_background": 1,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 2"
+          ],
+          "reply": "I don't currently have access to a download function for payslips in this system. However, since no payslips are available yet (as we confirmed earlier), there "
+        }
+      ]
+    }
+  ]
+}

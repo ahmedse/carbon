@@ -5,6 +5,8 @@ import { useAuth } from "../../../auth/AuthContext";
 import { useNotification } from "../../../components/NotificationProvider";
 import SystemDialog from "../../../components/SystemDialog";
 import EnterpriseGraph from "../../../components/graph/EnterpriseGraph";
+import { GraphNodeForeign } from "../../../components/graph/GraphNodeLabel";
+import { dominantDir } from "../../../components/graph/graphText";
 import { fetchDataSchemaTables } from "../../../api/dataschema";
 import { getTableLineage, getTableImpact, createLineageEdge } from "../../../api/lineage";
 import {
@@ -262,20 +264,28 @@ function LineageTab({ tableId, isAdmin }) {
   );
 
   const renderNode = useCallback(
-    (node) => (
-      <>
-        <rect x={6} y={8} width={6} height={node.h - 16} rx={2} fill={nodeColor(node)} />
-        <text x={20} y={24} fontSize={12} fontWeight={700} fill={theme.palette.text.primary}>
-          {String(node.label).slice(0, 26)}
-        </text>
-        {node.subtitle && (
-          <text x={20} y={42} fontSize={11} fill={theme.palette.text.secondary}>
-            {String(node.subtitle).slice(0, 24)}
-          </text>
-        )}
-      </>
-    ),
-    [nodeColor, theme.palette.text.primary, theme.palette.text.secondary],
+    (node) => {
+      const color = nodeColor(node);
+      const title = String(node.label || "");
+      const rtl = dominantDir(title) === "rtl";
+      return (
+        <>
+          <rect x={rtl ? node.w - 4 : 0} y={0} width={4} height={node.h} fill={color} />
+          <GraphNodeForeign
+            width={node.w}
+            height={node.h}
+            title={title}
+            meta={node.subtitle || ""}
+            status=""
+            statusColor={color}
+            fontFamily={theme.typography?.fontFamily}
+            color={theme.palette.text.primary}
+            tip={node.subtitle ? `${title} — ${node.subtitle}` : title}
+          />
+        </>
+      );
+    },
+    [nodeColor, theme],
   );
 
   const hasLineage = lineage.upstream.length > 0 || lineage.downstream.length > 0;
@@ -341,7 +351,9 @@ function LineageTab({ tableId, isAdmin }) {
             layoutHeight={graphData.height}
             height={Math.max(320, graphData.height)}
             nodeColor={nodeColor}
+            nodeShape={() => "parallelogram"}
             renderNode={renderNode}
+            fitZoomCeil={1.75}
             legend={legend}
             title={t("lineageGraphTitle")}
             summary={t("lineageGraphSummary", { count: graphData.nodes.length })}

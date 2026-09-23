@@ -6,6 +6,7 @@
 // label, 14px icon, left-bar active indicator, action.hover/selected states.
 import PropTypes from 'prop-types';
 import { Box, List, ListItemButton, Paper, Typography } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 
 // Single listbox option row. `ariaLabel` pins the accessible name so tests
 // (and screen readers) keep a stable name regardless of badge/description.
@@ -19,6 +20,8 @@ export function PickerOption({
   onClick,
   onHover,
 }) {
+  const theme = useTheme();
+  const labelLineHeight = theme.direction === 'rtl' ? theme.typography.body1.lineHeight : 1;
   return (
     <ListItemButton
       role="option"
@@ -31,7 +34,7 @@ export function PickerOption({
         display: 'flex',
         alignItems: 'center',
         gap: 0.75,
-        minHeight: 28,
+        minHeight: theme.direction === 'rtl' ? 32 : 28,
         px: 0.75,
         py: 0.125,
         borderRadius: '5px',
@@ -81,20 +84,20 @@ export function PickerOption({
         <Typography
           component="span"
           noWrap
-          sx={{ fontSize: '0.65rem', fontWeight: 500, lineHeight: 1, flexShrink: 0 }}
+          sx={{ fontSize: '0.65rem', fontWeight: 500, lineHeight: labelLineHeight, flexShrink: 0 }}
         >
           {badge}
         </Typography>
       ) : null}
       <Box sx={{ minWidth: 0, flex: 1 }}>
-        <Typography noWrap sx={{ fontSize: '0.65rem', lineHeight: 1, fontWeight: active ? 600 : 400 }}>
+        <Typography noWrap sx={{ fontSize: '0.65rem', lineHeight: labelLineHeight, fontWeight: active ? 600 : 400 }}>
           {title}
         </Typography>
         {description ? (
           <Typography
             noWrap
             color="text.secondary"
-            sx={{ fontSize: '0.575rem', fontWeight: 500, lineHeight: 1, display: 'block', mt: 0.25 }}
+            sx={{ fontSize: '0.575rem', fontWeight: 500, lineHeight: labelLineHeight, display: 'block', mt: 0.25 }}
           >
             {description}
           </Typography>

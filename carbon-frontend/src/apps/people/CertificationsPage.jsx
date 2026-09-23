@@ -8,18 +8,10 @@ import {
   Box,
   Button,
   IconButton,
-  Paper,
   Snackbar,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Tooltip,
-  Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -30,8 +22,8 @@ import PageContainer from '../../components/layout/PageContainer';
 import PageHeader from '../../components/Page/PageHeader';
 import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
 import ErrorAlert from '../../components/Page/ErrorAlert';
-import EmptyState from '../../components/Page/EmptyState';
 import SystemDialog from '../../components/SystemDialog';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { SearchSelect } from '../../components/Form';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
@@ -81,6 +73,8 @@ export default function CertificationsPage() {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [searchValue, setSearchValue] = useState('');
+  const [gridFilters, setGridFilters] = useState({ urgency: '' });
 
   const loadData = useCallback(async () => {
     try {
@@ -205,6 +199,95 @@ export default function CertificationsPage() {
 
   const closeSnackbar = () => setSnackbar((prev) => ({ ...prev, open: false }));
 
+  const urgencyOf = (certification) => expiryUrgency(certification.expiry_date) || 'valid';
+
+  const filteredCertifications = useMemo(() => {
+    const q = searchValue.trim().toLowerCase();
+    return sortedCertifications.filter((certification) => {
+      if (gridFilters.urgency && urgencyOf(certification) !== gridFilters.urgency) return false;
+      if (!q) return true;
+      const hay = [
+        employeeName(certification.employee),
+        refLabel(certification.cert_type),
+        refCode(certification.cert_type),
+        certification.number,
+        formatDate(certification.issued_date),
+        formatDate(certification.expiry_date),
+        certification.notes,
+      ].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }, [sortedCertifications, searchValue, gridFilters, employeeLabels, t]);
+
+  const filterDefs = useMemo(() => [
+    {
+      key: 'urgency',
+      label: t('colStatus'),
+      emptyLabel: t('filterAll'),
+      options: [
+        { value: 'expired', label: t('certsTabExpired') },
+        { value: 'critical', label: t('certsLegendCritical') },
+        { value: 'warning', label: t('certsLegendWarning') },
+        { value: 'notice', label: t('certsLegendNotice') },
+        { value: 'valid', label: t('certsTabValid') },
+      ],
+    },
+  ], [t]);
+
+  const columns = useMemo(() => [
+    {
+      field: 'employee',
+      headerName: t('colEmployee'),
+      flex: 1,
+      minWidth: 160,
+      valueGetter: (value) => employeeName(value),
+    },
+    {
+      field: 'cert_type',
+      headerName: t('colCertType'),
+      width: 160,
+      valueGetter: (value) => refLabel(value) || refCode(value) || '—',
+    },
+    { field: 'number', headerName: t('colCertNumber'), width: 140, valueGetter: (value) => value || '—' },
+    { field: 'issued_date', headerName: t('colIssuedDate'), width: 130, valueGetter: (value) => formatDate(value) },
+    {
+      field: 'expiry_date',
+      headerName: t('colExpiryDate'),
+      width: 140,
+      valueGetter: (value) => (value ? formatDate(value) : t('certsTabNoExpiry')),
+    },
+    {
+      field: 'status',
+      headerName: t('colStatus'),
+      width: 150,
+      sortable: false,
+      valueGetter: (_value, row) => urgencyOf(row),
+      renderCell: (params) => <CertExpiryChip expiryDate={params.row.expiry_date} />,
+    },
+    { field: 'notes', headerName: t('colNotes'), flex: 1, minWidth: 140, valueGetter: (value) => value || '—' },
+    {
+      field: 'actions',
+      headerName: t('colActions'),
+      width: 110,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => (
+        <>
+          <Tooltip title={t('actionEditCertification')}>
+            <IconButton size="small" onClick={() => openEdit(params.row)} sx={{ color: 'primary.main' }}>
+              <EditIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={t('actionDeleteCertification')}>
+            <IconButton size="small" onClick={() => setDeleteTarget(params.row)} sx={{ color: 'error.main' }}>
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </>
+      ),
+    },
+  ], [t, employeeLabels]);
+
   return (
     <PageContainer>
       <PageHeader
@@ -223,85 +306,35 @@ export default function CertificationsPage() {
         <LoadingSkeleton variant="console" />
       ) : error ? (
         <ErrorAlert message={error} onRetry={loadData} />
-      ) : certifications.length === 0 ? (
-        <EmptyState
-          icon={<SchoolIcon />}
-          title={t('certificationsEmpty')}
-          description={t('certificationsEmptyDesc')}
-          actionLabel={t('actionAddCertification')}
-          onAction={openCreate}
-        />
       ) : (
         <Box>
-          <TableContainer component={Paper} variant="outlined">
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colEmployee')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colCertType')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colCertNumber')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colIssuedDate')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colExpiryDate')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colStatus')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colNotes')}</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colActions')}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {sortedCertifications.map((certification) => {
-                  const urg = expiryUrgency(certification.expiry_date);
-                  const isUrgent = urg === 'expired' || urg === 'critical';
-                  return (
-                    <TableRow
-                      key={certification.id}
-                      hover
-                      sx={{ bgcolor: isUrgent ? 'error.50' : undefined }}
-                    >
-                      <TableCell>{employeeName(certification.employee)}</TableCell>
-                      <TableCell>
-                        {refLabel(certification.cert_type) || refCode(certification.cert_type) || '—'}
-                      </TableCell>
-                      <TableCell>{certification.number ?? '—'}</TableCell>
-                      <TableCell>{formatDate(certification.issued_date)}</TableCell>
-                      <TableCell>
-                        {certification.expiry_date ? (
-                          formatDate(certification.expiry_date)
-                        ) : (
-                          <Typography component="span" variant="body2" color="text.disabled">
-                            {t('certsTabNoExpiry')}
-                          </Typography>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <CertExpiryChip expiryDate={certification.expiry_date} />
-                      </TableCell>
-                      <TableCell>{certification.notes || '—'}</TableCell>
-                      <TableCell align="right">
-                        <Tooltip title={t('actionEditCertification')}>
-                          <IconButton
-                            size="small"
-                            onClick={() => openEdit(certification)}
-                            sx={{ color: 'primary.main' }}
-                          >
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title={t('actionDeleteCertification')}>
-                          <IconButton
-                            size="small"
-                            onClick={() => setDeleteTarget(certification)}
-                            sx={{ color: 'error.main' }}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </TableContainer>
+          <FilteredDataGrid
+            embedded
+            rows={filteredCertifications}
+            columns={columns}
+            searchValue={searchValue}
+            onSearchChange={setSearchValue}
+            filterDefs={filterDefs}
+            filterValues={gridFilters}
+            onFilterChange={(key, value) => setGridFilters((prev) => ({ ...prev, [key]: value }))}
+            onClearFilters={() => {
+              setSearchValue('');
+              setGridFilters({ urgency: '' });
+            }}
+            emptyMessage={t('certificationsEmpty')}
+            emptySubtext={t('certificationsEmptyDesc')}
+            pageSize={25}
+            height={560}
+            dataGridProps={{
+              getRowClassName: (params) => {
+                const urg = expiryUrgency(params.row.expiry_date);
+                return urg === 'expired' || urg === 'critical' ? 'cert-urgent-row' : '';
+              },
+              sx: {
+                '& .cert-urgent-row': { bgcolor: 'error.50' },
+              },
+            }}
+          />
           <CertExpiryLegend />
         </Box>
       )}

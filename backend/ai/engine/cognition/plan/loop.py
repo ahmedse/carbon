@@ -1611,6 +1611,8 @@ class ReActLoop:
         from ai.engine.llm.call_meter import stage
         from ai.engine.cognition.plan.export_bind import (
             apply_bind_to_tool_calls,
+            is_bound_catalog_read,
+            is_bound_resolve_entity,
             is_fully_bound_host_api,
             render_step_template,
         )
@@ -1627,6 +1629,11 @@ class ReActLoop:
         _deterministic = is_fully_bound_host_api(
             step.tool_name, step.tool_args, _catalog,
         )
+        _read_bound = (not _deterministic) and (
+            is_bound_catalog_read(step.tool_name, step.tool_args, _catalog)
+            or is_bound_resolve_entity(step.tool_name, step.tool_args)
+        )
+        _skip_draft = _deterministic or _read_bound
 
         def _bound_summary() -> str:
             args = step.tool_args if isinstance(step.tool_args, dict) else {}
@@ -1643,7 +1650,7 @@ class ReActLoop:
         # ── Flight Director: prepare_step (additive, never fails the run) ─
         attempts = 0
         prep = None
-        if flight_director is not None and not _deterministic:
+        if flight_director is not None and not _skip_draft:
             try:
                 prep = await flight_director.prepare_step(
                     step, flight_director.ledger, attempts=attempts,
@@ -1669,9 +1676,9 @@ class ReActLoop:
 
         retrieval_stub = retrieval or RetrievalResult()
 
-        if _deterministic:
-            # PV2-3A A2: zero draft/observe LLM — synthesize tool_calls from
-            # plan tool_args (same bind helper used when drafts omit calls).
+        if _skip_draft:
+            # PV2-3A A2: bound writes skip draft+observe. Bound GET reads skip
+            # draft only — observe still restates the host record.
             _title_fb = (
                 (step.tool_args or {}).get("title")
                 or (step.intent or "Agent report")[:80]
@@ -1718,9 +1725,10 @@ class ReActLoop:
                 result.critic_flags.append("deterministic_host_step")
             logger.info(
                 "ReActLoop: deterministic-first host step=%d api=%s "
-                "(skip draft/observe)",
+                "(%s)",
                 step.step_id,
                 (step.tool_args or {}).get("api_name"),
+                "skip draft, observe" if _read_bound else "skip draft/observe",
             )
         else:
             # Tool-aware drafting: expose the step's tool set (or the curated
@@ -2312,7 +2320,7 @@ class ReActLoop:
             # ONCE when the worker's declared tool calls outnumber what actually
             # executed. Mutation steps are NEVER auto re-run (RULE_21) — those
             # escalate for human review instead.
-            if flight_director is not None and not _deterministic:
+            if flight_director is not None and not _skip_draft:
                 try:
                     verdict = flight_director.on_step_completed(
                         step, draft, execution, result,
@@ -2460,6 +2468,38 @@ class ReActLoop:
         # no_match → never synthesize; escalation/clarification owns this.
         if payload_status(result_raw) == "no_match":
             return None
+
+        from ai.engine.cognition.turn.zero_llm import (
+            is_empty_payslip_tool_result,
+            payslip_lines_from_tools,
+            profile_from_tools,
+            render_empty_payslip_answer,
+            render_payslip_grounded,
+            render_profile_grounded,
+            render_resolve_grounded,
+        )
+
+        tools = [tool_output] if isinstance(tool_output, dict) else []
+        if is_empty_payslip_tool_result(tools):
+            return ObservationResult(
+                answer=render_empty_payslip_answer(user_message),
+            )
+        lines = payslip_lines_from_tools(tools)
+        if lines:
+            grounded = render_payslip_grounded(user_message, lines)
+            if grounded:
+                return ObservationResult(answer=grounded)
+        profile = profile_from_tools(tools)
+        if profile:
+            grounded = render_profile_grounded(user_message, profile)
+            if grounded:
+                return ObservationResult(answer=grounded)
+        resolved = render_resolve_grounded(
+            user_message,
+            result_raw,
+        )
+        if resolved:
+            return ObservationResult(answer=resolved)
 
         tool_name = tool_output.get("tool_name", "tool") if isinstance(tool_output, dict) else "tool"
         result_text = result_raw if isinstance(result_raw, str) else json.dumps(

@@ -251,6 +251,26 @@ class TestCompensationUnauthorizedAsk:
             is None
         )
 
+    def test_stamp_skips_net_pay_empty_payslips(self):
+        """F-LIVE-9: last month's net pay + empty lines is empty, not CBAC deny."""
+        from ai.engine.agent.tools import stamp_compensation_deny_on_soft_empty
+
+        tools = [{
+            "tool_name": "call_host_api",
+            "tool_args": {"api_name": "list_my_payslips"},
+            "result": {
+                "status_code": 200,
+                "data": {"count": 0, "results": []},
+            },
+        }]
+        out = stamp_compensation_deny_on_soft_empty(
+            tools,
+            user_message="What was my net pay last month?",
+            caps=frozenset(),
+        )
+        assert out[0]["result"].get("unauthorized") is not True
+        assert out[0]["result"]["status_code"] == 200
+
     def test_stamp_empty_payslips_when_salary_asked_without_capability(self):
         from ai.engine.agent.tools import stamp_compensation_deny_on_soft_empty
 

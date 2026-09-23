@@ -115,6 +115,7 @@ import DiscoveryComposer from './DiscoveryComposer';
 import AgentTaskPicker from './AgentTaskPicker';
 import AgentStage, { stageForStatus } from './AgentStage';
 import AgentRunSurface, { mergePlanWithRunSteps } from './AgentRunSurface';
+import { LIVE_PLAN_POLL_MS } from './pulseProgressCadence';
 import AgentReviewSurface from './AgentReviewSurface';
 import AgentCockpit, { defaultCockpitSegment, normalizeCockpitSegment } from './AgentCockpit';
 import AgentPlanToolbar from './AgentPlanToolbar';
@@ -1018,7 +1019,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     if (!planId || phase !== 'working') return undefined;
     const timer = setInterval(() => {
       refreshPlan(planId, { quiet: true });
-    }, 3000);
+    }, LIVE_PLAN_POLL_MS);
     return () => clearInterval(timer);
   }, [selectedPlan?.id, phase, refreshPlan]);
 

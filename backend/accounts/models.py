@@ -35,13 +35,34 @@ class User(AbstractUser):
 
 # --- SCOPED ROLE ASSIGNMENT ---
 
+class ScopedRoleQuerySet(models.QuerySet):
+    """Live assignments: active, and inside valid_from / valid_to when set."""
+
+    def live(self, on=None):
+        on = on or timezone.localdate()
+        return self.filter(is_active=True).filter(
+            models.Q(valid_from__isnull=True) | models.Q(valid_from__lte=on),
+            models.Q(valid_to__isnull=True) | models.Q(valid_to__gte=on),
+        )
+
+
 class ScopedRole(models.Model):
     """
-    Assigns a role (Group) to a user for a specific org-unit/module scope.
-    - If org_unit/module are null, role applies globally.
-    - If org_unit is set and module is null: org-unit-level role.
-    - If module is set: module-level role (org_unit optional).
+    Assigns a duty (Group) to a user for an org-unit/module scope.
+
+    Birthright rows are rewritten when position or org membership changes.
+    Exception rows are manual grants and are left in place.
+    Empty org_unit and module means the duty is global.
+    Empty dates mean the row is open-ended.
     """
+
+    PROVENANCE_BIRTHRIGHT = "birthright"
+    PROVENANCE_EXCEPTION = "exception"
+    PROVENANCE_CHOICES = [
+        (PROVENANCE_BIRTHRIGHT, "Birthright"),
+        (PROVENANCE_EXCEPTION, "Exception"),
+    ]
+
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="scoped_roles")
     group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="scoped_roles")
     org_unit = models.ForeignKey(
@@ -50,8 +71,18 @@ class ScopedRole(models.Model):
     module = models.ForeignKey(
         "core.Module", null=True, blank=True, on_delete=models.CASCADE, related_name="scoped_roles"
     )
+    provenance = models.CharField(
+        max_length=16,
+        choices=PROVENANCE_CHOICES,
+        default=PROVENANCE_EXCEPTION,
+        help_text="birthright is recalculated; exception is an explicit grant.",
+    )
+    valid_from = models.DateField(null=True, blank=True)
+    valid_to = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
+
+    objects = ScopedRoleQuerySet.as_manager()
 
     class Meta:
         unique_together = ("user", "group", "org_unit", "module")
@@ -66,6 +97,35 @@ class ScopedRole(models.Model):
             scope.append(f"Module:{self.module}")
         return f"{self.user} as {self.group.name} in {'/'.join(scope) or 'global'}"
 
+
+class DutyProfile(models.Model):
+    """Position code → domain duty. The birthright engine reads this table.
+
+    ``duty`` is a domain-prefixed id (``people:lead``), resolved to the
+    current Django group. ``scope`` says which org anchor the row uses.
+    """
+
+    SCOPE_HOME = "home_org"
+    SCOPE_MANAGED = "managed_org"
+    SCOPE_GLOBAL = "global"
+    SCOPE_CHOICES = [
+        (SCOPE_HOME, "Home org unit"),
+        (SCOPE_MANAGED, "Org units this person runs"),
+        (SCOPE_GLOBAL, "Global"),
+    ]
+
+    position_code = models.CharField(max_length=64, db_index=True)
+    duty = models.CharField(max_length=100)
+    scope = models.CharField(max_length=16, choices=SCOPE_CHOICES, default=SCOPE_HOME)
+
+    class Meta:
+        unique_together = ("position_code", "duty", "scope")
+        verbose_name = "Duty profile"
+        verbose_name_plural = "Duty profiles"
+
+    def __str__(self):
+        return f"{self.position_code} → {self.duty} ({self.scope})"
+
 # --- AUDIT LOGGING ---
 
 class RoleAssignmentAuditLog(models.Model):
@@ -76,6 +136,7 @@ class RoleAssignmentAuditLog(models.Model):
         ("assigned", "Assigned"),
         ("removed", "Removed"),
         ("modified", "Modified"),
+        ("refused", "Refused"),
     )
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="role_audit_logs")
     actor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="role_audit_actions")

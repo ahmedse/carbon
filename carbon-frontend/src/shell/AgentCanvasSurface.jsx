@@ -18,6 +18,7 @@ import { useNotification } from '../components/NotificationProvider';
 import { listArtifacts } from '../api/aiWorkspace';
 import OpsCanvasHost from './OpsCanvasHost';
 import { mergeCanvasJourney } from './mergeCanvasJourney';
+import { LIVE_CANVAS_POLL_MS } from './pulseProgressCadence';
 
 /**
  * @param {object} props
@@ -95,7 +96,7 @@ function AgentCanvasSurface({
     if (!live || !planId) return () => { cancelled = true; };
     const tmr = setInterval(() => {
       if (!cancelled) load();
-    }, 2500);
+    }, LIVE_CANVAS_POLL_MS);
     return () => {
       cancelled = true;
       clearInterval(tmr);

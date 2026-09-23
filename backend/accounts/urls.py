@@ -4,9 +4,9 @@ from rest_framework.routers import DefaultRouter
 from django.urls import path
 from .views import (
     UserViewSet, GroupViewSet,
-    ScopedRoleViewSet, RoleAssignmentAuditLogViewSet,
+    ScopedRoleViewSet, RoleAssignmentAuditLogViewSet, DutyProfileViewSet,
     LogoutView, my_roles, me_context, me_preferences, change_password,
-    role_registry, platform_apps, capability_matrix,
+    role_registry, platform_apps, capability_matrix, duties,
 )
 from .notification_views import NotificationViewSet
 from .pulse_auth import pulse_auth_view, pulse_provision_view
@@ -17,6 +17,7 @@ router.register(r'users', UserViewSet)
 router.register(r'roles', GroupViewSet, basename='role')
 router.register(r'groups', GroupViewSet, basename='group')
 router.register(r'scoped-roles', ScopedRoleViewSet, basename='scopedrole')
+router.register(r'duty-profiles', DutyProfileViewSet, basename='dutyprofile')
 router.register(r'role-audit-logs', RoleAssignmentAuditLogViewSet, basename='roleassignmentauditlog')
 router.register(r'notifications', NotificationViewSet, basename='user-alert')
 
@@ -25,6 +26,7 @@ urlpatterns = [
     path('me/context/', me_context, name='me-context'),
     path('me/preferences/', me_preferences, name='me-preferences'),
     path('role-registry/', role_registry, name='role-registry'),
+    path('duties/', duties, name='duties'),
     path('change-password/', change_password, name='change-password'),
     path('logout/', LogoutView.as_view(), name='logout'),
     path('platform-apps/', platform_apps, name='platform-apps'),

@@ -5,7 +5,7 @@ source: people/payroll_service.assert_unique_active_period
 owner: people
 failure: Two computed or committed runs for the same org and month overwrite each other in staff workflow.
 validation: people/tests/test_payroll_service.py
-implementation: Create and compute refuse a second draft/computed/validated/committed run. Failed runs may be superseded.
+implementation: Create and compute refuse a second draft/computed/validated/committed run. The model constraint people_payrollrun_one_active_period is the database backstop. Failed runs may be superseded.
 confidence: high-code
 catalogue: configured
-residual: Historical duplicates already in nibras_dev are not deleted. No database unique constraint on dirty history.
+residual: The database constraint people_payrollrun_one_active_period covers draft, computed, validated, and committed. nibras_dev still has duplicate committed runs (Maintenance Department 2027-01 ids 22–28, QA Payroll Leaf 2026-09 ids 17 and 29). Those rows were not deleted or rewritten, so the constraint is not applied on that database until one run in each group is kept by hand.

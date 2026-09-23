@@ -12,7 +12,6 @@ from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 
 from accounts.permissions import ReadAnyWriteAdmin
-from accounts.models import ScopedRole
 from accounts.rbac_utils import user_has_global_role, ADMIN_ROLES
 from core.feedback import AppFeedback
 from .audit_utils import emit_governance_event
@@ -207,20 +206,18 @@ class AssetProfileViewSet(viewsets.ModelViewSet):
             'domain', 'owner', 'steward', 'glossary_term',
         ).prefetch_related('tags')
         
-        # RBAC: Scope to user's org units (superusers/staff see all)
+        # Catalog reads follow live duties that grant catalog:view.
         user = self.request.user
         if not (user.is_superuser or user.is_staff):
-            org_units = list(
-                ScopedRole.objects.filter(
-                    user=user, is_active=True
-                ).values_list('org_unit_id', flat=True).distinct()
-            )
-            if not org_units:
-                return AssetProfile.objects.none()
-            qs = qs.filter(
-                Q(data_table__module__org_unit_id__in=org_units) |
-                Q(data_field__data_table__module__org_unit_id__in=org_units)
-            )
+            from accounts.rbac_utils import org_scope_for_capability
+            scope = org_scope_for_capability(user, 'catalog:view')
+            if not scope.unrestricted:
+                if not scope.ids:
+                    return AssetProfile.objects.none()
+                qs = qs.filter(
+                    Q(data_table__module__org_unit_id__in=scope.ids) |
+                    Q(data_field__data_table__module__org_unit_id__in=scope.ids)
+                )
         
         p = self.request.query_params
         if p.get('classification'):

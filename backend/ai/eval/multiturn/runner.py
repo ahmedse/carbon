@@ -36,6 +36,7 @@ import contextlib
 import json
 import os
 import sys
+import time
 import types
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -143,6 +144,7 @@ class TurnResult:
     decision: Optional[str] = None
     llm_calls: Optional[int] = None  # None = unmeasured (before PV2-0A); int = measured
     llm_calls_background: Optional[int] = None  # PV2-2C — auto_memory etc.
+    latency_ms: Optional[float] = None  # C8 wall-clock: dispatch start → result
     language_detected: str = "en"
     language_ok: bool = True
     reask_violations: list[str] = field(default_factory=list)
@@ -202,11 +204,40 @@ class BankReport:
     llm_calls_p50: float = 0.0
     llm_calls_max: int = 0
     turns_over_budget: int = 0
+    latency_p50_ms: float = 0.0
+    latency_max_ms: float = 0.0
+    latency_samples: int = 0
+    latency_histogram: dict[str, int] = field(default_factory=dict)
     
     per_objective_pass: dict[str, float] = field(default_factory=dict)
     
     scripts: list[ScriptResult] = field(default_factory=list)
     errors: list[dict] = field(default_factory=list)  # [{script_id, error}]
+
+
+LATENCY_BUCKETS = (
+    (250.0, "0-250ms"),
+    (500.0, "250-500ms"),
+    (1000.0, "500-1000ms"),
+    (2000.0, "1000-2000ms"),
+    (4000.0, "2000-4000ms"),
+    (None, "4000ms+"),
+)
+
+
+def _latency_histogram(values: list[float]) -> dict[str, int]:
+    """C8 ledger histogram: count wall-clock turns per bucket."""
+    counts = {label: 0 for _, label in LATENCY_BUCKETS}
+    for raw in values:
+        placed = False
+        for ceiling, label in LATENCY_BUCKETS:
+            if ceiling is None or raw < ceiling:
+                counts[label] += 1
+                placed = True
+                break
+        if not placed:
+            counts["4000ms+"] += 1
+    return counts
 
 
 # ── Main runner ──────────────────────────────────────────────────────────
@@ -268,6 +299,7 @@ def run_script(
                 if callable(set_turn):
                     set_turn(turn_idx)
                 # Dispatch the chat turn — do NOT catch exceptions
+                t0 = time.perf_counter()
                 dispatch_response = dispatch_task(
                     "chat",
                     {
@@ -277,6 +309,7 @@ def run_script(
                     },
                     instance_id=instance_id,
                 )
+                wall_ms = round((time.perf_counter() - t0) * 1000, 1)
                 
                 # Extract the inner result (phase 0A adds turn_decision, llm_calls)
                 if dispatch_response.get("status") != "completed":
@@ -291,6 +324,8 @@ def run_script(
                 turn_decision = response.get("turn_decision") or "unknown"
                 llm_calls = response.get("llm_calls")  # None if not measured (pre-PV2-0A)
                 llm_calls_background = response.get("llm_calls_background")
+                # C8 is user-visible wall time. Ledger execution_ms is a
+                # witness, not a substitute — 0-LLM turns often store 0.
                 
                 # Build turn result
                 turn_result = TurnResult(
@@ -300,6 +335,7 @@ def run_script(
                     decision=turn_decision,
                     llm_calls=llm_calls,
                     llm_calls_background=llm_calls_background,
+                    latency_ms=wall_ms,
                     language_detected=detect_language(reply_content),
                 )
                 
@@ -421,6 +457,7 @@ def run_bank(
     report = BankReport(scripts_run=len(scripts))
     
     llm_calls_all = []
+    latency_all: list[float] = []
     
     for script in scripts:
         try:
@@ -451,6 +488,10 @@ def run_bank(
                 llm_calls_all.append(turn.llm_calls)
                 if turn.llm_calls > report.llm_calls_max:
                     report.llm_calls_max = turn.llm_calls
+            if turn.latency_ms is not None:
+                latency_all.append(float(turn.latency_ms))
+                if turn.latency_ms > report.latency_max_ms:
+                    report.latency_max_ms = float(turn.latency_ms)
         
         # Track over-budget turns (only count if llm_calls was measured)
         for turn in script_result.turns:
@@ -461,6 +502,11 @@ def run_bank(
     if llm_calls_all:
         llm_calls_all.sort()
         report.llm_calls_p50 = llm_calls_all[len(llm_calls_all) // 2]
+    if latency_all:
+        latency_all.sort()
+        report.latency_samples = len(latency_all)
+        report.latency_p50_ms = latency_all[len(latency_all) // 2]
+        report.latency_histogram = _latency_histogram(latency_all)
     
     # Language fidelity (turns with expect + language check)
     language_checks = sum(
@@ -554,6 +600,10 @@ def metrics_to_json(report: BankReport) -> dict:
         "llm_calls_p50": report.llm_calls_p50,
         "llm_calls_max": report.llm_calls_max,
         "turns_over_budget": report.turns_over_budget,
+        "latency_p50_ms": round(report.latency_p50_ms, 1),
+        "latency_max_ms": round(report.latency_max_ms, 1),
+        "latency_samples": report.latency_samples,
+        "latency_histogram": dict(report.latency_histogram),
         "per_objective_pass": {
             k: round(v, 3) for k, v in report.per_objective_pass.items()
         },
@@ -625,6 +675,7 @@ def report_to_json(
                         "decision": t.decision,
                         "llm_calls": t.llm_calls,
                         "llm_calls_background": t.llm_calls_background,
+                        "latency_ms": t.latency_ms,
                         "language": t.language_detected,
                         "passed": t.passed,
                         "fail_reasons": t.fail_reasons,
@@ -643,7 +694,8 @@ def format_turn_line(script_id: str, turn_no: int, t: TurnResult) -> str:
     reasons = f" [{'; '.join(t.fail_reasons)}]" if t.fail_reasons else ""
     return (
         f"    {script_id} turn{turn_no} decision={t.decision} "
-        f"llm_calls={t.llm_calls} lang={t.language_detected} {status}{reasons}"
+        f"llm_calls={t.llm_calls} latency_ms={t.latency_ms} "
+        f"lang={t.language_detected} {status}{reasons}"
     )
 
 
@@ -684,6 +736,14 @@ def g5_failures(report: BankReport) -> list[str]:
         fails.append(
             f"llm_calls_p50={report.llm_calls_p50:.1f} > {G5_LLM_P50_MAX}"
         )
+    latencies = [
+        t.latency_ms
+        for s in report.scripts
+        for t in s.turns
+        if t.latency_ms is not None
+    ]
+    if report.total_turns > 0 and not latencies:
+        fails.append("latency_histogram empty (C8)")
     def _simple_budget(turn: TurnResult) -> bool:
         exp = turn.expect
         return bool(
@@ -846,7 +906,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         "--gate",
         action="store_true",
         help="PV2-6A / G5: exit 1 when router < 0.90, slot_carry < 1.0, "
-        "llm p50 > 2, or over_budget > 10%",
+        "llm p50 > 2, over_budget > 10%, or C8 latency histogram is empty",
     )
     args = parser.parse_args(argv)
     if args.host_user and not args.no_isolated_db:

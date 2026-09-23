@@ -13,7 +13,7 @@ import { fetchGroupDetail } from '../../api/groups';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 export default function GroupDetailPage() {
-  useDocumentTitle("Group Detail");
+  useDocumentTitle("Duty");
   const { groupId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -40,8 +40,10 @@ export default function GroupDetailPage() {
 
   const headerComponent = (
     <DetailHeader
-      title={group?.name || 'Group'}
-      description={group?.manifest_key || 'Platform role group'}
+      title={group?.duty || group?.name || 'Duty'}
+      description={group?.duty && group.duty !== group.name
+        ? `Stored group ${group.name}. A duty has no org unit. Each assignment below anchors it to one.`
+        : 'Stored group. A duty has no org unit. Each assignment anchors it to one.'}
       icon={GroupIcon}
       onClose={() => navigate('/admin/groups')}
     />

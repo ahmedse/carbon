@@ -62,6 +62,7 @@ def test_days_from_wording():
     assert parse_days("لمدة يوم واحد") == 1
     assert parse_days("for 3 days") == 3
     assert parse_days("لمدة 5 ايام") == 5
+    assert parse_days("لمدة 3 شهور") is None
     assert parse_days("no duration here") is None
 
 
@@ -71,6 +72,8 @@ def test_loan_amount_and_months_from_wording():
     assert parse_amount("hello") is None
     assert parse_months("لمدة 12 شهر") == 12
     assert parse_months("for 6 months") == 6
+    assert parse_months("لمدة 3 شهور") == 3
+    assert parse_months("لمدة 3 ايام") is None
     assert parse_months("no term") is None
 
 
@@ -119,6 +122,10 @@ def leave_types(db):
     ReferenceValue.objects.get_or_create(
         reference_set=rs, code="emergency",
         defaults={"label": "Emergency Leave", "metadata": {"aliases": ["عارضة"]}},
+    )
+    ReferenceValue.objects.get_or_create(
+        reference_set=rs, code="unpaid",
+        defaults={"label": "Unpaid Leave", "metadata": {}},
     )
     return rs
 
@@ -215,6 +222,23 @@ def test_explicit_end_date_is_never_overridden(leave_types):
         today=TODAY,
     )
     assert body["end_date"] == "2026-10-02"
+
+
+@pytest.mark.django_db
+def test_unpaid_months_are_implicit_in_the_brief(leave_types):
+    """بدون مرتب is unpaid; 3 شهور is a span, not 3 days."""
+    from ai.write_slots import fill_write_body
+
+    body = fill_write_body(
+        {},
+        slots=LEAVE_SLOTS,
+        text="اريد طلب اجازة بدون مرتب لمدة 3 شهور, نبدأ من 1 فبراير 2027",
+        today=TODAY,
+    )
+    assert body["leave_type"] == "unpaid"
+    assert body["start_date"] == "2027-02-01"
+    assert body["end_date"] == "2027-04-30"
+    assert body["days"] == 89
 
 
 @pytest.mark.django_db

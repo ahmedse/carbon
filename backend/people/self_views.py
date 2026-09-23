@@ -40,6 +40,7 @@ from .leave_guards import (
     linked_approved_corr as _linked_approved_corr,
     record_blocks_overlap as _record_blocks_overlap,
     remaining_identity as _remaining_identity,
+    resolve_balance_year as _resolve_balance_year,
 )
 from .leave_type_resolve import allowed_leave_type_payload, resolve_leave_type
 from .manager_routing import manager_routing_block_response
@@ -224,7 +225,7 @@ class LeaveSelfCollectionView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        year = start_date.year
+        year = _resolve_balance_year(profile, leave_type, start_date)
         _, _, _, _, remaining = _compute_balance(profile, leave_type, year)
         if days > remaining:
             return Response(

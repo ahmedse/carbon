@@ -127,6 +127,8 @@ def test_rule_21_write_steps_are_found_after_run_pause():
     body = confirm_body_for(JOURNEYS[0], slots)
     assert body["leave_type"] == "annual"
     assert body["start_date"] == slots["start_date"]
+    assert body["end_date"] == slots["start_date"]
+    assert body["days"] == 1
 
 
 def test_host_fingerprint_and_slot_carry():

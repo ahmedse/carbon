@@ -41,6 +41,10 @@ export default function FilteredDataGrid({
   onClearFilters,
   pageSize = 25,
   rowsPerPageOptions = [25, 50, 100],
+  paginationMode,
+  rowCount,
+  paginationModel,
+  onPaginationModelChange,
   emptyMessage,
   emptySubtext,
   getRowId,
@@ -56,6 +60,7 @@ export default function FilteredDataGrid({
   onRowSelectionModelChange,
   hideFooterSelectedRowCount = true,
   _toolbar = false,
+  dataGridProps = {},
 }) {
   const { t } = useTranslation('common');
   const [showFilters, setShowFilters] = useState(false);
@@ -181,14 +186,21 @@ export default function FilteredDataGrid({
             loading={loading}
             pageSize={pageSize}
             rowsPerPageOptions={rowsPerPageOptions}
+            {...(paginationMode === 'server'
+              ? { paginationMode, rowCount, paginationModel, onPaginationModelChange }
+              : {})}
             hideFooterSelectedRowCount={hideFooterSelectedRowCount}
             toolbar
             getRowId={getRowId}
             height={height}
             initialState={initialState}
+            {...dataGridProps}
             onRowClick={onRowClick}
             getRowClassName={(params) =>
-              highlightRow?.(params.row) ? 'highlighted-row' : ''
+              [
+                highlightRow?.(params.row) ? 'highlighted-row' : '',
+                dataGridProps.getRowClassName?.(params) || '',
+              ].filter(Boolean).join(' ')
             }
             checkboxSelection={checkboxSelection}
             {...(checkboxSelection
@@ -198,6 +210,7 @@ export default function FilteredDataGrid({
                 }
               : {})}
             sx={{
+              ...(dataGridProps.sx || {}),
               ...(onRowClick
                 ? { '& .MuiDataGrid-row': { cursor: 'pointer' } }
                 : {}),

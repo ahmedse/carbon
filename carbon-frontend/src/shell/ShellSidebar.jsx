@@ -4,6 +4,7 @@
 import React, { useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Box, List, Typography, IconButton, Tooltip } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import { ChevronStart } from '../i18n/DirectionalIcons';
 import HomeIcon from '@mui/icons-material/Home';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -255,20 +256,24 @@ function getSidebarItems(studioId, helpApps = []) {
     
     case 'admin':
       return [
+        { type: 'group', label: 'Access' },
         { label: 'Users', path: '/admin/users', icon: PeopleIcon, role: 'admin' },
-        { label: 'Groups & Roles', path: '/admin/groups', icon: GroupIcon, role: 'admin' },
+        { label: 'Duties', path: '/admin/groups', icon: GroupIcon, role: 'admin' },
+        { label: 'Assignments', path: '/admin/access', icon: AssignmentIcon, role: 'admin' },
+        { label: 'Position profiles', path: '/admin/position-profiles', icon: WorkIcon, role: 'admin' },
         { label: 'Org Units', path: '/admin/org-units', icon: AccountTreeIcon, role: 'admin' },
-        { label: 'Access Control', path: '/admin/access', icon: SecurityIcon, role: 'admin' },
+        { type: 'divider' },
+        { type: 'group', label: 'Trust' },
         { label: 'Field Policies', path: '/admin/catalog/field-policies', icon: SecurityIcon, role: 'admin' },
         { label: 'Audit Log', path: '/admin/audit', icon: HistoryIcon, role: 'admin' },
-        { label: 'System Logs', path: '/admin/logs', icon: ArticleIcon, role: 'admin' },
         { label: 'Assurance', path: '/admin/assurance', icon: FactCheckIcon, role: 'admin' },
         { type: 'divider' },
-        { type: 'group', label: 'App Management' },
+        { type: 'group', label: 'Apps' },
         { label: 'Registered Apps', path: '/admin/apps', icon: AppsIcon, role: 'admin' },
         { label: 'Role Registry', path: '/admin/role-matrix', icon: GridViewIcon, role: 'admin' },
         { type: 'divider' },
-        { type: 'group', label: 'System Settings' },
+        { type: 'group', label: 'Platform' },
+        { label: 'System Logs', path: '/admin/logs', icon: ArticleIcon, role: 'admin' },
         { label: 'Platform Config', path: '/admin/config', icon: SettingsIcon, role: 'admin' },
       ];
 
@@ -475,6 +480,8 @@ function filterItemsByCapability(items, user, authCtx) {
 
 export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
   const { t } = useTranslation('shell');
+  const theme = useTheme();
+  const labelLineHeight = theme.direction === 'rtl' ? theme.typography.body1.lineHeight : 1;
   const { currentPerspective: _currentPerspective, availablePerspectives, isGlobalAdminFlag, userCapabilities, context, user } = useAuth();
   const location = useLocation();
   const { isAppEnabled } = useEnabledApps();
@@ -597,8 +604,8 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          height: 28,
-          minHeight: 28,
+          height: theme.direction === 'rtl' ? 32 : 28,
+          minHeight: theme.direction === 'rtl' ? 32 : 28,
           px: 0.75,
           borderBottom: '1px solid',
           borderColor: 'divider',
@@ -612,6 +619,7 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
             fontWeight: 600,
             textTransform: 'uppercase',
             letterSpacing: '0.04em',
+            lineHeight: labelLineHeight,
             color: 'text.secondary',
           }}
         >
@@ -676,6 +684,7 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
                       fontSize: '0.6875rem',
                       fontWeight: 500,
                       color: 'text.disabled',
+                      lineHeight: labelLineHeight,
                       letterSpacing: '0.04em',
                       px: 0.75,
                       pt: 0.75,
@@ -719,7 +728,7 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 0.75,
-                    height: 30,
+                    height: theme.direction === 'rtl' ? 34 : 30,
                     px: 0.75,
                     borderRadius: '5px',
                     cursor: 'pointer',
@@ -753,7 +762,7 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
                     sx={{
                       fontSize: '0.75rem',
                       fontWeight: isActive ? 600 : 400,
-                      lineHeight: 1,
+                      lineHeight: labelLineHeight,
                     }}
                   >
                     {shellLabel(t, item.label)}
@@ -793,7 +802,7 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
             <LocationOnIcon sx={{ fontSize: 12, color: 'primary.main', flexShrink: 0 }} />
             <Typography
               noWrap
-              sx={{ fontSize: '0.6875rem', fontWeight: 500, color: 'text.secondary', lineHeight: 1 }}
+              sx={{ fontSize: '0.6875rem', fontWeight: 500, color: 'text.secondary', lineHeight: labelLineHeight }}
               title={userOrgUnit}
             >
               {userOrgUnit}

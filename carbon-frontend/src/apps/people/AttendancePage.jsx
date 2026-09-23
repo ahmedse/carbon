@@ -2,7 +2,7 @@
 // People & Payroll — attendance records & permissions (full CRUD).
 // All colours via theme tokens; apiFetch only; SystemDialog for the forms.
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -10,16 +10,9 @@ import {
   Chip,
   IconButton,
   MenuItem,
-  Paper,
   Snackbar,
   Stack,
   Switch,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Tooltip,
   Typography,
@@ -33,8 +26,8 @@ import PageContainer from '../../components/layout/PageContainer';
 import PageHeader from '../../components/Page/PageHeader';
 import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
 import ErrorAlert from '../../components/Page/ErrorAlert';
-import EmptyState from '../../components/Page/EmptyState';
 import SystemDialog from '../../components/SystemDialog';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
 import {
@@ -91,6 +84,10 @@ export default function AttendancePage() {
 
   const [saving, setSaving] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [recordSearch, setRecordSearch] = useState('');
+  const [recordFilters, setRecordFilters] = useState({ status: '' });
+  const [permissionSearch, setPermissionSearch] = useState('');
+  const [permissionFilters, setPermissionFilters] = useState({ approved: '' });
 
   const loadData = useCallback(async () => {
     try {
@@ -414,6 +411,158 @@ export default function AttendancePage() {
     </>
   );
 
+  const filteredRecords = useMemo(() => {
+    const q = recordSearch.trim().toLowerCase();
+    return records.filter((record) => {
+      if (recordFilters.status && record.status !== recordFilters.status) return false;
+      if (!q) return true;
+      const statusKey = statusLabelKey(record.status);
+      const hay = [
+        employeeName(record.employee),
+        formatDate(record.date),
+        record.hours_worked,
+        record.overtime_hours,
+        record.status,
+        statusKey ? t(statusKey) : '',
+      ].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }, [records, recordSearch, recordFilters, employeeLabels, t]);
+
+  const filteredPermissions = useMemo(() => {
+    const q = permissionSearch.trim().toLowerCase();
+    return permissions.filter((permission) => {
+      if (permissionFilters.approved === 'yes' && !permission.approved) return false;
+      if (permissionFilters.approved === 'no' && permission.approved) return false;
+      if (!q) return true;
+      const hay = [
+        employeeName(permission.employee),
+        formatDate(permission.date),
+        permission.permission_type,
+        permission.hours,
+      ].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }, [permissions, permissionSearch, permissionFilters, employeeLabels]);
+
+  const recordFilterDefs = useMemo(() => [
+    {
+      key: 'status',
+      label: t('filterStatus'),
+      emptyLabel: t('filterAll'),
+      options: ['present', 'absent', 'leave', 'permission'].map((value) => ({
+        value,
+        label: t(statusLabelKey(value)),
+      })),
+    },
+  ], [t]);
+
+  const permissionFilterDefs = useMemo(() => [
+    {
+      key: 'approved',
+      label: t('colApproved'),
+      emptyLabel: t('filterAll'),
+      options: [
+        { value: 'yes', label: t('yes') },
+        { value: 'no', label: t('no') },
+      ],
+    },
+  ], [t]);
+
+  const recordColumns = useMemo(() => [
+    {
+      field: 'employee',
+      headerName: t('colEmployee'),
+      flex: 1,
+      minWidth: 160,
+      valueGetter: (value) => employeeName(value),
+    },
+    { field: 'date', headerName: t('colDate'), width: 130, valueGetter: (value) => formatDate(value) },
+    { field: 'hours_worked', headerName: t('colHoursWorked'), width: 130, valueGetter: (value) => value ?? '—' },
+    { field: 'overtime_hours', headerName: t('colOvertimeHours'), width: 140, valueGetter: (value) => value ?? '—' },
+    {
+      field: 'status',
+      headerName: t('colStatus'),
+      width: 140,
+      valueGetter: (value) => {
+        const key = statusLabelKey(value);
+        return key ? t(key) : (value || '—');
+      },
+      renderCell: (params) => (
+        <Chip size="small" variant="outlined" color={statusColor(params.row.status)} label={params.value} />
+      ),
+    },
+    {
+      field: 'actions',
+      headerName: t('colActions'),
+      width: 110,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => (
+        <>
+          <Tooltip title={tCommon('edit')}>
+            <IconButton size="small" onClick={() => openEditRecord(params.row)} sx={{ color: 'primary.main' }}>
+              <EditIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={tCommon('delete')}>
+            <IconButton size="small" onClick={() => handleDeleteRecord(params.row)} sx={{ color: 'error.main' }}>
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </>
+      ),
+    },
+  ], [t, tCommon, employeeLabels]);
+
+  const permissionColumns = useMemo(() => [
+    {
+      field: 'employee',
+      headerName: t('colEmployee'),
+      flex: 1,
+      minWidth: 160,
+      valueGetter: (value) => employeeName(value),
+    },
+    { field: 'date', headerName: t('colDate'), width: 130, valueGetter: (value) => formatDate(value) },
+    { field: 'permission_type', headerName: t('colPermissionType'), width: 160, valueGetter: (value) => value || '—' },
+    { field: 'hours', headerName: t('colHours'), width: 100, valueGetter: (value) => value ?? '—' },
+    {
+      field: 'approved',
+      headerName: t('colApproved'),
+      width: 120,
+      valueGetter: (value) => (value ? t('yes') : t('no')),
+      renderCell: (params) => (
+        <Chip
+          size="small"
+          variant="outlined"
+          color={params.row.approved ? 'success' : 'default'}
+          label={params.value}
+        />
+      ),
+    },
+    {
+      field: 'actions',
+      headerName: t('colActions'),
+      width: 110,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => (
+        <>
+          <Tooltip title={tCommon('edit')}>
+            <IconButton size="small" onClick={() => openEditPermission(params.row)} sx={{ color: 'primary.main' }}>
+              <EditIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={tCommon('delete')}>
+            <IconButton size="small" onClick={() => handleDeletePermission(params.row)} sx={{ color: 'error.main' }}>
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </>
+      ),
+    },
+  ], [t, tCommon, employeeLabels]);
+
   const header = <PageHeader icon={AccessTimeIcon} title={t('attendanceTitle')} subtitle={t('attendanceSubtitle')} />;
 
   if (loading) {
@@ -434,152 +583,69 @@ export default function AttendancePage() {
     );
   }
 
-  if (records.length === 0 && permissions.length === 0) {
-    return (
-      <PageContainer>
-        {header}
-        <EmptyState
-          icon={<AccessTimeIcon />}
-          title={t('attendanceEmpty')}
-          description={t('attendanceEmptyDesc')}
-          actionLabel={t('actionAddAttendanceRecord')}
-          onAction={openCreateRecord}
-        />
-        {renderDialogs()}
-      </PageContainer>
-    );
-  }
-
   return (
     <PageContainer>
       {header}
 
-      <Stack spacing={2}>
+      <Stack spacing={3}>
         <Box>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-            <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>{t('attendanceRecordsTitle')}</Typography>
+            <Typography variant="subtitle2">{t('attendanceRecordsTitle')}</Typography>
             <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={openCreateRecord}>
               {t('actionAddAttendanceRecord')}
             </Button>
           </Stack>
-          <TableContainer component={Paper} variant="outlined">
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colEmployee')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colDate')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colHoursWorked')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colOvertimeHours')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colStatus')}</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colActions')}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {records.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} align="center" sx={{ color: 'text.secondary' }}>{t('attendanceEmpty')}</TableCell>
-                  </TableRow>
-                ) : (
-                  records.map((record) => {
-                    const statusKey = statusLabelKey(record.status);
-                    return (
-                      <TableRow key={record.id} hover>
-                        <TableCell>{employeeName(record.employee)}</TableCell>
-                        <TableCell>{formatDate(record.date)}</TableCell>
-                        <TableCell>{record.hours_worked ?? '—'}</TableCell>
-                        <TableCell>{record.overtime_hours ?? '—'}</TableCell>
-                        <TableCell>
-                          <Chip
-                            size="small"
-                            variant="outlined"
-                            color={statusColor(record.status)}
-                            label={statusKey ? t(statusKey) : record.status}
-                          />
-                        </TableCell>
-                        <TableCell align="right">
-                          <Tooltip title={tCommon('edit')}>
-                            <IconButton size="small" onClick={() => openEditRecord(record)} sx={{ color: 'primary.main' }}>
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title={tCommon('delete')}>
-                            <IconButton size="small" onClick={() => handleDeleteRecord(record)} sx={{ color: 'error.main' }}>
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
+          <FilteredDataGrid
+            embedded
+            rows={filteredRecords}
+            columns={recordColumns}
+            searchValue={recordSearch}
+            onSearchChange={setRecordSearch}
+            filterDefs={recordFilterDefs}
+            filterValues={recordFilters}
+            onFilterChange={(key, value) => setRecordFilters((prev) => ({ ...prev, [key]: value }))}
+            onClearFilters={() => {
+              setRecordSearch('');
+              setRecordFilters({ status: '' });
+            }}
+            emptyMessage={t('attendanceEmpty')}
+            emptySubtext={t('attendanceEmptyDesc')}
+            pageSize={25}
+            height={420}
+          />
         </Box>
 
         <Box>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-            <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>{t('attendancePermissionsTitle')}</Typography>
+            <Typography variant="subtitle2">{t('attendancePermissionsTitle')}</Typography>
             <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={openCreatePermission}>
               {t('actionAddAttendancePermission')}
             </Button>
           </Stack>
-          <TableContainer component={Paper} variant="outlined">
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colEmployee')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colDate')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colPermissionType')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colHours')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colApproved')}</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colActions')}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {permissions.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} align="center" sx={{ color: 'text.secondary' }}>{t('attendanceEmpty')}</TableCell>
-                  </TableRow>
-                ) : (
-                  permissions.map((permission) => (
-                    <TableRow key={permission.id} hover>
-                      <TableCell>{employeeName(permission.employee)}</TableCell>
-                      <TableCell>{formatDate(permission.date)}</TableCell>
-                      <TableCell>{permission.permission_type ?? '—'}</TableCell>
-                      <TableCell>{permission.hours ?? '—'}</TableCell>
-                      <TableCell>
-                        <Chip
-                          size="small"
-                          variant="outlined"
-                          color={permission.approved ? 'success' : 'default'}
-                          label={permission.approved ? t('yes') : t('no')}
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        <Tooltip title={tCommon('edit')}>
-                          <IconButton size="small" onClick={() => openEditPermission(permission)} sx={{ color: 'primary.main' }}>
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title={tCommon('delete')}>
-                          <IconButton size="small" onClick={() => handleDeletePermission(permission)} sx={{ color: 'error.main' }}>
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
+          <FilteredDataGrid
+            embedded
+            rows={filteredPermissions}
+            columns={permissionColumns}
+            searchValue={permissionSearch}
+            onSearchChange={setPermissionSearch}
+            filterDefs={permissionFilterDefs}
+            filterValues={permissionFilters}
+            onFilterChange={(key, value) => setPermissionFilters((prev) => ({ ...prev, [key]: value }))}
+            onClearFilters={() => {
+              setPermissionSearch('');
+              setPermissionFilters({ approved: '' });
+            }}
+            emptyMessage={t('attendanceEmpty')}
+            emptySubtext={t('attendanceEmptyDesc')}
+            pageSize={25}
+            height={420}
+          />
         </Box>
       </Stack>
 
       {renderDialogs()}
 
-      <Snackbar
+            <Snackbar
         open={snackbar.open}
         autoHideDuration={4000}
         onClose={closeSnackbar}

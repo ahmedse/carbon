@@ -48,12 +48,38 @@ def record_blocks_overlap(record) -> bool:
     return linked_in_flight_corr(record)
 
 
+def entitlement_years(profile, code) -> set[int]:
+    """Calendar years that already have an entitlement row for this type."""
+    return set(
+        LeaveEntitlement.objects.filter(
+            employee=profile, leave_type__code=code,
+        ).values_list("year", flat=True)
+    )
+
+
+def resolve_balance_year(profile, code, start_date, *, open_years: set[int] | None = None) -> int:
+    """Year whose entitlement pays for leave starting on ``start_date``.
+
+    The balance screen is the open year (usually this calendar year). A request
+    in a later year that has no entitlement row yet is still scored against
+    that open bucket — otherwise the employee sees 90 days and submit says
+    remaining 0.
+    """
+    year = start_date.year
+    years = open_years if open_years is not None else entitlement_years(profile, code)
+    if year in years:
+        return year
+    prior = [y for y in years if y <= year]
+    return max(prior) if prior else year
+
+
 def compute_balance(profile, code, year):
     """Return ``(entitled, carried_forward, used, pending, remaining)`` Decimals.
 
-    ``used`` and ``pending`` are scoped to ``start_date`` in ``year`` so
-    cross-year leave does not drain the wrong entitlement bucket.
+    ``used`` and ``pending`` include leave charged to ``year``: a start in
+    ``year``, or a later year whose entitlement is not opened yet.
     """
+    years = entitlement_years(profile, code)
     agg = LeaveEntitlement.objects.filter(
         employee=profile, year=year, leave_type__code=code,
     ).aggregate(
@@ -65,17 +91,17 @@ def compute_balance(profile, code, year):
     opening_balance = entitled + carried_forward
 
     used = Decimal('0')
-    for record in LeaveRecord.objects.filter(
-        employee=profile, leave_type__code=code, start_date__year=year,
-    ):
-        if record.status == 'approved' or linked_approved_corr(record):
-            used += record.days
-
     pending = Decimal('0')
     for record in LeaveRecord.objects.filter(
-        employee=profile, leave_type__code=code, start_date__year=year,
+        employee=profile, leave_type__code=code,
     ):
-        if linked_in_flight_corr(record):
+        if resolve_balance_year(
+            profile, code, record.start_date, open_years=years,
+        ) != year:
+            continue
+        if record.status == 'approved' or linked_approved_corr(record):
+            used += record.days
+        elif linked_in_flight_corr(record):
             pending += record.days
 
     remaining_signed = opening_balance - used - pending

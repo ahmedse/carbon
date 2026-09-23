@@ -78,6 +78,17 @@ def ess_users(db, create_user):
 
 
 @pytest.mark.django_db
+def test_people_me_payslips_empty_is_200_not_fake_403(ess_users):
+    """F-LIVE-9: ESS me/payslips matches HTTP self view — empty is 200."""
+    user, _ = ess_users
+    out = _people_me(user, "payslips", "GET")
+    assert out["status_code"] == 200, out
+    assert out["data"]["count"] == 0
+    assert out["data"]["results"] == []
+    assert out.get("unauthorized") is not True
+
+
+@pytest.mark.django_db
 def test_people_me_post_leave(ess_users):
     user, _ = ess_users
     start = date.today() + timedelta(days=10)

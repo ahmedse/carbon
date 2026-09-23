@@ -11,12 +11,6 @@ import {
   Paper,
   Snackbar,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Tooltip,
   Typography,
@@ -31,9 +25,10 @@ import PageContainer from '../../components/layout/PageContainer';
 import PageHeader from '../../components/Page/PageHeader';
 import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
 import ErrorAlert from '../../components/Page/ErrorAlert';
-import EmptyState from '../../components/Page/EmptyState';
 import SystemDialog from '../../components/SystemDialog';
 import { SearchSelect } from '../../components/Form';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
+import StandardDataGrid from '../../components/StandardDataGrid';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
 import {
@@ -112,6 +107,8 @@ export default function PayrollRunsPage() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [actionError, setActionError] = useState(null);
+  const [searchValue, setSearchValue] = useState('');
+  const [gridFilters, setGridFilters] = useState({ status: '', org_unit: '' });
 
   const loadData = useCallback(async () => {
     try {
@@ -291,6 +288,173 @@ export default function PayrollRunsPage() {
     }
   };
 
+  const filteredRuns = useMemo(() => {
+    const q = searchValue.trim().toLowerCase();
+    return runs.filter((run) => {
+      if (gridFilters.status && run.status !== gridFilters.status) return false;
+      if (gridFilters.org_unit && String(run.org_unit) !== String(gridFilters.org_unit)) return false;
+      if (!q) return true;
+      const statusKey = statusLabelKey(run.status);
+      const hay = [
+        run.id,
+        run.period_start,
+        run.period_end,
+        formatDate(run.period_start),
+        formatDate(run.period_end),
+        orgUnitName(run.org_unit),
+        run.preparer_username,
+        run.status,
+        statusKey ? t(statusKey) : '',
+      ].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }, [runs, searchValue, gridFilters, t, orgUnitById, orgUnits]);
+
+  const filterDefs = useMemo(() => [
+    {
+      key: 'status',
+      label: t('filterStatus'),
+      emptyLabel: t('filterAll'),
+      options: ['draft', 'computed', 'validated', 'committed', 'failed'].map((value) => ({
+        value,
+        label: t(statusLabelKey(value)),
+      })),
+    },
+    {
+      key: 'org_unit',
+      label: t('colOrgUnit'),
+      emptyLabel: t('filterAll'),
+      options: orgUnitsForPicker.map((unit) => ({
+        value: String(unit.id),
+        label: unit.full_path || unit.name || unit.code || String(unit.id),
+      })),
+    },
+  ], [t, orgUnitsForPicker]);
+
+  const runColumns = useMemo(() => [
+    { field: 'period_start', headerName: t('colPeriodStart'), width: 130, valueFormatter: (value) => formatDate(value) },
+    { field: 'period_end', headerName: t('colPeriodEnd'), width: 130, valueFormatter: (value) => formatDate(value) },
+    {
+      field: 'org_unit',
+      headerName: t('colOrgUnit'),
+      flex: 1,
+      minWidth: 180,
+      valueGetter: (value) => orgUnitName(value),
+    },
+    {
+      field: 'status',
+      headerName: t('colStatus'),
+      width: 140,
+      valueGetter: (value) => {
+        const key = statusLabelKey(value);
+        return key ? t(key) : value;
+      },
+      renderCell: (params) => (
+        <Chip
+          size="small"
+          variant="outlined"
+          color={statusColor(params.row.status)}
+          label={params.value}
+        />
+      ),
+    },
+    {
+      field: 'preparer_username',
+      headerName: t('colPreparer'),
+      width: 160,
+      valueGetter: (value) => value || '',
+      renderCell: (params) => (
+        params.row.preparer_username ? params.row.preparer_username : (
+          <Tooltip title={t('payrollPreparerNotRecorded')}>
+            <span>—</span>
+          </Tooltip>
+        )
+      ),
+    },
+    {
+      field: 'actions',
+      headerName: t('colActions'),
+      width: 460,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => {
+        const run = params.row;
+        return (
+          <Stack direction="row" spacing={0.5} alignItems="center">
+            {['compute', 'validate', 'commit'].map((action) => (
+              <Button
+                key={action}
+                size="small"
+                variant="outlined"
+                disabled={
+                  !ACTION_ENABLED[action](run.status)
+                  || busyId === run.id
+                  || (
+                    action === 'commit'
+                    && (
+                      !run.preparer_username
+                      || run.preparer_username === user?.username
+                    )
+                  )
+                }
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleAction(run, action);
+                }}
+              >
+                {t(`action${action.charAt(0).toUpperCase()}${action.slice(1)}`)}
+              </Button>
+            ))}
+            {run.status === 'committed' && (
+              <Button
+                size="small"
+                variant="outlined"
+                color="info"
+                startIcon={<DownloadIcon />}
+                disabled={busyId === run.id}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleWpsExport(run);
+                }}
+              >
+                {t('actionExportWps')}
+              </Button>
+            )}
+            <Tooltip title={t('actionEditPayrollRun')}>
+              <IconButton size="small" onClick={(event) => { event.stopPropagation(); openEdit(run); }}>
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={t('actionDeletePayrollRun')}>
+              <IconButton size="small" onClick={(event) => { event.stopPropagation(); handleDelete(run); }} sx={{ color: 'error.main' }}>
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        );
+      },
+    },
+  ], [t, user, busyId, orgUnitById, orgUnits]);
+
+  const validationColumns = useMemo(() => [
+    { field: 'rule_key', headerName: t('colRuleKey'), flex: 1, minWidth: 160, valueGetter: (value) => value || '—' },
+    {
+      field: 'passed',
+      headerName: t('colPassed'),
+      width: 120,
+      renderCell: (params) => (
+        <Chip
+          size="small"
+          variant="outlined"
+          color={params.row.passed ? 'success' : 'error'}
+          label={params.row.passed ? '✓' : '✗'}
+        />
+      ),
+    },
+    { field: 'checked', headerName: t('colChecked'), width: 120, valueGetter: (value) => value ?? 0 },
+    { field: 'failed', headerName: t('colFailed'), width: 120, valueGetter: (value) => value ?? 0 },
+  ], [t]);
+
   if (loading) {
     return (
       <PageContainer>
@@ -316,187 +480,64 @@ export default function PayrollRunsPage() {
         title={t('payrollTitle')}
         subtitle={t('payrollSubtitle')}
         actions={
-          runs.length > 0 ? (
-            <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={openCreate}>
-              {t('actionAddPayrollRun')}
-            </Button>
-          ) : undefined
+          <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={openCreate}>
+            {t('actionAddPayrollRun')}
+          </Button>
         }
       />
 
-      {runs.length === 0 ? (
-        <EmptyState
-          icon={<PaymentsIcon />}
-          title={t('payrollEmpty')}
-          description={t('payrollEmptyDesc')}
-          actionLabel={t('actionAddPayrollRun')}
-          onAction={openCreate}
-        />
-      ) : (
       <Stack spacing={2}>
         <Alert severity="info">{t('payrollSodBanner')}</Alert>
         {runs.some((run) => run.status === 'committed') && (
           <Alert severity="warning">{t('wpsExportHonesty')}</Alert>
         )}
-        <TableContainer component={Paper} variant="outlined">
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colPeriodStart')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colPeriodEnd')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colOrgUnit')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colStatus')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colPreparer')}</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colActions')}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {runs.map((run) => {
-                const statusKey = statusLabelKey(run.status);
-                return (
-                  <TableRow
-                    key={run.id}
-                    hover
-                    selected={run.id === selectedId}
-                    onClick={() => setSelectedId(run.id)}
-                    sx={{ cursor: 'pointer' }}
-                  >
-                    <TableCell>{formatDate(run.period_start)}</TableCell>
-                    <TableCell>{formatDate(run.period_end)}</TableCell>
-                    <TableCell>{orgUnitName(run.org_unit)}</TableCell>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        variant="outlined"
-                        color={statusColor(run.status)}
-                        label={statusKey ? t(statusKey) : run.status}
-                      />
-                    </TableCell>
-                    <TableCell>{run.preparer_username || '—'}</TableCell>
-                    <TableCell align="right">
-                      <Stack direction="row" spacing={0.5} justifyContent="flex-end" alignItems="center">
-                        {['compute', 'validate', 'commit'].map((action) => (
-                          <Button
-                            key={action}
-                            size="small"
-                            variant="outlined"
-                            disabled={
-                              !ACTION_ENABLED[action](run.status)
-                              || busyId === run.id
-                              || (
-                                action === 'commit'
-                                && Boolean(user?.username)
-                                && run.preparer_username === user.username
-                              )
-                            }
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleAction(run, action);
-                            }}
-                          >
-                            {t(`action${action.charAt(0).toUpperCase()}${action.slice(1)}`)}
-                          </Button>
-                        ))}
-                        {run.status === 'committed' && (
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            color="info"
-                            startIcon={<DownloadIcon />}
-                            disabled={busyId === run.id}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleWpsExport(run);
-                            }}
-                          >
-                            {t('actionExportWps')}
-                          </Button>
-                        )}
-                        <Tooltip title={t('actionEditPayrollRun')}>
-                          <IconButton
-                            size="small"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              openEdit(run);
-                            }}
-                            sx={{ color: 'primary.main' }}
-                          >
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title={t('actionDeletePayrollRun')}>
-                          <IconButton
-                            size="small"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleDelete(run);
-                            }}
-                            sx={{ color: 'error.main' }}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </Stack>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <FilteredDataGrid
+          embedded
+          rows={filteredRuns}
+          columns={runColumns}
+          loading={false}
+          searchValue={searchValue}
+          onSearchChange={setSearchValue}
+          filterDefs={filterDefs}
+          filterValues={gridFilters}
+          onFilterChange={(key, value) => setGridFilters((prev) => ({ ...prev, [key]: value }))}
+          onClearFilters={() => {
+            setSearchValue('');
+            setGridFilters({ status: '', org_unit: '' });
+          }}
+          emptyMessage={t('payrollEmpty')}
+          emptySubtext={t('payrollEmptyDesc')}
+          pageSize={25}
+          height={520}
+          onRowClick={(params) => setSelectedId(params.row.id)}
+          highlightRow={(row) => row.id === selectedId}
+        />
 
         <Box>
-          <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, mb: 1 }}>{t('validationsTitle')}</Typography>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>{t('validationsTitle')}</Typography>
           {selectedId == null ? (
-            <Paper variant="outlined" sx={{ p: 2, fontSize: '0.8125rem', color: 'text.secondary' }}>
-              {t('selectRunPrompt')}
+            <Paper variant="outlined" sx={{ p: 2 }}>
+              <Typography variant="body2" color="text.secondary">{t('selectRunPrompt')}</Typography>
             </Paper>
           ) : validationsLoading ? (
             <LoadingSkeleton variant="table" />
           ) : validationsError ? (
             <ErrorAlert message={validationsError} onRetry={() => setValidationsKey((k) => k + 1)} />
-          ) : validations.length === 0 ? (
-            <EmptyState
-              icon={<PaymentsIcon />}
-              title={t('noValidations')}
-              description={t('noValidationsDesc')}
-            />
           ) : (
-            <TableContainer component={Paper} variant="outlined">
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colRuleKey')}</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colPassed')}</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colChecked')}</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colFailed')}</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {validations.map((validation) => (
-                    <TableRow key={validation.id} hover>
-                      <TableCell>{validation.rule_key ?? '—'}</TableCell>
-                      <TableCell>
-                        <Chip
-                          size="small"
-                          variant="outlined"
-                          color={validation.passed ? 'success' : 'error'}
-                          label={validation.passed ? '✓' : '✗'}
-                        />
-                      </TableCell>
-                      <TableCell>{validation.checked ?? 0}</TableCell>
-                      <TableCell>{validation.failed ?? 0}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+            <StandardDataGrid
+              rows={validations}
+              columns={validationColumns}
+              loading={false}
+              pageSize={10}
+              rowsPerPageOptions={[10, 25]}
+              height={280}
+              getRowId={(row) => row.id}
+            />
           )}
         </Box>
       </Stack>
-      )}
 
-      <SystemDialog
+            <SystemDialog
         open={openDialog}
         title={editingRun ? t('payrollRunEditTitle') : t('payrollRunCreateTitle')}
         onClose={closeDialog}

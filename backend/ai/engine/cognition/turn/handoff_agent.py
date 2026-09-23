@@ -237,6 +237,60 @@ def build_slot_status_answer(
     )
 
 
+_READY_TO_SUBMIT_RE = re.compile(
+    r"("
+    r"anything else (?:you |i )?(?:need|needed)"
+    r"|is that (?:all|everything)"
+    r"|do you (?:need|have) (?:anything|everything|all)"
+    r"|هل (?:تحتاج|ينقص|بقي)"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def is_ready_to_submit_ask(text: str) -> bool:
+    """True for 'is there anything else you need?' after slots are bound."""
+    return bool(_READY_TO_SUBMIT_RE.search(text or ""))
+
+
+def build_bound_write_confirmation_answer(
+    *,
+    api_name: str,
+    slots: dict,
+    user_message: str = "",
+) -> ChatHandoffOutcome:
+    """0-LLM restatement while Chat is still clarifying — not a second handoff."""
+    from ai.engine.agent.chat_surface import detect_locale
+
+    locale = detect_locale(user_message)
+    body = {
+        k: v for k, v in (slots or {}).items()
+        if v not in (None, "", [], {})
+    }
+    api = (api_name or "").strip()
+    if api == "submit_my_leave":
+        leave = str(body.get("leave_type") or "leave").strip()
+        start = _pretty_date(body.get("start_date"))
+        end = _pretty_date(body.get("end_date")) or start
+        if locale == "ar":
+            text = f"طلبك: إجازة {leave} من {start} إلى {end}."
+        else:
+            text = f"Your leave request: {leave} leave, {start} to {end}."
+    elif locale == "ar":
+        text = render_slot_status(user_message, body)
+    else:
+        text = render_slot_status(user_message, body)
+    return ChatHandoffOutcome(
+        text=text,
+        actions=[],
+        envelope=None,
+        api_name=api,
+        slots=body,
+        tool_result={},
+        decision="answer",
+    )
+
+
 def combine_user_brief(
     user_message: str,
     conversation_history: list[dict] | None = None,
@@ -266,11 +320,60 @@ def combine_user_brief(
     return "\n".join(parts)
 
 
+_EASTERN_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
+_TO_EASTERN_DIGITS = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
+_QUESTION_RE = re.compile(
+    r"[?؟]|^\s*(?:متى|هل|كيف|لماذا|ما|أين|وين|when|how|why|what|will|can|does)\b",
+    re.IGNORECASE,
+)
+_AFFIRM_RE = re.compile(
+    r"(?:نعم|أجل|بالضبط|هذا كل شيء|تمام|موافق"
+    r"|\byes\b|\byep\b|\bexactly\b|\bthat'?s all\b|\bcorrect\b)",
+    re.IGNORECASE,
+)
+
+
+def _western_digits(text: str) -> str:
+    return (text or "").translate(_EASTERN_DIGITS)
+
+
+def _numbers_in(text: str) -> list[str]:
+    return re.findall(r"\d+", _western_digits(text))
+
+
+def is_bound_write_affirmation(text: str, slots: dict | None) -> bool:
+    """True when the user confirms a write whose slots are already bound.
+
+    «نعم، أريد ٥٠٠٠ بالضبط» after a handoff is not a new draft. A question
+    is not an affirmation. A different amount is a slot change, not a confirm.
+    """
+    raw = (text or "").strip()
+    if not raw or _QUESTION_RE.search(raw) or not _AFFIRM_RE.search(raw):
+        return False
+    known = set()
+    for value in (slots or {}).values():
+        known.update(_numbers_in(str(value)))
+    stated = _numbers_in(raw)
+    return all(num in known for num in stated)
+
+
+def _display_slot_value(value, user_message: str) -> str:
+    text = str(value)
+    if text.endswith(".0"):
+        text = text[:-2]
+    if text and text in _western_digits(user_message):
+        eastern = text.translate(_TO_EASTERN_DIGITS)
+        if eastern in (user_message or ""):
+            return eastern
+    return text
+
+
 def _carryover_handoff_copy(
     spec: dict[str, str],
     *,
     draft: dict | None,
     locale: str,
+    user_message: str = "",
 ) -> str:
     """Bilingual handoff that lists bound slots and Agent carry-over."""
     from ai.engine.agent.chat_surface import _FIELD_LABELS, _label
@@ -288,7 +391,7 @@ def _carryover_handoff_copy(
                 key, (key.replace("_", " "), key.replace("_", " "))
             )
             lab = ar_lab if locale == "ar" else en_lab
-            bits.append(f"{lab}: {value}")
+            bits.append(f"{lab}: {_display_slot_value(value, user_message)}")
 
     if locale == "ar":
         if bits:
@@ -330,7 +433,9 @@ def build_chat_write_handoff(
     api = (api_name or "").strip()
     body = dict(slots or {})
     spec = handoff_spec_for_api(api)
-    text = _carryover_handoff_copy(spec, draft=body, locale=locale)
+    text = _carryover_handoff_copy(
+        spec, draft=body, locale=locale, user_message=user_message,
+    )
     actions = build_handoff_actions(spec, locale=locale)
     envelope = build_handoff_envelope(spec, draft=body, locale=locale)
     tool_result = build_chat_handoff_result(
@@ -480,6 +585,9 @@ _SLOT_STATUS_RE = re.compile(
     r"|\bhow much\b"
     r"|\bwhat (?:did i|was)\b"
     r"|\bwhich dates?\b"
+    r"|\bis it marked\b"
+    r"|\bmarked as\b"
+    r"|تم تسجيله"
     r")",
     re.IGNORECASE,
 )
@@ -565,6 +673,20 @@ def _pretty_date(value: Any) -> str:
 def _parse_iso_date(text: str) -> str | None:
     match = _ISO_DATE_RE.search(_latin_digits(text))
     return match.group(1) if match else None
+
+
+def _parse_relative_day(text: str) -> str | None:
+    raw = (text or "").strip()
+    if not re.search(r"\btoday\b|اليوم", raw, re.I):
+        return None
+    try:
+        from django.utils import timezone
+
+        return timezone.localdate().isoformat()
+    except Exception:  # noqa: BLE001
+        from datetime import date as _date
+
+        return _date.today().isoformat()
 
 
 def _parse_named_dates(text: str) -> list[str]:
@@ -662,6 +784,9 @@ def resolve_ess_write_from_brief(
             body["start_date"] = named[0]
             if len(named) > 1:
                 body["end_date"] = named[-1]
+        relative = _parse_relative_day(text)
+        if relative and "start_date" not in body:
+            body["start_date"] = relative
         days = _parse_int(_DAYS_RE, text)
         if days:
             body["days"] = days

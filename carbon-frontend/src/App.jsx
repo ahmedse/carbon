@@ -26,6 +26,7 @@ import {
 const OrgUnitsPage = React.lazy(() => import("./pages/admin/OrgUnitsPage"));
 const OrgUnitDetailPage = React.lazy(() => import("./pages/admin/OrgUnitDetailPage"));
 const AccessControlPage = React.lazy(() => import("./pages/admin/AccessControlPage"));
+const PositionProfilesPage = React.lazy(() => import("./pages/admin/PositionProfilesPage"));
 const FieldPoliciesPanel = React.lazy(() => import("./pages/admin/catalog/FieldPoliciesPanel"));
 const UsersPage = React.lazy(() => import("./pages/admin/UsersPage"));
 const GroupsPage = React.lazy(() => import("./pages/admin/GroupsPage"));
@@ -408,6 +409,14 @@ export default function App() {
                   element={
                     <AdminRoute>
                       <AccessControlPage />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="/admin/position-profiles"
+                  element={
+                    <AdminRoute>
+                      <PositionProfilesPage />
                     </AdminRoute>
                   }
                 />

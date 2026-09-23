@@ -847,7 +847,11 @@ async def _execute_single_tool(
                 _code = int(result.get("status_code"))
             except (TypeError, ValueError):
                 _code = None
-            if _code is not None and _code >= 400:
+            if (
+                _code is not None
+                and _code >= 400
+                and not result.get("unauthorized")
+            ):
                 _data = result.get("data")
                 _detail = ""
                 if isinstance(_data, dict):

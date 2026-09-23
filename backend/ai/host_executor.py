@@ -1396,8 +1396,11 @@ def _people_me(user, sub, method, body=None) -> dict:
         return {"status_code": 200, "data": {"count": len(results), "results": results}}
 
     if sub == "leave-balance":
+        # Same row shape as LeaveBalanceView. Omitting remaining_signed makes
+        # LeaveBalanceSerializer raise KeyError and the Agent step fails.
         from django.utils import timezone
         from mdm.models import ReferenceValue
+        from people.leave_guards import remaining_identity
         from people.self_serializers import LeaveBalanceSerializer
         from people.self_views import _compute_balance
 
@@ -1409,10 +1412,13 @@ def _people_me(user, sub, method, body=None) -> dict:
         balances = []
         for code in codes:
             entitled, carried, used, pending, remaining = _compute_balance(profile, code, year)
+            remaining_signed, _display = remaining_identity(entitled, carried, used, pending)
             balances.append({
                 "leave_type": code, "entitled": entitled, "carried_forward": carried,
                 "opening_balance": entitled + carried, "used": used, "pending": pending,
                 "remaining": remaining,
+                "remaining_signed": remaining_signed,
+                "overdrawn": remaining_signed < 0,
             })
         return {"status_code": 200, "data": LeaveBalanceSerializer(balances, many=True).data}
 
@@ -1436,27 +1442,19 @@ def _people_me(user, sub, method, body=None) -> dict:
         from people.models import PayslipLine
         from people.self_views import COMMITTED_RUN_STATUSES
         from people import serializers as S
-        from people.sensitivity import can_view_compensation
 
         qs = PayslipLine.objects.filter(
             employee=profile, payroll_run__status__in=COMMITTED_RUN_STATUSES,
         )
         results = S.PayslipLineSerializer(qs, many=True).data
-        payload: dict = {
+        # Mirror PayslipSelfCollectionView: own committed lines, 200 even
+        # when empty. Do not fake a compensation 403 here — empty means no
+        # committed payslip lines (instance.yaml: say so). B5 salary-vs-empty
+        # stays in stamp_compensation_deny_on_soft_empty for "my salary".
+        return {
             "status_code": 200,
             "data": {"count": len(results), "results": results},
         }
-        # B5: empty payslips must not become soft "no salary data" when the
-        # caller lacks compensation access — surface an explicit CBAC deny.
-        if not results and not can_view_compensation(user):
-            payload["unauthorized"] = True
-            payload["status_code"] = 403
-            payload["capability"] = "people:view_compensation"
-            payload["message"] = (
-                "Not authorized to view compensation "
-                "(people:view_compensation required)."
-            )
-        return payload
 
     return {"status_code": 404, "data": {"detail": f"Unknown self-service resource: me/{sub}"}}
 

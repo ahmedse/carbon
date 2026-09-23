@@ -10,6 +10,7 @@ from ai.eval.multiturn.runner import (
     BankReport,
     ScriptResult,
     TurnResult,
+    _latency_histogram,
     _make_stub_llm_factory,
     exit_code_for,
     g5_failures,
@@ -61,6 +62,7 @@ def _report(*, router=1.0, slot=1.0, p50=1.0, over=0, measured=10, reask=True):
                 decision_ok=router >= 1.0 or i > 0,
                 llm_calls=int(p50),
                 llm_calls_ok=over == 0,
+                latency_ms=80.0,
                 language_ok=True,
                 mentions_ok=True,
                 passed=True,
@@ -95,3 +97,21 @@ def test_g5_fails_on_intentional_router_break():
 def test_g5_fails_on_llm_p50_and_over_budget():
     assert any("llm_calls_p50" in m for m in g5_failures(_report(p50=3)))
     assert any("over_budget" in m for m in g5_failures(_report(over=3)))
+
+
+def test_g5_fails_when_latency_histogram_missing():
+    report = _report()
+    for turn in report.scripts[0].turns:
+        turn.latency_ms = None
+    misses = g5_failures(report)
+    assert any("latency_histogram" in m for m in misses)
+
+
+def test_latency_histogram_buckets_split_at_four_seconds():
+    hist = _latency_histogram([10, 249, 250, 999, 2000, 3999, 4000, 8000])
+    assert hist["0-250ms"] == 2
+    assert hist["250-500ms"] == 1
+    assert hist["500-1000ms"] == 1
+    assert hist["1000-2000ms"] == 0
+    assert hist["2000-4000ms"] == 2
+    assert hist["4000ms+"] == 2

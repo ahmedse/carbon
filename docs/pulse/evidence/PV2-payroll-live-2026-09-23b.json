@@ -1,0 +1,145 @@
+{
+  "tier": "live_dev",
+  "caveats": [
+    "Tier live_dev: real LLM provider (LLM_API_KEY) and the configured dev DB, dispatched as an authenticated employee. Reply-text metrics are engine-attributable but non-deterministic across runs (LLM variance).",
+    "Chat mode only (ADR-0046): host writes are never committed from these turns; process dials may create Plan/Run rows awaiting consent in the dev DB.",
+    "Fan-out agents and multi-step planning are disabled in the engine Settings (os.environ + get_settings.cache_clear() since PV2-1C). The PV2-0C live baseline ran WITH fan-out on (override_settings does not reach the engine Settings) — compare llm_calls against it accordingly."
+  ],
+  "host_user": "emp_1067",
+  "database": "nibras_dev",
+  "errors": [],
+  "scripts_run": 1,
+  "scripts_passed": 0,
+  "total_turns": 8,
+  "turns_passed": 0,
+  "focus_retention": 0.2,
+  "slot_carry_over": 0.0,
+  "language_fidelity": 1.0,
+  "router_agreement": 0.125,
+  "llm_calls_p50": 3,
+  "llm_calls_max": 5,
+  "turns_over_budget": 5,
+  "per_objective_pass": {
+    "C1": 0.0,
+    "C2": 0.0
+  },
+  "scripts": [
+    {
+      "script_id": "payroll-followup-en-01",
+      "turns": 8,
+      "turns_passed": 0,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 7,
+      "llm_budget_failures": 5,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "tool_answer",
+          "llm_calls": 5,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['answer']",
+            "mentions_any missing ['4500', '4,500']",
+            "llm_calls=5 > 2"
+          ],
+          "reply": "I'll fetch your payslips to show you last month's net pay.I apologize — that search returned general payroll guidance, not your actual payslips. Let me clarify:"
+        },
+        {
+          "turn": 2,
+          "decision": "tool_answer",
+          "llm_calls": 5,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['answer']",
+            "llm_calls=5 > 2"
+          ],
+          "reply": "I understand — you're asking about deductions on your payslip. Let me fetch your payslip records so I can show you what was deducted.I need to retrieve your act"
+        },
+        {
+          "turn": 3,
+          "decision": "tool_answer",
+          "llm_calls": 5,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['answer']",
+            "mentions_any missing ['3700', '3,700']",
+            "llm_calls=5 > 2"
+          ],
+          "reply": "I understand — you're asking about your take-home pay after GOSI deduction. To show you that, I need to fetch your payslips first.\n\nLet me pull your payslip rec"
+        },
+        {
+          "turn": 4,
+          "decision": "clarify",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=clarify not in ['answer']"
+          ],
+          "reply": "I can look that up a few different ways — which do you mean?\n- Show me my payslip lines so I can verify the GOSI amount myself\n- Explain how GOSI is calculated "
+        },
+        {
+          "turn": 5,
+          "decision": "tool_answer",
+          "llm_calls": 3,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['answer']",
+            "mentions_any missing ['800']",
+            "llm_calls=3 > 2"
+          ],
+          "reply": "You have 4 loans in draft status: 1. **Personal Loan** — Principal: 2,000 | Term: 20 months | Start: 2026-09-24\n2. **Emergency Loan** — Principal: 5,000 | Term:"
+        },
+        {
+          "turn": 6,
+          "decision": "clarify",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=clarify not in ['answer']",
+            "mentions_any missing ['2000', '2,000']"
+          ],
+          "reply": "I can look that up a few different ways — which do you mean?\n- Show me my payslip lines (gross, GOSI, loan deductions, net pay) from a recent committed payroll "
+        },
+        {
+          "turn": 7,
+          "decision": "tool_answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=tool_answer not in ['answer']"
+          ],
+          "reply": "I'll search for information about GOFSCO's payroll processing schedule."
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 3,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 2"
+          ],
+          "reply": "To download your payslip, please: 1. **Log into Nibras** (your HR & Payroll employee self-service portal)\n2. Navigate to **My Payslips** or **قسيمة الراتب** (Ar"
+        }
+      ]
+    }
+  ]
+}

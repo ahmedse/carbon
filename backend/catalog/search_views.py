@@ -10,7 +10,6 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from accounts.permissions import ReadAnyWriteAdmin
-from accounts.models import ScopedRole
 from dataschema.models import DataTable, DataField
 from .models import DataDomain, GlossaryTerm, AssetProfile
 from .services import ensure_asset_profiles
@@ -73,18 +72,16 @@ class CatalogSearchView(APIView):
         user = request.user
         org_unit_ids = None
         if not (user.is_superuser or user.is_staff):
-            org_unit_ids = list(
-                ScopedRole.objects.filter(
-                    user=user, is_active=True
-                ).values_list('org_unit_id', flat=True).distinct()
-            )
-            if not org_unit_ids:
-                # User has no scoped roles; return empty results
-                return Response({
-                    'query': q,
-                    'total': 0,
-                    'results': []
-                })
+            from accounts.rbac_utils import org_scope_for_capability
+            scope = org_scope_for_capability(user, 'catalog:view')
+            if not scope.unrestricted:
+                org_unit_ids = list(scope.ids)
+                if not org_unit_ids:
+                    return Response({
+                        'query': q,
+                        'total': 0,
+                        'results': []
+                    })
 
         # Collect results from each type
         all_results = []

@@ -1,0 +1,344 @@
+{
+  "tier": "live_dev",
+  "caveats": [
+    "Tier live_dev: real LLM provider (LLM_API_KEY) and the configured dev DB, dispatched as an authenticated employee. Reply-text metrics are engine-attributable but non-deterministic across runs (LLM variance).",
+    "Chat mode only (ADR-0046): host writes are never committed from these turns; process dials may create Plan/Run rows awaiting consent in the dev DB.",
+    "Fan-out agents and multi-step planning are disabled in the engine Settings (os.environ + get_settings.cache_clear() since PV2-1C). The PV2-0C live baseline ran WITH fan-out on (override_settings does not reach the engine Settings) — compare llm_calls against it accordingly."
+  ],
+  "host_user": "emp_1067",
+  "database": "nibras_dev",
+  "errors": [],
+  "scripts_run": 3,
+  "scripts_passed": 3,
+  "total_turns": 24,
+  "turns_passed": 24,
+  "focus_retention": 1.0,
+  "slot_carry_over": 0.0,
+  "language_fidelity": 1.0,
+  "router_agreement": 1.0,
+  "llm_calls_p50": 0,
+  "llm_calls_max": 2,
+  "turns_over_budget": 0,
+  "latency_p50_ms": 62.7,
+  "latency_max_ms": 7476.4,
+  "latency_samples": 24,
+  "latency_histogram": {
+    "0-250ms": 20,
+    "250-500ms": 0,
+    "500-1000ms": 0,
+    "1000-2000ms": 0,
+    "2000-4000ms": 1,
+    "4000ms+": 3
+  },
+  "per_objective_pass": {
+    "C1": 1.0,
+    "C2": 1.0,
+    "C10": 1.0,
+    "C7": 1.0
+  },
+  "scripts": [
+    {
+      "script_id": "payroll-followup-en-01",
+      "turns": 8,
+      "turns_passed": 8,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 0,
+      "llm_budget_failures": 0,
+      "passed": true,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "latency_ms": 6319.4,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Last month's committed net pay is 4500."
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 59.3,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Committed deductions: GOSI 1200 and loan installment 800."
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 57.4,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "After the GOSI deduction of 1200, take-home before the loan installment is 5300."
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 58.4,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "The committed GOSI line is 1200. I will not invent a statutory rate beyond that line."
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 57.7,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "The committed loan installment is 800."
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 57.6,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Yes. Committed total deductions are 2000 (GOSI 1200 + loan 800)."
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 58.4,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "I don't have next month's payroll run date. That date is on the committed run in People — I won't guess it."
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 57.6,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Payslips are in My. If none are committed yet, there is nothing to download."
+        }
+      ]
+    },
+    {
+      "script_id": "grounded-recall-01",
+      "turns": 8,
+      "turns_passed": 8,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 0,
+      "llm_budget_failures": 0,
+      "passed": true,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "answer",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "latency_ms": 2305.2,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Your employee number is 1067."
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 70.5,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "You are in the Coiled Tubing department."
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 62.7,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Your manager is Mohammad Bolto Ali."
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 65.6,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Your name is Mohamed Hassan."
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 65.4,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Your employee number is 1067."
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 59.1,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "You did not mention a department. Your record shows Coiled Tubing."
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 57.4,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Your manager is Mohammad Bolto Ali."
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 59.1,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Your name is Mohamed Hassan."
+        }
+      ]
+    },
+    {
+      "script_id": "language-fidelity-ar-01",
+      "turns": 8,
+      "turns_passed": 8,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 0,
+      "llm_budget_failures": 0,
+      "passed": true,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "latency_ms": 4868.8,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "صافي الراتب المعتمد هو 4500."
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 59.4,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "الراتب الإجمالي المعتمد هو 6500. الصافي 4500."
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 56.4,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "الاستقطاعات المعتمدة: GOSI 1200 وقسط القرض 800."
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 114.3,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "صافي الراتب المعتمد هو 4500."
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "latency_ms": 7476.4,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "بناءً على بيانات الراتب المعتمدة لديك: **الخصومات الحالية:**\n- **GOSI (التأمينات الاجتماعية)**: 1200 — هذا استقطاع قانوني إجباري يحكمه نظام التأمينات الاجتماعية"
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 69.2,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "ليس لدي تاريخ معالجة رواتب الشهر القادم. التاريخ على مسير الرواتب المعتمد في تطبيقاتي، ولن أخمنه."
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 64.4,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "صافي الراتب المعتمد هو 4500."
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 64.6,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "على الرحب والسعة. أنا هنا إذا احتجت شيئاً آخر."
+        }
+      ]
+    }
+  ]
+}

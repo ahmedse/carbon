@@ -180,6 +180,14 @@ def test_employee_list_query_budget_is_bounded(auth, create_user, org_a):
 
 
 @pytest.mark.django_db
+def test_employee_detail_includes_org_unit_name(auth, create_user, org_a, employee_a):
+    client = auth(create_user('people_org_label', is_superuser=True))
+    resp = client.get(EMPLOYEES_URL + f'{employee_a.pk}/')
+    assert resp.status_code == 200
+    assert resp.json()['org_unit_label'] == 'Org A'
+
+
+@pytest.mark.django_db
 def test_employee_list_honors_page_size(auth, create_user, org_a):
     """page_size must cap results (NB-P0-EMP-PAGE — was ignored / unbounded)."""
     for i in range(12):

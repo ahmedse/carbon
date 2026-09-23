@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field, fields
 from typing import Any, Iterable
 
@@ -35,6 +36,14 @@ from ai.engine.cognition.turn.language import detect_reply_language
 from ai.engine.core.models import ConversationContextRecord
 
 logger = logging.getLogger("pulse.cognition.state_store")
+
+_EMPTY_PAYSLIP_REPLY_RE = re.compile(
+    r"no (?:committed )?payslips"
+    r"|found no payslips"
+    r"|no payslips (?:are |were )?(?:on file|found)"
+    r"|لم أجد قسائم",
+    re.IGNORECASE,
+)
 
 STATE_VERSION = 1
 FOCUS_MAX = 5
@@ -435,6 +444,23 @@ def update_state_from_turn(
     state.last_results = state.last_results + _last_result_entries(
         completed_tools, scope, turn,
     )
+    if _EMPTY_PAYSLIP_REPLY_RE.search(response_text or ""):
+        already = any(
+            "list_my_payslips" in str(row.get("api") or row.get("digest") or "")
+            and (
+                "count=0" in str(row.get("digest") or "")
+                or "results=[]" in str(row.get("digest") or "")
+            )
+            for row in state.last_results
+            if isinstance(row, dict)
+        )
+        if not already:
+            state.last_results.append({
+                "turn": turn,
+                "tool": "call_host_api",
+                "api": "list_my_payslips",
+                "digest": "call_host_api list_my_payslips: count=0",
+            })
 
     if focus_stack is not None:
         stack = list(focus_stack)

@@ -12,12 +12,13 @@ turns:
       max_llm_calls: 2
   
   - user: "كم هو راتبي الشهري؟"
-    stub_reply: "راتبك الشهري الإجمالي هو ٦٠٠٠ دينار."
+    # Host committed gross is 6500 (٦٥٠٠). ٦٠٠٠ was never a payslip line.
+    stub_reply: "راتبك الشهري الإجمالي هو ٦٥٠٠."
     expect:
       decision_in: [answer]
       language: ar
       max_llm_calls: 2
-      mentions_any: ["٦٠٠٠", "dinar"]
+      mentions_any: ["٦٥٠٠", "6500"]
   
   - user: "كم يتم خصمه من راتبي؟"
     stub_reply: "يتم خصم ١٥٠٠ دينار من راتبك (بما فيها GOSI والقروض)."

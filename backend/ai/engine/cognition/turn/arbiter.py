@@ -1,8 +1,12 @@
-"""TurnDecision Arbiter (PV2-4A · ADR-0047 §4.1).
+"""TurnDecision Arbiter (PV2-4A / 4B · ADR-0047 §4.1).
 
-Shadow mode (``PULSE_ARBITER=shadow``, default): ``decide()`` is compared to
-the legacy early-exit decision and logged. The runner still executes the
-legacy path. Flip (4B) is a separate phase after soak evidence.
+``PULSE_ARBITER=on`` (default after 4B): the recorded turn decision is
+``Arbiter.decide``. ``shadow`` logs the comparison and keeps the legacy
+label. ``legacy`` is the kill switch: no compare, caller decision stands.
+
+Early-exit bodies still return the single gate that fired. Precedence
+below includes that gate's signal, so a one-gate exit agrees. When several
+gates fired, ``on`` records the higher-precedence decision.
 """
 from __future__ import annotations
 
@@ -19,8 +23,8 @@ _PRECEDENCE: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("process_brief", ("process_brief_early", "process_brief")),
     ("handoff_agent", ("chat_handoff",)),
     ("navigate", ("nav_fast_path", "nav_ground")),
-    ("clarify", ("deixis",)),
-    ("tool_answer", ("weather_force",)),
+    ("clarify", ("deixis", "chat_clarify")),
+    ("tool_answer", ("weather_force", "tools_executed")),
     ("answer", ()),
 )
 

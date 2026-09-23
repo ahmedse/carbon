@@ -1,10 +1,21 @@
-"""PV2-4A — Arbiter shadow: precedence, conflict pairs, persist, no behavior flip."""
+"""PV2-4A/4B — Arbiter precedence, conflict pairs, on/shadow/legacy."""
 from __future__ import annotations
+
+import pytest
 
 from ai.engine.cognition.state_store import ConversationState, update_state_from_turn
 from ai.engine.cognition.turn.arbiter import Arbiter, TurnDecision, shadow_compare
 from ai.engine.cognition.turn.runner import _finalize_meter
 from ai.engine.cognition.turn.witnesses import TurnLedger
+
+
+@pytest.fixture(autouse=True)
+def _fresh_settings_cache():
+    from ai.engine.core.config import get_settings
+
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 def _sigs(*fired: str, extra: list[dict] | None = None) -> list[dict]:
@@ -68,6 +79,54 @@ def test_finalize_meter_records_shadow_without_changing_legacy():
     assert ledger.arbiter_shadow["legacy"] == "handoff_agent"
     assert ledger.arbiter_shadow["arbiter"] == "handoff_agent"
     assert ledger.arbiter_shadow["agree"] is True
+
+
+def _arbiter_mode(monkeypatch, mode: str) -> None:
+    from ai.engine.core.config import get_settings
+
+    monkeypatch.setenv("PULSE_ARBITER", mode)
+    get_settings.cache_clear()
+
+
+def test_on_mode_records_arbiter_when_gates_conflict(monkeypatch):
+    """4B: several fired gates → recorded decision is Arbiter precedence."""
+    _arbiter_mode(monkeypatch, "on")
+    ledger = TurnLedger()
+    ledger.decision_signals = _sigs("off_limits", "nav_fast_path")
+    _finalize_meter(ledger, meter=object(), decision="navigate")
+    assert ledger.turn_decision == "refuse"
+    assert ledger.arbiter_shadow["agree"] is False
+    assert ledger.arbiter_shadow["arbiter"] == "refuse"
+
+
+def test_legacy_kill_switch_keeps_caller_decision(monkeypatch):
+    _arbiter_mode(monkeypatch, "legacy")
+    ledger = TurnLedger()
+    ledger.decision_signals = _sigs("off_limits", "nav_fast_path")
+    _finalize_meter(ledger, meter=object(), decision="navigate")
+    assert ledger.turn_decision == "navigate"
+    assert ledger.arbiter_shadow is None
+
+
+def test_shadow_keeps_caller_label(monkeypatch):
+    _arbiter_mode(monkeypatch, "shadow")
+    ledger = TurnLedger()
+    ledger.decision_signals = _sigs("off_limits", "nav_fast_path")
+    _finalize_meter(ledger, meter=object(), decision="navigate")
+    assert ledger.turn_decision == "navigate"
+    assert ledger.arbiter_shadow["arbiter"] == "refuse"
+
+
+def test_clarify_and_tools_stay_themselves_when_on():
+    clarify = TurnLedger()
+    clarify.decision_signals = [{"gate": "chat_clarify", "fired": True}]
+    _finalize_meter(clarify, meter=object(), decision="clarify")
+    assert clarify.turn_decision == "clarify"
+
+    tools = TurnLedger()
+    tools.decision_signals = [{"gate": "tools_executed", "fired": True}]
+    _finalize_meter(tools, meter=object(), decision="tool_answer")
+    assert tools.turn_decision == "tool_answer"
 
 
 def test_state_persists_legacy_and_arbiter():

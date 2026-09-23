@@ -11,16 +11,9 @@ import {
   FormControlLabel,
   IconButton,
   MenuItem,
-  Paper,
   Snackbar,
   Stack,
   Switch,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Tooltip,
 } from '@mui/material';
@@ -33,8 +26,8 @@ import PageContainer from '../../components/layout/PageContainer';
 import PageHeader from '../../components/Page/PageHeader';
 import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
 import ErrorAlert from '../../components/Page/ErrorAlert';
-import EmptyState from '../../components/Page/EmptyState';
 import SystemDialog from '../../components/SystemDialog';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useReferenceOptions } from '../../hooks/useReferenceOptions';
 import { useAuth } from '../../auth/AuthContext';
@@ -76,6 +69,8 @@ export default function PositionsPage() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [searchValue, setSearchValue] = useState('');
+  const [gridFilters, setGridFilters] = useState({ status: '', org_unit: '' });
 
   const loadData = useCallback(async () => {
     try {
@@ -215,6 +210,143 @@ export default function PositionsPage() {
 
   const closeSnackbar = () => setSnackbar((prev) => ({ ...prev, open: false }));
 
+  const positionStatusLabel = (status) => {
+    const keys = {
+      proposed: 'statusProposed',
+      open: 'statusOpen',
+      filled: 'statusFilled',
+      frozen: 'statusFrozen',
+      closed: 'statusClosed',
+    };
+    return keys[status] ? t(keys[status]) : (status || '—');
+  };
+
+  const positionStatusColor = (status) => {
+    if (status === 'filled') return 'success';
+    if (status === 'open') return 'info';
+    if (status === 'frozen') return 'warning';
+    return 'default';
+  };
+
+  const filteredPositions = useMemo(() => {
+    const q = searchValue.trim().toLowerCase();
+    return positions.filter((position) => {
+      if (gridFilters.status && position.status !== gridFilters.status) return false;
+      if (gridFilters.org_unit && String(position.org_unit) !== String(gridFilters.org_unit)) return false;
+      if (!q) return true;
+      const hay = [
+        position.code,
+        position.title,
+        orgUnitName(position.org_unit),
+        refLabel(position.grade),
+        refCode(position.grade),
+        positionStatusLabel(position.status),
+        position.fte,
+        refLabel(position.job_family),
+        incumbentLabel(position.id),
+        position.reports_to ? positionLabel(position.reports_to) : '',
+      ].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }, [positions, searchValue, gridFilters, orgUnitById, orgUnits, t]);
+
+  const filterDefs = useMemo(() => [
+    {
+      key: 'status',
+      label: t('filterStatus'),
+      emptyLabel: t('filterAll'),
+      options: ['proposed', 'open', 'filled', 'frozen', 'closed'].map((value) => ({
+        value,
+        label: positionStatusLabel(value),
+      })),
+    },
+    {
+      key: 'org_unit',
+      label: t('colOrgUnit'),
+      emptyLabel: t('filterAll'),
+      options: orgUnitsForPicker.map((unit) => ({
+        value: String(unit.id),
+        label: unit.full_path || unit.name || unit.code || String(unit.id),
+      })),
+    },
+  ], [t, orgUnitsForPicker]);
+
+  const columns = useMemo(() => [
+    { field: 'code', headerName: t('colCode'), width: 120, valueGetter: (value) => value || '—' },
+    { field: 'title', headerName: t('colTitle'), flex: 1, minWidth: 160, valueGetter: (value) => value || '—' },
+    { field: 'org_unit', headerName: t('colOrgUnit'), width: 180, valueGetter: (value) => orgUnitName(value) },
+    {
+      field: 'grade',
+      headerName: t('colGrade'),
+      width: 120,
+      valueGetter: (_value, row) => refLabel(row.grade) || refCode(row.grade) || '—',
+    },
+    {
+      field: 'status',
+      headerName: t('colStatus'),
+      width: 130,
+      valueGetter: (value) => positionStatusLabel(value),
+      renderCell: (params) => (
+        <Chip size="small" variant="outlined" color={positionStatusColor(params.row.status)} label={params.value} />
+      ),
+    },
+    { field: 'fte', headerName: t('colFte'), width: 80, valueGetter: (value) => value ?? '—' },
+    {
+      field: 'job_family',
+      headerName: t('colJobFamilyCode'),
+      width: 140,
+      valueGetter: (_value, row) => refLabel(row.job_family) || refCode(row.job_family) || '—',
+    },
+    {
+      field: 'incumbent',
+      headerName: t('colIncumbent'),
+      width: 160,
+      sortable: false,
+      valueGetter: (_value, row) => incumbentLabel(row.id),
+    },
+    {
+      field: 'reports_to',
+      headerName: t('colReportsTo'),
+      width: 160,
+      valueGetter: (value) => (value ? positionLabel(value) : '—'),
+    },
+    {
+      field: 'is_management',
+      headerName: t('colIsManagement'),
+      width: 130,
+      valueGetter: (value) => (value ? t('yes') : t('no')),
+      renderCell: (params) => (
+        <Chip
+          size="small"
+          variant="outlined"
+          color={params.row.is_management ? 'info' : 'default'}
+          label={params.value}
+        />
+      ),
+    },
+    {
+      field: 'actions',
+      headerName: t('colActions'),
+      width: 110,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => (
+        <>
+          <Tooltip title={t('actionEditPosition')}>
+            <IconButton size="small" onClick={() => openEdit(params.row)} sx={{ color: 'primary.main' }}>
+              <EditIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={t('actionDeletePosition')}>
+            <IconButton size="small" onClick={() => handleDelete(params.row)} sx={{ color: 'error.main' }}>
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </>
+      ),
+    },
+  ], [t, positions, orgUnitById, orgUnits]);
+
   return (
     <PageContainer>
       <PageHeader
@@ -233,96 +365,25 @@ export default function PositionsPage() {
         <LoadingSkeleton variant="console" />
       ) : error ? (
         <ErrorAlert message={error} onRetry={loadData} />
-      ) : positions.length === 0 ? (
-        <EmptyState
-          icon={<AccountTreeIcon />}
-          title={t('positionsEmpty')}
-          description={t('positionsEmptyDesc')}
-          actionLabel={t('actionAddPosition')}
-          onAction={openCreate}
-        />
       ) : (
-        <TableContainer component={Paper} variant="outlined">
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colCode')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colTitle')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colOrgUnit')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colGrade')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colStatus')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colFte')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colJobFamilyCode')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colIncumbent')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colReportsTo')}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colIsManagement')}</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colActions')}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {positions.map((position) => (
-                <TableRow key={position.id} hover>
-                  <TableCell>{position.code ?? '—'}</TableCell>
-                  <TableCell>{position.title ?? '—'}</TableCell>
-                  <TableCell>{orgUnitName(position.org_unit)}</TableCell>
-                  <TableCell>{refLabel(position.grade) || refCode(position.grade) || '—'}</TableCell>
-                  <TableCell>
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      color={
-                        position.status === 'filled'
-                          ? 'success'
-                          : position.status === 'open'
-                            ? 'info'
-                            : position.status === 'frozen'
-                              ? 'warning'
-                              : 'default'
-                      }
-                      label={
-                        position.status === 'proposed'
-                          ? t('statusProposed')
-                          : position.status === 'open'
-                            ? t('statusOpen')
-                            : position.status === 'filled'
-                              ? t('statusFilled')
-                              : position.status === 'frozen'
-                                ? t('statusFrozen')
-                                : position.status === 'closed'
-                                  ? t('statusClosed')
-                                  : position.status ?? '—'
-                      }
-                    />
-                  </TableCell>
-                  <TableCell>{position.fte ?? '—'}</TableCell>
-                  <TableCell>{refLabel(position.job_family) || refCode(position.job_family) || '—'}</TableCell>
-                  <TableCell>{incumbentLabel(position.id)}</TableCell>
-                  <TableCell>{position.reports_to ? positionLabel(position.reports_to) : '—'}</TableCell>
-                  <TableCell>
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      color={position.is_management ? 'info' : 'default'}
-                      label={position.is_management ? t('yes') : t('no')}
-                    />
-                  </TableCell>
-                  <TableCell align="right">
-                    <Tooltip title={t('actionEditPosition')}>
-                      <IconButton size="small" onClick={() => openEdit(position)} sx={{ color: 'primary.main' }}>
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title={t('actionDeletePosition')}>
-                      <IconButton size="small" onClick={() => handleDelete(position)} sx={{ color: 'error.main' }}>
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <FilteredDataGrid
+          embedded
+          rows={filteredPositions}
+          columns={columns}
+          searchValue={searchValue}
+          onSearchChange={setSearchValue}
+          filterDefs={filterDefs}
+          filterValues={gridFilters}
+          onFilterChange={(key, value) => setGridFilters((prev) => ({ ...prev, [key]: value }))}
+          onClearFilters={() => {
+            setSearchValue('');
+            setGridFilters({ status: '', org_unit: '' });
+          }}
+          emptyMessage={t('positionsEmpty')}
+          emptySubtext={t('positionsEmptyDesc')}
+          pageSize={25}
+          height={560}
+        />
       )}
 
       <SystemDialog

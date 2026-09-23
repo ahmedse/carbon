@@ -226,6 +226,24 @@ def test_submit_insufficient_balance_400(workflow, api_client, get_token_for_use
     assert LeaveRecord.objects.count() == 0
 
 
+@pytest.mark.django_db
+def test_next_year_leave_uses_open_balance(workflow, api_client, get_token_for_user):
+    """Feb next year has no entitlement row; the days on screen are this year."""
+    wf = workflow
+    LeaveEntitlement.objects.create(
+        employee=wf.requester_emp, year=date.today().year, leave_type=wf.leave_annual,
+        entitled_days=Decimal('90'),
+    )
+    _auth(api_client, wf.requester_user, get_token_for_user)
+    start = date(date.today().year + 1, 2, 1)
+    resp = api_client.post(
+        LEAVE_URL,
+        _payload(days='10', start=start, end=date(start.year, 2, 10)),
+        format='json',
+    )
+    assert resp.status_code == 201, resp.content
+
+
 # ── 5. overlap ─────────────────────────────────────────────────────────────
 
 @pytest.mark.django_db

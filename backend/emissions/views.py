@@ -15,7 +15,7 @@ from decimal import Decimal
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 
 from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, SBTiTarget, VerificationRecord, CalculationAudit, ExportAudit, OrganizationalBoundary, BaseYear, RecalculationTrigger, InventorySource, InventorySourceStatus, CoverageGoal, CoverageAction
-from accounts.rbac_utils import get_visible_module_ids, get_visible_org_units, user_is_global_admin
+from accounts.rbac_utils import org_scope_for_capability, user_is_global_admin
 from accounts.constants import ADMINS_GROUP
 from core.feedback import AppFeedback
 from catalog.audit_utils import emit_governance_event
@@ -1190,11 +1190,11 @@ class SBTiTargetViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
     def get_queryset(self):
-        from accounts.rbac_utils import get_visible_org_units
-        allowed = get_visible_org_units(self.request.user)
-        if allowed is None:
-            return SBTiTarget.objects.all()
-        return SBTiTarget.objects.filter(org_unit_id__in=allowed)
+        scope = org_scope_for_capability(self.request.user, 'carbon:view_console')
+        qs = SBTiTarget.objects.all()
+        if not scope.unrestricted:
+            qs = qs.filter(org_unit_id__in=scope.ids)
+        return qs
 
     @action(detail=True, methods=['get'], url_path='progress')
     def progress(self, request, pk=None):
@@ -1326,13 +1326,12 @@ class ExportAuditViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        from accounts.rbac_utils import get_visible_org_units
         qs = ExportAudit.objects.select_related(
             'exported_by'
         ).order_by('-exported_at')
-        allowed = get_visible_org_units(self.request.user)
-        if allowed is not None:
-            qs = qs.filter(org_unit_id__in=[ou.id for ou in allowed])
+        scope = org_scope_for_capability(self.request.user, 'carbon:view_console')
+        if not scope.unrestricted:
+            qs = qs.filter(org_unit_id__in=scope.ids)
         format_filter = self.request.query_params.get('report_format')
         if format_filter:
             qs = qs.filter(report_format=format_filter)
@@ -1480,12 +1479,13 @@ class InventorySourceViewSet(viewsets.ModelViewSet):
     required_write_capability = 'carbon:manage_inventory_coverage'
 
     def get_queryset(self):
-        visible_ids = {ou.id for ou in get_visible_org_units(self.request.user)}
-        if not visible_ids:
+        scope = org_scope_for_capability(self.request.user, 'carbon:view_console')
+        qs = InventorySource.objects.select_related('org_unit', 'created_by')
+        if scope.unrestricted:
+            return qs
+        if not scope.ids:
             return InventorySource.objects.none()
-        return InventorySource.objects.filter(
-            org_unit_id__in=visible_ids
-        ).select_related('org_unit', 'created_by')
+        return qs.filter(org_unit_id__in=scope.ids)
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -1517,12 +1517,13 @@ class CoverageGoalViewSet(viewsets.ModelViewSet):
     required_write_capability = 'carbon:manage_inventory_coverage'
 
     def get_queryset(self):
-        visible_ids = {ou.id for ou in get_visible_org_units(self.request.user)}
-        if not visible_ids:
+        scope = org_scope_for_capability(self.request.user, 'carbon:view_console')
+        qs = CoverageGoal.objects.select_related('org_unit', 'sbti_target', 'created_by')
+        if scope.unrestricted:
+            return qs
+        if not scope.ids:
             return CoverageGoal.objects.none()
-        return CoverageGoal.objects.filter(
-            org_unit_id__in=visible_ids
-        ).select_related('org_unit', 'sbti_target', 'created_by')
+        return qs.filter(org_unit_id__in=scope.ids)
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)

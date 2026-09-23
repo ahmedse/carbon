@@ -25,7 +25,19 @@ export default function StandardDataGrid({
 }) {
   const { lang } = useLanguage();
   const [paginationModel, setPaginationModel] = useState({ pageSize, page: 0 });
-  const localeText = (lang === 'ar' ? arSD : enUS).components.MuiDataGrid.defaultProps.localeText;
+  const localeText = {
+    ...(lang === 'ar' ? arSD : enUS).components.MuiDataGrid.defaultProps.localeText,
+    ...(lang === 'ar' ? {
+      // arSD leaves this commented, so the footer falls back to English "of".
+      paginationDisplayedRows: ({ from, to, count, estimated }) => {
+        if (!estimated) {
+          return `${from}–${to} من ${count !== -1 ? count : `أكثر من ${to}`}`;
+        }
+        const estimatedLabel = estimated > to ? `حوالي ${estimated}` : `أكثر من ${to}`;
+        return `${from}–${to} من ${count !== -1 ? count : estimatedLabel}`;
+      },
+    } : {}),
+  };
 
   return (
     <Paper
@@ -51,11 +63,11 @@ export default function StandardDataGrid({
         disableRowSelectionOnClick
         checkboxSelection={checkboxSelection}
         hideFooterSelectedRowCount={hideFooterSelectedRowCount}
-        localeText={localeText}
         slots={toolbar ? { toolbar: GridToolbar } : undefined}
         slotProps={toolbar ? { toolbar: { showQuickFilter: true, quickFilterProps: { debounceMs: 250 } } } : undefined}
         sx={{ border: 'none', flex: 1, '& .MuiDataGrid-cell': { outline: 'none', display: 'flex', alignItems: 'center' } }}
         {...props}
+        localeText={{ ...localeText, ...props.localeText }}
       />
     </Paper>
   );

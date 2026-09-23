@@ -20,10 +20,10 @@ def is_global_admin(user) -> bool:
         return True
     from accounts.models import ScopedRole
     return ScopedRole.objects.filter(
-        user=user, is_active=True,
+        user=user,
         group__name__in=['admin', 'admins_group'],
         org_unit__isnull=True, module__isnull=True,
-    ).exists()
+    ).live().exists()
 
 
 def _can(user, capability: str) -> bool:

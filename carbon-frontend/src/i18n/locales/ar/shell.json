@@ -22,7 +22,12 @@
     "carbon": "كربون",
     "my": "لوحتي",
     "people": "الموارد البشرية",
-    "team": "الفريق"
+    "team": "الفريق",
+    "learn": "التعلّم",
+    "teach": "التدريس",
+    "gradevance": "GradeVance",
+    "healthy": "الصحة",
+    "stub": "تطبيق تجريبي"
   },
   "nav": {
     "home": "الرئيسية",
@@ -162,9 +167,14 @@
     "referenceData": "البيانات المرجعية",
     "rotation": "المناوبات",
     "myLeave": "إجازاتي",
+    "myAttendance": "حضوري",
     "myRequests": "طلباتي",
     "my": "لوحتي",
     "team": "الفريق",
+    "approvalsInbox": "صندوق الاعتمادات",
+    "teamHistory": "السجل",
+    "teamDirectory": "دليل الفريق",
+    "whosOut": "من في إجازة",
     "requestDetail": "تفاصيل الطلب",
     "processes": "العمليات",
     "policy": "السياسة",
@@ -184,7 +194,21 @@
     "skillLearning": "تعلّم المهارات",
     "spend": "الإنفاق",
     "engine": "المحرك",
-    "expertise": "الخبرة"
+    "expertise": "الخبرة",
+    "chairmanOverview": "نظرة الرئيس",
+    "inventoryCoverage": "تغطية المخزون",
+    "stems": "جذوع الأسئلة",
+    "calibration": "المعايرة",
+    "markingQueue": "طابور التصحيح",
+    "appeals": "الطعون",
+    "proposals": "المقترحات",
+    "packLibrary": "مكتبة الحزم",
+    "qa": "ضمان الجودة",
+    "accessibility": "إمكانية الوصول",
+    "lti": "LTI",
+    "myAssignments": "واجباتي",
+    "progress": "التقدم",
+    "stubHome": "الصفحة التجريبية"
   },
   "group": {
     "dataProducts": "منتجات البيانات",
@@ -204,7 +228,9 @@
     "configuration": "الإعداد",
     "organization": "التنظيم",
     "payrollBenefits": "الرواتب والمزايا",
-    "workforce": "القوى العاملة"
+    "workforce": "القوى العاملة",
+    "executive": "الإدارة التنفيذية",
+    "biAnalytics": "التحليلات وذكاء الأعمال"
   },
   "ui": {
     "darkMode": "الوضع الداكن",
@@ -239,6 +265,13 @@
     "dockPulse": "إرساء Pulse",
     "pulseExpandedBanner": "مساحة عمل النطاق مخفية أثناء توسيع Pulse.",
     "pulseExpandedDock": "إرساء بجانب النطاق",
+    "tagline": {
+      "nibras": "تطبيقات أعمال مؤسسية مدعومة بالذكاء الاصطناعي",
+      "eduos": "نظام تشغيل التعليم",
+      "tectona": "ذكاء تشغيلي مدعوم بالذكاء الاصطناعي",
+      "medos": "نظام تشغيل العمليات السريرية",
+      "aastmt": "منصة بيانات موثوقة تستضيف تطبيقات النطاق"
+    },
     "domainsHeading": "تطبيقات النطاق",
     "domainsSubheading": "افتح نطاقاً للعمل في مساحة العمل التقليدية. استخدم Pulse بجانبها للذكاء الاصطناعي.",
     "openDomain": "فتح {{name}}",

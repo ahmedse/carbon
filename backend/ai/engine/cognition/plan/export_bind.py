@@ -498,6 +498,59 @@ def is_fully_bound_host_api(
     return True
 
 
+def is_bound_catalog_read(
+    tool_name: str | None,
+    tool_args: dict | None,
+    api_catalog: Any,
+) -> bool:
+    """True when a GET ``call_host_api`` needs no path params and is fully named.
+
+    First-person identity (``get_my_profile`` / ``/people/me/``) is the
+    intended caller: skip DraftWitness, still run observe so the host
+    record is restated. Mutations stay on ``is_fully_bound_host_api``.
+    """
+    if (tool_name or "").strip() != "call_host_api":
+        return False
+    if not isinstance(tool_args, dict):
+        return False
+    if contains_mustache_placeholders(tool_args):
+        return False
+    api_name = str(tool_args.get("api_name") or "").strip()
+    if not api_name:
+        return False
+    entry = None
+    for item in api_catalog or []:
+        if isinstance(item, dict) and str(item.get("name") or "") == api_name:
+            entry = item
+            break
+    if not isinstance(entry, dict):
+        # Catalog contract: /people/me/ has no path id. Bind even when the
+        # scoped catalog copy was not passed into the loop.
+        return api_name == "get_my_profile"
+    if str(entry.get("method") or "GET").upper() != "GET":
+        return False
+    path = str(entry.get("path") or "")
+    if re.search(r"\{[^}]+\}", path):
+        return False
+    if entry.get("requires_confirmation"):
+        return False
+    return True
+
+
+def is_bound_resolve_entity(
+    tool_name: str | None,
+    tool_args: dict | None,
+) -> bool:
+    """True when ``resolve_entity`` already has a query — skip draft."""
+    if (tool_name or "").strip() != "resolve_entity":
+        return False
+    if not isinstance(tool_args, dict):
+        return False
+    if contains_mustache_placeholders(tool_args):
+        return False
+    return bool(str(tool_args.get("query") or "").strip())
+
+
 def render_step_template(
     api_name: str,
     values: dict[str, Any] | None,
@@ -599,6 +652,21 @@ def apply_bind_to_tool_calls(
     # calling the tool, synthesize from the plan's tool_args so Approve→resume
     # still writes (loan/leave/attendance). Never invent args — only when the
     # step already carries them.
+    if (
+        (step_tool_name or "") == "resolve_entity"
+        and isinstance(step_tool_args, dict)
+        and step_tool_args.get("query")
+    ):
+        return [{
+            "id": "plan_step_bind_synth",
+            "type": "function",
+            "function": {
+                "name": "resolve_entity",
+                "arguments": json.dumps(
+                    step_tool_args, ensure_ascii=False, default=str,
+                ),
+            },
+        }]
     if (
         (step_tool_name or "") == "call_host_api"
         and isinstance(step_tool_args, dict)

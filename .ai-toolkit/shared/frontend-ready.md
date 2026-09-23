@@ -49,9 +49,10 @@ Owner: <role>   IA: <nav path>   Route: </carbon/...>
 ### Composition tree (primitives first — REUSE, never invent)
 PageContainer
  └─ PageHeader (title, primary action = ONE button top-right)
- └─ StandardDataGrid  ← data source: GET /carbon-api/<resource>/
- │    props: rows, columns, getRowId, loading, density="compact"
+ └─ FilteredDataGrid  ← data source: GET /carbon-api/<resource>/
+ │    props: rows, columns, getRowId, loading, search, filterDefs, sort, pageSize
  │    states: loading | empty | error | loaded | forbidden
+ │    (RULE 14 — search + relevant filters + ordering + paging; not a raw table)
  └─ <Domain>FormDialog  ← SystemDialog, NOT raw Drawer
       props: open, initialValues, onSubmit
       states: idle | submitting | error | success
@@ -60,7 +61,7 @@ PageContainer
 ### Reuse audit (do this, don't skip)
 - [ ] Searched src/components/ — no existing primitive duplicated
 - [ ] Form uses SystemDialog (or the project's modal primitive), never raw Drawer/Dialog
-- [ ] Data grid uses StandardDataGrid + getRowId, never raw table for >20 rows
+- [ ] Record list uses FilteredDataGrid (search, relevant filters, sort, paging) + getRowId, never a raw table
 - [ ] Feedback uses NotificationProvider.notify / notifyFromError, never alert()
 ```
 

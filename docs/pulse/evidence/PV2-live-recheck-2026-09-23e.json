@@ -1,0 +1,324 @@
+{
+  "tier": "live_dev",
+  "caveats": [
+    "Tier live_dev: real LLM provider (LLM_API_KEY) and the configured dev DB, dispatched as an authenticated employee. Reply-text metrics are engine-attributable but non-deterministic across runs (LLM variance).",
+    "Chat mode only (ADR-0046): host writes are never committed from these turns; process dials may create Plan/Run rows awaiting consent in the dev DB.",
+    "Fan-out agents and multi-step planning are disabled in the engine Settings (os.environ + get_settings.cache_clear() since PV2-1C). The PV2-0C live baseline ran WITH fan-out on (override_settings does not reach the engine Settings) — compare llm_calls against it accordingly."
+  ],
+  "host_user": "emp_1067",
+  "database": "nibras_dev",
+  "errors": [],
+  "scripts_run": 3,
+  "scripts_passed": 2,
+  "total_turns": 24,
+  "turns_passed": 19,
+  "focus_retention": 0.692,
+  "slot_carry_over": 1.0,
+  "language_fidelity": 1.0,
+  "router_agreement": 1.0,
+  "llm_calls_p50": 1,
+  "llm_calls_max": 3,
+  "turns_over_budget": 4,
+  "per_objective_pass": {
+    "C1": 0.688,
+    "C3": 1.0,
+    "C8": 1.0,
+    "C2": 0.375,
+    "C5": 1.0,
+    "C6": 1.0
+  },
+  "scripts": [
+    {
+      "script_id": "ess-loan-ar-01",
+      "turns": 8,
+      "turns_passed": 8,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 0,
+      "llm_budget_failures": 0,
+      "passed": true,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "handoff_agent",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "لدي: نوع القرض: emergency؛ المبلغ: ٥٠٠٠؛ amount: ٥٠٠٠.\n\nلإرسال الطلب بدّل إلى وضع الوكيل (Agent) — سأنقل هذه التفاصيل معك. أو قدّم من تطبيقاتي. الدردشة لا تُرسل"
+        },
+        {
+          "turn": 2,
+          "decision": "handoff_agent",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "لدي: amount: ٥٠٠٠؛ نوع القرض: emergency؛ المبلغ: ٥٠٠٠.\n\nلإرسال الطلب بدّل إلى وضع الوكيل (Agent) — سأنقل هذه التفاصيل معك. أو قدّم من تطبيقاتي. الدردشة لا تُرسل"
+        },
+        {
+          "turn": 3,
+          "decision": "handoff_agent",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "لدي: amount: 5000؛ نوع القرض: emergency؛ المبلغ: 5000.\n\nلإرسال الطلب بدّل إلى وضع الوكيل (Agent) — سأنقل هذه التفاصيل معك. أو قدّم من تطبيقاتي. الدردشة لا تُرسل"
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "لم أُرسل الطلب بعد — أنت لا تزال في الدردشة. الدردشة للشرح والتخطيط فقط، لا تُغيّر السجلات. **لإرسال طلب القرض الطارئ بـ ٥٠٠٠:** 1. **انتقل إلى وضع الوكيل (Agen"
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "المبلغ الذي طلبته: **٥٠٠٠ دينار** نوع القرض: **طارئ (emergency)** هذا ما أكدته للتو. هل تريد تعديل المبلغ أو نوع القرض؟"
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "لا يمكنني التنبؤ بقرار الموافقة — هذا يعتمد على: 1. **سياسة الشركة** — حدود القروض الطارئة والشروط\n2. **وضعك المالي** — الراتب، القروض الحالية، الخصومات\n3. **مر"
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "على الرحب والسعة. أنا هنا إذا احتجت شيئاً آخر."
+        },
+        {
+          "turn": 8,
+          "decision": "handoff_agent",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "ar",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "لدي: amount: 5000؛ نوع القرض: emergency؛ المبلغ: 5000.\n\nلإرسال الطلب بدّل إلى وضع الوكيل (Agent) — سأنقل هذه التفاصيل معك. أو قدّم من تطبيقاتي. الدردشة لا تُرسل"
+        }
+      ]
+    },
+    {
+      "script_id": "payroll-followup-en-01",
+      "turns": 8,
+      "turns_passed": 3,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 0,
+      "llm_budget_failures": 4,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "answer",
+          "llm_calls": 3,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['4500', '4,500']",
+            "llm_calls=3 > 2"
+          ],
+          "reply": "I don't have any payslip records on file for you. This could mean no payslips have been processed yet, or they may not be visible in your self-service records. "
+        },
+        {
+          "turn": 2,
+          "decision": "answer",
+          "llm_calls": 3,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "llm_calls=3 > 2"
+          ],
+          "reply": "I don't have any payslip records to show you deductions from. As I mentioned, `list_my_payslips` returned no data. Without payslip records, I cannot tell you wh"
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 3,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['3700', '3,700']",
+            "llm_calls=3 > 2"
+          ],
+          "reply": "I cannot tell you your take-home pay because I don't have any payslip records for you. Without access to your actual payslips, I cannot calculate or confirm: - "
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "To check if your GOSI is calculated correctly, I need to see your actual payslip. Do you have a specific payslip or payroll run you'd like me to review?"
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 3,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['800']",
+            "llm_calls=3 > 2"
+          ],
+          "reply": "You have multiple loans in draft status. Here are the details: 1. **Personal Loan** (ID 44): 520.000 | 12 months | Start: 2027-09-13 | Status: Draft\n2. **Person"
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 1,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "mentions_any missing ['2000', '2,000']"
+          ],
+          "reply": "Are you asking about total deductions on a specific payslip, or total loan principal across all your loans?"
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "I don't have next month's payroll run date. That date is on the committed run in People — I won't guess it."
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Payslips are in My. If none are committed yet, there is nothing to download."
+        }
+      ]
+    },
+    {
+      "script_id": "chat-handoff-write-01",
+      "turns": 8,
+      "turns_passed": 8,
+      "language_failures": 0,
+      "reask_violations": 0,
+      "decision_failures": 0,
+      "llm_budget_failures": 0,
+      "passed": true,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "clarify",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "What type of loan are you interested in?"
+        },
+        {
+          "turn": 2,
+          "decision": "clarify",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Emergency loan. How much do you need to borrow?"
+        },
+        {
+          "turn": 3,
+          "decision": "handoff_agent",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "I have: Loan type: emergency; Principal: 3000; amount: 3000.\n\nTo submit it, switch to Agent — I'll carry these details over. Or open My and submit there. Chat d"
+        },
+        {
+          "turn": 4,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Not yet. I've drafted the loan request details, but the handoff to Agent or My is ready for you to initiate. To complete it: 1. **Switch to Agent** — I'll pass "
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "The agent has emergency loan and 3000.0."
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "No. The agent has your emergency loan request details (loan type: emergency, principal: 3000 SAR). You should not need to repeat them — the handoff carries the "
+        },
+        {
+          "turn": 7,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Once you hand off to Agent or submit via My: 1. **Submission** — Your emergency loan request (3000 SAR) is submitted to the system.\n2. **Processing** — HR revie"
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "You're welcome. Ask if you need anything else."
+        }
+      ]
+    }
+  ]
+}

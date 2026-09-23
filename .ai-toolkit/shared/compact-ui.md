@@ -52,6 +52,8 @@ cell: borderBottom 1px solid divider, padding '4px 8px', lineHeight 1.3
 row hover: primary 4% opacity
 ```
 - Use `density="compact"` on all DataGrids.
+- Record lists use `FilteredDataGrid` (design-system RULE 14): search, the filters
+  that split that list, column sort, and paging. A raw `<Table>` is not a list.
 - Column headers are 0.75rem uppercase (theme columnHeaderTitle).
 - Pagination text is body2 size.
 - **ROW CLICK = HIGHLIGHT ONLY.** Never navigate on row click. The user must deliberately click an action button (eye icon, etc.) to navigate. Set `highlightRow` and `onRowClick` for selection state.
@@ -148,6 +150,8 @@ List: disablePadding, flex 1, overflow auto, py 0.5, px 0.75
 Nav row: height 30px, px 0.75, gap 0.75, borderRadius 5px, cursor pointer
 Icon: fontSize 16, opacity 0.6 (1.0 when active)
 Label: fontSize '0.75rem', fontWeight 400 (600 when active), lineHeight 1
+       RTL uses theme body line height (1.9). Cairo's own metrics are 1.874em;
+       a shorter line box with overflow:hidden shaves Arabic glyphs.
 Group header: fontSize '0.6875rem', fontWeight 500, color text.disabled
               LETTER-SPACING 0.04em, px 0.75, pt 0.75, pb 0.25
               NEVER uppercase, NEVER bold, NEVER colored

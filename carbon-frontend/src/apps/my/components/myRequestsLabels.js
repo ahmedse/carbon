@@ -146,6 +146,26 @@ export function leaveTypeLabel(t, code) {
   return t(`leaveType.${code}`, { defaultValue: code });
 }
 
+/**
+ * List title from the stored code and payload. Structured requests are named
+ * in the active language. A memo title stays the text that was written.
+ * There is no second stored title.
+ */
+export function displayTitle(t, item, tLeave = t) {
+  const code = item?.corr_type_code
+    || (item?.corr_type && typeof item.corr_type === 'object' ? item.corr_type.code : null);
+  const payload = item?.payload && typeof item.payload === 'object' ? item.payload : {};
+  if (code === 'leave_request') {
+    const leave = leaveTypeLabel(tLeave, payload.leave_type);
+    if (leave && leave !== '—' && leave !== String(payload.leave_type || '')) return leave;
+    return corrTypeLabel(t, 'leave_request');
+  }
+  if (code === 'attendance_permission' || code === 'loan_request' || code === 'profile_change') {
+    return corrTypeLabel(t, code);
+  }
+  return item?.title || '—';
+}
+
 /** Localized date formatting, robust to ISO datetimes and timezone shift. */
 export function formatDate(value, lang) {
   if (!value) return '—';

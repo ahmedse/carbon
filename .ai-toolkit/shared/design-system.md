@@ -199,6 +199,37 @@ without search, and every picker needs to signal its async state.
 
 ---
 
+## RULE 14 — Every record list is a FilteredDataGrid
+
+A page that lists records (admin tables, domain lists, inboxes, directories) is
+`FilteredDataGrid` (`src/components/FilteredDataGrid.jsx`). It is not a raw MUI
+`<Table>`, and it is not a bare `DataGrid` / `StandardDataGrid` with no query chrome.
+Sort and paging alone are not enough.
+
+Every such list has:
+
+- **Search** across the fields a person would type (name, code, reference, path).
+- **Relevant filters only** — the dimensions that actually split the list (type,
+  parent, status, org unit, date range). Not a filter for every column. Filter
+  pickers are `SearchSelect` (RULE 13), which `FilteredDataGrid` already uses.
+- **Ordering** — column sort, with a default on the column people scan first.
+- **Paging** — page size must be one of `rowsPerPageOptions`.
+- The four data states (RULE 4). Row click highlights only; open, edit, and
+  delete are explicit actions (`shared/compact-ui.md`).
+
+A list that can grow past one page sends `q` and the active filters to the API
+(`paginationMode="server"`). Client-side filter is only for a bounded set that
+is already loaded.
+
+Exceptions, and only these:
+
+- A short key/value panel or a detail timeline of a handful of events, not a
+  record list.
+- A dialog that shows one already-chosen set of fewer than about eight rows
+  may omit search and filters. If that set can grow, it still sorts and pages.
+
+---
+
 ## RULE 12 — Consistency Over Cleverness
 
 - The same action looks and behaves the same everywhere (predictability > novelty).
@@ -221,6 +252,7 @@ without search, and every picker needs to signal its async state.
 [ ] Status shown as badge/dot + label (not color alone)
 [ ] Spacing via Stack/Grid gap, not per-child margins
 [ ] Reviewed the reference component named in project.config.md for this project's look
+[ ] Record lists use FilteredDataGrid — search, relevant filters, sort, paging (RULE 14)
 ```
 
 ## Anti-Patterns (instant reject in review)
@@ -229,6 +261,8 @@ without search, and every picker needs to signal its async state.
 - Duplicated component (`Button2`, `CustomCard`)
 - Raw `<Select>`/`<TextField select>` with hardcoded `<MenuItem>`s for a data-driven or
   open-ended enum/entity picker (use `SearchSelect` — RULE 13)
+- A record list rendered as a raw `<Table>` or a bare DataGrid with no search and
+  no relevant filters (use `FilteredDataGrid` — RULE 14)
 - A picker whose listbox silently renders empty because options failed to load (missing
   loading/error/empty state)
 - Blank screen while loading / no empty state

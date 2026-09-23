@@ -28,7 +28,7 @@ import { useEnabledApps } from '../hooks/useEnabledApps';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 import PageContainer from '../components/layout/PageContainer';
 import { FONT } from '../theme/themeTokens';
-import { PLATFORM_TITLE, PLATFORM_TAGLINE } from '../config/branding';
+import { BRAND_ID, PLATFORM_TITLE, PLATFORM_TAGLINE } from '../config/branding';
 
 const APP_ICONS = {
   Co2: Co2Icon,
@@ -210,7 +210,7 @@ export default function PlatformHome() {
           {PLATFORM_TITLE}
         </Typography>
         <Typography sx={{ ...FONT.body, color: 'text.secondary', mb: 1.5 }}>
-          {PLATFORM_TAGLINE}
+          {t(`ui.tagline.${BRAND_ID}`, { defaultValue: PLATFORM_TAGLINE })}
         </Typography>
         <Typography
           sx={{

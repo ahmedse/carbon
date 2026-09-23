@@ -1,20 +1,10 @@
 // src/apps/people/PayslipPage.jsx
 // People & Payroll — payslip lines per payroll run (read-only).
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  FormControl,
-  InputLabel,
-  MenuItem,
   Paper,
-  Select,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   Typography,
 } from '@mui/material';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
@@ -23,7 +13,8 @@ import PageContainer from '../../components/layout/PageContainer';
 import PageHeader from '../../components/Page/PageHeader';
 import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
 import ErrorAlert from '../../components/Page/ErrorAlert';
-import EmptyState from '../../components/Page/EmptyState';
+import { SearchSelect } from '../../components/Form';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
 import { fetchPayrollRuns, fetchPayslipLines } from '../../api/people';
@@ -40,6 +31,8 @@ export default function PayslipPage() {
   const [error, setError] = useState(null);
   const [linesLoading, setLinesLoading] = useState(false);
   const [linesError, setLinesError] = useState(null);
+  const [searchValue, setSearchValue] = useState('');
+  const [lineType, setLineType] = useState('');
 
   useEffect(() => {
     setLoading(true);
@@ -60,6 +53,61 @@ export default function PayslipPage() {
       .catch((err) => setLinesError(err?.message || t('payslipLoadError')))
       .finally(() => setLinesLoading(false));
   }, [selectedRun, token, t]);
+
+  const lineLabel = (line) => (
+    line.employee_no || line.employee_name
+      ? `${line.employee_no ?? '—'} — ${line.employee_name ?? ''}`
+      : (line.employee ?? '—')
+  );
+
+  const lineTypeOptions = useMemo(
+    () => [...new Set(lines.map((line) => line.line_type).filter(Boolean))],
+    [lines],
+  );
+
+  const filteredLines = useMemo(() => {
+    const q = searchValue.trim().toLowerCase();
+    return lines.filter((line) => {
+      if (lineType && line.line_type !== lineType) return false;
+      if (!q) return true;
+      const hay = [
+        lineLabel(line),
+        line.line_type,
+        formatAmount(line.amount),
+        line.rule_id,
+        line.rule_version,
+      ].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }, [lines, searchValue, lineType]);
+
+  const filterDefs = useMemo(() => [
+    {
+      key: 'line_type',
+      label: t('colLineType'),
+      emptyLabel: t('filterAll'),
+      options: lineTypeOptions.map((value) => ({ value, label: value })),
+    },
+  ], [t, lineTypeOptions]);
+
+  const columns = useMemo(() => [
+    {
+      field: 'employee',
+      headerName: t('colEmployee'),
+      flex: 1,
+      minWidth: 200,
+      valueGetter: (_value, row) => lineLabel(row),
+    },
+    { field: 'line_type', headerName: t('colLineType'), width: 140, valueGetter: (value) => value || '—' },
+    {
+      field: 'amount',
+      headerName: t('colAmount'),
+      width: 140,
+      valueGetter: (value) => formatAmount(value),
+    },
+    { field: 'rule_id', headerName: t('colRuleId'), width: 140, valueGetter: (value) => value ?? '—' },
+    { field: 'rule_version', headerName: t('colRuleVersion'), width: 140, valueGetter: (value) => value ?? '—' },
+  ], [t]);
 
   if (loading) {
     return (
@@ -93,35 +141,33 @@ export default function PayslipPage() {
       <PageHeader icon={ReceiptLongIcon} title={t('payslipTitle')} subtitle={t('payslipSubtitle')} />
 
       <Stack spacing={2}>
-        <FormControl size="small" sx={{ minWidth: 240 }}>
-          <InputLabel id="payslip-run-label">{t('selectPayrollRun')}</InputLabel>
-          <Select
-            labelId="payslip-run-label"
-            label={t('selectPayrollRun')}
-            value={selectedRun}
-            onChange={(event) => setSelectedRun(event.target.value)}
-          >
-            <MenuItem value="">{t('selectAllRuns')}</MenuItem>
-            {runs.map((run) => (
-              <MenuItem key={run.id} value={String(run.id)}>
-                {`${formatDate(run.period_start)} → ${formatDate(run.period_end)}`}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        <SearchSelect
+          options={runs}
+          valueKey="id"
+          labelKey="id"
+          getOptionLabel={(run) => `${formatDate(run.period_start)} → ${formatDate(run.period_end)}`}
+          label={t('selectPayrollRun')}
+          value={selectedRun === '' ? null : Number(selectedRun)}
+          clearable
+          onChange={(run) => {
+            setSelectedRun(run ? String(run.id) : '');
+            setSearchValue('');
+            setLineType('');
+          }}
+        />
 
         <Stack direction="row" spacing={2}>
           <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, flex: 1 }}>
-            <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary', textTransform: 'uppercase' }}>
+            <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase' }}>
               {t('grossTotal')}
             </Typography>
-            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600 }}>{formatAmount(grossTotal)}</Typography>
+            <Typography variant="subtitle1">{formatAmount(grossTotal)}</Typography>
           </Paper>
           <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, flex: 1 }}>
-            <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary', textTransform: 'uppercase' }}>
+            <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase' }}>
               {t('netTotal')}
             </Typography>
-            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600 }}>{formatAmount(netTotal)}</Typography>
+            <Typography variant="subtitle1">{formatAmount(netTotal)}</Typography>
           </Paper>
         </Stack>
 
@@ -129,37 +175,27 @@ export default function PayslipPage() {
           <LoadingSkeleton variant="table" />
         ) : linesError ? (
           <ErrorAlert message={linesError} onRetry={() => window.location.reload()} />
-        ) : lines.length === 0 ? (
-          <EmptyState
-            icon={<ReceiptLongIcon />}
-            title={t('payslipEmpty')}
-            description={t('payslipEmptyDesc')}
-          />
         ) : (
-          <TableContainer component={Paper} variant="outlined">
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colEmployee')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colLineType')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colAmount')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colRuleId')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colRuleVersion')}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {lines.map((line) => (
-                  <TableRow key={line.id} hover>
-                    <TableCell>{line.employee_no || line.employee_name ? `${line.employee_no ?? '—'} — ${line.employee_name ?? ''}` : (line.employee ?? '—')}</TableCell>
-                    <TableCell>{line.line_type ?? '—'}</TableCell>
-                    <TableCell>{formatAmount(line.amount)}</TableCell>
-                    <TableCell>{line.rule_id ?? '—'}</TableCell>
-                    <TableCell>{line.rule_version ?? '—'}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+          <FilteredDataGrid
+            embedded
+            rows={filteredLines}
+            columns={columns}
+            searchValue={searchValue}
+            onSearchChange={setSearchValue}
+            filterDefs={filterDefs}
+            filterValues={{ line_type: lineType }}
+            onFilterChange={(key, value) => {
+              if (key === 'line_type') setLineType(value || '');
+            }}
+            onClearFilters={() => {
+              setSearchValue('');
+              setLineType('');
+            }}
+            emptyMessage={t('payslipEmpty')}
+            emptySubtext={t('payslipEmptyDesc')}
+            pageSize={25}
+            height={520}
+          />
         )}
       </Stack>
     </PageContainer>

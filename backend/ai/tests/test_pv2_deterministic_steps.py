@@ -8,6 +8,7 @@ today's draft path.
 from __future__ import annotations
 
 import json
+import re
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -130,6 +131,27 @@ def test_mustache_and_binding_helpers():
         _CATALOG,
     ) is False
     assert is_fully_bound_host_api("search_knowledge", {}, _CATALOG) is False
+    from ai.engine.cognition.plan.export_bind import is_bound_catalog_read
+
+    profile_catalog = [{
+        "name": "get_my_profile",
+        "method": "GET",
+        "path": "/carbon-api/people/me/",
+        "requires_confirmation": False,
+    }]
+    assert is_bound_catalog_read(
+        "call_host_api",
+        {"api_name": "get_my_profile"},
+        profile_catalog,
+    ) is True
+    assert is_bound_catalog_read(
+        "call_host_api",
+        {"api_name": "get_employee"},
+        [{"name": "get_employee", "method": "GET", "path": "/people/employees/{id}/"}],
+    ) is False
+    assert is_bound_catalog_read(
+        "call_host_api", {"api_name": "get_my_profile"}, [],
+    ) is True
 
 
 def test_step_template_ar_en_snapshots():
@@ -172,6 +194,20 @@ def test_step_template_ar_en_snapshots():
     )
     assert att_en and "personal" in att_en
     assert att_ar and "حضور" in att_ar
+
+
+async def test_every_step_template_has_matching_en_ar_slots():
+    """A5 machine check — not Nibras QA sign-off. Both languages, same slots."""
+    templates = (_nibras_cfg().get("step_templates") or {})
+    slot_re = re.compile(r"\{([a-z_]+)\}")
+    assert templates, "nibras instance.yaml must declare step_templates"
+    for name, entry in templates.items():
+        assert isinstance(entry, dict), name
+        en = (entry.get("en") or "").strip()
+        ar = (entry.get("ar") or "").strip()
+        assert en, f"{name} missing en"
+        assert ar, f"{name} missing ar"
+        assert set(slot_re.findall(en)) == set(slot_re.findall(ar)), name
 
 
 # ── ReActLoop deterministic path ───────────────────────────────────────────
@@ -377,3 +413,49 @@ def test_plans_service_reuses_step_templates_for_final_response():
     assert "emergency" in en and "5000" in en
     assert "قرض" in ar and "5000" in ar
     assert en != ar
+
+
+def _plan_shape(plan) -> tuple:
+    rows = []
+    for step in plan.steps:
+        args = dict(getattr(step, "tool_args", None) or {})
+        rows.append((
+            getattr(step, "intent", ""),
+            getattr(step, "tool_name", ""),
+            args.get("api_name"),
+            json.dumps(args.get("body") or {}, sort_keys=True, default=str),
+            bool(getattr(step, "is_mutation", False)),
+        ))
+    return tuple(rows)
+
+
+@pytest.mark.django_db
+def test_same_brief_same_plan_shape_pass_k_3():
+    """A10: the same ESS brief materializes the same plan shape three times."""
+    from datetime import date
+
+    from ai.engine.cognition.plan.process_dial import (
+        materialize_attendance_permission_plan,
+        materialize_leave_request_plan,
+        materialize_loan_request_plan,
+    )
+
+    today = date(2026, 9, 23)
+    briefs = (
+        (
+            materialize_loan_request_plan,
+            "I need an emergency loan of 5000 SAR for 12 months starting 2026-09-23",
+        ),
+        (
+            materialize_leave_request_plan,
+            "I need annual leave from 2026-10-01 to 2026-10-05",
+        ),
+        (
+            materialize_attendance_permission_plan,
+            "I need a late arrival permission on 2026-09-23 for 2 hours",
+        ),
+    )
+    for builder, text in briefs:
+        shapes = [_plan_shape(builder(text, today=today)) for _ in range(3)]
+        assert shapes[0] == shapes[1] == shapes[2]
+        assert len(shapes[0]) >= 1

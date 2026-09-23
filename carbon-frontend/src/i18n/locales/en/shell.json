@@ -22,7 +22,12 @@
     "carbon": "Carbon",
     "my": "My",
     "people": "People",
-    "team": "Team"
+    "team": "Team",
+    "learn": "Learn",
+    "teach": "Teach",
+    "gradevance": "GradeVance",
+    "healthy": "Healthy",
+    "stub": "Stub App"
   },
   "nav": {
     "home": "Home",
@@ -162,9 +167,14 @@
     "referenceData": "Reference Data",
     "rotation": "Rotation",
     "myLeave": "My Leave",
+    "myAttendance": "My Attendance",
     "myRequests": "My Requests",
     "my": "My",
     "team": "Team",
+    "approvalsInbox": "Approvals Inbox",
+    "teamHistory": "History",
+    "teamDirectory": "Team Directory",
+    "whosOut": "Who's Out",
     "requestDetail": "Request Detail",
     "processes": "Processes",
     "policy": "Policy",
@@ -184,7 +194,21 @@
     "skillLearning": "Skill Learning",
     "spend": "Spend",
     "engine": "Engine",
-    "expertise": "Expertise"
+    "expertise": "Expertise",
+    "chairmanOverview": "Chairman Overview",
+    "inventoryCoverage": "Inventory Coverage",
+    "stems": "Stems",
+    "calibration": "Calibration",
+    "markingQueue": "Marking queue",
+    "appeals": "Appeals",
+    "proposals": "Proposals",
+    "packLibrary": "Pack library",
+    "qa": "QA",
+    "accessibility": "Accessibility",
+    "lti": "LTI",
+    "myAssignments": "My assignments",
+    "progress": "Progress",
+    "stubHome": "Stub Home"
   },
   "group": {
     "dataProducts": "Data Products",
@@ -204,7 +228,9 @@
     "configuration": "Configuration",
     "organization": "Organization",
     "payrollBenefits": "Payroll & Benefits",
-    "workforce": "Workforce"
+    "workforce": "Workforce",
+    "executive": "Executive",
+    "biAnalytics": "BI & Analytics"
   },
   "ui": {
     "darkMode": "Dark mode",
@@ -239,6 +265,13 @@
     "dockPulse": "Dock Pulse",
     "pulseExpandedBanner": "Domain workspace is hidden while Pulse is expanded.",
     "pulseExpandedDock": "Dock beside domain",
+    "tagline": {
+      "nibras": "AI-native enterprise business domain applications",
+      "eduos": "Education Operating System",
+      "tectona": "AI-Powered Operations Intelligence",
+      "medos": "Clinical Operations Operating System",
+      "aastmt": "Trusted data platform hosting domain applications"
+    },
     "domainsHeading": "Domain applications",
     "domainsSubheading": "Open a domain to work in the traditional workspace. Use Pulse alongside for AI.",
     "openDomain": "Open {{name}}",

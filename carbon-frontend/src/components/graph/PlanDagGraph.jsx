@@ -16,6 +16,7 @@
 // component stays presentational. Theme tokens only (RULE_8); outcome labels
 // only (RULE_23).
 import React, { useCallback, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import PropTypes from 'prop-types';
 import {
   Box,
@@ -46,7 +47,9 @@ import {
   resolvePlanNodeShape,
 } from './planGraphShapes';
 import { layoutExecutionGraph } from '../../utils/planGraph';
-import { NODE_STATUS_DENSE, agentRoleLabel, stepStatusMeta } from '../../shell/aiTaskStatus';
+import { agentRoleLabel, stepStatusMeta } from '../../shell/aiTaskStatus';
+import { GraphNodeForeign } from './GraphNodeLabel';
+import { dominantDir } from './graphText';
 
 /** Wrap intent for graph cards — prefer readable journey labels over `…` soup. */
 export function wrapTitleLines(raw, maxPerLine, maxLines = 2) {
@@ -159,8 +162,14 @@ CollapsiblePayload.propTypes = {
   testId: PropTypes.string,
 };
 
-/** Compact UPPERCASE status label for the dense node interior. */
-const NODE_STATUS = NODE_STATUS_DENSE;
+const GRAPH_STATUS_KEY = {
+  pending: 'graphStatusPending',
+  running: 'graphStatusRunning',
+  awaiting_approval: 'graphStatusApproval',
+  completed: 'graphStatusFinished',
+  failed: 'graphStatusFailed',
+  skipped: 'graphStatusSkipped',
+};
 
 /** Step status → MUI Chip color (RULE 5 — chip carries a text label too). */
 export function planStepStatusChipColor(status) {
@@ -333,6 +342,11 @@ export default function PlanDagGraph({
   confirmingId = null,
 }) {
   const theme = useTheme();
+  const { t } = useTranslation('common');
+  const statusWord = useCallback(
+    (status) => t(GRAPH_STATUS_KEY[status] || 'graphStatusPending'),
+    [t],
+  );
   const structure = mode === 'structure';
   const [selected, setSelected] = useState(null);
   const [selectedEdge, setSelectedEdge] = useState(null);
@@ -397,13 +411,13 @@ export default function PlanDagGraph({
     () => (structure
       ? []
       : [
-        { label: 'Pending', color: theme.palette.text.disabled },
-        { label: 'Running', color: theme.palette.primary.main },
-        { label: 'Needs approval', color: theme.palette.warning.main },
-        { label: 'Finished', color: theme.palette.success.main },
-        { label: 'Failed', color: theme.palette.error.main },
+        { label: t('graphStatusPending'), color: theme.palette.text.disabled },
+        { label: t('graphStatusRunning'), color: theme.palette.primary.main },
+        { label: t('graphStatusApproval'), color: theme.palette.warning.main },
+        { label: t('graphStatusFinished'), color: theme.palette.success.main },
+        { label: t('graphStatusFailed'), color: theme.palette.error.main },
       ]),
-    [theme, structure],
+    [theme, structure, t],
   );
 
   const selectedStep = selected ? stepById.get(selected.id) : null;
@@ -447,109 +461,44 @@ export default function PlanDagGraph({
       const isDiamond = shape === 'diamond' || shape === 'diamondPlus';
       const isCircle = shape === 'circle' || shape === 'doubleCircle' || shape === 'thickCircle';
       const center = isDiamond || isCircle;
-      const padX = center ? 0 : 14;
-      const textX = center ? n.w / 2 : padX + 8;
-      const anchor = center ? 'middle' : 'start';
       const roleKey = String(n.agent_role || 'orchestrator').toLowerCase();
       const accentToken = PLAN_ROLE_ACCENT[roleKey] || 'primary';
       const accent = structure
         ? (theme.palette[accentToken]?.main || phaseColor(n.phase_id) || theme.palette.primary.main)
         : colorFor(n.status);
 
-      if (structure) {
-        const rawTitle = String(n.label || `Step ${n.id}`);
-        const titleMax = Math.max(18, Math.floor((n.w - (center ? n.w * 0.35 : 40)) / 6.6));
-        const titleLines = wrapTitleLines(rawTitle, titleMax, 2);
-        const isGateway = n.is_gateway
-          || ['choice', 'parallel', 'observe', 'map', 'loop', 'wait', 'fail', 'succeed'].includes(n.node_type);
-        const meta = isGateway
-          ? String(n.node_type || 'gateway')
-          : (agentRoleLabel(n.agent_role || 'orchestrator') || n.phase_name || '');
-        const metaMax = Math.max(8, Math.floor((n.w - (center ? n.w * 0.4 : 40)) / 5.6));
-        const metaTrim = meta.length > metaMax ? `${meta.slice(0, metaMax - 1)}…` : meta;
-        const lineCount = titleLines.length + (metaTrim ? 1 : 0);
-        const blockH = lineCount * 13;
-        const startY = n.h / 2 - blockH / 2 + 10;
-        return (
-          <>
-            {!center ? (
-              <>
-                <rect x={0} y={0} width={5} height={n.h} rx={0} fill={accent} />
-                <rect x={5} y={0} width={1} height={n.h} fill={theme.palette.divider} opacity={0.35} />
-              </>
-            ) : null}
-            {titleLines.map((line, i) => (
-              <text
-                key={`t${i}`}
-                x={textX}
-                y={startY + i * 14}
-                fontSize={center ? 11 : 12.5}
-                fontWeight={650}
-                fill={theme.palette.text.primary}
-                textAnchor={anchor}
-              >
-                {line}
-              </text>
-            ))}
-            {metaTrim ? (
-              <text
-                x={textX}
-                y={startY + titleLines.length * 14 + 2}
-                fontSize={10}
-                fill={theme.palette.text.secondary}
-                textAnchor={anchor}
-              >
-                {metaTrim}
-              </text>
-            ) : null}
-          </>
-        );
-      }
-
-      const color = colorFor(n.status);
-      const statusLabel = NODE_STATUS[n.status] || 'PENDING';
       const rawTitle = String(n.label || `Step ${n.id}`);
       const isGateway = n.is_gateway
         || ['choice', 'parallel', 'observe', 'map', 'loop', 'wait', 'fail', 'succeed'].includes(n.node_type);
-      // Cards stay light — tool ids / cast live in the dock under "More detail".
-      const metaRaw = isGateway ? String(n.node_type || 'gateway').toUpperCase() : '';
-      const titleMax = Math.max(22, Math.floor((n.w - 72) / 6.6));
-      const titleLines = wrapTitleLines(rawTitle, titleMax, 2);
-      const metaMax = Math.max(10, Math.floor((n.w - 28) / 5.6));
-      const meta = metaRaw.length > metaMax ? `${metaRaw.slice(0, metaMax - 1)}…` : metaRaw;
-      const startY = titleLines.length > 1 ? n.h / 2 - (meta ? 8 : 4) : n.h / 2 + (meta ? -2 : 4);
+      const meta = structure
+        ? (isGateway
+          ? String(n.node_type || 'gateway')
+          : (agentRoleLabel(n.agent_role || 'orchestrator') || n.phase_name || ''))
+        : (isGateway ? String(n.node_type || 'gateway') : '');
+      const statusLabel = structure ? '' : statusWord(n.status);
+      const bar = structure ? accent : colorFor(n.status);
+      const rtl = dominantDir(rawTitle) === 'rtl';
       return (
         <>
           {!center ? (
-            <>
-              <rect x={0} y={0} width={5} height={n.h} fill={color} />
-              <rect x={5} y={0} width={1} height={n.h} fill={theme.palette.divider} opacity={0.35} />
-            </>
+            <rect x={rtl ? n.w - 4 : 0} y={0} width={4} height={n.h} fill={bar} />
           ) : null}
-          {titleLines.map((line, i) => (
-            <text
-              key={`et${i}`}
-              x={padX + 8}
-              y={startY + i * 13}
-              fontSize={12.5}
-              fontWeight={650}
-              fill={theme.palette.text.primary}
-            >
-              {line}
-            </text>
-          ))}
-          <text x={n.w - 10} y={14} fontSize={9} fontWeight={700} fill={color} textAnchor="end">
-            {statusLabel}
-          </text>
-          {meta ? (
-            <text x={padX + 8} y={startY + titleLines.length * 13 + 2} fontSize={10} fill={theme.palette.text.secondary}>
-              {meta}
-            </text>
-          ) : null}
+          <GraphNodeForeign
+            width={n.w}
+            height={n.h}
+            title={rawTitle}
+            meta={meta}
+            status={statusLabel}
+            statusColor={bar}
+            center={center}
+            fontFamily={theme.typography?.fontFamily}
+            color={theme.palette.text.primary}
+            tip={rawTitle}
+          />
         </>
       );
     },
-    [colorFor, theme, structure, phaseColor],
+    [colorFor, theme, structure, phaseColor, statusWord],
   );
 
   const nodeAriaLabel = useCallback(
@@ -609,7 +558,7 @@ export default function PlanDagGraph({
               />
             </Box>
             <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.625rem' }}>
-              {row.label}
+              {t(`graphShape_${row.shape}`, { defaultValue: row.label })}
             </Typography>
           </Stack>
         ))}
@@ -965,7 +914,7 @@ export default function PlanDagGraph({
         direction={direction || 'tb'}
         fitMode="contain"
         // Never auto-upscale — meet×zoom>1 blew compact plans into one giant card.
-        fitZoomCeil={1}
+        fitZoomCeil={1.75}
       />
     </>
   );

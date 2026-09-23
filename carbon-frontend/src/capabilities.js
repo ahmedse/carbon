@@ -121,6 +121,7 @@ export const ROUTE_CAPABILITIES = {
   '/admin/groups':       PLATFORM_MANAGE_GROUPS,
   '/admin/org-units':    PLATFORM_MANAGE_ORG_UNITS,
   '/admin/access':       PLATFORM_MANAGE_ACCESS,
+  '/admin/position-profiles': PLATFORM_MANAGE_ACCESS,
   '/admin/audit':        PLATFORM_VIEW_AUDIT,
   '/admin/apps':         PLATFORM_MANAGE_APPS,
   '/admin/catalog/field-policies': DATASCHEMA_MANAGE,

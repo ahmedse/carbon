@@ -13,20 +13,21 @@ turns:
       mentions_any: ["1067"]
   
   - user: "What department am I in?"
-    stub_reply: "You are in the Engineering department."
+    # Host /people/me/ for emp_1067: Coiled Tubing. Engineering was never on the row.
+    stub_reply: "You are in the Coiled Tubing department."
     expect:
       decision_in: [answer]
       language: en
       max_llm_calls: 2
-      mentions_any: ["Engineering"]
+      mentions_any: ["Coiled Tubing"]
   
   - user: "And who is my manager?"
-    stub_reply: "Your manager is Ahmed Ali."
+    stub_reply: "Your manager is Mohammad Bolto Ali."
     expect:
       decision_in: [answer]
       language: en
       max_llm_calls: 2
-      mentions_any: ["Ahmed", "Ali"]
+      mentions_any: ["Mohammad", "Bolto"]
   
   - user: "Correct. My name is Mohamed Hassan"
     stub_reply: "Got it. I've noted that your name is Mohamed Hassan."
@@ -44,20 +45,20 @@ turns:
       mentions_any: ["1067"]
   
   - user: "And what department did I mention?"
-    stub_reply: "You work in the Engineering department."
+    stub_reply: "You did not mention a department. Your record shows Coiled Tubing."
     expect:
       decision_in: [answer]
       language: en
       max_llm_calls: 2
-      mentions_any: ["Engineering"]
+      mentions_any: ["Coiled Tubing", "did not mention", "didn't mention"]
   
   - user: "My manager's name is?"
-    stub_reply: "Your manager's name is Ahmed Ali."
+    stub_reply: "Your manager's name is Mohammad Bolto Ali."
     expect:
       decision_in: [answer]
       language: en
       max_llm_calls: 2
-      mentions_any: ["Ahmed", "Ali"]
+      mentions_any: ["Mohammad", "Bolto"]
   
   - user: "What is my full name?"
     stub_reply: "Your full name is Mohamed Hassan."
