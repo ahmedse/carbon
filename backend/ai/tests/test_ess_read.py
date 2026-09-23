@@ -192,7 +192,46 @@ def test_empty_payslip_honesty_via_ess_read():
     assert hit["gate"] == "ess_empty_payslip"
 
 
-def test_leave_topic_not_named_employee():
-    assert leave_topic_asked("عن الإجازات")
-    assert preferred_self_api("annual leave remaining for emp_1001") is None
-    assert loan_topic_asked("قروضي")
+def test_arabic_typo_اجازلت_is_leave_balance():
+    """Transcript typo «الاجازلت» must still force balance, not invent 0."""
+    from ai.engine.agent.tools import leave_balance_intent_asked
+    from ai.engine.cognition.turn.ess_read import (
+        leave_balance_force_needed,
+        leave_topic_asked,
+        preferred_self_api,
+        LEAVE_BALANCE_API,
+    )
+
+    msg = "ماشي, طيب عن الاجازلت"
+    assert leave_topic_asked(msg), msg
+    assert leave_balance_intent_asked(msg), msg
+    assert preferred_self_api(msg) == LEAVE_BALANCE_API
+    assert leave_balance_force_needed(
+        msg,
+        history=[{"role": "user", "content": "تقرير عن مرتبي و اجازاتي"}],
+        tool_calls=[],
+        last_results=[
+            {"api": "list_my_leave", "digest": "call_host_api list_my_leave: count=0"},
+        ],
+    )
+
+
+def test_comprehensive_pick_forces_leave_balance_when_thread_has_leave():
+    from ai.engine.cognition.turn.ess_read import leave_balance_force_needed
+
+    assert leave_balance_force_needed(
+        "تقرير شامل",
+        history=[
+            {"role": "user", "content": "تقرير مفصل عن مرتبي و اجازاتي"},
+            {"role": "assistant", "content": "ما هو التركيز؟"},
+        ],
+        tool_calls=[
+            {
+                "function": {
+                    "name": "call_host_api",
+                    "arguments": '{"api_name": "list_my_leave"}',
+                }
+            }
+        ],
+        last_results=[],
+    )

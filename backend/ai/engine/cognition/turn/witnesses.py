@@ -120,6 +120,11 @@ class TurnLedger:
     llm_calls_background: int = 0
     decision_signals: list | None = None
     turn_decision: str = ""
+    # A typed pre-draft route owns the turn. Runtime backstops may observe it
+    # but must not replace its response.
+    decision_committed: bool = False
+    route_kind: str = ""
+    process_mode: str = "ask"
     # PV2-3B — `_should_force_action` logged fallback (target 0 on goldens).
     force_action_fired: bool = False
     # PV2-4A — Arbiter shadow compare ({legacy, arbiter, agree, fired}).

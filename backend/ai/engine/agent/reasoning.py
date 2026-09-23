@@ -80,6 +80,9 @@ class AgentResponse:
     caveats: list[str] = field(default_factory=list)       # important warnings/disclaimers
     reasoning_steps: list[str] = field(default_factory=list)  # what agent did
     envelope: dict | None = None   # PAQ-2A typed AnswerEnvelope (model_dump), None when disabled/unavailable
+    # Structured clarification state persisted into ConversationState.  UI
+    # labels are presentation; option values drive the next turn.
+    open_question: dict | None = None
 
 
 class PulseAgent:
