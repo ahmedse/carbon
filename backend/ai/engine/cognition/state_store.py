@@ -344,6 +344,7 @@ def update_state_from_turn(
     focus_stack: Iterable[Any] | None = None,
     scope: dict | None = None,
     surface: str = "chat",
+    arbiter_shadow: dict | None = None,
 ) -> ConversationState:
     """Fold one finished turn's signals into ``state`` (in place) and bound it."""
     turn = state.next_turn()
@@ -407,11 +408,17 @@ def update_state_from_turn(
         state.open_question = {}
 
     fired = [g for g in (fired_gates or []) if g]
-    state.decisions = state.decisions + [{
+    row = {
         "turn": turn,
         "decision": decision or "answer",
         "why": (",".join(fired) or "draft")[:_WHY_MAX],
-    }]
+    }
+    if isinstance(arbiter_shadow, dict):
+        if arbiter_shadow.get("arbiter"):
+            row["arbiter"] = str(arbiter_shadow.get("arbiter"))
+        if "agree" in arbiter_shadow:
+            row["agree"] = bool(arbiter_shadow.get("agree"))
+    state.decisions = state.decisions + [row]
     return state.bound()
 
 

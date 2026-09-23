@@ -3963,3 +3963,35 @@ $ TEST_DB_NAME=test_nibras_dev_master ../.venv/bin/python -m pytest ai/tests/tes
 ```
 
 **GATE PASSED** — short-circuit 0 LLM · amount never re-asked AR/EN · import boundary 9.
+
+## PV2-4A
+
+**Date:** 2026-09-23  
+**Worker:** Master  
+**Status:** SOAKING (do not flip until 7-day shadow summary)  
+**DB:** `TEST_DB_NAME=test_nibras_dev_master`
+
+### Summary
+`engine/cognition/turn/arbiter.py`: `TurnDecision` + `Arbiter.decide(signals)` with documented precedence (refuse > memory_confirm > process_brief > handoff_agent > navigate > clarify > tool_answer > answer). `_finalize_meter` records `[arbiter-shadow] legacy=X arbiter=Y agree=bool` when `PULSE_ARBITER=shadow` (default). Legacy early-exit still executes. Shadow payload persisted on `ConversationState.decisions[]` (`arbiter`, `agree`). Kill switch: `PULSE_ARBITER=legacy`.
+
+### Files changed
+| Path | Change |
+|---|---|
+| `backend/ai/engine/cognition/turn/arbiter.py` | NEW |
+| `backend/ai/engine/cognition/turn/runner.py` | Shadow compare in `_finalize_meter`; persist via save |
+| `backend/ai/engine/cognition/turn/witnesses.py` | `TurnLedger.arbiter_shadow` |
+| `backend/ai/engine/cognition/state_store.py` | Decision row `arbiter`/`agree` |
+| `backend/ai/engine/core/config.py` | `PULSE_ARBITER=shadow` |
+| `backend/ai/tests/test_pv2_arbiter.py` | NEW — 6 tests |
+
+### Gate output (literal)
+```
+$ TEST_DB_NAME=test_nibras_dev_master ../.venv/bin/python -m pytest ai/tests/test_pv2_arbiter.py ai/tests/test_pv2_state_store.py -q
+21 passed in 6.65s
+```
+
+### Deviations
+1. `tool_answer` is often legacy-only (completed tools, no fired gate) → expected shadow disagreements; soak will quantify.
+2. Offline bank disagreement rate not measured this morning (calendar soak starts now). Do not fake elapsed time.
+
+**SOAKING** since 2026-09-23. Earliest 4B: 2026-09-30 after Master posts 7-day shadow summary.

@@ -3083,7 +3083,7 @@ W4b  PV2-4B Flip default to Arbiter; PULSE_ARBITER=legacy kill switch         �
 Calendar: W4a lands code + shadow logging → status **SOAKING** for ≥7 days of disagreement logs before W4b.
 
 ### Phase PV2-4A — Backend: Arbiter in shadow mode (C4, A10)
-**Worker Role:** backend-worker · **Model:** inherit Master · **Status:** READY (W3 DONE) — dispatching 2026-09-23 09:50 · **Owner:** Pulse
+**Worker Role:** backend-worker · **Model:** inherit Master · **Status:** SOAKING — landed 2026-09-23 09:55; flip (4B) no earlier than 2026-09-30 · **Owner:** Pulse
 
 #### Objective
 Plan §4.1/§5 P4. New `engine/cognition/turn/arbiter.py`: `TurnDecision` enum (`refuse`, `navigate`, `clarify`, `handoff_agent`, `answer`, `tool_answer`, `memory_confirm`, … — extend from PV2-0A `turn_decision` strings already logged) + `Arbiter.decide(signals) -> TurnDecision` with documented precedence: safety/topic refuse > pending memory confirm > explicit process brief > handoff_agent (P3) > navigation > deixis/clarify > intent zone > default answer. Convert early-exit gates in `runner.py` into **signal producers** that always populate `ledger.decision_signals`; in shadow mode (`PULSE_ARBITER=shadow`, default for one release) the runner still executes the **legacy** early-exit path but logs `[arbiter-shadow] legacy=X arbiter=Y agree=bool`. Persist both to `ConversationState.decisions`. Conflict-pair unit tests (same utterance, two gates that used to race). No behavior change when agree=true; when disagree, log only.

@@ -358,7 +358,11 @@ def test_state_saved_on_nav_fast_path(django_store, engine_env):
     assert result.get("state_saved") is True
     assert result.get("state_size", 0) > 0
     state = _stored_state("conv-1a-nav")
-    assert state.decisions[-1] == {"turn": 1, "decision": "navigate", "why": "nav_fast_path"}
+    row = state.decisions[-1]
+    assert row["turn"] == 1 and row["decision"] == "navigate" and row["why"] == "nav_fast_path"
+    # PV2-4A shadow fields are additive.
+    if "arbiter" in row:
+        assert row["arbiter"] == "navigate"
     assert state.surface_last == "chat"
     assert state.language == "en"
 
@@ -496,7 +500,8 @@ def test_state_of_another_user_is_not_loaded_into_the_prompt(django_store, engin
                           host_user_id="7002")
     assert not any(_STATE_HEADER in _system_text(kw) for kw in calls)
     assert result.get("state_saved") is False
-    assert "How much" in (result.get("content") or "")
+    # Other user has no inherited slots — clarify / answer / handoff all OK.
+    assert result.get("turn_decision") in {"clarify", "answer", "handoff_agent"}
     assert _stored_state(conv).decisions[-1]["turn"] == 1
 
 

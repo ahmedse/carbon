@@ -267,3 +267,9 @@ Track: PV2 — W3 (P3) DONE · W4a Arbiter shadow dispatching
 Ask: 3A deterministic-first bound steps, 3B Chat `handoff_agent` (F-LIVE-2/4), 3C discovery 0-LLM short-circuit + no re-ask known slots — Master-accepted. Import boundary 9. Live 3-script re-check still batched (needs approval). W4a Arbiter shadow → SOAKING ≥7d after land; do not flip (4B) without soak evidence. 3A/3B workers stalled mid-read; Master finished gates.
 Paths: backend/ai/engine/cognition/turn/handoff_agent.py, turn/runner.py, plan/{loop,export_bind}.py, plans_service.py, engine_runtime.py
 Blockers: none
+
+## [2026-09-23T09:55:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-7
+Track: PV2 — W4a Arbiter shadow SOAKING
+Ask: PV2-4A landed (`PULSE_ARBITER=shadow`). Legacy path unchanged. Soak ≥7 days of `[arbiter-shadow]` logs before 4B. W5 Chat↔Agent continuity is next and does not wait for soak. Earliest 4B: 2026-09-30.
+Paths: backend/ai/engine/cognition/turn/arbiter.py, runner.py, state_store.py
+Blockers: 4B blocked until soak evidence

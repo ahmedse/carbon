@@ -39,6 +39,20 @@ def _finalize_meter(ledger: TurnLedger, meter, decision: str) -> None:
     from ai.engine.llm.call_meter import CallMeter
 
     ledger.turn_decision = decision
+    try:
+        from ai.engine.core.config import get_settings
+        from ai.engine.cognition.turn.arbiter import shadow_compare
+
+        mode = (getattr(get_settings(), "PULSE_ARBITER", "shadow") or "shadow").strip().lower()
+        if mode == "shadow":
+            ledger.arbiter_shadow = shadow_compare(decision, ledger.decision_signals)
+        elif mode == "legacy":
+            ledger.arbiter_shadow = None
+        else:
+            # ``on`` is 4B — still compare+log in this release; execute stays legacy.
+            ledger.arbiter_shadow = shadow_compare(decision, ledger.decision_signals)
+    except Exception:  # noqa: BLE001 — shadow must never break a turn
+        logger.debug("arbiter shadow skipped", exc_info=True)
     if not isinstance(meter, CallMeter):
         return
     by_stage = meter.by_stage()
@@ -1617,6 +1631,7 @@ class TurnPipelineRunner:
                 draft_tool_calls=getattr(draft, "tool_calls", None),
                 focus_stack=get_working_memory().get_focus_stack(conversation_id),
                 scope=turn_args.get("scope"),
+                arbiter_shadow=getattr(ledger, "arbiter_shadow", None),
             )
             ledger.state_saved = await ConversationStateStore(self.db).save(
                 turn_args.get("instance_id") or "",
