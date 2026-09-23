@@ -2542,6 +2542,10 @@ class PlansService:
         ("end_date", "end_date"),
         ("days", "days"),
         ("reason", "reason"),
+        ("term_months", "term_months"),
+        ("permission_type", "permission_type"),
+        ("date", "date"),
+        ("hours", "hours"),
     )
 
     def _public_inherited_context(self, conversation_id: str) -> list[dict]:

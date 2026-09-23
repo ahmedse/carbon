@@ -136,6 +136,21 @@ def test_public_inherited_context_is_outcome_only(user):
     assert "api" not in keys
 
 
+def test_public_inherited_context_includes_attendance_slots(user):
+    conv = "conv-6b-att"
+    _seed_state(
+        conv,
+        permission_type="official",
+        date="2027-04-20",
+        hours=2,
+        api="submit_my_attendance_permission",
+    )
+    items = PlansService()._public_inherited_context(conv)
+    keys = {i["key"] for i in items}
+    assert {"permission_type", "date", "hours"} <= keys
+    assert "api" not in keys
+
+
 def test_serialize_run_includes_inherited_context(user):
     from ai.models.core import Run, generate_uuid
     from ai.plans_service import PLAN_INSTANCE_ID, STATUS_PENDING_APPROVAL

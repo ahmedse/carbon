@@ -291,3 +291,9 @@ Track: PV2 — 6A G5 CI gate DONE · 6B nightly SOAKING next
 Ask: Multi-turn bank is a blocking CI step (`--gate`). Stub advances per turn. Offline: router 0.917, slot_carry 1.0, llm p50 2. 4B still blocked until 2026-09-30. 6B nightly live smoke needs STACK-HOLD + approval (`emp_1067`). 6C waits on 5 green nights.
 Paths: backend/ai/eval/multiturn/runner.py, .github/workflows/ci.yml, docs/pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md
 Blockers: 6B live run needs user approval; 4B soak until 2026-09-30
+
+## [2026-09-23T10:30:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-11
+Track: PV2 — 6B nightly job SOAKING 0/5
+Ask: 6B runner landed. Do not start/kill :8009. First mutating night needs STACK-HOLD Pulse until the 3 ESS Chat→Agent→Approve pass as emp_1067. Not requesting the hold until human approval. Dry-run only tonight.
+Paths: backend/ai/eval/nightly_ess_smoke.py, docs/pulse/evidence/PV2-6B-soak.md, manage.sh, :8009, :5179
+Blockers: live 6B night + morning 3-script re-check need approval; 4B soak until 2026-09-30

@@ -4117,3 +4117,24 @@ turns_passed: 71/96
 `--gate` exit 0. Unit: `test_pv2_g5_gate.py` 4 passed (intentional router break → exit 1).
 
 **GATE PASSED** — G5 blocking in CI; goldens not loosened above the C8 cap of 2.
+
+## PV2-6B
+
+**Date:** 2026-09-23  
+**Worker:** Master  
+**Status:** SOAKING — job landed; live nights **0/5**  
+**DB:** no live host writes this landing
+
+### Summary
+Nightly ESS smoke is a real job, not a calendar placeholder. Three journeys (leave / loan / attendance) as `emp_1067`: Chat must not create host rows; Agent Approve + Run must; IC asserts handoff + slot_carry + host fingerprint. `--live` is refused without `--i-have-stack-hold`, `PULSE_NIGHTLY_LIVE=1`, and host-user `emp_1067`. Dry-run / SKIP do not increment the streak. Official ledger starts empty.
+
+### Files
+| Path | Change |
+|---|---|
+| `backend/ai/eval/nightly_ess_smoke.py` | Runner + consent + soak ledger |
+| `backend/ai/eval/test_pv2_6b_nightly.py` | Catalog / consent / IC / streak |
+| `backend/ai/plans_service.py` | Public inherited keys for attendance + term_months |
+| `.github/workflows/pulse-nightly-ess.yml` | UTC 02:00 catalog dry-run only |
+| `docs/pulse/evidence/PV2-6B-{soak.md,nights.json}` | Empty streak (honest) |
+
+**Not done:** first live night (needs STACK-HOLD + approval). **Not faked:** five nights. 6C stays PLANNED.

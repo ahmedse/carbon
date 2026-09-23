@@ -207,7 +207,7 @@ Replace the "CALL THE TOOL" grounding block with a surface-aware block: on Chat 
 ### P6 — Evaluation as a gate + hardening (1 week, low risk)
 
 - Multi-turn bank blocking in CI with §3 thresholds; `latency_budget` and `llm_calls` regression gates.
-- Nightly live smoke on Nibras dev (`emp_1067`) for the three ESS journeys Chat→Agent→Approve, asserting host rows + IC metrics.
+- Nightly live smoke on Nibras dev (`emp_1067`) for the three ESS journeys Chat→Agent→Approve, asserting host rows + IC metrics. Job: `python -m ai.eval.nightly_ess_smoke`. SOAKING until 5 consecutive live PASS nights (`docs/pulse/evidence/PV2-6B-soak.md`). First mutating night needs STACK-HOLD + `PULSE_NIGHTLY_LIVE=1`. Dry-run does not count.
 - ADR-0047 accepted; QA bank gate **G5 — Coherence**; `.cursor/rules/pulse-intelligence-contract.mdc`.
 
 ### QA bank G5 — Coherence (PV2-6A)
@@ -220,6 +220,17 @@ Offline CI step: `python -m ai.eval.multiturn.runner --gate`. Fails the build wh
 | `slot_carry_over` | = 1.0 | C3 |
 | `llm_calls_p50` | ≤ 2 | C8 after P3 |
 | `turns_over_budget` / simple turns (`max_llm_calls ≥ 1`) | ≤ 10% | C8 simple-turn ≤ 2. 0-LLM (nav/status) misses stay visible in the raw count, not this ratio. |
+
+### QA bank — nightly live ESS (PV2-6B, SOAKING)
+
+`python -m ai.eval.nightly_ess_smoke` as `emp_1067` on Nibras dev. Streak ledger: `docs/pulse/evidence/PV2-6B-soak.md`. Flip 6B DONE only after 5 consecutive live PASS nights.
+
+| Axis | Gate |
+|---|---|
+| Chat host rows | unchanged after Chat (ADR-0046) |
+| Chat decision | `handoff_agent` / `handoff_ready` / `active_plans` |
+| Slot carry | inherited_context contains journey required slots |
+| Agent Approve+Run | host ESS row matches fingerprint |
 
 ## 6. Sequencing
 

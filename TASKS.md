@@ -58,7 +58,7 @@ evidence → not done.
 | **DTR** (Data Trust / Catalog Index) | **Catalog** | **ACTIVE** | Stewardship nudges + FilteredDataGrid→SearchSelect · DTR-3 = Pulse (other master) |
 | **GradeVance E2E QA** | **EduOS** | **DONE** | Seed 6 runs + LCT report · `docs/eduos/qa-evidence/E2E-SUMMARY.json` |
 | **GradeVance HITL P2** | **EduOS** | **ACTIVE** | Learning loop proven: edit→proposal→accept→bump→repin · `docs/eduos/qa-evidence/HITL-LEARNING-LOOP.json` · next: UI path + Phase C depth |
-| **PV2** (Pulse v2 Intelligence Contract, ADR-0047) | **Pulse** | **ACTIVE** | Plan docs/pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md · **P0+P1+P2 DONE** · W3 (P3) dispatched · P4–P6 spec\'d (SOAKING rules) |
+| **PV2** (Pulse v2 Intelligence Contract, ADR-0047) | **Pulse** | **ACTIVE** | P0–P3 + P5 + 6A DONE · 4A SOAKING (flip ≥2026-09-30) · **6B SOAKING 0/5 nights** · 6C after five greens |
 
 **Multi-Master:** `.ai-toolkit/shared/multi-master.md` · seats · `docs/ops/MASTERS-COMMS.md` · RULE_30. · **This session seat: Nibras.**
 
@@ -3157,10 +3157,12 @@ Wire `ai.eval.multiturn.runner` into CI with §3 thresholds (router ≥ 0.90, sl
 ---
 
 ### Phase PV2-6B — Ops: nightly live smoke — SOAKING
-**Worker Role:** qa-validator · **Model:** inherit Master · **Status:** PLANNED · **Owner:** Pulse
+**Worker Role:** qa-validator · **Model:** inherit Master · **Status:** SOAKING — job landed 2026-09-23 10:30; live nights 0/5 · **Owner:** Pulse
 
 #### Objective
 Scheduled job: 3 ESS journeys Chat→Agent→Approve as `emp_1067` on Nibras dev; assert host rows + IC metrics. Status **SOAKING** until 5 consecutive green nights. STACK-HOLD / COMMS before first run.
+
+**Landed:** `python -m ai.eval.nightly_ess_smoke` · GH catalog dry-run cron `0 2 * * *` · ledger `docs/pulse/evidence/PV2-6B-{soak.md,nights.json}`. Mutating run refused unless `--live --i-have-stack-hold --host-user emp_1067` and `PULSE_NIGHTLY_LIVE=1`. Dry-run / SKIP do not increment the streak. Do not back-date nights.
 
 **Acceptance:** 5 consecutive greens recorded in evidence/; then flip DONE.
 

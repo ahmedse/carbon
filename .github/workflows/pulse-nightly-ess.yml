@@ -1,0 +1,34 @@
+# PV2-6B — Nightly ESS smoke catalog check.
+#
+# GitHub-hosted runners have no Nibras :8009 / nibras_dev. This workflow
+# only runs --dry-run (catalog + consent helpers). It never writes host
+# rows and never increments the soak streak.
+#
+# Mutating nights stay on the Nibras box after STACK-HOLD + COMMS:
+#   PULSE_NIGHTLY_LIVE=1 python -m ai.eval.nightly_ess_smoke \
+#     --live --i-have-stack-hold --host-user emp_1067 --record
+# See docs/pulse/evidence/PV2-6B-soak.md.
+
+name: Pulse nightly ESS smoke
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Dry-run catalog (no host writes)
+        run: python -m ai.eval.nightly_ess_smoke --dry-run --night "$(date -u +%F)"
