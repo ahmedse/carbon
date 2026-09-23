@@ -3831,3 +3831,135 @@ GATE PASSED
 | I2 | Info | Discovery still LLM-asks on known process dials except loan/attendance short-circuit (PV2-3C). | Next wave |
 
 **GATE PASSED** — import boundary 9 · antipatterns green · 16 context-pack tests · 169 regression.
+
+## PV2-3A
+
+**Date:** 2026-09-23  
+**Worker:** backend-worker (Composer)  
+**Status:** GATE PASSED (3A scope) — 1 regression fail is PV2-3B `runner.py` (`_broadcast_run` NameError), out of ownership  
+**DB:** `TEST_DB_NAME=test_nibras_dev_w3a`
+
+### Summary
+Fully bound `call_host_api` steps (complete catalog `write_slots`, no `{{…}}`) skip DraftWitness + observe: bind → RULE_21 consent → commit with bilingual `step_templates` summaries and `llm_calls == 0`. Partial / mustache-bound steps keep today's draft path. `plans_service.confirm_step` / inline-commit reuse the same templates for `run.final_response`.
+
+### Files changed
+| Path | Change |
+|---|---|
+| `backend/ai/engine/cognition/plan/export_bind.py` | `is_fully_bound_host_api`, mustache detect, `render_step_template` |
+| `backend/ai/engine/cognition/plan/loop.py` | Deterministic-first branch in `_execute_step_metered`; skip draft/observe; template summary |
+| `backend/ai/plans_service.py` | `_render_bound_step_summary`; confirm / inline-commit → `final_response` |
+| `backend/ai/engine/instances/nibras/instance.yaml` | `step_templates:` AR/EN for leave/loan/attendance submit |
+| `backend/ai/tests/test_pv2_deterministic_steps.py` | NEW — 12 tests |
+
+### Gate output (literal)
+```
+$ cd backend && ../.venv/bin/python manage.py check
+System check identified no issues (0 silenced).
+
+$ TEST_DB_NAME=test_nibras_dev_w3a ../.venv/bin/python -m pytest ai/tests/test_pv2_deterministic_steps.py -v -p no:cacheprovider
+============================== 12 passed in 0.34s ==============================
+
+$ TEST_DB_NAME=test_nibras_dev_w3a ../.venv/bin/python -m pytest ai/tests/test_plans.py ai/tests/test_pulse_loop.py ai/tests/test_react_consent_boundary.py ai/tests/test_plan_lifecycle.py ai/tests/test_pv2_*.py -q -p no:cacheprovider
+1 failed, 180 passed in 33.84s
+  FAILED ai/tests/test_pv2_state_store.py::test_slots_carry_over_three_turns_without_reask_and_state_block_in_draft
+  → NameError: _broadcast_run in runner.py:_return_chat_handoff (PV2-3B parallel; not edited by 3A)
+
+$ # 3A-owned + prior PV2 suite excluding the 3B-broken state_store case:
+$ … test_plans + test_pulse_loop + test_react_consent_boundary + test_plan_lifecycle + test_pv2_{deterministic_steps,baseline_defects,context_pack,context_pack_plan,memory_digests,audience_catalog,instrumentation}
+166 passed in 28.23s
+
+$ python3 .ai-toolkit/scripts/import-boundary-lint.py
+Import boundary: 9 violation(s) — engine must only import engine/stdlib/SDK.
+
+$ ./.ai-toolkit/scripts/verify.sh antipatterns
+GATE PASSED
+```
+
+### ESS plan p50 latency (stub)
+No live ESS timing harness in this partition. Expected effect: bound submit steps drop draft+observe LLM round-trips (was 2+ calls / step → 0). Report before/after when Master runs the offline bank / live Agent submit path.
+
+### Deviations
+1. Pre-execution consent pause (critic `mutation_not_confirmed`) unchanged — deterministic path still pauses before stage when no token; Approve still uses inline-commit.
+2. Confirm-step language uses `user.language` / `preferred_language` when present; defaults to `en`.
+
+### Issues found (not fixed)
+| ID | Severity | Finding | Notes |
+|---|---|---|---|
+| I1 | Blocker for full gate | `runner.py` `_broadcast_run` NameError (PV2-3B) | Breaks `test_pv2_state_store` carry-over; 3A did not touch runner |
+| I2 | Info | Discovery still LLM on known dials | PV2-3C |
+
+**GATE PASSED (3A)** — 12/12 new tests · import boundary 9 · antipatterns green · 166 owned+prior PV2 green; full `test_pv2_*` blocked only by parallel 3B runner defect.
+
+### Master audit 2026-09-23 09:50
+I1 closed: `_return_chat_handoff` now imports `broadcast_run_event`; `_finalize_meter` always writes `turn_decision`. Master re-ran 3A+3B+3C together: **148 passed** (`test_plans` + `test_plan_lifecycle` + `test_pv2_{discovery,deterministic_steps,handoff_agent}` + `test_chat_wiring` + `test_pv2_baseline_defects` + `test_pv2_state_store`); `test_pulse_loop` + `test_react_consent_boundary` **10 passed**; import boundary **9**; antipatterns **GATE PASSED**.
+
+## PV2-3B
+
+**Date:** 2026-09-23  
+**Worker:** backend-worker (stalled) + Master finish  
+**Status:** GATE PASSED  
+**DB:** `TEST_DB_NAME=test_nibras_dev_master`
+
+### Summary
+Chat never executes a mutating `call_host_api` plan. Enough bound ESS slots → `TurnDecision=handoff_agent` with bilingual carry-over copy; slots persist on `ConversationState` (`principal` + `amount` alias). `_try_multi_step_plan` returns `ChatHandoffOutcome` instead of ReAct consent pause (closes F-LIVE-2). `_should_force_action` is a logged fallback and now treats ESS write utterances (loan/leave/attendance), not only `_is_mutation_request`. Chat grounding never says `CALL THE TOOL` for host writes. Slot bind is lexical (no MDM on the async Chat turn).
+
+### Files changed
+| Path | Change |
+|---|---|
+| `backend/ai/engine/cognition/turn/handoff_agent.py` | NEW — plan inspect, lexical resolve, bilingual handoff, grounding block |
+| `backend/ai/engine/cognition/turn/runner.py` | `_try_chat_write_handoff` before ReAct; `_return_chat_handoff`; `_finalize_meter` always sets decision |
+| `backend/ai/engine_runtime.py` | force-action fallback includes ESS writes; no mutation force |
+| `backend/ai/tests/test_pv2_handoff_agent.py` | NEW |
+| `backend/ai/tests/test_pv2_state_store.py` | Loan carry-over expects 3B handoff slots |
+
+### Gate output (literal)
+```
+$ TEST_DB_NAME=test_nibras_dev_master ../.venv/bin/python -m pytest ai/tests/test_pv2_handoff_agent.py ai/tests/test_pv2_deterministic_steps.py -q
+27 passed in 1.52s
+
+$ TEST_DB_NAME=test_nibras_dev_master ../.venv/bin/python -m pytest ai/tests/test_plans.py ai/tests/test_plan_lifecycle.py ai/tests/test_pv2_discovery.py ai/tests/test_pv2_deterministic_steps.py ai/tests/test_pv2_handoff_agent.py ai/tests/test_chat_wiring.py ai/tests/test_pv2_baseline_defects.py ai/tests/test_pv2_state_store.py -q
+148 passed in 31.66s
+
+$ python3 .ai-toolkit/scripts/import-boundary-lint.py
+Import boundary: 9 violation(s)
+
+$ ./.ai-toolkit/scripts/verify.sh antipatterns
+GATE PASSED
+```
+
+### Deviations
+1. Chat slot bind is lexical (engine-local aliases + amount regex). Agent still MDM-resolves on inherit — Chat run() is async and must not import `fill_write_body`.
+2. Offline bank / live 3-script re-check still batched (needs approval). `force_action_fired` target 0 not re-measured on the bank this morning.
+3. Complete loan briefs hand off before draft — 1A StateBlock-in-draft assertion on that loan conversation was updated to persist/no-reask.
+
+### Issues found (not fixed)
+| ID | Severity | Finding | Notes |
+|---|---|---|---|
+| I1 | Info | Live F-LIVE-2/4 re-check still pending approval | Morning batch |
+| I2 | Info | Offline `force_action_fired` count not re-run | Run with 4A shadow bank |
+
+**GATE PASSED** — Chat write path is handoff_agent; 0 host staging on the unit seam.
+
+## PV2-3C
+
+**Date:** 2026-09-23  
+**Worker:** Master (3A/3B workers stalled; 3C not separately dispatched)  
+**Status:** GATE PASSED  
+**DB:** `TEST_DB_NAME=test_nibras_dev_master`
+
+### Summary
+`start_discovery` process-dial short-circuit (loan/attendance) and `scope_route` leave gate remain 0 LLM (`llm_calls: 0`). LLM discovery now loads `ConversationState`, builds `ContextPack(surface=agent_discovery, include_state=True)`, and sanitizes questions that re-ask known slots (amount/principal/loan_type/…) into bilingual residual wording.
+
+### Files changed
+| Path | Change |
+|---|---|
+| `backend/ai/plans_service.py` | State load, known-slot merge, sanitize, StateBlock in discovery pack |
+| `backend/ai/tests/test_pv2_discovery.py` | NEW — 5 tests |
+
+### Gate output (literal)
+```
+$ TEST_DB_NAME=test_nibras_dev_master ../.venv/bin/python -m pytest ai/tests/test_pv2_discovery.py -v
+5 passed in 1.14s
+```
+
+**GATE PASSED** — short-circuit 0 LLM · amount never re-asked AR/EN · import boundary 9.

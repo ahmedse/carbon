@@ -2449,6 +2449,81 @@ class PlansService:
 
     DISCOVERY_MAX_TURNS = 5
 
+    _DISCOVERY_SLOT_ASK = {
+        "amount": re.compile(
+            r"\bamount\b|how much|principal|كم(?:\s+هو)?\s*المبلغ|المبلغ|كم\s*تحتاج",
+            re.I,
+        ),
+        "principal": re.compile(
+            r"\bamount\b|how much|principal|كم(?:\s+هو)?\s*المبلغ|المبلغ",
+            re.I,
+        ),
+        "loan_type": re.compile(r"loan type|نوع(?:\s*ال)?قرض|what type", re.I),
+        "leave_type": re.compile(r"leave type|نوع(?:\s*ال)?إجازة|نوع(?:\s*ال)?اجازة", re.I),
+        "start_date": re.compile(r"start date|when|متى|تاريخ", re.I),
+    }
+    _DISCOVERY_ELSE = {
+        "en": "What else should this plan include?",
+        "ar": "ماذا تريد أن يتضمن هذا المخطط أيضاً؟",
+    }
+
+    def _load_conversation_state(self, conversation_id: str):
+        """Sync load ConversationState from the host session row (PV2-3C)."""
+        cid = (conversation_id or "").strip()
+        if not cid:
+            return None
+        try:
+            from ai.engine.cognition.state_store import ConversationState
+            from ai.models import ConversationContextRecord
+
+            row = ConversationContextRecord.objects.filter(
+                conversation_id=cid,
+            ).first()
+            if row is None:
+                return None
+            return ConversationState.from_dict(getattr(row, "session_json", None))
+        except Exception:  # noqa: BLE001
+            logger.debug("discovery state load skipped", exc_info=True)
+            return None
+
+    def _discovery_known_slots(self, brief: str, conversation_id: str = "") -> dict:
+        """Slots already bound: ConversationState + lexical brief (no MDM)."""
+        from ai.engine.cognition.turn.handoff_agent import (
+            merge_slots,
+            resolve_ess_write_from_brief,
+        )
+
+        state = self._load_conversation_state(conversation_id)
+        prior = dict(getattr(state, "slots", None) or {}) if state is not None else {}
+        extracted = {}
+        try:
+            resolved = resolve_ess_write_from_brief(brief)
+            if resolved:
+                extracted = dict(resolved[1] or {})
+        except Exception:  # noqa: BLE001
+            logger.debug("discovery lexical slots skipped", exc_info=True)
+        return merge_slots(prior, extracted)
+
+    def _question_reasks_known(self, question: str, known: dict) -> bool:
+        text = (question or "").strip()
+        if not text:
+            return False
+        for key, rx in self._DISCOVERY_SLOT_ASK.items():
+            if known.get(key) in (None, "", [], {}):
+                continue
+            if rx.search(text):
+                return True
+        return False
+
+    def _sanitize_discovery_question(
+        self, question: str | None, known: dict, language: str = "",
+    ) -> str | None:
+        """Replace a re-ask of a known slot with bilingual residual wording."""
+        if not self._question_reasks_known(question or "", known):
+            return question
+        lang = "ar" if str(language or "").startswith("ar") else "en"
+        return self._DISCOVERY_ELSE.get(lang) or self._DISCOVERY_ELSE["en"]
+
     def _discovery_prompt(
         self,
         brief: str,
@@ -2457,19 +2532,21 @@ class PlansService:
         user_info: dict | None = None,
         instance_config: dict | None = None,
         language: str = "",
+        state=None,
+        known_slots: dict | None = None,
     ) -> list:
-        """Build the chat messages for one discovery round (ContextPack PV2-2B)."""
+        """Build the chat messages for one discovery round (ContextPack PV2-2B/3C)."""
         from ai.engine.cognition.context_pack import build_context_pack
 
         pack = build_context_pack(
-            None,
+            state,
             surface="agent_discovery",
             stage="discovery_clarify",
             user_info=user_info,
             instance_config=instance_config,
             language=language or str((user_info or {}).get("language") or ""),
             include_history=False,
-            include_state=False,
+            include_state=True,
             include_knowledge=False,
             include_memory=False,
         )
@@ -2484,6 +2561,16 @@ class PlansService:
             reply = (turn.get("reply") or "").strip()
             if reply:
                 messages.append({"role": "user", "content": reply})
+        known = {
+            k: v for k, v in (known_slots or {}).items()
+            if v not in (None, "", [], {})
+        }
+        bound = ""
+        if known:
+            bits = ", ".join(f"{k}={v}" for k, v in list(known.items())[:12])
+            bound = (
+                f" Known slots (do NOT ask for these): {bits}."
+            )
         messages.append(
             {
                 "role": "user",
@@ -2492,12 +2579,23 @@ class PlansService:
                     '{"action":"ask","question":"<your question>"} to ask the '
                     'next clarifying question, or {"action":"complete"} when '
                     "you have enough to propose a plan."
+                    + bound
+                    + " Never re-ask amount, principal, loan_type, dates, or "
+                    "any slot already listed."
                 ),
             }
         )
         return messages
 
-    def _ask_discovery_llm(self, brief: str, turns: list, user=None) -> dict:
+    def _ask_discovery_llm(
+        self,
+        brief: str,
+        turns: list,
+        user=None,
+        *,
+        conversation_id: str = "",
+        known_slots: dict | None = None,
+    ) -> dict:
         """One discovery round → ``{"action": "ask"|"complete", "question": ...}``.
 
         Routes through ``route_chat`` (lazily imported, mirroring
@@ -2512,6 +2610,11 @@ class PlansService:
         instance_config = _plan_instance_config(user_pk or None)
 
         settings = get_settings()
+        language = str((user_info or {}).get("language") or "")
+        state = self._load_conversation_state(conversation_id)
+        known = known_slots if known_slots is not None else self._discovery_known_slots(
+            brief, conversation_id,
+        )
         result = _run_async(
             route_chat(
                 task="deep",
@@ -2522,6 +2625,9 @@ class PlansService:
                     turns,
                     user_info=user_info,
                     instance_config=instance_config,
+                    language=language,
+                    state=state,
+                    known_slots=known,
                 ),
                 model=settings.LLM_MODEL,
                 temperature=0.3,
@@ -2541,7 +2647,10 @@ class PlansService:
             question = (
                 "Could you tell me a bit more about what you want to accomplish?"
             )
-        return {"action": "ask", "question": question}
+        question = self._sanitize_discovery_question(question, known, language)
+        if self._question_reasks_known(question or "", known):
+            return {"action": "complete", "question": None}
+        return {"action": "ask", "question": question, "llm_calls": 1}
 
     @staticmethod
     def _enrich_brief(brief: str, turns: list) -> str:
@@ -2625,6 +2734,7 @@ class PlansService:
                     "question": None,
                     "turns": [],
                     "conversation_id": conversation_id or "",
+                    "llm_calls": 0,
                     "plan": plan_dto,
                     "plannable": True,
                     "route": {
@@ -2645,7 +2755,9 @@ class PlansService:
                 "process_dial discovery short-circuit failed — falling through"
             )
 
-        first = self._ask_discovery_llm(brief, [], user=user)
+        first = self._ask_discovery_llm(
+            brief, [], user=user, conversation_id=conversation_id,
+        )
         turns = [{"question": first["question"], "reply": None}]
 
         run_id = generate_uuid()
@@ -2762,7 +2874,12 @@ class PlansService:
         if len(turns) >= self.DISCOVERY_MAX_TURNS:
             decision = {"action": "complete", "question": None}
         else:
-            decision = self._ask_discovery_llm(brief, turns, user=user)
+            decision = self._ask_discovery_llm(
+                brief,
+                turns,
+                user=user,
+                conversation_id=getattr(run, "conversation_id", "") or "",
+            )
 
         if decision.get("action") == "complete":
             return self._finalize_discovery_run(user, run, brief, turns)
@@ -4630,8 +4747,12 @@ class PlansService:
         }
         step.critic_flags_json = flags
         step.tool_output_json = self._committed_tool_output(tool_output, api_result)
+        _tpl = self._render_bound_step_summary(
+            api_name, body, instance_config=instance_config, user=user,
+        )
         step.draft_text = (
-            (step.tool_output_json.get("summary") or "").strip()
+            _tpl
+            or (step.tool_output_json.get("summary") or "").strip()
             or step.draft_text
             or "Submitted."
         )
@@ -4648,8 +4769,11 @@ class PlansService:
         siblings = list(RunStep.objects.filter(run_id=run.id).order_by("step_index"))
         _reconcile_run_status_from_steps(run, siblings)
         summary = (
-            (step.tool_output_json.get("summary") or "").strip()
-            if isinstance(step.tool_output_json, dict) else ""
+            _tpl
+            or (
+                (step.tool_output_json.get("summary") or "").strip()
+                if isinstance(step.tool_output_json, dict) else ""
+            )
         )
         if summary:
             run.final_response = summary
@@ -4664,6 +4788,27 @@ class PlansService:
             "step_id": step.step_index,
             "committed_inline": True,
         }
+
+    def _render_bound_step_summary(
+        self, api_name: str, body: dict | None, *, instance_config: dict, user=None,
+    ) -> str:
+        """PV2-3A: bilingual step_templates for confirm_step final_response."""
+        from ai.engine.cognition.plan.export_bind import render_step_template
+
+        lang = "en"
+        if user is not None:
+            lang = (
+                str(getattr(user, "language", None) or "").strip()
+                or str(getattr(user, "preferred_language", None) or "").strip()
+                or "en"
+            )
+        tpl = render_step_template(
+            api_name,
+            body if isinstance(body, dict) else {},
+            lang,
+            (instance_config or {}).get("step_templates"),
+        )
+        return (tpl or "").strip()
 
     def confirm_step(self, user, plan_id: str, step_id, body_override=None) -> dict:
         """Confirm a paused consent step — executes the staged mutation.
@@ -4835,8 +4980,24 @@ class PlansService:
         flags = {**(flags or {}), "consent_granted": True, "effect_committed": True}
         step.critic_flags_json = flags
         step.tool_output_json = self._committed_tool_output(tool_output, api_result)
+        # PV2-3A: reuse step_templates for run.final_response when bound.
+        _args = step.tool_args_json if isinstance(step.tool_args_json, dict) else {}
+        _api = str(_args.get("api_name") or "").strip()
+        _body = _args.get("body") if isinstance(_args.get("body"), dict) else {}
+        if body_override and isinstance(body_override, dict):
+            _body = {**_body, **body_override}
+        _tpl = (
+            self._render_bound_step_summary(
+                _api, _body, instance_config=instance_config, user=user,
+            )
+            if _api else ""
+        )
+        if _tpl:
+            step.draft_text = _tpl
         step.save(update_fields=[
-            "status", "critic_flags_json", "tool_output_json", "updated_at",
+            "status", "critic_flags_json", "tool_output_json",
+            *(["draft_text"] if _tpl else []),
+            "updated_at",
         ])
         # Journal the committed consent + completion (exactly-one-effect): a
         # confirmed step reconstructs as ``succeeded``, never re-executed.
@@ -4846,6 +5007,9 @@ class PlansService:
         StepJournal.append(
             run.id, canonical_step_id(step), EVENT_STEP_COMPLETED
         )
+        if _tpl:
+            run.final_response = _tpl
+            run.save(update_fields=["final_response", "updated_at"])
         logger.info(
             "Plan step confirmed plan=%s step=%s user=%s",
             plan_id, step.step_index, user_pk,

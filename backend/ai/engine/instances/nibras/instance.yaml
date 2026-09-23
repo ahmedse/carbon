@@ -772,6 +772,32 @@ entities:
       approved_leave_count: {filter: {status: "approved"},  description: "Approved leave records"}
     scope_lookup: employee__org_unit_id__in
 
+# Bilingual outcome copy for fully bound process_dial submits (PV2-3A).
+# Rendered from bound write_slots — never LLM prose. Placeholders are
+# {field} names matching the catalog body (leave_type, principal, …).
+step_templates:
+  submit_my_leave:
+    en: >-
+      Leave request submitted: {leave_type}, {start_date} → {end_date}
+      ({days} days). Awaiting manager review in Team.
+    ar: >-
+      تم تقديم طلب الإجازة: {leave_type}، من {start_date} إلى {end_date}
+      ({days} أيام). بانتظار مراجعة المدير في الفريق.
+  submit_my_loan:
+    en: >-
+      Loan request submitted: {loan_type}, {principal} over {term_months}
+      months, start {start_date}. Awaiting manager then finance review in Team.
+    ar: >-
+      تم تقديم طلب القرض: {loan_type}، مبلغ {principal} لمدة {term_months}
+      شهرًا، يبدأ {start_date}. بانتظار مراجعة المدير ثم المالية في الفريق.
+  submit_my_attendance_permission:
+    en: >-
+      Attendance permission submitted: {permission_type} on {date}
+      ({hours} hours). Awaiting manager review in Team.
+    ar: >-
+      تم تقديم إذن الحضور: {permission_type} بتاريخ {date}
+      ({hours} ساعات). بانتظار مراجعة المدير في الفريق.
+
 # Pre-LLM topic guard: patterns matched against the user's message text.
 # Any match returns a canned refusal WITHOUT calling the LLM.  This is
 # a hard gate — it cannot be bypassed by prompt injection or roleplay.

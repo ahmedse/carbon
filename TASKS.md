@@ -3046,7 +3046,7 @@ W3b  PV2-3C discovery: no LLM on scope_route; StateBlock-aware (plans_service.st
 ```
 
 ### Phase PV2-3A — Backend: deterministic-first `process_dial` steps (A2, A4, A9)
-**Worker Role:** backend-worker · **Model:** inherit Master · **Status:** READY (W2 DONE) — dispatched 2026-09-23 09:30 · **Owner:** Pulse
+**Worker Role:** backend-worker · **Model:** inherit Master · **Status:** DONE — 2026-09-23 09:50 Master audit (12/12 + 148 W3 regression; import boundary 9) · **Owner:** Pulse
 
 #### Objective
 Plan §4.4/§5 P3. In `ReActLoop`, a step whose `tool_name == call_host_api` and whose `tool_args` are fully bound from `write_slots` (no `{{…}}` placeholders, all required catalog params present) skips DraftWitness and observe entirely: bind → stage (consent, RULE_21) → commit → deterministic summary. Summaries come from bilingual templates keyed by `api_name` (AR/EN, QA-reviewed strings in `instance.yaml` `step_templates`), rendered from bound values — never LLM prose. The `llm_meter` for such a step must read `llm_calls == 0`. Unbound/partial steps keep today's path. `_INLINE_COMMIT` path in `plans_service.confirm_step` reuses the same template for `run.final_response`.
@@ -3056,7 +3056,7 @@ Plan §4.4/§5 P3. In `ReActLoop`, a step whose `tool_name == call_host_api` and
 ---
 
 ### Phase PV2-3B — Backend: truthful Chat surface — `handoff_agent` decision (C5, F-LIVE-2, F-LIVE-4)
-**Worker Role:** backend-worker · **Model:** inherit Master · **Status:** READY (W2 DONE) — dispatched 2026-09-23 09:30 · **Owner:** Pulse
+**Worker Role:** backend-worker · **Model:** inherit Master · **Status:** DONE — 2026-09-23 09:50 Master audit (15/15 handoff + F-LIVE-2/4 Chat path; import boundary 9) · **Owner:** Pulse
 
 #### Objective
 Root cause (Master, PV2-0C): `_try_multi_step_plan` (`runner.py` ≈ 2691) runs a `process_dial` ReActLoop **inside Chat**; the mutation step pauses for consent that Chat can never grant (ADR-0046) and the user sees "I need your approval before I can proceed." Fix: (1) before running the loop in Chat, inspect the plan; if any step is a mutating `call_host_api` (catalog `requires_confirmation` or non-GET), do **not** execute — emit `TurnDecision = handoff_agent` with a deterministic bilingual reply built from the brief + bound slots ("I have: emergency loan, 5,000 SAR, 12 months. To submit it, switch to Agent — I'll carry these details over." / AR equivalent) and persist `intent`/`slots`/`open_question` into `ConversationState` (1A) so P5 can inherit them. Read-only plans still run. (2) `_should_force_action` (`engine_runtime.py:793`) becomes a logged fallback: the Chat grounding block (2A `IdentityBlock` autonomy rules) tells the model it hands off rather than calls write tools; count `force_action_fired` in the ledger; target 0 on the bank. (3) The Chat prompt must never say "CALL THE TOOL" for a write API (grep test on assembled prompt for an ESS write utterance).
@@ -3066,7 +3066,7 @@ Root cause (Master, PV2-0C): `_try_multi_step_plan` (`runner.py` ≈ 2691) runs 
 ---
 
 ### Phase PV2-3C — Backend: discovery without LLM on `scope_route`; never re-ask known slots (A4)
-**Worker Role:** backend-worker · **Model:** `claude-opus-5-5-medium` · **Status:** PLANNED (READY after 3A/3B) · **Owner:** Pulse
+**Worker Role:** backend-worker · **Model:** inherit Master · **Status:** DONE — 2026-09-23 09:50 Master audit (5/5 discovery; import boundary 9) · **Owner:** Pulse
 
 #### Objective
 `plans_service.start_discovery`: when `scope_route` short-circuits to a known process dial, no LLM call is made (meter = 0); otherwise discovery receives the `StateBlock` (1A) and the `ContextPack(surface="agent_discovery")` (2B) and must not ask for any slot already present in `ConversationState.slots` or the brief. Clarification wording from bilingual templates.
@@ -3083,7 +3083,7 @@ W4b  PV2-4B Flip default to Arbiter; PULSE_ARBITER=legacy kill switch         �
 Calendar: W4a lands code + shadow logging → status **SOAKING** for ≥7 days of disagreement logs before W4b.
 
 ### Phase PV2-4A — Backend: Arbiter in shadow mode (C4, A10)
-**Worker Role:** backend-worker · **Model:** inherit Master · **Status:** PLANNED (READY after W3) · **Owner:** Pulse
+**Worker Role:** backend-worker · **Model:** inherit Master · **Status:** READY (W3 DONE) — dispatching 2026-09-23 09:50 · **Owner:** Pulse
 
 #### Objective
 Plan §4.1/§5 P4. New `engine/cognition/turn/arbiter.py`: `TurnDecision` enum (`refuse`, `navigate`, `clarify`, `handoff_agent`, `answer`, `tool_answer`, `memory_confirm`, … — extend from PV2-0A `turn_decision` strings already logged) + `Arbiter.decide(signals) -> TurnDecision` with documented precedence: safety/topic refuse > pending memory confirm > explicit process brief > handoff_agent (P3) > navigation > deixis/clarify > intent zone > default answer. Convert early-exit gates in `runner.py` into **signal producers** that always populate `ledger.decision_signals`; in shadow mode (`PULSE_ARBITER=shadow`, default for one release) the runner still executes the **legacy** early-exit path but logs `[arbiter-shadow] legacy=X arbiter=Y agree=bool`. Persist both to `ConversationState.decisions`. Conflict-pair unit tests (same utterance, two gates that used to race). No behavior change when agree=true; when disagree, log only.

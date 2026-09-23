@@ -38,12 +38,12 @@ _BACKGROUND_LLM_STAGES = frozenset({"auto_memory"})
 def _finalize_meter(ledger: TurnLedger, meter, decision: str) -> None:
     from ai.engine.llm.call_meter import CallMeter
 
+    ledger.turn_decision = decision
     if not isinstance(meter, CallMeter):
         return
     by_stage = meter.by_stage()
     background = sum(by_stage.get(s, 0) for s in _BACKGROUND_LLM_STAGES)
     foreground = max(0, int(meter.total) - int(background))
-    ledger.turn_decision = decision
     ledger.llm_calls_by_stage = by_stage
     ledger.llm_calls_measured = foreground
     ledger.llm_calls_background = background
@@ -2490,6 +2490,27 @@ class TurnPipelineRunner:
             s2_latency, verdict="pass",
         )
 
+        # ── PV2-3B: Chat write handoff (before fan-out / ReAct) ────────────
+        # ESS write with enough bound slots → handoff_agent; never stage.
+        # Incomplete slots seed ConversationState and fall through to clarify.
+        _chat_handoff = await self._try_chat_write_handoff(
+            user_message=user_message,
+            conversation_history=conversation_history,
+            state_ctx=state_ctx,
+            instance_config=instance_config,
+        )
+        if _chat_handoff is not None:
+            return await self._return_chat_handoff(
+                outcome=_chat_handoff,
+                ledger=ledger,
+                meter=meter,
+                turn_id=turn_id,
+                instance_id=instance_id,
+                conversation_id=conversation_id,
+                host_user_id=host_user_id,
+                t0=t0,
+            )
+
         # ── P3.2: Orchestrator fan-out gate (after S2, before PR-20) ──────
         # If an orchestrator agent is active and the user message warrants
         # parallel decomposition, fan out to workers and synthesize results.
@@ -2754,6 +2775,7 @@ class TurnPipelineRunner:
 
         # ── PR-20: Multi-step planning gate (after S2, before S3) ──────────
         # If a multi-step plan is needed, run ReActLoop instead of single-pass S3→S5.
+        # PV2-3B: mutating host plans return ChatHandoffOutcome (never ReAct).
         react_result = None
         if settings.KG_MULTI_STEP_ENABLED and self.db is not None:
             try:
@@ -2770,9 +2792,24 @@ class TurnPipelineRunner:
                         retrieval=retrieval,
                         progress_callback=progress_callback,
                         stream_callback=stream_callback,
+                        state_ctx=state_ctx,
                     )
             except Exception:
                 logger.exception("Multi-step plan attempt failed; falling back to single-pass")
+
+        from ai.engine.cognition.turn.handoff_agent import ChatHandoffOutcome
+
+        if isinstance(react_result, ChatHandoffOutcome):
+            return await self._return_chat_handoff(
+                outcome=react_result,
+                ledger=ledger,
+                meter=meter,
+                turn_id=turn_id,
+                instance_id=instance_id,
+                conversation_id=conversation_id,
+                host_user_id=host_user_id,
+                t0=t0,
+            )
 
         if react_result is not None:
             # ── ReAct path: skip S3→S5 single-pass, go straight to S6 ──────
@@ -3037,109 +3074,11 @@ class TurnPipelineRunner:
                 "and still awaits approval in Tasks — nothing has run yet.\n"
             )
         elif draft_tools and _is_platform_zone:
-            system_prompt = (
-                f"{system_prompt}\n\n"
-                "GROUNDING RULES — follow them exactly:\n"
-                "- You have tools available. Use them to do real work instead "
-                "of guessing. When a tool matches the user's request, call it "
-                "right away — do not answer in prose instead of using it, and "
-                "do not say you cannot run/execute tasks.\n"
-                "- CALLING A MUTATION TOOL *IS* THE PROPOSAL. Submitting "
-                "leave, requesting a loan, advancing payroll and every other "
-                "write is confirmation-gated BY THE PLATFORM: the tool call "
-                "stages the action and shows the user a confirm/decline card, "
-                "and nothing reaches the system until they confirm. So when "
-                "you have the details you need, CALL THE TOOL. Describing the "
-                "action in prose instead stages nothing and leaves the user "
-                "with no way to approve it.\n"
-                "- Therefore NEVER say you cannot perform a write, that it "
-                "must be done 'directly in the system', that the user should "
-                "'complete the confirmation steps first and try again', or "
-                "that they should use 'the appropriate channel'. There is no "
-                "other channel — you are it, and the confirm card appears on "
-                "your tool call. If details are missing, ask ONE short "
-                "question for the missing piece; if you have them, call the "
-                "tool and tell the user the confirm card is ready.\n"
-                "- PLAN FIRST, CONVERT ON CONFIRMATION: when the user asks you "
-                "to plan, study, research, audit, orchestrate, or 'make a "
-                "multi-agent workflow' for something, DO NOT call plan_task "
-                "and DO NOT create any task yet. Instead, think it through and "
-                "PROPOSE a plan directly in chat: a short numbered list of "
-                "steps, each naming the tool or agent that would do it and the "
-                "deliverable it produces. Then invite the user to discuss, add, "
-                "remove, or reword steps. This proposal lives only in the chat "
-                "— it is NOT a task yet. A plain question (e.g. 'what is an "
-                "industry reporting protocol?') should just be answered directly, with no "
-                "plan proposal at all.\n"
-                "- Iterate the proposal in chat as the user gives feedback. "
-                "Re-present the revised numbered plan after each change and ask "
-                "whether it is settled.\n"
-                "- ONLY when the user explicitly confirms the plan is settled "
-                "(e.g. 'settled', 'go', 'convert it to a task', 'create the "
-                "task', 'make it a task', 'yes build it'), call plan_task with "
-                "the final agreed brief. That single call turns the agreed plan "
-                "into a real pending_approval task. Never call plan_task before "
-                "this confirmation, and never auto-create a task on detection.\n"
-                "- The plan_task tool DRAFTS a plan and returns a plan id in "
-                "pending_approval; it does not execute anything. After calling "
-                "it, tell the user the plan id and that it awaits approval in "
-                "the Tasks panel. Never claim a task ran or completed.\n"
-                "- After plan_task has created the task, if the user asks to "
-                "change a step of that task, use edit_plan. If the user asks to "
-                "run/approve it, use approve_plan. Never approve or run without "
-                "the user's confirmation.\n"
-                "- NEVER claim an action succeeded (e.g. 'rule created') unless "
-                "a tool result confirms it.\n"
-                "- The create_dq_rule tool only STAGES a proposal — it returns "
-                "a confirmation execution. Nothing is written until the user "
-                "confirms. Tell the user a confirmation button appeared; do "
-                "NOT say the rule was created.\n"
-                "- The create_dq_rule tool creates a rule DEFINITION; binding "
-                "it to a field is OPTIONAL and happens separately via "
-                "bind_dq_rules. When the user says the rule is general or that "
-                "they will bind it later, create it WITHOUT data_table/"
-                "data_field (omit both). Only ask which field/column to use "
-                "when the user wants the rule bound to a specific column now. "
-                "Never offer a duplicate-check instead of proceeding.\n"
-                "- Use web_research when the task needs internet facts (e.g. a "
-                "study comparing reporting standards) — cite its results; never "
-                "invent sources.\n"
-                "- Use export_document to produce a downloadable Word/Excel "
-                "artifact when the user wants the findings as a document; tell "
-                "them the download link appeared.\n"
-                "- If a tool errors, report the error plainly.\n"
-                "- You have long-term memory through the learn_fact tool. "
-                "When the user asks you to remember/store something, call "
-                "learn_fact; it proposes a fact and the user confirms before "
-                "it is saved (forget_fact removes a fact). After proposing, "
-                "tell the user a confirmation button appeared — do NOT claim "
-                "the fact is already saved, and do NOT say you lack memory, "
-                "that memory is unavailable/disabled, or that you can only "
-                "remember 'if memory is enabled in the future'. If asked "
-                "whether you can remember things, answer yes: via "
-                "learn_fact/forget_fact, which the user controls.\n"
-                "- Only claim a capability that a tool result in this turn "
-                "just demonstrated. Your native abilities (writing prose, "
-                "general knowledge, arithmetic) are NOT 'Pulse capabilities' "
-                "and must not be listed as such. Use the capability-list tool "
-                "only when the user asks what you/they can do or access — "
-                "never as a fallback when you are unsure.\n"
-                "- When the user asks what you can do, use the capability-list "
-                "tool so the app can attach the matching page links as small "
-                "buttons under your reply.\n"
-                "- CLARIFICATION POLICY: if the object the user refers to is "
-                "ambiguous (zero or multiple matches), if required evidence "
-                "or source data is missing, or if your authority to perform "
-                "the requested action is unclear, ASK one clarifying question "
-                "instead of guessing. Never assume or guess authority — when "
-                "in doubt about permission, ask.\n"
-                "- TENANT-ORG EXCEPTION: the platform's own organisation / "
-                "company name (see Tenant organisation above — aliases from "
-                "instance tenant_org) is NEVER an ambiguous object. Questions "
-                "about the company, or \"data in the system\" for that "
-                "company, must be answered with live tools immediately — do "
-                "not ask \"what specifically…?\" in a loop."
-            )
+            # PV2-3B / ADR-0046: Chat grounding must not say CALL THE TOOL for
+            # host writes — IdentityBlock autonomy + this block hand off instead.
+            from ai.engine.cognition.turn.handoff_agent import chat_grounding_rules_block
+
+            system_prompt = f"{system_prompt}\n\n{chat_grounding_rules_block()}"
 
         # [GAP-3] Resolve anaphora: substitute pronouns with active entity
         from ai.engine.cognition.dialogue.anaphora import AnaphoraResolver
@@ -4044,6 +3983,163 @@ class TurnPipelineRunner:
             )
             return None
 
+    async def _try_chat_write_handoff(
+        self,
+        *,
+        user_message: str,
+        conversation_history: list[dict] | None,
+        state_ctx,
+        instance_config: dict | None,
+    ):
+        """PV2-3B: ESS write with enough slots → ChatHandoffOutcome; else seed state.
+
+        Returns None when Chat should keep clarifying (incomplete slots) or the
+        utterance is not an ESS write. Never stages host mutations.
+        """
+        from ai.engine.cognition.turn.handoff_agent import (
+            build_chat_write_handoff,
+            combine_user_brief,
+            enough_slots_for_chat_handoff,
+            is_ess_write_utterance,
+            merge_slots,
+            resolve_ess_write_from_brief,
+            seed_slots_into_state,
+        )
+
+        prior: dict = {}
+        prior_api = ""
+        if state_ctx is not None and getattr(state_ctx, "state", None) is not None:
+            prior = dict(getattr(state_ctx.state, "slots", None) or {})
+            prior_api = str((state_ctx.state.intent or {}).get("api") or "")
+
+        prior_enough = bool(
+            prior_api and enough_slots_for_chat_handoff(prior_api, prior)
+        )
+        current_is_write = is_ess_write_utterance(user_message)
+        # Already handed off — do not re-fire on meta follow-ups
+        # ("is the handoff complete?", "thank you").
+        if prior_enough and not current_is_write:
+            return None
+        active_write = prior_api.startswith("submit_my_")
+        # Fresh write ask, or slot continuation while a write is open.
+        if not current_is_write and not active_write:
+            return None
+
+        brief = combine_user_brief(user_message, conversation_history, prior)
+        try:
+            # Lexical — no MDM. Safe on the async Chat turn.
+            resolved = resolve_ess_write_from_brief(
+                brief, prefer_api=prior_api or None,
+            )
+        except Exception:  # noqa: BLE001 — never block the turn
+            logger.debug("ESS write resolve failed", exc_info=True)
+            return None
+        if resolved is None:
+            return None
+        api_name, body = resolved
+        slots = merge_slots(prior, body)
+        seed_slots_into_state(state_ctx, api_name, slots)
+        if not enough_slots_for_chat_handoff(api_name, slots):
+            logger.info(
+                "TurnPipelineRunner: ESS write incomplete slots api=%s — "
+                "seed state, fall through (no ReAct mutation)",
+                api_name,
+            )
+            return None
+        logger.info(
+            "TurnPipelineRunner: Chat handoff_agent api=%s slots=%s",
+            api_name, sorted(slots.keys()),
+        )
+        return build_chat_write_handoff(
+            api_name=api_name,
+            slots=slots,
+            user_message=user_message,
+        )
+
+    async def _return_chat_handoff(
+        self,
+        *,
+        outcome,
+        ledger,
+        meter,
+        turn_id: str,
+        instance_id: str,
+        conversation_id: str,
+        host_user_id: str | None,
+        t0: float,
+    ):
+        """Finalize a ChatHandoffOutcome as handoff_agent (0 host staging)."""
+        from types import SimpleNamespace
+
+        from ai.engine.agent.reasoning import AgentResponse
+        from ai.engine.cognition.notifier import broadcast_run_event as _broadcast_run
+
+        final_text = outcome.text
+        total_latency = (time.monotonic() - t0) * 1000
+        handoff_tool = {
+            "tool_name": "call_host_api",
+            "tool_args": {
+                "api_name": outcome.api_name,
+                "body": outcome.slots,
+            },
+            "result": outcome.tool_result,
+            "error": None,
+            "latency_ms": 0.0,
+            "guardrail_flags": ["chat_no_host_mutation"],
+        }
+        if ledger.execution is not None:
+            ledger.execution.completed_tools = [handoff_tool]
+        else:
+            ledger.execution = SimpleNamespace(completed_tools=[handoff_tool])
+
+        ledger.final_response = (final_text or "")[:500]
+        ledger.total_latency_ms = total_latency
+        ledger.total_tokens = 0
+        ledger.total_llm_calls = 0
+        ledger.force_action_fired = False
+
+        if self.db is not None:
+            try:
+                await self._write_ledger_row(
+                    turn_id, instance_id, conversation_id, host_user_id,
+                    "final", 5,
+                    {
+                        "total_latency_ms": total_latency,
+                        "handoff_agent": True,
+                        "api_name": outcome.api_name,
+                    },
+                    0.0, verdict="pass",
+                )
+                await self.db.commit()
+            except Exception:  # noqa: BLE001
+                logger.debug("handoff ledger write skipped", exc_info=True)
+
+        response = AgentResponse(
+            text=final_text,
+            sources_cited=[],
+            tools_used=[],
+            confidence=1.0,
+            total_tokens=0,
+            llm_calls=0,
+            model="",
+            response_type="inferred",
+            actions=list(outcome.actions or []),
+            envelope=outcome.envelope,
+        )
+        await _broadcast_run(instance_id, "run.completed", {
+            "run_id": turn_id,
+            "total_latency_ms": total_latency,
+            "total_tokens": 0,
+            "total_llm_calls": 0,
+            "handoff_agent": True,
+        })
+        _signal(ledger, "skill_router", False)
+        _signal(ledger, "chat_handoff", True, api=outcome.api_name)
+        _signal(ledger, "weather_force", False)
+        ledger.turn_decision = "handoff_agent"
+        _finalize_meter(ledger, meter, "handoff_agent")
+        return response, ledger
+
     async def _try_multi_step_plan(
         self,
         instance_id: str,
@@ -4057,11 +4153,15 @@ class TurnPipelineRunner:
         retrieval,  # RetrievalResult
         progress_callback=None,
         stream_callback=None,
+        state_ctx=None,
     ):
-        """PR-20: Attempt multi-step planning. Returns ReActResult or None.
+        """PR-20: Attempt multi-step planning. Returns ReActResult, ChatHandoffOutcome, or None.
 
         None means "fall through to single-pass S3→S5" — the caller should
         treat this as "no multi-step needed."
+
+        Chat + mutating ``call_host_api`` → ``ChatHandoffOutcome`` (ADR-0046);
+        read-only multi-step plans still run ReActLoop.
         """
         from ai.engine.cognition.plan.planner import SkillAwarePlanner
         from ai.engine.cognition.plan.loop import ReActLoop
@@ -4070,6 +4170,14 @@ class TurnPipelineRunner:
         from ai.engine.skills.registry import SkillRegistry
         from ai.engine.llm.prompts import build_chat_prompt
         from ai.engine.core.config import get_settings
+        from ai.engine.cognition.turn.handoff_agent import (
+            build_chat_write_handoff,
+            enough_slots_for_chat_handoff,
+            extract_plan_write,
+            merge_slots,
+            plan_has_mutating_host_api,
+            seed_slots_into_state,
+        )
 
         settings = get_settings()
 
@@ -4105,6 +4213,32 @@ class TurnPipelineRunner:
         # Only activate ReAct loop for multi-step plans or skill-sourced plans
         if plan.source == "single_step" and len(plan.steps) <= 1:
             logger.debug("TurnPipelineRunner: single-step plan, skipping ReAct loop")
+            return None
+
+        catalog = (instance_config or {}).get("api_catalog") or []
+        if plan_has_mutating_host_api(plan, api_catalog=catalog):
+            api_name, body = extract_plan_write(plan)
+            prior = {}
+            if state_ctx is not None and getattr(state_ctx, "state", None) is not None:
+                prior = dict(getattr(state_ctx.state, "slots", None) or {})
+            slots = merge_slots(prior, body)
+            seed_slots_into_state(state_ctx, api_name, slots)
+            if enough_slots_for_chat_handoff(api_name, slots):
+                logger.info(
+                    "TurnPipelineRunner: mutating plan → handoff_agent "
+                    "(skip ReAct) api=%s source=%s",
+                    api_name, plan.source,
+                )
+                return build_chat_write_handoff(
+                    api_name=api_name,
+                    slots=slots,
+                    user_message=user_message,
+                )
+            logger.info(
+                "TurnPipelineRunner: mutating plan incomplete slots — "
+                "skip ReAct, fall through to clarify api=%s",
+                api_name,
+            )
             return None
 
         logger.info(

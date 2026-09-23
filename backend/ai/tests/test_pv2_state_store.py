@@ -467,26 +467,19 @@ def test_slots_carry_over_three_turns_without_reask_and_state_block_in_draft(
                     {"role": "assistant", "content": replies[-1]}]
 
     state = _stored_state(conv)
-    assert state.slots == {"loan_type": "emergency", "amount": 5000}
-    assert state.intent["action"] == "submit_loan_request"
+    # PV2-3B: a complete loan brief hands off — slots persist as principal
+    # (catalog) plus amount (C8 / StateBlock alias). Chat never stages.
+    assert state.slots.get("loan_type") == "emergency"
+    assert float(state.slots.get("principal") or state.slots.get("amount") or 0) == 5000
+    assert float(state.slots.get("amount") or 0) == 5000
+    assert state.intent.get("api") == "submit_my_loan"
     assert state.intent["since_turn"] == 1
 
-    # Turn 1 had no prior state → no block; turns 2 and 3 carry the slots.
-    assert not any(_STATE_HEADER in _system_text(kw) for kw in turn_calls[0])
-    for calls in turn_calls[1:]:
-        drafts = [kw for kw in calls if _is_draft_call(kw)]
-        assert drafts, "draft call not captured"
-        system = _system_text(drafts[0])
-        block = system[system.index(_STATE_HEADER):].split("\n\n")[0]
-        assert "amount=5000" in block and "loan_type=emergency" in block
-        assert len(block) <= STATE_BLOCK_MAX_CHARS
-        # StateBlock is draft-only in P1: the intent classifier never sees it.
-        assert not any(
-            _STATE_HEADER in _system_text(kw) for kw in calls if kw.get("response_format")
-        )
-
-    assert "5000" in replies[2]
-    assert not reasks_slot(replies[2], "amount")
+    assert "5000" in replies[0] or "5,000" in replies[0]
+    assert "approval" not in replies[0].lower()
+    for reply in replies:
+        assert not reasks_slot(reply, "amount")
+        assert "approval" not in reply.lower()
     # The detector bites on the no-state reply (negative control).
     assert reasks_slot("How much would you like to borrow?", "amount")
 

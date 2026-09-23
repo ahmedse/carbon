@@ -433,6 +433,114 @@ def bind_export_args(
     return args
 
 
+# ── PV2-3A: deterministic-first host API steps ─────────────────────────────
+
+_MUSTACHE_RE = re.compile(r"\{\{[^{}]+\}\}")
+
+
+def contains_mustache_placeholders(value: Any) -> bool:
+    """True when any string in ``value`` still has ``{{…}}`` template slots."""
+    if isinstance(value, str):
+        return bool(_MUSTACHE_RE.search(value))
+    if isinstance(value, dict):
+        return any(contains_mustache_placeholders(v) for v in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(contains_mustache_placeholders(v) for v in value)
+    return False
+
+
+def _write_slots_for_api(api_name: str, api_catalog: Any) -> list[dict[str, Any]]:
+    """Catalog ``write_slots`` for ``api_name`` (empty when undeclared)."""
+    name = str(api_name or "").strip()
+    if not name or not isinstance(api_catalog, (list, tuple)):
+        return []
+    for entry in api_catalog:
+        if not isinstance(entry, dict) or entry.get("name") != name:
+            continue
+        slots = entry.get("write_slots")
+        return [s for s in slots if isinstance(s, dict)] if isinstance(slots, list) else []
+    return []
+
+
+def is_fully_bound_host_api(
+    tool_name: str | None,
+    tool_args: dict | None,
+    api_catalog: Any,
+) -> bool:
+    """True when a ``call_host_api`` step can skip draft/observe (PV2-3A).
+
+    Requires: tool is ``call_host_api``, catalog declares ``write_slots``, no
+    ``{{…}}`` placeholders remain, and every ``required`` slot is present and
+    non-blank in ``tool_args.body``. Partial / unbound steps keep the LLM path.
+    """
+    if (tool_name or "").strip() != "call_host_api":
+        return False
+    if not isinstance(tool_args, dict):
+        return False
+    if contains_mustache_placeholders(tool_args):
+        return False
+    api_name = str(tool_args.get("api_name") or "").strip()
+    if not api_name:
+        return False
+    slots = _write_slots_for_api(api_name, api_catalog)
+    if not slots:
+        return False
+    body = tool_args.get("body") if isinstance(tool_args.get("body"), dict) else {}
+    for slot in slots:
+        if not bool(slot.get("required", True)):
+            continue
+        field = str(slot.get("field") or "").strip()
+        if not field:
+            continue
+        val = body.get(field)
+        if val is None or (isinstance(val, str) and not val.strip()):
+            return False
+    return True
+
+
+def render_step_template(
+    api_name: str,
+    values: dict[str, Any] | None,
+    language: str,
+    step_templates: Any,
+) -> str | None:
+    """Render a bilingual ``step_templates`` entry for ``api_name``.
+
+    ``step_templates`` shape (instance.yaml)::
+
+        step_templates:
+          submit_my_leave:
+            en: "Leave submitted: {leave_type} …"
+            ar: "تم تقديم الإجازة: {leave_type} …"
+
+    Returns ``None`` when no template matches. Missing value keys render empty.
+    """
+    if not isinstance(step_templates, dict):
+        return None
+    entry = step_templates.get(str(api_name or "").strip())
+    if not isinstance(entry, dict):
+        return None
+    lang = str(language or "en").strip().casefold()
+    if lang.startswith("ar"):
+        tpl = entry.get("ar") or entry.get("en")
+    else:
+        tpl = entry.get("en") or entry.get("ar")
+    if not isinstance(tpl, str) or not tpl.strip():
+        return None
+    raw = dict(values or {})
+    # Coerce for format — keep numbers/dates readable.
+    mapping = {str(k): ("" if v is None else str(v)) for k, v in raw.items()}
+
+    class _Safe(dict):
+        def __missing__(self, key: str) -> str:
+            return ""
+
+    try:
+        return tpl.format_map(_Safe(mapping)).strip() or None
+    except (ValueError, KeyError):
+        return tpl.strip()
+
+
 def apply_bind_to_tool_calls(
     tool_calls: list[dict] | None,
     prior_results: list[Any],

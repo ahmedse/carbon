@@ -7,7 +7,7 @@ turns:
   - user: "أريد قرض طارئ ٥٠٠٠ دينار"
     stub_reply: "فهمت أنك تريد قرض طارئ بمبلغ ٥٠٠٠ دينار. هل هذا صحيح؟"
     expect:
-      decision_in: [answer, clarify]
+      decision_in: [answer, clarify, handoff_agent]
       language: ar
       max_llm_calls: 2
       mentions_any: ["٥٠٠٠", "5000", "قرض", "emergency"]
@@ -15,7 +15,7 @@ turns:
   - user: "نعم، أريد ٥٠٠٠ بالضبط"
     stub_reply: "جيد. المبلغ المطلوب ٥٠٠٠ دينار. هل هناك أي متطلبات إضافية؟"
     expect:
-      decision_in: [answer]
+      decision_in: [answer, handoff_agent]
       language: ar
       max_llm_calls: 1
       must_not_reask_slots: [amount]

@@ -261,3 +261,9 @@ Track: PV2 — W2 (P2) DONE · W3 (P3) dispatched (3A ∥ 3B)
 Ask: PV2-2B Master-accepted. ContextPack now covers Chat + Agent LLM stages. W3: 3A deterministic-first bound process_dial steps (loop/export_bind/plans_service confirm templates) ∥ 3B Chat handoff_agent (runner/engine_runtime) — closes F-LIVE-2/4. Distinct TEST_DB_NAME. No stack hold.
 Paths: backend/ai/engine/cognition/plan/{loop,planner}.py, plans_service.py, turn/runner.py, engine_runtime.py
 Blockers: none
+
+## [2026-09-23T09:50:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-6
+Track: PV2 — W3 (P3) DONE · W4a Arbiter shadow dispatching
+Ask: 3A deterministic-first bound steps, 3B Chat `handoff_agent` (F-LIVE-2/4), 3C discovery 0-LLM short-circuit + no re-ask known slots — Master-accepted. Import boundary 9. Live 3-script re-check still batched (needs approval). W4a Arbiter shadow → SOAKING ≥7d after land; do not flip (4B) without soak evidence. 3A/3B workers stalled mid-read; Master finished gates.
+Paths: backend/ai/engine/cognition/turn/handoff_agent.py, turn/runner.py, plan/{loop,export_bind}.py, plans_service.py, engine_runtime.py
+Blockers: none

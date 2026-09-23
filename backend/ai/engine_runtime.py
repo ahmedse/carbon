@@ -223,13 +223,23 @@ async def _run_chat(
         # Deterministic backstop: the user asked for a write. On Chat we must
         # NEVER force a mutation tool call (ADR-0046 / G2) — synthesize an
         # honest Agent/My handoff instead. Staging belongs to Agent/plan.
+        # PV2-3B: IdentityBlock + Chat grounding already hand off; this path is
+        # a logged fallback (ledger.force_action_fired; target 0 on the bank).
         handoff_envelope = None
         if _should_force_action(message, response, ledger):
             from ai.engine.agent.chat_surface import synthesize_intent_handoff
 
+            try:
+                ledger.force_action_fired = True
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                ledger.turn_decision = "handoff_agent"
+            except Exception:  # noqa: BLE001
+                pass
             logger.info(
-                "[chat-handoff] conv=%s write intent without stage; "
-                "emitting Agent/My handoff (no mutation force)",
+                "[force-action-fallback] conv=%s write intent without stage; "
+                "emitting Agent/My handoff (logged fallback, no mutation force)",
                 str(conversation_id)[:8],
             )
             handoff_text, handoff_actions, handoff_envelope = synthesize_intent_handoff(
@@ -431,6 +441,9 @@ async def _run_chat(
                 # badge (platform|concept|real_time|general|off_limits).
                 "intent_zone": getattr(ledger, "intent_zone", "platform"),
                 "turn_decision": getattr(ledger, "turn_decision", ""),
+                "force_action_fired": bool(
+                    getattr(ledger, "force_action_fired", False)
+                ),
                 "llm_calls": int(getattr(ledger, "llm_calls_measured", 0) or 0),
                 "llm_calls_background": int(
                     getattr(ledger, "llm_calls_background", 0) or 0
@@ -815,11 +828,17 @@ def _should_force_action(message: str, response, ledger) -> bool:
     handoff. Anything else that drops the write also earns a handoff.
     """
     try:
+        from ai.engine.agent.chat_surface import is_ess_write_intent
         from ai.engine.cognition.dialogue.pending_mutation import detect_action_proposal
         from ai.engine.cognition.turn.action_deflection import is_action_deflection
         from ai.engine.cognition.turn.intent import _is_mutation_request
 
-        if not _is_mutation_request(message or ""):
+        # Prefer apply/request-shaped ESS intent — bare "An emergency loan"
+        # (slot fill) must not force handoff via the stub-defect path.
+        if not (
+            _is_mutation_request(message or "")
+            or is_ess_write_intent(message or "")
+        ):
             return False
         if _staged_or_acted(ledger) or _attempted_mutation(ledger):
             return False

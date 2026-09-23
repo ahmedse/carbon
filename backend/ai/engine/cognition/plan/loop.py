@@ -1602,18 +1602,48 @@ class ReActLoop:
         retry_policy: dict | None = None,
         prior_results: list | None = None,
     ) -> StepResult:
-        """Execute one plan step: draft → critic → execute → observe."""
+        """Execute one plan step: draft → critic → execute → observe.
+
+        PV2-3A: fully bound ``call_host_api`` steps (complete write_slots, no
+        ``{{…}}``) skip DraftWitness + observe — bind → consent → commit with
+        a deterministic bilingual summary from ``instance.yaml`` step_templates.
+        """
         from ai.engine.llm.call_meter import stage
+        from ai.engine.cognition.plan.export_bind import (
+            apply_bind_to_tool_calls,
+            is_fully_bound_host_api,
+            render_step_template,
+        )
 
         # Build step-prompt with dependents' context
         enriched_prompt = self._build_step_prompt(
             step, user_message, system_prompt, step_contexts,
         )
 
+        _catalog = (
+            (instance_config or {}).get("api_catalog")
+            if isinstance(instance_config, dict) else None
+        )
+        _deterministic = is_fully_bound_host_api(
+            step.tool_name, step.tool_args, _catalog,
+        )
+
+        def _bound_summary() -> str:
+            args = step.tool_args if isinstance(step.tool_args, dict) else {}
+            body = args.get("body") if isinstance(args.get("body"), dict) else {}
+            tpl = render_step_template(
+                str(args.get("api_name") or ""),
+                body,
+                str((user_info or {}).get("language") or "en"),
+                (instance_config or {}).get("step_templates")
+                if isinstance(instance_config, dict) else None,
+            )
+            return (tpl or "").strip()
+
         # ── Flight Director: prepare_step (additive, never fails the run) ─
         attempts = 0
         prep = None
-        if flight_director is not None:
+        if flight_director is not None and not _deterministic:
             try:
                 prep = await flight_director.prepare_step(
                     step, flight_director.ledger, attempts=attempts,
@@ -1637,123 +1667,178 @@ class ReActLoop:
                         enriched_prompt + "\n\nFLIGHT DIRECTOR:\n" + "\n".join(_guidance)
                     )
 
-        # Tool-aware drafting: expose the step's tool set (or the curated
-        # single-step allow-set) so the LLM can emit real tool_calls, and
-        # append the anti-fabrication grounding rules (mirrors runner.py:run).
-        from ai.engine.agent.tools import get_tool_definitions
-
-        step_tools: list[dict] | None = None
-        if step.tool_name:
-            step_tools = [
-                d for d in get_tool_definitions(instance_config)
-                if d.get("function", {}).get("name") == step.tool_name
-            ] or None
-        elif plan_source == "single_step":
-            # Single-step passthrough: mirror runner.py's curated allow-set so
-            # a plain imperative request still dispatches a tool.
-            _allow = {
-                "create_dq_rule",
-                "search_knowledge",
-                "get_entity_details",
-                "call_host_api",
-                "list_my_capabilities",
-                "plan_task",
-                "resolve_entity",
-                "aggregate_entity",
-            }
-            step_tools = [
-                d for d in get_tool_definitions(instance_config)
-                if d.get("function", {}).get("name") in _allow
-            ] or None
-        else:
-            # Multi-step REASONING step (no tool): pure LLM reasoning from the
-            # prior step results (depends_on) — comparison, synthesis,
-            # analysis are the model's job, NOT a skill or a tool call.
-            step_tools = None
-
-        if step_tools:
-            from ai.engine.cognition.context_pack import (
-                TASK_AGENT_PLAN_DRAFT,
-                build_context_pack,
-            )
-            draft_pack = build_context_pack(
-                None,
-                surface="agent_plan",
-                stage="draft",
-                user_info=user_info,
-                instance_config=instance_config,
-                conversation_history=conversation_history,
-                language=str((user_info or {}).get("language") or ""),
-                task_body=TASK_AGENT_PLAN_DRAFT,
-                include_history=False,
-                include_state=False,
-                include_knowledge=False,
-                include_memory=False,
-            )
-        else:
-            from ai.engine.cognition.context_pack import (
-                TASK_AGENT_PLAN_REASON,
-                build_context_pack,
-            )
-            draft_pack = build_context_pack(
-                None,
-                surface="agent_plan",
-                stage="draft",
-                user_info=user_info,
-                instance_config=instance_config,
-                conversation_history=conversation_history,
-                language=str((user_info or {}).get("language") or ""),
-                task_body=TASK_AGENT_PLAN_REASON,
-                include_history=False,
-                include_state=False,
-                include_knowledge=False,
-                include_memory=False,
-            )
-
-        # Draft
-        _draft_kwargs = dict(
-            instance_id=instance_id,
-            conversation_id=conversation_id,
-            user_message=enriched_prompt,
-            system_prompt="",
-            conversation_history=conversation_history,
-            instance_config=instance_config,
-            user_info=user_info,
-            tools=step_tools,
-            pack=draft_pack,
-        )
-        if prep is not None and prep.model_override:
-            _draft_kwargs["model"] = prep.model_override
-        with stage("draft"):
-            draft = await dw.draft(**_draft_kwargs)
-
-        # Critic
         retrieval_stub = retrieval or RetrievalResult()
-        with stage("critic"):
-            critic = await cw.review(
-                draft=draft,
-                retrieval=retrieval_stub,
-                is_mutation=step.is_mutation,
-                dry_run=dry_run,
-                confirmation_token=confirmation_token,
+
+        if _deterministic:
+            # PV2-3A A2: zero draft/observe LLM — synthesize tool_calls from
+            # plan tool_args (same bind helper used when drafts omit calls).
+            _title_fb = (
+                (step.tool_args or {}).get("title")
+                or (step.intent or "Agent report")[:80]
+            )
+            _synth = apply_bind_to_tool_calls(
+                [],
+                list(prior_results or []),
+                step_tool_name=step.tool_name,
+                step_tool_args=step.tool_args,
+                title_fallback=str(_title_fb),
+            )
+            draft = DraftResult(
+                text="",
+                tool_calls=_synth,
+                model_used="deterministic",
+            )
+            with stage("critic"):
+                critic = await cw.review(
+                    draft=draft,
+                    retrieval=retrieval_stub,
+                    is_mutation=step.is_mutation,
+                    dry_run=dry_run,
+                    confirmation_token=confirmation_token,
+                    enable_llm_critic=False,
+                    instance_id=instance_id,
+                    conversation_id=conversation_id,
+                    user_message=user_message,
+                    user_info=user_info,
+                    instance_config=instance_config,
+                    conversation_history=conversation_history,
+                    language=str((user_info or {}).get("language") or ""),
+                    surface="agent_plan",
+                )
+            _preview = _bound_summary()
+            result = StepResult(
+                step_id=step.step_id,
+                intent=step.intent,
+                draft_text=_preview or draft.text,
+                critic_verdict=critic.verdict,
+                critic_flags=critic.flags.copy(),
+                tokens_used=0,
+            )
+            if "deterministic_host_step" not in result.critic_flags:
+                result.critic_flags.append("deterministic_host_step")
+            logger.info(
+                "ReActLoop: deterministic-first host step=%d api=%s "
+                "(skip draft/observe)",
+                step.step_id,
+                (step.tool_args or {}).get("api_name"),
+            )
+        else:
+            # Tool-aware drafting: expose the step's tool set (or the curated
+            # single-step allow-set) so the LLM can emit real tool_calls, and
+            # append the anti-fabrication grounding rules (mirrors runner.py:run).
+            from ai.engine.agent.tools import get_tool_definitions
+
+            step_tools: list[dict] | None = None
+            if step.tool_name:
+                step_tools = [
+                    d for d in get_tool_definitions(instance_config)
+                    if d.get("function", {}).get("name") == step.tool_name
+                ] or None
+            elif plan_source == "single_step":
+                # Single-step passthrough: mirror runner.py's curated allow-set so
+                # a plain imperative request still dispatches a tool.
+                _allow = {
+                    "create_dq_rule",
+                    "search_knowledge",
+                    "get_entity_details",
+                    "call_host_api",
+                    "list_my_capabilities",
+                    "plan_task",
+                    "resolve_entity",
+                    "aggregate_entity",
+                }
+                step_tools = [
+                    d for d in get_tool_definitions(instance_config)
+                    if d.get("function", {}).get("name") in _allow
+                ] or None
+            else:
+                # Multi-step REASONING step (no tool): pure LLM reasoning from the
+                # prior step results (depends_on) — comparison, synthesis,
+                # analysis are the model's job, NOT a skill or a tool call.
+                step_tools = None
+
+            if step_tools:
+                from ai.engine.cognition.context_pack import (
+                    TASK_AGENT_PLAN_DRAFT,
+                    build_context_pack,
+                )
+                draft_pack = build_context_pack(
+                    None,
+                    surface="agent_plan",
+                    stage="draft",
+                    user_info=user_info,
+                    instance_config=instance_config,
+                    conversation_history=conversation_history,
+                    language=str((user_info or {}).get("language") or ""),
+                    task_body=TASK_AGENT_PLAN_DRAFT,
+                    include_history=False,
+                    include_state=False,
+                    include_knowledge=False,
+                    include_memory=False,
+                )
+            else:
+                from ai.engine.cognition.context_pack import (
+                    TASK_AGENT_PLAN_REASON,
+                    build_context_pack,
+                )
+                draft_pack = build_context_pack(
+                    None,
+                    surface="agent_plan",
+                    stage="draft",
+                    user_info=user_info,
+                    instance_config=instance_config,
+                    conversation_history=conversation_history,
+                    language=str((user_info or {}).get("language") or ""),
+                    task_body=TASK_AGENT_PLAN_REASON,
+                    include_history=False,
+                    include_state=False,
+                    include_knowledge=False,
+                    include_memory=False,
+                )
+
+            # Draft
+            _draft_kwargs = dict(
                 instance_id=instance_id,
                 conversation_id=conversation_id,
-                user_message=user_message,
-                user_info=user_info,
-                instance_config=instance_config,
+                user_message=enriched_prompt,
+                system_prompt="",
                 conversation_history=conversation_history,
-                language=str((user_info or {}).get("language") or ""),
-                surface="agent_plan",
+                instance_config=instance_config,
+                user_info=user_info,
+                tools=step_tools,
+                pack=draft_pack,
             )
+            if prep is not None and prep.model_override:
+                _draft_kwargs["model"] = prep.model_override
+            with stage("draft"):
+                draft = await dw.draft(**_draft_kwargs)
 
-        result = StepResult(
-            step_id=step.step_id,
-            intent=step.intent,
-            draft_text=draft.text,
-            critic_verdict=critic.verdict,
-            critic_flags=critic.flags.copy(),
-            tokens_used=int(getattr(draft, "tokens_used", 0) or 0),
-        )
+            # Critic
+            with stage("critic"):
+                critic = await cw.review(
+                    draft=draft,
+                    retrieval=retrieval_stub,
+                    is_mutation=step.is_mutation,
+                    dry_run=dry_run,
+                    confirmation_token=confirmation_token,
+                    instance_id=instance_id,
+                    conversation_id=conversation_id,
+                    user_message=user_message,
+                    user_info=user_info,
+                    instance_config=instance_config,
+                    conversation_history=conversation_history,
+                    language=str((user_info or {}).get("language") or ""),
+                    surface="agent_plan",
+                )
+
+            result = StepResult(
+                step_id=step.step_id,
+                intent=step.intent,
+                draft_text=draft.text,
+                critic_verdict=critic.verdict,
+                critic_flags=critic.flags.copy(),
+                tokens_used=int(getattr(draft, "tokens_used", 0) or 0),
+            )
 
         if critic.verdict == "veto":
             # ── Consent gate (RULE_21) ─────────────────────────────────────
@@ -1846,6 +1931,7 @@ class ReActLoop:
                             is_mutation=step.is_mutation,
                             dry_run=dry_run,
                             confirmation_token=confirmation_token,
+                            enable_llm_critic=not _deterministic,
                             instance_id=instance_id,
                             conversation_id=conversation_id,
                             user_message=user_message,
@@ -2118,8 +2204,12 @@ class ReActLoop:
                             # A post-write LLM observe can hang the resume SSE
                             # and leave the step stuck "Running" after a real
                             # write (leave already created; UI never got done).
+                            # PV2-3A: prefer bilingual step_templates over host
+                            # summary prose for fully bound process_dial steps.
+                            _tpl = _bound_summary() if _deterministic else ""
                             result.draft_text = (
-                                (_to.get("summary") or "").strip()
+                                _tpl
+                                or (_to.get("summary") or "").strip()
                                 or result.draft_text
                                 or "Submitted."
                             )
@@ -2172,6 +2262,10 @@ class ReActLoop:
                         result.confirmation_token = str(uuid4())
                         result.executed = False
                         result.error = None
+                        if _deterministic:
+                            _tpl = _bound_summary()
+                            if _tpl:
+                                result.draft_text = _tpl
                         logger.info(
                             "ReActLoop: consent gate hit step=%d tool=%s token=%s",
                             step.step_id, _to.get("tool_name", "?"),
@@ -2182,7 +2276,13 @@ class ReActLoop:
             # ── Pulse v2 Phase 1: observe — synthesize a grounded answer from a
             #    successfully executed tool result (draft→critic→execute→observe).
             #    Phase 5: the observation may also request a read-only follow-up.
-            if result.tool_output and not result.error and not result.paused:
+            #    PV2-3A: fully bound host steps never call observe (llm_calls==0).
+            if (
+                not _deterministic
+                and result.tool_output
+                and not result.error
+                and not result.paused
+            ):
                 _prior = ""
                 if step.depends_on:
                     _deps = [
@@ -2202,13 +2302,17 @@ class ReActLoop:
                         result.draft_text = _obs.answer
                     if _obs.needs_followup and _obs.followup_tool:
                         result.followup = _obs
+            elif _deterministic and result.tool_output and not result.error and not result.paused:
+                _tpl = _bound_summary()
+                if _tpl:
+                    result.draft_text = _tpl
 
             # ── Flight Director: on_step_completed + bounded fidelity re-run ─
             # Additive supervisor. Read-only/idempotent steps may be re-run
             # ONCE when the worker's declared tool calls outnumber what actually
             # executed. Mutation steps are NEVER auto re-run (RULE_21) — those
             # escalate for human review instead.
-            if flight_director is not None:
+            if flight_director is not None and not _deterministic:
                 try:
                     verdict = flight_director.on_step_completed(
                         step, draft, execution, result,

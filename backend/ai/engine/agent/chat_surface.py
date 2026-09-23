@@ -169,6 +169,19 @@ def is_ess_write_intent(message: str) -> bool:
     text = (message or "").strip()
     if not text or not _ESS_TOPIC_RE.search(text):
         return False
+    # Explicit apply/request verbs (EN + AR) — covers loan/attendance that
+    # ``_is_mutation_request`` historically missed (leave-only regex).
+    if re.search(
+        r"\b(?:apply|request|submit|want|need)\b.{0,40}\b"
+        r"(?:leave|loan|attendance|vacation|permission)\b"
+        r"|\b(?:leave|loan|attendance|vacation|permission)\b.{0,40}\b"
+        r"(?:apply|request|submit)\b"
+        r"|(?:أريد|اريد|أبغى|ابغى|اطلب|أطلب|تقديم|قدّم|قدم).{0,40}"
+        r"(?:إجاز|اجاز|قرض|استئذان)",
+        text,
+        re.IGNORECASE | re.DOTALL,
+    ):
+        return True
     try:
         from ai.engine.cognition.turn.intent import _is_mutation_request
     except Exception:  # noqa: BLE001

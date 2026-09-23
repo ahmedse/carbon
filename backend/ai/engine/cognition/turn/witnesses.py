@@ -120,6 +120,8 @@ class TurnLedger:
     llm_calls_background: int = 0
     decision_signals: list | None = None
     turn_decision: str = ""
+    # PV2-3B — `_should_force_action` logged fallback (target 0 on goldens).
+    force_action_fired: bool = False
     # PV2-1A — durable ConversationState written at turn exit.
     state_saved: bool = False
     state_size: int = 0
