@@ -498,6 +498,18 @@ def is_fully_bound_host_api(
     return True
 
 
+# First-person ESS GETs with no path id. Bind even when the scoped catalog
+# copy was not passed into the loop (same contract as /people/me/).
+_SELF_GET_NO_PATH = frozenset({
+    "get_my_profile",
+    "get_my_leave_balance",
+    "list_my_leave",
+    "list_my_loans",
+    "list_my_payslips",
+    "list_my_attendance_permissions",
+})
+
+
 def is_bound_catalog_read(
     tool_name: str | None,
     tool_args: dict | None,
@@ -505,9 +517,9 @@ def is_bound_catalog_read(
 ) -> bool:
     """True when a GET ``call_host_api`` needs no path params and is fully named.
 
-    First-person identity (``get_my_profile`` / ``/people/me/``) is the
-    intended caller: skip DraftWitness, still run observe so the host
-    record is restated. Mutations stay on ``is_fully_bound_host_api``.
+    First-person ESS lookups skip DraftWitness and LLM observe; restatement
+    is ``render_bound_catalog_read``. Mutations stay on
+    ``is_fully_bound_host_api``.
     """
     if (tool_name or "").strip() != "call_host_api":
         return False
@@ -524,9 +536,7 @@ def is_bound_catalog_read(
             entry = item
             break
     if not isinstance(entry, dict):
-        # Catalog contract: /people/me/ has no path id. Bind even when the
-        # scoped catalog copy was not passed into the loop.
-        return api_name == "get_my_profile"
+        return api_name in _SELF_GET_NO_PATH
     if str(entry.get("method") or "GET").upper() != "GET":
         return False
     path = str(entry.get("path") or "")
@@ -535,6 +545,137 @@ def is_bound_catalog_read(
     if entry.get("requires_confirmation"):
         return False
     return True
+
+
+def _unwrap_tool_payload(tool_output: Any) -> Any:
+    if not isinstance(tool_output, dict):
+        return tool_output
+    raw = tool_output.get("result", tool_output.get("data"))
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (TypeError, ValueError):
+            return raw
+    if isinstance(raw, dict) and "data" in raw and "status_code" in raw:
+        return raw.get("data")
+    return raw
+
+
+def _code_or_text(value: Any) -> str:
+    if isinstance(value, dict):
+        text = value.get("code") or value.get("name") or value.get("label")
+        return str(text).strip() if text else ""
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _as_record_list(payload: Any) -> list[dict]:
+    if isinstance(payload, list):
+        return [row for row in payload if isinstance(row, dict)]
+    if isinstance(payload, dict):
+        for key in ("results", "rows", "items", "records", "data"):
+            if isinstance(payload.get(key), list):
+                return [row for row in payload[key] if isinstance(row, dict)]
+        return [payload]
+    return []
+
+
+def render_bound_catalog_read(
+    tool_output: Any,
+    api_name: str,
+    language: str = "en",
+) -> str | None:
+    """0-LLM restatement of a bound ESS lookup. Invents no numbers."""
+    api = str(api_name or "").strip()
+    payload = _unwrap_tool_payload(tool_output)
+    ar = str(language or "en").strip().casefold().startswith("ar")
+    rows = _as_record_list(payload)
+
+    if api == "get_my_leave_balance":
+        parts: list[str] = []
+        for row in rows:
+            kind = _code_or_text(row.get("leave_type"))
+            remaining = row.get("remaining")
+            if not kind or remaining is None:
+                continue
+            entitled = row.get("entitled")
+            if ar:
+                chunk = f"{kind} المتبقي {remaining}"
+                if entitled is not None:
+                    chunk += f" (المستحق {entitled})"
+            else:
+                chunk = f"{kind} remaining {remaining}"
+                if entitled is not None:
+                    chunk += f" (entitled {entitled})"
+            parts.append(chunk)
+        if not parts:
+            return "لا يوجد رصيد إجازة." if ar else "No leave-balance rows."
+        joined = "؛ ".join(parts) if ar else "; ".join(parts)
+        return (f"رصيد الإجازة: {joined}." if ar else f"Leave balance: {joined}.")
+
+    if api == "list_my_loans":
+        if not rows:
+            return "لا توجد قروض قائمة." if ar else "No existing loans."
+        parts = []
+        for row in rows[:5]:
+            kind = _code_or_text(row.get("loan_type")) or "loan"
+            principal = row.get("principal")
+            months = row.get("term_months")
+            status = _code_or_text(row.get("status") or row.get("correspondence_status"))
+            bits = [kind]
+            if principal is not None:
+                bits.append(str(principal))
+            if months is not None:
+                bits.append(f"{months} mo" if not ar else f"{months} شهر")
+            if status:
+                bits.append(status)
+            parts.append(", ".join(bits) if not ar else "، ".join(bits))
+        body = "; ".join(parts) if not ar else "؛ ".join(parts)
+        return (
+            f"القروض القائمة ({len(rows)}): {body}."
+            if ar
+            else f"Existing loans ({len(rows)}): {body}."
+        )
+
+    if api == "list_my_attendance_permissions":
+        if not rows:
+            return (
+                "لا توجد أذونات حضور قائمة."
+                if ar
+                else "No existing attendance permissions."
+            )
+        parts = []
+        for row in rows[:5]:
+            kind = _code_or_text(row.get("permission_type")) or "permission"
+            hours = row.get("hours")
+            day = row.get("date")
+            bits = [kind]
+            if hours is not None:
+                bits.append(f"{hours}h" if not ar else f"{hours} س")
+            if day:
+                bits.append(str(day))
+            parts.append(", ".join(bits) if not ar else "، ".join(bits))
+        body = "; ".join(parts) if not ar else "؛ ".join(parts)
+        return (
+            f"أذونات الحضور القائمة ({len(rows)}): {body}."
+            if ar
+            else f"Existing permissions ({len(rows)}): {body}."
+        )
+
+    if api in _SELF_GET_NO_PATH:
+        from ai.engine.cognition.tool_digest import build_tool_digest
+
+        item = tool_output if isinstance(tool_output, dict) else {
+            "tool_name": "call_host_api",
+            "tool_args": {"api_name": api},
+            "result": payload,
+        }
+        if isinstance(item, dict) and not item.get("tool_args"):
+            item = {**item, "tool_args": {"api_name": api}}
+        digest = build_tool_digest([item], None)
+        return digest or None
+    return None
 
 
 def is_bound_resolve_entity(

@@ -29,6 +29,7 @@ import hashlib
 import json
 import os
 import sys
+import time
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -526,6 +527,31 @@ def complete_agent_write(
                 trace.setdefault("confirm_error", []).append(err_body)
         nxt = client.sse(f"/ai/plans/{plan_id}/run/", timeout=180)
         trace["run_http"].append(nxt.get("http_status"))
+    detail = client.get(f"/ai/plans/{plan_id}/")
+    if detail.status_code == 200:
+        plan = detail.json() or {}
+        usage = plan.get("usage") if isinstance(plan.get("usage"), dict) else {}
+        raw = usage.get("total_llm_calls")
+        if raw is None:
+            raw = plan.get("total_llm_calls")
+        if raw is not None:
+            try:
+                trace["plan_llm_calls"] = int(raw)
+            except (TypeError, ValueError):
+                pass
+        steps = []
+        for step in plan.get("steps") or []:
+            if not isinstance(step, dict):
+                continue
+            steps.append(
+                {
+                    "step_id": step.get("step_id"),
+                    "api": (step.get("tool_args") or {}).get("api_name"),
+                    "status": step.get("status"),
+                }
+            )
+        if steps:
+            trace["steps"] = steps
     return trace
 
 
@@ -545,18 +571,27 @@ def run_journey(
     slots: dict[str, Any],
 ) -> dict[str, Any]:
     utterance = chat_utterance(journey, slots)
+    t0 = time.perf_counter()
+    t_plan: list[float] = []
+
+    def _stamp(row: dict[str, Any]) -> dict[str, Any]:
+        row["journey_ms"] = round((time.perf_counter() - t0) * 1000, 1)
+        if t_plan:
+            row["discovery_commit_ms"] = round((time.perf_counter() - t_plan[0]) * 1000, 1)
+        return row
+
     before, list_http_before = list_host(client, journey.host_list_path)
     conv = client.post(
         "/ai/workspace/conversations/",
         {"conversation_type": "chat", "title": f"pv2-6b-{journey.id}"},
     )
     if conv.status_code not in (200, 201):
-        return {
+        return _stamp({
             "id": journey.id,
             "passed": False,
             "status": "FAIL",
             "notes": f"conv {conv.status_code}",
-        }
+        })
     cid = conv.json()["id"]
     msg = client.post(
         f"/ai/workspace/conversations/{cid}/messages/",
@@ -564,13 +599,13 @@ def run_journey(
         timeout=180,
     )
     if msg.status_code not in (200, 201):
-        return {
+        return _stamp({
             "id": journey.id,
             "passed": False,
             "status": "FAIL",
             "notes": f"chat {msg.status_code}",
             "conversation_id": cid,
-        }
+        })
     body = msg.json()
     assistant = body.get("assistant_message") or {}
     after_chat, _ = list_host(client, journey.host_list_path)
@@ -581,13 +616,14 @@ def run_journey(
         active_plans = list((detail.json() or {}).get("active_plans") or [])
     decision, handoff = _chat_decision(assistant, active_plans)
 
+    t_plan.append(time.perf_counter())
     plan = client.post(
         "/ai/plans/",
         {"brief": utterance, "conversation_id": cid},
         timeout=180,
     )
     if plan.status_code not in (200, 201):
-        return {
+        return _stamp({
             "id": journey.id,
             "passed": False,
             "status": "FAIL",
@@ -596,7 +632,7 @@ def run_journey(
             "handoff_ready": handoff,
             "chat_mutated": mutated,
             "notes": f"plan {plan.status_code}",
-        }
+        })
     plan_data = plan.json()
     inherited = list(plan_data.get("inherited_context") or [])
     carry = slot_carry_ok(inherited, journey.required_slots)
@@ -607,6 +643,15 @@ def run_journey(
     if approve_http in (200, 201):
         agent_trace = complete_agent_write(client, str(plan_id), journey, slots)
     after_agent, list_http_after = list_host(client, journey.host_list_path)
+    if agent_trace.get("plan_llm_calls") is None and plan_id:
+        try:
+            from ai.models.core import Run
+
+            run_row = Run.objects.filter(id=str(plan_id)).first()
+            if run_row is not None:
+                agent_trace["plan_llm_calls"] = int(run_row.total_llm_calls or 0)
+        except Exception:  # noqa: BLE001 — measurement must not fail the journey
+            pass
     fingerprint = {key: slots[key] for key in journey.fingerprint_fields if key in slots}
     host_hit = bool(matching_rows(after_agent, fingerprint)) or (
         len(row_ids(after_agent) - row_ids(before)) >= 1 and not mutated
@@ -628,6 +673,7 @@ def run_journey(
         "confirm_error": agent_trace.get("confirm_error") or [],
         "run_http": agent_trace.get("run_http") or [],
         "plan_status": agent_trace.get("plan_status") or "",
+        "plan_llm_calls": agent_trace.get("plan_llm_calls"),
         "host_list_http": [list_http_before, list_http_after],
         "host_row_after_agent": host_hit,
         "fingerprint": fingerprint,
@@ -637,7 +683,7 @@ def run_journey(
     result["passed"] = not misses
     result["status"] = "PASS" if result["passed"] else "FAIL"
     result["notes"] = ",".join(misses)
-    return result
+    return _stamp(result)
 
 
 def run_live_night(

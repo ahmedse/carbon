@@ -8,6 +8,7 @@ import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import useDocumentTitle from "../hooks/useDocumentTitle";
 import { INSTANCE_LOGO, PLATFORM_TITLE } from "../config/branding";
+import { resolveLandingPath } from "../shell/sessionRestore";
 
 
 export default function Login() {
@@ -30,8 +31,10 @@ export default function Login() {
 
   const navigate = useNavigate();
 
-  // Already logged in? Redirect to appropriate landing page.
-  if (user && context?.projectId) return <Navigate to={context?.landingPath || "/dashboard"} replace />;
+  // Already logged in? Return to the last in-app route (or brand landing).
+  if (user && context?.projectId) {
+    return <Navigate to={resolveLandingPath(context?.landingPath || "/dashboard")} replace />;
+  }
 
   // Project selection UI only at login
   if (user && projects.length > 1 && requireProject) {

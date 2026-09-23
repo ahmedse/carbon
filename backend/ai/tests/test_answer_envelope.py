@@ -159,12 +159,13 @@ def test_build_envelope_system_prompt_mentions_keys_and_chart_rule():
     assert "suggested_chart_type" in prompt
     assert "aggregate_entity" in prompt
     assert "empty `series`" in prompt
+    assert "single-bar" in prompt or "≥2 categories" in prompt
 
 
-# ── enrich_envelope_charts (scalar → series) ────────────────────────────────
+# ── enrich_envelope_charts (drop empty / single-point) ──────────────────────
 
-def test_enrich_fills_empty_series_from_aggregate_entity():
-    """P0: prose-correct headcount must not ship a titled empty chart."""
+def test_enrich_drops_empty_series_even_with_scalar():
+    """Single-metric bars are never worth shipping — prose carries the scalar."""
     raw = _envelope(
         headline="We have 530 active employees.",
         prose=["Active headcount grounded on is_active=True."],
@@ -189,13 +190,7 @@ def test_enrich_fills_empty_series_from_aggregate_entity():
         },
     }]
     enriched = enrich_envelope_charts(env, usable)
-    assert len(enriched.charts) == 1
-    chart = enriched.charts[0]
-    assert chart.title == "Active Employee Count"
-    assert chart.series == [{
-        "name": "Total active employees",
-        "data": [["Total active employees", 530]],
-    }]
+    assert enriched.charts == []
 
 
 def test_enrich_drops_empty_chart_without_scalar():
@@ -213,13 +208,17 @@ def test_enrich_drops_empty_chart_without_scalar():
     assert enriched.charts == []
 
 
-def test_enrich_synthesises_chart_when_llm_omitted_charts():
+def test_enrich_drops_single_point_and_does_not_synthesise():
     raw = _envelope(
         headline="We have 530 active employees.",
         prose=["Grounded on aggregate_entity."],
         tables=[],
-        charts=[],
-        sources=[],
+        charts=[{
+            "chart_type": "bar",
+            "title": "Total active employees",
+            "series": [{"name": "Total", "data": [["Total active employees", 530]]}],
+        }],
+        sources=[{"tool": "aggregate_entity", "rows_returned": 1, "truncated": False}],
     )
     env = envelope_from_json(json.dumps(raw))
     usable = [{
@@ -231,15 +230,52 @@ def test_enrich_synthesises_chart_when_llm_omitted_charts():
         },
     }]
     enriched = enrich_envelope_charts(env, usable)
+    assert enriched.charts == []
+
+
+def test_enrich_keeps_multi_bucket_chart():
+    raw = _envelope(
+        tables=[],
+        charts=[{
+            "chart_type": "bar",
+            "title": "By status",
+            "series": [{"name": "Runs", "data": [
+                ["Committed", 16], ["Draft", 2], ["Failed", 2],
+            ]}],
+        }],
+        sources=[{"tool": "analyze_payroll", "rows_returned": 3, "truncated": False}],
+    )
+    env = envelope_from_json(json.dumps(raw))
+    enriched = enrich_envelope_charts(env, [])
     assert len(enriched.charts) == 1
-    assert enriched.charts[0].series[0]["data"] == [["Total active employees", 530]]
-    assert enriched.sources  # provenance mandatory for data blocks
-    assert enriched.sources[0].tool == "aggregate_entity"
+
+
+def test_sanitize_drops_sample_payslip_table():
+    from ai.envelope_service import sanitize_envelope_tables
+
+    raw = _envelope(
+        tables=[
+            {
+                "title": "Payroll Run Status Summary",
+                "columns": ["Status", "Count"],
+                "rows": [["Committed", 16], ["Draft", 2]],
+            },
+            {
+                "title": "Sample Payslip Line Items (First 10 Employees)",
+                "columns": ["EMPLOYEE NAME", "EMPLOYEE NO", "GROSS", "GOSI/PIFSS", "NET"],
+                "rows": [["Wellie", "1001", 420, 0, -853]],
+            },
+        ],
+    )
+    env = envelope_from_json(json.dumps(raw))
+    cleaned = sanitize_envelope_tables(env)
+    assert len(cleaned.tables) == 1
+    assert cleaned.tables[0].title == "Payroll Run Status Summary"
 
 
 @pytest.mark.asyncio
-async def test_synthesize_envelope_enriches_empty_headcount_chart(monkeypatch):
-    """End-to-end: LLM empty series + aggregate scalar → filled chart."""
+async def test_synthesize_envelope_drops_empty_headcount_chart(monkeypatch):
+    """End-to-end: LLM empty/single series → no chart shipped."""
     llm_payload = _envelope(
         headline="We have 530 active employees.",
         prose=["Active employees only."],
@@ -266,7 +302,8 @@ async def test_synthesize_envelope_enriches_empty_headcount_chart(monkeypatch):
         }],
     )
     assert env is not None
-    assert env.charts[0].series[0]["data"][0][1] == 530
+    assert env.charts == []
+    assert "530" in env.headline
 
 
 # ── synthesize_envelope (async, mocked LLM) ─────────────────────────────────

@@ -277,7 +277,7 @@ describe('PD-01/03/04/05 — Done Output Answer · Discuss · Artifacts · PNG',
     );
     const cockpit = await screen.findByTestId('agent-cockpit');
     // Completed plans land on Output — switch to Run for StepCards.
-    fireEvent.click(within(cockpit).getByRole('button', { name: 'Run' }));
+    fireEvent.click(within(cockpit).getByRole('button', { name: 'Now' }));
     // Graph-first Run may hide the step list when settled — open List.
     const listBtn = screen.queryByRole('button', { name: 'List' });
     if (listBtn) fireEvent.click(listBtn);
@@ -342,7 +342,7 @@ describe('PD-01/03/04/05 — Done Output Answer · Discuss · Artifacts · PNG',
       <AITaskPanel conversationId="conv-1" focusPlanId="plan-done-1" onSwitchToChat={onSwitchToChat} />,
     );
     await screen.findByTestId('markdown-message');
-    const rerunBtn = screen.getByRole('button', { name: 'Rerun from a clean slate' });
+    const rerunBtn = screen.getByRole('button', { name: /^Rerun/ });
     expect(rerunBtn).toBeEnabled();
   });
 });

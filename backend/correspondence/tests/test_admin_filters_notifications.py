@@ -35,6 +35,7 @@ def filter_scene(db, create_user, create_scoped_role):
     )
     org2 = OrgUnit.objects.create(
         name='Finance', slug='finance', code='FIN', org_type='department',
+        parent=org1,
     )
 
     admin = create_user('of16_admin')
@@ -151,6 +152,44 @@ def test_admin_status_filter(filter_scene, api_client, get_token_for_user):
     assert resp.status_code == 200
     assert _ids(resp) == {c2.id}
     assert c1.id not in _ids(resp)
+
+
+@pytest.mark.django_db
+def test_admin_search_and_manager_filter(filter_scene, api_client, get_token_for_user):
+    scene = filter_scene
+    held = scene.corr(scene.req1, scene.org1, scene.leave, 'submitted')
+    held.title = 'Annual for One'
+    held.current_approver_ids = [scene.req2.id]
+    held.approver_chain = [{'order': 1, 'role': 'manager', 'user_ids': [scene.req2.id]}]
+    held.current_step = 0
+    held.save()
+    other = scene.corr(scene.req2, scene.org1, scene.leave, 'submitted')
+
+    _auth(api_client, scene.admin, get_token_for_user)
+    by_name = api_client.get(f'{LIST_URL}?q=One')
+    assert by_name.status_code == 200
+    assert held.id in _ids(by_name)
+    assert other.id not in _ids(by_name)
+
+    by_manager = api_client.get(f'{LIST_URL}?manager={scene.emp2.id}')
+    assert by_manager.status_code == 200
+    assert _ids(by_manager) == {held.id}
+
+
+@pytest.mark.django_db
+def test_admin_cannot_decide_a_step_they_do_not_hold(
+    filter_scene, api_client, get_token_for_user,
+):
+    scene = filter_scene
+    held = scene.corr(scene.req1, scene.org1, scene.leave, 'submitted')
+    held.current_approver_ids = [scene.req1.id]
+    held.save(update_fields=['current_approver_ids'])
+
+    _auth(api_client, scene.admin, get_token_for_user)
+    resp = api_client.post(f'{LIST_URL}{held.id}/approve/', {'comment': 'no'}, format='json')
+    assert resp.status_code == 403
+    held.refresh_from_db()
+    assert held.status == 'submitted'
 
 
 # ── non-admin self-scoping remains ──────────────────────────────────────────

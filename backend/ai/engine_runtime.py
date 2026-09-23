@@ -318,12 +318,26 @@ async def _run_chat(
             if content_override:
                 content = content_override
                 anti_flags = [*anti_flags, "chat_write_handoff"]
-            elif chat_handoff_note:
+            elif chat_handoff_note and not _has_successful_host_read(completed_tools):
                 # Tool attempted a host write; Chat cancelled + handed off.
+                # Do NOT replace a successful analytics/read answer when a
+                # later plan_task cancel also left a handoff note in the trace.
                 content = chat_handoff_note
                 anti_flags = [*anti_flags, "chat_no_host_mutation"]
                 if handoff_envelope is None:
                     handoff_envelope = _chat_handoff_envelope(completed_tools)
+            elif chat_handoff_note and _has_successful_host_read(completed_tools):
+                # Keep the grounded answer; drop write/plan CTAs from the bubble.
+                anti_flags = [*anti_flags, "chat_handoff_suppressed_after_read"]
+                actions = [
+                    a for a in actions
+                    if not (
+                        isinstance(a, dict)
+                        and a.get("type") == "open_panel"
+                        and a.get("panel") in ("tasks", "plan", "agent")
+                    )
+                ]
+                handoff_envelope = None
             elif _has_staged_host_action(pending_actions) and grounded_note:
                 # A staged mutation is the system's statement, not the model's.
                 # Drafted before the tool ran, the prose reliably misreads the
@@ -832,14 +846,17 @@ def _should_force_action(message: str, response, ledger) -> bool:
     try:
         from ai.engine.agent.chat_surface import is_ess_write_intent
         from ai.engine.cognition.dialogue.pending_mutation import detect_action_proposal
+        from ai.engine.cognition.plan.process_dial import strip_pulse_mode_prefix
         from ai.engine.cognition.turn.action_deflection import is_action_deflection
         from ai.engine.cognition.turn.intent import _is_mutation_request
 
         # Prefer apply/request-shaped ESS intent — bare "An emergency loan"
         # (slot fill) must not force handoff via the stub-defect path.
+        # Always strip ``[Pulse mode: …]`` — Ask hints must not look like writes.
+        user_words = strip_pulse_mode_prefix(message or "")
         if not (
-            _is_mutation_request(message or "")
-            or is_ess_write_intent(message or "")
+            _is_mutation_request(user_words)
+            or is_ess_write_intent(user_words)
         ):
             return False
         decided = str(getattr(ledger, "turn_decision", "") or "")
@@ -857,6 +874,10 @@ def _should_force_action(message: str, response, ledger) -> bool:
         # Already produced a chat_handoff this turn — do not re-synthesize.
         if _chat_handoff_note(_completed_tools_of(ledger)):
             return False
+        # Successful live reads already answered the question — never clobber
+        # an analytics/salary answer with a write handoff.
+        if _has_successful_host_read(_completed_tools_of(ledger)):
+            return False
         text = (getattr(response, "text", "") or "").strip()
         if not text:
             return False
@@ -870,6 +891,36 @@ def _should_force_action(message: str, response, ledger) -> bool:
     except Exception:  # noqa: BLE001 - the backstop must never break a turn
         logger.exception("action-deflection check failed; shipping the answer")
         return False
+
+
+def _has_successful_host_read(completed_tools: list[dict] | None) -> bool:
+    """True when at least one non-cancelled host/read tool returned data."""
+    for item in completed_tools or []:
+        if not isinstance(item, dict) or item.get("error"):
+            continue
+        flags = item.get("guardrail_flags") or []
+        if "chat_no_host_mutation" in flags:
+            continue
+        raw = item.get("result")
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            data = raw
+        if isinstance(data, dict) and data.get("action") == "chat_handoff":
+            continue
+        name = str(item.get("tool_name") or "")
+        if name in {
+            "call_host_api",
+            "search_knowledge",
+            "get_entity_details",
+            "resolve_entity",
+            "aggregate_entity",
+            "code_execute",
+        }:
+            return True
+        if data not in (None, "", {}, []):
+            return True
+    return False
 
 
 def build_forced_action_message(user_message: str, deflected_reply: str = "") -> str:
@@ -2192,13 +2243,44 @@ def _grounded_outcome_note(completed_tools: list[dict]) -> str:
     if _tools_all_failed(items):
         return ""
 
+    reads_ok = _has_successful_host_read(items)
+
+    def _tool_base(item: dict) -> str:
+        raw = str(item.get("tool_name") or item.get("tool") or "")
+        return raw.split(":", 1)[0].strip()
+
+    def _is_plan_draft_tool(item: dict) -> bool:
+        return _tool_base(item) in {"plan_task", "approve_plan", "edit_plan"}
+
     lines: list[str] = []
     for item in items:
+        flags = item.get("guardrail_flags") or []
+        # Cancelled Chat writes / plan_task are owned by the handoff path —
+        # never append "nothing was created or changed" under a successful read.
+        if "chat_no_host_mutation" in flags:
+            continue
         if item.get("error"):
+            # plan_task / edit_plan drafts that failed must not spam mutation
+            # fail copy under a successful payroll read (transcript: ×3).
+            if _is_plan_draft_tool(item):
+                continue
+            args = _tool_args_of(item)
+            if reads_ok and _is_mutation_tool(item.get("tool_name"), args):
+                api = str(args.get("api_name") or args.get("name") or "").lower()
+                base = _tool_base(item).lower()
+                # Keep fail copy only for real host writes that actually failed
+                # alongside a read (e.g. submit_my_leave timeout).
+                is_host_write = (
+                    api.startswith(("submit_", "create_", "update_", "delete_"))
+                    or base.startswith(("submit_", "create_"))
+                    or base in {"create_dq_rule", "learn_fact", "forget_fact"}
+                )
+                if not is_host_write:
+                    continue
             lines.append(
                 _fail_copy_for_tool(
                     item.get("tool_name") or item.get("tool"),
-                    _tool_args_of(item),
+                    args,
                 )
             )
             continue
@@ -2209,6 +2291,13 @@ def _grounded_outcome_note(completed_tools: list[dict]) -> str:
             continue
         if not isinstance(data, dict):
             continue
+        if data.get("action") in {
+            "chat_handoff",
+            "cancelled",
+            "chat_surface_blocked",
+            "blocked",
+        }:
+            continue
         if data.get("error"):
             # A structured clarification (e.g. a deterministic DQ rule missing
             # its field binding) is a user-facing question, not an internal
@@ -2217,6 +2306,8 @@ def _grounded_outcome_note(completed_tools: list[dict]) -> str:
             clarification = data.get("clarification") or {}
             if clarification.get("needed"):
                 lines.append(_clarification_question(clarification.get("missing")))
+            elif _is_plan_draft_tool(item):
+                continue
             else:
                 lines.append(
                     _fail_copy_for_tool(
@@ -2312,7 +2403,15 @@ def _grounded_outcome_note(completed_tools: list[dict]) -> str:
             if isinstance(files, list) and files:
                 names = ", ".join(str(f.get("filename") or "") for f in files)
                 lines.append(f"✅ Generated: {names} — download below.")
-    return "\n\n".join(lines)
+    # Identical fail / staging lines must not stack (transcript: ×3 warnings).
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for line in lines:
+        if line in seen:
+            continue
+        seen.add(line)
+        deduped.append(line)
+    return "\n\n".join(deduped)
 
 
 # ── F1-B entity mention annotation (deterministic answer post-processor) ──
@@ -2334,6 +2433,27 @@ def _sanitize_annotation_label(name: str) -> str:
     label = label.replace("[[", "").replace("]]", "")
     label = label.replace(":", "").replace("]", "")
     return label
+
+
+#: Lowercase surface forms that must never become entity chips — even when an
+#: OrgUnit is literally named ``IT`` / ``HR``. Case-insensitive match of ``it``
+#: onto ``IT`` rewrote clarify copy ("what should it focus on") into a chip.
+_ANNOTATION_STOP_SURFACES = frozenset({
+    "a", "an", "as", "at", "be", "by", "do", "he", "if", "in", "is", "it",
+    "me", "my", "no", "of", "on", "or", "so", "to", "up", "us", "we",
+    "the", "and", "for", "are", "was", "you", "our", "not",
+})
+
+
+def _is_annotation_stop_surface(matched: str) -> bool:
+    """True when the matched span is a function-word surface (e.g. lowercase ``it``)."""
+    surface = (matched or "").strip()
+    if not surface:
+        return True
+    # All-lowercase short function words only — ``IT`` / ``HR`` still annotate.
+    if surface != surface.lower():
+        return False
+    return surface.casefold() in _ANNOTATION_STOP_SURFACES
 
 
 def _annotation_protected_spans(text: str) -> list[tuple[int, int]]:
@@ -2494,6 +2614,8 @@ def _annotate_entity_mentions(answer: str, scope) -> str:
             for match in pattern.finditer(answer):
                 start, end = match.start(), match.end()
                 if any(occupied[start:end]):
+                    continue
+                if _is_annotation_stop_surface(answer[start:end]):
                     continue
                 for index in range(start, end):
                     occupied[index] = True

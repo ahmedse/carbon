@@ -19,8 +19,8 @@ import {
 } from '@mui/material';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import AddIcon from '@mui/icons-material/Add';
-import DeleteIcon from '@mui/icons-material/Delete';
-import EditIcon from '@mui/icons-material/Edit';
+import VisibilityRounded from '@mui/icons-material/VisibilityRounded';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import PageContainer from '../../components/layout/PageContainer';
 import PageHeader from '../../components/Page/PageHeader';
@@ -37,7 +37,6 @@ import {
   fetchLoanInstallments,
   createLoan,
   updateLoan,
-  deleteLoan,
 } from '../../api/people';
 import { labelsFromRows, formatAmount, formatDate, refCode, refLabel } from './utils';
 import EmployeePicker from './EmployeePicker';
@@ -85,6 +84,7 @@ function installmentStatusColor(status) {
 
 export default function LoansPage() {
   const { t } = useTranslation('people');
+  const navigate = useNavigate();
   const { t: tCommon } = useTranslation('common');
   useDocumentTitle(t('loansTitle'));
   const { token } = useAuth();
@@ -178,21 +178,6 @@ export default function LoansPage() {
     setOpenDialog(true);
   };
 
-  const openEdit = (loan) => {
-    setEditingLoan(loan);
-    setForm({
-      employee: loan.employee ?? '',
-      loan_type: refCode(loan.loan_type),
-      principal: loan.principal != null ? String(loan.principal) : '',
-      interest_rate: loan.interest_rate != null ? String(loan.interest_rate) : '0',
-      term_months: loan.term_months != null ? String(loan.term_months) : '',
-      start_date: loan.start_date ? String(loan.start_date).slice(0, 10) : '',
-      status: loan.status ?? 'active',
-      notes: loan.notes ?? '',
-    });
-    setOpenDialog(true);
-  };
-
   const closeDialog = () => {
     setOpenDialog(false);
     setEditingLoan(null);
@@ -247,25 +232,6 @@ export default function LoansPage() {
       });
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleDelete = async (loan) => {
-    if (!window.confirm(t('loanDeleteConfirm'))) return;
-    try {
-      await deleteLoan(loan.id, token);
-      if (expandedLoanId === loan.id) {
-        setExpandedLoanId(null);
-      }
-      setSnackbar({ open: true, message: t('loanDeleted'), severity: 'success' });
-      await loadData();
-    } catch (err) {
-      // DELETE 400 from the backend delete_guard carries { detail } — surface it.
-      setSnackbar({
-        open: true,
-        message: err?.message || err?.feedback?.title || err?.detail || t('loanDeleteBlocked'),
-        severity: 'error',
-      });
     }
   };
 
@@ -339,30 +305,31 @@ export default function LoansPage() {
       width: 110,
       sortable: false,
       filterable: false,
-      renderCell: (params) => (
-        <>
-          <Tooltip title={t('actionEditLoan')}>
+      renderCell: (params) => {
+        const loan = params.row;
+        const label = t('requestView');
+        return (
+          <Tooltip title={label}>
             <IconButton
               size="small"
-              onClick={(event) => { event.stopPropagation(); openEdit(params.row); }}
-              sx={{ color: 'primary.main' }}
+              color="primary"
+              aria-label={label}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (loan.correspondence_id) {
+                  navigate(`/team/${loan.correspondence_id}`, { state: { from: 'people-loans' } });
+                } else {
+                  navigate(`/people/loans/${loan.id}`);
+                }
+              }}
             >
-              <EditIcon fontSize="small" />
+              <VisibilityRounded fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title={t('actionDeleteLoan')}>
-            <IconButton
-              size="small"
-              onClick={(event) => { event.stopPropagation(); handleDelete(params.row); }}
-              sx={{ color: 'error.main' }}
-            >
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </>
-      ),
+        );
+      },
     },
-  ], [t, employeeLabels]);
+  ], [t, employeeLabels, navigate]);
 
   const installmentColumns = useMemo(() => [
     { field: 'installment_no', headerName: t('colInstallmentNo'), width: 130, valueGetter: (value) => value ?? '—' },

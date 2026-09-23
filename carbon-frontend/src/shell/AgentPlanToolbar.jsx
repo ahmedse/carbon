@@ -12,14 +12,11 @@ import {
 } from '@mui/material';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import { useTranslation } from 'react-i18next';
+import { humanTaskTitle } from './taskWorkspace';
 
-/** Short Operator-facing plan label from brief (first sentence / line). */
+/** Short employee-facing plan label from brief (first sentence / line). */
 export function planDisplayLabel(plan, fallback = 'Untitled plan') {
-  const b = String(plan?.brief || '').trim();
-  if (!b) return fallback;
-  const first = b.split(/\n/)[0].split(/(?<=[.!?])\s+/)[0].trim();
-  if (!first) return fallback;
-  return first.length > 56 ? `${first.slice(0, 55)}…` : first;
+  return humanTaskTitle(plan, fallback, 0);
 }
 
 /**
@@ -42,7 +39,7 @@ export default function AgentPlanToolbar({
   const { t } = useTranslation('ai');
   const cancelled = plan?.status === 'cancelled';
   const inspect = mode === 'inspect';
-  const fullBrief = String(plan?.brief || '').trim() || t('untitledPlan');
+  const fullBrief = humanTaskTitle(plan, t('untitledPlan'), 0);
 
   return (
     <Toolbar
@@ -51,34 +48,29 @@ export default function AgentPlanToolbar({
       data-testid="agent-plan-toolbar"
       sx={{
         width: '100%',
-        minHeight: 40,
+        minHeight: 32,
         gap: 1,
         px: 0,
         flexWrap: 'wrap',
-        alignItems: 'flex-start',
-        py: 0.5,
+        alignItems: 'center',
+        py: 0.25,
       }}
     >
       <Typography
         data-testid="agent-plan-label"
-        title={fullBrief}
+        title={String(plan?.brief || '').trim() || fullBrief}
         sx={{
-          flex: '1 1 140px',
-          minWidth: 0,
-          fontSize: '0.8125rem',
-          fontWeight: 600,
-          lineHeight: 1.35,
-          maxHeight: '4.05em',
-          overflowY: 'auto',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-          alignSelf: 'center',
+          position: 'absolute',
+          width: 1,
+          height: 1,
+          overflow: 'hidden',
+          clip: 'rect(0 0 0 0)',
         }}
       >
         {fullBrief}
       </Typography>
 
-      <Stack direction="row" spacing={0.75} alignItems="flex-start" flexWrap="wrap" useFlexGap sx={{ pt: 0.125 }}>
+      <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
         {cancelled ? (
           <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
             {t('planCancelledNothingRan')}

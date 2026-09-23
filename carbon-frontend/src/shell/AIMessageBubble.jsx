@@ -69,23 +69,22 @@ import SuggestionDiff from './SuggestionDiff';
 
 const CarbonDataGrid = lazy(() => import('../components/DataGrid/CarbonDataGrid'));
 
-// User: compact right-aligned row
+// User: compact right-aligned row — keep a soft cap so user turns don't stretch.
 const USER_BUBBLE_SX = {
   alignSelf: 'flex-end',
-  maxWidth: 'min(42rem, 88%)',
+  maxWidth: 'min(42rem, 92%)',
   px: 1.25, py: 0.625,
   borderRadius: 1,
   bgcolor: 'action.hover',
 };
 
-// AI: capped width so dir=auto Arabic does not park text on the far right
-// while chrome (AI badge, navigate buttons) stays on the far left — that
-// regression left a hollow rail after RTL polish (8587c39).
+// AI: full column width (presentation P-05/P-06) — tables/charts need the rail.
+// Cap was 42rem and left large empty gutters; Arabic dir=auto still uses plaintext.
 const AI_BUBBLE_SX = {
-  alignSelf: 'flex-start',
-  maxWidth: 'min(42rem, 96%)',
+  alignSelf: 'stretch',
+  maxWidth: '100%',
   width: '100%',
-  px: 0, py: 0,
+  px: 1.5, py: 0,
 };
 
 const META_SX = {
@@ -304,6 +303,10 @@ function AIMessageBubble({
   onDeclineExecution,
   onOpenPanel,
   onNotify,
+  onStartThreadFromHere,
+  onReplyInThread,
+  /** Current Ask|Plan dial — hide "Switch to Plan" when already on Plan. */
+  composerProcess = 'ask',
 }) {
   const [showActions, setShowActions] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -874,7 +877,12 @@ function AIMessageBubble({
   // open_panel action → switch the workspace to a panel (e.g. Tasks) and
   // focus the referenced object (plan created from chat). Rendered as a
   // button (NOT a route Link — the panel is a workspace surface).
-  const panelActions = rawActions.filter((a) => a?.type === 'open_panel');
+  // Panel=plan is the Ask→Plan dial CTA — hide it when already on Plan.
+  const panelActions = rawActions.filter((a) => {
+    if (a?.type !== 'open_panel') return false;
+    if (a.panel === 'plan' && composerProcess === 'plan') return false;
+    return true;
+  });
   const pendingActions = Array.isArray(metadata.pending_actions) ? metadata.pending_actions : [];
   const showActionRow = Boolean(
     !isUser && (
@@ -1461,7 +1469,7 @@ function AIMessageBubble({
               </Menu>
             </>
           )}
-          {(onCorrect || onPromote || onRetry || onDelete) && (
+          {(onCorrect || onPromote || onRetry || onDelete || onStartThreadFromHere || onReplyInThread) && (
             <>
               <Tooltip title="More actions">
                 <IconButton size="small" onClick={(e) => setMoreMenuAnchor(e.currentTarget)} aria-label="More message actions" sx={{ p: 0.5 }}>
@@ -1469,6 +1477,24 @@ function AIMessageBubble({
                 </IconButton>
               </Tooltip>
               <Menu anchorEl={moreMenuAnchor} open={Boolean(moreMenuAnchor)} onClose={() => setMoreMenuAnchor(null)}>
+                {onStartThreadFromHere && message.id && !String(message.id).startsWith('local-') && message.id !== 'streaming' && (
+                  <MenuItem
+                    onClick={() => { onStartThreadFromHere(message); setMoreMenuAnchor(null); }}
+                    sx={{ fontSize: '0.8125rem' }}
+                    data-testid="message-start-thread"
+                  >
+                    {t('threadFromHere')}
+                  </MenuItem>
+                )}
+                {onReplyInThread && message.id && !String(message.id).startsWith('local-') && (
+                  <MenuItem
+                    onClick={() => { onReplyInThread(message); setMoreMenuAnchor(null); }}
+                    sx={{ fontSize: '0.8125rem' }}
+                    data-testid="message-reply-in-thread"
+                  >
+                    {t('replyInThread')}
+                  </MenuItem>
+                )}
                 <MenuItem onClick={() => { handleCopyPlain(); setMoreMenuAnchor(null); }} sx={{ fontSize: '0.8125rem' }}>
                   Copy plain text
                 </MenuItem>
@@ -1564,7 +1590,7 @@ function AIMessageBubble({
               {copied ? <CheckIcon sx={{ fontSize: 14 }} /> : <ContentCopyIcon sx={{ fontSize: 14 }} />}
             </IconButton>
           </Tooltip>
-          {(onEdit || onDelete) && (
+          {(onEdit || onDelete || onStartThreadFromHere || onReplyInThread) && (
             <>
               <Tooltip title="More actions">
                 <IconButton size="small" onClick={(e) => setMoreMenuAnchor(e.currentTarget)} aria-label="More message actions" sx={{ p: 0.5 }}>
@@ -1572,6 +1598,24 @@ function AIMessageBubble({
                 </IconButton>
               </Tooltip>
               <Menu anchorEl={moreMenuAnchor} open={Boolean(moreMenuAnchor)} onClose={() => setMoreMenuAnchor(null)}>
+                {onStartThreadFromHere && message.id && !String(message.id).startsWith('local-') && (
+                  <MenuItem
+                    onClick={() => { onStartThreadFromHere(message); setMoreMenuAnchor(null); }}
+                    sx={{ fontSize: '0.8125rem' }}
+                    data-testid="message-start-thread"
+                  >
+                    {t('threadFromHere')}
+                  </MenuItem>
+                )}
+                {onReplyInThread && message.id && !String(message.id).startsWith('local-') && (
+                  <MenuItem
+                    onClick={() => { onReplyInThread(message); setMoreMenuAnchor(null); }}
+                    sx={{ fontSize: '0.8125rem' }}
+                    data-testid="message-reply-in-thread"
+                  >
+                    {t('replyInThread')}
+                  </MenuItem>
+                )}
                 {onEdit && (
                   <MenuItem
                     onClick={() => { setEditOpen(true); setEditText(message.content || ''); setMoreMenuAnchor(null); }}
@@ -1736,6 +1780,9 @@ AIMessageBubble.propTypes = {
   onConfirmExecution: PropTypes.func,
   onDeclineExecution: PropTypes.func,
   onNotify: PropTypes.func,
+  onStartThreadFromHere: PropTypes.func,
+  onReplyInThread: PropTypes.func,
+  composerProcess: PropTypes.oneOf(['ask', 'plan']),
 };
 
 export default AIMessageBubble;

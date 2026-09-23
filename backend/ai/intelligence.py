@@ -517,6 +517,7 @@ class CarbonIntelligence:
         conversation_id: str,
         content: str,
         model: str | None = None,
+        pulse_mode: str | None = None,
     ):
         """Stream an answer as a generator of SSE-ready dict frames.
 
@@ -643,7 +644,13 @@ class CarbonIntelligence:
                     "workspace_chat",
                     conversation.task_payload_json or {},
                 )
-                message = self._prepend_workspace_context(conversation, content)
+                if pulse_mode in ("ask", "plan"):
+                    payload = dict(conversation.task_payload_json or {})
+                    payload["pulse_mode"] = pulse_mode
+                    conversation.task_payload_json = payload
+                    conversation.save(update_fields=["task_payload_json"])
+                message = self._prepend_pulse_mode(pulse_mode, content)
+                message = self._prepend_workspace_context(conversation, message)
                 message = self._prepend_domain_context(scope, message)
                 chat_request = ChatRequest(
                     message=message,
@@ -3841,6 +3848,33 @@ class CarbonIntelligence:
             tool_digest=getattr(chat_response, "tool_digest", "") or "",
             active_plans=getattr(chat_response, "active_plans", None) or [],
         )
+
+    @staticmethod
+    def _prepend_pulse_mode(pulse_mode: str | None, content: str) -> str:
+        """Tell the engine whether this turn is Ask or Plan. Stored text stays the user's words."""
+        mode = (pulse_mode or "").strip().lower()
+        if mode == "plan":
+            return (
+                "[Pulse mode: Plan. Draft a reviewable plan from this thread. "
+                "Ask one missing fact at a time. Do not submit or change host records.]\n\n"
+                f"{content}"
+            )
+        if mode == "ask":
+            return (
+                "[Pulse mode: Ask. Answers and advice only. "
+                "Never call plan_task. Never invent a Tasks-panel plan. "
+                "Never change host records. "
+                "For a vague 'full report' / 'report about salaries' brief, "
+                "ask ONE short clarifying question about focus and audience "
+                "before fetching data — do not dump payslip rows. "
+                "For distribution or analytics questions, summarize with "
+                "aggregates and charts — never dump raw salary rows. "
+                "If the user needs a multi-step or governed plan, tell them to "
+                "switch the dial to Plan — do not invent Open-in-Agent or Open-My "
+                "for a read question.]\n\n"
+                f"{content}"
+            )
+        return content
 
     def _prepend_workspace_context(
         self,

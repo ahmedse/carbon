@@ -62,11 +62,21 @@ import InvestigateTab from './InvestigateTab';
 import { useAITaskTransfer } from './useAITaskTransfer';
 import { ExecuteModeProvider } from './ExecuteModeContext';
 import { pickOpenActivePlan } from './activePlans';
+import {
+  findConversationForProcess,
+  normalizePulseProcess,
+  processCreatePayload,
+  processForConversation,
+  rememberConversationProcess,
+} from './pulseProcessThreads';
+import { readActivePlanId } from './sessionRestore';
 
 const LOCAL_STORAGE_KEY = 'carbon-ai-active-conversation';
 
 // W5-A (ADR-0014) — Chat/Agent is a workspace-level mode, persisted.
 const MODE_STORAGE_KEY = 'carbon-ai-mode';
+// Ask | Plan are different chat sessions (ConversationState must not mingle).
+const PROCESS_STORAGE_KEY = 'carbon-ai-composer-process';
 
 // RULE_17: Memory console persists its own tab internally (AIMemoryConsole).
 
@@ -101,6 +111,15 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
       return localStorage.getItem(MODE_STORAGE_KEY) === 'agent' ? 'agent' : 'chat';
     } catch {
       return 'chat';
+    }
+  });
+  // Ask | Plan = separate sessions. Dial flip switches conversation_id so
+  // ConversationState (slots / intent) never mingles across modes.
+  const [composerProcess, setComposerProcess] = useState(() => {
+    try {
+      return normalizePulseProcess(localStorage.getItem(PROCESS_STORAGE_KEY));
+    } catch {
+      return 'ask';
     }
   });
   // W5-A — lifecycle state reported by AITaskPanel; drives the header's
@@ -190,6 +209,8 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
     for (const c of list || []) {
       if (!c?.id) continue;
       nextById[c.id] = c;
+      // Seed local dial map from durable task_payload (survives reload).
+      rememberConversationProcess(c.id, processForConversation(c));
       if (c.is_archived) nextArchived.push(c.id);
       else nextOrder.push(c.id);
     }
@@ -269,6 +290,14 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
     }
   }, [mode]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(PROCESS_STORAGE_KEY, composerProcess);
+    } catch {
+      /* ignore */
+    }
+  }, [composerProcess]);
+
 
 
   // Visible ids after archived-filter + client-side title search.
@@ -319,16 +348,32 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
     }
   }, [loading, activeId, effectiveActiveId]);
 
+  // No chat threads left, but a Task was open last time → reopen Tasks on that plan.
+  const lastTaskFallbackRef = useRef(false);
+  useEffect(() => {
+    if (loading || lastTaskFallbackRef.current) return;
+    if (mode !== 'chat') return;
+    if (order.length > 0 || archivedIds.length > 0) return;
+    const planId = readActivePlanId();
+    if (!planId) return;
+    lastTaskFallbackRef.current = true;
+    setTasksFocusPlanId(planId);
+    setMode('agent');
+  }, [loading, mode, order.length, archivedIds.length]);
+
   // Handle new chat.
   // ALWAYS create a fresh conversation. Reusing any existing thread (even an
   // empty one) made the button look broken ("new chat don't create one") — the
   // user clicked and nothing new appeared.
+  // Tag with the current Ask|Plan dial so ConversationState stays dial-scoped.
   const handleNewChat = useCallback(async () => {
     try {
-      const conv = await apiCreateConversation(token, {
-        conversation_type: 'chat',
-        title: t('newChatTitle'),
-      });
+      const title = composerProcess === 'plan' ? t('newPlanChatTitle') : t('newAskChatTitle');
+      const conv = await apiCreateConversation(
+        token,
+        processCreatePayload(composerProcess, title),
+      );
+      rememberConversationProcess(conv.id, composerProcess);
       setById((prev) => ({ ...prev, [conv.id]: conv }));
       setOrder((prev) => [conv.id, ...prev]);
       setActiveId(conv.id);
@@ -336,7 +381,50 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
     } catch (err) {
       notifyFromError(err, 'Could not create conversation');
     }
-  }, [token, notifyFromError, t]);
+  }, [token, notifyFromError, t, composerProcess]);
+
+  // Ask ↔ Plan flips the conversation, not a flag on the same thread.
+  const handleComposerProcessChange = useCallback(
+    async (next) => {
+      const dial = normalizePulseProcess(next);
+      if (dial === composerProcess && activeId) {
+        rememberConversationProcess(activeId, dial);
+        return;
+      }
+      setComposerProcess(dial);
+      const visible = order
+        .map((id) => byId[id])
+        .filter(Boolean);
+      const targetId = findConversationForProcess(dial, visible);
+      if (targetId && targetId !== activeId) {
+        rememberConversationProcess(targetId, dial);
+        setActiveId(targetId);
+        setShowArchived(false);
+        return;
+      }
+      if (targetId && targetId === activeId) {
+        rememberConversationProcess(activeId, dial);
+        return;
+      }
+      try {
+        const title = dial === 'plan' ? t('newPlanChatTitle') : t('newAskChatTitle');
+        const conv = await apiCreateConversation(
+          token,
+          processCreatePayload(dial, title),
+        );
+        rememberConversationProcess(conv.id, dial);
+        setById((prev) => ({ ...prev, [conv.id]: conv }));
+        setOrder((prev) => [conv.id, ...prev]);
+        setActiveId(conv.id);
+        setShowArchived(false);
+      } catch (err) {
+        notifyFromError(err, 'Could not open conversation');
+        // Roll dial back if create failed — stay on the open thread.
+        setComposerProcess(composerProcess);
+      }
+    },
+    [composerProcess, activeId, order, byId, token, notifyFromError, t],
+  );
 
   // Handle a manifest starter chip: open a conversation of the right type and
   // (for prompt-bearing chips) seed the first user message.
@@ -548,6 +636,16 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
     [byId, effectiveActiveId],
   );
 
+  // Selecting a thread restores its Ask|Plan dial (sessions stay dial-scoped).
+  // Depend on id only — dial flip sets composerProcess before the new conv
+  // arrives; re-syncing from the still-active Ask thread would undo the flip.
+  useEffect(() => {
+    if (!activeConversation?.id) return;
+    const dial = processForConversation(activeConversation);
+    rememberConversationProcess(activeConversation.id, dial);
+    setComposerProcess(dial);
+  }, [activeConversation?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- id-scoped
+
   // Edge: loading.
   const startDrawerResize = useCallback((e) => {
     e.preventDefault();
@@ -707,6 +805,8 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
                   seedDraft={chatSeedDraft}
                   onSeedDraftConsumed={() => setChatSeedDraft(null)}
                   onActivePlans={setChatActivePlans}
+                  process={composerProcess}
+                  onProcessChange={handleComposerProcessChange}
                 />
               ) : (
                 <AIEmptyState onStartChat={handleNewChat} manifests={manifests} onStartStarter={handleStartStarter} />

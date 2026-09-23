@@ -11,10 +11,10 @@ import {
   Box,
   Button,
   Chip,
+  IconButton,
   MenuItem,
   Paper,
   Select,
-  Skeleton,
   Stack,
   Table,
   TableBody,
@@ -23,25 +23,18 @@ import {
   TableHead,
   TablePagination,
   TableRow,
-  ToggleButton,
-  ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import AssignmentIcon from '@mui/icons-material/Assignment';
+import VisibilityRounded from '@mui/icons-material/VisibilityRounded';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
-import {
-  fetchEmployeeCorrespondence,
-  fetchEmployeeCorrespondenceDetail,
-} from '../../../api/people';
+import { fetchEmployeeCorrespondence } from '../../../api/people';
 import { PEOPLE_VIEW, hasCap, expandCapabilities } from '../../../capabilities';
 import EmptyState from '../../../components/Page/EmptyState';
 import LoadingSkeleton from '../../../components/Page/LoadingSkeleton';
-import SystemDialog from '../../../components/SystemDialog';
-import SummaryCard from '../../my/components/SummaryCard';
-import ApproverChainStepper from '../../my/components/ApproverChainStepper';
-import WorkflowGraph from '../../my/components/WorkflowGraph';
-import RequestTimeline from '../../my/components/RequestTimeline';
 import {
   STATUS_COLOR,
   STATUS_SUFFIX,
@@ -56,6 +49,7 @@ import {
 
 export default function EmployeeRequestsTab({ entityData }) {
   const { t, i18n } = useTranslation('people');
+  const navigate = useNavigate();
   const { t: tMy } = useTranslation('my');
   const { token, isGlobalAdminFlag, userCapabilities } = useAuth();
 
@@ -83,11 +77,6 @@ export default function EmployeeRequestsTab({ entityData }) {
   const [typeFilter, setTypeFilter] = useState('all');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
-
-  const [selected, setSelected] = useState(null);
-  const [view, setView] = useState('graph');
-  const [events, setEvents] = useState([]);
-  const [detailLoading, setDetailLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -152,39 +141,6 @@ export default function EmployeeRequestsTab({ entityData }) {
   const handleChangeRowsPerPage = (event) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
-  };
-
-  const openDetail = (row) => {
-    setSelected(row);
-    setView('stepper');
-    setEvents([]);
-    setDetailLoading(true);
-    if (!row?.id || !token) {
-      setDetailLoading(false);
-      return;
-    }
-    fetchEmployeeCorrespondenceDetail(empId, row.id, token)
-      .then((data) => setEvents(Array.isArray(data?.events) ? data.events : []))
-      .catch(() => setEvents([]))
-      .finally(() => setDetailLoading(false));
-  };
-
-  const closeDetail = () => {
-    setSelected(null);
-    setEvents([]);
-    setView('graph');
-    setDetailLoading(false);
-  };
-
-  const handleViewChange = (event, next) => {
-    if (next !== null) setView(next);
-  };
-
-  const handleRowKeyDown = (event, row) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      openDetail(row);
-    }
   };
 
   if (!canView || forbidden) return null;
@@ -269,27 +225,12 @@ export default function EmployeeRequestsTab({ entityData }) {
                       <TableCell sx={{ fontWeight: 600 }}>{t('colRequestsStatus')}</TableCell>
                       <TableCell sx={{ fontWeight: 600 }}>{t('colRequestsCreated')}</TableCell>
                       <TableCell sx={{ fontWeight: 600 }}>{t('colRequestsResolved')}</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }} align="right">{t('colActions')}</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {paginated.map((row) => (
-                      <TableRow
-                        key={row.id}
-                        hover
-                        onClick={() => openDetail(row)}
-                        onKeyDown={(event) => handleRowKeyDown(event, row)}
-                        role="button"
-                        tabIndex={0}
-                        aria-label={t('requestsOpenRequest', { ref: row.reference_no || row.id })}
-                        sx={{
-                          cursor: 'pointer',
-                          '&:focus-visible': {
-                            outline: '2px solid',
-                            outlineColor: 'primary.main',
-                            outlineOffset: -2,
-                          },
-                        }}
-                      >
+                      <TableRow key={row.id} hover>
                         <TableCell sx={{ fontSize: '0.75rem' }} dir="ltr">
                           {row.reference_no || '—'}
                         </TableCell>
@@ -308,6 +249,20 @@ export default function EmployeeRequestsTab({ entityData }) {
                         </TableCell>
                         <TableCell sx={{ fontSize: '0.75rem' }}>
                           {formatDate(row.resolved_at, i18n.language)}
+                        </TableCell>
+                        <TableCell align="right">
+                          <Tooltip title={t('requestView')}>
+                            <IconButton
+                              size="small"
+                              color="primary"
+                              aria-label={t('requestsOpenRequest', { ref: row.reference_no || row.id })}
+                              onClick={() => navigate(`/team/${row.id}`, {
+                                state: { from: 'people-employee', employeeId: empId },
+                              })}
+                            >
+                              <VisibilityRounded fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -330,55 +285,6 @@ export default function EmployeeRequestsTab({ entityData }) {
           )}
         </>
       )}
-
-      {/* Detail dialog (conditionally rendered content = lazy-loaded) */}
-      <SystemDialog
-        open={Boolean(selected)}
-        title={t('requestsDetailTitle')}
-        onClose={closeDetail}
-        onCancel={closeDetail}
-        cancelLabel={t('requestsClose')}
-        width={780}
-        height={660}
-      >
-        {selected ? (
-          <Stack spacing={1.5}>
-            <SummaryCard item={selected} />
-            <Stack direction="row" justifyContent="flex-end">
-              <ToggleButtonGroup
-                value={view}
-                exclusive
-                size="small"
-                onChange={handleViewChange}
-                aria-label={t('requestsViewToggleLabel')}
-              >
-                <ToggleButton value="stepper">{t('requestsViewStepper')}</ToggleButton>
-                <ToggleButton value="graph">{t('requestsViewGraph')}</ToggleButton>
-              </ToggleButtonGroup>
-            </Stack>
-            {view === 'stepper' ? (
-              <ApproverChainStepper
-                chain={selected.approver_chain}
-                currentStep={selected.current_step}
-                status={selected.status}
-              />
-            ) : (
-              <WorkflowGraph
-                chain={selected.approver_chain}
-                currentStep={selected.current_step}
-                status={selected.status}
-              />
-            )}
-            {detailLoading ? (
-              <Stack spacing={1}>
-                <Skeleton variant="rounded" height={64} />
-              </Stack>
-            ) : (
-              <RequestTimeline events={events} />
-            )}
-          </Stack>
-        ) : null}
-      </SystemDialog>
     </Box>
   );
 }

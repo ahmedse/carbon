@@ -31,6 +31,7 @@ import { useExecuteMode } from './useExecuteMode';
 import { useDraftPersistence } from '../hooks/useDraftPersistence';
 import ContextChipRow from './ContextChipRow';
 import { useTranslation } from 'react-i18next';
+import PulseProcessSwitch from './PulseProcessSwitch';
 
 const PLACEHOLDER_KEYS = {
   working: 'placeholderWorking',
@@ -151,6 +152,8 @@ function AIInputBar({
   conversationId,
   seedDraft = null,
   onSeedDraftConsumed,
+  process = 'ask',
+  onProcessChange = null,
 }) {
   const { t } = useTranslation('ai');
   const { token } = useAuth();
@@ -484,7 +487,9 @@ function AIInputBar({
     ? t(PLACEHOLDER_KEYS.working)
     : conversationStatus === 'needs_input'
       ? t(PLACEHOLDER_KEYS.needs_input)
-      : t(PLACEHOLDER_KEYS.default);
+      : process === 'plan'
+        ? t('placeholderPlan')
+        : t(PLACEHOLDER_KEYS.default);
 
   const popperOpen = stage !== null && (
     (stage === 'kind' && visibleKinds.length > 0) ||
@@ -496,19 +501,11 @@ function AIInputBar({
       ref={rootRef}
       sx={{
         borderTop: 1,
-        borderLeft: executeMode ? 1 : 0,
-        borderRight: executeMode ? 1 : 0,
-        borderBottom: executeMode ? 1 : 0,
-        borderColor: executeMode ? 'warning.main' : 'divider',
+        borderColor: 'divider',
         bgcolor: 'background.paper',
       }}
+      data-pulse-mode={process}
     >
-
-
-      {/* Composer chrome — W5-A (ADR-0014): the Ask/Agent mode selector moved
-          to the workspace header. The composer is mode-agnostic now; the
-          safety contract lives in AIWorkspaceHeader. */}
-
       {/* Persistent context chips — attached mentions survive across turns
           until explicitly removed (restore context). */}
       <ContextChipRow
@@ -518,12 +515,49 @@ function AIInputBar({
       />
 
       <Box
+        data-testid="composer-process"
+        sx={{
+          mx: 1.5,
+          mb: 1.25,
+          mt: 1,
+          border: 1,
+          borderColor: 'divider',
+          borderRadius: 1,
+          bgcolor: 'background.paper',
+          overflow: 'hidden',
+        }}
+      >
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            px: 1,
+            pt: 0.75,
+            pb: 0.25,
+          }}
+        >
+          <PulseProcessSwitch
+            variant="thread"
+            value={process}
+            onChange={onProcessChange || undefined}
+          />
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ fontSize: '0.625rem', flex: 1, minWidth: 0 }}
+            noWrap
+          >
+            {t(process === 'plan' ? 'composerPlanHint' : 'composerAskHint')}
+          </Typography>
+        </Box>
+      <Box
         sx={{
           display: 'flex',
           alignItems: 'flex-end',
           gap: 0.5,
-          px: 1.5,
-          py: 1,
+          px: 0.5,
+          pb: 0.5,
         }}
       >
         <Box sx={{ position: 'relative', flex: 1, minWidth: 0 }}>
@@ -531,23 +565,24 @@ function AIInputBar({
           inputRef={inputRef}
           fullWidth
           multiline
-          minRows={1}
-          maxRows={maxRows}
+          minRows={3}
+          maxRows={Math.min(8, maxRows)}
           size="small"
           value={value}
           onChange={handleChange}
           placeholder={placeholder}
           onKeyDown={handleKeyDown}
+          variant="standard"
+          InputProps={{ disableUnderline: true }}
           sx={{
-            '& .MuiOutlinedInput-root': {
-              fontSize: '0.8125rem',
-              bgcolor: 'action.hover',
+            '& .MuiInputBase-root': {
+              fontSize: '0.9375rem',
+              lineHeight: 1.7,
+              px: 1,
+              py: 0.5,
             },
-            // Scroll within the composer once it reaches maxRows (Copilot-style)
-            '& .MuiOutlinedInput-input': {
+            '& .MuiInputBase-input': {
               overflowY: 'auto',
-              // Per-field bidi: Arabic (or mixed) briefs align correctly even when
-              // the shell locale is still EN/LTR (and vice versa).
               unicodeBidi: 'plaintext',
             },
           }}
@@ -666,6 +701,7 @@ function AIInputBar({
         </span>
         </Tooltip>
       </Box>
+      </Box>
     </Box>
   );
 }
@@ -680,6 +716,8 @@ AIInputBar.propTypes = {
   conversationId: PropTypes.string,
   seedDraft: PropTypes.string,
   onSeedDraftConsumed: PropTypes.func,
+  process: PropTypes.oneOf(['ask', 'plan']),
+  onProcessChange: PropTypes.func,
 };
 
 export default AIInputBar;

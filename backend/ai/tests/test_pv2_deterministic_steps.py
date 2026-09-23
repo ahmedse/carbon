@@ -152,6 +152,17 @@ def test_mustache_and_binding_helpers():
     assert is_bound_catalog_read(
         "call_host_api", {"api_name": "get_my_profile"}, [],
     ) is True
+    for api in (
+        "get_my_leave_balance",
+        "list_my_loans",
+        "list_my_attendance_permissions",
+    ):
+        assert is_bound_catalog_read("call_host_api", {"api_name": api}, []) is True
+        assert is_bound_catalog_read(
+            "call_host_api",
+            {"api_name": api},
+            [{"name": api, "method": "GET", "path": "/carbon-api/people/me/x/"}],
+        ) is True
 
 
 def test_step_template_ar_en_snapshots():
@@ -373,6 +384,138 @@ async def test_partial_binding_still_drafts():
     assert "mutation_not_confirmed" in result.critic_flags
     dw.draft.assert_called_once()
     # Partial path still pauses before execute — observe not reached.
+    observe.assert_not_called()
+
+
+async def _run_bound_read_step(*, api_name: str, payload, language: str = "en"):
+    """Drive a bound ESS lookup through ``_execute_step``."""
+    cfg = _nibras_cfg()
+    loop = ReActLoop.__new__(ReActLoop)
+    loop.db = None
+    loop._build_step_prompt = MagicMock(return_value="prompt")  # noqa: SLF001
+    observe = AsyncMock(return_value=None)
+    loop._observe = observe  # noqa: SLF001
+
+    dw = AsyncMock()
+    dw.draft = AsyncMock(
+        return_value=SimpleNamespace(
+            text="LLM should not run",
+            tool_calls=[],
+            tokens_used=99,
+        )
+    )
+    cw = AsyncMock()
+    cw.review = AsyncMock(
+        return_value=SimpleNamespace(verdict="pass", flags=[], veto_reason=None)
+    )
+
+    host_row = {
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": api_name},
+        "result": json.dumps(payload, default=str),
+        "summary": "host ignored when restatement present",
+    }
+    ex = AsyncMock()
+    ex.executor = None
+    ex.execute = AsyncMock(
+        return_value=SimpleNamespace(completed_tools=[host_row])
+    )
+    step = PlanStep(
+        step_id=0,
+        intent="Check before submit",
+        tool_name="call_host_api",
+        tool_args={"api_name": api_name, "explanation": "lookup"},
+        is_mutation=False,
+    )
+    result = await loop._execute_step(  # noqa: SLF001
+        step=step,
+        dw=dw,
+        cw=cw,
+        ex=ex,
+        instance_id="nibras",
+        conversation_id="c",
+        user_message="submit",
+        system_prompt="sp",
+        conversation_history=None,
+        instance_config=cfg,
+        user_info={"language": language},
+        retrieval=RetrievalResult(),
+        progress_callback=None,
+        stream_callback=None,
+        dry_run=False,
+        confirmation_token=None,
+        step_contexts={},
+        host_user_id="u1",
+    )
+    return result, dw, observe
+
+
+def test_render_bound_catalog_read_uses_host_fields_only():
+    from ai.engine.cognition.plan.export_bind import render_bound_catalog_read
+
+    leave = render_bound_catalog_read(
+        {"result": json.dumps([
+            {"leave_type": "annual", "entitled": 20, "remaining": 18},
+            {"leave_type": "sick", "entitled": 10, "remaining": 10},
+        ])},
+        "get_my_leave_balance",
+        "en",
+    )
+    assert leave and "annual remaining 18" in leave and "sick remaining 10" in leave
+    assert "21" not in leave
+
+    empty_loans = render_bound_catalog_read(
+        {"result": json.dumps([])},
+        "list_my_loans",
+        "en",
+    )
+    assert empty_loans == "No existing loans."
+
+    loans_ar = render_bound_catalog_read(
+        {"result": [{"loan_type": {"code": "personal"}, "principal": 551, "term_months": 12, "status": "submitted"}]},
+        "list_my_loans",
+        "ar",
+    )
+    assert loans_ar and "551" in loans_ar and "قروض" in loans_ar
+
+    perms = render_bound_catalog_read(
+        {"result": [{"permission_type": "official", "hours": 2, "date": "2027-09-21"}]},
+        "list_my_attendance_permissions",
+        "en",
+    )
+    assert perms and "official" in perms and "2" in perms and "2027-09-21" in perms
+
+
+@pytest.mark.parametrize(
+    "api_name,payload,needle",
+    [
+        (
+            "get_my_leave_balance",
+            [{"leave_type": "annual", "entitled": 20, "remaining": 18}],
+            "18",
+        ),
+        (
+            "list_my_loans",
+            [{"loan_type": "personal", "principal": 551, "term_months": 12, "status": "draft"}],
+            "551",
+        ),
+        (
+            "list_my_attendance_permissions",
+            [],
+            "No existing attendance permissions",
+        ),
+    ],
+)
+async def test_bound_lookup_zero_llm_and_host_restatement(api_name, payload, needle):
+    result, dw, observe = await _run_bound_read_step(
+        api_name=api_name, payload=payload, language="en",
+    )
+    assert result.llm_calls == 0
+    assert result.error is None
+    assert result.paused is False
+    assert result.executed is True
+    assert needle in (result.draft_text or "")
+    dw.draft.assert_not_called()
     observe.assert_not_called()
 
 

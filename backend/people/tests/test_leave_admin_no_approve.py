@@ -3,6 +3,7 @@ from datetime import date
 
 import pytest
 
+from correspondence.models import Correspondence
 from mdm.models import OrgUnit
 from people.models import Employee, LeaveRecord
 from people.tests.ref_helpers import ensure_ref
@@ -102,3 +103,33 @@ def test_patch_non_terminal_status_ok(leave_admin_ctx):
     record.refresh_from_db()
     assert str(record.days) == '4.00'
     assert record.status == 'submitted'
+
+
+@pytest.mark.django_db
+def test_patch_refused_when_request_exists(leave_admin_ctx, create_user):
+    client = leave_admin_ctx['client']
+    record = leave_admin_ctx['record']
+    requester = create_user('leave_requester_gov')
+    Correspondence.objects.create(
+        reference_no='CRS-LEAVE-GOV',
+        corr_type=ensure_ref('correspondence_type', 'leave_request'),
+        subject_type='people.LeaveRecord',
+        subject_id=record.pk,
+        org_unit=record.employee.org_unit,
+        requester=requester,
+        title='Annual leave',
+        status='approved',
+    )
+    resp = client.patch(
+        f'{LEAVE_URL}{record.pk}/',
+        {'days': '9.00', 'start_date': '2026-11-01', 'end_date': '2026-11-15'},
+        format='json',
+    )
+    assert resp.status_code == 409, resp.content
+    assert resp.json().get('code') == 'request_governed_by_correspondence'
+    record.refresh_from_db()
+    assert str(record.days) == '5.00'
+
+    deleted = client.delete(f'{LEAVE_URL}{record.pk}/')
+    assert deleted.status_code == 409, deleted.content
+    assert LeaveRecord.objects.filter(pk=record.pk).exists()

@@ -182,6 +182,7 @@ const PEOPLE_ITEM_ICONS = {
   'People':         GroupsIcon,
   'Positions':      WorkIcon,
   'Employees':      BadgeIcon,
+  'Requests':       FactCheckIcon,
   'Attendance':     AccessTimeFilledIcon,
   'Leave':          EventAvailableIcon,
   'Certifications': WorkspacePremiumIcon,

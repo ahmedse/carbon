@@ -66,7 +66,7 @@ describe('DiscoveryComposer scope gate', () => {
 
     expect(await screen.findByTestId('scope-route-card')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Create a leave-request plan/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Plan now' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Make this a task' })).not.toBeInTheDocument();
   });
 
   it('leave_request creates an Agent plan and stays off Chat', async () => {
@@ -197,7 +197,7 @@ describe('DiscoveryComposer scope gate', () => {
     expect(onPlanReady).toHaveBeenCalled();
   });
 
-  it('loan process-dial plan_ready skips clarifying UI', async () => {
+  it('loan process-dial plan_ready asks before opening the task', async () => {
     const onPlanReady = vi.fn();
     startDiscoveryPlan.mockResolvedValue({
       id: 'plan-loan-1',
@@ -218,12 +218,13 @@ describe('DiscoveryComposer scope gate', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'send-brief' }));
 
-    await waitFor(() => {
-      expect(onPlanReady).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 'plan-loan-1', status: 'pending_approval' }),
-      );
-    });
+    expect(await screen.findByTestId('convert-task-card')).toBeInTheDocument();
+    expect(onPlanReady).not.toHaveBeenCalled();
     expect(screen.queryByTestId('scope-route-card')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Plan now' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Make this a task' }));
+    expect(onPlanReady).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'plan-loan-1', status: 'pending_approval' }),
+    );
   });
 });

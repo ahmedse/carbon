@@ -830,6 +830,31 @@ def _step_tool_output_fields(tool_output_json):
         return ui, ui.get("_output_type") or _infer_output_type(ui)
     return ui, _infer_output_type(tool_output_json)
 
+
+def _public_agreement_turns(turns):
+    """Chat that produced the task. Safe to show after discovery has finished."""
+    if not isinstance(turns, list):
+        return []
+    public = []
+    for turn in turns:
+        if not isinstance(turn, dict):
+            continue
+        reply = turn.get("reply")
+        public.append({
+            "question": str(turn.get("question") or "")[:2000],
+            "reply": None if reply in (None, "") else str(reply)[:2000],
+        })
+    return public
+
+
+def _public_heal_note(tool_output_json):
+    """Operator sentence from a read-only self-heal. Empty when there was none."""
+    data = tool_output_json if isinstance(tool_output_json, dict) else {}
+    heal = data.get("self_heal")
+    if not isinstance(heal, dict):
+        return ""
+    return str(heal.get("note") or "").strip()[:280]
+
 class PlansService:
     """Plan lifecycle: create → review → approve → run → consent → ledger."""
 
@@ -1553,6 +1578,9 @@ class PlansService:
                 if run.status == STATUS_DISCOVERING
                 else None
             ),
+            "agreement_turns": _public_agreement_turns(
+                plan_json.get("discovery_turns")
+            ),
             "created_at": run.created_at.isoformat() if run.created_at else None,
             "updated_at": run.updated_at.isoformat() if run.updated_at else None,
             "completed_at": run.completed_at.isoformat() if run.completed_at else None,
@@ -1584,6 +1612,11 @@ class PlansService:
                     ),
                     "consent_slots": _consent_slots_for_step(s, run.host_user_id),
                     "error": s.error,
+                    "retry_count": int(s.retry_count or 0),
+                    "is_mutation": bool(
+                        (step_meta.get(s.step_index) or {}).get("is_mutation")
+                    ),
+                    "heal_note": _public_heal_note(s.tool_output_json),
                     "tool_output": _step_tool_output_fields(s.tool_output_json)[0],
                     "output_type": _step_tool_output_fields(s.tool_output_json)[1],
                     "artifacts": [

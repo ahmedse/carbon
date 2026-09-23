@@ -22,7 +22,7 @@ describe('AgentTaskPicker', () => {
   it('renders a Task select (not a long list)', () => {
     render(<AgentTaskPicker plans={plans} selectedId="" onSelect={vi.fn()} />);
     expect(screen.getByLabelText('Task')).toBeInTheDocument();
-    expect(screen.getByText(/New \/ pick one/i)).toBeInTheDocument();
+    expect(screen.getByText(/Pick a task/i)).toBeInTheDocument();
     expect(screen.queryByText('My tasks')).not.toBeInTheDocument();
   });
 

@@ -125,10 +125,28 @@ _TASK_CREATION_MARKERS: tuple[str, ...] = (
 
 
 def _wants_explicit_task_creation(utterance: str) -> bool:
-    """True when the user wants a reviewable Agent plan, not a silent skill run."""
+    """True when the user wants a reviewable Agent plan, not a silent skill run.
+
+    Signals (deterministic):
+    - "make this a task" phrasing on the user's words;
+    - the composer dial was **Plan** (``[Pulse mode: Plan.`` prefix) — the
+      header promises "Pulse drafts a plan", so draft one.
+
+    Composite briefs (condition / parallel) do **not** force plan_task by
+    themselves — Ask and Plan are separate sessions, and Ask must never
+    create a Tasks plan. The slot-filler still steps aside for composites
+    so Chat does not answer a guarded brief with "which loan type?".
+    """
     if not utterance:
         return False
-    lower = utterance.lower()
+    from ai.engine.cognition.plan.process_dial import (
+        is_plan_dial_turn,
+        strip_pulse_mode_prefix,
+    )
+
+    if is_plan_dial_turn(utterance):
+        return True
+    lower = strip_pulse_mode_prefix(utterance).lower()
     return any(m in lower for m in _TASK_CREATION_MARKERS)
 
 

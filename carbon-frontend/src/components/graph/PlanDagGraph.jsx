@@ -49,7 +49,6 @@ import {
 import { layoutExecutionGraph } from '../../utils/planGraph';
 import { agentRoleLabel, stepStatusMeta } from '../../shell/aiTaskStatus';
 import { GraphNodeForeign } from './GraphNodeLabel';
-import { dominantDir } from './graphText';
 
 /** Wrap intent for graph cards — prefer readable journey labels over `…` soup. */
 export function wrapTitleLines(raw, maxPerLine, maxLines = 2) {
@@ -454,19 +453,9 @@ export default function PlanDagGraph({
     if (edge) setPaneOpen(true);
   }, []);
 
-  // Structure / execution node interiors — card boxes with clear accent bar.
+  // Flat cards: words only. The frame is a 1px outline drawn by the canvas.
   const renderNode = useCallback(
     (n) => {
-      const shape = resolvePlanNodeShape(n);
-      const isDiamond = shape === 'diamond' || shape === 'diamondPlus';
-      const isCircle = shape === 'circle' || shape === 'doubleCircle' || shape === 'thickCircle';
-      const center = isDiamond || isCircle;
-      const roleKey = String(n.agent_role || 'orchestrator').toLowerCase();
-      const accentToken = PLAN_ROLE_ACCENT[roleKey] || 'primary';
-      const accent = structure
-        ? (theme.palette[accentToken]?.main || phaseColor(n.phase_id) || theme.palette.primary.main)
-        : colorFor(n.status);
-
       const rawTitle = String(n.label || `Step ${n.id}`);
       const isGateway = n.is_gateway
         || ['choice', 'parallel', 'observe', 'map', 'loop', 'wait', 'fail', 'succeed'].includes(n.node_type);
@@ -476,29 +465,22 @@ export default function PlanDagGraph({
           : (agentRoleLabel(n.agent_role || 'orchestrator') || n.phase_name || ''))
         : (isGateway ? String(n.node_type || 'gateway') : '');
       const statusLabel = structure ? '' : statusWord(n.status);
-      const bar = structure ? accent : colorFor(n.status);
-      const rtl = dominantDir(rawTitle) === 'rtl';
       return (
-        <>
-          {!center ? (
-            <rect x={rtl ? n.w - 4 : 0} y={0} width={4} height={n.h} fill={bar} />
-          ) : null}
-          <GraphNodeForeign
-            width={n.w}
-            height={n.h}
-            title={rawTitle}
-            meta={meta}
-            status={statusLabel}
-            statusColor={bar}
-            center={center}
-            fontFamily={theme.typography?.fontFamily}
-            color={theme.palette.text.primary}
-            tip={rawTitle}
-          />
-        </>
+        <GraphNodeForeign
+          width={n.w}
+          height={n.h}
+          title={rawTitle}
+          meta={meta}
+          status={statusLabel}
+          statusColor={theme.palette.text.secondary}
+          center
+          fontFamily={theme.typography?.fontFamily}
+          color={theme.palette.text.primary}
+          tip={rawTitle}
+        />
       );
     },
-    [colorFor, theme, structure, phaseColor, statusWord],
+    [theme, structure, statusWord],
   );
 
   const nodeAriaLabel = useCallback(
@@ -913,8 +895,8 @@ export default function PlanDagGraph({
         fill={fill}
         direction={direction || 'tb'}
         fitMode="contain"
-        // Never auto-upscale — meet×zoom>1 blew compact plans into one giant card.
-        fitZoomCeil={1.75}
+        // Stay at card size. Scaling up to fill the rail turned a two-step plan into giant boxes.
+        fitZoomCeil={1}
       />
     </>
   );

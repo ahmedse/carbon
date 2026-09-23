@@ -146,7 +146,13 @@ def render_plan_status(state: Any, user_message: str = "") -> str:
     if lang == "ar":
         have = "لدي: " + "؛ ".join(bits) if bits else "لدي طلبك."
         more = f" {extra}." if extra else ""
-        return f"{have}. الحالة: {label}.{more}".strip()
+        text = f"{have}. الحالة: {label}.{more}".strip()
+        from ai.engine.cognition.turn.next_step import append_next_step
+
+        return append_next_step(text, state, user_message)
     have = "I have: " + "; ".join(bits) if bits else "I have your request."
     more = f" {extra}." if extra else ""
-    return f"{have}. It is {label}.{more}".strip()
+    text = f"{have}. It is {label}.{more}".strip()
+    from ai.engine.cognition.turn.next_step import append_next_step
+
+    return append_next_step(text, state, user_message)

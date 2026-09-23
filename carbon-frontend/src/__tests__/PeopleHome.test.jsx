@@ -35,9 +35,10 @@ describe('PeopleHome (NSR-6A Path H)', () => {
     navigateMock.mockClear();
   });
 
-  it('exports the five go-live module paths (no attendance/rotation)', () => {
+  it('exports the go-live module paths (no attendance/rotation)', () => {
     expect(PEOPLE_HOME_MODULES.map((m) => m.path)).toEqual([
       '/people/employees',
+      '/people/requests',
       '/people/leave',
       '/people/payroll',
       '/people/policies',
@@ -59,6 +60,7 @@ describe('PeopleHome (NSR-6A Path H)', () => {
     }
 
     expect(screen.getByText('Employees')).toBeInTheDocument();
+    expect(screen.getByText('Requests')).toBeInTheDocument();
     expect(screen.getByText('Leave')).toBeInTheDocument();
     expect(screen.getByText('Payroll Runs')).toBeInTheDocument();
     expect(screen.getByText('Policies')).toBeInTheDocument();

@@ -179,6 +179,29 @@ describe('EnvelopeMessage — full envelope', () => {
     expect(screen.queryByText('No data')).not.toBeInTheDocument();
   });
 
+  it('omits single-point headcount bars', () => {
+    render(
+      <EnvelopeMessage
+        envelope={{
+          headline: 'Company has 555 active employees.',
+          prose: ['Headcount only — no distribution.'],
+          charts: [
+            {
+              chart_type: 'bar',
+              title: 'Total active employees',
+              series: [{ name: 'Total', data: [['Total active employees', 555]] }],
+            },
+          ],
+          sources: [{ tool: 'aggregate_entity', rows_returned: 1, truncated: false }],
+        }}
+        fallbackContent=""
+      />,
+    );
+
+    expect(screen.getByText(/555 active employees/)).toBeInTheDocument();
+    expect(screen.queryByTestId('envelope-chart')).not.toBeInTheDocument();
+  });
+
   it('renders pie and line chart types without crashing', () => {
     render(
       <EnvelopeMessage

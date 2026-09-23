@@ -306,14 +306,17 @@ def _last_result_entries(
     allowed = _allowed_org_units(scope)
     entries: list[dict] = []
     for item in completed_tools or []:
-        if not isinstance(item, dict) or item.get("error"):
+        if not isinstance(item, dict):
             continue
         data = _parse(item.get("result"))
+        unauthorized = isinstance(data, dict) and bool(data.get("unauthorized"))
+        if item.get("error") and not unauthorized:
+            continue
         # S-TRACE-01 synthetic retrieval step ({"count": n}) is not a tool fact.
         if isinstance(data, dict) and set(data) == {"count"}:
             continue
         digest = build_tool_digest([item], scope)
-        if not digest:
+        if not digest and not unauthorized:
             continue
         args = item.get("tool_args") if isinstance(item.get("tool_args"), dict) else {}
         call_id = item.get("tool_call_id") or ""
@@ -321,9 +324,20 @@ def _last_result_entries(
             "turn": turn,
             "tool": str(item.get("tool_name") or ""),
             "api": str(args.get("api_name") or ""),
-            "digest": digest,
+            "digest": digest or "resolve_entity: unauthorized=true",
             "ref": f"tool_call:{call_id}" if call_id else "",
         }
+        if unauthorized:
+            entry["unauthorized"] = True
+            cap = data.get("capability")
+            if cap:
+                entry["capability"] = str(cap)
+            query = data.get("query") or args.get("query")
+            if query:
+                entry["query"] = str(query).strip()[:80]
+            msg = data.get("message")
+            if msg:
+                entry["message"] = str(msg).strip()[:200]
         entries.append(_tag_org_units(entry, _result_org_units(data, allowed)))
     return entries
 

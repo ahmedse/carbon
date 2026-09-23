@@ -1,7 +1,8 @@
 # ADR-0047 — Pulse v2: unified ConversationState, ContextPack and one decision per turn
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-22
+- **Accepted:** 2026-09-23 — G5 96/96 + 6B soak 5/5 (`PV2-6B-nights.json`). Night 2026-09-23 FAIL stays; trailing PASS 2026-09-26–30.
 - **Deciders:** Master Architect (Pulse seat) + Nibras QA
 - **Area:** cross-cutting (Pulse engine · Chat/Agent continuity · eval gates)
 - **Extends:** ADR-0014 (Chat/Agent split), ADR-0043 (Agent cockpit), ADR-0046 (Chat never stages host writes),

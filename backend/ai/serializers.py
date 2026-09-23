@@ -107,6 +107,12 @@ class SendMessageSerializer(serializers.Serializer):
     # Intelligence.send_message (never a 400; the assistant responds helpfully).
     content = serializers.CharField(required=True, allow_blank=True, trim_whitespace=True)
     model = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
+    pulse_mode = serializers.ChoiceField(
+        choices=["ask", "plan"],
+        required=False,
+        allow_null=True,
+        default=None,
+    )
 
 
 class EditMessageSerializer(serializers.Serializer):

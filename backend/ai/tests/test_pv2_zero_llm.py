@@ -407,6 +407,29 @@ def test_resolve_grounded_does_not_invent_job():
     assert deny and "Not authorized" in deny and "Senior Analyst" not in deny
 
 
+def test_directory_deny_replays_same_person_zero_llm():
+    from ai.engine.cognition.turn.zero_llm import try_zero_llm_answer
+
+    deny = [{
+        "tool": "resolve_entity",
+        "unauthorized": True,
+        "query": "Reena",
+        "capability": "people:view",
+        "message": "Not authorized to look up other employees (people:view required).",
+        "digest": "resolve_entity: unauthorized=true, query=Reena",
+    }]
+    her = try_zero_llm_answer("What is her position?", last_results=deny)
+    assert her and her["gate"] == "directory_deny"
+    assert "people:view" in her["text"]
+    assert "Senior Analyst" not in her["text"]
+    back = try_zero_llm_answer("Back to Reena - is she a manager?", last_results=deny)
+    assert back and back["gate"] == "directory_deny"
+    salman = try_zero_llm_answer("Now tell me about Salman", last_results=deny)
+    assert salman is None
+    mine = try_zero_llm_answer("What is my department?", last_results=deny)
+    assert mine is None or mine.get("gate") != "directory_deny"
+
+
 def test_stated_full_name_is_a_fact():
     facts = extract_stated_facts("Correct. My name is Mohamed Hassan")
     assert facts == [{"key": "name", "value": "Mohamed Hassan"}]

@@ -49,6 +49,7 @@ export default {
       // Routes remain in App.jsx for deep-link / legacy URL access (not promised).
       { type: 'group', label: 'Workforce' },
       { label: 'Employees', path: '/people/employees', role: '*' },
+      { label: 'Requests', path: '/people/requests', role: '*' },
       { label: 'Leave', path: '/people/leave', role: '*' },
       { label: 'Certifications', path: '/people/certifications', role: '*' },
       { type: 'divider' },

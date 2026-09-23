@@ -18,6 +18,7 @@ import {
 } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
 import { advanceDiscovery, createPlan, finalizeDiscovery, startDiscoveryPlan } from '../api/aiWorkspace';
@@ -135,11 +136,13 @@ function DiscoveryComposer({
 }) {
   const { token } = useAuth();
   const { notifyFromError } = useNotification();
+  const { t } = useTranslation('ai');
 
   const [busy, setBusy] = useState(false);
   const [planId, setPlanId] = useState(null);
   const [turns, setTurns] = useState([]);
   const [readyPlan, setReadyPlan] = useState(null);
+  const [held, setHeld] = useState(false);
   const [route, setRoute] = useState(null);
   const [lastBrief, setLastBrief] = useState('');
   const seedConsumedRef = useRef(null);
@@ -157,9 +160,20 @@ function DiscoveryComposer({
     setPlanId(null);
     setTurns([]);
     setReadyPlan(null);
+    setHeld(false);
     setRoute(null);
     setBusy(false);
     setLastBrief('');
+  };
+
+  const openTask = (plan, sourceTurns) => {
+    const agreed = Array.isArray(sourceTurns) ? sourceTurns : turns;
+    onPlanReady?.({
+      ...plan,
+      agreement_turns: plan?.agreement_turns?.length ? plan.agreement_turns : agreed,
+      brief: plan?.brief || statedBrief(agreed, lastBrief),
+    });
+    reset();
   };
 
   const handlePlanReady = (plan) => {
@@ -187,11 +201,17 @@ function DiscoveryComposer({
     if (applyRoutePayload(started, text)) {
       return;
     }
-    // ESS process dials (loan / attendance) skip clarifying and land a plan.
+    // A finished plan stays in this chat until the user makes it a task.
     if (started?.status === 'plan_ready' && started.plan) {
       setLastBrief(text);
+      setPlanId(started.id || started.plan.id || null);
+      setTurns(
+        Array.isArray(started.turns) && started.turns.length
+          ? started.turns
+          : [{ question: '', reply: text }],
+      );
+      setHeld(false);
       handlePlanReady(started.plan);
-      onPlanReady?.(started.plan);
       return;
     }
     setPlanId(started.id);
@@ -234,7 +254,14 @@ function DiscoveryComposer({
 
     setBusy(true);
     try {
-      if (!planId) {
+      if (readyPlan) {
+        const combined = [statedBrief(turns, lastBrief), text].filter(Boolean).join('\n');
+        setReadyPlan(null);
+        setHeld(false);
+        setPlanId(null);
+        setTurns([]);
+        await startWithBrief(combined);
+      } else if (!planId) {
         await startWithBrief(text);
       } else {
         const result = await advanceDiscovery(token, planId, text);
@@ -262,7 +289,7 @@ function DiscoveryComposer({
         return;
       }
       if (result.status === 'plan_ready' && result.plan) {
-        handlePlanReady(result.plan);
+        openTask(result.plan, Array.isArray(result.turns) ? result.turns : turns);
       }
     } catch (err) {
       notifyFromError(err, 'Could not build the plan');
@@ -288,8 +315,7 @@ function DiscoveryComposer({
           brief,
           conversation_id: conversationId || '',
         });
-        onPlanReady?.(plan);
-        reset();
+        openTask(plan, turns);
       } catch (err) {
         notifyFromError(err, 'Could not create the leave plan');
       } finally {
@@ -314,34 +340,42 @@ function DiscoveryComposer({
     }
   };
 
-  if (readyPlan) {
+  if (readyPlan && !held) {
+    const agreed = turnsToMessages(turns);
     return (
-      <Paper variant="outlined" sx={{ p: 1.25, bgcolor: 'background.paper', borderColor: 'success.main' }}>
-        <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 1 }}>
+      <Paper variant="outlined" data-testid="convert-task-card" sx={{ p: 1.25, bgcolor: 'background.paper', borderColor: 'success.main' }}>
+        {agreed.length > 0 && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, mb: 1 }}>
+            {agreed.map((msg) => (
+              <AIMessageBubble key={msg.id} message={msg} />
+            ))}
+          </Box>
+        )}
+        <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.5 }}>
           <CheckCircleOutlineIcon sx={{ fontSize: 16, color: 'success.main' }} />
           <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>
-            Plan ready — review below
+            {t('convertOfferTitle')}
           </Typography>
         </Stack>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, fontSize: '0.6875rem' }}>
+          {t('convertOfferHint')}
+        </Typography>
         <Stack direction="row" spacing={0.75}>
           <Button
             size="small"
             variant="contained"
             startIcon={<ChevronRightIcon sx={{ fontSize: 14 }} />}
-            onClick={() => {
-              onPlanReady?.(readyPlan);
-              reset();
-            }}
+            onClick={() => openTask(readyPlan, turns)}
             sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
           >
-            Review plan
+            {t('convertConfirm')}
           </Button>
           <Button
             size="small"
-            onClick={reset}
+            onClick={() => setHeld(true)}
             sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
           >
-            New task
+            {t('convertKeep')}
           </Button>
         </Stack>
       </Paper>
@@ -381,16 +415,16 @@ function DiscoveryComposer({
       {!gated && (
         <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.75 }}>
           <Typography variant="caption" color="text.secondary" sx={{ flex: 1, fontSize: '0.6875rem' }}>
-            Answer above, or plan with the brief as stated.
+            {t('convertStill')}
           </Typography>
           <Button
             size="small"
             variant="outlined"
-            disabled={planNowDisabled}
-            onClick={handleFinalize}
+            disabled={readyPlan ? busy : planNowDisabled}
+            onClick={() => (readyPlan ? openTask(readyPlan, turns) : handleFinalize())}
             sx={{ fontSize: '0.6875rem', textTransform: 'none', flexShrink: 0 }}
           >
-            Plan now
+            {t('convertConfirm')}
           </Button>
         </Stack>
       )}

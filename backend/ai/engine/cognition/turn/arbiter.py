@@ -4,9 +4,9 @@
 ``Arbiter.decide``. ``shadow`` logs the comparison and keeps the legacy
 label. ``legacy`` is the kill switch: no compare, caller decision stands.
 
-Early-exit bodies still return the single gate that fired. Precedence
-below includes that gate's signal, so a one-gate exit agrees. When several
-gates fired, ``on`` records the higher-precedence decision.
+Pre-S2 gates stage a body. ``pick_staged`` returns the Arbiter winner.
+A loser that also fired does not speak. Precedence includes each gate's
+signal so a one-gate exit agrees with its body.
 """
 from __future__ import annotations
 

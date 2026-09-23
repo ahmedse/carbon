@@ -108,7 +108,7 @@ export function nodeShapePath(shape, w, h) {
     }
     case 'roundedRect':
     default: {
-      const r = 8;
+      const r = 6;
       return [
         `M ${r} 0`,
         `H ${w - r}`,
@@ -153,19 +153,19 @@ export function nodeShapeInnerPath(shape, w, h) {
 export function resolvePlanEdgeStyle(edge) {
   const branch = edge?.branch || 'pending';
   if (branch === 'unchosen') {
-    return { kind: 'conditional-off', dash: '6 4', marker: 'arrowThin', strokeWidth: 1.5 };
+    return { kind: 'conditional-off', dash: '6 4', marker: 'arrowThin', strokeWidth: 1 };
   }
   if (branch === 'chosen') {
-    return { kind: 'conditional-on', marker: 'arrow', strokeWidth: 3 };
+    return { kind: 'conditional-on', marker: 'arrow', strokeWidth: 1.5 };
   }
   if (edge?.is_default) {
-    return { kind: 'default', dash: '2 3', marker: 'arrow', strokeWidth: 2.25 };
+    return { kind: 'default', dash: '2 3', marker: 'arrow', strokeWidth: 1 };
   }
   if (edge?.guard) {
-    return { kind: 'conditional', dash: '5 3', marker: 'arrowOpen', strokeWidth: 2 };
+    return { kind: 'conditional', dash: '5 3', marker: 'arrowOpen', strokeWidth: 1 };
   }
   // Parallel fan-in/out stays solid sequence flow
-  return { kind: 'sequence', marker: 'arrow', strokeWidth: 2.25 };
+  return { kind: 'sequence', marker: 'arrow', strokeWidth: 1.25 };
 }
 
 /** Compact SVG sample for legends (12×12 viewBox). */

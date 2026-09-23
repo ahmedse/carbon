@@ -208,6 +208,31 @@ def test_state_round_trip_has_exact_v1_keys_and_tolerates_missing_keys():
         assert ConversationState.from_dict(junk).is_empty()
 
 
+def test_unauthorized_resolve_is_kept_in_last_results():
+    state = ConversationState()
+    update_state_from_turn(
+        state,
+        decision="answer",
+        user_message="Tell me about Reena",
+        completed_tools=[{
+            "tool_name": "resolve_entity",
+            "tool_args": {"entity_type": "employee", "query": "Reena"},
+            "result": {
+                "found": False,
+                "unauthorized": True,
+                "status_code": 403,
+                "capability": "people:view",
+                "query": "Reena",
+                "message": "Not authorized to look up other employees (people:view required).",
+            },
+        }],
+    )
+    row = next(r for r in state.last_results if r.get("tool") == "resolve_entity")
+    assert row.get("unauthorized") is True
+    assert row.get("query") == "Reena"
+    assert "people:view" in str(row.get("message") or row.get("digest") or "")
+
+
 def test_empty_payslip_reply_seeds_last_results():
     state = ConversationState()
     update_state_from_turn(

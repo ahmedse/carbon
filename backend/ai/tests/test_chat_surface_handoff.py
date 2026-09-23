@@ -36,6 +36,75 @@ def test_chat_surface_is_fail_closed():
     assert is_chat_surface("plan") is False
 
 
+def test_plan_task_cancel_switches_to_plan_not_agent():
+    """Ask/Chat must not invent Open-in-Agent for a cancelled plan_task."""
+    result = build_chat_handoff_result(
+        "plan_task",
+        {"brief": "salary distributions"},
+        user_message="tell me more about the salaries distributions",
+    )
+    assert result["action"] == "chat_handoff"
+    assert result["tool_name"] == "plan_task"
+    actions = result["actions"]
+    assert len(actions) == 1
+    assert actions[0]["type"] == "open_panel"
+    assert actions[0]["panel"] == "plan"
+    assert "Agent" not in (actions[0].get("label") or "")
+    env = result["envelope"] or {}
+    assert "Ask mode" in (env.get("headline") or "")
+    assert env.get("caveats") == []
+
+
+@pytest.mark.asyncio
+async def test_chat_surface_hook_plan_task_is_plan_dial():
+    ctx = HookContext(
+        tool_name="plan_task",
+        tool_args={"brief": "analyze salaries"},
+        instance_id="nibras",
+        surface="chat",
+        user_message="analyze salary distribution",
+    )
+    result = await chat_surface_hook(ctx)
+    assert result.action == "cancel"
+    assert result.payload.get("actions")[0].get("panel") == "plan"
+
+
+@pytest.mark.asyncio
+async def test_chat_surface_hook_plan_task_passes_on_plan_dial():
+    """Plan dial may draft via plan_task — do not show 'Ask mode does not create tasks'."""
+    ctx = HookContext(
+        tool_name="plan_task",
+        tool_args={"brief": "loan 500 for 12 months if no open loan"},
+        instance_id="nibras",
+        surface="chat",
+        user_message=(
+            "[Pulse mode: Plan. Draft a reviewable plan from this thread. "
+            "Ask one missing fact at a time. Do not submit or change host records.]\n\n"
+            "direct deposit"
+        ),
+    )
+    result = await chat_surface_hook(ctx)
+    assert result.action == "pass"
+
+
+@pytest.mark.asyncio
+async def test_chat_surface_hook_still_blocks_host_write_on_plan_dial():
+    """Plan drafts plans; it must not submit host records from Chat surface."""
+    ctx = HookContext(
+        tool_name="call_host_api",
+        tool_args={"api_name": "submit_my_loan", "body": {"principal": 500}},
+        instance_id="nibras",
+        surface="chat",
+        user_message=(
+            "[Pulse mode: Plan. Draft a reviewable plan from this thread.]\n\n"
+            "submit the loan"
+        ),
+    )
+    result = await chat_surface_hook(ctx)
+    assert result.action == "cancel"
+    assert "chat_no_host_mutation" in (result.flags or [])
+
+
 def test_host_mutation_detection():
     assert is_host_mutation_tool(
         "call_host_api",
@@ -245,6 +314,69 @@ def test_chat_narration_never_says_submitting():
         surface="agent",
     )
     assert "Submitting" in agent_msg
+
+
+def test_ask_mode_prefix_is_not_a_mutation_or_task_request():
+    """Regression: Ask hint used to contain 'create a task' and force-handoff
+    clobbered salary/distribution answers with Open-in-Agent."""
+    from ai.engine.cognition.plan.planner import _wants_explicit_task_creation
+    from ai.engine.cognition.turn.intent import _is_mutation_request
+    from ai.intelligence import CarbonIntelligence
+
+    user = "tell me more about the salaries distributions"
+    ask = CarbonIntelligence._prepend_pulse_mode("ask", user)
+    assert _is_mutation_request(ask) is False
+    assert _is_mutation_request(user) is False
+    assert _wants_explicit_task_creation(ask) is False
+    assert _should_force_action(
+        ask,
+        types.SimpleNamespace(text="Here is the salary distribution by band."),
+        types.SimpleNamespace(
+            turn_decision="tool_answer",
+            decision_signals=[],
+            execution=types.SimpleNamespace(completed_tools=[
+                {
+                    "tool_name": "call_host_api",
+                    "result": {"api_name": "analyze_employees", "buckets": []},
+                    "error": None,
+                },
+            ]),
+        ),
+    ) is False
+
+
+def test_chat_handoff_does_not_clobber_successful_reads():
+    from ai.engine_runtime import _has_successful_host_read
+
+    tools = [
+        {
+            "tool_name": "call_host_api",
+            "result": {"ok": True, "rows": 3},
+            "error": None,
+        },
+        {
+            "tool_name": "plan_task",
+            "result": {
+                "action": "chat_handoff",
+                "message": "Ask mode does not create tasks",
+                "envelope": {"headline": "Ask mode does not create tasks", "caveats": []},
+            },
+            "error": None,
+            "guardrail_flags": ["chat_no_host_mutation"],
+        },
+    ]
+    assert _has_successful_host_read(tools) is True
+    assert _chat_handoff_note(tools)  # handoff present in trace
+    # Force path must stay off when a read already succeeded.
+    assert _should_force_action(
+        "[Pulse mode: Ask. Never call plan_task.]\n\ntell me about salaries",
+        types.SimpleNamespace(text="Distribution summary…"),
+        types.SimpleNamespace(
+            turn_decision="tool_answer",
+            decision_signals=[],
+            execution=types.SimpleNamespace(completed_tools=tools),
+        ),
+    ) is False
 
 
 def test_shall_i_submit_prose_triggers_handoff_backstop():

@@ -1,5 +1,5 @@
 // src/shell/__tests__/AgentCockpit.test.jsx
-// ADR-0043 — Plan · Run · Canvas · Output exclusive heroes.
+// Task screens — Now · Picture · Result.
 import React, { useState } from 'react';
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -8,45 +8,56 @@ import AgentCockpit, { defaultCockpitSegment, normalizeCockpitSegment } from '..
 const bodyRenderers = () => ({
   renderPlan: () => <div data-testid="body-plan">PLAN</div>,
   renderRun: () => <div data-testid="body-run">RUN</div>,
-  renderCanvas: () => <div data-testid="body-canvas">CANVAS</div>,
   renderOutput: () => <div data-testid="body-output">OUTPUT</div>,
 });
 
-function Harness({ initial = 'run', ...props }) {
+function Harness({ initial = 'run', resultReady = false, ...props }) {
   const [segment, setSegment] = useState(initial);
   return (
-    <AgentCockpit segment={segment} onSegment={setSegment} {...bodyRenderers()} {...props} />
+    <AgentCockpit
+      segment={segment}
+      onSegment={setSegment}
+      resultReady={resultReady}
+      {...bodyRenderers()}
+      {...props}
+    />
   );
 }
 
 describe('AgentCockpit — segmented control', () => {
-  const SEGMENTS = ['Plan', 'Run', 'Canvas', 'Output'];
-
-  it('renders all four segments', () => {
-    render(<Harness />);
-    for (const label of SEGMENTS) {
-      expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
-    }
+  it('renders Now and Picture; Result only after an outcome', () => {
+    const { rerender } = render(<Harness />);
+    expect(screen.getByRole('button', { name: 'Now' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Picture' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Result' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Journey' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Execution' })).not.toBeInTheDocument();
+    rerender(<Harness resultReady />);
+    expect(screen.getByRole('button', { name: 'Result' })).toBeInTheDocument();
   });
 
   it('shows exactly one hero test-id at a time', () => {
     render(<Harness initial="run" />);
     expect(screen.getByTestId('agent-cockpit-hero-run')).toBeInTheDocument();
     expect(screen.queryByTestId('agent-cockpit-hero-plan')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('agent-cockpit-hero-canvas')).not.toBeInTheDocument();
     expect(screen.queryByTestId('agent-cockpit-hero-output')).not.toBeInTheDocument();
   });
 
   it.each([
-    ['Plan', 'agent-cockpit-hero-plan', 'body-plan'],
-    ['Canvas', 'agent-cockpit-hero-canvas', 'body-canvas'],
-    ['Output', 'agent-cockpit-hero-output', 'body-output'],
-    ['Run', 'agent-cockpit-hero-run', 'body-run'],
+    ['Picture', 'agent-cockpit-hero-plan', 'body-plan'],
+    ['Now', 'agent-cockpit-hero-run', 'body-run'],
   ])('switching to %s renders %s', (label, heroId, bodyId) => {
     render(<Harness initial="plan" />);
     fireEvent.click(screen.getByRole('button', { name: label }));
     expect(screen.getByTestId(heroId)).toBeInTheDocument();
     expect(screen.getByTestId(bodyId)).toBeInTheDocument();
+  });
+
+  it('switching to Result renders output when ready', () => {
+    render(<Harness initial="plan" resultReady />);
+    fireEvent.click(screen.getByRole('button', { name: 'Result' }));
+    expect(screen.getByTestId('agent-cockpit-hero-output')).toBeInTheDocument();
+    expect(screen.getByTestId('body-output')).toBeInTheDocument();
   });
 });
 
@@ -96,6 +107,6 @@ describe('defaultCockpitSegment / normalizeCockpitSegment', () => {
   it('migrates legacy segment ids', () => {
     expect(normalizeCockpitSegment('steps')).toBe('run');
     expect(normalizeCockpitSegment('metrics')).toBe('output');
-    expect(normalizeCockpitSegment('canvas')).toBe('canvas');
+    expect(normalizeCockpitSegment('canvas')).toBe('plan');
   });
 });

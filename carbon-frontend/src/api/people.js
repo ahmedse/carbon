@@ -168,6 +168,11 @@ export function createLeaveRecord(data, token) {
   return apiFetch(`${ROOT}leave-records/`, { method: 'POST', body: data, token });
 }
 
+/** One leave record, including its request link when one exists. */
+export function fetchLeaveRecord(id, token) {
+  return apiFetch(`${ROOT}leave-records/${encodeURIComponent(id)}/`, { token });
+}
+
 /** Update a leave record (partial). */
 export function updateLeaveRecord(id, data, token) {
   return apiFetch(`${ROOT}leave-records/${encodeURIComponent(id)}/`, { method: 'PATCH', body: data, token });
@@ -319,6 +324,11 @@ export function deleteAttendanceRecord(id, token) {
 /** Create an attendance permission. */
 export function createAttendancePermission(data, token) {
   return apiFetch(`${ROOT}attendance-permissions/`, { method: 'POST', body: data, token });
+}
+
+/** One attendance permission, including its request link when one exists. */
+export function fetchAttendancePermission(id, token) {
+  return apiFetch(`${ROOT}attendance-permissions/${encodeURIComponent(id)}/`, { token });
 }
 
 /** Update an attendance permission (partial). */
@@ -527,6 +537,11 @@ export function createLoan(data, token) {
   return apiFetch(`${ROOT}loans/`, { method: 'POST', body: data, token });
 }
 
+/** One loan, including its request link when one exists. */
+export function fetchLoan(id, token) {
+  return apiFetch(`${ROOT}loans/${encodeURIComponent(id)}/`, { token });
+}
+
 /** Update a loan (partial). */
 export function updateLoan(id, data, token) {
   return apiFetch(`${ROOT}loans/${encodeURIComponent(id)}/`, { method: 'PATCH', body: data, token });
@@ -565,6 +580,26 @@ export function updateCertification(id, data, token) {
 /** Delete a certification. */
 export function deleteCertification(id, token) {
   return apiFetch(`${ROOT}certifications/${encodeURIComponent(id)}/`, { method: 'DELETE', token });
+}
+
+/**
+ * People audit register (GET correspondence/).
+ * correspondence:admin sees every request; others stay self-scoped.
+ * Robust to a plain list (pagination off) and `{ count, results }`.
+ */
+export async function fetchRequestAudit(token, params = {}) {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value == null || value === '') return;
+    qs.set(key, String(value));
+  });
+  const suffix = qs.toString() ? `?${qs}` : '';
+  const data = await apiFetch(`correspondence/${suffix}`, { token });
+  if (Array.isArray(data)) {
+    return { items: data, count: data.length };
+  }
+  const items = Array.isArray(data?.results) ? data.results : [];
+  return { items, count: Number(data?.count ?? items.length) };
 }
 
 /** List rotation schedules. */

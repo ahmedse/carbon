@@ -66,7 +66,7 @@ function AgentStage({
     case 'clarify':
       body = clarify || (
         <Typography variant="body2" color="text.secondary" sx={{ py: 1, fontSize: '0.75rem' }}>
-          Answer Pulse above, or click Plan now to build the reviewable plan.
+          Answer Pulse above, or make this a task from what was said.
         </Typography>
       );
       break;
@@ -84,7 +84,7 @@ function AgentStage({
         <Box>
           {idleHint || (
             <Typography variant="body2" color="text.secondary" sx={{ py: 1, fontSize: '0.75rem' }}>
-              Describe an outcome above. Pulse will clarify if needed, then show a plan to approve.
+              Pick a task. New work starts in Chat, in Plan mode.
             </Typography>
           )}
           {clarify}

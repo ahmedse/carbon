@@ -27,6 +27,7 @@ import { NotesProvider, useNotes } from '../notes/NotesContext';
 import { NotesDrawer } from '../notes/NotesDrawer';
 import { useIsMobile, usePulseFullscreen } from '../hooks/useIsMobile';
 import { useVisualViewportHeight } from '../hooks/useVisualViewportHeight';
+import { rememberLastPath } from './sessionRestore';
 import { ChevronEnd } from '../i18n/DirectionalIcons';
 
 /** Docked Pulse may grow until traditional still has ~320px (editor min). */
@@ -162,6 +163,10 @@ export function Shell() {
     const inferred = studioFromPath(location.pathname);
     if (inferred !== activeStudio) changeStudio(inferred);
   }, [location.pathname, activeStudio, changeStudio]);
+
+  useEffect(() => {
+    rememberLastPath(location.pathname, location.search || '');
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     try {

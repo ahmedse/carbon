@@ -3,6 +3,28 @@
 const TERMINAL = new Set(['completed', 'completed_with_gaps', 'failed', 'cancelled']);
 
 /**
+ * Next verb for an open ESS plan. Chat never says Confirm on handoff_ready
+ * (ADR-0046). Approve / Run / Confirm name Agent actions only.
+ * @param {string|undefined} status
+ * @returns {string}
+ */
+export function nextStepVerb(status) {
+  switch (String(status || '')) {
+    case 'handoff_ready':
+    case 'discovering':
+      return 'Submit';
+    case 'pending_approval':
+      return 'Approve';
+    case 'approved':
+      return 'Run';
+    case 'paused':
+      return 'Confirm';
+    default:
+      return '';
+  }
+}
+
+/**
  * First open (non-terminal) active plan, else the most recent snapshot.
  * @param {unknown} plans
  * @returns {{ plan_id?: string, title?: string, status?: string, slots?: object } | null}

@@ -95,6 +95,32 @@ class CorrespondenceViewSet(viewsets.ReadOnlyModelViewSet):
                 status_code = self.request.query_params.get('status')
                 if status_code:
                     qs = qs.filter(status=status_code)
+                q = (self.request.query_params.get('q') or '').strip()
+                if q:
+                    qs = qs.filter(
+                        Q(reference_no__icontains=q)
+                        | Q(title__icontains=q)
+                        | Q(requester__username__icontains=q)
+                        | Q(requester__employee_profile__full_name__icontains=q)
+                    )
+                manager_id = self.request.query_params.get('manager')
+                if manager_id:
+                    from people.models import Employee
+                    manager_user_id = (
+                        Employee.objects.filter(pk=manager_id)
+                        .values_list('user_id', flat=True)
+                        .first()
+                    )
+                    if not manager_user_id:
+                        qs = qs.none()
+                    else:
+                        qs = qs.filter(
+                            Q(current_approver_ids__contains=[manager_user_id])
+                            | Q(
+                                events__actor_id=manager_user_id,
+                                events__event_type__in=ACTOR_HISTORY_EVENTS,
+                            )
+                        ).distinct()
             else:
                 qs = qs.filter(requester=self.request.user)
                 status_code = self.request.query_params.get('status')

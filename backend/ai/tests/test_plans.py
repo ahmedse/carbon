@@ -444,6 +444,35 @@ def test_discovery_start_returns_question(
     run_ids_cleanup.append(run.id)
 
 
+def test_agreement_turns_and_heal_note_are_operator_safe():
+    from ai.plans_service import _public_agreement_turns, _public_heal_note
+
+    assert _public_agreement_turns([
+        {"question": "Which unit?", "reply": "Org 8"},
+        {"question": "", "reply": None},
+    ]) == [
+        {"question": "Which unit?", "reply": "Org 8"},
+        {"question": "", "reply": None},
+    ]
+    assert _public_heal_note({
+        "self_heal": {"note": "Read the loan list on the second try.", "strategy": "catalog_alias"},
+    }) == "Read the loan list on the second try."
+    assert _public_heal_note({"result": "ok"}) == ""
+
+
+def test_prepend_pulse_mode_tells_the_engine_ask_or_plan():
+    from ai.intelligence import CarbonIntelligence
+
+    ask = CarbonIntelligence._prepend_pulse_mode("ask", "How much leave?")
+    plan = CarbonIntelligence._prepend_pulse_mode("plan", "Loan 500 for 12 months")
+    assert "Pulse mode: Ask" in ask
+    assert "Never call plan_task" in ask
+    assert "How much leave?" in ask
+    assert "Pulse mode: Plan" in plan
+    assert "Loan 500" in plan
+    assert CarbonIntelligence._prepend_pulse_mode(None, "plain") == "plain"
+
+
 @pytest.mark.django_db
 def test_discovery_advance_continues_or_completes(
     user, patch_engine_seams, run_ids_cleanup, monkeypatch
@@ -617,6 +646,7 @@ def test_finalize_discovery_builds_plan_without_more_questions(
     assert result["plan"]["status"] == "pending_approval"
     assert len(result["plan"]["steps"]) >= 1
     assert result["plan"].get("discovery_turns") is None  # not discovering
+    assert result["plan"].get("agreement_turns") == []
 
     run = Run.objects.get(id=started["id"])
     assert run.status == "pending_approval"

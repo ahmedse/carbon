@@ -16,6 +16,7 @@ import { stepStatusMeta, toolLabel } from './aiTaskStatus';
 import { stripEngineJargon } from './humanizeOperatorCopy';
 import { actionLabelForApi } from './consentInputSpec';
 import { presentToolLabel } from './presentationPlane';
+import { beatSituation } from './beatReport';
 
 function formatDuration(ms) {
   if (ms == null || !Number.isFinite(ms)) return null;
@@ -74,7 +75,8 @@ export default function BeatDetailContent({
   const meta = stepStatusMeta(step.status);
   const intent = humanAction(step) || stripEngineJargon(event?.title || `Step ${step.step_id}`);
   const needsYou = step.status === 'awaiting_approval';
-  const failed = step.status === 'failed';
+  const situation = beatSituation(step);
+  const failed = situation.failed;
   const skipped = step.status === 'skipped';
   const started = formatWhen(step.started_at || step.created_at);
   const finished = formatWhen(step.finished_at || step.completed_at || step.updated_at);
@@ -133,8 +135,22 @@ export default function BeatDetailContent({
         </Box>
       )}
 
+      {situation.healed && (
+        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8125rem' }} data-testid="beat-healed">
+          {t('beatHealRead')}
+          {situation.heal ? ` ${situation.heal}` : ''}
+        </Typography>
+      )}
+
+      {situation.writeStopped && (
+        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8125rem' }} data-testid="beat-write-held">
+          {t('beatHealWrite')}
+        </Typography>
+      )}
+
       {failed && (
         <Box
+          data-testid="beat-failure-report"
           sx={{
             p: 1.25,
             borderRadius: 1,
@@ -143,8 +159,20 @@ export default function BeatDetailContent({
             bgcolor: 'error.soft',
           }}
         >
-          <Typography variant="body2" color="error.main" sx={{ fontSize: '0.8125rem' }}>
-            {String(step.error || step.error_message || t('beatFailed')).slice(0, 280)}
+          <Typography variant="body2" color="error.main" sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>
+            {t('beatFailWhat')}
+          </Typography>
+          <Typography variant="body2" sx={{ fontSize: '0.8125rem', mb: 0.75 }}>
+            {stripEngineJargon(situation.error || t('beatFailed')).slice(0, 280)}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.75rem' }}>
+            {t('beatFailMeans')}: {t('beatFailMeansBody')}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.75rem' }}>
+            {t('beatFailDid')}: {situation.mutation || situation.retries === 0 ? t('beatFailDidWrite') : t('beatFailDidRead')}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.75rem' }}>
+            {t('beatFailYou')}: {t('beatFailYouBody')}
           </Typography>
         </Box>
       )}

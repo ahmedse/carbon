@@ -21,7 +21,9 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
+import VisibilityRounded from '@mui/icons-material/VisibilityRounded';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import PageContainer from '../../components/layout/PageContainer';
 import PageHeader from '../../components/Page/PageHeader';
 import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
@@ -38,7 +40,6 @@ import {
   deleteAttendanceRecord,
   createAttendancePermission,
   updateAttendancePermission,
-  deleteAttendancePermission,
 } from '../../api/people';
 import { labelsFromRows, formatDate, statusColor, statusLabelKey } from './utils';
 import EmployeePicker from './EmployeePicker';
@@ -64,6 +65,7 @@ const ATTENDANCE_STATUSES = ['present', 'absent', 'leave', 'permission'];
 
 export default function AttendancePage() {
   const { t } = useTranslation('people');
+  const navigate = useNavigate();
   const { t: tCommon } = useTranslation('common');
   useDocumentTitle(t('attendanceTitle'));
   const { token } = useAuth();
@@ -203,19 +205,6 @@ export default function AttendancePage() {
     setPermissionDialogOpen(true);
   };
 
-  const openEditPermission = (permission) => {
-    setEditingPermission(permission);
-    setPermissionForm({
-      employee: permission.employee ?? '',
-      date: permission.date ? String(permission.date).slice(0, 10) : '',
-      permission_type: permission.permission_type ?? '',
-      hours: permission.hours != null ? String(permission.hours) : '',
-      approved: Boolean(permission.approved),
-      notes: permission.notes ?? '',
-    });
-    setPermissionDialogOpen(true);
-  };
-
   const closePermissionDialog = () => {
     setPermissionDialogOpen(false);
     setEditingPermission(null);
@@ -257,17 +246,6 @@ export default function AttendancePage() {
       showError(err);
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleDeletePermission = async (permission) => {
-    if (!window.confirm(t('attendancePermissionDeleteConfirm'))) return;
-    try {
-      await deleteAttendancePermission(permission.id, token);
-      setSnackbar({ open: true, message: t('attendancePermissionDeleted'), severity: 'success' });
-      await loadData();
-    } catch (err) {
-      showError(err);
     }
   };
 
@@ -546,22 +524,31 @@ export default function AttendancePage() {
       width: 110,
       sortable: false,
       filterable: false,
-      renderCell: (params) => (
-        <>
-          <Tooltip title={tCommon('edit')}>
-            <IconButton size="small" onClick={() => openEditPermission(params.row)} sx={{ color: 'primary.main' }}>
-              <EditIcon fontSize="small" />
+      renderCell: (params) => {
+        const permission = params.row;
+        const label = t('requestView');
+        return (
+          <Tooltip title={label}>
+            <IconButton
+              size="small"
+              color="primary"
+              aria-label={label}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (permission.correspondence_id) {
+                  navigate(`/team/${permission.correspondence_id}`, { state: { from: 'people-attendance' } });
+                } else {
+                  navigate(`/people/attendance/permissions/${permission.id}`);
+                }
+              }}
+            >
+              <VisibilityRounded fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title={tCommon('delete')}>
-            <IconButton size="small" onClick={() => handleDeletePermission(params.row)} sx={{ color: 'error.main' }}>
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </>
-      ),
+        );
+      },
     },
-  ], [t, tCommon, employeeLabels]);
+  ], [t, employeeLabels, navigate]);
 
   const header = <PageHeader icon={AccessTimeIcon} title={t('attendanceTitle')} subtitle={t('attendanceSubtitle')} />;
 

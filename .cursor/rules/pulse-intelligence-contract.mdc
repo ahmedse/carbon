@@ -1,0 +1,43 @@
+---
+description: Pulse v2 Intelligence Contract — ConversationState, one decision, 0-LLM bound steps, G5 + 6B soak (ADR-0047)
+globs:
+  - backend/ai/engine/cognition/**/*
+  - backend/ai/engine/cognition/turn/runner.py
+  - backend/ai/eval/**/*
+  - backend/ai/plans_service.py
+  - backend/ai/engine_runtime.py
+  - docs/pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md
+  - docs/pulse/evidence/PV2-6B-*
+  - .ai-toolkit/decisions/0047-pulse-unified-conversation-state.md
+alwaysApply: true
+---
+
+# Pulse intelligence contract (ADR-0047)
+
+v2 exit is measured: L2 / L3 / L4 (ESS) / L5 on `ai.eval.intelligence_ladder`, G5 `--gate`, and five consecutive live 6B PASS nights. Do not claim a level the scorer would deny.
+
+## Hard contract
+
+| Commitment | Rule |
+|---|---|
+| **ConversationState** | One durable, RBAC-scoped state per conversation. Load on every Chat turn and Agent discovery/run. |
+| **ContextPack** | Every LLM stage gets the same identity. No stage-local system prompt. |
+| **Arbiter** | Gates stage; one logged `TurnDecision`. Do not add a new early `return` in `runner.py`. |
+| **Deterministic-first** | Bound `process_dial` lookup/write: 0 draft/observe LLM. Bound GET restates host fields only. |
+| **ADR-0046** | Chat never host-mutates. Writes are Agent Approve + Run + `/steps/confirm/` (RULE_21) or host UI. |
+| **Host identity** | Never invent payslip figures, job titles, or departments. Align goldens to committed host, or stay 403-honest. |
+| **Soak** | Night `2026-09-23` FAIL stays. Do not `--record` over it. Dry-run / SKIP / FAIL do not increment the streak. |
+
+## Do NOT
+
+- Call the LLM for a fully bound ESS step.
+- Grant `people:view` to `emp_1067` to pass coworker goldens.
+- Loosen YAML goldens without Master-approved host evidence.
+- Flip ADR-0047 back to Proposed, or mark 6B incomplete, while `PV2-6B-nights.json` has `soak_complete: true` and trailing streak 5.
+
+## DO
+
+- New routing → Arbiter signal + G5 golden.
+- New history/state/routing change → multi-turn bank update.
+- Live ESS smoke as `emp_1067` only, with STACK-HOLD + `PULSE_NIGHTLY_LIVE=1`.
+- Read: `docs/pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md` · ADR-0046 · RULE_21 · RULE_23 · QA G5.

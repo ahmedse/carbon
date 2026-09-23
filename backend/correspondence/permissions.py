@@ -25,13 +25,15 @@ class CanSubmitCorrespondence(BasePermission):
 
 
 class CanActOnCorrespondence(BasePermission):
-    """Only the current approver (or a ``correspondence:admin``) may act."""
+    """Only a user on the current policy step may approve, reject, or send back.
+
+    ``correspondence:admin`` may view every request and may void or reopen a
+    finished one. That capability does not make them the approver of an open step.
+    """
 
     message = "You are not the current approver for this correspondence."
 
     def has_object_permission(self, request, view, obj):
-        if has_capability(request.user, 'correspondence:admin'):
-            return True
         uid = request.user.id
         return uid in (obj.current_approver_ids or [])
 

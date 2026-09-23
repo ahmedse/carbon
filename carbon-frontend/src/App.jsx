@@ -138,12 +138,14 @@ const PeopleHome = React.lazy(() => import("./apps/people/PeopleHome"));
 const EmployeesPage = React.lazy(() => import("./apps/people/EmployeesPage"));
 const EmployeeDetailPage = React.lazy(() => import("./apps/people/EmployeeDetailPage"));
 const LeavePage = React.lazy(() => import("./apps/people/LeavePage"));
+const PeopleRequestsPage = React.lazy(() => import("./apps/people/PeopleRequestsPage"));
 const PayrollRunsPage = React.lazy(() => import("./apps/people/PayrollRunsPage"));
 const PayslipPage = React.lazy(() => import("./apps/people/PayslipPage"));
 const AttendancePage = React.lazy(() => import("./apps/people/AttendancePage"));
 const PeopleConfigPage = React.lazy(() => import("./apps/people/PeopleConfigPage"));
 const PositionsPage = React.lazy(() => import("./apps/people/PositionsPage"));
 const LoansPage = React.lazy(() => import("./apps/people/LoansPage"));
+const RequestRecordPage = React.lazy(() => import("./apps/people/RequestRecordPage"));
 const CertificationsPage = React.lazy(() => import("./apps/people/CertificationsPage"));
 const RotationSchedulesPage = React.lazy(() => import("./apps/people/RotationSchedulesPage"));
 const PoliciesPage = React.lazy(() => import("./apps/people/PoliciesPage"));
@@ -359,13 +361,17 @@ export default function App() {
                 <Route path="/people/positions" element={<PositionsPage />} />
                 <Route path="/people/employees" element={<EmployeesPage />} />
                 <Route path="/people/employees/:employeeId" element={<EmployeeDetailPage />} />
+                <Route path="/people/requests" element={<PeopleRequestsPage />} />
                 <Route path="/people/leave" element={<LeavePage />} />
+                <Route path="/people/leave/records/:recordId" element={<RequestRecordPage kind="leave" />} />
                 <Route path="/people/payroll" element={<PayrollRunsPage />} />
                 <Route path="/people/payslip" element={<PayslipPage />} />
                 {/* NSR-6A Path H: attendance/rotation kept for deep-link (out of nav). */}
                 <Route path="/people/attendance" element={<AttendancePage />} />
+                <Route path="/people/attendance/permissions/:permissionId" element={<RequestRecordPage kind="permission" />} />
                 <Route path="/people/config" element={<PeopleConfigPage />} />
                 <Route path="/people/loans" element={<LoansPage />} />
+                <Route path="/people/loans/:loanId" element={<RequestRecordPage kind="loan" />} />
                 <Route path="/people/certifications" element={<CertificationsPage />} />
                 <Route path="/people/rotation" element={<RotationSchedulesPage />} />
                 <Route path="/people/policies" element={<PoliciesPage />} />

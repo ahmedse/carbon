@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 const navigateMock = vi.fn();
 const notifyMock = vi.fn();
+const authState = vi.hoisted(() => ({ id: 7 }));
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
@@ -17,7 +18,7 @@ vi.mock('react-router-dom', async () => {
 });
 
 vi.mock('../auth/AuthContext', () => ({
-  useAuth: () => ({ token: 'test-token' }),
+  useAuth: () => ({ token: 'test-token', user: { id: authState.id } }),
 }));
 
 vi.mock('../components/NotificationProvider', () => ({
@@ -45,6 +46,7 @@ const baseItem = {
   reference_no: 'CRS-2026-0099',
   title: 'Annual leave',
   status: 'submitted',
+  current_approver_ids: [7],
   current_step: 0,
   approver_chain: [{ order: 1, role: 'manager', intent: 'approve', user_ids: [7] }],
   events: [],
@@ -56,6 +58,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   navigateMock.mockClear();
   notifyMock.mockClear();
+  authState.id = 7;
 });
 
 function renderDetail() {
@@ -98,6 +101,15 @@ describe('TeamRequestDetail act UX', () => {
     const field = within(dialog).getByLabelText(/Comment/i);
     expect(field).toHaveAttribute('aria-invalid', 'true');
     expect(rejectCorrespondence).not.toHaveBeenCalled();
+  });
+
+  it('hides decide buttons when the viewer is not the current approver', async () => {
+    authState.id = 99;
+    fetchCorrespondenceDetail.mockResolvedValue(baseItem);
+    renderDetail();
+    expect(await screen.findByText(/belongs to the current approver/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Approve$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Reject$/i })).not.toBeInTheDocument();
   });
 
   it('hides act buttons when status is terminal', async () => {

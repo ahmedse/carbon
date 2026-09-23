@@ -529,8 +529,13 @@ export default function EnterpriseGraph({
     // Default ceil 1 — padded viewBox already prevents meet-upscale; zoom>1
     // is opt-in via fitZoomCeil for surfaces that truly want scale-up.
     const ceil = Number.isFinite(fitZoomCeil) ? fitZoomCeil : FIT_ZOOM_CEIL;
-    setZoomClamped(clamp(fitted, FIT_ZOOM_FLOOR, ceil));
-    setPan({ x: 0, y: 0 });
+    const scale = clamp(fitted, FIT_ZOOM_FLOOR, ceil);
+    setZoomClamped(scale);
+    // Leftover canvas stays empty around the graph, as in a flowchart.
+    setPan({
+      x: Math.max(0, (availW - width * scale) / 2),
+      y: Math.max(0, (availH - layoutHeight * scale) / 2),
+    });
   }, [setZoomClamped, viewport.w, viewport.h, width, height, layoutHeight, fitMode, fitZoomCeil]);
 
   // Graph-first Run: fit the DAG when the layout size changes so the hero
@@ -656,18 +661,18 @@ export default function EnterpriseGraph({
             const branch = e.branch || 'pending';
             const styled = edgeStyle ? edgeStyle(e) : null;
             let stroke = styled?.stroke || theme.palette.text.secondary;
-            let strokeWidth = styled?.strokeWidth ?? 2.25;
+            let strokeWidth = styled?.strokeWidth ?? 1.25;
             let strokeOpacity = 0.95;
             let dash = styled?.dash;
             let markerKind = styled?.marker || 'arrow';
             if (!styled) {
               if (branch === 'chosen') {
                 stroke = theme.palette.primary.main;
-                strokeWidth = 3;
+                strokeWidth = 1.5;
                 strokeOpacity = 1;
               } else if (branch === 'unchosen') {
                 stroke = theme.palette.text.disabled;
-                strokeWidth = 1.5;
+                strokeWidth = 1;
                 strokeOpacity = 0.4;
                 dash = '6 4';
                 markerKind = 'arrowThin';
@@ -680,7 +685,7 @@ export default function EnterpriseGraph({
               && String(selectedEdge.target) === String(e.target);
             if (edgeSelected) {
               stroke = theme.palette.primary.main;
-              strokeWidth = Math.max(strokeWidth, 3);
+              strokeWidth = Math.max(strokeWidth, 1.5);
               strokeOpacity = 1;
             }
             const markerRef = markerKind === 'arrowOpen'
@@ -756,15 +761,11 @@ export default function EnterpriseGraph({
             const shape = nodeShape ? nodeShape(n) : 'roundedRect';
             const framePath = nodeShapePath(shape, n.w, n.h);
             const innerPath = nodeShapeInnerPath(shape, n.w, n.h);
-            const isCard = shape === 'roundedRect' || shape === 'doubleRoundedRect' || shape === 'stadium'
-              || shape === 'parallelogram' || shape === 'hexagon' || shape === 'chamfer';
-            const strokeW = shape === 'thickCircle' ? 2.5 : (isSelected ? 2.25 : (isCard ? 1.5 : 1.75));
+            const strokeW = isSelected ? 1.5 : 1;
             const strokeColor = isSelected
               ? theme.palette.primary.main
-              : (theme.palette.mode === 'dark' ? theme.palette.grey[600] : theme.palette.grey[400]);
-            const fillBg = isSelected
-              ? theme.palette.action.selected
-              : theme.palette.background.paper;
+              : (theme.palette.mode === 'dark' ? theme.palette.grey[700] : theme.palette.grey[300]);
+            const fillBg = theme.palette.background.paper;
             const isToken = tokenNodeId != null && String(tokenNodeId) === String(n.id);
             const dim = isDimmed(n.id);
             return (
@@ -788,7 +789,7 @@ export default function EnterpriseGraph({
                     d={framePath}
                     fill="none"
                     stroke={fill}
-                    strokeWidth={2}
+                    strokeWidth={1.25}
                     transform="translate(-2,-2) scale(1.04)"
                   >
                     <animate attributeName="opacity" values="0.9;0.15;0.9" dur="1.1s" repeatCount="indefinite" />
@@ -799,7 +800,7 @@ export default function EnterpriseGraph({
                     d={framePath}
                     fill="none"
                     stroke={theme.palette.primary.main}
-                    strokeWidth={2.5}
+                    strokeWidth={1.5}
                     data-testid={`${testId}-token-${n.id}`}
                     transform="translate(-3,-3) scale(1.06)"
                   >
@@ -810,7 +811,7 @@ export default function EnterpriseGraph({
                   d={framePath}
                   fill={fillBg}
                   stroke={isToken ? theme.palette.primary.main : strokeColor}
-                  strokeWidth={isToken ? Math.max(strokeW, 2.25) : strokeW}
+                  strokeWidth={isToken ? 1.5 : strokeW}
                 />
                 {innerPath && (
                   <path
@@ -822,14 +823,13 @@ export default function EnterpriseGraph({
                   />
                 )}
                 {shape === 'diamondPlus' && (
-                  <g stroke={theme.palette.text.secondary} strokeWidth={1.75} fill="none">
+                  <g stroke={theme.palette.text.secondary} strokeWidth={1} fill="none">
                     <line x1={n.w / 2} y1={n.h * 0.28} x2={n.w / 2} y2={n.h * 0.72} />
                     <line x1={n.w * 0.28} y1={n.h / 2} x2={n.w * 0.72} y2={n.h / 2} />
                   </g>
                 )}
                 {renderNode ? renderNode(n) : (
                   <>
-                    <rect x={0} y={0} width={4} height={n.h} fill={fill} />
                     <GraphNodeForeign
                       width={n.w}
                       height={n.h}
@@ -854,10 +854,8 @@ export default function EnterpriseGraph({
                     y={n.h - 10}
                     width={10}
                     height={10}
-                    fill={fillBg}
-                    stroke={strokeColor}
-                    strokeWidth={1}
-                    rx={2}
+                    fill="transparent"
+                    stroke="none"
                   />
                 </g>
               </g>

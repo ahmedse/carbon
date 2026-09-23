@@ -44,6 +44,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { isSafeInternalRoute } from '../utils/navigation';
@@ -785,11 +786,15 @@ function remarkEntityChips() {
 const mermaidIdRef = { current: 0 };
 
 function MermaidBlock({ code }) {
+  const theme = useTheme();
   // { html: svgWithoutStyle, css: extractedCSS } | null
   const [diagram, setDiagram] = useState(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
   const effectiveCode = sanitizeXychartAxisLabels(repairTopLevelBar(repairXychart(reflowSingleLineMermaid(code))));
+  const mermaidTheme = theme.palette.mode === 'dark' ? 'dark' : 'default';
+  const fenceBg = 'grey.900';
+  const fenceFg = 'grey.300';
 
   useEffect(() => {
     let cancelled = false;
@@ -801,7 +806,7 @@ function MermaidBlock({ code }) {
         mermaid.initialize({
           startOnLoad: false,
           securityLevel: 'loose',
-          theme: 'default',
+          theme: mermaidTheme,
           fontFamily: 'inherit',
           // Keep charts compact and responsive — never full-bleed square blocks.
           pie: { useMaxWidth: true },
@@ -832,11 +837,11 @@ function MermaidBlock({ code }) {
     return () => {
       cancelled = true;
     };
-  }, [effectiveCode, attempt]);
+  }, [effectiveCode, attempt, mermaidTheme]);
 
   if (error) {
     return (
-      <Box sx={{ my: 1.5, borderRadius: 1, border: 1, borderColor: 'warning.main', overflow: 'hidden' }}>
+      <Box sx={{ my: 1.5, borderRadius: 0, border: 1, borderColor: 'warning.main', overflow: 'hidden' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
           <Chip
             size="small"
@@ -855,7 +860,18 @@ function MermaidBlock({ code }) {
             Retry
           </Button>
         </Box>
-        <Box component="pre" dir="ltr" sx={{ m: 0, p: 1.5, bgcolor: '#282c34', overflowX: 'auto', fontSize: '0.8125rem', color: '#abb2bf' }}>
+        <Box
+          component="pre"
+          dir="ltr"
+          sx={{
+            m: 0,
+            p: 1.5,
+            bgcolor: fenceBg,
+            overflowX: 'auto',
+            fontSize: '0.8125rem',
+            color: fenceFg,
+          }}
+        >
           <code>{effectiveCode}</code>
         </Box>
       </Box>
@@ -905,9 +921,13 @@ function MermaidBlock({ code }) {
 // ── Fenced code block: dark bg + language badge + copy button ────────────
 
 function CodeBlock({ children, className }) {
+  const theme = useTheme();
   const [copied, setCopied] = useState(false);
   const match = /language-(\w+)/.exec(className || '');
   const code = flattenText(children).replace(/\n$/, '');
+  const fenceBg = 'grey.900';
+  const fenceFg = 'grey.300';
+  const headerBg = theme.palette.mode === 'dark' ? 'grey.800' : 'grey.800';
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(code);
@@ -942,8 +962,7 @@ function CodeBlock({ children, className }) {
   }
 
   return (
-    <Box sx={{ position: 'relative', my: 1.5, borderRadius: 1, overflow: 'hidden', border: 1, borderColor: 'divider' }}>
-      {/* header bar */}
+    <Box sx={{ position: 'relative', my: 1.5, overflow: 'hidden', border: 1, borderColor: 'divider' }}>
       <Box
         sx={{
           display: 'flex',
@@ -951,31 +970,30 @@ function CodeBlock({ children, className }) {
           justifyContent: 'space-between',
           px: 1.5,
           py: 0.5,
-          bgcolor: '#21252b',
+          bgcolor: headerBg,
         }}
       >
-        <Typography variant="caption" sx={{ color: '#9da5b4', fontFamily: 'monospace' }}>
+        <Typography variant="caption" sx={{ color: fenceFg, fontFamily: 'monospace' }}>
           {match[1]}
         </Typography>
         <Tooltip title={copied ? 'Copied!' : 'Copy code'}>
-          <IconButton size="small" onClick={handleCopy} aria-label="Copy code" sx={{ color: '#9da5b4', p: 0.25 }}>
+          <IconButton size="small" onClick={handleCopy} aria-label="Copy code" sx={{ color: fenceFg, p: 0.25 }}>
             {copied ? <CheckIcon sx={{ fontSize: 13 }} /> : <ContentCopyIcon sx={{ fontSize: 13 }} />}
           </IconButton>
         </Tooltip>
       </Box>
-      {/* code body — children preserve rehype-highlight spans (syntax colors) */}
       <Box
         component="pre"
         dir="ltr"
         sx={{
           m: 0,
           p: 1.5,
-          bgcolor: '#282c34',
+          bgcolor: fenceBg,
           overflowX: 'auto',
           fontFamily: 'monospace',
-          fontSize: '0.6875rem',
-          lineHeight: 1.6,
-          color: '#abb2bf',
+          fontSize: '0.75rem',
+          lineHeight: 1.65,
+          color: fenceFg,
           '& code': { fontFamily: 'inherit', fontSize: 'inherit', bgcolor: 'transparent', p: 0 },
         }}
       >
@@ -997,64 +1015,233 @@ const components = {
   // entity reference chip — [[kind:id:label]] → inline <EntityChip/>
   entityRef: ({ kind, id, label }) => <EntityChip kind={kind} id={id} label={label} />,
 
-  // paragraphs
+  // paragraphs — enterprise 15px / 1.7 (Copilot density)
   p: ({ children }) => (
-    <Typography variant="body2" sx={{ mb: 1, '&:last-child': { mb: 0 }, lineHeight: 1.65 }}>
+    <Typography
+      variant="body2"
+      sx={{
+        mb: 1,
+        '&:last-child': { mb: 0 },
+        fontSize: '0.9375rem',
+        lineHeight: 1.7,
+        letterSpacing: '0.005em',
+      }}
+    >
       {children}
     </Typography>
   ),
 
-  // headings — mapped to compact-ui.md font scale (h1→h6 variant tier)
-  h1: ({ children }) => <Typography variant="h5" sx={{ mt: 2, mb: 0.5 }}>{children}</Typography>,
-  h2: ({ children }) => <Typography variant="h6" sx={{ mt: 1.5, mb: 0.5 }}>{children}</Typography>,
-  h3: ({ children }) => <Typography variant="subtitle1" sx={{ mt: 1, mb: 0.5 }}>{children}</Typography>,
-  h4: ({ children }) => <Typography variant="subtitle2" sx={{ mt: 0.75, mb: 0.25 }}>{children}</Typography>,
-  h5: ({ children }) => <Typography variant="body2" sx={{ fontWeight: 600, mt: 0.5, mb: 0.25 }}>{children}</Typography>,
-  h6: ({ children }) => <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mt: 0.5, mb: 0.25, color: 'text.secondary' }}>{children}</Typography>,
+  // headings — H2 carries a 2px accent rule; no h5→caption jumps
+  h1: ({ children }) => (
+    <Typography
+      component="h2"
+      sx={{
+        mt: 2,
+        mb: 0.75,
+        fontSize: '1.125rem',
+        fontWeight: 650,
+        letterSpacing: '-0.01em',
+        lineHeight: 1.35,
+        borderBottom: 2,
+        borderColor: 'primary.main',
+        pb: 0.5,
+        display: 'inline-block',
+        maxWidth: '100%',
+      }}
+    >
+      {children}
+    </Typography>
+  ),
+  h2: ({ children }) => (
+    <Typography
+      component="h3"
+      sx={{
+        mt: 1.75,
+        mb: 0.5,
+        fontSize: '1rem',
+        fontWeight: 650,
+        letterSpacing: '-0.01em',
+        lineHeight: 1.35,
+        borderBottom: 2,
+        borderColor: 'primary.main',
+        pb: 0.4,
+        display: 'inline-block',
+        maxWidth: '100%',
+      }}
+    >
+      {children}
+    </Typography>
+  ),
+  h3: ({ children }) => (
+    <Typography
+      component="h4"
+      sx={{
+        mt: 1.25,
+        mb: 0.4,
+        fontSize: '0.9375rem',
+        fontWeight: 600,
+        lineHeight: 1.4,
+      }}
+    >
+      {children}
+    </Typography>
+  ),
+  h4: ({ children }) => (
+    <Typography
+      component="h5"
+      sx={{ mt: 1, mb: 0.25, fontSize: '0.875rem', fontWeight: 600 }}
+    >
+      {children}
+    </Typography>
+  ),
+  h5: ({ children }) => (
+    <Typography
+      component="h6"
+      sx={{ mt: 0.75, mb: 0.25, fontSize: '0.8125rem', fontWeight: 600 }}
+    >
+      {children}
+    </Typography>
+  ),
+  h6: ({ children }) => (
+    <Typography
+      component="p"
+      sx={{
+        mt: 0.5,
+        mb: 0.25,
+        fontSize: '0.75rem',
+        fontWeight: 600,
+        color: 'text.secondary',
+      }}
+    >
+      {children}
+    </Typography>
+  ),
 
   // lists
-  ul: ({ children }) => <Box component="ul" sx={{ pl: 2.5, my: 0.5, mb: 1 }}>{children}</Box>,
-  ol: ({ children }) => <Box component="ol" sx={{ pl: 2.5, my: 0.5, mb: 1 }}>{children}</Box>,
+  ul: ({ children }) => (
+    <Box
+      component="ul"
+      sx={{
+        pl: 2.5,
+        my: 0.75,
+        mb: 1,
+        fontSize: '0.9375rem',
+        lineHeight: 1.7,
+      }}
+    >
+      {children}
+    </Box>
+  ),
+  ol: ({ children }) => (
+    <Box
+      component="ol"
+      sx={{
+        pl: 2.5,
+        my: 0.75,
+        mb: 1,
+        fontSize: '0.9375rem',
+        lineHeight: 1.7,
+      }}
+    >
+      {children}
+    </Box>
+  ),
   li: ({ children, checked }) => {
     if (checked !== null && checked !== undefined) {
       return (
         <Box component="li" sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, listStyle: 'none', ml: -2 }}>
           <Checkbox size="small" checked={!!checked} disabled sx={{ p: 0, mt: 0.125 }} />
-          <Typography variant="body2" component="span">{children}</Typography>
+          <Typography component="span" sx={{ fontSize: '0.9375rem', lineHeight: 1.7 }}>{children}</Typography>
         </Box>
       );
     }
-    return <Typography component="li" variant="body2" sx={{ mb: 0.25 }}>{children}</Typography>;
+    return (
+      <Typography
+        component="li"
+        sx={{ mb: 0.35, fontSize: '0.9375rem', lineHeight: 1.7 }}
+      >
+        {children}
+      </Typography>
+    );
   },
 
-  // tables — compact-ui.md: TableHead 0.625rem uppercase letterSpacing, TableCell 0.6875rem body2, padding 4px 8px
+  // tables — sticky head, tabular lining figures, caption-ready wrapper
   table: ({ children }) => (
-    <Box sx={{ overflowX: 'auto', my: 1.5, borderRadius: 1, border: 1, borderColor: 'divider' }}>
-      <Table size="small" sx={{ minWidth: 300 }}>{children}</Table>
+    <Box
+      sx={{
+        overflowX: 'auto',
+        my: 1.5,
+        border: 1,
+        borderColor: 'divider',
+        borderRadius: 0,
+      }}
+    >
+      <Table
+        size="small"
+        sx={{
+          minWidth: 280,
+          '& .MuiTableCell-root': {
+            fontVariantNumeric: 'tabular-nums lining-nums',
+          },
+        }}
+      >
+        {children}
+      </Table>
     </Box>
   ),
-  thead: ({ children }) => <TableHead sx={{ bgcolor: 'background.dark' }}>{children}</TableHead>,
+  thead: ({ children }) => (
+    <TableHead
+      sx={{
+        bgcolor: 'action.hover',
+        position: 'sticky',
+        top: 0,
+        zIndex: 1,
+      }}
+    >
+      {children}
+    </TableHead>
+  ),
   tbody: ({ children }) => <TableBody>{children}</TableBody>,
-  tr: ({ children }) => <TableRow sx={{ '&:nth-of-type(even)': { bgcolor: 'action.hover' }, '&:last-child td': { borderBottom: 0 } }}>{children}</TableRow>,
+  tr: ({ children }) => (
+    <TableRow
+      sx={{
+        '&:nth-of-type(even)': { bgcolor: 'action.hover' },
+        '&:last-child td': { borderBottom: 0 },
+      }}
+    >
+      {children}
+    </TableRow>
+  ),
   th: ({ children }) => (
     <TableCell
       sx={{
-        py: 0.75, px: 1,
+        py: 0.75,
+        px: 1,
         fontWeight: 600,
-        fontSize: '0.625rem',
-        textTransform: 'uppercase',
-        letterSpacing: '0.05em',
+        fontSize: '0.6875rem',
+        letterSpacing: '0.02em',
         whiteSpace: 'nowrap',
         color: 'text.secondary',
-        borderBottom: 2,
+        borderBottom: 1,
         borderColor: 'divider',
+        fontVariantNumeric: 'tabular-nums lining-nums',
       }}
     >
       {children}
     </TableCell>
   ),
   td: ({ children }) => (
-    <TableCell sx={{ py: 0.5, px: 1, fontSize: '0.6875rem' }}>{children}</TableCell>
+    <TableCell
+      sx={{
+        py: 0.6,
+        px: 1,
+        fontSize: '0.8125rem',
+        lineHeight: 1.5,
+        fontVariantNumeric: 'tabular-nums lining-nums',
+      }}
+    >
+      {children}
+    </TableCell>
   ),
 
   // blockquote — borderRadius uses theme token (borderRadius:0.5 = 4px per shape.borderRadius:8)
@@ -1097,19 +1284,42 @@ const components = {
     );
   },
 
-  // figures — image with optional title → caption
+  // figures — image with optional title → caption (theme tokens, flat)
   img: ({ src, alt, title }) => (
-    <Box sx={{ my: 1 }}>
+    <Box
+      component="figure"
+      sx={{
+        my: 1.5,
+        mx: 0,
+        border: 1,
+        borderColor: 'divider',
+        bgcolor: 'background.paper',
+      }}
+    >
       <Box
         component="img"
         src={src}
         alt={alt || ''}
         title={title}
-        sx={{ maxWidth: '100%', borderRadius: 1, display: 'block' }}
+        sx={{ maxWidth: '100%', display: 'block' }}
       />
-      {title && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, textAlign: 'center' }}>
-          {title}
+      {(title || alt) && (
+        <Typography
+          component="figcaption"
+          variant="caption"
+          color="text.secondary"
+          sx={{
+            display: 'block',
+            px: 1,
+            py: 0.75,
+            textAlign: 'center',
+            borderTop: 1,
+            borderColor: 'divider',
+            fontSize: '0.6875rem',
+            letterSpacing: '0.01em',
+          }}
+        >
+          {title || alt}
         </Typography>
       )}
     </Box>

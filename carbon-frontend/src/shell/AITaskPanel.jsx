@@ -114,13 +114,16 @@ import StepEditDialog from './StepEditDialog';
 import DiscoveryComposer from './DiscoveryComposer';
 import AgentTaskPicker from './AgentTaskPicker';
 import AgentStage, { stageForStatus } from './AgentStage';
+import TaskBoard from './TaskBoard';
 import AgentRunSurface, { mergePlanWithRunSteps } from './AgentRunSurface';
 import { LIVE_PLAN_POLL_MS } from './pulseProgressCadence';
 import AgentReviewSurface from './AgentReviewSurface';
 import AgentCockpit, { defaultCockpitSegment, normalizeCockpitSegment } from './AgentCockpit';
 import AgentPlanToolbar from './AgentPlanToolbar';
 import AgentRunToolbar from './AgentRunToolbar';
-import AgentCanvasSurface from './AgentCanvasSurface';
+import TaskJourney from './TaskJourney';
+import AITaskAuditCard from './AITaskAuditCard';
+import { hasTaskOutcome, humanTaskTitle, taskCoworkerLine } from './taskWorkspace';
 import { ArtifactCard } from '../components/ai/StepOutputRenderer';
 import { buildDiscussHandoff } from './buildDiscussDraft';
 import { splitAnswerAppendix } from './splitAnswerAppendix';
@@ -131,6 +134,11 @@ import { resolveOutputActions } from './resolveOutputActions';
 import { Link as RouterLink } from 'react-router-dom';
 import { autonomyDefaultListOpen, readAutonomyMode } from './autonomyMode';
 import { isImageMime, isPreviewableMime } from './artifactMime';
+import {
+  readActivePlanId,
+  writeActivePlanId,
+  clearActivePlanId,
+} from './sessionRestore';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -786,6 +794,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   // Task list + composer
   const [plans, setPlans] = useState([]);
   const [plansLoading, setPlansLoading] = useState(true);
+  const [plansLoadError, setPlansLoadError] = useState(false);
 
   // Selected plan detail + run state
   const [selectedPlan, setSelectedPlan] = useState(null);
@@ -857,7 +866,11 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   // Manual switches pin the choice for the current plan (soft lifecycle defaults).
   const handleSegmentChange = useCallback((value, { user = true } = {}) => {
     if (!value) return;
-    const next = normalizeCockpitSegment(value);
+    let next = normalizeCockpitSegment(value);
+    const effective = selectedPlan ? effectivePlanStatus(selectedPlan) : '';
+    if (next === 'output' && !hasTaskOutcome(effective, phaseRef.current)) {
+      next = 'run';
+    }
     setSegment(next);
     if (user) segmentOverrideRef.current = selectedPlan?.id ?? true;
     try {
@@ -865,7 +878,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     } catch {
       // storage may be unavailable — segment still switches in-memory
     }
-  }, [selectedPlan?.id]);
+  }, [selectedPlan]);
 
   // W5-D — the workspace activity bar (Monitor 📊 / Results 📦) drives this
   // panel's internal tab. Only external *changes* move the tab, so the RULE_17
@@ -927,11 +940,14 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   }, [externalTab, handleSegmentChange]);
 
   const loadPlans = useCallback(async () => {
+    if (!token) return;
     setPlansLoading(true);
+    setPlansLoadError(false);
     try {
       const data = await listPlans(token, { limit: 50 });
       setPlans(Array.isArray(data?.plans) ? data.plans : []);
     } catch (err) {
+      setPlansLoadError(true);
       notifyFromErrorRef.current(err, 'Could not load tasks');
     } finally {
       setPlansLoading(false);
@@ -941,6 +957,19 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   useEffect(() => {
     loadPlans();
   }, [loadPlans]);
+
+  // Returning to the board — refresh once (not while a task is open).
+  const boardHome = chatFirst && !selectedPlan;
+  const boardHomeRef = useRef(false);
+  useEffect(() => {
+    if (!boardHome || !token) {
+      boardHomeRef.current = boardHome;
+      return;
+    }
+    if (boardHomeRef.current) return;
+    boardHomeRef.current = true;
+    loadPlans();
+  }, [boardHome, token, loadPlans]);
 
   // I4-F — hydrate the conversation's dispatched subagents quietly (no toast).
   useEffect(() => {
@@ -1042,6 +1071,9 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             output_type: s.output_type ?? null,
             artifacts: s.artifacts ?? [],
             error: s.error ?? null,
+            retry_count: s.retry_count ?? 0,
+            is_mutation: Boolean(s.is_mutation),
+            heal_note: s.heal_note || '',
             consent_granted: Boolean(s.consent_granted),
             // W7-A execution contract (F-26 / F-28): parallel lane grouping
             // + the runnable_state enum the UI locks/edits on.
@@ -1074,26 +1106,35 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     try {
       const plan = await getPlan(token, planId);
       applyPlanToView(plan);
+      writeActivePlanId(planId);
       if (activateRunTab) setTab('run');
     } catch (err) {
+      // Stale pointer (deleted plan) — drop it so the next open does not loop.
+      if (readActivePlanId() === String(planId)) clearActivePlanId();
       notifyFromErrorRef.current(err, 'Could not open the plan');
     } finally {
       setDetailLoading(false);
     }
   }, [token, applyPlanToView]);
 
-  // Chat-first: open the newest active task once so the stage is never empty
-  // when history exists. User "New task" clears selection without re-auto-pick.
-  // Do not force the classic Run tab — that races Scheduled/Templates tests and
-  // activity-bar jumps (openPlan still activates Run when the user picks a task).
+  // Restore last Task on reopen (chat-first used to always land on the empty board).
+  // focusPlanId (Chat → Tasks jump) wins over the stored pointer.
   const autoOpenedRef = useRef(false);
   useEffect(() => {
-    if (autoOpenedRef.current || selectedPlan || plansLoading || !plans.length) return;
+    if (autoOpenedRef.current || selectedPlan || focusPlanId) return;
+    const stored = readActivePlanId();
+    if (stored) {
+      autoOpenedRef.current = true;
+      openPlan(stored, { activateRunTab: false });
+      return;
+    }
+    if (chatFirst) return;
+    if (plansLoading || !plans.length) return;
     autoOpenedRef.current = true;
     const active = ['discovering', 'pending_approval', 'approved', 'running', 'paused'];
     const preferred = plans.find((p) => active.includes(p.status)) || plans[0];
     if (preferred?.id) openPlan(preferred.id, { activateRunTab: false });
-  }, [plans, plansLoading, selectedPlan, openPlan]);
+  }, [chatFirst, plans, plansLoading, selectedPlan, focusPlanId, openPlan]);
 
   // Chat → Tasks jump: a chat reply's "Open in Tasks" button lands here with
   // the plan id of the just-drafted plan. Open it once, then signal the
@@ -1158,6 +1199,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       const updated = await approvePlan(token, selectedPlan.id);
       setSelectedPlan(updated);
       setPlans((prev) => prev.map((p) => (p.id === updated.id ? { ...p, status: updated.status } : p)));
+      handleSegmentChange('run', { user: false });
       loadPlans();
     } catch (err) {
       notifyFromErrorRef.current(err, 'Could not approve the plan');
@@ -1479,12 +1521,21 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     }
   };
 
+  const closePlan = useCallback(() => {
+    segmentOverrideRef.current = null;
+    setSelectedPlan(null);
+    setRunSteps([]);
+    setPhase('idle');
+    setLedger(null);
+    clearActivePlanId();
+  }, []);
+
   const handleDeletePlan = async (planId) => {
     try {
       await deletePlan(token, planId);
       setPlans((prev) => prev.filter((p) => p.id !== planId));
       if (selectedPlan?.id === planId) {
-        setSelectedPlan(null);
+        closePlan();
         setTab('tasks');
       }
       setDeletingPlanId(null);
@@ -1815,19 +1866,14 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   // ── Classic Tasks tab (debug fallback only) ───────────────────────────
   const renderTasks = () => (
     <Stack spacing={1.25}>
-      <DiscoveryComposer
-        conversationId={conversationId}
-        onPlanReady={handleDiscoveryReady}
-        onStarted={handleDiscoveryStarted}
-        onSwitchToChat={onSwitchToChat}
-        seedBrief={seedBrief}
-        onSeedBriefConsumed={onSeedBriefConsumed}
-      />
       <AgentTaskPicker
         plans={plans}
         loading={plansLoading}
         selectedId={selectedPlan?.id || ''}
-        onSelect={(id) => { if (id) openPlan(id); else setSelectedPlan(null); }}
+        onSelect={(id) => {
+          if (id) openPlan(id);
+          else closePlan();
+        }}
         onDelete={handleDeletePlan}
         deletingId={deletingPlanId}
       />
@@ -1835,14 +1881,14 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   );
 
   // ── Run: graph-first surface (DAG hero; list behind toggle) ───────────
-  const renderRun = ({ hideInherited = false } = {}) => {
+    const renderRun = ({ hideInherited = false, quietChrome = false } = {}) => {
     if (detailLoading) {
       return <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={22} /></Box>;
     }
     if (!selectedPlan) {
       return (
         <Typography variant="body2" color="text.secondary" sx={{ py: 3, fontSize: '0.75rem' }}>
-          Open a task from the Tasks tab to review, approve and run it.
+          Pick a task. New work starts in Chat, in Plan mode.
         </Typography>
       );
     }
@@ -2050,7 +2096,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             finished: phase === 'finished' || phase === 'stopped' || phase === 'error',
           })}
           artifacts={artifacts}
-          banner={statusBanner}
+          banner={quietChrome ? null : statusBanner}
           consentHero={consentHero}
           listContent={listContent}
           onOpenOutput={chatFirst
@@ -2596,7 +2642,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   // ── U-1 cockpit — Plan segment handled by AgentReviewSurface (review + inspect).
 
   const clarifying = selectedPlan?.status === 'discovering';
-  const showComposer = !selectedPlan || clarifying;
+  const showComposer = Boolean(clarifying);
   // Prefer live runSteps over stale selectedPlan.steps so chips flip as soon
   // as the stream finishes (before/without waiting on refreshPlan).
   const selectedEffective = selectedPlan
@@ -2636,6 +2682,27 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       ? runHeaderStatusChip(selectedPlan, runSteps, phase)
       : null;
     const showCockpit = Boolean(selectedPlan) && selectedPlan.status !== 'discovering';
+    const liveSteps = runSteps.length ? runSteps : (selectedPlan?.steps || []);
+    const awaitingNow = liveSteps.some((s) => s.status === 'awaiting_approval');
+    const doneNow = liveSteps.filter((s) => s.status === 'completed' || s.runnable_state === 'completed').length;
+    const pendingNow = liveSteps.filter(
+      (s) => s.status === 'pending' || s.status === 'awaiting_approval' || s.runnable_state === 'pending',
+    ).length;
+    const coworkerText = selectedPlan
+      ? [
+        taskCoworkerLine({
+          t,
+          phase,
+          effective: selectedEffective,
+          awaiting: awaitingNow,
+          pausedCounts: (phase === 'paused' || selectedEffective === 'paused')
+            ? { done: doneNow, pending: pendingNow }
+            : null,
+        }),
+        phase === 'error' && errorMessage ? errorMessage : '',
+      ].filter(Boolean).join(' ')
+      : '';
+    const resultReady = hasTaskOutcome(selectedEffective, phase);
 
     const renderCockpitPlan = () => {
       if (!selectedPlan) {
@@ -2691,68 +2758,55 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     const runToolbar = (() => {
       if (!selectedPlan || selectedPlan.status === 'discovering') return null;
       if (segment !== 'run') return null;
-      if (!showRunToolbar) return null;
+      const live = ['approved', 'running', 'paused'].includes(selectedEffective)
+        || phase === 'working'
+        || phase === 'paused';
+      if (!live) return null;
       return <AgentRunToolbar {...buildRunToolbarProps()} />;
     })();
 
     const cockpitToolbar = segment === 'plan' ? planToolbar : segment === 'run' ? runToolbar : null;
 
-    const renderCockpitRun = () => renderRun({ hideInherited: true });
+    const renderCockpitRun = () => renderRun({ hideInherited: true, quietChrome: true });
 
-    const renderCockpitCanvas = () => {
+    const renderCockpitOutput = () => {
       const journeySteps = runSteps.length
         ? runSteps
         : (Array.isArray(selectedPlan?.steps) ? selectedPlan.steps : []);
-      const journey = selectedPlan
+      const journeyPlan = selectedPlan
         ? {
-          status: selectedPlan.status,
-          brief: selectedPlan.brief || selectedPlan.user_message || '',
+          ...selectedPlan,
           steps: journeySteps,
-          finalResponse: selectedPlan.final_response || '',
-          artifacts,
+          final_response: selectedPlan.final_response || ledger?.final_response || '',
         }
         : null;
       return (
-        <AgentCanvasSurface
-          planId={selectedPlan?.id || null}
-          conversationId={conversationId}
-          live={phase === 'working' || phase === 'finished'}
-          journey={journey}
-        />
+        <Stack spacing={1.25} data-testid="agent-output-pure">
+          <TaskJourney plan={journeyPlan} />
+          {renderResults()}
+          {ledger ? <AITaskAuditCard ledger={ledger} /> : null}
+        </Stack>
       );
     };
 
-    const renderCockpitOutput = () => (
-      <Stack spacing={1.25} data-testid="agent-output-pure">
-        {(phase === 'finished' || phase === 'stopped' || phase === 'error') && (
-          <Paper variant="outlined" sx={{ bgcolor: 'background.paper', overflow: 'hidden' }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.25, py: 0.875 }}>
-              <Typography variant="body2" sx={{ flex: 1, fontWeight: 600, fontSize: '0.75rem' }}>
-                {phase === 'finished'
-                  ? t('runCompleted')
-                  : phase === 'stopped'
-                    ? 'Run stopped'
-                    : 'Run failed'}
-              </Typography>
-              {phase === 'error' && (
-                <Chip size="small" color="error" variant="outlined" label={t('failedWord')} sx={{ height: 18, fontSize: '0.625rem' }} />
-              )}
-            </Stack>
-            {phase === 'error' && errorMessage && (
-              <Typography variant="caption" color="error.main" sx={{ display: 'block', px: 1.25, pb: 1, fontSize: '0.6875rem' }}>
-                {errorMessage}
-              </Typography>
-            )}
-            {phase === 'stopped' && (
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', px: 1.25, pb: 1, fontSize: '0.6875rem' }}>
-                Stopped — pending steps were skipped and nothing was executed without approval.
-              </Typography>
-            )}
-          </Paper>
-        )}
-        {renderResults()}
-      </Stack>
-    );
+    if (!selectedPlan) {
+      return (
+        <Box
+          data-testid="agent-workspace"
+          sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
+        >
+          <TaskBoard
+            plans={plans}
+            loading={plansLoading}
+            loadError={plansLoadError}
+            onRetry={loadPlans}
+            onSelect={(id) => openPlan(id, { activateRunTab: false })}
+            onDelete={handleDeletePlan}
+            deletingId={deletingPlanId}
+          />
+        </Box>
+      );
+    }
 
     return (
       <Box
@@ -2765,24 +2819,29 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           spacing={1}
           sx={{ px: 1, py: 0.75, borderBottom: 1, borderColor: 'divider' }}
         >
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <AgentTaskPicker
-              plans={plans}
-              loading={plansLoading}
-              selectedId={selectedPlan?.id || ''}
-              onSelect={(id) => {
-                if (id) openPlan(id);
-                else {
-                  segmentOverrideRef.current = null;
-                  setSelectedPlan(null);
-                  setRunSteps([]);
-                  setPhase('idle');
-                }
-              }}
-              onDelete={handleDeletePlan}
-              deletingId={deletingPlanId}
-            />
-          </Box>
+          <Button
+            size="small"
+            onClick={closePlan}
+            data-testid="task-board-back"
+            sx={{ textTransform: 'none', fontSize: '0.75rem', minWidth: 0, px: 0.75, flexShrink: 0 }}
+          >
+            {t('boardAllTasks')}
+          </Button>
+          <Typography
+            variant="body2"
+            title={String(selectedPlan.brief || '').trim()}
+            sx={{
+              flex: 1,
+              minWidth: 0,
+              fontSize: '0.8125rem',
+              fontWeight: 500,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {humanTaskTitle(selectedPlan, t('untitledTask'))}
+          </Typography>
           {statusChip && (
             <Chip
               size="small"
@@ -2794,6 +2853,20 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             />
           )}
         </Stack>
+        {coworkerText ? (
+          <Typography
+            data-testid={
+              phase === 'paused' || awaitingNow || selectedEffective === 'paused'
+                ? 'paused-banner'
+                : 'task-coworker-line'
+            }
+            variant="body2"
+            color="text.secondary"
+            sx={{ px: 1.25, py: 0.5, fontSize: '0.75rem', borderBottom: 1, borderColor: 'divider' }}
+          >
+            {coworkerText}
+          </Typography>
+        ) : null}
 
         {showComposer && (
           <Box sx={{ px: 1, pt: 1, borderBottom: 1, borderColor: 'divider' }}>
@@ -2815,10 +2888,10 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             segment={segment}
             onSegment={(value) => handleSegmentChange(value, { user: true })}
             plan={selectedPlan}
+            resultReady={resultReady}
             toolbar={cockpitToolbar}
             renderPlan={renderCockpitPlan}
             renderRun={renderCockpitRun}
-            renderCanvas={renderCockpitCanvas}
             renderOutput={renderCockpitOutput}
           />
         ) : (

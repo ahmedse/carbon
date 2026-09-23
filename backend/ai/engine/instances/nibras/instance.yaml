@@ -788,7 +788,7 @@ step_templates:
   submit_my_leave:
     en: >-
       Leave request submitted: {leave_type}, {start_date} → {end_date}
-      ({days} days). Awaiting manager review in Team.
+      ({days} day(s)). Awaiting manager review in Team.
     ar: >-
       تم تقديم طلب الإجازة: {leave_type}، من {start_date} إلى {end_date}
       ({days} أيام). بانتظار مراجعة المدير في الفريق.

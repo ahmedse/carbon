@@ -194,32 +194,20 @@ export function runHeaderStatusChip(plan, runSteps = [], phase = 'idle') {
   const meta = planStatusMeta(effective);
 
   if (awaiting || phase === 'paused' || effective === 'paused') {
-    return {
-      label: total ? `${settled}/${total} · Needs approval` : meta.label,
-      color: 'warning',
-    };
+    return { label: 'Waiting on you', color: 'warning' };
   }
   if (phase === 'working' || effective === 'running') {
-    return {
-      label: total ? `${settled}/${total} · running` : meta.label,
-      color: 'primary',
-    };
+    return { label: total ? `Working · ${settled}/${total}` : 'Working', color: 'primary' };
   }
   if (phase === 'error' || effective === 'failed' || failed) {
-    return {
-      label: total ? `${settled}/${total} · failed` : meta.label,
-      color: 'error',
-    };
+    return { label: 'Stopped', color: 'error' };
   }
   if (phase === 'stopped' || effective === 'cancelled') {
-    return {
-      label: total ? `${settled}/${total} · stopped` : (meta.label || 'Stopped'),
-      color: 'default',
-    };
+    return { label: 'Stopped', color: 'default' };
   }
   if (effective === 'completed' || effective === 'completed_with_gaps' || phase === 'finished') {
     return {
-      label: total ? `${settled}/${total} · done` : meta.label,
+      label: 'Done',
       color: effective === 'completed_with_gaps' ? 'warning' : 'success',
     };
   }

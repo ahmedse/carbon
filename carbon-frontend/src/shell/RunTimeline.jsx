@@ -20,6 +20,7 @@ import { useTranslation } from 'react-i18next';
 import { toolLabel } from './aiTaskStatus';
 import { stripEngineJargon } from './humanizeOperatorCopy';
 import { presentToolLabel } from './presentationPlane';
+import { beatSituation } from './beatReport';
 
 function formatDuration(ms) {
   if (ms == null || !Number.isFinite(ms)) return null;
@@ -69,6 +70,11 @@ function TimelineBeat({
   const focused = event.kind === 'consent' || event.kind === 'running' || event.kind === 'paused';
   const colors = nodeColors(event.kind);
   const title = humanTitle(event, step);
+  const situation = beatSituation(step);
+  const toolPresented = step?.tool_name && step.tool_name !== 'call_host_api'
+    ? (presentToolLabel(step.tool_name, { audience: 'operator' }) || toolLabel(step.tool_name))
+    : '';
+  const showTool = Boolean(toolPresented) && toolPresented !== title;
   const tipBits = [
     t('beatTooltipOpen'),
     event.clockFull || event.clock || null,
@@ -218,6 +224,16 @@ function TimelineBeat({
                 sx={{ fontSize: '0.625rem', display: 'block', mt: 0.25 }}
               >
                 {event.detail}
+              </Typography>
+            )}
+            {situation.healed && (
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.625rem', display: 'block', mt: 0.25 }}>
+                {t('beatHealRead')}
+              </Typography>
+            )}
+            {showTool && (
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.5625rem', display: 'block', mt: 0.25 }}>
+                {t('beatToolClosed', { tool: toolPresented })}
               </Typography>
             )}
             {event.clock && (

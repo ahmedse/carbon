@@ -38,7 +38,7 @@ describe('resolvePlanEdgeStyle', () => {
     expect(resolvePlanEdgeStyle({ guard: 'x > 0' }).marker).toBe('arrowOpen');
     expect(resolvePlanEdgeStyle({ is_default: true }).dash).toBeTruthy();
     expect(resolvePlanEdgeStyle({ branch: 'unchosen' }).marker).toBe('arrowThin');
-    expect(resolvePlanEdgeStyle({ branch: 'chosen' }).strokeWidth).toBe(3);
+    expect(resolvePlanEdgeStyle({ branch: 'chosen' }).strokeWidth).toBe(1.5);
   });
 });
 

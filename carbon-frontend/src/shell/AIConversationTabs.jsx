@@ -267,7 +267,18 @@ function AIConversationTabs({
         </Box>
       )}
 
-      <Box role="listbox" aria-label="Conversation sessions" sx={{ overflowY: 'auto', maxHeight: 160, borderBottom: 1, borderColor: 'divider' }}>
+      <Box
+        role="listbox"
+        aria-label="Conversation sessions"
+        sx={{
+          overflowY: compact ? 'visible' : 'auto',
+          maxHeight: compact ? 'none' : 160,
+          borderBottom: compact ? 0 : 1,
+          borderColor: 'divider',
+          flex: compact ? 1 : undefined,
+          minHeight: 0,
+        }}
+      >
         {conversations.length === 0 ? (
           <Typography variant="caption" color="text.disabled" sx={{ display: 'block', px: 1.5, py: 1, fontSize: '0.75rem' }}>
             No sessions yet

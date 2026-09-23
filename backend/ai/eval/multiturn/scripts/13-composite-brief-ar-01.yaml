@@ -1,0 +1,71 @@
+id: composite-brief-ar-01
+objective_ids: [C1, C5, C6]
+language: ar
+surface: chat
+persona: emp_1067
+# A brief with a guard («إذا كان لدي قرض مفتوح، توقف») and a parallel read is a
+# plan, not a loan form. Chat must never answer it with a bare «أي نوع قرض تريد؟».
+# When Chat does clarify a governed slot, the choices ride follow_ups (chips)
+# and every chip label re-parses as a slot fill.
+turns:
+  - user: "راجع قروضي المفتوحة ورصيد إجازتي في الوقت نفسه. إذا كان لدي قرض مفتوح، توقف. إذا لا، قدّم طلب قرض ٥٠٠ دينار لمدة ١٢ شهراً."
+    stub_reply: "خطة مقترحة: ١) قراءة قروضي المفتوحة ورصيد الإجازة معاً. ٢) إن وُجد قرض مفتوح — توقف. ٣) وإلا — مسودة طلب قرض ٥٠٠ دينار لمدة ١٢ شهراً للمراجعة. لا يُرسل شيء قبل موافقتك."
+    expect:
+      decision_in: [answer, tool_answer]
+      language: ar
+      max_llm_calls: 3
+      mentions_none: ["أي نوع قرض تريد"]
+
+  - user: "ما الخطوات التي ستقوم بها بالترتيب؟"
+    stub_reply: "أولاً أقرأ القروض والرصيد، ثم أتحقق من الشرط، ثم أُجهّز مسودة الطلب فقط إذا لم يكن لديك قرض مفتوح."
+    expect:
+      decision_in: [answer, tool_answer]
+      language: ar
+      max_llm_calls: 2
+
+  - user: "أريد قرض طارئ ٥٠٠٠ لمدة ١٢ شهراً"
+    stub_reply: "لدي: نوع القرض: طارئ؛ المبلغ: ٥٠٠٠؛ المدة: ١٢. لإرسال الطلب بدّل إلى الوكيل."
+    expect:
+      decision_in: [handoff_agent, clarify, answer]
+      language: ar
+      max_llm_calls: 1
+      mentions_any: ["٥٠٠٠", "5000", "طارئ"]
+
+  - user: "ما نوع القرض الذي طلبته؟"
+    stub_reply: "نوع القرض الذي طلبته هو قرض طارئ."
+    expect:
+      decision_in: [answer, handoff_agent]
+      language: ar
+      max_llm_calls: 1
+      mentions_any: ["طارئ", "emergency"]
+
+  - user: "شكراً"
+    stub_reply: "على الرحب والسعة."
+    expect:
+      decision_in: [answer, navigate]
+      language: ar
+      max_llm_calls: 0
+
+  - user: "أريد إجازة"
+    stub_reply: "أي نوع إجازة تريد؟"
+    expect:
+      decision_in: [clarify]
+      language: ar
+      max_llm_calls: 1
+      mentions_any: ["نوع إجازة", "نوع الإجازة"]
+
+  - user: "إجازة سنوية"
+    stub_reply: "ما تواريخ الإجازة؟"
+    expect:
+      decision_in: [clarify]
+      language: ar
+      max_llm_calls: 1
+      must_not_reask_slots: [leave_type]
+
+  - user: "من 2026-10-05 إلى 2026-10-09"
+    stub_reply: "فهمت: إجازة سنوية من ٥ أكتوبر إلى ٩ أكتوبر. أأكد التواريخ؟"
+    expect:
+      decision_in: [clarify, answer, handoff_agent]
+      language: ar
+      max_llm_calls: 1
+      must_not_reask_slots: [leave_type]

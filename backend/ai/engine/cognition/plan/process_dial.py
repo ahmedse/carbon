@@ -63,6 +63,68 @@ _ATTENDANCE_BRIEF = re.compile(
 )
 
 
+_PULSE_PLAN_PREFIX = "[Pulse mode: Plan."
+
+# A brief with a condition, a branch, or two things to do at once is a plan,
+# not a form. The single-write slot-filler must never hijack it with
+# "which loan type?" — the planner drafts the DAG and asks inside it.
+_COMPOSITE_CONDITIONAL = re.compile(
+    r"\bif\b[^.؟?!\n]{0,160}\b(?:then|stop|otherwise|else|don'?t|do\s+not|only)\b"
+    r"|\b(?:otherwise|unless|else\s+stop)\b"
+    r"|(?:إذا|اذا|إن\s+كان|ان\s+كان|لو|في\s+حال)[^.؟?!\n]{0,160}"
+    r"(?:توقف|وإلا|والا|فلا|لا\s+تقدّ?م|لا\s+تطلب|إذا\s+لا|اذا\s+لا|إن\s+لم|ان\s+لم)"
+    r"|إذا\s+لا\b|اذا\s+لا\b|وإلا\b|والا\b|إن\s+لم\b|ان\s+لم\b",
+    re.IGNORECASE,
+)
+_COMPOSITE_PARALLEL = re.compile(
+    r"\b(?:at\s+the\s+same\s+time|in\s+parallel|simultaneously|side\s+by\s+side)\b"
+    r"|في\s+الوقت\s+نفسه|في\s+نفس\s+الوقت|بالتوازي|بشكل\s+متوازٍ?",
+    re.IGNORECASE,
+)
+# "Check X, then submit Y" — a read that gates a write is a two-step plan.
+_COMPOSITE_READ_THEN_WRITE = re.compile(
+    r"\b(?:check|review|verify|look\s+at|confirm|see)\b[^.؟?!\n]{0,160}"
+    r"\b(?:then|before|after\s+that|and\s+only\s+then)\b[^.؟?!\n]{0,160}"
+    r"\b(?:submit|apply|request|file|raise)\b"
+    r"|(?:راجع|تحقق|افحص|تأكد|اطّلع|اطلع|شوف)[^.؟?!\n]{0,160}"
+    r"(?:ثم|بعدها|وبعد\s+ذلك|قبل\s+أن|قبل\s+ان)[^.؟?!\n]{0,160}"
+    r"(?:قدّم|قدم|اطلب|أرسل|ارسل)",
+    re.IGNORECASE,
+)
+
+
+def strip_pulse_mode_prefix(utterance: str) -> str:
+    """Drop the ``[Pulse mode: …]`` engine hint so lexical checks see the user's words."""
+    text = (utterance or "").lstrip()
+    if text.startswith("[Pulse mode:"):
+        end = text.find("]")
+        if end != -1:
+            return text[end + 1:].lstrip()
+    return text
+
+
+def is_plan_dial_turn(utterance: str) -> bool:
+    """True when the Chat composer dial was Plan for this turn."""
+    return (utterance or "").lstrip().startswith(_PULSE_PLAN_PREFIX)
+
+
+def is_composite_brief(utterance: str) -> bool:
+    """True when the brief has a condition, branch, parallel ask, or read→write gate.
+
+    «راجع قروضي ورصيد إجازتي في الوقت نفسه. إذا كان لدي قرض مفتوح، توقف. إذا لا،
+    قدّم طلب قرض» is a plan with a guard, not a loan form missing its type.
+    A plain «أريد قرض طوارئ ٥٠٠٠ لمدة ١٢ شهراً» is not composite.
+    """
+    text = strip_pulse_mode_prefix(utterance)
+    if not text:
+        return False
+    return bool(
+        _COMPOSITE_CONDITIONAL.search(text)
+        or _COMPOSITE_PARALLEL.search(text)
+        or _COMPOSITE_READ_THEN_WRITE.search(text)
+    )
+
+
 def is_personal_leave_brief(utterance: str) -> bool:
     """True when Agent should materialize the leave process dial (not LLM DAG)."""
     from ai.engine.cognition.scope_route import (

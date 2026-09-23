@@ -20,17 +20,17 @@ import {
 } from '@mui/material';
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 import { effectivePlanStatus, planStatusMeta } from './aiTaskStatus';
+import { humanTaskTitle } from './taskWorkspace';
 
 const ACTIVE = new Set(['discovering', 'pending_approval', 'approved', 'running', 'paused']);
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 
 function briefLabel(plan) {
-  const raw = (plan?.brief || '').trim() || 'Untitled task';
-  return raw.length > 72 ? `${raw.slice(0, 72)}…` : raw;
+  return humanTaskTitle(plan, 'Untitled task');
 }
 
 function fullBrief(plan) {
-  return (plan?.brief || '').trim() || 'Untitled task';
+  return String(plan?.brief || '').trim() || humanTaskTitle(plan, 'Untitled task');
 }
 
 function AgentTaskPicker({
@@ -79,7 +79,7 @@ function AgentTaskPicker({
             if (!v) {
               return (
                 <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8125rem' }}>
-                  {loading ? 'Loading…' : 'New / pick one'}
+                  {loading ? 'Loading…' : 'Pick a task'}
                 </Typography>
               );
             }
@@ -131,8 +131,8 @@ function AgentTaskPicker({
           }}
           MenuProps={{ PaperProps: { sx: { maxHeight: 360 } } }}
         >
-          <MenuItem value="">
-            <em>New task</em>
+          <MenuItem value="" disabled>
+            <em>Pick a task</em>
           </MenuItem>
           {loading && (
             <MenuItem disabled value="__loading">

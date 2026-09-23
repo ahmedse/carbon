@@ -35,6 +35,9 @@ class ChatHandoffOutcome:
     slots: dict = field(default_factory=dict)
     tool_result: dict = field(default_factory=dict)
     decision: str = "handoff_agent"
+    #: Closed-set answers for a clarify (loan / leave / permission type).
+    #: Rendered as clickable chips in Chat; each string re-parses as a slot.
+    follow_ups: list[str] = field(default_factory=list)
 
 
 def plan_has_mutating_host_api(
@@ -187,6 +190,7 @@ def build_chat_write_clarify(
     locale = detect_locale(user_message)
     api = (api_name or "").strip()
     body = dict(slots or {})
+    choices: list[str] = []
     if echo and api == "submit_my_leave":
         leave = str(body.get("leave_type") or "leave").strip()
         start = _pretty_date(body.get("start_date"))
@@ -209,6 +213,13 @@ def build_chat_write_clarify(
                 text = f"قرض {loan}. كم المبلغ الذي تحتاجه؟"
             else:
                 text = f"{loan.title()} loan. How much do you need to borrow?"
+        else:
+            # Echo what is already bound so the question reads as a
+            # continuation, not a cold restart ("Got it: 500 over 12 months.").
+            text = _understood_prefix(
+                body, locale=locale, user_message=user_message, skip_key=key,
+            ) + text
+        choices = clarify_choices(api, key, locale)
     return ChatHandoffOutcome(
         text=text,
         actions=[],
@@ -217,7 +228,76 @@ def build_chat_write_clarify(
         slots=body,
         tool_result={},
         decision="clarify",
+        follow_ups=choices,
     )
+
+
+def _understood_prefix(
+    body: dict,
+    *,
+    locale: str,
+    user_message: str,
+    skip_key: str,
+) -> str:
+    """"Got it: Principal: ٥٠٠; Term (months): ١٢. " or "" when nothing is bound."""
+    from ai.engine.agent.chat_surface import _FIELD_LABELS
+
+    bits: list[str] = []
+    for key, value in list((body or {}).items())[:8]:
+        if key == skip_key or value in (None, "", [], {}):
+            continue
+        if key == "interest_rate" and value in (0, 0.0, "0"):
+            continue
+        en_lab, ar_lab = _FIELD_LABELS.get(
+            key, (key.replace("_", " "), key.replace("_", " "))
+        )
+        lab = ar_lab if locale == "ar" else en_lab
+        bits.append(f"{lab}: {_display_slot_value(value, user_message)}")
+    if not bits:
+        return ""
+    if locale == "ar":
+        return "فهمت: " + "؛ ".join(bits) + ". "
+    return "Got it: " + "; ".join(bits) + ". "
+
+
+# Closed-set slot choices. Every label must re-parse through the alias tables
+# below (``_first_alias``) so a chip click is a valid slot fill, and must stay
+# a host vocabulary (Nibras loan/leave/permission types) — never invented.
+_SLOT_CHOICES: dict[str, dict[str, tuple[tuple[str, str, str], ...]]] = {
+    "submit_my_loan": {
+        "loan_type": (
+            ("emergency", "Emergency loan", "قرض طارئ"),
+            ("housing", "Housing loan", "قرض سكن"),
+            ("salary", "Salary advance", "سلفة راتب"),
+            ("car", "Car loan", "قرض سيارة"),
+            ("personal", "Personal loan", "قرض شخصي"),
+        ),
+    },
+    "submit_my_leave": {
+        "leave_type": (
+            ("annual", "Annual leave", "إجازة سنوية"),
+            ("sick", "Sick leave", "إجازة مرضية"),
+            ("emergency", "Emergency leave", "إجازة طارئة"),
+            ("unpaid", "Unpaid leave", "إجازة بدون راتب"),
+            ("maternity", "Maternity leave", "إجازة أمومة"),
+        ),
+    },
+    "submit_my_attendance_permission": {
+        "permission_type": (
+            ("official", "Official permission", "استئذان رسمي"),
+            ("medical", "Medical permission", "استئذان طبي"),
+            ("emergency", "Emergency permission", "استئذان طارئ"),
+            ("personal", "Personal permission", "استئذان شخصي"),
+        ),
+    },
+}
+
+
+def clarify_choices(api_name: str, slot_key: str, locale: str = "en") -> list[str]:
+    """Chip labels for a governed slot; ``[]`` for free-form slots (amount, dates)."""
+    table = (_SLOT_CHOICES.get((api_name or "").strip()) or {}).get(slot_key) or ()
+    idx = 2 if locale == "ar" else 1
+    return [row[idx] for row in table]
 
 
 def build_slot_status_answer(
@@ -563,8 +643,9 @@ _AMOUNT_RE = re.compile(
     r"|(?:sar|kwd|مبلغ|قرض|loan)\s*([0-9]{2,}(?:[.,][0-9]+)?)",
     re.I,
 )
-_MONTHS_RE = re.compile(r"\b(\d{1,2})\s*(?:month|months|شهر|أشهر|اشهر)\b", re.I)
-_DAYS_RE = re.compile(r"\b(\d{1,3})\s*(?:day|days|يوم|أيام|ايام)\b", re.I)
+# No trailing \b after Arabic stems: «شهراً» / «أيامٍ» carry suffixes.
+_MONTHS_RE = re.compile(r"\b(\d{1,2})\s*(?:months?\b|شهر|أشهر|اشهر)", re.I)
+_DAYS_RE = re.compile(r"\b(\d{1,3})\s*(?:days?\b|يوم|أيام|ايام)", re.I)
 _HOURS_RE = re.compile(r"\b(\d{1,2}(?:\.\d+)?)\s*(?:hour|hours|ساعة|ساعات)\b", re.I)
 _ISO_DATE_RE = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
 _MONTH_NAMES = (
@@ -868,8 +949,21 @@ def chat_grounding_rules_block() -> str:
     """Chat-surface grounding — never instructs mutation tool calls for host writes."""
     return (
         "GROUNDING RULES — follow them exactly:\n"
-        "- You have tools available. For READS (balances, lists, profile), call "
-        "the matching tool instead of guessing.\n"
+        "- You have tools available. For READS (balances, lists, profile, "
+        "distributions, analytics), call the matching read tool and answer — "
+        "never call plan_task for a question.\n"
+        "- ASK MODE: answers only. Never call plan_task / approve_plan / "
+        "edit_plan. Never invent a Tasks-panel plan. If the user needs a "
+        "multi-step or reviewable plan, tell them to switch the dial to Plan "
+        "(same conversation) — do not invent Open-in-Agent or Open-My for "
+        "read questions.\n"
+        "- DISTRIBUTION / ANALYTICS: for salary or headcount distributions, "
+        "return aggregates, buckets, and a chart or summary table — NEVER paste "
+        "raw employee-by-employee salary rows into the chat.\n"
+        "- BROAD REPORT BRIEFS: if the user asks for a 'full' / 'complete' "
+        "salary or payroll report without saying the angle or audience, ask "
+        "ONE short clarifying question with options (distribution, run health, "
+        "GOSI, board summary) before calling tools.\n"
         "- HOST WRITES (leave, loan, attendance, payroll, DQ create): Chat never "
         "stages or submits them. Do NOT call submit_my_* / mutation "
         "call_host_api / create_dq_rule. When the user wants to submit and you "
@@ -881,8 +975,8 @@ def chat_grounding_rules_block() -> str:
         "- Memory (learn_fact / forget_fact) may stage a confirm card — that is "
         "the only Chat write exception.\n"
         "- PLAN FIRST for multi-step analytical work: propose numbered steps in "
-        "prose; only call plan_task when the user explicitly confirms converting "
-        "to a task.\n"
+        "prose when helpful; only when the user is in Plan mode (or explicitly "
+        "asks to convert to a task) may plan_task run.\n"
         "- If a tool errors, report the error plainly.\n"
         "- CLARIFICATION POLICY: if the object is ambiguous, ask one clarifying "
         "question instead of guessing.\n"

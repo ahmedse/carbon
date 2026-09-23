@@ -597,3 +597,191 @@ def test_assembled_prompt_never_says_call_the_tool_for_ess_write():
     assert "call the tool" not in assembled.lower()
     assert "submit_my_" in assembled or "HOST WRITES" in assembled
     assert "switch to Agent" in assembled or "hand off" in assembled.lower()
+
+
+# ── Composite briefs + clarify choices (PV2 · "where are the options?") ─────────
+
+_AR_COMPOSITE = (
+    "راجع قروضي المفتوحة ورصيد إجازتي في الوقت نفسه. إذا كان لدي قرض مفتوح، توقف. "
+    "إذا لا، قدّم طلب قرض ٥٠٠ دينار لمدة ١٢ شهراً."
+)
+_PLAN_PREFIX = (
+    "[Pulse mode: Plan. Draft a reviewable plan from this thread. "
+    "Ask one missing fact at a time. Do not submit or change host records.]\n\n"
+)
+
+
+def test_composite_brief_detection():
+    from ai.engine.cognition.plan.process_dial import is_composite_brief
+
+    assert is_composite_brief(_AR_COMPOSITE)
+    assert is_composite_brief(_PLAN_PREFIX + _AR_COMPOSITE)
+    assert is_composite_brief(
+        "If I have an open loan, stop. Otherwise apply for a 500 KWD loan over 12 months."
+    )
+    assert is_composite_brief("Check my open loans, then submit a 500 loan for 12 months")
+    assert is_composite_brief("review my loan balance and leave balance at the same time")
+    # Plain single writes stay with the slot-filler.
+    assert not is_composite_brief("أريد قرض طوارئ ٥٠٠٠ لمدة ١٢ شهراً")
+    assert not is_composite_brief("I want an emergency loan of 3000 over 12 months")
+    assert not is_composite_brief("قرض طارئ")
+    assert not is_composite_brief("")
+
+
+def test_plan_dial_and_composite_route_to_plan_task():
+    from ai.engine.cognition.plan.planner import _wants_explicit_task_creation
+
+    # Plan dial → Tasks plan.
+    assert _wants_explicit_task_creation(_PLAN_PREFIX + "أريد قرض طوارئ ٥٠٠٠")
+    # Composite alone (Ask session) must NOT force plan_task — separate sessions.
+    assert not _wants_explicit_task_creation(_AR_COMPOSITE)
+    assert not _wants_explicit_task_creation("أريد قرض طوارئ ٥٠٠٠ لمدة ١٢ شهراً")
+    assert not _wants_explicit_task_creation("What is my leave balance?")
+    # Explicit "make this a task" still does.
+    assert _wants_explicit_task_creation("create a task for this")
+
+
+def test_arabic_term_months_with_suffix_binds():
+    resolved = resolve_ess_write_from_brief("قرض ٥٠٠ دينار لمدة ١٢ شهراً")
+    assert resolved is not None
+    api, body = resolved
+    assert api == "submit_my_loan"
+    assert body.get("principal") == 500.0
+    assert body.get("term_months") == 12
+
+
+def test_clarify_carries_choices_and_understood_prefix():
+    from ai.engine.cognition.turn.handoff_agent import (
+        _LEAVE_TYPE_ALIASES,
+        _LOAN_TYPE_ALIASES,
+        _PERMISSION_TYPE_ALIASES,
+        _first_alias,
+        clarify_choices,
+    )
+
+    ask = build_chat_write_clarify(
+        api_name="submit_my_loan",
+        slots={"principal": 500.0, "term_months": 12},
+        user_message=_AR_COMPOSITE,
+    )
+    assert ask.decision == "clarify"
+    assert ask.text.startswith("فهمت:")
+    assert "٥٠٠" in ask.text and "١٢" in ask.text
+    assert ask.text.endswith("أي نوع قرض تريد؟")
+    assert ask.follow_ups == ["قرض طارئ", "قرض سكن", "سلفة راتب", "قرض سيارة", "قرض شخصي"]
+
+    en = build_chat_write_clarify(
+        api_name="submit_my_loan", slots={}, user_message="I want a loan",
+    )
+    assert en.text == "What type of loan are you interested in?"
+    assert "Emergency loan" in en.follow_ups
+
+    # Free-form slots (amount / dates) get no chips.
+    amount = build_chat_write_clarify(
+        api_name="submit_my_loan",
+        slots={"loan_type": "emergency"},
+        user_message="An emergency loan",
+    )
+    assert amount.follow_ups == []
+
+    # Every chip label must re-parse as a valid slot fill in either locale.
+    for api, key, table in (
+        ("submit_my_loan", "loan_type", _LOAN_TYPE_ALIASES),
+        ("submit_my_leave", "leave_type", _LEAVE_TYPE_ALIASES),
+        ("submit_my_attendance_permission", "permission_type", _PERMISSION_TYPE_ALIASES),
+    ):
+        for locale in ("en", "ar"):
+            labels = clarify_choices(api, key, locale)
+            assert labels, (api, locale)
+            for label in labels:
+                assert _first_alias(label, table), (api, label)
+                assert is_ess_slot_continuation(label, api), (api, label)
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_composite_brief_bypasses_slot_filler():
+    """«إذا كان لدي قرض مفتوح، توقف» is a plan, not a form — no "which type?"."""
+    from ai.engine.cognition.turn.runner import TurnPipelineRunner
+
+    runner = TurnPipelineRunner.__new__(TurnPipelineRunner)
+    ctx = _StateCtx()
+    outcome = await runner._try_chat_write_handoff(  # noqa: SLF001
+        user_message=_PLAN_PREFIX + _AR_COMPOSITE,
+        conversation_history=[],
+        state_ctx=ctx,
+        instance_config={"api_catalog": _LOAN_CATALOG},
+    )
+    assert outcome is None
+    # Same without the Plan prefix (Ask dial) — structure alone decides.
+    outcome = await runner._try_chat_write_handoff(  # noqa: SLF001
+        user_message=_AR_COMPOSITE,
+        conversation_history=[],
+        state_ctx=_StateCtx(),
+        instance_config={"api_catalog": _LOAN_CATALOG},
+    )
+    assert outcome is None
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_plan_dial_fresh_write_goes_to_planner_but_chip_reply_stays():
+    from ai.engine.cognition.turn.runner import TurnPipelineRunner
+
+    runner = TurnPipelineRunner.__new__(TurnPipelineRunner)
+    # Fresh write brief under the Plan dial → planner drafts; slot-filler steps aside.
+    outcome = await runner._try_chat_write_handoff(  # noqa: SLF001
+        user_message=_PLAN_PREFIX + "أريد قرض ٥٠٠٠ لمدة ١٢ شهراً",
+        conversation_history=[],
+        state_ctx=_StateCtx(),
+        instance_config={"api_catalog": _LOAN_CATALOG},
+    )
+    assert outcome is None
+
+    # Answering a clarify Chat asked (chip click) keeps filling, whatever the dial.
+    ctx = _StateCtx()
+    ctx.state.intent = {"api": "submit_my_loan", "zone": "ess"}
+    ctx.state.slots = {"principal": 5000.0, "term_months": 12}
+    ctx.state.decisions = [{"decision": "clarify"}]
+    outcome = await runner._try_chat_write_handoff(  # noqa: SLF001
+        user_message=_PLAN_PREFIX + "قرض طارئ",
+        conversation_history=[],
+        state_ctx=ctx,
+        instance_config={"api_catalog": _LOAN_CATALOG},
+    )
+    assert isinstance(outcome, ChatHandoffOutcome)
+    assert outcome.decision == "handoff_agent"
+    assert ctx.state.slots.get("loan_type") == "emergency"
+
+
+@pytest.mark.asyncio
+async def test_return_chat_handoff_carries_follow_ups():
+    from ai.engine.cognition.turn.runner import TurnPipelineRunner
+
+    runner = TurnPipelineRunner.__new__(TurnPipelineRunner)
+    runner.db = None
+    outcome = build_chat_write_clarify(
+        api_name="submit_my_loan", slots={}, user_message="I want a loan",
+    )
+    ledger = TurnLedger()
+    with (
+        patch(
+            "ai.engine.cognition.notifier.broadcast_run_event",
+            new_callable=AsyncMock,
+        ),
+        patch("ai.models.core.Run.objects"),
+        patch("ai.models.core.RunStep.objects"),
+    ):
+        response, _ledger = await runner._return_chat_handoff(  # noqa: SLF001
+            outcome=outcome,
+            ledger=ledger,
+            meter=SimpleNamespace(by_stage=lambda: {}, total=0),
+            turn_id="t1",
+            instance_id="nibras",
+            conversation_id="c1",
+            host_user_id="u1",
+            t0=0.0,
+            finalize=False,
+        )
+    assert response.follow_ups == outcome.follow_ups
+    assert "Emergency loan" in response.follow_ups

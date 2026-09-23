@@ -445,6 +445,11 @@ const ROUTE_CONFIG = {
   },
   // NSR-6A Path H: /people/attendance + /people/rotation omitted from
   // breadcrumb trail (routes kept for deep-link; not go-live nav).
+  '/people/requests': {
+    label: 'Requests',
+    icon: AssignmentIcon,
+    parent: '/people',
+  },
   '/people/leave': {
     label: 'Leave',
     icon: EventAvailableIcon,

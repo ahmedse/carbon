@@ -332,9 +332,9 @@ export function buildPlanPhases(plan) {
 // instead of sitting at rank 0 and shooting long crossing edges.
 
 export const EXEC_LAYOUT = {
-  nodeW: 300,
-  nodeH: 68,
-  colGap: 48,
+  nodeW: 240,
+  nodeH: 64,
+  colGap: 40,
   rowGap: 36,
   padX: 24,
   padTop: 32,
@@ -688,19 +688,6 @@ export function layoutExecutionGraph(plan, options = {}) {
   const direction = prefer === 'tb' || prefer === 'lr'
     ? prefer
     : (maxInRank > 1 ? 'lr' : 'tb');
-
-  // Short sequential plans get wider cards so fit-to-view fills the canvas.
-  const visibleCount = nodes.filter((n) => !n.is_dummy).length;
-  if (maxInRank <= 1 && visibleCount > 0 && visibleCount <= 4) {
-    L.nodeW = Math.max(L.nodeW, 380);
-    L.nodeH = Math.max(L.nodeH, 72);
-    L.rowGap = Math.max(L.rowGap, 44);
-    L.colGap = Math.max(L.colGap, 40);
-  } else if (maxInRank > 1) {
-    // Parallel fans: slightly shorter cards so siblings fit without endless scroll.
-    L.nodeW = Math.max(L.nodeW, 260);
-    L.nodeH = Math.min(Math.max(L.nodeH, 64), 72);
-  }
 
   let width;
   let height;

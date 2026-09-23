@@ -4369,3 +4369,129 @@ Evidence: `docs/pulse/evidence/PV2-live-c1-c8-2026-09-23o.md` · `docs/pulse/evi
 Master aligned three goldens to committed host rows. Budgets unchanged. 04 t3 **5300** (was 3700). 06 department **Coiled Tubing**, manager **Mohammad/Bolto** (was Engineering / Ahmed|Ali). 09 t2 **6500** (was ٦٠٠٠/dinar). Live **24/24**, C2 **1.0**. Offline G5 **96/96**. A5 still needs Nibras QA. A9 still needs STACK-HOLD. Night 2026-09-23 FAIL not rewritten.
 
 Evidence: `docs/pulse/evidence/PV2-live-c2-2026-09-23p.md`
+
+## PV2 A9 verify (23q)
+
+**Date:** 2026-09-23  
+**Status:** A9 REACHED · 19/20 · soak streak still 0/5  
+**DB:** `nibras_dev` as `emp_1067` · STACK-HOLD 20260923-38 · no `--record`
+
+Leave confirm is 200 with `end_date`. Loan and attendance host rows yes. Chat did not mutate. Discovery→commit ms: leave 4003, loan 4577, attendance 3235. **p50 4.0 s** (gate ≤ 6 s). Slot seed 2026-09-24. Night 2026-09-23 FAIL not rewritten. A5 still needs Nibras QA.
+
+Evidence: `docs/pulse/evidence/PV2-6B-verify-2026-09-23q.md`
+
+## PV2 A5 consent copy (23q)
+
+**Date:** 2026-09-23  
+**Status:** A5 REACHED · 20/20 objectives · v2 exit still open  
+**DB:** `nibras_dev` read of the three 23q plans · no new host write
+
+Write-step intent + `draft_text` name leave annual / 2027-08-31 / 1 day, loan personal / 551 / 12 mo, attendance official / 2027-09-21 / 2h, in English, before confirm. Arabic templates keep the same slots. Leave template “1 days” is now “day(s)”; the stored draft was not rewritten. Night 2026-09-23 FAIL not rewritten. Streak 0/5. ADR-0047 stays Proposed.
+
+Evidence: `docs/pulse/evidence/PV2-a5-consent-copy-2026-09-23q.md`
+
+## PV2 L3 executor (23r)
+
+**Date:** 2026-09-23  
+**Status:** L3 REACHED · G5 96/96  
+**DB:** isolated multiturn
+
+Racing Chat gates stage a body. `pick_staged` returns the Arbiter winner. Refuse beats navigate when both staged. Memory-confirm and the post-S2 tool path still finalize in place. Night 2026-09-23 FAIL not rewritten.
+
+Evidence: `docs/pulse/evidence/PV2-L3-executor-2026-09-23r.md`
+
+## PV2 L5 bound lookup + ladder audit (23s)
+
+**Date:** 2026-09-23  
+**Status:** L5 REACHED (unit) · L4 still partial · 6B 0/5  
+**DB:** isolated pytest; 23q live llm_calls were not recorded
+
+The ladder was a derived canvas claim. `ai.eval.intelligence_ladder` now scores L0–L5 from committed JSON + unit contracts. L2 contract row was stale ("Not reached") against live 23o/23p. L5 gap was real and measured on nibras_dev: 23q runs `69a4436b` / `378e4451` / `261cdd1a` each have `total_llm_calls=1` (lookup observe). Writes were already 0. `render_bound_catalog_read` restates leave balance / loans / permissions from the host payload. Next 6B verify will record `plan_llm_calls`. Night 2026-09-23 FAIL not rewritten.
+
+Evidence: `docs/pulse/evidence/PV2-L5-lookup-2026-09-23s.md`
+
+## PV2 L4 next-step offer (23s)
+
+**Date:** 2026-09-23  
+**Status:** L4 REACHED for ESS · 0 LLM · 6B 0/5
+
+Chat names the next verb from `ConversationState.active_plans` without a status ask: `what next` / `ok` / continuer. Status asks append the same verb. Chip brief is `Approve · title` (handoff_ready stays Submit, never Chat Confirm). ADR-0046 unchanged. Night 2026-09-23 FAIL not rewritten.
+
+Evidence: `docs/pulse/evidence/PV2-L4-next-step-2026-09-23s.md`
+
+## PV2 L5 live verify (23s)
+
+**Date:** 2026-09-23  
+**Status:** L5 LIVE 0 LLM · A9 p50 1.6 s · not a soak night  
+**DB:** nibras_dev
+
+`--live --i-have-stack-hold` without `--record`, slot seed 2026-09-25. Three ESS plans completed; `Run.total_llm_calls=0` (23q was 1). Chat did not mutate. Night 2026-09-23 FAIL not rewritten. Streak 0/5.
+
+Evidence: `docs/pulse/evidence/PV2-6B-verify-2026-09-23s.md`
+
+## PV2-6B official night 2026-09-26 — PASS
+
+**Date:** 2026-09-23 (recorded as night_id 2026-09-26)  
+**Status:** PASS · streak **1/5**  
+**DB:** nibras_dev · **Host:** emp_1067
+
+`--live --i-have-stack-hold --record --night 2026-09-26`. Night 2026-09-23 FAIL not rewritten. Leave/loan/attendance host_row yes, confirm 200, plan llm 0/0/0. A9 p50 1.3 s. Not nights 3–5.
+
+Evidence: `docs/pulse/evidence/PV2-6B-night-2026-09-26.md`
+
+## PV2-6B official night 2026-09-27 — PASS
+
+**Date:** 2026-09-23 (recorded as night_id 2026-09-27)  
+**Status:** PASS · streak **2/5**  
+**DB:** nibras_dev · **Host:** emp_1067
+
+`--live --i-have-stack-hold --record --night 2026-09-27`. Prior nights unchanged. Leave/loan/attendance host_row yes, confirm 200, plan llm 0/0/0. A9 p50 1.3 s. Nights 4–5 not recorded.
+
+Evidence: `docs/pulse/evidence/PV2-6B-night-2026-09-27.md`
+
+## PV2-6B official night 2026-09-28 — PASS
+
+**Date:** 2026-09-23 (recorded as night_id 2026-09-28)  
+**Status:** PASS · streak **3/5**  
+**DB:** nibras_dev · **Host:** emp_1067
+
+`--live --i-have-stack-hold --record --night 2026-09-28`. Prior nights unchanged. Leave/loan/attendance host_row yes, confirm 200, plan llm 0/0/0. A9 p50 1.3 s. Night 5 not recorded.
+
+Evidence: `docs/pulse/evidence/PV2-6B-night-2026-09-28.md`
+
+## PV2-6B official night 2026-09-29 — PASS
+
+**Date:** 2026-09-23 (recorded as night_id 2026-09-29)  
+**Status:** PASS · streak **4/5**  
+**DB:** nibras_dev · **Host:** emp_1067
+
+`--live --i-have-stack-hold --record --night 2026-09-29`. Prior nights unchanged. Leave/loan/attendance host_row yes, confirm 200, plan llm 0/0/0. A9 p50 1.3 s. Soak not complete — 2026-09-23 FAIL means five trailing PASS nights are required. 6C not started.
+
+Evidence: `docs/pulse/evidence/PV2-6B-night-2026-09-29.md`
+
+## PV2-6B official night 2026-09-30 — PASS · soak 5/5
+
+**Date:** 2026-09-23 (recorded as night_id 2026-09-30)  
+**Status:** PASS · streak **5/5** · soak_complete True  
+**DB:** nibras_dev · **Host:** emp_1067
+
+`--live --i-have-stack-hold --record --night 2026-09-30`. Night 2026-09-23 FAIL stays. Leave/loan/attendance host_row yes, confirm 200, plan llm 0/0/0. A9 p50 1.5 s.
+
+Evidence: `docs/pulse/evidence/PV2-6B-night-2026-09-30.md`
+
+## PV2-6C — ADR-0047 Accepted
+
+**Date:** 2026-09-23  
+**Status:** DONE
+
+G5 `--gate` 96/96 and 6B soak 5/5 are on disk. ADR-0047 flipped to Accepted. Rule: `.cursor/rules/pulse-intelligence-contract.mdc`. Ladder scorer reports `adr_0047=Accepted` and `six_b_streak=5`. Night 2026-09-23 FAIL not rewritten. 4A shadow calendar not flipped. F-LIVE-12 goldens still want Finance; `people:view` not granted.
+
+## F-LIVE-12 directory deny replay (not a golden pass)
+
+**Date:** 2026-09-23  
+**Status:** product 0-LLM deny · 05 goldens still want Finance  
+**DB:** nibras_dev
+
+`emp_1067` `resolve_entity` is 403 `people:view`. That deny is now stored on `last_results` and replayed on same-person follow-ups (`What is her position?`) with 0 LLM. New names (`Salman`) look up again. First-person profile is not stolen. Did not grant `people:view`. Did not rewrite 05 goldens.
+
+Evidence: `ai/tests/test_pv2_zero_llm.py::test_directory_deny_replays_same_person_zero_llm`

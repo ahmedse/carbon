@@ -46,6 +46,19 @@ import AIOfflineBanner from './AIOfflineBanner';
 import AIStatusBar from './AIStatusBar';
 import PulsePresence from './PulsePresence';
 import AIModelSelect from './AIModelSelect';
+import ChatThreadStack from './ChatThreadStack';
+import {
+  MAIN_THREAD_ID,
+  addThread,
+  assignToThread,
+  claimUnassigned,
+  loadThreadState,
+  messagesForThread,
+  renameThread,
+  saveThreadState,
+  setActiveThread,
+  titleFromContent,
+} from './chatThreads';
 import { KeyboardShortcutsHelp } from './KeyboardShortcutsHelp';
 import { useAITaskTransfer } from './useAITaskTransfer';
 import { useExecuteMode } from './useExecuteMode';
@@ -88,6 +101,8 @@ function AIConversationView({
   onConversationUpdated,
   seedDraft = null,
   onSeedDraftConsumed,
+  process: processProp = null,
+  onProcessChange = null,
   contextPulse = null,
   onActivePlans,
 }) {
@@ -114,6 +129,11 @@ function AIConversationView({
   const [stageHistory, setStageHistory] = useState([]);
   const [thinkingExpanded, setThinkingExpanded] = useState(true);
   const [sendMode, setSendMode] = useState('queue');
+  const [process, setProcess] = useState(processProp === 'plan' ? 'plan' : 'ask');
+  useEffect(() => {
+    if (processProp == null) return;
+    setProcess(processProp === 'plan' ? 'plan' : 'ask');
+  }, [processProp]);
   // Phase 21-C — collapsed "older messages" region toggle.
   const [showOlder, setShowOlder] = useState(false);
   const [actionBusyId, setActionBusyId] = useState(null);
@@ -145,6 +165,26 @@ function AIConversationView({
       return 1;
     }
   });
+  // In-session threads (Copilot-style topics) — client membership only.
+  const [threadState, setThreadState] = useState(() => loadThreadState(conversationId));
+  const threadStateRef = useRef(threadState);
+  threadStateRef.current = threadState;
+
+  const persistThreadState = useCallback(
+    (next) => {
+      setThreadState(next);
+      threadStateRef.current = next;
+      saveThreadState(conversationId, next);
+    },
+    [conversationId],
+  );
+
+  useEffect(() => {
+    const loaded = loadThreadState(conversationId);
+    setThreadState(loaded);
+    threadStateRef.current = loaded;
+  }, [conversationId]);
+
   const adjustZoom = useCallback((delta) => {
     setContentZoom((z) => {
       const next = Math.min(1.4, Math.max(0.8, Math.round((z + delta) * 10) / 10));
@@ -259,6 +299,19 @@ function AIConversationView({
     setWorkingStartedAt((prev) => prev || Date.now());
   }, [conversation?.status, sending]);
 
+  // Claim unassigned messages into the active thread so legacy logs stay under Main.
+  useEffect(() => {
+    if (!conversationId || !messages.length) return;
+    const claimed = claimUnassigned(
+      threadStateRef.current,
+      messages,
+      threadStateRef.current.activeId || MAIN_THREAD_ID,
+    );
+    if (claimed !== threadStateRef.current) {
+      persistThreadState(claimed);
+    }
+  }, [conversationId, messages, persistThreadState]);
+
   // Finish a streamed generation: reconcile canonical messages + release UI.
   const finishStream = useCallback(
     (conv) => {
@@ -279,6 +332,16 @@ function AIConversationView({
             }
             return merged;
           });
+          // Only claim ids that have no membership yet (do not steal other topics).
+          const active = threadStateRef.current.activeId || MAIN_THREAD_ID;
+          const orphanIds = canonicalMsgs
+            .map((m) => String(m.id))
+            .filter((id) => threadStateRef.current.membership?.[id] == null);
+          if (orphanIds.length) {
+            persistThreadState(
+              assignToThread(threadStateRef.current, orphanIds, active),
+            );
+          }
         }
       }
       setStreamingText(null);
@@ -288,7 +351,7 @@ function AIConversationView({
         setSending(false);
       }
     },
-    [],
+    [persistThreadState],
   );
 
   const handleRetry = useCallback(() => {
@@ -349,27 +412,40 @@ function AIConversationView({
       }
 
       // Optimistically append the user message; replaced by the persisted copy on done.
+      const localId = `local-${Date.now()}`;
       setMessages((prev) => [
         ...prev,
         {
-          id: `local-${Date.now()}`,
+          id: localId,
           role: 'user',
           content,
           created_at: new Date().toISOString(),
         },
       ]);
+      persistThreadState(
+        assignToThread(
+          threadStateRef.current,
+          [localId],
+          threadStateRef.current.activeId || MAIN_THREAD_ID,
+        ),
+      );
 
       // Sprint 17: resolved #-mentions ride along as workspace_context. TODO(mentions):
       // map #table/#rule/#field/#module kinds to concrete entity ids from the source
       // workspace before sending (the stream serializer persists only `content` today).
-      const workspaceContext =
-        Array.isArray(mentions) && mentions.length > 0 ? { mentions } : undefined;
+      const workspaceContext = {
+        workspace: 'pulse',
+        current_view: process,
+        intent_signal: process === 'plan' ? 'create' : 'explore',
+        ...((Array.isArray(mentions) && mentions.length > 0) ? { mentions } : {}),
+      };
 
       const controller = new AbortController();
       abortRef.current = controller;
 
       await sendMessageStream(token, conversationId, content, {
         workspaceContext,
+        pulseMode: process,
         model: selectedModel || undefined,
         signal: controller.signal,
         onChunk: (delta) => {
@@ -402,7 +478,7 @@ function AIConversationView({
         setSending(false);
       }
     },
-    [token, conversationId, finishStream, onStreamError, selectedModel],
+    [token, conversationId, finishStream, onStreamError, selectedModel, process, persistThreadState],
   );
 
   const handleSend = useCallback(
@@ -417,6 +493,61 @@ function AIConversationView({
       handleSend(question);
     },
     [handleSend],
+  );
+
+  /** Bubble CTAs: panel=plan flips the Ask/Plan dial; everything else → workspace. */
+  const handleBubbleOpenPanel = useCallback(
+    (panel, planId, opts = {}) => {
+      if (panel === 'plan') {
+        // Already on Plan — stale "Switch to Plan" from an older Ask turn.
+        if (process === 'plan') return;
+        setProcess('plan');
+        onProcessChange?.('plan');
+        return;
+      }
+      onOpenPanel?.(panel, planId, opts);
+    },
+    [onOpenPanel, onProcessChange, process],
+  );
+
+  const handleSelectThread = useCallback(
+    (threadId) => {
+      persistThreadState(setActiveThread(threadStateRef.current, threadId));
+    },
+    [persistThreadState],
+  );
+
+  const handleNewThread = useCallback(() => {
+    persistThreadState(addThread(threadStateRef.current, {}));
+  }, [persistThreadState]);
+
+  /** Copilot-style: start a topic from this turn; seed message moves into the new thread. */
+  const handleStartThreadFromHere = useCallback(
+    (message) => {
+      if (!message?.id) return;
+      const title = titleFromContent(message.content) || undefined;
+      let next = addThread(threadStateRef.current, {
+        title,
+        fromMessageId: message.id,
+      });
+      next = assignToThread(next, [message.id], next.activeId);
+      if (title) {
+        next = renameThread(next, next.activeId, title);
+      }
+      persistThreadState(next);
+    },
+    [persistThreadState],
+  );
+
+  /** Switch active thread to the one that owns this message. */
+  const handleReplyInThread = useCallback(
+    (message) => {
+      if (!message?.id) return;
+      const tid = threadStateRef.current.membership?.[String(message.id)];
+      if (!tid || tid === threadStateRef.current.activeId) return;
+      persistThreadState(setActiveThread(threadStateRef.current, tid));
+    },
+    [persistThreadState],
   );
 
   const handleStop = useCallback(async () => {
@@ -1197,8 +1328,10 @@ function AIConversationView({
   // Phase 21-C — collapse the older half of a long thread behind a toggle;
   // infinite scroll still pages older messages into the collapsed region.
   // After /clear, only post-boundary messages are shown (Restore undoes this).
+  // In-session thread filter (P-09) narrows further to the active topic.
   const clearBreak = conversation?.context_snapshot_json?._clear_break || null;
-  const threadMessages = messagesAfterClearBreak(messages, clearBreak);
+  const postClearMessages = messagesAfterClearBreak(messages, clearBreak);
+  const threadMessages = messagesForThread(postClearMessages, threadState);
   const olderMessages =
     threadMessages.length > OLDER_MESSAGES_COLLAPSE_AT
       ? threadMessages.slice(0, threadMessages.length - OLDER_MESSAGES_COLLAPSE_AT)
@@ -1246,6 +1379,14 @@ function AIConversationView({
       }}
     >
       {providerOffline && <AIOfflineBanner />}
+
+      {/* In-session topics — compact strip; sessions stay on the right activity bar. */}
+      <ChatThreadStack
+        state={threadState}
+        onSelect={handleSelectThread}
+        onNew={handleNewThread}
+        compact
+      />
 
       {/* Messages area — the single vertical scroll region (design §2.4):
           header + input bar stay fixed while this flex region scrolls. */}
@@ -1415,10 +1556,13 @@ function AIConversationView({
               onRedraftReport={handleRedraftReport}
               onConfirmExecution={handleConfirmExecution}
               onDeclineExecution={handleDeclineExecution}
-              onOpenPanel={onOpenPanel}
+              onOpenPanel={handleBubbleOpenPanel}
+              composerProcess={process}
               onRetry={isOwner ? handleRetryMessage : undefined}
               onEdit={isOwner ? handleEditMessage : undefined}
               onDelete={isOwner ? handleDeleteMessage : undefined}
+              onStartThreadFromHere={handleStartThreadFromHere}
+              onReplyInThread={handleReplyInThread}
             />
           ))}
         </Collapse>
@@ -1462,10 +1606,13 @@ function AIConversationView({
                 onRedraftReport={handleRedraftReport}
                 onConfirmExecution={handleConfirmExecution}
                 onDeclineExecution={handleDeclineExecution}
-                onOpenPanel={onOpenPanel}
+                onOpenPanel={handleBubbleOpenPanel}
+                composerProcess={process}
                 onRetry={isOwner ? handleRetryMessage : undefined}
                 onEdit={isOwner ? handleEditMessage : undefined}
                 onDelete={isOwner ? handleDeleteMessage : undefined}
+                onStartThreadFromHere={handleStartThreadFromHere}
+                onReplyInThread={handleReplyInThread}
               />
             </React.Fragment>
           );
@@ -1655,6 +1802,11 @@ function AIConversationView({
           conversationId={conversationId}
           seedDraft={seedDraft}
           onSeedDraftConsumed={onSeedDraftConsumed}
+          process={process}
+          onProcessChange={(next) => {
+            setProcess(next === 'plan' ? 'plan' : 'ask');
+            onProcessChange?.(next === 'plan' ? 'plan' : 'ask');
+          }}
           mode={sendMode === 'steer' ? 'agent' : 'ask'}
           onModeChange={(nextMode) => {
             setSendMode(nextMode === 'agent' ? 'steer' : 'queue');
@@ -1773,6 +1925,8 @@ AIConversationView.propTypes = {
   onConversationUpdated: PropTypes.func,
   seedDraft: PropTypes.string,
   onSeedDraftConsumed: PropTypes.func,
+  process: PropTypes.oneOf(['ask', 'plan']),
+  onProcessChange: PropTypes.func,
   contextPulse: PropTypes.shape({
     id: PropTypes.string,
     at: PropTypes.number,

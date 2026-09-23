@@ -82,7 +82,17 @@ def _is_mutation_request(text: str) -> bool:
 
     Mutation turns are owned by the full pipeline (tool execution), never by
     the read-only intent resolver.
+
+    Engine ``[Pulse mode: …]`` hints are stripped first — Ask-mode copy that
+    says \"do not create a task\" must never look like a write request.
     """
+    if not text:
+        return False
+    try:
+        from ai.engine.cognition.plan.process_dial import strip_pulse_mode_prefix
+        text = strip_pulse_mode_prefix(text)
+    except Exception:  # noqa: BLE001
+        pass
     if not text:
         return False
     return (

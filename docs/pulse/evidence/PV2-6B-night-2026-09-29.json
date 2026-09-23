@@ -1,0 +1,169 @@
+{
+  "night_id": "2026-09-29",
+  "status": "PASS",
+  "host_user": "emp_1067",
+  "journeys": [
+    {
+      "id": "leave",
+      "process": "leave.request.lifecycle",
+      "api_name": "submit_my_leave",
+      "conversation_id": "511b8dd2-d823-4821-8c96-d96e731ceca3",
+      "plan_id": "d4507004-082f-4eca-83fc-6e0ff4170f5b",
+      "chat_decision": "handoff_agent",
+      "handoff_ready": true,
+      "active_plans": true,
+      "chat_mutated": false,
+      "inherited_context": [
+        {
+          "key": "leave_type",
+          "value": "annual"
+        },
+        {
+          "key": "start_date",
+          "value": "2027-05-27"
+        },
+        {
+          "key": "days",
+          "value": "1"
+        }
+      ],
+      "slot_carry": true,
+      "approve_http": 200,
+      "confirm_http": [
+        200
+      ],
+      "confirm_error": [],
+      "run_http": [
+        200,
+        200
+      ],
+      "plan_status": "completed",
+      "plan_llm_calls": 0,
+      "host_list_http": [
+        200,
+        200
+      ],
+      "host_row_after_agent": true,
+      "fingerprint": {
+        "start_date": "2027-05-27"
+      },
+      "utterance": "I want annual leave from 2027-05-27 for 1 day",
+      "passed": true,
+      "status": "PASS",
+      "notes": "",
+      "journey_ms": 2298.7,
+      "discovery_commit_ms": 1491.7
+    },
+    {
+      "id": "loan",
+      "process": "loan.request.lifecycle",
+      "api_name": "submit_my_loan",
+      "conversation_id": "17560c2e-2ae1-4076-abc3-7cbf753727fd",
+      "plan_id": "52f69a18-f608-4745-b3c1-52cf402c0dab",
+      "chat_decision": "handoff_agent",
+      "handoff_ready": true,
+      "active_plans": true,
+      "chat_mutated": false,
+      "inherited_context": [
+        {
+          "key": "amount",
+          "value": "521.0"
+        },
+        {
+          "key": "loan_type",
+          "value": "personal"
+        },
+        {
+          "key": "start_date",
+          "value": "2027-06-10"
+        },
+        {
+          "key": "term_months",
+          "value": "12"
+        }
+      ],
+      "slot_carry": true,
+      "approve_http": 200,
+      "confirm_http": [
+        200
+      ],
+      "confirm_error": [],
+      "run_http": [
+        200,
+        200
+      ],
+      "plan_status": "completed",
+      "plan_llm_calls": 0,
+      "host_list_http": [
+        200,
+        200
+      ],
+      "host_row_after_agent": true,
+      "fingerprint": {
+        "principal": 521,
+        "term_months": 12
+      },
+      "utterance": "I need a personal loan of 521 KWD for 12 months starting 2027-06-10",
+      "passed": true,
+      "status": "PASS",
+      "notes": "",
+      "journey_ms": 1990.9,
+      "discovery_commit_ms": 1264.7
+    },
+    {
+      "id": "attendance",
+      "process": "attendance.permission.lifecycle",
+      "api_name": "submit_my_attendance_permission",
+      "conversation_id": "e026798e-5233-4e37-a79b-bf18c056eed4",
+      "plan_id": "5dc08e9f-db51-4c5a-b47a-18083387528f",
+      "chat_decision": "handoff_agent",
+      "handoff_ready": true,
+      "active_plans": true,
+      "chat_mutated": false,
+      "inherited_context": [
+        {
+          "key": "permission_type",
+          "value": "official"
+        },
+        {
+          "key": "date",
+          "value": "2027-06-17"
+        },
+        {
+          "key": "hours",
+          "value": "2.0"
+        }
+      ],
+      "slot_carry": true,
+      "approve_http": 200,
+      "confirm_http": [
+        200
+      ],
+      "confirm_error": [],
+      "run_http": [
+        200,
+        200
+      ],
+      "plan_status": "completed",
+      "plan_llm_calls": 0,
+      "host_list_http": [
+        200,
+        200
+      ],
+      "host_row_after_agent": true,
+      "fingerprint": {
+        "date": "2027-06-17",
+        "hours": 2
+      },
+      "utterance": "Request attendance permission official 2 hours on 2027-06-17",
+      "passed": true,
+      "status": "PASS",
+      "notes": "",
+      "journey_ms": 1918.8,
+      "discovery_commit_ms": 1157.7
+    }
+  ],
+  "consecutive_green": 4,
+  "notes": "live Chat→Agent→Approve",
+  "recorded_at": "2026-09-23T12:48:00.358505+00:00"
+}

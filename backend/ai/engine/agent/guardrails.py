@@ -166,6 +166,12 @@ async def chat_surface_hook(ctx: HookContext) -> HookResult:
     ``consent_hook`` / the executor can create ``pending_exec``. Memory
     (`learn_fact`) remains allowed. Agent/plan surfaces pass through.
 
+    **Plan dial exception:** ``plan_task`` drafts a reviewable Tasks-panel
+    plan (nothing runs until Approve). That is the Plan dial's job — do not
+    cancel it with "Ask mode does not create tasks" when the user message
+    carries ``[Pulse mode: Plan.…]``. ``approve_plan`` / ``edit_plan`` and
+    host writes still cancel on Chat.
+
     The cancel carries a structured ``payload`` (``chat_handoff``) so the
     turn layer can emit Open-in-Agent / Open-My CTAs instead of a dead
     Confirm banner.
@@ -179,6 +185,16 @@ async def chat_surface_hook(ctx: HookContext) -> HookResult:
     if not is_chat_surface(ctx.surface):
         return HookResult(action="pass")
 
+    tool = (ctx.tool_name or "").strip()
+    # Plan dial may call plan_task — drafts only, no host mutation.
+    if tool == "plan_task":
+        try:
+            from ai.engine.cognition.plan.process_dial import is_plan_dial_turn
+            if is_plan_dial_turn(str(ctx.user_message or "")):
+                return HookResult(action="pass")
+        except Exception:  # noqa: BLE001 — fail closed to cancel below
+            pass
+
     if not is_host_mutation_tool(ctx.tool_name, ctx.tool_args):
         return HookResult(action="pass")
 
@@ -189,11 +205,15 @@ async def chat_surface_hook(ctx: HookContext) -> HookResult:
         ctx.tool_args,
         user_message=str(ctx.user_message or ""),
     )
+    if tool in {"plan_task", "approve_plan", "edit_plan"}:
+        reason = "Ask mode doesn’t create tasks — switch to Plan to draft one."
+    else:
+        reason = (
+            "This change can’t be submitted in Chat — use Agent or My."
+        )
     return HookResult(
         action="cancel",
-        reason=(
-            "This change can’t be submitted in Chat — use Agent or My."
-        ),
+        reason=reason,
         flags=["chat_no_host_mutation"],
         payload=handoff,
     )

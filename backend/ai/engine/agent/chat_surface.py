@@ -166,7 +166,11 @@ def is_ess_write_intent(message: str) -> bool:
     Used to skip orchestrator fan-out (those turns belong to process_dial /
     Chat handoff) without blocking other mutation or analytics fan-outs.
     """
-    text = (message or "").strip()
+    try:
+        from ai.engine.cognition.plan.process_dial import strip_pulse_mode_prefix
+        text = strip_pulse_mode_prefix(message or "").strip()
+    except Exception:  # noqa: BLE001
+        text = (message or "").strip()
     if not text or not _ESS_TOPIC_RE.search(text):
         return False
     # Explicit apply/request verbs (EN + AR) — covers loan/attendance that
@@ -200,8 +204,116 @@ def handoff_spec_for_api(api_name: str | None) -> dict[str, str]:
         "process": "",
         "agent_label_en": "Open in Agent",
         "agent_label_ar": "فتح الوكيل",
-        "topic_en": "this change",
+        "topic_en": "change",
         "topic_ar": "هذا التغيير",
+    }
+
+
+def build_plan_mode_switch_handoff(*, user_message: str = "") -> dict[str, Any]:
+    """Ask mode must not create tasks — steer the user to the Plan dial.
+
+    Used when Chat cancels ``plan_task`` (or similar). No Agent Tasks panel,
+    no My route — just Switch to Plan so the same thread can draft a plan.
+    """
+    locale = detect_locale(user_message)
+    if locale == "ar":
+        headline = "وضع السؤال لا يُنشئ مهاماً"
+        prose = [
+            "وضع السؤال للإجابات والنصح فقط. "
+            "بدّل المفتاح إلى «خطّة» لصياغة خطة قابلة للمراجعة من هذه المحادثة.",
+        ]
+        label = "التبديل إلى خطّة"
+        summary = "بدّل إلى وضع الخطّة"
+    else:
+        headline = "Ask mode does not create tasks"
+        prose = [
+            "Ask is answers and advice only. "
+            "Switch the dial to Plan to draft a reviewable plan from this thread.",
+        ]
+        label = "Switch to Plan"
+        summary = "Switch to Plan mode"
+    envelope = {
+        "version": 1,
+        "headline": headline,
+        "prose": prose,
+        "tables": [],
+        "figures": [],
+        "caveats": [],
+        "sources": [],
+        "actions": [],
+    }
+    return {
+        "action": "chat_handoff",
+        "reason": INTERNAL_REASON,
+        "api_name": "",
+        "tool_name": "plan_task",
+        "draft": {},
+        "process_hint": "plan",
+        "actions": [
+            {
+                "type": "open_panel",
+                "panel": "plan",
+                "plan_id": "",
+                "label": label,
+                "summary": summary,
+                "process_hint": "plan",
+            },
+        ],
+        "message": f"**{headline}**\n\n{prose[0]}",
+        "summary": summary,
+        "envelope": envelope,
+        "locale": locale,
+        "requires_confirmation": False,
+        "pending_exec": False,
+        "caveats": [],
+    }
+
+
+def build_chat_handoff_result(
+    tool_name: str,
+    tool_args: dict | None,
+    *,
+    reason: str = "",
+    user_message: str = "",
+) -> dict[str, Any]:
+    """Tool-result shape for a cancelled Chat mutation (not an error)."""
+    name = (tool_name or "").strip()
+    # plan_task in Chat/Ask → switch to Plan dial; never invent Agent/My CTAs.
+    if name in {"plan_task", "approve_plan", "edit_plan"}:
+        return build_plan_mode_switch_handoff(user_message=user_message)
+
+    args = tool_args or {}
+    api = str(args.get("api_name") or args.get("api") or "").strip()
+    body = args.get("body") if isinstance(args.get("body"), dict) else {}
+    locale = detect_locale(user_message)
+    spec = handoff_spec_for_api(api)
+    actions = build_handoff_actions(spec, locale=locale)
+    message = handoff_copy(spec, draft=body, locale=locale)
+    envelope = build_handoff_envelope(spec, draft=body, locale=locale)
+    summary = (
+        "Prepared leave draft — handoff to Agent or My"
+        if "leave" in (spec.get("topic_en") or "")
+        else "Prepared draft — handoff to Agent or My"
+    )
+    if locale == "ar":
+        summary = "تم تجهيز مسودة — انتقل إلى الوكيل أو تطبيقاتي"
+    return {
+        "action": "chat_handoff",
+        # Internal only — never copy into caveats / thought UI.
+        "reason": INTERNAL_REASON,
+        "api_name": api,
+        "tool_name": tool_name,
+        "draft": body,
+        "process_hint": spec.get("process") or "",
+        "actions": actions,
+        "message": message,
+        "summary": summary,
+        "envelope": envelope,
+        "locale": locale,
+        "requires_confirmation": False,
+        "pending_exec": False,
+        # Explicit empty so envelope synthesizers have nothing to quote.
+        "caveats": [],
     }
 
 
@@ -408,49 +520,6 @@ def build_handoff_envelope(
         "charts": [],
         "caveats": [],  # never ADR / G2 / host-mutation jargon
         "sources": sources,
-    }
-
-
-def build_chat_handoff_result(
-    tool_name: str,
-    tool_args: dict | None,
-    *,
-    reason: str = "",
-    user_message: str = "",
-) -> dict[str, Any]:
-    """Tool-result shape for a cancelled Chat mutation (not an error)."""
-    args = tool_args or {}
-    api = str(args.get("api_name") or args.get("api") or "").strip()
-    body = args.get("body") if isinstance(args.get("body"), dict) else {}
-    locale = detect_locale(user_message)
-    spec = handoff_spec_for_api(api)
-    actions = build_handoff_actions(spec, locale=locale)
-    message = handoff_copy(spec, draft=body, locale=locale)
-    envelope = build_handoff_envelope(spec, draft=body, locale=locale)
-    summary = (
-        "Prepared leave draft — handoff to Agent or My"
-        if "leave" in (spec.get("topic_en") or "")
-        else "Prepared draft — handoff to Agent or My"
-    )
-    if locale == "ar":
-        summary = "تم تجهيز مسودة — انتقل إلى الوكيل أو تطبيقاتي"
-    return {
-        "action": "chat_handoff",
-        # Internal only — never copy into caveats / thought UI.
-        "reason": INTERNAL_REASON,
-        "api_name": api,
-        "tool_name": tool_name,
-        "draft": body,
-        "process_hint": spec.get("process") or "",
-        "actions": actions,
-        "message": message,
-        "summary": summary,
-        "envelope": envelope,
-        "locale": locale,
-        "requires_confirmation": False,
-        "pending_exec": False,
-        # Explicit empty so envelope synthesizers have nothing to quote.
-        "caveats": [],
     }
 
 

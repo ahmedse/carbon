@@ -116,7 +116,7 @@ export default function TeamRequestDetail() {
   const { t } = useTranslation('team');
   const theme = useTheme();
   const isRtl = theme.direction === 'rtl';
-  const { token, userCapabilities, isGlobalAdminFlag } = useAuth();
+  const { token, user, userCapabilities, isGlobalAdminFlag } = useAuth();
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -124,8 +124,20 @@ export default function TeamRequestDetail() {
   useDocumentTitle(t('detailTitle'));
 
   const fromHistory = location.state?.from === 'history';
-  const backPath = fromHistory ? '/team/history' : '/team';
-  const backLabel = fromHistory ? t('backToHistory') : t('backToInbox');
+  const peopleBack = {
+    'people-leave': { path: '/people/leave', label: t('backToPeopleLeave') },
+    'people-loans': { path: '/people/loans', label: t('backToPeopleLoans') },
+    'people-attendance': { path: '/people/attendance', label: t('backToPeopleAttendance') },
+    'people-employee': location.state?.employeeId
+      ? {
+          path: `/people/employees/${location.state.employeeId}`,
+          label: t('backToEmployee'),
+        }
+      : null,
+    'people-requests': { path: '/people/requests', label: t('backToPeopleRequests') },
+  }[location.state?.from];
+  const backPath = peopleBack?.path || (fromHistory ? '/team/history' : '/team');
+  const backLabel = peopleBack?.label || (fromHistory ? t('backToHistory') : t('backToInbox'));
 
   const canCorrAdmin = useMemo(() => {
     if (isGlobalAdminFlag === true) return true;
@@ -147,6 +159,12 @@ export default function TeamRequestDetail() {
   const [confirmDestructive, setConfirmDestructive] = useState(false);
 
   const isActionable = Boolean(data && ACTIONABLE.includes(data.status));
+  const userId = Number(user?.id);
+  const canDecide = Boolean(
+    isActionable
+    && Number.isFinite(userId)
+    && (data.current_approver_ids || []).some((id) => Number(id) === userId),
+  );
   const showAdminActs = Boolean(
     data && canCorrAdmin && ADMIN_TERMINAL.includes(data.status),
   );
@@ -375,10 +393,10 @@ export default function TeamRequestDetail() {
             <RequestTimeline events={data.events} />
 
             <Box sx={{ pt: 1 }}>
-              {isActionable || !showAdminActs ? (
+              {canDecide || !showAdminActs ? (
                 <>
                   <SectionTitle icon={HowToVoteIcon} title={t('actionsTitle')} />
-                  {isActionable ? (
+                  {canDecide ? (
                     <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
                       <Button
                         size="small"
@@ -413,7 +431,7 @@ export default function TeamRequestDetail() {
                     </Stack>
                   ) : (
                     <Typography variant="body2" color="text.secondary">
-                      {t('actionsNotAvailable')}
+                      {isActionable ? t('actionsNotYourStep') : t('actionsNotAvailable')}
                     </Typography>
                   )}
                 </>

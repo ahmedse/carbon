@@ -399,6 +399,8 @@ class LeaveRecordSerializer(serializers.ModelSerializer):
     employee_no = serializers.CharField(source='employee.employee_no', read_only=True)
     employee_name = serializers.CharField(source='employee.full_name', read_only=True)
     days = LeaveDaysField()
+    correspondence_id = serializers.SerializerMethodField()
+    reference_no = serializers.SerializerMethodField()
 
     class Meta:
         model = LeaveRecord
@@ -407,14 +409,22 @@ class LeaveRecordSerializer(serializers.ModelSerializer):
             'leave_type', 'leave_type_id', 'leave_type_label',
             'start_date', 'end_date',
             'days', 'status', 'calendar_split', 'created_at', 'updated_at',
+            'correspondence_id', 'reference_no',
         ]
         read_only_fields = [
             'id', 'employee_no', 'employee_name', 'leave_type_id',
             'created_at', 'updated_at',
+            'correspondence_id', 'reference_no',
         ]
 
     def get_leave_type_label(self, obj):
         return obj.leave_type.label if obj.leave_type_id else None
+
+    def get_correspondence_id(self, obj):
+        return obj.__dict__.get('correspondence_id')
+
+    def get_reference_no(self, obj):
+        return obj.__dict__.get('reference_no')
 
 
 class BenefitTypeSerializer(serializers.ModelSerializer):
@@ -447,6 +457,8 @@ class LoanSerializer(serializers.ModelSerializer):
     loan_type = GovernedValueField(set_name='loan_type', allow_null=False)
     employee_no = serializers.CharField(source='employee.employee_no', read_only=True)
     employee_name = serializers.CharField(source='employee.full_name', read_only=True)
+    correspondence_id = serializers.SerializerMethodField()
+    reference_no = serializers.SerializerMethodField()
 
     class Meta:
         model = Loan
@@ -454,8 +466,18 @@ class LoanSerializer(serializers.ModelSerializer):
             'id', 'employee', 'employee_no', 'employee_name',
             'loan_type', 'principal', 'interest_rate',
             'term_months', 'start_date', 'status', 'notes',
+            'correspondence_id', 'reference_no',
         ]
-        read_only_fields = ['id', 'employee_no', 'employee_name']
+        read_only_fields = [
+            'id', 'employee_no', 'employee_name',
+            'correspondence_id', 'reference_no',
+        ]
+
+    def get_correspondence_id(self, obj):
+        return obj.__dict__.get('correspondence_id')
+
+    def get_reference_no(self, obj):
+        return obj.__dict__.get('reference_no')
 
 
 class SelfLoanSerializer(LoanSerializer):
@@ -473,7 +495,7 @@ class SelfLoanSerializer(LoanSerializer):
 
     class Meta(LoanSerializer.Meta):
         fields = LoanSerializer.Meta.fields + [
-            'reference_no', 'correspondence_id', 'correspondence_status',
+            'correspondence_status',
         ]
         read_only_fields = fields
 
@@ -534,6 +556,8 @@ class AttendancePermissionSerializer(serializers.ModelSerializer):
     permission_type = GovernedValueField(set_name='permission_type', allow_null=False)
     employee_no = serializers.CharField(source='employee.employee_no', read_only=True)
     employee_name = serializers.CharField(source='employee.full_name', read_only=True)
+    correspondence_id = serializers.SerializerMethodField()
+    reference_no = serializers.SerializerMethodField()
 
     class Meta:
         model = AttendancePermission
@@ -541,8 +565,18 @@ class AttendancePermissionSerializer(serializers.ModelSerializer):
             'id', 'employee', 'employee_no', 'employee_name',
             'date', 'permission_type', 'hours',
             'status', 'approved', 'notes',
+            'correspondence_id', 'reference_no',
         ]
-        read_only_fields = ['id', 'employee_no', 'employee_name', 'status']
+        read_only_fields = [
+            'id', 'employee_no', 'employee_name', 'status',
+            'correspondence_id', 'reference_no',
+        ]
+
+    def get_correspondence_id(self, obj):
+        return obj.__dict__.get('correspondence_id')
+
+    def get_reference_no(self, obj):
+        return obj.__dict__.get('reference_no')
 
 
 class CertificationSerializer(serializers.ModelSerializer):

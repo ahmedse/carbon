@@ -20,6 +20,7 @@ import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import PolicyIcon from '@mui/icons-material/Policy';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import FactCheckIcon from '@mui/icons-material/FactCheck';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import PageContainer from '../../components/layout/PageContainer';
@@ -43,6 +44,13 @@ export const PEOPLE_HOME_MODULES = [
     titleKey: 'employeesTitle',
     subtitleKey: 'employeesSubtitle',
     countKey: 'employees',
+  },
+  {
+    id: 'requests',
+    path: '/people/requests',
+    icon: FactCheckIcon,
+    titleKey: 'requestsAuditTitle',
+    subtitleKey: 'requestsAuditSubtitle',
   },
   {
     id: 'leave',

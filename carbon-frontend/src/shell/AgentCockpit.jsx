@@ -1,6 +1,6 @@
 // src/shell/AgentCockpit.jsx
-// ADR-0043 — presentational run-cockpit shell: Plan · Run · Canvas · Output
-// (exclusive heroes). Parent owns state/handlers; this is pure layout (RULE_2).
+// Task screens: Now · Picture · Result (Result only after an outcome).
+// Journey is a fold under Result, not a fourth tab. Parent owns state.
 import React from 'react';
 import PropTypes from 'prop-types';
 import {
@@ -9,18 +9,14 @@ import {
   ToggleButton,
   ToggleButtonGroup,
 } from '@mui/material';
-import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
-import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
-import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
-import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import { useTranslation } from 'react-i18next';
 import InheritedContextPanel from './InheritedContextPanel';
+import { hasTaskOutcome } from './taskWorkspace';
 
 const SEGMENTS = [
-  { value: 'plan', labelKey: 'cockpitPlan', icon: AccountTreeOutlinedIcon },
-  { value: 'run', labelKey: 'cockpitRun', icon: PlayCircleOutlineIcon },
-  { value: 'canvas', labelKey: 'cockpitCanvas', icon: MapOutlinedIcon },
-  { value: 'output', labelKey: 'cockpitOutput', icon: ArticleOutlinedIcon },
+  { value: 'run', labelKey: 'cockpitNow' },
+  { value: 'plan', labelKey: 'cockpitPicture' },
+  { value: 'output', labelKey: 'cockpitResult', needsOutcome: true },
 ];
 
 /**
@@ -29,39 +25,46 @@ const SEGMENTS = [
  * @param {'plan'|'run'|'canvas'|'output'} props.segment
  * @param {function} props.onSegment
  * @param {React.ReactNode} props.header
+ * @param {React.ReactNode} [props.line]
  * @param {object|null} props.plan
  * @param {function} props.renderPlan
  * @param {function} props.renderRun
  * @param {function} props.renderCanvas
  * @param {function} props.renderOutput
- * @param {React.ReactNode} [props.toolbar] — segment toolbar under tabs (e.g. Plan chrome)
+ * @param {React.ReactNode} [props.toolbar]
+ * @param {boolean} [props.resultReady]
  */
 function AgentCockpit({
   segment,
   onSegment,
   header,
+  line = null,
   plan,
   renderPlan,
   renderRun,
   renderCanvas,
   renderOutput,
   toolbar = null,
+  resultReady = false,
 }) {
   const { t } = useTranslation('ai');
+
+  const visible = resultReady ? segment : (segment === 'output' ? 'run' : segment);
+  const view = visible === 'canvas' ? 'plan' : visible;
 
   const heroTestId = {
     plan: 'agent-cockpit-hero-plan',
     run: 'agent-cockpit-hero-run',
-    canvas: 'agent-cockpit-hero-canvas',
+    canvas: 'agent-cockpit-hero-plan',
     output: 'agent-cockpit-hero-output',
-  }[segment] || 'agent-cockpit-hero-run';
+  }[view] || 'agent-cockpit-hero-run';
 
   const body = () => {
-    switch (segment) {
+    switch (view) {
       case 'plan':
         return renderPlan();
       case 'canvas':
-        return renderCanvas();
+        return renderCanvas ? renderCanvas() : renderPlan();
       case 'output':
         return renderOutput();
       case 'run':
@@ -70,11 +73,13 @@ function AgentCockpit({
     }
   };
 
+  const tabs = SEGMENTS.filter((item) => !item.needsOutcome || resultReady);
+
   return (
     <Box
       data-testid="agent-cockpit"
       data-plan-id={plan?.id ?? ''}
-      data-segment={segment}
+      data-segment={view}
       sx={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}
     >
       {header ? (
@@ -82,29 +87,52 @@ function AgentCockpit({
           direction="row"
           alignItems="center"
           spacing={1}
-          sx={{ px: 1, py: 0.5, borderBottom: 1, borderColor: 'divider' }}
+          sx={{ px: 1.25, py: 0.5, borderBottom: 1, borderColor: 'divider' }}
         >
           <Box sx={{ flex: 1, minWidth: 0 }}>{header}</Box>
         </Stack>
       ) : null}
 
-      <Box sx={{ px: 1, py: 0.5, borderBottom: 1, borderColor: 'divider' }}>
+      {line ? (
+        <Box sx={{ px: 1.25, py: 0.5, borderBottom: 1, borderColor: 'divider' }}>
+          {line}
+        </Box>
+      ) : null}
+
+      <Box sx={{ px: 1, py: 0.25, borderBottom: 1, borderColor: 'divider' }}>
         <ToggleButtonGroup
-          value={segment}
+          value={view}
           exclusive
           size="small"
-          fullWidth
           onChange={(_e, next) => { if (next) onSegment?.(next); }}
           aria-label={t('cockpitView')}
+          sx={{
+            '& .MuiToggleButton-root': {
+              border: 'none',
+              px: 1.25,
+              py: 0.25,
+              fontSize: '0.75rem',
+              textTransform: 'none',
+              fontWeight: 500,
+              color: 'text.secondary',
+              '&.Mui-selected': {
+                bgcolor: 'transparent',
+                color: 'text.primary',
+                fontWeight: 600,
+                boxShadow: 'none',
+                borderBottom: 2,
+                borderColor: 'primary.main',
+                borderRadius: 0,
+              },
+            },
+          }}
         >
-          {SEGMENTS.map(({ value, labelKey, icon: Icon }) => (
+          {tabs.map(({ value, labelKey }) => (
             <ToggleButton
               key={value}
               value={value}
               aria-label={t(labelKey)}
-              sx={{ fontSize: '0.6875rem', textTransform: 'none', py: 0.25, gap: 0.5 }}
             >
-              <Icon sx={{ fontSize: 14 }} />
               {t(labelKey)}
             </ToggleButton>
           ))}
@@ -114,16 +142,16 @@ function AgentCockpit({
       {toolbar ? (
         <Box
           data-testid="agent-cockpit-toolbar"
-          sx={{ px: 1, py: 0.75, borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}
+          sx={{ px: 1.25, py: 0.5, borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}
         >
           {toolbar}
         </Box>
       ) : null}
 
       <Box
-        sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 1 }}
+        sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 1.25 }}
         data-testid="cockpit-body"
-        data-hero={segment}
+        data-hero={view}
       >
         <Box data-testid={heroTestId}>
           <Box sx={{ mb: 1 }}>
@@ -140,21 +168,20 @@ AgentCockpit.propTypes = {
   segment: PropTypes.oneOf(['plan', 'run', 'canvas', 'output']).isRequired,
   onSegment: PropTypes.func.isRequired,
   header: PropTypes.node,
+  line: PropTypes.node,
   plan: PropTypes.object,
   renderPlan: PropTypes.func.isRequired,
   renderRun: PropTypes.func.isRequired,
-  renderCanvas: PropTypes.func.isRequired,
+  renderCanvas: PropTypes.func,
   renderOutput: PropTypes.func.isRequired,
   toolbar: PropTypes.node,
+  resultReady: PropTypes.bool,
 };
 
 export default AgentCockpit;
 
-/** Soft lifecycle default (ADR-0043 §2). */
+/** Soft lifecycle default — Now while work is live, Picture to approve, Result after outcome. */
 export function defaultCockpitSegment(effectiveStatus, phase) {
-  // Settled session phases win so Output can show stop/fail chrome —
-  // but never treat a false "finished" as Output when the plan is not
-  // actually settled (Completed + 0/N pending).
   if (phase === 'stopped' || phase === 'error') {
     return 'output';
   }
@@ -180,22 +207,18 @@ export function defaultCockpitSegment(effectiveStatus, phase) {
   ) {
     return 'run';
   }
-  if (
-    effectiveStatus === 'completed'
-    || effectiveStatus === 'completed_with_gaps'
-    || effectiveStatus === 'failed'
-  ) {
+  if (hasTaskOutcome(effectiveStatus, phase)) {
     return 'output';
   }
-  // Declined before a run — Plan shows “nothing executed”.
   if (effectiveStatus === 'cancelled') return 'plan';
-  return 'plan';
+  return 'run';
 }
 
-/** Migrate ADR-0034 segment ids → ADR-0043. */
+/** Migrate ADR-0034 / Journey tab ids → Now · Picture · Result. */
 export function normalizeCockpitSegment(raw) {
   if (raw === 'steps') return 'run';
   if (raw === 'metrics') return 'output';
-  if (raw === 'plan' || raw === 'run' || raw === 'canvas' || raw === 'output') return raw;
+  if (raw === 'canvas') return 'plan';
+  if (raw === 'plan' || raw === 'run' || raw === 'output') return raw;
   return 'run';
 }

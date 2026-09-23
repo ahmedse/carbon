@@ -35,6 +35,17 @@ def _signal(ledger: TurnLedger, gate: str, fired: bool, **detail) -> None:
 _BACKGROUND_LLM_STAGES = frozenset({"auto_memory"})
 
 
+def _commit_staged(ledger: TurnLedger, meter, staged):
+    """L3: return the Arbiter winner's body, or None to keep walking the spine."""
+    from ai.engine.cognition.turn.executor import pick_staged
+
+    picked = pick_staged(ledger.decision_signals, staged)
+    if picked is None:
+        return None
+    _finalize_meter(ledger, meter, picked.decision)
+    return picked.response, ledger
+
+
 def _finalize_meter(ledger: TurnLedger, meter, decision: str) -> None:
     from ai.engine.llm.call_meter import CallMeter
 
@@ -299,17 +310,30 @@ def _filter_draft_tools(
     salience_domain: str,
 ) -> list[dict] | None:
     """Exclude ``list_my_capabilities`` unless the user explicitly asked about
-    capabilities/access or the turn is an identity-domain turn (GAP-M7)."""
+    capabilities/access or the turn is an identity-domain turn (GAP-M7).
+
+    Ask mode also strips ``plan_task`` / plan mutators — answers only; user
+    switches the Plan dial when a reviewable plan is required.
+    """
+    tools = draft_tools
     if (
-        draft_tools
+        tools
         and not _is_capability_query(user_message)
         and salience_domain != "identity"
     ):
-        return [
-            d for d in draft_tools
+        tools = [
+            d for d in tools
             if d.get("function", {}).get("name") != "list_my_capabilities"
         ]
-    return draft_tools
+    # Ask mode prefix is injected by CarbonIntelligence._prepend_pulse_mode.
+    msg = (user_message or "").lstrip()
+    if tools and msg.startswith("[Pulse mode: Ask."):
+        _ask_block = frozenset({"plan_task", "approve_plan", "edit_plan"})
+        tools = [
+            d for d in tools
+            if d.get("function", {}).get("name") not in _ask_block
+        ]
+    return tools
 
 
 #: Spine static tools ALWAYS exposed to the chat planner. Registry plugins
@@ -797,18 +821,105 @@ def _append_evidence_footer(synthesized: str, usable: list[dict]) -> str:
     return synthesized
 
 
-def _render_tool_tables(usable: list[dict]) -> str:
-    """Deterministically render GFM markdown tables from structured tool results.
+def _wants_visual(user_message: str) -> bool:
+    """True when a chart/graph is the right answer shape.
 
-    Covers the known platform data shapes so the synthesis LLM never has to
-    format a table itself — it only writes prose around the pre-built tables.
-    Returns an empty string when no tabular structure is found.
+    Explicit chart words OR distribution / breakdown / analytics phrasing
+    (\"salaries distributions\", \"breakdown by nationality\").
     """
+    if not user_message:
+        return False
+    import re
+    text = user_message
+    try:
+        from ai.engine.cognition.plan.process_dial import strip_pulse_mode_prefix
+        text = strip_pulse_mode_prefix(user_message)
+    except Exception:  # noqa: BLE001
+        pass
+    return bool(re.search(
+        r"\b(chart|charts|graph|graphs|visual|visuals|visualise|visualize|"
+        r"plot|plots|diagram|diagrams|pie|bar\s*chart|trend|trends|"
+        r"infographic|figure|figures|"
+        r"distribution|distributions|breakdown|break\s*down|"
+        r"analytics|histogram|by\s+(?:band|tier|nationality|gender|dept|"
+        r"department|grade|org))\b"
+        r"|توزيع|رسم\s*بياني|مخطط",
+        text, re.IGNORECASE))
+
+
+def _is_distribution_ask(user_message: str) -> bool:
+    """Salary / headcount distribution asks must never dump raw row tables."""
+    if not user_message:
+        return False
+    import re
+    text = user_message
+    try:
+        from ai.engine.cognition.plan.process_dial import strip_pulse_mode_prefix
+        text = strip_pulse_mode_prefix(user_message)
+    except Exception:  # noqa: BLE001
+        pass
+    return bool(re.search(
+        r"\b(distribution|distributions|breakdown|salary|salaries|"
+        r"compensation|payroll\s+mix|pay\s+bands?|tiers?)\b"
+        r"|توزيع|رواتب|راتب",
+        text, re.IGNORECASE))
+
+
+def _cell_display(value) -> str:
+    """Human cell text — never dump raw Python/JSON dict strings."""
+    if value is None:
+        return ""
+    if isinstance(value, dict):
+        for key in ("label", "name", "code", "title", "display"):
+            if value.get(key) not in (None, ""):
+                return str(value[key])
+        return ""
+    if isinstance(value, (list, tuple)):
+        return ", ".join(_cell_display(v) for v in value[:6] if v not in (None, ""))
+    text = str(value).strip()
+    # Common accident: stringified dict from ORM / ReferenceValue.
+    if text.startswith("{") and ("'label'" in text or '"label"' in text):
+        import re as _re
+        m = _re.search(r"['\"]label['\"]\s*:\s*['\"]([^'\"]+)['\"]", text)
+        if m:
+            return m.group(1)
+    return text
+
+
+def _salary_band_buckets(amounts: list[float]) -> list[tuple[str, int]]:
+    """Bucket gross/net amounts into readable salary bands."""
+    if not amounts:
+        return []
+    edges = [0, 100, 200, 300, 420, 600, 1000, 2000, 5000, 10_000]
+    labels = [
+        "≤100", "100–200", "200–300", "300–420", "420–600",
+        "600–1k", "1k–2k", "2k–5k", "5k+",
+    ]
+    counts = [0] * len(labels)
+    for amt in amounts:
+        if amt < 0:
+            # Negatives (loan-heavy nets) — count in lowest band with a note via label.
+            counts[0] += 1
+            continue
+        placed = False
+        for i in range(len(edges) - 1):
+            if edges[i] <= amt < edges[i + 1]:
+                counts[i] += 1
+                placed = True
+                break
+        if not placed:
+            counts[-1] += 1
+    return [(lab, n) for lab, n in zip(labels, counts) if n > 0]
+
+
+def _extract_amount_series(usable: list[dict]) -> list[float]:
+    """Pull numeric salary/amount fields from list-shaped tool results."""
     import json as _json
-
-    _SCOPE_NAMES = {1: "Scope 1 — Direct", 2: "Scope 2 — Indirect Energy", 3: "Scope 3 — Value Chain"}
-
-    parts: list[str] = []
+    amounts: list[float] = []
+    amount_keys = (
+        "amount", "gross", "gross_salary", "basic", "basic_salary",
+        "net", "net_pay", "value", "total",
+    )
     for tr in usable:
         result = tr.get("result")
         if result is None:
@@ -823,6 +934,87 @@ def _render_tool_tables(usable: list[dict]) -> str:
             data = data["data"]
         if not isinstance(data, dict):
             continue
+        for key in ("rows", "results", "items", "records", "lines"):
+            items = data.get(key)
+            if not isinstance(items, list):
+                continue
+            for row in items:
+                if not isinstance(row, dict):
+                    continue
+                for ak in amount_keys:
+                    raw = row.get(ak)
+                    if raw in (None, ""):
+                        continue
+                    try:
+                        amounts.append(float(raw))
+                        break
+                    except (TypeError, ValueError):
+                        continue
+    return amounts
+
+
+def _render_tool_tables(usable: list[dict], *, user_message: str = "") -> str:
+    """Deterministically render GFM markdown tables from structured tool results.
+
+    Prefer analytics ``breakdown`` buckets. Never dump raw payslip/employee
+    row dumps for distribution asks — those belong in a chart + band table.
+    """
+    import json as _json
+
+    _SCOPE_NAMES = {1: "Scope 1 — Direct", 2: "Scope 2 — Indirect Energy", 3: "Scope 3 — Value Chain"}
+    distribution = _is_distribution_ask(user_message)
+
+    parts: list[str] = []
+    for tr in usable:
+        result = tr.get("result")
+        if result is None:
+            continue
+        data = result
+        if isinstance(result, str):
+            try:
+                data = _json.loads(result)
+            except (TypeError, ValueError):
+                continue
+        if isinstance(data, dict) and "status_code" in data and "data" in data:
+            data = data["data"]
+        # Nested analytics payload without status_code.
+        if (
+            isinstance(data, dict)
+            and "breakdown" not in data
+            and isinstance(data.get("data"), dict)
+            and (
+                "breakdown" in data["data"]
+                or "by_scope" in data["data"]
+                or "rows" in data["data"]
+            )
+        ):
+            data = data["data"]
+        if not isinstance(data, dict):
+            continue
+
+        breakdown = data.get("breakdown") or []
+        if isinstance(breakdown, list) and breakdown and isinstance(breakdown[0], dict):
+            rows = []
+            for b in breakdown[:30]:
+                label = _cell_display(b.get("label") or b.get("name") or "—")
+                count = b.get("count", b.get("value", ""))
+                pct = b.get("pct", b.get("percent", ""))
+                if pct != "":
+                    rows.append(f"| {label} | {count} | {pct}% |")
+                else:
+                    rows.append(f"| {label} | {count} |")
+            if rows:
+                if "%" in rows[0]:
+                    parts.append(
+                        "| Band / category | Count | Share |\n"
+                        "|---|---|---|\n" + "\n".join(rows)
+                    )
+                else:
+                    parts.append(
+                        "| Band / category | Count |\n"
+                        "|---|---|\n" + "\n".join(rows)
+                    )
+                continue
 
         by_scope = data.get("by_scope") or {}
         if isinstance(by_scope, dict) and by_scope:
@@ -854,42 +1046,47 @@ def _render_tool_tables(usable: list[dict]) -> str:
                     "|---|---|---|\n" + "\n".join(rows)
                 )
 
-        # Generic list-of-dicts shapes (rows / results / items / records)
-        if not parts:
-            for key in ("rows", "results", "items", "records"):
-                items = data.get(key)
-                if isinstance(items, list) and items and isinstance(items[0], dict):
-                    cols = list(items[0].keys())[:8]
-                    header = "| " + " | ".join(str(c).replace("_", " ").title() for c in cols) + " |"
-                    sep = "|" + "|".join(["---"] * len(cols)) + "|"
-                    rows = [
-                        "| " + " | ".join(str(row.get(c, "")) for c in cols) + " |"
-                        for row in items[:50]
-                    ]
-                    if rows:
-                        parts.append("\n".join([header, sep] + rows))
+        # Generic list-of-dicts — SKIP for distribution asks (no salary dumps).
+        if distribution:
+            continue
+        if parts:
+            continue
+        for key in ("rows", "results", "items", "records"):
+            items = data.get(key)
+            if isinstance(items, list) and items and isinstance(items[0], dict):
+                # Skip payslip-line shaped dumps even outside explicit distribution.
+                sample_keys = {str(k).lower() for k in items[0].keys()}
+                if {"line_type", "payslip", "employee_name"} & sample_keys or (
+                    "amount" in sample_keys and "employee" in " ".join(sample_keys)
+                ):
                     break
+                cols = list(items[0].keys())[:8]
+                header = "| " + " | ".join(str(c).replace("_", " ").title() for c in cols) + " |"
+                sep = "|" + "|".join(["---"] * len(cols)) + "|"
+                rows = [
+                    "| " + " | ".join(_cell_display(row.get(c)) for c in cols) + " |"
+                    for row in items[:50]
+                ]
+                if rows:
+                    parts.append("\n".join([header, sep] + rows))
+                break
+
+    if distribution and not parts:
+        bands = _salary_band_buckets(_extract_amount_series(usable))
+        if bands:
+            rows = [f"| {lab} | {n} |" for lab, n in bands]
+            parts.append(
+                "| Salary band | Count |\n"
+                "|---|---|\n" + "\n".join(rows)
+            )
 
     return "\n\n".join(parts)
 
 
-def _wants_visual(user_message: str) -> bool:
-    """True when the user explicitly asked for a chart / graph / visual."""
-    if not user_message:
-        return False
-    import re
-    return bool(re.search(
-        r"\b(chart|charts|graph|graphs|visual|visuals|visualise|visualize|"
-        r"plot|plots|diagram|diagrams|pie|bar\s*chart|trend|trends|infographic|figure|figures)\b",
-        user_message, re.IGNORECASE))
-
-
-def _render_tool_charts(usable: list[dict]) -> str:
+def _render_tool_charts(usable: list[dict], *, user_message: str = "") -> str:
     """Deterministic Mermaid charts from structured tool results.
 
-    Pie for the scope split (parts of a whole); a bar chart for per-branch
-    magnitudes. Mermaid line rules are strict — the fence and every directive
-    each sit on their own line. Returns '' when no chartable structure exists.
+    Pie for balanced analyze_* breakdowns; bar for skewed / salary bands.
     """
     import json as _json
 
@@ -909,8 +1106,59 @@ def _render_tool_charts(usable: list[dict]) -> str:
                 continue
         if isinstance(data, dict) and "status_code" in data and "data" in data:
             data = data["data"]
+        if (
+            isinstance(data, dict)
+            and "breakdown" not in data
+            and isinstance(data.get("data"), dict)
+            and (
+                "breakdown" in data["data"]
+                or "by_scope" in data["data"]
+                or "rows" in data["data"]
+            )
+        ):
+            data = data["data"]
         if not isinstance(data, dict):
             continue
+
+        breakdown = data.get("breakdown") or []
+        chart_type = str(data.get("suggested_chart_type") or "bar").lower()
+        if isinstance(breakdown, list) and breakdown and isinstance(breakdown[0], dict):
+            labels: list[str] = []
+            values: list[float] = []
+            for b in breakdown[:12]:
+                lab = _cell_display(b.get("label") or b.get("name") or "-")
+                lab = lab.replace('"', "'").replace("—", "-").strip()[:24] or "-"
+                try:
+                    val = float(b.get("count", b.get("value", 0)) or 0)
+                except (TypeError, ValueError):
+                    val = 0.0
+                if val <= 0:
+                    continue
+                labels.append(lab)
+                values.append(val)
+            if labels and any(values):
+                if chart_type == "pie" and not have_pie and len(labels) <= 8:
+                    slices = [
+                        f'    "{lab}" : {int(v) if v == int(v) else round(v, 1)}'
+                        for lab, v in zip(labels, values)
+                    ]
+                    title = str(data.get("dimension") or "Distribution").replace('"', "'")[:40]
+                    charts.append(
+                        f"```mermaid\npie showData title {title}\n"
+                        + "\n".join(slices) + "\n```"
+                    )
+                    have_pie = True
+                elif not have_bar:
+                    ymax = int(max(values) * 1.15) or 1
+                    xlabels = ", ".join(f'"{lab}"' for lab in labels)
+                    charts.append(
+                        "```mermaid\nxychart-beta\n"
+                        '    title "Distribution"\n'
+                        f"    x-axis [{xlabels}]\n"
+                        f'    y-axis "Count" 0 --> {ymax}\n'
+                        f"    bar [{', '.join(str(int(v) if v == int(v) else round(v, 1)) for v in values)}]\n```"
+                    )
+                    have_bar = True
 
         by_scope = data.get("by_scope") or {}
         if isinstance(by_scope, dict) and by_scope and not have_pie:
@@ -933,8 +1181,8 @@ def _render_tool_charts(usable: list[dict]) -> str:
 
         by_module = data.get("by_module") or []
         if isinstance(by_module, list) and by_module and not have_bar:
-            labels: list[str] = []
-            values: list[float] = []
+            labels = []
+            values = []
             for m in by_module[:12]:
                 if isinstance(m, dict):
                     name = str(m.get("module_name") or m.get("module") or "-")
@@ -951,6 +1199,20 @@ def _render_tool_charts(usable: list[dict]) -> str:
                     f"    bar [{', '.join(str(v) for v in values)}]\n```"
                 )
                 have_bar = True
+
+    if not charts and _is_distribution_ask(user_message):
+        bands = _salary_band_buckets(_extract_amount_series(usable))
+        if bands:
+            labels = [f'"{lab}"' for lab, _ in bands]
+            values = [n for _, n in bands]
+            ymax = int(max(values) * 1.15) or 1
+            charts.append(
+                "```mermaid\nxychart-beta\n"
+                '    title "Salary distribution by band"\n'
+                f"    x-axis [{', '.join(labels)}]\n"
+                f'    y-axis "Employees" 0 --> {ymax}\n'
+                f"    bar [{', '.join(str(v) for v in values)}]\n```"
+            )
 
     return "\n\n".join(charts)
 
@@ -1369,7 +1631,7 @@ async def _synthesize_tool_results(
     if envelope is not None and (envelope.tables or envelope.charts):
         _env_text = _envelope_to_markdown(envelope)
         if _wants_visual(user_message) and "```mermaid" not in _env_text:
-            _charts = _render_tool_charts(usable)
+            _charts = _render_tool_charts(usable, user_message=user_message)
             if _charts:
                 _env_text = f"{_env_text}\n\n{_charts}"
         await _stream_final_text(
@@ -1404,7 +1666,7 @@ async def _synthesize_tool_results(
             # Even when the model's own draft is kept, honour an explicit
             # request for visuals by appending deterministic charts it omitted.
             if _wants_visual(user_message) and "```mermaid" not in stripped:
-                _charts = _render_tool_charts(usable)
+                _charts = _render_tool_charts(usable, user_message=user_message)
                 if _charts:
                     delta = "\n\n" + _charts
                     if stream_callback:
@@ -1438,8 +1700,8 @@ async def _synthesize_tool_results(
         include_memory=False,
     )
 
-    pre_tables = _render_tool_tables(usable)
-    pre_charts = _render_tool_charts(usable) if _wants_visual(user_message) else ""
+    pre_tables = _render_tool_tables(usable, user_message=user_message)
+    pre_charts = _render_tool_charts(usable, user_message=user_message) if _wants_visual(user_message) else ""
 
     try:
         result = await route_chat(
@@ -1715,8 +1977,17 @@ class TurnPipelineRunner:
         """Execute one turn. Returns (AgentResponse, TurnLedger)."""
         from ai.engine.agent.reasoning import AgentResponse
         from ai.engine.cognition.auto_memory import AutoMemoryExtractor
+        from ai.engine.cognition.turn.report_clarify import expand_numbered_report_pick
 
         settings = get_settings()
+
+        # Bare "1"/"2" after a report topic menu → scoped brief (not bare
+        # headcount). Must rewrite before zero-LLM / tools see the utterance.
+        _expanded_pick = expand_numbered_report_pick(
+            user_message, history=conversation_history,
+        )
+        if _expanded_pick:
+            user_message = _expanded_pick
 
         # Apply per-instance tool exclusions (e.g. an instance hides create_dq_rule).
         excluded_tools = set((instance_config or {}).get("excluded_tools") or [])
@@ -1739,6 +2010,8 @@ class TurnPipelineRunner:
             user_message=user_message,
             created_at=created_at,
         )
+        from ai.engine.cognition.turn.executor import StagedExit
+        staged: list[StagedExit] = []
 
         # ── P3.4: Per-run token budget ────────────────────────────────────
         from ai.engine.agent.budget import BudgetTracker
@@ -1930,8 +2203,7 @@ class TurnPipelineRunner:
                             "navigation_shortcircuit": _nav.action,
                         })
                         _signal(ledger, "nav_fast_path", True, action=_nav.action)
-                        _finalize_meter(ledger, meter, "navigate")
-                        return response, ledger
+                        staged.append(StagedExit("navigate", "nav_fast_path", response))
                     _signal(
                         ledger, "nav_fast_path", False,
                         action=getattr(_nav, "action", "none"),
@@ -1969,15 +2241,27 @@ class TurnPipelineRunner:
             t0=t0,
         )
         if _plan_status is not None:
-            return _plan_status
+            staged.append(StagedExit("answer", "plan_status", _plan_status[0]))
         _chat_handoff = await self._try_chat_write_handoff(
             user_message=user_message,
             conversation_history=conversation_history,
             state_ctx=state_ctx,
             instance_config=instance_config,
         )
+        if _chat_handoff is None and _plan_status is None:
+            _next_step = await self._try_next_step_offer(
+                user_message=user_message,
+                state_ctx=state_ctx,
+                ledger=ledger,
+                meter=meter,
+                turn_id=turn_id,
+                instance_id=instance_id,
+                t0=t0,
+            )
+            if _next_step is not None:
+                staged.append(StagedExit("answer", "next_step", _next_step[0]))
         if _chat_handoff is not None:
-            return await self._return_chat_handoff(
+            _handoff_pair = await self._return_chat_handoff(
                 outcome=_chat_handoff,
                 ledger=ledger,
                 meter=meter,
@@ -1986,7 +2270,14 @@ class TurnPipelineRunner:
                 conversation_id=conversation_id,
                 host_user_id=host_user_id,
                 t0=t0,
+                finalize=False,
             )
+            _handoff_decision = str(getattr(_chat_handoff, "decision", None) or "handoff_agent")
+            staged.append(StagedExit(
+                _handoff_decision,
+                "chat_handoff" if _handoff_decision == "handoff_agent" else f"chat_{_handoff_decision}",
+                _handoff_pair[0],
+            ))
         _zero = await self._try_zero_llm_surface(
             user_message=user_message,
             state_ctx=state_ctx,
@@ -1998,7 +2289,7 @@ class TurnPipelineRunner:
             t0=t0,
         )
         if _zero is not None:
-            return _zero
+            staged.append(StagedExit("answer", "zero_llm", _zero[0]))
 
         # Also run process briefing *before* salience when nav was skipped —
         # zero-token concept answer for governed process ids.
@@ -2035,14 +2326,17 @@ class TurnPipelineRunner:
                         "navigation_source": "skipped_for_process_brief",
                     })
                     _signal(ledger, "process_brief_early", True, process_id=_pid)
-                    _finalize_meter(ledger, meter, "process_brief")
-                    return response, ledger
+                    staged.append(StagedExit("process_brief", "process_brief_early", response))
             except Exception:  # noqa: BLE001
                 logger.warning(
                     "[%s] Process briefing early gate failed; continuing",
                     turn_id[:8], exc_info=True,
                 )
         _signal(ledger, "process_brief_early", _process_brief_early_fired)
+
+        _early = _commit_staged(ledger, meter, staged)
+        if _early is not None:
+            return _early
 
         # S1 — Salience
         s1_start = time.monotonic()
@@ -2185,14 +2479,17 @@ class TurnPipelineRunner:
                     "intent_shortcircuit": "deixis",
                 })
                 _signal(ledger, "deixis", True)
-                _finalize_meter(ledger, meter, "clarify")
-                return response, ledger
+                staged.append(StagedExit("clarify", "deixis", response))
         except Exception:
             logger.warning(
                 "[%s] Deixis gate failed; continuing",
                 turn_id[:8], exc_info=True,
             )
         _signal(ledger, "deixis", False)
+
+        _after_deixis = _commit_staged(ledger, meter, staged)
+        if _after_deixis is not None:
+            return _after_deixis
 
         # ── S1.5 — Intent Resolution (LLM-as-classifier, no local models) ──
         # Recognises which read-only endpoint the user is after, with a
@@ -2307,10 +2604,7 @@ class TurnPipelineRunner:
                     })
                     _signal(ledger, "process_brief", True, process_id=_pid)
                     _signal(ledger, "intent_short_circuit", False, action="process_brief")
-                    _signal(ledger, "nav_ground", False)
-                    _signal(ledger, "off_limits", False)
-                    _finalize_meter(ledger, meter, "process_brief")
-                    return response, ledger
+                    staged.append(StagedExit("process_brief", "process_brief", response))
 
             # [NAV] LLM-recognised navigation: ground the target *concept*
             # against the enumerated routes and propose→confirm (RULE_21 — no
@@ -2363,11 +2657,8 @@ class TurnPipelineRunner:
                         "navigation_shortcircuit": _nav.action,
                     })
                     _signal(ledger, "nav_ground", True, action=_nav.action)
-                    _signal(ledger, "process_brief", False)
                     _signal(ledger, "intent_short_circuit", False, action="navigate")
-                    _signal(ledger, "off_limits", False)
-                    _finalize_meter(ledger, meter, "navigate")
-                    return response, ledger
+                    staged.append(StagedExit("navigate", "nav_ground", response))
                 _signal(ledger, "nav_ground", False, action="navigate")
                 # else: navigation intent but the concept didn't ground to any
                 # declared destination → fall through to the normal pipeline.
@@ -2446,9 +2737,7 @@ class TurnPipelineRunner:
                 })
                 _signal(ledger, "off_limits", True, zone="off_limits")
                 _signal(ledger, "intent_short_circuit", True, action="off_limits")
-                _signal(ledger, "process_brief", False)
-                _finalize_meter(ledger, meter, "refuse")
-                return response, ledger
+                staged.append(StagedExit("refuse", "off_limits", response))
             if _off_limits_override:
                 _signal(
                     ledger, "off_limits", False,
@@ -2524,9 +2813,8 @@ class TurnPipelineRunner:
                     ledger, "intent_short_circuit", True,
                     action=_intent_resolution.action,
                 )
-                _signal(ledger, "process_brief", False)
-                _finalize_meter(ledger, meter, "clarify")
-                return response, ledger
+                _signal(ledger, "chat_clarify", True, action=_intent_resolution.action)
+                staged.append(StagedExit("clarify", "chat_clarify", response))
             _signal(
                 ledger, "intent_short_circuit", False,
                 action=_intent_resolution.action,
@@ -2569,8 +2857,11 @@ class TurnPipelineRunner:
                     "process_briefing": _pid,
                 })
                 _signal(ledger, "process_brief", True, process_id=_pid)
-                _finalize_meter(ledger, meter, "process_brief")
-                return response, ledger
+                staged.append(StagedExit("process_brief", "process_brief", response))
+
+        _gated = _commit_staged(ledger, meter, staged)
+        if _gated is not None:
+            return _gated
 
         # S2 — Retrieval
         s2_start = time.monotonic()
@@ -4161,7 +4452,60 @@ class TurnPipelineRunner:
         except Exception:  # noqa: BLE001
             logger.debug("plan_status broadcast skipped", exc_info=True)
         _signal(ledger, "plan_status", True)
-        _finalize_meter(ledger, meter, "answer")
+        ledger.turn_decision = ledger.turn_decision or "answer"
+        return response, ledger
+
+    async def _try_next_step_offer(
+        self,
+        *,
+        user_message: str,
+        state_ctx,
+        ledger,
+        meter,
+        turn_id: str,
+        instance_id: str,
+        t0: float,
+    ):
+        """L4: next ESS verb from state — 0 LLM. Chat never submits."""
+        from ai.engine.agent.reasoning import AgentResponse
+        from ai.engine.cognition.notifier import broadcast_run_event as _broadcast_run
+        from ai.engine.cognition.turn.next_step import (
+            render_next_step_offer,
+            should_offer_next_step,
+        )
+
+        state = getattr(state_ctx, "state", None) if state_ctx is not None else None
+        if not should_offer_next_step(user_message, state):
+            return None
+        text = render_next_step_offer(state, user_message)
+        if not text:
+            return None
+        total_latency = (time.monotonic() - t0) * 1000
+        ledger.final_response = text[:500]
+        ledger.total_latency_ms = total_latency
+        ledger.total_tokens = 0
+        ledger.total_llm_calls = 0
+        response = AgentResponse(
+            text=text,
+            sources_cited=[],
+            tools_used=[],
+            confidence=1.0,
+            total_tokens=0,
+            llm_calls=0,
+            model="",
+            response_type="inferred",
+        )
+        try:
+            await _broadcast_run(instance_id, "run.completed", {
+                "run_id": turn_id,
+                "total_latency_ms": total_latency,
+                "total_llm_calls": 0,
+                "next_step": True,
+            })
+        except Exception:  # noqa: BLE001
+            logger.debug("next_step broadcast skipped", exc_info=True)
+        _signal(ledger, "next_step", True)
+        ledger.turn_decision = ledger.turn_decision or "answer"
         return response, ledger
 
     async def _try_zero_llm_surface(
@@ -4214,7 +4558,11 @@ class TurnPipelineRunner:
             total_tokens=0,
             llm_calls=0,
             model="",
-            response_type="inferred",
+            response_type=(
+                "clarification"
+                if str(hit.get("decision") or "") == "clarify"
+                else "inferred"
+            ),
         )
         try:
             await _broadcast_run(instance_id, "run.completed", {
@@ -4226,7 +4574,6 @@ class TurnPipelineRunner:
         except Exception:  # noqa: BLE001
             logger.debug("zero_llm broadcast skipped", exc_info=True)
         _signal(ledger, str(hit.get("gate") or "zero_llm"), True)
-        _finalize_meter(ledger, meter, str(hit.get("decision") or "answer"))
         return response, ledger
 
     async def _try_chat_write_handoff(
@@ -4257,6 +4604,10 @@ class TurnPipelineRunner:
             build_bound_write_confirmation_answer,
             resolve_ess_write_from_brief,
             seed_slots_into_state,
+        )
+        from ai.engine.cognition.plan.process_dial import (
+            is_composite_brief,
+            is_plan_dial_turn,
         )
 
         prior: dict = {}
@@ -4311,6 +4662,29 @@ class TurnPipelineRunner:
         if not current_is_write and not is_ess_slot_continuation(
             user_message, prior_api,
         ):
+            return None
+
+        # A brief with a guard, a branch, or two asks at once is a plan, not a
+        # form. The single-write slot-filler must not answer «راجع قروضي … إذا
+        # كان لدي قرض مفتوح توقف، إذا لا قدّم طلب قرض» with "which loan type?".
+        # Step aside; the planner drafts the DAG (plan_task) and asks in context.
+        if current_is_write and is_composite_brief(user_message):
+            logger.info(
+                "TurnPipelineRunner: composite ESS brief — slot-filler steps "
+                "aside for the planner",
+            )
+            return None
+        # Plan dial + fresh write brief → the header promised a drafted plan.
+        # Keep the slot-filler only while the user is answering a clarify Chat
+        # itself asked (chips / bare values), whatever the dial.
+        answering_clarify = bool(prior_api) and last_decision == "clarify"
+        if current_is_write and not answering_clarify and is_plan_dial_turn(
+            user_message,
+        ):
+            logger.info(
+                "TurnPipelineRunner: Plan dial + ESS write brief — slot-filler "
+                "steps aside for the planner",
+            )
             return None
 
         brief = combine_user_brief(user_message, conversation_history, prior)
@@ -4382,8 +4756,9 @@ class TurnPipelineRunner:
         conversation_id: str,
         host_user_id: str | None,
         t0: float,
+        finalize: bool = True,
     ):
-        """Finalize a ChatHandoffOutcome as handoff_agent / clarify / answer."""
+        """Build a ChatHandoffOutcome response. ``finalize`` is the L3 commit."""
         from types import SimpleNamespace
 
         from ai.engine.agent.reasoning import AgentResponse
@@ -4442,6 +4817,8 @@ class TurnPipelineRunner:
             model="",
             response_type="inferred",
             actions=list(outcome.actions or []),
+            # Clarify choices ride the follow-up rail → clickable chips in Chat.
+            follow_ups=list(getattr(outcome, "follow_ups", None) or []),
             envelope=outcome.envelope,
         )
         await _broadcast_run(instance_id, "run.completed", {
@@ -4461,7 +4838,8 @@ class TurnPipelineRunner:
         )
         _signal(ledger, "weather_force", False)
         ledger.turn_decision = decision
-        _finalize_meter(ledger, meter, decision)
+        if finalize:
+            _finalize_meter(ledger, meter, decision)
         return response, ledger
 
     async def _try_multi_step_plan(

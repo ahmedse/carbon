@@ -110,6 +110,82 @@ _PAYROLL_FOLLOWUP_RE = re.compile(
     r")",
     re.IGNORECASE,
 )
+_COWORKER_FOLLOWUP_RE = re.compile(
+    r"("
+    r"\b(?:her|his|she|he|their)\b"
+    r"|\b(?:position|department|role|title|manager|reports?)\b"
+    r"|is\s+she\s+a\s+manager"
+    r"|قسم|منصب|مدير"
+    r")",
+    re.IGNORECASE,
+)
+_OTHER_NAME_RE = re.compile(r"\b([A-Z][a-z]{2,})\b")
+_OTHER_NAME_STOP = frozenset({
+    "what", "how", "who", "which", "her", "his", "she", "the", "now",
+    "tell", "about", "back", "department", "position", "role", "title",
+})
+
+
+def last_directory_deny(last_results: list[dict] | None) -> dict | None:
+    """Latest resolve_entity 403 (people:view). Invents no coworker record."""
+    for row in reversed(last_results or []):
+        if not isinstance(row, dict):
+            continue
+        if row.get("unauthorized"):
+            return row
+        digest = str(row.get("digest") or "").lower()
+        if "unauthorized=true" in digest or "people:view" in digest:
+            return row
+        if str(row.get("tool") or "") == "resolve_entity" and "not authorized" in digest:
+            return row
+    return None
+
+
+def _mentions_other_person(text: str, query: str) -> bool:
+    q = (query or "").strip().casefold()
+    if not q:
+        return False
+    for name in _OTHER_NAME_RE.findall(text or ""):
+        if name.casefold() in _OTHER_NAME_STOP:
+            continue
+        if name.casefold() not in q and q not in name.casefold():
+            return True
+    return False
+
+
+def should_replay_directory_deny(text: str, deny: dict | None) -> bool:
+    """Replay the 403 on same-person follow-ups. New names look up again."""
+    if not deny:
+        return False
+    from ai.engine.agent.tools import (
+        extract_named_coworker_query,
+        first_person_profile_ask,
+    )
+
+    if first_person_profile_ask(text):
+        return False
+    query = str(deny.get("query") or "").strip()
+    if _mentions_other_person(text, query):
+        return False
+    named = extract_named_coworker_query(text)
+    if named:
+        if not query:
+            return True
+        return named.casefold() == query.casefold() or named.casefold() in query.casefold()
+    return bool(_COWORKER_FOLLOWUP_RE.search(text or ""))
+
+
+def render_directory_deny(deny: dict, text: str = "") -> str:
+    msg = str(deny.get("message") or "").strip()
+    if msg:
+        return msg
+    grounded = render_resolve_grounded(text, {
+        "unauthorized": True,
+        "message": deny.get("message"),
+    })
+    return grounded or "Not authorized to look up other employees (people:view required)."
+
+
 _PAYROLL_POLICY_RE = re.compile(
     r"("
     r"\bappeal\b|\bobject(?:ion)?\b|\bcertificate\b"
@@ -748,10 +824,19 @@ def try_zero_llm_answer(
         render_fact_ack,
         render_recall,
     )
+    from ai.engine.cognition.turn.report_clarify import try_report_clarify
 
     raw = (text or "").strip()
     if not raw:
         return None
+    # Broad "full salary report" → clarify aspect/audience before any tools.
+    # Pass history + last_results so we never re-ask when the thread already
+    # has payroll context (ADR-0047 ConversationState continuity).
+    report_hit = try_report_clarify(
+        raw, history=history, last_results=last_results,
+    )
+    if report_hit is not None:
+        return report_hit
     known = list(facts or [])
     if is_thanks(raw):
         return {
@@ -780,6 +865,13 @@ def try_zero_llm_answer(
             "decision": "answer",
             "text": _PAYSLIP_DOWNLOAD_TEXT[lang],
             "gate": "payslip_download",
+        }
+    deny = last_directory_deny(last_results)
+    if deny and should_replay_directory_deny(raw, deny):
+        return {
+            "decision": "answer",
+            "text": render_directory_deny(deny, raw),
+            "gate": "directory_deny",
         }
     profile = profile_from_state(last_results)
     if profile and _PROFILE_ASK_RE.search(raw):

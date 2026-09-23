@@ -155,6 +155,9 @@ export default function FilteredDataGrid({
                     onChange={(v) => onFilterChange?.(def.key, v?.value ?? '')}
                     clearable={false}
                     size="small"
+                    loading={Boolean(def.loading)}
+                    onInputChange={def.onInputChange}
+                    filterOptions={def.filterOptions}
                   />
                 </Grid>
               );

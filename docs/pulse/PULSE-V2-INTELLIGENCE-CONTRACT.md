@@ -1,7 +1,8 @@
 # Pulse v2 — Intelligence Contract & Phased Plan
 
-- **Status:** Proposed (companion to ADR-0047)
+- **Status:** Accepted (companion to ADR-0047)
 - **Date:** 2026-09-22
+- **Accepted:** 2026-09-23 — G5 + 6B soak 5/5. Rule: `.cursor/rules/pulse-intelligence-contract.mdc`.
 - **Area:** cross-cutting — `backend/ai/engine/*`, `plans_service.py`, `engine_runtime.py`, `intelligence.py`, `ai/eval`, Pulse UI
 - **Extends:** ADR-0014 (Chat/Agent split), ADR-0043 (Agent cockpit), ADR-0046 (Chat no host mutation), RULE_21, RULE_23, QA bank G2
 - **Does not change:** the Chat/Agent trust contract. Chat stays advisory; all host writes stay on Agent Run consent or host UI.
@@ -34,10 +35,10 @@ Seven phases (P0–P6), each independently shippable and gated by measurable acc
 |---|---|---|---|
 | L0 | Safe | Never fabricates, never writes without consent, refuses off-limits | Reached |
 | L1 | Grounded | Answers from data/knowledge with citations | Reached |
-| L2 | Continuous | Remembers this conversation: entities, results, decisions, open questions | **Not reached — v2** |
-| L3 | Coherent | One voice, one decision per turn, same behavior for same intent | **Not reached — v2** |
-| L4 | Proactive | Anticipates the next step, tracks state across surfaces | Partial — v2 for ESS |
-| L5 | Autonomous within consent | Bound multi-step processes with 0 unnecessary LLM calls; pauses only for real decisions | **Not reached — v2** |
+| L2 | Continuous | Remembers this conversation: entities, results, decisions, open questions | Reached — live 23o focus 1.0 (24/24) + live 23p C2 1.0 + G5 slot_carry 1.0 |
+| L3 | Coherent | One voice, one decision per turn, same behavior for same intent | Reached — executor picks the Arbiter body |
+| L4 | Proactive | Anticipates the next step, tracks state across surfaces | Reached for ESS — 0-LLM next verb (Submit / Approve / Run / Confirm in Agent) from state; chip names it |
+| L5 | Autonomous within consent | Bound multi-step processes with 0 unnecessary LLM calls; pauses only for real decisions | Reached — bound lookup+write 0 LLM. Live 23s `Run.total_llm_calls=0` on leave/loan/attendance (23q was 1). |
 
 v2 exit criterion: L2, L3, L5 fully reached; L4 for the ESS journeys (loan, leave, attendance).
 
@@ -207,8 +208,8 @@ Replace the "CALL THE TOOL" grounding block with a surface-aware block: on Chat 
 ### P6 — Evaluation as a gate + hardening (1 week, low risk)
 
 - Multi-turn bank blocking in CI with §3 thresholds; `latency_budget` and `llm_calls` regression gates.
-- Nightly live smoke on Nibras dev (`emp_1067`) for the three ESS journeys Chat→Agent→Approve, asserting host rows + IC metrics. Job: `python -m ai.eval.nightly_ess_smoke`. SOAKING until 5 consecutive live PASS nights (`docs/pulse/evidence/PV2-6B-soak.md`). Night 2026-09-23 FAIL (`host_row` on leave/loan/attendance). Dry-run / FAIL do not count.
-- ADR-0047 accepted; QA bank gate **G5 — Coherence**; `.cursor/rules/pulse-intelligence-contract.mdc`.
+- Nightly live smoke on Nibras dev (`emp_1067`) for the three ESS journeys Chat→Agent→Approve, asserting host rows + IC metrics. Job: `python -m ai.eval.nightly_ess_smoke`. **DONE** — 5 consecutive live PASS nights (`docs/pulse/evidence/PV2-6B-soak.md`). Night 2026-09-23 FAIL stays. Nights 2026-09-26–30 PASS. Streak **5/5**. Dry-run / FAIL do not count.
+- ADR-0047 **Accepted**; QA bank gate **G5 — Coherence**; `.cursor/rules/pulse-intelligence-contract.mdc`.
 
 ### QA bank G5 — Coherence (PV2-6A)
 
@@ -222,9 +223,9 @@ Offline CI step: `python -m ai.eval.multiturn.runner --gate`. Fails the build wh
 | `turns_over_budget` / simple turns (`max_llm_calls ≥ 1`) | ≤ 10% | C8 simple-turn ≤ 2. 0-LLM (nav/status) misses stay visible in the raw count, not this ratio. After F-LIVE-10: raw over_budget 0; turns 96/96; router 1.0. Live 23p: C2 24/24 on host identity (5300 / Coiled Tubing / 6500). |
 | `latency_histogram` | present (samples > 0) | C8 wall-clock buckets gated in CI. Live goal remains p50 ≤ 4 s — stub milliseconds are not that goal. |
 
-### QA bank — nightly live ESS (PV2-6B, SOAKING)
+### QA bank — nightly live ESS (PV2-6B, DONE)
 
-`python -m ai.eval.nightly_ess_smoke` as `emp_1067` on Nibras dev. Streak ledger: `docs/pulse/evidence/PV2-6B-soak.md`. Flip 6B DONE only after 5 consecutive live PASS nights.
+`python -m ai.eval.nightly_ess_smoke` as `emp_1067` on Nibras dev. Streak ledger: `docs/pulse/evidence/PV2-6B-soak.md`. 6B **DONE** after 5 consecutive live PASS nights (2026-09-26–30). Night 2026-09-23 FAIL stays.
 
 | Axis | Gate |
 |---|---|

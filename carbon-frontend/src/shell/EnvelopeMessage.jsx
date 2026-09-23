@@ -258,8 +258,8 @@ function EnvelopeChart({ chart, t }) {
   const { chart_type: type = 'bar', title } = chart;
   const pairs = flattenSeries(chart.series);
   // Trust fix: never render a titled "No data" shell when series is empty.
-  // Backend enrich_envelope_charts should fill scalars; if it cannot, omit.
-  if (pairs.length === 0) {
+  // Also skip single-point bars (e.g. lone headcount) — prose carries the scalar.
+  if (pairs.length < 2) {
     return null;
   }
 
@@ -573,13 +573,31 @@ export default function EnvelopeMessage({ envelope, fallbackContent }) {
   const { headline, prose, tables, charts, caveats, sources } = envelope;
 
   return (
-    <Stack spacing={1}>
+    <Stack
+      spacing={2}
+      sx={{
+        width: '100%',
+        maxWidth: '100%',
+        '& .MuiTypography-root': { maxWidth: '72ch' },
+      }}
+    >
       {headline ? (
         <Typography
-          variant="h6"
+          variant="h5"
           component="div"
           sx={{
-            '& p': { fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit', mb: 0 },
+            fontWeight: 700,
+            letterSpacing: '-0.01em',
+            lineHeight: 1.35,
+            color: 'text.primary',
+            maxWidth: '56ch',
+            '& p': {
+              fontSize: 'inherit',
+              fontWeight: 'inherit',
+              color: 'inherit',
+              mb: 0,
+              lineHeight: 'inherit',
+            },
           }}
         >
           <MarkdownMessage content={headline} />
@@ -587,7 +605,13 @@ export default function EnvelopeMessage({ envelope, fallbackContent }) {
       ) : null}
 
       {Array.isArray(prose) && prose.length > 0 ? (
-        <Stack spacing={0.5}>
+        <Stack
+          spacing={1.25}
+          sx={{
+            color: 'text.secondary',
+            '& p': { fontSize: '0.975rem', lineHeight: 1.75, mb: 0 },
+          }}
+        >
           {prose.map((paragraph, i) => (
             <MarkdownMessage key={i} content={paragraph} />
           ))}
@@ -597,7 +621,7 @@ export default function EnvelopeMessage({ envelope, fallbackContent }) {
       <EnvelopeCaveats caveats={caveats} t={t} />
 
       {Array.isArray(tables) && tables.length > 0 ? (
-        <Stack spacing={1}>
+        <Stack spacing={1.5} sx={{ width: '100%', maxWidth: '100%', '& .MuiTypography-root': { maxWidth: 'none' } }}>
           {tables.map((table, i) => (
             <EnvelopeTable key={i} table={table} t={t} />
           ))}
@@ -605,7 +629,7 @@ export default function EnvelopeMessage({ envelope, fallbackContent }) {
       ) : null}
 
       {Array.isArray(charts) && charts.length > 0 ? (
-        <Stack spacing={1}>
+        <Stack spacing={1.5} sx={{ width: '100%', maxWidth: '100%', '& .MuiTypography-root': { maxWidth: 'none' } }}>
           {charts.map((chart, i) => (
             <EnvelopeChart key={i} chart={chart} t={t} />
           ))}

@@ -3,6 +3,7 @@ import { API_BASE_URL, API_ROUTES } from "../config";
 import { fetchModules } from "../api/modules";
 import { apiFetch, refreshAccessToken } from "../api/api"; // <-- Add this import
 import { DATASCHEMA_VIEW } from "../capabilities";
+import { resolveLandingPath } from "../shell/sessionRestore";
 
 // --- Helpers for token management ---
 // refreshAccessToken is imported from api.js (single source of truth)
@@ -313,11 +314,18 @@ export const AuthProvider = ({ children }) => {
         if (import.meta.env.DEV) console.error("[Auth] Failed to fetch modules", e);
       }
 
-      // Determine landing path: data-owners with no admin role go straight to their first module.
+      // Prefer last in-app route (Nibras / Carbon / any brand) over Home.
+      // Data-owners with no admin role still land on their first module when
+      // there is no remembered path beyond the default dashboard.
       const isAdmin = (u.roles || []).some(r => r.active !== false && r.role === 'admins_group');
       const isDataOwner = (u.roles || []).some(r => r.active !== false && r.role === 'dataowners_group');
-      let landingPath = '/dashboard';
-      if (!isAdmin && isDataOwner && modules.length > 0) {
+      let landingPath = resolveLandingPath('/dashboard');
+      if (
+        landingPath === '/dashboard'
+        && !isAdmin
+        && isDataOwner
+        && modules.length > 0
+      ) {
         landingPath = `/modules/${modules[0].id}`;
       }
 

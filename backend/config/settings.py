@@ -428,10 +428,15 @@ REST_FRAMEWORK = {
         'core.throttling.AnonMinuteRateThrottle',
     ),
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '100/hour',
+        # Development: every browser tab on a dev box shares the 127.0.0.1
+        # anon bucket, and DRF throttles run before authentication — once it
+        # trips, *every* endpoint 429s (Pulse Tasks, /me/context, insights…),
+        # which looks like a logout. Same treatment 'login'/'refresh' already
+        # get below; production keeps the strict caps.
+        'anon': '10000/hour' if IS_DEVELOPMENT else '100/hour',
         'user': '1000/hour',
         'user_minute': '1000/min',
-        'anon_minute': '60/min',
+        'anon_minute': '1000/min' if IS_DEVELOPMENT else '60/min',
         'ai': '60/min',
         'heavy': '10/min',
         # Development: allow rapid logins for E2E testing

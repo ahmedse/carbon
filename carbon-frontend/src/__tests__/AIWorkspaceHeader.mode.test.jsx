@@ -20,36 +20,36 @@ describe('AIWorkspaceHeader mode toggle + safety contract (W5-A / ADR-0014)', ()
   it('renders the agent contract text in Agent mode while idle', () => {
     render(<AIWorkspaceHeader onClose={vi.fn()} mode="agent" agentLifecycleState="idle" />);
     expect(
-      screen.getByText(/You approve the plan before it starts/i),
+      screen.getByText(/Pick a task\. New work starts in Chat, in Plan/i),
     ).toBeInTheDocument();
   });
 
   it('renders the plan-pending contract text (nothing runs until approval)', () => {
     render(<AIWorkspaceHeader onClose={vi.fn()} mode="agent" agentLifecycleState="plan_pending" />);
-    expect(screen.getByText(/Review the plan\. Nothing runs until you approve/i)).toBeInTheDocument();
+    expect(screen.getByText(/Review the picture\. Nothing runs until you approve/i)).toBeInTheDocument();
   });
 
   it('renders the running contract text with the pause affordance note', () => {
     render(<AIWorkspaceHeader onClose={vi.fn()} mode="agent" agentLifecycleState="running" />);
-    expect(screen.getByText(/Running — Pause anytime/i)).toBeInTheDocument();
+    expect(screen.getByText(/Working — you can pause anytime/i)).toBeInTheDocument();
   });
 
   it('renders the consent-needed contract text when a step requires approval', () => {
     render(
       <AIWorkspaceHeader onClose={vi.fn()} mode="agent" agentLifecycleState="consent_needed" />,
     );
-    expect(screen.getByText(/Approval needed — A step requires your confirmation/i)).toBeInTheDocument();
+    expect(screen.getByText(/Waiting on you — a step needs your OK/i)).toBeInTheDocument();
   });
 
   it('renders the done contract text when the run completes', () => {
     render(<AIWorkspaceHeader onClose={vi.fn()} mode="agent" agentLifecycleState="done" />);
-    expect(screen.getByText(/Done — Results are ready/i)).toBeInTheDocument();
+    expect(screen.getByText(/Done — the result is here/i)).toBeInTheDocument();
   });
 
   it('falls back to the idle contract text for unknown lifecycle states', () => {
     render(<AIWorkspaceHeader onClose={vi.fn()} mode="agent" agentLifecycleState="bogus" />);
     expect(
-      screen.getByText(/You approve the plan before it starts/i),
+      screen.getByText(/Pick a task\. New work starts in Chat, in Plan/i),
     ).toBeInTheDocument();
   });
 
@@ -65,7 +65,7 @@ describe('AIWorkspaceHeader mode toggle + safety contract (W5-A / ADR-0014)', ()
     const onModeChange = vi.fn();
     render(<AIWorkspaceHeader onClose={vi.fn()} onModeChange={onModeChange} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Agent mode' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tasks' }));
     expect(onModeChange).toHaveBeenCalledWith('agent');
   });
 
@@ -81,7 +81,7 @@ describe('AIWorkspaceHeader mode toggle + safety contract (W5-A / ADR-0014)', ()
     const onModeChange = vi.fn();
     render(<AIWorkspaceHeader onClose={vi.fn()} mode="agent" onModeChange={onModeChange} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Agent mode' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tasks' }));
     expect(onModeChange).not.toHaveBeenCalled();
   });
 });

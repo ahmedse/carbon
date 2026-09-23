@@ -165,6 +165,20 @@ def test_skips_code_fence(make_scoped_user):
 
 
 @pytest.mark.django_db
+def test_skips_lowercase_pronoun_it_even_when_org_named_IT(make_scoped_user):
+    """OrgUnit 'IT' must not chip the pronoun in 'what should it focus on'."""
+    org = _make_org("IT", "it-dept")
+    user = make_scoped_user("it-user", group="dataowners_group", org=org)
+
+    clarify = "Happy to help — what should it focus on?"
+    assert _annotate_entity_mentions(clarify, user.pk) == clarify
+
+    # Explicit all-caps IT still annotates when the user meant the unit.
+    out = _annotate_entity_mentions("Talk to IT about payroll.", user.pk)
+    assert f"[[org-unit:{org.id}:IT]]" in out
+
+
+@pytest.mark.django_db
 def test_skips_url(make_scoped_user):
     org = _make_org("South Valley", "south-valley")
     module = _make_module("Carbon Ledger", org)

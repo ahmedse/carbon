@@ -1255,6 +1255,62 @@ class LeaveEntitlementDetailView(_GatedDetailView):
         return qs
 
 
+def _with_request_link(qs, subject_type):
+    """Attach the governing request id for any employee request subject."""
+    from correspondence.models import Correspondence
+
+    corr = Correspondence.objects.filter(
+        subject_type=subject_type,
+        subject_id=OuterRef('pk'),
+    ).order_by('-id')
+    return qs.annotate(
+        correspondence_id=Subquery(corr.values('id')[:1]),
+        reference_no=Subquery(corr.values('reference_no')[:1]),
+    )
+
+
+def _governed_request_block(subject_type, subject_id):
+    """Refuse rewriting a record that belongs to an employee request."""
+    from correspondence.models import Correspondence
+
+    if not Correspondence.objects.filter(
+        subject_type=subject_type,
+        subject_id=subject_id,
+    ).exists():
+        return None
+    return Response(
+        {
+            'detail': (
+                'This record belongs to an employee request. '
+                'Open the request to audit it, or to void or reopen it. '
+                'Do not edit or delete it here.'
+            ),
+            'error_kind': 'request_governed_by_correspondence',
+            'code': 'request_governed_by_correspondence',
+        },
+        status=status.HTTP_409_CONFLICT,
+    )
+
+
+def _governed_request_feedback(subject_type, subject_id, *, context_key, context_id):
+    from correspondence.models import Correspondence
+
+    if not Correspondence.objects.filter(
+        subject_type=subject_type,
+        subject_id=subject_id,
+    ).exists():
+        return None
+    return AppFeedback(
+        code='request_governed_by_correspondence',
+        title='Cannot delete a record that has a request',
+        detail=(
+            'Open the request to audit it, or to void or reopen it.'
+        ),
+        context={context_key: context_id},
+        status_code=status.HTTP_409_CONFLICT,
+    )
+
+
 # LeaveRecord (employee-linked)
 class LeaveRecordListCreateView(_GatedListCreateView):
     model = LeaveRecord
@@ -1264,9 +1320,12 @@ class LeaveRecordListCreateView(_GatedListCreateView):
     _MAX_PAGE_SIZE = 200
 
     def get_queryset(self):
-        return LeaveRecord.objects.select_related(
-            'employee', 'leave_type',
-        ).order_by('-start_date', '-id')
+        return _with_request_link(
+            LeaveRecord.objects.select_related(
+                'employee', 'leave_type',
+            ).order_by('-start_date', '-id'),
+            'people.LeaveRecord',
+        )
 
     def post(self, request):
         """Refuse creating leave already approved/rejected — use ESS + Team."""
@@ -1329,36 +1388,27 @@ class LeaveRecordDetailView(_GatedDetailView):
     org_lookup = 'employee__org_unit_id__in'
 
     def _get_queryset(self, user):
-        qs = LeaveRecord.objects.select_related('employee', 'leave_type')
+        qs = _with_request_link(
+            LeaveRecord.objects.select_related('employee', 'leave_type'),
+            'people.LeaveRecord',
+        )
         if self.org_lookup is not None:
             qs = _scoped(user, qs, self.org_lookup)
         return qs
 
     def delete_guard(self, instance):
-        """Block deleting leave still tied to an open correspondence."""
-        from correspondence.models import OPEN_SUBJECT, Correspondence
-
-        open_corr = Correspondence.objects.filter(
-            subject_type='people.LeaveRecord',
-            subject_id=instance.pk,
-            status__in=OPEN_SUBJECT,
-        ).exists()
-        if open_corr:
-            return AppFeedback(
-                code='leave_linked_to_correspondence',
-                title='Cannot delete leave with an open request',
-                detail=(
-                    'This leave record is linked to an in-flight correspondence. '
-                    'Cancel or resolve the request first.'
-                ),
-                context={'leave_id': instance.pk},
-                status_code=status.HTTP_409_CONFLICT,
-            )
-        return None
+        """A request is voided or reopened, not deleted from the HR ledger."""
+        return _governed_request_feedback(
+            'people.LeaveRecord', instance.pk,
+            context_key='leave_id', context_id=instance.pk,
+        )
 
     def patch(self, request, pk):
-        """Refuse direct approve/reject — NSR spine is Correspondence / Team."""
+        """Refuse rewriting a request. Unlinked ledger rows can still be corrected."""
         instance = get_object_or_404(self._get_queryset(request.user), pk=pk)
+        blocked = _governed_request_block('people.LeaveRecord', instance.pk)
+        if blocked is not None:
+            return blocked
         desired = (request.data or {}).get('status')
         if (
             desired in ('approved', 'rejected')
@@ -1461,7 +1511,10 @@ class LoanListCreateView(_GatedListCreateView):
     org_lookup = 'employee__org_unit_id__in'
 
     def get_queryset(self):
-        return Loan.objects.select_related('employee', 'loan_type')
+        return _with_request_link(
+            Loan.objects.select_related('employee', 'loan_type'),
+            'people.Loan',
+        )
 
 
 class LoanDetailView(_GatedDetailView):
@@ -1469,9 +1522,23 @@ class LoanDetailView(_GatedDetailView):
     serializer_class = LoanSerializer
     org_lookup = 'employee__org_unit_id__in'
 
-    def delete_guard(self, instance):
-        from correspondence.models import OPEN_SUBJECT, Correspondence
+    def _get_queryset(self, user):
+        qs = _with_request_link(
+            Loan.objects.select_related('employee', 'loan_type'),
+            'people.Loan',
+        )
+        if self.org_lookup is not None:
+            qs = _scoped(user, qs, self.org_lookup)
+        return qs
 
+    def patch(self, request, pk):
+        instance = get_object_or_404(self._get_queryset(request.user), pk=pk)
+        blocked = _governed_request_block('people.Loan', instance.pk)
+        if blocked is not None:
+            return blocked
+        return super().patch(request, pk)
+
+    def delete_guard(self, instance):
         if instance.installments.filter(status='paid').exists():
             return AppFeedback(
                 code='loan_has_paid_installments',
@@ -1496,22 +1563,12 @@ class LoanDetailView(_GatedDetailView):
                 },
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
-        open_corr = Correspondence.objects.filter(
-            subject_type='people.Loan',
-            subject_id=instance.pk,
-            status__in=OPEN_SUBJECT,
-        ).exists()
-        if open_corr:
-            return AppFeedback(
-                code='loan_linked_to_correspondence',
-                title='Cannot delete loan with an open request',
-                detail=(
-                    'This loan is linked to an in-flight correspondence. '
-                    'Cancel or resolve the request first.'
-                ),
-                context={'loan_id': instance.pk},
-                status_code=status.HTTP_409_CONFLICT,
-            )
+        governed = _governed_request_feedback(
+            'people.Loan', instance.pk,
+            context_key='loan_id', context_id=instance.pk,
+        )
+        if governed is not None:
+            return governed
         return None
 
 
@@ -1551,7 +1608,10 @@ class AttendancePermissionListCreateView(_GatedListCreateView):
     org_lookup = 'employee__org_unit_id__in'
 
     def get_queryset(self):
-        return AttendancePermission.objects.select_related('employee', 'permission_type')
+        return _with_request_link(
+            AttendancePermission.objects.select_related('employee', 'permission_type'),
+            'people.AttendancePermission',
+        )
 
     def post(self, request):
         from people.governance.sod import SUBJECT_ATTENDANCE_PERMISSION, record_preparer
@@ -1579,26 +1639,20 @@ class AttendancePermissionDetailView(_GatedDetailView):
     serializer_class = AttendancePermissionSerializer
     org_lookup = 'employee__org_unit_id__in'
 
-    def delete_guard(self, instance):
-        from correspondence.models import OPEN_SUBJECT, Correspondence
+    def _get_queryset(self, user):
+        qs = _with_request_link(
+            AttendancePermission.objects.select_related('employee', 'permission_type'),
+            'people.AttendancePermission',
+        )
+        if self.org_lookup is not None:
+            qs = _scoped(user, qs, self.org_lookup)
+        return qs
 
-        open_corr = Correspondence.objects.filter(
-            subject_type='people.AttendancePermission',
-            subject_id=instance.pk,
-            status__in=OPEN_SUBJECT,
-        ).exists()
-        if open_corr:
-            return AppFeedback(
-                code='attendance_linked_to_correspondence',
-                title='Cannot delete permission with an open request',
-                detail=(
-                    'This attendance permission is linked to an in-flight '
-                    'correspondence. Cancel or resolve the request first.'
-                ),
-                context={'permission_id': instance.pk},
-                status_code=status.HTTP_409_CONFLICT,
-            )
-        return None
+    def delete_guard(self, instance):
+        return _governed_request_feedback(
+            'people.AttendancePermission', instance.pk,
+            context_key='permission_id', context_id=instance.pk,
+        )
 
     def patch(self, request, pk):
         from people.governance.sod import (
@@ -1609,6 +1663,9 @@ class AttendancePermissionDetailView(_GatedDetailView):
         )
 
         instance = get_object_or_404(self._get_queryset(request.user), pk=pk)
+        blocked = _governed_request_block('people.AttendancePermission', instance.pk)
+        if blocked is not None:
+            return blocked
         serializer = self.serializer_class(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         approving = (

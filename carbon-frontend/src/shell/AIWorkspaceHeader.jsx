@@ -14,8 +14,6 @@ import {
   Chip,
   IconButton,
   Snackbar,
-  ToggleButton,
-  ToggleButtonGroup,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -32,6 +30,7 @@ import { AI_MANAGE_CONSOLE, expandCapabilities, hasCap } from '../capabilities';
 import PulseLogo from './PulseLogo';
 import AIContextMenu from './AIContextMenu';
 import CheckpointPicker from './CheckpointPicker';
+import PulseProcessSwitch, { workspaceFromMode } from './PulseProcessSwitch';
 
 function capabilityKeys(caps) {
   if (!Array.isArray(caps)) return [];
@@ -60,6 +59,7 @@ function AIWorkspaceHeader({
   onConversationUpdated,
   onForked,
   mode = 'chat',
+  process = null,
   onModeChange,
   agentLifecycleState = 'idle',
   linkedPlan = null,
@@ -151,20 +151,13 @@ function AIWorkspaceHeader({
         >
           {t(contractKey)}
         </Typography>
-        <ToggleButtonGroup
-          exclusive
-          size="small"
-          value={mode}
-          onChange={(event, next) => next && onModeChange?.(next)}
-          aria-label={t('pulseMode')}
-        >
-          <ToggleButton value="chat" aria-label={t('chatMode')}>
-            💬 {t('modeChat')}
-          </ToggleButton>
-          <ToggleButton value="agent" aria-label={t('agentMode')}>
-            🤖 {t('modeAgent')}
-          </ToggleButton>
-        </ToggleButtonGroup>
+        <PulseProcessSwitch
+          variant="workspace"
+          value={workspaceFromMode(mode)}
+          onChange={(next) => {
+            onModeChange?.(next === 'tasks' ? 'agent' : 'chat');
+          }}
+        />
         {canManageConsole ? (
           <>
             <Tooltip title={t('saveCheckpoint')}>
@@ -250,6 +243,7 @@ AIWorkspaceHeader.propTypes = {
   onConversationUpdated: PropTypes.func,
   onForked: PropTypes.func,
   mode: PropTypes.oneOf(['chat', 'agent']),
+  process: PropTypes.oneOf(['ask', 'plan', 'run']),
   onModeChange: PropTypes.func,
   agentLifecycleState: PropTypes.oneOf([
     'idle',

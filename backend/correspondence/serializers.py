@@ -68,12 +68,15 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
     requester_name = serializers.SerializerMethodField()
     corr_type_code = serializers.SerializerMethodField()
     corr_type_label = serializers.SerializerMethodField()
+    org_unit_name = serializers.SerializerMethodField()
+    current_step_role = serializers.SerializerMethodField()
 
     class Meta:
         model = Correspondence
         fields = [
             'id', 'reference_no', 'corr_type', 'corr_type_code', 'corr_type_label',
-            'subject_type', 'subject_id', 'org_unit', 'requester', 'requester_name',
+            'subject_type', 'subject_id', 'org_unit', 'org_unit_name',
+            'requester', 'requester_name', 'current_step_role',
             'title', 'payload', 'status', 'current_step', 'current_approver_ids',
             'approver_chain', 'policy_version', 'policy_id', 'policy_snapshot',
             'signature_ref', 'resolved_at', 'created_at', 'updated_at',
@@ -95,6 +98,16 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
 
     def get_corr_type_label(self, obj):
         return obj.corr_type.label if obj.corr_type_id else None
+
+    def get_org_unit_name(self, obj):
+        return obj.org_unit.name if obj.org_unit_id else None
+
+    def get_current_step_role(self, obj):
+        chain = obj.approver_chain or []
+        step = obj.current_step if isinstance(obj.current_step, int) else -1
+        if 0 <= step < len(chain):
+            return chain[step].get('role')
+        return None
 
 
 class CorrespondenceDetailSerializer(CorrespondenceSerializer):

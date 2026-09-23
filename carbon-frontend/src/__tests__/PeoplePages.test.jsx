@@ -13,6 +13,7 @@ import peopleManifest from '../apps/people/manifest';
 import * as peopleApi from '../api/people';
 import EmployeesPage from '../apps/people/EmployeesPage';
 import LeavePage from '../apps/people/LeavePage';
+import PeopleRequestsPage from '../apps/people/PeopleRequestsPage';
 import PayrollRunsPage from '../apps/people/PayrollRunsPage';
 import PayslipPage from '../apps/people/PayslipPage';
 import AttendancePage from '../apps/people/AttendancePage';
@@ -29,6 +30,7 @@ const PEOPLE_PATHS = [
   '/people',
   '/people/positions',
   '/people/employees',
+  '/people/requests',
   '/people/leave',
   '/people/payroll',
   '/people/payslip',
@@ -60,13 +62,14 @@ describe('People & Payroll pages (NIR-4A)', () => {
   });
 
   it('each page module default-exports a function', () => {
-    const pages = [EmployeesPage, LeavePage, PayrollRunsPage, PayslipPage, AttendancePage, PeopleConfigPage, PositionsPage, LoansPage, CertificationsPage, RotationSchedulesPage, PoliciesPage, PolicyDetailPage];
+    const pages = [EmployeesPage, PeopleRequestsPage, LeavePage, PayrollRunsPage, PayslipPage, AttendancePage, PeopleConfigPage, PositionsPage, LoansPage, CertificationsPage, RotationSchedulesPage, PoliciesPage, PolicyDetailPage];
     for (const Page of pages) {
       expect(typeof Page).toBe('function');
     }
   });
 
   it('registers shell nav label keys for Loans, Certifications, and Rotation', () => {
+    expect(NAV_LABEL_KEYS.Requests).toBe('nav.requests');
     expect(NAV_LABEL_KEYS.Loans).toBe('nav.loans');
     expect(NAV_LABEL_KEYS.Certifications).toBe('nav.certifications');
     expect(NAV_LABEL_KEYS.Rotation).toBe('nav.rotation');
@@ -94,6 +97,7 @@ describe('People & Payroll pages (NIR-4A)', () => {
   it('exports all People API helper functions', () => {
     const helpers = [
       'fetchEmployees',
+      'fetchRequestAudit',
       'fetchPayrollRuns',
       'fetchPayrollRun',
       'createPayrollRun',

@@ -132,6 +132,7 @@ export const NAV_LABEL_KEYS = {
   Positions: 'nav.positions',
   Policies: 'nav.policies',
   Employees: 'nav.employees',
+  Requests: 'nav.requests',
   Leave: 'nav.leave',
   Payroll: 'nav.payroll',
   Payslips: 'nav.payslips',

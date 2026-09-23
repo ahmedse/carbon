@@ -333,7 +333,9 @@ def _build_grounding_directive(api_catalog: list | None) -> str:
             "1. For ANY distribution, breakdown, or 'how many X are Y' question, "
             "   use an `analyze_*` endpoint (e.g. `analyze_employees`) — NEVER count "
             "   rows from a `list_*` result. List endpoints are paginated and return "
-            "   at most 100 rows; counting them gives WRONG totals.",
+            "   at most 100 rows; counting them gives WRONG totals. "
+            "   NEVER paste raw employee salary rows into the chat — aggregates, "
+            "   buckets, and charts only.",
         ]
     lines += [
         "2. When a list endpoint returns `truncated: true`, you MUST say explicitly "

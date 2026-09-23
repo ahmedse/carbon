@@ -26,13 +26,13 @@ pytestmark = pytest.mark.eval_multiturn
 
 
 class TestScriptsLoad:
-    """Verify all 12 scripts load and are structurally valid."""
+    """Verify all 13 scripts load and are structurally valid."""
     
     def test_all_scripts_load(self):
-        """All 12 scripts must load without error."""
+        """All 13 scripts must load without error."""
         base_dir = Path(__file__).parent / "multiturn"
         scripts = load_scripts_from_glob("scripts/*.yaml", base_dir)
-        assert len(scripts) == 12, f"Expected 12 scripts, got {len(scripts)}"
+        assert len(scripts) == 13, f"Expected 13 scripts, got {len(scripts)}"
     
     def test_each_script_has_minimum_turns(self):
         """Each script must have ≥8 turns."""
@@ -265,7 +265,7 @@ class TestCliExitCodes:
 class TestCoherenceExpectations:
     """Per-script coherence expectations (expected to fail in P0 baseline).
     
-    All 12 scripts run with dispatch_task; xfail because Pulse v2 features
+    All 13 scripts run with dispatch_task; xfail because Pulse v2 features
     are not yet implemented. Failures are on expectation assertions
     (decision, language, reask, mentions), not on engine/DB errors.
     """
@@ -285,6 +285,7 @@ class TestCoherenceExpectations:
         ("scripts/10-*.yaml", "date-awareness-01"),
         ("scripts/11-*.yaml", "memory-learn-fact-01"),
         ("scripts/12-*.yaml", "nav-zero-llm-01"),
+        ("scripts/13-*.yaml", "composite-brief-ar-01"),
     ])
     def test_script_coherence_expectations(self, script_pattern, script_id):
         """Run script and validate all turns pass expectations."""

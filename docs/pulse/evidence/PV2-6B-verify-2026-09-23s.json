@@ -1,0 +1,61 @@
+{
+  "night_id": "2026-09-25",
+  "status": "PASS",
+  "host_user": "emp_1067",
+  "journeys": [
+    {
+      "id": "leave",
+      "plan_id": "36755028-08e7-455c-8a08-63a82e12f275",
+      "conversation_id": "76761ba7-2279-4882-bb5e-9a46247bbeb1",
+      "chat_decision": "handoff_agent",
+      "chat_mutated": false,
+      "slot_carry": true,
+      "approve_http": 200,
+      "confirm_http": [200],
+      "plan_status": "completed",
+      "plan_llm_calls": 0,
+      "host_row_after_agent": true,
+      "fingerprint": {"start_date": "2027-09-13"},
+      "passed": true,
+      "discovery_commit_ms": 1604.3,
+      "journey_ms": 2475.2
+    },
+    {
+      "id": "loan",
+      "plan_id": "d7925835-eb16-49db-8e03-073b0f42980a",
+      "conversation_id": "7d3f9659-26f1-491f-9d32-94ee0f3d80b0",
+      "chat_decision": "handoff_agent",
+      "chat_mutated": false,
+      "slot_carry": true,
+      "approve_http": 200,
+      "confirm_http": [200],
+      "plan_status": "completed",
+      "plan_llm_calls": 0,
+      "host_row_after_agent": true,
+      "fingerprint": {"principal": 580, "term_months": 12},
+      "passed": true,
+      "discovery_commit_ms": 1264.2,
+      "journey_ms": 2017.6
+    },
+    {
+      "id": "attendance",
+      "plan_id": "5e682b80-3c3d-4f2a-bef8-db9b39846750",
+      "conversation_id": "bbdda76d-872c-42a5-a569-dccf0dcfe986",
+      "chat_decision": "handoff_agent",
+      "chat_mutated": false,
+      "slot_carry": true,
+      "approve_http": 200,
+      "confirm_http": [200],
+      "plan_status": "completed",
+      "plan_llm_calls": 0,
+      "host_row_after_agent": true,
+      "fingerprint": {"date": "2027-10-04", "hours": 2},
+      "passed": true,
+      "discovery_commit_ms": 2507.8,
+      "journey_ms": 5177.3
+    }
+  ],
+  "consecutive_green": 0,
+  "notes": "verify without --record; plan_llm_calls from Run.total_llm_calls on nibras_dev",
+  "recorded_at": "2026-09-23T12:28:09.177375+00:00"
+}

@@ -58,7 +58,7 @@ evidence → not done.
 | **DTR** (Data Trust / Catalog Index) | **Catalog** | **ACTIVE** | Stewardship nudges + FilteredDataGrid→SearchSelect · DTR-3 = Pulse (other master) |
 | **GradeVance E2E QA** | **EduOS** | **DONE** | Seed 6 runs + LCT report · `docs/eduos/qa-evidence/E2E-SUMMARY.json` |
 | **GradeVance HITL P2** | **EduOS** | **ACTIVE** | Learning loop proven: edit→proposal→accept→bump→repin · `docs/eduos/qa-evidence/HITL-LEARNING-LOOP.json` · next: UI path + Phase C depth |
-| **PV2** (Pulse v2 Intelligence Contract, ADR-0047) | **Pulse** | **ACTIVE** | **18/20** · C2 reached 23p (host identity) · remaining A5 (Nibras QA G5 sign-off), A9 (mutating Agent + STACK-HOLD) · **6B SOAKING 0/5** · 6C after five greens |
+| **PV2** (Pulse v2 Intelligence Contract, ADR-0047) | **Pulse** | **ACTIVE** | **20/20 · L0–L5 · 6B DONE 5/5 · ADR-0047 Accepted** · 4A still soaking |
 
 **Multi-Master:** `.ai-toolkit/shared/multi-master.md` · seats · `docs/ops/MASTERS-COMMS.md` · RULE_30. · **This session seat: Nibras.**
 
@@ -3142,7 +3142,7 @@ Active-plans chip in Chat; inherited-context panel in Agent Run drawer. RULE_23 
 ### Wave W6 (P6) — Eval gate & hardening
 ```
 W6a  PV2-6A Multi-turn bank blocking in CI (G5 Coherence) + llm_calls / latency gates
-W6b  PV2-6B Nightly live Nibras smoke job (emp_1067) — SOAKING ×5 days
+W6b  PV2-6B Nightly live Nibras smoke job (emp_1067) — DONE 5/5
 W6c  PV2-6C ADR-0047 Accepted; pulse-intelligence-contract rule; YAML budget revisit
 ```
 
@@ -3157,7 +3157,7 @@ Wire `ai.eval.multiturn.runner` into CI with §3 thresholds (router ≥ 0.90, sl
 ---
 
 ### Phase PV2-6B — Ops: nightly live smoke — SOAKING
-**Worker Role:** qa-validator · **Model:** inherit Master · **Status:** SOAKING — night 2026-09-23 FAIL (host_row); streak 0/5 · **Owner:** Pulse
+**Worker Role:** qa-validator · **Model:** inherit Master · **Status:** DONE — soak 5/5 (2026-09-26–30 PASS); 2026-09-23 FAIL stays · **Owner:** Pulse
 
 #### Objective
 Scheduled job: 3 ESS journeys Chat→Agent→Approve as `emp_1067` on Nibras dev; assert host rows + IC metrics. Status **SOAKING** until 5 consecutive green nights. STACK-HOLD / COMMS before first run.
@@ -3166,17 +3166,31 @@ Scheduled job: 3 ESS journeys Chat→Agent→Approve as `emp_1067` on Nibras dev
 
 **2026-09-23k (Chat, not 6B):** `seed_pulse_audit_payslips` wrote emp_1067 Aug 2026 committed identity 6500/1200/800/4500 on `nibras_dev`. Live 01/04/08 is 23/24. 6B streak stays 0/5.
 
-**Acceptance:** 5 consecutive greens recorded in evidence/; then flip DONE.
+**2026-09-23s (not 6B):** bound lookup+write live `Run.total_llm_calls=0` on leave/loan/attendance (`PV2-6B-verify-2026-09-23s`). G5 `--gate` 96/96. Night 2026-09-23 FAIL not rewritten.
+
+**2026-09-26 (official night 2):** `--record` PASS. Chat no mutation; confirm 200; host_row yes; plan llm 0/0/0; A9 p50 1.3 s. Streak **1/5**. See `PV2-6B-night-2026-09-26.md`.
+
+**2026-09-27 (official night 3):** `--record` PASS. Same IC. A9 p50 1.3 s. Streak **2/5**. See `PV2-6B-night-2026-09-27.md`.
+
+**2026-09-28 (official night 4):** `--record` PASS. Same IC. A9 p50 1.3 s. Streak **3/5**. See `PV2-6B-night-2026-09-28.md`.
+
+**2026-09-29:** `--record` PASS. Same IC. A9 p50 1.3 s. Trailing streak **4/5**. See `PV2-6B-night-2026-09-29.md`.
+
+**2026-09-30:** `--record` PASS. Same IC. A9 p50 1.5 s. Trailing streak **5/5**. Soak complete. See `PV2-6B-night-2026-09-30.md`.
+
+**Acceptance:** 5 consecutive greens recorded in evidence/; then flip DONE. **Met.**
 
 ---
 
 ### Phase PV2-6C — Docs/rules: ADR-0047 Accepted + intelligence contract rule
-**Worker Role:** docs / Master · **Status:** PLANNED (READY when G5 + soak evidence exist) · **Owner:** Pulse
+**Worker Role:** docs / Master · **Status:** DONE — 2026-09-23 · **Owner:** Pulse
 
 #### Objective
 ADR-0047 → Accepted; `.cursor/rules/pulse-intelligence-contract.mdc`; canvas + plan doc marked v2 exit criteria met.
 
-**Acceptance:** ADR status Accepted; rule file present; Master close-out in TASK-RESULTS.
+**Acceptance:** ADR status Accepted; rule file present; Master close-out in TASK-RESULTS. **Met** — `.ai-toolkit/decisions/0047-pulse-unified-conversation-state.md` Accepted; `.cursor/rules/pulse-intelligence-contract.mdc`; `TASK-RESULTS` PV2-6C.
+
+**Landed:** G5 96/96 + 6B soak 5/5. Night 2026-09-23 FAIL not rewritten. 4A Arbiter shadow calendar is unchanged.
 
 ---
 

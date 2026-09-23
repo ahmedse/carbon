@@ -2,7 +2,7 @@
 // W6-B2 — DiscoveryComposer guided-discovery contract:
 //   * empty conversation → Pulse greeting + composer
 //   * needs_input       → clarifying question bubble + "Respond to AI's question…"
-//   * plan_ready        → "Plan ready — review below" banner + Review plan/New task
+//   * plan_ready        → convert card; the task opens only after Make this a task
 //   * startDiscoveryPlan / advanceDiscovery wire the token, brief and id.
 // Renders the REAL AIMessageBubble/AIInputBar (as AITaskPanel tests do) with
 // only auth/notifications/API mocked.
@@ -119,17 +119,18 @@ describe('DiscoveryComposer — guided discovery (W6-B2)', () => {
     fireEvent.change(screen.getByLabelText('Message input'), { target: { value: 'The emissions dataset' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
 
-    expect(await screen.findByText('Plan ready — review below')).toBeInTheDocument();
+    expect(await screen.findByText('The plan is ready. Make this a task?')).toBeInTheDocument();
+    expect(onPlanReady).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Review plan' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Make this a task' }));
     expect(onPlanReady).toHaveBeenCalledTimes(1);
-    expect(onPlanReady).toHaveBeenCalledWith(PLAN);
+    expect(onPlanReady).toHaveBeenCalledWith(expect.objectContaining({ id: PLAN.id }));
 
     // The composer resets after review — back to the input-only state.
     expect(await screen.findByLabelText('Message input')).toBeInTheDocument();
   });
 
-  it('resets the composer when New task is chosen', async () => {
+  it('keeps the chat when the user is not ready to make a task', async () => {
     render(<DiscoveryComposer conversationId="conv-1" />);
 
     fireEvent.change(screen.getByLabelText('Message input'), { target: { value: 'Audit duplicates.' } });
@@ -139,28 +140,29 @@ describe('DiscoveryComposer — guided discovery (W6-B2)', () => {
     fireEvent.change(screen.getByLabelText('Message input'), { target: { value: 'The emissions dataset' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
 
-    fireEvent.click(await screen.findByRole('button', { name: 'New task' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Keep talking' }));
 
     expect(await screen.findByLabelText('Message input')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send message' })).toBeInTheDocument();
   });
 
-  it('Plan now finalizes discovery without more answers', async () => {
+  it('Make this a task finalizes discovery and opens the task', async () => {
+    const onPlanReady = vi.fn();
     finalizeDiscovery.mockResolvedValue({
       status: 'plan_ready',
       plan: PLAN,
       turns: [{ question: 'Which dataset should we audit?', reply: null }],
     });
-    render(<DiscoveryComposer conversationId="conv-1" />);
+    render(<DiscoveryComposer conversationId="conv-1" onPlanReady={onPlanReady} />);
 
     fireEvent.change(screen.getByLabelText('Message input'), { target: { value: 'Audit duplicates.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
     expect(await screen.findByText('Which dataset should we audit?')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Plan now' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Make this a task' }));
     await waitFor(() => {
       expect(finalizeDiscovery).toHaveBeenCalledWith('test-token', 'plan-1');
     });
-    expect(await screen.findByText('Plan ready — review below')).toBeInTheDocument();
+    expect(onPlanReady).toHaveBeenCalledWith(expect.objectContaining({ id: PLAN.id }));
   });
 });

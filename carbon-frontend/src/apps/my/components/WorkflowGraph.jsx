@@ -8,7 +8,6 @@ import { Box, Stack, Typography, useTheme } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import EnterpriseGraph from '../../../components/graph/EnterpriseGraph';
 import { GraphNodeForeign } from '../../../components/graph/GraphNodeLabel';
-import { dominantDir } from '../../../components/graph/graphText';
 import { codeLabel, ROLE_SUFFIX, INTENT_SUFFIX } from './myRequestsLabels';
 
 /** Layout mirrors EXEC_LAYOUT density (ADR-0012 / planGraph.js) — compact for detail pages. */
@@ -227,13 +226,8 @@ function WorkflowGraph({ chain, currentStep, status, height }) {
       const color = nodeColor(n);
       const title = String(n.label || '');
       const sub = [n.subtitle, n.metaText].filter(Boolean).join(' · ');
-      const rtl = dominantDir(title) === 'rtl';
-      const terminal = n.id === 'submitted' || n.id === 'terminal';
       return (
         <>
-          {terminal ? null : (
-            <rect x={rtl ? n.w - 4 : 0} y={0} width={4} height={n.h} fill={color} />
-          )}
           <GraphNodeForeign
             width={n.w}
             height={n.h}
@@ -241,7 +235,7 @@ function WorkflowGraph({ chain, currentStep, status, height }) {
             meta={sub}
             status={n.statusLabel || ''}
             statusColor={color}
-            center={terminal}
+            center
             fontFamily={theme.typography?.fontFamily}
             color={theme.palette.text.primary}
             tip={`${title}${sub ? ` — ${sub}` : ''} — ${n.statusLabel || ''}`}

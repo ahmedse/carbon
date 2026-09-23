@@ -1677,8 +1677,9 @@ class ReActLoop:
         retrieval_stub = retrieval or RetrievalResult()
 
         if _skip_draft:
-            # PV2-3A A2: bound writes skip draft+observe. Bound GET reads skip
-            # draft only — observe still restates the host record.
+            # PV2-3A / L5: bound writes and bound ESS GET lookups skip
+            # draft. Writes also skip observe. Lookups restate from the
+            # host payload (render_bound_catalog_read) — no observe LLM.
             _title_fb = (
                 (step.tool_args or {}).get("title")
                 or (step.intent or "Agent report")[:80]
@@ -1728,7 +1729,7 @@ class ReActLoop:
                 "(%s)",
                 step.step_id,
                 (step.tool_args or {}).get("api_name"),
-                "skip draft, observe" if _read_bound else "skip draft/observe",
+                "skip draft/observe (bound read)" if _read_bound else "skip draft/observe",
             )
         else:
             # Tool-aware drafting: expose the step's tool set (or the curated
@@ -1755,6 +1756,9 @@ class ReActLoop:
                     "resolve_entity",
                     "aggregate_entity",
                 }
+                # Ask mode answers only — never offer plan_task (switch to Plan dial).
+                if (user_message or "").lstrip().startswith("[Pulse mode: Ask."):
+                    _allow.discard("plan_task")
                 step_tools = [
                     d for d in get_tool_definitions(instance_config)
                     if d.get("function", {}).get("name") in _allow
@@ -2284,9 +2288,11 @@ class ReActLoop:
             # ── Pulse v2 Phase 1: observe — synthesize a grounded answer from a
             #    successfully executed tool result (draft→critic→execute→observe).
             #    Phase 5: the observation may also request a read-only follow-up.
-            #    PV2-3A: fully bound host steps never call observe (llm_calls==0).
+            #    PV2-3A / L5: bound writes and bound ESS lookups never call
+            #    observe (llm_calls==0). Lookup restatement is deterministic.
             if (
                 not _deterministic
+                and not _read_bound
                 and result.tool_output
                 and not result.error
                 and not result.paused
@@ -2310,6 +2316,16 @@ class ReActLoop:
                         result.draft_text = _obs.answer
                     if _obs.needs_followup and _obs.followup_tool:
                         result.followup = _obs
+            elif _read_bound and result.tool_output and not result.error and not result.paused:
+                from ai.engine.cognition.plan.export_bind import render_bound_catalog_read
+
+                restated = render_bound_catalog_read(
+                    result.tool_output,
+                    str((step.tool_args or {}).get("api_name") or ""),
+                    str((user_info or {}).get("language") or "en"),
+                )
+                if restated:
+                    result.draft_text = restated
             elif _deterministic and result.tool_output and not result.error and not result.paused:
                 _tpl = _bound_summary()
                 if _tpl:
@@ -2468,6 +2484,21 @@ class ReActLoop:
         # no_match → never synthesize; escalation/clarification owns this.
         if payload_status(result_raw) == "no_match":
             return None
+
+        from ai.engine.cognition.plan.export_bind import render_bound_catalog_read
+
+        _api = ""
+        if isinstance(tool_output, dict) and isinstance(tool_output.get("tool_args"), dict):
+            _api = str(tool_output["tool_args"].get("api_name") or "")
+        if not _api and isinstance(getattr(step, "tool_args", None), dict):
+            _api = str(step.tool_args.get("api_name") or "")
+        _restated = render_bound_catalog_read(
+            tool_output,
+            _api,
+            str((user_info or {}).get("language") or "en"),
+        )
+        if _restated:
+            return ObservationResult(answer=_restated)
 
         from ai.engine.cognition.turn.zero_llm import (
             is_empty_payslip_tool_result,

@@ -21,7 +21,9 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
+import VisibilityRounded from '@mui/icons-material/VisibilityRounded';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import FilteredDataGrid from '../../components/FilteredDataGrid';
 import SystemDialog from '../../components/SystemDialog';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -73,6 +75,7 @@ function employeeLabel(row) {
 
 export default function LeavePage() {
   const { t } = useTranslation('people');
+  const navigate = useNavigate();
   const { t: tCommon } = useTranslation('common');
   useDocumentTitle(t('leaveTitle'));
   const { token } = useAuth();
@@ -139,19 +142,6 @@ export default function LeavePage() {
   const openCreateRecord = () => {
     setEditingRecord(null);
     setRecordForm({ ...EMPTY_RECORD });
-    setRecordDialogOpen(true);
-  };
-
-  const openEditRecord = (record) => {
-    setEditingRecord(record);
-    setRecordForm({
-      employee: record.employee ?? '',
-      leave_type: record.leave_type ?? '',
-      start_date: record.start_date ? String(record.start_date).slice(0, 10) : '',
-      end_date: record.end_date ? String(record.end_date).slice(0, 10) : '',
-      days: record.days != null ? String(record.days) : '',
-      status: record.status ?? 'draft',
-    });
     setRecordDialogOpen(true);
   };
 
@@ -413,39 +403,30 @@ export default function LeavePage() {
         filterable: false,
         renderCell: (params) => {
           const record = params.row;
+          const label = t('requestView');
           return (
-            <Box>
-              <Tooltip title={tCommon('edit')}>
-                <IconButton
-                  size="small"
-                  aria-label={tCommon('edit')}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openEditRecord(record);
-                  }}
-                >
-                  <EditIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title={tCommon('delete')}>
-                <IconButton
-                  size="small"
-                  aria-label={tCommon('delete')}
-                  sx={{ color: 'error.main' }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDeleteTarget({ kind: 'record', item: record });
-                  }}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </Box>
+            <Tooltip title={label}>
+              <IconButton
+                size="small"
+                color="primary"
+                aria-label={label}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (record.correspondence_id) {
+                    navigate(`/team/${record.correspondence_id}`, { state: { from: 'people-leave' } });
+                  } else {
+                    navigate(`/people/leave/records/${record.id}`);
+                  }
+                }}
+              >
+                <VisibilityRounded fontSize="small" />
+              </IconButton>
+            </Tooltip>
           );
         },
       },
     ],
-    [t, tCommon],
+    [t, navigate],
   );
 
   const entColumns = useMemo(

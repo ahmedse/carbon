@@ -52,9 +52,7 @@ export function GraphNodeLabel({
         justifyContent: 'center',
         alignItems: center ? 'center' : 'stretch',
         textAlign: center ? 'center' : 'start',
-        padding: center ? '8px 18px' : '6px 8px',
-        paddingInlineStart: center ? 18 : 14,
-        paddingInlineEnd: center ? 18 : 8,
+        padding: '8px 12px',
         overflow: 'hidden',
         pointerEvents: 'none',
         fontFamily: fontFamily || 'inherit',
@@ -65,8 +63,8 @@ export function GraphNodeLabel({
         style={{
           ...clamp,
           WebkitLineClamp: 2,
-          fontSize: center ? 11 : 12.5,
-          fontWeight: 650,
+          fontSize: 13,
+          fontWeight: 600,
           lineHeight: '15px',
           width: '100%',
         }}

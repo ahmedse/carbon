@@ -5,14 +5,15 @@
 markdown path and fails open: any exception returns ``None`` so the caller can
 fall back to the existing markdown synthesis unchanged.
 
-After the LLM returns, :func:`enrich_envelope_charts` deterministically fills
-(or drops) single-metric charts so a scalar tool result (e.g. aggregate
-headcount ``value: 530``) never ships as a titled chart with an empty series.
+After the LLM returns, :func:`enrich_envelope_charts` drops empty / single-point
+charts (a lone headcount bar is never worth the ink), and
+:func:`sanitize_envelope_tables` strips sample payslip row dumps.
 """
 from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from ai.envelope import AnswerEnvelope, EnvelopeChart, EnvelopeSource, envelope_from_json
@@ -20,6 +21,20 @@ from ai.envelope_prompt import build_envelope_system_prompt
 from ai.engine.core.resolution import payload_status
 
 logger = logging.getLogger("pulse.envelope")
+
+#: Titles that scream "employee-by-employee dump" — never ship these.
+_DUMP_TABLE_TITLE_RE = re.compile(
+    r"("
+    r"sample\s+payslip|payslip\s+line\s+items|first\s+\d+\s+employees?"
+    r"|employee[\s_-]?by[\s_-]?employee|raw\s+(?:salary|payslip)"
+    r")",
+    re.IGNORECASE,
+)
+#: Column sets that look like a payslip row dump.
+_DUMP_COL_MARKERS = frozenset({
+    "employee name", "employee no", "employee number", "emp no",
+    "gross", "net", "gosi", "gosi/pifss", "pifss",
+})
 
 
 async def synthesize_envelope(
@@ -78,9 +93,10 @@ async def synthesize_envelope(
         return None
 
     try:
-        return enrich_envelope_charts(envelope, usable)
+        envelope = enrich_envelope_charts(envelope, usable)
+        return sanitize_envelope_tables(envelope)
     except Exception:
-        logger.warning("Envelope chart enrichment failed; returning raw envelope", exc_info=True)
+        logger.warning("Envelope enrichment failed; returning raw envelope", exc_info=True)
         return envelope
 
 
@@ -206,57 +222,126 @@ def _ensure_sources_for_charts(
     return sources
 
 
+def _is_dump_table(table) -> bool:
+    """True when a table is a sample payslip / employee-row dump."""
+    title = str(getattr(table, "title", None) or "").strip()
+    if _DUMP_TABLE_TITLE_RE.search(title):
+        return True
+    cols = [
+        str(c).strip().lower()
+        for c in (getattr(table, "columns", None) or [])
+    ]
+    if not cols:
+        return False
+    hits = sum(1 for c in cols if c in _DUMP_COL_MARKERS)
+    # Employee identity + pay columns → row dump, not an aggregate summary.
+    has_identity = any(
+        c in {"employee name", "employee no", "employee number", "emp no"}
+        for c in cols
+    )
+    has_pay = any(c in {"gross", "net", "gosi", "gosi/pifss", "pifss"} for c in cols)
+    return has_identity and has_pay and hits >= 3
+
+
+def sanitize_envelope_tables(envelope: AnswerEnvelope) -> AnswerEnvelope:
+    """Drop sample payslip / employee-row dump tables from the envelope."""
+    tables = list(envelope.tables or [])
+    kept = [t for t in tables if not _is_dump_table(t)]
+    if kept == tables:
+        return envelope
+    return envelope.model_copy(update={"tables": kept})
+
+
+def _chart_from_breakdown(data: dict[str, Any]) -> EnvelopeChart | None:
+    """Build one multi-bucket chart from an analyze_* / breakdown payload."""
+    breakdown = data.get("breakdown")
+    if not isinstance(breakdown, list) or len(breakdown) < 2:
+        return None
+    points: list[list] = []
+    for b in breakdown[:12]:
+        if not isinstance(b, dict):
+            continue
+        label = str(b.get("label") or b.get("name") or "").strip() or "-"
+        raw = b.get("count", b.get("value", b.get("pct")))
+        try:
+            val = float(raw) if raw is not None else 0.0
+        except (TypeError, ValueError):
+            continue
+        if val <= 0:
+            continue
+        points.append([label[:48], int(val) if float(val).is_integer() else val])
+    if len(points) < 2:
+        return None
+    chart_type = str(data.get("suggested_chart_type") or "bar").lower()
+    if chart_type not in ("bar", "pie", "line"):
+        chart_type = "bar"
+    if chart_type == "pie" and len(points) > 8:
+        chart_type = "bar"
+    dim = str(data.get("dimension") or "").strip()
+    title = _humanize_metric(dim) if dim else "Distribution"
+    return EnvelopeChart(
+        chart_type=chart_type,  # type: ignore[arg-type]
+        title=title[:80],
+        series=[{"name": title[:40], "data": points}],
+    )
+
+
+def _charts_from_tool_breakdowns(usable: list[dict]) -> list[EnvelopeChart]:
+    """Deterministic charts when the LLM omitted multi-bucket series."""
+    out: list[EnvelopeChart] = []
+    seen: set[str] = set()
+    for tr in usable or []:
+        data = _unwrap_tool_payload(tr.get("result"))
+        if not isinstance(data, dict):
+            continue
+        # Nested host shape: {data: {breakdown: ...}}
+        if "breakdown" not in data and isinstance(data.get("data"), dict):
+            inner = data["data"]
+            if "breakdown" in inner:
+                data = inner
+        chart = _chart_from_breakdown(data)
+        if chart is None:
+            continue
+        key = f"{chart.title}:{_series_point_count(chart.series)}"
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(chart)
+        if len(out) >= 3:
+            break
+    return out
+
+
 def enrich_envelope_charts(
     envelope: AnswerEnvelope,
     usable_tools: list[dict] | None,
 ) -> AnswerEnvelope:
-    """Fill empty single-metric charts from tool scalars; drop still-empty charts.
+    """Keep multi-bucket charts; inject from tool breakdowns when missing.
 
-    The LLM often emits ``{title: "Active Employee Count", series: []}`` for an
-    ``aggregate_entity`` headcount. That ships as a titled "No data" shell on
-    the frontend even when prose correctly states 530. This pass:
-
-    1. Fills empty/malformed chart series from scalar tool results.
-    2. Synthesises one bar chart when the envelope has no charts but a scalar
-       exists (so chart and prose agree).
-    3. Omits charts that still have zero renderable points.
+    A lone ``Total active employees = 555`` bar wastes a viewport and looks
+    broken. Prose already carries the scalar — charts need ≥2 categories.
+    Empty series are omitted (never ship a titled "No data" shell).
+    When the LLM ships tables but no charts while ``analyze_*`` returned a
+    multi-bucket breakdown, inject those charts so "with charts" is honest.
     """
     usable = list(usable_tools or [])
-    scalars = _extract_scalar_metrics(usable)
-    scalar_queue = list(scalars)
-
     filled: list[EnvelopeChart] = []
     for chart in envelope.charts or []:
-        if _series_point_count(chart.series) > 0:
+        n = _series_point_count(chart.series)
+        if n >= 2:
             filled.append(chart)
-            continue
-        if not scalar_queue:
-            # Empty series + no scalar to fill → omit (never ship title-only).
-            continue
-        s = scalar_queue.pop(0)
-        title = (chart.title or "").strip() or s["label"]
-        filled.append(
-            chart.model_copy(update={
-                "title": title,
-                "series": _scalar_series(s["label"], s["value"]),
-                "chart_type": chart.chart_type if chart.chart_type in ("bar", "pie", "line") else "bar",
-            })
-        )
+            # else: 0 or 1 point → omit
 
-    # No charts at all, but we have a scalar total → synthesise one bar chart.
-    if not filled and scalars:
-        s = scalars[0]
-        filled.append(EnvelopeChart(
-            chart_type="bar",
-            title=s["label"],
-            series=_scalar_series(s["label"], s["value"]),
-        ))
+    if not filled:
+        filled = _charts_from_tool_breakdowns(usable)
 
-    if filled == list(envelope.charts or []):
+    original = list(envelope.charts or [])
+    if filled == original:
         return envelope
 
     sources = list(envelope.sources or [])
     if filled and not sources:
+        scalars = _extract_scalar_metrics(usable)
         sources = _ensure_sources_for_charts(envelope, usable, scalars)
 
     return envelope.model_copy(update={"charts": filled, "sources": sources})
