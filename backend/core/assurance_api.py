@@ -3,6 +3,9 @@
 GET /assurance/report/  — one evaluation of the ledger against the pack.
 GET /assurance/stream/  — SSE of that same snapshot. Re-reads the ledger file.
                           Does not run pytest. ?once=1 emits a single frame.
+
+The ``assurance`` package lives at the monorepo root. Production images may
+only ship ``backend/`` — import must not crash Django boot.
 """
 
 from __future__ import annotations
@@ -19,14 +22,34 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-_REPO = Path(__file__).resolve().parents[2]
+_DEFAULT_LEDGER = 'docs/assurance/evidence/nibras-demo-2026-09-23.jsonl'
+
+
+def _repo_root() -> Path:
+    here = Path(__file__).resolve()
+    for candidate in (here.parents[1], here.parents[2], here.parents[3]):
+        if (candidate / 'assurance' / 'evaluate.py').is_file():
+            return candidate
+        if (candidate / 'manage.py').is_file() and (candidate / 'config').is_dir():
+            # backend-only image: no monorepo assurance pack
+            return candidate
+    return here.parents[1]
+
+
+_REPO = _repo_root()
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
-from assurance.evaluate import evaluate_packs, load_events  # noqa: E402
-from assurance.load import load_brand  # noqa: E402
+try:
+    from assurance.evaluate import evaluate_packs, load_events  # noqa: E402
+    from assurance.load import load_brand  # noqa: E402
 
-_DEFAULT_LEDGER = 'docs/assurance/evidence/nibras-demo-2026-09-23.jsonl'
+    ASSURANCE_AVAILABLE = True
+except ImportError:  # pragma: no cover — prod image without monorepo root
+    evaluate_packs = None  # type: ignore[assignment]
+    load_events = None  # type: ignore[assignment]
+    load_brand = None  # type: ignore[assignment]
+    ASSURANCE_AVAILABLE = False
 
 
 class _IgnoreAcceptNegotiation(BaseContentNegotiation):
@@ -63,6 +86,11 @@ def _head_commit(root: Path) -> str:
 
 
 def build_snapshot(root: Path, *, pack: str, commit: str, ledger_raw: str) -> dict:
+    if not ASSURANCE_AVAILABLE:
+        raise FileNotFoundError(
+            'Assurance pack is not installed in this runtime '
+            '(monorepo assurance/ missing from image).'
+        )
     packs = load_brand(root, pack)
     ledger = _ledger_path(root, ledger_raw)
     events = load_events(ledger)
@@ -126,6 +154,11 @@ class AssuranceReportView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request):
+        if not ASSURANCE_AVAILABLE:
+            return Response(
+                {'detail': 'Assurance pack not available in this deployment.'},
+                status=503,
+            )
         try:
             payload = build_snapshot(
                 _REPO,
@@ -143,6 +176,11 @@ class AssuranceStreamView(APIView):
     content_negotiation_class = _IgnoreAcceptNegotiation
 
     def get(self, request):
+        if not ASSURANCE_AVAILABLE:
+            return Response(
+                {'detail': 'Assurance pack not available in this deployment.'},
+                status=503,
+            )
         pack = (request.query_params.get('pack') or 'nibras').strip() or 'nibras'
         commit = (request.query_params.get('commit') or '').strip()
         ledger_raw = (request.query_params.get('ledger') or '').strip()
