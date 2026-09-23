@@ -255,3 +255,9 @@ Track: PV2 — 2A DONE · 2B dispatching
 Ask: PV2-2A Master-accepted (ContextPack for chat stages). Checkpoint pending with this COMMS. PV2-2B (plan/discovery ContextPack) next. Overnight 2A worker died; Master finished gate + fixed one new import-boundary violation.
 Paths: backend/ai/engine/cognition/context_pack.py, turn/{draft,critic,intent,verify,runner}.py
 Blockers: none
+
+## [2026-09-23T09:30:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-5
+Track: PV2 — W2 (P2) DONE · W3 (P3) dispatched (3A ∥ 3B)
+Ask: PV2-2B Master-accepted. ContextPack now covers Chat + Agent LLM stages. W3: 3A deterministic-first bound process_dial steps (loop/export_bind/plans_service confirm templates) ∥ 3B Chat handoff_agent (runner/engine_runtime) — closes F-LIVE-2/4. Distinct TEST_DB_NAME. No stack hold.
+Paths: backend/ai/engine/cognition/plan/{loop,planner}.py, plans_service.py, turn/runner.py, engine_runtime.py
+Blockers: none
