@@ -250,6 +250,44 @@ def test_enrich_keeps_multi_bucket_chart():
     assert len(enriched.charts) == 1
 
 
+def test_enrich_injects_charts_from_analyze_breakdown():
+    """Transcript bug: tables present, charts=[], despite multi-bucket analyze_*."""
+    raw = _envelope(
+        headline="555 active employees across departments.",
+        prose=["Drilling leads headcount."],
+        tables=[{
+            "title": "Headcount by Department",
+            "columns": ["Unit", "Count"],
+            "rows": [["Drilling", 133], ["Coiled Tubing", 93]],
+        }],
+        charts=[],
+        sources=[{"tool": "call_host_api", "rows_returned": 16, "truncated": True}],
+    )
+    env = envelope_from_json(json.dumps(raw))
+    usable = [{
+        "tool_name": "call_host_api",
+        "result": {
+            "status_code": 200,
+            "data": {
+                "dimension": "org_unit",
+                "suggested_chart_type": "bar",
+                "breakdown": [
+                    {"label": "Drilling", "count": 133, "pct": 24.0},
+                    {"label": "Coiled Tubing", "count": 93, "pct": 16.8},
+                    {"label": "PCP", "count": 52, "pct": 9.4},
+                ],
+            },
+        },
+    }]
+    enriched = enrich_envelope_charts(env, usable)
+    assert len(enriched.charts) == 1
+    assert enriched.charts[0].chart_type == "bar"
+    series = enriched.charts[0].series or []
+    points = (series[0].get("data") if series else None) or []
+    assert len(points) >= 2
+    assert points[0][0] == "Drilling"
+
+
 def test_sanitize_drops_sample_payslip_table():
     from ai.envelope_service import sanitize_envelope_tables
 

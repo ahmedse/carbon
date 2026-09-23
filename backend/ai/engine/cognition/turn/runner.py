@@ -308,6 +308,7 @@ def _filter_draft_tools(
     draft_tools: list[dict] | None,
     user_message: str,
     salience_domain: str,
+    process_mode: str = "ask",
 ) -> list[dict] | None:
     """Exclude ``list_my_capabilities`` unless the user explicitly asked about
     capabilities/access or the turn is an identity-domain turn (GAP-M7).
@@ -325,9 +326,11 @@ def _filter_draft_tools(
             d for d in tools
             if d.get("function", {}).get("name") != "list_my_capabilities"
         ]
-    # Ask mode prefix is injected by CarbonIntelligence._prepend_pulse_mode.
+    # Process mode is structured transport metadata. Prefix support remains
+    # only for replaying pre-migration transcripts.
     msg = (user_message or "").lstrip()
-    if tools and msg.startswith("[Pulse mode: Ask."):
+    ask_mode = process_mode != "plan" or msg.startswith("[Pulse mode: Ask.")
+    if tools and ask_mode:
         _ask_block = frozenset({"plan_task", "approve_plan", "edit_plan"})
         tools = [
             d for d in tools
@@ -1599,6 +1602,30 @@ async def _synthesize_tool_results(
     if not results_text.strip():
         return None
 
+    # 0-LLM fast path: distribution / visual asks with deterministic tables or
+    # charts — skip envelope LLM + markdown synthesis (C8 smoothness).
+    pre_tables = _render_tool_tables(usable, user_message=user_message)
+    pre_charts = (
+        _render_tool_charts(usable, user_message=user_message)
+        if _wants_visual(user_message)
+        else ""
+    )
+    if (pre_tables or pre_charts) and (
+        _is_distribution_ask(user_message) or _wants_visual(user_message)
+    ):
+        parts = []
+        if pre_tables:
+            parts.append(pre_tables)
+        if pre_charts:
+            parts.append(pre_charts)
+        body = "\n\n".join(parts)
+        await _stream_final_text(
+            body,
+            stream_callback=stream_callback,
+            progress_callback=progress_callback,
+        )
+        return {"text": body, "tokens": 0, "model": model or ""}
+
     # [PAQ-2A/2B] Typed Answer Envelope. When enabled and the tools returned
     # structured data, synthesize the envelope FIRST — even when the model
     # already wrote a long markdown draft — so data answers render as typed
@@ -1699,9 +1726,6 @@ async def _synthesize_tool_results(
         include_knowledge=False,
         include_memory=False,
     )
-
-    pre_tables = _render_tool_tables(usable, user_message=user_message)
-    pre_charts = _render_tool_charts(usable, user_message=user_message) if _wants_visual(user_message) else ""
 
     try:
         result = await route_chat(
@@ -1954,6 +1978,7 @@ class TurnPipelineRunner:
         conversation_id: str,
         user_message: str,
         host_user_id: str | None = None,
+        process_mode: str = "ask",
         page_context: str = "",
         conversation_history: list[dict] | None = None,
         instance_config: dict | None = None,
@@ -2289,7 +2314,46 @@ class TurnPipelineRunner:
             t0=t0,
         )
         if _zero is not None:
-            staged.append(StagedExit("answer", "zero_llm", _zero[0]))
+            _zero_resp = _zero[0]
+            _zero_decision = (
+                "clarify"
+                if getattr(_zero_resp, "response_type", "") == "clarification"
+                else "answer"
+            )
+            staged.append(StagedExit(_zero_decision, "zero_llm", _zero_resp))
+
+        # Plan dial + personal ESS brief → process-dial plan, 0 draft LLM.
+        # The LLM must not replace the governed spine with ad-hoc reads and an
+        # invented "what is your salary?" clarify (ADR-0047 deterministic-first).
+        if _chat_handoff is None:
+            _plan_dial = await self._try_plan_dial_process_plan(
+                user_message=user_message,
+                state_ctx=state_ctx,
+                ledger=ledger,
+                turn_id=turn_id,
+                instance_id=instance_id,
+                conversation_id=conversation_id,
+                host_user_id=host_user_id,
+                t0=t0,
+            )
+            if _plan_dial is not None:
+                staged.append(StagedExit("tool_answer", "plan_dial_process", _plan_dial[0]))
+
+        # «in arabic and in more details please» → rewrite the previous answer.
+        # No tools, no new facts, never a fresh discovery menu.
+        if _chat_handoff is None and _zero is None:
+            _restyle = await self._try_restyle_previous_answer(
+                user_message=user_message,
+                conversation_history=conversation_history,
+                ledger=ledger,
+                meter=meter,
+                turn_id=turn_id,
+                instance_id=instance_id,
+                conversation_id=conversation_id,
+                t0=t0,
+            )
+            if _restyle is not None:
+                staged.append(StagedExit("answer", "restyle", _restyle[0]))
 
         # Also run process briefing *before* salience when nav was skipped —
         # zero-token concept answer for governed process ids.
@@ -2930,6 +2994,7 @@ class TurnPipelineRunner:
                         retrieval=retrieval,
                         turn_id=turn_id,
                         budget_tracker=budget,
+                        state_ctx=state_ctx,
                     )
             except Exception:
                 logger.exception("Fan-out attempt failed; falling back to multi-step / single-pass")
@@ -3042,6 +3107,7 @@ class TurnPipelineRunner:
                         retrieval=retrieval, progress_callback=progress_callback,
                         stream_callback=stream_callback, turn_id=turn_id,
                         intent_resolution=_intent_resolution,
+                        state_ctx=state_ctx,
                     )
             except Exception:
                 logger.exception("[%s] Pulse loop attempt failed; falling back to single-pass", turn_id[:8])
@@ -3364,7 +3430,9 @@ class TurnPipelineRunner:
         draft_tools = self._draft_tools if self.executor is not None else None
         # [GAP-M7] Salience guard: only surface list_my_capabilities when the
         # user is asking about identity/access, never as a confusion fallback.
-        draft_tools = _filter_draft_tools(draft_tools, user_message, salience.domain)
+        draft_tools = _filter_draft_tools(
+            draft_tools, user_message, salience.domain, process_mode,
+        )
         # Agent → Discuss: strip tools for prose refine (seed + follow-ups).
         # Apply turns (go/proceed/replan) keep tools so edit_plan can fire.
         _discuss_turn = _discuss_ctx
@@ -3839,6 +3907,89 @@ class TurnPipelineRunner:
                 )
         _signal(ledger, "weather_force", _weather_force_fired)
 
+        # ESS leave balance (Chat-first): never invent remaining/used/pending=0
+        # from empty list_my_leave. Force get_my_leave_balance like weather.
+        _leave_bal_force_fired = False
+        if (
+            self.executor is not None
+            and critic.verdict != "veto"
+            and not _is_text_transform_request(_resolved_user_message)
+        ):
+            try:
+                from ai.engine.cognition.turn.ess_read import (
+                    LEAVE_BALANCE_API,
+                    LEAVE_HISTORY_API,
+                    build_leave_balance_tool_call,
+                    leave_balance_force_needed,
+                    leave_zero_claim_in_text,
+                    tool_calls_include_api,
+                )
+
+                _lr = (
+                    list(state_ctx.state.last_results or [])
+                    if state_ctx is not None and getattr(state_ctx, "state", None)
+                    else []
+                )
+                _force_leave = leave_balance_force_needed(
+                    _resolved_user_message,
+                    history=conversation_history,
+                    tool_calls=draft.tool_calls,
+                    last_results=_lr,
+                )
+                # Also force when draft already plans empty-history twin only,
+                # or invents zero-balance prose without a balance call.
+                if not _force_leave and tool_calls_include_api(
+                    draft.tool_calls, LEAVE_HISTORY_API
+                ) and not tool_calls_include_api(
+                    draft.tool_calls, LEAVE_BALANCE_API
+                ):
+                    from ai.engine.cognition.turn.ess_read import (
+                        leave_history_asked,
+                        leave_topic_asked,
+                    )
+
+                    if leave_topic_asked(_resolved_user_message) and not leave_history_asked(
+                        _resolved_user_message
+                    ):
+                        _force_leave = True
+                if (
+                    not _force_leave
+                    and leave_zero_claim_in_text(final_text or draft.text or "")
+                    and not tool_calls_include_api(draft.tool_calls, LEAVE_BALANCE_API)
+                ):
+                    from ai.engine.cognition.turn.ess_read import leave_topic_asked
+
+                    if leave_topic_asked(_resolved_user_message):
+                        _force_leave = True
+
+                if _force_leave:
+                    import dataclasses as _dc_leave
+
+                    _leave_bal_force_fired = True
+                    _existing = list(draft.tool_calls or [])
+                    # Drop list_my_leave when the ask is balance — history ≠ balance.
+                    _filtered = [
+                        tc for tc in _existing
+                        if not tool_calls_include_api([tc], LEAVE_HISTORY_API)
+                    ]
+                    _filtered.append(build_leave_balance_tool_call(turn_id))
+                    draft = _dc_leave.replace(
+                        draft,
+                        tool_calls=_filtered,
+                        text="",
+                        confidence=min(float(getattr(draft, "confidence", 0.7) or 0.7), 0.7),
+                    )
+                    final_text = ""
+                    _draft_text_was_empty = True
+                    logger.info(
+                        "[ESS-LEAVE-BALANCE] Forced %s for %r",
+                        LEAVE_BALANCE_API,
+                        (_resolved_user_message or "")[:80],
+                    )
+            except Exception:  # noqa: BLE001 — never block Chat on ESS force
+                logger.debug("ESS leave-balance force skipped", exc_info=True)
+        _signal(ledger, "leave_balance_force", _leave_bal_force_fired)
+
         # S5 — Execute (real parallel tool dispatch + streaming)
         s5_start = time.monotonic()
         await _broadcast_run(instance_id, "run.step.started", {
@@ -3939,11 +4090,16 @@ class TurnPipelineRunner:
         except Exception:  # noqa: BLE001 — never block synthesis
             logger.debug("B5 compensation soft-empty stamp skipped", exc_info=True)
 
+        from ai.engine.cognition.turn.ess_read import empty_history_misread
         from ai.engine.cognition.turn.zero_llm import (
             is_empty_payslip_tool_result,
             render_empty_payslip_answer,
         )
 
+        _ess_empty = empty_history_misread(
+            execution.completed_tools,
+            user_message=_resolved_user_message,
+        )
         if is_empty_payslip_tool_result(execution.completed_tools):
             final_text = render_empty_payslip_answer(_resolved_user_message)
             _synth = None
@@ -3956,22 +4112,71 @@ class TurnPipelineRunner:
                 })
                 state_ctx.state.last_results = rows
         else:
-            with stage("synthesis"):
-                _synth = await _synthesize_tool_results(
-                    instance_id=instance_id,
-                    conversation_id=conversation_id,
-                    user_message=_resolved_user_message,
-                    completed_tools=execution.completed_tools,
-                    draft_text=final_text,
-                    model=draft.model_used or model,
-                    delivery=_intent_resolution.delivery if _intent_resolution else "explain",
-                    envelope_synthesizer=self.envelope_synthesizer,
-                    stream_callback=stream_callback,
-                    progress_callback=progress_callback,
-                    user_info=user_info,
-                    instance_config=instance_config,
-                    state=state_ctx.state if state_ctx is not None else None,
-                )
+            # Prefer 0-LLM host restatement for leave balance (Chat-first).
+            _bound_leave = None
+            try:
+                from ai.engine.cognition.plan.export_bind import render_bound_catalog_read
+                from ai.engine.cognition.turn.ess_read import LEAVE_BALANCE_API
+                from ai.engine.cognition.turn.navigation import detect_lang as _detect_lang
+
+                for _item in execution.completed_tools or []:
+                    if not isinstance(_item, dict):
+                        continue
+                    _args = (
+                        _item.get("tool_args")
+                        if isinstance(_item.get("tool_args"), dict)
+                        else {}
+                    )
+                    _api = str(
+                        _args.get("api_name")
+                        or _args.get("name")
+                        or _args.get("api")
+                        or ""
+                    )
+                    if _api != LEAVE_BALANCE_API and LEAVE_BALANCE_API not in str(
+                        _item.get("result") or ""
+                    ):
+                        # Match by tool_args only — don't false-positive on digests.
+                        if _api != LEAVE_BALANCE_API:
+                            continue
+                    if _api != LEAVE_BALANCE_API:
+                        continue
+                    _lang = (
+                        "ar"
+                        if _detect_lang(_resolved_user_message) == "ar"
+                        else "en"
+                    )
+                    _bound_leave = render_bound_catalog_read(
+                        _item, LEAVE_BALANCE_API, _lang
+                    )
+                    if _bound_leave:
+                        break
+            except Exception:  # noqa: BLE001
+                _bound_leave = None
+            if _bound_leave:
+                final_text = _bound_leave
+                _synth = None
+            elif _ess_empty is not None:
+                # Empty leave/loan history ≠ zero balance; never invent figures.
+                final_text = str(_ess_empty.get("text") or "")
+                _synth = None
+            else:
+                with stage("synthesis"):
+                    _synth = await _synthesize_tool_results(
+                        instance_id=instance_id,
+                        conversation_id=conversation_id,
+                        user_message=_resolved_user_message,
+                        completed_tools=execution.completed_tools,
+                        draft_text=final_text,
+                        model=draft.model_used or model,
+                        delivery=_intent_resolution.delivery if _intent_resolution else "explain",
+                        envelope_synthesizer=self.envelope_synthesizer,
+                        stream_callback=stream_callback,
+                        progress_callback=progress_callback,
+                        user_info=user_info,
+                        instance_config=instance_config,
+                        state=state_ctx.state if state_ctx is not None else None,
+                    )
         if _synth and _synth.get("text"):
             final_text = _synth["text"]
             total_tokens += int(_synth.get("tokens") or 0)
@@ -4220,6 +4425,7 @@ class TurnPipelineRunner:
         stream_callback,
         turn_id,
         intent_resolution=None,
+        state_ctx=None,
     ):
         """Pulse v2 Phase 1: run the adaptive ReAct loop for tool-bearing turns.
 
@@ -4375,6 +4581,9 @@ class TurnPipelineRunner:
                 progress_callback=progress_callback,
                 stream_callback=stream_callback,
                 host_user_id=host_user_id,
+                conversation_state=(
+                    state_ctx.state if state_ctx is not None else None
+                ),
             )
 
             # Only claim the pulse-loop path when a tool actually executed
@@ -4541,6 +4750,7 @@ class TurnPipelineRunner:
             history=conversation_history,
             newly_stored=bool(newly),
             last_results=getattr(state, "last_results", None) if state is not None else None,
+            open_question=getattr(state, "open_question", None) if state is not None else None,
         )
         if hit is None:
             return None
@@ -4574,6 +4784,210 @@ class TurnPipelineRunner:
         except Exception:  # noqa: BLE001
             logger.debug("zero_llm broadcast skipped", exc_info=True)
         _signal(ledger, str(hit.get("gate") or "zero_llm"), True)
+        if str(hit.get("decision") or "") == "clarify":
+            ledger.turn_decision = "clarify"
+        else:
+            ledger.turn_decision = ledger.turn_decision or "answer"
+        return response, ledger
+
+    async def _try_plan_dial_process_plan(
+        self,
+        *,
+        user_message: str,
+        state_ctx,
+        ledger,
+        turn_id: str,
+        instance_id: str,
+        conversation_id: str,
+        host_user_id: str | None,
+        t0: float,
+    ):
+        """Plan dial + personal ESS brief → process-dial plan, 0 draft LLM.
+
+        Drafts only (RULE_21): the plan lands in ``pending_approval``; nothing
+        is submitted here. Answer + Open-in-Tasks action in the user's language.
+        """
+        from asgiref.sync import sync_to_async
+
+        from ai.engine.agent.reasoning import AgentResponse
+        from ai.engine.cognition.notifier import broadcast_run_event as _broadcast_run
+        from ai.engine.cognition.turn.navigation import detect_lang
+        from ai.engine.cognition.turn.plan_dial import (
+            open_tasks_action,
+            plan_dial_process_brief,
+            render_plan_dial_answer,
+        )
+
+        brief = plan_dial_process_brief(user_message)
+        if not brief or not host_user_id:
+            return None
+        # A bare slot answer to an open Chat clarify stays with the slot-filler.
+        state = getattr(state_ctx, "state", None) if state_ctx is not None else None
+        if state is not None:
+            decisions = getattr(state, "decisions", None) or []
+            last = decisions[-1] if decisions and isinstance(decisions[-1], dict) else {}
+            prior_api = str((getattr(state, "intent", None) or {}).get("api") or "")
+            if prior_api and str(last.get("decision") or "") == "clarify" and len(brief) < 40:
+                return None
+
+        def _create_plan_sync():
+            from django.contrib.auth import get_user_model
+
+            from ai.plans_service import PlansService
+
+            User = get_user_model()
+            try:
+                user = User.objects.get(pk=host_user_id)
+            except (User.DoesNotExist, ValueError):
+                return None
+            return PlansService().create_plan(
+                user, brief, conversation_id=conversation_id or "",
+            )
+
+        try:
+            # thread_sensitive=False: create_plan re-enters the async engine
+            # (same reason as the plan_task plugin).
+            plan = await sync_to_async(_create_plan_sync, thread_sensitive=False)()
+        except Exception:  # noqa: BLE001 — never break the turn
+            logger.warning("plan_dial process plan create failed", exc_info=True)
+            return None
+        if not isinstance(plan, dict) or not plan.get("id"):
+            return None
+
+        lang = "ar" if detect_lang(brief) == "ar" else "en"
+        text = render_plan_dial_answer(brief=brief, plan=plan, lang=lang)
+        plan_id = str(plan.get("id") or "")
+
+        if state is not None:
+            try:
+                from ai.engine.cognition.state_store import upsert_active_plan
+
+                upsert_active_plan(
+                    state,
+                    plan_id=plan_id,
+                    status=str(plan.get("status") or "pending_approval"),
+                    title=brief[:80],
+                    step_summary="; ".join(
+                        str(s.get("intent") or "")
+                        for s in (plan.get("steps") or [])
+                        if isinstance(s, dict)
+                    ),
+                )
+            except Exception:  # noqa: BLE001
+                logger.debug("plan_dial active_plans write-back skipped", exc_info=True)
+
+        total_latency = (time.monotonic() - t0) * 1000
+        ledger.final_response = text[:500]
+        ledger.total_latency_ms = total_latency
+        ledger.total_tokens = 0
+        ledger.total_llm_calls = 0
+        response = AgentResponse(
+            text=text,
+            sources_cited=[],
+            tools_used=[],
+            confidence=1.0,
+            total_tokens=0,
+            llm_calls=0,
+            model="",
+            response_type="inferred",
+            actions=[open_tasks_action(plan_id, lang)],
+        )
+        try:
+            await _broadcast_run(instance_id, "run.completed", {
+                "run_id": turn_id,
+                "total_latency_ms": total_latency,
+                "total_llm_calls": 0,
+                "plan_dial_process": plan_id,
+            })
+        except Exception:  # noqa: BLE001
+            logger.debug("plan_dial broadcast skipped", exc_info=True)
+        logger.info(
+            "TurnPipelineRunner: Plan dial process plan id=%s steps=%d lang=%s",
+            plan_id[:8], len(plan.get("steps") or []), lang,
+        )
+        _signal(ledger, "plan_dial_process", True, plan_id=plan_id)
+        ledger.turn_decision = ledger.turn_decision or "tool_answer"
+        return response, ledger
+
+    async def _try_restyle_previous_answer(
+        self,
+        *,
+        user_message: str,
+        conversation_history,
+        ledger,
+        meter,
+        turn_id: str,
+        instance_id: str,
+        conversation_id: str,
+        t0: float,
+    ):
+        """«in arabic / more details» → rewrite the last answer. One LLM, no tools."""
+        from ai.engine.agent.reasoning import AgentResponse
+        from ai.engine.cognition.notifier import broadcast_run_event as _broadcast_run
+        from ai.engine.cognition.turn.plan_dial import (
+            build_restyle_messages,
+            is_restyle_request,
+            last_assistant_answer,
+            restyle_target_lang,
+            restyle_wants_more_detail,
+        )
+        from ai.engine.llm.call_meter import stage as _stage
+
+        if not is_restyle_request(user_message):
+            return None
+        previous = last_assistant_answer(conversation_history)
+        if not previous:
+            return None
+        target = restyle_target_lang(user_message)
+        messages = build_restyle_messages(
+            previous_answer=previous[:6000],
+            request=user_message,
+            target_lang=target,
+            more_detail=restyle_wants_more_detail(user_message),
+        )
+        try:
+            from ai.engine.llm.router import route_chat
+
+            with _stage("restyle"):
+                result = await route_chat(
+                    task="cognition",
+                    instance_id=instance_id,
+                    conversation_id=conversation_id,
+                    messages=messages,
+                    temperature=0.2,
+                    tools=None,
+                )
+        except Exception:  # noqa: BLE001 — fall through to the normal spine
+            logger.warning("restyle LLM call failed", exc_info=True)
+            return None
+        text = str((result or {}).get("content") or "").strip()
+        if not text:
+            return None
+        total_latency = (time.monotonic() - t0) * 1000
+        ledger.final_response = text[:500]
+        ledger.total_latency_ms = total_latency
+        ledger.total_llm_calls = 1
+        response = AgentResponse(
+            text=text,
+            sources_cited=[],
+            tools_used=[],
+            confidence=0.9,
+            total_tokens=int((result or {}).get("total_tokens") or 0),
+            llm_calls=1,
+            model=str((result or {}).get("model") or ""),
+            response_type="inferred",
+        )
+        try:
+            await _broadcast_run(instance_id, "run.completed", {
+                "run_id": turn_id,
+                "total_latency_ms": total_latency,
+                "total_llm_calls": 1,
+                "restyle": target,
+            })
+        except Exception:  # noqa: BLE001
+            logger.debug("restyle broadcast skipped", exc_info=True)
+        _signal(ledger, "restyle", True, lang=target)
+        ledger.turn_decision = ledger.turn_decision or "answer"
         return response, ledger
 
     async def _try_chat_write_handoff(
@@ -4910,6 +5324,9 @@ class TurnPipelineRunner:
             skill_registry=skill_registry,
             instance_id=instance_id,
             user_id=host_user_id or "",
+            conversation_state=(
+                state_ctx.state if state_ctx is not None else None
+            ),
         )
 
         # Only activate ReAct loop for multi-step plans or skill-sourced plans
@@ -5007,6 +5424,9 @@ class TurnPipelineRunner:
             progress_callback=progress_callback,
             stream_callback=stream_callback,
             host_user_id=host_user_id,
+            conversation_state=(
+                state_ctx.state if state_ctx is not None else None
+            ),
         )
 
         return react_result
@@ -5024,6 +5444,7 @@ class TurnPipelineRunner:
         retrieval,
         turn_id: str,
         budget_tracker=None,  # P3.4: BudgetTracker for per-run token limits
+        state_ctx=None,
     ):
         """P3.2: Attempt orchestrator fan-out. Returns _FanOutResponse or None.
 
@@ -5108,7 +5529,7 @@ class TurnPipelineRunner:
             instance_id=instance_id,
         )
         orch_pack = build_context_pack(
-            None,
+            state_ctx.state if state_ctx is not None else None,
             surface="chat",
             stage="fanout",
             user_info=user_info,
@@ -5116,7 +5537,7 @@ class TurnPipelineRunner:
             conversation_history=conversation_history,
             retrieval=retrieval,
             task_body=f"{task_body}\n\n{TASK_FANOUT}",
-            include_state=False,
+            include_state=True,
             include_knowledge=False,
             include_memory=False,
             include_history=False,
@@ -5224,7 +5645,7 @@ class TurnPipelineRunner:
                 build_context_pack,
             )
             synth_pack = build_context_pack(
-                None,
+                state_ctx.state if state_ctx is not None else None,
                 surface="chat",
                 stage="fanout_synthesis",
                 user_info=user_info,
@@ -5234,7 +5655,7 @@ class TurnPipelineRunner:
                     f"User request: {user_message}"
                 ),
                 user_body=_json.dumps(fan_out_result.artifact_refs, indent=2),
-                include_state=False,
+                include_state=True,
                 include_knowledge=False,
                 include_memory=False,
                 include_history=False,

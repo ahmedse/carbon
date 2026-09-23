@@ -439,6 +439,7 @@ def test_state_saved_on_clarify_with_open_question(django_store, engine_env):
     assert state.decisions[-1]["decision"] == "clarify"
     assert state.open_question["asked_turn"] == 1
     assert question in state.open_question["text"]
+    assert state.open_question.get("slot"), "open_question.slot must be non-empty"
     assert state.intent["action"] == "clarify"
     assert state.intent["zone"] == "platform"
 

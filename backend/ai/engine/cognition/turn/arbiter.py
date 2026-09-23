@@ -24,7 +24,7 @@ _PRECEDENCE: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("handoff_agent", ("chat_handoff",)),
     ("navigate", ("nav_fast_path", "nav_ground")),
     ("clarify", ("deixis", "chat_clarify")),
-    ("tool_answer", ("weather_force", "tools_executed")),
+    ("tool_answer", ("weather_force", "tools_executed", "plan_dial_process")),
     ("answer", ()),
 )
 

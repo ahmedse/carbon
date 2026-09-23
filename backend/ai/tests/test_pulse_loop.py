@@ -133,6 +133,33 @@ async def test_observe_skips_llm_for_empty_payslips():
     assert "payslip" in (out.answer or "").lower()
 
 
+async def test_observe_empty_leave_history_not_zero_balance():
+    """Empty list_my_leave must not invent remaining=0 for a balance ask."""
+    loop = ReActLoop()
+    dw = _FakeDraftWitness("remaining 0 / used 0 / pending 0")
+    tool_output = {
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": "list_my_leave"},
+        "result": json.dumps({"status_code": 200, "data": {"count": 0, "results": []}}),
+    }
+    out = await loop._observe(
+        step=_step(),
+        tool_output=tool_output,
+        user_message="عن الإجازات",
+        system_prompt="sys",
+        conversation_history=None,
+        instance_config=None,
+        user_info={"language": "ar"},
+        dw=dw,
+    )
+    assert out is not None
+    assert dw.call_kwargs is None
+    text = out.answer or ""
+    assert "المتبقي 0" not in text
+    assert "remaining 0" not in text.lower()
+    assert "رصيد" in text or "طلبات" in text
+
+
 async def test_observe_skips_llm_for_committed_payslips():
     """Committed identity is restated from the tool — observe must not draft."""
     loop = ReActLoop()

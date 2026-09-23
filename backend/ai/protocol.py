@@ -472,6 +472,9 @@ class ChatRequest:
     # Resolved by CarbonIntelligence from the user profile (or a per-message
     # override); None lets the engine keep its built-in default.
     temperature: float | None = None
+    # Structured Pulse process dial. This is transport metadata, not prompt
+    # prose: the engine routes Ask vs Plan before drafting.
+    process_mode: str = "ask"
 
 
 @dataclass

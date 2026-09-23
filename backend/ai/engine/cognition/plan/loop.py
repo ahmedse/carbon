@@ -269,6 +269,7 @@ class ReActLoop:
         on_compensation_queued=None,  # (failed_step_id, comp_step_id, node_id) -> ...
         on_wait_fired=None,       # (node_id, WaitDecision, duration_ms, until) -> ...
         max_heals: int | None = None,
+        conversation_state=None,  # ADR-0047 ConversationState → StateBlock
     ) -> ReActResult:
         """Execute the plan through the ReAct loop.
 
@@ -303,6 +304,7 @@ class ReActLoop:
         Returns:
             ReActResult with step results and final synthesis
         """
+        self._conversation_state = conversation_state
         from ai.engine.cognition.turn.draft import DraftWitness
         from ai.engine.cognition.turn.critic import CriticWitness
         from ai.engine.cognition.turn.execute import ExecuteWitness
@@ -1775,7 +1777,7 @@ class ReActLoop:
                     build_context_pack,
                 )
                 draft_pack = build_context_pack(
-                    None,
+                    getattr(self, "_conversation_state", None),
                     surface="agent_plan",
                     stage="draft",
                     user_info=user_info,
@@ -1784,7 +1786,7 @@ class ReActLoop:
                     language=str((user_info or {}).get("language") or ""),
                     task_body=TASK_AGENT_PLAN_DRAFT,
                     include_history=False,
-                    include_state=False,
+                    include_state=True,
                     include_knowledge=False,
                     include_memory=False,
                 )
@@ -1794,7 +1796,7 @@ class ReActLoop:
                     build_context_pack,
                 )
                 draft_pack = build_context_pack(
-                    None,
+                    getattr(self, "_conversation_state", None),
                     surface="agent_plan",
                     stage="draft",
                     user_info=user_info,
@@ -1803,7 +1805,7 @@ class ReActLoop:
                     language=str((user_info or {}).get("language") or ""),
                     task_body=TASK_AGENT_PLAN_REASON,
                     include_history=False,
-                    include_state=False,
+                    include_state=True,
                     include_knowledge=False,
                     include_memory=False,
                 )
@@ -2500,6 +2502,7 @@ class ReActLoop:
         if _restated:
             return ObservationResult(answer=_restated)
 
+        from ai.engine.cognition.turn.ess_read import empty_history_misread
         from ai.engine.cognition.turn.zero_llm import (
             is_empty_payslip_tool_result,
             payslip_lines_from_tools,
@@ -2515,6 +2518,9 @@ class ReActLoop:
             return ObservationResult(
                 answer=render_empty_payslip_answer(user_message),
             )
+        _ess_empty = empty_history_misread(tools, user_message=user_message or "")
+        if _ess_empty is not None:
+            return ObservationResult(answer=str(_ess_empty.get("text") or ""))
         lines = payslip_lines_from_tools(tools)
         if lines:
             grounded = render_payslip_grounded(user_message, lines)
@@ -2566,7 +2572,7 @@ class ReActLoop:
         from ai.engine.llm.call_meter import stage
 
         observe_pack = build_context_pack(
-            None,
+            getattr(self, "_conversation_state", None),
             surface="agent_plan",
             stage="observe",
             user_info=user_info,
@@ -2574,7 +2580,7 @@ class ReActLoop:
             conversation_history=conversation_history,
             language=str((user_info or {}).get("language") or ""),
             include_history=False,
-            include_state=False,
+            include_state=True,
             include_knowledge=False,
             include_memory=False,
         )
@@ -3292,7 +3298,7 @@ class ReActLoop:
             from ai.engine.llm.router import route_chat
 
             pack = build_context_pack(
-                None,
+                getattr(self, "_conversation_state", None),
                 surface="agent_plan",
                 stage="plan_synthesis",
                 user_info=user_info,
@@ -3300,7 +3306,7 @@ class ReActLoop:
                 language=str((user_info or {}).get("language") or ""),
                 user_body=synthesis_prompt,
                 include_history=False,
-                include_state=False,
+                include_state=True,
                 include_knowledge=False,
                 include_memory=False,
             )

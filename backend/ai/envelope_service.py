@@ -5,9 +5,10 @@
 markdown path and fails open: any exception returns ``None`` so the caller can
 fall back to the existing markdown synthesis unchanged.
 
-After the LLM returns, :func:`enrich_envelope_charts` drops empty / single-point
-charts (a lone headcount bar is never worth the ink), and
-:func:`sanitize_envelope_tables` strips sample payslip row dumps.
+After the LLM returns, :func:`enrich_envelope_charts` keeps multi-bucket
+charts, injects charts from ``analyze_*`` breakdowns when the LLM omitted
+them, drops empty / single-point bars (a lone headcount bar is never worth
+the ink), and :func:`sanitize_envelope_tables` strips sample payslip row dumps.
 """
 from __future__ import annotations
 

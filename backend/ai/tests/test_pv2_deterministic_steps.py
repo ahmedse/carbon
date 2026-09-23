@@ -471,6 +471,14 @@ def test_render_bound_catalog_read_uses_host_fields_only():
     )
     assert empty_loans == "No existing loans."
 
+    empty_leave_history = render_bound_catalog_read(
+        {"result": json.dumps({"count": 0, "results": []})},
+        "list_my_leave",
+        "en",
+    )
+    assert empty_leave_history == "No leave requests on record."
+    assert "remaining" not in (empty_leave_history or "").lower()
+
     loans_ar = render_bound_catalog_read(
         {"result": [{"loan_type": {"code": "personal"}, "principal": 551, "term_months": 12, "status": "submitted"}]},
         "list_my_loans",

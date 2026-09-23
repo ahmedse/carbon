@@ -103,8 +103,13 @@ def strip_pulse_mode_prefix(utterance: str) -> str:
     return text
 
 
-def is_plan_dial_turn(utterance: str) -> bool:
-    """True when the Chat composer dial was Plan for this turn."""
+def is_plan_dial_turn(
+    utterance: str,
+    process_mode: str | None = None,
+) -> bool:
+    """True when structured transport (or legacy prefix) says Plan."""
+    if (process_mode or "").strip().lower() in {"ask", "plan"}:
+        return (process_mode or "").strip().lower() == "plan"
     return (utterance or "").lstrip().startswith(_PULSE_PLAN_PREFIX)
 
 
@@ -335,6 +340,15 @@ def materialize_loan_request_plan(
         "capability": "loan.request.submit",
     }
 
+    # Composite brief: «راجع قروضي ورصيد إجازتي في الوقت نفسه. إذا كان لدي قرض
+    # مفتوح توقف، إذا لا قدّم…» — the guard and the parallel read are part of
+    # the plan the user asked for. Never ask "what is your salary?" instead.
+    composite = is_composite_brief(brief)
+    wants_leave_read = composite and bool(
+        re.search(r"\b(?:leave|vacation|pto)\b|إجاز|اجاز", brief, re.IGNORECASE)
+    )
+    guard_no_open_loan = composite and bool(_COMPOSITE_CONDITIONAL.search(brief))
+
     list_step = PlanStep(
         step_id=0,
         intent="Check existing loans before submitting",
@@ -354,6 +368,30 @@ def materialize_loan_request_plan(
         agent_role="orchestrator",
     )
 
+    prepare_steps = [list_step]
+    prepare_ids = [0]
+    if wants_leave_read:
+        prepare_steps.append(PlanStep(
+            step_id=1,
+            intent="Read leave balance (requested alongside the loan check)",
+            tool_name="call_host_api",
+            tool_args={
+                "api_name": "get_my_leave_balance",
+                "explanation": "Parallel read the brief asked for; no write.",
+                "_process": {
+                    **process_meta,
+                    "process_step": "prepare",
+                    "capability": "loan.request.submit",
+                    "role": "observe",
+                },
+            },
+            depends_on=[],
+            is_mutation=False,
+            agent_role="orchestrator",
+        ))
+        prepare_ids.append(1)
+    submit_id = len(prepare_steps)
+
     submit_args: dict[str, Any] = {
         "api_name": "submit_my_loan",
         "body": body,
@@ -363,12 +401,21 @@ def materialize_loan_request_plan(
         ),
         "_process": process_meta,
     }
+    submit_intent = _loan_submit_intent(brief, body)
+    if guard_no_open_loan:
+        submit_args["_guard"] = {
+            "source_step": 0,
+            "condition": "no_open_loans",
+            "on_fail": "stop",
+            "text": "Only if step 0 shows no open loan — otherwise stop.",
+        }
+        submit_intent += " — only if no open loan (stop otherwise)"
     submit_step = PlanStep(
-        step_id=1,
-        intent=_loan_submit_intent(brief, body),
+        step_id=submit_id,
+        intent=submit_intent,
         tool_name="call_host_api",
         tool_args=submit_args,
-        depends_on=[0],
+        depends_on=list(prepare_ids),
         is_mutation=True,
         agent_role="orchestrator",
     )
@@ -383,6 +430,11 @@ def materialize_loan_request_plan(
         "After you Approve, Team runs manager then finance review — "
         "Pulse does not approve. Track status in My Requests."
     )
+    if guard_no_open_loan:
+        synthesis += (
+            " Guard: the submit step runs only when the loan check shows no "
+            "open loan; otherwise the plan stops before submitting."
+        )
     if missing:
         synthesis += (
             f" Ungrounded slots for consent: {', '.join(missing)} "
@@ -391,7 +443,7 @@ def materialize_loan_request_plan(
 
     plan = Plan(
         pattern="loan_request",
-        steps=[list_step, submit_step],
+        steps=[*prepare_steps, submit_step],
         synthesis_instruction=synthesis,
         source="process_dial",
         skill_name=PROCESS_LOAN,
@@ -400,24 +452,31 @@ def materialize_loan_request_plan(
             PlanPhase(
                 phase_id=0,
                 name="Prepare",
-                goal="List existing loans",
-                strategy="sequential",
-                step_ids=[0],
+                goal=(
+                    "List existing loans and read leave balance"
+                    if wants_leave_read else "List existing loans"
+                ),
+                strategy="parallel" if wants_leave_read else "sequential",
+                step_ids=list(prepare_ids),
             ),
             PlanPhase(
                 phase_id=1,
                 name="Submit",
                 goal="Stage loan.request.submit for consent",
                 strategy="sequential",
-                step_ids=[1],
+                step_ids=[submit_id],
             ),
         ],
     )
     logger.info(
-        "process_dial loan plan: grounded=%s missing=%s body_keys=%s",
+        "process_dial loan plan: grounded=%s missing=%s body_keys=%s "
+        "composite=%s guard=%s leave_read=%s",
         grounded,
         missing,
         sorted(body.keys()),
+        composite,
+        guard_no_open_loan,
+        wants_leave_read,
     )
     return plan
 

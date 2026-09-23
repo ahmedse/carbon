@@ -2581,14 +2581,22 @@ _LEAVE_BALANCE_INTENT_RE = re.compile(
     r"days?\s+(?:of\s+)?leave\s+(?:left|remaining)|"
     r"how\s+much\s+leave|annual\s+leave(?:\s+remaining)?|"
     r"leave\s+entitlement|sick\s+leave\s+remaining|"
-    r"رصيد\s*ال?اجاز|رصيد\s*إجاز|اجازات?\s*متبقي|الإجازات?\s*المتبقي|"
-    r"رصيد\s*اجاز"
+    r"(?:my\s+)?leaves?\b|"
+    # Arabic stem + typo tolerance (عن الاجازلت / الإجازات / اجازاتي)
+    r"رصيد\s*ال?[اأإ]?جاز\w{0,4}|"
+    r"[اأإ]?جاز\w{0,4}\s*متبقي|"
+    r"ال?[اأإ]?جاز\w{0,4}\s*المتبقي|"
+    r"[اأإ]?جاز\w{0,4}ي|"
+    r"عن\s*ال?[اأإ]?جاز\w{0,4}|"
+    r"ال?[اأإ]?جاز\w{0,4}"
     r")",
     re.IGNORECASE,
 )
 
 _FIRST_PERSON_LEAVE_RE = re.compile(
-    r"(?i)\b(my|mine)\b|اجازاتي|رصيد\s*اجازاتي|رصيد\s*إجازاتي",
+    r"(?i)\b(my|mine)\b|"
+    r"[اأإ]?جاز\w{0,4}ي|رصيد\s*[اأإ]?جاز|"
+    r"عن\s*ال?[اأإ]?جاز\w{0,4}|ال?[اأإ]?جاز\w{0,4}",
 )
 
 _NAMED_LEAVE_HINT_RE = re.compile(

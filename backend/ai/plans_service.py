@@ -1872,7 +1872,7 @@ class PlansService:
             logger.exception("workflow_graph compile-from-json failed")
             return None
 
-    def _decompose(self, user, brief):
+    def _decompose(self, user, brief, conversation_id: str = ""):
         """Run SkillAwarePlanner.decompose on a fresh engine session."""
         from ai.engine.core.config import get_settings
         from ai.engine.core.database import get_session_factory
@@ -1881,6 +1881,8 @@ class PlansService:
 
         settings = get_settings()
         user_pk = str(user.pk)
+        _cid = conversation_id or ""
+        _svc = self
 
         async def _decompose():
             from ai.engine.llm.provider import get_llm_client
@@ -1897,6 +1899,7 @@ class PlansService:
                     instance_id=PLAN_INSTANCE_ID,
                     user_id=user_pk,
                     force_decompose=True,
+                    conversation_state=_svc._load_conversation_state(_cid),
                 )
 
         return _run_async(_decompose())
@@ -2405,7 +2408,7 @@ class PlansService:
             raise ValueError("brief is too long (max 4000 characters).")
 
         user_pk = str(user.pk)
-        plan = self._decompose(user, brief)
+        plan = self._decompose(user, brief, conversation_id=conversation_id)
 
         run_id = generate_uuid()
         plan_payload = self._plan_to_dict(plan)
@@ -3092,7 +3095,8 @@ class PlansService:
         from ai.models.core import RunStep
 
         enriched = self._enrich_brief(brief, turns)
-        plan = self._decompose(user, enriched)
+        cid = str(getattr(run, "conversation_id", "") or "")
+        plan = self._decompose(user, enriched, conversation_id=cid)
         plan_dict = self._plan_to_dict(plan)
         plan_dict["discovery_turns"] = turns
         plan_dict["brief"] = brief
@@ -4270,6 +4274,9 @@ class PlansService:
                 inherited_brief = await sync_to_async(
                     self._inherit_chat_brief, thread_sensitive=True,
                 )(run.user_message or "", conversation_id)
+                _cs = await sync_to_async(
+                    self._load_conversation_state, thread_sensitive=True,
+                )(conversation_id)
                 await loop.run(
                     plan=plan,
                     instance_id=PLAN_INSTANCE_ID,
@@ -4287,6 +4294,7 @@ class PlansService:
                     on_heal_proposed=_on_heal,
                     on_compensation_queued=_on_compensation,
                     on_wait_fired=_on_wait,
+                    conversation_state=_cs,
                 )
             finally:
                 set_current_plan_run(None)

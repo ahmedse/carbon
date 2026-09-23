@@ -399,6 +399,34 @@ def _focus_entries(
     return out
 
 
+def _infer_open_question_slot(
+    response_text: str,
+    *,
+    fired_gates: Iterable[str] | None = None,
+    slots: dict | None = None,
+) -> str:
+    """Name the open clarify slot for continuity (never leave empty)."""
+    gates = {str(g) for g in (fired_gates or []) if g}
+    if "report_clarify" in gates or "zero_llm" in gates:
+        text_l = (response_text or "").lower()
+        if "focus on" in text_l or "salary report" in text_l or "تقرير الرواتب" in (response_text or ""):
+            return "report_aspect"
+    text_l = (response_text or "").lower()
+    if "focus on" in text_l and ("pay distribution" in text_l or "payroll run" in text_l):
+        return "report_aspect"
+    # ESS: first missing known write slot.
+    known = dict(slots or {})
+    for key in ("loan_type", "amount", "principal", "reason", "start_date", "end_date", "days"):
+        if key not in known or known.get(key) in (None, ""):
+            if key in text_l or key.replace("_", " ") in text_l:
+                return key
+    if "loan" in text_l or "قرض" in (response_text or ""):
+        return "loan_slot"
+    if "leave" in text_l or "إجازة" in (response_text or ""):
+        return "leave_slot"
+    return "clarification"
+
+
 def update_state_from_turn(
     state: ConversationState,
     *,
@@ -485,7 +513,11 @@ def update_state_from_turn(
 
     if decision == "clarify":
         state.open_question = {
-            "slot": "",
+            "slot": _infer_open_question_slot(
+                response_text or "",
+                fired_gates=fired_gates,
+                slots=state.slots,
+            ),
             "asked_turn": turn,
             "text": " ".join((response_text or "").split())[:_OPEN_QUESTION_TEXT_MAX],
         }
@@ -544,8 +576,10 @@ def render_state_block(state: ConversationState, max_chars: int = STATE_BLOCK_MA
             + ", ".join(f"{k}={_fmt_slot(v)}" for k, v in state.slots.items())
         )
     if state.open_question.get("text"):
+        slot = (state.open_question.get("slot") or "").strip()
+        slot_bit = f" [{slot}]" if slot else ""
         lines.append(
-            f"You asked (turn {state.open_question.get('asked_turn', '?')}): "
+            f"You asked{slot_bit} (turn {state.open_question.get('asked_turn', '?')}): "
             f"{state.open_question['text']}"
         )
     intent = state.intent or {}

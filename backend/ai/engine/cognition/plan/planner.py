@@ -918,6 +918,7 @@ class SkillAwarePlanner:
         instance_id: str = "",
         user_id: str = "",
         force_decompose: bool = False,
+        conversation_state=None,
     ) -> Plan:
         """Decompose utterance into a Plan.
 
@@ -931,6 +932,7 @@ class SkillAwarePlanner:
             force_decompose: when True, always attempt LLM decomposition
                 (explicit "plan this" requests) even if the heuristic signals
                 don't fire; single-step remains the failure fallback.
+            conversation_state: ADR-0047 ConversationState for StateBlock
 
         Returns:
             Plan — always non-None; source="single_step" for trivial queries
@@ -1103,6 +1105,7 @@ class SkillAwarePlanner:
             plan = await self._llm_decompose(
                 utterance, client, model_name,
                 instance_id=instance_id, skills=skills, user_id=user_id,
+                conversation_state=conversation_state,
             )
             if plan and plan.steps:
                 logger.info("SkillAwarePlanner: LLM decomposition returned %d steps", len(plan.steps))
@@ -1187,6 +1190,7 @@ class SkillAwarePlanner:
     async def _llm_decompose(
         self, utterance: str, llm_client, model: str, instance_id: str = "",
         skills: list | None = None, user_id: str = "",
+        conversation_state=None,
     ) -> Plan | None:
         """Use LLM to decompose utterance into agentic steps."""
         from ai.engine.llm.router import route_chat
@@ -1235,7 +1239,7 @@ class SkillAwarePlanner:
             from ai.engine.cognition.context_pack import build_context_pack
 
             pack = build_context_pack(
-                None,
+                conversation_state,
                 surface="agent_plan",
                 stage="decompose",
                 instance_config=cfg if isinstance(cfg, dict) else None,
@@ -1243,7 +1247,7 @@ class SkillAwarePlanner:
                 task_body=prompt,
                 user_message=utterance,
                 include_history=False,
-                include_state=False,
+                include_state=True,
                 include_knowledge=False,
                 include_memory=False,
             )

@@ -374,11 +374,23 @@ def resolve_navigation(
     merely mention a module noun return ``none`` (the normal pipeline answers).
     How/where UI asks ("where can I find my leave") ground the *topic* only.
     """
+    # How/where UI ("where can I find my leave balance?") still grounds the
+    # place noun. Bare ESS topic reads («عن الإجازات», "my loans", "my
+    # payslips" without a nav verb) must answer from host APIs — not open UI.
     if is_how_where_ui(message):
         topic = place_topic(message)
         if topic:
             return ground_navigation(topic, instance_config)
         return NavigationResolution(lang=detect_lang(message or ""))
+    try:
+        from ai.engine.cognition.turn.ess_read import should_skip_module_nav
+
+        if should_skip_module_nav(message) and not _has_nav_verb(
+            normalize_text(message or "")
+        ):
+            return NavigationResolution(lang=detect_lang(message or ""))
+    except Exception:  # noqa: BLE001 — never block nav on import/edge failure
+        pass
     if is_interrogative_non_command(message):
         return NavigationResolution(lang=detect_lang(message or ""))
     return ground_navigation(message or "", instance_config)

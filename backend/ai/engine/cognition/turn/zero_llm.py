@@ -817,6 +817,7 @@ def try_zero_llm_answer(
     history: list[dict] | None = None,
     newly_stored: bool = False,
     last_results: list[dict] | None = None,
+    open_question: dict | None = None,
 ) -> dict[str, Any] | None:
     """Return ``{decision, text}`` when the utterance is a 0-LLM surface."""
     from ai.engine.cognition.turn.memory_recall import (
@@ -830,10 +831,11 @@ def try_zero_llm_answer(
     if not raw:
         return None
     # Broad "full salary report" → clarify aspect/audience before any tools.
-    # Pass history + last_results so we never re-ask when the thread already
-    # has payroll context (ADR-0047 ConversationState continuity).
     report_hit = try_report_clarify(
-        raw, history=history, last_results=last_results,
+        raw,
+        history=history,
+        last_results=last_results,
+        open_question=open_question,
     )
     if report_hit is not None:
         return report_hit

@@ -472,6 +472,11 @@ class PulseProvider(AIProvider):
         """
         payload: dict[str, Any] = {
             "message": request.message,
+            "process_mode": (
+                request.process_mode
+                if request.process_mode in {"ask", "plan"}
+                else "ask"
+            ),
         }
         if request.model:
             payload["model"] = request.model

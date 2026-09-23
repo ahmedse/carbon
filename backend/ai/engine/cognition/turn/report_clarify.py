@@ -252,6 +252,7 @@ def try_report_clarify(
     *,
     history: list[dict] | None = None,
     last_results: list[dict] | None = None,
+    open_question: dict | None = None,
 ) -> dict[str, Any] | None:
     """0-LLM: broad report → one clarify; never re-ask when context exists.
 
@@ -269,6 +270,12 @@ def try_report_clarify(
 
     # Aspect / "all 4" / charts follow-up → normal pipeline (tools + visuals).
     if looks_like_report_aspect_reply(text) or _SCOPED_RE.search(text):
+        return None
+
+    oq = open_question if isinstance(open_question, dict) else {}
+    if oq.get("slot") == "report_aspect" or (
+        oq.get("text") and _PRIOR_CLARIFY_RE.search(str(oq.get("text") or ""))
+    ):
         return None
 
     # Continuity: already clarified, already answered, or still have digests.

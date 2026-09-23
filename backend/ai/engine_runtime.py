@@ -209,6 +209,7 @@ async def _run_chat(
             instance_id=instance_id,
             conversation_id=conversation_id,
             host_user_id=host_user_id,
+            process_mode=str(payload.get("process_mode") or "ask"),
             conversation_history=history_messages,
             instance_config=instance_config,
             user_info=user_info,

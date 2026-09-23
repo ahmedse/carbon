@@ -599,22 +599,30 @@ def _apply_named_leave_override(
     Admin \"annual leave remaining for employee 1001 Wellie\" historically
     matched ``resolve_entity`` only (Pulse loop never forced the leave tool).
     Prefer ``list_leave_entitlements`` (org-scoped). First-person \"my leave\"
-    stays on ``get_my_leave_balance``.
+    stays on ``get_my_leave_balance``. Leave *history* asks use ``list_my_leave``.
     """
     from ai.engine.agent.tools import (
         first_person_leave_ask,
         leave_balance_intent_asked,
         named_leave_balance_ask,
     )
+    from ai.engine.cognition.turn.ess_read import leave_history_asked
 
     if not leave_balance_intent_asked(user_message):
         return resolution
 
     label_names = {lbl["name"] for lbl in labels}
-    if first_person_leave_ask(user_message):
-        preferred = ("get_my_leave_balance", "list_my_leave")
-    elif named_leave_balance_ask(user_message):
+    # ESS Chat: leave-balance topic without a named employee → self balance.
+    # «عن الإجازات» historically missed first_person and preferred list_my_leave
+    # (records) → empty → invented remaining/used/pending = 0.
+    if named_leave_balance_ask(user_message):
         preferred = ("list_leave_entitlements", "list_leave_records")
+    elif leave_history_asked(user_message):
+        preferred = ("list_my_leave", "get_my_leave_balance")
+    elif first_person_leave_ask(user_message) or not named_leave_balance_ask(
+        user_message
+    ):
+        preferred = ("get_my_leave_balance", "list_my_leave")
     else:
         return resolution
 
@@ -641,6 +649,48 @@ def _apply_named_leave_override(
     ]
     resolution.confidence = max(resolution.confidence, 0.9)
     resolution.intent = resolution.intent or "leave balance lookup"
+    return resolution
+
+
+def _apply_ess_self_read_override(
+    resolution: IntentResolution,
+    *,
+    user_message: str,
+    labels: list[dict],
+) -> IntentResolution:
+    """ESS self-read catalog: loan/payslip/leave-history twins of leave balance."""
+    from ai.engine.cognition.turn.ess_read import preferred_self_api
+
+    pick = preferred_self_api(user_message)
+    if pick is None:
+        return resolution
+    # Leave *balance* already handled by ``_apply_named_leave_override``.
+    if pick == "get_my_leave_balance":
+        return resolution
+
+    label_names = {lbl["name"] for lbl in labels}
+    if pick not in label_names:
+        return resolution
+
+    top = resolution.candidates[0].name if resolution.candidates else ""
+    if top == pick and resolution.action == "answer":
+        return resolution
+
+    resolution.action = "answer"
+    resolution.clarification = ""
+    resolution.options = []
+    resolution.zone = "platform"
+    resolution.delivery = "lookup"
+    resolution.needs_host_data = True
+    resolution.candidates = [
+        IntentCandidate(
+            name=pick,
+            confidence=max(resolution.confidence, 0.9),
+            reason=f"ESS self-read → {pick}",
+        )
+    ]
+    resolution.confidence = max(resolution.confidence, 0.9)
+    resolution.intent = resolution.intent or "ess self-read"
     return resolution
 
 
@@ -920,6 +970,11 @@ class IntentResolver:
             labels=labels,
         )
         resolution = _apply_named_leave_override(
+            resolution,
+            user_message=user_message,
+            labels=labels,
+        )
+        resolution = _apply_ess_self_read_override(
             resolution,
             user_message=user_message,
             labels=labels,

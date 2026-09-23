@@ -63,6 +63,40 @@ def test_first_person_leave_not_named():
     assert not named_leave_balance_ask(msg)
 
 
+def test_arabic_about_leaves_is_self_balance_not_nav_topic():
+    """«عن الإجازات» must hit get_my_leave_balance — not invent 0 from empty records."""
+    for msg in (
+        "عن الإجازات",
+        "ماشي، طيب عن الإجازات",
+        "رصيد الإجازات",
+        "اجازاتي",
+        "إجازاتي",
+    ):
+        assert leave_balance_intent_asked(msg), msg
+        assert first_person_leave_ask(msg), msg
+        assert not named_leave_balance_ask(msg), msg
+
+
+def test_arabic_about_leaves_override_prefers_get_my_leave_balance():
+    labels = [
+        {"name": "list_my_leave"},
+        {"name": "get_my_leave_balance"},
+        {"name": "resolve_entity"},
+    ]
+    resolution = IntentResolution(
+        action="answer",
+        candidates=[IntentCandidate(name="list_my_leave", confidence=0.8)],
+        confidence=0.8,
+        zone="platform",
+    )
+    out = _apply_named_leave_override(
+        resolution,
+        user_message="ماشي، طيب عن الإجازات",
+        labels=labels,
+    )
+    assert out.candidates[0].name == "get_my_leave_balance"
+
+
 def test_named_leave_override_prefers_list_leave_entitlements():
     labels = [
         {"name": "resolve_entity"},

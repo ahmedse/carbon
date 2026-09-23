@@ -115,3 +115,41 @@ def test_last_results_payroll_skips_clarify():
         "i need full report about salaries in the company",
         last_results=last_results,
     ) is None
+
+
+def test_numbered_pick_expands_after_topic_menu():
+    from ai.engine.cognition.turn.report_clarify import expand_numbered_report_pick
+
+    history = [
+        {
+            "role": "assistant",
+            "content": (
+                "I'd like to focus this report for you. **What's the main topic?**\n"
+                "1. **Headcount & Organization**\n"
+                "2. **Payroll & Compensation**"
+            ),
+        },
+    ]
+    expanded = expand_numbered_report_pick("1", history=history)
+    assert expanded is not None
+    assert "Headcount" in expanded
+    assert "charts" in expanded.lower()
+    assert try_report_clarify("1", history=history) is None
+
+
+def test_numbered_pick_expands_after_salary_clarify():
+    from ai.engine.cognition.turn.report_clarify import expand_numbered_report_pick
+
+    history = [
+        {
+            "role": "assistant",
+            "content": (
+                "Happy to help with a salary report — what should "
+                "this report focus on?"
+            ),
+        },
+    ]
+    expanded = expand_numbered_report_pick("1", history=history)
+    assert expanded is not None
+    assert "distribution" in expanded.lower() or "band" in expanded.lower()
+    assert expand_numbered_report_pick("1", history=[]) is None

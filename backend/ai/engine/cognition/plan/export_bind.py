@@ -614,6 +614,34 @@ def render_bound_catalog_read(
         joined = "؛ ".join(parts) if ar else "; ".join(parts)
         return (f"رصيد الإجازة: {joined}." if ar else f"Leave balance: {joined}.")
 
+    if api == "list_my_leave":
+        if not rows:
+            return (
+                "لا توجد طلبات إجازة مسجّلة."
+                if ar
+                else "No leave requests on record."
+            )
+        parts = []
+        for row in rows[:5]:
+            kind = _code_or_text(row.get("leave_type")) or "leave"
+            status = _code_or_text(row.get("status") or row.get("correspondence_status"))
+            start = row.get("start_date") or row.get("from_date")
+            end = row.get("end_date") or row.get("to_date")
+            bits = [kind]
+            if start:
+                bits.append(str(start))
+            if end:
+                bits.append(str(end))
+            if status:
+                bits.append(status)
+            parts.append(", ".join(bits) if not ar else "، ".join(bits))
+        body = "; ".join(parts) if not ar else "؛ ".join(parts)
+        return (
+            f"طلبات الإجازة ({len(rows)}): {body}."
+            if ar
+            else f"Leave requests ({len(rows)}): {body}."
+        )
+
     if api == "list_my_loans":
         if not rows:
             return "لا توجد قروض قائمة." if ar else "No existing loans."

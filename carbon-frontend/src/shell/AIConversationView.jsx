@@ -517,9 +517,27 @@ function AIConversationView({
     [persistThreadState],
   );
 
-  const handleNewThread = useCallback(() => {
+  const handleNewThread = useCallback(async () => {
+    // Align UI "New thread" with engine clear_break so ConversationState
+    // does not bleed across topics (ADR-0047 continuity).
+    if (conversationId && token) {
+      try {
+        const updated = await clearContext(token, conversationId);
+        setConversation((prev) => (prev ? { ...prev, ...updated } : updated));
+        onConversationUpdated?.(updated);
+      } catch (err) {
+        notifyFromError(err, 'Could not start a new thread');
+        return;
+      }
+    }
     persistThreadState(addThread(threadStateRef.current, {}));
-  }, [persistThreadState]);
+  }, [
+    conversationId,
+    token,
+    persistThreadState,
+    onConversationUpdated,
+    notifyFromError,
+  ]);
 
   /** Copilot-style: start a topic from this turn; seed message moves into the new thread. */
   const handleStartThreadFromHere = useCallback(

@@ -244,6 +244,22 @@ def test_grounded_note_mixed_success_keeps_fail_copy_for_mutation():
     assert "invented" not in note.lower()
 
 
+def test_grounded_note_plan_task_error_muted_under_successful_read():
+    """Transcript: payroll answer + ×3 'nothing was created' from plan_task."""
+    tools = [
+        {
+            "tool_name": "aggregate_entity",
+            "result": json.dumps({"metric": "headcount", "value": 555}),
+        },
+        {"tool_name": "plan_task", "error": "cancelled"},
+        {"tool_name": "plan_task", "error": "cancelled"},
+        {"tool_name": "plan_task", "error": "cancelled"},
+    ]
+    note = _grounded_outcome_note(tools)
+    assert note == ""
+    assert "nothing was created" not in note
+
+
 def test_fail_copy_lookup_has_no_invention_meta():
     from ai.engine_runtime import _FAILED_LOOKUP_COPY, _FAILED_ACTION_COPY
 

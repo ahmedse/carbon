@@ -649,7 +649,10 @@ class CarbonIntelligence:
                     payload["pulse_mode"] = pulse_mode
                     conversation.task_payload_json = payload
                     conversation.save(update_fields=["task_payload_json"])
-                message = self._prepend_pulse_mode(pulse_mode, content)
+                # Ask/Plan is structured transport metadata on ChatRequest.
+                # Keep the user's message as their words; routing must not
+                # parse an injected prose prefix.
+                message = content
                 message = self._prepend_workspace_context(conversation, message)
                 message = self._prepend_domain_context(scope, message)
                 chat_request = ChatRequest(
@@ -658,6 +661,15 @@ class CarbonIntelligence:
                     scope=scope,
                     model=resolved_model,
                     temperature=resolved_temperature,
+                    process_mode=(
+                        pulse_mode
+                        if pulse_mode in ("ask", "plan")
+                        else str(
+                            (conversation.task_payload_json or {}).get(
+                                "pulse_mode", "ask",
+                            )
+                        )
+                    ),
                 )
 
                 partial_parts: list[str] = []
@@ -3819,6 +3831,9 @@ class CarbonIntelligence:
             scope=scope,
             model=model,
             temperature=temperature,
+            process_mode=str(
+                (conversation.task_payload_json or {}).get("pulse_mode", "ask")
+            ),
         )
         started_at = time.perf_counter()
         chat_response = self.provider.chat(chat_request)

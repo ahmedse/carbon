@@ -11,10 +11,21 @@ turns:
   - user: "راجع قروضي المفتوحة ورصيد إجازتي في الوقت نفسه. إذا كان لدي قرض مفتوح، توقف. إذا لا، قدّم طلب قرض ٥٠٠ دينار لمدة ١٢ شهراً."
     stub_reply: "خطة مقترحة: ١) قراءة قروضي المفتوحة ورصيد الإجازة معاً. ٢) إن وُجد قرض مفتوح — توقف. ٣) وإلا — مسودة طلب قرض ٥٠٠ دينار لمدة ١٢ شهراً للمراجعة. لا يُرسل شيء قبل موافقتك."
     expect:
-      decision_in: [answer, tool_answer]
+      # Ask surface: a composite write brief is an honest handoff (switch to
+      # Plan / My) — never a silent submit, never a bare loan-type question.
+      decision_in: [answer, tool_answer, handoff_agent]
       language: ar
       max_llm_calls: 3
       mentions_none: ["أي نوع قرض تريد"]
+
+  # Restyle follow-up: rewrite the previous answer — never a fresh topic menu.
+  - user: "بالعربي وبالتفصيل"
+    stub_reply: "بالتفصيل: أولاً أقرأ قروضي المفتوحة ورصيد الإجازة معاً، ثم إن وُجد قرض مفتوح أتوقف، وإلا أُجهّز مسودة طلب قرض ٥٠٠ دينار لمدة ١٢ شهراً للمراجعة قبل أي إرسال."
+    expect:
+      decision_in: [answer]
+      language: ar
+      max_llm_calls: 1
+      mentions_none: ["ما هو الموضوع", "أي نوع قرض تريد", "Plan Review"]
 
   - user: "ما الخطوات التي ستقوم بها بالترتيب؟"
     stub_reply: "أولاً أقرأ القروض والرصيد، ثم أتحقق من الشرط، ثم أُجهّز مسودة الطلب فقط إذا لم يكن لديك قرض مفتوح."
