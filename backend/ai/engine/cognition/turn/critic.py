@@ -34,21 +34,6 @@ _KNOWLEDGE_GAP_RE = re.compile(
     re.IGNORECASE,
 )
 
-# ── LLM critic prompt ────────────────────────────────────────────────────────
-
-CRITIC_SYSTEM_PROMPT = """You are a quality and plausibility reviewer for an AI copilot's draft response. Review this draft response against the provided knowledge context.
-
-RULES:
-1. Fix ungrounded claims — anything not supported by the knowledge context.
-2. Flag data that appears to come from a different user or instance than the requester (a consistency flag; actual tenancy enforcement is deterministic, not this review).
-3. Fix incorrect API references — wrong endpoint names, wrong parameters.
-4. Suggest a more plausible or more complete alternative when the draft is weak, vague, or omits an important consideration.
-5. If the draft is clean, return "pass". If minor fixes needed, return "rewrite" with corrected text. If the draft is unsupported, incoherent, or harmful in plain content terms, return "veto". State-changing actions are vetoed separately by deterministic gates, not by this review.
-
-Return ONLY valid JSON — no markdown, no code fences, no explanation:
-{"verdict": "pass"|"rewrite"|"veto", "rewritten_text": "...", "veto_reason": "..."}"""
-
-
 class CriticWitness:
     """Rules-tier deterministic quality checks + optional LLM-tier plausibility review (advisory, never an enforcement control)."""
 
@@ -64,6 +49,11 @@ class CriticWitness:
         conversation_id: str = "",
         user_message: str = "",
         salience: "SalienceResult | None" = None,
+        user_info: dict | None = None,
+        instance_config: dict | None = None,
+        conversation_history: list[dict] | None = None,
+        language: str = "",
+        state=None,
     ) -> CriticVerdict:
         """Review a draft against retrieval evidence and quality rules and deterministic hard gates.
 
@@ -157,7 +147,19 @@ class CriticWitness:
 
         # ── 5. LLM-tier review ─────────────────────────────────────────────
         if enable_llm_critic:
-            return await self._llm_review(draft, retrieval, flags, instance_id, conversation_id, user_message)
+            return await self._llm_review(
+                draft,
+                retrieval,
+                flags,
+                instance_id,
+                conversation_id,
+                user_message,
+                user_info=user_info,
+                instance_config=instance_config,
+                conversation_history=conversation_history,
+                language=language,
+                state=state,
+            )
 
         # ── Fallback: rules-only verdict ────────────────────────────────────
         return _rules_only_verdict(flags)
@@ -200,31 +202,34 @@ class CriticWitness:
         instance_id: str,
         conversation_id: str,
         user_message: str,
+        *,
+        user_info: dict | None = None,
+        instance_config: dict | None = None,
+        conversation_history: list[dict] | None = None,
+        language: str = "",
+        state=None,
     ) -> CriticVerdict:
         """Run LLM-tier plausibility/quality review (advisory)."""
-        # Build knowledge context
-        knowledge_text = ""
-        for chunk in retrieval.knowledge_chunks[:10]:
-            content = chunk.get("content", "").strip()
-            if content:
-                knowledge_text += f"- {content}\n"
-
-        memory_text = ""
-        for chunk in retrieval.memory_chunks[:5]:
-            content = chunk.get("content", "").strip()
-            if content:
-                memory_text += f"- {content}\n"
+        from ai.engine.cognition.context_pack import build_context_pack
 
         review_message = (
             f"**Original user query**: {user_message[:500]}\n\n"
-            f"**Draft response** (flagged: {', '.join(flags)}):\n{draft.text[:2000]}\n\n"
-            f"**Knowledge context**:\n{knowledge_text[:1000]}\n"
-            f"**Memory context**:\n{memory_text[:500]}"
+            f"**Draft response** (flagged: {', '.join(flags)}):\n{draft.text[:2000]}"
         )
-
+        pack = build_context_pack(
+            state,
+            surface="chat",
+            stage="critic",
+            user_info=user_info,
+            instance_config=instance_config,
+            conversation_history=conversation_history,
+            retrieval=retrieval,
+            language=language,
+            user_body=review_message,
+        )
         messages = [
-            {"role": "system", "content": CRITIC_SYSTEM_PROMPT},
-            {"role": "user", "content": review_message},
+            {"role": "system", "content": pack.system_prompt()},
+            {"role": "user", "content": pack.user_prompt()},
         ]
 
         try:

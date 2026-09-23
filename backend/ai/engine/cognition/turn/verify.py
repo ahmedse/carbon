@@ -153,6 +153,10 @@ async def _correct_no_data(
     instance_id: str,
     conversation_id: str,
     model: str | None = None,
+    user_info: dict | None = None,
+    instance_config: dict | None = None,
+    language: str = "",
+    state=None,
 ) -> str | None:
     """Re-synthesize an answer that falsely claimed 'no data'.
 
@@ -161,31 +165,37 @@ async def _correct_no_data(
     text, or ``None`` on failure (the caller falls back to the original).
     """
     try:
+        from ai.engine.cognition.context_pack import build_context_pack
+
         results_text = json.dumps(
             [{"tool": tr.get("tool_name", ""), "result": tr.get("result")}
              for tr in tool_results],
             ensure_ascii=False, default=str,
         )[:4000]
-        system = (
-            "The previous AI answer incorrectly stated that no data was available. "
-            "The tool results below contain REAL data. "
-            "Write a corrected, concise answer to the user's question using those "
-            "values. Start with the headline finding. Include the key numbers. "
-            "NEVER say 'no data', 'not available', or any similar phrase. "
-            "Never invent values outside the tool results."
+        pack = build_context_pack(
+            state,
+            surface="chat",
+            stage="verify_correct",
+            user_info=user_info,
+            instance_config=instance_config,
+            language=language,
+            user_body=(
+                f"User question: {user_message}\n\n"
+                f"Tool results (JSON):\n{results_text}\n\n"
+                f"Incorrect previous answer:\n{answer}\n\n"
+                "Corrected answer:"
+            ),
+            include_history=False,
+            include_knowledge=False,
+            include_memory=False,
         )
         response = await route_chat(
             task="cognition",
             instance_id=instance_id,
             conversation_id=f"correct-{conversation_id}",
             messages=[
-                {"role": "system", "content": system},
-                {"role": "user",   "content": (
-                    f"User question: {user_message}\n\n"
-                    f"Tool results (JSON):\n{results_text}\n\n"
-                    f"Incorrect previous answer:\n{answer}\n\n"
-                    "Corrected answer:"
-                )},
+                {"role": "system", "content": pack.system_prompt()},
+                {"role": "user", "content": pack.user_prompt()},
             ],
             temperature=0.2,
             model=model,
@@ -234,6 +244,10 @@ class VerificationWitness:
         instance_id: str,
         conversation_id: str,
         model: str | None = None,
+        user_info: dict | None = None,
+        instance_config: dict | None = None,
+        language: str = "",
+        state=None,
     ) -> VerificationResult:
         """Verify the answer against the tool results.
 
@@ -258,6 +272,10 @@ class VerificationWitness:
                 instance_id=instance_id,
                 conversation_id=conversation_id,
                 model=model,
+                user_info=user_info,
+                instance_config=instance_config,
+                language=language,
+                state=state,
             )
             return VerificationResult(
                 passed=False,
@@ -265,6 +283,8 @@ class VerificationWitness:
                 unsupported_claims=[contradiction],
                 corrected_text=corrected,
             )
+
+        from ai.engine.cognition.context_pack import build_context_pack
 
         results_text = json.dumps(
             [
@@ -275,21 +295,21 @@ class VerificationWitness:
             default=str,
         )[:3000]
 
-        system = (
-            "You are a fact-checker. You receive: (1) an AI assistant's answer and "
-            "(2) the raw tool results the answer was based on. "
-            "Your job is to identify any specific numbers, dates, names, or percentages "
-            "in the answer that contradict the tool results. "
-            "Reply with JSON: "
-            '{"passed": true/false, "unsupported_claims": ["claim1", ...], '
-            '"verified_claims": ["claim1", ...], '
-            '"corrected_text": "corrected answer or null if passed=true"}'
-        )
-
-        user_content = (
-            f"User question: {user_message}\n\n"
-            f"Tool results:\n{results_text}\n\n"
-            f"Answer to verify:\n{answer}"
+        pack = build_context_pack(
+            state,
+            surface="chat",
+            stage="verify",
+            user_info=user_info,
+            instance_config=instance_config,
+            language=language,
+            user_body=(
+                f"User question: {user_message}\n\n"
+                f"Tool results:\n{results_text}\n\n"
+                f"Answer to verify:\n{answer}"
+            ),
+            include_history=False,
+            include_knowledge=False,
+            include_memory=False,
         )
 
         try:
@@ -298,8 +318,8 @@ class VerificationWitness:
                 instance_id=instance_id,
                 conversation_id=f"verify-{conversation_id}",
                 messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user_content},
+                    {"role": "system", "content": pack.system_prompt()},
+                    {"role": "user", "content": pack.user_prompt()},
                 ],
                 temperature=0.0,
                 model=model,

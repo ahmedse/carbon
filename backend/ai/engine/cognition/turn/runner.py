@@ -511,6 +511,10 @@ async def _normalize_weather_location(
     user_reply: str,
     conversation_history: list[dict] | None = None,
     model: str | None = None,
+    user_info: dict | None = None,
+    instance_config: dict | None = None,
+    language: str = "",
+    state=None,
 ) -> str:
     """LLM-normalize a location answer into a geocoder-ready ``City, Country``.
 
@@ -524,17 +528,11 @@ async def _normalize_weather_location(
     resolves a region to its most prominent city. Falls back to the raw reply
     on any failure (never blocks the turn).
     """
-    from ai.engine.llm.router import route_chat
-
-    system = (
-        "The user is answering the assistant's previous clarifying question "
-        "about a location for a weather lookup. Using the conversation so far "
-        "— ESPECIALLY any candidate places the assistant already offered — "
-        "resolve the user's short reply to the single place they meant. "
-        "Correct spelling. If the reply names a region rather than a city, "
-        "pick its single most prominent city. Reply with ONLY 'City, Country' "
-        "— no other words, no explanation."
+    from ai.engine.cognition.context_pack import (
+        TASK_WEATHER_LOCATION,
+        build_context_pack,
     )
+    from ai.engine.llm.router import route_chat
 
     # Thread the recent turns (the pending question + the assistant's
     # clarification with its offered candidates) so the model resolves the
@@ -553,7 +551,20 @@ async def _normalize_weather_location(
     user_parts.append(f"Original weather question: {original_question}")
     user_parts.append(f"User's location answer: {user_reply}")
     user_parts.append("Canonical 'City, Country':")
-    user = "\n".join(user_parts)
+    pack = build_context_pack(
+        state,
+        surface="chat",
+        stage="weather_normalize",
+        user_info=user_info,
+        instance_config=instance_config,
+        conversation_history=conversation_history,
+        language=language,
+        task_body=TASK_WEATHER_LOCATION,
+        user_body="\n".join(user_parts),
+        include_knowledge=False,
+        include_memory=False,
+        include_history=False,
+    )
 
     try:
         result = await route_chat(
@@ -561,8 +572,8 @@ async def _normalize_weather_location(
             instance_id=instance_id,
             conversation_id=f"geo-{conversation_id}",
             messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
+                {"role": "system", "content": pack.system_prompt()},
+                {"role": "user", "content": pack.user_prompt()},
             ],
             temperature=0.0,
             model=model,
@@ -605,6 +616,10 @@ async def _normalize_weather_question(
     conversation_history: list[dict] | None = None,
     model: str | None = None,
     weather_extractor=None,
+    user_info: dict | None = None,
+    instance_config: dict | None = None,
+    language: str = "",
+    state=None,
 ) -> str:
     """LLM-extract the canonical ``City, Country`` from a FULL weather question.
 
@@ -614,16 +629,11 @@ async def _normalize_weather_question(
     of that to the single place the user means. Falls back to the host's
     deterministic regex extractor on any failure (never blocks the turn).
     """
-    from ai.engine.llm.router import route_chat
-
-    system = (
-        "Extract the single place the user is asking about for a weather lookup. "
-        "Ignore greetings, misspellings, and any trailing question (e.g. 'is it "
-        "suitable for beach swimming?'). Correct the spelling of the place name. "
-        "If the place is a REGION rather than a city (e.g. 'north coast egypt', "
-        "'the south of france'), resolve it to its single most prominent city. "
-        "Reply with ONLY 'City, Country' — no other words, no explanation."
+    from ai.engine.cognition.context_pack import (
+        TASK_WEATHER_QUESTION,
+        build_context_pack,
     )
+    from ai.engine.llm.router import route_chat
 
     transcript_lines: list[str] = []
     for turn in (conversation_history or [])[-6:]:
@@ -638,7 +648,20 @@ async def _normalize_weather_question(
         user_parts.append(f"Conversation so far:\n{transcript}")
     user_parts.append(f"Weather question: {question}")
     user_parts.append("Canonical 'City, Country':")
-    user = "\n".join(user_parts)
+    pack = build_context_pack(
+        state,
+        surface="chat",
+        stage="weather_normalize",
+        user_info=user_info,
+        instance_config=instance_config,
+        conversation_history=conversation_history,
+        language=language,
+        task_body=TASK_WEATHER_QUESTION,
+        user_body="\n".join(user_parts),
+        include_knowledge=False,
+        include_memory=False,
+        include_history=False,
+    )
 
     try:
         result = await route_chat(
@@ -646,8 +669,8 @@ async def _normalize_weather_question(
             instance_id=instance_id,
             conversation_id=f"geo-q-{conversation_id}",
             messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
+                {"role": "system", "content": pack.system_prompt()},
+                {"role": "user", "content": pack.user_prompt()},
             ],
             temperature=0.0,
             model=model,
@@ -672,20 +695,27 @@ async def _clarify_no_matches(
     user_message: str,
     hints: list[str],
     model: str | None = None,
+    user_info: dict | None = None,
+    instance_config: dict | None = None,
+    language: str = "",
+    state=None,
 ) -> dict | None:
     """Route a ``no_match`` escalation into ONE disambiguating question."""
+    from ai.engine.cognition.context_pack import build_context_pack
     from ai.engine.llm.router import route_chat
 
-    hints_text = ", ".join(hints) if hints else "your request"
-    system = (
-        "The assistant attempted to answer the user's question but could not "
-        f"resolve these entities: {hints_text}. "
-        "Write ONE short, specific disambiguating question asking the user "
-        "which entity they meant. You MAY suggest 2-3 concrete normalised "
-        "candidates (e.g. cities) as a short bullet list, but ALWAYS ask the "
-        "user to confirm which one they meant. Do NOT fabricate data. Do NOT "
-        "answer as if you found results. Do NOT mention tools, APIs, or "
-        "fetching."
+    pack = build_context_pack(
+        state,
+        surface="chat",
+        stage="escalate",
+        user_info=user_info,
+        instance_config=instance_config,
+        language=language,
+        escalate_hints=hints,
+        user_body=f"User's question: {user_message}",
+        include_history=False,
+        include_knowledge=False,
+        include_memory=False,
     )
     try:
         result = await route_chat(
@@ -693,8 +723,8 @@ async def _clarify_no_matches(
             instance_id=instance_id,
             conversation_id=f"clarify-{conversation_id}",
             messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": f"User's question: {user_message}"},
+                {"role": "system", "content": pack.system_prompt()},
+                {"role": "user", "content": pack.user_prompt()},
             ],
             temperature=0.3,
             model=model,
@@ -1061,6 +1091,10 @@ async def _synthesize_tool_failures(
     model: str | None = None,
     stream_callback=None,
     progress_callback=None,
+    user_info: dict | None = None,
+    instance_config: dict | None = None,
+    language: str = "",
+    state=None,
 ) -> dict | None:
     """ADR-0021 failure branch — turn host/tool errors into grounded guidance.
 
@@ -1078,23 +1112,22 @@ async def _synthesize_tool_failures(
             pass
 
     failures_text = _render_tool_failures_for_recovery(failed)
-    system = (
-        "You are Pulse helping the user after a tool action failed.\n"
-        "RULES:\n"
-        "- Explain the failure in plain business language using ONLY the tool "
-        "failure payload below (detail / error_kind / hints).\n"
-        "- NEVER claim the action succeeded or that anything was submitted/"
-        "created/changed.\n"
-        "- NEVER invent numbers, balances, or dates not in the payload.\n"
-        "- NEVER mention tools, APIs, HTTP codes, stack traces, or 'invented'.\n"
-        "- Do NOT retry or pretend you will auto-retry a write — ask the user "
-        "what to change (another day, leave type, etc.) if that is the fix.\n"
-        "- If error_kind is invalid_leave_type, map common synonyms using hints "
-        "(عارضة/casual → emergency) and ask them to confirm the corrected type.\n"
-        "- If overlap or insufficient_balance, say so clearly and ask for another "
-        "day or type.\n"
-        "- Match the user's language when possible (Arabic if they wrote Arabic).\n"
-        "- Keep it short: 2–4 sentences max."
+    from ai.engine.cognition.context_pack import build_context_pack
+
+    pack = build_context_pack(
+        state,
+        surface="chat",
+        stage="recovery",
+        user_info=user_info,
+        instance_config=instance_config,
+        language=language,
+        user_body=(
+            f"User's message: {user_message}\n\n"
+            f"Tool failures (JSON lines):\n{failures_text}"
+        ),
+        include_history=False,
+        include_knowledge=False,
+        include_memory=False,
     )
     try:
         from ai.engine.llm.router import route_chat
@@ -1104,11 +1137,8 @@ async def _synthesize_tool_failures(
             instance_id=instance_id,
             conversation_id=f"recovery-{conversation_id}",
             messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": (
-                    f"User's message: {user_message}\n\n"
-                    f"Tool failures (JSON lines):\n{failures_text}"
-                )},
+                {"role": "system", "content": pack.system_prompt()},
+                {"role": "user", "content": pack.user_prompt()},
             ],
             temperature=0.2,
             model=model,
@@ -1162,6 +1192,10 @@ async def _synthesize_tool_results(
     envelope_synthesizer=None,
     stream_callback=None,
     progress_callback=None,
+    user_info: dict | None = None,
+    instance_config: dict | None = None,
+    language: str = "",
+    state=None,
 ) -> dict | None:
     """Ask the LLM to write a grounded final answer from executed tool results.
 
@@ -1220,6 +1254,10 @@ async def _synthesize_tool_results(
             user_message=user_message,
             hints=hints,
             model=model,
+            user_info=user_info,
+            instance_config=instance_config,
+            language=language,
+            state=state,
         )
         if result is not None:
             result["is_clarification"] = True
@@ -1239,6 +1277,10 @@ async def _synthesize_tool_results(
             model=model,
             stream_callback=stream_callback,
             progress_callback=progress_callback,
+            user_info=user_info,
+            instance_config=instance_config,
+            language=language,
+            state=state,
         )
 
     results_text = _render_tool_results_for_synthesis(usable)
@@ -1324,53 +1366,27 @@ async def _synthesize_tool_results(
                             "tokens": 0, "model": model or ""}
             return None
 
+    from ai.engine.cognition.context_pack import build_context_pack
     from ai.engine.llm.router import route_chat
 
     delivery_guide = _DELIVERY_SYNTHESIS.get(delivery or "explain", _DELIVERY_SYNTHESIS["explain"])
-    system = (
-        "You are finalising an answer for a data-platform assistant. Write the "
-        "final reply to the user's question using ONLY the tool results below.\n"
-        f"Delivery intent: {delivery_guide}\n"
-        "SCOPING (critical): answer EXACTLY what the user asked. If the user's "
-        "question names a specific entity — a module, branch, scope, table, "
-        "product, or other named item — scope the entire answer to THAT entity "
-        "only: filter the tool results down to it and do NOT enumerate, roll "
-        "up, table, or chart the other entities. Only when the user asks for "
-        "an overview, a comparison, or 'all' should you show the full "
-        "breakdown. Never answer 'about the whole organisation' when the user "
-        "named one branch.\n"
-        "ORG-NAME GUARD: the platform's own organisation / campus / company "
-        "name (the whole institution you serve) is NOT a filterable sub-entity "
-        "— when the user names the whole organisation, treat it as 'all data' "
-        "and show the full breakdown, never as a missing entity. A named "
-        "year or period is a TIME WINDOW, not an entity filter.\n"
-        "AUTHZ GUARD: when a tool result includes `unauthorized: true`, a "
-        "`capability` denial, or a message that access/permission is required, "
-        "state that clearly (name the capability when present). NEVER "
-        "paraphrase an authorization failure as 'no data', 'not found', or "
-        "'missing salary record'.\n"
-        "NON-EMPTY GUARD: if the tool results contain ANY calculations or rows "
-        "(a non-zero total, count, or breakdown), you MUST report those values "
-        "— NEVER say 'no data is available' when the tool returned data. Only "
-        "state that data is absent when the tool result is genuinely empty.\n"
-        "FORMAT: open with a **bold one-line takeaway**, then write 2-3 "
-        "sentences of explanatory prose. Do NOT include any tables or "
-        "structured data \u2014 data tables are appended automatically. "
-        "Close with 2-4 bold-lead 'Key takeaways' bullet points. "
-        "Do not mention tools, API calls, or fetching. "
-        "Do NOT include charts or diagrams unless the user explicitly asked."
+    pack = build_context_pack(
+        state,
+        surface="chat",
+        stage="synthesis",
+        user_info=user_info,
+        instance_config=instance_config,
+        language=language,
+        delivery_guide=delivery_guide,
+        hints=hints or None,
+        user_body=(
+            f"User's question: {user_message}\n\n"
+            f"Tool results (JSON):\n{results_text}"
+        ),
+        include_history=False,
+        include_knowledge=False,
+        include_memory=False,
     )
-
-    # Precedence 2: usable data exists but some entities were unresolved —
-    # synthesize from the usable data, but be honest about the gaps rather
-    # than inventing values for the entities the tool could not resolve.
-    if hints:
-        system += (
-            "\nNote: the tool could not resolve these entities: "
-            + ", ".join(hints)
-            + ". If your answer would depend on them, say so and ask the "
-            "user to clarify — do NOT invent values for them."
-        )
 
     pre_tables = _render_tool_tables(usable)
     pre_charts = _render_tool_charts(usable) if _wants_visual(user_message) else ""
@@ -1381,11 +1397,8 @@ async def _synthesize_tool_results(
             instance_id=instance_id,
             conversation_id=f"synthesis-{conversation_id}",
             messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": (
-                    f"User's question: {user_message}\n\n"
-                    f"Tool results (JSON):\n{results_text}"
-                )},
+                {"role": "system", "content": pack.system_prompt()},
+                {"role": "user", "content": pack.user_prompt()},
             ],
             temperature=0.3,
             model=model,
@@ -1976,6 +1989,9 @@ class TurnPipelineRunner:
                     user_reply=user_message.strip(),
                     conversation_history=conversation_history,
                     model=model,
+                    user_info=user_info,
+                    instance_config=instance_config,
+                    state=state_ctx.state if state_ctx is not None else None,
                 )
             user_message = f"weather in {_normalized_location}"
             logger.info(
@@ -2090,6 +2106,9 @@ class TurnPipelineRunner:
                         model=settings.INTENT_RESOLVER_MODEL or None,
                         min_confidence=settings.INTENT_RESOLVER_MIN_CONFIDENCE,
                         ambiguity_gap=settings.INTENT_RESOLVER_AMBIGUITY_GAP,
+                        user_info=user_info,
+                        instance_config=instance_config,
+                        state=state_ctx.state if state_ctx is not None else None,
                     )
             except Exception:
                 logger.warning(
@@ -3133,13 +3152,11 @@ class TurnPipelineRunner:
         if _wm_fragment:
             system_prompt = f"{system_prompt}\n\n{_wm_fragment}"
 
-        # [PV2-1A] StateBlock — durable ConversationState from earlier turns.
-        if state_ctx is not None:
-            from ai.engine.cognition.state_store import render_state_block
-
-            _state_block = render_state_block(state_ctx.state)
-            if _state_block:
-                system_prompt = f"{system_prompt}\n\n{_state_block}"
+        # [PV2-1A / PV2-2A] StateBlock lives in ContextPack.state (own budget),
+        # not appended onto the draft task_body (which is TASK_BLOCK-clipped).
+        # Kept here as a no-op marker so callers searching for StateBlock land
+        # on the pack construction below.
+        _state_for_pack = state_ctx.state if state_ctx is not None else None
 
         # [GAP-4] Inject session preference constraints into system prompt
         _pref_constraints = ""
@@ -3230,11 +3247,31 @@ class TurnPipelineRunner:
             }
 
         with stage("draft"):
+            from ai.engine.cognition.context_pack import build_context_pack
+
+            _draft_lang = ""
+            if state_ctx is not None:
+                _draft_lang = str(getattr(state_ctx.state, "language", "") or "")
+            draft_pack = build_context_pack(
+                _state_for_pack,
+                surface="chat",
+                stage="draft",
+                user_info=user_info,
+                instance_config=config,
+                conversation_history=conversation_history,
+                retrieval=retrieval,
+                language=_draft_lang,
+                task_body=system_prompt,
+                include_state=True,
+                include_knowledge=False,
+                include_memory=False,
+                include_history=False,
+            )
             draft = await draft_witness.draft(
                 instance_id=instance_id,
                 conversation_id=conversation_id,
                 user_message=_resolved_user_message,
-                system_prompt=system_prompt,
+                system_prompt="",
                 conversation_history=conversation_history,
                 instance_config=instance_config,
                 user_info=user_info,
@@ -3242,6 +3279,7 @@ class TurnPipelineRunner:
                 model=_draft_model,
                 tools=draft_tools,
                 temperature=temperature,
+                pack=draft_pack,
             )
         # [GAP-1] Fallback handler: ensure non-empty response.
         # Skip when the draft already has tool calls — a tool-only turn (LLM
@@ -3306,6 +3344,10 @@ class TurnPipelineRunner:
                 conversation_id=conversation_id,
                 user_message=_resolved_user_message,
                 salience=salience,
+                user_info=user_info,
+                instance_config=instance_config,
+                conversation_history=conversation_history,
+                state=state_ctx.state if state_ctx is not None else None,
             )
 
         # [knowledge_gap routing] Escalate via the reason lane or return
@@ -3329,7 +3371,7 @@ class TurnPipelineRunner:
                         instance_id=instance_id,
                         conversation_id=conversation_id,
                         user_message=_resolved_user_message,
-                        system_prompt=system_prompt,
+                        system_prompt="",
                         conversation_history=conversation_history,
                         instance_config=instance_config,
                         user_info=user_info,
@@ -3337,6 +3379,7 @@ class TurnPipelineRunner:
                         model=escalation_model,
                         tools=draft_tools,
                         temperature=temperature,
+                        pack=draft_pack,
                     )
                     total_tokens += draft.tokens_used
                     total_llm_calls += 1
@@ -3460,6 +3503,9 @@ class TurnPipelineRunner:
                         conversation_history=conversation_history,
                         model=model,
                         weather_extractor=self.weather_extractor,
+                        user_info=user_info,
+                        instance_config=instance_config,
+                        state=state_ctx.state if state_ctx is not None else None,
                     )
                 draft = _dc.replace(
                     draft,
@@ -3597,6 +3643,9 @@ class TurnPipelineRunner:
                 envelope_synthesizer=self.envelope_synthesizer,
                 stream_callback=stream_callback,
                 progress_callback=progress_callback,
+                user_info=user_info,
+                instance_config=instance_config,
+                state=state_ctx.state if state_ctx is not None else None,
             )
         if _synth and _synth.get("text"):
             final_text = _synth["text"]
@@ -3650,6 +3699,9 @@ class TurnPipelineRunner:
                         instance_id=instance_id,
                         conversation_id=conversation_id,
                         model=model_for_profile("verify") or draft.model_used or model,
+                        user_info=user_info,
+                        instance_config=instance_config,
+                        state=state_ctx.state if state_ctx is not None else None,
                     )
                 if not _vr.passed and _vr.corrected_text:
                     final_text = _vr.corrected_text
@@ -4190,10 +4242,11 @@ class TurnPipelineRunner:
             logger.debug("TurnPipelineRunner: orchestrator has no active workers")
             return None
 
-        # Build orchestrator system prompt
+        # Build orchestrator ContextPack (Identity + catalog Task + fan-out Task).
         config = instance_config or {}
+        from ai.engine.cognition.context_pack import TASK_FANOUT, build_context_pack
         from ai.engine.llm.prompts import build_chat_prompt
-        system_prompt = await build_chat_prompt(
+        task_body = await build_chat_prompt(
             instance_name=config.get("display_name", "Unknown System"),
             system_description=config.get("description", ""),
             relevant_knowledge=(
@@ -4218,19 +4271,25 @@ class TurnPipelineRunner:
             conversation_id=conversation_id,
             instance_id=instance_id,
         )
+        orch_pack = build_context_pack(
+            None,
+            surface="chat",
+            stage="fanout",
+            user_info=user_info,
+            instance_config=config,
+            conversation_history=conversation_history,
+            retrieval=retrieval,
+            task_body=f"{task_body}\n\n{TASK_FANOUT}",
+            include_state=False,
+            include_knowledge=False,
+            include_memory=False,
+            include_history=False,
+        )
+        system_prompt = orch_pack.system_prompt()
 
         # Orchestrator decision call: should we fan out?
         orchestrator_messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "system", "content": (
-                "You are the orchestrator agent. Your role is to decide whether this "
-                "user request would benefit from parallel decomposition across worker "
-                "agents. If the request has multiple independent sub-questions or "
-                "requires diverse expertise, call delegate_to_workers. If it's a simple "
-                "single-focus question, respond with a brief text reply (no tool call) "
-                "and the pipeline will fall through to single-pass processing."
-                " When the user asks to retrieve, analyse, or compare data — even without the word \"plan\" — fan out to the appropriate specialist workers. Prefer fan-out for aggregation, trend, comparison, ranking, or cross-domain questions. Only decline for greetings, simple factual lookups, or clarification requests."
-            )},
+            {"role": "system", "content": orch_pack.system_prompt()},
         ]
         if conversation_history:
             orchestrator_messages.extend(conversation_history[-6:])
@@ -4324,16 +4383,29 @@ class TurnPipelineRunner:
 
         # Synthesize results
         if fan_out_result.artifact_refs:
+            from ai.engine.cognition.context_pack import (
+                TASK_FANOUT_SYNTHESIS,
+                build_context_pack,
+            )
+            synth_pack = build_context_pack(
+                None,
+                surface="chat",
+                stage="fanout_synthesis",
+                user_info=user_info,
+                instance_config=instance_config,
+                task_body=(
+                    f"{system_prompt}\n\n{TASK_FANOUT_SYNTHESIS}\n\n"
+                    f"User request: {user_message}"
+                ),
+                user_body=_json.dumps(fan_out_result.artifact_refs, indent=2),
+                include_state=False,
+                include_knowledge=False,
+                include_memory=False,
+                include_history=False,
+            )
             synthesis_messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "system", "content": (
-                    "You are the orchestrator. Synthesize the following worker findings "
-                    "into a single coherent response to the user's original request. "
-                    "Do NOT mention workers or internal mechanics — just present the "
-                    "combined answer naturally.\n\n"
-                    "User request: " + user_message
-                )},
-                {"role": "user", "content": _json.dumps(fan_out_result.artifact_refs, indent=2)},
+                {"role": "system", "content": synth_pack.system_prompt()},
+                {"role": "user", "content": synth_pack.user_prompt()},
             ]
 
             synthesis = await route_chat(

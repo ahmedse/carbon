@@ -32,7 +32,7 @@ class DraftWitness:
         instance_id: str,
         conversation_id: str,
         user_message: str,
-        system_prompt: str,
+        system_prompt: str = "",
         conversation_history: list[dict] | None = None,
         instance_config: dict | None = None,
         user_info: dict | None = None,
@@ -46,6 +46,8 @@ class DraftWitness:
         # runs FIRST (after the budget check, before any LLM call) and may
         # short-circuit the draft with a clarifying question.
         clarify_inputs: dict | None = None,
+        # PV2-2A — preferred: ContextPack; system_prompt is its .system_prompt().
+        pack=None,
     ) -> DraftResult:
         """Single LLM call to plan and draft a response.
 
@@ -107,12 +109,29 @@ class DraftWitness:
                     tokens_used=0,
                 )
 
-        messages = [{"role": "system", "content": system_prompt}]
+        if pack is None:
+            from ai.engine.cognition.context_pack import build_context_pack
+
+            pack = build_context_pack(
+                None,
+                surface="chat",
+                stage="draft",
+                user_info=user_info,
+                instance_config=instance_config,
+                conversation_history=conversation_history,
+                task_body=system_prompt,
+                include_state=False,
+                include_knowledge=False,
+                include_memory=False,
+                include_history=False,
+            )
+        messages = [{"role": "system", "content": pack.system_prompt()}]
         if conversation_history:
             messages.extend(conversation_history)
         messages.append({"role": "user", "content": user_message})
 
         t0 = time.monotonic()
+        # Identity + Task come from ContextPack.system_prompt() (PV2-2A).
         result = await route_chat(
             task="cognition",
             instance_id=instance_id,

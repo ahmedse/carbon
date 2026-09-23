@@ -3709,3 +3709,32 @@ Foreground-only meter removed the auto_memory scheduling swing (was 3↔6 / 86�
 | I3 | Resolved | Topic-guard pre-LLM refuse now saves ConversationState. | Was I3 in PV2-1A notes |
 
 **GATE PASSED** — import boundary 9 · antipatterns green · bank runs identical · audience catalog 11/11.
+
+## PV2-2A
+
+**Date:** 2026-09-23 · **Author:** Pulse Master (finish worker 622af104 stalled after writing tests; overnight bebd2dc8 died mid-impl; Master completed gate + import-boundary fix)
+
+### Summary
+ContextPack + IdentityBlock for every chat-turn LLM stage. System prompts for draft/critic/intent/verify/weather/escalate/synthesis/fanout originate from `build_context_pack(...).system_prompt()`. Task wording only in TaskBlock templates. Import-boundary regression (engine→`ai.context_assembler`) fixed by moving `render_history_content` into the engine; host assembler re-exports.
+
+### Files
+| Path | Change |
+|---|---|
+| `backend/ai/engine/cognition/context_pack.py` | ContextPack, budgets, IdentityBlock date/user/autonomy, TaskBlock templates, engine-local `render_history_content` |
+| `turn/{draft,critic,intent,verify,runner}.py` | All chat `route_chat` system prompts via pack |
+| `backend/ai/context_assembler.py` | Re-export engine `render_history_content` |
+| `backend/ai/tests/test_pv2_context_pack.py` | 5 tests: AST/static, date-class, critic identity, no module `*_SYSTEM_PROMPT`, budget caps |
+
+### Gate (Master, `TEST_DB_NAME=test_nibras_dev_master`)
+```
+manage.py check — clean
+test_pv2_context_pack.py — 5 passed
+test_pv2_*.py + chat_wiring + intent + critic_roles + multiturn_bank — 143 passed, 12 xfailed
+offline bank — turns 8 · router 0.917 · llm p50/max 2/2 · slot 1.0 · over_budget 82 (unchanged vs 2C)
+import-boundary — 9 (was briefly 10; fixed)
+antipatterns — GATE PASSED
+```
+
+### Deviations / issues
+- Overnight worker left uncommitted WT; finish worker wrote tests then stalled — Master audited and fixed boundary.
+- Plan stages still use local prompts → PV2-2B.

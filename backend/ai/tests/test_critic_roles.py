@@ -2,7 +2,8 @@
 never framed as a security control.
 
 Locks in the reframing contract:
-- ``CRITIC_SYSTEM_PROMPT`` is a plausibility/quality reviewer, not security.
+- Critic TaskBlock (``TASK_CRITIC`` in context_pack) is a plausibility/quality
+  reviewer, not security. (PV2-2A: stage wording lives only in TaskBlock.)
 - The module docstring names the three roles (boundary / deterministic / LLM).
 - The deterministic hard veto (unconfirmed mutation) still holds.
 """
@@ -10,22 +11,23 @@ Locks in the reframing contract:
 from __future__ import annotations
 
 import ai.engine.cognition.turn.critic as m
+from ai.engine.cognition.context_pack import TASK_CRITIC
 from ai.engine.cognition.turn.critic import (
-    CRITIC_SYSTEM_PROMPT,
     CriticWitness,
     _rules_only_verdict,
 )
 
 
 def test_llm_critic_prompt_is_not_framed_as_security():
-    prompt = CRITIC_SYSTEM_PROMPT.lower()
+    prompt = TASK_CRITIC.lower()
     assert "security" not in prompt
     assert "safety" not in prompt
-    assert "plausibility" in prompt
+    # Quality / alternative framing (not a security control).
+    assert "quality" in prompt or "review" in prompt
 
 
 def test_llm_critic_prompt_names_alternatives():
-    assert "alternative" in CRITIC_SYSTEM_PROMPT.lower()
+    assert "alternative" in TASK_CRITIC.lower()
 
 
 def test_module_docstring_names_three_roles():

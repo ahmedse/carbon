@@ -27,20 +27,14 @@ def _estimate_tokens(text: str) -> int:
 def render_history_content(message: dict[str, Any]) -> str:
     """History text for one message: assistant turns carry their tool digest.
 
-    The digest (``metadata_json["tool_digest"]``) was built at turn time from
-    the scope-filtered tool results; here it is only re-clipped so a message
-    never grows by more than ``HISTORY_DIGEST_MAX_CHARS``.
+    Canonical implementation lives in ``ai.engine.cognition.context_pack`` so
+    the engine ContextPack never imports this host module (import boundary).
     """
-    content = message.get("content") or ""
-    if message.get("role") != "assistant":
-        return content
-    digest = ((message.get("metadata_json") or {}).get("tool_digest") or "").strip()
-    if not digest:
-        return content
-    room = HISTORY_DIGEST_MAX_CHARS - len(_DIGEST_PREFIX)
-    if len(digest) > room:
-        digest = digest[: room - 1] + "…"
-    return f"{content}{_DIGEST_PREFIX}{digest}"
+    from ai.engine.cognition.context_pack import (
+        render_history_content as _engine_render,
+    )
+
+    return _engine_render(message)
 
 
 def _message_created_after(created_at, cleared_at: str) -> bool:

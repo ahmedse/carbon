@@ -721,6 +721,10 @@ class IntentResolver:
         model: str | None = None,
         min_confidence: float = 0.6,
         ambiguity_gap: float = 0.15,
+        user_info: dict | None = None,
+        instance_config: dict | None = None,
+        language: str = "",
+        state=None,
     ) -> IntentResolution | None:
         """Return a structured :class:`IntentResolution`, or ``None`` on failure.
 
@@ -754,9 +758,10 @@ class IntentResolver:
         if not labels and not nav_targets:
             return None
 
+        from ai.engine.cognition.context_pack import build_context_pack
         from ai.engine.llm.router import route_chat
 
-        system_prompt = _build_system_prompt(labels, nav_targets, tenant_org=tenant_org)
+        task_body = _build_system_prompt(labels, nav_targets, tenant_org=tenant_org)
 
         # Fold a short recent-history window in so the classifier can resolve
         # "they/those" against prior turns (the regex anaphora resolver only
@@ -772,16 +777,27 @@ class IntentResolver:
             if context_lines else "(no recent conversation)"
         )
 
+        pack = build_context_pack(
+            state,
+            surface="chat",
+            stage="intent",
+            user_info=user_info,
+            instance_config=instance_config,
+            conversation_history=conversation_history,
+            language=language,
+            task_body=task_body,
+            user_body=(
+                f"{history_block}\n\n"
+                f"Current user message: \"{user_message.strip()}\"\n\n"
+                "Return JSON only."
+            ),
+            include_state=False,
+            include_knowledge=False,
+            include_memory=False,
+        )
         messages = [
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": (
-                    f"{history_block}\n\n"
-                    f"Current user message: \"{user_message.strip()}\"\n\n"
-                    "Return JSON only."
-                ),
-            },
+            {"role": "system", "content": pack.system_prompt()},
+            {"role": "user", "content": pack.user_prompt()},
         ]
 
         try:
