@@ -2504,6 +2504,26 @@ class PlansService:
             logger.debug("discovery lexical slots skipped", exc_info=True)
         return merge_slots(prior, extracted)
 
+    def _inherit_chat_brief(self, brief: str, conversation_id: str = "") -> str:
+        """PV2-5A: fold ConversationState slots + last_results into the Agent brief."""
+        state = self._load_conversation_state(conversation_id)
+        if state is None:
+            return brief
+        bits: list[str] = []
+        for key, value in (getattr(state, "slots", None) or {}).items():
+            if value in (None, "", [], {}):
+                continue
+            bits.append(f"{key}={value}")
+        for item in (getattr(state, "last_results", None) or [])[-3:]:
+            if not isinstance(item, dict):
+                continue
+            digest = (item.get("digest") or item.get("summary") or "").strip()
+            if digest:
+                bits.append(digest[:200])
+        if not bits:
+            return brief
+        return f"{brief}\n\nInherited from Chat: {'; '.join(bits[:16])}"
+
     def _question_reasks_known(self, question: str, known: dict) -> bool:
         text = (question or "").strip()
         if not text:
@@ -2720,7 +2740,9 @@ class PlansService:
 
             if is_personal_loan_brief(brief) or is_personal_attendance_brief(brief):
                 plan_dto = self.create_plan(
-                    user, brief=brief, conversation_id=conversation_id,
+                    user,
+                    brief=self._inherit_chat_brief(brief, conversation_id),
+                    conversation_id=conversation_id,
                 )
                 logger.info(
                     "Discovery skipped for process_dial ESS brief id=%s",
@@ -2756,7 +2778,10 @@ class PlansService:
             )
 
         first = self._ask_discovery_llm(
-            brief, [], user=user, conversation_id=conversation_id,
+            self._inherit_chat_brief(brief, conversation_id),
+            [],
+            user=user,
+            conversation_id=conversation_id,
         )
         turns = [{"question": first["question"], "reply": None}]
 
@@ -4119,11 +4144,14 @@ class PlansService:
                             run.id, node_id,
                         )
 
+                inherited_brief = await sync_to_async(
+                    self._inherit_chat_brief, thread_sensitive=True,
+                )(run.user_message or "", conversation_id)
                 await loop.run(
                     plan=plan,
                     instance_id=PLAN_INSTANCE_ID,
                     conversation_id=conversation_id,
-                    user_message=run.user_message,
+                    user_message=inherited_brief,
                     system_prompt=system_prompt,
                     instance_config=instance_config,
                     user_info=user_info,

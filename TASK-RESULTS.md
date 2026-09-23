@@ -3995,3 +3995,29 @@ $ TEST_DB_NAME=test_nibras_dev_master ../.venv/bin/python -m pytest ai/tests/tes
 2. Offline bank disagreement rate not measured this morning (calendar soak starts now). Do not fake elapsed time.
 
 **SOAKING** since 2026-09-23. Earliest 4B: 2026-09-30 after Master posts 7-day shadow summary.
+
+## PV2-5A
+
+**Date:** 2026-09-23  
+**Worker:** Master  
+**Status:** GATE PASSED  
+**DB:** `TEST_DB_NAME=test_nibras_dev_master`
+
+### Summary
+Agent discovery/run inherit Chat `ConversationState` slots. `start_discovery` short-circuit and LLM paths, plus `_execute_plan_once`, enrich the brief with `Inherited from Chat: key=value` (and last_results digests). Closes F-LIVE-4 carry-over into Agent.
+
+### Files changed
+| Path | Change |
+|---|---|
+| `backend/ai/plans_service.py` | `_inherit_chat_brief` on discovery + run |
+| `backend/ai/engine/cognition/turn/handoff_agent.py` | `amount` accepted as `principal` synonym |
+| `backend/ai/tests/test_pv2_discovery.py` | inherit golden |
+
+```
+$ TEST_DB_NAME=test_nibras_dev_master ../.venv/bin/python -m pytest ai/tests/test_pv2_discovery.py -q
+6 passed in 1.23s
+```
+
+**GATE PASSED** — Chat slots appear in the Agent discovery brief.
+
+

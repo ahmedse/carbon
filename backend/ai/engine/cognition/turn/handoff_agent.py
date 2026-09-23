@@ -114,6 +114,9 @@ def enough_slots_for_chat_handoff(api_name: str, slots: dict | None) -> bool:
     if not body:
         return False
     api = (api_name or "").strip().lower()
+    # Accept amount as a synonym for principal (StateBlock / C8 alias).
+    if api == "submit_my_loan" and "principal" not in body and "amount" in body:
+        body = {**body, "principal": body["amount"]}
     required = _MIN_SLOTS.get(api)
     if required is None:
         # Unknown write API — hand off as soon as any slot is bound.

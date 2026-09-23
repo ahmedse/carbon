@@ -3110,7 +3110,7 @@ W5c  PV2-5C FE: Active-plans chip + Run drawer inherited-context (RULE_23 wordin
 ```
 
 ### Phase PV2-5A — Backend: Agent inherits Chat state (A1)
-**Worker Role:** backend-worker · **Model:** inherit Master · **Status:** PLANNED (READY after W4a or after W3 if P4 shadowing) · **Owner:** Pulse
+**Worker Role:** backend-worker · **Model:** inherit Master · **Status:** DONE — 2026-09-23 10:00 Master (slots inherit into discovery brief + run) · **Owner:** Pulse
 
 #### Objective
 `start_discovery` and `_execute_plan_once` build `ContextPack(surface="agent_discovery"|"agent_plan")` from `ConversationStateStore.load`; brief enriched with slots + last_results digests. Tenancy: state keyed by `(instance_id, conversation_id)`; test isolation. Closes F-LIVE-4 carry-over of slots into Agent.

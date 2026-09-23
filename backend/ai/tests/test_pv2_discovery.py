@@ -104,6 +104,26 @@ def test_state_amount_never_reasked(user, monkeypatch, language, forbidden):
     assert "كم المبلغ" not in (result.get("question") or "")
 
 
+def test_chat_slots_appear_in_agent_discovery_brief(user, monkeypatch):
+    conv = "conv-5a-inherit"
+    _seed_state(conv, loan_type="emergency", amount=3000, principal=3000)
+    seen = {"brief": ""}
+
+    def _capture(self, user, brief="", conversation_id=""):
+        seen["brief"] = brief
+        return {"id": "plan-5a", "status": "pending_approval"}
+
+    monkeypatch.setattr(PlansService, "create_plan", _capture)
+    PlansService().start_discovery(
+        user,
+        brief="I want to apply for a loan",
+        conversation_id=conv,
+    )
+    assert "emergency" in seen["brief"]
+    assert "3000" in seen["brief"]
+    assert "Inherited from Chat" in seen["brief"]
+
+
 def test_discovery_prompt_includes_stateblock(user):
     conv = "conv-3c-pack"
     _seed_state(conv, amount=5000, loan_type="emergency")
