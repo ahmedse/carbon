@@ -9,7 +9,7 @@ turns:
     expect:
       decision_in: [answer]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
       mentions_any: ["ALPHA-2025"]
   
   - user: "Can you confirm you have that?"
@@ -40,7 +40,7 @@ turns:
     expect:
       decision_in: [answer]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
       mentions_any: ["ALPHA-2025"]
   
   - user: "Is that still my project?"

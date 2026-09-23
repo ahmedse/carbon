@@ -16,7 +16,7 @@ turns:
     expect:
       decision_in: [answer]
       language: ar
-      max_llm_calls: 1
+      max_llm_calls: 2
       mentions_any: ["٦٠٠٠", "dinar"]
   
   - user: "كم يتم خصمه من راتبي؟"
@@ -24,7 +24,7 @@ turns:
     expect:
       decision_in: [answer]
       language: ar
-      max_llm_calls: 1
+      max_llm_calls: 2
       mentions_any: ["١٥٠٠", "GOSI"]
   
   - user: "فما صافي راتبي؟"
@@ -32,7 +32,7 @@ turns:
     expect:
       decision_in: [answer]
       language: ar
-      max_llm_calls: 1
+      max_llm_calls: 2
       mentions_any: ["٤٥٠٠", "4500"]
   
   - user: "هل يمكنني الاعتراض على الخصومات؟"
@@ -40,21 +40,21 @@ turns:
     expect:
       decision_in: [answer]
       language: ar
-      max_llm_calls: 1
+      max_llm_calls: 2
   
   - user: "متى سيكون الراتب القادم؟"
     stub_reply: "الراتب القادم سيتم صرفه في اليوم الخمسة والعشرون من الشهر القادم."
     expect:
       decision_in: [answer]
       language: ar
-      max_llm_calls: 1
+      max_llm_calls: 2
   
   - user: "هل هناك أي تغييرات في راتبي؟"
     stub_reply: "لا توجد تغييرات في راتبك الأساسي، الخصومات كما هي."
     expect:
       decision_in: [answer]
       language: ar
-      max_llm_calls: 1
+      max_llm_calls: 2
   
   - user: "شكراً على المساعدة"
     stub_reply: "على الرحب والسعة. إذا احتجت لأي معلومة أخرى، أنا هنا دائماً."

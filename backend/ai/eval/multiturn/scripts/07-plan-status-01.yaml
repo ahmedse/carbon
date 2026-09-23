@@ -16,7 +16,7 @@ turns:
     expect:
       decision_in: [clarify, answer]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
       mentions_any: ["emergency"]
   
   - user: "5000 SAR"
@@ -40,21 +40,21 @@ turns:
     expect:
       decision_in: [answer]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
   
   - user: "How long until I hear back?"
     stub_reply: "You should hear back within 2-3 business days."
     expect:
       decision_in: [answer]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
   
   - user: "Can I check the status again later?"
     stub_reply: "Yes, you can check the status of your request anytime from the loans section."
     expect:
       decision_in: [answer, navigate]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
   
   - user: "Thanks for helping"
     stub_reply: "You're welcome. Feel free to reach out if you need anything else."

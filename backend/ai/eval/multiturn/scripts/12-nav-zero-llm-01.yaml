@@ -23,7 +23,7 @@ turns:
     expect:
       decision_in: [answer]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
   
   - user: "Go to the payroll section"
     stub_reply: "I'm navigating you to the payroll section now."

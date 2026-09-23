@@ -81,25 +81,28 @@ def engine_single_pass():
 
 def _make_stub_llm_factory(turns: list[Turn]):
     """Factory that returns a stub LLM client.
-    
-    Each call returns the next turn's stub_reply.
+
+    PV2-6A: the stub is pinned to the *script turn*. Every LLM call inside
+    that turn returns the same ``stub_reply``. The runner calls
+    ``set_turn(i)`` at the start of each user turn.
     """
-    turn_index = [0]  # closure mutable counter
-    
+    current = [0]
+
+    def set_turn(index: int) -> None:
+        current[0] = int(index)
+
     def _fake_completion(*args, **kwargs) -> types.SimpleNamespace:
         """Return a deterministic OpenAI-shaped chat completion."""
-        
+
         async def _create(**kw):
-            idx = turn_index[0]
-            turn_index[0] += 1
-            
-            if idx < len(turns):
+            idx = current[0]
+            if 0 <= idx < len(turns):
                 content = turns[idx].stub_reply
                 tool_calls = turns[idx].stub_tool_calls or None
             else:
                 content = "End of script."
                 tool_calls = None
-            
+
             return types.SimpleNamespace(
                 choices=[
                     types.SimpleNamespace(
@@ -116,13 +119,14 @@ def _make_stub_llm_factory(turns: list[Turn]):
                     total_tokens=10 + len(content.split()),
                 ),
             )
-        
+
         return types.SimpleNamespace(
             chat=types.SimpleNamespace(
                 completions=types.SimpleNamespace(create=_create)
             )
         )
-    
+
+    _fake_completion.set_turn = set_turn  # type: ignore[attr-defined]
     return _fake_completion
 
 
@@ -260,6 +264,9 @@ def run_script(
                 mock_client.return_value = stub_factory()
             
             for turn_idx, turn in enumerate(script.turns):
+                set_turn = getattr(stub_factory, "set_turn", None)
+                if callable(set_turn):
+                    set_turn(turn_idx)
                 # Dispatch the chat turn — do NOT catch exceptions
                 dispatch_response = dispatch_task(
                     "chat",
@@ -565,11 +572,9 @@ CAVEATS = [
     "Stub-dominated in this tier: focus_retention (mentions_any), mentions_none, "
     "language_fidelity, and per_objective_pass for text-based objectives; treat "
     "them as harness plumbing checks until the live tier (PV2-0C).",
-    "KNOWN DEFECT (not fixed in PV2-0B rev3): the stub client advances one "
-    "stub_reply per LLM call, not per turn. Turns that make 2-4 LLM calls "
-    "consume later turns' stub text, so replies drift out of alignment and, "
-    "once the script's stubs are exhausted (often by turn 3), the reply is the "
-    "literal fallback 'End of script.'. See turns_detail[].reply.",
+    "PV2-6A: stub is pinned per script turn (set_turn). Extra LLM calls in "
+    "the same turn reuse that turn's stub_reply and no longer consume later "
+    "turns. A turn index past the script still returns 'End of script.'.",
     "host_user_id=None: call_host_api fails with 'requires an authenticated "
     "session' in ESS scripts; the live tier (PV2-0C) will pass a real user.",
     "Fan-out agents and multi-step planning are disabled in the engine "
@@ -642,8 +647,77 @@ def format_turn_line(script_id: str, turn_no: int, t: TurnResult) -> str:
     )
 
 
-def exit_code_for(report: BankReport) -> int:
-    return 3 if report.errors else 0
+# PV2-6A / QA bank G5 — Intelligence Contract §3 (offline CI gate).
+G5_ROUTER_MIN = 0.90
+G5_SLOT_CARRY_MIN = 1.0
+G5_LLM_P50_MAX = 2.0
+G5_OVER_BUDGET_MAX = 0.10
+
+
+def g5_failures(report: BankReport) -> list[str]:
+    """Threshold misses for the G5 Coherence gate. Empty = pass."""
+    fails: list[str] = []
+    decision_applicable = sum(
+        1 for s in report.scripts for t in s.turns if t.expect
+    )
+    if decision_applicable and report.router_agreement < G5_ROUTER_MIN:
+        fails.append(
+            f"router_agreement={report.router_agreement:.3f} < {G5_ROUTER_MIN}"
+        )
+    reask_applicable = sum(
+        1
+        for s in report.scripts
+        for t in s.turns
+        if t.expect and t.expect.must_not_reask_slots
+    )
+    if reask_applicable and report.slot_carry_over < G5_SLOT_CARRY_MIN:
+        fails.append(
+            f"slot_carry_over={report.slot_carry_over:.3f} < {G5_SLOT_CARRY_MIN}"
+        )
+    measured = [
+        t.llm_calls
+        for s in report.scripts
+        for t in s.turns
+        if t.llm_calls is not None
+    ]
+    if measured and report.llm_calls_p50 > G5_LLM_P50_MAX:
+        fails.append(
+            f"llm_calls_p50={report.llm_calls_p50:.1f} > {G5_LLM_P50_MAX}"
+        )
+    def _simple_budget(turn: TurnResult) -> bool:
+        exp = turn.expect
+        return bool(
+            exp
+            and turn.llm_calls is not None
+            and int(getattr(exp, "max_llm_calls", 0) or 0) >= 1
+        )
+
+    budget_applicable = sum(
+        1 for s in report.scripts for t in s.turns if _simple_budget(t)
+    )
+    simple_over = sum(
+        1
+        for s in report.scripts
+        for t in s.turns
+        if _simple_budget(t) and not t.llm_calls_ok
+    )
+    if budget_applicable:
+        ratio = simple_over / budget_applicable
+        if ratio > G5_OVER_BUDGET_MAX:
+            fails.append(
+                f"over_budget={ratio:.3f} > {G5_OVER_BUDGET_MAX} "
+                f"({simple_over}/{budget_applicable} simple turns; "
+                f"0-LLM misses stay in turns_over_budget={report.turns_over_budget})"
+            )
+    return fails
+
+
+def exit_code_for(report: BankReport, *, gate: bool = False) -> int:
+    if report.errors:
+        return 3
+    if gate and g5_failures(report):
+        return 1
+    return 0
 
 
 # ── CLI entry point ──────────────────────────────────────────────────────
@@ -768,6 +842,12 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="Run against the configured dev DB instead of a throwaway test DB "
         "(live tier only; writes conversations/ledger rows into the dev DB)",
     )
+    parser.add_argument(
+        "--gate",
+        action="store_true",
+        help="PV2-6A / G5: exit 1 when router < 0.90, slot_carry < 1.0, "
+        "llm p50 > 2, or over_budget > 10%",
+    )
     args = parser.parse_args(argv)
     if args.host_user and not args.no_isolated_db:
         parser.error("--host-user requires --no-isolated-db (test DB has no users)")
@@ -850,12 +930,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     print(f"Metrics written to {report_path}")
     print()
 
-    code = exit_code_for(report)
-    if code:
+    code = exit_code_for(report, gate=args.gate)
+    if code == 3:
         print(
             f"{len(report.errors)} script(s) recorded engine errors -> exit {code}",
             file=sys.stderr,
         )
+    elif code == 1:
+        misses = g5_failures(report)
+        print("G5 Coherence gate failed: " + "; ".join(misses), file=sys.stderr)
     return code
 
 

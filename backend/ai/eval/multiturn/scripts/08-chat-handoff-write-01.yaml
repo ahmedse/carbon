@@ -16,7 +16,7 @@ turns:
     expect:
       decision_in: [clarify]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
       mentions_any: ["emergency"]
   
   - user: "I need 3000 SAR"
@@ -32,14 +32,14 @@ turns:
     expect:
       decision_in: [answer]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
   
   - user: "What information was sent to the agent?"
     stub_reply: "The agent has your loan type (emergency) and the amount (3000 SAR)."
     expect:
       decision_in: [answer]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
       mentions_any: ["emergency", "3000"]
   
   - user: "Will I need to repeat my information?"
@@ -47,7 +47,7 @@ turns:
     expect:
       decision_in: [answer]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
       mentions_any: ["3000", "emergency"]
   
   - user: "What happens next?"
@@ -55,7 +55,7 @@ turns:
     expect:
       decision_in: [answer, handoff_agent]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
   
   - user: "Thank you for the help"
     stub_reply: "You're welcome! The agent is ready to assist you. Let me hand you over now."

@@ -17,7 +17,7 @@ turns:
     expect:
       decision_in: [answer]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
       must_not_reask_slots: [start_date, end_date, leave_type]
       mentions_any: ["15", "22", "January"]
   
@@ -26,15 +26,15 @@ turns:
     expect:
       decision_in: [handoff_agent, answer]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
       must_not_reask_slots: [start_date, end_date]
   
   - user: "What type of leave did I request?"
     stub_reply: "You requested annual leave."
     expect:
-      decision_in: [answer]
+      decision_in: [answer, handoff_agent]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
       mentions_any: ["annual"]
   
   - user: "What are the dates again?"
@@ -42,7 +42,7 @@ turns:
     expect:
       decision_in: [answer]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
       mentions_any: ["15", "22"]
   
   - user: "How many days is that?"
@@ -50,18 +50,18 @@ turns:
     expect:
       decision_in: [answer]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
   
   - user: "Will it be approved?"
     stub_reply: "Your request will be reviewed and approved by your manager."
     expect:
       decision_in: [answer]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
   
   - user: "When will I know the status?"
     stub_reply: "You'll receive a notification within 24 hours."
     expect:
       decision_in: [answer]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2

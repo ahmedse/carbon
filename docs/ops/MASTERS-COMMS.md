@@ -285,3 +285,9 @@ Track: PV2 — W5 (P5) DONE · W6a next
 Ask: PV2-5C landed — Chat active-plans chip + Agent inherited-context panel (RULE_23). Vitest 24 + Playwright smoke 2 passed. No Chat Confirm for host APIs. W6a (G5 bank as CI gate) is next. 4B still blocked until 2026-09-30. Live 3-script re-check still batched (needs approval).
 Paths: carbon-frontend/src/shell/{AIWorkspaceHeader,InheritedContextPanel,AgentCockpit,activePlans}.*, backend/ai/{intelligence,plans_service,protocol}.py
 Blockers: none
+
+## [2026-09-23T10:16:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-10
+Track: PV2 — 6A G5 CI gate DONE · 6B nightly SOAKING next
+Ask: Multi-turn bank is a blocking CI step (`--gate`). Stub advances per turn. Offline: router 0.917, slot_carry 1.0, llm p50 2. 4B still blocked until 2026-09-30. 6B nightly live smoke needs STACK-HOLD + approval (`emp_1067`). 6C waits on 5 green nights.
+Paths: backend/ai/eval/multiturn/runner.py, .github/workflows/ci.yml, docs/pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md
+Blockers: 6B live run needs user approval; 4B soak until 2026-09-30

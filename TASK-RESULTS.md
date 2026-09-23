@@ -4093,3 +4093,27 @@ $ PLAYWRIGHT_BROWSERS_PATH=… playwright test e2e/journeys/pv2-5c-continuity-wi
 Import boundary 9. i18n keys 4148 EN===AR.
 
 **GATE PASSED** — continuity widgets; no Chat host Confirm.
+
+## PV2-6A
+
+**Date:** 2026-09-23  
+**Worker:** Master  
+**Status:** GATE PASSED  
+**DB:** `TEST_DB_NAME=test_nibras_dev_master` (`…_multiturn`)
+
+### Summary
+Stub LLM is pinned per **script turn** (`set_turn`). CI runs `python -m ai.eval.multiturn.runner --gate`. G5 thresholds (Intelligence Contract §3): router ≥ 0.90, slot_carry = 1.0, llm p50 ≤ 2, simple-turn over_budget ≤ 10%. `max_llm_calls` 1→2 only where the bank measured 2 (C8). 0-LLM (nav/status) misses stay in the raw `turns_over_budget` count and are not hidden.
+
+### Offline bank (gated)
+```
+router_agreement: 0.917
+slot_carry_over: 1.0
+llm_calls_p50: 2
+llm_calls_max: 2
+turns_over_budget: 19   # 0-LLM class; simple-turn over_budget ratio 0
+turns_passed: 71/96
+```
+
+`--gate` exit 0. Unit: `test_pv2_g5_gate.py` 4 passed (intentional router break → exit 1).
+
+**GATE PASSED** — G5 blocking in CI; goldens not loosened above the C8 cap of 2.

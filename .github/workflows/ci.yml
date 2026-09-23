@@ -129,6 +129,26 @@ jobs:
           python -m ai.eval.run_harness
           python -m pytest ai/eval ai/tests/redteam -q --maxfail=8 -m "not live" --disable-warnings
 
+      - name: Pulse G5 multi-turn coherence gate (PV2-6A)
+        working-directory: backend
+        env:
+          DJANGO_ENV: ci
+          DJANGO_DEBUG: "False"
+          SECRET_KEY: ci-secret-key-not-for-production
+          DJANGO_ALLOWED_HOSTS: 127.0.0.1,localhost,testserver
+          DJANGO_API_PREFIX: /carbon-api/
+          DB_NAME: carbon_ci
+          DB_USER: carbon_user
+          DB_PASSWORD: carbon_ci_pass
+          DB_HOST: localhost
+          DB_PORT: 5432
+          CSRF_TRUSTED_ORIGINS: ""
+          CORS_ALLOWED_ORIGINS: ""
+          TEST_DB_NAME: carbon_ci_g5
+        run: |
+          python -m ai.eval.multiturn.runner --gate --report /tmp/pv2-g5.json
+          python -m pytest ai/eval/test_pv2_g5_gate.py -q --disable-warnings
+
       - name: Run tests
         working-directory: backend
         env:

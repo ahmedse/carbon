@@ -3147,7 +3147,7 @@ W6c  PV2-6C ADR-0047 Accepted; pulse-intelligence-contract rule; YAML budget rev
 ```
 
 ### Phase PV2-6A — QA/CI: multi-turn bank as blocking gate
-**Worker Role:** qa-validator · **Model:** inherit Master · **Status:** PLANNED (READY after W5) · **Owner:** Pulse
+**Worker Role:** qa-validator · **Model:** inherit Master · **Status:** DONE — 2026-09-23 10:16 Master · **Owner:** Pulse
 
 #### Objective
 Wire `ai.eval.multiturn.runner` into CI with §3 thresholds (router ≥ 0.90, slot_carry 1.0, llm p50 ≤ 2 after P3, over_budget ≤ 10%). Fix stub-per-LLM-call harness defect (advance stub per *turn*, not per call). Revisit YAML `max_llm_calls` budgets that became wrong after nav-over-fire fix (RULE_28: change budgets with Master-approved evidence, not to hide regressions).

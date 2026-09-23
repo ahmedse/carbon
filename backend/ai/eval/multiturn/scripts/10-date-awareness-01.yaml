@@ -18,14 +18,14 @@ turns:
     expect:
       decision_in: [answer]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
   
   - user: "When is my next payday?"
     stub_reply: "Your next payday is September 25, 2026."
     expect:
       decision_in: [answer]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
       mentions_any: ["25", "September"]
   
   - user: "Is that before the end of the month?"
@@ -40,7 +40,7 @@ turns:
     expect:
       decision_in: [answer]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
       mentions_any: ["October"]
   
   - user: "How many days from now until my leave?"
@@ -48,7 +48,7 @@ turns:
     expect:
       decision_in: [answer]
       language: en
-      max_llm_calls: 1
+      max_llm_calls: 2
   
   - user: "What month are we in?"
     stub_reply: "We are in September 2026."

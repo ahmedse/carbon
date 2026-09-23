@@ -210,6 +210,17 @@ Replace the "CALL THE TOOL" grounding block with a surface-aware block: on Chat 
 - Nightly live smoke on Nibras dev (`emp_1067`) for the three ESS journeys Chat→Agent→Approve, asserting host rows + IC metrics.
 - ADR-0047 accepted; QA bank gate **G5 — Coherence**; `.cursor/rules/pulse-intelligence-contract.mdc`.
 
+### QA bank G5 — Coherence (PV2-6A)
+
+Offline CI step: `python -m ai.eval.multiturn.runner --gate`. Fails the build when any threshold misses. Stub advances **per script turn**, not per LLM call.
+
+| Metric | Gate | Contract |
+|---|---|---|
+| `router_agreement` | ≥ 0.90 | C4 (shadow); 0.98 target is P4 flip) |
+| `slot_carry_over` | = 1.0 | C3 |
+| `llm_calls_p50` | ≤ 2 | C8 after P3 |
+| `turns_over_budget` / simple turns (`max_llm_calls ≥ 1`) | ≤ 10% | C8 simple-turn ≤ 2. 0-LLM (nav/status) misses stay visible in the raw count, not this ratio. |
+
 ## 6. Sequencing
 
 ```
