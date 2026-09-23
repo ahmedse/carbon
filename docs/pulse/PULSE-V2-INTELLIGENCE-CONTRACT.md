@@ -219,7 +219,7 @@ Offline CI step: `python -m ai.eval.multiturn.runner --gate`. Fails the build wh
 | `router_agreement` | ≥ 0.90 | C4 (shadow); 0.98 target is P4 flip) |
 | `slot_carry_over` | = 1.0 | C3 |
 | `llm_calls_p50` | ≤ 2 | C8 after P3 |
-| `turns_over_budget` / simple turns (`max_llm_calls ≥ 1`) | ≤ 10% | C8 simple-turn ≤ 2. 0-LLM (nav/status) misses stay visible in the raw count, not this ratio. |
+| `turns_over_budget` / simple turns (`max_llm_calls ≥ 1`) | ≤ 10% | C8 simple-turn ≤ 2. 0-LLM (nav/status) misses stay visible in the raw count, not this ratio. After 2026-09-23 C8 residual: raw over_budget 19→6; `nav-zero-llm-01` PASS. |
 
 ### QA bank — nightly live ESS (PV2-6B, SOAKING)
 

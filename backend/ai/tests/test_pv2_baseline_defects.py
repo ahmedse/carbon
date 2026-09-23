@@ -112,7 +112,7 @@ _ANALYTICAL_Q = (
 @pytest.mark.django_db(transaction=True)
 def test_fanout_skipped_for_short_utterance(django_store, engine_env):
     engine_env(orchestrator=True, nav=False)
-    result = _chat("What is today's date?", conv="conv-1b-fan-short")
+    result = _chat("How are you?", conv="conv-1b-fan-short")
     by_stage = result.get("llm_calls_by_stage") or {}
     assert "fanout" not in by_stage, by_stage
     assert "draft" in by_stage, by_stage

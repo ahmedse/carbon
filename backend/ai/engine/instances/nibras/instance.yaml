@@ -701,6 +701,15 @@ navigation_routes:
       en: [attendance, attendance records, time and attendance]
       ar: [الحضور, سجل الحضور والانصراف, الحضور والانصراف]
 
+  - name: my_home
+    type: page
+    path: /my
+    description: Employee My dashboard (ESS home).
+    label: Home
+    labels:
+      en: [home, my dashboard, dashboard]
+      ar: [الرئيسية, بيتي, لوحة]
+
 # Tools excluded for this instance — Carbon-domain tools not relevant here.
 excluded_tools:
   - create_dq_rule

@@ -1827,17 +1827,33 @@ class TurnPipelineRunner:
                     is_deliverable_request,
                     is_process_briefing,
                 )
-                from ai.engine.cognition.turn.navigation import resolve_navigation
+                from ai.engine.cognition.turn.navigation import (
+                    is_how_where_ui,
+                    resolve_navigation,
+                )
 
                 # Process / lifecycle briefing mentions place nouns ("leave",
                 # "payroll") but must NEVER short-circuit to open-app propose.
                 # Deliverable asks ("تقرير عن المرتبات … word") likewise.
+                from ai.engine.cognition.turn.handoff_agent import (
+                    is_ess_write_utterance,
+                )
+
                 if is_process_briefing(user_message):
                     logger.info(
                         "[%s] Skipping navigation fast-path (process briefing)",
                         turn_id[:8],
                     )
                     _signal(ledger, "nav_fast_path", False, reason="process_briefing")
+                elif (
+                    is_ess_write_utterance(user_message)
+                    and not is_how_where_ui(user_message)
+                ) or re.search(
+                    r"\bremember\b|learn_fact|تذكر|احفظ",
+                    user_message or "",
+                    re.I,
+                ):
+                    _signal(ledger, "nav_fast_path", False, reason="write_or_memory")
                 elif is_deliverable_request(user_message):
                     logger.info(
                         "[%s] Skipping navigation fast-path (deliverable request)",
@@ -1903,6 +1919,50 @@ class TurnPipelineRunner:
                 s.get("gate") == "nav_fast_path" for s in ledger.decision_signals
             ):
                 _signal(ledger, "nav_fast_path", False)
+
+        # C8: thanks / clock / plan_status / handoff restatement before IntentResolver.
+        _plan_status = await self._try_plan_status_answer(
+            user_message=user_message,
+            state_ctx=state_ctx,
+            ledger=ledger,
+            meter=meter,
+            turn_id=turn_id,
+            instance_id=instance_id,
+            conversation_id=conversation_id,
+            host_user_id=host_user_id,
+            t0=t0,
+        )
+        if _plan_status is not None:
+            return _plan_status
+        _chat_handoff = await self._try_chat_write_handoff(
+            user_message=user_message,
+            conversation_history=conversation_history,
+            state_ctx=state_ctx,
+            instance_config=instance_config,
+        )
+        if _chat_handoff is not None:
+            return await self._return_chat_handoff(
+                outcome=_chat_handoff,
+                ledger=ledger,
+                meter=meter,
+                turn_id=turn_id,
+                instance_id=instance_id,
+                conversation_id=conversation_id,
+                host_user_id=host_user_id,
+                t0=t0,
+            )
+        _zero = await self._try_zero_llm_surface(
+            user_message=user_message,
+            state_ctx=state_ctx,
+            conversation_history=conversation_history,
+            ledger=ledger,
+            meter=meter,
+            turn_id=turn_id,
+            instance_id=instance_id,
+            t0=t0,
+        )
+        if _zero is not None:
+            return _zero
 
         # Also run process briefing *before* salience when nav was skipped —
         # zero-token concept answer for governed process ids.
@@ -2508,44 +2568,6 @@ class TurnPipelineRunner:
             "retrieval", 1, {"chunks": len(retrieval.knowledge_chunks)},
             s2_latency, verdict="pass",
         )
-
-        # ── PV2-5B: plan_status from ConversationState (0 LLM) ────────────
-        # Must run before Chat write handoff: history+slots would otherwise
-        # re-emit handoff_agent on "what's the status of my request?".
-        _plan_status = await self._try_plan_status_answer(
-            user_message=user_message,
-            state_ctx=state_ctx,
-            ledger=ledger,
-            meter=meter,
-            turn_id=turn_id,
-            instance_id=instance_id,
-            conversation_id=conversation_id,
-            host_user_id=host_user_id,
-            t0=t0,
-        )
-        if _plan_status is not None:
-            return _plan_status
-
-        # ── PV2-3B: Chat write handoff (before fan-out / ReAct) ────────────
-        # ESS write with enough bound slots → handoff_agent; never stage.
-        # Incomplete slots seed ConversationState and fall through to clarify.
-        _chat_handoff = await self._try_chat_write_handoff(
-            user_message=user_message,
-            conversation_history=conversation_history,
-            state_ctx=state_ctx,
-            instance_config=instance_config,
-        )
-        if _chat_handoff is not None:
-            return await self._return_chat_handoff(
-                outcome=_chat_handoff,
-                ledger=ledger,
-                meter=meter,
-                turn_id=turn_id,
-                instance_id=instance_id,
-                conversation_id=conversation_id,
-                host_user_id=host_user_id,
-                t0=t0,
-            )
 
         # ── P3.2: Orchestrator fan-out gate (after S2, before PR-20) ──────
         # If an orchestrator agent is active and the user message warrants
@@ -4075,6 +4097,70 @@ class TurnPipelineRunner:
         _finalize_meter(ledger, meter, "answer")
         return response, ledger
 
+    async def _try_zero_llm_surface(
+        self,
+        *,
+        user_message: str,
+        state_ctx=None,
+        conversation_history=None,
+        ledger,
+        meter,
+        turn_id: str,
+        instance_id: str,
+        t0: float,
+    ):
+        """C8/C10: thanks / clock / FAQ / stated-fact recall — 0 LLM."""
+        from ai.engine.agent.reasoning import AgentResponse
+        from ai.engine.cognition.notifier import broadcast_run_event as _broadcast_run
+        from ai.engine.cognition.turn.memory_recall import (
+            extract_stated_facts,
+            facts_from_state,
+            remember_facts,
+        )
+        from ai.engine.cognition.turn.zero_llm import try_zero_llm_answer
+
+        state = getattr(state_ctx, "state", None) if state_ctx is not None else None
+        newly = extract_stated_facts(user_message)
+        if newly and state is not None:
+            remember_facts(state, newly)
+        known = facts_from_state(state)
+        hit = try_zero_llm_answer(
+            user_message,
+            facts=known,
+            history=conversation_history,
+            newly_stored=bool(newly),
+        )
+        if hit is None:
+            return None
+        text = str(hit.get("text") or "")
+        total_latency = (time.monotonic() - t0) * 1000
+        ledger.final_response = text[:500]
+        ledger.total_latency_ms = total_latency
+        ledger.total_tokens = 0
+        ledger.total_llm_calls = 0
+        response = AgentResponse(
+            text=text,
+            sources_cited=[],
+            tools_used=[],
+            confidence=1.0,
+            total_tokens=0,
+            llm_calls=0,
+            model="",
+            response_type="inferred",
+        )
+        try:
+            await _broadcast_run(instance_id, "run.completed", {
+                "run_id": turn_id,
+                "total_latency_ms": total_latency,
+                "total_llm_calls": 0,
+                "zero_llm": hit.get("gate"),
+            })
+        except Exception:  # noqa: BLE001
+            logger.debug("zero_llm broadcast skipped", exc_info=True)
+        _signal(ledger, str(hit.get("gate") or "zero_llm"), True)
+        _finalize_meter(ledger, meter, str(hit.get("decision") or "answer"))
+        return response, ledger
+
     async def _try_chat_write_handoff(
         self,
         *,
@@ -4109,8 +4195,17 @@ class TurnPipelineRunner:
         )
         current_is_write = is_ess_write_utterance(user_message)
         # Already handed off — do not re-fire on meta follow-ups
-        # ("is the handoff complete?", "thank you").
+        # ("is the handoff complete?"). Thanks restates the same handoff at 0 LLM
+        # (C8 / chat-handoff-write-01 t8).
         if prior_enough and not current_is_write:
+            from ai.engine.cognition.turn.zero_llm import is_thanks
+
+            if is_thanks(user_message):
+                return build_chat_write_handoff(
+                    api_name=prior_api,
+                    slots=prior,
+                    user_message=user_message,
+                )
             return None
         active_write = prior_api.startswith("submit_my_")
         # Fresh write ask, or slot continuation while a write is open.

@@ -155,6 +155,12 @@ def _label_hit(label: str, message: str) -> int:
     """Return a specificity score (>0) if ``label`` matches ``message``."""
     if not label:
         return 0
+    # Short English labels ("home", "my", "hr") must be whole tokens so
+    # "take-home" and "my project" do not navigate.
+    if not _AR_SEARCH(label) and len(label) < 5:
+        if label in message.split():
+            return len(label)
+        return 0
     # Tier 1 — exact substring (handles "people" in "people app", and the
     # exact Arabic form).
     if label in message:
@@ -294,14 +300,32 @@ def ground_navigation(
 # path (``ground_navigation`` on a chosen concept) does not.
 
 _QUESTION_WORDS_EN: frozenset[str] = frozenset({
-    "when", "how", "why", "what", "is", "will", "can", "does",
+    "when", "how", "why", "what", "where", "is", "will", "can", "does",
 })
 # Normalised forms (see ``normalize_text``): hamza/alef folded.
 _QUESTION_WORDS_AR: frozenset[str] = frozenset({
-    "متي", "هل", "كيف", "لماذا", "ما", "ماذا",
+    "متي", "هل", "كيف", "لماذا", "ما", "ماذا", "اين", "أين",
 })
 _NAV_VERB_EN_RE = re.compile(
-    r"\b(?:open|go\s+to|goto|navigate\s+to|take\s+me\s+to|show\s+me)\b"
+    r"\b(?:open|go\s+to|goto|go\s+back|navigate\s+to|take\s+me\s+(?:back\s+)?to|"
+    r"show\s+me|show\s+my)\b"
+)
+_HOW_WHERE_UI_RE = re.compile(
+    r"("
+    r"\bhow\s+(?:do\s+i|can\s+i|to)\s+"
+    r"(?:apply|request|open|get|submit|find|see|check)\b"
+    r"|\bwhere\s+(?:can\s+i|do\s+i|is)\s+"
+    r"(?:find|see|check|look|is)\b"
+    r"|كيف\s+(?:أقدم|اقدم|أفتح|افتح)"
+    r"|وين\s+|أين\s+|اين\s+"
+    r")",
+    re.IGNORECASE,
+)
+_PLACE_TOPIC_RE = re.compile(
+    r"\b(loan|loans|leave|payroll|payslip|payslips|attendance|home|"
+    r"notification|notifications|dashboard)\b"
+    r"|قرض|قروض|إجازة|اجازة|راتب|رواتب|قسيمة|حضور|رئيسية|إشعار",
+    re.IGNORECASE,
 )
 # Normalised Arabic imperative/request stems: افتح / اذهب / أرني (→ ارني) /
 # روح / ودّيني (→ وديني).
@@ -348,7 +372,43 @@ def resolve_navigation(
     Grounds the raw user message against declared routes. Same contract as
     :func:`ground_navigation` — never invents destinations. Questions that
     merely mention a module noun return ``none`` (the normal pipeline answers).
+    How/where UI asks ("where can I find my leave") ground the *topic* only.
     """
+    if is_how_where_ui(message):
+        topic = place_topic(message)
+        if topic:
+            return ground_navigation(topic, instance_config)
+        return NavigationResolution(lang=detect_lang(message or ""))
     if is_interrogative_non_command(message):
         return NavigationResolution(lang=detect_lang(message or ""))
     return ground_navigation(message or "", instance_config)
+
+
+def is_how_where_ui(message: str) -> bool:
+    """True for how-do-I / where-can-I-find UI questions (C8 FAQ, 0 LLM)."""
+    raw = (message or "").strip()
+    return bool(raw and _HOW_WHERE_UI_RE.search(raw))
+
+
+def place_topic(message: str) -> str:
+    """Extract a declared place noun from a how/where UI ask."""
+    match = _PLACE_TOPIC_RE.search(message or "")
+    if not match:
+        return ""
+    token = match.group(0).lower()
+    aliases = {
+        "loan": "loans",
+        "payslip": "payslips",
+        "notification": "notifications",
+        "قرض": "loans",
+        "قروض": "loans",
+        "إجازة": "leave",
+        "اجازة": "leave",
+        "راتب": "payroll",
+        "رواتب": "payroll",
+        "قسيمة": "payslips",
+        "حضور": "attendance",
+        "رئيسية": "home",
+        "إشعار": "notifications",
+    }
+    return aliases.get(token, token)

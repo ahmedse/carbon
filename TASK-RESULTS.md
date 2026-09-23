@@ -4138,3 +4138,13 @@ Nightly ESS smoke is a real job, not a calendar placeholder. Three journeys (lea
 | `docs/pulse/evidence/PV2-6B-{soak.md,nights.json}` | Empty streak (honest) |
 
 **Not done:** first live night (needs STACK-HOLD + approval). **Not faked:** five nights. 6C stays PLANNED.
+
+## PV2-C8 residual (nav / thanks / clock / memory / deixis)
+
+**Date:** 2026-09-23  
+**Status:** DONE — 0-LLM surfaces before IntentResolver  
+**DB:** `TEST_DB_NAME=test_nibras_dev_master`
+
+Thanks, clock, how/where UI, nav, stated-fact recall, and date deixis no longer spend intent+draft. `nav-zero-llm-01` PASS. `memory-learn-fact-01` PASS (C10 = 1.0). `date-awareness-01` PASS. G5 still green: router **0.938**, slot 1.0, llm p50/max 2, turns **89/96**, raw over_budget **19→0**. Remaining 7 misses are decision mismatches (handoff vs answer), not budget. Import boundary 9. Goldens not loosened.
+
+**GATE PASSED** — C8 simple-turn cap held; 0-LLM class closed without hiding misses.
