@@ -476,6 +476,19 @@ def seed_slots_into_state(state_ctx: Any, api_name: str, slots: dict) -> None:
             "since_turn": prior.get("since_turn", state.next_turn()),
             "api": api_name,
         }
+    try:
+        from ai.engine.cognition.state_store import upsert_active_plan
+        from ai.engine.cognition.turn.plan_status import _title_from_slots
+
+        upsert_active_plan(
+            state,
+            plan_id="",
+            status="handoff_ready",
+            title=_title_from_slots(merged),
+            slots=merged,
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug("handoff active_plans seed skipped", exc_info=True)
 
 
 def chat_grounding_rules_block() -> str:

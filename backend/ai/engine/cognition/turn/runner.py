@@ -2505,6 +2505,23 @@ class TurnPipelineRunner:
             s2_latency, verdict="pass",
         )
 
+        # ── PV2-5B: plan_status from ConversationState (0 LLM) ────────────
+        # Must run before Chat write handoff: history+slots would otherwise
+        # re-emit handoff_agent on "what's the status of my request?".
+        _plan_status = await self._try_plan_status_answer(
+            user_message=user_message,
+            state_ctx=state_ctx,
+            ledger=ledger,
+            meter=meter,
+            turn_id=turn_id,
+            instance_id=instance_id,
+            conversation_id=conversation_id,
+            host_user_id=host_user_id,
+            t0=t0,
+        )
+        if _plan_status is not None:
+            return _plan_status
+
         # ── PV2-3B: Chat write handoff (before fan-out / ReAct) ────────────
         # ESS write with enough bound slots → handoff_agent; never stage.
         # Incomplete slots seed ConversationState and fall through to clarify.
@@ -3997,6 +4014,62 @@ class TurnPipelineRunner:
                 turn_id[:8],
             )
             return None
+
+    async def _try_plan_status_answer(
+        self,
+        *,
+        user_message: str,
+        state_ctx,
+        ledger,
+        meter,
+        turn_id: str,
+        instance_id: str,
+        conversation_id: str,
+        host_user_id: str | None,
+        t0: float,
+    ):
+        """PV2-5B: status-of-my-request from active_plans / slots — 0 LLM."""
+        from ai.engine.agent.reasoning import AgentResponse
+        from ai.engine.cognition.notifier import broadcast_run_event as _broadcast_run
+        from ai.engine.cognition.turn.plan_status import (
+            can_answer_plan_status,
+            is_plan_status_utterance,
+            render_plan_status,
+        )
+
+        state = getattr(state_ctx, "state", None) if state_ctx is not None else None
+        if not is_plan_status_utterance(user_message):
+            return None
+        if not can_answer_plan_status(state):
+            return None
+        text = render_plan_status(state, user_message)
+        total_latency = (time.monotonic() - t0) * 1000
+        ledger.final_response = (text or "")[:500]
+        ledger.total_latency_ms = total_latency
+        ledger.total_tokens = 0
+        ledger.total_llm_calls = 0
+        response = AgentResponse(
+            text=text,
+            sources_cited=[],
+            tools_used=[],
+            confidence=1.0,
+            total_tokens=0,
+            llm_calls=0,
+            model="",
+            response_type="inferred",
+        )
+        try:
+            await _broadcast_run(instance_id, "run.completed", {
+                "run_id": turn_id,
+                "total_latency_ms": total_latency,
+                "total_llm_calls": 0,
+                "plan_status": True,
+            })
+        except Exception:  # noqa: BLE001
+            logger.debug("plan_status broadcast skipped", exc_info=True)
+        _signal(ledger, "plan_status", True)
+        _finalize_meter(ledger, meter, "answer")
+        return response, ledger
 
     async def _try_chat_write_handoff(
         self,

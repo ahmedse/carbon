@@ -2381,6 +2381,7 @@ class PlansService:
             plan_json=self._plan_to_dict(plan),
         )
         run.save()
+        self._sync_active_plan(run, title=(brief or "")[:80])
 
         # Path B hybrid: pin governed ProcessDefinition when the plan came
         # from a process dial (leave.request.lifecycle, …) — kill-switch /
@@ -2523,6 +2524,55 @@ class PlansService:
         if not bits:
             return brief
         return f"{brief}\n\nInherited from Chat: {'; '.join(bits[:16])}"
+
+    def _sync_active_plan(self, run, *, title: str = "", slots: dict | None = None) -> None:
+        """PV2-5B: write plan lifecycle onto ConversationState.active_plans."""
+        cid = (getattr(run, "conversation_id", None) or "").strip()
+        if not cid:
+            return
+        try:
+            from ai.engine.cognition.state_store import (
+                ConversationState,
+                upsert_active_plan,
+            )
+            from ai.models import ConversationContextRecord
+            from ai.models.core import RunStep
+
+            row = ConversationContextRecord.objects.filter(conversation_id=cid).first()
+            state = ConversationState.from_dict(
+                getattr(row, "session_json", None) if row is not None else None
+            )
+            steps = list(RunStep.objects.filter(run_id=run.id).order_by("step_index"))
+            done = sum(1 for s in steps if getattr(s, "status", "") in (
+                "completed", "skipped",
+            ))
+            paused = next(
+                (s for s in steps if getattr(s, "status", "") == "paused"),
+                None,
+            )
+            summary = f"{done}/{len(steps)} steps done" if steps else ""
+            if paused is not None:
+                summary = (summary + f"; paused at step {paused.step_index}").strip("; ")
+            upsert_active_plan(
+                state,
+                plan_id=str(run.id),
+                status=str(run.status or ""),
+                title=(title or (run.user_message or "")[:80]).strip(),
+                slots=slots or {},
+                step_summary=summary,
+            )
+            payload = state.to_dict()
+            if row is None:
+                ConversationContextRecord.objects.create(
+                    conversation_id=cid,
+                    instance_id=getattr(run, "instance_id", None) or PLAN_INSTANCE_ID,
+                    session_json=payload,
+                )
+            else:
+                row.session_json = payload
+                row.save(update_fields=["session_json", "updated_at"])
+        except Exception:  # noqa: BLE001 — write-back must never fail a plan
+            logger.debug("active_plans write-back skipped", exc_info=True)
 
     def _question_reasks_known(self, question: str, known: dict) -> bool:
         text = (question or "").strip()
@@ -3098,6 +3148,7 @@ class PlansService:
             )
         run.status = STATUS_APPROVED
         run.save(update_fields=["status", "updated_at"])
+        self._sync_active_plan(run)
         logger.info("Plan approved id=%s user=%s", plan_id, str(user.pk))
         return self.get_plan(user, plan_id)
 
@@ -3110,6 +3161,7 @@ class PlansService:
             )
         run.status = STATUS_CANCELLED
         run.save(update_fields=["status", "updated_at"])
+        self._sync_active_plan(run)
         from ai.models.core import RunStep
 
         RunStep.objects.filter(run_id=run.id, status=STEP_PENDING).update(
@@ -3395,6 +3447,7 @@ class PlansService:
             )
         run.status = STATUS_PAUSED
         run.save(update_fields=["status", "updated_at"])
+        self._sync_active_plan(run)
         logger.info("Plan paused id=%s user=%s", plan_id, str(user.pk))
         return self.get_plan(user, plan_id)
 
@@ -4509,6 +4562,11 @@ class PlansService:
         # report (spec §3.5–§3.6). Re-queries read-only host state and never
         # fails the run; non-terminal runs skip closure (mirrors the
         # feed_run_feedback terminal guard).
+        try:
+            await sync_to_async(self._sync_active_plan, thread_sensitive=True)(run)
+        except Exception:  # noqa: BLE001
+            logger.debug("active_plans run-end write-back skipped", exc_info=True)
+
         if run.status in (STATUS_COMPLETED, STATUS_COMPLETED_WITH_GAPS, STATUS_FAILED):
             report = None
             try:
@@ -5311,6 +5369,10 @@ class PlansService:
         run.save(
             update_fields=["status", "run_state", "completed_at", "updated_at"]
         )
+        try:
+            PlansService()._sync_active_plan(run)
+        except Exception:  # noqa: BLE001
+            logger.debug("active_plans cancel write-back skipped", exc_info=True)
         RunStep.objects.filter(
             run_id=run.id,
             step_state__in=(

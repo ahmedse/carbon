@@ -3120,7 +3120,7 @@ W5c  PV2-5C FE: Active-plans chip + Run drawer inherited-context (RULE_23 wordin
 ---
 
 ### Phase PV2-5B — Backend: active_plans write-back + Chat plan_status (C9, A8)
-**Worker Role:** backend-worker · **Model:** inherit Master · **Status:** PLANNED (READY after 5A) · **Owner:** Pulse
+**Worker Role:** backend-worker · **Model:** inherit Master · **Status:** DONE — 2026-09-23 10:10 Master audit · **Owner:** Pulse
 
 #### Objective
 Plan lifecycle events (created/paused/completed/failed) update `ConversationState.active_plans`. Chat `plan_status` / "status of my request?" answered from state + `RunStep` rows with **0 LLM calls** when state has an active plan.

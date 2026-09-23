@@ -273,3 +273,9 @@ Track: PV2 — W4a Arbiter shadow SOAKING
 Ask: PV2-4A landed (`PULSE_ARBITER=shadow`). Legacy path unchanged. Soak ≥7 days of `[arbiter-shadow]` logs before 4B. W5 Chat↔Agent continuity is next and does not wait for soak. Earliest 4B: 2026-09-30.
 Paths: backend/ai/engine/cognition/turn/arbiter.py, runner.py, state_store.py
 Blockers: 4B blocked until soak evidence
+
+## [2026-09-23T10:10:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-8
+Track: PV2 — 5B plan_status DONE
+Ask: Chat answers "status of my request?" from `active_plans` / slots with 0 LLM. Plan lifecycle writes state. 5C FE chip next.
+Paths: backend/ai/engine/cognition/turn/plan_status.py, runner.py, plans_service.py, state_store.py
+Blockers: none

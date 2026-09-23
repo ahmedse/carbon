@@ -40,6 +40,7 @@ STATE_VERSION = 1
 FOCUS_MAX = 5
 LAST_RESULTS_MAX = 8
 DECISIONS_MAX = 12
+ACTIVE_PLANS_MAX = 5
 STATE_BLOCK_MAX_CHARS = 600
 
 # ``ConversationContextRecord.conversation_id`` is a varchar(36) primary key;
@@ -76,6 +77,7 @@ class ConversationState:
         self.focus = self.focus[:FOCUS_MAX]
         self.last_results = self.last_results[-LAST_RESULTS_MAX:]
         self.decisions = self.decisions[-DECISIONS_MAX:]
+        self.active_plans = self.active_plans[:ACTIVE_PLANS_MAX]
         return self
 
     def to_dict(self) -> dict:
@@ -122,6 +124,49 @@ class ConversationState:
 
     def size(self) -> int:
         return len(json.dumps(self.to_dict(), ensure_ascii=False))
+
+
+def upsert_active_plan(
+    state: ConversationState | None,
+    *,
+    plan_id: str = "",
+    status: str,
+    title: str = "",
+    slots: dict | None = None,
+    step_summary: str = "",
+) -> ConversationState | None:
+    """Write-back one plan lifecycle event onto ``state.active_plans`` (most recent first)."""
+    if state is None:
+        return None
+    status_n = (status or "").strip() or "pending_approval"
+    pid = (plan_id or "").strip()
+    title_n = (title or "").strip()
+    body = {
+        k: v for k, v in (slots or {}).items()
+        if v not in (None, "", [], {})
+    }
+    entry = {
+        "plan_id": pid,
+        "status": status_n,
+        "title": title_n,
+        "slots": body,
+        "step_summary": (step_summary or "").strip()[:200],
+    }
+    rest = []
+    for item in state.active_plans or []:
+        if not isinstance(item, dict):
+            continue
+        same_id = pid and (item.get("plan_id") or "") == pid
+        same_handoff = (
+            not pid
+            and not item.get("plan_id")
+            and (item.get("title") or "") == title_n
+        )
+        if same_id or same_handoff:
+            continue
+        rest.append(item)
+    state.active_plans = [entry, *rest][:ACTIVE_PLANS_MAX]
+    return state
 
 
 @dataclass

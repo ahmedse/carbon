@@ -4020,4 +4020,37 @@ $ TEST_DB_NAME=test_nibras_dev_master ../.venv/bin/python -m pytest ai/tests/tes
 
 **GATE PASSED** — Chat slots appear in the Agent discovery brief.
 
+## PV2-5B
+
+**Date:** 2026-09-23  
+**Worker:** Master  
+**Status:** GATE PASSED  
+**DB:** `TEST_DB_NAME=test_nibras_dev_master`
+
+### Summary
+Plan lifecycle write-back updates `ConversationState.active_plans` (create / approve / decline / pause / cancel / run-end). Chat handoff seeds a `handoff_ready` plan from slots. "Status of my request?" is answered from state with **0 LLM** (before the write-handoff gate so history does not re-fire handoff). Copy is honest: Chat-only plans are "not under review until you submit".
+
+### Files changed
+| Path | Change |
+|---|---|
+| `backend/ai/engine/cognition/state_store.py` | `upsert_active_plan`, `ACTIVE_PLANS_MAX` |
+| `backend/ai/engine/cognition/turn/plan_status.py` | NEW — detect + render |
+| `backend/ai/engine/cognition/turn/runner.py` | `_try_plan_status_answer` before Chat handoff |
+| `backend/ai/engine/cognition/turn/handoff_agent.py` | seed `handoff_ready` |
+| `backend/ai/plans_service.py` | `_sync_active_plan` on lifecycle |
+| `backend/ai/tests/test_pv2_plan_status.py` | NEW |
+
+```
+$ TEST_DB_NAME=test_nibras_dev_master ../.venv/bin/python -m pytest ai/tests/test_pv2_plan_status.py ai/tests/test_pv2_handoff_agent.py ai/tests/test_pv2_state_store.py -q
+36 passed in 6.22s
+
+$ … test_plans.py + test_pv2_plan_status.py + test_pv2_discovery.py
+73 passed in 11.17s
+```
+
+Import boundary 9.
+
+**GATE PASSED** — lifecycle write-back + 0-LLM plan_status.
+
+
 
