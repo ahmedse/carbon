@@ -10,4 +10,15 @@ bindings:
     must_contain:
       - "python -m pytest"
       - "working-directory: backend"
-    detail: CI backend job runs pytest. Merge protection was not read from GitHub.
+    detail: CI backend job runs pytest. GitHub branch protection was read separately and is not enabled.
+
+  - rule_id: PL-SSE-01
+    file: backend/core/assurance_api.py
+    must_contain:
+      - text/event-stream
+      - "Does not run pytest"
+      - AssuranceStreamView
+    must_not_contain:
+      - plans_api
+      - task_inbox
+    detail: Assurance SSE is its own staff route. It is not the Pulse chat stream.

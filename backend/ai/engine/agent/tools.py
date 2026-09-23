@@ -2460,7 +2460,15 @@ _COMPENSATION_INTENT_RE = re.compile(
 )
 
 _PAYSLIP_SPECIFIC_RE = re.compile(
-    r"(?i)\b(payslip|pay[\s_-]*slip|قسيمة(?:\s*الراتب)?)",
+    r"(?i)("
+    r"payslip|pay[\s_-]*slip|قسيمة(?:\s*الراتب)?"
+    r"|net\s*pay|take[\s_-]*home|takehome"
+    r"|last\s+month(?:'s)?\s+(?:net\s+)?pay"
+    r"|صافي\s*(?:ال)?راتب"
+    r"|deductions?\s+(?:were|applied|on)"
+    r"|gosi"
+    r"|الاستقطاعات|خصومات"
+    r")"
 )
 
 _FIRST_PERSON_COMP_RE = re.compile(

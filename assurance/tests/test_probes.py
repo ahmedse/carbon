@@ -87,7 +87,7 @@ class PlatformProbeTests(unittest.TestCase):
             by_rule.setdefault(finding.rule_id, []).append(finding.result)
         self.assertEqual(by_rule["PL-VERIFY-01"], ["passed"])
         self.assertEqual(by_rule["PL-CI-01"], ["passed"])
-        self.assertNotIn("PL-SSE-01", by_rule)
+        self.assertEqual(by_rule["PL-SSE-01"], ["passed"])
 
 
 if __name__ == "__main__":

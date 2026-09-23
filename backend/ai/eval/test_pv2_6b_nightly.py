@@ -12,9 +12,11 @@ from ai.eval.nightly_ess_smoke import (
     REQUIRED_CONSECUTIVE,
     ConsentError,
     NightRecord,
+    awaiting_mutation_steps,
     catalog_issues,
     chat_did_not_mutate,
     chat_utterance,
+    confirm_body_for,
     consecutive_green_nights,
     ic_failures,
     journey_bindings,
@@ -105,6 +107,26 @@ def test_chat_must_not_mutate_host_rows():
     before = [{"id": 1, "start_date": "2027-04-10"}]
     assert chat_did_not_mutate(before, [{"id": 1, "start_date": "2027-04-10"}])
     assert not chat_did_not_mutate(before, before + [{"id": 2}])
+
+
+def test_rule_21_write_steps_are_found_after_run_pause():
+    plan = {
+        "status": "paused",
+        "steps": [
+            {"step_id": 1, "status": "completed", "tool_args": {"api_name": "list_my_leave"}},
+            {
+                "step_id": 2,
+                "status": "awaiting_approval",
+                "tool_args": {"api_name": "submit_my_leave"},
+            },
+        ],
+    }
+    hits = awaiting_mutation_steps(plan, "submit_my_leave")
+    assert [h["step_id"] for h in hits] == [2]
+    slots = journey_bindings("2026-09-23")["leave"]
+    body = confirm_body_for(JOURNEYS[0], slots)
+    assert body["leave_type"] == "annual"
+    assert body["start_date"] == slots["start_date"]
 
 
 def test_host_fingerprint_and_slot_carry():

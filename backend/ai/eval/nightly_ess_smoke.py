@@ -1,9 +1,10 @@
 """PV2-6B — Nightly live ESS smoke (Chat → Agent → Approve as emp_1067).
 
 Three journeys on Nibras dev: leave, loan, attendance permission.
-Chat must not create host rows (ADR-0046). Agent Approve + Run must.
+Chat must not create host rows (ADR-0046). Agent Approve + Run +
+step Confirm (RULE_21) must.
 IC: handoff_ready / handoff_agent, slot_carry on inherited_context,
-host-row fingerprint after Run.
+host-row fingerprint after Run + Confirm.
 
 SOAKING until five consecutive live PASS nights. Dry-run and skipped
 nights do not count. Never invent elapsed nights.
@@ -411,10 +412,104 @@ def _mint_token(username: str) -> str:
 
 
 def _list_host(client: LiveClient, path: str) -> list[dict]:
+    rows, _status = list_host(client, path)
+    return rows
+
+
+def list_host(client: LiveClient, path: str) -> tuple[list[dict], int]:
     resp = client.get(path)
     if resp.status_code != 200:
-        return []
-    return _as_list(resp.json())
+        return [], resp.status_code
+    return _as_list(resp.json()), resp.status_code
+
+
+def awaiting_mutation_steps(plan: dict, api_name: str) -> list[dict]:
+    """RULE_21 write steps still paused after plan-level Approve + Run."""
+    hits = []
+    for step in plan.get("steps") or []:
+        if not isinstance(step, dict):
+            continue
+        if str(step.get("status") or "") != "awaiting_approval":
+            continue
+        args = step.get("tool_args") or {}
+        name = str(args.get("api_name") or "")
+        if name == api_name or (not api_name and name.startswith("submit_my_")):
+            hits.append(step)
+    if hits:
+        return hits
+    return [
+        step
+        for step in (plan.get("steps") or [])
+        if isinstance(step, dict) and str(step.get("status") or "") == "awaiting_approval"
+    ]
+
+
+def confirm_body_for(journey: Journey, slots: dict[str, Any]) -> dict[str, Any]:
+    """Slot body for step Confirm when the staged mutation is incomplete."""
+    if journey.id == "leave":
+        return {
+            "leave_type": slots.get("leave_type"),
+            "start_date": slots.get("start_date"),
+            "days": slots.get("days"),
+        }
+    if journey.id == "loan":
+        return {
+            "loan_type": slots.get("loan_type"),
+            "principal": slots.get("principal", slots.get("amount")),
+            "term_months": slots.get("term_months"),
+            "start_date": slots.get("start_date"),
+            "interest_rate": slots.get("interest_rate", "0"),
+        }
+    if journey.id == "attendance":
+        return {
+            "permission_type": slots.get("permission_type"),
+            "date": slots.get("date"),
+            "hours": slots.get("hours"),
+        }
+    return {}
+
+
+def complete_agent_write(
+    client: LiveClient,
+    plan_id: str,
+    journey: Journey,
+    slots: dict[str, Any],
+) -> dict[str, Any]:
+    """Approve already happened. Run, then Confirm each RULE_21 write step."""
+    trace: dict[str, Any] = {
+        "run_http": [],
+        "confirm_http": [],
+        "plan_status": "",
+        "awaiting": [],
+    }
+    first = client.sse(f"/ai/plans/{plan_id}/run/", timeout=300)
+    trace["run_http"].append(first.get("http_status"))
+    for _ in range(3):
+        detail = client.get(f"/ai/plans/{plan_id}/")
+        plan = detail.json() if detail.status_code == 200 else {}
+        trace["plan_status"] = str(plan.get("status") or "")
+        pending = awaiting_mutation_steps(plan, journey.api_name)
+        if not pending:
+            break
+        for step in pending:
+            sid = step.get("step_id")
+            if sid is None:
+                continue
+            trace["awaiting"].append(
+                {
+                    "step_id": sid,
+                    "api": (step.get("tool_args") or {}).get("api_name"),
+                }
+            )
+            payload: dict[str, Any] = {"step_id": sid}
+            body = confirm_body_for(journey, slots)
+            if body:
+                payload["body"] = body
+            conf = client.post(f"/ai/plans/{plan_id}/steps/confirm/", payload)
+            trace["confirm_http"].append(conf.status_code)
+        nxt = client.sse(f"/ai/plans/{plan_id}/run/", timeout=180)
+        trace["run_http"].append(nxt.get("http_status"))
+    return trace
 
 
 def _chat_decision(assistant: dict, state_plans: list) -> tuple[str, bool]:
@@ -433,7 +528,7 @@ def run_journey(
     slots: dict[str, Any],
 ) -> dict[str, Any]:
     utterance = chat_utterance(journey, slots)
-    before = _list_host(client, journey.host_list_path)
+    before, list_http_before = list_host(client, journey.host_list_path)
     conv = client.post(
         "/ai/workspace/conversations/",
         {"conversation_type": "chat", "title": f"pv2-6b-{journey.id}"},
@@ -461,7 +556,7 @@ def run_journey(
         }
     body = msg.json()
     assistant = body.get("assistant_message") or {}
-    after_chat = _list_host(client, journey.host_list_path)
+    after_chat, _ = list_host(client, journey.host_list_path)
     mutated = not chat_did_not_mutate(before, after_chat)
     detail = client.get(f"/ai/workspace/conversations/{cid}/")
     active_plans = []
@@ -491,9 +586,10 @@ def run_journey(
     plan_id = plan_data.get("id")
     approve = client.post(f"/ai/plans/{plan_id}/approve/")
     approve_http = approve.status_code
+    agent_trace: dict[str, Any] = {}
     if approve_http in (200, 201):
-        client.sse(f"/ai/plans/{plan_id}/run/", timeout=300)
-    after_agent = _list_host(client, journey.host_list_path)
+        agent_trace = complete_agent_write(client, str(plan_id), journey, slots)
+    after_agent, list_http_after = list_host(client, journey.host_list_path)
     fingerprint = {key: slots[key] for key in journey.fingerprint_fields if key in slots}
     host_hit = bool(matching_rows(after_agent, fingerprint)) or (
         len(row_ids(after_agent) - row_ids(before)) >= 1 and not mutated
@@ -511,6 +607,10 @@ def run_journey(
         "inherited_context": inherited,
         "slot_carry": carry,
         "approve_http": approve_http,
+        "confirm_http": agent_trace.get("confirm_http") or [],
+        "run_http": agent_trace.get("run_http") or [],
+        "plan_status": agent_trace.get("plan_status") or "",
+        "host_list_http": [list_http_before, list_http_after],
         "host_row_after_agent": host_hit,
         "fingerprint": fingerprint,
         "utterance": utterance,

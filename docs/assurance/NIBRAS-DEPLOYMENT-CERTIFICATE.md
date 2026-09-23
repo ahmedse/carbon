@@ -16,8 +16,8 @@ This is **not** a claim that Nibras is 100% production-assured, PAM-connected, o
 | Gate | Result |
 |---|---|
 | Nibras assurance pack (17 blocking rules) | Binding probes pass on this tree. Re-run `python -m assurance probe --pack nibras` to stamp a ledger. |
-| Platform `PL-CI-01` / `PL-VERIFY-01` | **Binding passed** — CI workflow runs pytest; `verify.sh` default includes people. Merge protection still unread. |
-| Platform `PL-SSE-01` | **Planned** — no product SSE board |
+| Platform `PL-CI-01` / `PL-VERIFY-01` | **Binding passed** — CI workflow runs pytest; `verify.sh` default includes people. GitHub `main` is not protected (404, empty rulesets). |
+| Platform `PL-SSE-01` | **Configured** — staff route `/admin/assurance` and `GET /assurance/stream/`. It reads a ledger. It does not run pytest. |
 | PAM / bank WPS acknowledgement | **Not wired** — local submit keeps `reconciled=False` |
 | Nationality / Kuwaitization on live GOFSCO rows | Blank nationality now **refuses** Kuwaiti-scoped EOSI/leave. Do not invent codes. |
 
@@ -68,7 +68,8 @@ Do **not** use Chat to submit leave or payroll.
 - Live nationality is often empty. Those rows now **refuse** Kuwaiti-scoped EOSI/leave instead of guessing.
 - Employee 360 and People lists no longer download the full roster to label a row. Directory search and filters are one page of 100. Pickers search 20 matches. Rows past that page are reached by search, not by loading everyone.
 - Two active runs for the same org/month are refused in create/compute. Historical duplicates were not deleted; there is no DB unique constraint.
-- Platform CI merge protection and the live assurance SSE board are **not** certified.
+- GitHub `ahmedse/carbon` `main` was read on 23 Sep 2026. Branch protection returned 404. Rulesets were empty. A merge is not blocked by GitHub.
+- The assurance board is a staff page. It is not a PAM receipt and it does not run the test suite.
 - GOSI/EOSI **formula rates** are data. This certificate does not attest PIFSS or KLL amounts.
 
 ## How to regenerate evidence

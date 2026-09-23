@@ -1,11 +1,11 @@
 id: PL-SSE-01
 journey: Live stream
 meaning: The product board uses its own event stream. Pulse chat SSE stays on the AI routes.
-source: backend/ai/plans_api.py; backend/ai/task_inbox_api.py
+source: backend/core/assurance_api.py
 owner: platform
 failure: Assurance status is narrated by Chat or scraped from markdown.
-validation: Design. The assurance HTTP stream is not built.
-implementation: Planned. This package evaluates a JSONL ledger locally.
-confidence: medium
-catalogue: planned
-residual: python -m assurance reads a ledger file. It does not open a socket.
+validation: GET /assurance/stream/ returns text/event-stream for a staff user. It re-reads a ledger file. It does not run pytest.
+implementation: AssuranceStreamView. Route is /admin/assurance, not My, Team, or People.
+confidence: high-code
+catalogue: configured
+residual: The stream does not launch tests. A row stays at its catalogue label until a ledger event exists for that commit.

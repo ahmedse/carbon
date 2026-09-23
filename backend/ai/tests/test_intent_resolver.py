@@ -474,6 +474,26 @@ def test_compensation_override_leaves_explicit_payslip_ask():
     assert out.candidates[0].name == "list_my_payslips"
 
 
+def test_compensation_override_leaves_net_pay_on_payslips():
+    """F-LIVE-9: last month's net / take-home is a payslip fact, not basic pay."""
+    from ai.engine.agent.tools import payslip_specific_ask
+
+    assert payslip_specific_ask("What was my net pay last month?")
+    assert payslip_specific_ask("And after GOSI is deducted, what is my take-home?")
+    assert payslip_specific_ask("ما صافي راتبي؟")
+    assert not payslip_specific_ask("What is my salary?")
+
+    res = IntentResolution(
+        action="answer",
+        candidates=[IntentCandidate(name="list_my_payslips", confidence=0.9)],
+        confidence=0.9,
+    )
+    out = _apply_compensation_override(
+        res, user_message="What was my net pay last month?", labels=_COMP_LABELS,
+    )
+    assert out.candidates[0].name == "list_my_payslips"
+
+
 def test_compensation_override_arabic_self_salary():
     res = IntentResolution(
         action="answer",

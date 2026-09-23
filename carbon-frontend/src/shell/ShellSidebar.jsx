@@ -262,6 +262,7 @@ function getSidebarItems(studioId, helpApps = []) {
         { label: 'Field Policies', path: '/admin/catalog/field-policies', icon: SecurityIcon, role: 'admin' },
         { label: 'Audit Log', path: '/admin/audit', icon: HistoryIcon, role: 'admin' },
         { label: 'System Logs', path: '/admin/logs', icon: ArticleIcon, role: 'admin' },
+        { label: 'Assurance', path: '/admin/assurance', icon: FactCheckIcon, role: 'admin' },
         { type: 'divider' },
         { type: 'group', label: 'App Management' },
         { label: 'Registered Apps', path: '/admin/apps', icon: AppsIcon, role: 'admin' },

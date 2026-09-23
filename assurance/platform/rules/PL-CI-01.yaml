@@ -4,8 +4,8 @@ meaning: CI runs lint, backend pytest, frontend, and Playwright. Tag deploy is S
 source: .github/workflows/ci.yml
 owner: platform
 failure: A required check is skipped or the log hides later failures.
-validation: Workflow file. Branch protection was not read.
+validation: Workflow file. Branch protection was read on 23 Sep 2026 and is not enabled.
 implementation: .github/workflows/ci.yml
 confidence: high-code
 catalogue: configured
-residual: Merge enforcement is unverified. Backend pytest stops at the first failure.
+residual: Observed 23 Sep 2026 on ahmedse/carbon. Branch protection GET returned 404 (branch not protected). Rulesets list was empty. Merge to main is not blocked by GitHub. Backend pytest still stops at the first failure.

@@ -211,10 +211,11 @@ def _build_system_prompt(
         "  name is present.",
         "- COMPENSATION / SALARY / BASIC PAY (راتب / أجر / مرتب): prefer "
         "  `get_employee` (named coworker) or `get_my_profile` (first-person "
-        "  \"my salary\" / راتبي). Do NOT match `list_my_payslips` or "
-        "  `list_payslip_lines` for salary/compensation — empty payslips are "
-        "  not \"no salary data\". Use payslip endpoints only when the user "
-        "  explicitly asks for payslip lines / قسيمة.",
+        "  \"my salary\" / راتبي). Do NOT match `list_my_payslips` for a "
+        "  contractual salary figure — empty payslips are not \"no salary "
+        "  data\". DO match `list_my_payslips` for net pay / take-home / "
+        "  last month's pay / deductions / GOSI / payslip / قسيمة / "
+        "  صافي الراتب.",
         "- If exactly one endpoint clearly matches, action = \"answer\" and set "
         "  `endpoint` to its name.",
         "- If two or more endpoints are nearly as likely and the user could mean "
@@ -500,7 +501,8 @@ def _apply_compensation_override(
 
     Prefer ``get_my_profile`` (self) or ``get_employee`` (coworker) so CBAC
     deny / resolve_entity paths can surface ``people:view_compensation``.
-    Payslip endpoints stay only when the user explicitly asked for payslips.
+    Payslip endpoints stay for explicit payslip / net-pay / take-home /
+    last-month / deduction / GOSI / قسيمة asks.
     """
     from ai.engine.agent.tools import (
         compensation_intent_asked,
