@@ -2328,6 +2328,7 @@ class TurnPipelineRunner:
         if _chat_handoff is None:
             _plan_dial = await self._try_plan_dial_process_plan(
                 user_message=user_message,
+                process_mode=process_mode,
                 state_ctx=state_ctx,
                 ledger=ledger,
                 turn_id=turn_id,
@@ -4133,12 +4134,6 @@ class TurnPipelineRunner:
                         or _args.get("api")
                         or ""
                     )
-                    if _api != LEAVE_BALANCE_API and LEAVE_BALANCE_API not in str(
-                        _item.get("result") or ""
-                    ):
-                        # Match by tool_args only — don't false-positive on digests.
-                        if _api != LEAVE_BALANCE_API:
-                            continue
                     if _api != LEAVE_BALANCE_API:
                         continue
                     _lang = (
@@ -4794,6 +4789,7 @@ class TurnPipelineRunner:
         self,
         *,
         user_message: str,
+        process_mode: str,
         state_ctx,
         ledger,
         turn_id: str,
@@ -4818,7 +4814,9 @@ class TurnPipelineRunner:
             render_plan_dial_answer,
         )
 
-        brief = plan_dial_process_brief(user_message)
+        brief = plan_dial_process_brief(
+            user_message, process_mode=process_mode,
+        )
         if not brief or not host_user_id:
             return None
         # A bare slot answer to an open Chat clarify stays with the slot-filler.
