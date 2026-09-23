@@ -2002,17 +2002,21 @@ class TurnPipelineRunner:
         """Execute one turn. Returns (AgentResponse, TurnLedger)."""
         from ai.engine.agent.reasoning import AgentResponse
         from ai.engine.cognition.auto_memory import AutoMemoryExtractor
-        from ai.engine.cognition.turn.report_clarify import expand_numbered_report_pick
+        from ai.engine.cognition.turn.router import TurnRouter
 
         settings = get_settings()
-
-        # Bare "1"/"2" after a report topic menu → scoped brief (not bare
-        # headcount). Must rewrite before zero-LLM / tools see the utterance.
-        _expanded_pick = expand_numbered_report_pick(
-            user_message, history=conversation_history,
+        original_user_message = user_message
+        state = getattr(state_ctx, "state", None) if state_ctx is not None else None
+        turn_route = TurnRouter().decide(
+            message=user_message,
+            process_mode=process_mode,
+            state=state,
+            history=conversation_history,
+            last_results=getattr(state, "last_results", None) if state is not None else None,
         )
-        if _expanded_pick:
-            user_message = _expanded_pick
+        # A structured open-question option resolves to its semantic value
+        # before intent/draft; the displayed label is never parsed as policy.
+        user_message = turn_route.message
 
         # Apply per-instance tool exclusions (e.g. an instance hides create_dq_rule).
         excluded_tools = set((instance_config or {}).get("excluded_tools") or [])
@@ -2032,8 +2036,11 @@ class TurnPipelineRunner:
             instance_id=instance_id,
             host_user_id=host_user_id,
             conversation_id=conversation_id,
-            user_message=user_message,
+            user_message=original_user_message,
             created_at=created_at,
+            decision_committed=turn_route.committed,
+            route_kind=turn_route.kind.value,
+            process_mode=turn_route.mode.value,
         )
         from ai.engine.cognition.turn.executor import StagedExit
         staged: list[StagedExit] = []
