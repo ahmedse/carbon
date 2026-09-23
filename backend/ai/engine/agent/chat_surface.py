@@ -241,24 +241,46 @@ def _label(spec: dict[str, str], key: str, locale: str) -> str:
 
 
 def build_handoff_actions(spec: dict[str, str], *, locale: str = "en") -> list[dict[str, Any]]:
-    """Machine-readable CTAs — host My/Team only (Pulse Agent UI retired).
+    """Machine-readable CTAs — Agent first, then My (AIMessageBubble order).
 
-    Manager Team-review and My-only profile intents are unchanged.
+    Manager Team-review and My-only profile intents skip Agent.
     """
     route = (spec.get("my_route") or "").strip()
-    if not route:
-        return []
-    summary = (
-        "Approve or reject in Team"
-        if spec.get("manager_only")
-        else "Submit in the host ESS app"
-    )
-    return [{
-        "type": "navigate",
-        "route": route,
-        "label": _label(spec, "my_label", locale),
-        "summary": summary,
-    }]
+    if spec.get("manager_only") or spec.get("my_only"):
+        if not route:
+            return []
+        summary = (
+            "Approve or reject in Team"
+            if spec.get("manager_only")
+            else "Submit in the host ESS app"
+        )
+        return [{
+            "type": "navigate",
+            "route": route,
+            "label": _label(spec, "my_label", locale),
+            "summary": summary,
+        }]
+    actions: list[dict[str, Any]] = [
+        {
+            "type": "open_panel",
+            "panel": "tasks",
+            "plan_id": "",
+            "label": _label(spec, "agent_label", locale),
+            "summary": (
+                f"Run via Agent"
+                + (f" ({spec['process']})" if spec.get("process") else "")
+            ),
+            "process_hint": spec.get("process") or "",
+        },
+    ]
+    if route:
+        actions.append({
+            "type": "navigate",
+            "route": route,
+            "label": _label(spec, "my_label", locale),
+            "summary": "Submit in the host ESS app",
+        })
+    return actions
 
 
 def handoff_copy(
@@ -273,21 +295,21 @@ def handoff_copy(
     if spec.get("manager_only"):
         if locale == "ar":
             return (
-                "اعتماد الطلبات يتم في تطبيق الفريق (Team)، وليس من الدردشة.\n\n"
+                "اعتماد الطلبات يتم في تطبيق الفريق (Team)، وليس من الدردشة أو الوكيل.\n\n"
                 f"افتح «{my_label}» للمراجعة والموافقة أو الرفض."
             )
         return (
-            "Approvals happen in the Team app — not in Chat.\n\n"
+            "Approvals happen in the Team app — not in Chat or Agent.\n\n"
             f"Open {my_label} to review and Approve or Decline."
         )
     if spec.get("my_only"):
         if locale == "ar":
             return (
-                f"تغيير الملف الشخصي يُقدَّم من تطبيقاتي فقط.\n\n"
+                f"تغيير الملف الشخصي يُقدَّم من تطبيقاتي فقط (وليس عبر الوكيل).\n\n"
                 f"افتح «{my_label}» وقدّم طلب التغيير هناك."
             )
         return (
-            f"Profile changes are submitted in My.\n\n"
+            f"Profile changes are submitted in My — not via Agent.\n\n"
             f"Open {my_label} and submit the change there."
         )
     if locale == "ar":
@@ -295,14 +317,20 @@ def handoff_copy(
             f"يمكنني مساعدتك في تجهيز {topic}، لكن الدردشة لا تُرسل ولا تغيّر "
             "السجلات في النظام.",
             "",
-            f"لإتمام التغيير افتح «{my_label}» وقدّم الطلب هناك.",
+            "لإتمام التغيير استخدم أحد المسارين:",
+            "• **الوكيل (Agent)** — بدّل إلى وضع الوكيل وشغّل العملية المعتمدة "
+            "(التأكيد عند التشغيل).",
+            f"• **تطبيقاتي** — افتح «{my_label}» وقدّم الطلب هناك.",
         ]
     else:
         lines = [
             f"I can help you prepare a {topic}, but Chat does not submit or "
             "change records in the system.",
             "",
-            f"To make the change, open {my_label} and submit there.",
+            "To make the change, use one of these paths:",
+            "• **Agent** — switch to Agent and run the governed process "
+            "(consent on Run).",
+            f"• **My** — open {my_label} and submit there.",
         ]
     if isinstance(draft, dict) and draft:
         bits = []
@@ -332,7 +360,7 @@ def build_handoff_envelope(
         headline = f"لا يمكن تقديم {topic} مباشرة من الدردشة"
         prose = [
             "جهّزنا التفاصيل أدناه. للدردشة دور استشاري فقط — "
-            "أكمل من تطبيقاتي.",
+            "أكمل عبر الوكيل أو من تطبيقاتي.",
         ]
         table_title = "مسودة الطلب"
         col_field, col_value = "الحقل", "القيمة"
@@ -341,7 +369,7 @@ def build_handoff_envelope(
         headline = f"This {topic} cannot be submitted from Chat"
         prose = [
             "The details below are prepared as a draft only. "
-            "Use My to submit.",
+            "Use Agent or My to submit.",
         ]
         table_title = "Draft request"
         col_field, col_value = "Field", "Value"

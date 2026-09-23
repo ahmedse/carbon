@@ -2,7 +2,7 @@
 // W5-A (ADR-0014) — Chat/Agent are the two top-level Pulse modes. The header
 // owns the mode buttons AND the always-visible safety-contract text, which
 // changes with the agent lifecycle state (§4 of the ADR — exact copy).
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import AIWorkspaceHeader from '../shell/AIWorkspaceHeader';
 
@@ -10,17 +10,6 @@ import AIWorkspaceHeader from '../shell/AIWorkspaceHeader';
 vi.mock('../shell/AIContextMenu', () => ({ default: () => null }));
 
 describe('AIWorkspaceHeader mode toggle + safety contract (W5-A / ADR-0014)', () => {
-  beforeEach(() => {
-    localStorage.setItem('carbon-ai-agent-ui', 'on');
-  });
-
-  it('hides the Agent/Chat mode toggle when Agent UI is disabled', () => {
-    localStorage.removeItem('carbon-ai-agent-ui');
-    render(<AIWorkspaceHeader onClose={vi.fn()} />);
-    expect(screen.queryByRole('button', { name: 'Agent mode' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Chat mode' })).not.toBeInTheDocument();
-  });
-
   it('renders the chat contract text by default in Chat mode', () => {
     render(<AIWorkspaceHeader onClose={vi.fn()} />);
     expect(

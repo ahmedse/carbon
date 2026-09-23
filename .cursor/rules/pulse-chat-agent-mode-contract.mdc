@@ -23,18 +23,19 @@ alwaysApply: true
 | Mode | Allowed | Forbidden |
 |------|---------|-----------|
 | **Chat** | Reads, advice, drafts, clarify, memory confirm (`learn_fact`) | Host mutations, `pending_exec` / `pending_actions` for `call_host_api` / DQ create / payroll / leave submit |
-| **Host UI** | My / Team / People ESS & admin (Plane A) — **primary write path** | Claiming Pulse Chat “submitted” when only My did |
-| **Agent UI** | **Retired / off by default** (`pulseAgentUi.js`; debug: `carbon-ai-agent-ui=on`) | Shipping Agent toggle or DiscoveryComposer as default ESS surface |
+| **Agent** | Plan → approve → Run → RULE_21 step consent → host effect | Silent writes; bypassing consent |
+| **Host UI** | My / Team / People ESS & admin (Plane A) | Claiming Pulse Chat “submitted” when only My/Agent did |
 
 ## Do NOT
 
 - Enable Confirm/Decline in Chat for host APIs because the banner says “Agent mode is OFF”.
 - Teach Chat personas/system prompts to “CALL THE TOOL” for leave/loan/attendance/payroll/GOSI/onboarding.
-- Re-enable Pulse Agent mode toggle / Clarifying “Plan now” for ESS without an explicit product decision.
+- Treat Chat staging + mode-switch as the product destination.
 - Ship one-line UI flips without a Pulse seat phase + G2 regression.
 
 ## DO
 
-- Chat write-intent → honest handoff to **My** (or Team) only — no `open_panel` Agent CTA.
+- Chat write-intent → one honest handoff: **switch to Agent** (process dial) and/or **My** app.
+- Agent owns consent UX (Run drawer / Approve) for Pulse-originated system change.
 - Keep memory Chat-confirm as the sole Chat-write exception.
 - Read: `.ai-toolkit/decisions/0046-pulse-chat-no-host-mutation-stage.md` · ADR-0014 · PB-62 · QA bank G2 / PC-090 / PC-091 / PC-350.

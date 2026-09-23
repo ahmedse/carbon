@@ -62,7 +62,6 @@ import InvestigateTab from './InvestigateTab';
 import { useAITaskTransfer } from './useAITaskTransfer';
 import { ExecuteModeProvider } from './ExecuteModeContext';
 import { pickOpenActivePlan } from './activePlans';
-import { isPulseAgentUiEnabled } from './pulseAgentUi';
 
 const LOCAL_STORAGE_KEY = 'carbon-ai-active-conversation';
 
@@ -78,7 +77,6 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   const { token } = useAuth();
   const { notifyFromError } = useNotification();
   const { pendingTransferId, clearPendingTransfer } = useAITaskTransfer();
-  const agentUiOn = isPulseAgentUiEnabled();
 
   // Durable, id-keyed store (normalized).
   const [byId, setById] = useState({});
@@ -96,10 +94,9 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   // it via the Sessions activity-bar icon when needed.
   const [activePanel, setActivePanel] = useState(null);
   // W5-A (ADR-0014) — workspace-level mode: 'chat' (advisory conversation) or
-  // 'agent' (planning + execution + consent + audit). Agent UI is off by
-  // default (pulseAgentUi) — Chat + host My/Team are the product surfaces.
+  // 'agent' (planning + execution + consent + audit). Persisted so the user's
+  // last mode survives close/reopen.
   const [mode, setMode] = useState(() => {
-    if (!isPulseAgentUiEnabled()) return 'chat';
     try {
       return localStorage.getItem(MODE_STORAGE_KEY) === 'agent' ? 'agent' : 'chat';
     } catch {
@@ -158,10 +155,6 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   }, [chatActivePlans, linkedPlan]);
 
   const openLinkedPlan = useCallback(() => {
-    if (!isPulseAgentUiEnabled()) {
-      // Agent UI retired — keep Chat; host My/Team own submissions.
-      return;
-    }
     if (headerLinkedPlan?.id) {
       setTasksFocusPlanId(headerLinkedPlan.id);
       setMode('agent');
@@ -268,18 +261,13 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   }, [activeId]);
 
   // W5-A — persist the workspace mode (ADR-0014: mode survives close/reopen).
-  // When Agent UI is off, force chat so a stale carbon-ai-mode=agent cannot revive it.
   useEffect(() => {
-    if (!agentUiOn && mode !== 'chat') {
-      setMode('chat');
-      return;
-    }
     try {
       localStorage.setItem(MODE_STORAGE_KEY, mode);
     } catch {
       /* ignore */
     }
-  }, [mode, agentUiOn]);
+  }, [mode]);
 
 
 
@@ -579,7 +567,6 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   // W5-A — switch the workspace-level mode. The sessions/context drawer is a
   // chat-mode surface, so it closes when entering Agent mode.
   const handleModeChange = useCallback((nextMode) => {
-    if (nextMode === 'agent' && !isPulseAgentUiEnabled()) return;
     setMode(nextMode);
     if (nextMode === 'agent') {
       setActivePanel(null);
@@ -601,10 +588,8 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   } catch {
     agentCockpitOn = true;
   }
-  // Effective mode — Agent UI kill switch never renders the task workspace.
-  const effectiveMode = agentUiOn ? mode : 'chat';
   // DW-P1-1 — mobile Agent with cockpit: hide activity rail (cockpit segments only).
-  const hideAgentActivityRail = isMobile && effectiveMode === 'agent' && agentCockpitOn;
+  const hideAgentActivityRail = isMobile && mode === 'agent' && agentCockpitOn;
 
   const togglePanel = (panel) => setActivePanel((prev) => (prev === panel ? null : panel));
 
@@ -615,10 +600,6 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   // switches mode and, for tasks, hands the plan id to AITaskPanel.
   const handleOpenPanel = (panel, planId, opts = {}) => {
     if (panel === 'tasks' || panel === 'agent') {
-      if (!isPulseAgentUiEnabled()) {
-        // Agent UI retired — ignore open_panel; navigate CTAs still work.
-        return;
-      }
       setActivePanel(null);
       setMode('agent');
       // ADR-0046: Chat handoff carries process_hint + draft so Agent can start
@@ -653,10 +634,10 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
             conversationId={activeConversation?.id ?? null}
             onConversationUpdated={handleConversationUpdated}
             onForked={handleForked}
-            mode={effectiveMode}
+            mode={mode}
             onModeChange={handleModeChange}
             agentLifecycleState={agentLifecycleState}
-            linkedPlan={effectiveMode === 'chat' ? headerLinkedPlan : null}
+            linkedPlan={mode === 'chat' ? headerLinkedPlan : null}
             onOpenLinkedPlan={openLinkedPlan}
             onDismissLinkedPlan={dismissLinkedPlan}
           />
@@ -673,7 +654,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
                 {t('loading')}
               </Typography>
             </Box>
-          ) : effectiveMode === 'agent' ? (
+          ) : mode === 'agent' ? (
             /* Agent mode (ADR-0014): AITaskPanel is the primary area — no
                conversation surface. The activity bar picks the agent view; the
                Monitor/Results icons route into AITaskPanel's internal tabs
@@ -896,7 +877,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
             overflowX: isMobile ? 'auto' : 'visible',
           }}
         >
-          {effectiveMode === 'agent'
+          {mode === 'agent'
             ? (() => {
                 const items = agentCockpitOn
                   ? [{ id: 'tasks', icon: <TaskAltOutlinedIcon sx={{ fontSize: 16 }} />, label: t('agent.tasks') }]
@@ -942,7 +923,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
                 </Tooltip>
               ))}
           <Box sx={{ flex: 1 }} />
-          {effectiveMode === 'chat' && (
+          {mode === 'chat' && (
             <Tooltip title={t('newChat')} placement="left">
               <IconButton size="small" onClick={handleNewChat} aria-label={t('newChat')} sx={{ p: 0.875 }}>
                 <AddCommentOutlinedIcon sx={{ fontSize: 16 }} />

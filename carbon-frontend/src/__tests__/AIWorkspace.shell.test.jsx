@@ -208,23 +208,6 @@ describe('AIWorkspace Chat activity bar (Operator calm)', () => {
 });
 
 describe('AIWorkspace mode split (Phase W5-A / ADR-0014)', () => {
-  beforeEach(() => {
-    // Agent UI is off by default; opt-in for these regression tests.
-    localStorage.setItem('carbon-ai-agent-ui', 'on');
-  });
-
-  it('hides Agent mode when pulse Agent UI is disabled (product default)', async () => {
-    localStorage.removeItem('carbon-ai-agent-ui');
-    localStorage.setItem('carbon-ai-mode', 'agent');
-    render(<AIWorkspace onClose={vi.fn()} />);
-
-    expect(
-      await screen.findByText(/Answers and advice only\. Nothing is created or changed/i),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Agent mode' })).not.toBeInTheDocument();
-    expect(screen.queryByTestId('task-panel')).not.toBeInTheDocument();
-  });
-
   it('opens in Chat mode: chat contract text and chat activity bar only', async () => {
     render(<AIWorkspace onClose={vi.fn()} />);
 
