@@ -291,10 +291,10 @@
   ar: "مرتبي"
   en: "my salary"
   expect_op: call_tool
-  expect_api: list_my_payslips
+  expect_api: get_my_profile
   expect_lang_ar: ar
   expect_lang_en: en
-  notes: "salary self-read"
+  notes: "salary self-read → profile (CBAC); not payslip lines"
 
 - id: g6-023
   category: payslip
@@ -332,7 +332,7 @@
   ar: "سجل حضوري"
   en: "Show my attendance"
   expect_op: call_tool
-  expect_api: list_attendance
+  expect_api: list_my_attendance
   expect_lang_ar: ar
   expect_lang_en: en
   notes: "attendance self-read"
@@ -342,7 +342,7 @@
   ar: "متى حضرت اليوم"
   en: "When did I clock in today?"
   expect_op: call_tool
-  expect_api: list_attendance
+  expect_api: list_my_attendance
   expect_lang_ar: ar
   expect_lang_en: en
   notes: "clock-in question"
@@ -352,7 +352,7 @@
   ar: "ساعات حضوري هذا الشهر"
   en: "my attendance hours this month"
   expect_op: call_tool
-  expect_api: list_attendance
+  expect_api: list_my_attendance
   expect_lang_ar: ar
   expect_lang_en: en
   notes: "monthly hours read"
@@ -362,7 +362,7 @@
   ar: "هل سجلت حضور اليوم"
   en: "Did I check in today?"
   expect_op: call_tool
-  expect_api: list_attendance
+  expect_api: list_my_attendance
   expect_lang_ar: ar
   expect_lang_en: en
   notes: "check-in status"

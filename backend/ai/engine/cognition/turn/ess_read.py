@@ -323,6 +323,15 @@ def preferred_self_api(text: str | None) -> str | None:
     t = _norm(text or "")
     if not t or is_named_employee_ask(t):
         return None
+    # Catalog contract: first-person salary / راتبي is get_my_profile
+    # (CBAC may deny). Explicit payslip / قسيمة stays on list_my_payslips.
+    from ai.engine.agent.tools import (
+        first_person_compensation_ask,
+        payslip_specific_ask,
+    )
+
+    if first_person_compensation_ask(t) and not payslip_specific_ask(t):
+        return "get_my_profile"
     domains = matching_self_domains(t)
     if len(domains) != 1:
         return None

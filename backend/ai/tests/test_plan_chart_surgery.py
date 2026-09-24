@@ -33,6 +33,23 @@ def test_add_chart_without_export_uses_envelope_not_matplotlib():
     )
 
 
+def test_screen_chart_step_is_not_coerced_into_a_document_export():
+    """Declaring a render surface outranks the word "chart" in the intent."""
+    from ai.engine.cognition.plan.planner import PlanStep, _coerce_export_steps
+
+    steps = PlansService._surgical_incremental_steps(_spine(), "add a chart please")
+    screen = next(s for s in steps if (s.get("tool_args") or {}).get("render"))
+    step = PlanStep(
+        step_id=screen["step_id"],
+        intent=screen["intent"],
+        tool_name=None,
+        tool_args=screen["tool_args"],
+        depends_on=screen["depends_on"],
+    )
+    _coerce_export_steps([step])
+    assert step.tool_name is None
+
+
 def test_add_chart_with_existing_export_uses_code_execute_png():
     spine = _spine() + [
         {

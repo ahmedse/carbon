@@ -24,6 +24,7 @@ _API_RENDER_META: dict[str, dict[str, str]] = {
     "list_my_loans": {"kind": "history", "empty_render": "no_loans", "scope": "loans"},
     "list_my_payslips": {"kind": "payslip", "empty_render": "no_payslips", "scope": "payslip"},
     "list_attendance": {"kind": "history", "empty_render": "no_attendance_rows", "scope": "attendance"},
+    "list_my_attendance": {"kind": "history", "empty_render": "no_attendance_rows", "scope": "attendance"},
     "list_my_attendance_permissions": {
         "kind": "history",
         "empty_render": "no_attendance_permissions",
