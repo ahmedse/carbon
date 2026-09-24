@@ -13,7 +13,7 @@ from ai.engine.cognition.plan.planner import _schema_violations
 
 READ_GAP = (
     "This read could not be completed. "
-    "A required field was missing or not allowed."
+    "A required field was missing or was not one of the allowed values."
 )
 WRITE_HELD = (
     "This step is waiting on a read that did not complete. "
@@ -94,6 +94,30 @@ def catalog_arg_violations(
     return _schema_violations(schema, parameter_values(tool_args, schema))
 
 
+def enum_fill_from_text(schema: dict | None, values: dict | None, text: str | None) -> dict | None:
+    """Fill a missing required enum when the text names exactly one allowed value."""
+    if not isinstance(schema, dict):
+        return None
+    props = schema.get("properties") or {}
+    have = values if isinstance(values, dict) else {}
+    hay = f" {(text or '').lower().replace('_', ' ')} "
+    filled: dict = {}
+    for key in schema.get("required") or []:
+        if key in have and str(have.get(key) or "").strip():
+            continue
+        spec = props.get(key) if isinstance(props.get(key), dict) else {}
+        enum = [str(item) for item in (spec.get("enum") or [])]
+        hits = []
+        for item in enum:
+            token = item.lower().replace("_", " ")
+            if token and f" {token} " in hay:
+                hits.append(item)
+        if len(hits) != 1:
+            return None
+        filled[key] = hits[0]
+    return filled or None
+
+
 def apply_repaired_params(
     tool_args: dict | None,
     repaired: dict | None,
@@ -104,16 +128,23 @@ def apply_repaired_params(
     schema = _schema_for(api_catalog, args) or {}
     props = schema.get("properties") or {}
     incoming = repaired if isinstance(repaired, dict) else {}
-    if isinstance(args.get("query_params"), dict):
-        query = dict(args["query_params"])
-        for key, val in incoming.items():
-            if key in props:
-                query[key] = val
-        args["query_params"] = query
-        return args
+    body = args.get("body") if isinstance(args.get("body"), dict) else None
+    skip = {"api_name", "query_params", "body", "method", "path"}
     for key, val in incoming.items():
-        if key in props:
+        if key not in props:
+            continue
+        if body is not None and key in body:
+            body = {**body, key: val}
+            args["body"] = body
+            continue
+        if key in args and key not in skip:
             args[key] = val
+            continue
+        # ``call_host_api`` sends query params only from ``query_params``; a
+        # top-level key never reaches the host.
+        query = dict(args.get("query_params") or {})
+        query[key] = val
+        args["query_params"] = query
     return args
 
 
@@ -164,7 +195,13 @@ def is_invalid_argument_error(error: Any) -> bool:
         return False
     if any(token in text for token in ("429", "502", "503", "504")):
         return False
-    return "Host API returned 400" in text or '"status_code": 400' in text
+    if "unknown dimension" in lowered:
+        return True
+    return (
+        "Host API returned 400" in text
+        or '"status_code": 400' in text
+        or "'status_code': 400" in text
+    )
 
 
 def tool_output_is_invalid_args(tool_output: Any) -> bool:

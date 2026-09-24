@@ -435,7 +435,7 @@ def _people_analytics(user, params: dict) -> dict:
     """
     from collections import defaultdict
 
-    from django.db.models import Count
+    from django.db.models import Count, Q
     from people.models import Employee
 
     ALLOWED_DIMENSIONS = {
@@ -448,6 +448,9 @@ def _people_analytics(user, params: dict) -> dict:
         "nationality_code": "nationality",
         "employment_type_code": "employment_type",
         "contract_type_code": "contract_type",
+        "department": "org_unit",
+        "department_name": "org_unit",
+        "position_name": "position",
     }
     FK_LABEL_MAP = {
         "position": ("people.models.Position", "title"),
@@ -461,20 +464,112 @@ def _people_analytics(user, params: dict) -> dict:
     }
     BLANK_CAVEAT_PCT = 50.0
 
-    dimension = (params.get("dimension") or "").strip().lower()
+    raw_group_by = params.get("group_by") or []
+    if isinstance(raw_group_by, str):
+        try:
+            raw_group_by = json.loads(raw_group_by)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            raw_group_by = [v.strip() for v in raw_group_by.split(",") if v.strip()]
+    group_by = [
+        DIMENSION_ALIASES.get(str(v).strip().lower(), str(v).strip().lower())
+        for v in (raw_group_by if isinstance(raw_group_by, list) else [])
+    ]
+    dimension = (params.get("dimension") or (group_by[-1] if group_by else "")).strip().lower()
     dimension = DIMENSION_ALIASES.get(dimension, dimension)
-    if dimension not in ALLOWED_DIMENSIONS:
+    requested_dimensions = group_by or [dimension]
+    invalid_dimensions = [d for d in requested_dimensions if d not in ALLOWED_DIMENSIONS]
+    if dimension not in ALLOWED_DIMENSIONS or invalid_dimensions:
         return {
             "status_code": 400,
             "data": {
                 "detail": (
-                    f"Unknown dimension '{dimension}'. "
+                    f"Unknown dimension(s) '{', '.join(invalid_dimensions) or dimension}'. "
                     f"Allowed: {', '.join(sorted(ALLOWED_DIMENSIONS | set(DIMENSION_ALIASES)))}"
                 )
             },
         }
 
     qs = _people_scope(user, Employee.objects.all(), "org_unit_id__in")
+    raw_filters = params.get("filters", params.get("filter", {})) or {}
+    if isinstance(raw_filters, str):
+        try:
+            raw_filters = json.loads(raw_filters)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return {
+                "status_code": 400,
+                "data": {"detail": "Analytics filters must be a JSON object."},
+            }
+    if not isinstance(raw_filters, dict):
+        return {
+            "status_code": 400,
+            "data": {"detail": "Analytics filters must be a JSON object."},
+        }
+
+    applied_filters: dict[str, list | bool | str] = {}
+    for raw_key, raw_value in raw_filters.items():
+        key = DIMENSION_ALIASES.get(
+            str(raw_key).strip().lower(), str(raw_key).strip().lower()
+        )
+        if key not in ALLOWED_DIMENSIONS:
+            return {
+                "status_code": 400,
+                "data": {
+                    "detail": (
+                        f"Unknown analytics filter '{raw_key}'. "
+                        f"Allowed: {', '.join(sorted(ALLOWED_DIMENSIONS | set(DIMENSION_ALIASES)))}"
+                    )
+                },
+            }
+        values = raw_value if isinstance(raw_value, list) else [raw_value]
+        values = [v for v in values if v is not None and str(v).strip()]
+        if not values:
+            return {
+                "status_code": 400,
+                "data": {"detail": f"Analytics filter '{raw_key}' has no values."},
+            }
+        if key == "is_active":
+            normalized = []
+            for value in values:
+                if isinstance(value, bool):
+                    normalized.append(value)
+                elif str(value).strip().lower() in {"true", "1", "yes"}:
+                    normalized.append(True)
+                elif str(value).strip().lower() in {"false", "0", "no"}:
+                    normalized.append(False)
+                else:
+                    return {
+                        "status_code": 400,
+                        "data": {"detail": f"Invalid boolean filter value {value!r}."},
+                    }
+            qs = qs.filter(is_active__in=normalized)
+            applied_filters[key] = normalized
+            continue
+
+        if key in FK_LABEL_MAP:
+            _model_path, label_field = FK_LABEL_MAP[key]
+            lookup = f"{key}__{label_field}__iexact"
+        else:
+            lookup = f"{key}__iexact"
+        matched = Q()
+        unmatched: list[str] = []
+        for value in values:
+            if not qs.filter(**{lookup: value}).exists():
+                unmatched.append(str(value))
+            else:
+                matched |= Q(**{lookup: value})
+        if unmatched:
+            return {
+                "status_code": 400,
+                "data": {
+                    "detail": (
+                        f"Unknown filter value(s) for '{raw_key}': "
+                        f"{', '.join(unmatched)}. Resolve the exact host label first."
+                    )
+                },
+            }
+        qs = qs.filter(matched)
+        applied_filters[key] = [str(v) for v in values]
+
     total = qs.count()
     if total == 0:
         return {
@@ -488,6 +583,50 @@ def _people_analytics(user, params: dict) -> dict:
                 "normalization_notes": [],
                 "suggested_chart_type": "bar",
                 "label_resolved": False,
+                "applied_filters": applied_filters,
+                "group_by": requested_dimensions,
+            },
+        }
+
+    if len(requested_dimensions) > 1:
+        value_fields: dict[str, str] = {}
+        for dim in requested_dimensions:
+            if dim in FK_LABEL_MAP:
+                _model_path, label_field = FK_LABEL_MAP[dim]
+                value_fields[dim] = f"{dim}__{label_field}"
+            else:
+                value_fields[dim] = dim
+        query_fields = list(value_fields.values())
+        grouped = (
+            qs.values(*query_fields)
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+        breakdown: list[dict] = []
+        for raw in grouped[:100]:
+            row = {
+                dim: _normalise_value(dim, raw.get(field))
+                for dim, field in value_fields.items()
+            }
+            row["count"] = raw["count"]
+            row["pct"] = round(raw["count"] / total * 100, 1)
+            breakdown.append(row)
+        caveats = []
+        if grouped.count() > 100:
+            caveats.append("The grouped breakdown was limited to the top 100 rows.")
+        return {
+            "status_code": 200,
+            "data": {
+                "dimension": dimension,
+                "group_by": requested_dimensions,
+                "applied_filters": applied_filters,
+                "total": total,
+                "breakdown": breakdown,
+                "caveats": caveats,
+                "was_normalized": False,
+                "normalization_notes": [],
+                "suggested_chart_type": "bar",
+                "label_resolved": True,
             },
         }
 
@@ -602,6 +741,8 @@ def _people_analytics(user, params: dict) -> dict:
             "normalization_notes": normalization_notes,
             "suggested_chart_type": _suggest_chart_type(breakdown),
             "label_resolved": label_resolved,
+            "applied_filters": applied_filters,
+            "group_by": requested_dimensions,
         },
     }
 

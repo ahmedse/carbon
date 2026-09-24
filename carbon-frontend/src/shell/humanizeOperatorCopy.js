@@ -27,7 +27,12 @@ const FRIENDLY_ERRORS = [
     fix: 'Check the step points at an existing record, or Skip it and continue.',
   },
   {
-    re: /\b403\b|forbidden|permission|not allowed/i,
+    re: /unknown dimension|required field was missing|was not one of the allowed values/i,
+    msg: 'A required detail was missing from the request, so nothing was sent.',
+    fix: 'Open Plan and add the missing detail to this step, then Retry.',
+  },
+  {
+    re: /\b403\b|forbidden|\bpermission\b|\bnot allowed\b/i,
     msg: 'You do not have permission for this action in this workspace.',
     fix: 'Ask HR / your admin for access, or Skip this step.',
   },

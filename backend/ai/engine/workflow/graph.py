@@ -176,6 +176,20 @@ def validate_graph(graph: WorkflowGraph) -> list[str]:
                 errors.append(f"choice node {n.id} needs a default (unguarded) edge")
         if n.node_type in _TERMINAL and out_by_src.get(n.id):
             errors.append(f"terminal node {n.id} must not have outgoing edges")
+    if graph.entry in id_set:
+        reachable: set[str] = set()
+        pending = [graph.entry]
+        while pending:
+            current = pending.pop()
+            if current in reachable:
+                continue
+            reachable.add(current)
+            pending.extend(edge.target for edge in out_by_src.get(current, []))
+        disconnected = sorted(id_set - reachable)
+        if disconnected:
+            errors.append(
+                "nodes unreachable from entry: " + ", ".join(disconnected)
+            )
     return errors
 
 
@@ -210,11 +224,25 @@ def compile_plan_to_graph(plan: Any) -> WorkflowGraph:
             )
         )
 
-    # Phase-aware edges when phases exist; otherwise pure depends_on.
+    # Explicit dependencies are contractual and must survive phase compilation.
+    for s in steps:
+        for dep in getattr(s, "depends_on", None) or []:
+            if dep in step_node_id:
+                edges.append(WorkflowEdge(
+                    source=step_node_id[dep],
+                    target=step_node_id[s.step_id],
+                ))
+
+    # Phase-aware edges. Phase boundaries are connected in declared order so
+    # a later parallel gateway can never become a second, disconnected entry.
     if phases:
+        previous_exit: str | None = None
         for phase in phases:
             strategy = getattr(phase, "strategy", None) or "sequential"
-            step_ids = list(getattr(phase, "step_ids", None) or [])
+            step_ids = [
+                sid for sid in (getattr(phase, "step_ids", None) or [])
+                if sid in step_node_id
+            ]
             if not step_ids:
                 continue
             if strategy == "parallel" and len(step_ids) > 1:
@@ -242,22 +270,23 @@ def compile_plan_to_graph(plan: Any) -> WorkflowGraph:
                     nid = step_node_id[sid]
                     edges.append(WorkflowEdge(source=gid, target=nid))
                     edges.append(WorkflowEdge(source=nid, target=join_id))
+                phase_entry = gid
+                phase_exit = join_id
             else:
                 # sequential within phase
                 for a, b in zip(step_ids, step_ids[1:]):
                     edges.append(
                         WorkflowEdge(source=step_node_id[a], target=step_node_id[b])
                     )
+                phase_entry = step_node_id[step_ids[0]]
+                phase_exit = step_node_id[step_ids[-1]]
+            if previous_exit is not None:
+                edges.append(WorkflowEdge(
+                    source=previous_exit,
+                    target=phase_entry,
+                ))
+            previous_exit = phase_exit
     else:
-        for s in steps:
-            for dep in getattr(s, "depends_on", None) or []:
-                if dep in step_node_id:
-                    edges.append(
-                        WorkflowEdge(
-                            source=step_node_id[dep],
-                            target=step_node_id[s.step_id],
-                        )
-                    )
         # If no depends_on at all, chain in step_id order.
         if steps and not edges:
             ordered = sorted(steps, key=lambda x: x.step_id)

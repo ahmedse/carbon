@@ -44,14 +44,20 @@ def _people(executor, endpoint: str, method: str = "GET", params=None, body=None
     )
 
 
-def _analytics(executor, dimension: str):
+def _analytics(executor, dimension: str, **params):
     return async_to_sync(executor._people_analytics_in_process)(
-        method="GET", params={"dimension": dimension}, body={}
+        method="GET", params={"dimension": dimension, **params}, body={}
     )
 
 
-def _make_org(name: str = "Nibras HQ", slug: str = "nibras-hq") -> OrgUnit:
-    return OrgUnit.objects.get_or_create(slug=slug, defaults={"name": name})[0]
+def _make_org(
+    name: str = "Nibras HQ",
+    slug: str = "nibras-hq",
+    parent: OrgUnit | None = None,
+) -> OrgUnit:
+    return OrgUnit.objects.get_or_create(
+        slug=slug, defaults={"name": name, "parent": parent}
+    )[0]
 
 
 def _ref(set_name: str, code: str, label: str | None = None) -> ReferenceValue:
@@ -444,6 +450,60 @@ def test_analytics_bad_dimension_returns_400():
 
     assert result["status_code"] == 400
     assert "dimension" in result["data"]["detail"].lower() or "allowed" in result["data"]["detail"].lower()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_analytics_department_filter_and_multi_group_are_applied():
+    user = User.objects.create_superuser(username="tg-filtered", password="secret123")
+    field_ops = _make_org("Field Operations", "tg-field-operations")
+    coiled = _make_org("Coiled Tubing", "tg-coiled-tubing", parent=field_ops)
+    other = _make_org("Drilling", "tg-drilling", parent=field_ops)
+    operator = _make_position(coiled, "Coiled Operator")
+    driller = _make_position(other, "Driller")
+    for index in range(3):
+        _make_employee(
+            coiled, f"CT{index:03d}", f"Coiled {index}", position=operator
+        )
+    for index in range(2):
+        _make_employee(
+            other, f"DR{index:03d}", f"Driller {index}", position=driller
+        )
+
+    result = _analytics(
+        _executor(user),
+        "position",
+        filters={"department": ["Coiled Tubing"]},
+        group_by=["department", "position"],
+    )
+
+    assert result["status_code"] == 200, result
+    data = result["data"]
+    assert data["total"] == 3
+    assert data["group_by"] == ["org_unit", "position"]
+    assert data["applied_filters"] == {"org_unit": ["Coiled Tubing"]}
+    assert data["breakdown"] == [{
+        "org_unit": "Coiled Tubing",
+        "position": "Coiled Operator",
+        "count": 3,
+        "pct": 100.0,
+    }]
+
+
+@pytest.mark.django_db(transaction=True)
+def test_analytics_unknown_exact_department_fails_instead_of_widening():
+    user = User.objects.create_superuser(username="tg-no-widen", password="secret123")
+    org = _make_org("Coiled Tubing", "tg-no-widen-coiled")
+    _make_employee(org, "NW001", "Scoped Employee")
+
+    result = _analytics(
+        _executor(user),
+        "position",
+        filters={"department": ["Field Ops"]},
+        group_by=["department", "position"],
+    )
+
+    assert result["status_code"] == 400
+    assert "field ops" in result["data"]["detail"].lower()
 
 
 @pytest.mark.django_db(transaction=True)

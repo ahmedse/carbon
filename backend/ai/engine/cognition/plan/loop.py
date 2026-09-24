@@ -9,7 +9,7 @@ import inspect
 import json
 import logging
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 
 from ai.engine.agent.surface import Surface
 from ai.engine.core.clock import utcnow
@@ -23,6 +23,58 @@ from ai.engine.llm.router import model_for_profile
 logger = logging.getLogger("pulse.cognition.plan.loop")
 
 _step_index_context = None
+
+
+def _transitive_prior_results(
+    step: PlanStep,
+    plan_steps: list[PlanStep],
+    results: list,
+) -> list:
+    """Evidence ancestors for a step, preserving execution order."""
+    if not step.depends_on:
+        return list(results)
+    by_id = {s.step_id: s for s in plan_steps}
+    wanted: set[int] = set()
+    pending = list(step.depends_on)
+    while pending:
+        sid = pending.pop()
+        if sid in wanted:
+            continue
+        wanted.add(sid)
+        parent = by_id.get(sid)
+        if parent is not None:
+            pending.extend(parent.depends_on or [])
+    return [r for r in results if getattr(r, "step_id", None) in wanted]
+
+
+def _enforce_structured_export_source(
+    step: PlanStep,
+    prior_results: list,
+    structured_source_ids: set[int],
+    result: "StepResult",
+) -> None:
+    """Carry grounded rows through a reasoning step that directly feeds export."""
+    if step.tool_name or step.step_id not in structured_source_ids:
+        return
+    from ai.engine.cognition.plan.export_bind import structured_table_from_results
+
+    table = structured_table_from_results(prior_results)
+    if table:
+        result.tool_output = {
+            "tool_name": "structured_synthesis",
+            "result": json.dumps({
+                **table,
+                "source_step_ids": [
+                    getattr(prior, "step_id", None) for prior in prior_results
+                ],
+            }, ensure_ascii=False, default=str),
+            "error": None,
+        }
+        return
+    result.error = (
+        "This analysis step produced no structured evidence for "
+        "its export dependents."
+    )
 
 
 def _coerce_json_field(value, *, default=None):
@@ -306,6 +358,12 @@ class ReActLoop:
             ReActResult with step results and final synthesis
         """
         self._conversation_state = conversation_state
+        self._structured_export_sources = {
+            dep
+            for candidate in plan.steps
+            if candidate.tool_name == "export_document"
+            for dep in (candidate.depends_on or [])
+        }
         from ai.engine.cognition.turn.draft import DraftWitness
         from ai.engine.cognition.turn.critic import CriticWitness
         from ai.engine.cognition.turn.execute import ExecuteWitness
@@ -985,7 +1043,9 @@ class ReActLoop:
                     flight_director=fd,
                     host_user_id=host_user_id,
                     retry_policy=_retry_policy,
-                    prior_results=list(step_results),
+                    prior_results=_transitive_prior_results(
+                        step, plan.steps, step_results,
+                    ),
                 )
                 # Hard-cancel: race step I/O against operator Stop (cancel_plan).
                 _task = asyncio.create_task(_exec_coro)
@@ -1620,6 +1680,7 @@ class ReActLoop:
         from ai.engine.llm.call_meter import stage
         from ai.engine.cognition.plan.export_bind import (
             apply_bind_to_tool_calls,
+            enforce_declared_step_tool,
             is_bound_catalog_read,
             is_bound_resolve_entity,
             is_fully_bound_host_api,
@@ -1849,6 +1910,21 @@ class ReActLoop:
             with stage("draft"):
                 draft = await dw.draft(**_draft_kwargs)
 
+            _allowed_calls, _rejected_calls = enforce_declared_step_tool(
+                step.tool_name,
+                step.tool_args,
+                draft.tool_calls,
+            )
+            if _rejected_calls:
+                logger.warning(
+                    "ReActLoop: rejected undeclared tool call(s) step=%d "
+                    "declared=%s rejected=%s",
+                    step.step_id,
+                    step.tool_name or "",
+                    _rejected_calls,
+                )
+                draft = replace(draft, tool_calls=_allowed_calls)
+
             # Critic
             with stage("critic"):
                 critic = await cw.review(
@@ -2027,10 +2103,7 @@ class ReActLoop:
             # before export_document runs (RULE_20 pure helper).
             from ai.engine.cognition.plan.export_bind import apply_bind_to_tool_calls
 
-            _deps = set(step.depends_on or [])
             _priors = list(prior_results or [])
-            if _deps:
-                _priors = [r for r in _priors if getattr(r, "step_id", None) in _deps] or _priors
             _title_fb = (
                 (step.tool_args or {}).get("title")
                 or (step.intent or "Agent report")[:80]
@@ -2058,6 +2131,7 @@ class ReActLoop:
                     instance_id=instance_id,
                     conversation_id=conversation_id,
                     conversation_history=conversation_history,
+                    user_message=user_message,
                 )
             )
             if _catalog_gap:
@@ -2085,6 +2159,13 @@ class ReActLoop:
                     _step_index_context(None)
             result.executed = True
             result.tool_output = execution.completed_tools[0] if execution.completed_tools else None
+
+            _enforce_structured_export_source(
+                step,
+                _priors,
+                getattr(self, "_structured_export_sources", set()),
+                result,
+            )
 
             # ── No-op mutation guard (RULE_21 honesty) ────────────────────
             # A mutation step that produced no tool result wrote nothing:
@@ -2135,6 +2216,7 @@ class ReActLoop:
                             instance_id=instance_id,
                             conversation_id=conversation_id,
                             conversation_history=conversation_history,
+                            user_message=user_message,
                             force=True,
                         )
                     )
@@ -2822,6 +2904,7 @@ class ReActLoop:
         instance_id: str,
         conversation_id: str,
         conversation_history,
+        user_message: str = "",
         force: bool = False,
     ) -> tuple[list, str | None, int]:
         """Spend one repair when catalog args are invalid.
@@ -2833,6 +2916,8 @@ class ReActLoop:
             READ_GAP,
             apply_repaired_params,
             catalog_arg_violations,
+            enum_fill_from_text,
+            parameter_values,
             parse_repair_payload,
             rewrite_host_calls,
         )
@@ -2846,7 +2931,7 @@ class ReActLoop:
             return calls, None, 0
         if step.is_mutation:
             return calls, READ_GAP, 1
-        schema_note = ""
+        schema = None
         if isinstance(step.tool_args, dict):
             for item in catalog or []:
                 if (
@@ -2854,8 +2939,24 @@ class ReActLoop:
                     and item.get("name") == step.tool_args.get("api_name")
                     and item.get("parameters")
                 ):
-                    schema_note = json.dumps(item["parameters"], default=str)
+                    schema = item["parameters"]
                     break
+        history_text = " ".join(
+            str((msg.get("content") or ""))
+            for msg in (conversation_history or [])
+            if isinstance(msg, dict)
+        )
+        filled = enum_fill_from_text(
+            schema,
+            parameter_values(step.tool_args or {}, schema or {}),
+            f"{step.intent or ''} {user_message or ''} {history_text}",
+        )
+        if filled:
+            step.tool_args = apply_repaired_params(step.tool_args, filled, catalog)
+            calls = rewrite_host_calls(calls, step.tool_args)
+            if not catalog_arg_violations(catalog, step.tool_name, step.tool_args):
+                return calls, None, 0
+        schema_note = json.dumps(schema, default=str) if schema else ""
         prompt = (
             "The host call arguments are invalid.\n"
             f"Violations: {'; '.join(violations) or 'the host rejected the arguments'}\n"
@@ -3000,7 +3101,7 @@ class ReActLoop:
         elif result.error:
             step_status = "failed"
         else:
-            step_status = "completed" if result.executed else "completed"
+            step_status = "completed"
 
         _llm_meter = {
             "llm_calls": int(result.llm_calls or 0),

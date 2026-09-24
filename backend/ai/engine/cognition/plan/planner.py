@@ -454,7 +454,7 @@ def _plugin_input_schemas() -> dict[str, dict]:
 
 
 def _schema_field_violations(prop: dict, value, path: str) -> list[str]:
-    """Validate one value against a JSON-Schema property (subset: type + enum)."""
+    """Validate one value against the catalog's small JSON-Schema subset."""
     violations: list[str] = []
 
     enum = prop.get("enum")
@@ -487,6 +487,29 @@ def _schema_field_violations(prop: dict, value, path: str) -> list[str]:
         violations.append(
             f"{path}: expected {'/'.join(types)}, got {type(value).__name__}"
         )
+        return violations
+
+    if isinstance(value, list) and isinstance(prop.get("items"), dict):
+        for index, item in enumerate(value):
+            violations.extend(
+                _schema_field_violations(prop["items"], item, f"{path}[{index}]")
+            )
+    if isinstance(value, dict):
+        nested_props = prop.get("properties") or {}
+        for field in prop.get("required") or []:
+            if field not in value:
+                violations.append(f"missing required field {path}.{field!s}")
+        for field, child in value.items():
+            child_prop = nested_props.get(field)
+            if child_prop is None:
+                if prop.get("additionalProperties") is False:
+                    violations.append(f"unknown field {path}.{field}")
+                continue
+            violations.extend(
+                _schema_field_violations(
+                    child_prop, child, f"{path}.{field}"
+                )
+            )
     return violations
 
 
@@ -516,6 +539,30 @@ def _schema_violations(schema: dict, args: dict) -> list[str]:
         violations.extend(_schema_field_violations(prop, value, field))
 
     return violations
+
+
+def _parse_plan_response(raw: str) -> dict | None:
+    """Parse a plan object even when the provider wraps JSON in prose/fences."""
+    text = (raw or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = json.loads(text)
+        return parsed if isinstance(parsed, dict) else None
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    decoder = json.JSONDecoder()
+    for index, character in enumerate(text):
+        if character != "{":
+            continue
+        try:
+            parsed, _end = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict) and isinstance(parsed.get("steps"), list):
+            return parsed
+    return None
 
 
 def _strip_invalid_tool_args(steps: list[PlanStep]) -> None:
@@ -1230,7 +1277,25 @@ class SkillAwarePlanner:
             catalog_names = _catalog_api_names(cfg)
             api_catalog = list((cfg or {}).get("api_catalog") or [])
             if catalog_names:
-                host_api_list = "\n".join(f"- {n}" for n in sorted(catalog_names))
+                catalog_by_name = {
+                    str(item.get("name") or ""): item
+                    for item in api_catalog
+                    if isinstance(item, dict) and item.get("name")
+                }
+                catalog_lines: list[str] = []
+                for name in sorted(catalog_names):
+                    item = catalog_by_name.get(name) or {}
+                    method = str(item.get("method") or "GET").upper()
+                    line = f"- {name} ({method})"
+                    parameters = item.get("parameters")
+                    if isinstance(parameters, dict) and parameters:
+                        line += " params=" + json.dumps(
+                            parameters,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        )
+                    catalog_lines.append(line)
+                host_api_list = "\n".join(catalog_lines)
         except Exception as exc:  # noqa: BLE001 - planning must still run
             logger.warning("api_catalog load failed for plan decompose: %s", exc)
             cfg = {}
@@ -1282,28 +1347,19 @@ class SkillAwarePlanner:
             logger.warning("LLM decomposition call failed: %s", e)
             return None
 
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError:
-            # Try to extract JSON from markdown fences
-            if "```" in raw:
-                start = raw.find("{")
-                end = raw.rfind("}") + 1
-                if start >= 0 and end > start:
-                    try:
-                        parsed = json.loads(raw[start:end])
-                    except json.JSONDecodeError:
-                        logger.warning("Failed to parse plan JSON from LLM response")
-                        return None
-                else:
-                    return None
-            else:
-                logger.warning("Failed to parse plan JSON from LLM response")
-                return None
+        parsed = _parse_plan_response(raw)
+        if parsed is None:
+            logger.warning("Failed to parse plan JSON from LLM response")
+            return None
 
         steps_data = parsed.get("steps", [])
+        if not isinstance(steps_data, list):
+            logger.warning("Plan JSON contains a non-list steps field")
+            return None
         steps = []
         for s in steps_data:
+            if not isinstance(s, dict):
+                continue
             step = PlanStep(
                 step_id=s.get("step_id", 0),
                 intent=s.get("intent", ""),

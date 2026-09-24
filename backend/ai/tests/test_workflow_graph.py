@@ -63,6 +63,50 @@ def test_compile_parallel_phase():
     assert validate_graph(g2) == []
 
 
+def test_compile_connects_cross_phase_dependencies_and_parallel_exports():
+    def step(step_id, depends_on):
+        return SimpleNamespace(
+            step_id=step_id,
+            intent=f"step {step_id}",
+            tool_name=None,
+            tool_args={},
+            is_mutation=False,
+            depends_on=depends_on,
+            agent_role="orchestrator",
+        )
+
+    plan = SimpleNamespace(
+        steps=[
+            step(0, []),
+            step(1, []),
+            step(2, [0, 1]),
+            step(3, [2]),
+            step(4, [2]),
+        ],
+        phases=[
+            SimpleNamespace(phase_id=0, name="reads", strategy="sequential", step_ids=[0, 1]),
+            SimpleNamespace(phase_id=1, name="synthesis", strategy="sequential", step_ids=[2]),
+            SimpleNamespace(phase_id=2, name="exports", strategy="parallel", step_ids=[3, 4]),
+        ],
+    )
+    graph = compile_plan_to_graph(plan)
+    assert graph.entry == "t0"
+    assert validate_graph(graph) == []
+    edge_pairs = {(edge.source, edge.target) for edge in graph.edges}
+    assert ("t0", "t2") in edge_pairs
+    assert ("t1", "t2") in edge_pairs
+    assert ("t2", "p2") in edge_pairs
+
+
+def test_validate_graph_rejects_disconnected_nodes():
+    graph = WorkflowGraph(
+        nodes=[WorkflowNode(id="a"), WorkflowNode(id="orphan")],
+        edges=[],
+        entry="a",
+    )
+    assert any("unreachable" in error for error in validate_graph(graph))
+
+
 def test_choice_requires_default_edge():
     g = WorkflowGraph(
         nodes=[

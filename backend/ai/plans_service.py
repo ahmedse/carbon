@@ -5093,7 +5093,7 @@ class PlansService:
         step = self._get_owned_step(run, step_id)
         if step.status != STEP_AWAITING_APPROVAL:
             raise PlanStepError(
-                f"Step {step.step_index} is not awaiting approval "
+                f"#{int(step.step_index) + 1} is not awaiting approval "
                 f"(status: {step.status})."
             )
 
@@ -5294,7 +5294,7 @@ class PlansService:
         step = self._get_owned_step(run, step_id)
         if step.status != STEP_AWAITING_APPROVAL:
             raise PlanStepError(
-                f"Step {step.step_index} is not awaiting approval "
+                f"#{int(step.step_index) + 1} is not awaiting approval "
                 f"(status: {step.status})."
             )
 
@@ -5381,7 +5381,7 @@ class PlansService:
         step = self._get_owned_step(run, step_id)
         if step.status != STEP_FAILED:
             raise PlanStepError(
-                f"Step {step.step_index} cannot be retried "
+                f"#{int(step.step_index) + 1} cannot be retried "
                 f"(status: {step.status}); only failed steps may be retried."
             )
         step.retry_count = (step.retry_count or 0) + 1
@@ -5424,7 +5424,7 @@ class PlansService:
             STEP_PENDING, STEP_FAILED, STEP_AWAITING_APPROVAL, STEP_PAUSED
         ):
             raise PlanStepError(
-                f"Step {step.step_index} cannot be skipped "
+                f"#{int(step.step_index) + 1} cannot be skipped "
                 f"(status: {step.status})."
             )
         prior = step.status
@@ -5452,7 +5452,7 @@ class PlansService:
         step = self._get_owned_step(run, step_id)
         if step.status not in (STEP_PENDING, STEP_RUNNING, STEP_PAUSED):
             raise PlanStepError(
-                f"Step {step.step_index} cannot be cancelled "
+                f"#{int(step.step_index) + 1} cannot be cancelled "
                 f"(status: {step.status})."
             )
         prior = step.status
@@ -5482,7 +5482,7 @@ class PlansService:
         step = self._get_owned_step(run, step_id)
         if step.status != STEP_RUNNING:
             raise PlanStepError(
-                f"Step {step.step_index} cannot be paused "
+                f"#{int(step.step_index) + 1} cannot be paused "
                 f"(status: {step.status}); only running steps may be paused."
             )
         step.status = STEP_PAUSED
@@ -5507,7 +5507,7 @@ class PlansService:
         step = self._get_owned_step(run, step_id)
         if step.status != STEP_PAUSED:
             raise PlanStepError(
-                f"Step {step.step_index} cannot be resumed "
+                f"#{int(step.step_index) + 1} cannot be resumed "
                 f"(status: {step.status}); only paused steps may be resumed."
             )
         step.status = STEP_PENDING

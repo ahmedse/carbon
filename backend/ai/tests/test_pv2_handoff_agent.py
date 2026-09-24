@@ -245,12 +245,20 @@ def test_plan_grounding_shows_the_plan_before_creating_a_task():
 
 
 def test_plan_dial_withholds_host_reads_and_task_creation():
-    from ai.engine.cognition.turn.runner_util import _filter_draft_tools
+    from ai.engine.cognition.turn.runner_util import (
+        _filter_draft_tools,
+        ensure_plan_review_text,
+        plan_accept_brief,
+        plan_created_receipt,
+        plan_task_error_receipt,
+    )
 
     tools = [
         {"function": {"name": "plan_task"}},
         {"function": {"name": "call_host_api"}},
         {"function": {"name": "resolve_entity"}},
+        {"function": {"name": "search_knowledge"}},
+        {"function": {"name": "web_research"}},
         {"function": {"name": "ask_clarification"}},
     ]
     names = {
@@ -269,12 +277,57 @@ def test_plan_dial_withholds_host_reads_and_task_creation():
         )
     }
     assert accepted == {"plan_task", "ask_clarification"}
+    retried = {
+        d["function"]["name"]
+        for d in _filter_draft_tools(
+            tools, "retry", "general", "plan", shown,
+        )
+    }
+    assert retried == {"plan_task", "ask_clarification"}
     ask_names = {
         d["function"]["name"]
         for d in _filter_draft_tools(tools, "what is my leave balance", "general", "ask")
     }
     assert "call_host_api" in ask_names
     assert "plan_task" not in ask_names
+    repaired = ensure_plan_review_text(
+        "Which department did you mean?",
+        "Break down headcount and export the results.",
+    )
+    assert "1. " in repaired
+    assert "2. " in repaired
+    assert "Reply “Accept”" in repaired
+    receipt = plan_created_receipt([{
+        "tool_name": "plan_task",
+        "result": (
+            '{"action":"plan_created","message":"Task created. Nothing has run."}'
+        ),
+        "error": None,
+    }])
+    assert receipt == "Task created. Nothing has run."
+    error = plan_task_error_receipt([{
+        "tool_name": "plan_task",
+        "result": None,
+        "error": "Planning failed — nothing was created.",
+    }])
+    assert error == "Planning failed — nothing was created."
+
+    brief = (
+        "Break down GOFSCO headcount by department and position for "
+        "Field Ops / Coiled Tubing. Export Excel and a PNG chart."
+    )
+    history = [
+        {"role": "user", "content": brief},
+        {"role": "assistant", "content": "1. Read headcount\n2. Export files"},
+        {"role": "user", "content": "ok"},
+        {"role": "assistant", "content": "Task planning failed."},
+    ]
+    assert plan_accept_brief("retry", history) == brief
+    history.extend([
+        {"role": "user", "content": "retry"},
+        {"role": "assistant", "content": "1. Read headcount\n2. Export files"},
+    ])
+    assert plan_accept_brief("accept", history) == brief
 
 
 def test_is_ess_write_utterance():

@@ -133,7 +133,11 @@ async def run_s2_and_plan_gates(
         return (response, ledger)
     pulse_loop_result = None
     _pulse_is_platform_zone = st.intent_resolution is not None and st.intent_resolution.zone in ('platform', 'off_limits')
-    if settings.PULSE_LOOP_ENABLED and runner.db is not None and runner._draft_tools and (not settings.KG_MULTI_STEP_ENABLED) and _pulse_is_platform_zone:
+    # Plan drafts a task for review. Running the read here answers the brief in
+    # the bubble, so the plan is never shown and no task is created.
+    from ai.engine.agent.surface import Surface as _Surface
+    _pulse_on_plan_dial = _Surface.resolve(surface, process_mode=process_mode, user_message=st.user_message or '') is _Surface.CHAT_PLAN
+    if settings.PULSE_LOOP_ENABLED and runner.db is not None and runner._draft_tools and (not settings.KG_MULTI_STEP_ENABLED) and _pulse_is_platform_zone and (not _pulse_on_plan_dial):
         try:
             with stage('pulse_loop'):
                 pulse_loop_result = await runner._try_pulse_loop(instance_id=instance_id, conversation_id=conversation_id, user_message=st.user_message, host_user_id=host_user_id, page_context=page_context, conversation_history=conversation_history, instance_config=instance_config, user_info=user_info, retrieval=st.retrieval, progress_callback=progress_callback, stream_callback=stream_callback, turn_id=turn_id, intent_resolution=st.intent_resolution, state_ctx=state_ctx)

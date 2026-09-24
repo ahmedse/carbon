@@ -191,7 +191,11 @@ api_catalog:
       Required query param: dimension — one of: gender, is_active, nationality,
       nationality_code, employment_type_code, contract_type_code, position,
       org_unit, kuwaitization, rotation.
-      Returns {dimension, total, breakdown[{label, count, pct, merged_from?}],
+      Optional filters are exact-match and fail when a host label is unknown;
+      department is an alias for org_unit. Optional group_by supports a
+      multi-dimensional aggregate such as [department, position].
+      Returns {dimension, group_by, applied_filters, total,
+      breakdown[{label?, count, pct, merged_from?, ...group fields}],
       caveats[], was_normalized, normalization_notes[], suggested_chart_type, label_resolved}.
       FK dimensions (position, org_unit) resolve IDs to human labels automatically.
       Text dimensions (gender etc.) are normalised: "M" merges into "male",
@@ -205,6 +209,7 @@ api_catalog:
       definition is fixed and cited — do not invent alternate filters.
     parameters:
       type: object
+      additionalProperties: false
       required: [dimension]
       properties:
         dimension:
@@ -220,6 +225,45 @@ api_catalog:
             - org_unit
             - kuwaitization
             - rotation
+        filters:
+          type: object
+          additionalProperties: false
+          properties:
+            gender: {type: [string, array]}
+            is_active: {type: [boolean, string, array]}
+            nationality: {type: [string, array]}
+            nationality_code: {type: [string, array]}
+            employment_type: {type: [string, array]}
+            employment_type_code: {type: [string, array]}
+            contract_type: {type: [string, array]}
+            contract_type_code: {type: [string, array]}
+            position: {type: [string, array]}
+            position_name: {type: [string, array]}
+            org_unit: {type: [string, array]}
+            department: {type: [string, array]}
+            department_name: {type: [string, array]}
+            kuwaitization: {type: [string, array]}
+            rotation: {type: [string, array]}
+        group_by:
+          type: array
+          items:
+            type: string
+            enum:
+              - gender
+              - is_active
+              - nationality
+              - nationality_code
+              - employment_type
+              - employment_type_code
+              - contract_type
+              - contract_type_code
+              - position
+              - position_name
+              - org_unit
+              - department
+              - department_name
+              - kuwaitization
+              - rotation
     requires_auth: true
     requires_confirmation: false
 

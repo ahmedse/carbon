@@ -849,7 +849,7 @@ class FlightDirector:
         ctype = criterion.get("type")
         if ctype == "created_entity":
             return await self._check_created_entity(
-                step, criterion, ledger, executor, step_statuses
+                step, criterion, run, ledger, executor, step_statuses
             )
         if ctype == "table_fields":
             return await self._check_table_fields(
@@ -863,6 +863,7 @@ class FlightDirector:
         return {"verdict": "met", "evidence": {"query": "no-op", "matches": True}}
 
     async def _check_created_entity(self, step: Any, criterion: dict,
+                                    run: Any,
                                     ledger: WorkingMemoryLedger,
                                     executor: Any,
                                     step_statuses: dict | None) -> dict:
@@ -1015,24 +1016,107 @@ class FlightDirector:
 
     @staticmethod
     async def _check_artifact(step: Any, criterion: dict, run: Any) -> dict:
-        """Assert at least one durable ``RunArtifact`` row for the step."""
+        """Assert durable artifacts contain the semantics their format promises."""
         from asgiref.sync import sync_to_async
-        from ai.models.core import RunArtifact
+        from ai.models.core import RunArtifact, RunStep
 
-        artifacts = await sync_to_async(
-            lambda: list(
-                RunArtifact.objects.filter(
-                    run_id=run.id, step_index=step.step_id
-                )
+        def _load():
+            artifacts = list(RunArtifact.objects.filter(
+                run_id=run.id, step_index=step.step_id
+            ))
+            journal = RunStep.objects.filter(
+                run_id=run.id, step_index=step.step_id
+            ).first()
+            return artifacts, (
+                journal.tool_output_json if journal is not None else None
             )
-        )()
-        if artifacts:
+
+        artifacts, tool_output = await sync_to_async(_load)()
+
+        def _find_manifest(value: Any) -> dict | None:
+            if isinstance(value, dict):
+                manifest = value.get("semantic_manifest")
+                if isinstance(manifest, dict):
+                    return manifest
+                for child in value.values():
+                    found = _find_manifest(child)
+                    if found:
+                        return found
+            elif isinstance(value, list):
+                for child in value:
+                    found = _find_manifest(child)
+                    if found:
+                        return found
+            elif isinstance(value, str):
+                try:
+                    return _find_manifest(json.loads(value))
+                except (TypeError, json.JSONDecodeError):
+                    return None
+            return None
+
+        manifest = _find_manifest(tool_output)
+        matches: list[dict] = []
+        invalid: list[dict] = []
+        for artifact in artifacts:
+            suffix = str(artifact.name or "").rsplit(".", 1)[-1].lower()
+            reason = ""
+            try:
+                if artifact.size_bytes <= 0 or not artifact.file:
+                    reason = "empty file"
+                elif suffix == "xlsx":
+                    from openpyxl import load_workbook
+
+                    with artifact.file.open("rb") as stream:
+                        workbook = load_workbook(stream, read_only=True, data_only=True)
+                        substantive = False
+                        for sheet in workbook.worksheets:
+                            rows = [
+                                tuple(value for value in row if value not in (None, ""))
+                                for row in sheet.iter_rows(values_only=True)
+                            ]
+                            rows = [row for row in rows if row]
+                            if len(rows) >= 2 and any(
+                                isinstance(value, (int, float))
+                                for row in rows[1:] for value in row
+                            ):
+                                substantive = True
+                                break
+                        workbook.close()
+                    if not substantive:
+                        reason = "no tabular rows with a numeric measure"
+                elif suffix == "png":
+                    from PIL import Image
+
+                    with artifact.file.open("rb") as stream:
+                        image = Image.open(stream)
+                        image.verify()
+                    if not (
+                        isinstance(manifest, dict)
+                        and manifest.get("source") == "structured_table"
+                        and manifest.get("row_count", 0) > 0
+                        and manifest.get("numeric_series") is True
+                    ):
+                        reason = "missing grounded numeric-series provenance"
+            except Exception as exc:  # noqa: BLE001 - acceptance reports corruption
+                reason = f"could not validate artifact: {exc}"
+
+            item = {"id": artifact.id, "name": artifact.name}
+            if reason:
+                item["reason"] = reason
+                invalid.append(item)
+            else:
+                matches.append(item)
+
+        if matches and not invalid:
             return {"verdict": "met", "evidence": {
                 "query": "RunArtifact(run_id, step_index)",
-                "matches": [{"id": a.id, "name": a.name} for a in artifacts],
+                "matches": matches,
+                "semantic_manifest": manifest or {},
             }}
         return {"verdict": "missed", "evidence": {
-            "query": "RunArtifact(run_id, step_index)", "matches": [],
+            "query": "RunArtifact(run_id, step_index)",
+            "matches": matches,
+            "invalid": invalid,
         }}
 
     @staticmethod

@@ -7,6 +7,7 @@ import pytest
 from ai.engine.cognition.plan.catalog_args import (
     READ_GAP,
     catalog_arg_violations,
+    enum_fill_from_text,
     is_invalid_argument_error,
     mutation_blocked_by_failed_read,
 )
@@ -53,12 +54,53 @@ def test_empty_dimension_is_a_schema_miss():
     ) == []
 
 
+def test_catalog_rejects_unknown_filter_and_grouping_value():
+    catalog = [{
+        "name": "analyze_employees",
+        "method": "GET",
+        "parameters": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["dimension"],
+            "properties": {
+                "dimension": {"type": "string", "enum": ["position"]},
+                "filters": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "department": {"type": ["string", "array"]},
+                    },
+                },
+                "group_by": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": ["department", "position"],
+                    },
+                },
+            },
+        },
+    }]
+    args = {
+        "api_name": "analyze_employees",
+        "query_params": {
+            "dimension": "position",
+            "filters": {"made_up_scope": "all"},
+            "group_by": ["department", "salary"],
+        },
+    }
+    misses = catalog_arg_violations(catalog, "call_host_api", args)
+    assert any("made_up_scope" in miss for miss in misses)
+    assert any("salary" in miss for miss in misses)
+
+
 def test_timeout_is_not_an_argument_repair():
     timeout = "[timeout] exceeded timeout_ms=1000"
     assert is_invalid_argument_error(timeout) is False
     assert is_invalid_argument_error("Host API request timed out (30s)") is False
     assert should_retry({"retry_on": ["timeout", "transient"]}, timeout, 0) is True
     assert is_invalid_argument_error("Host API returned 400: bad field") is True
+    assert is_invalid_argument_error("Unknown dimension ''. Allowed: gender") is True
     assert should_retry(None, "Host API returned 400: bad field", 0) is False
 
 
@@ -127,7 +169,7 @@ async def test_one_repair_with_an_allowed_value_updates_the_call():
         conversation_history=[],
     )
     assert gap is None
-    assert used == 1
+    assert used == 0
     assert step.tool_args["query_params"]["dimension"] == "nationality"
     assert "nationality" in updated[0]["function"]["arguments"]
 
@@ -154,3 +196,17 @@ async def test_a_second_miss_fails_the_step_without_calling_the_host():
     assert gap == READ_GAP
     assert used == 1
     assert catalog_arg_violations(CATALOG, "call_host_api", step.tool_args)
+
+
+def test_enum_named_in_the_request_fills_the_blank_field():
+    filled = enum_fill_from_text(
+        CATALOG[0]["parameters"],
+        {},
+        "Break down headcount by department and position",
+    )
+    assert filled == {"dimension": "position"}
+    assert enum_fill_from_text(
+        CATALOG[0]["parameters"],
+        {},
+        "People records",
+    ) is None

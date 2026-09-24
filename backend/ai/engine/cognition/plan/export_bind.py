@@ -144,6 +144,9 @@ def export_has_substance(
     content: str | None,
     table: dict | None = None,
     images: list | None = None,
+    *,
+    require_table: bool = False,
+    require_numeric_table: bool = False,
 ) -> tuple[bool, str]:
     """Gate finished deliverables: refuse hollow, mid-run, or title-only packs.
 
@@ -158,6 +161,33 @@ def export_has_substance(
             "(e.g. [Insert …], [Avg … Salary]). Bind real findings from prior "
             "steps, then export."
         )
+    has_table = table_has_substance(table)
+    if require_table and not has_table:
+        return False, (
+            "Export refused — this format requires a structured table with "
+            "headers and data rows grounded in prior tool output."
+        )
+    if require_numeric_table and has_table:
+        rows = table.get("rows") if isinstance(table, dict) else []
+        has_number = any(
+            isinstance(row, (list, tuple))
+            and any(
+                isinstance(cell, (int, float))
+                or (
+                    isinstance(cell, str)
+                    and bool(re.fullmatch(
+                        r"\s*[-+]?\d[\d,]*(?:\.\d+)?\s*%?\s*",
+                        cell,
+                    ))
+                )
+                for cell in row
+            )
+            for row in (rows or [])
+        )
+        if not has_number:
+            return False, (
+                "Export refused — the structured table has no grounded numeric series."
+            )
     if content_is_placeholder(content) and not table_has_substance(table) and not images_have_substance(images):
         return False, (
             "Export refused — no real findings to write. Provide markdown "
@@ -327,6 +357,22 @@ def _richest_table(tables: list[dict]) -> dict | None:
     if not tables:
         return None
     return max(tables, key=lambda t: len(t.get("rows") or []) * 10 + len(t.get("headers") or []))
+
+
+def structured_table_from_results(prior_results: list[Any]) -> dict | None:
+    """Richest grounded table carried by prior step tool payloads."""
+    tables: list[dict] = []
+    for result in prior_results or []:
+        tool_output = (
+            result.get("tool_output")
+            if isinstance(result, dict)
+            else getattr(result, "tool_output", None)
+        )
+        facts = extract_structured_facts(
+            tool_output if isinstance(tool_output, dict) else None
+        )
+        tables.extend(facts["tables"])
+    return _richest_table(tables)
 
 
 def _synthesize_content(
@@ -764,3 +810,35 @@ def apply_bind_to_tool_calls(
             },
         }]
     return calls
+
+
+def enforce_declared_step_tool(
+    step_tool_name: str | None,
+    step_tool_args: dict | None,
+    calls: list | None,
+) -> tuple[list, list[str]]:
+    """Keep only calls permitted by the plan step's declared tool.
+
+    Models may emit an unoffered catalog tool. An export step must never turn
+    into a fresh host read; returning no calls lets the deterministic binder
+    synthesize the declared export from prior structured results.
+    """
+    declared = str(step_tool_name or "").strip()
+    if not declared:
+        return list(calls or []), []
+    expected_api = str((step_tool_args or {}).get("api_name") or "").strip()
+    kept: list = []
+    rejected: list[str] = []
+    for call in calls or []:
+        if not isinstance(call, dict):
+            rejected.append("")
+            continue
+        name = str(((call.get("function") or {}).get("name") or "")).strip()
+        allowed = name == declared
+        if declared == "call_host_api" and expected_api:
+            allowed = allowed or name == expected_api
+        if allowed:
+            kept.append(call)
+        else:
+            rejected.append(name)
+    return kept, rejected

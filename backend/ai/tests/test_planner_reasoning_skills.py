@@ -41,6 +41,19 @@ def test_decompose_prompt_forbids_inventing_skill_names():
     assert "domain_specialist" in prompt
 
 
+def test_plan_parser_accepts_json_wrapped_in_provider_prose():
+    from ai.engine.cognition.plan.planner import _parse_plan_response
+
+    parsed = _parse_plan_response(
+        'I will provide the requested plan now.\n'
+        '{"pattern":"custom","steps":[{"step_id":0,"intent":"Read"}],'
+        '"synthesis_instruction":"Summarize"}\n'
+        "This plan keeps the read grounded."
+    )
+    assert parsed is not None
+    assert parsed["steps"][0]["intent"] == "Read"
+
+
 # ── 2. Validation downgrades unregistered invoke_skill ─────────────────────
 
 

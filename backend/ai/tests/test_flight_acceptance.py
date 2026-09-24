@@ -401,11 +401,16 @@ def test_build_acceptance_report_idempotent_per_run(run):
 
 
 def test_artifact_criterion_met_from_durable_run_artifact(run):
-    """artifact criterion → met when the run has a durable RunArtifact row."""
-    RunArtifact.objects.create(
+    """A durable artifact must contain bytes, not merely have a database row."""
+    from django.core.files.base import ContentFile
+
+    artifact = RunArtifact(
         run=run, step_index=1, name="report.docx",
         mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
+    artifact.file.save("report.docx", ContentFile(b"PK-valid-document"), save=False)
+    artifact.size_bytes = len(b"PK-valid-document")
+    artifact.save()
     fd = FlightDirector()
     step = _step(1, "Export the water report", tool_name="export_document")
     plan = _plan(step)
@@ -418,6 +423,26 @@ def test_artifact_criterion_met_from_durable_run_artifact(run):
     assert r["criterion"]["type"] == "artifact"
     assert r["verdict"] == "met"
     assert r["evidence"]["matches"][0]["name"] == "report.docx"
+
+
+def test_artifact_criterion_rejects_empty_database_row(run):
+    RunArtifact.objects.create(
+        run=run,
+        step_index=1,
+        name="empty.xlsx",
+        mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    fd = FlightDirector()
+    plan = _plan(_step(
+        1, "Export the report", tool_name="export_document"
+    ))
+
+    results = async_to_sync(fd.run_acceptance_checks)(
+        plan, run, fd.ledger, _FakeExecutor(), step_statuses={1: "completed"}
+    )
+
+    assert results[0]["verdict"] == "missed"
+    assert results[0]["evidence"]["invalid"]
 
 
 def test_reasoning_step_has_no_requirement(run):

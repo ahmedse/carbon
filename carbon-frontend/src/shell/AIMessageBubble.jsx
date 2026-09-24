@@ -71,6 +71,7 @@ const CarbonDataGrid = lazy(() => import('../components/DataGrid/CarbonDataGrid'
 // User: compact right-aligned row — keep a soft cap so user turns don't stretch.
 const USER_BUBBLE_SX = {
   alignSelf: 'flex-end',
+  position: 'relative',
   maxWidth: 'min(42rem, 92%)',
   px: 1.25, py: 0.625,
   borderRadius: 1,
@@ -1224,19 +1225,40 @@ function AIMessageBubble({
               </Stack>
             </Box>
           ) : (
-            <Typography
-              variant="body2"
-              dir="auto"
-              sx={{
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-                lineHeight: 1.5,
-                color: 'text.primary',
-                unicodeBidi: 'plaintext',
-              }}
-            >
-              {message.content}
-            </Typography>
+            <>
+              <Typography
+                variant="body2"
+                dir="auto"
+                sx={{
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  lineHeight: 1.5,
+                  color: 'text.primary',
+                  unicodeBidi: 'plaintext',
+                }}
+              >
+                {message.content}
+              </Typography>
+              <Tooltip title={copied ? 'Copied' : 'Copy'}>
+                <IconButton
+                  size="small"
+                  onClick={handleCopyPlain}
+                  aria-label="Copy message"
+                  sx={{
+                    position: 'absolute',
+                    top: 4,
+                    left: -28,
+                    p: 0.25,
+                    opacity: showActions ? 1 : 0,
+                    transition: 'opacity 0.12s ease',
+                    pointerEvents: showActions ? 'auto' : 'none',
+                    bgcolor: 'background.paper',
+                  }}
+                >
+                  {copied ? <CheckIcon sx={{ fontSize: 14 }} /> : <ContentCopyIcon sx={{ fontSize: 14 }} />}
+                </IconButton>
+              </Tooltip>
+            </>
           )
         ) : (
           <LongContent content={operatorContent}>

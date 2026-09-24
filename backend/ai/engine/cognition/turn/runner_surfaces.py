@@ -390,6 +390,7 @@ class SoftSurfacesMixin:
         surface=None,
         state_ctx=None,
         user_info=None,
+        process_mode: str = "",
     ):
         """Understand path. ``legacy`` skip; ``shadow`` log+fallthrough; ``v21`` act."""
         from types import SimpleNamespace
@@ -411,6 +412,15 @@ class SoftSurfacesMixin:
 
         mode = understand_mode()
         if mode == "legacy":
+            return None
+
+        # Plan drafts a reviewable task. A v21 exit here answers or hands off
+        # instead, so the plan is never shown and no task is ever created.
+        from ai.engine.agent.surface import Surface
+        if Surface.resolve(
+            surface, process_mode=process_mode, user_message=user_message or "",
+        ) is Surface.CHAT_PLAN:
+            _signal(ledger, "v21_understand", False, reason="plan_dial")
             return None
 
         state = getattr(state_ctx, "state", None) if state_ctx is not None else None

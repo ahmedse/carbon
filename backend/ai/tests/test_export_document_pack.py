@@ -71,7 +71,7 @@ async def test_export_pdf_only(plugin, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_export_png_fallback_without_table(plugin, tmp_path):
+async def test_export_png_refuses_prose_without_numeric_table(plugin, tmp_path):
     with override_settings(MEDIA_ROOT=str(tmp_path)):
         result = await plugin.execute(
             {
@@ -85,8 +85,23 @@ async def test_export_png_fallback_without_table(plugin, tmp_path):
             },
             ctx=None,
         )
-    assert "error" not in result
-    assert result["files"][0]["format"] == "png"
+    assert "error" in result
+    assert "table" in result["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_export_xlsx_refuses_prose_only(plugin, tmp_path):
+    with override_settings(MEDIA_ROOT=str(tmp_path)):
+        result = await plugin.execute(
+            {
+                "title": "Empty Spreadsheet",
+                "format": "xlsx",
+                "content": "A long narrative that must not be mistaken for spreadsheet data. " * 3,
+            },
+            ctx=None,
+        )
+    assert "error" in result
+    assert "structured table" in result["error"].lower()
 
 
 @pytest.mark.asyncio

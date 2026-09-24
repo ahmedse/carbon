@@ -242,6 +242,8 @@ def _filter_draft_tools(
             "aggregate_entity",
             "export_document",
             "invoke_skill",
+            "search_knowledge",
+            "web_research",
         })
         if not _user_accepted_shown_plan(user_message, conversation_history):
             _plan_block = _plan_block | {"plan_task"}
@@ -255,7 +257,88 @@ def _filter_draft_tools(
 _PLAN_ACCEPT = frozenset({
     "yes", "ok", "okay", "accept", "accepted", "approve", "approved",
     "go", "proceed", "confirm", "do it", "create it", "create the task",
+    "retry", "try again", "retry planning",
 })
+
+
+def _looks_like_accept(text: str) -> bool:
+    raw = (text or "").strip().lower().rstrip(".!")
+    if not raw or len(raw) > 80:
+        return False
+    if raw in _PLAN_ACCEPT or raw.startswith("accept"):
+        return True
+    return any(
+        phrase in raw
+        for phrase in ("create the task", "create it", "looks good", "go ahead", "do it")
+    )
+
+
+def _assistant_showed_plan(content: str) -> bool:
+    import re
+    return bool(re.search(r"\d+\s*[\.\)]\s+\S", content or ""))
+
+
+def ensure_plan_review_text(text: str, brief: str) -> str:
+    """Return a reviewable numbered plan, never a clarification-only reply."""
+    import re
+
+    raw = (text or "").strip()
+    numbered_steps = re.findall(r"(?m)^\s*\d+[\.\)]\s+\S.*$", raw)
+    if len(numbered_steps) >= 2:
+        return raw
+    clean_brief = " ".join((brief or "").split()).strip()
+    if len(clean_brief) > 500:
+        clean_brief = clean_brief[:497].rstrip() + "..."
+    return (
+        "Proposed plan\n"
+        "1. Confirm the requested scope and record any ambiguity as an assumption.\n"
+        f"2. Collect only the authorized source data needed for: {clean_brief}\n"
+        "3. Perform the requested analysis and validate the totals.\n"
+        "4. Produce the requested files, charts, or other deliverables.\n"
+        "5. Return a concise summary, caveats, and artifact links.\n\n"
+        "Assumption: where the request permits multiple interpretations, include "
+        "each separately rather than dropping one.\n\n"
+        "Reply “Accept” to create this task, or state what you want changed."
+    )
+
+
+def plan_created_receipt(completed_tools: list[dict] | None) -> str | None:
+    """Trusted plan_task receipt; avoids LLM synthesis and verification."""
+    import json
+
+    for item in completed_tools or []:
+        if not isinstance(item, dict) or item.get("tool_name") != "plan_task":
+            continue
+        if item.get("error"):
+            return None
+        data = item.get("result")
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except (TypeError, ValueError):
+                data = None
+        if not isinstance(data, dict) or data.get("action") != "plan_created":
+            continue
+        message = str(data.get("message") or "").strip()
+        if message:
+            return message
+        count = len(data.get("steps") or [])
+        return (
+            f"Task created with {count} steps. Nothing has run yet. "
+            "Review and approve it in Tasks."
+        )
+    return None
+
+
+def plan_task_error_receipt(completed_tools: list[dict] | None) -> str | None:
+    """Return a plan_task failure verbatim; never let synthesis reinterpret it."""
+    for item in completed_tools or []:
+        if not isinstance(item, dict) or item.get("tool_name") != "plan_task":
+            continue
+        error = str(item.get("error") or "").strip()
+        if error:
+            return error
+    return None
 
 
 def _user_accepted_shown_plan(
@@ -263,10 +346,7 @@ def _user_accepted_shown_plan(
     conversation_history: list | None,
 ) -> bool:
     """True when a numbered plan is already in the thread and this turn accepts it."""
-    import re
-
-    text = (user_message or "").strip().lower().rstrip(".!")
-    if text not in _PLAN_ACCEPT and not text.startswith("accept"):
+    if not _looks_like_accept(user_message):
         return False
     for msg in reversed(conversation_history or []):
         if not isinstance(msg, dict):
@@ -274,11 +354,52 @@ def _user_accepted_shown_plan(
         role = msg.get("role") or msg.get("type") or ""
         if role not in ("assistant", "ai"):
             continue
-        content = msg.get("content") or ""
-        if re.search(r"(?m)^\s*\d+[\.\)]\s+\S", content):
+        if _assistant_showed_plan(msg.get("content") or ""):
             return True
-        return False
     return False
+
+
+def last_user_brief(conversation_history: list | None) -> str | None:
+    """The most recent substantive user brief in the thread."""
+    for msg in reversed(conversation_history or []):
+        if not isinstance(msg, dict):
+            continue
+        role = msg.get("role") or msg.get("type") or ""
+        if role not in ("user", "human"):
+            continue
+        content = (msg.get("content") or "").strip()
+        if len(content) >= 40:
+            return content[:4000]
+    return None
+
+
+def plan_followup_context(
+    user_message: str,
+    conversation_history: list | None,
+) -> str | None:
+    """Brief a short Plan reply refers to (``both``, ``1,2,3``, ``the first``).
+
+    Without it the draft treats the reply as a brand-new subject and asks the
+    user what they mean, losing the task they already described.
+    """
+    raw = (user_message or "").strip()
+    if not raw or len(raw) > 40:
+        return None
+    if _looks_like_accept(raw):
+        return None
+    return last_user_brief(conversation_history)
+
+
+def plan_accept_brief(
+    user_message: str,
+    conversation_history: list | None,
+) -> str | None:
+    """Original task brief once the user has accepted a plan already shown."""
+    if not _user_accepted_shown_plan(user_message, conversation_history):
+        return None
+    # Control replies such as "retry" and prior acceptance words are not a
+    # task brief. Reuse the latest substantive user request instead.
+    return last_user_brief(conversation_history)
 
 #: Spine static tools ALWAYS exposed to the chat planner. Registry plugins
 #: contribute the rest via ``chat_tool_names()`` (G-C: freeze the spine, grow

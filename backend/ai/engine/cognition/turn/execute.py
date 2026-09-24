@@ -299,7 +299,7 @@ class ExecuteWitness:
         t0 = time.monotonic()
         per_tool_latency_ms: dict[str, float] = {}
         completed_tools: list[dict] = []
-        tool_calls = tool_calls or []
+        tool_calls = _drop_plan_dial_host_reads(tool_calls or [], ctx_defaults)
 
         # ── Parallel dispatch of independent tool calls ──────────────────
         if tool_calls:
@@ -1057,6 +1057,46 @@ def _tool_requires_confirmation(tool_name: str) -> bool:
         return is_confirmation_tool(tool_name)
     except Exception:  # noqa: BLE001 - guard must never raise into the turn
         return False
+
+
+#: Reads the Plan dial must not run: answering the brief in the bubble is what
+#: replaces showing a plan. Names the model may emit bare are caught too.
+_PLAN_DIAL_BLOCKED_TOOLS = frozenset({
+    "call_host_api",
+    "resolve_entity",
+    "aggregate_entity",
+    "export_document",
+    "invoke_skill",
+    "search_knowledge",
+    "web_research",
+})
+
+
+def _drop_plan_dial_host_reads(tool_calls: list[dict], ctx_defaults: dict) -> list[dict]:
+    """Withhold host reads on the Chat Plan dial (bare catalog names included)."""
+    if not tool_calls:
+        return tool_calls
+    from ai.engine.agent.surface import Surface
+
+    if Surface.resolve(
+        ctx_defaults.get("surface"),
+        process_mode=str(ctx_defaults.get("process_mode") or ""),
+        user_message=str(ctx_defaults.get("user_message") or ""),
+    ) is not Surface.CHAT_PLAN:
+        return tool_calls
+    catalog_names = {
+        str(ep.get("name") or "")
+        for ep in ((ctx_defaults.get("instance_config") or {}).get("api_catalog") or [])
+        if isinstance(ep, dict) and ep.get("name")
+    }
+    kept: list[dict] = []
+    for tc in tool_calls:
+        name = str(((tc or {}).get("function") or {}).get("name") or "")
+        if name in _PLAN_DIAL_BLOCKED_TOOLS or name in catalog_names:
+            logger.info("Plan dial withheld host read tool=%s (plan is drafted, not run)", name)
+            continue
+        kept.append(tc)
+    return kept
 
 
 def _safe_serialize(value) -> str:

@@ -244,7 +244,14 @@ class ExportDocument(ToolPlugin):
         images = args.get("images") if isinstance(args.get("images"), list) else []
 
         # Fail-visible substance gate: never ship hollow, mid-run, or title-only packs.
-        ok, reason = export_has_substance(content, table, images)
+        requires_table = any(ext in {"xlsx", "png"} for ext in wanted)
+        ok, reason = export_has_substance(
+            content,
+            table,
+            images,
+            require_table=requires_table,
+            require_numeric_table="png" in wanted,
+        )
         if not ok:
             return {"error": reason}
 
@@ -258,6 +265,15 @@ class ExportDocument(ToolPlugin):
         stem = _slugify(title)
         stamp = now().strftime("%Y%m%d-%H%M%S")
         files: list[dict] = []
+        created_paths: list[Path] = []
+
+        def _cleanup_created() -> None:
+            for created in created_paths:
+                try:
+                    created.unlink(missing_ok=True)
+                except OSError:
+                    logger.warning("Could not remove failed export %s", created)
+
         writers = {
             "docx": (self._write_docx, "Word"),
             "xlsx": (self._write_xlsx, "Excel"),
@@ -276,12 +292,10 @@ class ExportDocument(ToolPlugin):
                     writer(path, title, content, table, images=images)
                 else:
                     writer(path, title, content, table)
+                created_paths.append(path)
                 size = path.stat().st_size if path.exists() else 0
                 if size < _MIN_BYTES.get(kind, 0):
-                    try:
-                        path.unlink(missing_ok=True)
-                    except OSError:
-                        pass
+                    _cleanup_created()
                     return {
                         "error": (
                             f"{label} export refused — file was empty/shell-only "
@@ -296,10 +310,28 @@ class ExportDocument(ToolPlugin):
                 })
             except Exception as exc:  # fail-visible, never fabricate a file
                 logger.exception("export_document %s failed", kind)
+                if path.exists() and path not in created_paths:
+                    created_paths.append(path)
+                _cleanup_created()
                 return {"error": f"{label} export failed: {exc}"}
 
         if not files:
             return {"error": "No document was generated."}
+
+        headers = (table or {}).get("headers") or []
+        rows = (table or {}).get("rows") or []
+        semantic_manifest = {
+            "source": "structured_table",
+            "headers": [str(value) for value in headers],
+            "row_count": len(rows),
+            "numeric_series": any(
+                isinstance(row, (list, tuple))
+                and any(_to_number(cell) is not None for cell in row[1:])
+                for row in rows
+            ),
+        }
+        for entry in files:
+            entry["semantic_manifest"] = semantic_manifest
 
         # W5-C: persist into the plan's artifact store so the plan UI lists it
         # with a first-class download link. The frozen engine ToolContext has
@@ -351,6 +383,7 @@ class ExportDocument(ToolPlugin):
             "title": title,
             "files": files,
             "artifact_ids": artifact_ids,
+            "semantic_manifest": semantic_manifest,
             "message": (
                 f"Exported “{title}” as "
                 + ", ".join(f.get("format", "").upper() for f in files)
@@ -773,29 +806,28 @@ class ExportDocument(ToolPlugin):
             for row in rows[:12]:
                 if not row:
                     continue
-                label = str(row[0])[:18]
                 num = None
-                for cell in row[1:]:
+                numeric_index = None
+                for index, cell in enumerate(row[1:], start=1):
                     num = _to_number(cell)
                     if num is not None:
+                        numeric_index = index
                         break
                 if num is None:
                     continue
+                dimensions = [
+                    str(cell).strip()
+                    for cell in row[:numeric_index]
+                    if str(cell).strip()
+                ]
+                label = (dimensions[-1] if dimensions else str(row[0]))[:24]
                 labels.append(label)
                 values.append(abs(num))
 
         if not values:
-            bullets = [
-                ln.strip()
-                for ln in (content or "").splitlines()
-                if re.match(r"^[-*•]\s+", ln.strip())
-            ]
-            if bullets:
-                labels = [re.sub(r"^[-*•]\s+", "", b)[:18] for b in bullets[:6]]
-                values = [float(max(1, len(b))) for b in labels]
-            else:
-                labels = ["Findings", "Actions", "Risks"]
-                values = [3.0, 2.0, 1.0]
+            raise ValueError(
+                "PNG chart requires a grounded numeric series in the export table."
+            )
 
         plot_left, plot_top, plot_right, plot_bottom = 80, 100, width - 40, height - 60
         plot_w = plot_right - plot_left

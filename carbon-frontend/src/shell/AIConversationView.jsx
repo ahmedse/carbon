@@ -318,7 +318,13 @@ function AIConversationView({
     (conv) => {
       const canonical = normalizeConversationShape(conv);
       if (canonical) {
-        setConversation((prev) => ({ ...prev, ...canonical }));
+        // A terminal SSE frame is authoritative. Some serialized payloads
+        // still carry the pre-finalize `working` status; preserving it leaves
+        // the composer spinner running forever after the backend completed.
+        const terminal = canonical.status === 'working'
+          ? { ...canonical, status: 'completed' }
+          : canonical;
+        setConversation((prev) => ({ ...prev, ...terminal }));
         const canonicalMsgs = canonical.messages || [];
         if (canonicalMsgs.length) {
           setMessages((prev) => {
@@ -348,9 +354,7 @@ function AIConversationView({
       setStreamingText(null);
       setWorkingStage(null);
       // Keep the thinking timeline visible and expanded after the answer.
-      if (canonical?.status !== 'working') {
-        setSending(false);
-      }
+      setSending(false);
     },
     [persistThreadState],
   );

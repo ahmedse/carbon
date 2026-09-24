@@ -142,6 +142,15 @@ async def run_s3_through_s5(
         system_prompt = f'{system_prompt}\n\n{chat_grounding_rules_block(surface, process_mode=process_mode)}'
     from ai.engine.cognition.dialogue.anaphora import AnaphoraResolver
     _resolved_user_message = AnaphoraResolver(st.wm).resolve(conversation_id, st.user_message)
+    if str(process_mode or '') == 'plan':
+        from ai.engine.cognition.turn.runner_util import plan_followup_context
+        _plan_ctx = plan_followup_context(st.user_message, conversation_history)
+        if _plan_ctx:
+            # A short Plan reply answers the assistant's own question about the
+            # earlier brief. Without the brief the draft asks what it refers to.
+            _resolved_user_message = (
+                f'{_plan_ctx}\n\n(Answer to your last question: {st.user_message})'
+            )
     _wm_fragment = st.wm.to_prompt_fragment(conversation_id)
     if _wm_fragment:
         system_prompt = f'{system_prompt}\n\n{_wm_fragment}'
@@ -173,7 +182,12 @@ async def run_s3_through_s5(
     if _skill_terminology:
         from ai.engine.knowledge.terminology import TerminologyResolver
         system_prompt = TerminologyResolver().inject(system_prompt, _skill_terminology)
-    if st.intent_resolution is not None and st.intent_resolution.action == 'answer' and st.intent_resolution.candidates:
+    if (
+        str(process_mode or '') != 'plan'
+        and st.intent_resolution is not None
+        and st.intent_resolution.action == 'answer'
+        and st.intent_resolution.candidates
+    ):
         from ai.engine.cognition.turn.intent import _endpoint_to_domain_phrase
         _top_cand = st.intent_resolution.candidates[0]
         _phrases = [_endpoint_to_domain_phrase(c.name) for c in st.intent_resolution.candidates[:3]]
@@ -202,6 +216,48 @@ async def run_s3_through_s5(
             import dataclasses as _dc_inject
             st.draft = _dc_inject.replace(st.draft, tool_calls=calls, text="")
     import dataclasses as _dc
+    import json as _json
+    from ai.engine.cognition.turn.runner_util import (
+        ensure_plan_review_text,
+        plan_accept_brief,
+    )
+    _accept_brief = plan_accept_brief(st.user_message, conversation_history)
+    if _accept_brief and "plan_task" in _fn_names:
+        _calls = list(getattr(st.draft, "tool_calls", None) or [])
+        if not any(
+            ((c.get("function") or {}).get("name") == "plan_task")
+            for c in _calls if isinstance(c, dict)
+        ):
+            _calls.append({
+                "id": "plan_accept",
+                "type": "function",
+                "function": {
+                    "name": "plan_task",
+                    "arguments": _json.dumps({"brief": _accept_brief}),
+                },
+            })
+            st.draft = _dc.replace(st.draft, tool_calls=_calls)
+    if str(process_mode or '') == 'plan':
+        if _accept_brief:
+            # Acceptance creates exactly one reviewable task. Never let a
+            # model-emitted read/search accompany plan_task on this turn.
+            _plan_calls = [
+                c for c in (getattr(st.draft, "tool_calls", None) or [])
+                if isinstance(c, dict)
+                and ((c.get("function") or {}).get("name") == "plan_task")
+            ]
+            st.draft = _dc.replace(st.draft, tool_calls=_plan_calls, text="")
+        else:
+            # Before acceptance, Plan is text-only and must always show a
+            # numbered plan. Questions may follow the plan, never replace it.
+            st.draft = _dc.replace(
+                st.draft,
+                text=ensure_plan_review_text(
+                    getattr(st.draft, "text", "") or "",
+                    _resolved_user_message,
+                ),
+                tool_calls=[],
+            )
     from ai.engine.cognition.dialogue.fallback import FallbackHandler
     _fallback_text = FallbackHandler().handle(st.user_message, st.draft.text)
     if _fallback_text != st.draft.text and (not st.draft.tool_calls):
@@ -313,10 +369,25 @@ async def run_s3_through_s5(
         logger.debug('B5 compensation soft-empty stamp skipped', exc_info=True)
     from ai.engine.cognition.turn.ess_read import empty_history_misread
     from ai.engine.cognition.turn.catalog_render import honest_unsummarized_fallback, should_honest_fallback
+    from ai.engine.cognition.turn.runner_util import (
+        plan_created_receipt,
+        plan_task_error_receipt,
+    )
     from ai.engine.cognition.turn.zero_llm import is_empty_payslip_tool_result, render_empty_payslip_answer
     _synth = None
+    _plan_receipt = plan_created_receipt(st.execution.completed_tools)
+    _plan_error = plan_task_error_receipt(st.execution.completed_tools)
     _ess_empty = empty_history_misread(st.execution.completed_tools, user_message=_resolved_user_message)
-    if is_empty_payslip_tool_result(st.execution.completed_tools):
+    if _plan_receipt:
+        # plan_task already returns a grounded product receipt. Synthesizing
+        # and verifying that one line added multiple LLM calls and could leave
+        # the UI spinning on provider retries after the task already existed.
+        st.final_text = _plan_receipt
+        _synth = None
+    elif _plan_error:
+        st.final_text = _plan_error
+        _synth = None
+    elif is_empty_payslip_tool_result(st.execution.completed_tools):
         st.final_text = render_empty_payslip_answer(_resolved_user_message)
         _synth = None
         if state_ctx is not None and getattr(state_ctx, 'state', None) is not None:
@@ -395,7 +466,12 @@ async def run_s3_through_s5(
         _fb_lang = 'ar' if _detect_lang_fb(_resolved_user_message) == 'ar' else 'en'
         st.final_text = honest_unsummarized_fallback(_fb_lang)
         logger.info('[%s] Tool-only response — honest fallback (no render, draft_empty=%s, %d tools executed)', turn_id[:8], _draft_text_was_empty, len(st.execution.completed_tools))
-    if settings.PULSE_VERIFY_ENABLED and st.execution.completed_tools and st.final_text:
+    if (
+        settings.PULSE_VERIFY_ENABLED
+        and st.execution.completed_tools
+        and st.final_text
+        and not _plan_receipt
+    ):
         try:
             from ai.engine.cognition.turn.verify import VerificationWitness
             from ai.engine.llm.router import model_for_profile
