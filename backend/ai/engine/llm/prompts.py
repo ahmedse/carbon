@@ -75,11 +75,12 @@ async def build_chat_prompt(
 
     if turn_surface is Surface.CHAT_PLAN:
         process_directive = (
-            "\nPROCESS MODE (structured host contract): PLAN. Draft a reviewable "
-            "Tasks plan. Use plan_task for a plannable task; ask one missing "
-            "fact at a time; do not execute host writes. The user approves and "
-            "runs later. When refusing a write, say Plan drafts only — never "
-            "tell the user to switch to Plan, they are already there.\n"
+            "\nPROCESS MODE (structured host contract): PLAN. Show a numbered "
+            "plan in the reply for the user to audit. Do not call plan_task "
+            "until they accept that plan. Ask one missing fact at a time. Do "
+            "not execute host writes. When refusing a write, say Plan drafts "
+            "only — never tell the user to switch to Plan, they are already "
+            "there.\n"
         )
     elif turn_surface.may_host_mutate:
         process_directive = (

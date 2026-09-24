@@ -91,11 +91,7 @@ function AIWorkingIndicator({
                 </Box>
               ))}
             </Stack>
-          ) : (
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
-              Working…
-            </Typography>
-          )}
+          ) : null}
         </Box>
       </Collapse>
     </Box>

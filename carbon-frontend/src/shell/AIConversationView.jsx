@@ -583,6 +583,9 @@ function AIConversationView({
     setStageHistory([]);
     setThinkingExpanded(false);
     setStopped(true);
+    setConversation((prev) => (
+      prev?.status === 'working' ? { ...prev, status: 'pending' } : prev
+    ));
     try {
       await stopGeneration(token, conversationId);
     } catch (err) {
@@ -1661,16 +1664,6 @@ function AIConversationView({
           </>
         ) : isWorking ? (
           <>
-            {messages.length > 0 && (
-              <AIMessageBubble
-                message={{
-                  id: 'pending',
-                  role: 'user',
-                  content: '…',
-                  created_at: new Date().toISOString(),
-                }}
-              />
-            )}
             {showThinking && (
               <AIWorkingIndicator
                 conversationType={conversationType}

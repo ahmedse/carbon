@@ -63,10 +63,11 @@ def propose_heal(
 
     repaired: list[Any] = [recovery]
     for step in list(remaining_steps)[: max(0, max_new_steps - 1)]:
-        deps = [
-            d for d in (getattr(step, "depends_on", None) or [])
-            if d != failed_id
-        ]
+        deps = list(getattr(step, "depends_on", None) or [])
+        # A mutation must keep its dependency on the failed read so the
+        # consent gate stays closed until that read is repaired.
+        if not bool(getattr(step, "is_mutation", False)):
+            deps = [d for d in deps if d != failed_id]
         # Recovery becomes an optional predecessor so ordering stays sensible.
         if recovery.step_id not in deps:
             deps = [recovery.step_id] + list(deps)

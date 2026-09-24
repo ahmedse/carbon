@@ -940,6 +940,12 @@ class ReActLoop:
                     "step_index": step.step_id,
                     "intent": step.intent,
                 })
+                await self._mark_step_running(_db, run_id, step)
+
+            self._failed_read_ids = {
+                r.step_id for r in step_results
+                if getattr(r, "error", None) and not getattr(r, "paused", False)
+            }
 
             # Phase 2 — execute in parallel (sequential fast-path when len==1)
             async def _run_one(step):
@@ -1629,6 +1635,21 @@ class ReActLoop:
             (instance_config or {}).get("api_catalog")
             if isinstance(instance_config, dict) else None
         )
+        from ai.engine.cognition.plan.catalog_args import (
+            WRITE_HELD,
+            mutation_blocked_by_failed_read,
+        )
+        if mutation_blocked_by_failed_read(
+            step, getattr(self, "_failed_read_ids", ()),
+        ):
+            return StepResult(
+                step_id=step.step_id,
+                intent=step.intent,
+                critic_verdict="veto",
+                executed=False,
+                paused=False,
+                error=WRITE_HELD,
+            )
         _deterministic = is_fully_bound_host_api(
             step.tool_name, step.tool_args, _catalog,
         )
@@ -2021,6 +2042,28 @@ class ReActLoop:
                 step_tool_args=step.tool_args,
                 title_fallback=str(_title_fb),
             )
+            from ai.engine.cognition.plan.catalog_args import (
+                READ_GAP,
+                is_invalid_argument_error,
+                tool_output_is_invalid_args,
+            )
+            _catalog_repairs = 0
+            _bound_calls, _catalog_gap, _catalog_repairs = (
+                await self._repair_catalog_call(
+                    step,
+                    _bound_calls,
+                    dw,
+                    instance_config=instance_config,
+                    user_info=user_info,
+                    instance_id=instance_id,
+                    conversation_id=conversation_id,
+                    conversation_history=conversation_history,
+                )
+            )
+            if _catalog_gap:
+                result.error = _catalog_gap
+                result.executed = False
+                return result
 
             # W6-D: record the dispatching step so export-style plugins can
             # attribute artifacts to THIS step (multi-step / parallel runs).
@@ -2074,6 +2117,58 @@ class ReActLoop:
             _tool_attempt = 0
             if result.tool_output and isinstance(result.tool_output, dict):
                 _tool_err = result.tool_output.get("error")
+                if (
+                    _catalog_repairs < 1
+                    and not step.is_mutation
+                    and (
+                        tool_output_is_invalid_args(result.tool_output)
+                        or is_invalid_argument_error(_tool_err)
+                    )
+                ):
+                    _bound_calls, _catalog_gap, _catalog_repairs = (
+                        await self._repair_catalog_call(
+                            step,
+                            _bound_calls,
+                            dw,
+                            instance_config=instance_config,
+                            user_info=user_info,
+                            instance_id=instance_id,
+                            conversation_id=conversation_id,
+                            conversation_history=conversation_history,
+                            force=True,
+                        )
+                    )
+                    if _catalog_gap:
+                        result.error = READ_GAP
+                        result.tool_output = None
+                    else:
+                        try:
+                            _retry_exec = await ex.execute(
+                                text=draft.text,
+                                tool_calls=_bound_calls,
+                                stream_callback=stream_callback,
+                                progress_callback=progress_callback,
+                                agent_role=agent_role or step.agent_role,
+                                is_worker=(
+                                    step.agent_role not in ("orchestrator", "", None)
+                                ),
+                            )
+                        except Exception as _re:
+                            result.error = str(_re)
+                            _retry_exec = None
+                        if _retry_exec is not None:
+                            result.tool_output = (
+                                _retry_exec.completed_tools[0]
+                                if _retry_exec.completed_tools else None
+                            )
+                            if tool_output_is_invalid_args(result.tool_output):
+                                result.error = READ_GAP
+                                result.tool_output = None
+                _tool_err = (
+                    result.tool_output.get("error")
+                    if result.tool_output and isinstance(result.tool_output, dict)
+                    else None
+                )
                 while (
                     _tool_err
                     and not step.is_mutation
@@ -2716,6 +2811,84 @@ class ReActLoop:
                 remaining.append(s)
         return ready, remaining
 
+    async def _repair_catalog_call(
+        self,
+        step: PlanStep,
+        calls: list,
+        dw,
+        *,
+        instance_config,
+        user_info,
+        instance_id: str,
+        conversation_id: str,
+        conversation_history,
+        force: bool = False,
+    ) -> tuple[list, str | None, int]:
+        """Spend one repair when catalog args are invalid.
+
+        Returns ``(calls, gap_message_or_none, repairs_used)``. A gap means
+        the host must not be called. ``force`` is the post-400 path.
+        """
+        from ai.engine.cognition.plan.catalog_args import (
+            READ_GAP,
+            apply_repaired_params,
+            catalog_arg_violations,
+            parse_repair_payload,
+            rewrite_host_calls,
+        )
+
+        catalog = (
+            (instance_config or {}).get("api_catalog")
+            if isinstance(instance_config, dict) else None
+        )
+        violations = catalog_arg_violations(catalog, step.tool_name, step.tool_args)
+        if not violations and not force:
+            return calls, None, 0
+        if step.is_mutation:
+            return calls, READ_GAP, 1
+        schema_note = ""
+        if isinstance(step.tool_args, dict):
+            for item in catalog or []:
+                if (
+                    isinstance(item, dict)
+                    and item.get("name") == step.tool_args.get("api_name")
+                    and item.get("parameters")
+                ):
+                    schema_note = json.dumps(item["parameters"], default=str)
+                    break
+        prompt = (
+            "The host call arguments are invalid.\n"
+            f"Violations: {'; '.join(violations) or 'the host rejected the arguments'}\n"
+            f"Schema: {schema_note or '{}'}\n"
+            f"Step: {step.intent}\n"
+            "Reply with one JSON object of corrected parameter values and nothing else."
+        )
+        repaired = None
+        try:
+            draft = await dw.draft(
+                instance_id=instance_id,
+                conversation_id=conversation_id,
+                user_message=prompt,
+                system_prompt="",
+                conversation_history=conversation_history,
+                instance_config=instance_config,
+                user_info=user_info,
+                tools=None,
+            )
+            repaired = parse_repair_payload(getattr(draft, "text", "") or "")
+        except Exception:
+            logger.exception(
+                "ReActLoop: catalog arg repair draft failed step=%s",
+                step.step_id,
+            )
+        if not repaired:
+            return calls, READ_GAP, 1
+        step.tool_args = apply_repaired_params(step.tool_args, repaired, catalog)
+        calls = rewrite_host_calls(calls, step.tool_args)
+        if catalog_arg_violations(catalog, step.tool_name, step.tool_args):
+            return calls, READ_GAP, 1
+        return calls, None, 1
+
     def _replan_step(self, failed_step: PlanStep, failed_result: StepResult) -> list[PlanStep]:
         """Create replacement steps after a veto — simple: retry as single step."""
         logger.info(
@@ -2785,6 +2958,27 @@ class ReActLoop:
             status="skipped",
             error=reason,
         ))
+        await _db.commit()
+
+    async def _mark_step_running(self, _db, run_id: str, step: PlanStep) -> None:
+        """Show the step as running while it executes.
+
+        The row used to stay ``pending`` until the step finished, so a live
+        poll never had a running status to display.
+        """
+        if _db is None or not run_id:
+            return
+        from ai.engine.core.models import RunStep
+
+        existing = first(await _db.select(
+            RunStep,
+            ("run_id", run_id),
+            ("step_index", step.step_id),
+        ))
+        if existing is None or existing.status not in ("pending", "running"):
+            return
+        existing.status = "running"
+        existing.updated_at = utcnow()
         await _db.commit()
 
     async def _persist_run_step(

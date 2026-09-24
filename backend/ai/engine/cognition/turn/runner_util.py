@@ -199,6 +199,7 @@ def _filter_draft_tools(
     user_message: str,
     salience_domain: str,
     process_mode: str = "ask",
+    conversation_history: list | None = None,
 ) -> list[dict] | None:
     """Exclude ``list_my_capabilities`` unless the user explicitly asked about
     capabilities/access or the turn is an identity-domain turn (GAP-M7).
@@ -222,16 +223,62 @@ def _filter_draft_tools(
 
     # Only Ask withholds the planning tools. Plan drafts them, and Agent runs
     # them — an "anything that is not plan is ask" test wrongly caught Agent.
-    ask_mode = Surface.resolve(
+    resolved = Surface.resolve(
         process_mode=process_mode, user_message=user_message or "",
-    ) is Surface.CHAT_ASK
-    if tools and ask_mode:
+    )
+    if tools and resolved is Surface.CHAT_ASK:
         _ask_block = frozenset({"plan_task", "approve_plan", "edit_plan"})
         tools = [
             d for d in tools
             if d.get("function", {}).get("name") not in _ask_block
         ]
+    elif tools and resolved is Surface.CHAT_PLAN:
+        # Plan drafts a task. Live host reads would answer the brief in the
+        # bubble and skip acceptance. plan_task creates the task, so it stays
+        # unavailable until the user accepts a plan already shown.
+        _plan_block = frozenset({
+            "call_host_api",
+            "resolve_entity",
+            "aggregate_entity",
+            "export_document",
+            "invoke_skill",
+        })
+        if not _user_accepted_shown_plan(user_message, conversation_history):
+            _plan_block = _plan_block | {"plan_task"}
+        tools = [
+            d for d in tools
+            if d.get("function", {}).get("name") not in _plan_block
+        ]
     return tools
+
+
+_PLAN_ACCEPT = frozenset({
+    "yes", "ok", "okay", "accept", "accepted", "approve", "approved",
+    "go", "proceed", "confirm", "do it", "create it", "create the task",
+})
+
+
+def _user_accepted_shown_plan(
+    user_message: str,
+    conversation_history: list | None,
+) -> bool:
+    """True when a numbered plan is already in the thread and this turn accepts it."""
+    import re
+
+    text = (user_message or "").strip().lower().rstrip(".!")
+    if text not in _PLAN_ACCEPT and not text.startswith("accept"):
+        return False
+    for msg in reversed(conversation_history or []):
+        if not isinstance(msg, dict):
+            continue
+        role = msg.get("role") or msg.get("type") or ""
+        if role not in ("assistant", "ai"):
+            continue
+        content = msg.get("content") or ""
+        if re.search(r"(?m)^\s*\d+[\.\)]\s+\S", content):
+            return True
+        return False
+    return False
 
 #: Spine static tools ALWAYS exposed to the chat planner. Registry plugins
 #: contribute the rest via ``chat_tool_names()`` (G-C: freeze the spine, grow

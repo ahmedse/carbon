@@ -1006,9 +1006,41 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     try {
       const plan = await getPlan(token, planId);
       setSelectedPlan(plan);
-      // Replace the list row wholesale (status + steps) so picker chips use
-      // effectivePlanStatus on fresh step outcomes — not a lagged failed step.
       setPlans((prev) => prev.map((p) => (p.id === planId ? { ...p, ...plan } : p)));
+      // The Now timeline reads runSteps, snapshotted as Pending when the run
+      // opened. A quiet poll used to update the plan row only, so every step
+      // stayed Pending while the chip said Working.
+      if (Array.isArray(plan.steps) && plan.steps.length) {
+        setRunSteps((prev) => {
+          if (!prev.length) return prev;
+          const byId = new Map(plan.steps.map((s) => [s.step_id, s]));
+          const rank = {
+            pending: 0,
+            running: 1,
+            paused: 2,
+            awaiting_approval: 3,
+            completed: 4,
+            failed: 4,
+            skipped: 4,
+          };
+          return prev.map((s) => {
+            const fresh = byId.get(s.step_id);
+            if (!fresh?.status) return s;
+            // A poll that left before the step finished must not paint
+            // Running back over a step the stream already settled.
+            if ((rank[fresh.status] ?? 0) < (rank[s.status] ?? 0)) return s;
+            return {
+              ...s,
+              status: fresh.status,
+              error: fresh.error ?? s.error,
+              tool_output: fresh.tool_output ?? s.tool_output,
+              output_type: fresh.output_type ?? s.output_type,
+              artifacts: fresh.artifacts ?? s.artifacts,
+              consent_granted: Boolean(fresh.consent_granted) || Boolean(s.consent_granted),
+            };
+          });
+        });
+      }
       return plan;
     } catch (err) {
       if (!quiet) {

@@ -203,6 +203,23 @@ api_catalog:
       For TOTAL headcount or Kuwaiti count (canonical named metrics), prefer the
       standalone aggregate_entity TOOL (metric=headcount|kuwaiti) so the filter
       definition is fixed and cited — do not invent alternate filters.
+    parameters:
+      type: object
+      required: [dimension]
+      properties:
+        dimension:
+          type: string
+          enum:
+            - gender
+            - is_active
+            - nationality
+            - nationality_code
+            - employment_type_code
+            - contract_type_code
+            - position
+            - org_unit
+            - kuwaitization
+            - rotation
     requires_auth: true
     requires_confirmation: false
 

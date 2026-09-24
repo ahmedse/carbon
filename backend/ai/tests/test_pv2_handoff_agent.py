@@ -236,6 +236,47 @@ def test_chat_grounding_never_says_call_the_tool_for_writes():
     assert "learn_fact" in block
 
 
+def test_plan_grounding_shows_the_plan_before_creating_a_task():
+    block = chat_grounding_rules_block(process_mode="plan")
+    assert "numbered list" in block
+    assert "Do not call plan_task until the user has accepted" in block
+    assert "Never tell the user to switch to Plan" in block
+    assert "fetching live data" in block
+
+
+def test_plan_dial_withholds_host_reads_and_task_creation():
+    from ai.engine.cognition.turn.runner_util import _filter_draft_tools
+
+    tools = [
+        {"function": {"name": "plan_task"}},
+        {"function": {"name": "call_host_api"}},
+        {"function": {"name": "resolve_entity"}},
+        {"function": {"name": "ask_clarification"}},
+    ]
+    names = {
+        d["function"]["name"]
+        for d in _filter_draft_tools(tools, "pull the loans and export a brief", "general", "plan")
+    }
+    assert names == {"ask_clarification"}
+    shown = [{
+        "role": "assistant",
+        "content": "1. Pull company loans\n2. Export the brief for HR",
+    }]
+    accepted = {
+        d["function"]["name"]
+        for d in _filter_draft_tools(
+            tools, "yes", "general", "plan", shown,
+        )
+    }
+    assert accepted == {"plan_task", "ask_clarification"}
+    ask_names = {
+        d["function"]["name"]
+        for d in _filter_draft_tools(tools, "what is my leave balance", "general", "ask")
+    }
+    assert "call_host_api" in ask_names
+    assert "plan_task" not in ask_names
+
+
 def test_is_ess_write_utterance():
     assert is_ess_write_utterance("I want to apply for an emergency loan of 3000 SAR")
     assert is_ess_write_utterance("أريد إجازة سنوية غدا")

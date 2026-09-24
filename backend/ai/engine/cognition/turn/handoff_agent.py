@@ -1049,8 +1049,63 @@ def seed_slots_into_state(state_ctx: Any, api_name: str, slots: dict) -> None:
         logger.debug("handoff active_plans seed skipped", exc_info=True)
 
 
-def chat_grounding_rules_block() -> str:
-    """Chat-surface grounding — never instructs mutation tool calls for host writes."""
+def chat_grounding_rules_block(
+    surface: str | None = None,
+    *,
+    process_mode: str | None = None,
+) -> str:
+    """Grounding for this surface. Ask answers reads. Plan drafts a task.
+
+    The default (no surface, no dial) stays Ask so older callers keep the
+    read-and-answer contract. Plan must not inherit that contract.
+    """
+    from ai.engine.agent.surface import Surface
+
+    current = Surface.resolve(surface, process_mode=process_mode)
+    if current is Surface.CHAT_PLAN:
+        return _plan_grounding_rules_block()
+    if current.may_host_mutate:
+        return _agent_grounding_rules_block()
+    return _ask_grounding_rules_block()
+
+
+def _plan_grounding_rules_block() -> str:
+    """Plan dial: show the steps for audit. Create the task only after acceptance."""
+    return (
+        "GROUNDING RULES — follow them exactly:\n"
+        "- PLAN MODE. The user is already on Plan. Do not answer the brief "
+        "by fetching live data.\n"
+        "- Propose the plan in this reply so the user can audit it. Use a "
+        "numbered list, one step per line: what the step does, in order. "
+        "Ask them to accept it or say what to change.\n"
+        "- Do not call plan_task until the user has accepted the plan you "
+        "already showed. Creating the task is the step after acceptance, "
+        "not the first reply.\n"
+        "- If one fact is missing, ask that one question before you propose "
+        "the steps. Do not re-ask a fact already known.\n"
+        "- Do not call read tools (call_host_api, resolve_entity, "
+        "aggregate_entity) to produce the answer in this bubble.\n"
+        "- Do not submit host writes. Plan drafts only.\n"
+        "- Never tell the user to switch to Plan.\n"
+        "- NEVER claim a task was created unless plan_task returned it.\n"
+        "- If a tool errors, report the error plainly."
+    )
+
+
+def _agent_grounding_rules_block() -> str:
+    """Agent dial: an approved plan may stage effects with step consent."""
+    return (
+        "GROUNDING RULES — follow them exactly:\n"
+        "- AGENT MODE. The user is already in Agent. An approved plan may "
+        "stage host effects with step consent.\n"
+        "- Never tell the user to switch to Agent.\n"
+        "- NEVER claim an action succeeded unless a tool result confirms it.\n"
+        "- If a tool errors, report the error plainly."
+    )
+
+
+def _ask_grounding_rules_block() -> str:
+    """Ask dial: answer reads. A reviewable plan belongs on the Plan dial."""
     return (
         "GROUNDING RULES — follow them exactly:\n"
         "- You have tools available. For READS (balances, lists, profile, "

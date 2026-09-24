@@ -1958,6 +1958,10 @@ class CarbonIntelligence:
 
         cancelled = GENERATIONS.cancel(str(conversation.id))
 
+        if conversation.status == "working":
+            conversation.status = "pending"
+            conversation.save(update_fields=["status", "updated_at"])
+
         latest = conversation.generations.order_by("-started_at").first()
         if latest is not None and latest.status == "running":
             latest.status = "cancelled"

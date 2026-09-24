@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import re
 import time
@@ -81,6 +82,15 @@ async def run_s3_through_s5(
     _is_wq = runner._is_weather_query
     s3_start = time.monotonic()
     await _broadcast_run(instance_id, 'run.step.started', {'run_id': turn_id, 'stage': 's3_draft', 'stage_index': 2})
+    if progress_callback is not None:
+        _stage = (
+            "Drafting a plan for you to review…"
+            if str(process_mode or "") == "plan"
+            else "Reading your request…"
+        )
+        _maybe = progress_callback(_stage)
+        if inspect.isawaitable(_maybe):
+            await _maybe
     from ai.engine.cognition.turn.draft import DraftWitness
     draft_witness = DraftWitness(llm_client=runner.llm_client, knowledge_store=runner.knowledge_store, memory_manager=runner.memory_manager, executor=runner.executor)
     config = instance_config or {}
@@ -96,7 +106,10 @@ async def run_s3_through_s5(
         except Exception:
             logger.warning(f'[{turn_id[:8]}] Domain context assembly failed', exc_info=True)
     draft_tools = runner._draft_tools if runner.executor is not None else None
-    draft_tools = _filter_draft_tools(draft_tools, st.user_message, st.salience.domain, process_mode)
+    draft_tools = _filter_draft_tools(
+        draft_tools, st.user_message, st.salience.domain, process_mode,
+        conversation_history,
+    )
     from ai.engine.cognition.plan.planner import (
         _history_has_discuss_markers,
         _is_discuss_apply_turn,
@@ -126,7 +139,7 @@ async def run_s3_through_s5(
         system_prompt = f'{system_prompt}\n\nAGENT DISCUSS APPLY — follow exactly:\n- The user confirmed a Chat refine of an EXISTING Agent plan.\n- Call edit_plan on that plan' + (f' (plan_id={_plan_id_hint})' if _plan_id_hint else '') + ".\n- If the ask is small and additive (add a chart, embed visuals, add one export step), pass step_deltas with action=add — do NOT rewrite the whole brief. Rewriting the brief forces a full replan and often regresses the graph into duplicate vague steps.\n- Only pass a full replacement brief when the user asked to rebuild the plan from scratch.\n- Do NOT call plan_task (that creates a NEW plan).\n- Do NOT navigate to Payroll or any app.\n- Do NOT collapse the brief into a single invoke_skill step — the brief's multiple actions must remain multiple steps.\n- After edit_plan succeeds, tell the user the plan was updated and still awaits approval in Tasks — nothing has run yet.\n"
     elif draft_tools and _is_platform_zone:
         from ai.engine.cognition.turn.handoff_agent import chat_grounding_rules_block
-        system_prompt = f'{system_prompt}\n\n{chat_grounding_rules_block()}'
+        system_prompt = f'{system_prompt}\n\n{chat_grounding_rules_block(surface, process_mode=process_mode)}'
     from ai.engine.cognition.dialogue.anaphora import AnaphoraResolver
     _resolved_user_message = AnaphoraResolver(st.wm).resolve(conversation_id, st.user_message)
     _wm_fragment = st.wm.to_prompt_fragment(conversation_id)
