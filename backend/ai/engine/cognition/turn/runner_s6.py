@@ -94,6 +94,13 @@ async def run_s6_finalize(
     ledger.total_llm_calls = st.total_llm_calls
     logger.info('TurnPipelineRunner: turn=%s domain=%s route=%s critic=%s latency=%.0fms tokens=%d', turn_id[:8], st.salience.domain, st.salience.route, st.critic.verdict, total_latency, st.total_tokens)
     response = AgentResponse(text=st.final_text, sources_cited=st.draft.claimed_citations, tools_used=st.draft.tool_calls, confidence=st.draft.confidence, total_tokens=st.total_tokens, llm_calls=st.total_llm_calls, model=st.draft.model_used, envelope=st.synth.get('envelope') if st.synth else None)
+    if st.discuss_ctx and st.plan_revision_ref and (st.final_text or '').strip():
+        # The discuss reply is the proposed revision: keep it open as a typed,
+        # confirmable question so "apply" resolves against state (P9), not a
+        # phrase list.
+        from ai.engine.cognition.turn.plan_revision import build_revision_question
+        response.open_question = build_revision_question(st.plan_revision_ref, st.final_text)
+        _signal(ledger, 'plan_revision_proposed', True, plan_id=str(st.plan_revision_ref.get('plan_id') or ''))
     with stage('auto_memory'):
         asyncio.ensure_future(AutoMemoryExtractor.try_extract(user_message=st.user_message, instance_id=instance_id, host_user_id=host_user_id, db_session=runner.db))
     await _broadcast_run(instance_id, 'run.step.completed', {'run_id': turn_id, 'stage': 's6_finalize', 'stage_index': 5, 'latency_ms': s6_latency})

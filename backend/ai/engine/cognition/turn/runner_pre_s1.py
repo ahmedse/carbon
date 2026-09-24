@@ -82,6 +82,25 @@ async def run_pre_s1_gates(
     if turn_route.confirm and runner.executor is not None and instance_id:
         try:
             _confirm_payload = turn_route.confirm
+            from ai.engine.cognition.turn.plan_revision import (
+                KIND as _PLAN_REVISION,
+                build_revision_handoff,
+            )
+            if _confirm_payload.get("kind") == _PLAN_REVISION:
+                # Chat proposes, Agent applies (ADR-0046): the confirmed
+                # revision becomes a 0-LLM handoff to the Tasks panel. Chat
+                # never calls edit_plan — the Chat guard would cancel it.
+                response = build_revision_handoff(_confirm_payload, st.user_message)
+                total_latency = (time.monotonic() - t0) * 1000
+                await runner._write_ledger_row(turn_id, instance_id, conversation_id, host_user_id, 'final', 5, {'total_latency_ms': total_latency, 'total_tokens': 0, 'total_llm_calls': 0, 'plan_revision_handoff': _confirm_payload.get('plan_id') or ''}, total_latency, verdict='pass')
+                if runner.db is not None:
+                    await runner.db.commit()
+                ledger.final_response = response.text[:500]
+                ledger.total_latency_ms = total_latency
+                await _broadcast_run(instance_id, 'run.completed', {'run_id': turn_id, 'total_latency_ms': total_latency, 'total_tokens': 0, 'total_llm_calls': 0, 'plan_revision_handoff': True})
+                _signal(ledger, 'open_question_confirm', True, api='plan_revision', plan_id=str(_confirm_payload.get('plan_id') or ''))
+                _finalize_meter(ledger, meter, 'plan_revision_handoff')
+                return (response, ledger)
             _confirm_api = str(_confirm_payload.get("api") or "").strip()
             if _confirm_api:
                 from ai.engine.cognition.turn.ess_read import build_ess_self_tool_call
@@ -121,9 +140,15 @@ async def run_pre_s1_gates(
     except Exception:
         logger.warning('[%s] Pending-confirmation short-circuit failed; continuing normal pipeline', turn_id[:8], exc_info=True)
     _signal(ledger, 'pending_confirm', _pending_fired)
-    from ai.engine.cognition.plan.planner import _history_has_discuss_markers, _is_agent_discuss_context, _is_agent_discuss_turn, _is_discuss_apply_turn
-    st.discuss_ctx = _is_agent_discuss_context(st.user_message, conversation_history)
-    st.discuss_thread = st.discuss_ctx or _is_agent_discuss_turn(st.user_message) or _history_has_discuss_markers(conversation_history)
+    # Agent → Discuss is typed state, not transcript scanning (ADR-0049 P9):
+    # a pending ``plan_revision`` question on the Plan dial, or the FE seed
+    # turn with a linkable plan. ``discuss_thread`` also covers outcome-talk
+    # seeds on Ask (prose-only for that one turn).
+    from ai.engine.cognition.plan.planner import _is_agent_discuss_turn
+    from ai.engine.cognition.turn.plan_revision import is_discuss_turn, linked_plan_ref
+    st.discuss_ctx = is_discuss_turn(st.user_message, state, process_mode)
+    st.plan_revision_ref = linked_plan_ref(state, st.user_message) if st.discuss_ctx else None
+    st.discuss_thread = st.discuss_ctx or _is_agent_discuss_turn(st.user_message)
     _nav_fast_fired = False
     if settings.NAVIGATION_RESOLVER_ENABLED and (not st.discuss_thread) and (not turn_route.committed):
         try:

@@ -205,9 +205,33 @@ def score_l5(
     return LevelScore("L5", "Autonomous within consent", status, gates, note)
 
 
+def latest_g6_understand() -> dict[str, Any]:
+    """Newest committed ``PV2.1-g6-understand-*.json`` (the runtime-equivalent
+    ``--mode understand`` run), else the 2026-09-23 baseline."""
+    candidates = sorted(EVIDENCE.glob("PV2.1-g6-understand-*.json"))
+    if candidates:
+        return _load(candidates[-1].name)
+    return _load("PV2.1-g6-baseline-2026-09-23.json")
+
+
+def live_budget() -> dict[str, Any]:
+    """Measure the harness budget from the working tree, not a dated file.
+
+    L7 used to read ``PV2.1-budget-2026-09-23.json`` and stayed *partial*
+    weeks after the meters cleared their ceilings. The scorer must not lag
+    the code it scores; the dated files remain as history for the gauge series.
+    """
+    try:
+        from ai.eval.harness_budget import measure
+
+        return measure()
+    except Exception:  # noqa: BLE001 — scorer must degrade, not crash
+        return _load("PV2.1-budget-2026-09-23.json")
+
+
 def score_l6(g6: dict[str, Any] | None = None) -> LevelScore:
     """L6 Understands. Missing until a committed G6 evidence file clears the bars."""
-    row = g6 if g6 is not None else _load("PV2.1-g6-baseline-2026-09-23.json")
+    row = g6 if g6 is not None else latest_g6_understand()
     try:
         accuracy = float(row.get("decision_accuracy")) if row else -1.0
     except (TypeError, ValueError):
@@ -249,7 +273,7 @@ def score_l6(g6: dict[str, Any] | None = None) -> LevelScore:
 
 def score_l7(budget: dict[str, Any] | None = None) -> LevelScore:
     """L7 Lean harness. Ceilings from ADR-0049. Missing until the budget is inside them."""
-    row = budget if budget is not None else _load("PV2.1-budget-2026-09-23.json")
+    row = budget if budget is not None else live_budget()
     ceilings = {
         "staged_exits": 4,
         "re_compile": 60,

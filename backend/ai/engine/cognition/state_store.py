@@ -404,11 +404,21 @@ def resolve_against_state(message: str, state: "ConversationState") -> dict | No
     Returns a dict with confirm payload if affirmation matches, else None.
     Invariant I2: affirmation closes the question deterministically.
     """
-    from ai.engine.cognition.dialogue.affirmation import starts_with_affirmation
-    
+    from ai.engine.cognition.dialogue.affirmation import (
+        is_commit_affirmation,
+        starts_with_affirmation,
+    )
+    from ai.engine.cognition.turn.plan_revision import KIND as PLAN_REVISION
+
     question = state.open_question or {}
     if not isinstance(question, dict) or not question.get("confirm"):
         return None
+    # A proposed plan revision is committed only by a bare "yes / apply /
+    # accept" — "apply for leave" is a new request, not a confirmation.
+    if question.get("kind") == PLAN_REVISION:
+        if not is_commit_affirmation(message or ""):
+            return None
+        return question.get("confirm")
     if not starts_with_affirmation(message or ""):
         return None
     return question.get("confirm")
@@ -574,6 +584,15 @@ def update_state_from_turn(
         
         state.open_question = {
             **new_typed,
+            "asked_turn": turn,
+            "text": " ".join((response_text or "").split())[:_OPEN_QUESTION_TEXT_MAX],
+        }
+    elif isinstance(open_question, dict) and open_question.get("kind") and open_question.get("confirm"):
+        # An answer turn may still leave a typed, executable question open
+        # (e.g. a proposed plan revision awaiting "apply"). Only typed +
+        # confirmable questions survive an answer; prose never does.
+        state.open_question = {
+            **open_question,
             "asked_turn": turn,
             "text": " ".join((response_text or "").split())[:_OPEN_QUESTION_TEXT_MAX],
         }

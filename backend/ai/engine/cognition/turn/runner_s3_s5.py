@@ -110,33 +110,17 @@ async def run_s3_through_s5(
         draft_tools, st.user_message, st.salience.domain, process_mode,
         conversation_history,
     )
-    from ai.engine.cognition.plan.planner import (
-        _history_has_discuss_markers,
-        _is_discuss_apply_turn,
-    )
     _discuss_turn = st.discuss_ctx
-    _discuss_apply = (
-        _history_has_discuss_markers(conversation_history)
-        and _is_discuss_apply_turn(st.user_message)
-    )
     if _discuss_turn:
         draft_tools = None
     _is_platform_zone = st.intent_resolution is None or st.intent_resolution.zone in ('platform', 'off_limits')
     if _discuss_turn:
-        system_prompt = f'{system_prompt}\n\nAGENT DISCUSS MODE — follow exactly:\n- The user is refining or discussing an existing Agent plan in Chat.\n- Reply in prose only: improved brief and/or numbered steps.\n- Keep the step list multi-step when the brief has multiple actions (compute, validate, compare rates, report, do-not-commit). Never collapse to a single vague step.\n- Do NOT call any tools (no invoke_skill, call_host_api, resolve_entity, aggregate_entity, plan_task, edit_plan, approve_plan, web_research, export_document).\n- Do NOT re-run the prior analysis or fetch live data.\n- Do NOT navigate the user to an app (Payroll, People, …).\n- Do NOT mutate the Agent plan. Wait until the user says Fork, Replan, or explicitly asks to convert/run.\n'
-    elif _discuss_apply:
-        import re as _re_plan
-        _plan_id_match = None
-        for _msg in (conversation_history or [])[-12:]:
-            if not isinstance(_msg, dict):
-                continue
-            _plan_id_match = _re_plan.search('plan\\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', _msg.get('content') or '', _re_plan.I)
-            if _plan_id_match:
-                break
-        if not _plan_id_match:
-            _plan_id_match = _re_plan.search('plan\\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', st.user_message or '', _re_plan.I)
-        _plan_id_hint = _plan_id_match.group(1) if _plan_id_match else ''
-        system_prompt = f'{system_prompt}\n\nAGENT DISCUSS APPLY — follow exactly:\n- The user confirmed a Chat refine of an EXISTING Agent plan.\n- Call edit_plan on that plan' + (f' (plan_id={_plan_id_hint})' if _plan_id_hint else '') + ".\n- If the ask is small and additive (add a chart, embed visuals, add one export step), pass step_deltas with action=add — do NOT rewrite the whole brief. Rewriting the brief forces a full replan and often regresses the graph into duplicate vague steps.\n- Only pass a full replacement brief when the user asked to rebuild the plan from scratch.\n- Do NOT call plan_task (that creates a NEW plan).\n- Do NOT navigate to Payroll or any app.\n- Do NOT collapse the brief into a single invoke_skill step — the brief's multiple actions must remain multiple steps.\n- After edit_plan succeeds, tell the user the plan was updated and still awaits approval in Tasks — nothing has run yet.\n"
+        # Chat proposes; Agent applies. The reply itself becomes the typed
+        # ``plan_revision`` question (runner_s6) — a bare "apply / yes" next
+        # turn hands it to the Tasks panel without another LLM call.
+        _plan_title = str((st.plan_revision_ref or {}).get('title') or '').strip()
+        _plan_line = f' The plan under discussion: "{_plan_title}".' if _plan_title else ''
+        system_prompt = f'{system_prompt}\n\nAGENT DISCUSS MODE — follow exactly:\n- The user is refining or discussing an existing Agent plan in Chat.{_plan_line}\n- Reply in prose only: one improved brief and/or a short numbered step list. Your reply IS the proposed revision — write it so it can be applied verbatim.\n- Keep the step list multi-step when the brief has multiple actions (compute, validate, compare rates, report, do-not-commit). Never collapse to a single vague step.\n- Do NOT call any tools (no invoke_skill, call_host_api, resolve_entity, aggregate_entity, plan_task, edit_plan, approve_plan, web_research, export_document).\n- Do NOT re-run the prior analysis or fetch live data.\n- Do NOT navigate the user to an app (Payroll, People, …).\n- Do NOT claim the plan was changed. End with one line: the user can say "apply" to take this revision to Agent, where they review the diff and approve it.\n'
     elif draft_tools and _is_platform_zone:
         from ai.engine.cognition.turn.handoff_agent import chat_grounding_rules_block
         system_prompt = f'{system_prompt}\n\n{chat_grounding_rules_block(surface, process_mode=process_mode)}'

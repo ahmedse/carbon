@@ -323,93 +323,28 @@ _ACTION_VERBS: list[str] = [
 ]
 
 
-# Agent Done → Discuss in Chat seeds the composer with these markers so Chat
-# stays prose-only (no skill match / invoke_skill / ReAct) until Fork/Replan.
+# Agent Done → Discuss in Chat: the FE composer seeds the *first* turn with
+# this protocol marker (``buildDiscussDraft.js``) so that one turn stays
+# prose-only (no skill match / invoke_skill / ReAct). Every later turn reads
+# the typed ``plan_revision`` question on ConversationState instead
+# (``turn/plan_revision.py``) — no transcript scanning, no apply allowlist.
 _AGENT_DISCUSS_MARKERS: tuple[str, ...] = (
     "discussion only",
     "i'd like to refine plan",
     "let's discuss the outcome of",
-    "do not change the agent plan until i say to fork or replan",
 )
-
-# Explicit apply / convert signals that END discuss continuity (tools allowed).
-_AGENT_DISCUSS_APPLY_PHRASES: tuple[str, ...] = (
-    "fork",
-    "replan",
-    "convert it to a task",
-    "create the task",
-    "make it a task",
-    "settled",
-    "yes build it",
-    "apply the plan",
-    "update the plan",
-    "use this plan",
-    "proceed with",
-)
-
-# Bare affirmatives — only exit discuss when history already has discuss markers.
-_AGENT_DISCUSS_APPLY_SHORT: frozenset[str] = frozenset({
-    "go", "proceed", "yes", "ok", "okay", "do it", "confirm", "approved",
-    "apply", "accept",
-    "lfg", "ship it",
-})
 
 
 def _is_agent_discuss_turn(utterance: str) -> bool:
-    """True when Chat was seeded from Agent → Discuss (refine / outcome talk).
+    """True on the FE-seeded Agent → Discuss turn (refine / outcome talk).
 
-    These turns must stay single-step prose: pasting a prior brief/outcome
-    otherwise matches skills and trips invoke_skill / ReAct.
+    That turn pastes a prior brief/outcome, which would otherwise match
+    skills and trip invoke_skill / ReAct.
     """
     if not utterance:
         return False
     lower = utterance.lower()
     return any(m in lower for m in _AGENT_DISCUSS_MARKERS)
-
-
-def _history_has_discuss_markers(conversation_history: list | None) -> bool:
-    """True when a recent message in this thread carried Agent→Discuss markers."""
-    if not conversation_history:
-        return False
-    for msg in conversation_history[-12:]:
-        if not isinstance(msg, dict):
-            continue
-        content = msg.get("content") or ""
-        if _is_agent_discuss_turn(content):
-            return True
-    return False
-
-
-def _is_discuss_apply_turn(utterance: str) -> bool:
-    """True when the user is asking to apply the refined plan (exit discuss)."""
-    lower = (utterance or "").strip().lower()
-    if not lower:
-        return False
-    if lower in _AGENT_DISCUSS_APPLY_SHORT:
-        return True
-    # "why replan" / "do not replan yet" stay in discuss.
-    if any(neg in lower for neg in ("why ", "don't ", "do not ", "not yet", "don't replan")):
-        return False
-    return any(p in lower for p in _AGENT_DISCUSS_APPLY_PHRASES)
-
-
-def _is_agent_discuss_context(
-    utterance: str,
-    conversation_history: list | None = None,
-) -> bool:
-    """True while Chat is still refining an Agent plan in prose.
-
-    Seeded DISCUSSION ONLY messages are discuss. Follow-ups ("why single
-    step?", "think deeper") stay discuss while history still has markers —
-    until the user explicitly applies (go / proceed / replan / fork).
-    """
-    if _is_agent_discuss_turn(utterance):
-        return True
-    if not _history_has_discuss_markers(conversation_history):
-        return False
-    if _is_discuss_apply_turn(utterance):
-        return False
-    return True
 
 
 def _looks_agent_multi_step(utterance: str) -> bool:

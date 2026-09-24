@@ -1338,11 +1338,13 @@ class SoftSurfacesMixin:
         settings = get_settings()
 
         # Agent → Discuss seeds (and follow-ups) must never enter ReAct.
-        from ai.engine.cognition.plan.planner import (
-            _is_agent_discuss_context,
-            _wants_explicit_task_creation,
-        )
-        if _is_agent_discuss_context(user_message, conversation_history):
+        from ai.engine.cognition.plan.planner import _wants_explicit_task_creation
+        from ai.engine.cognition.turn.plan_revision import is_discuss_turn
+        if is_discuss_turn(
+            user_message,
+            getattr(state_ctx, "state", None),
+            process_mode,
+        ):
             logger.info("TurnPipelineRunner: Agent discuss turn — skip ReAct")
             return None
         # "I need a task…" → Chat PLAN FIRST + plan_task, not silent ReAct.

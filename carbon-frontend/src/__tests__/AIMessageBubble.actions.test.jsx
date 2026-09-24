@@ -415,7 +415,46 @@ describe('AIMessageBubble AI-driven actions', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Open in Tasks' }));
-    expect(onOpenPanel).toHaveBeenCalledWith('tasks', '7a0c10ae');
+    expect(onOpenPanel).toHaveBeenCalledWith(
+      'tasks',
+      '7a0c10ae',
+      expect.objectContaining({ revision: '' }),
+    );
+  });
+
+  it('carries a Chat-proposed plan revision to the Tasks panel (Chat proposes, Agent applies)', () => {
+    const onOpenPanel = vi.fn();
+    renderBubble(
+      {
+        id: 'msg-revision',
+        role: 'assistant',
+        content: '**Revision ready to apply in Agent**',
+        created_at: '2026-09-24T10:00:00Z',
+        outcome: null,
+        metadata: {
+          actions: [{
+            type: 'open_panel',
+            panel: 'tasks',
+            plan_id: 'e20c2937-7ece-45b0-8db6-3f40e89ee35d',
+            label: 'Apply in Agent',
+            summary: 'Review and apply the change in Agent',
+            process_hint: 'plan',
+            revision: 'Improved brief: compute variance, validate, report.\n1. Fetch\n2. Compute',
+          }],
+        },
+      },
+      { onOpenPanel },
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply in Agent' }));
+    expect(onOpenPanel).toHaveBeenCalledWith(
+      'tasks',
+      'e20c2937-7ece-45b0-8db6-3f40e89ee35d',
+      expect.objectContaining({
+        processHint: 'plan',
+        revision: 'Improved brief: compute variance, validate, report.\n1. Fetch\n2. Compute',
+      }),
+    );
   });
 
   it('does not render an open_panel button when no handler is wired', () => {

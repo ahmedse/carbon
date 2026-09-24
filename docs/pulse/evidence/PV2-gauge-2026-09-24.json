@@ -1,0 +1,87 @@
+{
+  "measured_at": "2026-09-24",
+  "instance": "nibras",
+  "budget": {
+    "staged_exits": 3,
+    "re_compile": 61,
+    "arabic_regex": 0,
+    "runner_lines": 367,
+    "tool_choice_uses": 33,
+    "routing_phrase_sets": 281,
+    "domain_terms_in_core": 846,
+    "brand_literals_in_core": 11
+  },
+  "ladder": {
+    "levels": {
+      "L0": "reached",
+      "L1": "reached",
+      "L2": "reached",
+      "L3": "reached",
+      "L4": "reached",
+      "L5": "reached",
+      "L6": "partial",
+      "L7": "partial"
+    },
+    "misses": {
+      "L6": [
+        "g6_parity",
+        "forced_call_misses"
+      ],
+      "L7": [
+        "re_compile"
+      ]
+    },
+    "six_b_streak": 5,
+    "soak_complete": true,
+    "adr_0047": "Accepted"
+  },
+  "g6": {
+    "source": "PV2.1-g6-understand-2026-09-24.json",
+    "n": 74,
+    "decision_accuracy": 0.972972972972973,
+    "parity": 0.9459459459459459,
+    "gate_pass": true,
+    "misses": 4
+  },
+  "g5": {
+    "source": "PV2-g5-2026-09-23s.json",
+    "scripts_passed": 12,
+    "scripts_run": 12,
+    "turns_passed": 96,
+    "total_turns": 96,
+    "focus_retention": 1.0,
+    "slot_carry_over": 1.0,
+    "router_agreement": 1.0,
+    "llm_calls_p50": 2
+  },
+  "soak": {
+    "required_consecutive": 5,
+    "soak_complete": true,
+    "nights": 6,
+    "last_night": "",
+    "last_verdict": "PASS"
+  },
+  "packs": {
+    "packs": {
+      "carbon": {
+        "version": 1,
+        "domain": "data_trust"
+      },
+      "eduos": {
+        "version": 1,
+        "domain": "education"
+      },
+      "nibras": {
+        "version": 1,
+        "domain": "hrms"
+      }
+    },
+    "violations": [],
+    "gate_pass": true
+  },
+  "coverage": {
+    "chat_turn_path": "ladder L0–L7 · G5 · G6 · budget",
+    "agent_plan_path": "no bank — planner / plans_service / discuss are unmeasured",
+    "second_instance": "none — all banks are Nibras ESS"
+  }
+}

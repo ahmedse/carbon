@@ -78,5 +78,6 @@ cp .ai-toolkit/decisions/0000-template.md .ai-toolkit/decisions/00NN-short-title
 | [0047](0047-pulse-unified-conversation-state.md) | Pulse v2: unified ConversationState, ContextPack, one decision per turn (Intelligence Contract) | Accepted |
 | [0048](0048-birthright-duty-scope.md) | Birthright duty scope | Accepted |
 | [0049](0049-pulse-2-1-model-understands-catalog-executes.md) | Pulse 2.1: model understands, catalog executes | Proposed |
+| [0050](0050-pulse-core-domain-free-versioned-packs.md) | Pulse core is domain-free; domains are self-contained, versioned packs (gauge + pack gates) | Proposed |
 
 <!-- Add a row per ADR. Keep newest at the bottom. -->

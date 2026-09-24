@@ -1,0 +1,16 @@
+# Domain pack manifest (ADR-0050). Addressed by `id` via the registry only.
+id: carbon
+version: 1
+domain: data_trust
+display_name: Carbon — Data Trust Platform
+instance: backend/ai/engine/instances/carbon/instance.yaml
+compat:
+  engine: ">=2.1"
+owns:
+  catalog: api_catalog.yaml
+  processes: processes/
+  vocabulary: vocabulary.yaml
+  triggers: triggers.yaml
+  prompts: prompts/
+  skills: skills/
+  assurance: assurance/

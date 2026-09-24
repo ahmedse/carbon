@@ -1,10 +1,7 @@
 import pytest
 
 from ai.engine.cognition.plan.planner import (
-    _history_has_discuss_markers,
-    _is_agent_discuss_context,
     _is_agent_discuss_turn,
-    _is_discuss_apply_turn,
     _looks_agent_multi_step,
     _score_skill,
     _wants_explicit_task_creation,
@@ -158,40 +155,57 @@ async def test_force_decompose_refuses_invoke_skill_collapse():
     assert plan.steps[0].tool_name != "invoke_skill"
 
 
-def test_discuss_followup_stays_in_context():
-    history = [
-        {
-            "role": "user",
-            "content": (
-                'I\'d like to refine plan (plan 29e0cdbf-1aa4-4f1c-8b61-36c02312a045): '
-                '"Compute payroll".\n\n'
-                "DISCUSSION ONLY — reply in Chat with one improved brief.\n"
-                "Do not change the Agent plan until I say to Fork or Replan."
-            ),
-        },
-        {"role": "assistant", "content": "Improved brief…\n1. Fetch\n2. Compute"},
-    ]
-    assert _history_has_discuss_markers(history) is True
-    assert _is_agent_discuss_context("why in single step?!", history) is True
-    assert _is_agent_discuss_context(
+_SEED = (
+    'I\'d like to refine plan (plan 29e0cdbf-1aa4-4f1c-8b61-36c02312a045): '
+    '"Compute payroll".\n\n'
+    "DISCUSSION ONLY — reply in Chat with one improved brief.\n"
+    "Do not change the Agent plan until I explicitly ask you to apply changes."
+)
+
+
+def test_discuss_seed_is_prose_only_turn():
+    assert _is_agent_discuss_turn(_SEED) is True
+    assert _is_agent_discuss_turn("why in single step?!") is False
+    assert _is_agent_discuss_turn("apply") is False
+
+
+def test_discuss_continuity_is_typed_state_not_transcript():
+    """Follow-ups stay in discuss because state holds a plan_revision question,
+    not because a phrase list decided. The apply allowlist is gone (ADR-0049 P11)."""
+    import ai.engine.cognition.plan.planner as planner
+    from ai.engine.cognition.state_store import ConversationState
+    from ai.engine.cognition.turn.plan_revision import (
+        build_revision_question,
+        is_discuss_turn,
+        linked_plan_ref,
+    )
+
+    for gone in ("_AGENT_DISCUSS_APPLY_SHORT", "_AGENT_DISCUSS_APPLY_PHRASES",
+                 "_is_discuss_apply_turn", "_history_has_discuss_markers",
+                 "_is_agent_discuss_context"):
+        assert not hasattr(planner, gone), gone
+
+    state = ConversationState()
+    # Seed turn on the Plan dial: plan id comes from the FE protocol line.
+    assert is_discuss_turn(_SEED, state, "plan") is True
+    assert linked_plan_ref(state, _SEED) == {
+        "plan_id": "29e0cdbf-1aa4-4f1c-8b61-36c02312a045", "title": "",
+    }
+    # Same seed on Ask: not a refine.
+    assert is_discuss_turn(_SEED, state, "ask") is False
+    # Without state, a follow-up is a normal turn.
+    assert is_discuss_turn("why in single step?!", state, "plan") is False
+    # After the assistant proposed a revision, state carries it and any
+    # follow-up on the Plan dial stays in discuss — no marker scanning.
+    state.open_question = build_revision_question(
+        {"plan_id": "29e0cdbf-1aa4-4f1c-8b61-36c02312a045", "title": "Compute payroll"},
+        "Improved brief…\n1. Fetch\n2. Compute",
+    )
+    assert is_discuss_turn("why in single step?!", state, "plan") is True
+    assert is_discuss_turn(
         "think deeper, compare to latest online numbers and make doc file report",
-        history,
+        state, "plan",
     ) is True
-    assert _is_discuss_apply_turn("proceed") is True
-    assert _is_discuss_apply_turn("apply") is True
-    assert _is_discuss_apply_turn("accept") is True
-    assert _is_agent_discuss_context("proceed", history) is False
-    assert _is_agent_discuss_context("apply", history) is False
-    assert _is_agent_discuss_context("accept", history) is False
-    assert _is_agent_discuss_context("go", history) is False
-    assert _is_agent_discuss_context("replan", history) is False
-
-
-def test_discuss_apply_ignores_why_replan():
-    assert _is_discuss_apply_turn("why replan into one step?") is False
-    assert _is_discuss_apply_turn("do not replan yet") is False
-    # Bare "apply" alone must exit discuss; "do not apply yet" must not.
-    assert _is_discuss_apply_turn("do not apply yet") is False
 
 
 # ── export-step coercion (document-generation reliability) ──────────────────

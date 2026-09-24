@@ -978,5 +978,9 @@
     "partial": "Partial",
     "idle": "Idle",
     "waiting": "Waiting"
-  }
+  },
+  "revisionFromChatTitle": "Revision proposed in Chat",
+  "applyRevision": "Apply revision",
+  "dismiss": "Dismiss",
+  "revisionFromChatHint": "Applying re-plans this task and shows the diff for review. Nothing runs until you approve."
 }

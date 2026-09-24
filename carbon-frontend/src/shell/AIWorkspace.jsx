@@ -134,6 +134,8 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   // the workspace switches to the Agent mode and the panel auto-opens the
   // created plan (consumed by AITaskPanel via onFocusPlanConsumed).
   const [tasksFocusPlanId, setTasksFocusPlanId] = useState(null);
+  // ADR-0046 / plan_revision: a Chat-proposed revision waiting for Agent to apply.
+  const [tasksPendingRevision, setTasksPendingRevision] = useState(null); // { planId, brief } | null
   // Agent Done → Chat: prefill composer with plan outcome context.
   const [chatSeedDraft, setChatSeedDraft] = useState(null);
   // ADR-0046 Chat→Agent: seed discovery with handoff draft / process hint.
@@ -712,9 +714,16 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
       setMode('agent');
       // ADR-0046: Chat handoff carries process_hint + draft so Agent can start
       // the governed dial — never stages host writes in Chat.
-      const brief = String(opts?.draft || opts?.processHint || '').trim();
-      if (brief) {
-        setAgentSeedBrief(brief);
+      const revision = String(opts?.revision || '').trim();
+      if (panel === 'tasks' && planId && revision) {
+        // A Chat-refined brief for an EXISTING plan: never seed a new plan
+        // from it — the Tasks panel applies it through replan + diff review.
+        setTasksPendingRevision({ planId, brief: revision });
+      } else {
+        const brief = String(opts?.draft || opts?.processHint || '').trim();
+        if (brief) {
+          setAgentSeedBrief(brief);
+        }
       }
       if (panel === 'tasks' && planId) {
         setTasksFocusPlanId(planId);
@@ -773,6 +782,8 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
               onFocusPlanConsumed={() => setTasksFocusPlanId(null)}
               seedBrief={agentSeedBrief}
               onSeedBriefConsumed={() => setAgentSeedBrief(null)}
+              pendingRevision={tasksPendingRevision}
+              onPendingRevisionConsumed={() => setTasksPendingRevision(null)}
               onLifecycleStateChange={handleLifecycleStateChange}
               onSwitchToChat={(payload) => {
                 applyDiscussHandoff(payload);

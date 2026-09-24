@@ -14,6 +14,7 @@ class MeteredTurnState:
     total_llm_calls: int = 0
     discuss_thread: bool = False
     discuss_ctx: bool = False
+    plan_revision_ref: dict | None = None  # {plan_id, title} the Chat refine targets (typed, from state)
     chat_handoff: Any = None
     ess_bound: Any = None
     intent_resolution: Any = None

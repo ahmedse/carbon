@@ -21,7 +21,10 @@ v2 (ADR-0047) stays the default path. Do not flip `PULSE_UNDERSTAND` or `PULSE_T
 | **Chat** | ADR-0046. `validate_decision` turns Chat write tools into `handoff_agent`. |
 | **Facts** | Numbers in a tool answer must appear in the tool payload (`turn/grounding.py`). |
 | **Ladder** | L0–L5 are the v2 exit. L6/L7 live in `v21_levels` and stay missing until evidence clears. Do not claim them in the canvas. |
-| **Budget** | Do not add `StagedExit` or routing `re.compile` on the v21 path. `harness_budget` must not rise. |
+| **Budget** | Do not add `StagedExit`, routing `re.compile`, or a module-level phrase table (`tuple[str]` / `frozenset` of words) anywhere in `engine/**`. `harness_budget` must not rise on any meter: exits, `re_compile`, `arabic_regex`, `runner_lines`, `routing_phrase_sets`, `domain_terms_in_core`, `brand_literals_in_core`. Gate: `python -m ai.eval.pulse_gauge --gate` (ratchet vs previous snapshot + ceiling). |
+| **Domain-free core** (ADR-0050) | No host-domain words (leave, payslip, loan, GOSI, إجازة, قرض …) and no brand ids (`nibras`, `eduos`, `carbon`) in `backend/ai/engine/**`. Vocabulary lives in the pack: `domain_packs/<id>/pack.yaml` (versioned, self-contained), `instance.yaml` catalog descriptions, process YAML, banks. `python -m ai.eval.pack_contract --gate` must pass. |
+| **Typed state over prose** | Discuss / follow-up continuity resolves against `ConversationState` (`open_question.kind`, `active_plans`), never by scanning history for markers or matching "apply"/"yes" lists. Affirmations go through `dialogue/affirmation.py` only. |
+| **Gauge** | Before claiming progress: `python -m ai.eval.pulse_gauge --write`. The canvas is regenerated from `docs/pulse/evidence/PV2-gauge-series.json`; L6/L7 read live numbers. |
 | **Soak** | Night 2026-09-23 FAIL stays. No live smoke without STACK-HOLD. No `manage.sh` start/kill. |
 
 ## Do NOT
@@ -29,4 +32,7 @@ v2 (ADR-0047) stays the default path. Do not flip `PULSE_UNDERSTAND` or `PULSE_T
 - Default `PULSE_UNDERSTAND=v21` or `PULSE_TOOL_CHOICE=on`.
 - Delete the legacy Intent→Draft path before G6 ≥ 0.95 and a shadow window.
 - Add `leave_*` phrase wrappers back into `ess_read.py`.
+- Add an apply / affirm / intent allowlist to `planner.py`, `runner_*.py`, or any engine module. Put the fix in state (`plan_revision.py` pattern), the catalog, or a golden.
+- Tell Chat to call `edit_plan` / `approve_plan`: the ADR-0046 guard cancels them on every Chat surface. Chat proposes; Agent applies.
+- Score L6/L7 from a dated evidence file pinned in code.
 - Loosen YAML goldens. Grant `people:view` to `emp_1067`.

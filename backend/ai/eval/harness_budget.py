@@ -21,6 +21,26 @@ runner_lines
     Line count of ``runner.py`` (including blank lines).
 tool_choice_uses
     Raw substring count of ``tool_choice`` in ``llm/**/*.py`` (comments included).
+routing_phrase_sets
+    Module-level phrase tables under ``engine/cognition/**`` — a top-level
+    ``UPPER_CASE`` assignment whose annotation starts with ``tuple[str``,
+    ``frozenset[str`` or ``set[str``, or whose value opens a ``frozenset(``,
+    ``(`` or ``{`` literal that holds string tokens. These are the allowlists
+    a ``re.compile`` meter cannot see (the 2026-09-24 Discuss→apply incident
+    lived in one). Each is a human guess about user vocabulary and a domain
+    assumption baked into the engine, so the count must shrink. ``*_i18n.py``
+    files are included: moving a table there is relocation, not deletion.
+domain_terms_in_core
+    Source lines under ``engine/**`` that carry a host-domain word (HR/ESS
+    vocabulary such as leave, payslip, loan, GOSI, إجازة, قرض). Pulse is a
+    coworker for many domain apps; domain vocabulary belongs in packs,
+    plugins and ``instance.yaml`` catalogs, never in the engine. Word match on
+    a token boundary (no regex), comments and docstrings included on purpose:
+    a comment that explains leave routing marks code that knows about leave.
+brand_literals_in_core
+    Source lines under ``engine/**`` naming a domain pack id (the directory
+    names under ``domain_packs/``, e.g. nibras / eduos / carbon). Core must
+    address packs through the registry, never by name. Target 0.
 
 Gate (``--gate PATH``)
 ----------------------
@@ -60,12 +80,37 @@ SPINE_RUNNER_PATHS = (
 LLM_ROOT = ENGINE_ROOT / "llm"
 DEFAULT_EVIDENCE = REPO_ROOT / "docs" / "pulse" / "evidence" / "PV2.1-budget-2026-09-23.json"
 
+COGNITION_ROOT = ENGINE_ROOT / "cognition"
+
 _COUNT_KEYS = (
     "staged_exits",
     "re_compile",
     "arabic_regex",
     "runner_lines",
     "tool_choice_uses",
+    "routing_phrase_sets",
+    "domain_terms_in_core",
+    "brand_literals_in_core",
+)
+
+DOMAIN_PACKS_ROOT = REPO_ROOT / "domain_packs"
+
+#: Host-domain vocabulary that must not appear in the engine. Lives in eval
+#: (a meter), not in core. Lowercase; Arabic without diacritics.
+DOMAIN_TERMS: frozenset[str] = frozenset({
+    "leave", "leaves", "vacation", "vacations", "payslip", "payslips",
+    "payroll", "salary", "salaries", "loan", "loans", "gosi", "eosi",
+    "attendance", "overtime", "timesheet", "employee", "employees",
+    "إجازة", "إجازات", "اجازة", "اجازه", "قرض", "قروض", "راتب", "رواتب",
+    "حضور", "موظف", "الموظف", "الموظفين", "مسير",
+})
+
+_PHRASE_ANNOTATIONS = ("tuple[str", "frozenset[str", "set[str")
+_PHRASE_LITERAL_OPENERS = ("frozenset(", "(", "{")
+#: Prose constants (prompts, copy, labels) are not routing vocabulary.
+_NOT_PHRASE_SUFFIXES = (
+    "_PROMPT", "_TEMPLATE", "_TEXT", "_COPY", "_MSG", "_MESSAGE", "_LABEL",
+    "_LABELS", "_HINT", "_URL", "_BLOCK", "_RULES", "_INSTRUCTION", "_INSTRUCTIONS",
 )
 
 _ARABIC_RANGE = range(0x0600, 0x06FF + 1)
@@ -121,6 +166,89 @@ def _count_tool_choice(root: Path) -> int:
     return total
 
 
+def _is_phrase_table_line(line: str, following: str = "") -> bool:
+    """Top-level ``_NAME[: ann] = <literal>`` whose literal holds string tokens.
+
+    ``following`` is the next few source lines, so a table that opens its
+    literal on the assignment line and lists its strings below still counts.
+    """
+    if not line or line[0] in " \t#":
+        return False
+    head, sep, rhs = line.partition("=")
+    if not sep or head.endswith(("!", "<", ">", ":")) or rhs.startswith("="):
+        return False
+    name, _, annotation = head.partition(":")
+    name = name.strip()
+    if len(name) < 2 or not all(ch.isupper() or ch == "_" or ch.isdigit() for ch in name):
+        return False
+    if name.endswith(_NOT_PHRASE_SUFFIXES):
+        return False
+    annotation = annotation.strip()
+    rhs = rhs.strip()
+    if annotation:
+        if not annotation.startswith(_PHRASE_ANNOTATIONS):
+            return False
+    elif not rhs.startswith(_PHRASE_LITERAL_OPENERS):
+        return False
+    window = rhs + "\n" + following
+    return '"' in window or "'" in window
+
+
+def _count_phrase_tables(root: Path) -> int:
+    if not root.is_dir():
+        return 0
+    total = 0
+    for path in sorted(root.rglob("*.py")):
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for idx, line in enumerate(lines):
+            if _is_phrase_table_line(line, "\n".join(lines[idx + 1 : idx + 4])):
+                total += 1
+    return total
+
+
+def _line_tokens(line: str) -> list[str]:
+    out: list[str] = []
+    buf: list[str] = []
+    for ch in line.lower():
+        if ch.isalnum() or ch == "_" or ("\u0600" <= ch <= "\u06ff"):
+            buf.append(ch)
+        elif buf:
+            out.append("".join(buf))
+            buf = []
+    if buf:
+        out.append("".join(buf))
+    return out
+
+
+def _count_domain_terms(files: list[Path]) -> int:
+    total = 0
+    for path in files:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if any(tok in DOMAIN_TERMS for tok in _line_tokens(line)):
+                total += 1
+    return total
+
+
+def pack_ids(root: Path = DOMAIN_PACKS_ROOT) -> frozenset[str]:
+    """Domain pack ids = directory names under ``domain_packs/``."""
+    if not root.is_dir():
+        return frozenset()
+    return frozenset(p.name.lower() for p in root.iterdir() if p.is_dir() and not p.name.startswith("."))
+
+
+def _count_brand_literals(files: list[Path], ids: frozenset[str]) -> int:
+    if not ids:
+        return 0
+    total = 0
+    for path in files:
+        if path.parent.name in ids and path.parent.parent.name == "instances":
+            continue  # a pack's own instance folder may name itself
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if any(tok in ids for tok in _line_tokens(line)):
+                total += 1
+    return total
+
+
 def measure() -> dict[str, Any]:
     """Return budget counters plus ``measured_at`` (ISO date)."""
     _, engine_root, runner_path, llm_root = _repo_paths()
@@ -144,6 +272,9 @@ def measure() -> dict[str, Any]:
         "arabic_regex": arabic_regex,
         "runner_lines": runner_lines,
         "tool_choice_uses": _count_tool_choice(llm_root),
+        "routing_phrase_sets": _count_phrase_tables(COGNITION_ROOT),
+        "domain_terms_in_core": _count_domain_terms(engine_files),
+        "brand_literals_in_core": _count_brand_literals(engine_files, pack_ids()),
         "measured_at": date.today().isoformat(),
     }
 

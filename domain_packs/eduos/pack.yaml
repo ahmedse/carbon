@@ -1,0 +1,18 @@
+# Domain pack manifest (ADR-0050). Addressed by `id` via the registry only.
+# EduOS profiles already carry their own `version` (gradevance.services.packs);
+# this pack version is the envelope those profile versions ship inside.
+id: eduos
+version: 1
+domain: education
+display_name: EduOS — GradeVance
+instance: backend/ai/engine/instances/eduos/instance.yaml
+compat:
+  engine: ">=2.1"
+owns:
+  profiles: profiles/
+  schemas: schemas/
+  engines: engines/
+  knowledge_bases: knowledge_bases/
+  gold: gold/
+  scripts: scripts/
+  assurance: assurance/

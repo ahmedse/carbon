@@ -15,6 +15,14 @@ AFFIRM_WORDS: frozenset[str] = frozenset({
     "اعملها", "ارسلها", "وافق", "اوافق", "بالتاكيد",
 })
 
+#: "Commit what you proposed" tokens. Only consulted when a typed
+#: ``open_question`` is pending (``is_commit_affirmation``) — never as a
+#: free-standing router signal, so "apply for leave" cannot match here.
+COMMIT_WORDS: frozenset[str] = frozenset({
+    "apply", "applied", "accept", "accepted", "commit", "adopt",
+    "اعتمد", "اعتمدها", "طبق", "طبقها", "اقبل", "موافقه",
+})
+
 AFFIRM_PHRASES: frozenset[str] = frozenset({
     "go ahead", "go for it", "do it", "do that", "do so", "submit it",
     "send it", "please do", "yes please", "sounds good", "that works",

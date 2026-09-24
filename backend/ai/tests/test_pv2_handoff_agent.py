@@ -589,7 +589,7 @@ async def test_try_multi_step_plan_skips_react_for_mutation():
         patch("ai.engine.cognition.plan.loop.ReActLoop") as react_cls,
         patch("ai.engine.skills.registry.SkillRegistry"),
         patch(
-            "ai.engine.cognition.plan.planner._is_agent_discuss_context",
+            "ai.engine.cognition.turn.plan_revision.is_discuss_turn",
             return_value=False,
         ),
         patch(
@@ -653,7 +653,7 @@ async def test_try_multi_step_plan_runs_readonly():
         patch("ai.engine.cognition.turn.draft.DraftWitness"),
         patch("ai.engine.cognition.turn.critic.CriticWitness"),
         patch(
-            "ai.engine.cognition.plan.planner._is_agent_discuss_context",
+            "ai.engine.cognition.turn.plan_revision.is_discuss_turn",
             return_value=False,
         ),
         patch(

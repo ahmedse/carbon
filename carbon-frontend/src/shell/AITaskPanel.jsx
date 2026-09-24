@@ -739,7 +739,7 @@ ResultArtifactCard.propTypes = {
  *   (tasks|monitor|results) that drives this panel's internal tab, so the
  *   Monitor and Results activity icons open the right internal view.
  */
-function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, seedBrief = null, onSeedBriefConsumed, onLifecycleStateChange, onSwitchToChat, externalTab = 'tasks' }) {
+function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, seedBrief = null, onSeedBriefConsumed, pendingRevision = null, onPendingRevisionConsumed, onLifecycleStateChange, onSwitchToChat, externalTab = 'tasks' }) {
   const { token } = useAuth();
   const { notify, notifyFromError } = useNotification();
   const { t } = useTranslation('ai');
@@ -2763,7 +2763,44 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           </Typography>
         );
       }
+      const revisionForThisPlan = pendingRevision?.planId && pendingRevision.planId === selectedPlan.id
+        ? String(pendingRevision.brief || '').trim()
+        : '';
       return (
+        <>
+        {revisionForThisPlan ? (
+          <Box
+            data-testid="plan-revision-from-chat"
+            sx={{ mb: 1.25, p: 1.25, border: '1px solid', borderColor: 'primary.light', borderRadius: 1, bgcolor: 'action.hover' }}
+            dir="auto"
+          >
+            <Typography variant="subtitle2" sx={{ fontSize: '0.8rem', mb: 0.5 }}>
+              {t('revisionFromChatTitle', 'Revision proposed in Chat')}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem', whiteSpace: 'pre-wrap', mb: 1 }}>
+              {revisionForThisPlan}
+            </Typography>
+            <Stack direction="row" spacing={1}>
+              <Button
+                size="small"
+                variant="contained"
+                disabled={mutating}
+                onClick={async () => {
+                  await handleReplanPlan(revisionForThisPlan);
+                  onPendingRevisionConsumed?.();
+                }}
+              >
+                {t('applyRevision', 'Apply revision')}
+              </Button>
+              <Button size="small" variant="text" disabled={mutating} onClick={() => onPendingRevisionConsumed?.()}>
+                {t('dismiss', 'Dismiss')}
+              </Button>
+            </Stack>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+              {t('revisionFromChatHint', 'Applying re-plans this task and shows the diff for review. Nothing runs until you approve.')}
+            </Typography>
+          </Box>
+        ) : null}
         <AgentReviewSurface
           plan={
             runSteps.length
@@ -2785,6 +2822,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             || ['running', 'paused', 'awaiting_approval'].includes(selectedPlan?.status)
           }
         />
+        </>
       );
     };
 
@@ -3169,6 +3207,9 @@ AITaskPanel.propTypes = {
   onFocusPlanConsumed: PropTypes.func,
   seedBrief: PropTypes.string,
   onSeedBriefConsumed: PropTypes.func,
+  /** Chat-proposed revision for an existing plan: { planId, brief }. Applied via replan + diff review. */
+  pendingRevision: PropTypes.shape({ planId: PropTypes.string, brief: PropTypes.string }),
+  onPendingRevisionConsumed: PropTypes.func,
   onLifecycleStateChange: PropTypes.func,
   onSwitchToChat: PropTypes.func,
   externalTab: PropTypes.oneOf(['tasks', 'run', 'monitor', 'results', 'templates', 'scheduled']),

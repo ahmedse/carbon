@@ -1083,6 +1083,9 @@ function AIMessageBubble({
               onClick={() => onOpenPanel?.(act.panel, act.plan_id, {
                 processHint: act.process_hint || metadata.process_hint || '',
                 draft: metadata.draft || act.summary || '',
+                // Chat proposes, Agent applies: a refined plan brief travels
+                // with the CTA and is applied via replan + diff review in Tasks.
+                revision: typeof act.revision === 'string' ? act.revision : '',
               })}
               aria-label={act.label || 'Open'}
             >

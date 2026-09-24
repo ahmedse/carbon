@@ -20,6 +20,7 @@ from ai.engine.cognition.dialogue.affirmation_i18n import (
     AFFIRM_PHRASES,
     AFFIRM_WORDS,
     ARABIC_FOLD,
+    COMMIT_WORDS,
 )
 
 #: A confirmation is a SHORT utterance. A long message that happens to contain
@@ -55,6 +56,26 @@ def is_affirmation(text: str) -> bool:
     # Every word must itself be affirmative ("yes ok", "نعم اكمل"). A single
     # non-affirmative word ("yes but", "no") disqualifies the whole message.
     return all(w in AFFIRM_WORDS for w in words)
+
+
+def is_commit_affirmation(text: str) -> bool:
+    """True when ``text`` is a short "yes, commit what you proposed".
+
+    :func:`is_affirmation` plus the commit vocabulary ("apply", "accept",
+    "اعتمدها"). Same bar: no question mark, at most
+    ``MAX_AFFIRMATION_WORDS`` words, every word affirmative. Meant for a
+    pending typed ``open_question`` (a proposed plan revision) — a longer
+    message like "apply for three days leave" is a fresh request and fails.
+    """
+    s = normalize(text)
+    if not s or "?" in s or "؟" in s:
+        return False
+    if is_affirmation(s):
+        return True
+    words = tokenize(s)
+    if not words or len(words) > MAX_AFFIRMATION_WORDS:
+        return False
+    return all(w in AFFIRM_WORDS or w in COMMIT_WORDS for w in words)
 
 
 def starts_with_affirmation(text: str) -> bool:
