@@ -210,63 +210,60 @@ export default function ExcellenceConsolePage() {
       )}
 
       {!loading && !error && !named && !context && (
-        <Stack spacing={1} role="list" aria-label="Contexts">
-          {contexts.map((row) => (
-            <Button
-              key={row.id}
-              variant="outlined"
-              fullWidth
-              sx={{ justifyContent: 'flex-start', textAlign: 'left', py: 1.5 }}
-              aria-label={`Open ${row.title}`}
-              onClick={() => {
-                const apps = row.apps || [];
-                if (apps.length === 1) {
-                  navigate(`/admin/excellence/${row.id}/${encodeURIComponent(apps[0].id)}`);
-                } else {
-                  navigate(`/admin/excellence/${row.id}`);
-                }
-              }}
-            >
-              <Stack spacing={0.25} alignItems="flex-start">
-                <Typography variant="subtitle1">{row.title}</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {row.app_count === 1 ? 'One app' : `${row.app_count} apps`}
-                  {' · '}
-                  {levelName(row.floor)}
-                </Typography>
-              </Stack>
-            </Button>
-          ))}
-          {contexts.length === 0 && (
-            <EmptyState title="No contexts declared" description="Nothing is registered on the excellence ledger yet." />
-          )}
-        </Stack>
+        <FilteredDataGrid
+          embedded
+          title="Contexts"
+          subtitle="Open a context. A context with one app opens that ladder."
+          rows={contexts}
+          getRowId={(row) => row.id}
+          columns={[
+            { field: 'title', headerName: 'Context', flex: 1, minWidth: 180 },
+            { field: 'app_count', headerName: 'Apps', width: 90 },
+            { field: 'floor', headerName: 'Level', width: 140, renderCell: (p) => <LevelChip level={p.value} name={levelName(p.value)} /> },
+            {
+              field: 'actions', headerName: 'Actions', width: 100, sortable: false,
+              renderCell: (p) => (
+                <Button
+                  size="small"
+                  aria-label={`Open ${p.row.title}`}
+                  onClick={() => {
+                    const apps = p.row.apps || [];
+                    if (apps.length === 1) navigate(`/admin/excellence/${p.row.id}/${encodeURIComponent(apps[0].id)}`);
+                    else navigate(`/admin/excellence/${p.row.id}`);
+                  }}
+                >
+                  Open
+                </Button>
+              ),
+            },
+          ]}
+          emptyMessage="No contexts declared"
+        />
       )}
 
       {!loading && !error && context && !app && current && (current.apps?.length !== 1) && (
-        <Stack spacing={1} role="list" aria-label={`${current.title} apps`}>
-          {(current.apps || []).map((row) => (
-            <Button
-              key={row.id}
-              variant="outlined"
-              fullWidth
-              sx={{ justifyContent: 'flex-start', textAlign: 'left', py: 1.5 }}
-              aria-label={`Open ${row.title}`}
-              onClick={() => navigate(`/admin/excellence/${context}/${encodeURIComponent(row.id)}`)}
-            >
-              <Stack spacing={0.25} alignItems="flex-start">
-                <Typography variant="subtitle1">{row.title}</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {row.level_name || levelName(row.level)}
-                  {row.weakest ? ` · Weakest ${aspectLabel(row.weakest)}` : ''}
-                </Typography>
-              </Stack>
-            </Button>
-          ))}
-          {(current.apps || []).length === 0 && (
-            <EmptyState title="No apps declared" description="This context has no apps on the ladder yet." />
-          )}
-        </Stack>
+        <FilteredDataGrid
+          embedded
+          title="Apps"
+          subtitle="Open an app to see its ladder. The level is the weakest aspect."
+          rows={current.apps || []}
+          getRowId={(row) => row.id}
+          columns={[
+            { field: 'title', headerName: 'App', flex: 1, minWidth: 180 },
+            { field: 'kind', headerName: 'Kind', width: 110 },
+            { field: 'level', headerName: 'Level', width: 150, renderCell: (p) => <LevelChip level={p.row.level} name={p.row.level_name || levelName(p.row.level)} /> },
+            { field: 'weakest', headerName: 'Weakest aspect', width: 160, valueGetter: (_v, row) => (row.weakest ? aspectLabel(row.weakest) : '') },
+            {
+              field: 'actions', headerName: 'Actions', width: 100, sortable: false,
+              renderCell: (p) => (
+                <Button size="small" aria-label={`Open ${p.row.title}`} onClick={() => navigate(`/admin/excellence/${context}/${encodeURIComponent(p.row.id)}`)}>
+                  Open
+                </Button>
+              ),
+            },
+          ]}
+          emptyMessage="No apps declared"
+        />
       )}
 
       {!loading && !error && grid && (
