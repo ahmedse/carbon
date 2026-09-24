@@ -337,7 +337,7 @@ Until then: remake IA may be “complete”; **enterprise QA gate is not**.
 | L5 metrics | `backend/ai/tests/test_admin_metrics_sample.py` |
 | Playwright | `e2e/journeys/journey-09-*.ts`, `journey-17-*.ts`, `journey-18-steward-admin-depth.spec.ts` |
 | Control APIs | `backend/ai/control_plane_api.py`, `prompt_governance_api.py`, `knowledge_api.py` |
-| Canvas scoreboard | `canvases/pulse-admin-qa-gate.canvas.tsx` |
+| Canvas scoreboard | `canvases/_archive/pulse/pulse-admin-qa-gate.canvas.tsx` |
 
 ---
 

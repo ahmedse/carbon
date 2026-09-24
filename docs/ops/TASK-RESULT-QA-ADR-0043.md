@@ -2,7 +2,7 @@
 
 **Seat:** Pulse · **Roles:** QA/Validator + Master Architect review  
 **Date:** 2026-09-19 · **Scope:** ADR-0043 V1–V4 vs Screen Spec  
-**Spec:** `docs/SCREEN-SPEC-AGENT-FOUR-VIEW-COCKPIT.md`  
+**Spec:** `docs/_archive/design-superseded/SCREEN-SPEC-AGENT-FOUR-VIEW-COCKPIT.md`  
 **ADR:** `.ai-toolkit/decisions/0043-agent-four-view-cockpit.md` (Implemented)
 
 ---

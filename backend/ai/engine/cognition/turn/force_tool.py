@@ -1,6 +1,7 @@
 """Map a high-confidence intent onto tool_choice (ADR-0049 P3).
 
-Off unless ``PULSE_TOOL_CHOICE=on``. Omitting the kwarg keeps today's Draft path.
+On unless ``PULSE_TOOL_CHOICE=off``. When intent already names one host read
+at confidence ≥ 0.9, Draft is forced with named ``tool_choice``.
 """
 from __future__ import annotations
 
@@ -24,7 +25,11 @@ _ESS_SELF_READ_APIS = frozenset(
 
 
 def tool_choice_enabled() -> bool:
-    return (os.environ.get(FLAG) or "off").strip().lower() in {"1", "on", "true"}
+    """Default on (P3). ``PULSE_TOOL_CHOICE=off`` is the kill switch."""
+    raw = os.environ.get(FLAG)
+    if raw is None or not str(raw).strip():
+        return True
+    return str(raw).strip().lower() in {"1", "on", "true"}
 
 
 def choice_from_resolution(resolution: Any) -> str | dict | None:

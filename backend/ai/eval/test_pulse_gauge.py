@@ -83,7 +83,11 @@ def test_snapshot_and_series_row_shape():
     assert snap["ladder"]["levels"]["L0"] in {"reached", "partial", "missing"}
     assert "L7" in snap["ladder"]["levels"]
     assert snap["packs"]["gate_pass"] is True
+    assert snap["agent_plan"]["gate_pass"] is True
+    assert snap["agent_plan"]["n"] >= 12
+    assert snap["coverage"]["agent_plan_path"].startswith("bank ")
     row = series_row(snap)
+    assert row["agent_plan"] == f"{snap['agent_plan']['passed']}/{snap['agent_plan']['n']}"
     assert row["date"] == snap["measured_at"] and row["instance"] == "nibras"
     assert row["packs_ok"] is True
 

@@ -102,8 +102,10 @@ def test_malformed_tool_result_is_none():
     assert decision_from_tool_result({"tool_calls": [], "content": "hello"}) is None
 
 
-def test_understand_defaults_legacy(monkeypatch: pytest.MonkeyPatch):
+def test_understand_defaults_v21(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("PULSE_UNDERSTAND", raising=False)
+    assert understand_mode() == "v21"
+    monkeypatch.setenv("PULSE_UNDERSTAND", "legacy")
     assert understand_mode() == "legacy"
     monkeypatch.setenv("PULSE_UNDERSTAND", "shadow")
     assert understand_mode() == "shadow"
@@ -120,6 +122,8 @@ def test_ungrounded_zero_is_flagged():
     assert ungrounded_numbers("remaining 0 days", [{"results": []}]) == []
     # count 0 is in the payload via empty list length
     assert "12" in ungrounded_numbers("you have 12 days", [{"remaining": 4}])
+    from ai.engine.cognition.turn.grounding import strip_ungrounded_numbers
+    assert strip_ungrounded_numbers("you have 12 days and 4 left", [{"remaining": 4}]) == "you have days and 4 left"
 
 
 def test_rank_tools_prefers_description_overlap():
@@ -134,9 +138,12 @@ def test_rank_tools_prefers_description_overlap():
     assert all(t["kind"] != "write" for t in chat)
 
 
-def test_tool_choice_off_by_default(monkeypatch: pytest.MonkeyPatch):
+def test_tool_choice_on_by_default(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("PULSE_TOOL_CHOICE", raising=False)
+    assert tool_choice_enabled() is True
+    monkeypatch.setenv("PULSE_TOOL_CHOICE", "off")
     assert tool_choice_enabled() is False
+    monkeypatch.delenv("PULSE_TOOL_CHOICE", raising=False)
 
     class _C:
         name = "get_my_leave_balance"
@@ -146,9 +153,9 @@ def test_tool_choice_off_by_default(monkeypatch: pytest.MonkeyPatch):
         needs_host_data = True
         candidates = [_C()]
 
-    assert choice_from_resolution(_R()) is None
-    monkeypatch.setenv("PULSE_TOOL_CHOICE", "on")
     assert choice_from_resolution(_R()) == {"name": "get_my_leave_balance"}
+    monkeypatch.setenv("PULSE_TOOL_CHOICE", "off")
+    assert choice_from_resolution(_R()) is None
 
 
 def test_v2_ladder_unchanged_v21_separate():

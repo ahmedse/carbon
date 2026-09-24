@@ -1,0 +1,24 @@
+# Pulse · Packs track (ADR-0050: packs are versioned and self-contained; core is domain-free).
+track: packs
+title: Domain packs (vocabulary, catalog, processes, banks)
+owner: pulse-master
+
+subjects:
+  - id: pulse.pack.nibras
+    kind: ai_pack
+    title: nibras pack
+    owner: pulse-master
+    paths: [domain_packs/nibras/pack.yaml, domain_packs/nibras]
+    adr: [.ai-toolkit/decisions/0050-pulse-core-domain-free-versioned-packs.md]
+    spec: [docs/pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md]
+
+checks:
+  - id: PULSE-PACK-GOV-01
+    title: Pack contract gate passes (versioned, self-contained, core domain-free)
+    dimension: governed
+    rank: 3
+    collector: pulse_gauge
+    probe: { type: packs_gate }
+    applies_to: [ai_pack]
+    solution: python -m ai.eval.pack_contract --gate ; move the vocabulary into the pack.
+    source: ADR-0050

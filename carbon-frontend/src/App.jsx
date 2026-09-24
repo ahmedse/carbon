@@ -87,6 +87,8 @@ const VerificationPage = React.lazy(() => import("./pages/carbon/VerificationPag
 const AuditLogPage = React.lazy(() => import("./pages/admin/AuditLogPage"));
 const LogViewerPage = React.lazy(() => import("./pages/admin/LogViewerPage"));
 const AssuranceBoardPage = React.lazy(() => import("./pages/admin/AssuranceBoardPage"));
+const ExcellenceLadderPage = React.lazy(() => import("./pages/admin/excellence/ExcellenceLadderPage"));
+const ExcellenceSubjectPage = React.lazy(() => import("./pages/admin/excellence/ExcellenceSubjectPage"));
 const PlatformConfigPage = React.lazy(() => import("./pages/admin/PlatformConfigPage"));
 // ADR-0036 Pulse Control Plane — six hubs + engage routes + legacy redirects
 const CommandCenterPage = React.lazy(() =>
@@ -479,6 +481,11 @@ export default function App() {
                 />
                 <Route path="/admin/logs" element={<AdminRoute><LogViewerPage /></AdminRoute>} />
                 <Route path="/admin/assurance" element={<AdminRoute><AssuranceBoardPage /></AdminRoute>} />
+                <Route path="/admin/excellence" element={<AdminRoute><ExcellenceLadderPage /></AdminRoute>} />
+                <Route path="/admin/excellence/rules" element={<AdminRoute><ExcellenceLadderPage /></AdminRoute>} />
+                <Route path="/admin/excellence/subjects/:subjectId" element={<AdminRoute><ExcellenceSubjectPage /></AdminRoute>} />
+                <Route path="/admin/excellence/:tier" element={<AdminRoute><ExcellenceLadderPage /></AdminRoute>} />
+                <Route path="/admin/excellence/:tier/:track" element={<AdminRoute><ExcellenceLadderPage /></AdminRoute>} />
                 <Route path="/admin/config" element={<AdminRoute><PlatformConfigPage /></AdminRoute>} />
                 {/* Pulse Control Plane (ADR-0036) — six destinations */}
                 <Route path="/admin/ai" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><CommandCenterPage /></AdminRoute>} />

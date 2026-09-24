@@ -1,11 +1,11 @@
 {
   "staged_exits": 4,
-  "re_compile": 61,
+  "re_compile": 60,
   "arabic_regex": 5,
   "runner_lines": 1500,
   "tool_choice_uses": 0,
-  "routing_phrase_sets": 281,
+  "routing_phrase_sets": 280,
   "domain_terms_in_core": 846,
-  "note": "Ratcheted 2026-09-24 to max(L7 target, measured). Any rise fails the gate. L7 targets: exits 4 / re.compile 60 / arabic 5 / runner 1500. re.compile is 61 today (one over L7) and stays honest until one is deleted. routing_phrase_sets, domain_terms_in_core and brand_literals_in_core are portability meters (ADR-0050): ceilings sit at today's measurement and only move down. pulse_gauge --gate additionally fails when any meter is higher than the previous snapshot.",
+  "note": "Ratcheted 2026-09-24. L7 targets hold: exits 4 / re.compile 60 / arabic 5 / runner 1500. re.compile is 60 after the two payload-date compiles in reasoning.py became one. routing_phrase_sets, domain_terms_in_core and brand_literals_in_core sit at today's measurement and only move down. pulse_gauge --gate fails when any meter is higher than the previous snapshot.",
   "brand_literals_in_core": 11
 }

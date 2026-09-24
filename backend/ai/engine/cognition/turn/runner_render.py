@@ -1460,9 +1460,22 @@ async def _synthesize_tool_results(
             return None
 
     from ai.engine.cognition.context_pack import build_context_pack
+    from ai.engine.cognition.turn.understand import understand_mode
     from ai.engine.llm.router import route_chat
 
     delivery_guide = _DELIVERY_SYNTHESIS.get(delivery or "explain", _DELIVERY_SYNTHESIS["explain"])
+    task_body = ""
+    if understand_mode() == "v21":
+        from ai.engine.cognition.turn.understand import (
+            catalog_prompt_lines,
+            understand_task_body,
+        )
+        _lines, _, _ = catalog_prompt_lines(
+            user_message or "",
+            (instance_config or {}).get("api_catalog"),
+            k=12,
+        )
+        task_body = understand_task_body(_lines)
     pack = build_context_pack(
         state,
         surface="chat",
@@ -1470,6 +1483,7 @@ async def _synthesize_tool_results(
         user_info=user_info,
         instance_config=instance_config,
         language=language,
+        task_body=task_body,
         delivery_guide=delivery_guide,
         hints=hints or None,
         user_body=(

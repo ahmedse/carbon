@@ -426,9 +426,10 @@ class SoftSurfacesMixin:
         state = getattr(state_ctx, "state", None) if state_ctx is not None else None
         # Write twins are described (Agent-only) so their not_for can route;
         # validate_decision downgrades any write call_tool to handoff_agent.
+        scoped_catalog = _scoped_api_catalog(instance_config, user_info)
         lines, allowed, write_names = catalog_prompt_lines(
             user_message or "",
-            _scoped_api_catalog(instance_config, user_info),
+            scoped_catalog,
             k=12,
             context=catalog_context(conversation_history),
         )
@@ -454,21 +455,25 @@ class SoftSurfacesMixin:
         messages.append({"role": "user", "content": user_message or ""})
 
         async def complete(*, messages, tools, tool_choice, strict_tools):
-            return await route_chat(
-                task="cognition",
-                instance_id=instance_id,
-                conversation_id=f"understand-{conversation_id}",
-                messages=messages,
-                tools=tools,
-                tool_choice=tool_choice,
-                strict_tools=strict_tools,
-                temperature=0.0,
-            )
+            from ai.engine.llm.call_meter import stage
+
+            with stage("understand"):
+                return await route_chat(
+                    task="cognition",
+                    instance_id=instance_id,
+                    conversation_id=f"understand-{conversation_id}",
+                    messages=messages,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    strict_tools=strict_tools,
+                    temperature=0.0,
+                )
 
         try:
             decision = await understand_turn(
                 complete=complete,
                 messages=messages,
+                catalog_tools=scoped_catalog,
                 surface=surface,
                 allowed_tools=allowed or None,
                 write_tools=write_names or None,
@@ -558,6 +563,9 @@ class SoftSurfacesMixin:
         ledger.final_response = text[:500]
         ledger.total_latency_ms = total_latency
         ledger.turn_decision = decision.commands[0].op if decision.commands else "answer"
+        from ai.engine.llm.call_meter import current_meter
+
+        _finalize_meter(ledger, current_meter(), ledger.turn_decision)
         if executed:
             ledger.execution = SimpleNamespace(completed_tools=list(executed))
         envelope = render_envelope(
@@ -571,6 +579,8 @@ class SoftSurfacesMixin:
             "v21_understand",
             True,
             op=ledger.turn_decision,
+            ops=[c.op for c in decision.commands],
+            validated=True,
             render=decision.commands[0].render if decision.commands else "text",
         )
         return AgentResponse(
@@ -624,9 +634,14 @@ class SoftSurfacesMixin:
             _signal(ledger, "ess_bound_self_read", False, reason="ess_write")
             return None
 
+        _prior_api = None
+        _state = getattr(state_ctx, "state", None)
+        if _state is not None:
+            _prior_api = (getattr(_state, "intent", None) or {}).get("api")
         api = bound_ess_self_api(
             user_message,
             history=conversation_history,
+            prior_api=_prior_api,
         )
         if not api:
             _signal(ledger, "ess_bound_self_read", False)

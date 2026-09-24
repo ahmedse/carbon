@@ -1,0 +1,109 @@
+# Agent / plan path bank — the surface G5 and G6 do not score.
+# Offline, no LLM. Scored by `python -m ai.eval.agent_plan_runner`.
+#
+# What this holds:
+#   * A Discuss seed is the plan id the composer writes, not an English phrase.
+#   * Continuity is a typed plan_revision question on ConversationState.
+#   * "apply" / "accept" / "اعتمدها" commit that question into a 0-LLM handoff.
+#   * A longer sentence that merely contains those words does not commit.
+#   * Chat never calls edit_plan (ADR-0046). Agent applies via the Tasks panel.
+#
+# Adding a phrase list in engine/ to pass a case here is a failure of the bank.
+
+- id: ap-001
+  check: seed
+  note: "FE refine draft carries a plan id → discuss on the Plan dial"
+  process: plan
+  message: |
+    I'd like to refine plan (plan e20c2937-7ece-45b0-8db6-3f40e89ee35d): "Compute payroll variance".
+
+    DISCUSSION ONLY — reply in Chat with one improved brief and a short numbered step list.
+    Do not change the Agent plan until I explicitly ask you to apply changes.
+  expect:
+    discuss: true
+    plan_id: e20c2937-7ece-45b0-8db6-3f40e89ee35d
+
+- id: ap-002
+  check: seed
+  note: "The prose marker without a plan id is not a seed"
+  process: plan
+  message: "DISCUSSION ONLY — reply in Chat with one improved brief."
+  expect:
+    discuss: false
+
+- id: ap-003
+  check: seed
+  note: "Ask dial (outcome talk) does not open a plan revision"
+  process: ask
+  message: |
+    Let's discuss the outcome of: Compute payroll variance (plan e20c2937-7ece-45b0-8db6-3f40e89ee35d).
+  expect:
+    discuss: false
+    seed: true
+
+- id: ap-004
+  check: seed
+  note: "Plan dial with no plan and no open question is an ordinary turn"
+  process: plan
+  message: "why in a single step?!"
+  expect:
+    discuss: false
+
+- id: ap-005
+  check: continuity
+  note: "Follow-up has no plan id; the open question keeps the thread"
+  message: "why in a single step?!"
+  expect:
+    discuss: true
+    resolved: false
+
+- id: ap-006
+  check: commit
+  message: apply
+  expect:
+    resolved: true
+    llm_calls: 0
+    action_type: open_panel
+    panel: tasks
+    plan_id: e20c2937-7ece-45b0-8db6-3f40e89ee35d
+
+- id: ap-007
+  check: commit
+  message: accept
+  expect:
+    resolved: true
+    llm_calls: 0
+
+- id: ap-008
+  check: commit
+  message: اعتمدها
+  expect:
+    resolved: true
+    label: تطبيق في الوكيل
+
+- id: ap-009
+  check: commit
+  message: "apply for three days leave"
+  expect:
+    resolved: false
+    discuss: true
+
+- id: ap-010
+  check: commit
+  message: "do not apply yet"
+  expect:
+    resolved: false
+
+- id: ap-011
+  check: ess_confirm
+  note: "apply does not commit an ESS confirm question"
+  message: "apply for leave"
+  expect:
+    resolved: false
+
+- id: ap-012
+  check: chat_guard
+  note: "ADR-0046 cancels edit_plan on Chat, including the Plan dial"
+  expect:
+    action: cancel
+    flag: chat_no_host_mutation

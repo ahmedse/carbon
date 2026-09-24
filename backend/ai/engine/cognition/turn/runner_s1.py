@@ -163,7 +163,10 @@ async def run_s1_intent(
     if _after_deixis is not None:
         return _after_deixis
     st.intent_resolution = None
-    if settings.INTENT_RESOLVER_ENABLED:
+    from ai.engine.cognition.turn.understand import understand_mode
+    # P7: v21 already classified in the understand call. The intent prompt
+    # stays on the legacy kill switch only.
+    if settings.INTENT_RESOLVER_ENABLED and understand_mode() != "v21":
         try:
             from ai.engine.cognition.turn.intent import IntentResolver
             from ai.engine.cognition.dialogue.anaphora import AnaphoraResolver

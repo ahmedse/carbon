@@ -2,7 +2,7 @@
 """Pulse Admin QA Gate L5 — metrics sample harness.
 
 Samples control/spend/quality/rollups/maturity/candidates for schema + honesty
-gates (docs/pulse/PULSE-ADMIN-QA-GATE.md §7). Does not gate chat grounding.
+gates (docs/pulse/archive/PULSE-ADMIN-QA-GATE.md §7). Does not gate chat grounding.
 
 Run::
 

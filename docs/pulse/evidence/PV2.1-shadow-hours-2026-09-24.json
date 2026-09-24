@@ -1,0 +1,11 @@
+{
+  "measured_at": "2026-09-24",
+  "clock": "hours",
+  "note": "Human waived the 5-day shadow calendar on 2026-09-24. Agreement is the bank, not a waiting period. Committed default stays legacy. This machine's process env is already PULSE_UNDERSTAND=v21; the stack was not restarted.",
+  "source": "PV2.1-g6-understand-2026-09-24.json vs baseline_decision",
+  "utterances": 148,
+  "agree": 125,
+  "agree_rate": 0.845,
+  "baseline_tier": {"agree": 121, "n": 122, "rate": 0.992, "splits": ["g6-038:ar"]},
+  "v21_tier": {"agree": 4, "n": 26, "rate": 0.154, "note": "Legacy ladder is not expected to pass v21 goldens. Disagreement here is the understand path doing the work the ladder cannot."}
+}

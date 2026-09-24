@@ -70,7 +70,8 @@ def test_agent_discuss_refine_is_not_multi_step():
 def test_agent_discuss_outcome_with_analyze_verb_stays_single():
     """Pasted prior outcome often contains 'analyze' — still discuss-only."""
     draft = (
-        "Let's discuss the outcome of: Count Nibras employees (plan abc).\n"
+        "Let's discuss the outcome of: Count Nibras employees "
+        "(plan 74a5e6a6-942c-4185-a986-8f895601d5ca).\n"
         "---\n"
         "Prior outcome (context only — do not re-execute):\n"
         "I will analyze the employee population based on is_active.\n"
@@ -97,7 +98,8 @@ async def test_decompose_skips_skill_match_on_discuss_turn():
             return [_Skill()]
 
     draft = (
-        'I\'d like to refine plan (plan abc): "Count Nibras employees".\n\n'
+        'I\'d like to refine plan (plan 74a5e6a6-942c-4185-a986-8f895601d5ca): '
+        '"Count Nibras employees".\n\n'
         "DISCUSSION ONLY — reply in Chat.\n"
         "Do not change the Agent plan until I say to Fork or Replan."
     )
@@ -163,8 +165,11 @@ _SEED = (
 )
 
 
-def test_discuss_seed_is_prose_only_turn():
+def test_discuss_seed_is_the_plan_id_not_the_prose():
+    """The English 'DISCUSSION ONLY' lines are copy. The plan id is the signal."""
     assert _is_agent_discuss_turn(_SEED) is True
+    assert _is_agent_discuss_turn("DISCUSSION ONLY — reply in Chat with one improved brief.") is False
+    assert _is_agent_discuss_turn("I'd like to refine plan: compute payroll.") is False
     assert _is_agent_discuss_turn("why in single step?!") is False
     assert _is_agent_discuss_turn("apply") is False
 

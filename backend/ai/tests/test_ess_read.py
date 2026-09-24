@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import yaml
+import pytest
 from pathlib import Path
 
 from ai.engine.cognition.turn.ess_read import (
@@ -188,7 +189,8 @@ def test_empty_payslip_honesty_via_ess_read():
     assert hit["gate"] == "ess_empty_payslip"
 
 
-def test_bound_ess_self_api_single_vs_multi_domain():
+def test_bound_ess_self_api_single_vs_multi_domain(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("PULSE_UNDERSTAND", "legacy")
     from ai.engine.cognition.turn.ess_read import (
         LEAVE_BALANCE_API,
         bound_ess_self_api,
@@ -321,9 +323,26 @@ def test_comprehensive_pick_binds_only_when_single_domain_in_thread():
     assert bound_ess_self_api("تقرير شامل", history=leave_only) == LEAVE_BALANCE_API
 
 
-def test_calendar_questions_are_not_a_leave_balance_read():
+def test_calendar_questions_are_not_a_leave_balance_read(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("PULSE_UNDERSTAND", "legacy")
     from ai.engine.cognition.turn.ess_read import LEAVE_BALANCE_API, bound_ess_self_api
 
     assert bound_ess_self_api("How many days from now until my leave?") is None
     assert bound_ess_self_api("When does my leave start?") is None
     assert bound_ess_self_api("How many leave days do I have left?") == LEAVE_BALANCE_API
+
+
+def test_v21_fresh_read_is_not_chosen_by_topic_regex(monkeypatch: pytest.MonkeyPatch):
+    """P2: the catalog routes a fresh read. P9: a follow-up binds state, not history."""
+    from ai.engine.cognition.turn.ess_read import LEAVE_BALANCE_API, bound_ess_self_api
+
+    monkeypatch.setenv("PULSE_UNDERSTAND", "v21")
+    assert bound_ess_self_api("How many leave days do I have left?") is None
+    leave_only = [
+        {"role": "user", "content": "عن الإجازات"},
+        {"role": "assistant", "content": "رصيد الإجازة…"},
+    ]
+    assert bound_ess_self_api("تقرير شامل", history=leave_only) is None
+    assert bound_ess_self_api(
+        "تقرير شامل", history=leave_only, prior_api=LEAVE_BALANCE_API,
+    ) == LEAVE_BALANCE_API

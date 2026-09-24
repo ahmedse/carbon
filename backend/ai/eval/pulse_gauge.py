@@ -159,11 +159,23 @@ def collect_packs() -> dict[str, Any]:
     }
 
 
-def _agent_path_coverage() -> dict[str, Any]:
-    """What the gauge cannot see yet — stated, not hidden."""
+def collect_agent_plan() -> dict[str, Any]:
+    """Offline Agent/plan bank (planner seed, Discuss state, ADR-0046 guard)."""
+    from ai.eval.agent_plan_runner import score
+
+    return score()
+
+
+def _coverage(agent: dict[str, Any]) -> dict[str, Any]:
+    """What is scored, and what is still silent. Silence is stated."""
+    if agent.get("n"):
+        mark = "pass" if agent.get("gate_pass") else "FAIL"
+        plan = f"bank {agent.get('passed')}/{agent.get('n')} {mark}"
+    else:
+        plan = "no bank — planner / plans_service / discuss are unmeasured"
     return {
         "chat_turn_path": "ladder L0–L7 · G5 · G6 · budget",
-        "agent_plan_path": "no bank — planner / plans_service / discuss are unmeasured",
+        "agent_plan_path": plan,
         "second_instance": "none — all banks are Nibras ESS",
     }
 
@@ -174,6 +186,7 @@ def _agent_path_coverage() -> dict[str, Any]:
 def snapshot(instance: str = "nibras") -> dict[str, Any]:
     budget = measure_budget()
     ladder = collect_ladder()
+    agent = collect_agent_plan()
     return {
         "measured_at": budget.get("measured_at") or date.today().isoformat(),
         "instance": instance,
@@ -183,7 +196,8 @@ def snapshot(instance: str = "nibras") -> dict[str, Any]:
         "g5": collect_g5(),
         "soak": collect_soak(),
         "packs": collect_packs(),
-        "coverage": _agent_path_coverage(),
+        "agent_plan": agent,
+        "coverage": _coverage(agent),
     }
 
 
@@ -201,6 +215,9 @@ def series_row(snap: dict[str, Any]) -> dict[str, Any]:
         "g5_turns": f"{g5.get('turns_passed')}/{g5.get('total_turns')}" if g5 else "",
         "six_b_streak": ladder.get("six_b_streak"),
         "packs_ok": (snap.get("packs") or {}).get("gate_pass"),
+        "agent_plan": (
+            f"{(snap.get('agent_plan') or {}).get('passed')}/{(snap.get('agent_plan') or {}).get('n')}"
+        ),
     }
 
 
@@ -253,6 +270,10 @@ def previous_row(rows: list[dict[str, Any]], snap: dict[str, Any]) -> dict[str, 
 def ratchet_violations(snap: dict[str, Any], prev: dict[str, Any] | None, ceiling: dict[str, Any]) -> list[str]:
     out = list(gate_violations(snap["budget"], ceiling))
     out.extend(f"pack contract: {v}" for v in (snap.get("packs") or {}).get("violations") or [])
+    agent = snap.get("agent_plan") or {}
+    if agent.get("n") and not agent.get("gate_pass"):
+        ids = ", ".join(m.get("id", "") for m in agent.get("misses") or [])
+        out.append(f"agent plan bank: {agent.get('passed')}/{agent.get('n')} ({ids})")
     if prev:
         for key in RATCHET_KEYS:
             try:
@@ -299,10 +320,14 @@ def render_text(snap: dict[str, Any], prev: dict[str, Any] | None = None) -> str
     for pid, meta in (packs.get("packs") or {}).items():
         lines.append(f"  {pid:10s} v{meta.get('version')} {meta.get('domain')}")
     lines.append(f"  contract gate: {'pass' if packs.get('gate_pass') else 'FAIL'}")
-    lines += ["", "Not measured"]
+    agent = snap.get("agent_plan") or {}
+    if agent.get("n"):
+        lines.append(
+            f"  Agent/plan bank {agent.get('passed')}/{agent.get('n')} gate={'pass' if agent.get('gate_pass') else 'FAIL'}"
+        )
+    lines += ["", "Coverage"]
     for k, v in (snap.get("coverage") or {}).items():
-        if "no " in v or "none" in v:
-            lines.append(f"  {k}: {v}")
+        lines.append(f"  {k}: {v}")
     return "\n".join(lines) + "\n"
 
 

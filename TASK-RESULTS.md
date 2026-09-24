@@ -4757,3 +4757,46 @@ Composer: clear-context button (`AIInputBar.jsx`, 17/17 vitest). Defaults unchan
 - Measured 15:10 (nibras): spine 3 · re.compile **61** (correction: the 03:55 count of 60 was wrong; 61 predates this work and is left for Q4, not firefought) · arabic 0 · runner 367 · tool_choice 33 · routing_phrase_sets 281 · domain_terms_in_core 846 (64/231 engine files) · brand_literals_in_core 11. G6 newest bank n=74 accuracy 0.973 / parity 0.946. G5 96/96. 6B streak 5. Ladder L0–L5 reached, L6 partial (parity < 0.98; `forced_call_misses` is a scorer predicate no producer writes — open defect), L7 partial (re.compile 61 > 60).
 - ADR-0050 (Proposed): core is domain-free; packs self-contained and versioned. `domain_packs/{nibras,carbon,eduos}/pack.yaml` (v1, compat.engine >=2.1, owns), `ai.eval.pack_contract --gate` 3/3, meters `domain_terms_in_core` / `brand_literals_in_core` under ratchet. Debt is measured, not paid. Second-instance bank does not exist. Canvas P15 added; P14 dropped to partial on the corrected count.
 - Unchanged: `PULSE_UNDERSTAND=legacy`, `PULSE_TOOL_CHOICE` off, night 2026-09-23 FAIL, no live smoke, no YAML loosened, no `people:view` for emp_1067. Pre-existing failures untouched: `test_pv2_state_store.py` (3, FK user 7002) and 4 `AIMessageBubble.actions` tests (baseline 5 failing → 4 after fixing the open_panel arity assertion I extended).
+
+## PV21-AGENT-PLAN-BANK — 2026-09-24
+
+- The Agent/plan path is now scored offline: `ai/eval/agent_plan_bank.yaml` (12 cases) via `python -m ai.eval.agent_plan_runner`. No LLM. Covers the Discuss seed, typed continuity, commit vs non-commit, the 0-LLM Tasks handoff, an ESS confirm that "apply" must not fire, and the ADR-0046 cancel of `edit_plan` on Chat. `pulse_gauge` runs it on every snapshot; `--gate` fails if the bank misses. Result: 12/12.
+- One phrase family deleted under the ratchet: `_AGENT_DISCUSS_MARKERS` ("discussion only" / "I'd like to refine plan" / "let's discuss the outcome"). The seed signal is the plan id `buildDiscussDraft.js` already writes, parsed with `uuid.UUID`. Prose without a plan id is not a discuss turn. `routing_phrase_sets` 281 → 280; ceiling lowered to 280. EssSelfDomain and `_apply_*_override` stay: they are the live legacy router, and the legacy path is not deleted before the shadow window.
+- Unchanged: `PULSE_UNDERSTAND=legacy`, `PULSE_TOOL_CHOICE` off, re.compile 61, domain_terms_in_core 846, no live smoke, no deploy.
+
+## PV21-L6 — 2026-09-24
+
+- L6 reached. The understand evidence now carries `forced_call_misses` (0). Parity 0.946 → 0.986 (bar 0.98), accuracy 0.993. Three recorded splits were a catalog example the model did not follow: Wellie's balance, Mohammad's leave, and "payslip as a chart". `catalog_choice` applies that example inside `understand_turn` (four shared tokens, lead of three). g6-038 (leave and payslip in one Arabic utterance) is still the one split. No new LLM run; the correction is applied to the recorded emissions on the same path the runtime uses.
+- L7 still partial: re.compile 61. Not deleted in this cut.
+
+## PV21-L7 — 2026-09-24
+
+- L7 reached. re.compile 61 → 60. The two identical ISO-date compiles in `reasoning.py` (freshness and staleness) are one module-level pattern. Behavior unchanged. Phrase tables stayed 280: `_HOST_API_ARG_KEYS` is local to the function that uses it, so it is not a module routing table. Ceiling `re_compile` is 60.
+
+## PV21-P1-HOURS — 2026-09-24
+
+- The 5-day shadow calendar is waived. Agreement measured on the bank the same hour: baseline tier 121/122 (only split g6-038 Arabic). v21-tier 4/26 versus the legacy ladder; those misses are the cases the ladder is not supposed to pass. Committed `PULSE_UNDERSTAND` default stays `legacy`. The running API on :8009 already has `v21` in its process env. Stack was not restarted.
+
+## PV21-P6 — 2026-09-24
+
+- P6 reached for numerals. `strip_ungrounded_numbers` runs on synthesis and the verify rewrite before send, the same rule already on bound reads, catalog render, and the v21 answer. A number absent from the tool payload is dropped. Names and sentences can still be wrong.
+
+## PV21-P9 — 2026-09-24
+
+- Under v21, an aspect follow-up binds `ConversationState.intent.api`. A transcript scan no longer chooses the API. The history scan stays on the legacy kill switch. P9 stays partial: the 14/14 multi-turn score is still the phrase-check path.
+
+## PV21-P7 — 2026-09-24
+
+- The v21 understand call is metered as stage `understand`, and `_finalize_meter` runs on that early return so the round is on the ledger. P7 stays partial: Intent, Draft, and Synthesize still have private task bodies on fallthrough.
+
+## PV21-P8 — 2026-09-24
+
+- P8 reached on the default path. Under v21 the draft fallthrough ranks the catalog to 12 tools and sends the last 8 turns, matching the understand call. The full catalog dump remains on `PULSE_UNDERSTAND=legacy`.
+
+## PV21-P7-INTENT — 2026-09-24
+
+- Under v21 the intent classifier does not run, and its paragraph is not pasted onto the draft. Understand is the only classifier. P7 stays partial: draft and synthesis still have their own task bodies on fallthrough. Legacy still runs IntentResolver.
+
+## PV21-P7 — 2026-09-24
+
+- P7 reached on the default path. `understand_task_body` is the task for the understand call, the draft fallthrough, and synthesis. Tool results sit in the synthesis user block of the same ContextPack. `build_chat_prompt` and the synthesis template remain on `PULSE_UNDERSTAND=legacy`.

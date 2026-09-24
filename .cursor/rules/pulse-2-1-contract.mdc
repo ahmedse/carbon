@@ -9,7 +9,7 @@ alwaysApply: true
 
 # Pulse 2.1 contract (ADR-0049 · Proposed)
 
-v2 (ADR-0047) stays the default path. Do not flip `PULSE_UNDERSTAND` or `PULSE_TOOL_CHOICE` on in committed defaults.
+Understanding (P1) is the default path: `PULSE_UNDERSTAND=v21`. Named `tool_choice` (P3) is on when intent already names one host read. `legacy` / `PULSE_TOOL_CHOICE=off` are the kill switches.
 
 ## Hard contract
 
@@ -18,6 +18,8 @@ v2 (ADR-0047) stays the default path. Do not flip `PULSE_UNDERSTAND` or `PULSE_T
 | **Understanding** | One call emits a `Decision` (`turn/decision.py`). Regex may normalize (`engine/text/normalize.py`) or add a signal. Regex must not be a new turn exit. |
 | **Catalog** | Twins differ by description, `not_for`, `kind`, `empty_render`. Not by a new `topic_re`. |
 | **tool_choice** | Force with `choice_from_resolution` only when `PULSE_TOOL_CHOICE=on`. Omitted kwarg = today's behavior. |
+| **P1 default** | `PULSE_UNDERSTAND` defaults to `v21`. `legacy` is the kill switch. |
+| **P3 default** | `PULSE_TOOL_CHOICE` defaults on. `off` skips the named force. |
 | **Chat** | ADR-0046. `validate_decision` turns Chat write tools into `handoff_agent`. |
 | **Facts** | Numbers in a tool answer must appear in the tool payload (`turn/grounding.py`). |
 | **Ladder** | L0–L5 are the v2 exit. L6/L7 live in `v21_levels` and stay missing until evidence clears. Do not claim them in the canvas. |
@@ -29,7 +31,7 @@ v2 (ADR-0047) stays the default path. Do not flip `PULSE_UNDERSTAND` or `PULSE_T
 
 ## Do NOT
 
-- Default `PULSE_UNDERSTAND=v21` or `PULSE_TOOL_CHOICE=on`.
+- Do not set `PULSE_UNDERSTAND=legacy` or `PULSE_TOOL_CHOICE=off` in committed defaults.
 - Delete the legacy Intent→Draft path before G6 ≥ 0.95 and a shadow window.
 - Add `leave_*` phrase wrappers back into `ess_read.py`.
 - Add an apply / affirm / intent allowlist to `planner.py`, `runner_*.py`, or any engine module. Put the fix in state (`plan_revision.py` pattern), the catalog, or a golden.

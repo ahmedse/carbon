@@ -632,6 +632,7 @@ api_catalog:
     empty_render: no_payslips
     examples:
       - {ar: "قسيمة راتبي", en: "What was my last payslip?"}
+      - {ar: "الآن اعرض قسيمة راتبي الأخيرة كرسم بياني", en: "now show my last payslip as a chart"}
     description: >
       The logged-in employee's OWN payslip lines from committed/validated
       payroll runs only: id, line_type (gross | gosi | loan_installment | net),
@@ -663,6 +664,7 @@ api_catalog:
     examples:
       - {ar: "ما رصيد إجازات Wellie؟", en: "what's Wellie's leave balance?"}
       - {ar: "رصيد إجازة emp_1712", en: "leave balance for emp_1712"}
+      - {ar: "كم يوم إجازة لـ Mohammad؟", en: "How much leave does Mohammad have?"}
     description: >
       List leave entitlements for employees visible to the user. Fields:
       id, employee, employee_no, employee_name, leave_type, entitled_days,

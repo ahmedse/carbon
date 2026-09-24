@@ -397,6 +397,7 @@ def bound_ess_self_api(
     text: str | None,
     *,
     history: list | None = None,
+    prior_api: str | None = None,
 ) -> str | None:
     """API for a Chat-bound ESS self-read, or None (fall through).
 
@@ -421,11 +422,30 @@ def bound_ess_self_api(
     if len(domains) > 1:
         return None
     if len(domains) == 1:
+        # P2: a fresh read is routed by the catalog. topic_re stays on the
+        # legacy kill switch only. Follow-ups with no domain word still bind
+        # from history below.
+        from ai.engine.cognition.turn.understand import understand_mode
+
+        if understand_mode() == "v21":
+            return None
         return domains[0].preferred_api(t)
 
     # No domain in this utterance — aspect follow-up against thread focus.
     if not (_is_aspect_followup(t) or _is_comprehensive_pick(t)):
         return None
+    from ai.engine.cognition.turn.understand import understand_mode
+
+    if understand_mode() == "v21":
+        # P9: the previous tool is on ConversationState.intent, not the transcript.
+        api = str(prior_api or "").strip()
+        known = {
+            name
+            for domain in ESS_SELF_DOMAINS
+            for name in (domain.balance_api, domain.history_api)
+            if name
+        }
+        return api if api in known else None
     prior = domains_in_recent_history(history)
     if len(prior) != 1:
         return None

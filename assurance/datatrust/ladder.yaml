@@ -1,0 +1,40 @@
+# Data Trust tier — Catalog · DQ · MDM (ADR-0039 Trust Index sits beside this ladder).
+tier: datatrust
+title: Data Trust (Catalog · DQ · MDM)
+owner: owner
+level_names: [Unmanaged, Declared, Specified, Built, Proven, Operated, Excellent]
+
+subjects:
+  - id: datatrust.module.catalog
+    kind: module
+    title: catalog (datasets, trust index, search)
+    owner: owner
+    paths: [backend/catalog]
+    tests: [backend/catalog/tests]
+    adr: [.ai-toolkit/decisions/0039-data-trust-index.md]
+    app: catalog
+  - id: datatrust.module.dq
+    kind: module
+    title: dq (rules, evidence, contradiction)
+    owner: owner
+    paths: [backend/dq]
+    tests: [backend/dq/tests]
+    app: dq
+  - id: datatrust.module.mdm
+    kind: module
+    title: mdm (golden records)
+    owner: owner
+    paths: [backend/mdm]
+    tests: [backend/mdm/tests]
+    app: mdm
+
+checks:
+  - id: DT-SPC-01
+    title: Trust Index ADR linked
+    dimension: specified
+    rank: 2
+    collector: repo
+    probe: { type: paths_exist, field: adr }
+    applies_to: [module]
+    solution: Link ADR-0039 (or the module's own ADR) under `adr:`.
+    source: ADR-0039

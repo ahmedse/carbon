@@ -1,0 +1,40 @@
+# Pulse tier — Excellence Ladder (ADR-0051). Owner seat: Pulse Master.
+# Inherits every platform check. Tier-wide checks below apply to all Pulse
+# tracks (chat, agent, memory, packs, ops); track manifests add their own.
+tier: pulse
+title: Pulse (Chat · Agent · Memory · Packs · Ops)
+owner: pulse-master
+level_names: [Unmanaged, Declared, Specified, Built, Proven, Operated, Excellent]
+
+subjects:
+  - id: pulse.engine.core
+    kind: module
+    title: engine core (domain-free, ADR-0050)
+    owner: pulse-master
+    paths: [backend/ai/engine]
+    tests: [backend/ai/tests]
+    adr:
+      - .ai-toolkit/decisions/0047-pulse-unified-conversation-state.md
+      - .ai-toolkit/decisions/0050-pulse-core-domain-free-versioned-packs.md
+    spec: [docs/pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md]
+    app: ai
+
+checks:
+  - id: PULSE-MNT-01
+    title: Harness budget within ceiling (no meter above PV2.1-budget-ceiling.json)
+    dimension: maintainable
+    rank: 3
+    collector: pulse_gauge
+    probe: { type: budget_gate, subjects: [pulse.engine.core] }
+    applies_to: [module]
+    solution: python -m ai.eval.pulse_gauge --gate ; remove the exit / regex / phrase table you added.
+    source: ADR-0049 Budget row
+  - id: PULSE-SPC-01
+    title: Intelligence contract document present
+    dimension: specified
+    rank: 2
+    collector: repo
+    probe: { type: paths_exist, field: spec }
+    applies_to: [module, ai_pack, process]
+    solution: Link the contract / spec under `spec:`.
+    source: ADR-0047

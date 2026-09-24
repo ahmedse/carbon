@@ -23,6 +23,9 @@ def _dt_key(value):
         return 0
 
 
+# ISO date inside a tool payload. One compile, two readers (freshness and staleness).
+_ISO_IN_PAYLOAD_RE = re.compile(r"(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?)")
+
 # Fast regex to detect simple conversational messages that don't need tools
 _CONVERSATIONAL_RE = re.compile(
     r"^\s*"
@@ -971,10 +974,8 @@ class PulseAgent:
             # ── Freshness indicator ──
             raw = tool.get("raw_result", "")
             if raw:
-                import re as _re
                 from datetime import datetime as _dt, timezone as _tz
-                _date_pat = _re.compile(r"(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?)")
-                _dates = _date_pat.findall(raw[:1000])  # scan first 1000 chars
+                _dates = _ISO_IN_PAYLOAD_RE.findall(raw[:1000])  # scan first 1000 chars
                 _latest = None
                 for _d in _dates:
                     try:
@@ -999,7 +1000,6 @@ class PulseAgent:
     @staticmethod
     def _detect_caveats(synthesis, tools_used: list[dict]) -> list[str]:
         """Detect data quality caveats to surface alongside the response."""
-        import re
         from datetime import datetime, timedelta, timezone
 
         caveats = []
@@ -1032,12 +1032,11 @@ class PulseAgent:
         # Look for date patterns in tool results and flag if data is old
         now_utc = datetime.now(timezone.utc)
         stale_threshold = timedelta(hours=36)  # flag if data is >36h old
-        date_pattern = re.compile(r"(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?)")
         latest_data_date = None
 
         for tool in tools_used:
             raw = str(tool.get("raw_result", ""))
-            dates_found = date_pattern.findall(raw)
+            dates_found = _ISO_IN_PAYLOAD_RE.findall(raw)
             for d in dates_found:
                 try:
                     parsed = datetime.fromisoformat(d.replace("T", " "))

@@ -14,3 +14,27 @@ python -m assurance report --pack nibras --commit <sha> --ledger /tmp/nibras.jso
 ```
 
 See `docs/assurance/ASSURANCE-WORKBOARD-PLAN.md`.
+
+## Excellence ladder (ADR-0051)
+
+The same directories also hold the **ladder manifests** read by `backend/excellence`:
+
+- `assurance/<tier>/ladder.yaml` — tier, subjects, tier-wide checks (`platform` is inherited by every tier).
+- `assurance/<tier>/tracks/<track>.yaml` — one track (Pulse: `chat`, `agent`, `memory`, `packs`, `ops`).
+- `domain_packs/<id>/assurance/ladder.yaml` — a domain app's tier.
+
+Rules (`pack.yaml` + `rules/`) say *what must be true*; the ladder says *which level each subject has earned*
+(L0 Unmanaged → L6 Excellent, one check at a time, minimum across dimensions). Events live in the
+`carbon_excellence` database, never in the brand DB.
+
+```bash
+cd backend
+python -m excellence.gauge --no-db --collect --only repo,pulse_gauge,observe   # dry run
+python -m excellence.gauge --collect --write --gate                             # persist + ratchet
+python -m excellence.gauge --gate --changed origin/main                         # CI: only touched subjects
+python -m excellence.gauge --run pytest:accounts                                # one app
+python -m excellence.gauge --run vitest:src/pages/admin/excellence/__tests__/ExcellencePages.test.jsx
+bash .ai-toolkit/scripts/verify.sh excellence                                   # verify gate target
+```
+
+Admin UI: **Trust → Excellence** (`/admin/excellence`). Ladder | Rules. Measure runs collectors into the ledger.

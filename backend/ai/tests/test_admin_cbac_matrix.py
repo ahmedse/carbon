@@ -8,7 +8,7 @@ assigned via AI governance groups today.
 Contract: ``ai:view_console`` never authorizes publish / promote / budget /
 containment / knowledge write / prompt activate.
 
-Plan: docs/pulse/PULSE-ADMIN-QA-GATE.md §4.
+Plan: docs/pulse/archive/PULSE-ADMIN-QA-GATE.md §4.
 """
 
 from __future__ import annotations

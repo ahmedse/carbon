@@ -1,6 +1,6 @@
 """One understanding call (ADR-0049). The model emits emit_decision; code validates.
 
-Default runtime stays on the legacy Intent→Draft path until PULSE_UNDERSTAND=v21.
+Default runtime is the understanding call. ``PULSE_UNDERSTAND=legacy`` is the kill switch.
 """
 from __future__ import annotations
 
@@ -77,6 +77,19 @@ def _clip_words(text: str, max_chars: int) -> str:
     return (cut or text[:max_chars]).rstrip(".,;:") + "…"
 
 
+def understand_task_body(
+    catalog_lines: list[str],
+    navigation_lines: list[str] | None = None,
+) -> str:
+    """The one task body for understand, draft, and synthesis (P7)."""
+    catalog = "\n".join(catalog_lines)
+    nav = "\n".join(navigation_lines or [])
+    parts = [_UNDERSTAND_RULES, f"CATALOG:\n{catalog}"]
+    if nav:
+        parts.append(f"NAV (navigate with target_id):\n{nav}")
+    return "\n\n".join(parts)
+
+
 def build_understand_system_prompt(
     *,
     catalog_lines: list[str],
@@ -88,13 +101,8 @@ def build_understand_system_prompt(
     """ContextPack-backed system prompt for the v21 understand call (ADR-0047)."""
     from ai.engine.cognition.context_pack import build_context_pack
 
-    catalog = "\n".join(catalog_lines)
-    nav = "\n".join(navigation_lines or [])
-    parts = [_UNDERSTAND_RULES, f"CATALOG:\n{catalog}"]
-    if nav:
-        parts.append(f"NAV (navigate with target_id):\n{nav}")
     # Rules first: the clip must never drop process_id=plan / clarify policy.
-    task_body = "\n\n".join(parts)
+    task_body = understand_task_body(catalog_lines, navigation_lines)
     pack = build_context_pack(
         state,
         surface="chat",
@@ -234,13 +242,13 @@ def catalog_context(history: list | None) -> str:
 
 
 def understand_mode() -> str:
-    """``legacy`` (default), ``shadow`` (log only), or ``v21`` (act)."""
-    raw = (os.environ.get(UNDERSTAND_FLAG) or "legacy").strip().lower()
-    if raw == "v21":
-        return "v21"
+    """``v21`` (default: the model decides), ``shadow`` (log only), or ``legacy`` (kill switch)."""
+    raw = (os.environ.get(UNDERSTAND_FLAG) or "v21").strip().lower()
+    if raw in {"legacy", "off", "v2"}:
+        return "legacy"
     if raw in {"shadow", "shadow_only", "log"}:
         return "shadow"
-    return "legacy"
+    return "v21"
 
 
 Completer = Callable[..., Awaitable[dict]]
@@ -286,7 +294,6 @@ async def understand_turn(
     tools = [EMIT_DECISION_TOOL]
     # Catalog tools are described in the prompt by the caller. Forcing
     # emit_decision means the model cannot skip the decision by chatting.
-    del catalog_tools  # described in the prompt by the caller, not a second tool list
     result = await complete(
         messages=messages,
         tools=tools,
@@ -296,10 +303,52 @@ async def understand_turn(
     parsed = decision_from_tool_result(result if isinstance(result, dict) else None)
     if parsed is None:
         return None
-    return validate_decision(
+    validated = validate_decision(
         parsed,
         surface=surface,
         allowed_tools=allowed_tools,
         write_tools=write_tools,
         state=state,
+    )
+    return _apply_catalog_choice(validated, messages, catalog_tools)
+
+
+def _apply_catalog_choice(
+    decision: Decision,
+    messages: list[dict],
+    catalog: list[dict] | None,
+) -> Decision:
+    """Catalog examples and domains override a model choice that contradicts them."""
+    from ai.engine.cognition.catalog_retrieval import catalog_choice
+    from ai.engine.cognition.turn.decision import Command
+
+    utterance = ""
+    for msg in reversed(messages or []):
+        if isinstance(msg, dict) and msg.get("role") == "user":
+            utterance = str(msg.get("content") or "")
+            break
+    choice = catalog_choice(utterance, catalog)
+    if not choice or not decision.commands:
+        return decision
+    first = decision.commands[0]
+    if choice["op"] == "clarify":
+        if first.op != "call_tool":
+            return decision
+        return Decision(
+            commands=[Command(op="clarify", question="Which one should I look at?")],
+            language=decision.language,
+            confidence=decision.confidence,
+            reason=decision.reason,
+        )
+    name = choice.get("name") or ""
+    if not name or (first.op == "call_tool" and first.name == name):
+        return decision
+    if first.op not in {"clarify", "call_tool", "continue", "answer"}:
+        return decision
+    render = first.render if first.render in {"chart", "table"} else "text"
+    return Decision(
+        commands=[Command(op="call_tool", name=name, render=render)],
+        language=decision.language,
+        confidence=decision.confidence,
+        reason=decision.reason,
     )

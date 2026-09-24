@@ -38,11 +38,23 @@ Modular monolith (Django + React) deployed as isolated brand instances (AASTMT �
 |-----|------|
 | [pulse/](./pulse/) | Pulse QA + UX living docs |
 | [pulse/QA-CHAT-AGENTIC-SCENARIO-BANK.md](./pulse/QA-CHAT-AGENTIC-SCENARIO-BANK.md) | Chat + Agentic scenario banks + measurement gates (Master/QA) |
-| [pulse/LIVE-QA-2026-09-16.md](./pulse/LIVE-QA-2026-09-16.md) | Live server QA findings (Chat/Agent UX) |
 | [pulse/QA-FRAMEWORK.md](./pulse/QA-FRAMEWORK.md) | Canonical intelligence/feature measurement spec |
+| [pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md](./pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md) | v2 intelligence contract (ADR-0047) — ladder, Arbiter, ConversationState |
+| [pulse/PULSE-CANONICAL.md](./pulse/PULSE-CANONICAL.md) · [pulse/PULSE-ROADMAP.md](./pulse/PULSE-ROADMAP.md) | What Pulse is · the plan |
 | [DESIGN_AI_WORKSPACE_V4.md](./DESIGN_AI_WORKSPACE_V4.md) | AI workspace implementation target |
 | [DESIGN-AGENT-WORKFLOW-AND-UI.md](./DESIGN-AGENT-WORKFLOW-AND-UI.md) | Agent workflow + UI |
+| [DESIGN-AGENT-CATALOG.md](./DESIGN-AGENT-CATALOG.md) | Agent catalog / graph reuse (ADR-0011) |
+| [DESIGN-CONTEXTUAL-INSPECTOR-DRAWER.md](./DESIGN-CONTEXTUAL-INSPECTOR-DRAWER.md) | Contextual inspector drawer (ADR-0019) |
 | [PULSE-COWORKER-IMPLEMENTATION-SPEC.md](./PULSE-COWORKER-IMPLEMENTATION-SPEC.md) | Coworker implementation |
+| [pulse/archive/](./pulse/archive/) | Superseded Pulse plans, audits, dated QA findings (see its README) |
+
+## Assurance / Excellence Ledger
+
+| Doc | Role |
+|-----|------|
+| [../.ai-toolkit/decisions/0051-excellence-ledger.md](../.ai-toolkit/decisions/0051-excellence-ledger.md) | One evidence store, many ladders (tier → track → subject; `excellence` DB) |
+| [../assurance/README.md](../assurance/README.md) | Rules + ladder manifests (`assurance/<tier>/ladder.yaml`, `tracks/*.yaml`) · `python -m excellence.gauge` |
+| [assurance/ASSURANCE-WORKBOARD-PLAN.md](./assurance/ASSURANCE-WORKBOARD-PLAN.md) | Assurance workboard (rule × evidence × commit) — absorbed by ADR-0051 |
 
 ## Operations
 
@@ -60,6 +72,7 @@ Modular monolith (Django + React) deployed as isolated brand instances (AASTMT �
 | [TESTING_QA_GUIDE.md](./TESTING_QA_GUIDE.md) | Testing guide |
 | [ADMIN_USER_GUIDE.md](./ADMIN_USER_GUIDE.md) | Admin guide |
 | [SIMULATION-GOLDEN.json](./SIMULATION-GOLDEN.json) | Simulation baseline (do not delete) |
+| [data-model.md](./data-model.md) | Data model short reference |
 
 ## Archive (do not treat as current)
 

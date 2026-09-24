@@ -6,8 +6,8 @@
 - **Area:** frontend | cross-cutting (Pulse Agent UI)
 - **Extends:** ADR-0014 (Chat/Agent split), ADR-0034 (workflow + cockpit segments), ADR-0041 (Ops Canvas / Job Map)
 - **Does not touch:** Nibras / EduOS product UIs (EduOS may *attach* Job Maps per ADR-0041 §5)
-- **Screen Spec:** `docs/SCREEN-SPEC-AGENT-FOUR-VIEW-COCKPIT.md`
-- **Remediation master:** `docs/pulse/PULSE-AGENTIC-UX-REMEDIATION-PLAN.md` Track E
+- **Screen Spec:** `docs/_archive/design-superseded/SCREEN-SPEC-AGENT-FOUR-VIEW-COCKPIT.md`
+- **Remediation master:** `docs/pulse/archive/PULSE-AGENTIC-UX-REMEDIATION-PLAN.md` Track E
 
 ## Context
 
@@ -92,7 +92,7 @@ ADR-0011 / 0012 still bind: reuse `PlanDagGraph` / `EnterpriseGraph` — **no ne
 | **V5** | Operator calm: Plan stage-first; Run chronicle + Run health; Canvas story-first; Output purity + file Delete | Track E · Vitest + Screen Spec — **DONE** |
 | **V6** | Plan graph-only structure (no stage wall / no Finished); tooltips; click drawer | Vitest AgentReviewSurface + PlanDagGraph structure — **DONE** |
 
-Frontend worker required Screen Spec (`docs/SCREEN-SPEC-AGENT-FOUR-VIEW-COCKPIT.md`) before V1 code — **DONE**. V5 amends that Spec.
+Frontend worker required Screen Spec (`docs/_archive/design-superseded/SCREEN-SPEC-AGENT-FOUR-VIEW-COCKPIT.md`) before V1 code — **DONE**. V5 amends that Spec.
 
 ### V5 Operator calm (binding deltas)
 
@@ -164,6 +164,6 @@ Actions buttons, UPPERCASE headers).
 ## References
 
 - Design narrative: `docs/DESIGN-AGENT-WORKFLOW-AND-UI.md` §6 (amended), §10
-- Board: `~/.cursor/projects/home-ahmed-ws-carbon/canvases/pulse-agent-four-view-ia.canvas.tsx`
+- Board: `~/.cursor/projects/home-ahmed-ws-carbon/canvases/_archive/pulse/pulse-agent-four-view-ia.canvas.tsx`
 - ADR-0014 · ADR-0034 · ADR-0041 · ADR-0011 · ADR-0012 · ADR-0036
 - Code today: `AITaskPanel.jsx` (segments), `AgentRunSurface.jsx`, `OpsCanvasHost.jsx`, `OpsCanvasShelf.jsx`

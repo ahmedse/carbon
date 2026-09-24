@@ -79,5 +79,6 @@ cp .ai-toolkit/decisions/0000-template.md .ai-toolkit/decisions/00NN-short-title
 | [0048](0048-birthright-duty-scope.md) | Birthright duty scope | Accepted |
 | [0049](0049-pulse-2-1-model-understands-catalog-executes.md) | Pulse 2.1: model understands, catalog executes | Proposed |
 | [0050](0050-pulse-core-domain-free-versioned-packs.md) | Pulse core is domain-free; domains are self-contained, versioned packs (gauge + pack gates) | Proposed |
+| [0051](0051-excellence-ledger.md) | Excellence Ledger: one evidence store, many ladders (tier → track → subject; `excellence` DB) | Accepted |
 
 <!-- Add a row per ADR. Keep newest at the bottom. -->

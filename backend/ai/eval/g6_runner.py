@@ -215,6 +215,10 @@ def _pair_result(
         "ar_ok": _matches_expect(ar_dec, case),
         "en_ok": _matches_expect(en_dec, case),
         "parity": ar_dec["op"] == en_dec["op"] and ar_dec["api"] == en_dec["api"],
+        "_expect": {
+            "op": case.get("expect_op"),
+            "api": str(case.get("expect_api") or ""),
+        },
     }
 
 
@@ -240,6 +244,15 @@ def _aggregate(results: list[dict[str, Any]]) -> dict[str, Any]:
         if result["parity"]:
             parity_hits += 1
     total_utterances = 2 * n
+    forced = 0
+    for result in results:
+        case_expect = result.get("_expect") or {}
+        if case_expect.get("op") != "call_tool":
+            continue
+        for side in ("ar", "en"):
+            dec = result.get(side) or {}
+            if dec.get("op") != "call_tool" or dec.get("api") != case_expect.get("api"):
+                forced += 1
     return {
         "n": n,
         "decision_accuracy": (
@@ -247,6 +260,7 @@ def _aggregate(results: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         "parity": parity_hits / n if n else 0.0,
         "misses": misses,
+        "forced_call_misses": forced,
     }
 
 
@@ -345,9 +359,10 @@ async def understand_decision(
     )
     from ai.engine.llm.router import route_chat
 
+    scoped_catalog = _scoped_api_catalog(instance_config, user_info)
     lines, allowed, writes = catalog_prompt_lines(
         text,
-        _scoped_api_catalog(instance_config, user_info),
+        scoped_catalog,
         k=12,
         context=catalog_context(history),
     )
@@ -379,6 +394,7 @@ async def understand_decision(
     decision = await understand_turn(
         complete=complete,
         messages=messages,
+        catalog_tools=scoped_catalog,
         surface="chat",
         allowed_tools=allowed or None,
         write_tools=writes or None,

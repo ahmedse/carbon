@@ -31,6 +31,7 @@ import GavelIcon from '@mui/icons-material/Gavel';
 import TuneIcon from '@mui/icons-material/Tune';
 import InboxIcon from '@mui/icons-material/Inbox';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
+import StairsIcon from '@mui/icons-material/Stairs';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import SecurityIcon from '@mui/icons-material/Security';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
@@ -267,7 +268,7 @@ function getSidebarItems(studioId, helpApps = []) {
         { type: 'group', label: 'Trust' },
         { label: 'Field Policies', path: '/admin/catalog/field-policies', icon: SecurityIcon, role: 'admin' },
         { label: 'Audit Log', path: '/admin/audit', icon: HistoryIcon, role: 'admin' },
-        { label: 'Assurance', path: '/admin/assurance', icon: FactCheckIcon, role: 'admin' },
+        { label: 'Excellence', path: '/admin/excellence', icon: StairsIcon, role: 'admin' },
         { type: 'divider' },
         { type: 'group', label: 'Apps' },
         { label: 'Registered Apps', path: '/admin/apps', icon: AppsIcon, role: 'admin' },
@@ -280,7 +281,7 @@ function getSidebarItems(studioId, helpApps = []) {
 
     case 'ai-admin':
       // ADR-0036 — Pulse Control Plane. Freeze: no new top-level peers.
-      // Plan: docs/pulse/PULSE-ADMIN-REMAKE.md
+      // Plan: docs/pulse/archive/PULSE-ADMIN-REMAKE.md
       return [
         { label: 'Command Center', path: '/admin/ai', icon: AutoAwesomeIcon, role: 'admin' },
         { label: 'Domain', path: '/admin/ai/domain', icon: RuleIcon, role: 'admin' },

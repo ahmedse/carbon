@@ -1,0 +1,33 @@
+# Pulse · Agent / Plan track (plan → approve → run → RULE_21 consent).
+track: agent
+title: Agent (plan, approve, run)
+owner: pulse-master
+
+subjects:
+  - id: pulse.agent.planner
+    kind: module
+    title: planner (decompose, bind host APIs, degrade unbound steps)
+    owner: pulse-master
+    paths: [backend/ai/engine/cognition/plan]
+    tests: [backend/ai/tests/test_host_api_plan_coerce.py, backend/ai/tests/test_plans.py]
+    adr: [.ai-toolkit/decisions/0049-pulse-2-1-model-understands-catalog-executes.md]
+    spec: [docs/pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md]
+  - id: pulse.agent.plans_service
+    kind: module
+    title: plans service (approve, run, step consent, catalog binding)
+    owner: pulse-master
+    paths: [backend/ai/plans_service.py]
+    tests: [backend/ai/tests/test_plans.py, backend/ai/tests/test_phantom_success_guard.py]
+    adr: [.ai-toolkit/decisions/0046-pulse-chat-no-host-mutation-stage.md]
+    spec: [docs/pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md]
+
+checks:
+  - id: PULSE-AGENT-COR-01
+    title: Intelligence ladder L4 reached (ESS write with consent)
+    dimension: correct
+    rank: 4
+    collector: pulse_gauge
+    probe: { type: ladder_level, level: L4, subjects: [pulse.agent.plans_service] }
+    applies_to: [module]
+    solution: python -m ai.eval.intelligence_ladder ; fix the failing L4 gates.
+    source: ADR-0047 ladder

@@ -74,6 +74,7 @@ urlpatterns = [
     path(f'{api_prefix}/accounts/', include('accounts.urls')),
     path(f'{api_prefix}/core/', include('core.urls')),
     path(f'{api_prefix}/assurance/', include('core.assurance_urls')),
+    path(f'{api_prefix}/excellence/', include('excellence.urls')),
     path(f'{api_prefix}/dataschema/', include('dataschema.urls')),
     path(f'{api_prefix}/carbon/', include(('emissions.urls', 'carbon'), namespace='carbon')),
     path(f'{api_prefix}/catalog/', include('catalog.urls')),

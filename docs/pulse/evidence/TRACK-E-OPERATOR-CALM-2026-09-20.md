@@ -22,9 +22,9 @@ AgentCanvasSurface · runChronicle — 29 passed
 
 ## Binding docs refreshed
 
-- `docs/pulse/PULSE-AGENTIC-UX-REMEDIATION-PLAN.md` — Track E master
+- `docs/pulse/archive/PULSE-AGENTIC-UX-REMEDIATION-PLAN.md` — Track E master
 - `.ai-toolkit/decisions/0043-agent-four-view-cockpit.md` — V5
-- `docs/SCREEN-SPEC-AGENT-FOUR-VIEW-COCKPIT.md` — V5 deltas
+- `docs/_archive/design-superseded/SCREEN-SPEC-AGENT-FOUR-VIEW-COCKPIT.md` — V5 deltas
 
 ## Follow-on (same day) — visual Timeline
 

@@ -1,0 +1,16 @@
+# Pulse · Memory track (learn_fact is the sole Chat-write exception, ADR-0046).
+track: memory
+title: Memory (facts, learning, ConversationState)
+owner: pulse-master
+
+subjects:
+  - id: pulse.memory.engine
+    kind: module
+    title: memory + learning engine
+    owner: pulse-master
+    paths: [backend/ai/engine/memory, backend/ai/engine/learning]
+    tests: [backend/ai/tests]
+    adr: [.ai-toolkit/decisions/0047-pulse-unified-conversation-state.md]
+    spec: [docs/pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md]
+
+checks: []

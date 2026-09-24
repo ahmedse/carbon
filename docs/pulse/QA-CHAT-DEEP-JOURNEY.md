@@ -4,8 +4,8 @@
 > **Date:** 2026-09-16 (refreshed)  
 > **Mode:** **Chat only** (ADR-0014 advisory contract) — Agent out of scope  
 > **Brand:** Nibras · accounts: `ahmed` / `AdminPa_132`  
-> **Board:** open beside chat → [`pulse-qa-measurement.canvas.tsx`](/home/ahmed/.cursor/projects/home-ahmed-ws-carbon/canvases/pulse-qa-measurement.canvas.tsx)  
-> **Banks:** `QA-CHAT-AGENTIC-SCENARIO-BANK.md` §2 · `QA-FRAMEWORK.md` · `LIVE-QA-2026-09-16.md`
+> **Board:** open beside chat → [`pulse-qa-measurement.canvas.tsx`](/home/ahmed/.cursor/projects/home-ahmed-ws-carbon/canvases/_archive/pulse/pulse-qa-measurement.canvas.tsx)  
+> **Banks:** `QA-CHAT-AGENTIC-SCENARIO-BANK.md` §2 · `QA-FRAMEWORK.md` · `archive/LIVE-QA-2026-09-16.md`
 
 ---
 

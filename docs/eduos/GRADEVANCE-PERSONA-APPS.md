@@ -1,7 +1,7 @@
 # GradeVance — Persona apps: Learn · Teach · Engine
 
 **Status:** Accepted — 2026-09-19 (owner go; naming: learn / teach)
-**Companion canvas:** [GradeVance Persona Apps](../../.cursor/projects/home-ahmed-ws-carbon/canvases/GradeVance-Persona-Apps.canvas.tsx)
+**Companion canvas:** [GradeVance Persona Apps](../../.cursor/projects/home-ahmed-ws-carbon/canvases/GradeVance-Persona-Split.canvas.tsx)
 **Owner seat:** EduOS
 **Supersedes stance:** GRADEVANCE-DESIGN §3 "One app, five roles — not five apps" and
 ADR-0038 §6 are *refined*, not reversed: still not five apps — **three persona

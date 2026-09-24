@@ -1,0 +1,40 @@
+# Pulse · Chat track (ADR-0046: Chat never host-mutates).
+track: chat
+title: Chat (read, advise, draft, memory confirm)
+owner: pulse-master
+
+subjects:
+  - id: pulse.chat.turn
+    kind: process
+    title: Chat turn (Arbiter → TurnDecision → answer)
+    owner: pulse-master
+    paths: [backend/ai/engine/cognition, backend/ai/engine/core]
+    tests: [backend/ai/tests]
+    adr: [.ai-toolkit/decisions/0046-pulse-chat-no-host-mutation-stage.md]
+    spec: [docs/pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md]
+  - id: pulse.chat.ui
+    kind: journey
+    title: Chat surface (AI workspace, message bubble, threads)
+    owner: pulse-master
+    paths: [carbon-frontend/src/shell/AIMessageBubble.jsx, carbon-frontend/src/shell]
+    tests: [carbon-frontend/src/shell/__tests__]
+
+checks:
+  - id: PULSE-CHAT-COR-01
+    title: Intelligence ladder L2 reached (grounded reads)
+    dimension: correct
+    rank: 4
+    collector: pulse_gauge
+    probe: { type: ladder_level, level: L2, subjects: [pulse.chat.turn] }
+    applies_to: [process]
+    solution: python -m ai.eval.intelligence_ladder ; fix the failing L2 gates.
+    source: ADR-0047 ladder
+  - id: PULSE-CHAT-COR-02
+    title: Intelligence ladder L3 reached (multi-turn state)
+    dimension: correct
+    rank: 5
+    collector: pulse_gauge
+    probe: { type: ladder_level, level: L3, subjects: [pulse.chat.turn] }
+    applies_to: [process]
+    solution: python -m ai.eval.intelligence_ladder ; fix the failing L3 gates.
+    source: ADR-0047 ladder

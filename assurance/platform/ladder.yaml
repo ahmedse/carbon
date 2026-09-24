@@ -1,0 +1,195 @@
+# Platform tier — Excellence Ladder (ADR-0051).
+# Checks here are inherited by every tier and cannot be lowered by a pack.
+# Keep rank 1 small and undeniable; add ranks only after rank 1 is credible.
+tier: platform
+title: Platform core
+owner: owner
+
+subjects:
+  - id: platform.module.accounts
+    kind: module
+    title: accounts (identity, CBAC, birthright)
+    owner: owner
+    paths: [backend/accounts]
+    tests: [backend/accounts/tests]
+    adr: [.ai-toolkit/decisions/0048-birthright-duty-scope.md]
+    app: accounts
+  - id: platform.module.core
+    kind: module
+    title: core (settings glue, throttles, assurance API)
+    owner: owner
+    paths: [backend/core]
+    tests: [backend/core/tests]
+    app: core
+  - id: platform.module.appregistry
+    kind: module
+    title: appregistry (AppManifest, activation)
+    owner: owner
+    paths: [backend/appregistry]
+    tests: [backend/appregistry/tests]
+    app: appregistry
+  - id: platform.module.dataschema
+    kind: module
+    title: dataschema (field policies, typed storage)
+    owner: owner
+    paths: [backend/dataschema]
+    tests: [backend/dataschema/tests]
+    adr: [.ai-toolkit/decisions/0025-typed-vs-dataschema-storage.md]
+    app: dataschema
+  - id: platform.module.connections
+    kind: module
+    title: connections
+    owner: owner
+    paths: [backend/connections]
+    tests: [backend/connections/tests]
+    app: connections
+  - id: platform.module.importexport
+    kind: module
+    title: importexport
+    owner: owner
+    paths: [backend/importexport]
+    tests: [backend/importexport/tests]
+    app: importexport
+  - id: platform.module.evidence
+    kind: module
+    title: evidence (attachments)
+    owner: owner
+    paths: [backend/evidence]
+    tests: [backend/evidence/tests]
+    app: evidence
+  - id: platform.module.regulations
+    kind: module
+    title: regulations
+    owner: owner
+    paths: [backend/regulations]
+    app: regulations
+  - id: platform.module.excellence
+    kind: module
+    title: excellence (this ledger)
+    owner: owner
+    paths: [backend/excellence]
+    tests: [backend/excellence/tests]
+    adr: [.ai-toolkit/decisions/0051-excellence-ledger.md]
+    app: excellence
+  - id: platform.module.shell
+    kind: module
+    title: frontend shell (navigation, auth, AI workspace chrome)
+    owner: owner
+    paths: [carbon-frontend/src/shell]
+    tests: [carbon-frontend/src/shell/__tests__, carbon-frontend/src/__tests__/AIMessageBubble.operations.test.jsx]
+    vitest: src/__tests__/AIMessageBubble.operations.test.jsx
+  - id: platform.repo
+    kind: artifact
+    title: repository hygiene (verify.sh antipatterns, DoD, toolkit)
+    owner: owner
+    paths: [.ai-toolkit/shared/definition-of-done.md, .ai-toolkit/scripts/verify.sh]
+    ci: [.github/workflows/ci.yml]
+    runbook: [docs/QUICKSTART_DEPLOYMENT.md, docs/SECURITY_DEPLOYMENT.md, docs/deployment.md]
+
+checks:
+  # ── rank 1 · Declared ─────────────────────────────────────────────────────
+  - id: PLAT-GOV-01
+    title: Subject has a named owner
+    dimension: governed
+    rank: 1
+    collector: repo
+    probe: { type: field_nonempty, field: owner }
+    solution: Set `owner` on the subject in its ladder.yaml.
+    source: ADR-0051 §2
+  - id: PLAT-GOV-02
+    title: Declared paths exist in the repository
+    dimension: governed
+    rank: 1
+    collector: repo
+    probe: { type: paths_exist, field: paths }
+    solution: Point `paths` at real directories or remove the subject.
+    source: ADR-0051 §2 (declared, not derived)
+  - id: PLAT-MNT-01
+    title: Repository passes verify.sh antipatterns
+    dimension: maintainable
+    rank: 1
+    collector: antipatterns
+    probe: { type: verify_antipatterns, subjects: [platform.repo] }
+    applies_to: [artifact]
+    solution: Fix the antipattern hits reported by `.ai-toolkit/scripts/verify.sh antipatterns`.
+    source: .ai-toolkit/shared/definition-of-done.md §5
+
+  # ── rank 2 · Specified ────────────────────────────────────────────────────
+  - id: PLAT-SPC-01
+    title: Module has an ADR or design document
+    dimension: specified
+    rank: 2
+    collector: repo
+    probe: { type: paths_exist, field: adr }
+    applies_to: [module, process, ai_pack]
+    solution: Link the ADR / design doc under `adr:` (or write one).
+    source: .ai-toolkit/shared/definition-of-done.md §7
+
+  # ── rank 3 · Built ────────────────────────────────────────────────────────
+  - id: PLAT-COR-01
+    title: Module has tests in the tree
+    dimension: correct
+    rank: 3
+    collector: repo
+    probe: { type: tests_present }
+    applies_to: [module]
+    solution: Add tests under the module's tests/ directory.
+    source: .ai-toolkit/shared/definition-of-done.md §4
+
+  # ── rank 4 · Proven ───────────────────────────────────────────────────────
+  - id: PLAT-COR-02
+    title: Module test suite executed green on HEAD
+    dimension: correct
+    rank: 4
+    collector: pytest
+    probe: { type: pytest_app }
+    applies_to: [module]
+    solution: "python -m excellence.gauge --run pytest:<app>  (one app at a time)"
+    source: TASKS.md Master Directive — Test Partitioning
+  - id: PLAT-COR-03
+    title: Frontend shell vitest file executed green on HEAD
+    dimension: correct
+    rank: 4
+    collector: vitest
+    probe: { type: vitest_file, subjects: [platform.module.shell] }
+    applies_to: [module]
+    solution: "python -m excellence.gauge --run vitest:src/__tests__/AIMessageBubble.operations.test.jsx"
+    source: TASKS.md Frontend one-spec rule
+
+  # ── rank 5 · Operated ─────────────────────────────────────────────────────
+  - id: PLAT-REL-01
+    title: CI workflow is declared and present
+    dimension: reliable
+    rank: 5
+    collector: observe
+    probe: { type: ci_files, subjects: [platform.repo] }
+    applies_to: [artifact]
+    solution: Point `ci:` at a real workflow under .github/workflows/.
+    source: ADR-0051 P3
+  - id: PLAT-REL-02
+    title: Deploy / rollback runbooks exist
+    dimension: reliable
+    rank: 5
+    collector: observe
+    probe: { type: runbook_files, subjects: [platform.repo] }
+    applies_to: [artifact]
+    solution: Point `runbook:` at QUICKSTART / SECURITY / deployment docs.
+    source: ADR-0051 P3
+  - id: PLAT-OBS-01
+    title: Evaluator fault rules still hold (stale/conflict/fail pin L0)
+    dimension: observed
+    rank: 5
+    collector: observe
+    probe: { type: evaluator_self_check, subjects: [platform.repo] }
+    applies_to: [artifact]
+    solution: Fix excellence.evaluator if this self-check fails.
+    source: ADR-0051 P4 fault-demonstration
+  - id: PLAT-OBS-02
+    title: Django app has a migrations package
+    dimension: observed
+    rank: 5
+    collector: observe
+    probe: { type: migrations_present }
+    applies_to: [module]
+    solution: Add backend/<app>/migrations (even an empty __init__.py package).
+    source: ADR-0051 P3

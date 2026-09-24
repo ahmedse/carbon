@@ -1,0 +1,14 @@
+track: people
+title: People (HR admin)
+owner: nibras-master
+
+subjects:
+  - id: nibras.people.ui
+    kind: journey
+    title: People frontend app
+    owner: nibras-master
+    paths: [carbon-frontend/src/apps/people]
+    tests: [carbon-frontend/src/apps/people]
+    runbook: [docs/nibras/DEV-CREDENTIALS.md]
+
+checks: []

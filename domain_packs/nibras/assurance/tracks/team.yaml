@@ -1,0 +1,14 @@
+track: team
+title: Team (line manager)
+owner: nibras-master
+
+subjects:
+  - id: nibras.team.ui
+    kind: journey
+    title: Team frontend app
+    owner: nibras-master
+    paths: [carbon-frontend/src/apps/team]
+    tests: [carbon-frontend/src/apps/team]
+    spec: [docs/nibras/TEAM-APP-MASTER.md]
+
+checks: []

@@ -1,7 +1,7 @@
 /**
  * JOURNEY 18 (steward depth): Pulse Control Plane P0 UI walk + J2–J6 oracles.
  *
- * ADR-0036 / docs/pulse/PULSE-ADMIN-QA-GATE.md Wave 2.
+ * ADR-0036 / docs/pulse/archive/PULSE-ADMIN-QA-GATE.md Wave 2.
  * Complements journey-17 (API + light UI) and journey-09 (read CBAC).
  * Note: journey-18-done-surface-pack.spec.ts is a separate Done-track pack.
  *

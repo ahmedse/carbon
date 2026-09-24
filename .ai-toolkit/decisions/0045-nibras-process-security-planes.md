@@ -109,4 +109,4 @@ Pulse SoD. Catalog `permissions:` lists are capability-id echoes — **not** Dja
 - `.ai-toolkit/troubleshooting/playbook.md` PB-61
 - `.ai-toolkit/project.config.md` RULE_34
 - ADR-0030, ADR-0031 D10, ADR-0044
-- `domain_packs/nibras/README.md` · `docs/pulse/PULSE-AGENTIC-WORKFLOW-AUDIT-KB.md` §7
+- `domain_packs/nibras/README.md` · `docs/pulse/archive/PULSE-AGENTIC-WORKFLOW-AUDIT-KB.md` §7

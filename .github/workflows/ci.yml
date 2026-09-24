@@ -79,6 +79,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -91,6 +93,32 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
+
+      - name: Excellence ledger tests + changed-subject ratchet (ADR-0051)
+        working-directory: backend
+        env:
+          DJANGO_ENV: ci
+          DJANGO_DEBUG: "False"
+          SECRET_KEY: ci-secret-key-not-for-production
+          DJANGO_ALLOWED_HOSTS: 127.0.0.1,localhost,testserver
+          DJANGO_API_PREFIX: /carbon-api/
+          DB_NAME: carbon_ci
+          DB_USER: carbon_user
+          DB_PASSWORD: carbon_ci_pass
+          DB_HOST: localhost
+          DB_PORT: 5432
+          CSRF_TRUSTED_ORIGINS: ""
+          CORS_ALLOWED_ORIGINS: ""
+          EXCELLENCE_DB_NAME: carbon_ci_excellence
+          TEST_DB_NAME: carbon_ci_excellence_test
+        run: |
+          PGPASSWORD=carbon_ci_pass psql -h localhost -U carbon_user -d postgres -c "CREATE DATABASE carbon_ci_excellence;" || true
+          python manage.py migrate --database=excellence --noinput
+          python -m pytest excellence -q --create-db
+          BASE="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$BASE" ]; then BASE="HEAD~1"; fi
+          python -m excellence.gauge --collect --only repo,observe --write --gate --changed "$BASE" || \
+            python -m excellence.gauge --collect --only repo,observe --no-db --gate --changed "$BASE"
 
       - name: Replay smoke (P2-11 — offline L1 fixtures)
         working-directory: backend

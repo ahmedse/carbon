@@ -275,6 +275,7 @@ INSTALLED_APPS = [
     'gradevance',
     'correspondence',
     'regulations',
+    'excellence',
     'rest_framework_simplejwt.token_blacklist',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -389,8 +390,23 @@ DATABASES = {
             # concurrently without colliding on the same test database.
             'NAME': get_env("TEST_DB_NAME", None) or f'test_{DB_NAME}',
         },
-    }
+    },
+    # Excellence Ledger (ADR-0051 §7): one append-only evidence store shared by
+    # every brand database. Same server and credentials; routed by
+    # excellence.router.ExcellenceRouter. No FKs into brand tables.
+    'excellence': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': get_env("EXCELLENCE_DB_NAME", "carbon_excellence"),
+        'USER': get_env("DB_USER", required=True),
+        'PASSWORD': get_env("DB_PASSWORD", required=True),
+        'HOST': get_env("DB_HOST", "localhost"),
+        'PORT': get_env("DB_PORT", "5432"),
+        'TEST': {
+            'NAME': (get_env("TEST_DB_NAME", None) or f'test_{DB_NAME}') + '_excellence',
+        },
+    },
 }
+DATABASE_ROUTERS = ['excellence.router.ExcellenceRouter']
 
 # Cache — Redis when available, local-memory fallback
 _redis_url = os.getenv('REDIS_URL', '')

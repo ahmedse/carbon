@@ -94,9 +94,33 @@ async def run_s3_through_s5(
     from ai.engine.cognition.turn.draft import DraftWitness
     draft_witness = DraftWitness(llm_client=runner.llm_client, knowledge_store=runner.knowledge_store, memory_manager=runner.memory_manager, executor=runner.executor)
     config = instance_config or {}
-    from ai.engine.llm.prompts import build_chat_prompt
-    system_prompt = await build_chat_prompt(instance_name=config.get('display_name', 'Unknown System'), system_description=config.get('description', ''), relevant_knowledge=st.retrieval.knowledge_chunks[0]['content'] if st.retrieval.knowledge_chunks else 'No knowledge loaded yet.', relevant_memories=st.retrieval.memory_chunks[0]['content'] if st.retrieval.memory_chunks else 'No memories available.', page_context=page_context or 'unknown', user_info=user_info, persona=_audience_persona(config, user_info), api_catalog=_scoped_api_catalog(config, user_info), navigation_routes=_scoped_navigation_routes(config, user_info), domain_topics=config.get('domain_topics'), instance_config={**config, 'persona': _audience_persona(config, user_info), 'api_catalog': _scoped_api_catalog(config, user_info)}, conversation_id=conversation_id, instance_id=instance_id, process_mode=process_mode)
-    _domain_ctx_enabled = config.get('domain_context_enabled', None) if config.get('domain_context_enabled') is not None else settings.PULSE_DOMAIN_CONTEXT_ENABLED
+    from ai.engine.cognition.turn.understand import understand_mode
+    _catalog = _scoped_api_catalog(config, user_info)
+    _draft_history = conversation_history
+    _v21 = understand_mode() == "v21"
+    if _v21:
+        from ai.engine.cognition.turn.understand import (
+            catalog_context,
+            catalog_prompt_lines,
+            navigation_prompt_lines,
+            understand_task_body,
+        )
+        _lines, _allowed, _writes = catalog_prompt_lines(
+            st.user_message or "",
+            _catalog,
+            k=12,
+            context=catalog_context(conversation_history),
+        )
+        _draft_history = list(conversation_history or [])[-8:]
+        system_prompt = understand_task_body(
+            _lines,
+            navigation_prompt_lines(_scoped_navigation_routes(config, user_info)),
+        )
+        del _allowed, _writes
+    else:
+        from ai.engine.llm.prompts import build_chat_prompt
+        system_prompt = await build_chat_prompt(instance_name=config.get('display_name', 'Unknown System'), system_description=config.get('description', ''), relevant_knowledge=st.retrieval.knowledge_chunks[0]['content'] if st.retrieval.knowledge_chunks else 'No knowledge loaded yet.', relevant_memories=st.retrieval.memory_chunks[0]['content'] if st.retrieval.memory_chunks else 'No memories available.', page_context=page_context or 'unknown', user_info=user_info, persona=_audience_persona(config, user_info), api_catalog=_catalog, navigation_routes=_scoped_navigation_routes(config, user_info), domain_topics=config.get('domain_topics'), instance_config={**config, 'persona': _audience_persona(config, user_info), 'api_catalog': _catalog}, conversation_id=conversation_id, instance_id=instance_id, process_mode=process_mode)
+    _domain_ctx_enabled = (not _v21) and (config.get('domain_context_enabled', None) if config.get('domain_context_enabled') is not None else settings.PULSE_DOMAIN_CONTEXT_ENABLED)
     if _domain_ctx_enabled:
         try:
             if runner.domain_context_assembler is not None:
@@ -167,7 +191,8 @@ async def run_s3_through_s5(
         from ai.engine.knowledge.terminology import TerminologyResolver
         system_prompt = TerminologyResolver().inject(system_prompt, _skill_terminology)
     if (
-        str(process_mode or '') != 'plan'
+        understand_mode() != "v21"
+        and str(process_mode or '') != 'plan'
         and st.intent_resolution is not None
         and st.intent_resolution.action == 'answer'
         and st.intent_resolution.candidates
@@ -187,11 +212,11 @@ async def run_s3_through_s5(
         _draft_lang = ''
         if state_ctx is not None:
             _draft_lang = str(getattr(state_ctx.state, 'language', '') or '')
-        draft_pack = build_context_pack(_state_for_pack, surface='chat', stage='draft', user_info=user_info, instance_config=config, conversation_history=conversation_history, retrieval=st.retrieval, language=_draft_lang, task_body=system_prompt, include_state=True, include_knowledge=False, include_memory=False, include_history=False)
+        draft_pack = build_context_pack(_state_for_pack, surface='chat', stage='draft', user_info=user_info, instance_config=config, conversation_history=_draft_history, retrieval=st.retrieval, language=_draft_lang, task_body=system_prompt, include_state=True, include_knowledge=False, include_memory=False, include_history=False)
         from ai.engine.cognition.turn.force_tool import draft_force_kwargs, ensure_forced_call
         _fn_names = {str((d.get('function') or {}).get('name') or '') for d in draft_tools or [] if isinstance(d, dict)}
         _fn_names.discard('')
-        st.draft = await draft_witness.draft(instance_id=instance_id, conversation_id=conversation_id, user_message=_resolved_user_message, system_prompt='', conversation_history=conversation_history, instance_config=instance_config, user_info=user_info, budget_tracker=budget, model=_draft_model, tools=draft_tools, temperature=temperature, pack=draft_pack, **draft_force_kwargs(st.intent_resolution, _fn_names))
+        st.draft = await draft_witness.draft(instance_id=instance_id, conversation_id=conversation_id, user_message=_resolved_user_message, system_prompt='', conversation_history=_draft_history, instance_config=instance_config, user_info=user_info, budget_tracker=budget, model=_draft_model, tools=draft_tools, temperature=temperature, pack=draft_pack, **draft_force_kwargs(st.intent_resolution, _fn_names))
         st.draft = ensure_forced_call(st.draft, st.intent_resolution, turn_id, _fn_names)
         # I2: If open_question_confirm injected a forced_tool_call, inject it now
         if st.forced_tool_call and "call_host_api" in _fn_names:
@@ -270,7 +295,7 @@ async def run_s3_through_s5(
         if escalation_model and escalation_model != current_model:
             logger.info('[%s] knowledge_gap detected — escalating to reason lane (%s)', turn_id[:8], escalation_model)
             with stage('escalate'):
-                st.draft = await draft_witness.draft(instance_id=instance_id, conversation_id=conversation_id, user_message=_resolved_user_message, system_prompt='', conversation_history=conversation_history, instance_config=instance_config, user_info=user_info, budget_tracker=budget, model=escalation_model, tools=draft_tools, temperature=temperature, pack=draft_pack, **draft_force_kwargs(st.intent_resolution, _fn_names))
+                st.draft = await draft_witness.draft(instance_id=instance_id, conversation_id=conversation_id, user_message=_resolved_user_message, system_prompt='', conversation_history=_draft_history, instance_config=instance_config, user_info=user_info, budget_tracker=budget, model=escalation_model, tools=draft_tools, temperature=temperature, pack=draft_pack, **draft_force_kwargs(st.intent_resolution, _fn_names))
                 st.draft = ensure_forced_call(st.draft, st.intent_resolution, turn_id, _fn_names)
                 st.total_tokens += st.draft.tokens_used
                 st.total_llm_calls += 1
@@ -474,6 +499,16 @@ async def run_s3_through_s5(
             logger.warning('[%s] Verification step failed', turn_id[:8], exc_info=True)
             ledger.verification_passed = False
             ledger.verification_error = str(e)
+    if st.execution.completed_tools and st.final_text and not _plan_receipt:
+        from ai.engine.cognition.turn.grounding import strip_ungrounded_numbers
+        _payloads = [
+            _item.get('result') for _item in st.execution.completed_tools
+            if isinstance(_item, dict)
+        ]
+        _grounded = strip_ungrounded_numbers(st.final_text, _payloads)
+        if _grounded != st.final_text:
+            _signal(ledger, 'numeric_grounding', True)
+            st.final_text = _grounded
     if not st.execution.completed_tools and st.retrieval.knowledge_chunks:
         st.execution.completed_tools.append({'tool_name': 'search_knowledge', 'tool_args': {'query': st.user_message}, 'result': {'count': len(st.retrieval.knowledge_chunks)}, 'error': None, 'latency_ms': st.s2_latency})
     st.synth = _synth

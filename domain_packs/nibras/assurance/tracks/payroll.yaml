@@ -1,0 +1,28 @@
+track: payroll
+title: Payroll · GOSI · WPS
+owner: nibras-master
+
+subjects:
+  - id: nibras.process.payroll
+    kind: process
+    title: Payroll run lifecycle
+    owner: nibras-master
+    paths: [domain_packs/nibras/processes/payroll.run.lifecycle.yaml]
+    process: domain_packs/nibras/processes/payroll.run.lifecycle.yaml
+  - id: nibras.process.gosi_wps
+    kind: process
+    title: GOSI / WPS SIF lifecycle
+    owner: nibras-master
+    paths: [domain_packs/nibras/processes/gosi_wps.sif.lifecycle.yaml]
+    process: domain_packs/nibras/processes/gosi_wps.sif.lifecycle.yaml
+
+checks:
+  - id: NIBRAS-PAY-SPC-01
+    title: Payroll process YAML parses
+    dimension: specified
+    rank: 2
+    collector: repo
+    probe: { type: process_yaml }
+    applies_to: [process]
+    solution: Fix the process YAML under domain_packs/nibras/processes/.
+    source: NPS / NSR

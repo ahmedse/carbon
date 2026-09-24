@@ -27,7 +27,7 @@ def _committed_understand_default(monkeypatch):
     """The G5 bank scores the committed default path. A local ``.env`` trial
     of ``PULSE_UNDERSTAND`` must not change what these goldens measure."""
     monkeypatch.setenv("PULSE_UNDERSTAND", "legacy")
-    monkeypatch.delenv("PULSE_TOOL_CHOICE", raising=False)
+    monkeypatch.setenv("PULSE_TOOL_CHOICE", "on")
 
 
 # ── Structural tests (PASS for real) ─────────────────────────────────────

@@ -1,0 +1,23 @@
+# Carbon (emissions) hosted-app tier.
+tier: carbon
+title: Carbon (emissions hosted app)
+owner: owner
+level_names: [Unmanaged, Declared, Specified, Built, Proven, Operated, Excellent]
+
+subjects:
+  - id: carbon.module.emissions
+    kind: module
+    title: emissions
+    owner: owner
+    paths: [backend/emissions]
+    tests: [backend/emissions/tests]
+    adr: [.ai-toolkit/decisions/0025-typed-vs-dataschema-storage.md]
+    app: emissions
+  - id: carbon.ui
+    kind: journey
+    title: Carbon frontend app
+    owner: owner
+    paths: [carbon-frontend/src/apps/carbon]
+    tests: [carbon-frontend/src/apps/carbon]
+
+checks: []

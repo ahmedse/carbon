@@ -6,7 +6,7 @@
 - Runs one `emit_decision` understanding call per eligible turn.
 - Logs `[understand-shadow] legacy=… v21=… agree=… ops=…`.
 - Does **not** act on the Decision — legacy Intent→Draft spine answers the user.
-- Flip to `v21` only after ≥5 days of shadow with high agreement and G6 ≥ 0.95 offline (already 1.0).
+- Flip in an environment after an hours-scale agreement log (human, 2026-09-24: no 5-day wait) and G6 ≥ 0.95. Bank agreement 2026-09-24: baseline tier 121/122, the one split is g6-038 Arabic. v21-tier disagreement with the ladder is expected.
 
 **Start (Master / STACK-HOLD only)**
 ```bash
@@ -25,4 +25,4 @@ rg '\[understand-shadow\]' <pulse-api-log> | tee docs/pulse/evidence/PV2.1-shado
 - Abort: unset or `PULSE_UNDERSTAND=legacy`.
 - Flip: `PULSE_UNDERSTAND=v21` only after Master review of the 5-day log.
 
-**Not started:** live 5-day window (needs STACK-HOLD + running stack). Code path is ready.
+**2026-09-24:** the 5-day calendar is waived. Hours measurement is `PV2.1-shadow-hours-2026-09-24.json`. Committed default stays `legacy`. This workstation's running API already has `PULSE_UNDERSTAND=v21` (process env). It was not restarted.

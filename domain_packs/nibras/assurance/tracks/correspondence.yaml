@@ -1,0 +1,13 @@
+track: correspondence
+title: Correspondence spine
+owner: nibras-master
+
+subjects:
+  - id: nibras.process.onboarding
+    kind: process
+    title: Employee onboarding lifecycle
+    owner: nibras-master
+    paths: [domain_packs/nibras/processes/employee.onboarding.lifecycle.yaml]
+    process: domain_packs/nibras/processes/employee.onboarding.lifecycle.yaml
+
+checks: []

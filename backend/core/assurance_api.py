@@ -28,9 +28,11 @@ _DEFAULT_LEDGER = 'docs/assurance/evidence/nibras-demo-2026-09-23.jsonl'
 def _repo_root() -> Path:
     here = Path(__file__).resolve()
     # /app/core/file.py → parents only go as far as `/` (IndexError if we ask for [3]).
-    for candidate in list(here.parents)[1:4]:
+    candidates = list(here.parents)[1:4]
+    for candidate in candidates:
         if (candidate / 'assurance' / 'evaluate.py').is_file():
             return candidate
+    for candidate in candidates:
         if (candidate / 'manage.py').is_file() and (candidate / 'config').is_dir():
             # backend-only image: no monorepo assurance pack
             return candidate

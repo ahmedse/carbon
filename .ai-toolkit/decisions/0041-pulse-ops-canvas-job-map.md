@@ -125,7 +125,7 @@ Evidence: `docs/pulse/evidence/OPS-CANVAS-ADR-0041-2026-09-18.md`
 
 ## References
 
-- Research: `~/.cursor/projects/home-ahmed-ws-carbon/canvases/pulse-ops-canvas-research.canvas.tsx`
+- Research: `~/.cursor/projects/home-ahmed-ws-carbon/canvases/_archive/pulse/pulse-ops-canvas-research.canvas.tsx`
 - ADR-0012 Enterprise Graph · ADR-0014 Chat/Agent split · ADR-0019 Inspector ·
   ADR-0032 ECF · ADR-0034 resilient workflow graph · ADR-0036 control plane IA
 - `carbon-frontend/src/shell/{AIWorkspace,AgentRunSurface,EnvelopeMessage,AIArtifactBrowser}.jsx`

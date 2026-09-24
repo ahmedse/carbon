@@ -300,7 +300,7 @@ cd /home/ahmed/ws/carbon/backend && ../.venv/bin/python -m pytest \
 **Recommended Model:** DeepSeek V4.1-Flash  
 **Status:** DONE — FE My loans + HR installments UI 2026-09-16  
 **Depends on:** NSR-3A  
-**Screen Spec:** `docs/SCREEN-SPEC-NIBRAS-LOANS.md`
+**Screen Spec:** `docs/_archive/design-superseded/SCREEN-SPEC-NIBRAS-LOANS.md`
 
 #### Objective
 HR loan expander shows generated installments (read-only is OK if generated). Employee `/my` shows loan list + status (QA B6).
@@ -418,7 +418,7 @@ cd /home/ahmed/ws/carbon/backend && ../.venv/bin/python -m pytest \
 **Recommended Model:** DeepSeek V4.1-Flash  
 **Status:** DONE — compliance CRUD + compensation create UI 2026-09-16  
 **Depends on:** NSR-0  
-**Screen Spec:** `docs/SCREEN-SPEC-PEOPLE-CONFIG.md`
+**Screen Spec:** `docs/_archive/design-superseded/SCREEN-SPEC-PEOPLE-CONFIG.md`
 
 #### Objective
 Compliance rules create/update in UI (API already exists). Compensation components + plans admin UI (API POST exists; no page today). Reference Data stays. Overview may remain informational.

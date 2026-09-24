@@ -140,3 +140,28 @@ def test_plan_goldens_pin_process_and_persona():
     assert _matches_expect(plan, case)
     assert not _matches_expect(other, case)
     assert _decision_to_dict(None)["op"] == "malformed"
+
+
+def test_catalog_example_owns_the_three_l6_splits_only():
+    """A catalog example owns Wellie, Mohammad, and the payslip chart.
+
+    It must not steal an ordinary balance ask.
+    """
+    import yaml
+    from pathlib import Path
+    from ai.engine.cognition.catalog_retrieval import catalog_choice
+
+    root = Path(__file__).resolve().parents[1]
+    cfg = yaml.safe_load((root / "engine/instances/nibras/instance.yaml").read_text())
+    catalog = cfg["api_catalog"] if "api_catalog" in cfg else None
+    if catalog is None:
+        for value in cfg.values():
+            if isinstance(value, dict) and "api_catalog" in value:
+                catalog = value["api_catalog"]
+                break
+    bank = {c["id"]: c for c in load_bank()}
+    assert catalog_choice(bank["g6-045"]["en"], catalog)["name"] == "list_leave_entitlements"
+    assert catalog_choice(bank["g6-047"]["en"], catalog)["name"] == "list_leave_entitlements"
+    assert catalog_choice(bank["g6-070"]["en"], catalog)["name"] == "list_my_payslips"
+    assert catalog_choice(bank["g6-001"]["en"], catalog) is None
+    assert catalog_choice(bank["g6-038"]["ar"], catalog) is None

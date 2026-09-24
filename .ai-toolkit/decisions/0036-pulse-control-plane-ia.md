@@ -5,7 +5,7 @@
 - **Deciders:** Master Architect
 - **Area:** frontend | cross-cutting
 - **Extends:** ADR-0031 D8, ADR-0011 (Workspace = engage; Admin = manage/observe)
-- **Plan:** `docs/pulse/PULSE-ADMIN-REMAKE.md`
+- **Plan:** `docs/pulse/archive/PULSE-ADMIN-REMAKE.md`
 
 ## Context
 
@@ -51,6 +51,6 @@ evidence, learn) were not the IA.
 
 ## References
 
-- `docs/pulse/PULSE-ADMIN-REMAKE.md`
+- `docs/pulse/archive/PULSE-ADMIN-REMAKE.md`
 - `carbon-frontend/src/pages/admin/ai/control/pulseControlIa.js`
 - `docs/pulse/archive/PULSE-UNIFIED-REMEDIATION-PLAN.md` §2 (D8 target)

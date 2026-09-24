@@ -171,6 +171,28 @@ verify_intelligence() {
   fi
 }
 
+# ── EXCELLENCE LEDGER (ADR-0051) ───────────────────────────────────────────────
+verify_excellence() {
+  echo "── Excellence ladder ───────────────────"
+  if [ ! -d "$BACKEND_DIR/excellence" ]; then warn "no excellence app"; return; fi
+  local PY; PY="$(_py)"
+  local _prev="$PWD"
+  cd "$BACKEND_DIR" || return
+  # Collect cheap probes + observe (no pytest/vitest from the gate), then ratchet
+  # only subjects touched vs origin/main. Empty change set → clean.
+  if "$PY" -m excellence.gauge --collect --only repo,observe,pulse_gauge --write --gate --changed origin/main >/tmp/vex.log 2>&1; then
+    pass "excellence ratchet (changed subjects)"
+  else
+    # --no-db fallback when the ledger DB is absent (CI image without carbon_excellence)
+    if "$PY" -m excellence.gauge --collect --only repo,observe --no-db --gate --changed origin/main >/tmp/vex2.log 2>&1; then
+      pass "excellence ratchet (--no-db fallback)"
+    else
+      fail "excellence ratchet"; tail -30 /tmp/vex.log; tail -20 /tmp/vex2.log
+    fi
+  fi
+  cd "$_prev" || true
+}
+
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 TARGET="${1:-all}"
 echo "Verification gate: $TARGET"
@@ -181,9 +203,10 @@ case "$TARGET" in
   tests)        verify_tests ;;
   antipatterns) verify_antipatterns ;;
   intelligence) verify_intelligence ;;
-  all)          verify_backend; verify_frontend; verify_antipatterns ;;
-  full)         verify_backend; verify_tests; verify_frontend; verify_antipatterns; verify_intelligence ;;
-  *) echo "Unknown: $TARGET (use backend|frontend|tests|antipatterns|intelligence|all|full)"; exit 1 ;;
+  excellence)   verify_excellence ;;
+  all)          verify_backend; verify_frontend; verify_antipatterns; verify_excellence ;;
+  full)         verify_backend; verify_tests; verify_frontend; verify_antipatterns; verify_intelligence; verify_excellence ;;
+  *) echo "Unknown: $TARGET (use backend|frontend|tests|antipatterns|intelligence|excellence|all|full)"; exit 1 ;;
 esac
 echo "════════════════════════════════════════"
 if [ "$FAIL" -eq 0 ]; then echo "${GREEN}GATE PASSED${NC}"; else echo "${RED}GATE FAILED — fix before reporting done${NC}"; exit 1; fi

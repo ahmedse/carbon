@@ -1,0 +1,29 @@
+track: my
+title: My (employee ESS)
+owner: nibras-master
+
+subjects:
+  - id: nibras.my.ui
+    kind: journey
+    title: My frontend app
+    owner: nibras-master
+    paths: [carbon-frontend/src/apps/my]
+    tests: [carbon-frontend/src/apps/my]
+  - id: nibras.process.leave
+    kind: process
+    title: Leave request lifecycle
+    owner: nibras-master
+    paths: [domain_packs/nibras/processes/leave.request.lifecycle.yaml]
+    process: domain_packs/nibras/processes/leave.request.lifecycle.yaml
+    adr: [.ai-toolkit/decisions/0045-nibras-process-security-planes.md]
+
+checks:
+  - id: NIBRAS-MY-SPC-01
+    title: Leave process YAML parses
+    dimension: specified
+    rank: 2
+    collector: repo
+    probe: { type: process_yaml, subjects: [nibras.process.leave] }
+    applies_to: [process]
+    solution: Fix the leave.request.lifecycle.yaml structure.
+    source: domain_packs/nibras/processes

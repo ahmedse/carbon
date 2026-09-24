@@ -323,28 +323,20 @@ _ACTION_VERBS: list[str] = [
 ]
 
 
-# Agent Done → Discuss in Chat: the FE composer seeds the *first* turn with
-# this protocol marker (``buildDiscussDraft.js``) so that one turn stays
-# prose-only (no skill match / invoke_skill / ReAct). Every later turn reads
-# the typed ``plan_revision`` question on ConversationState instead
-# (``turn/plan_revision.py``) — no transcript scanning, no apply allowlist.
-_AGENT_DISCUSS_MARKERS: tuple[str, ...] = (
-    "discussion only",
-    "i'd like to refine plan",
-    "let's discuss the outcome of",
-)
-
-
 def _is_agent_discuss_turn(utterance: str) -> bool:
     """True on the FE-seeded Agent → Discuss turn (refine / outcome talk).
 
-    That turn pastes a prior brief/outcome, which would otherwise match
-    skills and trip invoke_skill / ReAct.
+    ``buildDiscussDraft.js`` writes the plan id into that one message. The id
+    is the signal — not the English sentences around it — so a pasted brief
+    stays prose-only (no skill match / invoke_skill / ReAct). Later turns do
+    not need this: they read the typed ``plan_revision`` question on
+    ConversationState (``turn/plan_revision.py``).
     """
     if not utterance:
         return False
-    lower = utterance.lower()
-    return any(m in lower for m in _AGENT_DISCUSS_MARKERS)
+    from ai.engine.cognition.turn.plan_revision import _uuid_in
+
+    return bool(_uuid_in(utterance))
 
 
 def _looks_agent_multi_step(utterance: str) -> bool:
@@ -862,6 +854,62 @@ def _rewrite_domain_api(
     return api
 
 
+def _unbind_unknown_host_api_steps(
+    steps: list[PlanStep], catalog_names: set[str] | None,
+) -> list[int]:
+    """Degrade ``call_host_api`` steps that name no catalog API.
+
+    The decomposer turns conditional prose ("if over band, escalate to
+    Finance") into ``call_host_api(action="escalate_to_finance")``. Nothing
+    validates that name until the operator clicks Approve, where the host
+    executor refuses it. A step whose resolved api_name is not an exact
+    catalog entry is not a host write: it becomes a reasoning step
+    (``tool_name=None``, ``is_mutation=False``) so it never reaches the
+    consent gate. When a secondary key (``action``/``api``/``name``) *does*
+    hold a catalog name, promote it to ``api_name`` instead.
+
+    No-op when the catalog is unknown (no instance config) — we cannot judge.
+    Returns the step ids that were unbound. Mutates ``steps`` in place.
+    """
+    if not catalog_names:
+        return []
+    # Same order as PlansService._step_mutation_api_name.
+    host_api_arg_keys = ("api_name", "api", "action", "name")
+    unbound: list[int] = []
+    for step in steps:
+        if step.tool_name != "call_host_api":
+            continue
+        args = dict(step.tool_args or {})
+        resolved: str | None = None
+        for key in host_api_arg_keys:
+            candidate = args.get(key)
+            if isinstance(candidate, str) and candidate.strip() in catalog_names:
+                resolved = candidate.strip()
+                break
+        if resolved is not None:
+            if args.get("api_name") != resolved:
+                args["api_name"] = resolved
+                step.tool_args = args
+                logger.info(
+                    "Step %d host api promoted from secondary key → %r",
+                    step.step_id, resolved,
+                )
+            continue
+        attempted = next(
+            (str(args[k]) for k in host_api_arg_keys if args.get(k)), "",
+        )
+        logger.warning(
+            "Step %d call_host_api names no catalog API (%r) — degrading to "
+            "reasoning so it cannot reach Approve",
+            step.step_id, attempted,
+        )
+        step.tool_name = None
+        step.tool_args = {}
+        step.is_mutation = False
+        unbound.append(step.step_id)
+    return unbound
+
+
 def _ensure_export_deliverable(utterance: str, steps: list[PlanStep]) -> None:
     """Append an export_document step when the brief asks for a file deliverable.
 
@@ -1353,6 +1401,9 @@ class SkillAwarePlanner:
         # Second pass after arg strip — entity_name may remain on
         # get_entity_details when the tool_name was already valid.
         _coerce_host_api_steps(steps, catalog_names, utterance=utterance)
+        # A host call that names no catalog API is not a host call. Decide it
+        # here, at plan save — not when the operator clicks Approve.
+        _unbind_unknown_host_api_steps(steps, catalog_names)
 
         # Governed slots + grounded dates from the brief (MDM codes, platform
         # clock) — the consent card must not re-ask what the operator stated.

@@ -1,0 +1,43 @@
+# Nibras tier — Excellence Ladder (ADR-0051). Seat: Nibras Master.
+# Lives beside the existing assurance rules pack (pack.yaml + rules/).
+tier: nibras
+title: Nibras (People · My · Team · Payroll · Correspondence)
+owner: nibras-master
+level_names: [Unmanaged, Declared, Specified, Built, Proven, Operated, Excellent]
+
+subjects:
+  - id: nibras.module.people
+    kind: module
+    title: people (HRIS, payroll, attendance, loans)
+    owner: nibras-master
+    paths: [backend/people]
+    tests: [backend/people/tests]
+    adr: [.ai-toolkit/decisions/0027-governed-lookup-fk-to-referencevalue.md, .ai-toolkit/decisions/0028-single-root-org-unit-instance-gated-seeds.md]
+    spec: [docs/DESIGN-NIBRAS-ENTERPRISE-HR-DATA-MODEL.md]
+    app: people
+  - id: nibras.module.correspondence
+    kind: module
+    title: correspondence (ESS spine)
+    owner: nibras-master
+    paths: [backend/correspondence]
+    tests: [backend/correspondence/tests]
+    adr: [.ai-toolkit/decisions/0030-eoffice-correspondence-engine.md]
+    app: correspondence
+  - id: nibras.pack
+    kind: ai_pack
+    title: nibras domain pack (catalog, processes, banks)
+    owner: nibras-master
+    paths: [domain_packs/nibras/pack.yaml, domain_packs/nibras]
+    adr: [.ai-toolkit/decisions/0050-pulse-core-domain-free-versioned-packs.md]
+    runbook: [docs/nibras/DEV-CREDENTIALS.md]
+
+checks:
+  - id: NIBRAS-SPC-01
+    title: HR data model / design doc linked
+    dimension: specified
+    rank: 2
+    collector: repo
+    probe: { type: paths_exist, field: spec }
+    applies_to: [module]
+    solution: Link DESIGN-NIBRAS-ENTERPRISE-HR-DATA-MODEL.md under `spec:`.
+    source: NSR

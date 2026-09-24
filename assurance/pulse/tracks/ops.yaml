@@ -1,0 +1,32 @@
+# Pulse · Ops track (soak, nightly live smoke, evidence series).
+track: ops
+title: Ops (soak nights, gauge series, evidence)
+owner: pulse-master
+
+subjects:
+  - id: pulse.ops.soak
+    kind: process
+    title: 6B nightly soak (live ESS as emp_1067, STACK-HOLD only)
+    owner: pulse-master
+    paths: [docs/pulse/evidence/PV2-6B-nights.json, docs/pulse/evidence/PV2-gauge-series.json]
+    spec: [docs/pulse/PULSE-V2-INTELLIGENCE-CONTRACT.md]
+
+checks:
+  - id: PULSE-OPS-REL-01
+    title: 6B soak complete (five consecutive live PASS nights)
+    dimension: reliable
+    rank: 5
+    collector: pulse_gauge
+    probe: { type: soak_complete, subjects: [pulse.ops.soak] }
+    applies_to: [process]
+    solution: Run the nightly live smoke under STACK-HOLD; do not --record over a FAIL night.
+    source: ADR-0047 Soak row
+  - id: PULSE-OPS-OBS-01
+    title: Gauge series evidence refreshed within 14 days
+    dimension: observed
+    rank: 5
+    collector: observe
+    probe: { type: gauge_series_fresh, file: docs/pulse/evidence/PV2-gauge-series.json, days: 14, subjects: [pulse.ops.soak] }
+    applies_to: [process]
+    solution: python -m ai.eval.pulse_gauge --write
+    source: ADR-0051 P3

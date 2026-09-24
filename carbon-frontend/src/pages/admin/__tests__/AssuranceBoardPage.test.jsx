@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import AssuranceBoardPage from '../AssuranceBoardPage';
+import AssuranceRulesPanel from '../excellence/AssuranceRulesPanel';
 
 const snapshot = {
   commit: 'board-test',
@@ -56,9 +56,9 @@ vi.mock('../../../api/api', () => ({
   })),
 }));
 
-describe('AssuranceBoardPage', () => {
+describe('AssuranceRulesPanel', () => {
   it('shows ledger rows and the residual for the selected rule', async () => {
-    render(<AssuranceBoardPage />);
+    render(<AssuranceRulesPanel embedded />);
     expect(await screen.findByText('NR-PAY-01')).toBeTruthy();
     expect(screen.getByText('PL-SSE-01')).toBeTruthy();
     fireEvent.click(screen.getByText('NR-PAY-01'));
@@ -66,7 +66,7 @@ describe('AssuranceBoardPage', () => {
   });
 
   it('can hide rules that do not block release', async () => {
-    render(<AssuranceBoardPage />);
+    render(<AssuranceRulesPanel embedded />);
     await screen.findByText('PL-SSE-01');
     fireEvent.click(screen.getByLabelText('Blocks release'));
     await waitFor(() => {

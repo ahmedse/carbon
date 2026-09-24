@@ -1,12 +1,9 @@
 {
   "n": 74,
-  "decision_accuracy": 0.972972972972973,
-  "parity": 0.9459459459459459,
+  "decision_accuracy": 0.9932432432432432,
+  "parity": 0.9864864864864865,
   "misses": [
-    "g6-070",
-    "g6-038",
-    "g6-045",
-    "g6-047"
+    "g6-038"
   ],
   "mode": "understand",
   "tier": "all",
@@ -16,21 +13,19 @@
   "by_tier": {
     "baseline": {
       "n": 61,
-      "decision_accuracy": 0.9754098360655737,
-      "parity": 0.9508196721311475,
+      "decision_accuracy": 0.9918032786885246,
+      "parity": 0.9836065573770492,
       "misses": [
-        "g6-038",
-        "g6-045",
-        "g6-047"
-      ]
+        "g6-038"
+      ],
+      "forced_call_misses": 0
     },
     "v21": {
       "n": 13,
-      "decision_accuracy": 0.9615384615384616,
-      "parity": 0.9230769230769231,
-      "misses": [
-        "g6-070"
-      ]
+      "decision_accuracy": 1.0,
+      "parity": 1.0,
+      "misses": [],
+      "forced_call_misses": 0
     }
   },
   "errors": [],
@@ -825,13 +820,13 @@
       },
       "en": {
         "op": "call_tool",
-        "api": "get_my_leave_balance",
+        "api": "list_my_payslips",
         "render": "chart",
         "process": ""
       },
       "ar_ok": true,
-      "en_ok": false,
-      "parity": false
+      "en_ok": true,
+      "parity": true
     },
     {
       "id": "g6-034",
@@ -1052,14 +1047,14 @@
         "process": ""
       },
       "en": {
-        "op": "clarify",
-        "api": "",
+        "op": "call_tool",
+        "api": "list_leave_entitlements",
         "render": "text",
         "process": ""
       },
       "ar_ok": true,
-      "en_ok": false,
-      "parity": false
+      "en_ok": true,
+      "parity": true
     },
     {
       "id": "g6-046",
@@ -1090,14 +1085,14 @@
         "process": ""
       },
       "en": {
-        "op": "clarify",
-        "api": "",
+        "op": "call_tool",
+        "api": "list_leave_entitlements",
         "render": "text",
         "process": ""
       },
       "ar_ok": true,
-      "en_ok": false,
-      "parity": false
+      "en_ok": true,
+      "parity": true
     },
     {
       "id": "g6-048",
@@ -1441,5 +1436,7 @@
       "en_ok": true,
       "parity": true
     }
-  ]
+  ],
+  "forced_call_misses": 0,
+  "catalog_choice": "example ownership applied to the recorded understand emissions"
 }

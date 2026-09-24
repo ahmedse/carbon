@@ -229,3 +229,80 @@ async def test_get_entity_details_still_misses_unknown_knowledge_name():
     )
     assert result["entity"] is None
     assert "not found" in result["message"]
+
+
+# ── Unbound host writes never reach Approve (prod 2026-09-24) ─────────────────
+# Board-pack brief: "If over band, escalate to Finance and do not export."
+# The decomposer emitted call_host_api(action="escalate_to_finance"); Approve
+# refused it with "'escalate_to_finance' is not a host API in the catalog".
+# The step must be decided at plan save, not at consent.
+
+
+def _payroll_catalog() -> set[str]:
+    return {
+        "list_payroll_runs", "get_payroll_run", "list_payslip_lines",
+        "compute_payroll_run", "validate_payroll_run", "commit_payroll_run",
+        "list_loans", "generate_gosi_wps_sif",
+    }
+
+
+def test_unbound_escalate_to_finance_degrades_to_reasoning():
+    from ai.engine.cognition.plan.planner import PlanStep, _unbind_unknown_host_api_steps
+
+    step = PlanStep(
+        step_id=7,
+        intent="[OVER-BAND PATH] Escalate variance to Finance and do not export",
+        tool_name="call_host_api",
+        tool_args={"api_name": "call_host_api", "action": "escalate_to_finance", "payroll_run_id": "run-1"},
+        is_mutation=True,
+    )
+    unbound = _unbind_unknown_host_api_steps([step], _payroll_catalog())
+
+    assert unbound == [7]
+    assert step.tool_name is None
+    assert step.tool_args == {}
+    assert step.is_mutation is False
+
+
+def test_secondary_key_holding_catalog_name_is_promoted_to_api_name():
+    from ai.engine.cognition.plan.planner import PlanStep, _unbind_unknown_host_api_steps
+
+    step = PlanStep(
+        step_id=2,
+        intent="Run the October payroll variance check",
+        tool_name="call_host_api",
+        tool_args={"api_name": "call_host_api", "action": "validate_payroll_run", "body": {"run": 12}},
+        is_mutation=True,
+    )
+    unbound = _unbind_unknown_host_api_steps([step], _payroll_catalog())
+
+    assert unbound == []
+    assert step.tool_name == "call_host_api"
+    assert step.tool_args["api_name"] == "validate_payroll_run"
+    assert step.tool_args["body"] == {"run": 12}
+    assert step.is_mutation is True
+
+
+def test_bound_host_step_and_non_host_tools_are_untouched():
+    from ai.engine.cognition.plan.planner import PlanStep, _unbind_unknown_host_api_steps
+
+    bound = PlanStep(step_id=0, intent="List runs", tool_name="call_host_api",
+                     tool_args={"api_name": "list_payroll_runs"})
+    export = PlanStep(step_id=1, intent="Export board pack", tool_name="export_document",
+                      tool_args={"format": "pack"}, is_mutation=True)
+    reasoning = PlanStep(step_id=2, intent="Analyze variance", tool_name=None, tool_args={})
+
+    assert _unbind_unknown_host_api_steps([bound, export, reasoning], _payroll_catalog()) == []
+    assert bound.tool_args == {"api_name": "list_payroll_runs"}
+    assert export.tool_name == "export_document" and export.is_mutation is True
+    assert reasoning.tool_name is None
+
+
+def test_unknown_catalog_is_a_noop():
+    """No instance config → we cannot judge; never strip blindly."""
+    from ai.engine.cognition.plan.planner import PlanStep, _unbind_unknown_host_api_steps
+
+    step = PlanStep(step_id=0, intent="x", tool_name="call_host_api",
+                    tool_args={"action": "escalate_to_finance"}, is_mutation=True)
+    assert _unbind_unknown_host_api_steps([step], set()) == []
+    assert step.tool_name == "call_host_api"

@@ -44,3 +44,20 @@ def ungrounded_numbers(text: str | None, payloads: list[Any] | None) -> list[str
         if token not in allowed and head not in allowed:
             bad.append(token)
     return bad
+
+
+def strip_ungrounded_numbers(text: str | None, payloads: list[Any] | None) -> str:
+    """Drop numerals the payloads do not contain. Words stay."""
+    bad = set(ungrounded_numbers(text, payloads))
+    if not bad or not text:
+        return text or ""
+
+    def _repl(match: re.Match) -> str:
+        token = match.group(1)
+        head = token.split(".", 1)[0]
+        if token in bad or head in bad:
+            return ""
+        return match.group(0)
+
+    cleaned = re.sub(r"(?<![\w.])(\d+(?:\.\d+)?)(?![\w.])", _repl, text)
+    return " ".join(cleaned.split())
