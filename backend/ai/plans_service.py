@@ -3197,7 +3197,7 @@ class PlansService:
         """List the requesting user's plans, newest first."""
         from ai.models.core import Run
 
-        limit = max(1, min(int(limit or 50), 100))
+        limit = max(1, min(int(limit or 50), 500))
         runs = list(
             Run.objects.filter(
                 host_user_id=str(user.pk), instance_id=PLAN_INSTANCE_ID
@@ -5390,11 +5390,6 @@ class PlansService:
         """
         run = self._get_owned_run(user, plan_id)
         step = self._get_owned_step(run, step_id)
-        if step.status != STEP_FAILED:
-            raise PlanStepError(
-                f"#{int(step.step_index) + 1} cannot be retried "
-                f"(status: {step.status}); only failed steps may be retried."
-            )
         step.retry_count = (step.retry_count or 0) + 1
         step.status = STEP_PENDING
         step.error = None
@@ -5411,7 +5406,7 @@ class PlansService:
         # re-entry state for ``resume_run_id`` — so resume re-executes the
         # re-queued step. Runs already resumable (paused / approved) are left
         # untouched.
-        if run.status in (STATUS_FAILED, STATUS_RUNNING):
+        if run.status not in (STATUS_PAUSED, STATUS_APPROVED):
             run.status = STATUS_PAUSED
             run.save(update_fields=["status", "updated_at"])
         logger.info(
@@ -5491,11 +5486,6 @@ class PlansService:
         """
         run = self._get_owned_run(user, plan_id)
         step = self._get_owned_step(run, step_id)
-        if step.status != STEP_RUNNING:
-            raise PlanStepError(
-                f"#{int(step.step_index) + 1} cannot be paused "
-                f"(status: {step.status}); only running steps may be paused."
-            )
         step.status = STEP_PAUSED
         step.save(update_fields=["status", "updated_at"])
         StepJournal.append(
@@ -5516,13 +5506,13 @@ class PlansService:
         """
         run = self._get_owned_run(user, plan_id)
         step = self._get_owned_step(run, step_id)
-        if step.status != STEP_PAUSED:
-            raise PlanStepError(
-                f"#{int(step.step_index) + 1} cannot be resumed "
-                f"(status: {step.status}); only paused steps may be resumed."
-            )
         step.status = STEP_PENDING
-        step.save(update_fields=["status", "updated_at"])
+        step.error = None
+        step.last_error = ""
+        step.save(update_fields=["status", "error", "last_error", "updated_at"])
+        if run.status not in (STATUS_PAUSED, STATUS_APPROVED, STATUS_RUNNING):
+            run.status = STATUS_PAUSED
+            run.save(update_fields=["status", "updated_at"])
         StepJournal.append(
             run.id, canonical_step_id(step), EVENT_STEP_RESUMED
         )
@@ -5629,28 +5619,19 @@ class PlansService:
         return self.cancel_plan(user, plan_id)
 
     def rerun_plan(self, user, plan_id: str) -> dict:
-        """Re-run an already-executed plan from a clean slate (workspace convenience).
+        """Re-run a plan from a clean slate (workspace convenience).
 
-        Allowed for a ``completed`` / ``completed_with_gaps`` / ``failed`` /
-        ``cancelled`` run. Every step is reset to ``pending`` (outputs, verdicts,
-        tokens and errors cleared) while ``step_index`` order and ``depends_on``
-        are preserved, and the run is returned to ``approved`` — a runnable
-        status — so the existing ``run_plan_stream`` re-executes it. Nothing
-        executes here (RULE_21): the fail-closed boundary + consent still apply
-        when the caller triggers the run. Distinct from durable ``replay_run``
-        (which stages to ``replaying`` for the admin audit surface).
+        Allowed from every run status, including paused, running, and still
+        awaiting approval. Every step is reset to ``pending`` (outputs,
+        verdicts, tokens and errors cleared) while ``step_index`` order and
+        ``depends_on`` are preserved, and the run is returned to ``approved``
+        — a runnable status — so the existing ``run_plan_stream`` re-executes
+        it. Nothing executes here (RULE_21): the fail-closed boundary +
+        consent still apply when the caller triggers the run. Distinct from
+        durable ``replay_run`` (which stages to ``replaying`` for the admin
+        audit surface).
         """
         run = self._get_owned_run(user, plan_id)
-        if run.status not in (
-            STATUS_COMPLETED,
-            STATUS_COMPLETED_WITH_GAPS,
-            STATUS_FAILED,
-            STATUS_CANCELLED,
-        ):
-            raise PlanNotRunnableError(
-                f"Only an executed plan can be re-run (status: {run.status}). "
-                "Re-run a completed, failed, cancelled, or completed-with-gaps plan."
-            )
         from ai.models.core import RunStep
 
         steps = list(

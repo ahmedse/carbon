@@ -41,7 +41,6 @@ from ai.models.step_journal import (
     EVENT_STEP_STARTED,
 )
 from ai.plans_service import (
-    PlanNotRunnableError,
     PlanStepError,
     PlansService,
     STEP_PAUSED,
@@ -105,14 +104,15 @@ def test_retry_failed_step_requeues_and_makes_run_resumable(user, run_ids_cleanu
 
 
 @pytest.mark.django_db
-def test_retry_completed_step_is_refused(user, run_ids_cleanup):
-    plan = _make_plan(user, status="running")
+def test_retry_completed_step_requeues(user, run_ids_cleanup):
+    plan = _make_plan(user, status="completed")
     step = _make_step(plan, step_index=0, status="completed")
     run_ids_cleanup.append(plan.id)
 
-    with pytest.raises(PlanStepError):
-        PlansService().retry_step(user, plan.id, 0)
-    assert _reload(step).status == "completed"
+    result = PlansService().retry_step(user, plan.id, 0)
+    assert result["status"] == "retried"
+    assert _reload(step).status == "pending"
+    assert Run.objects.get(id=plan.id).status == "paused"
 
 
 # ── rerun_plan ─────────────────────────────────────────────────────────────
@@ -164,13 +164,17 @@ def test_rerun_completed_with_gaps_plan_resets_and_approves(user, run_ids_cleanu
 
 
 @pytest.mark.django_db
-def test_rerun_non_executed_plan_is_refused(user, run_ids_cleanup):
-    plan = _make_plan(user, status="running")
-    _make_step(plan, step_index=0, status="running")
+def test_rerun_running_or_paused_plan_resets(user, run_ids_cleanup):
+    plan = _make_plan(user, status="paused")
+    step = _make_step(plan, step_index=0, status="awaiting_approval")
     run_ids_cleanup.append(plan.id)
 
-    with pytest.raises(PlanNotRunnableError):
-        PlansService().rerun_plan(user, plan.id)
+    result = PlansService().rerun_plan(user, plan.id)
+
+    assert result["rerun"]["of"] == "paused"
+    assert result["rerun"]["reset_count"] == 1
+    assert Run.objects.get(id=plan.id).status == "approved"
+    assert _reload(step).status == "pending"
 
 
 # ── skip_step ──────────────────────────────────────────────────────────────
@@ -237,25 +241,23 @@ def test_pause_then_resume_round_trips_running_to_pending(user, run_ids_cleanup)
 
 
 @pytest.mark.django_db
-def test_pause_pending_step_is_refused(user, run_ids_cleanup):
+def test_pause_pending_step_holds_it(user, run_ids_cleanup):
     plan = _make_plan(user, status="running")
     step = _make_step(plan, step_index=0, status="pending")
     run_ids_cleanup.append(plan.id)
 
-    with pytest.raises(PlanStepError):
-        PlansService().pause_step(user, plan.id, 0)
-    assert _reload(step).status == "pending"
+    assert PlansService().pause_step(user, plan.id, 0)["status"] == "paused"
+    assert _reload(step).status == STEP_PAUSED
 
 
 @pytest.mark.django_db
-def test_resume_running_step_is_refused(user, run_ids_cleanup):
+def test_resume_running_step_requeues(user, run_ids_cleanup):
     plan = _make_plan(user, status="running")
     step = _make_step(plan, step_index=0, status="running")
     run_ids_cleanup.append(plan.id)
 
-    with pytest.raises(PlanStepError):
-        PlansService().resume_step(user, plan.id, 0)
-    assert _reload(step).status == "running"
+    assert PlansService().resume_step(user, plan.id, 0)["status"] == "resumed"
+    assert _reload(step).status == "pending"
 
 
 @pytest.mark.django_db
@@ -303,7 +305,8 @@ def test_api_retry_guard_violation_is_conflict(
     run_ids_cleanup.append(plan.id)
 
     resp = api_client.post(f"/carbon-api/ai/plans/{plan.id}/steps/0/retry/")
-    assert resp.status_code == 409, resp.content
+    assert resp.status_code == 200, resp.content
+    assert resp.json()["status"] == "retried"
 
 
 @pytest.mark.django_db
@@ -357,7 +360,8 @@ def test_api_pause_guard_violation_is_conflict(
     run_ids_cleanup.append(plan.id)
 
     resp = api_client.post(f"/carbon-api/ai/plans/{plan.id}/steps/0/pause/")
-    assert resp.status_code == 409, resp.content
+    assert resp.status_code == 200, resp.content
+    assert resp.json()["status"] == "paused"
 
 
 @pytest.mark.django_db

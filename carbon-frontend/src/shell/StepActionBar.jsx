@@ -33,17 +33,14 @@ export default function StepActionBar({
   const primary = [];
   const secondary = [];
 
-  if (s === 'failed') {
-    if (onRetry) primary.push({ key: 'retry', label: t('stepRetry'), icon: <ReplayIcon />, onClick: () => onRetry(id), variant: 'contained' });
+  if (onRetry) primary.push({ key: 'retry', label: t('stepRetry'), icon: <ReplayIcon />, onClick: () => onRetry(id), variant: 'contained' });
+  if (onPause) primary.push({ key: 'pause', label: t('stepPause'), icon: <PauseIcon />, onClick: () => onPause(id) });
+  if (onResume) primary.push({ key: 'resume', label: t('stepResume'), icon: <PlayArrowIcon />, onClick: () => onResume(id) });
+  if (s === 'failed' || s === 'paused' || s === 'pending') {
     if (onSkip) primary.push({ key: 'skip', label: t('stepSkip'), icon: <SkipNextIcon />, onClick: () => onSkip(id) });
-  } else if (s === 'running') {
-    if (onPause) primary.push({ key: 'pause', label: t('stepPause'), icon: <PauseIcon />, onClick: () => onPause(id) });
+  }
+  if (s === 'running' || s === 'pending') {
     if (onCancel) primary.push({ key: 'cancel', label: t('stepCancel'), icon: <CloseIcon />, onClick: () => onCancel(id), color: 'error' });
-  } else if (s === 'paused') {
-    if (onResume) primary.push({ key: 'resume', label: t('stepResume'), icon: <PlayArrowIcon />, onClick: () => onResume(id), variant: 'contained' });
-    if (onSkip) primary.push({ key: 'skip', label: t('stepSkip'), icon: <SkipNextIcon />, onClick: () => onSkip(id) });
-  } else if (s === 'pending') {
-    if (onSkip) primary.push({ key: 'skip', label: t('stepSkip'), icon: <SkipNextIcon />, onClick: () => onSkip(id) });
   }
 
   if (s !== 'completed' && s !== 'skipped') {

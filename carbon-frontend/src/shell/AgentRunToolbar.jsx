@@ -7,7 +7,6 @@ import {
   Stack,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { isRerunnableStatus } from './aiTaskStatus';
 
 /**
  * @param {object} props
@@ -31,7 +30,6 @@ export default function AgentRunToolbar({
   const runnable = effectiveStatus === 'approved' || effectiveStatus === 'paused';
   const paused = effectiveStatus === 'paused' || phase === 'paused';
   const failed = effectiveStatus === 'failed';
-  const rerunnable = isRerunnableStatus(effectiveStatus);
   // Resume continues a paused run. A step still waiting on Approve is not
   // paused-in-the-middle — Resume would skip that consent.
   const canResume = paused && !running && !consentBlocksPlay;
@@ -94,7 +92,7 @@ export default function AgentRunToolbar({
       variant: 'text',
     });
   }
-  if (rerunnable && onRerun && !running) {
+  if (onRerun) {
     actions.push({
       key: 'rerun',
       testId: 'agent-run-rerun',

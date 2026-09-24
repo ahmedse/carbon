@@ -28,10 +28,12 @@ function renderToolbar(status, overrides = {}) {
 
 describe('StepToolbar — status → controls state machine', () => {
   const CASES = {
-    pending: ['Skip', 'Cancel'],
-    running: ['Pause', 'Cancel'],
-    paused: ['Resume', 'Skip', 'Cancel'],
-    failed: ['Retry', 'Skip'],
+    pending: ['Retry', 'Pause', 'Resume', 'Skip', 'Cancel'],
+    running: ['Retry', 'Pause', 'Resume', 'Cancel'],
+    paused: ['Retry', 'Pause', 'Resume', 'Skip', 'Cancel'],
+    failed: ['Retry', 'Pause', 'Resume', 'Skip'],
+    completed: ['Retry', 'Pause', 'Resume'],
+    awaiting_approval: ['Retry', 'Pause', 'Resume'],
   };
 
   for (const [status, labels] of Object.entries(CASES)) {
@@ -45,10 +47,6 @@ describe('StepToolbar — status → controls state machine', () => {
     });
   }
 
-  it.each(['completed', 'skipped', 'awaiting_approval'])('renders no controls for status "%s"', (status) => {
-    renderToolbar(status);
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
-  });
 });
 
 describe('StepToolbar — actions', () => {
@@ -78,14 +76,15 @@ describe('StepToolbar — actions', () => {
     expect(handlers.onRetry).toHaveBeenCalledWith(7);
 
     const { handlers: running } = renderToolbar('running');
-    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    const pauses = screen.getAllByRole('button', { name: 'Pause' });
+    fireEvent.click(pauses[pauses.length - 1]);
     expect(running.onPause).toHaveBeenCalledWith(7);
   });
 
   it('disables every control and fires nothing when busy', () => {
     const { handlers } = renderToolbar('paused', { busy: true });
     const buttons = screen.getAllByRole('button');
-    expect(buttons).toHaveLength(3);
+    expect(buttons).toHaveLength(5);
     for (const button of buttons) {
       expect(button).toBeDisabled();
     }

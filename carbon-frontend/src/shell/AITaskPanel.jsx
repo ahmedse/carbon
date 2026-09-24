@@ -330,13 +330,15 @@ StepErrorBanner.propTypes = { error: PropTypes.string };
 // W-7 — per-step control toolbar. The visible set of controls is driven purely
 // by the step's status (see STEP_CONTROLS). Every action stops event
 // propagation so it never toggles the row's expand/collapse.
+const STEP_ANY = ['retry', 'pause', 'resume'];
 const STEP_CONTROLS = {
-  pending: ['skip', 'cancel'],
-  running: ['pause', 'cancel'],
-  paused: ['resume', 'skip', 'cancel'],
-  failed: ['retry', 'skip'],
-  // Consent gate: Approve/Decline only (hero card). No skip/play that looks like bypass.
-  awaiting_approval: [],
+  pending: [...STEP_ANY, 'skip', 'cancel'],
+  running: [...STEP_ANY, 'cancel'],
+  paused: [...STEP_ANY, 'skip', 'cancel'],
+  failed: [...STEP_ANY, 'skip'],
+  completed: [...STEP_ANY],
+  skipped: [...STEP_ANY],
+  awaiting_approval: [...STEP_ANY],
 };
 
 const STEP_CONTROL_META = {
@@ -1800,39 +1802,14 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     if (!selectedPlan) return;
     setMutating(true);
     try {
-      const fresh = (await refreshPlan(selectedPlan.id)) || selectedPlan;
-      const apiStatus = fresh.status;
-      const effective = effectivePlanStatus(fresh);
-      const alreadyRunnable = apiStatus === 'approved' || apiStatus === 'paused';
-      const apiTerminal = isRerunnableStatus(apiStatus);
-      const effectiveTerminal = isRerunnableStatus(effective);
-
-      if (!alreadyRunnable) {
-        if (!apiTerminal && effectiveTerminal) {
-          notifyRef.current(
-            'Plan status is still updating — try Rerun again in a moment.',
-            'info',
-          );
-          setMutating(false);
-          return;
-        }
-        if (!apiTerminal) {
-          notifyRef.current(
-            'Approve the plan before running, or wait until the run has finished.',
-            'info',
-          );
-          setMutating(false);
-          return;
-        }
-        const reset = await rerunPlan(token, selectedPlan.id);
-        // refreshPlan only replaces the plan row. The run list and the
-        // finished phase live in separate state, so a rerun stayed on Done
-        // with every step still completed until the stream happened to
-        // overwrite one. Apply the reset payload: steps are pending, phase
-        // leaves finished.
-        if (reset?.steps) applyPlanToView(reset);
-        else await refreshPlan(selectedPlan.id);
-      }
+      const reset = await rerunPlan(token, selectedPlan.id);
+      // refreshPlan only replaces the plan row. The run list and the
+      // finished phase live in separate state, so a rerun stayed on Done
+      // with every step still completed until the stream happened to
+      // overwrite one. Apply the reset payload: steps are pending, phase
+      // leaves finished.
+      if (reset?.steps) applyPlanToView(reset);
+      else await refreshPlan(selectedPlan.id);
     } catch (err) {
       notifyFromErrorRef.current(err, 'Could not re-run the plan');
       setMutating(false);

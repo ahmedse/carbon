@@ -62,7 +62,6 @@ function AgentRunSurface({
   onOpenOutput = null,
   onRerun = null,
   onOpenPlan = null,
-  canRerun = false,
   busy = false,
   onConfirmStep = null,
   onDeclineStep = null,
@@ -266,7 +265,7 @@ function AgentRunSurface({
             <Button
               size="small"
               variant="contained"
-              disabled={!canRerun || busy}
+              disabled={busy}
               onClick={onRerun}
               sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
             >

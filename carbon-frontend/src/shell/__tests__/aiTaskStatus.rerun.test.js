@@ -13,8 +13,11 @@ describe('isRerunnableStatus / isSettledPhase', () => {
     expect(isRerunnableStatus('completed_with_gaps')).toBe(true);
     expect(isRerunnableStatus('failed')).toBe(true);
     expect(isRerunnableStatus('cancelled')).toBe(true);
-    expect(isRerunnableStatus('running')).toBe(false);
-    expect(isRerunnableStatus('approved')).toBe(false);
+    expect(isRerunnableStatus('running')).toBe(true);
+    expect(isRerunnableStatus('approved')).toBe(true);
+    expect(isRerunnableStatus('paused')).toBe(true);
+    expect(isRerunnableStatus('pending_approval')).toBe(true);
+    expect(isRerunnableStatus('')).toBe(false);
   });
 
   it('marks finished/stopped/error as settled UI phases', () => {

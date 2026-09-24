@@ -80,8 +80,15 @@ export function stepStatusMeta(status) {
   return STEP_STATUS[status] || { label: status || 'Pending', color: 'default' };
 }
 
-/** Terminal plan statuses that may be reset via POST …/rerun/ then streamed. */
+/** Statuses the Result/Now chrome used to treat as the only rerun set.
+ *  Rerun is allowed from every status; this list stays for callers that
+ *  still want the historical terminal set. */
 export const RERUNNABLE_STATUSES = Object.freeze([
+  'discovering',
+  'pending_approval',
+  'approved',
+  'running',
+  'paused',
   'completed',
   'completed_with_gaps',
   'failed',
@@ -90,7 +97,7 @@ export const RERUNNABLE_STATUSES = Object.freeze([
 
 /** True when a plan may be wiped and re-executed from a clean slate. */
 export function isRerunnableStatus(status) {
-  return RERUNNABLE_STATUSES.includes(status);
+  return Boolean(status);
 }
 
 /** Session/UI phases that mean the run has settled (ledger + Output CTAs). */

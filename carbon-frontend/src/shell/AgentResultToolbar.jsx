@@ -36,7 +36,6 @@ import { useTranslation } from 'react-i18next';
  */
 export default function AgentResultToolbar({
   hostActions = [],
-  rerunnable = false,
   busy = false,
   canExportLedger = false,
   canExportResponse = false,
@@ -92,13 +91,14 @@ export default function AgentResultToolbar({
           </Button>
         ) : null}
         {onRerun ? (
-          <Tooltip title={rerunnable ? t('rerunPlan') : t('resultRerunNeedsApprove')}>
+          <Tooltip title={t('rerunPlan')}>
             <span>
               <Button
                 size="small"
                 variant="outlined"
-                disabled={!rerunnable || busy}
+                disabled={busy}
                 onClick={onRerun}
+                data-testid="result-rerun"
                 sx={{ textTransform: 'none' }}
               >
                 {t('rerunPlanShort')}

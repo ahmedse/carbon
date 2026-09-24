@@ -87,7 +87,7 @@ class Settings(BaseSettings):
     FANOUT_PROBE_MIN_TOKENS: int = 12   # PV2-1B: utterances shorter than this (words) never pay the fan-out probe call
 
     # ── Guardrails (P3.3) ──
-    GUARDRAIL_MAX_TOOL_CALLS_PER_RUN: int = 20
+    GUARDRAIL_MAX_TOOL_CALLS_PER_RUN: int = 100
     GUARDRAIL_MAX_TOKENS_PER_RUN: int = 100_000
     GUARDRAIL_BUDGET_ENFORCEMENT: bool = True
     GUARDRAIL_REDACTED_TOOLS: str = '[]'
