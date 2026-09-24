@@ -5372,9 +5372,9 @@ class PlansService:
     # ── W-7: per-step controls ────────────────────────────────────────────
 
     def retry_step(self, user, plan_id: str, step_id) -> dict:
-        """Re-queue a single failed step for re-execution (user-initiated).
+        """Re-queue any step for re-execution (user-initiated).
 
-        Only a ``failed`` step may be retried. The step is reset to
+        The step is reset to
         ``pending`` with its error cleared and ``retry_count`` incremented —
         it is NOT executed inline. Re-execution happens when the durable
         ``run``/``resume`` path re-enters (the fail-closed command boundary +
