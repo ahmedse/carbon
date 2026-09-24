@@ -4,6 +4,8 @@ ReActLoop — Iterates a Plan step-by-step with critic gating + re-plan on failu
 PR-20: Executes each PlanStep through draft → critic → execute → observe,
 with mutation confirmation gates, dry-run previews, and up to 2 replans.
 """
+from ai.engine.cognition.phrase_tables import T
+from ai.engine.pack_vocab import V
 import asyncio
 import inspect
 import json
@@ -16,6 +18,12 @@ from ai.engine.core.clock import utcnow
 from ai.engine.core.resolution import payload_status
 from ai.engine.core.query import first
 
+from ai.engine.cognition.plan.failures import (
+    BLOCKED_DEPENDENCY,
+    MISSING_BINDING,
+    classify_step_failure,
+    is_replannable,
+)
 from ai.engine.cognition.plan.planner import Plan, PlanStep
 from ai.engine.cognition.turn.witnesses import CriticVerdict, DraftResult, RetrievalResult
 from ai.engine.llm.router import model_for_profile
@@ -45,6 +53,16 @@ def _transitive_prior_results(
         if parent is not None:
             pending.extend(parent.depends_on or [])
     return [r for r in results if getattr(r, "step_id", None) in wanted]
+
+
+def _failure_flags(result) -> dict:
+    """``failure_class`` / ``choice`` for the RunStep flags (empty on success)."""
+    out: dict = {}
+    if getattr(result, "failure_class", ""):
+        out["failure_class"] = result.failure_class
+    if getattr(result, "choice", None):
+        out["choice"] = result.choice
+    return out
 
 
 def _enforce_structured_export_source(
@@ -186,12 +204,7 @@ def _strip_markdown_fence(text: str) -> str:
 # reasoning. Mutation/planning tools are deliberately excluded — an automatic
 # follow-up must never write state or trigger a consent gate without the user.
 # ``call_host_api`` is allowed only for GET (see ``_followup_is_readonly``).
-_ALLOWED_FOLLOWUP_TOOLS = frozenset({
-    "web_research",
-    "get_entity_details",
-    "search_knowledge",
-    "call_host_api",
-})
+_ALLOWED_FOLLOWUP_TOOLS = T("plan/loop.py::_ALLOWED_FOLLOWUP_TOOLS")
 
 # Hard cap on auto-injected follow-ups per run (independent of PULSE_LOOP_MAX_STEPS).
 # Live QA: uncapped chaining produced 3× "Fetch call_host_api" consent spam.
@@ -256,6 +269,10 @@ class StepResult:
     llm_calls: int = 0
     llm_ms: float = 0.0
     llm_by_stage: dict | None = None
+    # plan/failures.py class when the step failed; decides retry / replan.
+    failure_class: str = ""
+    # missing_binding: the candidates the operator picks from.
+    choice: dict | None = None
 
 
 @dataclass
@@ -846,7 +863,7 @@ class ReActLoop:
                             _wnode, _wf_ctx, elapsed_ms=_elapsed_ms,
                         )
                     if not _decision.satisfied:
-                        # until-only still pending — leave wait incomplete.
+                        # until-only still pending —  wait incomplete.
                         continue
                     _wf_gateways.add(_wnode.id)
                     _completed_graph.add(_wnode.id)
@@ -916,7 +933,7 @@ class ReActLoop:
                         })
                 # Runtime follow-ups / heal inserts are not in the compiled
                 # workflow_graph. Promote them when depends_on are met so the
-                # graph path cannot leave Pending orphans under Completed.
+                # graph path cannot  Pending orphans under Completed.
                 _graph_sids: set[int] = set()
                 for _gn in _wf_graph.nodes:
                     _gsid = step_id_for_node(_gn)
@@ -1002,7 +1019,14 @@ class ReActLoop:
 
             self._failed_read_ids = {
                 r.step_id for r in step_results
-                if getattr(r, "error", None) and not getattr(r, "paused", False)
+                if getattr(r, "error", None)
+                and not getattr(r, "paused", False)
+                and not str(r.error).startswith("[caught]")
+            }
+            self._step_api_names = {
+                s.step_id: str((s.tool_args or {}).get("api_name") or "")
+                for s in plan.steps
+                if isinstance(s.tool_args, dict)
             }
 
             # Phase 2 — execute in parallel (sequential fast-path when len==1)
@@ -1133,6 +1157,9 @@ class ReActLoop:
             # Phase 3 — fold back IN ORDER (same post-step logic as today)
             stopped_for_pause = False
             for step, result, step_latency in executed:
+                result.failure_class = classify_step_failure(
+                    step, result, plan_source=plan.source,
+                )
                 step_results.append(result)
                 _step_llm = int(getattr(result, "llm_calls", 0) or 0)
                 total_llm_calls += _step_llm
@@ -1347,7 +1374,12 @@ class ReActLoop:
                     if result.error and "[cancelled]" in str(result.error):
                         stopped_for_cancel = True
                         break
-                    if replans_used < self.MAX_REPLANS:
+                    if not is_replannable(result.failure_class):
+                        logger.info(
+                            "ReActLoop: step %d failed (%s) — not replanned",
+                            step.step_id, result.failure_class,
+                        )
+                    elif replans_used < self.MAX_REPLANS:
                         logger.info(
                             "ReActLoop: step %d vetoed, replanning (%d/%d)",
                             step.step_id, replans_used + 1, self.MAX_REPLANS,
@@ -1415,9 +1447,18 @@ class ReActLoop:
                         for s in list(remaining) + list(plan.steps)
                         if getattr(s, "tool_name", None)
                     )
+                    _fu_args, _fu_label = self._admit_followup(
+                        _fu.followup_tool, _fu.followup_args,
+                        step, instance_config, plan.steps,
+                    )
                     if _dup:
                         logger.info(
                             "ReActLoop: coalesce duplicate follow-up tool=%s",
+                            _fu.followup_tool,
+                        )
+                    elif _fu_args is None:
+                        logger.info(
+                            "ReActLoop: dropped follow-up tool=%s (not on the capability surface)",
                             _fu.followup_tool,
                         )
                     else:
@@ -1426,9 +1467,9 @@ class ReActLoop:
                         _next_step_id += 1
                         _followup_step = PlanStep(
                             step_id=_fid,
-                            intent=f"Fetch {_fu.followup_tool} to complete the answer",
+                            intent=_fu_label,
                             tool_name=_fu.followup_tool,
-                            tool_args=_fu.followup_args or {},
+                            tool_args=_fu_args,
                             is_mutation=False,
                             depends_on=[step.step_id],
                             agent_role="orchestrator",
@@ -1465,7 +1506,7 @@ class ReActLoop:
         if not is_cancelled and _db is not None and run_id is not None:
             is_cancelled = await self._run_is_cancelled(_db, run_id)
 
-        # Truthful Done: never leave Pending steps under a Completed run.
+        # Truthful Done: never  Pending steps under a Completed run.
         # Skip anything still queued (stuck deps, orphan follow-ups, barrier).
         if remaining and not is_paused and not is_cancelled:
             for _ss in list(remaining):
@@ -1700,7 +1741,10 @@ class ReActLoop:
             WRITE_HELD,
             mutation_blocked_by_failed_read,
         )
-        if mutation_blocked_by_failed_read(
+        _failed_deps = set(step.depends_on or []) & set(
+            getattr(self, "_failed_read_ids", ()) or (),
+        )
+        if _failed_deps or mutation_blocked_by_failed_read(
             step, getattr(self, "_failed_read_ids", ()),
         ):
             return StepResult(
@@ -1710,7 +1754,12 @@ class ReActLoop:
                 executed=False,
                 paused=False,
                 error=WRITE_HELD,
+                failure_class=BLOCKED_DEPENDENCY,
             )
+        if step.tool_name == "call_host_api" and isinstance(step.tool_args, dict):
+            _bind_gap = self._bind_host_step(step, instance_config, prior_results)
+            if _bind_gap is not None:
+                return _bind_gap
         _deterministic = is_fully_bound_host_api(
             step.tool_name, step.tool_args, _catalog,
         )
@@ -1997,7 +2046,7 @@ class ReActLoop:
                 if _requires_consent:
                     # Recover a missed resume token from the durable step when
                     # the operator already Approved (consent_granted). Never
-                    # silently re-pause — that left loan submits stuck forever.
+                    # silently re-pause — that left  submits stuck forever.
                     _already_granted = False
                     _recovered_tok = None
                     _db_ref = self.db
@@ -2117,9 +2166,11 @@ class ReActLoop:
             )
             from ai.engine.cognition.plan.catalog_args import (
                 READ_GAP,
+                canonical_host_calls,
                 is_invalid_argument_error,
                 tool_output_is_invalid_args,
             )
+            _bound_calls = canonical_host_calls(_bound_calls, _catalog)
             _catalog_repairs = 0
             _bound_calls, _catalog_gap, _catalog_repairs = (
                 await self._repair_catalog_call(
@@ -2394,8 +2445,8 @@ class ReActLoop:
                             result.confirmation_token = confirmation_token
                             # Skip observe — the host receipt is the outcome.
                             # A post-write LLM observe can hang the resume SSE
-                            # and leave the step stuck "Running" after a real
-                            # write (leave already created; UI never got done).
+                            # and  the step stuck "Running" after a real
+                            # write ( already created; UI never got done).
                             # PV2-3A: prefer bilingual step_templates over host
                             # summary prose for fully bound process_dial steps.
                             _tpl = _bound_summary() if _deterministic else ""
@@ -2852,6 +2903,105 @@ class ReActLoop:
             result.followup.followup_args,
         )
 
+    @staticmethod
+    def _admit_followup(
+        tool_name: str | None,
+        tool_args: dict | None,
+        parent: PlanStep,
+        instance_config: dict | None,
+        plan_steps: list[PlanStep],
+    ) -> tuple[dict | None, str]:
+        """``(args, label)`` for a follow-up the surface accepts; ``(None, "")`` otherwise.
+
+        A host follow-up must name a catalog read and pass its schema, with
+        any path value bindable from the step it follows. No remap is guessed.
+        """
+        if tool_name != "call_host_api":
+            label = str(tool_name or "").replace("_", " ").strip().capitalize()
+            return dict(tool_args or {}), label
+        from ai.engine.cognition.plan.bindings import declare_bindings
+        from ai.engine.cognition.turn.capability import host_surface
+
+        surface = host_surface(instance_config)
+        name = str((tool_args or {}).get("api_name") or "").strip()
+        if not name or name not in surface.names or name in surface.writes:
+            return None, ""
+        probe = PlanStep(
+            step_id=-1, intent="", tool_name="call_host_api",
+            tool_args=surface.host_args(name, tool_args), depends_on=[parent.step_id],
+        )
+        declare_bindings(probe, {s.step_id: s for s in plan_steps}, surface)
+        args = probe.tool_args
+        bind = args.get("bind") or {}
+        missing = surface.missing_path_keys(name, args)
+        if any(k not in bind for k in missing):
+            return None, ""
+        as_sent = {
+            **args,
+            "path_params": {**(args.get("path_params") or {}), **{k: "bound" for k in missing}},
+        }
+        if surface.arg_violations(name, as_sent):
+            return None, ""
+        return args, surface.label(name)
+
+    def _bind_host_step(
+        self, step: PlanStep, instance_config: dict | None, prior_results: list | None,
+    ) -> StepResult | None:
+        """Canonical args + path values bound from dependencies.
+
+        Returns a failed ``missing_binding`` result when a path value cannot
+        be bound — with the candidates when there is more than one.
+        """
+        from ai.engine.cognition.plan.bindings import resolve_bindings
+        from ai.engine.cognition.turn.capability import host_surface
+
+        surface = host_surface(instance_config)
+        name = str(step.tool_args.get("api_name") or "")
+        if not name:
+            return None
+        step.tool_args = surface.host_args(name, step.tool_args)
+        outputs = {
+            r.step_id: r.tool_output for r in (prior_results or [])
+            if getattr(r, "tool_output", None) is not None
+        }
+        binding = resolve_bindings(
+            step.tool_args, surface, outputs,
+            getattr(self, "_step_api_names", None) or {},
+        )
+        if binding.status in ("none", "bound"):
+            step.tool_args = binding.tool_args
+            return None
+        label = surface.label(name)
+        if binding.status == "choice":
+            error = (
+                f"{label} needs one {binding.key}: step {binding.from_step} "
+                f"returned {len(binding.options)}. Pick one to continue."
+            )
+            choice = {
+                "key": binding.key,
+                "from_step": binding.from_step,
+                "options": binding.options,
+            }
+        else:
+            error = (
+                f"{label} needs a {binding.key} and no earlier step "
+                "returned one."
+            )
+            choice = None
+        logger.info(
+            "ReActLoop: step %d %s unbound path %r (%s)",
+            step.step_id, name, binding.key, binding.status,
+        )
+        return StepResult(
+            step_id=step.step_id,
+            intent=step.intent,
+            critic_verdict="veto",
+            executed=False,
+            error=error,
+            failure_class=MISSING_BINDING,
+            choice=choice,
+        )
+
     def _build_step_prompt(
         self, step: PlanStep, user_message: str, system_prompt: str,
         step_contexts: dict[int, str],
@@ -3143,9 +3293,14 @@ class ReActLoop:
                 # Keep list-shaped critic flags discoverable for debug.
                 _merged["critic_flags"] = _next_flags
             _merged["llm_meter"] = _llm_meter
+            _merged.pop("failure_class", None)
+            _merged.pop("choice", None)
+            _merged.update(_failure_flags(result))
             # Django JSONField wants native objects — json.dumps would
             # store a string scalar and break consent_granted reads.
             existing.critic_flags_json = _merged
+            if step.tool_args:
+                existing.tool_args_json = step.tool_args
             existing.tool_output_json = (
                 result.tool_output if result.tool_output is not None
                 else existing.tool_output_json
@@ -3180,10 +3335,13 @@ class ReActLoop:
                 status=step_status,
                 draft_text=result.draft_text or None,
                 critic_verdict=result.critic_verdict or None,
-                critic_flags_json=(
-                    {"critic_flags": list(result.critic_flags), "llm_meter": _llm_meter}
-                    if result.critic_flags else {"llm_meter": _llm_meter}
-                ),
+                critic_flags_json={
+                    **(
+                        {"critic_flags": list(result.critic_flags), "llm_meter": _llm_meter}
+                        if result.critic_flags else {"llm_meter": _llm_meter}
+                    ),
+                    **_failure_flags(result),
+                },
                 tool_output_json=result.tool_output if result.tool_output else None,
                 error=result.error,
                 latency_ms=step_latency_ms,
@@ -3422,21 +3580,21 @@ class ReActLoop:
                 break
             intent = (r.intent or "").lower()
             if (
-                "submit leave" in intent
+                V("t_submit_leave") in intent
                 and out.get("confirmed")
                 and not (r.error and not str(r.error).startswith("[caught]"))
             ):
                 leave_submit_done = True
                 break
             if (
-                "submit loan" in intent
+                V("t_submit_loan") in intent
                 and out.get("confirmed")
                 and not (r.error and not str(r.error).startswith("[caught]"))
             ):
                 loan_submit_done = True
                 break
             if (
-                "attendance permission" in intent
+                V("t_attendance_permission") in intent
                 and out.get("confirmed")
                 and not (r.error and not str(r.error).startswith("[caught]"))
             ):
@@ -3445,8 +3603,8 @@ class ReActLoop:
 
         if leave_submit_done:
             head = (
-                "Your leave request was submitted. "
-                "Your manager reviews it in Team — track status in My Leave."
+                V("t_your_leave_request_was_submitted")
+                + V("t_your_manager_reviews_it_in_team_2")
             )
             if actions_md:
                 return f"{head}\n\n{actions_md}".strip()[:2000]
@@ -3454,8 +3612,8 @@ class ReActLoop:
 
         if loan_submit_done:
             head = (
-                "Your loan request was submitted. "
-                "Manager then finance review it in Team — track status in My Requests."
+                V("t_your_loan_request_was_submitted")
+                + "Manager then finance review it in Team — track status in My Requests."
             )
             if actions_md:
                 return f"{head}\n\n{actions_md}".strip()[:2000]
@@ -3463,8 +3621,8 @@ class ReActLoop:
 
         if attendance_submit_done:
             head = (
-                "Your attendance permission was submitted. "
-                "Your manager reviews it in Team — track status in My Attendance."
+                V("t_your_attendance_permission_was_submitted")
+                + V("t_your_manager_reviews_it_in_team")
             )
             if actions_md:
                 return f"{head}\n\n{actions_md}".strip()[:2000]

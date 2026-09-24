@@ -1,18 +1,8 @@
-"""Agent discovery scope router — gate briefs/replies before planning.
-
-Deterministic (no LLM): classifies Operator text so Agent discovery does not
-over-help (force-fit leave → DQ, trivia → Carbon quiz). Chat remains the
-advisor surface; Agent remains the planner.
-
-Classes:
-  PLAN_CLEAR   — in-scope outcome; discovery/LLM may proceed
-  PLAN_AMBIG   — could be plan or transaction; show recommended cards
-  ADVISORY     — Q&A / trivia → handoff Chat
-  TRANSACTION  — personal leave / HR action → recommend leave path
-  DIGRESSION   — mid-discovery topic switch (same as ADVISORY/TRANSACTION)
-  ABUSE        — jailbreak / injection style → calm refuse
-"""
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+from ai.engine.pack_vocab import V
+V("t_agent_discovery_scope_router_gate_briefs")
+
 
 from dataclasses import dataclass, field
 from typing import Any
@@ -26,42 +16,15 @@ from ai.engine.cognition.scope_route_i18n import (
 )
 from ai.engine.text.word_match import contains_any_phrase, has_any_word
 
-_LEAVE_PERSONAL_PHRASES = (
-    "i want leave", "i want annual leave", "i want time off", "i want timeoff",
-    "i want vacation", "i want pto", "i want holiday",
-    "i need leave", "i need annual leave", "i need time off", "i need vacation",
-    "i need pto", "i need holiday",
-    "i request leave", "i request annual leave", "i request time off",
-    "i request vacation", "i request pto", "i request holiday",
-    "requesting leave", "requesting annual leave", "requesting time off",
-    "requesting vacation", "request leave", "request annual leave",
-    "apply for leave", "apply for annual leave", "apply for time off",
-    "apply for vacation", "apply for pto", "apply for holiday",
-    "take leave", "take annual leave", "take time off", "take vacation",
-    "take pto", "take holiday",
-    "reporting an absence", "reporting absence", "report an absence", "report absence",
-)
-_LEAVE_COMPLIANCE_PHRASES = (
-    "leave compliance", "leave risk", "leave variance", "leave report",
-    "leave pack", "leave board", "absence rate",
-)
+_LEAVE_PERSONAL_PHRASES = T("scope_route.py::_LEAVE_PERSONAL_PHRASES")
+_LEAVE_COMPLIANCE_PHRASES = T("scope_route.py::_LEAVE_COMPLIANCE_PHRASES")
 
-_BARE_LEAVE_EN = frozenset({"leave", "time off", "time-off", "vacation", "pto"})
-_ADVISORY_PHRASES = (
-    "who is", "who are", "who was", "who were", "what is", "tell me about",
-)
-_ABUSE_PHRASES = (
-    "ignore previous instructions", "ignore all previous instructions",
-    "ignore prior instructions", "ignore all prior instructions",
-    "jailbreak", "dan mode", "system prompt", "do anything now",
-)
-_PLAN_SIGNAL_WORDS = (
-    "plan", "prepare", "build", "create", "export", "summarize", "analyse",
-    "analyze", "report",
-)
-_PLAN_SIGNAL_PHRASES = ("board pack", "data quality", "dq rule")
+_BARE_LEAVE_EN = T("scope_route.py::_BARE_LEAVE_EN")
+_ADVISORY_PHRASES = T("scope_route.py::_ADVISORY_PHRASES")
+_ABUSE_PHRASES = T("scope_route.py::_ABUSE_PHRASES")
+_PLAN_SIGNAL_WORDS = T("scope_route.py::_PLAN_SIGNAL_WORDS")
+_PLAN_SIGNAL_PHRASES = T("scope_route.py::_PLAN_SIGNAL_PHRASES")
 
-PLANNABLE = frozenset({"PLAN_CLEAR", "PLAN_AMBIG"})
 
 
 def _leave_personal(text: str) -> bool:
@@ -73,7 +36,7 @@ def _leave_compliance(text: str) -> bool:
     return bool(
         contains_any_phrase(raw, _LEAVE_COMPLIANCE_PHRASES)
         or has_any_word(raw, ("absenteeism",))
-        or (contains_any_phrase(raw, ("board pack",)) and has_any_word(raw, ("leave",)))
+        or (contains_any_phrase(raw, ("board pack",)) and has_any_word(raw, (V("t_leave"),)))
         or leave_compliance_ar(raw)
     )
 
@@ -119,13 +82,13 @@ def _leave_cards(*, personal_primary: bool) -> list[dict[str, Any]]:
     return [
         {
             "id": "leave_request",
-            "label": "Create a leave-request plan",
+            "label": V("t_create_a_leave_request_plan"),
             "hint": "Stay in Agent — draft a reviewable plan you can edit before approving",
             "primary": personal_primary,
         },
         {
             "id": "compliance_report",
-            "label": "Plan a leave-compliance report",
+            "label": V("t_plan_a_leave_compliance_report"),
             "hint": "Agent will draft a reviewable board-pack plan",
             "primary": not personal_primary,
         },
@@ -164,17 +127,17 @@ def scope_route(text: str, *, stage: str = "brief") -> ScopeRoute:
     if _leave_compliance(raw):
         return ScopeRoute(
             cls="PLAN_CLEAR",
-            message="I'll treat this as a leave-compliance / board-pack plan.",
+            message=V("t_i_ll_treat_this_as_a"),
             recommended="compliance_report",
             plannable=True,
             cards=_leave_cards(personal_primary=False),
         )
 
-    # Personal leave → recommend leave path (asymmetric vs compliance).
-    # Loan / attendance must not fall into generic clarifying — they have
+    # Personal  → recommend  path (asymmetric vs compliance).
+    #  /  must not fall into generic clarifying — they have
     # process dials (handled in plans_service.start_discovery short-circuit).
     if _leave_personal(raw) or _bare_leave(raw):
-        # Loan/attendance briefs can contain "leave early" etc. — check first.
+        # / briefs can contain " early" etc. — check first.
         from ai.engine.cognition.plan.process_dial import (
             is_personal_attendance_brief,
             is_personal_loan_brief,
@@ -190,10 +153,10 @@ def scope_route(text: str, *, stage: str = "brief") -> ScopeRoute:
         return ScopeRoute(
             cls="TRANSACTION" if personal else "PLAN_AMBIG",
             message=(
-                "That sounds like a personal leave request. "
-                "I can draft a reviewable leave-request plan here for you to edit "
-                "and approve — or plan a leave-compliance board pack instead. "
-                "Chat stays available if you only want advice."
+                V("t_that_sounds_like_a_personal_leave")
+                + V("t_i_can_draft_a_reviewable_leave")
+                + V("t_and_approve_or_plan_a_leave")
+                + "Chat stays available if you only want advice."
             ),
             recommended="leave_request",
             plannable=False,
@@ -201,7 +164,7 @@ def scope_route(text: str, *, stage: str = "brief") -> ScopeRoute:
             cards=_leave_cards(personal_primary=True),
         )
 
-    # Loan / attendance without leave words — still plannable for dial short-circuit.
+    #  /  without  words — still plannable for dial short-circuit.
     try:
         from ai.engine.cognition.plan.process_dial import (
             is_personal_attendance_brief,

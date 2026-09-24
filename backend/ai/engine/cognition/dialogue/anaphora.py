@@ -6,6 +6,7 @@ focused named entity ("Back to Abrar", "tell me about Abrar again"),
 rewriting the message to include a stable id (e.g. employee_no) when known.
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
 
 import re
 
@@ -47,14 +48,14 @@ _SUBJECT_IT_QUESTION = re.compile(
     re.IGNORECASE,
 )
 
-# Explicit restore: "back to Abrar", "back to employee 1021"
+# Explicit restore: "back to Abrar", "back to  1021"
 _BACK_TO = re.compile(
     r"\bback\s+to\s+(?:the\s+)?(.+?)(?:\s*[.,!?;:]|$)",
     re.IGNORECASE,
 )
 
-_AGAIN_CUE_PHRASES = ("once more", "as before")
-_AGAIN_CUE_WORDS = ("again", "earlier", "previously")
+_AGAIN_CUE_PHRASES = T("dialogue/anaphora.py::_AGAIN_CUE_PHRASES")
+_AGAIN_CUE_WORDS = T("dialogue/anaphora.py::_AGAIN_CUE_WORDS")
 
 
 def _has_again_cue(text: str) -> bool:

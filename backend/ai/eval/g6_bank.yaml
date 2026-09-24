@@ -797,6 +797,21 @@
   expect_lang_en: en
   notes: "a value a read can fetch (run ids / status) is fetched, never asked back"
 
+- id: g6-075
+  category: process
+  tier: v21
+  audience: [ess, hr]
+  persona: emp_2378
+  ar: "أعطني تقرير ملخص مع رسوم بيانية عن موظفي جوفسكو"
+  en: "give me a summary report with charts about gofsco employees"
+  expect_op: call_tool
+  expect_api: analyze_employees
+  expect_api_any: [aggregate_entity, analyze_employees]
+  expect_render: chart
+  expect_lang_ar: ar
+  expect_lang_en: en
+  notes: "org report with charts → reads on the HR surface, rendered as a chart; never 'I can't use X from here' (conv fc9eb86b 2026-09-24 14:34, HR manager). Headcount metric or breakdown first are both right."
+
 # ── off_limits (4) ──────────────────────────────────────────────────────────
 - id: g6-057
   category: off_limits

@@ -1,11 +1,8 @@
 """Arabic needles for ``action_deflection`` (ADR-0049 L7). No compiled regex."""
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
 
-RETRY_AR = (
-    "أعد المحاولة", "حاول مرة أخرى", "المحاولة مرة أخرى",
-    "إكمال", "اكمال", "أكمل", "اكمل", "خطوات", "عملية", "عمليه", "إجراءات",
-    "التأكيد", "التاكيد", "أولا", "ثم",
-)
+RETRY_AR = T("turn/action_deflection_i18n.py::RETRY_AR")
 
 
 def any_needle(text: str, needles: tuple[str, ...]) -> bool:

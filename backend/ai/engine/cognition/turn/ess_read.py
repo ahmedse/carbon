@@ -12,6 +12,9 @@ Hard rule for Chat/Agent self-service reads across ESS domains:
 Empty history list ≠ zero entitlement/balance for that domain.
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+
+from ai.engine.pack_vocab import V
 
 import json
 import re
@@ -58,40 +61,30 @@ HISTORY_APIS = frozenset({
 _LEAVE_TOPIC_RE = re.compile(
     r"("
     r"\bleav\w*\b|\bleaves?\b|\bvacation|\bpto\b|\btime[\s-]?off\b|"
-    r"leave\s+balance|remaining\s+leave|leave\s+remaining|"
-    r"how\s+much\s+leave|annual\s+leave|leave\s+entitlement"
-    r")",
+    + V("t_leave_s_balance_remaining_s_leave")
+    + V("t_how_s_much_s_leave_annual")
+    + r")",
     re.IGNORECASE,
 )
 
 _LEAVE_HISTORY_RE = re.compile(
     r"("
     r"\bleave\s+(?:requests?|history|records?|applications?)\b|"
-    r"\bmy\s+previous\s+leave\b|"
-    r"\bmy\s+leave\s+(?:requests?|history|applications?)\b|"
-    r"\b(?:previous|past)\s+leave\b|"
-    r"\blist\s+my\s+leave\b"
-    r")",
+    + V("t_bmy_s_previous_s_leave_b")
+    + V("t_bmy_s_leave_s_requests_history")
+    + V("t_b_previous_past_s_leave_b")
+    + V("t_blist_s_my_s_leave_b")
+    + r")",
     re.IGNORECASE,
-)
-
-_LOAN_TOPIC_WORDS = ("loan", "loans", "installment", "installments", "advance", "advances")
-_LOAN_SELF_PHRASES = (
-    "my loan", "my loans", "my advance", "my advances",
-    "my installment", "my installments",
 )
 
 _PAYSLIP_TOPIC_RE = re.compile(
     r"("
     r"\bpayslips?\b|\bnet\s+pay\b|\btake[\s-]?home\b|"
-    r"\blast\s+(?:month'?s?\s+)?(?:pay|salary|payslip)\b|"
-    r"\bmy\s+salary\b|\bsalary\b"
-    r")",
+    + V("t_blast_s_month_s_s_pay")
+    + V("t_bmy_s_salary_b_bsalary_b")
+    + r")",
     re.IGNORECASE,
-)
-
-_ATTENDANCE_EN_NEEDLES = (
-    "attendance", "clock in", "clock-in", "check in", "check-in",
 )
 
 _NAMED_EMP_RE = re.compile(
@@ -99,26 +92,21 @@ _NAMED_EMP_RE = re.compile(
     r"\bemp[_\s-]?\d+\b|"
     r"\bemployee\s*(?:no\.?|number|#|:)?\s*\d+|"
     r"\bfor\s+(?!me\b)\w+|"
-    r"'s\s+(?:leave|annual|sick|balance|loan|payslip)|"
-    r"\bdoes\s+[A-Z][\w'-]+"
+    + V("t_s_s_leave_annual_sick_balance_2")
+    + r"\bdoes\s+[A-Z][\w'-]+"
     r")",
     re.IGNORECASE,
 )
 
 _LEAVE_ZERO_CLAIM_RE = re.compile(
     r"("
-    r"remaining\s*(?:leave\s*)?(?:balance\s*)?[:=]?\s*0|"
-    r"(?:used|pending)\s*[:=]?\s*0\s*day"
+    + V("t_remaining_s_leave_s_balance_s")
+    + r"(?:used|pending)\s*[:=]?\s*0\s*day"
     r")",
     re.IGNORECASE,
 )
 
-_PROPER_NAME_STOP = frozenset({
-    "What", "How", "Show", "Where", "When", "Who", "Why", "Tell", "Please",
-    "Can", "Could", "Would", "Should", "May", "My", "The", "A", "An", "OK",
-    "Remaining", "List", "About", "Does", "Did", "Is", "Are", "I", "We",
-    "You", "Leave", "Loan", "Annual", "Sick", "Your", "Our", "Their",
-})
+_PROPER_NAME_STOP = T("turn/ess_read.py::_PROPER_NAME_STOP")
 
 
 def empty_render_text(key: str | None, language: str = "en") -> str | None:
@@ -142,17 +130,17 @@ class EssSelfDomain:
     history_api: str | None
     topic_re: Pattern[str] | None = None
     history_re: Pattern[str] | None = None
-    #: When set, preferred bind requires a first-person hit (e.g. loans FAQ).
+    #: When set, preferred bind requires a first-person hit (e.g.  FAQ).
     self_re: Pattern[str] | None = None
     topic_words: tuple[str, ...] = ()
     self_phrases: tuple[str, ...] = ()
     topic_needles: tuple[str, ...] = ()
     history_needles: tuple[str, ...] = ()
     self_needles: tuple[str, ...] = ()
-    honesty_key: str = "payslip"
+    honesty_key: str = V("t_payslip_2")
 
     def topic_match(self, text: str) -> bool:
-        if self.id == "attendance":
+        if self.id == V("t_attendance"):
             return _attendance_topic(text)
         raw = text or ""
         if self.topic_re is not None and self.topic_re.search(raw):
@@ -190,10 +178,10 @@ class EssSelfDomain:
         return self.history_api
 
 
-#: Instance-local catalog. Add attendance / GOSI / … as twins without binder ifs.
+#: Instance-local catalog. Add  /  / … as twins without binder ifs.
 ESS_SELF_DOMAINS: tuple[EssSelfDomain, ...] = (
     EssSelfDomain(
-        id="leave",
+        id=V("t_leave"),
         balance_api=LEAVE_BALANCE_API,
         history_api=LEAVE_HISTORY_API,
         topic_re=_LEAVE_TOPIC_RE,
@@ -203,30 +191,33 @@ ESS_SELF_DOMAINS: tuple[EssSelfDomain, ...] = (
         honesty_key="leave_history",
     ),
     EssSelfDomain(
-        id="loan",
+        id=V("t_loan_2"),
         balance_api=None,
         history_api=LOAN_HISTORY_API,
-        topic_words=_LOAN_TOPIC_WORDS,
-        self_phrases=_LOAN_SELF_PHRASES,
+        topic_words=(V("t_loan_2"), V("t_loans"), "installment", "installments", "advance", "advances"),
+        self_phrases=(
+            V("t_my_loan"), V("t_my_loans"), "my advance", "my advances",
+            "my installment", "my installments",
+        ),
         topic_needles=LOAN_TOPIC_AR,
         self_needles=LOAN_SELF_AR,
         honesty_key="loan_history",
     ),
     EssSelfDomain(
-        id="payslip",
+        id=V("t_payslip_2"),
         balance_api=PAYSLIP_API,
         history_api=PAYSLIP_API,
         topic_re=_PAYSLIP_TOPIC_RE,
         topic_needles=PAYSLIP_TOPIC_AR,
-        honesty_key="payslip",
+        honesty_key=V("t_payslip_2"),
     ),
     EssSelfDomain(
-        id="attendance",
+        id=V("t_attendance"),
         balance_api=ATTENDANCE_API,
         history_api=ATTENDANCE_API,
         # topic_re unused — topic_match uses _attendance_topic (no new compile).
         topic_re=_PAYSLIP_TOPIC_RE,
-        honesty_key="attendance",
+        honesty_key=V("t_attendance"),
     ),
 )
 
@@ -254,7 +245,7 @@ def is_named_employee_ask(text: str | None) -> bool:
     raw = _norm(text or "")
     if _NAMED_EMP_RE.search(raw) or any_needle(raw, NAMED_EMP_AR):
         return True
-    nouns = {"leave", "annual", "sick", "balance", "loan", "payslip", "loans"}
+    nouns = {V("t_leave"), "annual", "sick", "balance", V("t_loan_2"), V("t_payslip_2"), V("t_loans")}
     tokens = raw.split()
     for i, tok in enumerate(tokens):
         clean = tok.strip(".,?؟!'\"")
@@ -272,7 +263,9 @@ def is_named_employee_ask(text: str | None) -> bool:
 
 def _attendance_topic(text: str) -> bool:
     low = (text or "").casefold()
-    if any(needle in low for needle in _ATTENDANCE_EN_NEEDLES):
+    if any(needle in low for needle in (
+        V("t_attendance"), "clock in", "clock-in", "check in", "check-in",
+    )):
         return True
     if "hour" in low and "month" in low:
         return True
@@ -323,8 +316,8 @@ def preferred_self_api(text: str | None) -> str | None:
     t = _norm(text or "")
     if not t or is_named_employee_ask(t):
         return None
-    # Catalog contract: first-person salary / راتبي is get_my_profile
-    # (CBAC may deny). Explicit payslip / قسيمة stays on list_my_payslips.
+    # Catalog contract: first-person  / راتبي is get_my_profile
+    # (CBAC may deny). Explicit  / قسيمة stays on list_my_payslips.
     from ai.engine.agent.tools import (
         first_person_compensation_ask,
         payslip_specific_ask,
@@ -349,14 +342,11 @@ def ess_self_read_topic(text: str | None) -> str | None:
     return None
 
 
-_BARE_PLACE_EN = frozenset({
-    "leave", "leaves", "loan", "loans", "payroll", "payslip", "payslips",
-    "attendance", "home",
-})
+_BARE_PLACE_EN = T("turn/ess_read.py::_BARE_PLACE_EN")
 
 
 def is_bare_place_noun(text: str | None) -> bool:
-    """True for terse destination nouns («leave», «قروض») — still navigate."""
+    V("t_true_for_terse_destination_nouns_leave")
     stripped = _norm(text or "").strip("?؟!").casefold()
     if stripped in {word.casefold() for word in _BARE_PLACE_EN}:
         return True
@@ -370,7 +360,7 @@ def should_skip_module_nav(text: str | None) -> bool:
         return False
     if preferred_self_api(t) is not None:
         return True
-    # Single-domain topic read even when preferred is None (loan FAQ).
+    # Single-domain topic read even when preferred is None ( FAQ).
     domains = matching_self_domains(t)
     return len(domains) == 1 and not is_named_employee_ask(t)
 
@@ -399,16 +389,7 @@ def bound_ess_self_api(
     history: list | None = None,
     prior_api: str | None = None,
 ) -> str | None:
-    """API for a Chat-bound ESS self-read, or None (fall through).
-
-    Rules (domain-agnostic):
-    - Named-employee / third-person → None.
-    - A day-count or a start-date question → None (not a balance GET).
-    - Exactly one domain in the utterance → that domain's preferred API.
-    - Multiple domains in the utterance → None (not a single bound GET).
-    - Aspect / comprehensive follow-up with exactly one domain in recent
-      history → that domain's balance API (or history if no balance twin).
-    """
+    V("t_api_for_a_chat_bound_ess")
     t = _norm(text or "")
     if not t or is_named_employee_ask(t):
         return None
@@ -432,12 +413,10 @@ def bound_ess_self_api(
         return domains[0].preferred_api(t)
 
     # No domain in this utterance — aspect follow-up against thread focus.
-    if not (_is_aspect_followup(t) or _is_comprehensive_pick(t)):
-        return None
     from ai.engine.cognition.turn.understand import understand_mode
 
     if understand_mode() == "v21":
-        # P9: the previous tool is on ConversationState.intent, not the transcript.
+        # P9 + P10: the previous tool is on state. Language needles do not choose it.
         api = str(prior_api or "").strip()
         known = {
             name
@@ -445,7 +424,16 @@ def bound_ess_self_api(
             for name in (domain.balance_api, domain.history_api)
             if name
         }
-        return api if api in known else None
+        if api not in known:
+            return None
+        words = [w for w in t.split() if w]
+        if 2 <= len(words) <= 6:
+            return api
+        if _is_aspect_followup(t) or _is_comprehensive_pick(t):
+            return api
+        return None
+    if not (_is_aspect_followup(t) or _is_comprehensive_pick(t)):
+        return None
     prior = domains_in_recent_history(history)
     if len(prior) != 1:
         return None
@@ -476,8 +464,13 @@ def answer_bound_ess_tools(
     *,
     api_name: str,
     user_message: str,
+    unread_text: bool = True,
 ) -> str:
-    """0-LLM restatement or honesty from completed bound tools."""
+    """0-LLM restatement or honesty from completed bound tools.
+
+    ``unread_text=False`` returns "" for a read no restater covers, so the
+    caller can render the rows instead of claiming the read failed.
+    """
     from ai.engine.cognition.plan.export_bind import render_bound_catalog_read
 
     lang = "ar" if detect_lang(user_message or "") == "ar" else "en"
@@ -510,6 +503,8 @@ def answer_bound_ess_tools(
     for d in ESS_SELF_DOMAINS:
         if api in {d.balance_api, d.history_api}:
             return HONEST_EMPTY[lang][d.honesty_key]
+    if not unread_text:
+        return ""
     return (
         "لم أتمكن من قراءة البيانات من النظام."
         if lang == "ar"
@@ -518,9 +513,9 @@ def answer_bound_ess_tools(
 
 
 def preferred_admin_leave_api(text: str | None) -> str | None:
-    """Named-employee leave remaining → entitlements list."""
+    V("t_named_employee_leave_remaining_entitlements_list")
     t = _norm(text or "")
-    if not domain_topic_asked("leave", t) or not is_named_employee_ask(t):
+    if not domain_topic_asked(V("t_leave"), t) or not is_named_employee_ask(t):
         return None
     return "list_leave_entitlements"
 
@@ -618,7 +613,7 @@ def empty_history_misread(
     if not topic:
         # Still honesty when tools are empty history for a known twin.
         pass
-    want_balance = topic == "leave" and not domain_history_asked("leave", user_message)
+    want_balance = topic == V("t_leave") and not domain_history_asked(V("t_leave"), user_message)
     lang = "ar" if detect_lang(user_message or "") == "ar" else "en"
     for item in completed_tools or []:
         if not isinstance(item, dict) or item.get("error"):
@@ -627,23 +622,23 @@ def empty_history_misread(
         data = _unwrap(item.get("result"))
         if not _payload_empty_list(data):
             continue
-        if api == LEAVE_HISTORY_API and (want_balance or topic == "leave" or topic is None):
+        if api == LEAVE_HISTORY_API and (want_balance or topic == V("t_leave") or topic is None):
             return {
                 "decision": "answer",
                 "text": HONEST_EMPTY[lang]["leave_history"],
                 "gate": "ess_empty_leave_history",
                 "prefer_api": LEAVE_BALANCE_API,
             }
-        if api == LOAN_HISTORY_API and (topic == "loan" or topic is None):
+        if api == LOAN_HISTORY_API and (topic == V("t_loan_2") or topic is None):
             return {
                 "decision": "answer",
                 "text": HONEST_EMPTY[lang]["loan_history"],
                 "gate": "ess_empty_loan_history",
             }
-        if api == PAYSLIP_API and (topic == "payslip" or topic is None):
+        if api == PAYSLIP_API and (topic == V("t_payslip_2") or topic is None):
             return {
                 "decision": "answer",
-                "text": HONEST_EMPTY[lang]["payslip"],
+                "text": HONEST_EMPTY[lang][V("t_payslip_2")],
                 "gate": "ess_empty_payslip",
             }
     return None
@@ -653,11 +648,11 @@ def guidance_block(*, audience: str = "ess") -> str:
     """Prompt fragment — balance API first; never invent from empty history."""
     return (
         "ESS SELF-READ CONTRACT (mandatory):\n"
-        f"- Leave balance / «عن الإجازات» / رصيد → `{LEAVE_BALANCE_API}` "
+        f"- {V("t_leave_2")} balance / «عن الإجازات» / رصيد → `{LEAVE_BALANCE_API}` "
         f"(entitled/used/pending/remaining by type). "
-        f"`{LEAVE_HISTORY_API}` is leave REQUESTS only — empty requests ≠ zero balance.\n"
-        f"- Loan list / قروضي → `{LOAN_HISTORY_API}`; never invent installments.\n"
-        f"- Payslip / net pay / قسيمة → `{PAYSLIP_API}`; empty → say empty, never invent.\n"
+        f"`{LEAVE_HISTORY_API}` is {V("t_leave")} REQUESTS only — empty requests ≠ zero balance.\n"
+        f"- {V("t_loan")} list / قروضي → `{LOAN_HISTORY_API}`; never invent installments.\n"
+        f"- {V("t_payslip")} / net pay / قسيمة → `{PAYSLIP_API}`; empty → say empty, never invent.\n"
         "- Never invent remaining/used/pending = 0 from an empty history list.\n"
-        "- Do not offer to open Leave/Loans UI unless the user asked to navigate."
+        + V("t_do_not_offer_to_open_leave")
     )

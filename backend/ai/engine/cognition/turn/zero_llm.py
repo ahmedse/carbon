@@ -6,6 +6,9 @@ Write handoff stays in ``handoff_agent.py``. Plan status stays in
 short-circuits that must not spend intent+draft.
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+from ai.engine.pack_vocab import V
+
 
 import calendar
 import json
@@ -40,8 +43,8 @@ from ai.engine.cognition.turn.zero_llm_i18n import (
 )
 
 # EN-only patterns — Arabic literals live in ``zero_llm_i18n`` (ADR-0049 L7).
-_THANKS_STARTS = ("thanks", "thank you", "thx", "ty")
-_THANKS_WRITE_WORDS = ("submit", "apply", "request", "approve", "send")
+_THANKS_STARTS = T("turn/zero_llm.py::_THANKS_STARTS")
+_THANKS_WRITE_WORDS = T("turn/zero_llm.py::_THANKS_WRITE_WORDS")
 _CLOCK_RE = re.compile(
     r"("
     r"\b(?:what(?:'s| is)|tell\s+me)\b.{0,24}"
@@ -51,13 +54,9 @@ _CLOCK_RE = re.compile(
     r")",
     re.IGNORECASE | re.DOTALL,
 )
-_SHOW_OPEN_WORDS = ("show", "open", "where")
-_SHOW_OPEN_PHRASES = ("go to",)
-_MONTHS = {
-    "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
-    "july": 7, "august": 8, "september": 9, "october": 10, "november": 11,
-    "december": 12,
-}
+_SHOW_OPEN_WORDS = T("turn/zero_llm.py::_SHOW_OPEN_WORDS")
+_SHOW_OPEN_PHRASES = T("turn/zero_llm.py::_SHOW_OPEN_PHRASES")
+_MONTHS = T("turn/zero_llm.py::_MONTHS")
 _DATE_IN_TEXT_RE = re.compile(
     r"\b(" + "|".join(_MONTHS) + r")\s+(\d{1,2})(?:st|nd|rd|th)?"
     r"(?:,\s*(\d{4}))?\b",
@@ -67,46 +66,20 @@ _DEIXIS_RE = re.compile(
     r"\bis that\s+(before|after|earlier than|later than)\b",
     re.IGNORECASE,
 )
-_PAYROLL_SCHEDULE_PHRASES = (
-    "when will payroll be processed",
-    "when will next month's payroll be processed",
-    "when will next months payroll be processed",
-    "when is payroll run",
-    "when is the payroll run",
-    "when does payroll run",
-    "when does the payroll run",
-    "when does payroll get processed",
-    "when is payroll get processed",
-)
-_PAYSLIP_DOWNLOAD_PHRASES = (
-    "can i download my payslip", "can i download my payslips",
-    "can i download payslip", "can i download payslips",
-    "download my payslip", "download my payslips", "download payslip",
-    "download payslips",
-)
-_PAYROLL_FOLLOWUP_WORDS = ("deduction", "deductions", "gosi")
-_PAYROLL_FOLLOWUP_PHRASES = (
-    "take-home", "take home", "take_home", "net pay", "loan amount",
-    "total deductions", "after gosi",
-)
-_COWORKER_FOLLOWUP_WORDS = (
-    "her", "his", "she", "he", "their", "position", "department", "role",
-    "title", "manager", "report", "reports",
-)
-_COWORKER_FOLLOWUP_PHRASES = ("is she a manager",)
+_PAYROLL_SCHEDULE_PHRASES = T("turn/zero_llm.py::_PAYROLL_SCHEDULE_PHRASES")
+_PAYSLIP_DOWNLOAD_PHRASES = T("turn/zero_llm.py::_PAYSLIP_DOWNLOAD_PHRASES")
+_PAYROLL_FOLLOWUP_WORDS = T("turn/zero_llm.py::_PAYROLL_FOLLOWUP_WORDS")
+_PAYROLL_FOLLOWUP_PHRASES = T("turn/zero_llm.py::_PAYROLL_FOLLOWUP_PHRASES")
+_COWORKER_FOLLOWUP_WORDS = T("turn/zero_llm.py::_COWORKER_FOLLOWUP_WORDS")
+_COWORKER_FOLLOWUP_PHRASES = T("turn/zero_llm.py::_COWORKER_FOLLOWUP_PHRASES")
 _EASTERN_DIGITS = str.maketrans(
     "\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669",
     "0123456789",
 )
-_PROFILE_ASK_PHRASES = (
-    "employee number", "employee no", "what number",
-)
-_PROFILE_ASK_WORDS = ("department", "manager")
+_PROFILE_ASK_PHRASES = T("turn/zero_llm.py::_PROFILE_ASK_PHRASES")
+_PROFILE_ASK_WORDS = T("turn/zero_llm.py::_PROFILE_ASK_WORDS")
 _OTHER_NAME_RE = re.compile(r"\b([A-Z][a-z]{2,})\b")
-_OTHER_NAME_STOP = frozenset({
-    "what", "how", "who", "which", "her", "his", "she", "the", "now",
-    "tell", "about", "back", "department", "position", "role", "title",
-})
+_OTHER_NAME_STOP = T("turn/zero_llm.py::_OTHER_NAME_STOP")
 
 
 def last_directory_deny(last_results: list[dict] | None) -> dict | None:
@@ -171,10 +144,10 @@ def render_directory_deny(deny: dict, text: str = "") -> str:
         "unauthorized": True,
         "message": deny.get("message"),
     })
-    return grounded or "Not authorized to look up other employees (people:view required)."
+    return grounded or V("t_not_authorized_to_look_up_other")
 
 
-_PAYROLL_POLICY_WORDS = ("appeal", "objection", "object", "certificate")
+_PAYROLL_POLICY_WORDS = T("turn/zero_llm.py::_PAYROLL_POLICY_WORDS")
 _USER_AMOUNT_RE = re.compile(
     r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+|\d+",
 )
@@ -244,7 +217,7 @@ def is_day_span_ask(text: str) -> bool:
 
 
 def is_when_start_ask(text: str) -> bool:
-    """'When does my leave start' is a date, not a balance GET."""
+    V("t_when_does_my_leave_start_is")
     raw = text or ""
     if any_needle(raw, WHEN_START_AR):
         return True
@@ -259,13 +232,13 @@ def is_calendar_not_balance(text: str) -> bool:
 
 
 def is_clock_ask(text: str) -> bool:
-    """True for today's date / current month — not leave-start or payroll when."""
+    V("t_true_for_today_s_date_current")
     raw = (text or "").strip()
     return bool(raw and (_CLOCK_RE.search(raw) or any_needle(raw, CLOCK_AR)))
 
 
 def is_payroll_schedule_ask(text: str) -> bool:
-    """When is payroll processed — not leave start, not net pay."""
+    V("t_when_is_payroll_processed_not_leave")
     raw = (text or "").strip()
     return bool(
         raw and (
@@ -275,11 +248,7 @@ def is_payroll_schedule_ask(text: str) -> bool:
     )
 
 
-_EMPTY_PAYSLIP_REPLY_PHRASES = (
-    "no payslips", "no committed payslips", "found no payslips",
-    "no payslips are on file", "no payslips were on file",
-    "no payslips are found", "no payslips were found",
-)
+_EMPTY_PAYSLIP_REPLY_PHRASES = T("turn/zero_llm.py::_EMPTY_PAYSLIP_REPLY_PHRASES")
 
 
 def _empty_payslip_digest(text: str) -> bool:
@@ -291,7 +260,7 @@ def _empty_payslip_digest(text: str) -> bool:
         or "results=[]" in blob
         or 'results":[]' in blob
         or "results = []" in blob
-        or "no payslips" in blob
+        or V("t_no_payslips") in blob
         or "0 rows" in blob
         or "0 row" in blob
     )
@@ -347,7 +316,7 @@ def last_payslip_was_empty(
     last_results: list[dict] | None,
     history: list[dict] | None = None,
 ) -> bool:
-    """True when a prior turn already established empty ESS payslips."""
+    V("t_true_when_a_prior_turn_already")
     for row in reversed(last_results or []):
         if not isinstance(row, dict):
             continue
@@ -359,7 +328,7 @@ def last_payslip_was_empty(
             return True
         if re.search(r"count=[1-9]", digest) or payslip_lines_from_state([row]):
             return False
-        # A payslip digest that is not clearly empty is not evidence of rows
+        # A  digest that is not clearly empty is not evidence of rows
         # either — keep scanning older rows and history. Do not return False.
     for msg in reversed(history or []):
         if not isinstance(msg, dict):
@@ -376,7 +345,7 @@ def last_payslip_was_empty(
 
 
 def is_empty_payslip_tool_result(completed_tools: list | None) -> bool:
-    """True when this turn's payslip tool returned no committed rows."""
+    V("t_true_when_this_turn_s_payslip")
     for item in completed_tools or []:
         if not isinstance(item, dict):
             continue
@@ -386,7 +355,7 @@ def is_empty_payslip_tool_result(completed_tools: list | None) -> bool:
         )
         blob = f"{args} {api} {item.get('tool_name') or ''} {item.get('result') or ''}"
         looks_payslip = (
-            "payslip" in blob.lower()
+            V("t_payslip_2") in blob.lower()
             or "قسيمة" in blob
             or "list_my_payslips" in api
         )
@@ -406,9 +375,9 @@ def is_empty_payslip_tool_result(completed_tools: list | None) -> bool:
     return False
 
 
-_PAYSLIP_LINE_CODES = ("gross", "gosi", "loan_installment", "net")
+_PAYSLIP_LINE_CODES = T("turn/zero_llm.py::_PAYSLIP_LINE_CODES")
 _DIGEST_AMOUNT_RE = re.compile(
-    r"\b(gross|gosi|loan_installment|net)\s*=\s*([0-9]+(?:\.[0-9]+)?)",
+    V("t_b_gross_gosi_loan_installment_net"),
     re.I,
 )
 
@@ -430,7 +399,7 @@ def _line_type_code(value: Any) -> str:
 
 
 def payslip_lines_from_payload(data: Any) -> dict[str, str]:
-    """Map line_type → amount from a host payslip payload."""
+    V("t_map_line_type_amount_from_a")
     records: list[dict] = []
     if isinstance(data, list):
         records = [row for row in data if isinstance(row, dict)]
@@ -450,7 +419,7 @@ def payslip_lines_from_payload(data: Any) -> dict[str, str]:
 
 
 def payslip_lines_from_tools(completed_tools: list | None) -> dict[str, str]:
-    """Read committed payslip amounts from this turn's tool results."""
+    V("t_read_committed_payslip_amounts_from_this")
     out: dict[str, str] = {}
     for item in completed_tools or []:
         if not isinstance(item, dict):
@@ -459,7 +428,7 @@ def payslip_lines_from_tools(completed_tools: list | None) -> dict[str, str]:
         api = str(args.get("api_name") or args.get("name") or args.get("api") or "")
         blob = f"{args} {api} {item.get('tool_name') or ''} {item.get('result') or ''}"
         if (
-            "payslip" not in blob.lower()
+            V("t_payslip_2") not in blob.lower()
             and "قسيمة" not in blob
             and "list_my_payslips" not in api
         ):
@@ -483,7 +452,7 @@ def payslip_lines_from_state(
         blob = f"{row.get('api') or ''} {row.get('digest') or ''}"
         looks_payslip = (
             "list_my_payslips" in blob
-            or "payslip" in blob.lower()
+            or V("t_payslip_2") in blob.lower()
             or bool(_DIGEST_AMOUNT_RE.search(str(row.get("digest") or "")))
         )
         if not looks_payslip:
@@ -496,23 +465,23 @@ def payslip_lines_from_state(
 
 
 def render_payslip_grounded(text: str, lines: dict[str, str]) -> str | None:
-    """Answer a payroll follow-up from committed line amounts. Invents none."""
+    V("t_answer_a_payroll_follow_up_from")
     if not lines:
         return None
     raw = (text or "").strip()
     if _is_payroll_policy(raw):
         return None
     net = lines.get("net")
-    gosi = lines.get("gosi")
-    loan = lines.get("loan_installment")
+    deduction_value = lines.get(V("t_gosi"))
+    advance_value = lines.get("loan_installment")
     gross = lines.get("gross")
     after_gosi = None
     total = None
     try:
-        if gross and gosi:
-            after_gosi = _fmt_amount(Decimal(gross) - Decimal(gosi))
-        if gosi and loan:
-            total = _fmt_amount(Decimal(gosi) + Decimal(loan))
+        if gross and deduction_value:
+            after_gosi = _fmt_amount(Decimal(gross) - Decimal(deduction_value))
+        if deduction_value and advance_value:
+            total = _fmt_amount(Decimal(deduction_value) + Decimal(advance_value))
     except (InvalidOperation, TypeError, ValueError):
         after_gosi = after_gosi
         total = total
@@ -520,26 +489,26 @@ def render_payslip_grounded(text: str, lines: dict[str, str]) -> str | None:
     lang = "ar" if detect_lang(raw) == "ar" else "en"
     if re.search(r"deductions? were|what deductions|applied|خصم|استقطاع", lower):
         parts = []
-        if gosi:
-            parts.append(f"GOSI {gosi}")
-        if loan:
+        if deduction_value:
+            parts.append(f"{V("t_gosi_2")} {deduction_value}")
+        if advance_value:
             parts.append(
-                f"قسط القرض {loan}" if lang == "ar" else f"loan installment {loan}"
+                f"قسط القرض {advance_value}" if lang == "ar" else f"{V("t_loan_2")} installment {advance_value}"
             )
         if parts:
             if lang == "ar":
                 return "الاستقطاعات المعتمدة: " + " و".join(parts) + "."
             return "Committed deductions: " + " and ".join(parts) + "."
         return None
-    if re.search(r"after gosi|take[\s_-]*home|بعد.{0,12}gosi|صافي.{0,8}بعد", lower):
+    if re.search(V("t_after_gosi_take_s_home_بعد"), lower):
         if after_gosi:
             if lang == "ar":
                 return (
-                    f"بعد خصم GOSI البالغ {gosi}، المتبقي قبل قسط القرض هو {after_gosi}."
+                    f"بعد خصم {V("t_gosi_2")} البالغ {deduction_value}، المتبقي قبل قسط القرض هو {after_gosi}."
                 )
             return (
-                f"After the GOSI deduction of {gosi}, take-home before the "
-                f"loan installment is {after_gosi}."
+                f"After the {V("t_gosi_2")} deduction of {deduction_value}, take-home before the "
+                f"{V("t_loan_2")} installment is {after_gosi}."
             )
         if net:
             return (
@@ -554,11 +523,11 @@ def render_payslip_grounded(text: str, lines: dict[str, str]) -> str | None:
                 return f"الراتب الإجمالي المعتمد هو {gross}. الصافي {net}."
             return f"صافي الراتب المعتمد هو {net}."
         return f"Last month's committed net pay is {net}."
-    if re.search(r"loan amount|قسط.{0,8}قرض", lower) and loan:
+    if re.search(V("t_loan_amount_قسط_0_8_قرض"), lower) and advance_value:
         return (
-            f"قسط القرض المعتمد هو {loan}."
+            f"قسط القرض المعتمد هو {advance_value}."
             if lang == "ar"
-            else f"The committed loan installment is {loan}."
+            else f"The committed {V("t_loan_2")} installment is {advance_value}."
         )
     if re.search(r"total deductions|إجمالي.{0,8}خصم|اجمالي.{0,8}خصم", lower) and total:
         stated = [
@@ -566,21 +535,21 @@ def render_payslip_grounded(text: str, lines: dict[str, str]) -> str | None:
             for m in _USER_AMOUNT_RE.finditer(_western_digits(raw))
         ]
         base = (
-            f"إجمالي الاستقطاعات المعتمدة {total} (GOSI {gosi} + قرض {loan})."
+            f"إجمالي الاستقطاعات المعتمدة {total} ({V("t_gosi_2")} {deduction_value} + {V("t_قرض")} {advance_value})."
             if lang == "ar"
-            else f"Committed total deductions are {total} (GOSI {gosi} + loan {loan})."
+            else f"Committed total deductions are {total} ({V("t_gosi_2")} {deduction_value} + {V("t_loan_2")} {advance_value})."
         )
         if stated and _fmt_amount(stated[-1].replace(",", "")) == total:
             return f"Yes. {base}" if lang != "ar" else f"نعم. {base}"
         if stated:
             return f"{base} You mentioned {stated[-1]} — that does not match."
         return base
-    if re.search(r"gosi", lower) and gosi:
+    if re.search(V("t_gosi"), lower) and deduction_value:
         return (
-            f"بند GOSI المعتمد هو {gosi}. لن أخترع نسبة نظامية أبعد من هذا البند."
+            f"بند {V("t_gosi_2")} المعتمد هو {deduction_value}. لن أخترع نسبة نظامية أبعد من هذا البند."
             if lang == "ar"
             else (
-                f"The committed GOSI line is {gosi}. "
+                f"The committed {V("t_gosi_2")} line is {deduction_value}. "
                 "I will not invent a statutory rate beyond that line."
             )
         )
@@ -681,7 +650,7 @@ def render_resolve_grounded(text: str, payload: Any) -> str | None:
     if data.get("unauthorized"):
         return str(
             data.get("message")
-            or "Not authorized to look up other employees."
+            or V("t_not_authorized_to_look_up_other_2")
         ).strip()
     if data.get("action") == "disambiguate" or (
         not data.get("found") and data.get("candidates")
@@ -716,7 +685,7 @@ def render_resolve_grounded(text: str, payload: Any) -> str | None:
         if name:
             bits.append(str(name))
         if emp:
-            bits.append(f"employee {emp}")
+            bits.append(f"{V("t_employee_4")} {emp}")
         if title:
             bits.append(str(title))
         if dept:
@@ -724,7 +693,7 @@ def render_resolve_grounded(text: str, payload: Any) -> str | None:
         if bits:
             return ", ".join(bits) + "."
     if data.get("found") is False:
-        return str(data.get("message") or "No matching employee for that query.").strip()
+        return str(data.get("message") or V("t_no_matching_employee_for_that_query")).strip()
     return None
 
 
@@ -739,8 +708,8 @@ def render_profile_grounded(text: str, profile: dict[str, str]) -> str | None:
     emp = profile.get("employee_no")
     dept = profile.get("department")
     manager = profile.get("manager")
-    if re.search(r"employee number|employee no|what number|رقم الموظف", lower) and emp:
-        return f"Your employee number is {emp}."
+    if re.search(V("t_employee_number_employee_no_what_number"), lower) and emp:
+        return f"Your {V("t_employee_4")} number is {emp}."
     if re.search(r"department|قسم", lower) and dept:
         if re.search(r"did i mention|i mention", lower):
             return (
@@ -754,7 +723,7 @@ def render_profile_grounded(text: str, profile: dict[str, str]) -> str | None:
 
 
 def render_empty_payslip_answer(text: str) -> str:
-    """Honest empty-payslip copy. Echoes figures the user typed; invents none."""
+    V("t_honest_empty_payslip_copy_echoes_figures")
     lang = "ar" if detect_lang(text) == "ar" else "en"
     stated = [
         m.group(0)
@@ -762,15 +731,15 @@ def render_empty_payslip_answer(text: str) -> str:
     ]
     if lang == "ar":
         base = (
-            "لم أجد قسائم معتمدة، لذلك لا يوجد صافي راتب أو استقطاعات "
-            "أو قسط قرض من قسيمة."
+            V("t_لم_أجد_قسائم_معتمدة_لذلك_لا")
+            + V("t_أو_قسط_قرض_من_قسيمة")
         )
         if stated:
             return f"{base} ذكرت {stated[-1]} — لا أستطيع تأكيد هذا الرقم."
         return base
     base = (
-        "No committed payslips were found, so I do not have net pay, "
-        "deductions, GOSI, or a loan installment from a payslip."
+        V("t_no_committed_payslips_were_found_so")
+        + V("t_deductions_gosi_or_a_loan_installment")
     )
     if stated:
         return f"{base} You mentioned {stated[-1]} — I cannot confirm that figure."
@@ -946,7 +915,7 @@ def try_zero_llm_answer(
     raw = (text or "").strip()
     if not raw:
         return None
-    # Broad "full salary report" → clarify aspect/audience before any tools.
+    # Broad "full  report" → clarify aspect/audience before any tools.
     report_hit = try_report_clarify(
         raw,
         history=history,

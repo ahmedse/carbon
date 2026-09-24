@@ -10,6 +10,9 @@ wording lives only in TaskBlock — never as a stage-local identity prompt
 (``AGENT_PLAN_AUTONOMY`` / ``AGENT_DISCOVERY_AUTONOMY``).
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+
+from ai.engine.pack_vocab import V
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -26,45 +29,17 @@ TASK_BLOCK_MAX_CHARS = 8000
 HISTORY_MESSAGE_MAX = 8
 HISTORY_MSG_CLIP = 400
 
-VALID_AUDIENCES = frozenset({"ess", "hr", "admin"})
-DEFAULT_AUDIENCE = ("hr",)
-MY_AUDIENCE = ("ess", "hr")
+VALID_AUDIENCES = T("context_pack.py::VALID_AUDIENCES")
+DEFAULT_AUDIENCE = T("context_pack.py::DEFAULT_AUDIENCE")
+MY_AUDIENCE = T("context_pack.py::MY_AUDIENCE")
 
-VALID_SURFACES = frozenset({"chat", "agent_plan", "agent_discovery"})
-VALID_STAGES = frozenset({
-    "draft",
-    "understand",
-    "critic",
-    "intent",
-    "synthesis",
-    "verify",
-    "verify_correct",
-    "escalate",
-    "weather_normalize",
-    "recovery",
-    "fanout",
-    "fanout_synthesis",
-    # Agent plan / discovery stages (PV2-2B)
-    "decompose",
-    "observe",
-    "plan_synthesis",
-    "discovery_clarify",
-})
+VALID_SURFACES = T("context_pack.py::VALID_SURFACES")
+VALID_STAGES = T("context_pack.py::VALID_STAGES")
 
 # ADR-0046 Chat autonomy (one-liner). Agent surfaces get RULE_21 wording.
-CHAT_AUTONOMY = (
-    "Autonomy (Chat · ADR-0046): advise, draft, explain, and hand off — "
-    "never claim to have submitted or staged a host write. For leave / loan / "
-    "attendance / payroll mutations, direct the user to Agent or My."
-)
-AGENT_PLAN_AUTONOMY = (
-    "Autonomy (Agent plan · RULE_21): stage host effects only with explicit "
-    "user consent; never claim commit before receipt."
-)
-AGENT_DISCOVERY_AUTONOMY = (
-    "Autonomy (Agent discovery · RULE_21): collect missing slots and propose "
-    "a plan; never execute host writes without staged consent."
-)
+CHAT_AUTONOMY = T("context_pack.py::CHAT_AUTONOMY")
+AGENT_PLAN_AUTONOMY = T("context_pack.py::AGENT_PLAN_AUTONOMY")
+AGENT_DISCOVERY_AUTONOMY = T("context_pack.py::AGENT_DISCOVERY_AUTONOMY")
 
 # ── Stage TaskBlock templates (task wording ONLY — no persona / date / user) ─
 
@@ -117,39 +92,9 @@ You MAY suggest 2-3 concrete normalised candidates as a short bullet list, but A
 the user to confirm which one they meant. Do NOT fabricate data. Do NOT answer as if you
 found results. Do NOT mention tools, APIs, or fetching."""
 
-TASK_RECOVERY = """TASK — Tool-failure recovery:
-Explain the failure in plain business language using ONLY the tool failure payload
-(detail / error_kind / hints).
-NEVER claim the action succeeded or that anything was submitted/created/changed.
-NEVER invent numbers, balances, or dates not in the payload.
-NEVER mention tools, APIs, HTTP codes, stack traces, or 'invented'.
-Do NOT retry or pretend you will auto-retry a write — ask the user what to change
-(another day, leave type, etc.) if that is the fix.
-If error_kind is invalid_leave_type, map common synonyms using hints
-(عارضة/casual → emergency) and ask them to confirm the corrected type.
-If overlap or insufficient_balance, say so clearly and ask for another day or type.
-Match the user's language when possible (Arabic if they wrote Arabic).
-Keep it short: 2–4 sentences max."""
+TASK_RECOVERY = V("t_task_tool_failure_recovery_explain_the")
 
-TASK_SYNTHESIS = """TASK — Tool-result synthesis:
-Write the final reply to the user's question using ONLY the tool results in the user message.
-Delivery intent: {delivery_guide}
-SCOPING (critical): answer EXACTLY what the user asked. If the user's question names a
-specific entity — a module, branch, scope, table, product, or other named item — scope the
-entire answer to THAT entity only. Only when the user asks for an overview, a comparison,
-or 'all' should you show the full breakdown.
-ORG-NAME GUARD: the platform's own organisation / campus / company name is NOT a
-filterable sub-entity — when the user names the whole organisation, treat it as 'all data'.
-AUTHZ GUARD: when a tool result includes `unauthorized: true`, a `capability` denial, or a
-message that access/permission is required, state that clearly. NEVER paraphrase an
-authorization failure as 'no data', 'not found', or 'missing salary record'.
-NON-EMPTY GUARD: if the tool results contain ANY calculations or rows, you MUST report those
-values — NEVER say 'no data is available' when the tool returned data.
-FORMAT: open with a **bold one-line takeaway**, then write 2-3 sentences of explanatory prose.
-Do NOT include any tables or structured data — data tables are appended automatically.
-Close with 2-4 bold-lead 'Key takeaways' bullet points.
-Do not mention tools, API calls, or fetching.
-Do NOT include charts or diagrams unless the user explicitly asked.{hints_note}"""
+TASK_SYNTHESIS = V("t_task_tool_result_synthesis_write_the")
 
 TASK_DRAFT = """TASK — Draft the next assistant reply for this Chat turn.
 Follow the identity, state, knowledge, and memory blocks above.
@@ -173,14 +118,7 @@ answer naturally."""
 
 # ── Agent plan / discovery TaskBlocks (PV2-2B) ─────────────────────────────
 
-TASK_DECOMPOSE = """TASK — Plan decompose:
-Decompose the user task into phases and steps. Respond with JSON only — no markdown,
-no code fences, no prose outside the JSON object.
-Available tools, host API catalog names, and registered skills appear in the user
-message — use only those names.
-Each step's intent must describe the action with bound values (amounts, dates,
-leave types, api_name) — never invent free-form identity text for the user or org.
-Mutations stage with consent (RULE_21); never claim a host write already committed."""
+TASK_DECOMPOSE = V("t_task_plan_decompose_decompose_the_user")
 
 TASK_OBSERVE = """TASK — Observe tool result:
 Decide whether the tool result (plus any prior step results) fully answers the
@@ -203,27 +141,7 @@ Do not claim a host write succeeded unless a step result confirms receipt.
 Do not invent identity, amounts, or dates absent from the step results.
 Keep the reply concise and in the user's language when known."""
 
-TASK_DISCOVERY_CLARIFY = """TASK — Discovery clarify:
-Before proposing a plan, clarify the user's outcome with short focused questions.
-Ask ONE concise question at a time. When you have enough information, complete.
-Scope rules (critical):
-- Only clarify outcomes Agent can plan: reports, board packs, data-quality rules,
-  data workflows, exports.
-- Never map personal leave / vacation / إجازة to DQ rules, approvals, or
-  data-source onboarding. If the user wants personal leave, respond with
-  {"action":"complete"} only if they clearly asked for a leave-compliance
-  REPORT; otherwise keep asking for the report outcome — the host may already
-  have redirected them.
-- Do not ask 'what outcome on the Carbon Data Trust Platform' for trivia, names,
-  or personal HR actions.
-- If the user wants a data-quality rule (validate/check/flag a field, not-null,
-  unique, allowed values, range, regex, format like an email or phone number),
-  you MUST find out exactly WHICH field and table the rule applies to before
-  completing — ask for the specific field/column name (or DataField id) and
-  table. Never complete discovery for a DQ rule while the target field is still
-  unknown.
-Never invent free-form identity text; slot labels come from the brief and
-bound values only."""
+TASK_DISCOVERY_CLARIFY = V("t_task_discovery_clarify_before_proposing_a")
 
 TASK_AGENT_PLAN_DRAFT = """TASK — Agent plan step draft:
 Execute the current plan step using the tools and bound args in the user message.
@@ -413,18 +331,18 @@ def _user_identity_lines(user_info: dict[str, Any] | None) -> list[str]:
     if aud_txt:
         bits.append(f"audience={aud_txt}")
     lines.append(" · ".join(bits))
-    employee = user_info.get("employee") or None
-    if isinstance(employee, dict) and employee:
+    person_row = user_info.get(V("t_employee_4")) or None
+    if isinstance(person_row, dict) and person_row:
         emp_bits = [
-            str(employee[k])
+            str(person_row[k])
             for k in ("full_name", "job_title", "org_unit")
-            if employee.get(k)
+            if person_row.get(k)
         ]
-        emp_no = employee.get("employee_no")
+        emp_no = person_row.get("employee_no")
         if emp_no:
             emp_bits.insert(0 if not emp_bits else 1, f"employee_no={emp_no}")
         if emp_bits:
-            lines.append("Employee: " + ", ".join(emp_bits))
+            lines.append(V("t_employee_3") + ", ".join(emp_bits))
     return lines
 
 

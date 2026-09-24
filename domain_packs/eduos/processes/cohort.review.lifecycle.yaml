@@ -1,0 +1,20 @@
+# EduOS cohort review — governed process owned by the education pack.
+# Discovered by the core through domain_packs/*/processes, with no brand id
+# and no HR vocabulary in the engine.
+id: cohort.review.lifecycle
+version: "1.0"
+owner: ai
+status: active
+
+objective:
+  predicate: cohort.review.recorded
+
+steps:
+  - id: submit
+    kind: command
+    autonomy: act_confirm
+    consent: true
+
+  - id: review
+    kind: human_task
+    autonomy: human_only

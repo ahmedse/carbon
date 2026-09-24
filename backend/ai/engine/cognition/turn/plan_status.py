@@ -4,6 +4,9 @@ When the user asks "status of my request?" and state has an active plan
 (or Chat-handoff slots), answer deterministically — 0 LLM calls.
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+from ai.engine.pack_vocab import V
+
 
 import re
 from typing import Any
@@ -16,8 +19,8 @@ from ai.engine.cognition.turn.plan_status_i18n import (
     is_status_ask_ar,
 )
 
-_STATUS_TAILS = ("status", "request", "application", "plan", "loan", "leave")
-_HAPPENED_TAILS = ("request", "loan", "leave", "plan", "application")
+_STATUS_TAILS = T("turn/plan_status.py::_STATUS_TAILS")
+_HAPPENED_TAILS = T("turn/plan_status.py::_HAPPENED_TAILS")
 
 
 def _is_status_ask_en(text: str) -> bool:
@@ -59,17 +62,17 @@ def _lang(text: str, state: Any = None) -> str:
 
 
 def _title_from_slots(slots: dict) -> str:
-    loan = slots.get("loan_type")
-    leave = slots.get("leave_type")
+    advance_value = slots.get("loan_type")
+    kind_value = slots.get("leave_type")
     amount = slots.get("amount") or slots.get("principal")
-    if loan and amount is not None:
-        return f"{loan} loan"
-    if loan:
-        return f"{loan} loan"
-    if leave:
-        return f"{leave} leave"
+    if advance_value and amount is not None:
+        return f"{advance_value} {V("t_loan_2")}"
+    if advance_value:
+        return f"{advance_value} {V("t_loan_2")}"
+    if kind_value:
+        return f"{kind_value} {V("t_leave")}"
     if amount is not None:
-        return "loan request"
+        return V("t_loan_request_2")
     return "request"
 
 

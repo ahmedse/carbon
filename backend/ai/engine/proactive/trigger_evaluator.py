@@ -272,7 +272,7 @@ async def _evaluate_trend(
         measured_value=round(pct_change, 2),
         threshold_value=deviation_pct,
         detail=f"{column} trend: baseline_avg={baseline_avg:.2f}, recent_avg={recent_avg:.2f}, "
-               f"change={pct_change:+.2f}% (threshold ±{deviation_pct}%) → {'FIRED' if fired else 'ok'}",
+               + f"change={pct_change:+.2f}% (threshold ±{deviation_pct}%) → {'FIRED' if fired else 'ok'}",
         data_snapshot={
             "table": table, "column": column,
             "baseline_avg": baseline_avg, "recent_avg": recent_avg,
@@ -357,7 +357,7 @@ async def _evaluate_correlation(
         measured_value=matching,
         threshold_value=min_signals,
         detail=f"Correlation: {matching}/{len(signals)} signals matched "
-               f"(need {min_signals}). {'; '.join(signal_details)}",
+               + f"(need {min_signals}). {'; '.join(signal_details)}",
         data_snapshot={"matching": matching, "signals": signal_details},
     )
 

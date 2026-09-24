@@ -4,11 +4,14 @@ Keeps legacy soft-gate behaviour; moves weight out of ``runner.py`` so the
 harness ``runner_lines`` meter can fall without a behaviour change.
 """
 from __future__ import annotations
+from ai.engine.pack_vocab import V
+
 
 import logging
 import time
 
 from ai.engine.cognition.turn.runner_helpers import (
+    _audience_from_user_info,
     _audience_persona,
     _finalize_meter,
     _scoped_api_catalog,
@@ -119,12 +122,12 @@ class SoftSurfacesMixin:
                     "api_name": "get_my_profile",
                     "explanation": (
                         "First-person identity is the logged-in "
-                        "employee record"
+                        + V("t_employee_record")
                     ),
                 }
             elif _coworker_q:
                 _step_tool, _step_args = "resolve_entity", {
-                    "entity_type": "employee",
+                    "entity_type": V("t_employee_4"),
                     "query": _coworker_q,
                     "explanation": "Named coworker lookup",
                 }
@@ -180,7 +183,7 @@ class SoftSurfacesMixin:
             )
 
             # N7 / SIM-20260919-N7: mirror single-pass S1.5 INTENT injection so
-            # Pulse loop Chat does not stop after resolve_entity on named leave.
+            # Pulse loop Chat does not stop after resolve_entity on named .
             if (
                 intent_resolution is not None
                 and intent_resolution.action == "answer"
@@ -397,14 +400,24 @@ class SoftSurfacesMixin:
 
         from ai.engine.agent.reasoning import AgentResponse
         from ai.engine.agent.guardrails import build_default_pipeline
+        from ai.engine.cognition.turn.capability import capability_surface
+        from ai.engine.cognition.turn.decision import Rejection
         from ai.engine.cognition.turn.execute import ExecuteWitness
-        from ai.engine.cognition.turn.ess_read import build_ess_self_tool_call
-        from ai.engine.cognition.turn.pipeline_v21 import act_on_decision, render_envelope
+        from ai.engine.cognition.turn.pipeline_v21 import (
+            act_on_decision,
+            arbiter_gate,
+            decision_render,
+            failed_reads,
+            lead_command,
+            speak_rows,
+        )
+        from ai.engine.cognition.turn.repair import rejection_feedback
         from ai.engine.cognition.turn.understand import (
             build_understand_system_prompt,
             catalog_context,
             catalog_prompt_lines,
             navigation_prompt_lines,
+            repair_turn,
             understand_mode,
             understand_turn,
         )
@@ -424,9 +437,11 @@ class SoftSurfacesMixin:
             return None
 
         state = getattr(state_ctx, "state", None) if state_ctx is not None else None
-        # Write twins are described (Agent-only) so their not_for can route;
-        # validate_decision downgrades any write call_tool to handoff_agent.
-        scoped_catalog = _scoped_api_catalog(instance_config, user_info)
+        # One surface: the prompt lists it, validation accepts it, the
+        # executor binds it. Write twins are described (Agent-only) so their
+        # not_for can route; validate_decision hands any write to Agent.
+        caps = capability_surface(instance_config, user_info)
+        scoped_catalog = list(caps.entries)
         lines, allowed, write_names = catalog_prompt_lines(
             user_message or "",
             scoped_catalog,
@@ -478,6 +493,7 @@ class SoftSurfacesMixin:
                 allowed_tools=allowed or None,
                 write_tools=write_names or None,
                 state=state,
+                arg_violations=caps.arg_violations,
             )
         except Exception:  # noqa: BLE001 — legacy spine remains
             logger.warning("v21 understand failed", exc_info=True)
@@ -486,6 +502,14 @@ class SoftSurfacesMixin:
         if decision is None:
             _signal(ledger, "v21_understand", False, reason="malformed_decision")
             return None
+
+        async def record(outcome: str, executed_rows: list[dict]) -> None:
+            await self._record_understand(
+                ledger=ledger, decision=decision, outcome=outcome,
+                executed=executed_rows, turn_id=turn_id, instance_id=instance_id,
+                conversation_id=conversation_id, host_user_id=host_user_id,
+                user_message=user_message or "", user_info=user_info, t0=t0,
+            )
 
         try:
             from ai.engine.cognition.turn.arbiter import shadow_understand
@@ -496,10 +520,13 @@ class SoftSurfacesMixin:
 
         if mode == "shadow":
             _signal(ledger, "v21_understand", False, reason="shadow_only")
+            await record("shadow", [])
             return None
 
+        calls = {"n": 0}
+
         async def execute_tool(name: str, args: dict):
-            del args  # host GET identity is the api name; the session is the caller
+            calls["n"] += 1
             witness = ExecuteWitness(
                 executor=self.executor,
                 hook_pipeline=build_default_pipeline(),
@@ -518,9 +545,10 @@ class SoftSurfacesMixin:
                 instance_id=instance_id,
                 knowledge_store=self.knowledge_store,
             )
+            call_id = f"call_v21_{(turn_id or 'turn')[:8]}_{calls['n']}"
             execution = await witness.execute(
                 text="",
-                tool_calls=[build_ess_self_tool_call(name, turn_id)],
+                tool_calls=[caps.host_call(name, args, call_id=call_id)],
                 stream_callback=None,
                 progress_callback=None,
             )
@@ -529,29 +557,59 @@ class SoftSurfacesMixin:
                 return completed[0].get("result")
             return None
 
-        executed: list[dict] = []
-        try:
-            text = await act_on_decision(
-                decision,
+        async def act(current) -> tuple[str | None, list[dict]]:
+            rows: list[dict] = []
+            reply = await act_on_decision(
+                current,
                 execute_tool=execute_tool,
                 user_message=user_message or "",
                 state=state,
-                executed=executed,
+                executed=rows,
                 surface=surface,
             )
+            return reply, rows
+
+        try:
+            text, executed = await act(decision)
+            # Self-heal: the host refused a decided read's arguments. The
+            # model sees the host's own detail and decides once more.
+            refused = failed_reads(executed)
+            if refused and not decision.repaired:
+                host = [
+                    Rejection(i, row["name"], "host_rejected", row["detail"])
+                    for i, row in enumerate(refused)
+                ]
+                kept = [c.name or c.op for c in decision.commands if c.name not in {r.name for r in host}]
+                healed = await repair_turn(
+                    complete=complete,
+                    decision=decision,
+                    feedback=rejection_feedback(host, kept=kept),
+                )
+                if healed is not None and healed.commands:
+                    healed.rejections = [*healed.rejections, *host]
+                    decision = healed
+                    text, executed = await act(decision)
         except Exception:  # noqa: BLE001
             logger.warning("v21 act failed", exc_info=True)
             _signal(ledger, "v21_understand", False, reason="act_error")
+            await record("act_error", [])
             return None
+        text, envelope = speak_rows(
+            decision, executed, text=text, user_message=user_message or "",
+        )
         if not (text or "").strip():
             # Plan and Agent already own a multi-step goal. The canned
             # "switch" sentence is None there so the planner can draft it.
-            _signal(ledger, "v21_understand", False, reason="fallthrough")
+            # A Decision with nothing valid left is not user text either:
+            # the legacy spine answers.
+            reason = "unrepairable" if not decision.commands else "fallthrough"
+            _signal(ledger, "v21_understand", False, reason=reason)
+            await record(reason, executed)
             return None
 
         handoff_actions: list[dict] = []
-        cmd0 = decision.commands[0]
-        if cmd0.op == "handoff_agent" and str(cmd0.process_id or "") == "plan":
+        cmd0 = lead_command(decision)
+        if cmd0 is not None and cmd0.op == "handoff_agent" and str(cmd0.process_id or "") == "plan":
             from ai.engine.agent.chat_surface import build_plan_mode_switch_handoff
 
             switch = build_plan_mode_switch_handoff(
@@ -562,18 +620,18 @@ class SoftSurfacesMixin:
         total_latency = (time.monotonic() - t0) * 1000
         ledger.final_response = text[:500]
         ledger.total_latency_ms = total_latency
-        ledger.turn_decision = decision.commands[0].op if decision.commands else "answer"
+        # The Arbiter records the turn from gates; v21 fires the gate it acted as.
+        gate = arbiter_gate(decision, executed=bool(executed))
+        if gate:
+            _signal(ledger, gate, True, source="v21")
+        from ai.engine.cognition.turn.arbiter import Arbiter
+
+        ledger.turn_decision = Arbiter().decide(ledger.decision_signals).value
         from ai.engine.llm.call_meter import current_meter
 
         _finalize_meter(ledger, current_meter(), ledger.turn_decision)
         if executed:
             ledger.execution = SimpleNamespace(completed_tools=list(executed))
-        envelope = render_envelope(
-            decision,
-            executed,
-            headline=text,
-            user_message=user_message or "",
-        )
         _signal(
             ledger,
             "v21_understand",
@@ -581,8 +639,10 @@ class SoftSurfacesMixin:
             op=ledger.turn_decision,
             ops=[c.op for c in decision.commands],
             validated=True,
-            render=decision.commands[0].render if decision.commands else "text",
+            repaired=decision.repaired,
+            render=decision_render(decision),
         )
+        await record("answered", executed)
         return AgentResponse(
             text=text,
             sources_cited=[],
@@ -598,6 +658,70 @@ class SoftSurfacesMixin:
             envelope=envelope,
             actions=handoff_actions,
         ), ledger
+
+    async def _record_understand(
+        self,
+        *,
+        ledger,
+        decision,
+        outcome: str,
+        executed: list[dict],
+        turn_id: str,
+        instance_id: str,
+        conversation_id: str,
+        host_user_id: str | None,
+        user_message: str,
+        user_info,
+        t0: float,
+    ) -> None:
+        """One ``understand`` ledger row per v21 turn; nominate what needed healing.
+
+        The row carries what the model decided, what validation dropped and
+        why, whether a repair ran, and which reads executed — so every v21
+        answer, fallthrough, and repair is auditable after the fact.
+        """
+        from ai.engine.cognition.turn.pipeline_v21 import failed_reads
+        from ai.engine.cognition.turn.repair import nominate_understand_case
+
+        payload = {
+            "outcome": outcome,
+            "raw_ops": list(decision.raw_ops or decision.ops()),
+            "ops": decision.ops(),
+            "rejections": [r.to_dict() for r in decision.rejections],
+            "repaired": bool(decision.repaired),
+            "executed": [
+                str((row.get("tool_args") or {}).get("api_name") or "")
+                for row in executed if isinstance(row, dict)
+            ],
+            "host_refused": [row["name"] for row in failed_reads(executed)],
+            "language": decision.language,
+        }
+        # Detail only: the Arbiter must not treat a record as a routing gate.
+        _signal(ledger, "v21_record", False, **payload)
+        logger.info(
+            "[understand] outcome=%s raw=%s ops=%s rejected=%s repaired=%s executed=%s",
+            outcome, payload["raw_ops"], payload["ops"],
+            [f"{r['code']}:{r['name']}" for r in payload["rejections"]],
+            payload["repaired"], payload["executed"],
+        )
+        try:
+            await self._write_ledger_row(
+                turn_id, instance_id, conversation_id, host_user_id,
+                "understand", 1, payload, (time.monotonic() - t0) * 1000,
+                verdict="pass" if outcome == "answered" else outcome,
+            )
+        except Exception:  # noqa: BLE001 — observability never breaks a turn
+            logger.debug("understand ledger row skipped", exc_info=True)
+        if decision.rejections:
+            nominate_understand_case(
+                utterance=user_message,
+                audience=list(_audience_from_user_info(user_info) or []),
+                raw_ops=payload["raw_ops"],
+                final_ops=payload["ops"],
+                rejections=decision.rejections,
+                repaired=decision.repaired,
+                conversation_id=conversation_id,
+            )
 
     async def _try_bound_ess_self_read(
         self,
@@ -1107,7 +1231,7 @@ class SoftSurfacesMixin:
             if decisions and isinstance(decisions[-1], dict):
                 last_decision = str(decisions[-1].get("decision") or "")
         # Only restate after a handoff. "Yes, that's correct" while Chat is
-        # still clarifying (leave t2) must stay an answer.
+        # still clarifying ( t2) must stay an answer.
         if prior_enough and is_bound_write_affirmation(user_message, prior):
             if last_decision == "handoff_agent":
                 return build_chat_write_handoff(
@@ -1132,7 +1256,7 @@ class SoftSurfacesMixin:
 
         # A brief with a guard, a branch, or two asks at once is a plan, not a
         # form. The single-write slot-filler must not answer «راجع قروضي … إذا
-        # كان لدي قرض مفتوح توقف، إذا لا قدّم طلب قرض» with "which loan type?".
+        # كان لدي  مفتوح توقف، إذا لا قدّم طلب » with "which  type?".
         # Step aside; the planner drafts the DAG (plan_task) and asks in context.
         if current_is_write and is_composite_brief(user_message):
             logger.info(
@@ -1528,7 +1652,7 @@ class SoftSurfacesMixin:
         settings = get_settings()
 
         # Balanced budget gate: skip orchestrator only for clear ESS host
-        # writes (leave/loan/attendance) — process_dial / Chat handoff own
+        # writes (//) — process_dial / Chat handoff own
         # those. Other mutations and analytics still get a fan-out decision.
         try:
             from ai.engine.agent.chat_surface import is_ess_write_intent

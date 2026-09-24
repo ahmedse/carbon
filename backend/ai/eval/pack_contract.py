@@ -91,7 +91,88 @@ def check_pack(pack_dir: Path) -> tuple[dict[str, Any], list[str]]:
     if not isinstance(compat, dict) or not str(compat.get("engine") or "").strip():
         violations.append(f"{pack}: compat.engine required")
     _check_owned_paths(pack_dir, manifest.get("owns"), violations, pack)
+    if isinstance(instance, str) and (REPO_ROOT / instance.strip()).is_file():
+        violations.extend(
+            f"{pack}: {msg}" for msg in tool_reference_violations(REPO_ROOT / instance.strip())
+        )
     return manifest, violations
+
+
+def _registry_tool_names() -> set[str]:
+    """Engine tools the pack does not own (static + flag-gated capabilities)."""
+    try:
+        from ai.engine.agent import tools as registry
+    except Exception:  # noqa: BLE001 — the catalog check still runs
+        return set()
+    defs = list(getattr(registry, "STATIC_TOOL_DEFINITIONS", []) or [])
+    for attr in ("_ECF_RESOLVE_ENTITY_DEFINITION", "_ECF_AGGREGATE_ENTITY_DEFINITION"):
+        if isinstance(getattr(registry, attr, None), dict):
+            defs.append(getattr(registry, attr))
+    return {
+        str(((d or {}).get("function") or {}).get("name") or "")
+        for d in defs
+    } - {""}
+
+
+def _tokens(text: str) -> set[str]:
+    out: set[str] = set()
+    buf: list[str] = []
+    for ch in f"{text} ":
+        if ch.isalnum() or ch == "_":
+            buf.append(ch)
+        elif buf:
+            out.add("".join(buf))
+            buf = []
+    return out
+
+
+def _entry_text(entry: dict) -> str:
+    parts = [str(entry.get(k) or "") for k in ("description", "not_for")]
+    for ex in entry.get("examples") or []:
+        parts.append(" ".join(str(v) for v in ex.values()) if isinstance(ex, dict) else str(ex))
+    return " ".join(parts)
+
+
+def tool_reference_violations(instance_path: Path) -> list[str]:
+    """Prompt text may only name tools its reader can call (ADR-0049 §9).
+
+    * Identity prose (``persona``, ``guidance_by_audience``) names no tool:
+      it is shown to every audience, and routing belongs on the tool.
+    * Catalog text names only catalog entries every one of its readers can
+      see. Engine tools describe themselves; a pack cannot know whether a
+      flag-gated engine tool is on, so it never points at one.
+    """
+    from ai.engine.cognition.context_pack import entry_audience
+
+    try:
+        doc = yaml.safe_load(instance_path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return [f"{instance_path.name} unreadable"]
+    catalog = [e for e in doc.get("api_catalog") or [] if isinstance(e, dict) and e.get("name")]
+    audience_of = {str(e["name"]): set(entry_audience(e)) for e in catalog}
+    registry = _registry_tool_names() - set(audience_of)
+    known = set(audience_of) | registry
+    out: list[str] = []
+
+    identity = {"persona": doc.get("persona")}
+    guidance = doc.get("guidance_by_audience")
+    if isinstance(guidance, dict):
+        identity.update({f"guidance_by_audience.{k}": v for k, v in guidance.items()})
+    for where, text in identity.items():
+        named = sorted(_tokens(str(text or "")) & known)
+        if named:
+            out.append(f"{where} names tools {named}; put routing on the tool entry")
+
+    for entry in catalog:
+        name = str(entry["name"])
+        readers = audience_of[name]
+        for other in sorted(_tokens(_entry_text(entry)) & known - {name}):
+            if other in registry:
+                out.append(f"api_catalog.{name} names engine tool {other}")
+            elif not readers <= audience_of[other]:
+                missing = sorted(readers - audience_of[other])
+                out.append(f"api_catalog.{name} names {other}, hidden from {missing}")
+    return out
 
 
 def check_all(root: Path = DOMAIN_PACKS_ROOT) -> tuple[list[dict[str, Any]], list[str]]:

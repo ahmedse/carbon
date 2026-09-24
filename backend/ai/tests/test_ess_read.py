@@ -205,7 +205,8 @@ def test_bound_ess_self_api_single_vs_multi_domain(monkeypatch: pytest.MonkeyPat
     assert bound_ess_self_api("تقرير مفصل عن مرتبي و اجازاتي") is None
 
 
-def test_bound_ess_followup_uses_active_domain_not_leave_hardcode():
+def test_bound_ess_followup_uses_active_domain_not_leave_hardcode(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("PULSE_UNDERSTAND", "legacy")
     from ai.engine.cognition.turn.ess_read import (
         LEAVE_BALANCE_API,
         LOAN_HISTORY_API,
@@ -302,7 +303,8 @@ def test_arabic_typo_اجازلت_is_leave_balance():
     assert LEAVE_BALANCE_API in str(out.tool_calls)
 
 
-def test_comprehensive_pick_binds_only_when_single_domain_in_thread():
+def test_comprehensive_pick_binds_only_when_single_domain_in_thread(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("PULSE_UNDERSTAND", "legacy")
     from ai.engine.cognition.turn.ess_read import (
         LEAVE_BALANCE_API,
         bound_ess_self_api,
@@ -332,6 +334,20 @@ def test_calendar_questions_are_not_a_leave_balance_read(monkeypatch: pytest.Mon
     assert bound_ess_self_api("How many leave days do I have left?") == LEAVE_BALANCE_API
 
 
+def test_vacation_synonym_is_not_a_topic_regex(monkeypatch: pytest.MonkeyPatch):
+    """P11: under v21 'my vacations' is a catalog example, not a routing synonym.
+
+    The legacy kill switch keeps its old binding, so the vacation golden holds.
+    """
+    from ai.engine.cognition.turn.ess_read import bound_ess_self_api
+
+    monkeypatch.setenv("PULSE_UNDERSTAND", "v21")
+    assert bound_ess_self_api("tell me more about my vacations") is None
+    monkeypatch.setenv("PULSE_UNDERSTAND", "legacy")
+    assert bound_ess_self_api("tell me more about my vacations") == "get_my_leave_balance"
+    assert bound_ess_self_api("How many leave days do I have left?") == "get_my_leave_balance"
+
+
 def test_v21_fresh_read_is_not_chosen_by_topic_regex(monkeypatch: pytest.MonkeyPatch):
     """P2: the catalog routes a fresh read. P9: a follow-up binds state, not history."""
     from ai.engine.cognition.turn.ess_read import LEAVE_BALANCE_API, bound_ess_self_api
@@ -345,4 +361,11 @@ def test_v21_fresh_read_is_not_chosen_by_topic_regex(monkeypatch: pytest.MonkeyP
     assert bound_ess_self_api("تقرير شامل", history=leave_only) is None
     assert bound_ess_self_api(
         "تقرير شامل", history=leave_only, prior_api=LEAVE_BALANCE_API,
+    ) == LEAVE_BALANCE_API
+    # P10: the same continuation binds in either language, with no needle list.
+    assert bound_ess_self_api(
+        "with the details", prior_api=LEAVE_BALANCE_API,
+    ) == LEAVE_BALANCE_API
+    assert bound_ess_self_api(
+        "مع التفاصيل", prior_api=LEAVE_BALANCE_API,
     ) == LEAVE_BALANCE_API

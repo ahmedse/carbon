@@ -3,42 +3,45 @@
 No ``compiled regex`` in this module.
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+from ai.engine.pack_vocab import V
 
-READY_TO_SUBMIT_AR = ("هل تحتاج", "هل ينقص", "هل بقي")
-QUESTION_AR = ("؟", "متى", "هل", "كيف", "لماذا", "ما", "أين", "وين")
-AFFIRM_AR = ("نعم", "أجل", "بالضبط", "هذا كل شيء", "تمام", "موافق")
-JAILBREAK_AR = ("تجاهل", "تجاوز")
 
-LOAN_EMERGENCY_AR = ("طارئ", "طارئة", "طارئه")
-LOAN_HOUSING_AR = ("سكن", "عقاري")
-LOAN_SALARY_AR = ("راتب",)
-LOAN_CAR_AR = ("سيارة", "سياره")
-LOAN_PERSONAL_AR = ("شخصي",)
+READY_TO_SUBMIT_AR = T("turn/handoff_agent_i18n.py::READY_TO_SUBMIT_AR")
+QUESTION_AR = T("turn/handoff_agent_i18n.py::QUESTION_AR")
+AFFIRM_AR = T("turn/handoff_agent_i18n.py::AFFIRM_AR")
+JAILBREAK_AR = T("turn/handoff_agent_i18n.py::JAILBREAK_AR")
 
-LEAVE_ANNUAL_AR = ("سنوي", "سنوية", "سنويه")
-LEAVE_SICK_AR = ("مرض", "مرضية", "مرضيه")
-LEAVE_EMERGENCY_AR = ("طارئ", "طارئة", "عارضة", "عارضه")
-LEAVE_UNPAID_AR = ("بدون راتب", "بدون  راتب")
-LEAVE_MATERNITY_AR = ("وضع", "أمومة")
+LOAN_EMERGENCY_AR = T("turn/handoff_agent_i18n.py::LOAN_EMERGENCY_AR")
+LOAN_HOUSING_AR = T("turn/handoff_agent_i18n.py::LOAN_HOUSING_AR")
+LOAN_SALARY_AR = T("turn/handoff_agent_i18n.py::LOAN_SALARY_AR")
+LOAN_CAR_AR = T("turn/handoff_agent_i18n.py::LOAN_CAR_AR")
+LOAN_PERSONAL_AR = T("turn/handoff_agent_i18n.py::LOAN_PERSONAL_AR")
 
-PERM_OFFICIAL_AR = ("رسمي",)
-PERM_MEDICAL_AR = ("طبي",)
-PERM_EMERGENCY_AR = ("طارئ",)
-PERM_PERSONAL_AR = ("شخصي",)
+LEAVE_ANNUAL_AR = T("turn/handoff_agent_i18n.py::LEAVE_ANNUAL_AR")
+LEAVE_SICK_AR = T("turn/handoff_agent_i18n.py::LEAVE_SICK_AR")
+LEAVE_EMERGENCY_AR = T("turn/handoff_agent_i18n.py::LEAVE_EMERGENCY_AR")
+LEAVE_UNPAID_AR = T("turn/handoff_agent_i18n.py::LEAVE_UNPAID_AR")
+LEAVE_MATERNITY_AR = T("turn/handoff_agent_i18n.py::LEAVE_MATERNITY_AR")
 
-AMOUNT_CURRENCY_AR = ("ريال", "دينار", "دنانير")
-AMOUNT_PREFIX_AR = ("مبلغ", "قرض")
-MONTHS_AR = ("شهر", "أشهر", "اشهر")
-DAYS_AR = ("يوم", "أيام", "ايام")
-HOURS_AR = ("ساعة", "ساعات")
-SLOT_STATUS_AR = ("تم تسجيله",)
-RELATIVE_DAY_AR = ("اليوم",)
+PERM_OFFICIAL_AR = T("turn/handoff_agent_i18n.py::PERM_OFFICIAL_AR")
+PERM_MEDICAL_AR = T("turn/handoff_agent_i18n.py::PERM_MEDICAL_AR")
+PERM_EMERGENCY_AR = T("turn/handoff_agent_i18n.py::PERM_EMERGENCY_AR")
+PERM_PERSONAL_AR = T("turn/handoff_agent_i18n.py::PERM_PERSONAL_AR")
+
+AMOUNT_CURRENCY_AR = T("turn/handoff_agent_i18n.py::AMOUNT_CURRENCY_AR")
+AMOUNT_PREFIX_AR = T("turn/handoff_agent_i18n.py::AMOUNT_PREFIX_AR")
+MONTHS_AR = T("turn/handoff_agent_i18n.py::MONTHS_AR")
+DAYS_AR = T("turn/handoff_agent_i18n.py::DAYS_AR")
+HOURS_AR = T("turn/handoff_agent_i18n.py::HOURS_AR")
+SLOT_STATUS_AR = T("turn/handoff_agent_i18n.py::SLOT_STATUS_AR")
+RELATIVE_DAY_AR = T("turn/handoff_agent_i18n.py::RELATIVE_DAY_AR")
 
 CLARIFY_TEXT = {
     "submit_my_loan": {
         "loan_type": {
-            "en": "What type of loan are you interested in?",
-            "ar": "أي نوع قرض تريد؟",
+            "en": V("t_what_type_of_loan_are_you"),
+            "ar": V("t_أي_نوع_قرض_تريد"),
         },
         "principal": {
             "en": "How much do you need?",
@@ -47,11 +50,11 @@ CLARIFY_TEXT = {
     },
     "submit_my_leave": {
         "leave_type": {
-            "en": "What type of leave do you want to take?",
-            "ar": "أي نوع إجازة تريد؟",
+            "en": V("t_what_type_of_leave_do_you"),
+            "ar": V("t_أي_نوع_إجازة_تريد"),
         },
         "start_date": {
-            "en": "Which dates do you want to take leave?",
+            "en": V("t_which_dates_do_you_want_to"),
             "ar": "ما تواريخ الإجازة؟",
         },
     },

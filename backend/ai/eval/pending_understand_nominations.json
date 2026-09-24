@@ -1,0 +1,27 @@
+[
+  {
+    "utterance": "توزيع الرواتب",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "answer"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "analyze_employees",
+        "code": "invalid_args",
+        "detail": "dimension: invalid value 'basic_salary' (allowed: 'gender', 'is_active', 'nationality', 'nationality_code', 'employment_type_code', 'contract_type_code', 'position', 'org_unit', 'kuwaitization', 'rotation')"
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "fc9eb86b-34ce-4075-870b-1ad9d79e2681",
+    "nominated_at": "2026-09-24T15:08:39.398930+00:00",
+    "status": "pending_human_review"
+  }
+]

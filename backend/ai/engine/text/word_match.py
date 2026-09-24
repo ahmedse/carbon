@@ -73,7 +73,7 @@ def has_gapped_words(
     """``head`` followed by one of ``tails`` with at most ``max_gap`` words between.
 
     Replaces patterns like ``\\bno\\s+(?:\\w+\\s+){0,3}(?:data|records?)\\b``
-    without a compiled regex: ``has_gapped_words("no carbon emissions data",
+    without a compiled regex: ``has_gapped_words("no plant emissions data",
     "no", ("data",))`` is True.
     """
     toks = _tokens(text)

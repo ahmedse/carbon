@@ -20,11 +20,12 @@ grant — it is an explicit statement of permission, not a guess.
 The module imports only the standard library so it stays safe to run inside
 the engine runtime without pulling in Django models (ADR-0007 / RULE_20).
 """
+from ai.engine.cognition.phrase_tables import T
 
 from dataclasses import dataclass
 
 # The set of recognised clarification triggers, in precedence order.
-CLARIFICATION_REASONS = ("ambiguous_identity", "missing_evidence", "unclear_authority")
+CLARIFICATION_REASONS = T("turn/clarify.py::CLARIFICATION_REASONS")
 
 
 @dataclass(frozen=True)

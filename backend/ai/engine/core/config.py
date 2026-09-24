@@ -127,7 +127,7 @@ class Settings(BaseSettings):
 
     # ── Entity Capability Framework (ADR-0032) ──
     # Generic resolve/search/get/aggregate/describe over registered entity descriptors.
-    # Additive: only instances with an `entities:` block (nibras) expose resolve_entity;
+    # Additive: only instances with an `entities:` block expose resolve_entity;
     # instances without one are unaffected. Legacy list_employees/get_employee stay live.
     ECF_ENABLED: bool = False  # off until ECF-7 cutover (ADR-0032 gate: goldens green + human sign-off)
 

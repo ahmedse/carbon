@@ -29,6 +29,51 @@ subjects:
     app: mdm
 
 checks:
+  - id: DT-SPC-00
+    title: Data Trust Index ADR is declared
+    dimension: specified
+    rank: 1
+    collector: repo
+    probe: { type: file_exists, file: .ai-toolkit/decisions/0039-data-trust-index.md }
+    applies_to: [module]
+    solution: Keep ADR-0039.
+    source: ADR-0039
+  - id: DT-COR-01
+    title: Data Trust module names its test tree
+    dimension: correct
+    rank: 1
+    collector: repo
+    probe: { type: tests_present }
+    applies_to: [module]
+    solution: "Declare tests: for catalog, dq, and mdm."
+    source: ADR-0039
+  - id: DT-REL-01
+    title: Data Trust subject has an owner
+    dimension: reliable
+    rank: 1
+    collector: repo
+    probe: { type: field_nonempty, field: owner }
+    applies_to: [module]
+    solution: Set owner on the subject.
+    source: ADR-0039
+  - id: DT-OBS-01
+    title: Data Trust ladder manifest is the declared signal
+    dimension: observed
+    rank: 1
+    collector: repo
+    probe: { type: file_exists, file: assurance/datatrust/ladder.yaml }
+    applies_to: [module]
+    solution: Keep assurance/datatrust/ladder.yaml.
+    source: ADR-0051
+  - id: DT-MNT-01
+    title: Data Trust module paths exist
+    dimension: maintainable
+    rank: 1
+    collector: repo
+    probe: { type: paths_exist, field: paths }
+    applies_to: [module]
+    solution: Declare paths that exist in the tree.
+    source: ADR-0020
   - id: DT-SPC-01
     title: Trust Index ADR linked
     dimension: specified

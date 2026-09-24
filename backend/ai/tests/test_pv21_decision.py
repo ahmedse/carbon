@@ -30,7 +30,7 @@ def test_parse_and_chat_write_becomes_handoff():
     assert checked.commands[0].op == "handoff_agent"
 
 
-def test_unknown_tool_clarifies_when_allowlist_set():
+def test_off_surface_tool_is_rejected_never_spoken():
     decision = parse_decision(
         {
             "commands": [{"op": "call_tool", "name": "get_my_leave_balance"}],
@@ -41,7 +41,12 @@ def test_unknown_tool_clarifies_when_allowlist_set():
     checked = validate_decision(
         decision, surface="chat", allowed_tools={"list_my_leave"}
     )
-    assert checked.commands[0].op == "clarify"
+    # No command carries the rejected name to the user; repair or legacy decides.
+    assert checked.commands == []
+    assert [(r.code, r.name) for r in checked.rejections] == [
+        ("not_on_surface", "get_my_leave_balance"),
+    ]
+    assert checked.raw_ops == ["call_tool"]
 
 
 def test_named_tool_choice_only_for_single_call():

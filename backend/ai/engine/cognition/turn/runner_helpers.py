@@ -1,5 +1,6 @@
 """Shared helpers for TurnPipelineRunner and extracted stage modules."""
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
 
 import logging
 
@@ -7,7 +8,7 @@ from ai.engine.cognition.turn.witnesses import TurnLedger
 
 logger = logging.getLogger("pulse.cognition.turn.runner")
 
-_BACKGROUND_LLM_STAGES = frozenset({"auto_memory"})
+_BACKGROUND_LLM_STAGES = T("turn/runner_helpers.py::_BACKGROUND_LLM_STAGES")
 
 
 def get_settings():

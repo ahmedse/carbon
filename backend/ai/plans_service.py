@@ -349,6 +349,20 @@ def _display_timezone():
 RETRY_MAX_ATTEMPTS = 3
 RETRY_BASE_DELAY_SECONDS = 1.0
 RETRY_MAX_DELAY_SECONDS = 8.0
+# Whole-run re-executions after the first pass (``run_plan``). Each pass also
+# gets the in-step transient policy, so one is enough.
+RUN_RETRY_MAX = 1
+
+
+def _step_failure_class(step) -> str:
+    """``failure_class`` the loop recorded on a RunStep (``""`` when absent)."""
+    flags = getattr(step, "critic_flags_json", None)
+    if isinstance(flags, str):
+        try:
+            flags = json.loads(flags)
+        except (json.JSONDecodeError, TypeError):
+            flags = None
+    return str(flags.get("failure_class") or "") if isinstance(flags, dict) else ""
 
 # Lifecycle states whose transition is journaled as a step event (P3-07b).
 # ``ready``/``planned``/``cancelled``/``awaiting_reconciliation`` are not
@@ -4622,15 +4636,21 @@ class PlansService:
             run, plan, user_pk, conversation_id, instance_config, user_info
         )
 
-        # Bounded, deterministic retry for transient tool failures.
-        for attempt in range(1, RETRY_MAX_ATTEMPTS + 1):
+        # One retry, for transient failures only. A 400, a missing id, a
+        # blocked dependency or a no-effect step fails the same way again.
+        from ai.engine.cognition.plan.failures import is_retryable
+
+        for attempt in range(1, RUN_RETRY_MAX + 1):
             await sync_to_async(run.refresh_from_db)()
             steps = await sync_to_async(
                 lambda: list(
                     RunStep.objects.filter(run_id=run.id).order_by("step_index")
                 )
             )()
-            failed_steps = [s for s in steps if s.status == STEP_FAILED]
+            failed_steps = [
+                s for s in steps
+                if s.status == STEP_FAILED and is_retryable(_step_failure_class(s))
+            ]
             awaiting = [s for s in steps if s.status == STEP_AWAITING_APPROVAL]
             # Never retry past a consent gate (RULE_21); surface it instead.
             if not failed_steps or awaiting:

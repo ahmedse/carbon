@@ -5,6 +5,9 @@ RULE_20 pure (no Django). Called by the plan loop immediately before
 and charts even when the draft LLM emitted placeholders or title-only args.
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+from ai.engine.pack_vocab import V
+
 
 import json
 import re
@@ -24,8 +27,8 @@ _PLACEHOLDER_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Template slots the LLM leaves in prose/tables — e.g. [Insert specific insights…],
-# [Avg Kuwaiti Salary], [Median Non-Kuwaiti Salary]. Any of these = hollow pack.
+# Template slots the LLM  in prose/tables — e.g. [Insert specific insights…],
+# [Avg Kuwaiti ], [Median Non-Kuwaiti ]. Any of these = hollow pack.
 _UNFILLED_SLOT_RE = re.compile(
     r"\["
     r"(?:"
@@ -40,8 +43,8 @@ _UNFILLED_SLOT_RE = re.compile(
     r"|Lowest\b"
     r"|Specific insights?\b"
     r"|actionable recommendations?\b"
-    r"|[A-Za-z][^\]]{0,60}?\b(?:Salary|Value|Count|Rate|Amount|Figure|Metric)\b"
-    r")"
+    + V("t_a_za_z_0_60_b")
+    + r")"
     r"[^\]]*\]",
     re.IGNORECASE,
 )
@@ -148,18 +151,12 @@ def export_has_substance(
     require_table: bool = False,
     require_numeric_table: bool = False,
 ) -> tuple[bool, str]:
-    """Gate finished deliverables: refuse hollow, mid-run, or title-only packs.
-
-    Returns ``(ok, reason)``. Reason is empty when ok.
-
-    A chart alone does **not** excuse unfilled ``[Insert…]`` / ``[Avg … Salary]``
-    slots in prose or tables — that is the hollow Word the operator already saw.
-    """
+    V("t_gate_finished_deliverables_refuse_hollow_mid")
     if text_has_unfilled_slots(content) or table_has_unfilled_slots(table):
         return False, (
             "Export refused — the draft still contains unfilled template slots "
-            "(e.g. [Insert …], [Avg … Salary]). Bind real findings from prior "
-            "steps, then export."
+            + V("t_e_g_insert_avg_salary_bind")
+            + "steps, then export."
         )
     has_table = table_has_substance(table)
     if require_table and not has_table:
@@ -546,15 +543,7 @@ def is_fully_bound_host_api(
 
 # First-person ESS GETs with no path id. Bind even when the scoped catalog
 # copy was not passed into the loop (same contract as /people/me/).
-_SELF_GET_NO_PATH = frozenset({
-    "get_my_profile",
-    "get_my_leave_balance",
-    "list_my_leave",
-    "list_my_loans",
-    "list_my_payslips",
-    "list_my_attendance_permissions",
-    "list_attendance",
-})
+_SELF_GET_NO_PATH = T("plan/export_bind.py::_SELF_GET_NO_PATH")
 
 
 def is_bound_catalog_read(
@@ -684,17 +673,7 @@ def render_step_template(
     language: str,
     step_templates: Any,
 ) -> str | None:
-    """Render a bilingual ``step_templates`` entry for ``api_name``.
-
-    ``step_templates`` shape (instance.yaml)::
-
-        step_templates:
-          submit_my_leave:
-            en: "Leave submitted: {leave_type} …"
-            ar: "تم تقديم الإجازة: {leave_type} …"
-
-    Returns ``None`` when no template matches. Missing value keys render empty.
-    """
+    V("t_render_a_bilingual_step_templates_entry")
     if not isinstance(step_templates, dict):
         return None
     entry = step_templates.get(str(api_name or "").strip())
@@ -777,7 +756,7 @@ def apply_bind_to_tool_calls(
 
     # Process-dial / bound plan steps: when the draft narrates instead of
     # calling the tool, synthesize from the plan's tool_args so Approve→resume
-    # still writes (loan/leave/attendance). Never invent args — only when the
+    # still writes (//). Never invent args — only when the
     # step already carries them.
     if (
         (step_tool_name or "") == "resolve_entity"

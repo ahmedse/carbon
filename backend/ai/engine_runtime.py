@@ -378,6 +378,11 @@ async def _run_chat(
         access_table = _grounded_access_table(completed_tools)
         if access_table:
             content = f"{content}\n\n{access_table}" if content else access_table
+        # Egress invariant: no tool or catalog identifier reaches the user,
+        # whichever stage wrote the text. Labels come from the registry.
+        content, leaked = _scrub_internal_names(content, instance_config)
+        if leaked:
+            anti_flags = [*anti_flags, "internal_identifier_corrected"]
         # F1-B — annotate scoped entity mentions in the final answer as
         # serialized refs ([[kind:id:label]]) for the frontend EntityChip.
         # Runs on the finalized answer text, scoped to the requesting user so
@@ -2877,6 +2882,25 @@ def _strip_staged_deflection(text: str) -> tuple[str, bool]:
     if not removed:
         return text, False
     return "".join(kept).strip(), True
+
+
+def _scrub_internal_names(text: str, instance_config: dict | None) -> tuple[str, list[str]]:
+    """Egress gate: exact tool / catalog identifiers become their human labels."""
+    if not text:
+        return text, []
+    try:
+        from ai.engine.cognition.turn.capability import (
+            internal_name_labels,
+            scrub_internal_names,
+        )
+
+        cleaned, hits = scrub_internal_names(text, internal_name_labels(instance_config))
+    except Exception:  # noqa: BLE001 — a gate failure must not drop the answer
+        logger.debug("internal-name scrub skipped", exc_info=True)
+        return text, []
+    if hits:
+        logger.info("[egress] internal identifiers relabelled: %s", sorted(set(hits)))
+    return cleaned, hits
 
 
 def apply_anti_hallucination_gate(

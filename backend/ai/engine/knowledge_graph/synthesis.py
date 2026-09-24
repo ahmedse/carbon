@@ -10,6 +10,7 @@ SynthesizedAnswer that carries:
   - provenance            (entities queried)
   - retry metadata        (how many SQL repairs were needed)
 """
+from ai.engine.pack_vocab import V
 import json
 import logging
 from dataclasses import dataclass, field
@@ -63,7 +64,7 @@ class ValidationResult:
 # ── Column-name heuristics ────────────────────────────────────────────────────
 
 _CURRENCY_HEURISTICS = frozenset({
-    "amount", "total", "revenue", "cost", "price", "value", "salary",
+    "amount", "total", "revenue", "cost", "price", "value", V("t_salary"),
     "budget", "fee", "balance", "payment", "income", "sales",
 })
 _DATE_HEURISTICS = frozenset({

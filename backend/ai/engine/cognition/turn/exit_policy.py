@@ -7,31 +7,15 @@ Soft gates Decision will own after the flip use :func:`stage_soft_exit``;
 they stay on the legacy path and are skipped when ``PULSE_UNDERSTAND=v21``.
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
 
 from typing import Any
 
 # Soft gates Decision owns after the v21 flip. Kept on legacy until shadow.
-V21_SUPERSEDED_GATES = frozenset({
-    "zero_llm",
-    "restyle",
-    "typed_router",
-    "deixis",
-    "process_brief_early",
-    "process_brief",
-    "chat_clarify",
-    "next_step",
-    "plan_status",
-    "nav_fast_path",
-    "nav_ground",
-    "plan_dial_process",
-})
+V21_SUPERSEDED_GATES = T("turn/exit_policy.py::V21_SUPERSEDED_GATES")
 
 # Always stage on v21 (Chat write handoff, bound ESS GET, refuse).
-V21_KEEP_GATES = frozenset({
-    "off_limits",
-    "chat_handoff",
-    "ess_bound_self_read",
-})
+V21_KEEP_GATES = T("turn/exit_policy.py::V21_KEEP_GATES")
 
 
 def may_stage(gate: str) -> bool:

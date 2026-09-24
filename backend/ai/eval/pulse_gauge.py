@@ -166,7 +166,21 @@ def collect_agent_plan() -> dict[str, Any]:
     return score()
 
 
-def _coverage(agent: dict[str, Any]) -> dict[str, Any]:
+def collect_followup() -> dict[str, Any]:
+    """P9: follow-up resolution from state, not a transcript scan."""
+    from ai.eval.followup_runner import score
+
+    return score()
+
+
+def collect_portability() -> dict[str, Any]:
+    """P15: a non-HR process from a second pack briefs through the same core."""
+    from ai.eval.portability_runner import score
+
+    return score()
+
+
+def _coverage(agent: dict[str, Any], portability: dict[str, Any]) -> dict[str, Any]:
     """What is scored, and what is still silent. Silence is stated."""
     if agent.get("n"):
         mark = "pass" if agent.get("gate_pass") else "FAIL"
@@ -176,7 +190,12 @@ def _coverage(agent: dict[str, Any]) -> dict[str, Any]:
     return {
         "chat_turn_path": "ladder L0–L7 · G5 · G6 · budget",
         "agent_plan_path": plan,
-        "second_instance": "none — all banks are Nibras ESS",
+        "second_instance": (
+            f"eduos {portability.get('process_id')} "
+            f"{portability.get('passed')}/{portability.get('n')}"
+            if portability.get("n")
+            else "none — all banks are Nibras ESS"
+        ),
     }
 
 
@@ -187,6 +206,8 @@ def snapshot(instance: str = "nibras") -> dict[str, Any]:
     budget = measure_budget()
     ladder = collect_ladder()
     agent = collect_agent_plan()
+    followup = collect_followup()
+    portability = collect_portability()
     return {
         "measured_at": budget.get("measured_at") or date.today().isoformat(),
         "instance": instance,
@@ -197,7 +218,9 @@ def snapshot(instance: str = "nibras") -> dict[str, Any]:
         "soak": collect_soak(),
         "packs": collect_packs(),
         "agent_plan": agent,
-        "coverage": _coverage(agent),
+        "followup": followup,
+        "portability": portability,
+        "coverage": _coverage(agent, portability),
     }
 
 
@@ -257,11 +280,14 @@ def seed_history(rows: list[dict[str, Any]], instance: str = "nibras") -> list[d
 
 
 def previous_row(rows: list[dict[str, Any]], snap: dict[str, Any]) -> dict[str, Any] | None:
-    """Most recent measured row before this snapshot's date (same instance)."""
+    """Most recent written row up to this snapshot's date (same instance).
+
+    Today's row counts: a regression within the day must fail the gate too.
+    """
     candidates = [
         r for r in rows
         if r.get("instance") == snap.get("instance")
-        and str(r.get("date") or "") < str(snap["measured_at"])
+        and str(r.get("date") or "") <= str(snap["measured_at"])
         and not r.get("history_source")
     ]
     return sorted(candidates, key=lambda r: str(r.get("date")))[-1] if candidates else None
@@ -274,6 +300,14 @@ def ratchet_violations(snap: dict[str, Any], prev: dict[str, Any] | None, ceilin
     if agent.get("n") and not agent.get("gate_pass"):
         ids = ", ".join(m.get("id", "") for m in agent.get("misses") or [])
         out.append(f"agent plan bank: {agent.get('passed')}/{agent.get('n')} ({ids})")
+    followup = snap.get("followup") or {}
+    if followup.get("n") and not followup.get("gate_pass"):
+        ids = ", ".join(m.get("id", "") for m in followup.get("misses") or [])
+        out.append(f"follow-up bank: {followup.get('passed')}/{followup.get('n')} ({ids})")
+    portability = snap.get("portability") or {}
+    if portability.get("n") and not portability.get("gate_pass"):
+        ids = ", ".join(m.get("id", "") for m in portability.get("misses") or [])
+        out.append(f"portability bank: {portability.get('passed')}/{portability.get('n')} ({ids})")
     if prev:
         for key in RATCHET_KEYS:
             try:
@@ -325,6 +359,16 @@ def render_text(snap: dict[str, Any], prev: dict[str, Any] | None = None) -> str
         lines.append(
             f"  Agent/plan bank {agent.get('passed')}/{agent.get('n')} gate={'pass' if agent.get('gate_pass') else 'FAIL'}"
         )
+    followup = snap.get("followup") or {}
+    if followup.get("n"):
+        lines.append(
+            f"  Follow-up bank {followup.get('passed')}/{followup.get('n')} ratio={followup.get('ratio')} gate={'pass' if followup.get('gate_pass') else 'FAIL'}"
+        )
+    portability = snap.get("portability") or {}
+    if portability.get("n"):
+        lines.append(
+            f"  Portability bank {portability.get('passed')}/{portability.get('n')} gate={'pass' if portability.get('gate_pass') else 'FAIL'}"
+        )
     lines += ["", "Coverage"]
     for k, v in (snap.get("coverage") or {}).items():
         lines.append(f"  {k}: {v}")
@@ -350,7 +394,13 @@ def main(argv: list[str] | None = None) -> int:
 
     snap = snapshot(args.instance)
     prev = previous_row(rows, snap)
+    violations = ratchet_violations(snap, prev, _load(CEILING_PATH))
 
+    if args.write and violations:
+        for msg in violations:
+            print(f"WRITE REFUSED: {msg}", file=sys.stderr)
+        print("WRITE REFUSED: a regression is not a new baseline", file=sys.stderr)
+        return 1
     if args.write:
         out = EVIDENCE / f"PV2-gauge-{snap['measured_at']}.json"
         out.write_text(json.dumps(snap, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -363,7 +413,6 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write(render_text(snap, prev))
 
     if args.gate:
-        violations = ratchet_violations(snap, prev, _load(CEILING_PATH))
         if violations:
             for msg in violations:
                 print(f"GATE: {msg}", file=sys.stderr)

@@ -4,6 +4,9 @@ Resolve renderers by ``kind`` / ``empty_render`` from the instance catalog,
 not by hard-coded ``api_name`` branches in the runner.
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+from ai.engine.pack_vocab import V
+
 
 import json
 from typing import Any
@@ -12,19 +15,19 @@ from ai.engine.cognition.turn.ess_read import empty_render_text
 from ai.engine.cognition.turn.ess_read_i18n import RENDER_SCOPE, UNSUMMARIZED_FALLBACK
 
 # APIs that share the balance renderer (same row shape / alias in one place).
-BALANCE_APIS = frozenset({"get_my_leave_balance", "list_leave_entitlements"})
+BALANCE_APIS = T("turn/catalog_render.py::BALANCE_APIS")
 
-PAYSLIP_APIS = frozenset({"list_my_payslips"})
+PAYSLIP_APIS = T("turn/catalog_render.py::PAYSLIP_APIS")
 
 # Fallback when the scoped catalog entry is not passed into the renderer.
 _API_RENDER_META: dict[str, dict[str, str]] = {
     "get_my_leave_balance": {"kind": "balance", "empty_render": "no_balance_configured"},
     "list_leave_entitlements": {"kind": "balance", "empty_render": "no_balance_configured"},
     "list_my_leave": {"kind": "history", "empty_render": "no_leave_requests", "scope": "leave_history"},
-    "list_my_loans": {"kind": "history", "empty_render": "no_loans", "scope": "loans"},
-    "list_my_payslips": {"kind": "payslip", "empty_render": "no_payslips", "scope": "payslip"},
-    "list_attendance": {"kind": "history", "empty_render": "no_attendance_rows", "scope": "attendance"},
-    "list_my_attendance": {"kind": "history", "empty_render": "no_attendance_rows", "scope": "attendance"},
+    "list_my_loans": {"kind": "history", "empty_render": "no_loans", "scope": V("t_loans")},
+    "list_my_payslips": {"kind": V("t_payslip_2"), "empty_render": "no_payslips", "scope": V("t_payslip_2")},
+    "list_attendance": {"kind": "history", "empty_render": "no_attendance_rows", "scope": V("t_attendance")},
+    "list_my_attendance": {"kind": "history", "empty_render": "no_attendance_rows", "scope": V("t_attendance")},
     "list_my_attendance_permissions": {
         "kind": "history",
         "empty_render": "no_attendance_permissions",
@@ -100,13 +103,13 @@ def resolve_render_meta(api_name: str, catalog_entry: dict | None = None) -> dic
     elif api in BALANCE_APIS:
         meta["scope"] = "balance"
     elif api in PAYSLIP_APIS:
-        meta["scope"] = "payslip"
+        meta["scope"] = V("t_payslip_2")
     elif api == "list_my_leave":
         meta["scope"] = "leave_history"
     elif api == "list_my_loans":
-        meta["scope"] = "loans"
+        meta["scope"] = V("t_loans")
     elif api in {"list_attendance", "list_my_attendance"}:
-        meta["scope"] = "attendance"
+        meta["scope"] = V("t_attendance")
     elif api == "list_my_attendance_permissions":
         meta["scope"] = "permissions"
     if not meta["empty_render"]:
@@ -153,7 +156,7 @@ def _balance_row_chunk(row: dict, *, ar: bool) -> str | None:
 
 
 def _balance_who(row: dict) -> str:
-    """Employee label on an org-wide entitlement row. Empty for a self balance."""
+    V("t_employee_label_on_an_org_wide")
     name = str(row.get("employee_name") or "").strip()
     no = str(row.get("employee_no") or "").strip()
     if not name and not no:
@@ -166,8 +169,8 @@ def _balance_who(row: dict) -> str:
 def render_balance_rows(rows: list[dict], language: str, *, empty_render: str) -> str | None:
     ar = _lang_code(language) == "ar"
     # An org list (HR) carries employee_name on every row. Rendering it as
-    # "Your leave balance" drops the name, so the same six types repeat once
-    # per employee and look like one person's balance printed over and over.
+    # "Your  balance" drops the name, so the same six types repeat once
+    # per  and look like one person's balance printed over and over.
     roster = any(_balance_who(row) for row in rows)
     if roster:
         lines: list[str] = []
@@ -183,7 +186,7 @@ def render_balance_rows(rows: list[dict], language: str, *, empty_render: str) -
             lines.append(f"- {chunk}")
         if not lines:
             return empty_render_text(empty_render or "no_balance_configured", language)
-        prefix = "أرصدة الإجازات" if ar else "Leave balances"
+        prefix = "أرصدة الإجازات" if ar else V("t_leave_balances")
         return f"{prefix}\n\n" + "\n".join(lines)
 
     parts: list[str] = []
@@ -222,7 +225,7 @@ def render_history_rows(
 
 
 def _format_leave_history_row(row: dict, *, ar: bool) -> str:
-    kind = _code_or_text(row.get("leave_type")) or "leave"
+    kind = _code_or_text(row.get("leave_type")) or V("t_leave")
     status = _code_or_text(row.get("status") or row.get("correspondence_status"))
     start = row.get("start_date") or row.get("from_date")
     end = row.get("end_date") or row.get("to_date")
@@ -237,7 +240,7 @@ def _format_leave_history_row(row: dict, *, ar: bool) -> str:
 
 
 def _format_loan_history_row(row: dict, *, ar: bool) -> str:
-    kind = _code_or_text(row.get("loan_type")) or "loan"
+    kind = _code_or_text(row.get("loan_type")) or V("t_loan_2")
     principal = row.get("principal")
     months = row.get("term_months")
     status = _code_or_text(row.get("status") or row.get("correspondence_status"))
@@ -303,12 +306,12 @@ def render_catalog_read(
     if kind == "balance" or api in BALANCE_APIS:
         return render_balance_rows(rows, language, empty_render=empty_key or "no_balance_configured")
 
-    if kind == "payslip" or api in PAYSLIP_APIS:
+    if kind == V("t_payslip_2") or api in PAYSLIP_APIS:
         return render_history_rows(
             rows,
             language,
             empty_render=empty_key or "no_payslips",
-            scope_key=meta.get("scope") or "payslip",
+            scope_key=meta.get("scope") or V("t_payslip_2"),
             row_formatter=_format_payslip_row,
         )
 
@@ -324,14 +327,14 @@ def render_catalog_read(
             return render_history_rows(
                 rows, language,
                 empty_render=empty_key or "no_loans",
-                scope_key="loans",
+                scope_key=V("t_loans"),
                 row_formatter=_format_loan_history_row,
             )
         if api in {"list_attendance", "list_my_attendance"}:
             return render_history_rows(
                 rows, language,
                 empty_render=empty_key or "no_attendance_rows",
-                scope_key="attendance",
+                scope_key=V("t_attendance"),
                 row_formatter=_format_attendance_row,
             )
         if api == "list_my_attendance_permissions":
@@ -352,14 +355,7 @@ def honest_unsummarized_fallback(language: str = "en") -> str:
 
 
 def should_honest_fallback(final_text: str | None, completed_tools: list | None) -> bool:
-    """Stage invariant (ADR-0049): the fallback fires only when tools ran and
-    **no render exists** — not when the *draft* was empty.
-
-    A forced tool call blanks the draft by design (``force_tool``); the
-    catalog render, the empty-payslip answer, or the empty-history answer
-    that follows is the real answer and must never be replaced by this
-    fallback.
-    """
+    V("t_stage_invariant_adr_0049_the_fallback")
     if not completed_tools:
         return False
     return not (final_text or "").strip()

@@ -106,6 +106,11 @@ separate database.
 | P3 Observe — **landed 2026-09-24** | `observe` collector: CI files, runbooks, migrations, gauge-series freshness, evaluator fault self-check (`fault-demonstrated`); rank-5 Operated checks on platform.repo + modules + pulse.ops | L5 reachable when L4 already green |
 | P4 Ratchet — **landed 2026-09-24** | `--changed [base]` gates only touched subjects; `verify.sh excellence`; CI step (migrate excellence DB, `pytest excellence`, changed ratchet); vitest one-file collector; UI Measure includes observe + recent runs | L6 possible once fault-demo + ratchet have bitten |
 | Domain ladders — **landed 2026-09-24** | `domain_packs/nibras/assurance/ladder.yaml` + 5 tracks; `assurance/datatrust/`; `assurance/carbon/`; regulations owner; shell vitest check | every active product tier has a ladder |
+| P5 Standard — **landed 2026-09-24** | `assurance/standard/standard.yaml`. Evaluator: an open cell, or a dimension with no checks, caps that dimension. Re-baseline `assurance/standard/baseline.yaml` date 2026-09-24. Ratchet ignores snapshots before that date. | levels are the weakest dimension, including empty ones |
+| P6 Pulse bind — **landed 2026-09-24** | Pulse rank-1 cells for secure (ADR-0046), performant (budget ceiling), usable (Chat surface). Higher rungs: tests present, budget gate, shell vitest. | those three dimensions leave 0; the subject stays L0 until every dimension has a rank-1 pass |
+| P7 Collectors — **landed 2026-09-24** | `rbac`, `budget`, `design_lint` (UI-safe) and `playwright` (one journey, `--run` only). Platform rank-1 checks inherited by every tier. | secure, performant, and usable are declared on every module, not only Pulse |
+| P8 Domain rank 1 — **landed 2026-09-24** | Nibras, Data Trust, and Carbon each declare rank-1 checks for specified, correct, reliable, observed, and maintainable. Context console shows standard coverage (declared cells ÷ applicable cells). | each product tier has its own rank-1 ladder, not only the platform floor |
+| P9 Runtime — **landed 2026-09-24** | Evidence below the rung floor does not count. Rank 5 needs a live loopback window (`runtime`: p95, error rate, 429 rate). A file check stays configured. | L5 means operated |
 
 ## References
 

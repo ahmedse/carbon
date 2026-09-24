@@ -42,8 +42,8 @@ class MetricDef:
 
 @dataclass
 class EntityDescriptor:
-    name: str                                # "employee"
-    model: str                               # "people.models.Employee"
+    name: str                                # ""
+    model: str                               # "people.models."
     identifiers: list[str] = field(default_factory=list)    # ["id","employee_no","civil_id"]
     search_fields: list[SearchField] = field(default_factory=list)
     label_map: dict[str, LabelSource] = field(default_factory=dict)

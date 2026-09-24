@@ -1,8 +1,9 @@
 """Arabic needles for ``process_brief`` (ADR-0049 L7). No compiled regex."""
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
 
-BRIEFING_ASK_AR = ('اشرح', 'شرح', 'خطوة بخطوة', 'موافقة بشرية', 'عملية', 'دورة الحياة')
-DELIVERABLE_ASK_AR = ('تقرير', 'تقارير', 'ملف', 'مستند', 'وورد', 'اكسل', 'إكسل', 'رسوم', 'جداول', 'جدول', 'صدّر', 'صدر', 'أنشئ', 'انشئ', 'ولّد', 'ولد', 'اكتب', 'تحليل', 'ملخص')
+BRIEFING_ASK_AR = T("turn/process_brief_i18n.py::BRIEFING_ASK_AR")
+DELIVERABLE_ASK_AR = T("turn/process_brief_i18n.py::DELIVERABLE_ASK_AR")
 
 
 STEP_LABELS: dict[str, tuple[str, str]] = {

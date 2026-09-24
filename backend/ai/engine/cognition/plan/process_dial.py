@@ -1,19 +1,8 @@
-"""Process-dial plan materialization — hybrid Agent task creation (Path B).
-
-Contract
---------
-* **Process dial owns the DAG spine** — which steps exist, consent, capabilities.
-  Personal leave/loan never LLM-invent a random submit topology.
-* **Deterministic slot fill owns codes/dates/amounts** — ``fill_write_body`` from
-  the brief.
-* **LLM is residual intelligence** — not used for leave/loan spines today;
-  consent UI still asks only truly missing governed fields.
-* **Host Plane A owns review** — lifecycle review/activate/verify stay
-  Correspondence / Team SoD. Pulse Run covers the AI-runnable prefix only.
-
-See ADR-0045 (planes), ADR-0046 (Chat handoff), QA PA-030 / E-LV-* / E-LN-*.
-"""
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+from ai.engine.pack_vocab import V
+V("t_process_dial_plan_materialization_hybrid_agent")
+
 
 import logging
 import re
@@ -31,11 +20,11 @@ from ai.engine.cognition.plan.process_dial_i18n import (
 
 logger = logging.getLogger("pulse.cognition.plan.process_dial")
 
-PROCESS_LEAVE = "leave.request.lifecycle"
+PROCESS_LEAVE = V("t_leave_request_lifecycle")
 PROCESS_LEAVE_VERSION = "1.1"
-PROCESS_LOAN = "loan.request.lifecycle"
+PROCESS_LOAN = V("t_loan_request_lifecycle")
 PROCESS_LOAN_VERSION = "1.1"
-PROCESS_ATTENDANCE = "attendance.permission.lifecycle"
+PROCESS_ATTENDANCE = V("t_attendance_permission_lifecycle")
 PROCESS_ATTENDANCE_VERSION = "1.1"
 
 # Dates: no ``future: true`` — host ESS owns backdate window
@@ -65,7 +54,7 @@ def _loan_brief(text: str) -> bool:
     from ai.engine.text.word_match import has_word
 
     raw = text or ""
-    return bool(has_word(raw, "loan") or any_needle(raw, LOAN_BRIEF_AR))
+    return bool(has_word(raw, V("t_loan_2")) or any_needle(raw, LOAN_BRIEF_AR))
 
 
 def _attendance_brief(text: str) -> bool:
@@ -75,7 +64,7 @@ def _attendance_brief(text: str) -> bool:
     return bool(
         has_any_word(raw, ("permission",))
         or contains_any_phrase(
-            raw, ("attendance permission", "short hours", "early leave"),
+            raw, (V("t_attendance_permission"), "short hours", V("t_early_leave")),
         )
         or any_needle(raw, ATTENDANCE_BRIEF_AR)
     )
@@ -85,15 +74,13 @@ _PULSE_PLAN_PREFIX = "[Pulse mode: Plan."
 
 # A brief with a condition, a branch, or two things to do at once is a plan,
 # not a form. The single-write slot-filler must never hijack it with
-# "which loan type?" — the planner drafts the DAG and asks inside it.
+# "which  type?" — the planner drafts the DAG and asks inside it.
 _COMPOSITE_CONDITIONAL = re.compile(
     r"\bif\b[^.\?\u061F!\n]{0,160}\b(?:then|stop|otherwise|else|don'?t|do\s+not|only)\b"
     r"|\b(?:otherwise|unless|else\s+stop)\b",
     re.IGNORECASE,
 )
-_COMPOSITE_PARALLEL_PHRASES = (
-    "at the same time", "in parallel", "simultaneously", "side by side",
-)
+_COMPOSITE_PARALLEL_PHRASES = T("plan/process_dial.py::_COMPOSITE_PARALLEL_PHRASES")
 # "Check X, then submit Y" — a read that gates a write is a two-step plan.
 _COMPOSITE_READ_THEN_WRITE = re.compile(
     r"\b(?:check|review|verify|look\s+at|confirm|see)\b[^.\?\?!\n]{0,160}"
@@ -161,12 +148,7 @@ def is_plan_dial_turn(
 
 
 def is_composite_brief(utterance: str) -> bool:
-    """True when the brief has a condition, branch, parallel ask, or read→write gate.
-
-    «راجع قروضي ورصيد إجازتي في الوقت نفسه. إذا كان لدي قرض مفتوح، توقف. إذا لا،
-    قدّم طلب قرض» is a plan with a guard, not a loan form missing its type.
-    A plain «أريد قرض طوارئ ٥٠٠٠ لمدة ١٢ شهراً» is not composite.
-    """
+    V("t_true_when_the_brief_has_a")
     text = strip_pulse_mode_prefix(utterance)
     if not text:
         return False
@@ -178,7 +160,7 @@ def is_composite_brief(utterance: str) -> bool:
 
 
 def is_personal_leave_brief(utterance: str) -> bool:
-    """True when Agent should materialize the leave process dial (not LLM DAG)."""
+    V("t_true_when_agent_should_materialize_the")
     from ai.engine.cognition.scope_route import (
         _bare_leave,
         _leave_compliance,
@@ -198,7 +180,7 @@ def is_personal_leave_brief(utterance: str) -> bool:
     return bool(
         re.search(
             r"\b(?:i\s+(?:want|need|request)|i'?d\s+like)\b.{0,48}\b"
-            r"(?:annual\s+)?(?:leave|vacation|pto|time\s*off)\b",
+            + V("t_annual_s_leave_vacation_pto_time"),
             text,
             re.IGNORECASE | re.DOTALL,
         )
@@ -206,15 +188,15 @@ def is_personal_leave_brief(utterance: str) -> bool:
 
 
 def is_personal_loan_brief(utterance: str) -> bool:
-    """True when Agent should materialize the loan process dial (not LLM DAG)."""
+    V("t_true_when_agent_should_materialize_the_2")
     text = (utterance or "").strip()
     if not text:
         return False
     if not _loan_brief(text):
         return False
     if re.search(
-        r"\b(?:all\s+loans|loan\s+portfolio|board\s+pack|compliance)\b"
-        r"|قروض\s*الموظفين",
+        V("t_b_all_s_loans_loan_s")
+        + V("t_قروض_s_الموظفين"),
         text,
         re.IGNORECASE,
     ):
@@ -223,7 +205,7 @@ def is_personal_loan_brief(utterance: str) -> bool:
 
 
 def is_personal_attendance_brief(utterance: str) -> bool:
-    """True when Agent should materialize attendance permission dial."""
+    V("t_true_when_agent_should_materialize_attendance")
     text = (utterance or "").strip()
     if not text:
         return False
@@ -231,10 +213,10 @@ def is_personal_attendance_brief(utterance: str) -> bool:
         return False
     if not _attendance_brief(text):
         return False
-    # Bare "permission" without attendance/استئذان context is too weak.
+    # Bare "permission" without /استئذان context is too weak.
     if re.search(r"\bpermission\b", text, re.I) and not re.search(
-        r"\b(?:attendance|hours|early|short|medical|official|emergency)\b"
-        r"|استئذان|حضور|ساعة",
+        V("t_b_attendance_hours_early_short_medical")
+        + V("t_استئذان_حضور_ساعة"),
         text,
         re.I,
     ):
@@ -247,7 +229,7 @@ def materialize_leave_request_plan(
     *,
     today: date | None = None,
 ):
-    """Build a reviewable Plan from ``leave.request.lifecycle`` + brief slots."""
+    V("t_build_a_reviewable_plan_from_leave")
     from ai.engine.cognition.plan.planner import Plan, PlanPhase, PlanStep
     from ai.write_slots import fill_write_body
 
@@ -263,20 +245,20 @@ def materialize_leave_request_plan(
         "process_id": PROCESS_LEAVE,
         "process_version": PROCESS_LEAVE_VERSION,
         "process_step": "submit",
-        "capability": "leave.request.submit",
+        "capability": V("t_leave_request_submit"),
     }
 
     balance_step = PlanStep(
         step_id=0,
-        intent="Check leave balance before submitting",
+        intent=V("t_check_leave_balance_before_submitting"),
         tool_name="call_host_api",
         tool_args={
             "api_name": "get_my_leave_balance",
-            "explanation": "Read remaining entitlement before the leave submit.",
+            "explanation": V("t_read_remaining_entitlement_before_the_leave"),
             "_process": {
                 **process_meta,
                 "process_step": "prepare",
-                "capability": "leave.request.submit",
+                "capability": V("t_leave_request_submit"),
                 "role": "observe",
             },
         },
@@ -289,8 +271,8 @@ def materialize_leave_request_plan(
         "api_name": "submit_my_leave",
         "body": body,
         "explanation": (
-            "Submit personal leave via leave.request.lifecycle (submit). "
-            "Manager review continues in Team after you Approve here."
+            V("t_submit_personal_leave_via_leave_request")
+            + "Manager review continues in Team after you Approve here."
         ),
         "_process": process_meta,
     }
@@ -314,10 +296,10 @@ def materialize_leave_request_plan(
     ]
 
     synthesis = (
-        "Leave request follows process dial leave.request.lifecycle: "
-        "Pulse runs balance check then submit (consent). "
+        V("t_leave_request_follows_process_dial_leave")
+        + "Pulse runs balance check then submit (consent). "
         "After you Approve submit, the request waits for your manager in Team "
-        "(/team). Track status in My Leave — Pulse does not approve for them."
+        + V("t_team_track_status_in_my_leave")
     )
     if missing:
         synthesis += (
@@ -343,14 +325,14 @@ def materialize_leave_request_plan(
             PlanPhase(
                 phase_id=1,
                 name="Submit",
-                goal="Stage leave.request.submit for consent",
+                goal=V("t_stage_leave_request_submit_for_consent"),
                 strategy="sequential",
                 step_ids=[1],
             ),
         ],
     )
     logger.info(
-        "process_dial leave plan: grounded=%s missing=%s body_keys=%s",
+        V("t_process_dial_leave_plan_grounded_s"),
         grounded,
         missing,
         sorted(body.keys()),
@@ -359,18 +341,14 @@ def materialize_leave_request_plan(
 
 
 def brief_requests_loan_submit(utterance: str) -> bool:
-    """True when the brief asks to stage a loan, not only to read loans/leave.
-
-    «راجع قروضي ورصيد إجازتي في الوقت نفسه» is a read. A conditional
-    «إذا لا، قدّم طلب قرض» or «أريد قرض» is a submit.
-    """
+    V("t_true_when_the_brief_asks_to")
     text = strip_pulse_mode_prefix(utterance or "")
     if not text or not _loan_brief(text):
         return False
     if _composite_conditional(text) or _composite_read_then_write(text):
         return True
     if any_needle(text, (
-        "أريد قرض", "اريد قرض", "تقديم قرض", "طلب قرض", "قدّم طلب", "قدم طلب",
+        V("t_أريد_قرض"), V("t_اريد_قرض"), V("t_تقديم_قرض"), V("t_طلب_قرض"), "قدّم طلب", "قدم طلب",
     )):
         return True
     return bool(re.search(
@@ -382,22 +360,22 @@ def brief_requests_loan_submit(utterance: str) -> bool:
 
 
 def _materialize_loan_read_plan(brief: str):
-    """Review-only plan: list loans (and leave when asked). No submit step."""
+    V("t_review_only_plan_list_loans_and")
     from ai.engine.cognition.plan.planner import Plan, PlanPhase, PlanStep
 
     wants_leave = bool(re.search(
-        r"\b(?:leave|vacation|pto)\b|إجاز|اجاز",
+        V("t_b_leave_vacation_pto_b_إجاز"),
         brief or "",
         re.IGNORECASE,
     ))
     steps = [
         PlanStep(
             step_id=0,
-            intent="Check existing loans (read only — no request)",
+            intent=V("t_check_existing_loans_read_only_no"),
             tool_name="call_host_api",
             tool_args={
                 "api_name": "list_my_loans",
-                "explanation": "The brief asked to review loans, not to submit one.",
+                "explanation": V("t_the_brief_asked_to_review_loans"),
             },
             depends_on=[],
             is_mutation=False,
@@ -407,7 +385,7 @@ def _materialize_loan_read_plan(brief: str):
     if wants_leave:
         steps.append(PlanStep(
             step_id=1,
-            intent="Read leave balance (read only)",
+            intent=V("t_read_leave_balance_read_only"),
             tool_name="call_host_api",
             tool_args={
                 "api_name": "get_my_leave_balance",
@@ -422,9 +400,9 @@ def _materialize_loan_read_plan(brief: str):
         pattern="ess_read",
         steps=steps,
         synthesis_instruction=(
-            "Read-only plan. List the employee's loans"
-            + (" and leave balance" if wants_leave else "")
-            + ". Do not submit a loan. Nothing runs until the operator approves."
+            V("t_read_only_plan_list_the_employee")
+            + (V("t_and_leave_balance") if wants_leave else "")
+            + V("t_do_not_submit_a_loan_nothing")
         ),
         source="process_dial",
         skill_name=PROCESS_LOAN,
@@ -433,7 +411,7 @@ def _materialize_loan_read_plan(brief: str):
             PlanPhase(
                 phase_id=0,
                 name="Review",
-                goal="Read loans and leave — no submit",
+                goal=V("t_read_loans_and_leave_no_submit"),
                 strategy="parallel" if wants_leave else "sequential",
                 step_ids=step_ids,
             ),
@@ -446,11 +424,7 @@ def materialize_loan_request_plan(
     *,
     today: date | None = None,
 ):
-    """Build a reviewable Plan from ``loan.request.lifecycle`` + brief slots.
-
-    Host review is manager then finance (Team) — Pulse only stages submit.
-    A review-only brief (check loans / leave, no apply) stays a read plan.
-    """
+    V("t_build_a_reviewable_plan_from_loan")
     from ai.engine.cognition.plan.planner import Plan, PlanPhase, PlanStep
     from ai.write_slots import fill_write_body
 
@@ -470,29 +444,29 @@ def materialize_loan_request_plan(
         "process_id": PROCESS_LOAN,
         "process_version": PROCESS_LOAN_VERSION,
         "process_step": "submit",
-        "capability": "loan.request.submit",
+        "capability": V("t_loan_request_submit"),
     }
 
-    # Composite brief: «راجع قروضي ورصيد إجازتي في الوقت نفسه. إذا كان لدي قرض
+    # Composite brief: «راجع قروضي ورصيد إجازتي في الوقت نفسه. إذا كان لدي 
     # مفتوح توقف، إذا لا قدّم…» — the guard and the parallel read are part of
-    # the plan the user asked for. Never ask "what is your salary?" instead.
+    # the plan the user asked for. Never ask "what is your ?" instead.
     composite = is_composite_brief(brief)
     wants_leave_read = composite and bool(
-        re.search(r"\b(?:leave|vacation|pto)\b|إجاز|اجاز", brief, re.IGNORECASE)
+        re.search(V("t_b_leave_vacation_pto_b_إجاز"), brief, re.IGNORECASE)
     )
     guard_no_open_loan = composite and _composite_conditional(brief)
 
     list_step = PlanStep(
         step_id=0,
-        intent="Check existing loans before submitting",
+        intent=V("t_check_existing_loans_before_submitting"),
         tool_name="call_host_api",
         tool_args={
             "api_name": "list_my_loans",
-            "explanation": "Read current loans before staging a new request.",
+            "explanation": V("t_read_current_loans_before_staging_a"),
             "_process": {
                 **process_meta,
                 "process_step": "prepare",
-                "capability": "loan.request.submit",
+                "capability": V("t_loan_request_submit"),
                 "role": "observe",
             },
         },
@@ -506,7 +480,7 @@ def materialize_loan_request_plan(
     if wants_leave_read:
         prepare_steps.append(PlanStep(
             step_id=1,
-            intent="Read leave balance (requested alongside the loan check)",
+            intent=V("t_read_leave_balance_requested_alongside_the"),
             tool_name="call_host_api",
             tool_args={
                 "api_name": "get_my_leave_balance",
@@ -514,7 +488,7 @@ def materialize_loan_request_plan(
                 "_process": {
                     **process_meta,
                     "process_step": "prepare",
-                    "capability": "loan.request.submit",
+                    "capability": V("t_loan_request_submit"),
                     "role": "observe",
                 },
             },
@@ -529,8 +503,8 @@ def materialize_loan_request_plan(
         "api_name": "submit_my_loan",
         "body": body,
         "explanation": (
-            "Submit personal loan via loan.request.lifecycle (submit). "
-            "Manager then finance review continues in Team after you Approve here."
+            V("t_submit_personal_loan_via_loan_request")
+            + "Manager then finance review continues in Team after you Approve here."
         ),
         "_process": process_meta,
     }
@@ -540,9 +514,9 @@ def materialize_loan_request_plan(
             "source_step": 0,
             "condition": "no_open_loans",
             "on_fail": "stop",
-            "text": "Only if step 0 shows no open loan — otherwise stop.",
+            "text": V("t_only_if_step_0_shows_no"),
         }
-        submit_intent += " — only if no open loan (stop otherwise)"
+        submit_intent += V("t_only_if_no_open_loan_stop")
     submit_step = PlanStep(
         step_id=submit_id,
         intent=submit_intent,
@@ -558,15 +532,15 @@ def materialize_loan_request_plan(
     missing = [k for k in required if k not in grounded]
 
     synthesis = (
-        "Loan request follows process dial loan.request.lifecycle: "
-        "Pulse lists existing loans then stages submit (consent). "
-        "After you Approve, Team runs manager then finance review — "
+        V("t_loan_request_follows_process_dial_loan")
+        + V("t_pulse_lists_existing_loans_then_stages")
+        + "After you Approve, Team runs manager then finance review — "
         "Pulse does not approve. Track status in My Requests."
     )
     if guard_no_open_loan:
         synthesis += (
-            " Guard: the submit step runs only when the loan check shows no "
-            "open loan; otherwise the plan stops before submitting."
+            V("t_guard_the_submit_step_runs_only")
+            + V("t_open_loan_otherwise_the_plan_stops")
         )
     if missing:
         synthesis += (
@@ -586,8 +560,8 @@ def materialize_loan_request_plan(
                 phase_id=0,
                 name="Prepare",
                 goal=(
-                    "List existing loans and read leave balance"
-                    if wants_leave_read else "List existing loans"
+                    V("t_list_existing_loans_and_read_leave")
+                    if wants_leave_read else V("t_list_existing_loans")
                 ),
                 strategy="parallel" if wants_leave_read else "sequential",
                 step_ids=list(prepare_ids),
@@ -595,15 +569,15 @@ def materialize_loan_request_plan(
             PlanPhase(
                 phase_id=1,
                 name="Submit",
-                goal="Stage loan.request.submit for consent",
+                goal=V("t_stage_loan_request_submit_for_consent"),
                 strategy="sequential",
                 step_ids=[submit_id],
             ),
         ],
     )
     logger.info(
-        "process_dial loan plan: grounded=%s missing=%s body_keys=%s "
-        "composite=%s guard=%s leave_read=%s",
+        V("t_process_dial_loan_plan_grounded_s")
+        + "composite=%s guard=%s leave_read=%s",
         grounded,
         missing,
         sorted(body.keys()),
@@ -619,7 +593,7 @@ def materialize_attendance_permission_plan(
     *,
     today: date | None = None,
 ):
-    """Build a reviewable Plan from ``attendance.permission.lifecycle``."""
+    V("t_build_a_reviewable_plan_from_attendance")
     from ai.engine.cognition.plan.planner import Plan, PlanPhase, PlanStep
     from ai.write_slots import fill_write_body
 
@@ -635,12 +609,12 @@ def materialize_attendance_permission_plan(
         "process_id": PROCESS_ATTENDANCE,
         "process_version": PROCESS_ATTENDANCE_VERSION,
         "process_step": "submit",
-        "capability": "attendance.permission.submit",
+        "capability": V("t_attendance_permission_submit"),
     }
 
     list_step = PlanStep(
         step_id=0,
-        intent="Check existing attendance permissions",
+        intent=V("t_check_existing_attendance_permissions"),
         tool_name="call_host_api",
         tool_args={
             "api_name": "list_my_attendance_permissions",
@@ -648,7 +622,7 @@ def materialize_attendance_permission_plan(
             "_process": {
                 **process_meta,
                 "process_step": "prepare",
-                "capability": "attendance.permission.submit",
+                "capability": V("t_attendance_permission_submit"),
                 "role": "observe",
             },
         },
@@ -661,9 +635,9 @@ def materialize_attendance_permission_plan(
         "api_name": "submit_my_attendance_permission",
         "body": body,
         "explanation": (
-            "Submit personal attendance permission via "
-            "attendance.permission.lifecycle (submit). "
-            "Manager review continues in Team after you Approve here."
+            V("t_submit_personal_attendance_permission_via")
+            + V("t_attendance_permission_lifecycle_submit")
+            + "Manager review continues in Team after you Approve here."
         ),
         "_process": process_meta,
     }
@@ -682,10 +656,10 @@ def materialize_attendance_permission_plan(
     missing = [k for k in required if k not in grounded]
 
     synthesis = (
-        "Attendance permission follows process dial "
-        "attendance.permission.lifecycle: Pulse lists existing permissions "
-        "then stages submit (consent). After you Approve, your manager "
-        "reviews in Team (/team). Track status in My Attendance."
+        V("t_attendance_permission_follows_process_dial")
+        + V("t_attendance_permission_lifecycle_pulse_lists_exis")
+        + "then stages submit (consent). After you Approve, your manager "
+        + V("t_reviews_in_team_team_track_status")
     )
     if missing:
         synthesis += (
@@ -711,14 +685,14 @@ def materialize_attendance_permission_plan(
             PlanPhase(
                 phase_id=1,
                 name="Submit",
-                goal="Stage attendance.permission.submit for consent",
+                goal=V("t_stage_attendance_permission_submit_for_consent"),
                 strategy="sequential",
                 step_ids=[1],
             ),
         ],
     )
     logger.info(
-        "process_dial attendance plan: grounded=%s missing=%s body_keys=%s",
+        V("t_process_dial_attendance_plan_grounded_s"),
         grounded,
         missing,
         sorted(body.keys()),
@@ -728,7 +702,7 @@ def materialize_attendance_permission_plan(
 
 def _leave_submit_intent(brief: str, body: dict[str, Any]) -> str:
     """Human intent line — product language, no engine jargon."""
-    parts = ["Submit leave request"]
+    parts = [V("t_submit_leave_request")]
     lt = body.get("leave_type")
     if lt:
         parts.append(f"({lt})")
@@ -748,7 +722,7 @@ def _leave_submit_intent(brief: str, body: dict[str, Any]) -> str:
 
 
 def _loan_submit_intent(brief: str, body: dict[str, Any]) -> str:
-    parts = ["Submit loan request"]
+    parts = [V("t_submit_loan_request")]
     lt = body.get("loan_type")
     if lt:
         parts.append(f"({lt})")
@@ -768,7 +742,7 @@ def _loan_submit_intent(brief: str, body: dict[str, Any]) -> str:
 
 
 def _attendance_submit_intent(brief: str, body: dict[str, Any]) -> str:
-    parts = ["Submit attendance permission"]
+    parts = [V("t_submit_attendance_permission")]
     pt = body.get("permission_type")
     if pt:
         parts.append(f"({pt})")

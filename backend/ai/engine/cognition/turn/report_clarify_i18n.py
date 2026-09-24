@@ -1,47 +1,12 @@
 """Arabic needles for ``report_clarify`` (ADR-0049 L7). No compiled regex."""
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
 
-BROAD_REPORT_AR = (
-    "تقرير",
-    "رواتب",
-    "راتب",
-    "مسير",
-    "الأجور",
-    "كامل",
-    "شامل",
-    "مفصل",
-)
-SCOPED_AR = (
-    "مجلس",
-    "إدارة",
-    "توزيع",
-    "شرائح",
-    "تأمينات",
-    "استقطاع",
-    "حسب",
-    "رسوم",
-    "مخططات",
-)
-ASPECT_PICK_AR = (
-    "توزيع",
-    "شرائح",
-    "مسيرات",
-    "ملتزم",
-    "مسودة",
-    "فشل",
-    "تأمينات",
-    "مجلس",
-    "ملخص",
-    "كل",
-    "أربعة",
-    "الجوانب",
-    "الخيارات",
-    "ما سبق",
-)
-PRIOR_CLARIFY_AR = (
-    "على ماذا تريد التركيز",
-    "بكل سرور أساعد في تقرير الرواتب",
-)
+
+BROAD_REPORT_AR = T("turn/report_clarify_i18n.py::BROAD_REPORT_AR")
+SCOPED_AR = T("turn/report_clarify_i18n.py::SCOPED_AR")
+ASPECT_PICK_AR = T("turn/report_clarify_i18n.py::ASPECT_PICK_AR")
+PRIOR_CLARIFY_AR = T("turn/report_clarify_i18n.py::PRIOR_CLARIFY_AR")
 
 
 def any_needle(text: str, needles: tuple[str, ...]) -> bool:

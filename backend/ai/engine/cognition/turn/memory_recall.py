@@ -7,6 +7,8 @@ This module only folds a bare ``my X is Y`` statement into ConversationState
 Schema stays v1: facts are ``last_results`` rows with ``tool=user_fact``.
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+
 
 import re
 from typing import Any
@@ -18,7 +20,7 @@ from ai.engine.cognition.turn.memory_recall_i18n import (
 )
 from ai.engine.text.word_match import contains_any_phrase, has_any_word, has_word
 
-_STORE_REMEMBER_PHRASES = ("remember that", "please remember that", "learn_fact")
+_STORE_REMEMBER_PHRASES = T("turn/memory_recall.py::_STORE_REMEMBER_PHRASES")
 _FACT_EN_RE = re.compile(
     r"\bmy\s+([a-z][a-z0-9][a-z0-9 /-]{0,40}?)\s+is\s+"
     r"([A-Za-z0-9][A-Za-z0-9._/-]{1,48})\b",
@@ -28,22 +30,10 @@ _FACT_NAME_RE = re.compile(
     r"\bmy\s+((?:full\s+)?name)\s+is\s+([A-Za-z][A-Za-z .'-]{1,60})\b",
     re.IGNORECASE,
 )
-_RECALL_PHRASES = (
-    "confirm you have", "confirm that", "can you confirm you have",
-    "can you confirm that", "what's my", "what is my", "is that still",
-    "tell me about", "can you remember",
-)
-_HOST_IDENTITY_PHRASES = (
-    "employee number", "employee no", "job title", "organisation",
-    "organization", "org unit",
-)
-_HOST_IDENTITY_WORDS = ("manager", "department")
-_STOP = frozenset({
-    "the", "and", "for", "that", "this", "still", "have", "you", "can",
-    "about", "tell", "what", "your", "my", "is", "are", "was", "were",
-    "yes", "not", "before", "after", "month", "end", "with", "from",
-    "code", "codes",
-})
+_RECALL_PHRASES = T("turn/memory_recall.py::_RECALL_PHRASES")
+_HOST_IDENTITY_PHRASES = T("turn/memory_recall.py::_HOST_IDENTITY_PHRASES")
+_HOST_IDENTITY_WORDS = T("turn/memory_recall.py::_HOST_IDENTITY_WORDS")
+_STOP = T("turn/memory_recall.py::_STOP")
 _FACT_TOOL = "user_fact"
 
 

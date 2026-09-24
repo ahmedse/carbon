@@ -54,8 +54,9 @@ def test_ladder_lists_tiers_and_levels_from_events(client, staff):
     body = resp.json()
     assert {t["id"] for t in body["tiers"]} >= {"platform", "pulse"}
     row = next(s for s in body["subjects"] if s["subject_id"] == "platform.module.accounts")
-    assert row["level"] == 3 and row["level_name"] == "Built"
-    assert row["next"] == ["PLAT-COR-02"]
+    assert row["level"] == 0 and row["level_name"] == "Unmanaged"
+    assert "secure:1" not in row["open"]
+    assert "specified:1" in row["open"]
     assert all(s["tier"] == "platform" for s in body["subjects"])
 
 

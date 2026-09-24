@@ -1,12 +1,10 @@
 """Arabic needles for ``plan_dial`` (ADR-0049 L7). No compiled regex."""
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
 
-RESTYLE_AR = (
-    "بالعرب", "بالإنجليز", "بالانجليز", "بالتفصيل", "أكثر تفصيل", "اكثر تفصيل",
-    "بتفصيل أكثر", "بتفصيل اكثر", "وضّح أكثر", "وضح اكثر", "أعد الصياغة", "اعد الصياغة",
-    "باختصار", "مختصر",
-)
-NEW_CONTENT_AR = ('قرض', 'إجاز', 'اجاز', 'استئذان', 'راتب', 'رواتب', 'تقرير', 'قدّم', 'قدم', 'اطلب')
+
+RESTYLE_AR = T("turn/plan_dial_i18n.py::RESTYLE_AR")
+NEW_CONTENT_AR = T("turn/plan_dial_i18n.py::NEW_CONTENT_AR")
 
 
 def any_needle(text: str, needles: tuple[str, ...]) -> bool:

@@ -1,17 +1,7 @@
-"""ECF-6 — Canonical metric aggregation.
-
-aggregate(descriptor, metric, *, count_fn) → AggregateResult
-
-The algorithm is domain-neutral. Metric definitions (filters + descriptions)
-come from EntityDescriptor.metrics (ADR-0032). The injectable ``count_fn``
-keeps the engine database-free (RULE_20) — the host executor resolves the
-model path and applies RULE_12 org scope.
-
-Canonical examples (HRMS employee descriptor):
-  headcount → filter {is_active: True}
-  kuwaiti   → filter {nationality_code: "KW"}  (NOT the kuwaitization boolean)
-"""
 from __future__ import annotations
+from ai.engine.pack_vocab import V
+V("t_ecf_6_canonical_metric_aggregation_aggregate")
+
 
 from dataclasses import dataclass
 from typing import Callable

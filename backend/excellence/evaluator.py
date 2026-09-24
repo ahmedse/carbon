@@ -8,13 +8,12 @@ Row state per (subject, check), the only state a UI may show:
 * evidence_class conflict         → ``conflict`` (not passable)
 * active exemption                → ``exempt`` (satisfies rank; counted apart)
 * otherwise                       → ``passed`` | ``failed``
+* passed, but evidence below the rung floor → ``unknown``
 
-Reachable ceiling = consecutive ranks from 1 that have at least one declared
-check for the subject (a rank with no check anywhere is not earned).
-Level per dimension = highest rank ≤ ceiling such that every check of that
-dimension with rank ≤ it is satisfied (passed or exempt). Overall level =
-**minimum** across dimensions that have at least one applicable check.
-Never the mean.
+A rank with no check in that dimension is open and stops the climb. An empty
+dimension is level 0. Overall level is the minimum across applicable
+dimensions. Never the mean. Rank 5 counts only with enforcement-verified
+evidence or better. Rank 6 counts only when a fault was demonstrated.
 """
 from __future__ import annotations
 
@@ -22,9 +21,21 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Iterable, Mapping
 
-from .catalogue import Catalogue, Check, MAX_LEVEL, Subject
+from .catalogue import DIMENSIONS, Catalogue, Check, MAX_LEVEL, Subject
+from .standard import Standard, load_standard
 
 SATISFIED = frozenset({"passed", "exempt"})
+_EVIDENCE_RANK = {
+    "configured": 1,
+    "executed": 2,
+    "enforcement-verified": 3,
+    "fault-demonstrated": 4,
+}
+
+
+def meets_floor(evidence_class: str, floor: str) -> bool:
+    """True when the event's evidence is at least the rung's floor."""
+    return _EVIDENCE_RANK.get(evidence_class, 0) >= _EVIDENCE_RANK.get(floor, 1)
 
 
 @dataclass(frozen=True)
@@ -87,6 +98,21 @@ class SubjectReport:
         target = self.level + 1
         return [c for c in self.checks if c.check.rank == target and c.state not in SATISFIED]
 
+    @property
+    def open_cells(self) -> list[str]:
+        """Applicable cells at the next rank that have no check. Silence is not a pass."""
+        target = self.level + 1
+        if target > MAX_LEVEL:
+            return []
+        out = []
+        for dim, dim_level in self.dimensions.items():
+            if dim_level != self.level:
+                continue
+            if any(c.check.dimension == dim and c.check.rank == target for c in self.checks):
+                continue
+            out.append(f"{dim}:{target}")
+        return out
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "subject_id": self.subject.id,
@@ -110,6 +136,7 @@ class SubjectReport:
                 for c in self.checks
             ],
             "next": [c.check.id for c in self.next_steps],
+            "open": self.open_cells,
         }
 
 
@@ -133,7 +160,9 @@ def evaluate_subject(
     latest: Mapping[tuple[str, str], EventView],
     exemptions: set[tuple[str, str]],
     head: str,
+    standard: Standard | None = None,
 ) -> SubjectReport:
+    standard = standard or load_standard()
     states: list[CheckState] = []
     for check in checks:
         ev = latest.get((subject.id, check.id))
@@ -152,40 +181,35 @@ def evaluate_subject(
         if ev.result not in ("passed", "failed"):
             states.append(CheckState(check, "unknown", ev.evidence_class, ev.commit, ev.source))
             continue
+        rung = standard.rung(check.dimension, check.rank)
+        floor = rung.evidence_floor if rung else "configured"
+        if ev.result == "passed" and not meets_floor(ev.evidence_class, floor):
+            states.append(CheckState(check, "unknown", ev.evidence_class, ev.commit, ev.source))
+            continue
         states.append(CheckState(check, ev.result, ev.evidence_class, ev.commit, ev.source))
 
-    ceiling = _declared_ceiling(states)
     dims: dict[str, int] = {}
-    for dim in sorted({c.check.dimension for c in states}):
-        dims[dim] = _dimension_level([c for c in states if c.check.dimension == dim], ceiling)
+    for dim in DIMENSIONS:
+        if not standard.applies(subject.kind, dim):
+            continue
+        dims[dim] = _dimension_level([c for c in states if c.check.dimension == dim])
     level = min(dims.values()) if dims else 0
     return SubjectReport(subject=subject, level=level, dimensions=dims, checks=states)
 
 
-def _declared_ceiling(states: Iterable[CheckState]) -> int:
-    """Highest rank reachable: ranks 1..N must each have at least one check
-    declared for this subject (any dimension). A rank nobody wrote a check
-    for is not earned, and the ladder stops there. Silence is not a pass."""
-    ranks = {s.check.rank for s in states}
+def _dimension_level(states: list[CheckState]) -> int:
+    """Level N needs every check of this dimension at ranks 1..N satisfied.
+    A rank with no check is an open cell and stops the dimension. An empty
+    dimension is level 0. Other dimensions do not carry the rank."""
+    by_rank: dict[int, list[CheckState]] = {}
+    for state in states:
+        by_rank.setdefault(state.check.rank, []).append(state)
     level = 0
     for rank in range(1, MAX_LEVEL + 1):
-        if rank not in ranks:
+        rows = by_rank.get(rank)
+        if not rows or not all(s.state in SATISFIED for s in rows):
             break
         level = rank
-    return level
-
-
-def _dimension_level(states: list[CheckState], ceiling: int) -> int:
-    """Soundcheck rule inside one dimension: level N requires every check of
-    this dimension with rank ≤ N to be satisfied. A rank with no check in
-    this dimension does not block it (other dimensions carry that rank)."""
-    level = 0
-    for rank in range(1, ceiling + 1):
-        rows = [s for s in states if s.check.rank == rank]
-        if all(s.state in SATISFIED for s in rows):
-            level = rank
-            continue
-        break
     return level
 
 

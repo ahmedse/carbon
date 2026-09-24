@@ -1,0 +1,1231 @@
+t_a_bare_module_place_noun_alone: 'A bare module place noun alone: attendance / حضور
+  or payroll / رواتب '
+t_a_contractual_salary_figure_empty_payslips: 'a contractual salary figure; empty
+  payslips are not "no salary '
+t_a_first_person_data_ask_my: 'A first-person data ask (my hours, my payslip, my leave
+  balance) → '
+t_a_named_other_person_s_leave: 'A named other person''s leave (name or emp_NNNN)
+  → call_tool '
+t_a_user_is_searching_an_employee: 'A user is searching an employee directory whose
+  names are stored in '
+t_a_za_z_0_60_b: '|[A-Za-z][^\]]{0,60}?\b(?:Salary|Value|Count|Rate|Amount|Figure|Metric)\b'
+t_active_employees: active employees
+t_advertise_registered_descriptor_entity_types_and: "Advertise registered descriptor\
+  \ entity types (and metrics) on ECF tools.\n\n    Deep-copies the static ECF defs\
+  \ so import-time templates stay untouched.\n    When descriptors are available,\
+  \ ``entity_type`` / ``metric`` enums and\n    descriptions list the live names.\
+  \ Otherwise keep the HRMS fallback wording\n    (employee + leave_record) without\
+  \ brand-specific engine terms.\n    "
+t_after_gosi: after gosi
+t_after_gosi_take_s_home_بعد: after gosi|take[\s_-]*home|بعد.{0,12}gosi|صافي.{0,8}بعد
+t_agent_discovery_scope_router_gate_briefs: "Agent discovery scope router — gate briefs/replies\
+  \ before planning.\n\nDeterministic (no LLM): classifies Operator text so Agent\
+  \ discovery does not\nover-help (force-fit leave → DQ, trivia → a quiz). Chat remains\
+  \ the\nadvisor surface; Agent remains the planner.\n\nClasses:\n  PLAN_CLEAR   —\
+  \ in-scope outcome; discovery/LLM may proceed\n  PLAN_AMBIG   — could be plan or\
+  \ transaction; show recommended cards\n  ADVISORY     — Q&A / trivia → handoff Chat\n\
+  \  TRANSACTION  — personal leave / HR action → recommend leave path\n  DIGRESSION\
+  \   — mid-discovery topic switch (same as ADVISORY/TRANSACTION)\n  ABUSE       \
+  \ — jailbreak / injection style → calm refuse\n"
+t_agent_leave_request_lifecycle_or_my: 'Agent (leave.request.lifecycle) or My Leave
+  (/my/leave). '
+t_all_four_salary_report_aspects_with: all four salary report aspects with charts
+t_and_approve_or_plan_a_leave: 'and approve — or plan a leave-compliance board pack
+  instead. '
+t_and_leave_balance: ' and leave balance'
+t_annual_leave: annual leave
+t_annual_leave_2: Annual leave
+t_annual_s_leave_vacation_pto_time: (?:annual\s+)?(?:leave|vacation|pto|time\s*off)\b
+t_another_leave_type: another leave type
+t_answer_a_payroll_follow_up_from: Answer a payroll follow-up from committed line
+  amounts. Invents none.
+t_api_for_a_chat_bound_ess: "API for a Chat-bound ESS self-read, or None (fall through).\n\
+  \n    Rules (domain-agnostic):\n    - Named-employee / third-person → None.\n  \
+  \  - A day-count or a start-date question → None (not a balance GET).\n    - Exactly\
+  \ one domain in the utterance → that domain's preferred API.\n    - Multiple domains\
+  \ in the utterance → None (not a single bound GET).\n    - Aspect / comprehensive\
+  \ follow-up with exactly one domain in recent\n      history → that domain's balance\
+  \ API (or history if no balance twin).\n    "
+t_apply_for_annual_leave: apply for annual leave
+t_apply_for_leave: apply for leave
+t_apply_for_vacation: apply for vacation
+t_arabic_needles_for_intent_leave_mutation: Arabic needles for ``intent`` leave mutation
+  (ADR-0049 L7). No compiled regex.
+t_arabic_needles_for_tools_py_compensation: Arabic needles for ``tools.py`` compensation/leave/profile
+  (ADR-0049 L7).
+t_attendance: attendance
+t_attendance_lifecycle: attendance lifecycle
+t_attendance_payroll_mutations_direct_the_user: attendance / payroll mutations, direct
+  the user to Agent or My.
+t_attendance_permission: attendance permission
+t_attendance_permission_2: attendance.permission
+t_attendance_permission_follows_process_dial: 'Attendance permission follows process
+  dial '
+t_attendance_permission_lifecycle: attendance.permission.lifecycle
+t_attendance_permission_lifecycle_pulse_lists_exis: 'attendance.permission.lifecycle:
+  Pulse lists existing permissions '
+t_attendance_permission_lifecycle_submit: 'attendance.permission.lifecycle (submit). '
+t_attendance_permission_submit: attendance.permission.submit
+t_attendance_permissions: attendance permissions
+t_b5_never_let_empty_payslips_bare: "B5: never let empty payslips / bare profile look\
+  \ like 'no salary data'.\n\n    When the user asked about compensation and lacks\
+  \ ``people:view_compensation``,\n    stamp an explicit CBAC deny onto empty payslip\
+  \ results and self-profile\n    lookups so synthesis cannot invent absence.\n  \
+  \  "
+t_b5_salary_compensation_asks_must_not: "B5: salary/compensation asks must not soft-route\
+  \ to empty payslip lists.\n\n    Prefer ``get_my_profile`` (self) or ``get_employee``\
+  \ (coworker) so CBAC\n    deny / resolve_entity paths can surface ``people:view_compensation``.\n\
+  \    Payslip endpoints stay for explicit payslip / net-pay / take-home /\n    last-month\
+  \ / deduction / GOSI / قسيمة asks.\n    "
+t_b_all_s_loans_loan_s: \b(?:all\s+loans|loan\s+portfolio|board\s+pack|compliance)\b
+t_b_attendance_hours_early_short_medical: \b(?:attendance|hours|early|short|medical|official|emergency)\b
+t_b_distribution_distributions_breakdown_salary_sa: \b(distribution|distributions|breakdown|salary|salaries|
+t_b_gross_gosi_loan_installment_net: \b(gross|gosi|loan_installment|net)\s*=\s*([0-9]+(?:\.[0-9]+)?)
+t_b_leave_loan_attendance_vacation_permission: '|\b(?:leave|loan|attendance|vacation|permission)\b.{0,40}\b'
+t_b_leave_vacation_pto_b_إجاز: \b(?:leave|vacation|pto)\b|إجاز|اجاز
+t_b_leave_vacation_s_request_application: '|\b(?:leave|vacation)\s+(?:request|application)\b'
+t_b_previous_past_s_leave_b: \b(?:previous|past)\s+leave\b|
+t_b_request_apply_s_for_take: \b(?:request|apply\s+for|take|submit|book)\s+.{0,24}\b(?:leave|time\s*off|vacation|pto)\b
+t_balance_zero_no_payslip_no_loans: '(balance zero, no payslip, no loans, no requests)
+  — especially after '
+t_basic_salary: basic salary
+t_bilingual_en_ar_navigation_grounding_navigation: "Bilingual (EN + AR) navigation\
+  \ GROUNDING.\n\nNavigation is a first-class intent, but *comprehension* of it belongs\
+  \ to the\nLLM intent classifier (``intent.py``): only the LLM can tell an actual\
+  \ request\nto navigate (\"take me to the people app\") from a question or complaint\
+  \ that\nmerely mentions a place (\"why are you designed to show all employees' leaves?\"\
+  ,\n\"مش بسألك روح مكان\"). A keyword/verb matcher cannot — it fires on any sentence\n\
+  that happens to contain a verb + a place noun, including negations and\nmeta-questions.\n\
+  \nSo this module does NOT decide *whether* the user wants to navigate. It only\n\
+  *grounds* a target concept the LLM already chose against the instance's\n*declared*\
+  \ navigation targets (see ``navigation_routes`` in ``instance.yaml``).\nThis is\
+  \ the anti-hallucination guard: it never invents a destination and never\ntrusts\
+  \ a raw route from the LLM — it maps a concept to a real, enumerated route.\n\n\
+  Design:\n  1. Unicode normalisation — NFKC, strip tashkeel/diacritics, fold Arabic\n\
+  \     orthographic variants (أإآ→ا · ة→ه · ى→ي · ؤ/ئ→ء) and kashida.\n  2. Alias\
+  \ matching      — each target declares its own en/ar synonyms.\n  3. Graceful ambiguity\
+  \  — multiple matches return candidates, never a dead-end.\n  4. No match      \
+  \      — returns ``none`` and the normal pipeline proceeds.\n\nEntry point: :func:`ground_navigation`\
+  \ — a pure function of\n``(concept, instance_config)``, no LLM, no I/O, deterministic.\n"
+t_bind_ess_write_slots_from_a: "Bind ESS write slots from a combined brief (loan/leave/attendance).\n\
+  \n    Lexical only — no MDM / ``write_slots``. Chat is async; governed lookup\n\
+  \    is Agent's job after handoff. Returns ``(api_name, body)`` or None.\n\n   \
+  \ ``prefer_api`` forces the write kind when the current turn is a slot\n    continuation\
+  \ (e.g. \"I need 3000 SAR\") that is not itself a loan brief.\n    "
+t_blast_s_month_s_s_pay: \blast\s+(?:month'?s?\s+)?(?:pay|salary|payslip)\b|
+t_bleave_b_إجازة_اجازة: \bleave\b|إجازة|اجازة
+t_blist_s_my_s_leave_b: \blist\s+my\s+leave\b
+t_bmy_s_leave_s_requests_history: \bmy\s+leave\s+(?:requests?|history|applications?)\b|
+t_bmy_s_previous_s_leave_b: \bmy\s+previous\s+leave\b|
+t_bmy_s_salary_b_bsalary_b: \bmy\s+salary\b|\bsalary\b
+t_board_ready_salary_summary_high_level: Board-ready salary summary high level no
+  row dumps
+t_broad_payroll_salary_report_asks_clarify: 'Broad payroll/salary report asks — clarify
+  before dumping data.
+
+
+  Ask mode must not invent a full report from a vague brief. One short
+
+  question with closed options; then run tools for the chosen angle.
+
+
+  Continuity (ADR-0047 ConversationState): never re-ask the same clarify when
+
+  this thread already has payroll/salary results, a prior clarify, or a scoped
+
+  follow-up (charts / all aspects / …).
+
+  '
+t_bucket_gross_net_amounts_into_readable: Bucket gross/net amounts into readable salary
+  bands.
+t_build_a_reviewable_plan_from_attendance: Build a reviewable Plan from ``attendance.permission.lifecycle``.
+t_build_a_reviewable_plan_from_leave: Build a reviewable Plan from ``leave.request.lifecycle``
+  + brief slots.
+t_build_a_reviewable_plan_from_loan: "Build a reviewable Plan from ``loan.request.lifecycle``\
+  \ + brief slots.\n\n    Host review is manager then finance (Team) — Pulse only\
+  \ stages submit.\n    A review-only brief (check loans / leave, no apply) stays\
+  \ a read plan.\n    "
+t_c1_never_clarify_modes_when_the: "C1: never clarify modes when the 'name' is instruction-shaped\
+  \ text.\n\n    Force ``answer`` + ``resolve_entity`` so the resolver returns an\
+  \ honest\n    no_match (data-as-data). Must not dump salaries or ask which mode\
+  \ to enter.\n    "
+t_can_i_download_my_payslip: can i download my payslip
+t_can_i_download_my_payslips: can i download my payslips
+t_can_i_download_payslip: can i download payslip
+t_can_i_download_payslips: can i download payslips
+t_canonical_short_affirmation_detection_english_ar: 'Canonical short-affirmation detection
+  (English + Arabic).
+
+
+  One source of truth for "the user just said yes". The deixis gate, the
+
+  pending-action store and the consent-resume path all consult this module so a
+
+  bare affirmative can never be re-read as a fresh — or off-limits — request.
+
+
+  Arabic is normalized before matching (tashkeel stripped, alef/ya/teh-marbuta
+
+  unified), so ``ايوة`` and ``ايوه`` are the same token. The teh-marbuta spelling
+
+  is what users actually type, and missing it hard-refused a leave
+
+  confirmation with the out-of-scope copy.
+
+  '
+t_car_loan: Car loan
+t_case_sensitive_given_name_leave_topic: Case-sensitive Given-name + leave topic (no
+  extra re.compile).
+t_catalog_as_router_lines_for_the: "Catalog-as-router lines for the understand prompt\
+  \ (ADR-0049 §2).\n\n    Returns ``(lines, allowed_names, write_names)``. Write twins\
+  \ are\n    *described* — marked Agent-only — so the model can use their ``not_for``\n\
+  \    to separate \"I have a loan\" (read) from \"I want a loan\" (write). Chat\n\
+  \    never executes them: ``validate_decision`` turns a write ``call_tool``\n  \
+  \  into ``handoff_agent`` (ADR-0046). One helper feeds both the runtime and\n  \
+  \  the G6 understand scorer so they see the same catalog.\n\n    ``catalog`` must\
+  \ already be RBAC-scoped. Every entry is described and\n    allowed: lexical ranking\
+  \ only orders the list and picks which ``k``\n    entries get full description +\
+  \ examples. Rank ≥ k gets a one-line\n    summary so an HR catalog still fits under\
+  \ the 8k task clip with the\n    decision rules above it.\n    "
+t_chart_table_envelope_for_render_text: "Chart/table envelope for ``render`` != text,\
+  \ built from ``executed`` only.\n\n    No other payload (prior turns, other domains)\
+  \ can reach the chart, so a\n    leave thread cannot produce a payroll figure.\n\
+  \    "
+t_check_existing_attendance_permissions: Check existing attendance permissions
+t_check_existing_loans_before_submitting: Check existing loans before submitting
+t_check_existing_loans_read_only_no: Check existing loans (read only — no request)
+t_check_leave_balance_before_submitting: Check leave balance before submitting
+t_check_my_current_attendance_permissions_read: Check my current attendance permissions
+  (read)
+t_check_my_current_loans_read: Check my current loans (read)
+t_checking_your_leave_balance: Checking your leave balance
+t_clock_me_in_record_attendance_now: 'Clock-me-in / record attendance now (الآن /
+  now) → handoff_agent with '
+t_compensation_ask_cbac_capable_employee_profile: compensation ask → CBAC-capable
+  employee/profile path
+t_compensation_payroll_s_mix_pay_s: compensation|payroll\s+mix|pay\s+bands?|tiers?)\b
+t_compensation_salary_basic_pay_راتب_أجر: '- COMPENSATION / SALARY / BASIC PAY (راتب
+  / أجر / مرتب): prefer '
+t_consent_resume_remember_an_action_the: 'Consent resume — remember an action the
+  assistant proposed in prose.
+
+
+  RULE_21 says a mutation is never auto-run: the assistant proposes, the user
+
+  confirms. When the proposal is STAGED (a pending execution + confirm card)
+
+  the card carries the consent. But the assistant also proposes in plain prose
+
+  ("I''ll file two days of annual leave from tomorrow — shall I proceed?"), and
+
+  then a bare "نعم" had nothing to attach to: the turn was re-read as a brand
+
+  new request, which is how a leave confirmation ended up hard-refused as
+
+  off-limits and then looped on "confirm it in the system first".
+
+
+  This store closes that loop. The proposal text from the assistant''s own turn
+
+  is kept for one exchange; if the next message is a short affirmative, the
+
+  turn is re-issued as an explicit instruction so the model actually calls the
+
+  platform action (which then stages normally, under RULE_21).
+
+
+  Nothing here executes anything — it only rewrites the user''s "yes" into the
+
+  request the assistant itself just offered.
+
+  '
+t_contractual_salary_figure_empty_payslips_are: '  contractual salary figure — empty
+  payslips are not "no salary '
+t_create_a_leave_request_plan: Create a leave-request plan
+t_creating_an_employee_record: Creating an employee record
+t_days_s_of_s_leave_s: days?\s+(?:of\s+)?leave\s+(?:left|remaining)|
+t_deductions_and_gosi_overview: Deductions and GOSI overview
+t_deductions_gosi: Deductions & GOSI
+t_deductions_gosi_or_a_loan_installment: deductions, GOSI, or a loan installment from
+  a payslip.
+t_deductions_gosi_overview: '- **Deductions & GOSI** overview
+
+  '
+t_deterministic_mermaid_charts_from_structured_too: "Deterministic Mermaid charts\
+  \ from structured tool results.\n\n    Pie for balanced analyze_* breakdowns; bar\
+  \ for skewed / salary bands.\n    "
+t_deterministic_zero_token_fast_path_used: "Deterministic zero-token fast path used\
+  \ by the turn runner.\n\n    Grounds the raw user message against declared routes.\
+  \ Same contract as\n    :func:`ground_navigation` — never invents destinations.\
+  \ Questions that\n    merely mention a module noun return ``none`` (the normal pipeline\
+  \ answers).\n    How/where UI asks (\"where can I find my leave\") ground the *topic*\
+  \ only.\n    "
+t_deterministically_render_gfm_markdown_tables_fro: "Deterministically render GFM\
+  \ markdown tables from structured tool results.\n\n    Prefer analytics ``breakdown``\
+  \ buckets. Never dump raw payslip/employee\n    row dumps for distribution asks\
+  \ — those belong in a chart + band table.\n    "
+t_distribution_analytics_for_salary_or_headcount: '- DISTRIBUTION / ANALYTICS: for
+  salary or headcount distributions, '
+t_do_not_offer_to_open_leave: '- Do not offer to open Leave/Loans UI unless the user
+  asked to navigate.'
+t_do_not_submit_a_loan_nothing: . Do not submit a loan. Nothing runs until the operator
+  approves.
+t_download_my_payslip: download my payslip
+t_download_my_payslips: download my payslips
+t_download_payslip: download payslip
+t_download_payslips: download payslips
+t_dump_payslip_rows_for_distribution_or: 'dump payslip rows. For distribution or analytics
+  questions, '
+t_e_g_employee_leave_record_must: (e.g. employee, leave_record). Must match a descriptor
+  name.
+t_e_g_insert_avg_salary_bind: '(e.g. [Insert …], [Avg … Salary]). Bind real findings
+  from prior '
+t_early_leave: early leave
+t_ecf_6_canonical_metric_aggregation_aggregate: "ECF-6 — Canonical metric aggregation.\n\
+  \naggregate(descriptor, metric, *, count_fn) → AggregateResult\n\nThe algorithm\
+  \ is domain-neutral. Metric definitions (filters + descriptions)\ncome from EntityDescriptor.metrics\
+  \ (ADR-0032). The injectable ``count_fn``\nkeeps the engine database-free (RULE_20)\
+  \ — the host executor resolves the\nmodel path and applies RULE_12 org scope.\n\n\
+  Canonical examples (HRMS employee descriptor):\n  headcount → filter {is_active:\
+  \ True}\n  kuwaiti   → filter {nationality_code: \"KW\"}  (NOT the kuwaitization\
+  \ boolean)\n"
+t_emergency_leave: Emergency leave
+t_emergency_loan: Emergency loan
+t_employee: Employee
+t_employee_2: 'employee #'
+t_employee_3: 'Employee: '
+t_employee_4: employee
+t_employee_label_on_an_org_wide: Employee label on an org-wide entitlement row. Empty
+  for a self balance.
+t_employee_no: employee no
+t_employee_number: employee number
+t_employee_number_employee_no_what_number: employee number|employee no|what number|رقم
+  الموظف
+t_employee_onboarding: employee.onboarding
+t_employee_onboarding_lifecycle: employee.onboarding.lifecycle
+t_employee_record: employee record
+t_employees: employees
+t_employees_2: /employees/([^/]+)
+t_employees_3: Employees
+t_ess_self_read_catalog_loan_payslip: 'ESS self-read catalog: loan/payslip/leave-history
+  twins of leave balance.'
+t_fill_the_write_slots_the_brief: "Fill the write slots the brief already answered\
+  \ (RULE_21 consent card).\n\n    Slots are declared per endpoint in the brand ``api_catalog``\n\
+  \    (``write_slots``) and resolved by ``ai.write_slots``: governed values\n   \
+  \ through MDM, dates against the platform clock. A card must never ask the\n   \
+  \ operator for a leave type or day they just stated. Mutates in place; needs\n \
+  \   DB access, so callers in async code wrap it with ``sync_to_async``.\n    "
+t_filterable_sub_entity_not_an_employee: 'filterable sub-entity, NOT an employee,
+  NOT a missing record.
+
+  '
+t_fly_to_the_people_app_take: '("fly to the people app", "take me to payroll", "روح
+  لتطبيق الموظفين"). '
+t_found_no_payslips: found no payslips
+t_gate_finished_deliverables_refuse_hollow_mid: "Gate finished deliverables: refuse\
+  \ hollow, mid-run, or title-only packs.\n\n    Returns ``(ok, reason)``. Reason\
+  \ is empty when ok.\n\n    A chart alone does **not** excuse unfilled ``[Insert…]``\
+  \ / ``[Avg … Salary]``\n    slots in prose or tables — that is the hollow Word the\
+  \ operator already saw.\n    "
+t_gate_only_promotion_admit_then_promote: "Gate-only promotion: admit then promote\
+  \ a skill to instance_promoted.\n\n    Private by design (P1-06).  The only sanctioned\
+  \ way to move a skill into\n    ``instance_promoted``.  Unlike the previous implementation,\
+  \ this *always*\n    runs the admission gate — there is no ``gate_status`` short-circuit\
+  \ that\n    would let a non-pending skill skip the critics.  If admission fails,\
+  \ it\n    raises ``ValueError`` and leaves the skill untouched.\n    "
+t_gosi: gosi
+t_gosi_2: GOSI
+t_gosi_3: '|gosi'
+t_gosi_and_statutory_employer_employee_contributio: GOSI and statutory employer employee
+  contributions compliance
+t_gosi_board_summary_before_calling_tools: 'GOSI, board summary) before calling tools.
+
+  '
+t_governed_process_briefing_chat_concept_answers: 'Governed-process briefing — Chat
+  concept answers, never navigation.
+
+
+  When the operator asks about a pack process id / lifecycle (EN or AR),
+
+  Pulse must explain ordered steps + human gates. That is a *concept* brief,
+
+  not a navigate short-circuit to People & Payroll.
+
+
+  Deterministic (stdlib + optional Django ORM / pack YAML). No LLM.
+
+  '
+t_guard_the_submit_step_runs_only: ' Guard: the submit step runs only when the loan
+  check shows no '
+t_happy_to_help_with_a_salary: 'Happy to help with a salary report — what should **this
+  report** focus on?
+
+
+  '
+t_happy_to_help_with_a_salary_2: happy to help with a salary report
+t_headcount_and_organization_structure_active_empl: 'Headcount and organization structure
+  — active employees by '
+t_hidden_salary_access_required: (hidden — salary access required)
+t_honest_empty_payslip_copy_echoes_figures: Honest empty-payslip copy. Echoes figures
+  the user typed; invents none.
+t_host_writes_leave_loan_attendance_payroll: '- HOST WRITES (leave, loan, attendance,
+  payroll, DQ create): Chat never '
+t_housing_loan: Housing loan
+t_how_s_much_s_leave_annual: how\s+much\s+leave|annual\s+leave|leave\s+entitlement
+t_how_s_much_s_leave_annual_2: how\s+much\s+leave|annual\s+leave(?:\s+remaining)?|
+t_hr_admin_only_for_salary_compensation: 'HR-admin only). For salary / compensation '
+t_i_can_draft_a_reviewable_leave: 'I can draft a reviewable leave-request plan here
+  for you to edit '
+t_i_can_only_read_your_own: 'I can only read your own records — for example your payslips
+  via '
+t_i_don_t_have_next_month: 'I don''t have next month''s payroll run date. '
+t_i_ll_treat_this_as_a: I'll treat this as a leave-compliance / board-pack plan.
+t_i_need_annual_leave: i need annual leave
+t_i_need_leave: i need leave
+t_i_need_vacation: i need vacation
+t_i_request_annual_leave: i request annual leave
+t_i_request_leave: i request leave
+t_i_request_vacation: i request vacation
+t_i_want_annual_leave: i want annual leave
+t_i_want_leave: i want leave
+t_i_want_vacation: i want vacation
+t_if_any_path_param_value_is: "\n    If any path param value is non-numeric (a slug\
+  \ or name), auto-resolve it to\n    the real numeric PK by fetching the corresponding\
+  \ list endpoint first.\n    Returns a (possibly updated) copy of path_params.\n\n\
+  \    Intelligence layer: invented demo labels (``demo-oct-2026``) are matched\n\
+  \    against ``period_start`` when exact field match fails — so payroll compute\n\
+  \    does not die on ``Field 'id' expected a number``.\n\n    Legacy list_employees\
+  \ / get_employee path via slug_resolution.\n    Superseded by ECF resolve_entity\
+  \ when ECF_ENABLED (ECF-7); kept as\n    30-day fallback — do NOT delete.\n    "
+t_if_intent_named_a_host_get: "If Intent named a host GET with certainty, inject call_host_api\
+  \ when Draft skipped it.\n\n    Runs for ESS self-read APIs always (replaces the\
+  \ leave-only post-draft force).\n    For other APIs, requires ``PULSE_TOOL_CHOICE=on``.\n\
+  \    "
+t_keep_leave_apis_off_loan_onboarding: Keep leave APIs off loan/onboarding plans;
+  bind pack-correct hosts.
+t_kill_clarify_disambiguate_loops_on_the: "Kill clarify/disambiguate loops on the\
+  \ whole-organisation name.\n\n    When the user names the tenant (GOFSCO/AASTMT/…)\
+  \ or \"the company\", the\n    intent classifier must not short-circuit to clarify\
+  \ — Chat should answer\n    from live tools. Prefer a people/employees analyze or\
+  \ list endpoint when\n    present; otherwise fall through with action=answer and\
+  \ no endpoint.\n    "
+t_last_month_s_pay_deductions_gosi: 'last month''s pay, deductions, GOSI, payslip
+  lines, or قسيمة. '
+t_last_month_s_pay_deductions_gosi_2: '  last month''s pay / deductions / GOSI / payslip
+  / قسيمة / '
+t_leave: leave
+t_leave_2: Leave
+t_leave_and_attendance_balances_usage_patterns: Leave and attendance balances usage
+  patterns with charts
+t_leave_balance: leave balance
+t_leave_balance_ask_host_leave_entitlements: leave balance ask → host leave entitlements/self
+  path
+t_leave_balance_employees_payslips_use_call: '(leave balance, employees, payslips,
+  …) use call_host_api with an '
+t_leave_balance_loans_or_profile_call: 'leave balance, loans, or profile, call the '
+t_leave_balance_lookup: leave balance lookup
+t_leave_balances: Leave balances
+t_leave_board: leave board
+t_leave_compliance: leave compliance
+t_leave_lifecycle: leave lifecycle
+t_leave_loan_attendance_payroll_if_they: '(leave/loan/attendance/payroll). If they
+  ask to REQUEST / '
+t_leave_loan_attendance_vacation_permission_b: (?:leave|loan|attendance|vacation|permission)\b
+t_leave_pack: leave pack
+t_leave_process: leave process
+t_leave_report: leave report
+t_leave_request: leave.request
+t_leave_request_2: leave request
+t_leave_request_follows_process_dial_leave: 'Leave request follows process dial leave.request.lifecycle: '
+t_leave_request_lifecycle: leave.request.lifecycle
+t_leave_request_submit: leave.request.submit
+t_leave_requests: leave requests
+t_leave_risk: leave risk
+t_leave_s_balance_remaining_s_leave: leave\s+balance|remaining\s+leave|leave\s+remaining|
+t_leave_s_entitlement_sick_s_leave: leave\s+entitlement|sick\s+leave\s+remaining|
+t_leave_type: leave type
+t_leave_type_2: Leave type
+t_leave_variance: leave variance
+t_leaves: leaves
+t_list_existing_loans: List existing loans
+t_list_existing_loans_and_read_leave: List existing loans and read leave balance
+t_list_my_payslips_or_your_own: 'list_my_payslips, or your own leave and loans. '
+t_listing_your_leave_records: Listing your leave records
+t_loan: Loan
+t_loan_2: loan
+t_loan_amount: loan amount
+t_loan_amount_قسط_0_8_قرض: loan amount|قسط.{0,8}قرض
+t_loan_lifecycle: loan lifecycle
+t_loan_process: loan process
+t_loan_request: loan.request
+t_loan_request_2: loan request
+t_loan_request_follows_process_dial_loan: 'Loan request follows process dial loan.request.lifecycle: '
+t_loan_request_lifecycle: loan.request.lifecycle
+t_loan_request_submit: loan.request.submit
+t_loan_salary_joined_by_and_و: 'loan+salary), joined by "and" or و (standalone
+  or prefixed to the second noun, as in وقسيمة / وكم) — clarify which one, in either
+  language. Never call_tool '
+t_loan_shows_up_the_plan_stops: loan shows up, the plan stops before submitting.
+t_loan_type: Loan type
+t_loan_type_2: loan type
+t_loans: loans
+t_map_line_type_amount_from_a: Map line_type → amount from a host payslip payload.
+t_maternity_leave: Maternity leave
+t_my_attendance: /my/attendance
+t_my_leave: /my/leave
+t_my_loan: my loan
+t_my_loans: my loans
+t_my_s_leaves_b: (?:my\s+)?leaves?\b
+t_my_salary_راتبي_do_not_match: '  "my salary" / راتبي). Do NOT match `list_my_payslips`
+  for a '
+t_n7_named_person_leave_balance_must: "N7: named-person leave balance must hit entitlements,\
+  \ not stop at resolve.\n\n    Admin \"annual leave remaining for employee 1001 Wellie\"\
+  \ historically\n    matched ``resolve_entity`` only (Pulse loop never forced the\
+  \ leave tool).\n    Prefer ``list_leave_entitlements`` (org-scoped). First-person\
+  \ \"my leave\"\n    stays on ``get_my_leave_balance``. Leave *history* asks use\
+  \ ``list_my_leave``.\n    "
+t_name_employee_number_id_date_or: Name, employee number, id, date, or any identifier
+  of the entity.
+t_name_the_open_clarify_slot_for: "Name the open clarify slot for continuity (never\
+  \ leave empty).\n    \n    This is only a fallback for backward-compat with older\
+  \ clarify surfaces\n    that don't provide typed kind/options. New menus must pass\
+  \ typed open_question.\n    "
+t_named_employee_leave_remaining_entitlements_list: Named-employee leave remaining
+  → entitlements list.
+t_navigate_to_that_nav_target_bare: '→ navigate to that NAV target. Bare leave / الإجازات
+  or payslip / قسيمة '
+t_never_claim_to_have_submitted_or: 'never claim to have submitted or staged a host
+  write. For leave / loan / '
+t_never_create_leave_record_that_needs: 'Never create_leave_record (that needs an
+  employee id and is '
+t_never_paste_raw_employee_salary_rows: '   NEVER paste raw employee salary rows into
+  the chat — aggregates, '
+t_no_committed_payslips: no committed payslips
+t_no_committed_payslips_were_found_so: 'No committed payslips were found, so I do
+  not have net pay, '
+t_no_employee: no employee
+t_no_matching_employee_for_that_query: No matching employee for that query.
+t_no_payslips: no payslips
+t_no_payslips_are_found: no payslips are found
+t_no_payslips_are_on_file: no payslips are on file
+t_no_payslips_were_found: no payslips were found
+t_no_payslips_were_on_file: no payslips were on file
+t_not_authorized_to_look_up_other: Not authorized to look up other employees (people:view
+  required).
+t_not_authorized_to_look_up_other_2: Not authorized to look up other employees.
+t_of_a_process_id_or_lifecycle: '  of a process id or lifecycle (e.g. leave.request.lifecycle,
+  loan.request.lifecycle, '
+t_one_identity_chunk_count_4_gross: "One identity chunk: ``count=4, gross=6500, gosi=1200,\
+  \ …``.\n\n    Default per-record digest is 200-char and drops net when four lines\n\
+  \    are present. Payslip recall needs the identity, not employee_name.\n    "
+t_only_if_no_open_loan_otherwise: ' — only if no open loan (otherwise the plan stops)'
+t_only_if_no_open_loan_stop: ' — only if no open loan (stop otherwise)'
+t_only_if_step_0_shows_no: Only if step 0 shows no open loan — otherwise stop.
+t_open_loan_otherwise_the_plan_stops: open loan; otherwise the plan stops before submitting.
+t_open_my_attendance: Open My Attendance
+t_open_my_leave: Open My Leave
+t_other_employees_data: 'other employees'' data.
+
+  '
+t_overtime: overtime
+t_p4_3_skills_admission_gate_three: "P4.3 — Skills Admission Gate — Three Critics\
+  \ + Marginal-Gain Check.\n\nBefore a draft skill can be promoted to instance_promoted,\
+  \ it must pass\nthree heterogeneous critics and a marginal-gain check. This is the\n\
+  non-negotiable gate from MASTER-PLAN §4.\n\nCritics\n-------\n1. STRUCTURAL   (rules,\
+  \ no LLM) — validates signature/body JSON, kind,\n   name collision with existing\
+  \ tools.\n2. HARMLESSNESS (rules + optional LLM) — checks for dangerous patterns.\n\
+  \   Only calls LLM for api_call / code_snippet kinds.\n3. CONSISTENCY  (LLM) — checks\
+  \ that the new skill doesn't contradict\n   any existing instance_promoted skill.\n\
+  4. MARGINAL GAIN (eval) — runs the skill on a small sample, compares\n   to baseline.\n\
+  \nAll results are written to SkillAdmissionLog. Critic exceptions are\nfail-closed:\
+  \ if a critic raises or returns an unparseable LLM response it\nrejects the skill\
+  \ (reason ``critic_error``) and leaves it pending, so removing\nthe LLM key means\
+  \ nothing is promoted.\n"
+t_parse_planner_demo_period_aliases_into: 'Parse planner/demo period aliases into
+  (year, month).
+
+
+  Shared by call_host_api slug resolution so invented labels like
+
+  ``demo-oct-2026`` resolve to real payroll-run PKs instead of crashing
+
+  Django with ``Field ''id'' expected a number``.
+
+  '
+t_payroll: payroll
+t_payroll_2: Payroll
+t_payroll_and_compensation_salary_ranges_gross: 'Payroll and compensation — salary
+  ranges, gross pay, deductions, '
+t_payroll_compensation: payroll & compensation
+t_payroll_lifecycle: payroll lifecycle
+t_payroll_process: payroll process
+t_payroll_run: payroll.run
+t_payroll_run_2: payroll-run
+t_payroll_run_3: payroll run
+t_payroll_run_health: Payroll run health
+t_payroll_run_health_committed_draft_failed: '- **Payroll run health** (committed
+  / draft / failed)
+
+  '
+t_payroll_run_health_committed_draft_failed_2: Payroll run health committed draft
+  failed
+t_payroll_run_leave_record_or_other: payroll run, leave record, or other sub-item
+  that is still ambiguous.
+t_payroll_run_lifecycle: payroll.run.lifecycle
+t_payroll_run_lifecycle_gosi_wps_sif: '  payroll.run.lifecycle, gosi_wps.sif.lifecycle,
+  employee.onboarding.lifecycle, '
+t_payroll_run_status: payroll run status
+t_payroll_run_status_draft_computed_validated: Payroll run status draft computed validated
+  committed failed
+t_payroll_runs: payroll runs
+t_payroll_runs_2: /payroll-runs/([^/]+)
+t_payslip: Payslip
+t_payslip_2: payslip
+t_payslip_line: payslip line
+t_payslip_lines: /payslip-lines/([^/]+)
+t_payslip_loan_attendance_profile_overrides_state: '(payslip, loan, attendance, profile)
+  overrides state — call that '
+t_payslip_pay_s_slip: payslip|pay[\s_-]*slip
+t_payslips: payslips
+t_payslips_are_in_my_if_none: Payslips are in My. If none are committed yet, there
+  is nothing to download.
+t_people_payroll: People & Payroll.
+t_per_message_tool_digests_pv2_1c: "Per-message tool digests (PV2-1C · Intelligence\
+  \ Contract §4.3 HistoryBlock).\n\nA digest is a ≤ 200-char, scalar-only restatement\
+  \ of what a turn's tools\nreturned (\"call_host_api get_my_loan_eligibility: eligible=true,\n\
+  max_amount=8000, currency=SAR\"), persisted on the assistant message so the\nmodel\
+  \ can recall tool facts turns later without re-querying.\n\nNever a raw payload:\n\
+  \  * only successful, non-staged tool results contribute;\n  * only scalar leaves\
+  \ (bool / number / short string) are kept;\n  * internal ids and restricted identifiers\
+  \ (national id, IBAN, secrets…) are\n    dropped (RULE_23);\n  * records carrying\
+  \ an ``org_unit_id`` outside the user's retrieval scope\n    (``{\"org_unit_ids\"\
+  : [...], \"org_unit_id\": n}`` — the same dict the S2\n    applicability-first filter\
+  \ consumes) are dropped (RULE_20). With no scope,\n    only unscoped records survive.\n\
+  \nPure function — no Django, no I/O.\n"
+t_personal_leave_time_off_payroll_hr: '    Personal leave / time-off / payroll / HR
+  self-service asks are NOT '
+t_personal_loan: Personal loan
+t_pick_another_leave_type_or_a: Pick another leave type or a shorter period.
+t_plan_a_leave_compliance_report: Plan a leave-compliance report
+t_plan_dial_personal_ess_brief_deterministic: 'Plan dial + personal ESS brief → deterministic
+  process-dial plan (0 draft LLM).
+
+
+  ADR-0047 deterministic-first: when the composer dial is **Plan** and the brief
+
+  is a personal loan / leave / attendance request (composite or not), the plan
+
+  spine is owned by the process dial (``process_dial.materialize_*``). The LLM
+
+  draft must not replace it with ad-hoc reads and an invented clarify such as
+
+  "what is your monthly salary?".
+
+
+  Also owns the *restyle* follow-up («in arabic and in more details please»,
+
+  «بالعربي وبالتفصيل»): re-render the previous assistant answer — no tools, no
+
+  new facts, one LLM rewrite — instead of restarting discovery.
+
+  '
+t_prepared_leave_draft_handoff_to_agent: Prepared leave draft — handoff to Agent or
+  My
+t_preparing_next_steps_for_attendance: Preparing next steps for attendance…
+t_preparing_next_steps_for_your_leave: Preparing next steps for your leave…
+t_preparing_next_steps_for_your_loan: Preparing next steps for your loan…
+t_process_dial_attendance_plan_grounded_s: 'process_dial attendance plan: grounded=%s
+  missing=%s body_keys=%s'
+t_process_dial_leave_plan_grounded_s: 'process_dial leave plan: grounded=%s missing=%s
+  body_keys=%s'
+t_process_dial_loan_plan_grounded_s: 'process_dial loan plan: grounded=%s missing=%s
+  body_keys=%s '
+t_process_dial_plan_materialization_hybrid_agent: "Process-dial plan materialization\
+  \ — hybrid Agent task creation (Path B).\n\nContract\n--------\n* **Process dial\
+  \ owns the DAG spine** — which steps exist, consent, capabilities.\n  Personal leave/loan\
+  \ never LLM-invent a random submit topology.\n* **Deterministic slot fill owns codes/dates/amounts**\
+  \ — ``fill_write_body`` from\n  the brief.\n* **LLM is residual intelligence** —\
+  \ not used for leave/loan spines today;\n  consent UI still asks only truly missing\
+  \ governed fields.\n* **Host Plane A owns review** — lifecycle review/activate/verify\
+  \ stay\n  Correspondence / Team SoD. Pulse Run covers the AI-runnable prefix only.\n\
+  \nSee ADR-0045 (planes), ADR-0046 (Chat handoff), QA PA-030 / E-LV-* / E-LN-*.\n"
+t_process_id_submit_my_attendance_permission: 'process_id=submit_my_attendance_permission.
+  Past attendance rows '
+t_pull_numeric_salary_amount_fields_from: Pull numeric salary/amount fields from list-shaped
+  tool results.
+t_pulse_lists_existing_loans_then_stages: 'Pulse lists existing loans then stages
+  submit (consent). '
+t_raw_employee_by_employee_salary_rows: 'raw employee-by-employee salary rows into
+  the chat.
+
+  '
+t_read_committed_payslip_amounts_from_this: Read committed payslip amounts from this
+  turn's tool results.
+t_read_current_loans_before_staging_a: Read current loans before staging a new request.
+t_read_leave_balance_read_only: Read leave balance (read only)
+t_read_leave_balance_requested_alongside_the: Read leave balance (requested alongside
+  the loan check)
+t_read_loans_and_leave_no_submit: Read loans and leave — no submit
+t_read_my_leave_balance_read: Read my leave balance (read)
+t_read_my_leave_records_read: Read my leave records (read)
+t_read_only_no_loan_will_be: '**Read only** — no loan will be submitted. It runs only
+  after you approve.'
+t_read_only_plan_list_the_employee: Read-only plan. List the employee's loans
+t_read_remaining_entitlement_before_the_leave: Read remaining entitlement before the
+  leave submit.
+t_redact_capability_gated_fields_the_caller: "Redact capability-gated fields the caller\
+  \ cannot see.\n\n    Always replaces the value when the capability is absent — never\
+  \ leave a\n    real salary visible to unauthorized callers (A5). Zero/null used\
+  \ to be the\n    only trigger because the host sometimes returned ``0.000`` as a\
+  \ soft mask;\n    that missed the case where the raw amount leaked through.\n  \
+  \  "
+t_remaining_s_leave_s_balance_s: remaining\s*(?:leave\s*)?(?:balance\s*)?[:=]?\s*0|
+t_render_a_bilingual_step_templates_entry: "Render a bilingual ``step_templates``\
+  \ entry for ``api_name``.\n\n    ``step_templates`` shape (instance.yaml)::\n\n\
+  \        step_templates:\n          submit_my_leave:\n            en: \"Leave submitted:\
+  \ {leave_type} …\"\n            ar: \"تم تقديم الإجازة: {leave_type} …\"\n\n   \
+  \ Returns ``None`` when no template matches. Missing value keys render empty.\n\
+  \    "
+t_request_annual_leave: request annual leave
+t_request_leave: request leave
+t_requesting_annual_leave: requesting annual leave
+t_requesting_leave: requesting leave
+t_requesting_vacation: requesting vacation
+t_resolve_entity_requires_a_name_or: resolve_entity requires a name or employee number
+  (query).
+t_return_fixed_cbac_deny_prose_when: "Return fixed CBAC deny prose when any tool denied\
+  \ view_compensation.\n\n    B5: skip LLM paraphrasing that mixes deny with soft\
+  \ \"no salary data\".\n    "
+t_reveal_s_all_s_salaries: reveal\s+(all\s+)?salaries|
+t_review_only_plan_list_loans_and: 'Review-only plan: list loans (and leave when asked).
+  No submit step.'
+t_reviews_in_team_team_track_status: reviews in Team (/team). Track status in My Attendance.
+t_rewrite_mistaken_knowledge_entity_bindings_to: "Rewrite mistaken knowledge-entity\
+  \ bindings to ``call_host_api``.\n\n    Live Agent QA (N-AG-LV-01): the decomposer\
+  \ often set\n    ``get_entity_details(entity_name=\"get_my_leave_balance\")`` because\
+  \ the\n    tool description said \"API endpoint\" and the prompt listed no catalog.\n\
+  \    That tool only searches the knowledge store → soft miss\n    ``Entity '…' not\
+  \ found``. Chat uses ``call_host_api`` with the same\n    catalog names. Mutates\
+  \ ``steps`` in place.\n\n    Also rewrites leave-only APIs off loan/onboarding briefs\
+  \ (P1 bind).\n    "
+t_rich_content_rendering_your_replies_are: "## Rich content rendering\n\nYour replies\
+  \ are rendered as rich Markdown documents in the platform UI. Use the\nright construct\
+  \ instead of describing things in prose:\n\n- **Tables** — GFM Markdown tables render\
+  \ as styled, striped tables. **Table\n  line rules (critical):** leave a blank line\
+  \ before the table, put the header\n  row, the `|---|---|` delimiter row, and EVERY\
+  \ data row each on its OWN line.\n  NEVER glue a table onto a prose line (e.g. after\
+  \ a colon) and NEVER collapse\n  the rows onto one line — a single-line table renders\
+  \ as raw `|` text, not a\n  table. Correct form:\n\n  | Position | Employees |\n\
+  \  |----------|-----------|\n  | Driver   | 52        |\n  | Floorman | 22     \
+  \   |\n- **Code** — fenced blocks (```python, ```sql, ```json, ...) render with\
+  \ syntax\n  highlighting, a language badge, and a copy button. **Always format JSON\
+  \ with\n  proper indentation** (2 spaces per level) and line breaks — never as a\
+  \ single\n  line. Example:\n  ```json\n  {\n    \"name\": \"Example Rule\",\n  \
+  \  \"type\": \"threshold\",\n    \"params\": {\n      \"operator\": \"gt\",\n  \
+  \    \"value\": 0\n    }\n  }\n  ```\n- **Diagrams** — a ```mermaid fenced block\
+  \ renders as a live diagram\n  (flowchart, sequenceDiagram, stateDiagram-v2, classDiagram,\
+  \ pie, gantt, ...).\n  When a workflow, flow, process, relationship or structure\
+  \ is clearer as a\n  picture, ALWAYS emit a mermaid diagram instead of prose. You\
+  \ CAN draw\n  diagrams — never say you cannot.\n- **Mermaid line rules (critical)**\
+  \ — the opening ```mermaid fence MUST start\n  on its OWN line, preceded by a blank\
+  \ line; the closing ``` MUST be on its own\n  line too. Put EVERY mermaid directive\
+  \ on its OWN line. NEVER place the fence\n  inline after prose, and NEVER collapse\
+  \ a diagram to a single line — a\n  single-line or inline fence will NOT render\
+  \ as a diagram in the UI.\n- **Data charts** — when your answer holds 3+ comparable\
+  \ numeric records, emit a\n  Mermaid chart IN ADDITION to a table (or rely on the\
+  \ Answer Envelope charts\n  the server builds from host rows). Do NOT call `code_execute`\
+  \ / matplotlib to\n  draw a chart for the screen — that sandbox PNG path is only\
+  \ for embedding\n  figures into Word/PDF exports. Choose the Mermaid type intelligently:\n\
+  \  - Use ```mermaid pie``` when the values are **parts of a whole** (scope %, category\n\
+  \    shares, breakdowns that add up to 100%). Pie slices must sum to a meaningful\
+  \ total.\n  - Use ```mermaid xychart-beta``` with `bar` when comparing **magnitudes\
+  \ across\n    independent categories** (module CO₂e, top emitters, year-over-year\
+  \ absolute).\n  - Use ```mermaid xychart-beta``` with `line` for **trends over time**.\n\
+  \  - Keep x-axis labels ≤ 14 chars — abbreviate or shorten longer names (the renderer\n\
+  \    truncates them anyway). NEVER include em-dashes (—), angle brackets, or braces\
+  \ in\n    axis labels; use a hyphen (-) instead. One `bar` line holds ALL values\n\
+  \    comma-separated. Every directive (`title`, `x-axis`, `y-axis`, `bar`, `line`,\n\
+  \    each `pie` slice) goes on its own line. Example:\n  ```mermaid\n  pie title\
+  \ Scope breakdown\n      \"Scope 1\" : 2258\n      \"Scope 2\" : 8032\n      \"\
+  Scope 3\" : 6\n  ```\n  ```mermaid\n  xychart-beta\n      title \"CO2e by Module\
+  \ (tonnes)\"\n      x-axis [\"Module A\", \"Module B\", \"Module C\"]\n      y-axis\
+  \ \"CO2e tonnes\" 0 --> 6000\n      bar [5566, 4023, 707]\n  ```\n  NEVER write\
+  \ `axis x`, `axis y`, or per-point `bar x: 1 y: 2.51` lines —\n  those are invalid\
+  \ Mermaid and the chart will NOT render. Use exactly the\n  `x-axis [...]` / `y-axis\
+  \ \"...\" 0 --> N` / `bar [...]` form above.\n- **Tables** — every row on its OWN\
+  \ line. NEVER put two data rows on the same line.\n  A correctly formed module-breakdown\
+  \ table looks like:\n\n  | Module | Calculations | CO₂e (kg) | CO₂e (t) |\n  |--------|-------------|-----------|---------|\n\
+  \  | Module A | 47 | 5,586,304 | 5,566 |\n  | Module B | 84 | 4,023,122 | 4,023\
+  \ |\n\n  One data row per line — NEVER collapse rows.\n- **Math** — $inline$ and\
+  \ $$block$$ render with KaTeX.\n- **Figures** — images with a title render with\
+  \ a caption below them.\n- **Links** — internal platform routes (starting with /)\
+  \ render as in-app links.\n\nPrefer rich constructs over prose lists whenever they\
+  \ make the answer clearer\nand easier to scan. Example diagram:\n\n```mermaid\n\
+  flowchart LR\n    A[Start] --> B{Valid?}\n    B -- Yes --> C[Activate]\n    B --\
+  \ No --> D[Investigate]\n```\n"
+t_rich_content_rendering_your_replies_render: '## Rich content rendering
+
+
+  Your replies render as rich Markdown. Use the right construct instead of prose:
+
+
+  - **Tables** — GFM tables render as styled tables. Leave a blank line before the
+  table; put the header, the `|---|---|` delimiter, and every data row each on its
+  OWN line.
+
+  - **Code** — fenced blocks (```python, ```sql, ```json) render with syntax highlighting
+  and a copy button; indent JSON with 2 spaces per level.
+
+  - **Diagrams** — a ```mermaid fenced block renders as a live diagram (flowchart,
+  sequenceDiagram, stateDiagram-v2, classDiagram, pie, gantt). You CAN draw diagrams;
+  when a process or structure is clearer as a picture, emit one.
+
+  - **Mermaid line rules** — the opening ```mermaid fence starts on its OWN line preceded
+  by a blank line; the closing fence is on its own line; each directive on its own
+  line.
+
+  - **Data charts** — for 3+ comparable numeric records, emit a Mermaid chart IN ADDITION
+  to a table: ```mermaid pie for parts-of-a-whole; ```mermaid xychart-beta with `bar`
+  for magnitudes or `line` for trends.
+
+  - **Math** — $inline$ and $$block$$ render with KaTeX.
+
+  - **Figures** — images with a title render with a caption below.
+
+  - **Links** — internal platform routes (starting with /) render as in-app links.
+
+  '
+t_run_the_full_analysis_pipeline_for: "\n    Run the full analysis pipeline for one\
+  \ instance.\n\n    If force=False (default), checks whether ENTITY nodes already\
+  \ have an\n    importance_score — if they do, skips the entire analysis (idempotent).\n\
+  \n    Pass an open Django Store session as `session`, or leave None to open one.\n\
+  \    Returns combined summary dict from all three methods.\n    "
+t_s_s_leave_annual_sick_balance: '''s\s+(?:leave|annual|sick|balance)|'
+t_s_s_leave_annual_sick_balance_2: '''s\s+(?:leave|annual|sick|balance|loan|payslip)|'
+t_salaries: salaries
+t_salary: salary
+t_salary_advance: Salary advance
+t_salary_band: salary band
+t_salary_band_count: '| Salary band | Count |
+
+  '
+t_salary_headcount_distribution_asks_must_never: Salary / headcount distribution asks
+  must never dump raw row tables.
+t_salary_or_payroll_report_without_saying: 'salary or payroll report without saying
+  the angle or audience, ask '
+t_salary_report: salary report
+t_sar_kwd_loan_s_0_9: '|(?:sar|kwd|loan)\s*([0-9]{2,}(?:[.,][0-9]+)?)'
+t_score_a_skill_against_the_utterance: "Score a skill against the utterance using\
+  \ simple keyword overlap.\n\n    Returns 0.0–1.0 where higher = better match.\n\
+  \    Name tokens are split on underscores so ``payroll_run_variance_check``\n  \
+  \  does not score as a single opaque blob against unrelated payroll chatter.\n \
+  \   Description-only matches stay below the hot-path threshold unless strong.\n\
+  \    "
+t_show_my_attendance_سجل_حضوري_without: '("show my attendance", "سجل حضوري" without
+  الآن) → list_my_attendance.
+
+  '
+t_show_s_all_s_salaries: show\s+all\s+salaries|
+t_sick_leave: Sick leave
+t_skillawareplanner_process_dial_attendance_d_step: 'SkillAwarePlanner: process_dial
+  attendance (%d steps)'
+t_skillawareplanner_process_dial_leave_d_steps: 'SkillAwarePlanner: process_dial leave
+  (%d steps)'
+t_skillawareplanner_process_dial_loan_d_steps: 'SkillAwarePlanner: process_dial loan
+  (%d steps)'
+t_stage_attendance_permission_submit_for_consent: Stage attendance.permission.submit
+  for consent
+t_stage_invariant_adr_0049_the_fallback: "Stage invariant (ADR-0049): the fallback\
+  \ fires only when tools ran and\n    **no render exists** — not when the *draft*\
+  \ was empty.\n\n    A forced tool call blanks the draft by design (``force_tool``);\
+  \ the\n    catalog render, the empty-payslip answer, or the empty-history answer\n\
+  \    that follows is the real answer and must never be replaced by this\n    fallback.\n\
+  \    "
+t_stage_leave_request_submit_for_consent: Stage leave.request.submit for consent
+t_stage_loan_request_submit_for_consent: Stage loan.request.submit for consent
+t_store_employee_focus_entity_id_employee: Store employee focus (entity_id=employee_no)
+  after a resolve match.
+t_submit_attendance_permission: Submit attendance permission
+t_submit_leave: submit leave
+t_submit_leave_i_want_leave_أريد: 'SUBMIT leave ("I want leave", "أريد إجازة", عارضة
+  / '
+t_submit_leave_request: Submit leave request
+t_submit_loan: submit loan
+t_submit_loan_request: Submit loan request
+t_submit_personal_attendance_permission_via: 'Submit personal attendance permission
+  via '
+t_submit_personal_leave_via_leave_request: 'Submit personal leave via leave.request.lifecycle
+  (submit). '
+t_submit_personal_loan_via_loan_request: 'Submit personal loan via loan.request.lifecycle
+  (submit). '
+t_submit_the_attendance_permission: Submit the attendance permission
+t_submit_the_leave_request: Submit the leave request
+t_submit_the_loan_request: Submit the loan request
+t_submitting_a_leave_request: Submitting a leave request
+t_submitting_an_attendance_permission: Submitting an attendance permission
+t_submitting_your_leave_request: Submitting your leave request
+t_submitting_your_loan_request: Submitting your loan request
+t_summarize_with_aggregates_and_charts_never: 'summarize with aggregates and charts,
+  never raw salary rows. If '
+t_take_annual_leave: take annual leave
+t_take_leave: take leave
+t_take_vacation: take vacation
+t_task_discovery_clarify_before_proposing_a: "TASK — Discovery clarify:\nBefore proposing\
+  \ a plan, clarify the user's outcome with short focused questions.\nAsk ONE concise\
+  \ question at a time. When you have enough information, complete.\nScope rules (critical):\n\
+  - Only clarify outcomes Agent can plan: reports, board packs, data-quality rules,\n\
+  \  data workflows, exports.\n- Never map personal leave / vacation / إجازة to DQ\
+  \ rules, approvals, or\n  data-source onboarding. If the user wants personal leave,\
+  \ respond with\n  {\"action\":\"complete\"} only if they clearly asked for a leave-compliance\n\
+  \  REPORT; otherwise keep asking for the report outcome — the host may already\n\
+  \  have redirected them.\n- Do not ask 'what outcome on the host platform' for trivia,\
+  \ names,\n  or personal HR actions.\n- If the user wants a data-quality rule (validate/check/flag\
+  \ a field, not-null,\n  unique, allowed values, range, regex, format like an email\
+  \ or phone number),\n  you MUST find out exactly WHICH field and table the rule\
+  \ applies to before\n  completing — ask for the specific field/column name (or DataField\
+  \ id) and\n  table. Never complete discovery for a DQ rule while the target field\
+  \ is still\n  unknown.\nNever invent free-form identity text; slot labels come from\
+  \ the brief and\nbound values only."
+t_task_plan_decompose_decompose_the_user: 'TASK — Plan decompose:
+
+  Decompose the user task into phases and steps. Respond with JSON only — no markdown,
+
+  no code fences, no prose outside the JSON object.
+
+  Available tools, host API catalog names, and registered skills appear in the user
+
+  message — use only those names.
+
+  Each step''s intent must describe the action with bound values (amounts, dates,
+
+  leave types, api_name) — never invent free-form identity text for the user or org.
+
+  Mutations stage with consent (RULE_21); never claim a host write already committed.'
+t_task_plan_decompose_tool_catalog_rules: "TASK — Plan decompose (tool catalog + rules):\n\
+  The user asked a task that may need multiple tool calls. Decompose it into\nphases\
+  \ (workflow stages) and steps.\n\nAvailable tools:\n{tools_list}\n\nHost API catalog\
+  \ (live data — use call_host_api with api_name=…):\n{host_api_list}\n\nRegistered\
+  \ skills (for invoke_skill only — exact names):\n{skills_list}\n\nReturn ONLY valid\
+  \ JSON (no markdown, no fences):\n{{\n  \"pattern\": \"<root_cause|comparative|custom>\"\
+  ,\n  \"phases\": [\n    {{\n      \"phase_id\": 0,\n      \"name\": \"<short stage\
+  \ name, e.g. Research>\",\n      \"goal\": \"<what this stage accomplishes>\",\n\
+  \      \"strategy\": \"<sequential|parallel>\",\n      \"step_ids\": [0, 1]\n  \
+  \  }}\n  ],\n  \"steps\": [\n    {{\n      \"step_id\": 0,\n      \"intent\": \"\
+  <natural-language description>\",\n      \"tool_name\": \"<one of the available\
+  \ tools>\",\n      \"tool_args\": {{}},\n      \"depends_on\": [],\n      \"is_mutation\"\
+  : false,\n      \"agent_role\": \"<orchestrator|researcher|planner|critic|domain_specialist>\"\
+  \n    }}\n  ],\n  \"synthesis_instruction\": \"<how to combine steps into final\
+  \ answer>\"\n}}\n\nRules:\n- Each step must use one of the available tools listed\
+  \ above.\n- Live host data / self-service reads and writes (leave balance, leave\n\
+  \  records, payslips, profile, employees, payroll, …) MUST use\n  tool_name \"call_host_api\"\
+  \ with tool_args.api_name set to an exact name\n  from the Host API catalog. NEVER\
+  \ put a catalog name in\n  get_entity_details.entity_name — that tool is knowledge-schema\
+  \ only.\n- First-person leave submit (\"I want leave\", Arabic إجازة / عارضة) MUST\
+  \ use\n  submit_my_leave when that catalog name exists — never create_leave_record\n\
+  \  (admin path; needs employee id and skips the /me/leave/ workflow).\n- Loan process\
+  \ / first-person loan submit MUST use submit_my_loan (or list_my_loans\n  for reads)\
+  \ — NEVER submit_my_leave. Leave APIs are leave-only.\n- Employee onboarding MUST\
+  \ use create_employee / list_employees / update_employee\n  — NEVER submit_my_leave.\n\
+  - Person / org identity lookups by name or employee number use\n  resolve_entity\
+  \ (ECF), not get_entity_details and not a catalog name as\n  an entity.\n- invoke_skill\
+  \ may ONLY reference an exact name from the Registered skills\n  list. NEVER invent\
+  \ a skill name — if no skill matches, do not use\n  invoke_skill at all.\n- Analysis,\
+  \ comparison, synthesis and other REASONING steps are NOT skills:\n  they are done\
+  \ by the LLM itself. For such a step use a real tool to gather\n  the raw inputs\
+  \ it needs, then set \"tool_name\": null and\n  \"agent_role\": \"domain_specialist\"\
+  \ so the model reasons directly from the\n  prior step results (available via depends_on).\n\
+  - depends_on lists step_id values whose results are needed before this step.\n-\
+  \ Steps with no dependencies can run in parallel.\n- Group steps into 2-4 phases\
+  \ that tell a workflow story: research/collect\n  first, then analyze, then produce\
+  \ output. Keep plans small — prefer 4-7\n  total steps. A single phase is fine for\
+  \ simple jobs.\n- NEVER invent numeric path ids (payroll run ids, employee ids,\
+  \ org ids).\n  Demo labels in the brief (e.g. run_id: demo-oct-2026) are NOT database\n\
+  \  primary keys. Always list first (list_payroll_runs / list_employees /\n  resolve_entity),\
+  \ then call detail/compute/validate with the REAL id from\n  that prior step via\
+  \ depends_on — or omit path_params and let the host\n  resolve the period alias.\
+  \ Putting a fake string into path_params.id\n  will fail.\n- The id comes from\
+  \ the listing step through tool_args.bind, never typed in:\n  \"bind\": {{\"id\":\
+  \ {{\"step\": <listing step_id>, \"field\": \"id\", \"select\": \"latest\"}}}}.\n\
+  \  Use select \"latest\" only when the brief asks for the latest / current one;\n\
+  \  omit select and the operator picks one.\n- call_host_api tool_args carry values\
+  \ only under path_params (path ids),\n  query_params (read filters such as dimension)\
+  \ or body (write fields).\n  A top-level value is never sent to the host.\n- NEVER collapse a multi-action\
+  \ brief (compute + validate + report, compare\n  to rates, generate a document,\
+  \ do-not-commit) into ONE invoke_skill step.\n  Emit a separate step for each distinct\
+  \ action. Prefer call_host_api for\n  live payroll/host reads and writes; use null-tool\
+  \ reasoning for analysis;\n  use export_document when the brief asks for a document/file\
+  \ report.\n- strategy \"parallel\" only when the phase's steps are truly independent;\n\
+  \  otherwise \"sequential\".\n- agent_role selects who executes the step:\n  \"\
+  researcher\" for read-only internet/knowledge research,\n  \"planner\" for sequencing\
+  \ / decomposition-only thinking,\n  \"critic\" for review / quality gates before\
+  \ export or mutation,\n  \"domain_specialist\" for deep domain analysis (payroll,\
+  \ HR, finance),\n  \"orchestrator\" for host coordination and everything else (the\
+  \ main agent).\n  Multi-agent tasks MUST assign distinct roles across research /\
+  \ analyze /\n  critique / act phases — do not stamp every step orchestrator when\
+  \ the\n  brief clearly spans research + specialist judgment + review.\n- Set is_mutation:\
+  \ true only for steps that modify host state.\n- create_dq_rule needs a REAL target:\
+  \ deterministic rule types (not_null,\n  unique, allowed_values, range, regex) REQUIRE\
+  \ data_table AND data_field ids.\n  If the field/table is unknown, first call get_entity_details\
+  \ (or another\n  lookup tool) to resolve it, OR emit a reasoning step whose instructions\
+  \ ask\n  the user for the specific field/table before any create_dq_rule step.\n\
+  \  NEVER emit a create_dq_rule step for a deterministic rule without its\n  data_table\
+  \ and data_field.\n- Step intents and pre-consent wording must use bound values\
+  \ only — never\n  invent free-form identity text for the user or organisation.\n\
+  \nUser task: {task}\n"
+t_task_tool_failure_recovery_explain_the: 'TASK — Tool-failure recovery:
+
+  Explain the failure in plain business language using ONLY the tool failure payload
+
+  (detail / error_kind / hints).
+
+  NEVER claim the action succeeded or that anything was submitted/created/changed.
+
+  NEVER invent numbers, balances, or dates not in the payload.
+
+  NEVER mention tools, APIs, HTTP codes, stack traces, or ''invented''.
+
+  Do NOT retry or pretend you will auto-retry a write — ask the user what to change
+
+  (another day, leave type, etc.) if that is the fix.
+
+  If error_kind is invalid_leave_type, map common synonyms using hints
+
+  (عارضة/casual → emergency) and ask them to confirm the corrected type.
+
+  If overlap or insufficient_balance, say so clearly and ask for another day or type.
+
+  Match the user''s language when possible (Arabic if they wrote Arabic).
+
+  Keep it short: 2–4 sentences max.'
+t_task_tool_result_synthesis_write_the: 'TASK — Tool-result synthesis:
+
+  Write the final reply to the user''s question using ONLY the tool results in the
+  user message.
+
+  Delivery intent: {delivery_guide}
+
+  SCOPING (critical): answer EXACTLY what the user asked. If the user''s question
+  names a
+
+  specific entity — a module, branch, scope, table, product, or other named item —
+  scope the
+
+  entire answer to THAT entity only. Only when the user asks for an overview, a comparison,
+
+  or ''all'' should you show the full breakdown.
+
+  ORG-NAME GUARD: the platform''s own organisation / campus / company name is NOT
+  a
+
+  filterable sub-entity — when the user names the whole organisation, treat it as
+  ''all data''.
+
+  AUTHZ GUARD: when a tool result includes `unauthorized: true`, a `capability` denial,
+  or a
+
+  message that access/permission is required, state that clearly. NEVER paraphrase
+  an
+
+  authorization failure as ''no data'', ''not found'', or ''missing salary record''.
+
+  NON-EMPTY GUARD: if the tool results contain ANY calculations or rows, you MUST
+  report those
+
+  values — NEVER say ''no data is available'' when the tool returned data.
+
+  FORMAT: open with a **bold one-line takeaway**, then write 2-3 sentences of explanatory
+  prose.
+
+  Do NOT include any tables or structured data — data tables are appended automatically.
+
+  Close with 2-4 bold-lead ''Key takeaways'' bullet points.
+
+  Do not mention tools, API calls, or fetching.
+
+  Do NOT include charts or diagrams unless the user explicitly asked.{hints_note}'
+t_team_track_status_in_my_leave: (/team). Track status in My Leave — Pulse does not
+  approve for them.
+t_that_sounds_like_a_personal_leave: 'That sounds like a personal leave request. '
+t_the_brief_asked_to_review_loans: The brief asked to review loans, not to submit
+  one.
+t_this_is_an_authorization_deny_not: '- This is an authorization deny, not an empty
+  payroll result.'
+t_title_salary_distribution_by_band: '    title "Salary distribution by band"
+
+  '
+t_true_for_first_person_leave_balance: True for first-person leave balance asks (my
+  leave / اجازاتي).
+t_true_for_first_person_salary_asks: True for first-person salary asks (my salary
+  / راتبي).
+t_true_for_leave_loan_attendance_submit: "True for leave/loan/attendance *submit*\
+  \ asks (not balance reads).\n\n    Used to skip orchestrator fan-out (those turns\
+  \ belong to process_dial /\n    Chat handoff) without blocking other mutation or\
+  \ analytics fan-outs.\n    "
+t_true_for_terse_destination_nouns_leave: True for terse destination nouns («leave»,
+  «قروض») — still navigate.
+t_true_for_third_person_numbered_employee: "True for third-person / numbered-employee\
+  \ leave balance asks.\n\n    Admin Chat N-CHAT-03: \"annual leave remaining for\
+  \ employee 1001 Wellie\"\n    must route to ``list_leave_entitlements``, not stop\
+  \ after ``resolve_entity``.\n    "
+t_true_for_today_s_date_current: True for today's date / current month — not leave-start
+  or payroll when.
+t_true_when_a_chart_graph_is: "True when a chart/graph is the right answer shape.\n\
+  \n    Explicit chart words OR distribution / breakdown / analytics phrasing\n  \
+  \  (\"salaries distributions\", \"breakdown by nationality\").\n    "
+t_true_when_a_prior_turn_already: True when a prior turn already established empty
+  ESS payslips.
+t_true_when_agent_should_materialize_attendance: True when Agent should materialize
+  attendance permission dial.
+t_true_when_agent_should_materialize_the: True when Agent should materialize the leave
+  process dial (not LLM DAG).
+t_true_when_agent_should_materialize_the_2: True when Agent should materialize the
+  loan process dial (not LLM DAG).
+t_true_when_message_is_a_question: "True when ``message`` is a question (> 3 tokens)\
+  \ without a nav verb.\n\n    Interrogative = ends with ``?``/``؟`` or starts with\
+  \ an EN/AR question word.\n    Pure noun phrases (\"payroll\", \"الرواتب\") and\
+  \ explicit commands\n    (\"Can you open payroll?\") are not affected.\n    "
+t_true_when_text_is_a_short: "True when ``text`` is a short \"yes, commit what you\
+  \ proposed\".\n\n    :func:`is_affirmation` plus the commit vocabulary (\"apply\"\
+  , \"accept\",\n    \"اعتمدها\"). Same bar: no question mark, at most\n    ``MAX_AFFIRMATION_WORDS``\
+  \ words, every word affirmative. Meant for a\n    pending typed ``open_question``\
+  \ (a proposed plan revision) — a longer\n    message like \"apply for three days\
+  \ leave\" is a fresh request and fails.\n    "
+t_true_when_the_ask_names_a: "True when the ask names a topic in ``topic_guard.in_scope``\
+  \ (EN/AR).\n\n    Used to narrow the classifier's ``off_limits`` refusal: an in-scope\
+  \ HR ask\n    («أريد قرض طارئ») must not be scope-refused. Bypass / credential wording\n\
+  \    is never treated as in scope.\n    "
+t_true_when_the_brief_asks_to: "True when the brief asks to stage a loan, not only\
+  \ to read loans/leave.\n\n    «راجع قروضي ورصيد إجازتي في الوقت نفسه» is a read.\
+  \ A conditional\n    «إذا لا، قدّم طلب قرض» or «أريد قرض» is a submit.\n    "
+t_true_when_the_brief_has_a: "True when the brief has a condition, branch, parallel\
+  \ ask, or read→write gate.\n\n    «راجع قروضي ورصيد إجازتي في الوقت نفسه. إذا كان\
+  \ لدي قرض مفتوح، توقف. إذا لا،\n    قدّم طلب قرض» is a plan with a guard, not a\
+  \ loan form missing its type.\n    A plain «أريد قرض طوارئ ٥٠٠٠ لمدة ١٢ شهراً» is\
+  \ not composite.\n    "
+t_true_when_the_tool_came_back: "True when the tool came back empty-handed in a way\
+  \ a retry could fix.\n\n    A legitimately empty answer (\"you have no leave records\"\
+  ) is NOT a miss —\n    only a lookup that never reached real data is.\n    "
+t_true_when_the_user_explicitly_asked: True when the user explicitly asked for payslip
+  lines (not basic pay).
+t_true_when_the_user_wants_a: "True when the user wants a reviewable Agent plan, not\
+  \ a silent skill run.\n\n    Signals (deterministic):\n    - \"make this a task\"\
+  \ phrasing on the user's words;\n    - the composer dial was **Plan** (``[Pulse\
+  \ mode: Plan.`` prefix) — the\n      header promises \"Pulse drafts a plan\", so\
+  \ draft one.\n\n    Composite briefs (condition / parallel) do **not** force plan_task\
+  \ by\n    themselves — Ask and Plan are separate sessions, and Ask must never\n\
+  \    create a Tasks plan. The slot-filler still steps aside for composites\n   \
+  \ so Chat does not answer a guarded brief with \"which loan type?\".\n    "
+t_true_when_the_utterance_asks_about: True when the utterance asks about leave remaining
+  / balance (EN/AR).
+t_true_when_the_utterance_asks_about_2: True when the utterance asks about salary
+  / compensation (EN/AR).
+t_true_when_the_utterance_asks_to: "True when the utterance asks to *explain* a governed\
+  \ process/lifecycle.\n\n    Mentions of a process id alone count (sim prompts always\
+  \ embed the id).\n    Bare \"open leave\" / \"take me to payroll\" do NOT match.\n\
+  \    "
+t_true_when_the_utterance_is_a: "True when the utterance is a personal loan / leave\
+  \ / attendance write.\n\n    Used by the Chat handoff path and the ``_should_force_action``\
+  \ fallback so\n    ESS writes are not gated only on ``_is_mutation_request`` (which\
+  \ is leave-\n    and DQ-shaped and misses \"apply for a loan\"). Payroll recall\n\
+  \    (\"what was the loan amount?\") is not a write.\n    "
+t_true_when_this_turn_s_payslip: True when this turn's payslip tool returned no committed
+  rows.
+t_two_distinct_ess_domains_in_one: 'Two distinct ESS domains in one utterance (leave+loan,
+  leave+payslip, '
+t_unpaid_leave: Unpaid leave
+t_updating_the_employee_record: Updating the employee record
+t_use_a_recognised_leave_type_for: Use a recognised leave type (for example emergency
+  for عارضة).
+t_use_for_total_headcount_كم_عدد: 'Use for total headcount (''كم عدد الموظفين'') and
+  Kuwaiti count '
+t_use_this_for_find_employee_x: 'Use this for ''find employee X'', ''who is X'', ''employee
+  number N'', '
+t_vacation: vacation
+t_what_type_of_leave_do_you: What type of leave do you want to take?
+t_what_type_of_loan_are_you: What type of loan are you interested in?
+t_when_compensation_is_asked_without_capability: "When compensation is asked without\
+  \ capability, return an explicit CBAC deny.\n\n    B5: never soft-empty / \"No data\"\
+  \ for salary — surface unauthorized +\n    ``people:view_compensation`` so Chat\
+  \ does not invent absence.\n    "
+t_when_does_my_leave_start_is: '''When does my leave start'' is a date, not a balance
+  GET.'
+t_when_does_payroll_get_processed: when does payroll get processed
+t_when_does_payroll_run: when does payroll run
+t_when_does_the_payroll_run: when does the payroll run
+t_when_is_payroll_get_processed: when is payroll get processed
+t_when_is_payroll_processed_not_leave: When is payroll processed — not leave start,
+  not net pay.
+t_when_is_payroll_run: when is payroll run
+t_when_is_the_payroll_run: when is the payroll run
+t_when_listing_leave_loans_without_an: When listing leave/loans without an employee
+  filter, use WM focus (B1).
+t_when_will_next_month_s_payroll: when will next month's payroll be processed
+t_when_will_next_months_payroll_be: when will next months payroll be processed
+t_when_will_payroll_be_processed: when will payroll be processed
+t_which_dates_do_you_want_to: Which dates do you want to take leave?
+t_who_they_are_for_first_person: 'who they are. For first-person questions about their
+  own leave, '
+t_your_attendance_permission_was_submitted: 'Your attendance permission was submitted. '
+t_your_leave_request_was_submitted: 'Your leave request was submitted. '
+t_your_loan_request_was_submitted: 'Your loan request was submitted. '
+t_your_manager_reviews_it_in_team: Your manager reviews it in Team — track status
+  in My Attendance.
+t_your_manager_reviews_it_in_team_2: Your manager reviews it in Team — track status
+  in My Leave.
+t_أريد_قرض: أريد قرض
+t_أو_قسط_قرض_من_قسيمة: أو قسط قرض من قسيمة.
+t_أي_نوع_إجازة_تريد: أي نوع إجازة تريد؟
+t_أي_نوع_قرض_تريد: أي نوع قرض تريد؟
+t_إجازة: إجازة
+t_إجازة_أمومة: إجازة أمومة
+t_إجازة_بدون_راتب: إجازة بدون راتب
+t_إجازة_سنوية: إجازة سنوية
+t_إجازة_طارئة: إجازة طارئة
+t_إجازة_مرضية: إجازة مرضية
+t_إذن_حضور: إذن حضور
+t_اجازة: اجازة
+t_اجازه: اجازه
+t_اذن_حضور: اذن حضور
+t_اريد_قرض: اريد قرض
+t_استئذان_حضور: استئذان حضور
+t_استئذان_حضور_ساعة: '|استئذان|حضور|ساعة'
+t_الاستقطاعات_والتأمينات_gosi: '- **الاستقطاعات والتأمينات (GOSI)**
+
+  '
+t_التاريخ_على_مسير_الرواتب_المعتمد_في: التاريخ على مسير الرواتب المعتمد في تطبيقاتي،
+  ولن أخمنه.
+t_الشرط_خطوة_التقديم_مربوطة_بنتيجة_القراءة: '**الشرط:** خطوة التقديم مربوطة بنتيجة
+  القراءة — إذا ظهر قرض مفتوح تتوقف الخطة قبل التقديم.'
+t_بدون_راتب: بدون  راتب
+t_بدون_راتب_2: بدون راتب
+t_تقديم_قرض: تقديم قرض
+t_توزيع_رواتب_راتب: '|توزيع|رواتب|راتب'
+t_جميع_الموظفين: جميع الموظفين
+t_حضور: حضور
+t_راتب: راتب
+t_رقم_الموظف: رقم الموظف
+t_رواتب: رواتب
+t_سلفة_راتب: سلفة راتب
+t_صافي_راتب: صافي راتب
+t_صلاحية_حضور: صلاحية حضور
+t_طلب_إجازة: طلب إجازة
+t_طلب_قرض: طلب قرض
+t_فقط_إذا_لم_يكن_لدي_قرض: ' — فقط إذا لم يكن لديّ قرض مفتوح (وإلا تتوقف الخطة)'
+t_قراءة_فقط_لن_ي_قد_م: '**قراءة فقط** — لن يُقدَّم أي قرض. التشغيل يبدأ بعد اعتمادك
+  للخطة.'
+t_قرض: قرض
+t_قرض_سكن: قرض سكن
+t_قرض_سيارة: قرض سيارة
+t_قرض_شخصي: قرض شخصي
+t_قرض_طارئ: قرض طارئ
+t_قروض: قروض
+t_قروض_s_الموظفين: '|قروض\s*الموظفين'
+t_كم_كويتي_موظف_and_for_leave: '(''كم كويتي موظف''), and for leave metrics when leave_record
+  is '
+t_لم_أجد_قسائم_معتمدة_لذلك_لا: 'لم أجد قسائم معتمدة، لذلك لا يوجد صافي راتب أو استقطاعات '
+t_ليس_لدي_تاريخ_معالجة_رواتب_الشهر: 'ليس لدي تاريخ معالجة رواتب الشهر القادم. '
+t_مسير: مسير
+t_من_هو_x_ابحث_عن_x: '''من هو X'', ''ابحث عن X'', leave lookups by id/date/status,
+  etc. '
+t_هذا_شرح_مفاهيمي_للعملية_وليس_طلب: هذا شرح مفاهيمي للعملية — وليس طلبًا لفتح شاشة
+  People & Payroll.

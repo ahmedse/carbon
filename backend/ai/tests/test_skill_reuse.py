@@ -171,8 +171,8 @@ def test_decompose_routes_promoted_non_plan_skill_to_invoke_skill(django_store, 
 
 
 @pytest.mark.django_db(transaction=True)
-def test_invoke_skill_records_full_telemetry(django_store, cfg):
-    """A successful invoke updates usage_count, success_rate, latency, last_executed_at."""
+def test_invoke_skill_recipe_return_is_not_a_success(django_store, cfg):
+    """A procedure hands back its recipe and executes nothing: no stats move."""
     from ai.engine.agent.tools import execute_invoke_skill
     from ai.models.core import Skill as DjangoSkill
     from ai.store import get_store
@@ -195,12 +195,11 @@ def test_invoke_skill_records_full_telemetry(django_store, cfg):
     assert result["skill_name"] == name
     assert result["skill_id"] == skill_id
     assert "result" in result
+    assert result["executed"] is False
 
     skill = DjangoSkill.objects.get(id=skill_id)
-    assert skill.usage_count == 1
-    assert skill.success_rate == 1.0
-    assert skill.last_executed_at is not None
-    assert skill.avg_latency_ms >= 0
+    assert skill.usage_count == 0
+    assert skill.last_executed_at is None
 
 
 # ── 3. Missing skill never increments ────────────────────────────────────

@@ -1,13 +1,8 @@
-"""Broad payroll/salary report asks — clarify before dumping data.
-
-Ask mode must not invent a full report from a vague brief. One short
-question with closed options; then run tools for the chosen angle.
-
-Continuity (ADR-0047 ConversationState): never re-ask the same clarify when
-this thread already has payroll/salary results, a prior clarify, or a scoped
-follow-up (charts / all aspects / …).
-"""
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+from ai.engine.pack_vocab import V
+V("t_broad_payroll_salary_report_asks_clarify")
+
 
 from typing import Any
 
@@ -23,10 +18,10 @@ from ai.engine.cognition.turn.report_clarify_i18n import (
 )
 
 #: Vague "give me a full report" without an angle / audience.
-_BROAD_HEADS = ("full", "complete", "comprehensive", "detailed", "entire", "overall")
-_BROAD_DOCS = ("report", "overview", "summary", "pack")
-_BROAD_PAY = ("salary", "salaries", "payroll", "compensation", "pay")
-_BROAD_PAY_DOCS = ("report", "overview", "summary")
+_BROAD_HEADS = T("turn/report_clarify.py::_BROAD_HEADS")
+_BROAD_DOCS = T("turn/report_clarify.py::_BROAD_DOCS")
+_BROAD_PAY = T("turn/report_clarify.py::_BROAD_PAY")
+_BROAD_PAY_DOCS = T("turn/report_clarify.py::_BROAD_PAY_DOCS")
 
 
 def _is_broad_report_en(text: str) -> bool:
@@ -34,39 +29,20 @@ def _is_broad_report_en(text: str) -> bool:
         return True
     if any(has_gapped_words(text, doc, _BROAD_PAY, max_gap=6) for doc in _BROAD_DOCS):
         return True
-    return any(has_gapped_words(text, pay, _BROAD_PAY_DOCS, max_gap=4) for pay in ("salary", "salaries", "payroll", "compensation"))
+    return any(has_gapped_words(text, pay, _BROAD_PAY_DOCS, max_gap=4) for pay in (V("t_salary"), V("t_salaries"), V("t_payroll"), "compensation"))
 
 #: Already scoped — do not re-ask.
 #: Note: ``charts?`` not ``chart`` — "with charts" must count as scoped.
-_SCOPED_WORDS = (
-    "board", "executive", "finance", "manager", "committee",
-    "distribution", "breakdown", "band", "bands", "tier", "tiers", "histogram",
-    "chart", "charts", "graph", "graphs", "visual", "visuals", "viz",
-    "gosi", "pifss", "deduction", "variance", "committed", "draft", "failed",
-    "word", "excel", "pdf", "pptx", "export", "pack",
-)
-_SCOPED_PHRASES = (
-    "hr lead",
-    "by band", "by tier", "by nationality", "by gender", "by dept",
-    "by department", "by org", "by grade",
-)
+_SCOPED_WORDS = T("turn/report_clarify.py::_SCOPED_WORDS")
+_SCOPED_PHRASES = T("turn/report_clarify.py::_SCOPED_PHRASES")
 
 
 def _is_scoped_en(text: str) -> bool:
     return has_any_word(text, _SCOPED_WORDS) or contains_any_phrase(text, _SCOPED_PHRASES)
 
 #: User reply that picks an option from the clarify list (or all of them).
-_ASPECT_WORDS = (
-    "distribution", "band", "bands", "tier", "tiers",
-    "committed", "draft", "failed", "gosi", "pifss", "deduction",
-    "board", "executive", "summary", "both", "everything",
-)
-_ASPECT_PHRASES = (
-    "pay mix", "run health", "payroll run", "payroll runs",
-    "high level", "high-level",
-    "all of the", "all the", "all four", "all aspects", "all options",
-    "all above", "all them", "each aspect", "each one",
-)
+_ASPECT_WORDS = T("turn/report_clarify.py::_ASPECT_WORDS")
+_ASPECT_PHRASES = T("turn/report_clarify.py::_ASPECT_PHRASES")
 
 
 def _is_aspect_pick_en(text: str) -> bool:
@@ -82,78 +58,25 @@ def _numbered_pick_key(text: str) -> str | None:
         return folded
     return None
 
-#: Expand numbered picks into scoped tool briefs (salary report menu).
-_SALARY_ASPECT_BY_NUM = {
-    "1": "Pay distribution by band with charts and tiers",
-    "2": "Payroll run health committed draft failed",
-    "3": "Deductions and GOSI overview",
-    "4": "Board-ready salary summary high level no row dumps",
-    "5": "Board-ready salary summary high level no row dumps",
-    "both": "all four salary report aspects with charts",
-}
+#: Expand numbered picks into scoped tool briefs ( report menu).
+_SALARY_ASPECT_BY_NUM = T("turn/report_clarify.py::_SALARY_ASPECT_BY_NUM")
 
 #: Expand numbered picks from the headcount/org topic menu (LLM variant).
-_TOPIC_ASPECT_BY_NUM = {
-    "1": (
-        "Headcount and organization structure — active employees by "
-        "department, role, and employment type with charts"
-    ),
-    "2": (
-        "Payroll and compensation — salary ranges, gross pay, deductions, "
-        "net pay trends with charts"
-    ),
-    "3": "Leave and attendance balances usage patterns with charts",
-    "4": "GOSI and statutory employer employee contributions compliance",
-    "5": "Payroll run status draft computed validated committed failed",
-    "both": (
-        "Headcount and organization structure with charts — departments, "
-        "roles, employment type"
-    ),
-}
+_TOPIC_ASPECT_BY_NUM = T("turn/report_clarify.py::_TOPIC_ASPECT_BY_NUM")
 
-_TOPIC_MENU_MARKERS = (
-    "headcount & organization", "payroll & compensation",
-    "what's the main topic", "i'd like to focus this report",
-)
+_TOPIC_MENU_MARKERS = T("turn/report_clarify.py::_TOPIC_MENU_MARKERS")
 
 #: Prior assistant clarify — match even after entity-chip mutation of "it".
-_PRIOR_CLARIFY_MARKERS = (
-    "what should", "focus on", "happy to help with a salary report",
-    "بكل سرور أساعد في تقرير الرواتب", "على ماذا تريد التركيز",
-)
+_PRIOR_CLARIFY_MARKERS = T("turn/report_clarify.py::_PRIOR_CLARIFY_MARKERS")
 
-#: Thread already answered a salary/payroll report (continuity).
-_PRIOR_REPORT_ANSWER_MARKERS = (
-    "payroll run status", "payslip line", "active employees", "headcount by",
-    "salary band", "pay distribution", "gosi", "pifss", "committed", "draft",
-    "failed",
-)
+#: Thread already answered a / report (continuity).
+_PRIOR_REPORT_ANSWER_MARKERS = T("turn/report_clarify.py::_PRIOR_REPORT_ANSWER_MARKERS")
 
-#: Digests that mean we already fetched payroll/salary context this thread.
-_PAYROLL_DIGEST_MARKERS = (
-    "list_payroll_runs", "list_payslip_lines", "analyze_employees",
-    "aggregate_entity", "headcount", "payslip", "payroll", "metric=headcount",
-)
+#: Digests that mean we already fetched / context this thread.
+_PAYROLL_DIGEST_MARKERS = T("turn/report_clarify.py::_PAYROLL_DIGEST_MARKERS")
 
 # Avoid pronoun "it" — entity annotator casefolds OrgUnit "IT" onto "it".
-_CLARIFY = {
-    "en": (
-        "Happy to help with a salary report — what should **this report** focus on?\n\n"
-        "- **Pay distribution by band** (charts + tiers)\n"
-        "- **Payroll run health** (committed / draft / failed)\n"
-        "- **Deductions & GOSI** overview\n"
-        "- **Board-ready summary** (high level, no row dumps)\n"
-        "- Something else — tell me the **audience** and the **angle**"
-    ),
-    "ar": (
-        "بكل سرور أساعد في تقرير الرواتب — على ماذا تريد التركيز؟\n\n"
-        "- **توزيع الرواتب حسب الشرائح** (رسوم بيانية)\n"
-        "- **صحة مسيرات الرواتب** (معتمد / مسودة / فاشل)\n"
-        "- **الاستقطاعات والتأمينات (GOSI)**\n"
-        "- **ملخص لمجلس الإدارة** (مستوى عالٍ بدون جداول صفوف)\n"
-        "- أمر آخر — حدّد **الجمهور** و**الزاوية**"
-    ),
-}
+_CLARIFY = T("turn/report_clarify.py::_CLARIFY")
 
 
 def is_broad_report_ask(utterance: str) -> bool:

@@ -1,12 +1,14 @@
 """Arabic needles for ``plan_status`` (ADR-0049 L7). No compiled regex."""
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+
 
 # Status ask = a status HEAD followed (within a short window) by a plan OBJECT.
-# Mirrors the retired regex ``(?:حالة|وضع).{0,24}(?:طلب|قرض|...)`` without compiling.
-STATUS_HEAD_AR = ("حالة", "وضع", "ماذا حدث", "وش صار")
-STATUS_OBJECT_AR = ("طلب", "قرض", "إجازة", "اجازة", "المخطط", "الخطة")
+# Mirrors the retired regex ``(?:حالة|وضع).{0,24}(?:طلب||...)`` without compiling.
+STATUS_HEAD_AR = T("turn/plan_status_i18n.py::STATUS_HEAD_AR")
+STATUS_OBJECT_AR = T("turn/plan_status_i18n.py::STATUS_OBJECT_AR")
 STATUS_ASK_AR = STATUS_HEAD_AR  # kept for import compatibility; use ``is_status_ask_ar``
-WRITE_ASK_AR = ("أريد", "اريد", "أبغى", "اطلب")
+WRITE_ASK_AR = T("turn/plan_status_i18n.py::WRITE_ASK_AR")
 
 
 STATUS_LABEL = {

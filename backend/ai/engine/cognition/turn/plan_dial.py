@@ -1,16 +1,8 @@
-"""Plan dial + personal ESS brief → deterministic process-dial plan (0 draft LLM).
-
-ADR-0047 deterministic-first: when the composer dial is **Plan** and the brief
-is a personal loan / leave / attendance request (composite or not), the plan
-spine is owned by the process dial (``process_dial.materialize_*``). The LLM
-draft must not replace it with ad-hoc reads and an invented clarify such as
-"what is your monthly salary?".
-
-Also owns the *restyle* follow-up («in arabic and in more details please»,
-«بالعربي وبالتفصيل»): re-render the previous assistant answer — no tools, no
-new facts, one LLM rewrite — instead of restarting discovery.
-"""
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+from ai.engine.pack_vocab import V
+V("t_plan_dial_personal_ess_brief_deterministic")
+
 
 import logging
 import re
@@ -36,24 +28,9 @@ logger = logging.getLogger("pulse.cognition.turn.plan_dial")
 
 _TO_EASTERN = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
 
-_RESTYLE_PHRASES = (
-    "in arabic", "in english",
-    "more detail", "more details", "extra detail", "extra details",
-    "further detail", "further details", "in more detail", "in greater detail",
-    "expand on that", "expand on this", "expand on it",
-    "summarize that", "summarize this", "summarize it",
-    "summarise that", "summarise this", "summarise it",
-    "translate that", "translate this", "translate it",
-    "say that", "say this", "say it",
-    "repeat that", "repeat this", "repeat it",
-    "write that", "write this", "write it",
-    "explain that", "explain this", "explain it",
-)
-_RESTYLE_WORDS = ("elaborate", "expand", "shorter", "briefer")
-_NEW_CONTENT_WORDS = (
-    "submit", "apply", "request", "loan", "leave", "attendance",
-    "salary", "payroll", "report",
-)
+_RESTYLE_PHRASES = T("turn/plan_dial.py::_RESTYLE_PHRASES")
+_RESTYLE_WORDS = T("turn/plan_dial.py::_RESTYLE_WORDS")
+_NEW_CONTENT_WORDS = T("turn/plan_dial.py::_NEW_CONTENT_WORDS")
 
 
 def _is_restyle_en(text: str) -> bool:
@@ -168,48 +145,10 @@ def build_restyle_messages(
 
 # ── Plan answer rendering ──────────────────────────────────────────────────
 
-_AR_STEP_BY_API = {
-    "list_my_loans": "التحقق من قروضي الحالية (قراءة)",
-    "get_my_leave_balance": "قراءة رصيد إجازتي (قراءة)",
-    "list_my_leave": "قراءة إجازاتي (قراءة)",
-    "list_my_attendance_permissions": "التحقق من استئذاناتي الحالية (قراءة)",
-    "submit_my_loan": "تقديم طلب القرض",
-    "submit_my_leave": "تقديم طلب الإجازة",
-    "submit_my_attendance_permission": "تقديم طلب الاستئذان",
-}
-_EN_STEP_BY_API = {
-    "list_my_loans": "Check my current loans (read)",
-    "get_my_leave_balance": "Read my leave balance (read)",
-    "list_my_leave": "Read my leave records (read)",
-    "list_my_attendance_permissions": "Check my current attendance permissions (read)",
-    "submit_my_loan": "Submit the loan request",
-    "submit_my_leave": "Submit the leave request",
-    "submit_my_attendance_permission": "Submit the attendance permission",
-}
-_AR_SLOT = {
-    "principal": "المبلغ",
-    "term_months": "المدة (شهر)",
-    "loan_type": "نوع القرض",
-    "start_date": "تاريخ البدء",
-    "leave_type": "نوع الإجازة",
-    "end_date": "تاريخ الانتهاء",
-    "days": "الأيام",
-    "permission_type": "نوع الاستئذان",
-    "date": "التاريخ",
-    "hours": "الساعات",
-}
-_EN_SLOT = {
-    "principal": "amount",
-    "term_months": "term (months)",
-    "loan_type": "loan type",
-    "start_date": "start date",
-    "leave_type": "leave type",
-    "end_date": "end date",
-    "days": "days",
-    "permission_type": "permission type",
-    "date": "date",
-    "hours": "hours",
-}
+_AR_STEP_BY_API = T("turn/plan_dial.py::_AR_STEP_BY_API")
+_EN_STEP_BY_API = T("turn/plan_dial.py::_EN_STEP_BY_API")
+_AR_SLOT = T("turn/plan_dial.py::_AR_SLOT")
+_EN_SLOT = T("turn/plan_dial.py::_EN_SLOT")
 
 
 def _eastern(value: Any) -> str:
@@ -237,9 +176,9 @@ def _step_line(step: dict, lang: str) -> str:
     guard = args.get("_guard") if isinstance(args.get("_guard"), dict) else None
     if guard:
         label += (
-            " — فقط إذا لم يكن لديّ قرض مفتوح (وإلا تتوقف الخطة)"
+            V("t_فقط_إذا_لم_يكن_لدي_قرض")
             if lang == "ar"
-            else " — only if no open loan (otherwise the plan stops)"
+            else V("t_only_if_no_open_loan_otherwise")
         )
     return label
 
@@ -282,7 +221,7 @@ def render_plan_dial_answer(*, brief: str, plan: dict, lang: str) -> str:
         if any(str((s.get("tool_args") or {}).get("api_name") or "").startswith("submit_") for s in steps):
             if composite:
                 lines.append(
-                    "**الشرط:** خطوة التقديم مربوطة بنتيجة القراءة — إذا ظهر قرض مفتوح تتوقف الخطة قبل التقديم."
+                    V("t_الشرط_خطوة_التقديم_مربوطة_بنتيجة_القراءة")
                 )
             if missing:
                 names = "، ".join(_AR_SLOT.get(k, k) for k in missing)
@@ -291,7 +230,7 @@ def render_plan_dial_answer(*, brief: str, plan: dict, lang: str) -> str:
                 "كل خطوة تقديم تطلب موافقتك قبل أن تصل إلى النظام، ثم تستمر المراجعة لدى مديرك في «فريقي»."
             )
         else:
-            lines.append("**قراءة فقط** — لن يُقدَّم أي قرض. التشغيل يبدأ بعد اعتمادك للخطة.")
+            lines.append(V("t_قراءة_فقط_لن_ي_قد_م"))
         return "\n".join(lines)
 
     lines = [
@@ -310,7 +249,7 @@ def render_plan_dial_answer(*, brief: str, plan: dict, lang: str) -> str:
         if composite:
             lines.append(
                 "**Guard:** the submit step is tied to the read result — if an open "
-                "loan shows up, the plan stops before submitting."
+                + V("t_loan_shows_up_the_plan_stops")
             )
         if missing:
             names = ", ".join(_EN_SLOT.get(k, k) for k in missing)
@@ -320,7 +259,7 @@ def render_plan_dial_answer(*, brief: str, plan: dict, lang: str) -> str:
             "then your manager reviews in Team."
         )
     else:
-        lines.append("**Read only** — no loan will be submitted. It runs only after you approve.")
+        lines.append(V("t_read_only_no_loan_will_be"))
     return "\n".join(lines)
 
 

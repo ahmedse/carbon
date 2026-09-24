@@ -8,6 +8,9 @@ Track D — topic stack: when several recent assistant topics exist, list
 them so the user can pick instead of silently taking only the latest.
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+
+from ai.engine.pack_vocab import V
 
 import re
 from typing import Any
@@ -31,30 +34,16 @@ _BOLD = re.compile(r"\*\*([^*]{2,80})\*\*")
 
 _TOPIC_STACK_MAX = 4
 
-_KNOWN_TOOL_IDENTIFIERS = frozenset({
-    "call_host_api",
-    "resolve_entity",
-    "search_knowledge",
-    "export_document",
-    "code_execute",
-    "web_research",
-    "get_my_leave_balance",
-    "list_leave_entitlements",
-    "list_my_leave",
-    "list_my_loans",
-    "list_my_payslips",
-    "list_attendance",
-    "list_my_attendance_permissions",
-})
+_KNOWN_TOOL_IDENTIFIERS = T("dialogue/deixis.py::_KNOWN_TOOL_IDENTIFIERS")
 
 _API_TOPIC_PHRASES: dict[str, str] = {
-    "get_my_leave_balance": "leave balance",
-    "list_leave_entitlements": "leave balance",
-    "list_my_leave": "leave requests",
-    "list_my_loans": "loans",
-    "list_my_payslips": "payslips",
-    "list_attendance": "attendance",
-    "list_my_attendance_permissions": "attendance permissions",
+    "get_my_leave_balance": V("t_leave_balance"),
+    "list_leave_entitlements": V("t_leave_balance"),
+    "list_my_leave": V("t_leave_requests"),
+    "list_my_loans": V("t_loans"),
+    "list_my_payslips": V("t_payslips"),
+    "list_attendance": V("t_attendance"),
+    "list_my_attendance_permissions": V("t_attendance_permissions"),
     "get_my_profile": "profile",
 }
 
@@ -122,11 +111,7 @@ def _topics_from_last_results(
     return stack
 
 
-_SKIP_LINE_PREFIXES = (
-    "here's what i found",
-    "i retrieved your records",
-    "retrieved ",
-)
+_SKIP_LINE_PREFIXES = T("dialogue/deixis.py::_SKIP_LINE_PREFIXES")
 
 
 def _topic_from_content(content: str) -> str | None:

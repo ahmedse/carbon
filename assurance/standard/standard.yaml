@@ -1,0 +1,78 @@
+# Excellence standard (ADR-0051 companion). One grid for every app:
+# 9 dimensions × levels 1–6. A cell with no bound check is open and caps
+# that dimension. N/A is declared here, never inferred.
+version: 1
+evidence_floor:
+  1: configured
+  2: configured
+  3: executed
+  4: executed
+  5: enforcement-verified
+  6: fault-demonstrated
+na:
+  dataset: [usable]
+  artifact: [secure, performant, usable]
+rungs:
+  specified:
+    1: Manifest entry with a one-line purpose
+    2: Spec or ADR linked and present
+    3: Acceptance criteria have ids; tests cite them
+    4: Every criterion has a green test on HEAD
+    5: Spec touched within the window of any code change
+    6: Zero orphan criteria and zero untested criteria for 30 days
+  correct:
+    1: Test location declared
+    2: Test plan section in the spec
+    3: Tests present for the subject
+    4: One-app or one-spec suite green on HEAD
+    5: Goldens or journeys green on the nightly
+    6: An injected bug is caught by the suite
+  secure:
+    1: Data class declared
+    2: Capabilities and roles listed in the spec
+    3: Forbidden-path tests present
+    4: Those tests green on HEAD
+    5: Authorization and secret scan enforced in CI
+    6: An out-of-scope request is refused live
+  reliable:
+    1: Failure owner declared
+    2: Failure modes listed in the spec
+    3: Error and retry paths tested
+    4: Idempotency or retry tests green on HEAD
+    5: CI, runbook, and a passing soak window
+    6: Recovery drill demonstrated
+  performant:
+    1: Budget declared
+    2: Budget written in the spec
+    3: Probe or benchmark exists
+    4: Budget met in test on HEAD
+    5: Budget met in a live window
+    6: Budget held for consecutive windows
+  usable:
+    1: Persona and surface declared
+    2: Screen spec present
+    3: Four data states and design-system primitives only
+    4: Journey test green on HEAD
+    5: RTL, i18n, and accessibility checks pass
+    6: Live journey completion recorded
+  maintainable:
+    1: Paths declared; antipatterns gate applies
+    2: Module boundary declared
+    3: Antipatterns and budget gates clean
+    4: Boundary check green on HEAD
+    5: No ratchet regression across the window
+    6: Zero active exemptions
+  observed:
+    1: Signal named
+    2: SLO or signal threshold defined
+    3: Instrumentation present in code
+    4: Collector writes the series on HEAD
+    5: Series fresh within 14 days
+    6: Evaluator self-check demonstrated
+  governed:
+    1: Owner named
+    2: Contract or ADR linked
+    3: Contract gate exists
+    4: Contract gate passes on HEAD
+    5: Gate enforced in CI
+    6: All exemptions unexpired and younger than 90 days

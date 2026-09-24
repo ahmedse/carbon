@@ -22,9 +22,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .catalogue import LEVEL_NAMES, load_catalogue
+from .cells import apps_in, build_grid, histogram, median, subjects_for_app
 from .evaluator import evaluate
 from .gauge import head_commit
-from .models import Event, Exemption, Run, Snapshot
+from .standard import load_standard
+from .models import Event, Exemption, Initiative, Run, Snapshot
 from .runs import UI_SAFE, execute_run, run_as_dict
 
 _LEDGER_DOWN = 'Excellence ledger database is not reachable in this deployment.'
@@ -68,7 +70,6 @@ def build_ladder(tier: str | None = None, track: str | None = None) -> dict:
         row['owner'] = rep.subject.owner
         row['level_name'] = LEVEL_NAMES[rep.level]
         row['counts'] = _state_counts(row['checks'])
-        row.pop('checks')
         subjects.append(row)
     return {
         'head': head,
@@ -202,8 +203,11 @@ class RunListCreateView(APIView):
 
     def get(self, request):
         try:
-            rows = Run.objects.all()[:50]
-            return Response({'runs': [run_as_dict(r) for r in rows]})
+            rows = Run.objects.all()
+            tier = _param(request, 'tier')
+            if tier:
+                rows = rows.filter(tier=tier)
+            return Response({'runs': [run_as_dict(r) for r in rows[:50]]})
         except DatabaseError:
             return Response({'detail': _LEDGER_DOWN}, status=503)
 
@@ -232,6 +236,22 @@ class RunListCreateView(APIView):
 
 class ExemptionListCreateView(APIView):
     permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        try:
+            rows = Exemption.objects.all()[:200]
+        except DatabaseError:
+            return Response({'detail': _LEDGER_DOWN}, status=503)
+        today = date.today()
+        return Response({'exemptions': [{
+            'id': row.pk,
+            'check_id': row.check_id,
+            'subject_id': row.subject_id,
+            'reason': row.reason,
+            'granted_by': row.granted_by,
+            'until': row.until.isoformat(),
+            'active': row.until >= today,
+        } for row in rows]})
 
     def post(self, request):
         data = request.data if isinstance(request.data, dict) else {}
@@ -273,6 +293,231 @@ class ExemptionListCreateView(APIView):
             'granted_by': row.granted_by,
             'until': row.until.isoformat(),
         }, status=201)
+
+
+def _reports(tier: str | None = None):
+    cat = load_catalogue()
+    head = head_commit()
+    qs = Event.objects.all()
+    if tier:
+        qs = qs.filter(tier=tier)
+    events = list(qs.values('check_id', 'subject_id', 'commit', 'result', 'evidence_class', 'at', 'source'))
+    exemptions = list(Exemption.objects.values('check_id', 'subject_id', 'until'))
+    reports = evaluate(cat, events, exemptions, head=head, tier=tier)
+    return cat, head, reports
+
+
+def build_overview() -> dict:
+    cat, head, reports = _reports()
+    contexts = []
+    for tier in sorted(cat.tiers.values(), key=lambda t: (t.id != 'platform', t.id)):
+        apps = []
+        declared = applicable = 0
+        for app in apps_in(cat, tier.id):
+            grid = build_grid(subjects_for_app(cat, app['id']), reports)
+            declared += grid['coverage_declared']
+            applicable += grid['coverage_applicable']
+            apps.append({
+                **app,
+                'level': grid['level'],
+                'level_name': grid['level_name'],
+                'distance': grid['distance'],
+                'coverage': grid['coverage'],
+            })
+        levels = [a['level'] for a in apps]
+        contexts.append({
+            'id': tier.id,
+            'title': 'Pulse' if tier.id == 'pulse' else tier.title,
+            'owner': tier.owner,
+            'app_count': len(apps),
+            'apps': apps,
+            'median': median(levels),
+            'floor': min(levels) if levels else 0,
+            'unmanaged': sum(1 for lv in levels if lv == 0),
+            'coverage': (declared / applicable) if applicable else 0,
+            'histogram': histogram(levels),
+        })
+    return {'head': head, 'contexts': contexts}
+
+
+def build_app(app_id: str, track: str | None = None) -> dict | None:
+    cat = load_catalogue()
+    tier = 'pulse' if app_id == 'pulse' else (cat.subjects[app_id].tier if app_id in cat.subjects else None)
+    if tier is None:
+        return None
+    _cat, head, reports = _reports(tier)
+    subjects = subjects_for_app(cat, app_id, track)
+    if not subjects:
+        return None
+    grid = build_grid(subjects, reports)
+    title = 'Pulse' if app_id == 'pulse' else subjects[0].title
+    tracks = [
+        {'id': tr.id, 'title': tr.title}
+        for (tid, _), tr in sorted(cat.tracks.items())
+        if tid == tier
+    ]
+    ids = [s.id for s in subjects]
+    checks = []
+    for cell in grid['cells']:
+        for check in cell['checks']:
+            checks.append({**check, 'dimension': cell['dimension'], 'rank': cell['level']})
+    events = list(
+        Event.objects.filter(subject_id__in=ids).order_by('-at').values(
+            'id', 'check_id', 'subject_id', 'commit', 'result', 'evidence_class', 'at', 'source', 'runner',
+        )[:100]
+    )
+    for event in events:
+        event['at'] = event['at'].isoformat() if event['at'] else None
+    exemptions = [{
+        'id': row.pk,
+        'check_id': row.check_id,
+        'subject_id': row.subject_id,
+        'reason': row.reason,
+        'granted_by': row.granted_by,
+        'until': row.until.isoformat(),
+        'active': row.is_active(),
+    } for row in Exemption.objects.filter(subject_id__in=ids)]
+    by_date: dict[str, list[int]] = {}
+    for snap in Snapshot.objects.filter(subject_id__in=ids).order_by('-date')[:200]:
+        by_date.setdefault(snap.date.isoformat(), []).append(snap.level)
+    trend = [{'date': day, 'level': min(levels)} for day, levels in list(by_date.items())[:30]]
+    runs = [run_as_dict(row) for row in Run.objects.filter(tier=tier)[:20]]
+    return {
+        'id': app_id,
+        'title': title,
+        'tier': tier,
+        'track': track or '',
+        'head': head,
+        'tracks': tracks,
+        'subjects': [{'id': s.id, 'title': s.title, 'track': s.track, 'kind': s.kind} for s in subjects],
+        'checks': checks,
+        'events': events,
+        'exemptions': exemptions,
+        'trend': trend,
+        'runs': runs,
+        **grid,
+    }
+
+
+def build_standard_view() -> dict:
+    standard = load_standard()
+    return {
+        'version': standard.version,
+        'na': {k: sorted(v) for k, v in standard.na.items()},
+        'rungs': [
+            {'dimension': r.dimension, 'level': r.level, 'title': r.title, 'evidence_floor': r.evidence_floor}
+            for r in standard.rungs
+        ],
+    }
+
+
+class OverviewView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        try:
+            return Response(build_overview())
+        except DatabaseError:
+            return Response({'detail': _LEDGER_DOWN}, status=503)
+
+
+class AppView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, app_id: str):
+        try:
+            body = build_app(app_id, _param(request, 'track'))
+        except DatabaseError:
+            return Response({'detail': _LEDGER_DOWN}, status=503)
+        if body is None:
+            return Response({'detail': f'No app {app_id} in the catalogue.'}, status=404)
+        return Response(body)
+
+
+class StandardView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        return Response(build_standard_view())
+
+
+def _initiative_dict(row, levels):
+    ids = list(row.app_ids or [])
+    reached = [app_id for app_id in ids if levels.get(app_id, 0) >= row.target_level]
+    return {
+        'id': row.pk,
+        'title': row.title,
+        'tier': row.tier,
+        'target_level': row.target_level,
+        'app_ids': ids,
+        'deadline': row.deadline.isoformat(),
+        'owner': row.owner,
+        'status': row.status,
+        'note': row.note,
+        'reached': len(reached),
+        'scope': len(ids),
+    }
+
+
+class InitiativeListCreateView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        try:
+            overview = build_overview()
+            levels = {
+                app['id']: app['level']
+                for ctx in overview['contexts']
+                for app in ctx['apps']
+            }
+            rows = Initiative.objects.all()[:100]
+        except DatabaseError:
+            return Response({'detail': _LEDGER_DOWN}, status=503)
+        return Response({'initiatives': [_initiative_dict(row, levels) for row in rows]})
+
+    def post(self, request):
+        data = request.data if isinstance(request.data, dict) else {}
+        title = str(data.get('title') or '').strip()
+        tier = str(data.get('tier') or '').strip()
+        try:
+            target = int(data.get('target_level'))
+            deadline = date.fromisoformat(str(data.get('deadline') or ''))
+        except (TypeError, ValueError):
+            return Response({'detail': 'target_level and deadline (YYYY-MM-DD) are required.'}, status=400)
+        app_ids = [str(a) for a in (data.get('app_ids') or []) if str(a).strip()]
+        if not title or not tier or not app_ids or not 1 <= target <= 6:
+            return Response({'detail': 'title, tier, app_ids, and target_level 1–6 are required.'}, status=400)
+        if deadline < date.today():
+            return Response({'detail': 'deadline must be today or later.'}, status=400)
+        try:
+            row = Initiative.objects.create(
+                title=title,
+                tier=tier,
+                target_level=target,
+                app_ids=app_ids,
+                deadline=deadline,
+                owner=getattr(request.user, 'username', '') or 'staff',
+                note=str(data.get('note') or ''),
+            )
+        except DatabaseError:
+            return Response({'detail': _LEDGER_DOWN}, status=503)
+        return Response(_initiative_dict(row, {}), status=201)
+
+
+class InitiativeCloseView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def post(self, request, initiative_id: int):
+        status = str((request.data or {}).get('status') or '').strip()
+        if status not in ('met', 'missed', 'open'):
+            return Response({'detail': 'status must be met, missed, or open.'}, status=400)
+        try:
+            updated = Initiative.objects.filter(pk=initiative_id).update(status=status)
+        except DatabaseError:
+            return Response({'detail': _LEDGER_DOWN}, status=503)
+        if not updated:
+            return Response({'detail': 'Initiative not found.'}, status=404)
+        return Response({'id': initiative_id, 'status': status})
 
 
 class ExemptionDeleteView(APIView):

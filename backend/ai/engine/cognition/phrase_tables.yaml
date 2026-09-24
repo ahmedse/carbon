@@ -1,0 +1,2670 @@
+context_pack.py::AGENT_DISCOVERY_AUTONOMY:
+  kind: str
+  value: 'Autonomy (Agent discovery · RULE_21): collect missing slots and propose
+    a plan; never execute host writes without staged consent.'
+context_pack.py::AGENT_PLAN_AUTONOMY:
+  kind: str
+  value: 'Autonomy (Agent plan · RULE_21): stage host effects only with explicit user
+    consent; never claim commit before receipt.'
+context_pack.py::CHAT_AUTONOMY:
+  kind: str
+  value: 'Autonomy (Chat · ADR-0046): advise, draft, explain, and hand off — never
+    claim to have submitted or staged a host write. For leave / loan / attendance
+    / payroll mutations, direct the user to Agent or My.'
+context_pack.py::DEFAULT_AUDIENCE:
+  items:
+  - hr
+  kind: tuple
+context_pack.py::MY_AUDIENCE:
+  items:
+  - ess
+  - hr
+  kind: tuple
+context_pack.py::VALID_AUDIENCES:
+  items:
+  - ess
+  - hr
+  - admin
+  kind: frozenset
+context_pack.py::VALID_STAGES:
+  items:
+  - draft
+  - understand
+  - critic
+  - intent
+  - synthesis
+  - verify
+  - verify_correct
+  - escalate
+  - weather_normalize
+  - recovery
+  - fanout
+  - fanout_synthesis
+  - decompose
+  - observe
+  - plan_synthesis
+  - discovery_clarify
+  kind: frozenset
+context_pack.py::VALID_SURFACES:
+  items:
+  - chat
+  - agent_plan
+  - agent_discovery
+  kind: frozenset
+dialogue/affirmation_helpers.py::_EDGE_PUNCT:
+  kind: chars
+  value: .,;!?"'،؛…«»
+dialogue/affirmation_i18n.py::AFFIRM_PHRASES:
+  items:
+  - go ahead
+  - go for it
+  - do it
+  - do that
+  - do so
+  - submit it
+  - send it
+  - please do
+  - yes please
+  - sounds good
+  - that works
+  - of course
+  - why not
+  - make it so
+  - lets do it
+  - let's do it
+  - i confirm
+  - i approve
+  - i agree
+  - نعم من فضلك
+  - اه صح
+  - تمام كده
+  - ماشي تمام
+  - قدم الطلب
+  - ابعت الطلب
+  - نفذ الطلب
+  - اكمل الطلب
+  - موافق تماما
+  kind: frozenset
+dialogue/affirmation_i18n.py::AFFIRM_WORDS:
+  items:
+  - 'yes'
+  - yeah
+  - yep
+  - yup
+  - ok
+  - okay
+  - sure
+  - correct
+  - right
+  - confirm
+  - confirmed
+  - confirming
+  - approve
+  - approved
+  - proceed
+  - continue
+  - go
+  - affirmative
+  - absolutely
+  - definitely
+  - please
+  - agreed
+  - agree
+  - نعم
+  - ايوه
+  - ايوا
+  - اه
+  - اي
+  - اكيد
+  - تمام
+  - صح
+  - صحيح
+  - موافق
+  - موافقه
+  - ماشي
+  - اوك
+  - اوكي
+  - حسنا
+  - طيب
+  - يلا
+  - تفضل
+  - كمل
+  - اكمل
+  - نفذ
+  - قدمها
+  - ابدا
+  - اعملها
+  - ارسلها
+  - وافق
+  - اوافق
+  - بالتاكيد
+  kind: frozenset
+dialogue/affirmation_i18n.py::COMMIT_WORDS:
+  items:
+  - apply
+  - applied
+  - accept
+  - accepted
+  - commit
+  - adopt
+  - اعتمد
+  - اعتمدها
+  - طبق
+  - طبقها
+  - اقبل
+  - موافقه
+  kind: frozenset
+dialogue/anaphora.py::_AGAIN_CUE_PHRASES:
+  items:
+  - once more
+  - as before
+  kind: tuple
+dialogue/anaphora.py::_AGAIN_CUE_WORDS:
+  items:
+  - again
+  - earlier
+  - previously
+  kind: tuple
+dialogue/deixis.py::_KNOWN_TOOL_IDENTIFIERS:
+  items:
+  - call_host_api
+  - resolve_entity
+  - search_knowledge
+  - export_document
+  - code_execute
+  - web_research
+  - get_my_leave_balance
+  - list_leave_entitlements
+  - list_my_leave
+  - list_my_loans
+  - list_my_payslips
+  - list_attendance
+  - list_my_attendance_permissions
+  kind: frozenset
+dialogue/deixis.py::_SKIP_LINE_PREFIXES:
+  items:
+  - here's what i found
+  - i retrieved your records
+  - 'retrieved '
+  kind: tuple
+dialogue/fallback.py::_AMBIGUOUS_WORDS:
+  items:
+  - which
+  - either
+  - or
+  - between
+  - versus
+  - compare
+  kind: tuple
+dialogue/pending_action.py::_MEMORY_CONFIRMATION_SIGNALS:
+  items:
+  - store it
+  - remember it
+  - save it
+  - keep it
+  - احفظها
+  - تذكرها
+  - سجلها
+  kind: frozenset
+dialogue/pending_action.py::_PROPOSAL_PREFIX_PHRASES:
+  items:
+  - 'shall '
+  - 'should '
+  - 'would you like me to '
+  - 'want me to '
+  - 'can i '
+  kind: tuple
+dialogue/pending_action.py::_PROPOSAL_VERBS:
+  items:
+  - store
+  - remember
+  - memorize
+  - save
+  - note
+  kind: tuple
+dialogue/pending_mutation_i18n.py::ACTION_VERB_AR:
+  items:
+  - تقديم
+  - أقدم
+  - إعداد
+  - أعد
+  - إنشاء
+  - أنشئ
+  - تسجيل
+  - أسجل
+  - إرسال
+  - أرسل
+  - حجز
+  - أحجز
+  - تعديل
+  - أعدل
+  - تحديث
+  - أحدث
+  - إلغاء
+  - ألغي
+  - اعتماد
+  - تنفيذ
+  - أنفذ
+  - أبدأ
+  - البدء
+  - أتابع
+  - المتابعة
+  - إكمال
+  - أكمل
+  kind: tuple
+dialogue/pending_mutation_i18n.py::ASKS_PERMISSION_AR:
+  items:
+  - يرجى
+  - يُرجى
+  - الرجاء
+  - برجاء
+  - التأكيد
+  - هل تريد
+  - قبل تقديم
+  - قبل إرسال
+  - قبل تنفيذ
+  kind: tuple
+dialogue/pending_mutation_i18n.py::FIRST_PERSON_AR:
+  items:
+  - سأ
+  - سوف أ
+  - يمكنني
+  - أستطيع
+  - هل أ
+  - أن أ
+  - تريدني
+  - تريد أن أ
+  - دعني
+  kind: tuple
+entity/contracts.py::_NONEXISTENCE_PHRASES:
+  items:
+  - no such
+  - no matching
+  - no employee
+  - no record
+  - not found
+  - does not exist
+  kind: tuple
+entity/contracts_i18n.py::NONEXISTENCE_AR:
+  items:
+  - لا يوجد
+  - غير موجود
+  - لم يتم العثور
+  kind: tuple
+entity/heal.py::_CORRECTION_PHRASES:
+  items:
+  - wrong
+  - incorrect
+  - not right
+  - that's wrong
+  kind: tuple
+entity/heal_i18n.py::CORRECTION_AR:
+  items:
+  - غلط
+  - مخطأ
+  - ليس صحيح
+  - ليس صحيحاً
+  - هذا خطأ
+  kind: tuple
+kg_seeding.py::_STOPWORDS:
+  items:
+  - I
+  - Me
+  - We
+  - You
+  - He
+  - She
+  - It
+  - They
+  - The
+  - A
+  - An
+  - Is
+  - Are
+  - Was
+  - Were
+  - Can
+  - Will
+  - Would
+  - Could
+  - Should
+  - This
+  - That
+  - These
+  - Those
+  - What
+  - How
+  - Why
+  - When
+  - Where
+  - Who
+  - My
+  - Your
+  - His
+  - Her
+  - Our
+  - Their
+  - And
+  - Or
+  - But
+  - If
+  - So
+  - For
+  - To
+  - In
+  - 'On'
+  - At
+  - From
+  - With
+  - Of
+  - By
+  - As
+  - All
+  - Not
+  - 'No'
+  kind: frozenset
+notifier.py::RUN_EVENT_TYPES:
+  items:
+  - run.started
+  - run.phase.started
+  - run.phase.completed
+  - run.step.started
+  - run.step.completed
+  - run.step.failed
+  - run.step.skipped
+  - run.paused
+  - run.resumed
+  - run.completed
+  - run.failed
+  - run.cancelled
+  - tool.started
+  - tool.completed
+  - tool.failed
+  kind: frozenset
+plan/catalog_args.py::READ_GAP:
+  kind: str
+  value: This read could not be completed. A required field was missing or was not
+    one of the allowed values.
+plan/catalog_args.py::WRITE_HELD:
+  kind: str
+  value: This step is waiting on a read that did not complete. Edit the plan, or run
+    again after that read succeeds.
+plan/export_bind.py::_SELF_GET_NO_PATH:
+  items:
+  - get_my_profile
+  - get_my_leave_balance
+  - list_my_leave
+  - list_my_loans
+  - list_my_payslips
+  - list_my_attendance_permissions
+  - list_attendance
+  kind: frozenset
+plan/loop.py::_ALLOWED_FOLLOWUP_TOOLS:
+  items:
+  - web_research
+  - get_entity_details
+  - search_knowledge
+  - call_host_api
+  kind: frozenset
+plan/planner.py::_MUTATION_TOOL_NAMES:
+  items:
+  - export_document
+  kind: set
+plan/planner.py::_TASK_CREATION_MARKERS:
+  items:
+  - need a task
+  - i need a task
+  - create a task
+  - make a task
+  - as a task
+  - turn this into a task
+  - convert this into a task
+  - convert what we talk
+  - in the tasks panel
+  kind: tuple
+plan/process_dial.py::_COMPOSITE_PARALLEL_PHRASES:
+  items:
+  - at the same time
+  - in parallel
+  - simultaneously
+  - side by side
+  kind: tuple
+plan/process_dial_i18n.py::ATTENDANCE_BRIEF_AR:
+  items:
+  - استئذان
+  - إذن حضور
+  - اذن حضور
+  - ساعات قصيرة
+  - سجل حضوري الآن
+  - سجل حضورى الان
+  kind: tuple
+plan/process_dial_i18n.py::COMPOSITE_CONDITIONAL_AR:
+  items:
+  - إذا
+  - اذا
+  - إن كان
+  - ان كان
+  - لو
+  - في حال
+  - توقف
+  - وإلا
+  - والا
+  - فلا
+  - لا تقدم
+  - لا تطلب
+  - إذا لا
+  - اذا لا
+  - إن لم
+  - ان لم
+  kind: tuple
+plan/process_dial_i18n.py::COMPOSITE_PARALLEL_AR:
+  items:
+  - في الوقت نفسه
+  - في نفس الوقت
+  - بالتوازي
+  - بشكل متواز
+  kind: tuple
+plan/process_dial_i18n.py::COMPOSITE_READ_WRITE_AR:
+  items:
+  - راجع
+  - تحقق
+  - افحص
+  - تأكد
+  - اطلع
+  - شوف
+  - ثم
+  - بعدها
+  - وبعد ذلك
+  - قبل أن
+  - قبل ان
+  - قدّم
+  - قدم
+  - اطلب
+  - أرسل
+  - ارسل
+  kind: tuple
+plan/process_dial_i18n.py::LOAN_BRIEF_AR:
+  items:
+  - قرض
+  - قروضي
+  - أريد قرض
+  - اريد قرض
+  - تقديم قرض
+  kind: tuple
+scope_route.py::_ABUSE_PHRASES:
+  items:
+  - ignore previous instructions
+  - ignore all previous instructions
+  - ignore prior instructions
+  - ignore all prior instructions
+  - jailbreak
+  - dan mode
+  - system prompt
+  - do anything now
+  kind: tuple
+scope_route.py::_ADVISORY_PHRASES:
+  items:
+  - who is
+  - who are
+  - who was
+  - who were
+  - what is
+  - tell me about
+  kind: tuple
+scope_route.py::_BARE_LEAVE_EN:
+  items:
+  - leave
+  - time off
+  - time-off
+  - vacation
+  - pto
+  kind: frozenset
+scope_route.py::_LEAVE_COMPLIANCE_PHRASES:
+  items:
+  - leave compliance
+  - leave risk
+  - leave variance
+  - leave report
+  - leave pack
+  - leave board
+  - absence rate
+  kind: tuple
+scope_route.py::_LEAVE_PERSONAL_PHRASES:
+  items:
+  - i want leave
+  - i want annual leave
+  - i want time off
+  - i want timeoff
+  - i want vacation
+  - i want pto
+  - i want holiday
+  - i need leave
+  - i need annual leave
+  - i need time off
+  - i need vacation
+  - i need pto
+  - i need holiday
+  - i request leave
+  - i request annual leave
+  - i request time off
+  - i request vacation
+  - i request pto
+  - i request holiday
+  - requesting leave
+  - requesting annual leave
+  - requesting time off
+  - requesting vacation
+  - request leave
+  - request annual leave
+  - apply for leave
+  - apply for annual leave
+  - apply for time off
+  - apply for vacation
+  - apply for pto
+  - apply for holiday
+  - take leave
+  - take annual leave
+  - take time off
+  - take vacation
+  - take pto
+  - take holiday
+  - reporting an absence
+  - reporting absence
+  - report an absence
+  - report absence
+  kind: tuple
+scope_route.py::_PLAN_SIGNAL_PHRASES:
+  items:
+  - board pack
+  - data quality
+  - dq rule
+  kind: tuple
+scope_route.py::_PLAN_SIGNAL_WORDS:
+  items:
+  - plan
+  - prepare
+  - build
+  - create
+  - export
+  - summarize
+  - analyse
+  - analyze
+  - report
+  kind: tuple
+scope_route_i18n.py::ABSENCE_REPORT_AR:
+  items:
+  - الإبلاغ عن غياب
+  - الابلاغ عن غياب
+  - أبلغ عن غياب
+  - ابلغ عن غياب
+  kind: tuple
+scope_route_i18n.py::ADVISORY_AR:
+  items:
+  - من هو
+  - من هي
+  - من هم
+  - عرفني
+  - اشرح لي
+  kind: tuple
+scope_route_i18n.py::BARE_LEAVE_AR:
+  items:
+  - إجازة
+  - اجازة
+  - اجازه
+  kind: frozenset
+scope_route_i18n.py::LEAVE_COMPLIANCE_TERM_AR:
+  items:
+  - تقرير
+  - مخاطر
+  - امتثال
+  - أكتوبر
+  kind: tuple
+scope_route_i18n.py::LEAVE_PLEASE_AR:
+  items:
+  - من فضلك
+  - لو سمحت
+  kind: tuple
+scope_route_i18n.py::LEAVE_WANT_AR:
+  items:
+  - أريد
+  - ابغى
+  - أبغى
+  - عايز
+  - عاوز
+  - اريد
+  kind: tuple
+scope_route_i18n.py::LEAVE_WORD_AR:
+  items:
+  - إجازة
+  - اجازة
+  - اجازه
+  kind: tuple
+scope_route_i18n.py::PLAN_SIGNAL_AR:
+  items:
+  - بيانات
+  - تقرير
+  - خطة
+  - جودة بيانات
+  kind: tuple
+state_store.py::_DICT_KEYS:
+  items:
+  - intent
+  - slots
+  - open_question
+  kind: tuple
+state_store.py::_EMPTY_PAYSLIP_REPLY_PHRASES:
+  items:
+  - no payslips
+  - no committed payslips
+  - found no payslips
+  - no payslips are on file
+  - no payslips were on file
+  - no payslips are found
+  - no payslips were found
+  kind: tuple
+state_store.py::_LIST_KEYS:
+  items:
+  - focus
+  - last_results
+  - active_plans
+  - decisions
+  kind: tuple
+state_store.py::_NON_FOCUS_TYPES:
+  items:
+  - pending_weather
+  - weather_resolution
+  kind: frozenset
+state_store_i18n.py::EMPTY_PAYSLIP_AR:
+  items:
+  - لم أجد قسائم
+  kind: tuple
+tool_digest.py::_PAYSLIP_IDENTITY_CODES:
+  items:
+  - gross
+  - gosi
+  - loan_installment
+  - net
+  kind: tuple
+tool_digest.py::_PLUMBING_KEYS:
+  items:
+  - status_code
+  - requires_confirmation
+  - execution_id
+  - kind
+  - operation
+  - method
+  - endpoint
+  - reasoning
+  - confirmation_message
+  - action
+  - route
+  - error
+  - detail
+  - latency_ms
+  - tool_call_id
+  - self_heal
+  kind: frozenset
+tool_digest.py::_RECORD_LIST_KEYS:
+  items:
+  - results
+  - rows
+  - items
+  - records
+  - entities
+  - data
+  kind: tuple
+tool_digest.py::_RESTRICTED_KEY_NEEDLES:
+  items:
+  - password
+  - passwd
+  - secret
+  - token
+  - apikey
+  - api_key
+  - credential
+  - iban
+  - swift
+  - nationalid
+  - national_id
+  - iqama
+  - ssn
+  - passport
+  - bankaccount
+  - bank_account
+  - accountnumber
+  - account_number
+  - cardnumber
+  - card_number
+  - cvv
+  - pincode
+  - pin_code
+  - hash
+  - salt
+  kind: tuple
+trajectory.py::_HOW_TO_PHRASES:
+  items:
+  - how do
+  - how can
+  - how to
+  - how should
+  kind: tuple
+turn/action_deflection_i18n.py::RETRY_AR:
+  items:
+  - أعد المحاولة
+  - حاول مرة أخرى
+  - المحاولة مرة أخرى
+  - إكمال
+  - اكمال
+  - أكمل
+  - اكمل
+  - خطوات
+  - عملية
+  - عمليه
+  - إجراءات
+  - التأكيد
+  - التاكيد
+  - أولا
+  - ثم
+  kind: tuple
+turn/catalog_render.py::BALANCE_APIS:
+  items:
+  - get_my_leave_balance
+  - list_leave_entitlements
+  kind: frozenset
+turn/catalog_render.py::PAYSLIP_APIS:
+  items:
+  - list_my_payslips
+  kind: frozenset
+turn/clarify.py::CLARIFICATION_REASONS:
+  items:
+  - ambiguous_identity
+  - missing_evidence
+  - unclear_authority
+  kind: tuple
+turn/critic.py::_KNOWLEDGE_GAP_PHRASES:
+  items:
+  - i'm not sure
+  - i am not sure
+  - i'm not certain
+  - i am not certain
+  - i'm unable to
+  - i am unable to
+  - i'm not confident
+  - i am not confident
+  - i don't have specific
+  - i don't have detailed
+  - i don't have enough
+  - i don't have complete
+  - i don't have information
+  - i don't have knowledge
+  - i cannot provide
+  - i can't provide
+  - i cannot give
+  - i can't give
+  - i cannot confirm
+  - i can't confirm
+  - i cannot answer
+  - i can't answer
+  - i need more context
+  - i need more information
+  - i need more detail
+  - i want to give you the most useful
+  - could you clarify which specific
+  kind: tuple
+turn/decision.py::COMMAND_OPS:
+  items:
+  - call_tool
+  - navigate
+  - clarify
+  - set_slot
+  - answer
+  - handoff_agent
+  - refuse
+  - confirm
+  - reject
+  - continue
+  kind: frozenset
+turn/decision.py::RENDER_MODES:
+  items:
+  - text
+  - chart
+  - table
+  kind: frozenset
+turn/decision.py::_CHAT_WRITE_PREFIXES:
+  items:
+  - create_
+  - submit_
+  - approve_
+  - reject_
+  - update_
+  - delete_
+  - cancel_
+  - post_
+  kind: tuple
+turn/ess_read.py::_BARE_PLACE_EN:
+  items:
+  - leave
+  - leaves
+  - loan
+  - loans
+  - payroll
+  - payslip
+  - payslips
+  - attendance
+  - home
+  kind: frozenset
+turn/ess_read.py::_PROPER_NAME_STOP:
+  items:
+  - What
+  - How
+  - Show
+  - Where
+  - When
+  - Who
+  - Why
+  - Tell
+  - Please
+  - Can
+  - Could
+  - Would
+  - Should
+  - May
+  - My
+  - The
+  - A
+  - An
+  - OK
+  - Remaining
+  - List
+  - About
+  - Does
+  - Did
+  - Is
+  - Are
+  - I
+  - We
+  - You
+  - Leave
+  - Loan
+  - Annual
+  - Sick
+  - Your
+  - Our
+  - Their
+  kind: frozenset
+turn/ess_read_i18n.py::_SETS:
+  items:
+  - BARE_PLACE_AR
+  kind: tuple
+turn/ess_read_i18n.py::_TUPLES:
+  items:
+  - LEAVE_TOPIC_AR
+  - LEAVE_HISTORY_AR
+  - LOAN_TOPIC_AR
+  - LOAN_SELF_AR
+  - PAYSLIP_TOPIC_AR
+  - ATTENDANCE_AR_TOKENS
+  - NAMED_EMP_AR
+  - LEAVE_ZERO_CLAIM_AR
+  - ASPECT_FOLLOWUP_NEEDLES
+  - COMPREHENSIVE_NEEDLES
+  kind: tuple
+turn/execute.py::_CATALOG_KEEP_KEYS:
+  items:
+  - api_name
+  - path_params
+  - query_params
+  - body
+  - explanation
+  kind: frozenset
+turn/execute.py::_CATALOG_PATH_KEYS:
+  items:
+  - id
+  - pk
+  - employee_id
+  - run_id
+  kind: frozenset
+turn/execute.py::_CATALOG_QUERY_KEYS:
+  items:
+  - dimension
+  - is_active
+  - page
+  - page_size
+  - limit
+  - offset
+  - search
+  - q
+  - ordering
+  - status
+  - employee_no
+  - date
+  - date_from
+  - date_to
+  - period
+  - year
+  - month
+  kind: frozenset
+turn/execute.py::_OUTPUT_TYPE_MARKER_KEYS:
+  items:
+  - _output_type
+  - output_type
+  - type
+  - render
+  - artifact
+  - artifacts
+  - file
+  - files
+  - file_path
+  - download_url
+  - path
+  - filename
+  - headers
+  - rows
+  - columns
+  - series
+  - labels
+  - values
+  - x
+  - y
+  kind: frozenset
+turn/execute.py::_PLAN_DIAL_BLOCKED_TOOLS:
+  items:
+  - call_host_api
+  - resolve_entity
+  - aggregate_entity
+  - export_document
+  - invoke_skill
+  - search_knowledge
+  - web_research
+  kind: frozenset
+turn/exit_policy.py::V21_KEEP_GATES:
+  items:
+  - off_limits
+  - chat_handoff
+  - ess_bound_self_read
+  kind: frozenset
+turn/exit_policy.py::V21_SUPERSEDED_GATES:
+  items:
+  - zero_llm
+  - restyle
+  - typed_router
+  - deixis
+  - process_brief_early
+  - process_brief
+  - chat_clarify
+  - next_step
+  - plan_status
+  - nav_fast_path
+  - nav_ground
+  - plan_dial_process
+  kind: frozenset
+turn/force_tool.py::_ESS_SELF_READ_APIS:
+  items:
+  - get_my_leave_balance
+  - list_my_leave
+  - list_my_loans
+  - list_my_payslips
+  - list_my_attendance_permissions
+  - list_attendance
+  kind: frozenset
+turn/handoff_agent.py::_AFFIRM_PHRASES:
+  items:
+  - that's all
+  - thats all
+  kind: tuple
+turn/handoff_agent.py::_AFFIRM_WORDS:
+  items:
+  - 'yes'
+  - yep
+  - exactly
+  - correct
+  kind: tuple
+turn/handoff_agent.py::_LEAVE_DATE_SLOTS:
+  items:
+  - start_date
+  - end_date
+  - days
+  kind: tuple
+turn/handoff_agent.py::_LEAVE_TYPE_WORDS:
+  items:
+  - annual
+  - sick
+  - emergency
+  - unpaid
+  - maternity
+  kind: tuple
+turn/handoff_agent.py::_LOAN_TYPE_WORDS:
+  items:
+  - emergency
+  - housing
+  - salary
+  - car
+  - personal
+  kind: tuple
+turn/handoff_agent.py::_MONTH_NAMES:
+  items:
+  - january
+  - february
+  - march
+  - april
+  - may
+  - june
+  - july
+  - august
+  - september
+  - october
+  - november
+  - december
+  kind: tuple
+turn/handoff_agent.py::_PAYROLL_STATUS_PHRASES:
+  items:
+  - what was
+  - what were
+  - what is my
+  - how much was
+  - when will
+  - net pay
+  - take-home
+  - take home
+  - can i download
+  kind: tuple
+turn/handoff_agent.py::_PAYROLL_STATUS_WORDS:
+  items:
+  - payslip
+  - payslips
+  - deduction
+  - deductions
+  - gosi
+  - payroll
+  kind: tuple
+turn/handoff_agent.py::_PERMISSION_TYPE_WORDS:
+  items:
+  - official
+  - medical
+  - emergency
+  - personal
+  kind: tuple
+turn/handoff_agent.py::_QUESTION_START_WORDS:
+  items:
+  - when
+  - how
+  - why
+  - what
+  - will
+  - can
+  - does
+  kind: tuple
+turn/handoff_agent.py::_READY_TO_SUBMIT_PHRASES:
+  items:
+  - anything else you need
+  - anything else you needed
+  - anything else i need
+  - anything else i needed
+  - is that all
+  - is that everything
+  - do you need anything
+  - do you need everything
+  - do you need all
+  - do you have anything
+  - do you have everything
+  - do you have all
+  kind: tuple
+turn/handoff_agent.py::_SLOT_STATUS_PHRASES:
+  items:
+  - what type
+  - what date
+  - what dates
+  - what amount
+  - what information
+  - how much
+  - what did i
+  - what was
+  - which date
+  - which dates
+  - is it marked
+  - marked as
+  kind: tuple
+turn/handoff_agent_i18n.py::AFFIRM_AR:
+  items:
+  - نعم
+  - أجل
+  - بالضبط
+  - هذا كل شيء
+  - تمام
+  - موافق
+  kind: tuple
+turn/handoff_agent_i18n.py::AMOUNT_CURRENCY_AR:
+  items:
+  - ريال
+  - دينار
+  - دنانير
+  kind: tuple
+turn/handoff_agent_i18n.py::AMOUNT_PREFIX_AR:
+  items:
+  - مبلغ
+  - قرض
+  kind: tuple
+turn/handoff_agent_i18n.py::DAYS_AR:
+  items:
+  - يوم
+  - أيام
+  - ايام
+  kind: tuple
+turn/handoff_agent_i18n.py::HOURS_AR:
+  items:
+  - ساعة
+  - ساعات
+  kind: tuple
+turn/handoff_agent_i18n.py::JAILBREAK_AR:
+  items:
+  - تجاهل
+  - تجاوز
+  kind: tuple
+turn/handoff_agent_i18n.py::LEAVE_ANNUAL_AR:
+  items:
+  - سنوي
+  - سنوية
+  - سنويه
+  kind: tuple
+turn/handoff_agent_i18n.py::LEAVE_EMERGENCY_AR:
+  items:
+  - طارئ
+  - طارئة
+  - عارضة
+  - عارضه
+  kind: tuple
+turn/handoff_agent_i18n.py::LEAVE_MATERNITY_AR:
+  items:
+  - وضع
+  - أمومة
+  kind: tuple
+turn/handoff_agent_i18n.py::LEAVE_SICK_AR:
+  items:
+  - مرض
+  - مرضية
+  - مرضيه
+  kind: tuple
+turn/handoff_agent_i18n.py::LEAVE_UNPAID_AR:
+  items:
+  - بدون راتب
+  - بدون  راتب
+  kind: tuple
+turn/handoff_agent_i18n.py::LOAN_CAR_AR:
+  items:
+  - سيارة
+  - سياره
+  kind: tuple
+turn/handoff_agent_i18n.py::LOAN_EMERGENCY_AR:
+  items:
+  - طارئ
+  - طارئة
+  - طارئه
+  kind: tuple
+turn/handoff_agent_i18n.py::LOAN_HOUSING_AR:
+  items:
+  - سكن
+  - عقاري
+  kind: tuple
+turn/handoff_agent_i18n.py::LOAN_PERSONAL_AR:
+  items:
+  - شخصي
+  kind: tuple
+turn/handoff_agent_i18n.py::LOAN_SALARY_AR:
+  items:
+  - راتب
+  kind: tuple
+turn/handoff_agent_i18n.py::MONTHS_AR:
+  items:
+  - شهر
+  - أشهر
+  - اشهر
+  kind: tuple
+turn/handoff_agent_i18n.py::PERM_EMERGENCY_AR:
+  items:
+  - طارئ
+  kind: tuple
+turn/handoff_agent_i18n.py::PERM_MEDICAL_AR:
+  items:
+  - طبي
+  kind: tuple
+turn/handoff_agent_i18n.py::PERM_OFFICIAL_AR:
+  items:
+  - رسمي
+  kind: tuple
+turn/handoff_agent_i18n.py::PERM_PERSONAL_AR:
+  items:
+  - شخصي
+  kind: tuple
+turn/handoff_agent_i18n.py::QUESTION_AR:
+  items:
+  - ؟
+  - متى
+  - هل
+  - كيف
+  - لماذا
+  - ما
+  - أين
+  - وين
+  kind: tuple
+turn/handoff_agent_i18n.py::READY_TO_SUBMIT_AR:
+  items:
+  - هل تحتاج
+  - هل ينقص
+  - هل بقي
+  kind: tuple
+turn/handoff_agent_i18n.py::RELATIVE_DAY_AR:
+  items:
+  - اليوم
+  kind: tuple
+turn/handoff_agent_i18n.py::SLOT_STATUS_AR:
+  items:
+  - تم تسجيله
+  kind: tuple
+turn/intent.py::_DELIVERY_MODES:
+  items:
+  - list
+  - lookup
+  - explain
+  - analyze
+  - compare
+  - summarize
+  kind: set
+turn/intent.py::_MUTATION_PHRASES:
+  items:
+  - set up
+  kind: tuple
+turn/intent.py::_MUTATION_VERBS:
+  items:
+  - create
+  - creating
+  - created
+  - add
+  - adding
+  - added
+  - delete
+  - deleting
+  - deleted
+  - remove
+  - removing
+  - removed
+  - drop
+  - dropping
+  - insert
+  - inserting
+  - write
+  - writing
+  - setup
+  - generate
+  - generating
+  - bind
+  - binding
+  - make
+  kind: tuple
+turn/intent.py::_NEW_THING_PHRASES:
+  items:
+  - new rule
+  - new dq rule
+  - new data-quality rule
+  - new data quality rule
+  - new table
+  - new field
+  - new column
+  - new schema
+  - new row
+  - new record
+  - another new rule
+  - a new rule
+  - a new table
+  - a new field
+  kind: tuple
+turn/intent.py::_READ_ONLY:
+  items:
+  - GET
+  kind: set
+turn/intent.py::_ZONES:
+  items:
+  - platform
+  - concept
+  - real_time
+  - general
+  - off_limits
+  kind: set
+turn/intent_i18n.py::LEAVE_TYPE_AR:
+  items:
+  - عارضة
+  - عارضه
+  - طارئة
+  - طارئه
+  - سنوية
+  - سنويه
+  - مرضية
+  kind: tuple
+turn/intent_i18n.py::LEAVE_WANT_AR:
+  items:
+  - أريد
+  - اريد
+  - أبغى
+  - ابغى
+  - عايز
+  - عاوز
+  - اطلب
+  - أطلب
+  - تقديم
+  - قدّم
+  - قدm
+  kind: tuple
+turn/intent_i18n.py::LEAVE_WORD_AR:
+  items:
+  - إجازة
+  - اجازة
+  - اجازه
+  kind: tuple
+turn/memory_recall.py::_HOST_IDENTITY_PHRASES:
+  items:
+  - employee number
+  - employee no
+  - job title
+  - organisation
+  - organization
+  - org unit
+  kind: tuple
+turn/memory_recall.py::_HOST_IDENTITY_WORDS:
+  items:
+  - manager
+  - department
+  kind: tuple
+turn/memory_recall.py::_RECALL_PHRASES:
+  items:
+  - confirm you have
+  - confirm that
+  - can you confirm you have
+  - can you confirm that
+  - what's my
+  - what is my
+  - is that still
+  - tell me about
+  - can you remember
+  kind: tuple
+turn/memory_recall.py::_STOP:
+  items:
+  - the
+  - and
+  - for
+  - that
+  - this
+  - still
+  - have
+  - you
+  - can
+  - about
+  - tell
+  - what
+  - your
+  - my
+  - is
+  - are
+  - was
+  - were
+  - 'yes'
+  - not
+  - before
+  - after
+  - month
+  - end
+  - with
+  - from
+  - code
+  - codes
+  kind: frozenset
+turn/memory_recall.py::_STORE_REMEMBER_PHRASES:
+  items:
+  - remember that
+  - please remember that
+  - learn_fact
+  kind: tuple
+turn/memory_recall_i18n.py::HOST_IDENTITY_AR:
+  items:
+  - مدير
+  - قسم
+  - رقم الموظف
+  kind: tuple
+turn/memory_recall_i18n.py::STORE_REMEMBER_AR:
+  items:
+  - تذكر
+  - احفظ
+  kind: tuple
+turn/navigation.py::_AR_TASHKEEL:
+  kind: chars
+  value: ًٌٍَُِّْٰـٕٓٔٗ٘
+turn/navigation.py::_HOW_HEADS:
+  items:
+  - 'how do i '
+  - 'how can i '
+  - 'how to '
+  kind: tuple
+turn/navigation.py::_HOW_VERBS:
+  items:
+  - apply
+  - request
+  - open
+  - get
+  - submit
+  - find
+  - see
+  - check
+  kind: frozenset
+turn/navigation.py::_NAV_VERB_PHRASES:
+  items:
+  - go to
+  - go back
+  - navigate to
+  - take me back to
+  - take me to
+  - show me
+  - show my
+  kind: tuple
+turn/navigation.py::_NAV_VERB_WORDS:
+  items:
+  - open
+  - goto
+  kind: tuple
+turn/navigation.py::_PLACE_TOPICS:
+  items:
+  - loans
+  - loan
+  - leave
+  - payroll
+  - payslips
+  - payslip
+  - attendance
+  - home
+  - notifications
+  - notification
+  - dashboard
+  kind: tuple
+turn/navigation.py::_QUESTION_WORDS_AR:
+  items:
+  - متي
+  - هل
+  - كيف
+  - لماذا
+  - ما
+  - ماذا
+  - اين
+  - أين
+  kind: frozenset
+turn/navigation.py::_QUESTION_WORDS_EN:
+  items:
+  - when
+  - how
+  - why
+  - what
+  - where
+  - is
+  - will
+  - can
+  - does
+  kind: frozenset
+turn/navigation.py::_WHERE_HEADS:
+  items:
+  - 'where can i '
+  - 'where do i '
+  - 'where is '
+  kind: tuple
+turn/navigation.py::_WHERE_TAILS:
+  items:
+  - find
+  - see
+  - check
+  - look
+  - is
+  kind: frozenset
+turn/navigation_i18n.py::HOW_WHERE_AR:
+  items:
+  - كيف أقدم
+  - كيف اقدم
+  - كيف أفتح
+  - كيف افتح
+  - 'وين '
+  - 'أين '
+  - 'اين '
+  kind: tuple
+turn/navigation_i18n.py::NAV_VERB_AR:
+  items:
+  - افتح
+  - تفتح
+  - اذهب
+  - تذهب
+  - ارني
+  - روح
+  - وديني
+  - خذني
+  kind: tuple
+turn/navigation_i18n.py::PLACE_TOPIC_AR:
+  items:
+  - قرض
+  - قروض
+  - إجازة
+  - اجازة
+  - راتب
+  - رواتب
+  - قسيمة
+  - حضور
+  - رئيسية
+  - إشعار
+  kind: tuple
+turn/navigation_i18n.py::SELF_READ_POSSESSIVE_AR:
+  items:
+  - إجازاتي
+  - اجازاتي
+  - إجازتي
+  - اجازتي
+  - راتبي
+  - مرتبي
+  - قروضي
+  - حضوري
+  - سلفتي
+  - قسيمة راتبي
+  - استئذاناتي
+  kind: tuple
+turn/navigation_i18n.py::SELF_READ_POSSESSIVE_EN:
+  items:
+  - 'my '
+  - ' mine'
+  kind: tuple
+turn/next_step.py::_CONTINUERS:
+  items:
+  - ok
+  - okay
+  - and
+  - then
+  - next
+  - go on
+  kind: frozenset
+turn/next_step.py::_NEXT_ASK_PHRASES:
+  items:
+  - what's next
+  - whats next
+  - what is next
+  - what next
+  - then what
+  - what should i do
+  - what do i do
+  - what's the next step
+  - what is the next step
+  kind: tuple
+turn/next_step.py::_PAYROLL_PHRASES:
+  items:
+  - net pay
+  - take-home
+  - take home
+  kind: tuple
+turn/next_step.py::_PAYROLL_WORDS:
+  items:
+  - payslip
+  - payroll
+  - gosi
+  - deduction
+  kind: tuple
+turn/next_step.py::_TERMINAL:
+  items:
+  - completed
+  - completed_with_gaps
+  - failed
+  - cancelled
+  kind: frozenset
+turn/next_step_i18n.py::CONTINUER_AR:
+  items:
+  - بعدها
+  - بعدين
+  kind: tuple
+turn/next_step_i18n.py::NEXT_ASK_AR:
+  items:
+  - ماذا بعد
+  - وش الخطوة
+  - وش بعدين
+  - ما الخطوة
+  - بعدين
+  kind: tuple
+turn/next_step_i18n.py::OFFER:
+  items:
+    approve_in_agent:
+      ar: 'التالي: افتح الوكيل واضغط اعتماد ثم تشغيل.'
+      en: 'Next: open Agent and Approve, then Run.'
+    confirm_in_agent:
+      ar: 'التالي: افتح الوكيل وأكّد الخطوة المنتظرة.'
+      en: 'Next: open Agent and confirm the waiting step.'
+    run_in_agent:
+      ar: 'التالي: افتح الوكيل وشغّل الخطة.'
+      en: 'Next: open Agent and Run.'
+    submit_in_agent:
+      ar: 'التالي: بدّل إلى الوكيل لإرسال الطلب. الدردشة لا تُرسل.'
+      en: 'Next: switch to Agent to submit. Chat will not send it.'
+  kind: dict
+turn/next_step_i18n.py::PAYROLL_AR:
+  items:
+  - قسيمة
+  - راتب
+  - استقطاع
+  kind: tuple
+turn/plan_dial.py::_AR_SLOT:
+  items:
+    date: التاريخ
+    days: الأيام
+    end_date: تاريخ الانتهاء
+    hours: الساعات
+    leave_type: نوع الإجازة
+    loan_type: نوع القرض
+    permission_type: نوع الاستئذان
+    principal: المبلغ
+    start_date: تاريخ البدء
+    term_months: المدة (شهر)
+  kind: dict
+turn/plan_dial.py::_AR_STEP_BY_API:
+  items:
+    get_my_leave_balance: قراءة رصيد إجازتي (قراءة)
+    list_my_attendance_permissions: التحقق من استئذاناتي الحالية (قراءة)
+    list_my_leave: قراءة إجازاتي (قراءة)
+    list_my_loans: التحقق من قروضي الحالية (قراءة)
+    submit_my_attendance_permission: تقديم طلب الاستئذان
+    submit_my_leave: تقديم طلب الإجازة
+    submit_my_loan: تقديم طلب القرض
+  kind: dict
+turn/plan_dial.py::_EN_SLOT:
+  items:
+    date: date
+    days: days
+    end_date: end date
+    hours: hours
+    leave_type: leave type
+    loan_type: loan type
+    permission_type: permission type
+    principal: amount
+    start_date: start date
+    term_months: term (months)
+  kind: dict
+turn/plan_dial.py::_EN_STEP_BY_API:
+  items:
+    get_my_leave_balance: Read my leave balance (read)
+    list_my_attendance_permissions: Check my current attendance permissions (read)
+    list_my_leave: Read my leave records (read)
+    list_my_loans: Check my current loans (read)
+    submit_my_attendance_permission: Submit the attendance permission
+    submit_my_leave: Submit the leave request
+    submit_my_loan: Submit the loan request
+  kind: dict
+turn/plan_dial.py::_NEW_CONTENT_WORDS:
+  items:
+  - submit
+  - apply
+  - request
+  - loan
+  - leave
+  - attendance
+  - salary
+  - payroll
+  - report
+  kind: tuple
+turn/plan_dial.py::_RESTYLE_PHRASES:
+  items:
+  - in arabic
+  - in english
+  - more detail
+  - more details
+  - extra detail
+  - extra details
+  - further detail
+  - further details
+  - in more detail
+  - in greater detail
+  - expand on that
+  - expand on this
+  - expand on it
+  - summarize that
+  - summarize this
+  - summarize it
+  - summarise that
+  - summarise this
+  - summarise it
+  - translate that
+  - translate this
+  - translate it
+  - say that
+  - say this
+  - say it
+  - repeat that
+  - repeat this
+  - repeat it
+  - write that
+  - write this
+  - write it
+  - explain that
+  - explain this
+  - explain it
+  kind: tuple
+turn/plan_dial.py::_RESTYLE_WORDS:
+  items:
+  - elaborate
+  - expand
+  - shorter
+  - briefer
+  kind: tuple
+turn/plan_dial_i18n.py::NEW_CONTENT_AR:
+  items:
+  - قرض
+  - إجاز
+  - اجاز
+  - استئذان
+  - راتب
+  - رواتب
+  - تقرير
+  - قدّم
+  - قدم
+  - اطلب
+  kind: tuple
+turn/plan_dial_i18n.py::RESTYLE_AR:
+  items:
+  - بالعرب
+  - بالإنجليز
+  - بالانجليز
+  - بالتفصيل
+  - أكثر تفصيل
+  - اكثر تفصيل
+  - بتفصيل أكثر
+  - بتفصيل اكثر
+  - وضّح أكثر
+  - وضح اكثر
+  - أعد الصياغة
+  - اعد الصياغة
+  - باختصار
+  - مختصر
+  kind: tuple
+turn/plan_revision.py::_REVISABLE:
+  items:
+  - pending_approval
+  - approved
+  - paused
+  - completed
+  - failed
+  - stopped
+  kind: frozenset
+turn/plan_status.py::_HAPPENED_TAILS:
+  items:
+  - request
+  - loan
+  - leave
+  - plan
+  - application
+  kind: tuple
+turn/plan_status.py::_STATUS_TAILS:
+  items:
+  - status
+  - request
+  - application
+  - plan
+  - loan
+  - leave
+  kind: tuple
+turn/plan_status_i18n.py::STATUS_HEAD_AR:
+  items:
+  - حالة
+  - وضع
+  - ماذا حدث
+  - وش صار
+  kind: tuple
+turn/plan_status_i18n.py::STATUS_OBJECT_AR:
+  items:
+  - طلب
+  - قرض
+  - إجازة
+  - اجازة
+  - المخطط
+  - الخطة
+  kind: tuple
+turn/plan_status_i18n.py::WRITE_ASK_AR:
+  items:
+  - أريد
+  - اريد
+  - أبغى
+  - اطلب
+  kind: tuple
+turn/process_brief.py::_BRIEFING_PHRASES:
+  items:
+  - walk me through
+  - how does
+  - what is the steps
+  - what are the steps
+  - list step
+  - list every step
+  - end-to-end
+  - end to end
+  - human approval
+  - human-only
+  - human only
+  - governed process
+  - process lifecycle
+  kind: tuple
+turn/process_brief.py::_BRIEFING_WORDS:
+  items:
+  - explain
+  - describe
+  - lifecycle
+  kind: tuple
+turn/process_brief.py::_DELIVERABLE_WORDS:
+  items:
+  - report
+  - reports
+  - document
+  - documents
+  - word
+  - docx
+  - xlsx
+  - excel
+  - pdf
+  - csv
+  - export
+  - generate
+  - produce
+  - create
+  - draft
+  - write
+  - summary
+  - summarise
+  - summarize
+  - breakdown
+  - comprehensive
+  - analysis
+  - analyse
+  - analyze
+  kind: tuple
+turn/process_brief_i18n.py::BRIEFING_ASK_AR:
+  items:
+  - اشرح
+  - شرح
+  - خطوة بخطوة
+  - موافقة بشرية
+  - عملية
+  - دورة الحياة
+  kind: tuple
+turn/process_brief_i18n.py::DELIVERABLE_ASK_AR:
+  items:
+  - تقرير
+  - تقارير
+  - ملف
+  - مستند
+  - وورد
+  - اكسل
+  - إكسل
+  - رسوم
+  - جداول
+  - جدول
+  - صدّر
+  - صدر
+  - أنشئ
+  - انشئ
+  - ولّد
+  - ولد
+  - اكتب
+  - تحليل
+  - ملخص
+  kind: tuple
+turn/report_clarify.py::_ASPECT_PHRASES:
+  items:
+  - pay mix
+  - run health
+  - payroll run
+  - payroll runs
+  - high level
+  - high-level
+  - all of the
+  - all the
+  - all four
+  - all aspects
+  - all options
+  - all above
+  - all them
+  - each aspect
+  - each one
+  kind: tuple
+turn/report_clarify.py::_ASPECT_WORDS:
+  items:
+  - distribution
+  - band
+  - bands
+  - tier
+  - tiers
+  - committed
+  - draft
+  - failed
+  - gosi
+  - pifss
+  - deduction
+  - board
+  - executive
+  - summary
+  - both
+  - everything
+  kind: tuple
+turn/report_clarify.py::_BROAD_DOCS:
+  items:
+  - report
+  - overview
+  - summary
+  - pack
+  kind: tuple
+turn/report_clarify.py::_BROAD_HEADS:
+  items:
+  - full
+  - complete
+  - comprehensive
+  - detailed
+  - entire
+  - overall
+  kind: tuple
+turn/report_clarify.py::_BROAD_PAY:
+  items:
+  - salary
+  - salaries
+  - payroll
+  - compensation
+  - pay
+  kind: tuple
+turn/report_clarify.py::_BROAD_PAY_DOCS:
+  items:
+  - report
+  - overview
+  - summary
+  kind: tuple
+turn/report_clarify.py::_CLARIFY:
+  items:
+    ar: 'بكل سرور أساعد في تقرير الرواتب — على ماذا تريد التركيز؟
+
+
+      - **توزيع الرواتب حسب الشرائح** (رسوم بيانية)
+
+      - **صحة مسيرات الرواتب** (معتمد / مسودة / فاشل)
+
+      - **الاستقطاعات والتأمينات (GOSI)**
+
+      - **ملخص لمجلس الإدارة** (مستوى عالٍ بدون جداول صفوف)
+
+      - أمر آخر — حدّد **الجمهور** و**الزاوية**'
+    en: 'Happy to help with a salary report — what should **this report** focus on?
+
+
+      - **Pay distribution by band** (charts + tiers)
+
+      - **Payroll run health** (committed / draft / failed)
+
+      - **Deductions & GOSI** overview
+
+      - **Board-ready summary** (high level, no row dumps)
+
+      - Something else — tell me the **audience** and the **angle**'
+  kind: dict
+turn/report_clarify.py::_PAYROLL_DIGEST_MARKERS:
+  items:
+  - list_payroll_runs
+  - list_payslip_lines
+  - analyze_employees
+  - aggregate_entity
+  - headcount
+  - payslip
+  - payroll
+  - metric=headcount
+  kind: tuple
+turn/report_clarify.py::_PRIOR_CLARIFY_MARKERS:
+  items:
+  - what should
+  - focus on
+  - happy to help with a salary report
+  - بكل سرور أساعد في تقرير الرواتب
+  - على ماذا تريد التركيز
+  kind: tuple
+turn/report_clarify.py::_PRIOR_REPORT_ANSWER_MARKERS:
+  items:
+  - payroll run status
+  - payslip line
+  - active employees
+  - headcount by
+  - salary band
+  - pay distribution
+  - gosi
+  - pifss
+  - committed
+  - draft
+  - failed
+  kind: tuple
+turn/report_clarify.py::_SALARY_ASPECT_BY_NUM:
+  items:
+    '1': Pay distribution by band with charts and tiers
+    '2': Payroll run health committed draft failed
+    '3': Deductions and GOSI overview
+    '4': Board-ready salary summary high level no row dumps
+    '5': Board-ready salary summary high level no row dumps
+    both: all four salary report aspects with charts
+  kind: dict
+turn/report_clarify.py::_SCOPED_PHRASES:
+  items:
+  - hr lead
+  - by band
+  - by tier
+  - by nationality
+  - by gender
+  - by dept
+  - by department
+  - by org
+  - by grade
+  kind: tuple
+turn/report_clarify.py::_SCOPED_WORDS:
+  items:
+  - board
+  - executive
+  - finance
+  - manager
+  - committee
+  - distribution
+  - breakdown
+  - band
+  - bands
+  - tier
+  - tiers
+  - histogram
+  - chart
+  - charts
+  - graph
+  - graphs
+  - visual
+  - visuals
+  - viz
+  - gosi
+  - pifss
+  - deduction
+  - variance
+  - committed
+  - draft
+  - failed
+  - word
+  - excel
+  - pdf
+  - pptx
+  - export
+  - pack
+  kind: tuple
+turn/report_clarify.py::_TOPIC_ASPECT_BY_NUM:
+  items:
+    '1': Headcount and organization structure — active employees by department, role,
+      and employment type with charts
+    '2': Payroll and compensation — salary ranges, gross pay, deductions, net pay
+      trends with charts
+    '3': Leave and attendance balances usage patterns with charts
+    '4': GOSI and statutory employer employee contributions compliance
+    '5': Payroll run status draft computed validated committed failed
+    both: Headcount and organization structure with charts — departments, roles, employment
+      type
+  kind: dict
+turn/report_clarify.py::_TOPIC_MENU_MARKERS:
+  items:
+  - headcount & organization
+  - payroll & compensation
+  - what's the main topic
+  - i'd like to focus this report
+  kind: tuple
+turn/report_clarify_i18n.py::ASPECT_PICK_AR:
+  items:
+  - توزيع
+  - شرائح
+  - مسيرات
+  - ملتزم
+  - مسودة
+  - فشل
+  - تأمينات
+  - مجلس
+  - ملخص
+  - كل
+  - أربعة
+  - الجوانب
+  - الخيارات
+  - ما سبق
+  kind: tuple
+turn/report_clarify_i18n.py::BROAD_REPORT_AR:
+  items:
+  - تقرير
+  - رواتب
+  - راتب
+  - مسير
+  - الأجور
+  - كامل
+  - شامل
+  - مفصل
+  kind: tuple
+turn/report_clarify_i18n.py::PRIOR_CLARIFY_AR:
+  items:
+  - على ماذا تريد التركيز
+  - بكل سرور أساعد في تقرير الرواتب
+  kind: tuple
+turn/report_clarify_i18n.py::SCOPED_AR:
+  items:
+  - مجلس
+  - إدارة
+  - توزيع
+  - شرائح
+  - تأمينات
+  - استقطاع
+  - حسب
+  - رسوم
+  - مخططات
+  kind: tuple
+turn/router.py::_REPORT_OPTIONS:
+  items:
+  - id: '1'
+    label: Pay distribution by band
+    value: Pay distribution by band with charts and tiers
+  - id: '2'
+    label: Payroll run health
+    value: Payroll run health committed draft failed
+  - id: '3'
+    label: Deductions & GOSI
+    value: Deductions and GOSI overview
+  - id: '4'
+    label: Board-ready summary
+    value: Board-ready salary summary high level no row dumps
+  kind: tuple
+turn/runner_helpers.py::_BACKGROUND_LLM_STAGES:
+  items:
+  - auto_memory
+  kind: frozenset
+turn/runner_render.py::_CHART_IMAGE_KEYS:
+  items:
+  - image_b64
+  - png_b64
+  - image_base64
+  kind: frozenset
+turn/runner_render.py::_DELIVERY_INJECTION:
+  items:
+    analyze: get insight — patterns, extremes, and what drives it
+    compare: compare the relevant entries side by side
+    explain: understand what this is, how it is used, and why it matters
+    list: see the full list of records
+    lookup: find one specific value
+    summarize: get a high-level summary
+  kind: dict
+turn/runner_render.py::_DELIVERY_SYNTHESIS:
+  items:
+    analyze: The user wants insight — surface the extremes (highest/lowest), the groupings,
+      and patterns. Lead with the finding, then support it with a Markdown table.
+    compare: The user wants a side-by-side comparison — contrast the entries on the
+      dimensions that matter using a Markdown table.
+    explain: The user wants to UNDERSTAND this dataset, not just see rows. Lead with
+      what it IS and how it is used, group it meaningfully (by category/scope), name
+      the notable entries and what they mean, and present the data as a Markdown table
+      so it is readable. End with one natural next step.
+    list: The user wants the complete record set — present every row in a clean Markdown
+      table (meaningful columns only) and add a chart if the values are comparable.
+    lookup: The user wants one specific value — answer with that value directly, bold
+      it, and keep surrounding detail minimal.
+    summarize: The user wants a roll-up — give headline numbers and a compact table
+      of the main groups, no exhaustive list.
+  kind: dict
+turn/runner_util.py::_CAPABILITY_PHRASES:
+  items:
+  - what can you do
+  - what do you have access to
+  - what features
+  - show me capabilities
+  - your capabilities
+  - what are you able to do
+  - what can i use
+  kind: tuple
+turn/runner_util.py::_CHAT_STATIC_TOOLS:
+  items:
+  - search_knowledge
+  - get_entity_details
+  - learn_fact
+  - forget_fact
+  - call_host_api
+  kind: frozenset
+turn/runner_util.py::_DEFAULT_REFUSAL_AR:
+  kind: str
+  value: لا أستطيع المساعدة في هذا الطلب. إذا كان لديك سؤال عن بيانات منصتك، فأنا
+    هنا للمساعدة.
+turn/runner_util.py::_DEFAULT_REFUSAL_EN:
+  kind: str
+  value: I'm not able to help with that request. If you have a question about your
+    platform data, emissions, or data quality, I'm here to help.
+turn/runner_util.py::_ECF_CHAT_TOOLS:
+  items:
+  - resolve_entity
+  - aggregate_entity
+  kind: frozenset
+turn/runner_util.py::_PLAN_ACCEPT:
+  items:
+  - 'yes'
+  - ok
+  - okay
+  - accept
+  - accepted
+  - approve
+  - approved
+  - go
+  - proceed
+  - confirm
+  - do it
+  - create it
+  - create the task
+  - retry
+  - try again
+  - retry planning
+  kind: frozenset
+turn/runner_util.py::_SCOPE_BYPASS_PHRASES:
+  items:
+  - system prompt
+  - developer mode
+  - you are now
+  - api key
+  - api keys
+  - secret key
+  - secret keys
+  - access control
+  - access controls
+  kind: tuple
+turn/runner_util.py::_SCOPE_BYPASS_WORDS:
+  items:
+  - ignore
+  - disregard
+  - bypass
+  - override
+  - jailbreak
+  - pretend
+  - password
+  - passwords
+  - credential
+  - credentials
+  - access
+  kind: tuple
+turn/runner_util.py::_TEXT_TRANSFORM_PHRASES:
+  items:
+  - correct the spelling
+  - correct spelling
+  - fix the spelling
+  - fix spelling
+  - check the spelling
+  - check spelling
+  - spell check
+  - spell-check
+  - correct the grammar
+  - correct grammar
+  - fix the grammar
+  - fix grammar
+  - check the grammar
+  - check grammar
+  - proofread
+  - rephrase
+  - rewrite
+  - fix the typos
+  - fix typos
+  - fix the typo
+  - fix typo
+  kind: tuple
+turn/runner_util.py::_TEXT_TRANSFORM_WORDS:
+  items:
+  - typo
+  - translate
+  kind: tuple
+turn/runner_util_i18n.py::ESS_TOPIC_AR:
+  items:
+  - إجاز
+  - اجاز
+  - قرض
+  - راتب
+  - رواتب
+  - حضور
+  - غياب
+  - قسيم
+  - استئذان
+  - سلف
+  kind: tuple
+turn/runner_util_i18n.py::FIRST_PERSON_AR:
+  items:
+  - أنا
+  - انا
+  - عندي
+  - لدي
+  - أريد
+  - اريد
+  - طلبت
+  - راتبي
+  - إجازتي
+  - اجازتي
+  - قرضي
+  - حضوري
+  - رصيدي
+  - قسيمتي
+  kind: tuple
+turn/runner_util_i18n.py::SCOPE_BYPASS_AR:
+  items:
+  - تجاهل
+  - تجاوز
+  - صلاحيات
+  - قيود
+  - حماي
+  - كلمة المرور
+  - كلمات المرور
+  - كلمات مرور
+  - كلمة السر
+  - موجه النظام
+  - صلاحيات المدير
+  kind: tuple
+turn/salience.py::_URGENCY_KEYWORDS:
+  items:
+  - urgent
+  - asap
+  - critical
+  - broken
+  - down
+  - error
+  - failing
+  - emergency
+  kind: set
+turn/self_heal.py::_REPAIRABLE_TOOLS:
+  items:
+  - get_entity_details
+  - search_knowledge
+  - call_host_api
+  kind: frozenset
+turn/self_heal.py::_UNKNOWN_API_PHRASES:
+  items:
+  - unknown api
+  - api not found
+  - no such api
+  - not in catalog
+  - not in the catalog
+  kind: tuple
+turn/verify.py::_COLLECTION_KEYS:
+  items:
+  - by_scope
+  - by_module
+  - by_status
+  - rows
+  - results
+  - items
+  - breakdown
+  - records
+  - data
+  kind: tuple
+turn/verify.py::_COUNT_KEYS:
+  items:
+  - total
+  - count
+  - total_calculations
+  - row_count
+  - n
+  - results_count
+  kind: tuple
+turn/verify.py::_NO_DATA_NOUNS:
+  items:
+  - data
+  - record
+  - records
+  - result
+  - results
+  - calculation
+  - calculations
+  - entries
+  - rows
+  kind: tuple
+turn/verify.py::_NO_DATA_PHRASES:
+  items:
+  - no matching
+  - not available
+  - there is no
+  - there are no
+  kind: tuple
+turn/zero_llm.py::_COWORKER_FOLLOWUP_PHRASES:
+  items:
+  - is she a manager
+  kind: tuple
+turn/zero_llm.py::_COWORKER_FOLLOWUP_WORDS:
+  items:
+  - her
+  - his
+  - she
+  - he
+  - their
+  - position
+  - department
+  - role
+  - title
+  - manager
+  - report
+  - reports
+  kind: tuple
+turn/zero_llm.py::_EMPTY_PAYSLIP_REPLY_PHRASES:
+  items:
+  - no payslips
+  - no committed payslips
+  - found no payslips
+  - no payslips are on file
+  - no payslips were on file
+  - no payslips are found
+  - no payslips were found
+  kind: tuple
+turn/zero_llm.py::_MONTHS:
+  items:
+    april: 4
+    august: 8
+    december: 12
+    february: 2
+    january: 1
+    july: 7
+    june: 6
+    march: 3
+    may: 5
+    november: 11
+    october: 10
+    september: 9
+  kind: dict
+turn/zero_llm.py::_OTHER_NAME_STOP:
+  items:
+  - what
+  - how
+  - who
+  - which
+  - her
+  - his
+  - she
+  - the
+  - now
+  - tell
+  - about
+  - back
+  - department
+  - position
+  - role
+  - title
+  kind: frozenset
+turn/zero_llm.py::_PAYROLL_FOLLOWUP_PHRASES:
+  items:
+  - take-home
+  - take home
+  - take_home
+  - net pay
+  - loan amount
+  - total deductions
+  - after gosi
+  kind: tuple
+turn/zero_llm.py::_PAYROLL_FOLLOWUP_WORDS:
+  items:
+  - deduction
+  - deductions
+  - gosi
+  kind: tuple
+turn/zero_llm.py::_PAYROLL_POLICY_WORDS:
+  items:
+  - appeal
+  - objection
+  - object
+  - certificate
+  kind: tuple
+turn/zero_llm.py::_PAYROLL_SCHEDULE_PHRASES:
+  items:
+  - when will payroll be processed
+  - when will next month's payroll be processed
+  - when will next months payroll be processed
+  - when is payroll run
+  - when is the payroll run
+  - when does payroll run
+  - when does the payroll run
+  - when does payroll get processed
+  - when is payroll get processed
+  kind: tuple
+turn/zero_llm.py::_PAYSLIP_DOWNLOAD_PHRASES:
+  items:
+  - can i download my payslip
+  - can i download my payslips
+  - can i download payslip
+  - can i download payslips
+  - download my payslip
+  - download my payslips
+  - download payslip
+  - download payslips
+  kind: tuple
+turn/zero_llm.py::_PAYSLIP_LINE_CODES:
+  items:
+  - gross
+  - gosi
+  - loan_installment
+  - net
+  kind: tuple
+turn/zero_llm.py::_PROFILE_ASK_PHRASES:
+  items:
+  - employee number
+  - employee no
+  - what number
+  kind: tuple
+turn/zero_llm.py::_PROFILE_ASK_WORDS:
+  items:
+  - department
+  - manager
+  kind: tuple
+turn/zero_llm.py::_SHOW_OPEN_PHRASES:
+  items:
+  - go to
+  kind: tuple
+turn/zero_llm.py::_SHOW_OPEN_WORDS:
+  items:
+  - show
+  - open
+  - where
+  kind: tuple
+turn/zero_llm.py::_THANKS_STARTS:
+  items:
+  - thanks
+  - thank you
+  - thx
+  - ty
+  kind: tuple
+turn/zero_llm.py::_THANKS_WRITE_WORDS:
+  items:
+  - submit
+  - apply
+  - request
+  - approve
+  - send
+  kind: tuple
+turn/zero_llm_i18n.py::CLOCK_AR:
+  items:
+  - ما هو تاريخ
+  - ما تاريخ
+  - ما هو اليوم
+  - ما اليوم
+  - ما هو الشهر
+  - اليوم كم
+  kind: tuple
+turn/zero_llm_i18n.py::COWORKER_FOLLOWUP_AR:
+  items:
+  - قسم
+  - منصب
+  - مدير
+  kind: tuple
+turn/zero_llm_i18n.py::DAY_SPAN_AR:
+  items:
+  - من الآن
+  - من الان
+  - حتى إجاز
+  - حتى اجاز
+  kind: tuple
+turn/zero_llm_i18n.py::EMPTY_PAYSLIP_REPLY_AR:
+  items:
+  - لم أجد قسائم
+  kind: tuple
+turn/zero_llm_i18n.py::MONTH_ASK_AR:
+  items:
+  - الشهر
+  kind: tuple
+turn/zero_llm_i18n.py::NOTIFICATION_AR:
+  items:
+  - إشعارات
+  - اشعارات
+  - تنبيهات
+  kind: tuple
+turn/zero_llm_i18n.py::PAYROLL_FOLLOWUP_AR:
+  items:
+  - راتبي
+  - الراتب
+  - صافي
+  - الاستقطاعات
+  - خصومات
+  - قسيمة
+  kind: tuple
+turn/zero_llm_i18n.py::PAYROLL_POLICY_AR:
+  items:
+  - اعتراض
+  - شهادة طبية
+  - سياسة
+  kind: tuple
+turn/zero_llm_i18n.py::PAYROLL_SCHEDULE_AR:
+  items:
+  - متى ستتم معالجة الرواتب
+  - متى يتم معالجة الرواتب
+  - متى سيكون الراتب
+  kind: tuple
+turn/zero_llm_i18n.py::PAYSLIP_DOWNLOAD_AR:
+  items:
+  - تحميل قسيمة
+  - تحميل القسيمة
+  kind: tuple
+turn/zero_llm_i18n.py::PROFILE_ASK_AR:
+  items:
+  - رقم الموظف
+  - قسم
+  - مدير
+  kind: tuple
+turn/zero_llm_i18n.py::SHOW_OPEN_AR:
+  items:
+  - أرني
+  - ارني
+  - افتح
+  - وين
+  - أين
+  kind: tuple
+turn/zero_llm_i18n.py::THANKS_AR:
+  items:
+  - شكرا
+  - شكراً
+  - مشكور
+  kind: tuple
+turn/zero_llm_i18n.py::THANKS_WRITE_AR:
+  items:
+  - قدّم
+  - قدم
+  - أرسل
+  - ارسل
+  kind: tuple
+turn/zero_llm_i18n.py::WHEN_START_AR:
+  items:
+  - متى تبدأ
+  - متى تبدا
+  - متى يبدأ
+  - متى يبدا
+  kind: tuple

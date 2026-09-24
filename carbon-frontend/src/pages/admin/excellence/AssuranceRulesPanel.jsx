@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Alert, Box, Chip, CircularProgress, FormControlLabel, Stack, Switch,
-  Table, TableBody, TableCell, TableHead, TableRow, Typography,
+  Alert, Box, Button, Chip, FormControlLabel, Skeleton, Stack, Switch, Typography,
 } from '@mui/material';
 import { useAuth } from '../../../auth/AuthContext';
 import { apiFetch, apiFetchStream } from '../../../api/api';
+import FilteredDataGrid from '../../../components/FilteredDataGrid';
 
 function labelColor(label) {
   if (label === 'passed') return 'success';
@@ -108,38 +108,33 @@ export default function AssuranceRulesPanel({ pack = 'nibras', embedded = false 
         {snapshot?.ledger ? ` Ledger: ${snapshot.ledger}` : ' No ledger file — rows stay at their catalogue label.'}
       </Typography>
       {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
-      {!snapshot && !error && <CircularProgress size={28} />}
+      {!snapshot && !error && (
+        <Stack spacing={1} aria-busy="true" aria-label="Loading rules">
+          <Skeleton variant="rounded" sx={{ height: 4 }} />
+          <Skeleton variant="rounded" sx={{ height: 22 }} />
+        </Stack>
+      )}
       {snapshot && (
-        <Box sx={{ overflow: 'auto' }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Rule</TableCell>
-                <TableCell>Journey</TableCell>
-                <TableCell>Meaning</TableCell>
-                <TableCell>Evidence</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow
-                  key={`${row.pack}-${row.rule_id}`}
-                  hover
-                  selected={selected?.rule_id === row.rule_id && selected?.pack === row.pack}
-                  onClick={() => setSelected(row)}
-                  sx={{ cursor: 'pointer' }}
-                >
-                  <TableCell>{row.rule_id}</TableCell>
-                  <TableCell>{row.journey}</TableCell>
-                  <TableCell>{row.meaning}</TableCell>
-                  <TableCell>
-                    <Chip size="small" label={row.label} color={labelColor(row.label)} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Box>
+        <FilteredDataGrid
+          embedded
+          title="Rules"
+          rows={rows}
+          getRowId={(row) => `${row.pack}-${row.rule_id}`}
+          highlightRow={(row) => selected?.rule_id === row.rule_id && selected?.pack === row.pack}
+          columns={[
+            { field: 'rule_id', headerName: 'Rule', width: 140 },
+            { field: 'journey', headerName: 'Journey', width: 140 },
+            { field: 'meaning', headerName: 'Meaning', flex: 1, minWidth: 200 },
+            { field: 'label', headerName: 'Evidence', width: 140, renderCell: (p) => <Chip size="small" label={p.value} color={labelColor(p.value)} /> },
+            {
+              field: 'actions', headerName: 'Actions', width: 100, sortable: false,
+              renderCell: (p) => (
+                <Button size="small" aria-label={`Open ${p.row.rule_id}`} onClick={() => setSelected(p.row)}>Open</Button>
+              ),
+            },
+          ]}
+          emptyMessage="No rules in this pack"
+        />
       )}
       {selected && (
         <Alert severity="info" sx={{ mt: 1 }}>

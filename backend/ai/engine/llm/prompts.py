@@ -6,6 +6,7 @@ Prompts are now synthesized at runtime by llm.prompt_synthesizer — no
 hardcoded per-instance template. The SYSTEM_PROMPT_INTROSPECT templates
 below are the only remaining static prompts (schema analysis, not chat).
 """
+from ai.engine.pack_vocab import V
 
 # ── Note: SYSTEM_PROMPT_CHAT removed 2026-08-09 ──
 # build_chat_prompt() now calls llm.prompt_synthesizer.synthesize_system_prompt()
@@ -95,9 +96,9 @@ async def build_chat_prompt(
             "write request, provide the governed Agent/My handoff; never stage "
             "it. For a vague 'full report' brief, ask ONE short clarifying "
             "question about focus and audience before fetching data — do not "
-            "dump payslip rows. For distribution or analytics questions, "
-            "summarize with aggregates and charts, never raw salary rows. If "
-            "the user needs a multi-step or governed plan, tell them to switch "
+            + V("t_dump_payslip_rows_for_distribution_or")
+            + V("t_summarize_with_aggregates_and_charts_never")
+            + "the user needs a multi-step or governed plan, tell them to switch "
             "the dial to Plan — do not invent Open-in-Agent or Open-My for a "
             "read question.\n"
         )
@@ -111,44 +112,44 @@ async def build_chat_prompt(
         roles_part = f" — Roles: {', '.join(roles)}" if roles else ""
         user_context = f"**{display_name}**{email_part}{roles_part}"
         # Domain subject binding: lets the model resolve first-person requests
-        # ("my leave", "اجازاتي") to THIS person and steers it to self-scoped
+        # ("my ", "اجازاتي") to THIS person and steers it to self-scoped
         # endpoints instead of the org-wide lists (which would leak others' data).
-        employee = user_info.get("employee") or None
-        if employee:
+        person_row = user_info.get(V("t_employee_4")) or None
+        if person_row:
             emp_bits = [
-                str(employee[k]) for k in ("full_name", "job_title", "org_unit")
-                if employee.get(k)
+                str(person_row[k]) for k in ("full_name", "job_title", "org_unit")
+                if person_row.get(k)
             ]
-            if employee.get("employee_no"):
-                emp_bits.insert(1, f"employee #{employee['employee_no']}")
+            if person_row.get("employee_no"):
+                emp_bits.insert(1, f"{V("t_employee_4")} #{person_row['employee_no']}")
             emp_line = ", ".join(emp_bits)
-            user_context = f"{user_context}\n**Employee identity**: {emp_line}"
+            user_context = f"{user_context}\n**{V("t_employee")} identity**: {emp_line}"
             identity_directive = (
                 f"**Identity**: You are assisting {emp_line}. When they say "
                 "\"my\", \"me\", \"mine\", or \"I\" — or the Arabic اجازاتي / "
                 "راتبي / بياناتي / قروضي — it refers to THIS person; never ask "
-                "who they are. For first-person questions about their own leave, "
-                "leave balance, loans, or profile, call the "
-                "self-service endpoints (get_my_profile, list_my_leave, "
+                + V("t_who_they_are_for_first_person")
+                + V("t_leave_balance_loans_or_profile_call")
+                + "self-service endpoints (get_my_profile, list_my_leave, "
                 "get_my_leave_balance, list_my_loans). "
                 "CRITICAL — Chat mode never submits or stages host writes "
-                "(leave/loan/attendance/payroll). If they ask to REQUEST / "
-                "SUBMIT leave (\"I want leave\", \"أريد إجازة\", عارضة / "
-                "emergency) do NOT call submit_my_leave or any call_host_api "
+                + V("t_leave_loan_attendance_payroll_if_they")
+                + V("t_submit_leave_i_want_leave_أريد")
+                + "emergency) do NOT call submit_my_leave or any call_host_api "
                 "mutation — explain that Chat is advisory and direct them to "
-                "Agent (leave.request.lifecycle) or My Leave (/my/leave). "
-                "Never create_leave_record (that needs an employee id and is "
-                "HR-admin only). For salary / compensation "
-                "/ basic pay / راتبي call get_my_profile (or resolve_entity / "
+                + V("t_agent_leave_request_lifecycle_or_my")
+                + V("t_never_create_leave_record_that_needs")
+                + V("t_hr_admin_only_for_salary_compensation")
+                + "/ basic pay / راتبي call get_my_profile (or resolve_entity / "
                 "get_employee for a named coworker) — NEVER list_my_payslips for "
-                "a contractual salary figure; empty payslips are not \"no salary "
-                "data\", and a CBAC deny (people:view_compensation) must be "
+                + V("t_a_contractual_salary_figure_empty_payslips")
+                + "data\", and a CBAC deny (people:view_compensation) must be "
                 "stated plainly. Use list_my_payslips for net pay, take-home, "
-                "last month's pay, deductions, GOSI, payslip lines, or قسيمة. "
-                "Do NOT use the organisation-wide list endpoints "
+                + V("t_last_month_s_pay_deductions_gosi")
+                + "Do NOT use the organisation-wide list endpoints "
                 "(list_employees, list_leave_records, …) for a first-person "
                 "request — they return the whole population and would expose "
-                "other employees' data.\n"
+                + V("t_other_employees_data")
             )
     else:
         user_context = (
@@ -181,7 +182,7 @@ async def build_chat_prompt(
 
     # ── Caller identity directive (per-user) — appended so it is always
     # present regardless of the assembler/fallback path. Lets the model
-    # resolve first-person requests to the logged-in employee and steer to
+    # resolve first-person requests to the logged-in  and steer to
     # self-scoped endpoints instead of org-wide lists.
     if identity_directive:
         result = f"{result}\n\n{identity_directive}" if result else identity_directive
@@ -297,8 +298,8 @@ def _build_tenant_org_directive(instance_config: dict | None) -> str:
         + (f" (short name: **{short}**)" if short else "")
         + f". Aliases: {alias_line}. "
         "This is the WHOLE organisation / company / institution — NOT a "
-        "filterable sub-entity, NOT an employee, NOT a missing record.\n"
-        f"{summary_line}"
+        + V("t_filterable_sub_entity_not_an_employee")
+        + f"{summary_line}"
         "When the user asks about this organisation, \"the company\", \"our "
         "company\", \"the organisation\", or \"data in the system\" / \"what "
         "data do we have\" about it:\n"
@@ -310,7 +311,7 @@ def _build_tenant_org_directive(instance_config: dict | None) -> str:
         "(`aggregate_entity` metric=headcount, and when useful "
         "`analyze_employees` or list endpoints) and answer from the results.\n"
         "4. Only ask a clarifying question when they name a specific person, "
-        "payroll run, leave record, or other sub-item that is still ambiguous."
+        + V("t_payroll_run_leave_record_or_other")
     )
 
 
@@ -371,8 +372,8 @@ def _build_grounding_directive(api_catalog: list | None) -> str:
             "   use an `analyze_*` endpoint (e.g. `analyze_employees`) — NEVER count "
             "   rows from a `list_*` result. List endpoints are paginated and return "
             "   at most 100 rows; counting them gives WRONG totals. "
-            "   NEVER paste raw employee salary rows into the chat — aggregates, "
-            "   buckets, and charts only.",
+            + V("t_never_paste_raw_employee_salary_rows")
+            + "   buckets, and charts only.",
         ]
     lines += [
         "2. When a list endpoint returns `truncated: true`, you MUST say explicitly "
@@ -465,100 +466,7 @@ def _build_access_section(instance_config: dict | None) -> str:
 #: frontend renders assistant markdown richly (tables, syntax-highlighted
 #: code, live mermaid diagrams, KaTeX math, figure captions) — the model must
 #: know it can DRAW diagrams and format content instead of saying it cannot.
-RENDERING_CAPABILITIES = """## Rich content rendering
-
-Your replies are rendered as rich Markdown documents in the platform UI. Use the
-right construct instead of describing things in prose:
-
-- **Tables** — GFM Markdown tables render as styled, striped tables. **Table
-  line rules (critical):** leave a blank line before the table, put the header
-  row, the `|---|---|` delimiter row, and EVERY data row each on its OWN line.
-  NEVER glue a table onto a prose line (e.g. after a colon) and NEVER collapse
-  the rows onto one line — a single-line table renders as raw `|` text, not a
-  table. Correct form:
-
-  | Position | Employees |
-  |----------|-----------|
-  | Driver   | 52        |
-  | Floorman | 22        |
-- **Code** — fenced blocks (```python, ```sql, ```json, ...) render with syntax
-  highlighting, a language badge, and a copy button. **Always format JSON with
-  proper indentation** (2 spaces per level) and line breaks — never as a single
-  line. Example:
-  ```json
-  {
-    "name": "Example Rule",
-    "type": "threshold",
-    "params": {
-      "operator": "gt",
-      "value": 0
-    }
-  }
-  ```
-- **Diagrams** — a ```mermaid fenced block renders as a live diagram
-  (flowchart, sequenceDiagram, stateDiagram-v2, classDiagram, pie, gantt, ...).
-  When a workflow, flow, process, relationship or structure is clearer as a
-  picture, ALWAYS emit a mermaid diagram instead of prose. You CAN draw
-  diagrams — never say you cannot.
-- **Mermaid line rules (critical)** — the opening ```mermaid fence MUST start
-  on its OWN line, preceded by a blank line; the closing ``` MUST be on its own
-  line too. Put EVERY mermaid directive on its OWN line. NEVER place the fence
-  inline after prose, and NEVER collapse a diagram to a single line — a
-  single-line or inline fence will NOT render as a diagram in the UI.
-- **Data charts** — when your answer holds 3+ comparable numeric records, emit a
-  Mermaid chart IN ADDITION to a table (or rely on the Answer Envelope charts
-  the server builds from host rows). Do NOT call `code_execute` / matplotlib to
-  draw a chart for the screen — that sandbox PNG path is only for embedding
-  figures into Word/PDF exports. Choose the Mermaid type intelligently:
-  - Use ```mermaid pie``` when the values are **parts of a whole** (scope %, category
-    shares, breakdowns that add up to 100%). Pie slices must sum to a meaningful total.
-  - Use ```mermaid xychart-beta``` with `bar` when comparing **magnitudes across
-    independent categories** (module CO₂e, top emitters, year-over-year absolute).
-  - Use ```mermaid xychart-beta``` with `line` for **trends over time**.
-  - Keep x-axis labels ≤ 14 chars — abbreviate or shorten longer names (the renderer
-    truncates them anyway). NEVER include em-dashes (—), angle brackets, or braces in
-    axis labels; use a hyphen (-) instead. One `bar` line holds ALL values
-    comma-separated. Every directive (`title`, `x-axis`, `y-axis`, `bar`, `line`,
-    each `pie` slice) goes on its own line. Example:
-  ```mermaid
-  pie title Scope breakdown
-      "Scope 1" : 2258
-      "Scope 2" : 8032
-      "Scope 3" : 6
-  ```
-  ```mermaid
-  xychart-beta
-      title "CO2e by Module (tonnes)"
-      x-axis ["Module A", "Module B", "Module C"]
-      y-axis "CO2e tonnes" 0 --> 6000
-      bar [5566, 4023, 707]
-  ```
-  NEVER write `axis x`, `axis y`, or per-point `bar x: 1 y: 2.51` lines —
-  those are invalid Mermaid and the chart will NOT render. Use exactly the
-  `x-axis [...]` / `y-axis "..." 0 --> N` / `bar [...]` form above.
-- **Tables** — every row on its OWN line. NEVER put two data rows on the same line.
-  A correctly formed module-breakdown table looks like:
-
-  | Module | Calculations | CO₂e (kg) | CO₂e (t) |
-  |--------|-------------|-----------|---------|
-  | Module A | 47 | 5,586,304 | 5,566 |
-  | Module B | 84 | 4,023,122 | 4,023 |
-
-  One data row per line — NEVER collapse rows.
-- **Math** — $inline$ and $$block$$ render with KaTeX.
-- **Figures** — images with a title render with a caption below them.
-- **Links** — internal platform routes (starting with /) render as in-app links.
-
-Prefer rich constructs over prose lists whenever they make the answer clearer
-and easier to scan. Example diagram:
-
-```mermaid
-flowchart LR
-    A[Start] --> B{Valid?}
-    B -- Yes --> C[Activate]
-    B -- No --> D[Investigate]
-```
-"""
+RENDERING_CAPABILITIES = V("t_rich_content_rendering_your_replies_are")
 
 
 #: Compact always-on rendering directive (P4-03 progressive disclosure).
@@ -566,19 +474,7 @@ flowchart LR
 #: ``rich-content-rendering`` skill folder's ``references/formatting-examples.md``
 #: and are loaded on demand.  This summary stays in the always-on prompt so the
 #: model still knows it can draw diagrams and format rich content.
-RENDERING_CAPABILITIES_SUMMARY = """## Rich content rendering
-
-Your replies render as rich Markdown. Use the right construct instead of prose:
-
-- **Tables** — GFM tables render as styled tables. Leave a blank line before the table; put the header, the `|---|---|` delimiter, and every data row each on its OWN line.
-- **Code** — fenced blocks (```python, ```sql, ```json) render with syntax highlighting and a copy button; indent JSON with 2 spaces per level.
-- **Diagrams** — a ```mermaid fenced block renders as a live diagram (flowchart, sequenceDiagram, stateDiagram-v2, classDiagram, pie, gantt). You CAN draw diagrams; when a process or structure is clearer as a picture, emit one.
-- **Mermaid line rules** — the opening ```mermaid fence starts on its OWN line preceded by a blank line; the closing fence is on its own line; each directive on its own line.
-- **Data charts** — for 3+ comparable numeric records, emit a Mermaid chart IN ADDITION to a table: ```mermaid pie for parts-of-a-whole; ```mermaid xychart-beta with `bar` for magnitudes or `line` for trends.
-- **Math** — $inline$ and $$block$$ render with KaTeX.
-- **Figures** — images with a title render with a caption below.
-- **Links** — internal platform routes (starting with /) render as in-app links.
-"""
+RENDERING_CAPABILITIES_SUMMARY = V("t_rich_content_rendering_your_replies_render")
 
 
 def build_introspect_messages(

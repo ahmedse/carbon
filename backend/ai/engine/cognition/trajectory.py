@@ -4,6 +4,7 @@ Every time a run completes (via TurnPipelineRunner), this module writes
 one append-only row to the ``trajectory`` table.  The consolidation sweep
 (P4.2) reads these rows for offline analysis.
 """
+from ai.engine.cognition.phrase_tables import T
 
 import json
 import logging
@@ -35,7 +36,7 @@ _INTENT_WORDS: list[tuple[str, tuple[str, ...]]] = [
         "start", "stop", "approve", "reject",
     )),
 ]
-_HOW_TO_PHRASES = ("how do", "how can", "how to", "how should")
+_HOW_TO_PHRASES = T("trajectory.py::_HOW_TO_PHRASES")
 
 
 def _classify_intent(user_message: str) -> str:

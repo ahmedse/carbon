@@ -5,43 +5,22 @@ second router. ``Arbiter.decide`` stays the v2 path; this module is the v21
 path behind ``PULSE_UNDERSTAND``.
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
-COMMAND_OPS = frozenset(
-    {
-        "call_tool",
-        "navigate",
-        "clarify",
-        "set_slot",
-        "answer",
-        "handoff_agent",
-        "refuse",
-        "confirm",
-        "reject",
-        "continue",
-    }
-)
+COMMAND_OPS = T("turn/decision.py::COMMAND_OPS")
 
 # How a call_tool / continue answer is shown. A chart or table renders the
 # decided tool's payload only — never whatever other payload is chartable.
-RENDER_MODES = frozenset({"text", "chart", "table"})
+RENDER_MODES = T("turn/decision.py::RENDER_MODES")
 
 # handoff_agent target for a multi-step / conditional goal (Agent plans it).
 PLAN_PROCESS_ID = "plan"
 
 # Chat may call reads and the handoff command. Writes are Agent + RULE_21.
-_CHAT_WRITE_PREFIXES = (
-    "create_",
-    "submit_",
-    "approve_",
-    "reject_",
-    "update_",
-    "delete_",
-    "cancel_",
-    "post_",
-)
+_CHAT_WRITE_PREFIXES = T("turn/decision.py::_CHAT_WRITE_PREFIXES")
 
 
 @dataclass
@@ -59,6 +38,23 @@ class Command:
     text: str = ""
     render: str = "text"
 
+    def reads_host(self) -> bool:
+        """A read the executor runs: a named call, a confirm, or a continue."""
+        return self.op in {"call_tool", "confirm", "continue"}
+
+
+@dataclass(frozen=True)
+class Rejection:
+    """Why validation dropped a command. Feedback for repair, never user text."""
+
+    index: int
+    name: str
+    code: str  # not_on_surface | invalid_args | missing_name
+    detail: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"index": self.index, "name": self.name, "code": self.code, "detail": self.detail}
+
 
 @dataclass
 class Decision:
@@ -66,6 +62,12 @@ class Decision:
     language: str = "en"
     confidence: float = 0.0
     reason: str = ""
+    rejections: list[Rejection] = field(default_factory=list)
+    raw_ops: list[str] = field(default_factory=list)
+    repaired: bool = False
+    # The emit_decision exchange that produced this Decision, kept so a
+    # repair round can answer the model's own call. Not part of equality.
+    exchange: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
     def ops(self) -> list[str]:
         return [c.op for c in self.commands]
@@ -170,11 +172,15 @@ def validate_decision(
     allowed_tools: set[str] | None = None,
     write_tools: set[str] | None = None,
     state: Any = None,
+    arg_violations: Callable[[str, dict], list[str]] | None = None,
 ) -> Decision:
-    """Downgrade policy violations to clarify or handoff. Never drop to a free answer that writes.
+    """Enforce policy. Never drop to a free answer that writes.
 
     Chat (ADR-0046): call_tool on a write name becomes handoff_agent.
-    Unknown tool names become clarify.
+    A name off the surface or args that break its schema is dropped and
+    recorded as a ``Rejection`` — repair feedback, never user text. A
+    Decision whose every command was dropped has no commands; the caller
+    repairs or falls through.
     ``confirm`` without a pending open question becomes clarify.
     """
     from ai.engine.agent.surface import Surface
@@ -184,7 +190,8 @@ def validate_decision(
     on_chat = Surface.resolve(surface).is_chat
     pending = _pending_open_question(state)
     out: list[Command] = []
-    for cmd in decision.commands:
+    rejections: list[Rejection] = []
+    for index, cmd in enumerate(decision.commands):
         if cmd.op == "confirm":
             if not pending.get("text"):
                 out.append(
@@ -207,17 +214,20 @@ def validate_decision(
         if cmd.op == "call_tool":
             name = cmd.name.strip()
             if not name:
-                out.append(Command(op="clarify", question="Which action should I take?"))
+                rejections.append(Rejection(index, "", "missing_name"))
                 continue
             if allowed_tools is not None and name not in allowed_tools:
-                out.append(
-                    Command(
-                        op="clarify",
-                        question=f"I can't use {name} from here.",
-                    )
-                )
+                rejections.append(Rejection(index, name, "not_on_surface"))
                 continue
-            if on_chat and _is_write_tool(name, write_tools):
+            write = _is_write_tool(name, write_tools)
+            if not write and arg_violations is not None:
+                problems = arg_violations(name, dict(cmd.args or {}))
+                if problems:
+                    rejections.append(
+                        Rejection(index, name, "invalid_args", "; ".join(problems)[:400])
+                    )
+                    continue
+            if on_chat and write:
                 out.append(
                     Command(
                         op="handoff_agent",
@@ -227,13 +237,14 @@ def validate_decision(
                 )
                 continue
         out.append(cmd)
-    if not out:
-        out = [Command(op="clarify", question="Can you say which one you mean?")]
     return Decision(
         commands=out[:3],
         language=decision.language,
         confidence=decision.confidence,
         reason=decision.reason,
+        rejections=rejections,
+        raw_ops=decision.raw_ops or decision.ops(),
+        repaired=decision.repaired,
     )
 
 

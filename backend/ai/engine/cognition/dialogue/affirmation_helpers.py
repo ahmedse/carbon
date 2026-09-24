@@ -1,7 +1,8 @@
 """Char-level helpers for affirmation normalization (no pre-compiled patterns)."""
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
 
-_EDGE_PUNCT = frozenset(".,;!?\"'\u060C\u061B\u2026\u00AB\u00BB")
+_EDGE_PUNCT = T("dialogue/affirmation_helpers.py::_EDGE_PUNCT")
 
 
 def strip_tashkeel(text: str) -> str:

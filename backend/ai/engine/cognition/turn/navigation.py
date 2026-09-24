@@ -1,30 +1,8 @@
-"""Bilingual (EN + AR) navigation GROUNDING.
-
-Navigation is a first-class intent, but *comprehension* of it belongs to the
-LLM intent classifier (``intent.py``): only the LLM can tell an actual request
-to navigate ("take me to the people app") from a question or complaint that
-merely mentions a place ("why are you designed to show all employees' leaves?",
-"مش بسألك روح مكان"). A keyword/verb matcher cannot — it fires on any sentence
-that happens to contain a verb + a place noun, including negations and
-meta-questions.
-
-So this module does NOT decide *whether* the user wants to navigate. It only
-*grounds* a target concept the LLM already chose against the instance's
-*declared* navigation targets (see ``navigation_routes`` in ``instance.yaml``).
-This is the anti-hallucination guard: it never invents a destination and never
-trusts a raw route from the LLM — it maps a concept to a real, enumerated route.
-
-Design:
-  1. Unicode normalisation — NFKC, strip tashkeel/diacritics, fold Arabic
-     orthographic variants (أإآ→ا · ة→ه · ى→ي · ؤ/ئ→ء) and kashida.
-  2. Alias matching      — each target declares its own en/ar synonyms.
-  3. Graceful ambiguity  — multiple matches return candidates, never a dead-end.
-  4. No match            — returns ``none`` and the normal pipeline proceeds.
-
-Entry point: :func:`ground_navigation` — a pure function of
-``(concept, instance_config)``, no LLM, no I/O, deterministic.
-"""
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+from ai.engine.pack_vocab import V
+V("t_bilingual_en_ar_navigation_grounding_navigation")
+
 
 import re
 import unicodedata
@@ -43,20 +21,17 @@ from ai.engine.text.word_match import has_any_word, has_arabic_script
 
 # Arabic diacritics / tashkeel to strip (harakat + other combining marks are
 # removed separately via unicodedata.combining).
-_AR_TASHKEEL: frozenset[str] = frozenset(
-    "\u064B\u064C\u064D\u064E\u064F\u0650\u0651\u0652\u0670\u0640"
-    "\u0653\u0654\u0655\u0657\u0658"
-)
+_AR_TASHKEEL = T("turn/navigation.py::_AR_TASHKEEL")
 
 # Orthographic folding — the cheapest, safe normalisations that make
-# "الموظفون" / "الموظفين"-style variance and hamza variants match consistently.
+# "الموظفون" / ""-style variance and hamza variants match consistently.
 _AR_FOLD: tuple[tuple[str, str], ...] = (
     ("أ", "ا"), ("إ", "ا"), ("آ", "ا"),
     ("ة", "ه"), ("ى", "ي"), ("ؤ", "ء"), ("ئ", "ء"),
 )
 
 # Arabic tokens must share this many leading characters to count as a fuzzy
-# match (catches case-ending variance like الموظفون ↔ الموظفين, but keeps
+# match (catches case-ending variance like الموظفون ↔ , but keeps
 # الراتب vs الرواتب distinct).
 _AR_FUZZY_PREFIX_MIN = 5
 
@@ -141,7 +116,7 @@ def load_targets(instance_config: dict | None) -> list[NavigationTarget]:
 
         label = route.get("label") or (en_labels[0] if en_labels else ar_labels[0])
         # Include the display label itself so an LLM emitting the exact label
-        # ("People & Payroll") still grounds correctly.
+        # ("People & ") still grounds correctly.
         combined = [normalize_text(l) for l in en_labels + ar_labels + [label]]
         combined = [l for l in combined if l]
         if not combined:
@@ -175,7 +150,7 @@ def _label_hit(label: str, message: str) -> int:
         return len(label)
     # Tier 2 — Arabic fuzzy: a message token and this label share a common
     # prefix ≥ _AR_FUZZY_PREFIX_MIN (case-ending variance). English stays
-    # strict to avoid "pay" matching "payroll" and the like.
+    # strict to avoid "pay" matching "" and the like.
     if _AR_SEARCH(label):
         msg_tokens = message.split()
         label_tokens = label.split()
@@ -204,8 +179,8 @@ def _common_prefix_len(a: str, b: str) -> int:
 
 
 # An explicit "app" noun (English "app"/"application" or Arabic "تطبيق") boosts
-# ``type: app`` home targets over same-named sub-pages, so "تطبيق الموظفين"
-# (the People *app*) resolves to /people rather than the employees page.
+# ``type: app`` home targets over same-named sub-pages, so "تطبيق "
+# (the People *app*) resolves to /people rather than the  page.
 _APP_NOUN_BOOST = 1000
 # Minimum score gap for the top target to win outright; below this, the
 # resolver offers candidates instead of guessing.
@@ -302,31 +277,21 @@ def ground_navigation(
 
 
 # ── Interrogative guard (fast path only) ──────────────────────────────────────
-# A question that merely names a module ("When will next month's payroll be
+# A question that merely names a module ("When will next month's  be
 # processed?", «هل ستتم الموافقة عليه؟») is not a navigation command. The raw
 # fast path grounds the whole utterance, so it needs this guard; the LLM-intent
 # path (``ground_navigation`` on a chosen concept) does not.
 
-_QUESTION_WORDS_EN: frozenset[str] = frozenset({
-    "when", "how", "why", "what", "where", "is", "will", "can", "does",
-})
+_QUESTION_WORDS_EN = T("turn/navigation.py::_QUESTION_WORDS_EN")
 # Normalised forms (see ``normalize_text``): hamza/alef folded.
-_QUESTION_WORDS_AR: frozenset[str] = frozenset({
-    "متي", "هل", "كيف", "لماذا", "ما", "ماذا", "اين", "أين",
-})
-_NAV_VERB_WORDS = ("open", "goto")
-_NAV_VERB_PHRASES = (
-    "go to", "go back", "navigate to", "take me back to", "take me to",
-    "show me", "show my",
-)
-_HOW_HEADS = ("how do i ", "how can i ", "how to ")
-_HOW_VERBS = frozenset({"apply", "request", "open", "get", "submit", "find", "see", "check"})
-_WHERE_HEADS = ("where can i ", "where do i ", "where is ")
-_WHERE_TAILS = frozenset({"find", "see", "check", "look", "is"})
-_PLACE_TOPICS = (
-    "loans", "loan", "leave", "payroll", "payslips", "payslip",
-    "attendance", "home", "notifications", "notification", "dashboard",
-)
+_QUESTION_WORDS_AR = T("turn/navigation.py::_QUESTION_WORDS_AR")
+_NAV_VERB_WORDS = T("turn/navigation.py::_NAV_VERB_WORDS")
+_NAV_VERB_PHRASES = T("turn/navigation.py::_NAV_VERB_PHRASES")
+_HOW_HEADS = T("turn/navigation.py::_HOW_HEADS")
+_HOW_VERBS = T("turn/navigation.py::_HOW_VERBS")
+_WHERE_HEADS = T("turn/navigation.py::_WHERE_HEADS")
+_WHERE_TAILS = T("turn/navigation.py::_WHERE_TAILS")
+_PLACE_TOPICS = T("turn/navigation.py::_PLACE_TOPICS")
 
 
 def _has_nav_verb_en(text: str) -> bool:
@@ -366,12 +331,7 @@ def _has_nav_verb(norm: str) -> bool:
 
 
 def is_interrogative_non_command(message: str) -> bool:
-    """True when ``message`` is a question (> 3 tokens) without a nav verb.
-
-    Interrogative = ends with ``?``/``؟`` or starts with an EN/AR question word.
-    Pure noun phrases ("payroll", "الرواتب") and explicit commands
-    ("Can you open payroll?") are not affected.
-    """
+    V("t_true_when_message_is_a_question")
     raw = (message or "").strip()
     if not raw:
         return False
@@ -409,16 +369,10 @@ def is_first_person_self_read(message: str) -> bool:
 def resolve_navigation(
     message: str, instance_config: dict | None,
 ) -> NavigationResolution:
-    """Deterministic zero-token fast path used by the turn runner.
-
-    Grounds the raw user message against declared routes. Same contract as
-    :func:`ground_navigation` — never invents destinations. Questions that
-    merely mention a module noun return ``none`` (the normal pipeline answers).
-    How/where UI asks ("where can I find my leave") ground the *topic* only.
-    """
-    # How/where UI ("where can I find my leave balance?") still grounds the
-    # place noun. Bare ESS topic reads («عن الإجازات», "my loans", "my
-    # payslips" without a nav verb) must answer from host APIs — not open UI.
+    V("t_deterministic_zero_token_fast_path_used")
+    # How/where UI ("where can I find my  balance?") still grounds the
+    # place noun. Bare ESS topic reads («عن الإجازات», "my ", "my
+    # " without a nav verb) must answer from host APIs — not open UI.
     if is_how_where_ui(message):
         topic = place_topic(message)
         if topic:
@@ -461,17 +415,17 @@ def place_topic(message: str) -> str:
     if not token:
         return ""
     aliases = {
-        "loan": "loans",
-        "payslip": "payslips",
+        V("t_loan_2"): V("t_loans"),
+        V("t_payslip_2"): V("t_payslips"),
         "notification": "notifications",
-        "قرض": "loans",
-        "قروض": "loans",
-        "إجازة": "leave",
-        "اجازة": "leave",
-        "راتب": "payroll",
-        "رواتب": "payroll",
-        "قسيمة": "payslips",
-        "حضور": "attendance",
+        V("t_قرض"): V("t_loans"),
+        V("t_قروض"): V("t_loans"),
+        V("t_إجازة"): V("t_leave"),
+        V("t_اجازة"): V("t_leave"),
+        V("t_راتب"): V("t_payroll"),
+        V("t_رواتب"): V("t_payroll"),
+        "قسيمة": V("t_payslips"),
+        V("t_حضور"): V("t_attendance"),
         "رئيسية": "home",
         "إشعار": "notifications",
     }

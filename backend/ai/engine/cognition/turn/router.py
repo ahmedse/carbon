@@ -6,6 +6,8 @@ must not reinterpret it from assistant prose or a synthetic user-message
 prefix.
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -75,28 +77,7 @@ class RouteDecision:
     confirm: dict[str, Any] | None = None  # I2: confirm payload for open_question.confirm
 
 
-_REPORT_OPTIONS = (
-    {
-        "id": "1",
-        "label": "Pay distribution by band",
-        "value": "Pay distribution by band with charts and tiers",
-    },
-    {
-        "id": "2",
-        "label": "Payroll run health",
-        "value": "Payroll run health committed draft failed",
-    },
-    {
-        "id": "3",
-        "label": "Deductions & GOSI",
-        "value": "Deductions and GOSI overview",
-    },
-    {
-        "id": "4",
-        "label": "Board-ready summary",
-        "value": "Board-ready salary summary high level no row dumps",
-    },
-)
+_REPORT_OPTIONS = T("turn/router.py::_REPORT_OPTIONS")
 
 
 def _resolve_open_question(message: str, state: Any) -> str | None:
@@ -188,7 +169,7 @@ class TurnRouter:
             )
 
         # Recall/status questions about an already-created plan are reads, not
-        # new process briefs. Leave them uncommitted for the deterministic
+        # new process briefs.  them uncommitted for the deterministic
         # plan-status witness.
         if is_plan_status_utterance(text):
             return RouteDecision(

@@ -9,6 +9,8 @@ User-facing strings never mention ADR/G2/host-mutation jargon (RULE_23).
 """
 from __future__ import annotations
 
+from ai.engine.pack_vocab import V
+
 import re
 from typing import Any
 
@@ -52,34 +54,34 @@ CHAT_DRAFT_TOOLS = frozenset({"plan_task"})
 #: Maps host api_name → My route + Agent process dial + labels.
 _API_HANDOFF: dict[str, dict[str, str]] = {
     "submit_my_leave": {
-        "my_route": "/my/leave",
-        "my_label_en": "Open My Leave",
+        "my_route": V("t_my_leave"),
+        "my_label_en": V("t_open_my_leave"),
         "my_label_ar": "فتح إجازاتي",
-        "process": "leave.request.lifecycle",
+        "process": V("t_leave_request_lifecycle"),
         "agent_label_en": "Open in Agent",
         "agent_label_ar": "فتح الوكيل",
-        "topic_en": "leave request",
-        "topic_ar": "طلب إجازة",
+        "topic_en": V("t_leave_request_2"),
+        "topic_ar": V("t_طلب_إجازة"),
     },
     "submit_my_loan": {
         "my_route": "/my/requests",
         "my_label_en": "Open My Requests",
         "my_label_ar": "فتح طلباتي",
-        "process": "loan.request.lifecycle",
+        "process": V("t_loan_request_lifecycle"),
         "agent_label_en": "Open in Agent",
         "agent_label_ar": "فتح الوكيل",
-        "topic_en": "loan request",
-        "topic_ar": "طلب قرض",
+        "topic_en": V("t_loan_request_2"),
+        "topic_ar": V("t_طلب_قرض"),
     },
     "submit_my_attendance_permission": {
-        "my_route": "/my/attendance",
-        "my_label_en": "Open My Attendance",
+        "my_route": V("t_my_attendance"),
+        "my_label_en": V("t_open_my_attendance"),
         "my_label_ar": "فتح الحضور",
-        "process": "attendance.permission.lifecycle",
+        "process": V("t_attendance_permission_lifecycle"),
         "agent_label_en": "Open in Agent",
         "agent_label_ar": "فتح الوكيل",
-        "topic_en": "attendance permission",
-        "topic_ar": "استئذان حضور",
+        "topic_en": V("t_attendance_permission"),
+        "topic_ar": V("t_استئذان_حضور"),
     },
     "submit_my_profile_change": {
         "my_route": "/my/requests",
@@ -94,9 +96,9 @@ _API_HANDOFF: dict[str, dict[str, str]] = {
     },
 }
 
-#: Manager wants to act on Team inbox (approve leave/loan/attendance) — host /team.
+#: Manager wants to act on Team inbox (approve //) — host /team.
 _REVIEW_VERBS = ("approve", "reject", "review")
-_REVIEW_OBJECTS = ("leave", "loan", "request", "inbox", "attendance", "permission")
+_REVIEW_OBJECTS = (V("t_leave"), V("t_loan_2"), "request", "inbox", V("t_attendance"), "permission")
 _REVIEW_PHRASES = ("team inbox", "approvals inbox", "approval inbox")
 
 
@@ -110,21 +112,21 @@ _PROFILE_CHANGE_PHRASES = (
 def _leave_intent(text: str) -> bool:
     raw = text or ""
     return bool(
-        has_any_word(raw, ("leave", "vacation"))
-        or contains_any_phrase(raw, ("annual leave", "time off"))
+        has_any_word(raw, (V("t_leave"), V("t_vacation")))
+        or contains_any_phrase(raw, (V("t_annual_leave"), "time off"))
         or any_needle(raw, LEAVE_INTENT_AR)
     )
 
 
 def _loan_intent(text: str) -> bool:
     raw = text or ""
-    return bool(has_word(raw, "loan") or any_needle(raw, LOAN_INTENT_AR))
+    return bool(has_word(raw, V("t_loan_2")) or any_needle(raw, LOAN_INTENT_AR))
 
 
 def _attendance_intent(text: str) -> bool:
     raw = text or ""
     return bool(
-        has_any_word(raw, ("attendance", "permission", "excuse"))
+        has_any_word(raw, (V("t_attendance"), "permission", "excuse"))
         or any_needle(raw, ATTENDANCE_INTENT_AR)
     )
 
@@ -141,8 +143,8 @@ def _manager_review_intent(text: str) -> bool:
         return False
     return any(
         tok in raw.casefold()
-        for tok in ("leave", "loan", "request", "attendance", "permission", "inbox")
-    ) or any(n in raw for n in ("إجاز", "اجاز", "طلب", "استئذان", "قرض"))
+        for tok in (V("t_leave"), V("t_loan_2"), "request", V("t_attendance"), "permission", "inbox")
+    ) or any(n in raw for n in ("إجاز", "اجاز", "طلب", "استئذان", V("t_قرض")))
 
 
 def _profile_change_intent(text: str) -> bool:
@@ -295,7 +297,7 @@ def _ess_topic(text: str) -> bool:
     raw = text or ""
     cf = raw.casefold()
     return bool(
-        has_any_word(raw, ("leave", "loan", "attendance", "vacation", "permission"))
+        has_any_word(raw, (V("t_leave"), V("t_loan_2"), V("t_attendance"), V("t_vacation"), "permission"))
         or "submit_my_leave" in cf
         or "submit_my_loan" in cf
         or "submit_my_attendance" in cf
@@ -304,11 +306,7 @@ def _ess_topic(text: str) -> bool:
 
 
 def is_ess_write_intent(message: str) -> bool:
-    """True for leave/loan/attendance *submit* asks (not balance reads).
-
-    Used to skip orchestrator fan-out (those turns belong to process_dial /
-    Chat handoff) without blocking other mutation or analytics fan-outs.
-    """
+    V("t_true_for_leave_loan_attendance_submit")
     try:
         from ai.engine.cognition.plan.process_dial import strip_pulse_mode_prefix
         text = strip_pulse_mode_prefix(message or "").strip()
@@ -319,19 +317,19 @@ def is_ess_write_intent(message: str) -> bool:
     from ai.engine.cognition.turn.handoff_agent import is_slot_status_ask
     if is_slot_status_ask(text):
         return False
-    # Explicit apply/request verbs (EN + AR) — covers loan/attendance that
-    # ``_is_mutation_request`` historically missed (leave-only regex).
+    # Explicit apply/request verbs (EN + AR) — covers / that
+    # ``_is_mutation_request`` historically missed (-only regex).
     if re.search(
         r"\b(?:apply|request|submit|want|need)\b.{0,40}\b"
-        r"(?:leave|loan|attendance|vacation|permission)\b"
-        r"|\b(?:leave|loan|attendance|vacation|permission)\b.{0,40}\b"
-        r"(?:apply|request|submit)\b",
+        + V("t_leave_loan_attendance_vacation_permission_b")
+        + V("t_b_leave_loan_attendance_vacation_permission")
+        + r"(?:apply|request|submit)\b",
         text,
         re.IGNORECASE | re.DOTALL,
     ):
         return True
     if any_needle(text, ESS_WRITE_VERB_AR) and any_needle(
-        text, ("إجاز", "اجاز", "قرض", "استئذان")
+        text, ("إجاز", "اجاز", V("t_قرض"), "استئذان")
     ):
         return True
     try:
@@ -467,8 +465,8 @@ def build_chat_handoff_result(
         spec, draft=body, locale=locale, surface=surface,
     )
     summary = (
-        "Prepared leave draft — handoff to Agent or My"
-        if "leave" in (spec.get("topic_en") or "")
+        V("t_prepared_leave_draft_handoff_to_agent")
+        if V("t_leave") in (spec.get("topic_en") or "")
         else "Prepared draft — handoff to Agent or My"
     )
     if locale == "ar":
@@ -767,10 +765,10 @@ def synthesize_intent_handoff(
 def chat_mutation_narration(api_name: str | None = None) -> str:
     """Honest progress line for Chat when a mutation tool is about to be blocked."""
     api = (api_name or "").strip().lower()
-    if "leave" in api:
-        return "Preparing next steps for your leave…"
-    if "loan" in api:
-        return "Preparing next steps for your loan…"
-    if "attendance" in api:
-        return "Preparing next steps for attendance…"
+    if V("t_leave") in api:
+        return V("t_preparing_next_steps_for_your_leave")
+    if V("t_loan_2") in api:
+        return V("t_preparing_next_steps_for_your_loan")
+    if V("t_attendance") in api:
+        return V("t_preparing_next_steps_for_attendance")
     return "Checking how to complete this request…"

@@ -1,5 +1,8 @@
 """Shared turn-runner utilities extracted for L7 runner_lines meter."""
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+from ai.engine.pack_vocab import V
+
 
 import logging
 import re
@@ -15,15 +18,7 @@ from ai.engine.text.word_match import contains_any_phrase, has_any_word
 logger = logging.getLogger("pulse.cognition.turn.runner_util")
 
 
-_CAPABILITY_PHRASES = (
-    "what can you do",
-    "what do you have access to",
-    "what features",
-    "show me capabilities",
-    "your capabilities",
-    "what are you able to do",
-    "what can i use",
-)
+_CAPABILITY_PHRASES = T("turn/runner_util.py::_CAPABILITY_PHRASES")
 
 def _is_capability_query(text: str) -> bool:
     """True if the user explicitly asks about capabilities/access."""
@@ -37,18 +32,8 @@ def _is_capability_query(text: str) -> bool:
 # into live weather fetching just because the quoted sentence happens to name
 # "weather"/"forecast". Regex-only and engine-local (the engine cannot import
 # ``ai.plugins.web_research`` — RULE_20), so it lives here beside the routing.
-_TEXT_TRANSFORM_PHRASES = (
-    "correct the spelling", "correct spelling",
-    "fix the spelling", "fix spelling",
-    "check the spelling", "check spelling",
-    "spell check", "spell-check",
-    "correct the grammar", "correct grammar",
-    "fix the grammar", "fix grammar",
-    "check the grammar", "check grammar",
-    "proofread", "rephrase", "rewrite",
-    "fix the typos", "fix typos", "fix the typo", "fix typo",
-)
-_TEXT_TRANSFORM_WORDS = ("typo", "translate")
+_TEXT_TRANSFORM_PHRASES = T("turn/runner_util.py::_TEXT_TRANSFORM_PHRASES")
+_TEXT_TRANSFORM_WORDS = T("turn/runner_util.py::_TEXT_TRANSFORM_WORDS")
 
 def _is_text_transform_request(text: str) -> bool:
     """True when the user's ask is to transform quoted text, not to act on it."""
@@ -67,8 +52,8 @@ def _ess_topic(text: str) -> bool:
         has_any_word(
             text,
             (
-                "leave", "loan", "attendance", "vacation", "payslip", "salary",
-                "absence", "overtime",
+                V("t_leave"), V("t_loan_2"), V("t_attendance"), V("t_vacation"), V("t_payslip_2"), V("t_salary"),
+                "absence", V("t_overtime"),
             ),
         )
         or "time off" in (text or "").casefold()
@@ -88,11 +73,11 @@ def _is_my_endpoint(name: str) -> bool:
 
 def _history_has_active_process(conversation_history: list[dict] | None) -> bool:
     """True when a recent message names a governed process id (brief/dial)."""
-    from ai.engine.cognition.turn.process_brief import KNOWN_PROCESS_IDS
+    from ai.engine.cognition.turn.process_brief import process_ids
 
     for msg in (conversation_history or [])[-6:]:
         content = str((msg or {}).get("content") or "")
-        if any(pid in content for pid in KNOWN_PROCESS_IDS):
+        if any(pid in content for pid in process_ids()):
             return True
     return False
 
@@ -130,32 +115,14 @@ def _fanout_skip_reason(
     return None
 
 # ── F-LIVE-1: scope refusal ───────────────────────────────────────────────
-_DEFAULT_REFUSAL_EN = (
-    "I'm not able to help with that request. "
-    "If you have a question about your platform data, emissions, "
-    "or data quality, I'm here to help."
-)
-_DEFAULT_REFUSAL_AR = (
-    "لا أستطيع المساعدة في هذا الطلب. "
-    "إذا كان لديك سؤال عن بيانات منصتك، فأنا هنا للمساعدة."
-)
+_DEFAULT_REFUSAL_EN = T("turn/runner_util.py::_DEFAULT_REFUSAL_EN")
+_DEFAULT_REFUSAL_AR = T("turn/runner_util.py::_DEFAULT_REFUSAL_AR")
 # Wording that keeps a refusal even when the ask names an in-scope topic.
-_SCOPE_BYPASS_WORDS = (
-    "ignore", "disregard", "bypass", "override", "jailbreak", "pretend",
-    "password", "passwords", "credential", "credentials", "access",
-)
-_SCOPE_BYPASS_PHRASES = (
-    "system prompt", "developer mode", "you are now", "api key", "api keys",
-    "secret key", "secret keys", "access control", "access controls",
-)
+_SCOPE_BYPASS_WORDS = T("turn/runner_util.py::_SCOPE_BYPASS_WORDS")
+_SCOPE_BYPASS_PHRASES = T("turn/runner_util.py::_SCOPE_BYPASS_PHRASES")
 
 def _is_declared_in_scope(user_message: str, instance_config: dict | None) -> bool:
-    """True when the ask names a topic in ``topic_guard.in_scope`` (EN/AR).
-
-    Used to narrow the classifier's ``off_limits`` refusal: an in-scope HR ask
-    («أريد قرض طارئ») must not be scope-refused. Bypass / credential wording
-    is never treated as in scope.
-    """
+    V("t_true_when_the_ask_names_a")
     from ai.engine.cognition.turn.navigation import normalize_text
 
     declared = ((instance_config or {}).get("topic_guard") or {}).get("in_scope") or {}
@@ -254,11 +221,7 @@ def _filter_draft_tools(
     return tools
 
 
-_PLAN_ACCEPT = frozenset({
-    "yes", "ok", "okay", "accept", "accepted", "approve", "approved",
-    "go", "proceed", "confirm", "do it", "create it", "create the task",
-    "retry", "try again", "retry planning",
-})
+_PLAN_ACCEPT = T("turn/runner_util.py::_PLAN_ACCEPT")
 
 
 def _looks_like_accept(text: str) -> bool:
@@ -407,16 +370,9 @@ def plan_accept_brief(
 #: When ``ECF_ENABLED``, ``resolve_entity`` / ``aggregate_entity`` join the
 #: allow-set dynamically (see ``_chat_tool_allowlist``) — otherwise name
 #: lookups fall through to ``search_knowledge`` and false-miss live People rows.
-_CHAT_STATIC_TOOLS = frozenset({
-    "search_knowledge", "get_entity_details",
-    "learn_fact", "forget_fact",
-    # call_host_api reaches REST host endpoints listed in the system prompt.
-    # ECF resolve/aggregate are separate function tools (not REST) and are
-    # gated in ``_chat_tool_allowlist`` when ECF_ENABLED.
-    "call_host_api",
-})
+_CHAT_STATIC_TOOLS = T("turn/runner_util.py::_CHAT_STATIC_TOOLS")
 
-_ECF_CHAT_TOOLS = frozenset({"resolve_entity", "aggregate_entity"})
+_ECF_CHAT_TOOLS = T("turn/runner_util.py::_ECF_CHAT_TOOLS")
 
 def _chat_tool_allowlist() -> frozenset[str]:
     """Chat planner allow-set: spine ∪ chat-visible plugins ∪ ECF (when on)."""

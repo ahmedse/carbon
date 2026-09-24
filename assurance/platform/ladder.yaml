@@ -114,6 +114,53 @@ checks:
     solution: Fix the antipattern hits reported by `.ai-toolkit/scripts/verify.sh antipatterns`.
     source: .ai-toolkit/shared/definition-of-done.md §5
 
+  - id: PLAT-SEC-01
+    title: RBAC isolation journey is declared
+    dimension: secure
+    rank: 1
+    collector: rbac
+    probe:
+      type: marker
+      file: carbon-frontend/e2e/journeys/journey-06-rbac-isolation.spec.ts
+      marker: RBAC
+    applies_to: [module, process, journey, ai_pack]
+    solution: Keep the RBAC isolation journey, and the word rbac in it.
+    source: e2e/journeys/journey-06
+  - id: PLAT-PRF-01
+    title: A numeric budget ceiling is declared
+    dimension: performant
+    rank: 1
+    collector: budget
+    probe: { type: ceiling, file: docs/pulse/evidence/PV2.1-budget-ceiling.json }
+    applies_to: [module, process, journey, ai_pack]
+    solution: Keep a JSON object of numeric limits at the ceiling path.
+    source: PV2.1-budget-ceiling.json
+  - id: PLAT-USE-01
+    title: Excellence console uses tokens, not raw hex or a raw table
+    dimension: usable
+    rank: 1
+    collector: design_lint
+    probe:
+      type: no_hex_or_raw_table
+      files:
+        - carbon-frontend/src/pages/admin/excellence/ExcellenceConsolePage.jsx
+        - carbon-frontend/src/pages/admin/excellence/ExcellenceCellMap.jsx
+    applies_to: [module, process, journey, ai_pack]
+    solution: Replace hex colors and raw MUI Table with theme tokens and FilteredDataGrid.
+    source: design-system RULE 1 and RULE 14
+  - id: PLAT-USE-04
+    title: One Playwright journey executed green on HEAD
+    dimension: usable
+    rank: 4
+    collector: playwright
+    probe:
+      type: journey
+      file: carbon-frontend/e2e/journeys/journey-06-rbac-isolation.spec.ts
+      subjects: [platform.module.shell]
+    applies_to: [module]
+    solution: "python -m excellence.gauge --run playwright:carbon-frontend/e2e/journeys/journey-06-rbac-isolation.spec.ts"
+    source: e2e one-journey rule
+
   # ── rank 2 · Specified ────────────────────────────────────────────────────
   - id: PLAT-SPC-01
     title: Module has an ADR or design document
@@ -193,3 +240,30 @@ checks:
     applies_to: [module]
     solution: Add backend/<app>/migrations (even an empty __init__.py package).
     source: ADR-0051 P3
+  - id: PLAT-PRF-05
+    title: Live p95 is inside the budget
+    dimension: performant
+    rank: 5
+    collector: runtime
+    probe: { type: latency_p95, path: /api/health/, p95_ms: 500, samples: 8 }
+    applies_to: [module, process, journey, ai_pack]
+    solution: "python -m excellence.gauge --run runtime:http://127.0.0.1:8009"
+    source: ADR-0051 P9
+  - id: PLAT-REL-05
+    title: Live error rate is inside the window
+    dimension: reliable
+    rank: 5
+    collector: runtime
+    probe: { type: error_rate, path: /api/health/, max_rate: 0.01, samples: 8 }
+    applies_to: [module, process, journey, ai_pack]
+    solution: "Measure a loopback window. A 5xx rate above 1% fails the rung."
+    source: ADR-0051 P9
+  - id: PLAT-SEC-05
+    title: Live 429 rate stays inside the window
+    dimension: secure
+    rank: 5
+    collector: runtime
+    probe: { type: status_429, path: /api/health/, max_rate: 0.05, samples: 8 }
+    applies_to: [module, process, journey, ai_pack]
+    solution: "A healthy window is not stuck on 429. This probe does not generate 429s."
+    source: ADR-0051 P9

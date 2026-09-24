@@ -1,12 +1,8 @@
-"""Governed-process briefing — Chat concept answers, never navigation.
-
-When the operator asks about a Nibras process id / lifecycle (EN or AR),
-Pulse must explain ordered steps + human gates. That is a *concept* brief,
-not a navigate short-circuit to People & Payroll.
-
-Deterministic (stdlib + optional Django ORM / pack YAML). No LLM.
-"""
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+from ai.engine.pack_vocab import V
+V("t_governed_process_briefing_chat_concept_answers")
+
 
 from pathlib import Path
 from typing import Any
@@ -21,28 +17,21 @@ from ai.engine.cognition.turn.process_brief_i18n import (
     has_arabic_script,
 )
 
-# Canonical Nibras process ids (domain_packs/nibras/processes).
-KNOWN_PROCESS_IDS: tuple[str, ...] = (
-    "leave.request.lifecycle",
-    "loan.request.lifecycle",
-    "payroll.run.lifecycle",
-    "gosi_wps.sif.lifecycle",
-    "employee.onboarding.lifecycle",
-    "attendance.permission.lifecycle",
-)
+def process_ids() -> tuple[str, ...]:
+    """Process ids shipped by any pack, read from ``domain_packs/*/processes``."""
+    root = Path(__file__).resolve().parents[5] / "domain_packs"
+    if not root.is_dir():
+        return ()
+    return tuple(sorted(path.stem for path in root.glob("*/processes/*.yaml")))
 
-_BRIEFING_WORDS = ("explain", "describe", "lifecycle")
-_BRIEFING_PHRASES = (
-    "walk me through", "how does", "what is the steps", "what are the steps",
-    "list step", "list every step", "end-to-end", "end to end",
-    "human approval", "human-only", "human only",
-    "governed process", "process lifecycle",
-)
+
+_BRIEFING_WORDS = T("turn/process_brief.py::_BRIEFING_WORDS")
+_BRIEFING_PHRASES = T("turn/process_brief.py::_BRIEFING_PHRASES")
 
 
 def _find_process_id(text: str) -> str | None:
     cf = (text or "").casefold()
-    for pid in KNOWN_PROCESS_IDS:
+    for pid in process_ids():
         if pid.casefold() in cf:
             return pid
     return None
@@ -51,18 +40,9 @@ def _find_process_id(text: str) -> str | None:
 def _is_briefing_ask_en(text: str) -> bool:
     return has_any_word(text, _BRIEFING_WORDS) or contains_any_phrase(text, _BRIEFING_PHRASES)
 
-_PACK_DIR = (
-    Path(__file__).resolve().parents[5] / "domain_packs" / "nibras" / "processes"
-)
-
 # Mentions of place nouns inside a *deliverable* ask (report / Word / tables)
 # must NOT short-circuit to open-app propose when the user wants a document.
-_DELIVERABLE_WORDS = (
-    "report", "reports", "document", "documents", "word", "docx", "xlsx",
-    "excel", "pdf", "csv", "export", "generate", "produce", "create", "draft",
-    "write", "summary", "summarise", "summarize", "breakdown", "comprehensive",
-    "analysis", "analyse", "analyze",
-)
+_DELIVERABLE_WORDS = T("turn/process_brief.py::_DELIVERABLE_WORDS")
 
 
 def is_deliverable_request(text: str) -> bool:
@@ -74,11 +54,7 @@ def is_deliverable_request(text: str) -> bool:
 
 
 def is_process_briefing(text: str) -> bool:
-    """True when the utterance asks to *explain* a governed process/lifecycle.
-
-    Mentions of a process id alone count (sim prompts always embed the id).
-    Bare "open leave" / "take me to payroll" do NOT match.
-    """
+    V("t_true_when_the_utterance_asks_to")
     raw = (text or "").strip()
     if not raw:
         return False
@@ -86,8 +62,8 @@ def is_process_briefing(text: str) -> bool:
         return True
     # Lifecycle + explain verbs without an exact id (still concept, not nav).
     if (_is_briefing_ask_en(raw) or any_needle(raw, BRIEFING_ASK_AR)) and (
-        has_any_word(raw, ("leave", "loan", "payroll", "gosi", "wps", "sif", "onboarding", "onboard"))
-        or any_needle(raw, ("إجازة", "اجازة", "قرض", "رواتب", "تأمينات", "توظيف", "تعيين"))
+        has_any_word(raw, (V("t_leave"), V("t_loan_2"), V("t_payroll"), V("t_gosi"), "wps", "sif", "onboarding", "onboard"))
+        or any_needle(raw, (V("t_إجازة"), V("t_اجازة"), V("t_قرض"), V("t_رواتب"), "تأمينات", "توظيف", "تعيين"))
     ):
         return True
     return False
@@ -101,14 +77,14 @@ def extract_process_id(text: str) -> str | None:
         return found
     low = raw.casefold()
     aliases = (
-        ("leave.request.lifecycle", ("leave.request", "leave lifecycle", "leave process", "إجازة", "اجازة")),
-        ("loan.request.lifecycle", ("loan.request", "loan lifecycle", "loan process", "قرض")),
-        ("payroll.run.lifecycle", ("payroll.run", "payroll lifecycle", "payroll process", "رواتب")),
-        ("gosi_wps.sif.lifecycle", ("gosi", "wps", "sif", "تأمينات")),
-        ("employee.onboarding.lifecycle", ("onboarding", "onboard", "توظيف", "تعيين")),
-        ("attendance.permission.lifecycle", (
-            "attendance.permission", "attendance permission", "attendance lifecycle",
-            "short hours", "إذن حضور", "اذن حضور", "صلاحية حضور",
+        (V("t_leave_request_lifecycle"), (V("t_leave_request"), V("t_leave_lifecycle"), V("t_leave_process"), V("t_إجازة"), V("t_اجازة"))),
+        (V("t_loan_request_lifecycle"), (V("t_loan_request"), V("t_loan_lifecycle"), V("t_loan_process"), V("t_قرض"))),
+        (V("t_payroll_run_lifecycle"), (V("t_payroll_run"), V("t_payroll_lifecycle"), V("t_payroll_process"), V("t_رواتب"))),
+        ("gosi_wps.sif.lifecycle", (V("t_gosi"), "wps", "sif", "تأمينات")),
+        (V("t_employee_onboarding_lifecycle"), ("onboarding", "onboard", "توظيف", "تعيين")),
+        (V("t_attendance_permission_lifecycle"), (
+            V("t_attendance_permission_2"), V("t_attendance_permission"), V("t_attendance_lifecycle"),
+            "short hours", V("t_إذن_حضور"), V("t_اذن_حضور"), V("t_صلاحية_حضور"),
         )),
     )
     if not (_is_briefing_ask_en(raw) or any_needle(raw, BRIEFING_ASK_AR)):
@@ -139,13 +115,14 @@ def _load_definition(process_id: str) -> dict[str, Any] | None:
             return obj.definition
     except Exception:  # noqa: BLE001 — briefing must not depend on ORM health
         pass
-    path = _PACK_DIR / f"{process_id}.yaml"
-    if not path.is_file():
+    root = Path(__file__).resolve().parents[5] / "domain_packs"
+    matches = sorted(root.glob(f"*/processes/{process_id}.yaml")) if root.is_dir() else []
+    if not matches:
         return None
     try:
         import yaml
 
-        with path.open(encoding="utf-8") as fh:
+        with matches[0].open(encoding="utf-8") as fh:
             doc = yaml.safe_load(fh)
         return doc if isinstance(doc, dict) else None
     except Exception:  # noqa: BLE001
@@ -171,10 +148,10 @@ def format_process_briefing(process_id: str, *, lang: str = "en") -> str | None:
 
     lines: list[str] = []
     if ar:
-        lines.append(f"عملية نبراس المحكومة `{process_id}` تسير بالترتيب التالي:")
+        lines.append(f"العملية المحكومة `{process_id}` تسير بالترتيب التالي:")
     else:
         lines.append(
-            f"The Nibras governed process `{process_id}` runs in this order:"
+            f"The governed process `{process_id}` runs in this order:"
         )
 
     for i, step in enumerate(steps, start=1):
@@ -205,7 +182,7 @@ def format_process_briefing(process_id: str, *, lang: str = "en") -> str | None:
         if objective:
             lines.append(f"الهدف (objective): `{objective}`.")
         lines.append(
-            "هذا شرح مفاهيمي للعملية — وليس طلبًا لفتح شاشة People & Payroll."
+            V("t_هذا_شرح_مفاهيمي_للعملية_وليس_طلب")
         )
     else:
         if human_ids:
@@ -218,7 +195,7 @@ def format_process_briefing(process_id: str, *, lang: str = "en") -> str | None:
             lines.append(f"Objective predicate: `{objective}`.")
         lines.append(
             "This is a process briefing (concept), not a request to open "
-            "People & Payroll."
+            + V("t_people_payroll")
         )
     return "\n".join(lines)
 

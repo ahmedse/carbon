@@ -115,7 +115,12 @@ async def run_s1_intent(
     try:
         from ai.engine.cognition.dialogue.deixis import should_gate_deixis
         _deixis_last_results = list(getattr(getattr(state_ctx, 'state', None), 'last_results', None) or []) if state_ctx is not None else []
-        _deixis_q = None if st.deixis_subject else should_gate_deixis(st.user_message, conversation_history=conversation_history, last_results=_deixis_last_results)
+        from ai.engine.cognition.turn.understand import understand_mode
+        # P9: under v21 the subject is last_results. The transcript scan stays on legacy.
+        _deixis_history = None if understand_mode() == "v21" else conversation_history
+        _deixis_q = None
+        if may_stage('deixis') and not st.deixis_subject:
+            _deixis_q = should_gate_deixis(st.user_message, conversation_history=_deixis_history, last_results=_deixis_last_results)
         if _deixis_q:
             # I5: deixis must not exit if there's no last_result to refer to
             _last_tool_result = None
@@ -315,7 +320,7 @@ async def run_s1_intent(
         _signal(ledger, 'process_brief', False)
         _signal(ledger, 'nav_ground', False)
         _signal(ledger, 'off_limits', False)
-    if not st.discuss_thread:
+    if not st.discuss_thread and may_stage('process_brief'):
         from asgiref.sync import sync_to_async
         from ai.engine.cognition.turn.process_brief import try_process_briefing
         _brief_fb = await sync_to_async(try_process_briefing, thread_sensitive=True)(st.user_message)

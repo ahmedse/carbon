@@ -1,0 +1,5 @@
+# P5 re-baseline. Levels before this date were computed by skipping dimensions
+# that had no checks. From this date an open cell caps the dimension.
+# The ratchet compares only snapshots on or after this date.
+date: 2026-09-24
+note: ADR-0051 P5. The drop to the honest grid is the baseline, not a regression.

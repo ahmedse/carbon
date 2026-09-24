@@ -12,10 +12,11 @@ HonestUncertaintyHandler — fires when S4 Critic detects a knowledge gap
 Both are domain-agnostic: no domain terms in either class.
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
 
 from ai.engine.text.word_match import has_any_word
 
-_AMBIGUOUS_WORDS = ("which", "either", "or", "between", "versus", "compare")
+_AMBIGUOUS_WORDS = T("dialogue/fallback.py::_AMBIGUOUS_WORDS")
 
 
 class FallbackHandler:

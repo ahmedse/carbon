@@ -5,6 +5,9 @@ execute ReAct / stage consent. Emit a deterministic bilingual handoff and
 persist bound slots into ConversationState so Agent can inherit them.
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+from ai.engine.pack_vocab import V
+
 
 import logging
 import re
@@ -51,8 +54,8 @@ _MIN_SLOTS: dict[str, tuple[str, ...]] = {
     "submit_my_attendance_permission": ("permission_type",),
 }
 
-# Leave also needs a date or day count (either is enough to stop Chat looping).
-_LEAVE_DATE_SLOTS = ("start_date", "end_date", "days")
+#  also needs a date or day count (either is enough to stop Chat looping).
+_LEAVE_DATE_SLOTS = T("turn/handoff_agent.py::_LEAVE_DATE_SLOTS")
 
 
 @dataclass
@@ -66,7 +69,7 @@ class ChatHandoffOutcome:
     slots: dict = field(default_factory=dict)
     tool_result: dict = field(default_factory=dict)
     decision: str = "handoff_agent"
-    #: Closed-set answers for a clarify (loan / leave / permission type).
+    #: Closed-set answers for a clarify ( /  / permission type).
     #: Rendered as clickable chips in Chat; each string re-parses as a slot.
     follow_ups: list[str] = field(default_factory=list)
 
@@ -195,15 +198,15 @@ def render_slot_status(text: str, slots: dict | None) -> str:
         k: v for k, v in (slots or {}).items()
         if v not in (None, "", [], {})
     }
-    leave = str(body.get("leave_type") or "").strip()
-    if leave and re.search(r"\btype\b|\bleave\b", text or "", re.I):
-        return f"You requested {leave} leave."
-    loan = str(body.get("loan_type") or "").strip()
+    kind_value = str(body.get("leave_type") or "").strip()
+    if kind_value and re.search(r"\btype\b|\bleave\b", text or "", re.I):
+        return f"You requested {kind_value} {V("t_leave")}."
+    advance_value = str(body.get("loan_type") or "").strip()
     amount = body.get("principal", body.get("amount"))
-    if loan or amount not in (None, ""):
+    if advance_value or amount not in (None, ""):
         bits = []
-        if loan:
-            bits.append(f"{loan} loan")
+        if advance_value:
+            bits.append(f"{advance_value} {V("t_loan_2")}")
         if amount not in (None, ""):
             bits.append(str(amount))
         return "The agent has " + " and ".join(bits) + "."
@@ -227,14 +230,14 @@ def build_chat_write_clarify(
     body = dict(slots or {})
     choices: list[str] = []
     if echo and api == "submit_my_leave":
-        leave = str(body.get("leave_type") or "leave").strip()
+        kind_value = str(body.get("leave_type") or V("t_leave")).strip()
         start = _pretty_date(body.get("start_date"))
         end = _pretty_date(body.get("end_date"))
         if locale == "ar":
-            text = f"فهمت: إجازة {leave} من {start} إلى {end}. أأكد التواريخ؟"
+            text = f"فهمت: {V("t_إجازة")} {kind_value} من {start} إلى {end}. أأكد التواريخ؟"
         else:
             text = (
-                f"I understand you want {leave} leave from {start} to {end}. "
+                f"I understand you want {kind_value} {V("t_leave")} from {start} to {end}. "
                 "Let me confirm those dates?"
             )
     else:
@@ -242,12 +245,12 @@ def build_chat_write_clarify(
         key = missing[0] if missing else "loan_type"
         pack = (CLARIFY_TEXT.get(api) or {}).get(key) or {}
         text = pack.get(locale) or pack.get("en") or "What else do I need to know?"
-        loan = str(body.get("loan_type") or "").strip()
-        if api == "submit_my_loan" and loan and key == "principal":
+        advance_value = str(body.get("loan_type") or "").strip()
+        if api == "submit_my_loan" and advance_value and key == "principal":
             if locale == "ar":
-                text = f"قرض {loan}. كم المبلغ الذي تحتاجه؟"
+                text = f"{V("t_قرض")} {advance_value}. كم المبلغ الذي تحتاجه؟"
             else:
-                text = f"{loan.title()} loan. How much do you need to borrow?"
+                text = f"{advance_value.title()} {V("t_loan_2")}. How much do you need to borrow?"
         else:
             # Echo what is already bound so the question reads as a
             # continuation, not a cold restart ("Got it: 500 over 12 months.").
@@ -297,24 +300,24 @@ def _understood_prefix(
 
 # Closed-set slot choices. Every label must re-parse through the alias tables
 # below (``_first_alias``) so a chip click is a valid slot fill, and must stay
-# a host vocabulary (Nibras loan/leave/permission types) — never invented.
+# a host vocabulary (//permission types) — never invented.
 _SLOT_CHOICES: dict[str, dict[str, tuple[tuple[str, str, str], ...]]] = {
     "submit_my_loan": {
         "loan_type": (
-            ("emergency", "Emergency loan", "قرض طارئ"),
-            ("housing", "Housing loan", "قرض سكن"),
-            ("salary", "Salary advance", "سلفة راتب"),
-            ("car", "Car loan", "قرض سيارة"),
-            ("personal", "Personal loan", "قرض شخصي"),
+            ("emergency", V("t_emergency_loan"), V("t_قرض_طارئ")),
+            ("housing", V("t_housing_loan"), V("t_قرض_سكن")),
+            (V("t_salary"), V("t_salary_advance"), V("t_سلفة_راتب")),
+            ("car", V("t_car_loan"), V("t_قرض_سيارة")),
+            ("personal", V("t_personal_loan"), V("t_قرض_شخصي")),
         ),
     },
     "submit_my_leave": {
         "leave_type": (
-            ("annual", "Annual leave", "إجازة سنوية"),
-            ("sick", "Sick leave", "إجازة مرضية"),
-            ("emergency", "Emergency leave", "إجازة طارئة"),
-            ("unpaid", "Unpaid leave", "إجازة بدون راتب"),
-            ("maternity", "Maternity leave", "إجازة أمومة"),
+            ("annual", V("t_annual_leave_2"), V("t_إجازة_سنوية")),
+            ("sick", V("t_sick_leave"), V("t_إجازة_مرضية")),
+            ("emergency", V("t_emergency_leave"), V("t_إجازة_طارئة")),
+            ("unpaid", V("t_unpaid_leave"), V("t_إجازة_بدون_راتب")),
+            ("maternity", V("t_maternity_leave"), V("t_إجازة_أمومة")),
         ),
     },
     "submit_my_attendance_permission": {
@@ -352,12 +355,7 @@ def build_slot_status_answer(
     )
 
 
-_READY_TO_SUBMIT_PHRASES = (
-    "anything else you need", "anything else you needed", "anything else i need",
-    "anything else i needed", "is that all", "is that everything",
-    "do you need anything", "do you need everything", "do you need all",
-    "do you have anything", "do you have everything", "do you have all",
-)
+_READY_TO_SUBMIT_PHRASES = T("turn/handoff_agent.py::_READY_TO_SUBMIT_PHRASES")
 
 
 def is_ready_to_submit_ask(text: str) -> bool:
@@ -385,13 +383,13 @@ def build_bound_write_confirmation_answer(
     }
     api = (api_name or "").strip()
     if api == "submit_my_leave":
-        leave = str(body.get("leave_type") or "leave").strip()
+        kind_value = str(body.get("leave_type") or V("t_leave")).strip()
         start = _pretty_date(body.get("start_date"))
         end = _pretty_date(body.get("end_date")) or start
         if locale == "ar":
-            text = f"طلبك: إجازة {leave} من {start} إلى {end}."
+            text = f"طلبك: {V("t_إجازة")} {kind_value} من {start} إلى {end}."
         else:
-            text = f"Your leave request: {leave} leave, {start} to {end}."
+            text = f"Your {V("t_leave")} request: {kind_value} {V("t_leave")}, {start} to {end}."
     elif locale == "ar":
         text = render_slot_status(user_message, body)
     else:
@@ -444,9 +442,9 @@ _TO_EASTERN_DIGITS = str.maketrans(
     "0123456789",
     "\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669",
 )
-_QUESTION_START_WORDS = ("when", "how", "why", "what", "will", "can", "does")
-_AFFIRM_WORDS = ("yes", "yep", "exactly", "correct")
-_AFFIRM_PHRASES = ("that's all", "thats all")
+_QUESTION_START_WORDS = T("turn/handoff_agent.py::_QUESTION_START_WORDS")
+_AFFIRM_WORDS = T("turn/handoff_agent.py::_AFFIRM_WORDS")
+_AFFIRM_PHRASES = T("turn/handoff_agent.py::_AFFIRM_PHRASES")
 
 
 def _western_digits(text: str) -> str:
@@ -598,23 +596,12 @@ def build_chat_write_handoff(
     )
 
 
-_PAYROLL_STATUS_PHRASES = (
-    "what was", "what were", "what is my", "how much was", "when will",
-    "net pay", "take-home", "take home", "can i download",
-)
-_PAYROLL_STATUS_WORDS = (
-    "payslip", "payslips", "deduction", "deductions", "gosi", "payroll",
-)
+_PAYROLL_STATUS_PHRASES = T("turn/handoff_agent.py::_PAYROLL_STATUS_PHRASES")
+_PAYROLL_STATUS_WORDS = T("turn/handoff_agent.py::_PAYROLL_STATUS_WORDS")
 
 
 def is_ess_write_utterance(text: str) -> bool:
-    """True when the utterance is a personal loan / leave / attendance write.
-
-    Used by the Chat handoff path and the ``_should_force_action`` fallback so
-    ESS writes are not gated only on ``_is_mutation_request`` (which is leave-
-    and DQ-shaped and misses "apply for a loan"). Payroll recall
-    ("what was the loan amount?") is not a write.
-    """
+    V("t_true_when_the_utterance_is_a")
     brief = (text or "").strip()
     if not brief:
         return False
@@ -676,15 +663,15 @@ def is_ess_slot_continuation(text: str, api_name: str | None) -> bool:
 # Lexical codes for Chat handoff only. Agent re-resolves via MDM on inherit.
 # Must not import ``mdm`` / ``fill_write_body`` — Chat run() is async.
 _NeedleRow = tuple[tuple[str, ...], str]
-_LOAN_TYPE_WORDS = ("emergency", "housing", "salary", "car", "personal")
+_LOAN_TYPE_WORDS = T("turn/handoff_agent.py::_LOAN_TYPE_WORDS")
 _LOAN_TYPE_NEEDLES: tuple[_NeedleRow, ...] = (
     (LOAN_EMERGENCY_AR, "emergency"),
     (LOAN_HOUSING_AR, "housing"),
-    (LOAN_SALARY_AR, "salary"),
+    (LOAN_SALARY_AR, V("t_salary")),
     (LOAN_CAR_AR, "car"),
     (LOAN_PERSONAL_AR, "personal"),
 )
-_LEAVE_TYPE_WORDS = ("annual", "sick", "emergency", "unpaid", "maternity")
+_LEAVE_TYPE_WORDS = T("turn/handoff_agent.py::_LEAVE_TYPE_WORDS")
 _LEAVE_TYPE_NEEDLES: tuple[_NeedleRow, ...] = (
     (LEAVE_ANNUAL_AR, "annual"),
     (LEAVE_SICK_AR, "sick"),
@@ -692,7 +679,7 @@ _LEAVE_TYPE_NEEDLES: tuple[_NeedleRow, ...] = (
     (LEAVE_UNPAID_AR, "unpaid"),
     (LEAVE_MATERNITY_AR, "maternity"),
 )
-_PERMISSION_TYPE_WORDS = ("official", "medical", "emergency", "personal")
+_PERMISSION_TYPE_WORDS = T("turn/handoff_agent.py::_PERMISSION_TYPE_WORDS")
 _PERMISSION_TYPE_NEEDLES: tuple[_NeedleRow, ...] = (
     (PERM_OFFICIAL_AR, "official"),
     (PERM_MEDICAL_AR, "medical"),
@@ -737,7 +724,7 @@ _AR_DIGITS = str.maketrans(
 )
 _AMOUNT_RE = re.compile(
     r"([0-9]{2,}(?:[.,][0-9]+)?)\s*(?:sar|kwd|riyal|dinar|dinars)?"
-    r"|(?:sar|kwd|loan)\s*([0-9]{2,}(?:[.,][0-9]+)?)",
+    + V("t_sar_kwd_loan_s_0_9"),
     re.I,
 )
 # No trailing word-boundary after unit stems that carry suffixes.
@@ -745,10 +732,7 @@ _MONTHS_RE = re.compile(r"\b(\d{1,2})\s*(?:months?\b)", re.I)
 _DAYS_RE = re.compile(r"\b(\d{1,3})\s*(?:days?\b)", re.I)
 _HOURS_RE = re.compile(r"\b(\d{1,2}(?:\.\d+)?)\s*(?:hour|hours)\b", re.I)
 _ISO_DATE_RE = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
-_MONTH_NAMES = (
-    "january", "february", "march", "april", "may", "june",
-    "july", "august", "september", "october", "november", "december",
-)
+_MONTH_NAMES = T("turn/handoff_agent.py::_MONTH_NAMES")
 _MONTH_INDEX = {name: i for i, name in enumerate(_MONTH_NAMES, 1)}
 _NAMED_DATE_RE = re.compile(
     r"\b(" + "|".join(_MONTH_NAMES) + r")\s+(\d{1,2})(?:st|nd|rd|th)?"
@@ -757,11 +741,7 @@ _NAMED_DATE_RE = re.compile(
     r"(?:,\s*(\d{4}))?\b",
     re.IGNORECASE,
 )
-_SLOT_STATUS_PHRASES = (
-    "what type", "what date", "what dates", "what amount", "what information",
-    "how much", "what did i", "what was", "which date", "which dates",
-    "is it marked", "marked as",
-)
+_SLOT_STATUS_PHRASES = T("turn/handoff_agent.py::_SLOT_STATUS_PHRASES")
 
 
 def _latin_digits(text: str) -> str:
@@ -909,14 +889,7 @@ def resolve_ess_write_from_brief(
     *,
     prefer_api: str | None = None,
 ) -> tuple[str, dict] | None:
-    """Bind ESS write slots from a combined brief (loan/leave/attendance).
-
-    Lexical only — no MDM / ``write_slots``. Chat is async; governed lookup
-    is Agent's job after handoff. Returns ``(api_name, body)`` or None.
-
-    ``prefer_api`` forces the write kind when the current turn is a slot
-    continuation (e.g. \"I need 3000 SAR\") that is not itself a loan brief.
-    """
+    V("t_bind_ess_write_slots_from_a")
     text = (brief or "").strip()
     if not text:
         return None
@@ -1122,15 +1095,15 @@ def _ask_grounding_rules_block() -> str:
         "multi-step or reviewable plan, tell them to switch the dial to Plan "
         "(same conversation) — do not invent Open-in-Agent or Open-My for "
         "read questions.\n"
-        "- DISTRIBUTION / ANALYTICS: for salary or headcount distributions, "
-        "return aggregates, buckets, and a chart or summary table — NEVER paste "
-        "raw employee-by-employee salary rows into the chat.\n"
-        "- BROAD REPORT BRIEFS: if the user asks for a 'full' / 'complete' "
-        "salary or payroll report without saying the angle or audience, ask "
-        "ONE short clarifying question with options (distribution, run health, "
-        "GOSI, board summary) before calling tools.\n"
-        "- HOST WRITES (leave, loan, attendance, payroll, DQ create): Chat never "
-        "stages or submits them. Do NOT call submit_my_* / mutation "
+        + V("t_distribution_analytics_for_salary_or_headcount")
+        + "return aggregates, buckets, and a chart or summary table — NEVER paste "
+        + V("t_raw_employee_by_employee_salary_rows")
+        + "- BROAD REPORT BRIEFS: if the user asks for a 'full' / 'complete' "
+        + V("t_salary_or_payroll_report_without_saying")
+        + "ONE short clarifying question with options (distribution, run health, "
+        + V("t_gosi_board_summary_before_calling_tools")
+        + V("t_host_writes_leave_loan_attendance_payroll")
+        + "stages or submits them. Do NOT call submit_my_* / mutation "
         "call_host_api / create_dq_rule. When the user wants to submit and you "
         "have the details, tell them to switch to Agent (you will carry the "
         "details over) or open My — one clear next step.\n"

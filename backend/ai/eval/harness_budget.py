@@ -194,7 +194,24 @@ def _is_phrase_table_line(line: str, following: str = "") -> bool:
     return '"' in window or "'" in window
 
 
+def _count_yaml_phrase_tables(path: Path) -> int:
+    """Top-level entries of a data file under the core that hold string items."""
+    import yaml
+
+    try:
+        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return 0
+    if not isinstance(doc, dict):
+        return 0
+    return sum(1 for value in doc.values() if isinstance(value, (dict, list, str)))
+
+
 def _count_phrase_tables(root: Path) -> int:
+    """Python tables plus YAML tables that live inside the core directory.
+
+    Moving a table into a data file beside the code does not take it out of core.
+    """
     if not root.is_dir():
         return 0
     total = 0
@@ -203,6 +220,9 @@ def _count_phrase_tables(root: Path) -> int:
         for idx, line in enumerate(lines):
             if _is_phrase_table_line(line, "\n".join(lines[idx + 1 : idx + 4])):
                 total += 1
+    for pattern in ("*.yaml", "*.yml"):
+        for path in sorted(root.rglob(pattern)):
+            total += _count_yaml_phrase_tables(path)
     return total
 
 

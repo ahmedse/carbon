@@ -109,3 +109,20 @@ class Run(models.Model):
 
     def __str__(self) -> str:
         return f"Run #{self.pk} {self.status} · {','.join(self.collectors or [])}"
+
+
+class Initiative(models.Model):
+    """A dated goal on top of the ladder: reach a level for a set of apps."""
+
+    title = models.CharField(max_length=160)
+    tier = models.CharField(max_length=40, db_index=True)
+    target_level = models.PositiveSmallIntegerField()
+    app_ids = models.JSONField(default=list, blank=True)
+    deadline = models.DateField(db_index=True)
+    owner = models.CharField(max_length=120)
+    status = models.CharField(max_length=12, default="open")
+    note = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["deadline", "-id"]

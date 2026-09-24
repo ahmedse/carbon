@@ -9,6 +9,7 @@ True) and fails CLOSED: any exception or unparseable response yields
 answer was *not* verified rather than silently claiming it was.
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
 
 import json
 import logging
@@ -22,11 +23,8 @@ logger = logging.getLogger("pulse.cognition.verify")
 # A phrase in the ANSWER that asserts the absence of data. Deterministic guard:
 # if the answer says this while a tool returned rows, that is a contradiction.
 # Allows up to 3 words between "no" and the data noun ("no matching records").
-_NO_DATA_NOUNS = (
-    "data", "record", "records", "result", "results", "calculation",
-    "calculations", "entries", "rows",
-)
-_NO_DATA_PHRASES = ("no matching", "not available", "there is no", "there are no")
+_NO_DATA_NOUNS = T("turn/verify.py::_NO_DATA_NOUNS")
+_NO_DATA_PHRASES = T("turn/verify.py::_NO_DATA_PHRASES")
 
 
 def _asserts_no_data(text: str) -> bool:
@@ -36,12 +34,9 @@ def _asserts_no_data(text: str) -> bool:
     )
 
 # Result keys that carry a positive row/record count.
-_COUNT_KEYS = ("total", "count", "total_calculations", "row_count", "n", "results_count")
+_COUNT_KEYS = T("turn/verify.py::_COUNT_KEYS")
 # Result keys whose non-empty list/dict value means data is present.
-_COLLECTION_KEYS = (
-    "by_scope", "by_module", "by_status", "rows", "results", "items",
-    "breakdown", "records", "data",
-)
+_COLLECTION_KEYS = T("turn/verify.py::_COLLECTION_KEYS")
 
 
 def _result_has_data(result: object) -> bool:

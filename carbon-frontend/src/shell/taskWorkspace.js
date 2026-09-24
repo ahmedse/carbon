@@ -13,12 +13,12 @@ const OUTCOME_STATUS = new Set(['completed', 'completed_with_gaps', 'failed']);
  * @returns {string}
  */
 export function humanTaskTitle(plan, fallback = 'Task', maxLen = 72) {
+  const serverTitle = String(plan?.title || '').trim();
+  if (serverTitle) {
+    return maxLen && serverTitle.length > maxLen ? `${serverTitle.slice(0, maxLen - 1)}…` : serverTitle;
+  }
   const raw = String(plan?.brief || plan?.user_message || '').trim();
   if (!raw) return fallback;
-  if (/gosi|wps/i.test(raw) && /payroll|sif/i.test(raw)) {
-    return 'Send the GOSI file for this payroll';
-  }
-  if (/gosi|wps/i.test(raw)) return 'Send the GOSI file';
   let cleaned = stripEngineJargon(raw);
   cleaned = cleaned.replace(/\b[a-z][a-z0-9]*(?:[._][a-z0-9]+)+\b/gi, ' ');
   cleaned = cleaned.replace(/\busing\b[:,]?\s*/gi, ' ');

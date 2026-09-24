@@ -3,27 +3,23 @@
 Pure helper (RULE_20): the brand catalog owns ``parameters``. The engine
 checks required fields and enums, and never imports a domain app.
 """
-
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+
 
 import json
 from typing import Any
 
 from ai.engine.cognition.plan.planner import _schema_violations
 
-READ_GAP = (
-    "This read could not be completed. "
-    "A required field was missing or was not one of the allowed values."
-)
-WRITE_HELD = (
-    "This step is waiting on a read that did not complete. "
-    "Edit the plan, or run again after that read succeeds."
-)
+READ_GAP = T("plan/catalog_args.py::READ_GAP")
+WRITE_HELD = T("plan/catalog_args.py::WRITE_HELD")
 
 __all__ = [
     "READ_GAP",
     "WRITE_HELD",
     "catalog_arg_violations",
+    "canonical_host_args",
     "apply_repaired_params",
     "parse_repair_payload",
     "rewrite_host_calls",
@@ -52,30 +48,43 @@ def _schema_for(api_catalog: Any, tool_args: dict | None) -> dict | None:
 
 
 def parameter_values(tool_args: dict, schema: dict) -> dict:
-    """Values the schema applies to, from args, query_params, or body.
+    """Values the schema applies to, from what the executor sends.
 
-    A blank string is omitted so a required field fails as missing.
+    Only ``path_params`` / ``query_params`` / ``body`` reach the host, so a
+    top-level key is not a value. A blank string is omitted so a required
+    field fails as missing.
     """
     props = schema.get("properties") or {}
-    query = tool_args.get("query_params")
-    query = query if isinstance(query, dict) else {}
-    body = tool_args.get("body")
-    body = body if isinstance(body, dict) else {}
-    skip = {"api_name", "query_params", "body", "method", "path"}
     out: dict = {}
-    for key in props:
-        if key in query:
-            val = query[key]
-        elif key in tool_args and key not in skip:
-            val = tool_args[key]
-        elif key in body:
-            val = body[key]
-        else:
+    for nest in ("path_params", "body", "query_params"):
+        inner = tool_args.get(nest)
+        if not isinstance(inner, dict):
             continue
-        if isinstance(val, str) and not val.strip():
-            continue
-        out[key] = val
+        for key in props:
+            if key not in inner:
+                continue
+            val = inner[key]
+            if isinstance(val, str) and not val.strip():
+                continue
+            out[key] = val
     return out
+
+
+def _surface(api_catalog: Any):
+    from ai.engine.cognition.turn.capability import CapabilitySurface
+
+    return CapabilitySurface(
+        entries=tuple(e for e in (api_catalog or []) if isinstance(e, dict)),
+    )
+
+
+def canonical_host_args(api_catalog: Any, tool_args: dict | None) -> dict:
+    """``tool_args`` in the one shape ``call_host_api`` sends (see ``host_args``)."""
+    args = tool_args if isinstance(tool_args, dict) else {}
+    name = str(args.get("api_name") or "").strip()
+    if not name:
+        return dict(args)
+    return _surface(api_catalog).host_args(name, args)
 
 
 def catalog_arg_violations(
@@ -123,29 +132,19 @@ def apply_repaired_params(
     repaired: dict | None,
     api_catalog: Any,
 ) -> dict:
-    """Write repaired parameter values back onto the call args."""
+    """Write repaired parameter values into the shape the executor sends."""
     args = dict(tool_args or {})
     schema = _schema_for(api_catalog, args) or {}
     props = schema.get("properties") or {}
     incoming = repaired if isinstance(repaired, dict) else {}
-    body = args.get("body") if isinstance(args.get("body"), dict) else None
-    skip = {"api_name", "query_params", "body", "method", "path"}
-    for key, val in incoming.items():
-        if key not in props:
-            continue
-        if body is not None and key in body:
-            body = {**body, key: val}
-            args["body"] = body
-            continue
-        if key in args and key not in skip:
-            args[key] = val
-            continue
-        # ``call_host_api`` sends query params only from ``query_params``; a
-        # top-level key never reaches the host.
-        query = dict(args.get("query_params") or {})
-        query[key] = val
-        args["query_params"] = query
-    return args
+    if not str(args.get("api_name") or "").strip():
+        return args
+    from ai.engine.cognition.turn.capability import flat_args
+
+    merged = {k: v for k, v in flat_args(args).items()}
+    merged.update({k: v for k, v in incoming.items() if k in props})
+    base = {k: args[k] for k in ("api_name", "explanation", "bind") if k in args}
+    return canonical_host_args(api_catalog, {**base, **merged})
 
 
 def parse_repair_payload(text: str | None) -> dict | None:
@@ -164,9 +163,31 @@ def parse_repair_payload(text: str | None) -> dict | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+def canonical_host_calls(calls: list | None, api_catalog: Any) -> list:
+    """Every ``call_host_api`` call rewritten to the shape the executor sends."""
+    out = []
+    for tc in calls or []:
+        fn = dict((tc or {}).get("function") or {}) if isinstance(tc, dict) else {}
+        if (fn.get("name") or "") != "call_host_api":
+            out.append(tc)
+            continue
+        raw = fn.get("arguments", "{}")
+        try:
+            parsed = json.loads(raw) if isinstance(raw, str) else dict(raw or {})
+        except (json.JSONDecodeError, TypeError, ValueError):
+            out.append(tc)
+            continue
+        args = canonical_host_args(api_catalog, parsed)
+        args.pop("bind", None)
+        fn["arguments"] = json.dumps(args, ensure_ascii=False, default=str)
+        out.append({**tc, "function": fn})
+    return out
+
+
 def rewrite_host_calls(calls: list | None, tool_args: dict) -> list:
     """Point synthesized ``call_host_api`` calls at the repaired args."""
-    payload = json.dumps(tool_args or {}, ensure_ascii=False, default=str)
+    sent = {k: v for k, v in (tool_args or {}).items() if k != "bind"}
+    payload = json.dumps(sent, ensure_ascii=False, default=str)
     out = []
     for tc in calls or []:
         if not isinstance(tc, dict):

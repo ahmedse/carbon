@@ -32,6 +32,51 @@ subjects:
     runbook: [docs/nibras/DEV-CREDENTIALS.md]
 
 checks:
+  - id: NIBRAS-SPC-00
+    title: Nibras HR design is declared
+    dimension: specified
+    rank: 1
+    collector: repo
+    probe: { type: file_exists, file: docs/DESIGN-NIBRAS-ENTERPRISE-HR-DATA-MODEL.md }
+    applies_to: [module, process, journey, ai_pack]
+    solution: Keep the Nibras HR data-model design.
+    source: NSR
+  - id: NIBRAS-COR-01
+    title: Nibras module names its test tree
+    dimension: correct
+    rank: 1
+    collector: repo
+    probe: { type: tests_present }
+    applies_to: [module]
+    solution: "Declare tests: for the module."
+    source: NSR
+  - id: NIBRAS-REL-01
+    title: Nibras subject has a failure owner
+    dimension: reliable
+    rank: 1
+    collector: repo
+    probe: { type: field_nonempty, field: owner }
+    applies_to: [module, process, journey, ai_pack]
+    solution: Set owner on the subject.
+    source: NSR
+  - id: NIBRAS-OBS-01
+    title: Nibras assurance pack is the declared signal
+    dimension: observed
+    rank: 1
+    collector: repo
+    probe: { type: file_exists, file: domain_packs/nibras/assurance/pack.yaml }
+    applies_to: [module, process, journey, ai_pack]
+    solution: Keep the Nibras assurance pack beside the ladder.
+    source: assurance pack
+  - id: NIBRAS-MNT-01
+    title: Nibras subject paths exist
+    dimension: maintainable
+    rank: 1
+    collector: repo
+    probe: { type: paths_exist, field: paths }
+    applies_to: [module, process, journey, ai_pack]
+    solution: Declare paths that exist in the tree.
+    source: ADR-0020
   - id: NIBRAS-SPC-01
     title: HR data model / design doc linked
     dimension: specified

@@ -15,6 +15,9 @@ Usage (applied in engine_runtime after tool results, gated on ECF_ENABLED):
   result = apply_entity_contracts(tool_result, descriptor, user_capabilities)
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+
+from ai.engine.pack_vocab import V
 
 from typing import Any
 
@@ -27,10 +30,7 @@ from ai.engine.cognition.entity.registry import EntityDescriptor
 
 # Phrases that indicate a non-existence claim that must not be made
 # from a truncated source.
-_NONEXISTENCE_PHRASES = (
-    "no such", "no matching", "no employee", "no record",
-    "not found", "does not exist",
-)
+_NONEXISTENCE_PHRASES = T("entity/contracts.py::_NONEXISTENCE_PHRASES")
 
 
 def no_truncation_as_truth(
@@ -108,21 +108,15 @@ def honest_masking(
     descriptor: EntityDescriptor,
     user_capabilities: frozenset[str] | None = None,
 ) -> dict:
-    """Redact capability-gated fields the caller cannot see.
-
-    Always replaces the value when the capability is absent — never leave a
-    real salary visible to unauthorized callers (A5). Zero/null used to be the
-    only trigger because the host sometimes returned ``0.000`` as a soft mask;
-    that missed the case where the raw amount leaked through.
-    """
+    V("t_redact_capability_gated_fields_the_caller")
     if user_capabilities is None:
         user_capabilities = frozenset()
 
     result = dict(record)
     for field_name, policy in descriptor.masking.items():
         if policy.capability in user_capabilities:
-            continue  # caller is authorised — leave value intact
-        result[field_name] = "(hidden — salary access required)"
+            continue  # caller is authorised —  value intact
+        result[field_name] = V("t_hidden_salary_access_required")
     return result
 
 

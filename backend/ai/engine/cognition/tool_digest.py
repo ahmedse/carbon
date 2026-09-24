@@ -1,23 +1,8 @@
-"""Per-message tool digests (PV2-1C · Intelligence Contract §4.3 HistoryBlock).
-
-A digest is a ≤ 200-char, scalar-only restatement of what a turn's tools
-returned ("call_host_api get_my_loan_eligibility: eligible=true,
-max_amount=8000, currency=SAR"), persisted on the assistant message so the
-model can recall tool facts turns later without re-querying.
-
-Never a raw payload:
-  * only successful, non-staged tool results contribute;
-  * only scalar leaves (bool / number / short string) are kept;
-  * internal ids and restricted identifiers (national id, IBAN, secrets…) are
-    dropped (RULE_23);
-  * records carrying an ``org_unit_id`` outside the user's retrieval scope
-    (``{"org_unit_ids": [...], "org_unit_id": n}`` — the same dict the S2
-    applicability-first filter consumes) are dropped (RULE_20). With no scope,
-    only unscoped records survive.
-
-Pure function — no Django, no I/O.
-"""
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+from ai.engine.pack_vocab import V
+V("t_per_message_tool_digests_pv2_1c")
+
 
 import json
 from typing import Any, Iterable
@@ -27,20 +12,11 @@ DIGEST_MAX_CHARS = 200
 _MAX_RECORDS_PER_TOOL = 3
 _MAX_VALUE_CHARS = 40
 
-_RECORD_LIST_KEYS = ("results", "rows", "items", "records", "entities", "data")
+_RECORD_LIST_KEYS = T("tool_digest.py::_RECORD_LIST_KEYS")
 
-_RESTRICTED_KEY_NEEDLES = (
-    "password", "passwd", "secret", "token", "apikey", "api_key", "credential",
-    "iban", "swift", "nationalid", "national_id", "iqama", "ssn", "passport",
-    "bankaccount", "bank_account", "accountnumber", "account_number",
-    "cardnumber", "card_number", "cvv", "pincode", "pin_code", "hash", "salt",
-)
+_RESTRICTED_KEY_NEEDLES = T("tool_digest.py::_RESTRICTED_KEY_NEEDLES")
 
-_PLUMBING_KEYS = frozenset({
-    "status_code", "requires_confirmation", "execution_id", "kind", "operation",
-    "method", "endpoint", "reasoning", "confirmation_message", "action", "route",
-    "error", "detail", "latency_ms", "tool_call_id", "self_heal",
-})
+_PLUMBING_KEYS = T("tool_digest.py::_PLUMBING_KEYS")
 
 
 def _parse(raw: Any) -> Any:
@@ -132,7 +108,7 @@ def _tool_label(item: dict) -> str:
     return f"{name} {api_name}" if api_name else name
 
 
-_PAYSLIP_IDENTITY_CODES = ("gross", "gosi", "loan_installment", "net")
+_PAYSLIP_IDENTITY_CODES = T("tool_digest.py::_PAYSLIP_IDENTITY_CODES")
 
 
 def _line_type_code(value: Any) -> str:
@@ -155,11 +131,7 @@ def _fmt_amount(value: Any) -> str | None:
 
 
 def _compact_payslip_identity(data: Any) -> str | None:
-    """One identity chunk: ``count=4, gross=6500, gosi=1200, …``.
-
-    Default per-record digest is 200-char and drops net when four lines
-    are present. Payslip recall needs the identity, not employee_name.
-    """
+    V("t_one_identity_chunk_count_4_gross")
     records: list[dict] = []
     if isinstance(data, list):
         records = [row for row in data if isinstance(row, dict)]

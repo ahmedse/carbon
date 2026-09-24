@@ -5,6 +5,8 @@ user must take next (switch to Agent / Approve / Run / Confirm). Chat
 never submits (ADR-0046).
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+
 
 from typing import Any
 
@@ -17,18 +19,12 @@ from ai.engine.cognition.turn.next_step_i18n import (
     any_needle,
 )
 
-_TERMINAL = frozenset({
-    "completed", "completed_with_gaps", "failed", "cancelled",
-})
+_TERMINAL = T("turn/next_step.py::_TERMINAL")
 
-_NEXT_ASK_PHRASES = (
-    "what's next", "whats next", "what is next", "what next",
-    "then what", "what should i do", "what do i do",
-    "what's the next step", "what is the next step",
-)
-_CONTINUERS = frozenset({"ok", "okay", "and", "then", "next", "go on"})
-_PAYROLL_WORDS = ("payslip", "payroll", "gosi", "deduction")
-_PAYROLL_PHRASES = ("net pay", "take-home", "take home")
+_NEXT_ASK_PHRASES = T("turn/next_step.py::_NEXT_ASK_PHRASES")
+_CONTINUERS = T("turn/next_step.py::_CONTINUERS")
+_PAYROLL_WORDS = T("turn/next_step.py::_PAYROLL_WORDS")
+_PAYROLL_PHRASES = T("turn/next_step.py::_PAYROLL_PHRASES")
 
 
 def _is_next_ask(text: str) -> bool:

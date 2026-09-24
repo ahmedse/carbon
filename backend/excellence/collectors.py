@@ -105,6 +105,10 @@ def collect_repo(cat: Catalogue, pairs: list[tuple[Check, Subject]], ctx: dict[s
             if val is None:
                 val = subject.extra.get(fld)
             out.append(_draft(check, subject, "passed" if val else "failed", source=f"manifest:{fld}"))
+        elif kind == "file_exists":
+            rel = str(check.probe.get("file") or "")
+            ok = bool(rel) and (REPO_ROOT / rel).is_file()
+            out.append(_draft(check, subject, "passed" if ok else "failed", source=rel or "probe:file"))
         elif kind == "paths_exist":
             fld = str(check.probe.get("field") or "paths")
             paths = getattr(subject, fld, ()) or ()
@@ -402,6 +406,201 @@ def _tuple_probe(check: Check) -> tuple[str, ...]:
     return ()
 
 
+def collect_rbac(cat: Catalogue, pairs: list[tuple[Check, Subject]], ctx: dict[str, Any]) -> list[EventDraft]:
+    """A named file must exist and contain a marker. Evidence the RBAC rule is declared."""
+    out: list[EventDraft] = []
+    for check, subject in pairs:
+        rel = str(check.probe.get("file") or "")
+        marker = str(check.probe.get("marker") or "")
+        path = REPO_ROOT / rel
+        if not rel or not path.is_file():
+            out.append(_draft(check, subject, "failed", source=rel or "rbac", detail={"why": "missing"}))
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        ok = bool(marker) and marker in text
+        out.append(_draft(check, subject, "passed" if ok else "failed", source=rel,
+                          detail={"marker": marker, "found": ok}))
+    return out
+
+
+def collect_budget(cat: Catalogue, pairs: list[tuple[Check, Subject]], ctx: dict[str, Any]) -> list[EventDraft]:
+    """A ceiling file must parse as an object with at least one numeric limit."""
+    import json as _json
+    out: list[EventDraft] = []
+    cache: dict[str, tuple[bool, dict[str, Any]]] = {}
+    for check, subject in pairs:
+        rel = str(check.probe.get("file") or "")
+        if rel not in cache:
+            path = REPO_ROOT / rel
+            if not path.is_file():
+                cache[rel] = (False, {"why": "missing"})
+            else:
+                try:
+                    data = _json.loads(path.read_text(encoding="utf-8"))
+                except _json.JSONDecodeError as exc:
+                    cache[rel] = (False, {"why": str(exc)})
+                else:
+                    nums = [k for k, v in (data.items() if isinstance(data, dict) else []) if isinstance(v, (int, float))]
+                    cache[rel] = (bool(nums), {"limits": nums[:12]})
+        ok, detail = cache[rel]
+        out.append(_draft(check, subject, "passed" if ok else "failed", source=rel or "budget", detail=detail))
+    return out
+
+
+def collect_design_lint(cat: Catalogue, pairs: list[tuple[Check, Subject]], ctx: dict[str, Any]) -> list[EventDraft]:
+    """A directory must not contain raw hex colors or a raw MUI Table."""
+    import re
+    hex_re = re.compile(r"#[0-9A-Fa-f]{3,8}\b")
+    out: list[EventDraft] = []
+    cache: dict[str, tuple[bool, dict[str, Any]]] = {}
+    for check, subject in pairs:
+        files = check.probe.get("files") or ([check.probe["path"]] if check.probe.get("path") else [])
+        key = tuple(str(p) for p in files)
+        if key not in cache:
+            hits: list[str] = []
+            missing: list[str] = []
+            for rel in key:
+                path = REPO_ROOT / rel
+                if not path.is_file():
+                    missing.append(rel)
+                    continue
+                text = path.read_text(encoding="utf-8", errors="replace")
+                if hex_re.search(text) or "<Table" in text:
+                    hits.append(rel)
+            cache[key] = (not hits and not missing and bool(key), {"hits": hits, "missing": missing})
+        ok, detail = cache[key]
+        out.append(_draft(check, subject, "passed" if ok else "failed", source="design_lint", detail=detail))
+    return out
+
+
+def collect_playwright(cat: Catalogue, pairs: list[tuple[Check, Subject]], ctx: dict[str, Any]) -> list[EventDraft]:
+    """One journey file. Runs only when --run playwright:<path> names it."""
+    wanted = set(ctx.get("run_playwright") or ())
+    out: list[EventDraft] = []
+    for check, subject in pairs:
+        rel = str(check.probe.get("file") or "")
+        if not rel:
+            out.append(_unknown(check, subject, "playwright probe has no file"))
+            continue
+        if rel not in wanted:
+            out.append(EventDraft(
+                check_id=check.id, subject_id=subject.id, tier=subject.tier, track=subject.track,
+                result="unknown", evidence_class="configured", source=f"playwright {rel}",
+                detail={"why": "not requested; pass --run playwright:<path>"},
+            ))
+            continue
+        if not (REPO_ROOT / rel).is_file():
+            out.append(_draft(check, subject, "failed", source=rel, detail={"why": "missing"}))
+            continue
+        started = time.monotonic()
+        try:
+            proc = subprocess.run(
+                ["npx", "playwright", "test", rel], cwd=REPO_ROOT / "carbon-frontend",
+                capture_output=True, text=True, timeout=int(ctx.get("timeout", 600)), check=False,
+            )
+        except subprocess.TimeoutExpired:
+            out.append(_unknown(check, subject, f"playwright {rel} timed out"))
+            continue
+        ms = int((time.monotonic() - started) * 1000)
+        result = "passed" if proc.returncode == 0 else "failed"
+        out.append(_draft(check, subject, result, source=f"playwright {rel}", duration_ms=ms,
+                          detail={"exit": proc.returncode, "tail": (proc.stdout + proc.stderr)[-2000:]}))
+    return out
+
+
+_RUNTIME_HOSTS = frozenset({"127.0.0.1", "localhost"})
+_RUNTIME_CAP = 20
+
+
+def _p95(samples: list[float]) -> float:
+    ordered = sorted(samples)
+    index = max(0, int(round(0.95 * (len(ordered) - 1))))
+    return ordered[index]
+
+
+def _sample_window(origin: str, path: str, samples: int, fetch) -> dict[str, Any]:
+    """GET a loopback URL a bounded number of times. Never used to force 429s."""
+    from urllib.parse import urlparse
+
+    parsed = urlparse(origin)
+    if parsed.scheme not in ("http", "https") or parsed.hostname not in _RUNTIME_HOSTS:
+        raise ValueError("runtime origin must be http(s)://127.0.0.1 or localhost")
+    count = max(1, min(int(samples or 8), _RUNTIME_CAP))
+    url = origin.rstrip("/") + "/" + path.lstrip("/")
+    latencies: list[float] = []
+    errors = throttled = 0
+    for _ in range(count):
+        started = time.monotonic()
+        status, _body = fetch(url)
+        latencies.append((time.monotonic() - started) * 1000)
+        if status >= 500 or status == 0:
+            errors += 1
+        elif status == 429:
+            throttled += 1
+    return {
+        "url": url,
+        "samples": count,
+        "p95_ms": round(_p95(latencies), 2),
+        "error_rate": errors / count,
+        "rate_429": throttled / count,
+    }
+
+
+def collect_runtime(cat: Catalogue, pairs: list[tuple[Check, Subject]], ctx: dict[str, Any]) -> list[EventDraft]:
+    """Live window for p95, error rate, and 429 rate. Unknown until --run runtime:<origin>."""
+    origin = str(ctx.get("run_runtime") or "")
+    fetch = ctx.get("runtime_fetch")
+    cache: dict[tuple, dict[str, Any]] = {}
+    out: list[EventDraft] = []
+    for check, subject in pairs:
+        kind = str(check.probe.get("type") or "")
+        if kind not in ("latency_p95", "error_rate", "status_429"):
+            out.append(_unknown(check, subject, f"runtime collector has no probe {kind!r}"))
+            continue
+        if not origin:
+            out.append(EventDraft(
+                check_id=check.id, subject_id=subject.id, tier=subject.tier, track=subject.track,
+                result="unknown", evidence_class="configured", source="runtime",
+                detail={"why": "not requested; pass --run runtime:http://127.0.0.1:<port>"},
+            ))
+            continue
+        key = (origin, str(check.probe.get("path") or "/"), int(check.probe.get("samples") or 8))
+        if key not in cache:
+            try:
+                cache[key] = _sample_window(key[0], key[1], key[2], fetch or _http_fetch)
+            except (ValueError, OSError) as exc:
+                cache[key] = {"error": str(exc)}
+        window = cache[key]
+        if "error" in window:
+            out.append(_draft(check, subject, "failed", "enforcement-verified", source="runtime", detail=window))
+            continue
+        if kind == "latency_p95":
+            limit = float(check.probe.get("p95_ms") or 500)
+            ok = window["p95_ms"] <= limit
+        elif kind == "error_rate":
+            limit = float(check.probe.get("max_rate") or 0.01)
+            ok = window["error_rate"] <= limit
+        else:
+            limit = float(check.probe.get("max_rate") or 0.05)
+            ok = window["rate_429"] <= limit
+        out.append(_draft(
+            check, subject, "passed" if ok else "failed", "enforcement-verified",
+            source=window["url"], detail={**window, "limit": limit},
+        ))
+    return out
+
+
+def _http_fetch(url: str) -> tuple[int, str]:
+    import urllib.error
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(url, timeout=2) as resp:
+            return int(resp.status), resp.read(256).decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        return int(exc.code), ""
+
+
 REGISTRY: dict[str, Collector] = {
     "repo": collect_repo,
     "antipatterns": collect_antipatterns,
@@ -409,6 +608,11 @@ REGISTRY: dict[str, Collector] = {
     "pytest": collect_pytest,
     "vitest": collect_vitest,
     "observe": collect_observe,
+    "rbac": collect_rbac,
+    "budget": collect_budget,
+    "design_lint": collect_design_lint,
+    "playwright": collect_playwright,
+    "runtime": collect_runtime,
 }
 
 

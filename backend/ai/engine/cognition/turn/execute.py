@@ -7,6 +7,9 @@ Wave 8A: Broadcasts tool.started/completed/failed events to the studio
 event stream so the ActivityFeed can show what the agent *did*.
 """
 from __future__ import annotations
+from ai.engine.pack_vocab import V
+from ai.engine.cognition.phrase_tables import T
+
 
 import asyncio
 import json
@@ -69,15 +72,9 @@ def find_my_api_twin(api_name: str, catalog: list | None) -> str | None:
 
 
 # Query fields models often put at the top level of a bare catalog call.
-_CATALOG_QUERY_KEYS = frozenset({
-    "dimension", "is_active", "page", "page_size", "limit", "offset",
-    "search", "q", "ordering", "status", "employee_no", "date",
-    "date_from", "date_to", "period", "year", "month",
-})
-_CATALOG_PATH_KEYS = frozenset({"id", "pk", "employee_id", "run_id"})
-_CATALOG_KEEP_KEYS = frozenset({
-    "api_name", "path_params", "query_params", "body", "explanation",
-})
+_CATALOG_QUERY_KEYS = T("turn/execute.py::_CATALOG_QUERY_KEYS")
+_CATALOG_PATH_KEYS = T("turn/execute.py::_CATALOG_PATH_KEYS")
+_CATALOG_KEEP_KEYS = T("turn/execute.py::_CATALOG_KEEP_KEYS")
 
 
 def coerce_bare_catalog_tool(
@@ -154,9 +151,9 @@ def own_records_403_message(lang: str, api_name: str = "") -> str:
             "لا أملك صلاحية قوائم الموارد البشرية على مستوى المؤسسة."
         )
     return (
-        "I can only read your own records — for example your payslips via "
-        "list_my_payslips, or your own leave and loans. "
-        "I don't have access to organisation-wide HR lists."
+        V("t_i_can_only_read_your_own")
+        + V("t_list_my_payslips_or_your_own")
+        + "I don't have access to organisation-wide HR lists."
     )
 
 
@@ -242,15 +239,7 @@ def _resolve_evidence_store() -> EvidenceStore:
 # tool_output; dict results (e.g. export_document's {files, download_url})
 # arrive nested inside the JSON-string ``result`` and would otherwise
 # serialize as "text". Mirror the frozen vocabulary exactly.
-_OUTPUT_TYPE_MARKER_KEYS = frozenset({
-    # hints
-    "_output_type", "output_type", "type", "render",
-    # artifact markers
-    "artifact", "artifacts", "file", "files", "file_path",
-    "download_url", "path", "filename",
-    # table / chart markers
-    "headers", "rows", "columns", "series", "labels", "values", "x", "y",
-})
+_OUTPUT_TYPE_MARKER_KEYS = T("turn/execute.py::_OUTPUT_TYPE_MARKER_KEYS")
 
 
 class ExecuteWitness:
@@ -558,14 +547,14 @@ def _narrate_tool(
         api = (a.get("api_name") or a.get("api") or name or "").strip()
         method = str(a.get("method") or "").strip().upper()
         friendly = {
-            "submit_my_leave": "Submitting your leave request",
-            "create_leave_record": "Submitting a leave request",
-            "get_my_leave_balance": "Checking your leave balance",
-            "list_my_leave": "Listing your leave records",
-            "submit_my_loan": "Submitting your loan request",
-            "create_employee": "Creating an employee record",
-            "update_employee": "Updating the employee record",
-            "submit_my_attendance_permission": "Submitting an attendance permission",
+            "submit_my_leave": V("t_submitting_your_leave_request"),
+            "create_leave_record": V("t_submitting_a_leave_request"),
+            "get_my_leave_balance": V("t_checking_your_leave_balance"),
+            "list_my_leave": V("t_listing_your_leave_records"),
+            "submit_my_loan": V("t_submitting_your_loan_request"),
+            "create_employee": V("t_creating_an_employee_record"),
+            "update_employee": V("t_updating_the_employee_record"),
+            "submit_my_attendance_permission": V("t_submitting_an_attendance_permission"),
         }.get(api)
         if friendly:
             return f"✍️ {friendly}…"
@@ -581,7 +570,7 @@ def _narrate_tool(
             return f"📄 Looking up {api.removeprefix('get_').replace('_', ' ')}…"
         if api == "analyze_employees":
             dim = a.get("dimension") or (a.get("query_params") or {}).get("dimension")
-            return f"📊 Analysing employees by {dim}…" if dim else "📊 Analysing the workforce…"
+            return f"📊 Analysing {V("t_employees")} by {dim}…" if dim else "📊 Analysing the workforce…"
         return "📊 Checking your records…"
     if name == "search_knowledge":
         q = (a.get("query") or "").strip()
@@ -1061,15 +1050,7 @@ def _tool_requires_confirmation(tool_name: str) -> bool:
 
 #: Reads the Plan dial must not run: answering the brief in the bubble is what
 #: replaces showing a plan. Names the model may emit bare are caught too.
-_PLAN_DIAL_BLOCKED_TOOLS = frozenset({
-    "call_host_api",
-    "resolve_entity",
-    "aggregate_entity",
-    "export_document",
-    "invoke_skill",
-    "search_knowledge",
-    "web_research",
-})
+_PLAN_DIAL_BLOCKED_TOOLS = T("turn/execute.py::_PLAN_DIAL_BLOCKED_TOOLS")
 
 
 def _drop_plan_dial_host_reads(tool_calls: list[dict], ctx_defaults: dict) -> list[dict]:
@@ -1178,7 +1159,12 @@ def _build_tool_result_summary(completed_tools: list[dict]) -> str:
 
     tool_summaries: list[str] = []
     for tool_result in completed_tools:
-        tool_name = tool_result.get("tool_name", "unknown")
+        # Name what was read (the capability), never the executor that read it.
+        tool_args = tool_result.get("tool_args")
+        tool_name = (
+            (tool_args.get("api_name") if isinstance(tool_args, dict) else None)
+            or tool_result.get("tool_name", "unknown")
+        )
         raw_result = tool_result.get("result", {})
         if isinstance(raw_result, str):
             try:

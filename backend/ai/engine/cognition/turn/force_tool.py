@@ -4,6 +4,9 @@ On unless ``PULSE_TOOL_CHOICE=off``. When intent already names one host read
 at confidence ≥ 0.9, Draft is forced with named ``tool_choice``.
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+from ai.engine.pack_vocab import V
+
 
 import os
 from typing import Any
@@ -11,17 +14,8 @@ from typing import Any
 FLAG = "PULSE_TOOL_CHOICE"
 
 # Host self-reads Intent may name. These are call_host_api arguments, not LLM
-# function names — inject the GET when Draft skipped them (Q1 leave-force replacement).
-_ESS_SELF_READ_APIS = frozenset(
-    {
-        "get_my_leave_balance",
-        "list_my_leave",
-        "list_my_loans",
-        "list_my_payslips",
-        "list_my_attendance_permissions",
-        "list_attendance",
-    }
-)
+# function names — inject the GET when Draft skipped them (Q1 -force replacement).
+_ESS_SELF_READ_APIS = T("turn/force_tool.py::_ESS_SELF_READ_APIS")
 
 
 def tool_choice_enabled() -> bool:
@@ -75,11 +69,7 @@ def draft_force_kwargs(resolution: Any, function_names: set[str] | None) -> dict
 
 
 def ensure_forced_call(draft: Any, resolution: Any, turn_id: str, function_names: set[str] | None) -> Any:
-    """If Intent named a host GET with certainty, inject call_host_api when Draft skipped it.
-
-    Runs for ESS self-read APIs always (replaces the leave-only post-draft force).
-    For other APIs, requires ``PULSE_TOOL_CHOICE=on``.
-    """
+    V("t_if_intent_named_a_host_get")
     choice = choice_from_resolution(resolution)
     api = ""
     if isinstance(choice, dict):

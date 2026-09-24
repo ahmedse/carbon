@@ -1,9 +1,12 @@
-"""Arabic needles for ``intent`` leave mutation (ADR-0049 L7). No compiled regex."""
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+from ai.engine.pack_vocab import V
+V("t_arabic_needles_for_intent_leave_mutation")
 
-LEAVE_WANT_AR = ("أريد", "اريد", "أبغى", "ابغى", "عايز", "عاوز", "اطلب", "أطلب", "تقديم", "قدّم", "قدm")
-LEAVE_WORD_AR = ("إجازة", "اجازة", "اجازه")
-LEAVE_TYPE_AR = ("عارضة", "عارضه", "طارئة", "طارئه", "سنوية", "سنويه", "مرضية")
+
+LEAVE_WANT_AR = T("turn/intent_i18n.py::LEAVE_WANT_AR")
+LEAVE_WORD_AR = T("turn/intent_i18n.py::LEAVE_WORD_AR")
+LEAVE_TYPE_AR = T("turn/intent_i18n.py::LEAVE_TYPE_AR")
 
 
 def leave_mutation_ar(text: str) -> bool:

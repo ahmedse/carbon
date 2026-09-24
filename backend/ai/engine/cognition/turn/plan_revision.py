@@ -31,6 +31,7 @@ No ``re.compile``. No new ``stage_exit``. The plan id on the seed turn is
 parsed with :class:`uuid.UUID`, and after that it lives in state.
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
 
 import uuid
 from typing import Any
@@ -41,7 +42,7 @@ _REVISION_MAX = 2000
 _TITLE_MAX = 160
 
 #: Plan statuses a Chat refine may target. Anything else is history.
-_REVISABLE = frozenset({"pending_approval", "approved", "paused", "completed", "failed", "stopped"})
+_REVISABLE = T("turn/plan_revision.py::_REVISABLE")
 
 
 # ── Reading state ────────────────────────────────────────────────────────

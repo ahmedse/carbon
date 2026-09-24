@@ -23,6 +23,8 @@ import sys
 from datetime import date
 from typing import Any
 
+import yaml
+
 from .catalogue import LEVEL_NAMES, REPO_ROOT, Catalogue, load_catalogue
 from .collectors import EventDraft, run_collectors
 from .evaluator import SubjectReport, evaluate, regressions
@@ -74,11 +76,19 @@ def load_exemptions() -> list[Any]:
     return list(Exemption.objects.values("check_id", "subject_id", "until"))
 
 
+def _baseline_date() -> date:
+    """Snapshots before this date used the old formula. They are not regressions."""
+    from .standard import STANDARD_PATH
+    path = STANDARD_PATH.parent / "baseline.yaml"
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return date.fromisoformat(str(raw["date"]))
+
+
 def previous_levels(tier: str | None) -> dict[str, int]:
     """Latest snapshot level per subject (before today)."""
     from .models import Snapshot
 
-    qs = Snapshot.objects.filter(date__lt=date.today())
+    qs = Snapshot.objects.filter(date__lt=date.today(), date__gte=_baseline_date())
     if tier:
         qs = qs.filter(tier=tier)
     out: dict[str, int] = {}
@@ -164,9 +174,14 @@ def main(argv: list[str] | None = None) -> int:
 
     run_apps = {r.split(":", 1)[1] for r in args.run if r.startswith("pytest:")}
     run_vitest = {r.split(":", 1)[1] for r in args.run if r.startswith("vitest:")}
-    ctx = {"run_apps": run_apps, "run_vitest": run_vitest}
+    run_playwright = {r.split(":", 1)[1] for r in args.run if r.startswith("playwright:")}
+    run_runtime = next((r.split(":", 1)[1] for r in args.run if r.startswith("runtime:")), "")
+    ctx = {
+        "run_apps": run_apps, "run_vitest": run_vitest, "run_playwright": run_playwright,
+        "run_runtime": run_runtime,
+    }
     only = {s.strip() for s in args.only.split(",")} if args.only else None
-    if not args.collect and (run_apps or run_vitest):
+    if not args.collect and (run_apps or run_vitest or run_playwright or run_runtime):
         args.collect = True
 
     drafts: list[EventDraft] = []
@@ -176,6 +191,10 @@ def main(argv: list[str] | None = None) -> int:
             drafts.extend(run_collectors(cat, subjects, only={"pytest"}, ctx=ctx))
         if run_vitest and (only is None or "vitest" not in only):
             drafts.extend(run_collectors(cat, subjects, only={"vitest"}, ctx=ctx))
+        if run_playwright and (only is None or "playwright" not in only):
+            drafts.extend(run_collectors(cat, subjects, only={"playwright"}, ctx=ctx))
+        if run_runtime and (only is None or "runtime" not in only):
+            drafts.extend(run_collectors(cat, subjects, only={"runtime"}, ctx=ctx))
 
     if args.no_db:
         events: list[Any] = [{**d.as_dict(), "commit": head, "at": None} for d in drafts]

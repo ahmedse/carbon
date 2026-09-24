@@ -1,15 +1,7 @@
-"""Canonical short-affirmation detection (English + Arabic).
-
-One source of truth for "the user just said yes". The deixis gate, the
-pending-action store and the consent-resume path all consult this module so a
-bare affirmative can never be re-read as a fresh — or off-limits — request.
-
-Arabic is normalized before matching (tashkeel stripped, alef/ya/teh-marbuta
-unified), so ``ايوة`` and ``ايوه`` are the same token. The teh-marbuta spelling
-is what users actually type, and missing it made Nibras hard-refuse a leave
-confirmation with the out-of-scope copy.
-"""
 from __future__ import annotations
+from ai.engine.pack_vocab import V
+V("t_canonical_short_affirmation_detection_english_ar")
+
 
 from ai.engine.cognition.dialogue.affirmation_helpers import (
     strip_edge_punct,
@@ -59,14 +51,7 @@ def is_affirmation(text: str) -> bool:
 
 
 def is_commit_affirmation(text: str) -> bool:
-    """True when ``text`` is a short "yes, commit what you proposed".
-
-    :func:`is_affirmation` plus the commit vocabulary ("apply", "accept",
-    "اعتمدها"). Same bar: no question mark, at most
-    ``MAX_AFFIRMATION_WORDS`` words, every word affirmative. Meant for a
-    pending typed ``open_question`` (a proposed plan revision) — a longer
-    message like "apply for three days leave" is a fresh request and fails.
-    """
+    V("t_true_when_text_is_a_short")
     s = normalize(text)
     if not s or "?" in s or "؟" in s:
         return False

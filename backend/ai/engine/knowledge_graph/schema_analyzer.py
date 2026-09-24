@@ -6,6 +6,7 @@ Runs after migration (Stage 1) has populated ENTITY + ATTRIBUTE nodes.
 Pure analysis — reads from the graph, writes enriched properties back.
 No LLM calls — all logic is heuristic / structural.
 """
+from ai.engine.pack_vocab import V
 import json
 import logging
 import math
@@ -22,7 +23,7 @@ _ABBREV_MAP: dict[str, list[str]] = {
     "cust": ["customer", "customers"],
     "prod": ["product", "products"],
     "org":  ["organization", "organizations", "organisation", "organisations"],
-    "emp":  ["employee", "employees"],
+    "emp":  [V("t_employee_4"), V("t_employees")],
     "dept": ["department", "departments"],
     "inv":  ["invoice", "invoices", "inventory"],
     "txn":  ["transaction", "transactions"],
@@ -594,15 +595,7 @@ async def run_schema_analysis(
     force: bool = False,
     session=None,
 ) -> dict:
-    """
-    Run the full analysis pipeline for one instance.
-
-    If force=False (default), checks whether ENTITY nodes already have an
-    importance_score — if they do, skips the entire analysis (idempotent).
-
-    Pass an open Django Store session as `session`, or leave None to open one.
-    Returns combined summary dict from all three methods.
-    """
+    V("t_run_the_full_analysis_pipeline_for")
     from ai.engine.knowledge_graph.store import KnowledgeGraphStore
 
     async def _run(db_session):

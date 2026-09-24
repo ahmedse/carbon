@@ -19,6 +19,7 @@ LLM-tier (enable_llm_critic=True, triggered when flags are raised):
 - LLM returns JSON: {"verdict": "pass"|"rewrite"|"veto", "rewritten_text": "...", "veto_reason": "..."}
 - rewritten_text is populated when verdict is "rewrite"
 """
+from ai.engine.cognition.phrase_tables import T
 import json
 import logging
 from ai.engine.cognition.turn.witnesses import CriticVerdict, DraftResult, RetrievalResult, SalienceResult
@@ -28,16 +29,7 @@ from ai.engine.llm.router import route_chat
 logger = logging.getLogger("pulse.cognition.turn.critic")
 
 # Phrases that indicate the LLM is admitting it doesn't know — not ambiguity, not safety.
-_KNOWLEDGE_GAP_PHRASES = (
-    "i'm not sure", "i am not sure", "i'm not certain", "i am not certain",
-    "i'm unable to", "i am unable to", "i'm not confident", "i am not confident",
-    "i don't have specific", "i don't have detailed", "i don't have enough",
-    "i don't have complete", "i don't have information", "i don't have knowledge",
-    "i cannot provide", "i can't provide", "i cannot give", "i can't give",
-    "i cannot confirm", "i can't confirm", "i cannot answer", "i can't answer",
-    "i need more context", "i need more information", "i need more detail",
-    "i want to give you the most useful", "could you clarify which specific",
-)
+_KNOWLEDGE_GAP_PHRASES = T("turn/critic.py::_KNOWLEDGE_GAP_PHRASES")
 
 class CriticWitness:
     """Rules-tier deterministic quality checks + optional LLM-tier plausibility review (advisory, never an enforcement control)."""
@@ -111,7 +103,7 @@ class CriticWitness:
                         verdict="veto",
                         flags=["unconfirmed_mutation"],
                         veto_reason="This action was blocked pending review: an "
-                                   f"unconfirmed state-changing tool call ({method}) "
+                                   + f"unconfirmed state-changing tool call ({method}) "
                                    "was proposed.",
                     )
 

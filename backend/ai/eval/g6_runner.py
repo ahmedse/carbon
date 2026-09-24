@@ -187,6 +187,10 @@ def _matches_expect(decision: dict[str, str], case: dict[str, Any]) -> bool:
     expect_process = str(case.get("expect_process") or "")
     if expect_process and decision.get("process", "") != expect_process:
         return False
+    # Several reads are equally right (e.g. a total or a breakdown first).
+    any_api = [str(a) for a in case.get("expect_api_any") or []]
+    if any_api:
+        return decision["op"] == case["expect_op"] and decision["api"] in any_api
     return decision["op"] == case["expect_op"] and decision["api"] == expect_api
 
 
@@ -218,6 +222,7 @@ def _pair_result(
         "_expect": {
             "op": case.get("expect_op"),
             "api": str(case.get("expect_api") or ""),
+            "api_any": [str(a) for a in case.get("expect_api_any") or []],
         },
     }
 
@@ -249,9 +254,10 @@ def _aggregate(results: list[dict[str, Any]]) -> dict[str, Any]:
         case_expect = result.get("_expect") or {}
         if case_expect.get("op") != "call_tool":
             continue
+        accepted = case_expect.get("api_any") or [case_expect.get("api")]
         for side in ("ar", "en"):
             dec = result.get(side) or {}
-            if dec.get("op") != "call_tool" or dec.get("api") != case_expect.get("api"):
+            if dec.get("op") != "call_tool" or dec.get("api") not in accepted:
                 forced += 1
     return {
         "n": n,
@@ -309,15 +315,20 @@ def _case_state(case: dict[str, Any]) -> Any:
 
 def _decision_to_dict(decision: Any, state: Any = None) -> dict[str, str]:
     """Normalise to the api the runtime would execute (``act_on_decision``)."""
-    from ai.engine.cognition.turn.pipeline_v21 import _continue_api
+    from ai.engine.cognition.turn.pipeline_v21 import (
+        _continue_api,
+        decision_render,
+        lead_command,
+    )
 
     if decision is None:
         # Runtime falls through to legacy; the understand call still missed.
         return {"op": "malformed", "api": "", "render": "text"}
     cmds = list(getattr(decision, "commands", None) or [])
     if not cmds:
-        return {"op": "answer", "api": "", "render": "text"}
-    first = cmds[0]
+        # Every command was rejected even after repair: legacy answers.
+        return {"op": "unrepairable", "api": "", "render": "text"}
+    first = lead_command(decision)
     op = str(getattr(first, "op", "") or "answer")
     name = str(getattr(first, "name", "") or "")
     api = name if op == "call_tool" else ""
@@ -331,8 +342,9 @@ def _decision_to_dict(decision: Any, state: Any = None) -> dict[str, str]:
     return {
         "op": op,
         "api": api,
-        "render": str(getattr(first, "render", "") or "text"),
+        "render": decision_render(decision),
         "process": str(getattr(first, "process_id", "") or "") if op == "handoff_agent" else "",
+        "repaired": bool(getattr(decision, "repaired", False)),
     }
 
 
@@ -353,13 +365,15 @@ async def understand_decision(
         navigation_prompt_lines,
         understand_turn,
     )
+    from ai.engine.cognition.turn.capability import capability_surface
     from ai.engine.cognition.turn.runner_helpers import (
-        _scoped_api_catalog,
+        _audience_persona,
         _scoped_navigation_routes,
     )
     from ai.engine.llm.router import route_chat
 
-    scoped_catalog = _scoped_api_catalog(instance_config, user_info)
+    caps = capability_surface(instance_config, user_info)
+    scoped_catalog = list(caps.entries)
     lines, allowed, writes = catalog_prompt_lines(
         text,
         scoped_catalog,
@@ -373,7 +387,10 @@ async def understand_decision(
         ),
         state=state,
         user_info=user_info,
-        instance_config=instance_config,
+        instance_config={
+            **(instance_config or {}),
+            "persona": _audience_persona(instance_config, user_info),
+        },
     )
     messages: list[dict] = [{"role": "system", "content": system}]
     messages.extend(list(history or [])[-8:])
@@ -399,6 +416,7 @@ async def understand_decision(
         allowed_tools=allowed or None,
         write_tools=writes or None,
         state=state,
+        arg_violations=caps.arg_violations,
     )
     return _decision_to_dict(decision, state)
 

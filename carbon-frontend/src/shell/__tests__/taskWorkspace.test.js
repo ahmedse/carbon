@@ -8,10 +8,23 @@ import {
 } from '../taskWorkspace';
 
 describe('humanTaskTitle', () => {
-  it('rewrites a GOSI / payroll engine brief', () => {
-    expect(humanTaskTitle({
-      brief: 'Plan gosi_wps.sif.lifecycle on a committed payroll run using generate_gosi_wps_sif, validate_gosi_wps_sif, submit_gosi_wps_sif. Never submit_my_leave.',
-    })).toBe('Send the GOSI file for this payroll');
+  it('titles from the brief, not from a keyword it mentions', () => {
+    const title = humanTaskTitle({
+      brief: 'Prepare weekly workforce briefing: headcount by org unit and employment type, latest payroll run (gross, GOSI, loans, net), month-on-month variance, summary report with charts.',
+    });
+    expect(title).toMatch(/^Prepare weekly workforce briefing/);
+    expect(title).not.toMatch(/Send the GOSI file/);
+  });
+
+  it('strips engine ids from a process brief', () => {
+    const title = humanTaskTitle({
+      brief: 'Plan gosi_wps.sif.lifecycle on a committed payroll run using generate_gosi_wps_sif, validate_gosi_wps_sif. Never submit_my_leave.',
+    });
+    expect(title).not.toMatch(/gosi_wps|generate_gosi_wps_sif|submit_my_leave/);
+  });
+
+  it('prefers a server-provided title', () => {
+    expect(humanTaskTitle({ title: 'Weekly workforce briefing', brief: 'x' })).toBe('Weekly workforce briefing');
   });
 
   it('keeps a human brief', () => {

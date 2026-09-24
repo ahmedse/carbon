@@ -39,7 +39,7 @@ turns:
           arguments: '{"commands":[{"op":"call_tool","name":"get_my_leave_balance","render":"text"}],"language":"en","confidence":0.9}'
     expect:
       # A bound 0-LLM read may answer first (deterministic-first).
-      decision_in: [call_tool, tool_answer]
+      decision_in: [tool_answer]
       language: en
       max_llm_calls: 2
       mentions_any: ["annual"]
@@ -53,7 +53,7 @@ turns:
           name: emit_decision
           arguments: '{"commands":[{"op":"call_tool","name":"get_my_leave_balance","render":"chart"}],"language":"en","confidence":0.9}'
     expect:
-      decision_in: [call_tool]
+      decision_in: [tool_answer]
       language: en
       max_llm_calls: 2
       mentions_any: ["Leave balance"]
@@ -69,7 +69,7 @@ turns:
           arguments: '{"commands":[{"op":"continue","render":"chart"}],"language":"en","confidence":0.9}'
     expect:
       # continue → the state's last read (leave), rendered as a chart.
-      decision_in: [continue]
+      decision_in: [tool_answer]
       language: en
       max_llm_calls: 2
       mentions_any: ["Leave balance"]
@@ -84,7 +84,7 @@ turns:
           name: emit_decision
           arguments: '{"commands":[{"op":"continue","render":"table"}],"language":"en","confidence":0.9}'
     expect:
-      decision_in: [continue]
+      decision_in: [tool_answer]
       language: en
       max_llm_calls: 2
       mentions_any: ["annual"]
@@ -99,7 +99,7 @@ turns:
           name: emit_decision
           arguments: '{"commands":[{"op":"call_tool","name":"get_my_leave_balance","render":"text"}],"language":"en","confidence":0.9}'
     expect:
-      decision_in: [call_tool, tool_answer]
+      decision_in: [tool_answer]
       language: en
       max_llm_calls: 2
       mentions_any: ["sick"]
@@ -117,7 +117,7 @@ turns:
       # Contrast: a named new subject moves the chart. One person's payslip
       # lines are never a head-count "Employees" distribution. The bound
       # 0-LLM read may answer; it charts its own payload only.
-      decision_in: [call_tool, tool_answer]
+      decision_in: [tool_answer]
       language: en
       max_llm_calls: 2
       mentions_any: ["Payslip lines"]
@@ -133,7 +133,7 @@ turns:
           arguments: '{"commands":[{"op":"call_tool","name":"list_my_loans","render":"text"}],"language":"en","confidence":0.9}'
     expect:
       # Subject switch by name: loans, with no chart carried over.
-      decision_in: [call_tool, tool_answer]
+      decision_in: [tool_answer]
       language: en
       max_llm_calls: 2
       mentions_any: ["emergency", "9600", "9,600"]

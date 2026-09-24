@@ -150,7 +150,9 @@ async def run_pre_s1_gates(
     st.plan_revision_ref = linked_plan_ref(state, st.user_message) if st.discuss_ctx else None
     st.discuss_thread = st.discuss_ctx or _is_agent_discuss_turn(st.user_message)
     _nav_fast_fired = False
-    if settings.NAVIGATION_RESOLVER_ENABLED and (not st.discuss_thread) and (not turn_route.committed):
+    if not may_stage('nav_fast_path'):
+        _signal(ledger, 'nav_fast_path', False, reason='v21')
+    elif settings.NAVIGATION_RESOLVER_ENABLED and (not st.discuss_thread) and (not turn_route.committed):
         try:
             from ai.engine.cognition.turn.process_brief import is_deliverable_request, is_process_briefing
             from ai.engine.cognition.turn.navigation import is_how_where_ui, resolve_navigation
@@ -237,15 +239,15 @@ async def run_pre_s1_gates(
         _zero_resp = _zero[0]
         _zero_decision = 'clarify' if getattr(_zero_resp, 'response_type', '') == 'clarification' else 'answer'
         stage_soft_exit(staged, _zero_decision, 'zero_llm', _zero_resp)
-    if turn_route.kind is RouteKind.PLAN_PROCESS:
+    if turn_route.kind is RouteKind.PLAN_PROCESS and may_stage('plan_dial_process'):
         _plan_dial = await runner._try_plan_dial_process_plan(user_message=st.user_message, process_mode=process_mode, state_ctx=state_ctx, ledger=ledger, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, host_user_id=host_user_id, t0=t0)
         if _plan_dial is not None:
             stage_soft_exit(staged, 'tool_answer', 'plan_dial_process', _plan_dial[0])
-    if turn_route.kind is RouteKind.RESTYLE:
+    if turn_route.kind is RouteKind.RESTYLE and may_stage('restyle'):
         _restyle = await runner._try_restyle_previous_answer(user_message=st.user_message, conversation_history=conversation_history, ledger=ledger, meter=meter, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, t0=t0)
         if _restyle is not None:
             stage_soft_exit(staged, 'answer', 'restyle', _restyle[0])
-    if turn_route.kind is RouteKind.REPORT_CLARIFY:
+    if turn_route.kind is RouteKind.REPORT_CLARIFY and may_stage('typed_router'):
         question = turn_route.open_question
         text = question.prompt if question is not None else ''
         response = AgentResponse(text=text, sources_cited=[], tools_used=[], confidence=1.0, total_tokens=0, llm_calls=0, model='', response_type='clarification', follow_ups=[item.get('label') or item.get('value') or '' for item in (question.to_dict().get('options', []) if question is not None else [])], open_question=question.to_dict() if question is not None else None)

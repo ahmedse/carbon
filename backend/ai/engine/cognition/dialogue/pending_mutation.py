@@ -1,22 +1,7 @@
-"""Consent resume — remember an action the assistant proposed in prose.
-
-RULE_21 says a mutation is never auto-run: the assistant proposes, the user
-confirms. When the proposal is STAGED (a pending execution + confirm card)
-the card carries the consent. But the assistant also proposes in plain prose
-("I'll file two days of annual leave from tomorrow — shall I proceed?"), and
-then a bare "نعم" had nothing to attach to: the turn was re-read as a brand
-new request, which is how a leave confirmation ended up hard-refused as
-off-limits and then looped on "confirm it in the system first".
-
-This store closes that loop. The proposal text from the assistant's own turn
-is kept for one exchange; if the next message is a short affirmative, the
-turn is re-issued as an explicit instruction so the model actually calls the
-platform action (which then stages normally, under RULE_21).
-
-Nothing here executes anything — it only rewrites the user's "yes" into the
-request the assistant itself just offered.
-"""
 from __future__ import annotations
+from ai.engine.pack_vocab import V
+V("t_consent_resume_remember_an_action_the")
+
 
 import re
 import threading

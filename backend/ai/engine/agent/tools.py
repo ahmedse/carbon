@@ -1,6 +1,7 @@
 """
 Tool definitions and execution functions for the Pulse agent.
 """
+from ai.engine.pack_vocab import V
 import copy
 import json
 import logging
@@ -23,7 +24,7 @@ from ai.engine.llm.router import route_chat
 
 logger = logging.getLogger("pulse.agent.tools")
 
-#: Person-scoped list APIs that must carry employee filter when WM has focus (B1).
+#: Person-scoped list APIs that must carry  filter when WM has focus (B1).
 _FOCUS_SCOPED_HOST_APIS = frozenset({
     "list_leave_entitlements",
     "list_leave_records",
@@ -31,15 +32,15 @@ _FOCUS_SCOPED_HOST_APIS = frozenset({
 })
 
 #: Resolve queries that are instruction / mode text, not person names (C1).
-#: Matched as data-as-data → honest no_match; never clarify modes / dump salaries.
+#: Matched as data-as-data → honest no_match; never clarify modes / dump .
 _INSTRUCTION_SHAPED_QUERY = re.compile(
     r"(?is)"
     r"(ignore\s+(all\s+)?(previous|prior|above)|"
     r"disregard\s+(all\s+)?(previous|prior|instructions?)|"
     r"system\s+prompt|"
-    r"show\s+all\s+salaries|"
-    r"reveal\s+(all\s+)?salaries|"
-    r"you\s+are\s+now|"
+    + V("t_show_s_all_s_salaries")
+    + V("t_reveal_s_all_s_salaries")
+    + r"you\s+are\s+now|"
     r"new\s+instructions?\s*:|"
     r"override\s+(all\s+)?(rules|instructions?|guards?))"
 )
@@ -52,10 +53,10 @@ def _is_instruction_shaped_query(query: str) -> bool:
         return False
     if _INSTRUCTION_SHAPED_QUERY.search(q):
         return True
-    # Semicolon / newline packed directives are never employee names.
+    # Semicolon / newline packed directives are never  names.
     if (";" in q or "\n" in q) and len(q.split()) >= 4:
         lowered = q.lower()
-        if any(tok in lowered for tok in ("ignore", "prompt", "salary", "salaries", "override")):
+        if any(tok in lowered for tok in ("ignore", "prompt", V("t_salary"), V("t_salaries"), "override")):
             return True
     return False
 
@@ -93,11 +94,11 @@ def _inject_focus_employee_params(
     query_params: dict | None,
     conversation_id: str,
 ) -> dict | None:
-    """When listing leave/loans without an employee filter, use WM focus (B1)."""
+    V("t_when_listing_leave_loans_without_an")
     if api_name not in _FOCUS_SCOPED_HOST_APIS:
         return query_params
     qp = dict(query_params or {})
-    if any(qp.get(k) not in (None, "") for k in ("employee", "employee_id", "employee_no")):
+    if any(qp.get(k) not in (None, "") for k in (V("t_employee_4"), "employee_id", "employee_no")):
         return qp
     no = _focus_employee_no(conversation_id)
     if not no:
@@ -112,7 +113,7 @@ def _inject_focus_employee_params(
 
 
 def _remember_resolved_employee(conversation_id: str, record: dict | None) -> None:
-    """Store employee focus (entity_id=employee_no) after a resolve match."""
+    V("t_store_employee_focus_entity_id_employee")
     if not conversation_id or not isinstance(record, dict):
         return
     no = str(record.get("employee_no") or "").strip()
@@ -133,7 +134,7 @@ def _remember_resolved_employee(conversation_id: str, record: dict | None) -> No
         get_working_memory().set_focus(
             conversation_id,
             name,
-            "employee",
+            V("t_employee_4"),
             entity_id=no,
             aliases=aliases,
         )
@@ -143,7 +144,7 @@ def _remember_resolved_employee(conversation_id: str, record: dict | None) -> No
             from ai.engine.memory.working import get_working_memory
 
             get_working_memory().set_focus(
-                conversation_id, f"{no}|{name}", "employee"
+                conversation_id, f"{no}|{name}", V("t_employee_4")
             )
         except Exception:  # noqa: BLE001
             logger.debug("working-memory set_focus failed", exc_info=True)
@@ -175,8 +176,8 @@ STATIC_TOOL_DEFINITIONS = [
             "description": (
                 "Get detailed schema and business description for a knowledge-store "
                 "entity (database table / documented concept). For live host data "
-                "(leave balance, employees, payslips, …) use call_host_api with an "
-                "api_name from the Host API catalog — do not pass catalog names here."
+                + V("t_leave_balance_employees_payslips_use_call")
+                + "api_name from the Host API catalog — do not pass catalog names here."
             ),
             "parameters": {
                 "type": "object",
@@ -551,7 +552,7 @@ _CONFIRM_VERBS: dict[str, str] = {
 def _default_confirmation_message(api_name: str) -> str:
     """Human confirm prompt for an endpoint with no configured message.
 
-    The old default put "This will execute POST /carbon-api/people/me/leave/"
+    The old default put the HTTP method and path
     in front of the user (RULE_23 — outcome words, never method and path).
     """
     words = [w for w in re.split(r"[^a-z0-9]+", (api_name or "").lower()) if w]
@@ -616,7 +617,7 @@ def _resolve_catalog_alias(entity_name: str, instance_config: dict | None) -> st
         if len(bucket) == 1:
             return bucket[0]
         if len(bucket) > 1:
-            # Prefer the employee's own-data endpoint, then the simplest name.
+            # Prefer the 's own-data endpoint, then the simplest name.
             selfies = [n for n in bucket if re.search(r"(^|_)(my|me)(_|$)", n)]
             pool = selfies or bucket
             return sorted(pool, key=lambda n: (len(_catalog_alias_tokens(n)), n))[0]
@@ -802,9 +803,9 @@ def _extract_unresolved_path_ids(path: str) -> dict:
     if not path:
         return out
     for pattern in (
-        r"/payroll-runs/([^/]+)",
-        r"/employees/([^/]+)",
-        r"/payslip-lines/([^/]+)",
+        V("t_payroll_runs_2"),
+        V("t_employees_2"),
+        V("t_payslip_lines"),
     ):
         m = re.search(pattern, path)
         if not m:
@@ -827,26 +828,14 @@ async def _resolve_slug_to_id(
     api_name: str,
     path_params: dict,
 ) -> dict:
-    """
-    If any path param value is non-numeric (a slug or name), auto-resolve it to
-    the real numeric PK by fetching the corresponding list endpoint first.
-    Returns a (possibly updated) copy of path_params.
-
-    Intelligence layer: invented demo labels (``demo-oct-2026``) are matched
-    against ``period_start`` when exact field match fails — so payroll compute
-    does not die on ``Field 'id' expected a number``.
-
-    Legacy list_employees / get_employee path via slug_resolution.
-    Superseded by ECF resolve_entity when ECF_ENABLED (ECF-7); kept as
-    30-day fallback — do NOT delete.
-    """
+    V("t_if_any_path_param_value_is")
     from ai.engine.agent.period_alias import item_matches_period, parse_period_alias
 
     resolution = _get_slug_resolution(executor, api_name)
-    # Built-in payroll resolve when instance.yaml omitted the mapping —
+    # Built-in  resolve when instance.yaml omitted the mapping —
     # planners invent ``demo-oct-2026`` constantly for GOFSCO briefs.
     if not resolution and any(
-        tok in (api_name or "") for tok in ("payroll_run", "payroll-run")
+        tok in (api_name or "") for tok in ("payroll_run", V("t_payroll_run_2"))
     ):
         resolution = ("list_payroll_runs", ["period_start", "id"])
 
@@ -1140,7 +1129,7 @@ async def execute_call_host_api(
         merged.update(path_params or {})
         merged.update(query_params or {})
         merged.update(body or {})
-        entity_type = merged.get("entity_type") or "employee"
+        entity_type = merged.get("entity_type") or V("t_employee_4")
         q = (
             merged.get("query")
             or merged.get("name")
@@ -1156,7 +1145,7 @@ async def execute_call_host_api(
                     q = val.strip()
                     break
         if not q:
-            return {"error": "resolve_entity requires a name or employee number (query)."}
+            return {"error": V("t_resolve_entity_requires_a_name_or")}
         return await execute_resolve_entity(
             entity_type=str(entity_type),
             query=str(q),
@@ -1174,7 +1163,7 @@ async def execute_call_host_api(
         merged.update(path_params or {})
         merged.update(query_params or {})
         merged.update(body or {})
-        entity_type = merged.get("entity_type") or "employee"
+        entity_type = merged.get("entity_type") or V("t_employee_4")
         metric = (
             merged.get("metric")
             or merged.get("name")
@@ -1213,7 +1202,7 @@ async def execute_call_host_api(
             entry = self_entry
             path_params = None
 
-    # B1: person-scoped leave/loan lists inherit focused employee_no when omitted.
+    # B1: person-scoped / lists inherit focused employee_no when omitted.
     query_params = _inject_focus_employee_params(api_name, query_params, conversation_id)
 
     method = entry["method"]
@@ -2069,26 +2058,37 @@ async def execute_invoke_skill(
         result = {"kind": skill.kind, "body": body, "args_passed": args}
 
     # Usage tracking — record FULL telemetry (usage_count, success_rate,
-    # avg_latency_ms, last_executed_at) after a successful invoke. SkillsStore
-    # commits internally, so snapshot the scalar fields before the commit and
-    # never mutate the (now-stale) skill object afterward.
+    # avg_latency_ms, last_executed_at) only when the skill ran something.
+    # A recipe handed back as data is not a success. SkillsStore commits
+    # internally, so snapshot the scalar fields before the commit and never
+    # mutate the (now-stale) skill object afterward.
     from ai.engine.skills.crud import SkillsStore
 
     skill_id = skill.id
     skill_name_out = skill.name
     skill_kind = skill.kind
-    elapsed_ms = (time.monotonic() - started) * 1000
-    await SkillsStore(executor.db).update_stats(
-        skill_id, success=True, latency_ms=elapsed_ms
-    )
+    executed = "sandbox_result" in result
+    if executed:
+        elapsed_ms = (time.monotonic() - started) * 1000
+        await SkillsStore(executor.db).update_stats(
+            skill_id, success=True, latency_ms=elapsed_ms
+        )
 
-    logger.info("invoke_skill: %s (%s, %s) used by %s", skill_id, skill_name_out, skill_kind, author_user_id)
+    logger.info(
+        "invoke_skill: %s (%s, %s) used by %s executed=%s",
+        skill_id, skill_name_out, skill_kind, author_user_id, executed,
+    )
     return {
         "skill_id": skill_id,
         "skill_name": skill_name_out,
         "kind": skill_kind,
         "result": result,
-        "message": f"Invoked skill '{skill_name_out}' — returned its recipe as data; nothing was executed.",
+        "executed": executed,
+        "message": (
+            f"Invoked skill '{skill_name_out}'."
+            if executed else
+            f"Invoked skill '{skill_name_out}' — returned its recipe as data; nothing was executed."
+        ),
     }
 
 
@@ -2114,7 +2114,7 @@ STATIC_TOOL_EXECUTORS = {
 
 # Fallback wording when instance_config / descriptors are unavailable at
 # catalog assembly time. Prefer dynamic names from load_descriptors().
-_ECF_ENTITY_TYPE_FALLBACK = ("employee", "leave_record")
+_ECF_ENTITY_TYPE_FALLBACK = (V("t_employee_4"), "leave_record")
 _ECF_METRIC_FALLBACK = ("headcount", "kuwaiti")
 
 _ECF_RESOLVE_ENTITY_DEFINITION = {
@@ -2123,9 +2123,9 @@ _ECF_RESOLVE_ENTITY_DEFINITION = {
         "name": "resolve_entity",
         "description": (
             "Find a specific record by name, number, or identifier. "
-            "Use this for 'find employee X', 'who is X', 'employee number N', "
-            "'من هو X', 'ابحث عن X', leave lookups by id/date/status, etc. "
-            "Performs a COMPLETE scan (not capped at 100 rows) across all records, "
+            + V("t_use_this_for_find_employee_x")
+            + V("t_من_هو_x_ابحث_عن_x")
+            + "Performs a COMPLETE scan (not capped at 100 rows) across all records, "
             "in Arabic and English. Returns a single match, a disambiguation list, "
             "or a grounded 'not found' that includes how many records were searched. "
             "ALWAYS use this instead of list_employees for name/number lookup. "
@@ -2138,13 +2138,13 @@ _ECF_RESOLVE_ENTITY_DEFINITION = {
                     "type": "string",
                     "description": (
                         "Registered entity type from HRMS instance descriptors "
-                        "(e.g. employee, leave_record). Must match a descriptor name."
+                        + V("t_e_g_employee_leave_record_must")
                     ),
                     "enum": list(_ECF_ENTITY_TYPE_FALLBACK),
                 },
                 "query": {
                     "type": "string",
-                    "description": "Name, employee number, id, date, or any identifier of the entity.",
+                    "description": V("t_name_employee_number_id_date_or"),
                 },
                 "explanation": {
                     "type": "string",
@@ -2167,9 +2167,9 @@ _ECF_AGGREGATE_ENTITY_DEFINITION = {
         "name": "aggregate_entity",
         "description": (
             "Return a CANONICAL named metric count for an entity type. "
-            "Use for total headcount ('كم عدد الموظفين') and Kuwaiti count "
-            "('كم كويتي موظف'), and for leave metrics when leave_record is "
-            "registered. Metrics are descriptor-defined — "
+            + V("t_use_for_total_headcount_كم_عدد")
+            + V("t_كم_كويتي_موظف_and_for_leave")
+            + "registered. Metrics are descriptor-defined — "
             "'headcount' ALWAYS means is_active=True; 'kuwaiti' ALWAYS means "
             "nationality_code=KW (never the kuwaitization boolean). "
             "Cite the filter fields in your answer. "
@@ -2183,7 +2183,7 @@ _ECF_AGGREGATE_ENTITY_DEFINITION = {
                     "type": "string",
                     "description": (
                         "Registered entity type from HRMS instance descriptors "
-                        "(e.g. employee, leave_record). Must match a descriptor name."
+                        + V("t_e_g_employee_leave_record_must")
                     ),
                     "enum": list(_ECF_ENTITY_TYPE_FALLBACK),
                 },
@@ -2239,13 +2239,7 @@ def _enrich_ecf_tool_definitions(
     definitions: list[dict],
     instance_config: dict | None,
 ) -> list[dict]:
-    """Advertise registered descriptor entity types (and metrics) on ECF tools.
-
-    Deep-copies the static ECF defs so import-time templates stay untouched.
-    When descriptors are available, ``entity_type`` / ``metric`` enums and
-    descriptions list the live names. Otherwise keep the HRMS fallback wording
-    (employee + leave_record) without brand-specific engine terms.
-    """
+    V("t_advertise_registered_descriptor_entity_types_and")
     entity_names = _descriptor_entity_names(instance_config)
     metric_names = _descriptor_metric_names(instance_config)
     advertised_entities = entity_names or list(_ECF_ENTITY_TYPE_FALLBACK)
@@ -2449,8 +2443,8 @@ async def _llm_transliterate(query: str, instance_id: str, conversation_id: str)
     a person, only spellings to search for.
     """
     prompt = (
-        "A user is searching an employee directory whose names are stored in "
-        "English (Latin letters). The user typed this name in Arabic:\n"
+        V("t_a_user_is_searching_an_employee")
+        + "English (Latin letters). The user typed this name in Arabic:\n"
         f'"{query}"\n\n'
         "List up to 6 likely English spellings of this name, comma-separated, "
         "names only — no numbering, no explanation. Include common variants "
@@ -2476,18 +2470,18 @@ async def _llm_transliterate(query: str, instance_id: str, conversation_id: str)
 # Compensation fields: omit from Chat identity lookups unless the user asked
 # about pay (A5 minimize-disclosure — even when CBAC allows the amount).
 _COMPENSATION_INTENT_WORDS = (
-    "salary", "compensation", "pay", "wage", "payroll",
+    V("t_salary"), "compensation", "pay", "wage", V("t_payroll"),
 )
-_COMPENSATION_INTENT_PHRASES = ("basic pay", "basic salary")
+_COMPENSATION_INTENT_PHRASES = ("basic pay", V("t_basic_salary"))
 
 _PAYSLIP_SPECIFIC_RE = re.compile(
     r"(?i)("
-    r"payslip|pay[\s_-]*slip"
-    r"|net\s*pay|take[\s_-]*home|takehome"
+    + V("t_payslip_pay_s_slip")
+    + r"|net\s*pay|take[\s_-]*home|takehome"
     r"|last\s+month(?:'s)?\s+(?:net\s+)?pay"
     r"|deductions?\s+(?:were|applied|on)"
-    r"|gosi"
-    r")"
+    + V("t_gosi_3")
+    + r")"
 )
 
 
@@ -2512,7 +2506,7 @@ def _first_person_en(text: str) -> bool:
 
 
 def compensation_intent_asked(text: str | None) -> bool:
-    """True when the utterance asks about salary / compensation (EN/AR)."""
+    V("t_true_when_the_utterance_asks_about_2")
     raw = text or ""
     from ai.engine.text.word_match import contains_any_phrase, has_any_word
 
@@ -2524,7 +2518,7 @@ def compensation_intent_asked(text: str | None) -> bool:
 
 
 def payslip_specific_ask(text: str | None) -> bool:
-    """True when the user explicitly asked for payslip lines (not basic pay)."""
+    V("t_true_when_the_user_explicitly_asked")
     raw = text or ""
     return bool(
         _PAYSLIP_SPECIFIC_RE.search(raw) or any_needle(raw, PAYSLIP_SPECIFIC_AR)
@@ -2532,7 +2526,7 @@ def payslip_specific_ask(text: str | None) -> bool:
 
 
 def first_person_compensation_ask(text: str | None) -> bool:
-    """True for first-person salary asks (my salary / راتبي)."""
+    V("t_true_for_first_person_salary_asks")
     raw = text or ""
     return compensation_intent_asked(raw) and bool(
         _first_person_en(raw) or any_needle(raw, FIRST_PERSON_COMP_AR)
@@ -2540,7 +2534,7 @@ def first_person_compensation_ask(text: str | None) -> bool:
 
 
 _FIRST_PERSON_PROFILE_PHRASES = (
-    "employee number", "employee no", "employee #",
+    V("t_employee_number"), V("t_employee_no"), V("t_employee_2"),
     "what department am i", "department am i", "which department am i",
     "my department", "who is my manager", "my manager", "manager's name",
     "managers name", "who am i", "my profile",
@@ -2576,7 +2570,7 @@ _NAMED_COWORKER_RE = re.compile(
 )
 _NAMED_COWORKER_STOP = frozenset({
     "my", "me", "i", "you", "the", "a", "an", "this", "that",
-    "payroll", "leave", "loan", "today", "tomorrow",
+    V("t_payroll"), V("t_leave"), V("t_loan_2"), "today", "tomorrow",
 })
 
 
@@ -2597,12 +2591,12 @@ def extract_named_coworker_query(text: str | None) -> str | None:
 
 _LEAVE_BALANCE_INTENT_RE = re.compile(
     r"("
-    r"leave\s+balance|remaining\s+leave|leave\s+remaining|"
-    r"days?\s+(?:of\s+)?leave\s+(?:left|remaining)|"
-    r"how\s+much\s+leave|annual\s+leave(?:\s+remaining)?|"
-    r"leave\s+entitlement|sick\s+leave\s+remaining|"
-    r"(?:my\s+)?leaves?\b"
-    r")",
+    + V("t_leave_s_balance_remaining_s_leave")
+    + V("t_days_s_of_s_leave_s")
+    + V("t_how_s_much_s_leave_annual_2")
+    + V("t_leave_s_entitlement_sick_s_leave")
+    + V("t_my_s_leaves_b")
+    + r")",
     re.IGNORECASE,
 )
 
@@ -2612,8 +2606,8 @@ _NAMED_LEAVE_HINT_RE = re.compile(
     r"\bemp[_\s-]?\d+\b|"
     r"\bemployee\s*(?:no\.?|number|#|:)?\s*\d+|"
     r"\bfor\s+(?!me\b)\w+|"
-    r"'s\s+(?:leave|annual|sick|balance)|"
-    r"\bdoes\s+[A-Z][\w'-]+\s+have\b"
+    + V("t_s_s_leave_annual_sick_balance")
+    + r"\bdoes\s+[A-Z][\w'-]+\s+have\b"
     r")",
     re.IGNORECASE,
 )
@@ -2639,14 +2633,14 @@ def _leave_intent_forms(text: str | None) -> tuple[str, ...]:
 
 
 def _named_leave_proper(text: str) -> bool:
-    """Case-sensitive Given-name + leave topic (no extra re.compile)."""
+    V("t_case_sensitive_given_name_leave_topic")
     tokens = (text or "").split()
-    nouns = {"leave", "annual", "sick", "balance"}
+    nouns = {V("t_leave"), "annual", "sick", "balance"}
     stop = {
         "What", "How", "Show", "Where", "When", "Who", "Why", "Tell", "Please",
         "Can", "Could", "Would", "Should", "May", "My", "The", "A", "An", "OK",
         "Remaining", "List", "About", "Does", "Did", "Is", "Are", "I", "We",
-        "You", "Leave", "Loan", "Annual", "Sick", "Your", "Our", "Their",
+        "You", V("t_leave_2"), V("t_loan"), "Annual", "Sick", "Your", "Our", "Their",
     }
     for i, tok in enumerate(tokens):
         clean = tok.strip(".,?؟!'\"")
@@ -2667,7 +2661,7 @@ def _named_leave_proper(text: str) -> bool:
 
 
 def leave_balance_intent_asked(text: str | None) -> bool:
-    """True when the utterance asks about leave remaining / balance (EN/AR)."""
+    V("t_true_when_the_utterance_asks_about")
     return any(
         _LEAVE_BALANCE_INTENT_RE.search(form) or any_needle(form, LEAVE_TOPIC_AR)
         for form in _leave_intent_forms(text)
@@ -2675,7 +2669,7 @@ def leave_balance_intent_asked(text: str | None) -> bool:
 
 
 def first_person_leave_ask(text: str | None) -> bool:
-    """True for first-person leave balance asks (my leave / اجازاتي)."""
+    V("t_true_for_first_person_leave_balance")
     if not leave_balance_intent_asked(text):
         return False
     raw = text or ""
@@ -2688,11 +2682,7 @@ def first_person_leave_ask(text: str | None) -> bool:
 
 
 def named_leave_balance_ask(text: str | None) -> bool:
-    """True for third-person / numbered-employee leave balance asks.
-
-    Admin Chat N-CHAT-03: \"annual leave remaining for employee 1001 Wellie\"
-    must route to ``list_leave_entitlements``, not stop after ``resolve_entity``.
-    """
+    V("t_true_for_third_person_numbered_employee")
     if not leave_balance_intent_asked(text):
         return False
     if first_person_leave_ask(text):
@@ -2753,16 +2743,11 @@ def stamp_compensation_deny_on_soft_empty(
     user_message: str,
     caps: frozenset[str] | None = None,
 ) -> list[dict]:
-    """B5: never let empty payslips / bare profile look like 'no salary data'.
-
-    When the user asked about compensation and lacks ``people:view_compensation``,
-    stamp an explicit CBAC deny onto empty payslip results and self-profile
-    lookups so synthesis cannot invent absence.
-    """
+    V("t_b5_never_let_empty_payslips_bare")
     if not completed_tools or not compensation_intent_asked(user_message):
         return completed_tools
     if payslip_specific_ask(user_message):
-        # Net pay / take-home / last payslip: empty list is the truth.
+        # Net pay / take-home / last : empty list is the truth.
         return completed_tools
     if caps and "people:view_compensation" in caps:
         return completed_tools
@@ -2793,8 +2778,8 @@ def stamp_compensation_deny_on_soft_empty(
 
         is_payslip = (
             api in _PAYSLIP_API_NAMES
-            or "payslip" in api
-            or "payslip" in str(data.get("endpoint") or "").lower()
+            or V("t_payslip_2") in api
+            or V("t_payslip_2") in str(data.get("endpoint") or "").lower()
         )
         is_profile = api in _PROFILE_API_NAMES or api in {"me", "get_my_profile"}
         should_stamp = False
@@ -2805,7 +2790,7 @@ def stamp_compensation_deny_on_soft_empty(
         elif is_profile and compensation_intent_asked(user_message) and not payslip_specific_ask(
             user_message
         ):
-            # First-person routing often lands on get_my_profile for "my salary".
+            # First-person routing often lands on get_my_profile for "my ".
             should_stamp = True
 
         if not should_stamp:
@@ -2833,10 +2818,7 @@ def stamp_compensation_deny_on_soft_empty(
 
 
 def compensation_authz_deny_message(completed_tools: list[dict] | None) -> str | None:
-    """Return fixed CBAC deny prose when any tool denied view_compensation.
-
-    B5: skip LLM paraphrasing that mixes deny with soft \"no salary data\".
-    """
+    V("t_return_fixed_cbac_deny_prose_when")
     for item in completed_tools or []:
         if not isinstance(item, dict) or item.get("error"):
             continue
@@ -2867,7 +2849,7 @@ def compensation_authz_deny_message(completed_tools: list[dict] | None) -> str |
             f"**Not authorized to view compensation.** {body}\n\n"
             "**Key takeaways:**\n"
             "- Access requires the `people:view_compensation` capability.\n"
-            "- This is an authorization deny, not an empty payroll result."
+            + V("t_this_is_an_authorization_deny_not")
         )
     return None
 
@@ -2895,11 +2877,7 @@ def _compensation_unauthorized_payload(
     caps: frozenset[str],
     intent_text: str,
 ) -> dict | None:
-    """When compensation is asked without capability, return an explicit CBAC deny.
-
-    B5: never soft-empty / \"No data\" for salary — surface unauthorized +
-    ``people:view_compensation`` so Chat does not invent absence.
-    """
+    V("t_when_compensation_is_asked_without_capability")
     if not record or not getattr(descriptor, "masking", None):
         return None
     if not compensation_intent_asked(intent_text):
@@ -2960,11 +2938,11 @@ async def execute_resolve_entity(
         return {"error": "Host executor not available"}
 
     # C1: instruction-shaped "names" are data, not people — honest miss, no clarify.
-    if entity_type == "employee" and _is_instruction_shaped_query(query):
+    if entity_type == V("t_employee_4") and _is_instruction_shaped_query(query):
         return {
             "found": False,
             "action": "none",
-            "message": "No matching employee for that query.",
+            "message": V("t_no_matching_employee_for_that_query"),
             "searched_total": 0,
             "query": query,
             "suggestions": [],
@@ -3020,10 +2998,10 @@ async def execute_resolve_entity(
             intent_text = _compensation_intent_text(
                 query, explanation, kwargs.get("user_message"),
             )
-            # B5: salary/compensation ask without capability must NEVER soft
+            # B5: /compensation ask without capability must NEVER soft
             # "no matching record" — scoped misses look like absence. Deny.
             if (
-                entity_type == "employee"
+                entity_type == V("t_employee_4")
                 and compensation_intent_asked(intent_text)
                 and "people:view_compensation" not in caps
             ):
@@ -3047,7 +3025,7 @@ async def execute_resolve_entity(
             exists_elsewhere = False
             exists_fn = getattr(executor, "entity_exists_unscoped", None)
             if (
-                entity_type == "employee"
+                entity_type == V("t_employee_4")
                 and "people:view" not in caps
                 and callable(exists_fn)
                 and (query or "").strip()
@@ -3070,7 +3048,7 @@ async def execute_resolve_entity(
                         except Exception:  # noqa: BLE001
                             continue
             if (
-                entity_type == "employee"
+                entity_type == V("t_employee_4")
                 and "people:view" not in caps
                 and exists_elsewhere
             ):
@@ -3082,7 +3060,7 @@ async def execute_resolve_entity(
                     "message": (
                         "غير مصرح بالبحث عن موظفين آخرين (مطلوب صلاحية people:view)."
                         if ar
-                        else "Not authorized to look up other employees (people:view required)."
+                        else V("t_not_authorized_to_look_up_other")
                     ),
                     "searched_total": result.searched_total,
                     "query": query,
@@ -3161,7 +3139,7 @@ async def execute_resolve_entity(
     # B1/C7: remember stable employee_no focus after a successful match
     # (including unauthorized-but-identified — the person was resolved).
     if (
-        entity_type == "employee"
+        entity_type == V("t_employee_4")
         and isinstance(response, dict)
         and isinstance(response.get("record"), dict)
         and (response.get("found") or response.get("action") == "match")
@@ -3206,7 +3184,7 @@ async def execute_aggregate_entity(
 
     # A10 — ESS empty org scope must not report headcount 0 as truth.
     access_fn = getattr(executor, "people_metric_access", None)
-    if callable(access_fn) and entity_type == "employee":
+    if callable(access_fn) and entity_type == V("t_employee_4"):
         try:
             access = await sync_to_async(access_fn, thread_sensitive=True)()
         except Exception:  # noqa: BLE001
@@ -3292,6 +3270,46 @@ def get_tool_definitions(instance_config: dict | None = None) -> list[dict]:
             instance_config,
         )
     return _dedup_definitions(base + plugin_defs + list(MCP_TOOLS))
+
+
+def host_api_capabilities(instance_config: dict | None = None) -> list[dict]:
+    """Registry tools ``call_host_api`` executes by ``api_name``, as catalog entries.
+
+    ``call_host_api`` aliases these names to their engine executor, so any
+    surface built from catalog entries can offer them with the same schema
+    the Draft tool list uses. Fields the executor defaults are not required.
+    """
+    if not getattr(get_settings(), "ECF_ENABLED", False):
+        return []
+    import copy
+
+    entries: list[dict] = []
+    defs = _enrich_ecf_tool_definitions(
+        [_ECF_RESOLVE_ENTITY_DEFINITION, _ECF_AGGREGATE_ENTITY_DEFINITION],
+        instance_config,
+    )
+    for tool in defs:
+        fn = (tool or {}).get("function") or {}
+        name = str(fn.get("name") or "")
+        if not name:
+            continue
+        params = copy.deepcopy(fn.get("parameters") or {})
+        props = params.get("properties") or {}
+        props.pop("explanation", None)
+        # The host alias falls back to the default entity type when unset.
+        params["required"] = [
+            key for key in params.get("required") or []
+            if key in props and key != "entity_type"
+        ]
+        entries.append({
+            "name": name,
+            "description": str(fn.get("description") or ""),
+            "method": "GET",
+            "kind": "read",
+            "parameters": params,
+            "source": "registry",
+        })
+    return entries
 
 
 async def get_tool_executors() -> dict:

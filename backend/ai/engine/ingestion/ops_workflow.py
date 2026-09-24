@@ -595,7 +595,7 @@ class OpsWorkflowRunner:
                                     run_row.error = "; ".join(ops.errors)
                                 else:
                                     run_row.output_location = ops.data.get("output_location")
-        except Exception as exc:  # defensive: never leave a ledger row 'running'
+        except Exception as exc:  # defensive: never  a ledger row 'running'
             logger.exception("Ops workflow crashed")
             final_status = "failed"
             run_row.error = f"{type(exc).__name__}: {exc}"

@@ -6,6 +6,8 @@ a Plan with tool-centric PlanSteps (tool_name + tool_args from TOOL_EXECUTORS).
 Falls back to LLM decomposition if no skill matches, and to single-step for
 simple queries. Distinct from the SQL-focused MultiStepPlanner.
 """
+from ai.engine.cognition.phrase_tables import T
+from ai.engine.pack_vocab import V
 import json
 import logging
 import re
@@ -66,13 +68,7 @@ class Plan:
 # ── Keyword scoring ────────────────────────────────────────────────────────────
 
 def _score_skill(skill, utterance_lower: str) -> float:
-    """Score a skill against the utterance using simple keyword overlap.
-
-    Returns 0.0–1.0 where higher = better match.
-    Name tokens are split on underscores so ``payroll_run_variance_check``
-    does not score as a single opaque blob against unrelated payroll chatter.
-    Description-only matches stay below the hot-path threshold unless strong.
-    """
+    V("t_score_a_skill_against_the_utterance")
     name_lower = skill.name.lower()
     desc_lower = (skill.description or "").lower()
     utterance_tokens = set(utterance_lower.replace("_", " ").split())
@@ -111,17 +107,7 @@ def _score_skill(skill, utterance_lower: str) -> float:
 
 # Explicit "make this a Tasks-panel plan" — Chat PLAN FIRST / plan_task owns these.
 # Must NOT skill-match into invoke_skill / silent ReAct.
-_TASK_CREATION_MARKERS: tuple[str, ...] = (
-    "need a task",
-    "i need a task",
-    "create a task",
-    "make a task",
-    "as a task",
-    "turn this into a task",
-    "convert this into a task",
-    "convert what we talk",
-    "in the tasks panel",
-)
+_TASK_CREATION_MARKERS = T("plan/planner.py::_TASK_CREATION_MARKERS")
 
 
 def _wants_explicit_task_creation(
@@ -129,18 +115,7 @@ def _wants_explicit_task_creation(
     *,
     process_mode: str | None = None,
 ) -> bool:
-    """True when the user wants a reviewable Agent plan, not a silent skill run.
-
-    Signals (deterministic):
-    - "make this a task" phrasing on the user's words;
-    - the composer dial was **Plan** (``[Pulse mode: Plan.`` prefix) — the
-      header promises "Pulse drafts a plan", so draft one.
-
-    Composite briefs (condition / parallel) do **not** force plan_task by
-    themselves — Ask and Plan are separate sessions, and Ask must never
-    create a Tasks plan. The slot-filler still steps aside for composites
-    so Chat does not answer a guarded brief with "which loan type?".
-    """
+    V("t_true_when_the_user_wants_a")
     if not utterance:
         return False
     from ai.engine.cognition.plan.process_dial import (
@@ -156,112 +131,7 @@ def _wants_explicit_task_creation(
 
 # ── LLM decompose prompt (agentic tool format, not SQL) ────────────────────────
 
-_DECOMPOSE_AGENT_PROMPT = """\
-TASK — Plan decompose (tool catalog + rules):
-The user asked a task that may need multiple tool calls. Decompose it into
-phases (workflow stages) and steps.
-
-Available tools:
-{tools_list}
-
-Host API catalog (live data — use call_host_api with api_name=…):
-{host_api_list}
-
-Registered skills (for invoke_skill only — exact names):
-{skills_list}
-
-Return ONLY valid JSON (no markdown, no fences):
-{{
-  "pattern": "<root_cause|comparative|custom>",
-  "phases": [
-    {{
-      "phase_id": 0,
-      "name": "<short stage name, e.g. Research>",
-      "goal": "<what this stage accomplishes>",
-      "strategy": "<sequential|parallel>",
-      "step_ids": [0, 1]
-    }}
-  ],
-  "steps": [
-    {{
-      "step_id": 0,
-      "intent": "<natural-language description>",
-      "tool_name": "<one of the available tools>",
-      "tool_args": {{}},
-      "depends_on": [],
-      "is_mutation": false,
-      "agent_role": "<orchestrator|researcher|planner|critic|domain_specialist>"
-    }}
-  ],
-  "synthesis_instruction": "<how to combine steps into final answer>"
-}}
-
-Rules:
-- Each step must use one of the available tools listed above.
-- Live host data / self-service reads and writes (leave balance, leave
-  records, payslips, profile, employees, payroll, …) MUST use
-  tool_name "call_host_api" with tool_args.api_name set to an exact name
-  from the Host API catalog. NEVER put a catalog name in
-  get_entity_details.entity_name — that tool is knowledge-schema only.
-- First-person leave submit ("I want leave", Arabic إجازة / عارضة) MUST use
-  submit_my_leave when that catalog name exists — never create_leave_record
-  (admin path; needs employee id and skips the /me/leave/ workflow).
-- Loan process / first-person loan submit MUST use submit_my_loan (or list_my_loans
-  for reads) — NEVER submit_my_leave. Leave APIs are leave-only.
-- Employee onboarding MUST use create_employee / list_employees / update_employee
-  — NEVER submit_my_leave.
-- Person / org identity lookups by name or employee number use
-  resolve_entity (ECF), not get_entity_details and not a catalog name as
-  an entity.
-- invoke_skill may ONLY reference an exact name from the Registered skills
-  list. NEVER invent a skill name — if no skill matches, do not use
-  invoke_skill at all.
-- Analysis, comparison, synthesis and other REASONING steps are NOT skills:
-  they are done by the LLM itself. For such a step use a real tool to gather
-  the raw inputs it needs, then set "tool_name": null and
-  "agent_role": "domain_specialist" so the model reasons directly from the
-  prior step results (available via depends_on).
-- depends_on lists step_id values whose results are needed before this step.
-- Steps with no dependencies can run in parallel.
-- Group steps into 2-4 phases that tell a workflow story: research/collect
-  first, then analyze, then produce output. Keep plans small — prefer 4-7
-  total steps. A single phase is fine for simple jobs.
-- NEVER invent numeric path ids (payroll run ids, employee ids, org ids).
-  Demo labels in the brief (e.g. run_id: demo-oct-2026) are NOT database
-  primary keys. Always list first (list_payroll_runs / list_employees /
-  resolve_entity), then call detail/compute/validate with the REAL id from
-  that prior step via depends_on — or omit path_params and let the host
-  resolve the period alias. Putting a fake string into path_params.id
-  will fail.
-- NEVER collapse a multi-action brief (compute + validate + report, compare
-  to rates, generate a document, do-not-commit) into ONE invoke_skill step.
-  Emit a separate step for each distinct action. Prefer call_host_api for
-  live payroll/host reads and writes; use null-tool reasoning for analysis;
-  use export_document when the brief asks for a document/file report.
-- strategy "parallel" only when the phase's steps are truly independent;
-  otherwise "sequential".
-- agent_role selects who executes the step:
-  "researcher" for read-only internet/knowledge research,
-  "planner" for sequencing / decomposition-only thinking,
-  "critic" for review / quality gates before export or mutation,
-  "domain_specialist" for deep domain analysis (payroll, HR, finance),
-  "orchestrator" for host coordination and everything else (the main agent).
-  Multi-agent tasks MUST assign distinct roles across research / analyze /
-  critique / act phases — do not stamp every step orchestrator when the
-  brief clearly spans research + specialist judgment + review.
-- Set is_mutation: true only for steps that modify host state.
-- create_dq_rule needs a REAL target: deterministic rule types (not_null,
-  unique, allowed_values, range, regex) REQUIRE data_table AND data_field ids.
-  If the field/table is unknown, first call get_entity_details (or another
-  lookup tool) to resolve it, OR emit a reasoning step whose instructions ask
-  the user for the specific field/table before any create_dq_rule step.
-  NEVER emit a create_dq_rule step for a deterministic rule without its
-  data_table and data_field.
-- Step intents and pre-consent wording must use bound values only — never
-  invent free-form identity text for the user or organisation.
-
-User task: {task}
-"""
+_DECOMPOSE_AGENT_PROMPT = V("t_task_plan_decompose_tool_catalog_rules")
 
 
 # ── Pattern signals (reused from the SQL planner, simplified) ──────────────────
@@ -311,7 +181,7 @@ _TASK_VERB_STEMS: list[str] = [
 # learn_fact, forget_fact, run_ops_workflow — already gate at execution time;
 # marking them is_mutation here would double-gate. export_document writes
 # files with requires_confirmation=False, so it relies on this gate.
-_MUTATION_TOOL_NAMES: set[str] = {"export_document"}
+_MUTATION_TOOL_NAMES = T("plan/planner.py::_MUTATION_TOOL_NAMES")
 
 # Imperative action verbs — two or more distinct verbs in one brief strongly
 # signal a multi-action job ("create … reuse or create … and bind …").
@@ -620,17 +490,7 @@ def _coerce_host_api_steps(
     steps: list[PlanStep], catalog_names: set[str] | None,
     utterance: str = "",
 ) -> None:
-    """Rewrite mistaken knowledge-entity bindings to ``call_host_api``.
-
-    Live Agent QA (N-AG-LV-01): the decomposer often set
-    ``get_entity_details(entity_name="get_my_leave_balance")`` because the
-    tool description said "API endpoint" and the prompt listed no catalog.
-    That tool only searches the knowledge store → soft miss
-    ``Entity '…' not found``. Chat uses ``call_host_api`` with the same
-    catalog names. Mutates ``steps`` in place.
-
-    Also rewrites leave-only APIs off loan/onboarding briefs (P1 bind).
-    """
+    V("t_rewrite_mistaken_knowledge_entity_bindings_to")
     if not catalog_names:
         return
     domain = _plan_domain(utterance)
@@ -652,13 +512,13 @@ def _coerce_host_api_steps(
             args = {"api_name": api, **{k: v for k, v in args.items() if k != "api_name"}}
             if api == "submit_my_leave" and isinstance(args.get("body"), dict):
                 args["body"] = {
-                    k: v for k, v in args["body"].items() if k != "employee"
+                    k: v for k, v in args["body"].items() if k != V("t_employee_4")
                 }
             if api == "submit_my_attendance_permission" and isinstance(args.get("body"), dict):
                 args["body"] = {
                     k: v
                     for k, v in args["body"].items()
-                    if k not in ("employee", "approved")
+                    if k not in (V("t_employee_4"), "approved")
                 }
             step.tool_args = args
             logger.info(
@@ -679,7 +539,7 @@ def _coerce_host_api_steps(
         )
         if not isinstance(candidate, str) or candidate not in catalog_names:
             # Domain rewrite may still apply when api_name is already set to a
-            # leave API on a non-leave brief (candidate still in catalog).
+            #  API on a non- brief (candidate still in catalog).
             if (
                 step.tool_name == "call_host_api"
                 and isinstance(args.get("api_name"), str)
@@ -696,17 +556,17 @@ def _coerce_host_api_steps(
                     )
             continue
         if step.tool_name == "call_host_api" and args.get("api_name") == candidate:
-            # Prefer self-service leave submit when both catalog entries exist
-            # (Agent plans historically bound create_leave_record → /leave-records/
-            # without employee → HTTP 400; /me/leave/ is the governed self path).
+            # Prefer self-service  submit when both catalog entries exist
+            # (Agent plans historically bound create_leave_record → /-records/
+            # without  → HTTP 400; /me// is the governed self path).
             if (
                 candidate == "create_leave_record"
                 and "submit_my_leave" in catalog_names
             ):
                 candidate = "submit_my_leave"
                 body = args.get("body")
-                if isinstance(body, dict) and "employee" in body:
-                    body = {k: v for k, v in body.items() if k != "employee"}
+                if isinstance(body, dict) and V("t_employee_4") in body:
+                    body = {k: v for k, v in body.items() if k != V("t_employee_4")}
                     args["body"] = body
             if (
                 candidate == "create_attendance_permission"
@@ -718,7 +578,7 @@ def _coerce_host_api_steps(
                     args["body"] = {
                         k: v
                         for k, v in body.items()
-                        if k not in ("employee", "approved")
+                        if k not in (V("t_employee_4"), "approved")
                     }
             rewritten = _rewrite_domain_api(candidate, domain, catalog_names)
             if rewritten != args.get("api_name"):
@@ -729,7 +589,7 @@ def _coerce_host_api_steps(
                     args["body"] = {
                         k: v
                         for k, v in args["body"].items()
-                        if k not in ("employee", "approved")
+                        if k not in (V("t_employee_4"), "approved")
                     }
                 step.tool_args = args
                 logger.info(
@@ -762,7 +622,7 @@ def _coerce_host_api_steps(
             new_args["body"] = {
                 k: v
                 for k, v in new_args["body"].items()
-                if k not in ("employee", "approved")
+                if k not in (V("t_employee_4"), "approved")
             }
         step.tool_args = new_args
         logger.info(
@@ -775,14 +635,7 @@ def resolve_step_write_bodies(
     api_catalog,
     utterance: str = "",
 ) -> None:
-    """Fill the write slots the brief already answered (RULE_21 consent card).
-
-    Slots are declared per endpoint in the brand ``api_catalog``
-    (``write_slots``) and resolved by ``ai.write_slots``: governed values
-    through MDM, dates against the platform clock. A card must never ask the
-    operator for a leave type or day they just stated. Mutates in place; needs
-    DB access, so callers in async code wrap it with ``sync_to_async``.
-    """
+    V("t_fill_the_write_slots_the_brief")
     from ai.write_slots import fill_write_body, write_slots_for
 
     for step in steps:
@@ -807,31 +660,31 @@ def resolve_step_write_bodies(
 def _plan_domain(utterance: str) -> str:
     """Classify plan brief domain for API bind guards."""
     u = (utterance or "").casefold()
-    if "loan.request" in u or re.search(r"\bloan\b", u):
-        if "leave" not in u:
-            return "loan"
+    if V("t_loan_request") in u or re.search(r"\bloan\b", u):
+        if V("t_leave") not in u:
+            return V("t_loan_2")
         # Mixed — prefer explicit process id
-        if "loan.request" in u and "leave.request" not in u:
-            return "loan"
-    if "employee.onboarding" in u or "onboard" in u:
+        if V("t_loan_request") in u and V("t_leave_request") not in u:
+            return V("t_loan_2")
+    if V("t_employee_onboarding") in u or "onboard" in u:
         return "onboarding"
-    if "attendance.permission" in u or "attendance permission" in u or "إذن حضور" in (utterance or ""):
-        return "attendance"
-    if "leave.request" in u or re.search(r"\bleave\b|إجازة|اجازة", utterance or "", re.I):
-        return "leave"
-    if "payroll" in u:
-        return "payroll"
-    if "gosi" in u or "wps" in u or "sif" in u:
-        return "gosi"
+    if V("t_attendance_permission_2") in u or V("t_attendance_permission") in u or V("t_إذن_حضور") in (utterance or ""):
+        return V("t_attendance")
+    if V("t_leave_request") in u or re.search(V("t_bleave_b_إجازة_اجازة"), utterance or "", re.I):
+        return V("t_leave")
+    if V("t_payroll") in u:
+        return V("t_payroll")
+    if V("t_gosi") in u or "wps" in u or "sif" in u:
+        return V("t_gosi")
     return ""
 
 
 def _rewrite_domain_api(
     api: str, domain: str, catalog_names: set[str],
 ) -> str:
-    """Keep leave APIs off loan/onboarding plans; bind pack-correct hosts."""
+    V("t_keep_leave_apis_off_loan_onboarding")
     leave_only = {"submit_my_leave", "create_leave_record", "list_my_leave", "get_my_leave_balance"}
-    if domain == "loan" and api in leave_only:
+    if domain == V("t_loan_2") and api in leave_only:
         if "submit_my_loan" in catalog_names:
             return "submit_my_loan"
         if "list_my_loans" in catalog_names:
@@ -843,7 +696,7 @@ def _rewrite_domain_api(
             return "create_employee"
         if "list_employees" in catalog_names:
             return "list_employees"
-    if domain == "attendance":
+    if domain == V("t_attendance"):
         if api in leave_only or api == "create_attendance_permission":
             if "submit_my_attendance_permission" in catalog_names:
                 return "submit_my_attendance_permission"
@@ -908,6 +761,75 @@ def _unbind_unknown_host_api_steps(
         step.is_mutation = False
         unbound.append(step.step_id)
     return unbound
+
+
+def skill_has_effect(skill) -> bool:
+    """True when ``invoke_skill`` (or plan expansion) would execute something.
+
+    A governed process, a code snippet with code, or a plan skill with at
+    least one tool step. Everything else returns its recipe as data.
+    """
+    kind = str(getattr(skill, "kind", "") or "")
+    raw = getattr(skill, "body", None) or "{}"
+    try:
+        body = json.loads(raw) if isinstance(raw, str) else dict(raw)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        body = {}
+    if not isinstance(body, dict):
+        return False
+    if body.get("process_ref"):
+        return True
+    if kind == "code_snippet":
+        return bool(str(body.get("code") or "").strip())
+    if kind == "multi_step_plan":
+        return any(
+            isinstance(s, dict) and s.get("tool_name")
+            for s in body.get("steps") or []
+        )
+    return False
+
+
+def _canonicalize_host_steps(
+    steps: list[PlanStep], api_catalog: list | None, utterance: str = "",
+) -> None:
+    """Put every host step in the one shape validation, execution and repair use.
+
+    Also fills a required enum the step's own words name exactly once, and
+    points unfilled path ids at the listing step they depend on (``bind``).
+    Mutates ``steps`` in place.
+    """
+    if not api_catalog:
+        return
+    from ai.engine.cognition.plan.bindings import declare_bindings
+    from ai.engine.cognition.plan.catalog_args import enum_fill_from_text, parameter_values
+    from ai.engine.cognition.turn.capability import host_surface
+
+    surface = host_surface({"api_catalog": api_catalog})
+    by_id = {s.step_id: s for s in steps}
+    for step in steps:
+        if step.tool_name != "call_host_api" or not isinstance(step.tool_args, dict):
+            continue
+        name = str(step.tool_args.get("api_name") or "")
+        if not name:
+            continue
+        step.tool_args = surface.host_args(name, step.tool_args)
+        schema = surface.schema(name)
+        if schema and surface.arg_violations(name, step.tool_args):
+            filled = enum_fill_from_text(
+                schema,
+                parameter_values(step.tool_args, schema),
+                f"{step.intent or ''} {utterance or ''}",
+            )
+            if filled:
+                step.tool_args = surface.host_args(name, {**step.tool_args, **filled})
+            still = surface.arg_violations(name, step.tool_args)
+            if still:
+                logger.info(
+                    "Step %d %s args still invalid at plan save (%s); the run repairs once",
+                    step.step_id, name, "; ".join(still),
+                )
+    for step in steps:
+        declare_bindings(step, by_id, surface)
 
 
 def _ensure_export_deliverable(utterance: str, steps: list[PlanStep]) -> None:
@@ -1002,7 +924,7 @@ class SkillAwarePlanner:
                 )],
             )
 
-        # ── Path B hybrid: personal loan / leave → process dial spine ────
+        # ── Path B hybrid: personal  /  → process dial spine ────
         # Process owns DAG; write_slots own codes/amounts; LLM must not invent
         # a freeform ESS topology.
         try:
@@ -1022,7 +944,7 @@ class SkillAwarePlanner:
                     materialize_loan_request_plan, thread_sensitive=True,
                 )(utterance)
                 logger.info(
-                    "SkillAwarePlanner: process_dial loan (%d steps)",
+                    V("t_skillawareplanner_process_dial_loan_d_steps"),
                     len(plan.steps),
                 )
                 return plan
@@ -1031,7 +953,7 @@ class SkillAwarePlanner:
                     materialize_attendance_permission_plan, thread_sensitive=True,
                 )(utterance)
                 logger.info(
-                    "SkillAwarePlanner: process_dial attendance (%d steps)",
+                    V("t_skillawareplanner_process_dial_attendance_d_step"),
                     len(plan.steps),
                 )
                 return plan
@@ -1040,7 +962,7 @@ class SkillAwarePlanner:
                     materialize_leave_request_plan, thread_sensitive=True,
                 )(utterance)
                 logger.info(
-                    "SkillAwarePlanner: process_dial leave (%d steps)",
+                    V("t_skillawareplanner_process_dial_leave_d_steps"),
                     len(plan.steps),
                 )
                 return plan
@@ -1050,7 +972,7 @@ class SkillAwarePlanner:
             )
 
         # "I need a task / create a task" → Chat owns plan_task (PLAN FIRST).
-        # Never hot-path a loosely matched skill (e.g. payroll variance) into
+        # Never hot-path a loosely matched skill (e.g.  variance) into
         # invoke_skill and fail the turn.
         skip_skill_hotpath = (
             (not force_decompose) and _wants_explicit_task_creation(utterance)
@@ -1248,7 +1170,7 @@ class SkillAwarePlanner:
         tools_list = "\n".join(f"- {n}" for n in tool_names)
 
         # Brand host API catalog — without this the model binds live endpoints
-        # to get_entity_details (knowledge store) and Agent leave/balance
+        # to get_entity_details (knowledge store) and Agent /balance
         # steps soft-miss (N-AG-LV-01 / SIM-20260919-N10).
         catalog_names: set[str] = set()
         api_catalog: list = []
@@ -1286,8 +1208,10 @@ class SkillAwarePlanner:
 
         # Only advertise real, registered skills — the LLM must never invent
         # a skill name for invoke_skill (reasoning is the LLM's job, not a
-        # skill). If no skills are registered, state that clearly.
-        skill_names = sorted({s.name for s in (skills or [])})
+        # skill). If no skills are registered, state that clearly. A skill
+        # that only hands back a recipe executes nothing, so it is no step.
+        skills = [s for s in (skills or []) if skill_has_effect(s)]
+        skill_names = sorted({s.name for s in skills})
         skills_list = (
             "\n".join(f"- {n}" for n in skill_names)
             if skill_names
@@ -1404,6 +1328,7 @@ class SkillAwarePlanner:
         # A host call that names no catalog API is not a host call. Decide it
         # here, at plan save — not when the operator clicks Approve.
         _unbind_unknown_host_api_steps(steps, catalog_names)
+        _canonicalize_host_steps(steps, api_catalog, utterance)
 
         # Governed slots + grounded dates from the brief (MDM codes, platform
         # clock) — the consent card must not re-ask what the operator stated.

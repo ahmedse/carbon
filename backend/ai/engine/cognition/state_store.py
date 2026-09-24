@@ -17,6 +17,9 @@ Schema v1 (top-level keys exactly)::
 Engine-only: imports nothing from the Django host (import boundary).
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+
+from ai.engine.pack_vocab import V
 
 import json
 import logging
@@ -38,11 +41,7 @@ from ai.engine.text.word_match import contains_any_phrase
 
 logger = logging.getLogger("pulse.cognition.state_store")
 
-_EMPTY_PAYSLIP_REPLY_PHRASES = (
-    "no payslips", "no committed payslips", "found no payslips",
-    "no payslips are on file", "no payslips were on file",
-    "no payslips are found", "no payslips were found",
-)
+_EMPTY_PAYSLIP_REPLY_PHRASES = T("state_store.py::_EMPTY_PAYSLIP_REPLY_PHRASES")
 
 STATE_VERSION = 1
 FOCUS_MAX = 5
@@ -55,14 +54,14 @@ STATE_BLOCK_MAX_CHARS = 600
 # longer ids cannot be stored (and must not poison the turn's transaction).
 _CONVERSATION_ID_MAX = 36
 
-_NON_FOCUS_TYPES = frozenset({"pending_weather", "weather_resolution"})
+_NON_FOCUS_TYPES = T("state_store.py::_NON_FOCUS_TYPES")
 _SLOT_VALUE_MAX = 60
 _LABEL_MAX = 80
 _OPEN_QUESTION_TEXT_MAX = 200
 _WHY_MAX = 80
 
-_DICT_KEYS = ("intent", "slots", "open_question")
-_LIST_KEYS = ("focus", "last_results", "active_plans", "decisions")
+_DICT_KEYS = T("state_store.py::_DICT_KEYS")
+_LIST_KEYS = T("state_store.py::_LIST_KEYS")
 
 
 # ── State object ────────────────────────────────────────────────────────
@@ -414,7 +413,7 @@ def resolve_against_state(message: str, state: "ConversationState") -> dict | No
     if not isinstance(question, dict) or not question.get("confirm"):
         return None
     # A proposed plan revision is committed only by a bare "yes / apply /
-    # accept" — "apply for leave" is a new request, not a confirmation.
+    # accept" — "apply for " is a new request, not a confirmation.
     if question.get("kind") == PLAN_REVISION:
         if not is_commit_affirmation(message or ""):
             return None
@@ -430,18 +429,14 @@ def _infer_open_question_slot(
     fired_gates: Iterable[str] | None = None,
     slots: dict | None = None,
 ) -> str:
-    """Name the open clarify slot for continuity (never leave empty).
-    
-    This is only a fallback for backward-compat with older clarify surfaces
-    that don't provide typed kind/options. New menus must pass typed open_question.
-    """
+    V("t_name_the_open_clarify_slot_for")
     gates = {str(g) for g in (fired_gates or []) if g}
     if "report_clarify" in gates or "zero_llm" in gates:
         text_l = (response_text or "").lower()
-        if "focus on" in text_l or "salary report" in text_l or "تقرير الرواتب" in (response_text or ""):
+        if "focus on" in text_l or V("t_salary_report") in text_l or "تقرير الرواتب" in (response_text or ""):
             return "report_aspect"
     text_l = (response_text or "").lower()
-    if "focus on" in text_l and ("pay distribution" in text_l or "payroll run" in text_l):
+    if "focus on" in text_l and ("pay distribution" in text_l or V("t_payroll_run_3") in text_l):
         return "report_aspect"
     # ESS: first missing known write slot.
     known = dict(slots or {})
@@ -449,9 +444,9 @@ def _infer_open_question_slot(
         if key not in known or known.get(key) in (None, ""):
             if key in text_l or key.replace("_", " ") in text_l:
                 return key
-    if "loan" in text_l or "قرض" in (response_text or ""):
+    if V("t_loan_2") in text_l or V("t_قرض") in (response_text or ""):
         return "loan_slot"
-    if "leave" in text_l or "إجازة" in (response_text or ""):
+    if V("t_leave") in text_l or V("t_إجازة") in (response_text or ""):
         return "leave_slot"
     return "clarification"
 
@@ -588,7 +583,7 @@ def update_state_from_turn(
             "text": " ".join((response_text or "").split())[:_OPEN_QUESTION_TEXT_MAX],
         }
     elif isinstance(open_question, dict) and open_question.get("kind") and open_question.get("confirm"):
-        # An answer turn may still leave a typed, executable question open
+        # An answer turn may still  a typed, executable question open
         # (e.g. a proposed plan revision awaiting "apply"). Only typed +
         # confirmable questions survive an answer; prose never does.
         state.open_question = {

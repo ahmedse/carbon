@@ -15,7 +15,7 @@ from .collectors import REGISTRY, run_collectors
 from .gauge import head_commit, persist, write_snapshots
 from .models import Run, RunStatus
 
-UI_SAFE = frozenset({"repo", "pulse_gauge", "antipatterns", "observe"})
+UI_SAFE = frozenset({"repo", "pulse_gauge", "antipatterns", "observe", "rbac", "budget", "design_lint"})
 
 
 def execute_run(
@@ -26,11 +26,13 @@ def execute_run(
     track: str = "",
     run_apps: list[str] | None = None,
     run_vitest: list[str] | None = None,
+    run_playwright: list[str] | None = None,
     write_snapshot: bool = False,
 ) -> Run:
     names = [c.strip() for c in collectors if c and str(c).strip()]
     apps = [a.strip() for a in (run_apps or []) if a and str(a).strip()]
     vitest_files = [a.strip() for a in (run_vitest or []) if a and str(a).strip()]
+    playwright_files = [a.strip() for a in (run_playwright or []) if a and str(a).strip()]
     unknown = [c for c in names if c not in REGISTRY]
     if unknown:
         raise ValueError(f"Unknown collectors: {', '.join(unknown)}")
@@ -40,7 +42,9 @@ def execute_run(
         raise ValueError("pytest requires run_apps with exactly one app label.")
     if "vitest" in names and len(vitest_files) != 1:
         raise ValueError("vitest requires run_vitest with exactly one test file path.")
-    unsafe = [c for c in names if c not in UI_SAFE and c not in ("pytest", "vitest")]
+    if "playwright" in names and len(playwright_files) != 1:
+        raise ValueError("playwright requires run_playwright with exactly one journey path.")
+    unsafe = [c for c in names if c not in UI_SAFE and c not in ("pytest", "vitest", "playwright")]
     if unsafe:
         raise ValueError(f"Collectors not allowed from the UI: {', '.join(unsafe)}")
 
@@ -58,7 +62,11 @@ def execute_run(
         cat = load_catalogue()
         subjects = cat.subjects_in(tier or None, track or None)
         only = set(names)
-        ctx: dict[str, Any] = {"run_apps": set(apps), "run_vitest": set(vitest_files)}
+        ctx: dict[str, Any] = {
+            "run_apps": set(apps),
+            "run_vitest": set(vitest_files),
+            "run_playwright": set(playwright_files),
+        }
         drafts = run_collectors(cat, subjects, only=only, ctx=ctx)
         n = persist(drafts, head, runner=f"ui:{requested_by}")
         if write_snapshot:

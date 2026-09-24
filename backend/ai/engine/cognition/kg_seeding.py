@@ -7,6 +7,7 @@ with source='observation'.
 
 Sleep-time job — no LLM calls, no hot-path impact.
 """
+from ai.engine.cognition.phrase_tables import T
 import json
 import logging
 import re
@@ -24,16 +25,7 @@ _MIN_WORD_LENGTH = 2     # Minimum characters for an entity candidate
 _DEFAULT_CONFIDENCE = 0.3  # Low confidence — validation comes later
 
 # Words to skip during noun-phrase extraction
-_STOPWORDS: frozenset[str] = frozenset({
-    "I", "Me", "We", "You", "He", "She", "It", "They",
-    "The", "A", "An", "Is", "Are", "Was", "Were",
-    "Can", "Will", "Would", "Could", "Should",
-    "This", "That", "These", "Those",
-    "What", "How", "Why", "When", "Where", "Who",
-    "My", "Your", "His", "Her", "Our", "Their",
-    "And", "Or", "But", "If", "So", "For", "To", "In", "On", "At", "From", "With",
-    "Of", "By", "As", "All", "Not", "No",
-})
+_STOPWORDS = T("kg_seeding.py::_STOPWORDS")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

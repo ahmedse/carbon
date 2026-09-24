@@ -1,10 +1,7 @@
-"""Parse planner/demo period aliases into (year, month).
-
-Shared by call_host_api slug resolution so invented labels like
-``demo-oct-2026`` resolve to real payroll-run PKs instead of crashing
-Django with ``Field 'id' expected a number``.
-"""
 from __future__ import annotations
+from ai.engine.pack_vocab import V
+V("t_parse_planner_demo_period_aliases_into")
+
 
 import re
 from calendar import month_abbr

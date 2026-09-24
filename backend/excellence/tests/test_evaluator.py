@@ -36,10 +36,12 @@ def test_no_events_is_unmanaged_and_unmeasured() -> None:
 def test_level_is_min_across_dimensions_with_soundcheck_rule() -> None:
     events = [_ev("G1"), _ev("G2"), _ev("S2"), _ev("C3"), _ev("C4", "failed")]
     rep = evaluate(_cat(), events, head=HEAD)["m"]
-    # governed has checks only at rank 1; it does not block ranks 2-3 (specified/correct carry them)
-    assert rep.dimensions == {"correct": 3, "governed": 4, "specified": 4}
-    assert rep.level == 3
-    assert [c.check.id for c in rep.next_steps] == ["C4"]
+    # A rank with no check in that dimension is open. specified has no rank-1 check.
+    assert rep.dimensions["governed"] == 1
+    assert rep.dimensions["specified"] == 0
+    assert rep.dimensions["secure"] == 0
+    assert rep.level == 0
+    assert "secure:1" in rep.open_cells
 
 
 def test_one_failing_rank1_check_pins_the_subject_at_l0() -> None:
@@ -50,9 +52,11 @@ def test_one_failing_rank1_check_pins_the_subject_at_l0() -> None:
 
 def test_rank_gap_stops_the_ladder() -> None:
     cat = _cat()
-    del cat.checks["S2"]  # nobody wrote a rank-2 check → rank 2 is not earned
+    del cat.checks["S2"]
     events = [_ev("G1"), _ev("G2"), _ev("C3"), _ev("C4")]
-    assert evaluate(cat, events, head=HEAD)["m"].level == 1
+    rep = evaluate(cat, events, head=HEAD)["m"]
+    assert rep.dimensions["specified"] == 0
+    assert rep.level == 0
 
 
 def test_stale_event_does_not_count() -> None:
@@ -80,12 +84,28 @@ def test_active_exemption_satisfies_expired_does_not() -> None:
     events = [_ev("G1"), _ev("G2", "failed")]
     active = [{"check_id": "G2", "subject_id": "m", "until": today}]
     expired = [{"check_id": "G2", "subject_id": "m", "until": today - timedelta(days=1)}]
-    assert evaluate(_cat(), events, active, head=HEAD, today=today)["m"].level == 1
-    assert evaluate(_cat(), events, expired, head=HEAD, today=today)["m"].level == 0
+    active_rep = evaluate(_cat(), events, active, head=HEAD, today=today)["m"]
+    expired_rep = evaluate(_cat(), events, expired, head=HEAD, today=today)["m"]
+    assert active_rep.dimensions["governed"] == 1
+    assert expired_rep.dimensions["governed"] == 0
+    assert active_rep.level == 0  # other dimensions are still open
+
+
+def test_rank5_requires_enforcement_verified_evidence() -> None:
+    cat = Catalogue()
+    cat.tiers["platform"] = Tier(id="platform", title="p")
+    cat.subjects["m"] = Subject(id="m", kind="module", title="m", tier="platform", owner="o", paths=("x",))
+    for rank in range(1, 6):
+        cat.checks[f"R{rank}"] = Check(id=f"R{rank}", title=f"R{rank}", dimension="reliable", rank=rank, collector="runtime")
+    executed = [_ev(f"R{rank}") for rank in range(1, 6)]
+    live = executed[:-1] + [_ev("R5", cls="enforcement-verified")]
+    assert evaluate(cat, executed, head=HEAD)["m"].dimensions["reliable"] == 4
+    assert evaluate(cat, live, head=HEAD)["m"].dimensions["reliable"] == 5
 
 
 def test_ratchet_reports_only_drops() -> None:
     rep = evaluate(_cat(), [_ev("G1"), _ev("G2")], head=HEAD)
-    assert regressions(rep, {"m": 3}) == ["m: L3 → L1"]
-    assert regressions(rep, {"m": 1}) == []
+    assert regressions(rep, {"m": 3}) == ["m: L3 → L0"]
+    assert regressions(rep, {"m": 1}) == ["m: L1 → L0"]
+    assert regressions(rep, {"m": 0}) == []
     assert regressions(rep, {}) == []

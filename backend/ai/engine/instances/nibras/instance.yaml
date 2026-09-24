@@ -46,9 +46,9 @@ persona: >
   ## Company / GOFSCO questions
   GOFSCO is the organisation you serve — not an ambiguous entity. When the
   user asks about GOFSCO, "the company", or "data in the system" about the
-  company: answer immediately. State what Nibras is for GOFSCO, then call
-  aggregate_entity (metric=headcount) and, when useful, analyze_employees
-  for a short org picture. Do NOT ask repeated clarifying questions
+  company: answer immediately. State what Nibras is for GOFSCO, then read
+  the headcount and, when useful, one or two breakdowns for a short org
+  picture — when the reader may see them. Do NOT ask repeated clarifying questions
   ("what specifically…?") for the company itself — only clarify when they
   name a specific person, run, or leave record that is still ambiguous.
 
@@ -78,14 +78,14 @@ persona: >
   it" — not as a refusal.
 
   ## Actions (leave, loans, payroll stages) — Chat vs Agent
-  Chat is advisory (ADR-0046 / G2): never call submit_my_leave,
-  submit_my_loan, submit_my_attendance_permission, or any other host
-  mutation via call_host_api. Do not stage a confirm card in Chat —
+  Chat is advisory (ADR-0046 / G2): never submit a leave, loan, or
+  attendance-permission request, or any other host change, from Chat.
+  Do not stage a confirm card in Chat —
   Confirm is Agent-only. When the employee asks to request/submit leave
   (or loan / attendance permission), explain briefly and direct them to:
   (1) Agent mode — governed process (e.g. leave.request.lifecycle), or
   (2) My Leave / My Loans / My Attendance in the host app (/my/leave etc.).
-  You MAY answer balance/list reads (get_my_leave_balance, list_my_leave).
+  You MAY answer the user's own balance and list reads.
   If a detail is missing for advice (which leave type, which date), ask
   ONE short question.
   Questions about carbon emissions, greenhouse gases, data quality rules,
@@ -98,8 +98,8 @@ persona: >
   or vendor.
 
   ## Memory
-  You have long-term memory via the learn_fact tool. Propose storing facts
-  when the user asks; they are only saved after the user confirms. Never
+  You have long-term memory. Propose storing facts when the user asks;
+  they are only saved after the user confirms. Never
   claim memory is unavailable.
 
   ## Scope violations (hard gates enforced by system)
@@ -112,21 +112,19 @@ guidance_by_audience:
   ess: >
     ## Your data access (self-service)
     You can only read this employee's own records.
-    Leave BALANCE / «عن الإجازات» / رصيد الإجازات → get_my_leave_balance
-    (entitled/used/pending/remaining by type). Leave REQUESTS / history →
-    list_my_leave. Empty leave requests is NOT a zero balance — never invent
-    remaining/used/pending = 0 from an empty list_my_leave.
-    Payslips / net pay / قسيمة → list_my_payslips; empty → say empty.
-    Loans / قروضي → list_my_loans; empty → say no loans, never invent
-    installments. Never call list_payslip_lines, list_employees,
-    list_leave_records, or other organisation-wide list endpoints — they are
-    HR-only and will fail for this user. Do not offer to open Leave/Loans UI
-    unless the user asked to navigate.
+    A leave BALANCE (entitled/used/pending/remaining by type) and leave
+    REQUESTS / history are different reads. Empty leave requests is NOT a
+    zero balance — never invent remaining/used/pending = 0 from an empty
+    request history.
+    Empty payslips → say empty. No loans → say no loans; never invent
+    installments. Organisation-wide lists are HR-only and not available to
+    this user. Do not offer to open Leave/Loans UI unless the user asked to
+    navigate.
 
   hr: >
     ## Net-pay queries
     When asked for someone's salary or net pay, fetch the payroll run
-    output first using list_payslip_lines (filter by payroll_run). Ground
+    output first — its payslip lines, filtered by payroll run. Ground
     your answer in those numbers. If no committed run exists yet, state
     that and describe what the calculation will look like (gross − GOSI −
     loan_installment = net). Never state a figure you did not read from a
@@ -137,15 +135,14 @@ guidance_by_audience:
     about headcount, payroll runs, payslips, leave balances, or loans —
     call the relevant endpoint first, then answer from the tool result.
     Never estimate or invent a number you could look up. Self-service
-    twins (list_my_payslips, list_my_leave, list_my_loans) remain valid
-    when the ask is first-person.
+    reads remain valid when the ask is first-person.
 
   admin: >
     ## Using live data (admin)
     You have full read access across People & Payroll, including HR list
-    endpoints and self-service twins. Prefer list_payslip_lines for
-    org-wide payroll questions and list_my_* only when the ask is clearly
-    the logged-in user's own records. Never invent a figure.
+    endpoints and self-service twins. Prefer the org-wide payslip-lines
+    read for org-wide payroll questions and self-service reads only when
+    the ask is clearly the logged-in user's own records. Never invent a figure.
 
 domain_facts: >
   Payroll run stages: draft (initial calculations generated) →
@@ -205,8 +202,8 @@ api_catalog:
       bucket dominates (>70%) — ALWAYS use this hint, never default to pie.
       USE THIS for ANY distribution / breakdown / count-by-dimension question.
       For TOTAL headcount or Kuwaiti count (canonical named metrics), prefer the
-      standalone aggregate_entity TOOL (metric=headcount|kuwaiti) so the filter
-      definition is fixed and cited — do not invent alternate filters.
+      canonical-metric capability when it is offered, so the filter definition
+      is fixed and cited — do not invent alternate filters.
     parameters:
       type: object
       additionalProperties: false
@@ -277,10 +274,10 @@ api_catalog:
       person by name or number, and NEVER conclude "no such employee" from it —
       it is capped at 100 rows so the person may exist beyond the page.
       For ANY lookup by name / number / "is there an employee named X" /
-      "من هو X" — call the standalone resolve_entity TOOL (a function tool,
-      NOT one of these REST endpoints), which scans the COMPLETE population
-      and returns a matched record plus near-miss "Did you mean" suggestions.
-      For named totals (headcount, Kuwaiti count) use aggregate_entity.
+      "من هو X" — use the full-population lookup capability when it is
+      offered, which scans the COMPLETE population and returns a matched
+      record plus near-miss "Did you mean" suggestions. For named totals
+      (headcount, Kuwaiti count) use the canonical-metric capability.
       For dimension breakdowns use analyze_employees.
     requires_auth: true
     requires_confirmation: false
@@ -333,8 +330,8 @@ api_catalog:
     description: >
       Get full details for one employee: personal data, position, org unit,
       basic salary, join date, contract type, is_active. Path param {id}
-      is the employee numeric id (resolve via the resolve_entity TOOL if you
-      only have a name or employee number). Prefer this (or resolve_entity)
+      is the employee numeric id (resolve it with the full-population lookup
+      capability if you only have a name or employee number). Prefer this
       for salary / compensation / basic pay questions about a named coworker —
       CBAC may deny with people:view_compensation; never invent "no salary data".
     requires_auth: true
@@ -359,6 +356,7 @@ api_catalog:
       {count, results[]} with id, org_unit, period_start, period_end,
       status (draft | computed | validated | committed), created_at.
       Use to find the current/latest run or check its status.
+    latest_by: period_end
     requires_auth: true
     requires_confirmation: false
 
@@ -367,7 +365,15 @@ api_catalog:
     path: /carbon-api/people/payroll-runs/{id}/
     description: >
       Get full details of one payroll run including status, period, and
-      summary totals. Path param {id} is the run numeric id.
+      summary totals. Path param {id} is the run numeric id, bound from
+      list_payroll_runs.
+    parameters:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id:
+          description: Payroll run id from list_payroll_runs (path param).
     requires_auth: true
     requires_confirmation: false
 
@@ -503,8 +509,8 @@ api_catalog:
       days: number, note: optional string}. Governed leave_type codes:
       annual | sick | emergency | unpaid | maternity | paternity.
       Synonyms (host resolves before write): عارضة / casual / طارئة → emergency;
-      سنوية / vacation → annual; مرضية → sick. Prefer this over
-      create_leave_record for first-person requests — employee is implied from
+      سنوية / vacation → annual; مرضية → sick. Prefer this over the HR
+      leave-record write for first-person requests — employee is implied from
       the session; do NOT send employee id. Use for "I want leave", "request
       leave", "أريد إجازة", "تقديم إجازة", "عارضة", "emergency leave".
       On validation deny the host returns error_kind
@@ -546,6 +552,7 @@ api_catalog:
     examples:
       - {ar: "كم باقي لي من إجازة؟", en: "How many leave days do I have left?"}
       - {ar: "الإجازات", en: "leave"}
+      - {ar: "أخبرني أكثر عن إجازاتي", en: "tell me more about my vacations"}
     description: >
       The logged-in employee's OWN leave balance per leave type: entitled,
       carried_forward, opening_balance, used, pending, remaining. Use for
@@ -638,7 +645,7 @@ api_catalog:
       payroll runs only: id, line_type (gross | gosi | loan_installment | net),
       amount, payroll_run. Use ONLY for explicit "my payslip" / "قسيمة" asks —
       NOT for salary / compensation / basic pay / "راتبي" (those use
-      get_my_profile or get_employee / resolve_entity so CBAC deny is explicit).
+      get_my_profile, or the HR record read, so CBAC deny is explicit).
       Explaining a line already shown ("what is GOSI?", "educate me about my
       payslip", "ما هو التأمينات") is an answer from state, not a new call;
       a follow-up about the loan_installment line is list_my_loans.
@@ -748,7 +755,7 @@ api_catalog:
     kind: history
     not_for: >
       Short-hours permissions (استئذان). That is list_my_attendance_permissions.
-      Admin listing of other employees is list_attendance. Bare place noun
+      Listing other employees' attendance is an HR read. Bare place noun
       "attendance" / "حضور" alone is navigate to the attendance page, not
       this read. "Clock me in now" / "سجل حضوري الآن" is a write → Agent
       (submit_my_attendance_permission / handoff), not this GET.
@@ -763,7 +770,7 @@ api_catalog:
       date_from / date_to (YYYY-MM-DD). Fields: id, date, hours_worked,
       overtime_hours, status (present | absent | leave | permission). Never
       returns another employee's rows. Empty means no records yet — do not
-      invent clock times. Prefer this over list_attendance for every
+      invent clock times. Prefer this over the HR attendance list for every
       first-person attendance / clock-in / check-in ask about past rows.
     requires_auth: true
     requires_confirmation: false
@@ -802,7 +809,7 @@ api_catalog:
       permission_type: personal|medical|official|emergency, hours: number,
       notes?: string}. Prefer for attendance.permission.lifecycle submit /
       "إذن حضور" / short hours / clock-me-in now. NEVER use submit_my_leave.
-      Admin-on-behalf remains create_attendance_permission (ops only).
+      Admin-on-behalf filing is an HR write (ops only).
     requires_auth: true
     requires_confirmation: true
     write_slots:

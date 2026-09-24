@@ -7,6 +7,8 @@ in-process dict is a fallback only when Redis is unreachable.
 """
 from __future__ import annotations
 
+from ai.engine.pack_vocab import V
+
 import json
 import logging
 import re
@@ -353,7 +355,7 @@ def update_focus_from_resolve_results(
         working_memory.set_focus(
             conversation_id,
             display,
-            "employee",
+            V("t_employee_4"),
             entity_id=emp_no or None,
             aliases=aliases,
         )

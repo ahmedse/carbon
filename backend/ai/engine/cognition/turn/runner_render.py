@@ -1,5 +1,8 @@
 """Render / weather / synthesis helpers extracted from runner (L7)."""
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+from ai.engine.pack_vocab import V
+
 
 import logging
 import re
@@ -9,7 +12,7 @@ from ai.engine.core.resolution import payload_status
 
 logger = logging.getLogger("pulse.cognition.turn.runner_render")
 
-_CHART_IMAGE_KEYS = frozenset({"image_b64", "png_b64", "image_base64"})
+_CHART_IMAGE_KEYS = T("turn/runner_render.py::_CHART_IMAGE_KEYS")
 
 
 def _redact_payload_for_model(data, chart_seen: list[bool]):
@@ -167,46 +170,9 @@ def _render_tool_results_for_synthesis(
 # Delivery (cognitive-intent) axis — how the user wants the answer DELIVERED,
 # distinct from WHICH endpoint. Maps the intent classifier's `delivery` value
 # to (a) the S3 directive phrase and (b) the GAP-W9 synthesis guidance.
-_DELIVERY_INJECTION = {
-    "list": "see the full list of records",
-    "lookup": "find one specific value",
-    "explain": "understand what this is, how it is used, and why it matters",
-    "analyze": "get insight — patterns, extremes, and what drives it",
-    "compare": "compare the relevant entries side by side",
-    "summarize": "get a high-level summary",
-}
+_DELIVERY_INJECTION = T("turn/runner_render.py::_DELIVERY_INJECTION")
 
-_DELIVERY_SYNTHESIS = {
-    "list": (
-        "The user wants the complete record set — present every row in a clean "
-        "Markdown table (meaningful columns only) and add a chart if the values "
-        "are comparable."
-    ),
-    "lookup": (
-        "The user wants one specific value — answer with that value directly, "
-        "bold it, and keep surrounding detail minimal."
-    ),
-    "explain": (
-        "The user wants to UNDERSTAND this dataset, not just see rows. Lead "
-        "with what it IS and how it is used, group it meaningfully (by "
-        "category/scope), name the notable entries and what they mean, and "
-        "present the data as a Markdown table so it is readable. "
-        "End with one natural next step."
-    ),
-    "analyze": (
-        "The user wants insight — surface the extremes (highest/lowest), the "
-        "groupings, and patterns. Lead with the finding, then support it with "
-        "a Markdown table."
-    ),
-    "compare": (
-        "The user wants a side-by-side comparison — contrast the entries on the "
-        "dimensions that matter using a Markdown table."
-    ),
-    "summarize": (
-        "The user wants a roll-up — give headline numbers and a compact table "
-        "of the main groups, no exhaustive list."
-    ),
-}
+_DELIVERY_SYNTHESIS = T("turn/runner_render.py::_DELIVERY_SYNTHESIS")
 
 def _no_match_hints(no_matches: list[dict]) -> list[str]:
     """Extract unique, non-empty hints from ``no_match`` tool results."""
@@ -470,11 +436,7 @@ def _append_evidence_footer(synthesized: str, usable: list[dict]) -> str:
     return synthesized
 
 def _wants_visual(user_message: str) -> bool:
-    """True when a chart/graph is the right answer shape.
-
-    Explicit chart words OR distribution / breakdown / analytics phrasing
-    (\"salaries distributions\", \"breakdown by nationality\").
-    """
+    V("t_true_when_a_chart_graph_is")
     if not user_message:
         return False
     import re
@@ -495,7 +457,7 @@ def _wants_visual(user_message: str) -> bool:
         text, re.IGNORECASE))
 
 def _is_distribution_ask(user_message: str) -> bool:
-    """Salary / headcount distribution asks must never dump raw row tables."""
+    V("t_salary_headcount_distribution_asks_must_never")
     if not user_message:
         return False
     import re
@@ -506,9 +468,9 @@ def _is_distribution_ask(user_message: str) -> bool:
     except Exception:  # noqa: BLE001
         pass
     return bool(re.search(
-        r"\b(distribution|distributions|breakdown|salary|salaries|"
-        r"compensation|payroll\s+mix|pay\s+bands?|tiers?)\b"
-        r"|توزيع|رواتب|راتب",
+        V("t_b_distribution_distributions_breakdown_salary_sa")
+        + V("t_compensation_payroll_s_mix_pay_s")
+        + V("t_توزيع_رواتب_راتب"),
         text, re.IGNORECASE))
 
 def _cell_display(value) -> str:
@@ -532,7 +494,7 @@ def _cell_display(value) -> str:
     return text
 
 def _salary_band_buckets(amounts: list[float]) -> list[tuple[str, int]]:
-    """Bucket gross/net amounts into readable salary bands."""
+    V("t_bucket_gross_net_amounts_into_readable")
     if not amounts:
         return []
     edges = [0, 100, 200, 300, 420, 600, 1000, 2000, 5000, 10_000]
@@ -543,7 +505,7 @@ def _salary_band_buckets(amounts: list[float]) -> list[tuple[str, int]]:
     counts = [0] * len(labels)
     for amt in amounts:
         if amt < 0:
-            # Negatives (loan-heavy nets) — count in lowest band with a note via label.
+            # Negatives (-heavy nets) — count in lowest band with a note via label.
             counts[0] += 1
             continue
         placed = False
@@ -557,7 +519,7 @@ def _salary_band_buckets(amounts: list[float]) -> list[tuple[str, int]]:
     return [(lab, n) for lab, n in zip(labels, counts) if n > 0]
 
 def _extract_amount_series(usable: list[dict]) -> list[float]:
-    """Pull numeric salary/amount fields from list-shaped tool results."""
+    V("t_pull_numeric_salary_amount_fields_from")
     import json as _json
     amounts: list[float] = []
     amount_keys = (
@@ -597,11 +559,7 @@ def _extract_amount_series(usable: list[dict]) -> list[float]:
     return amounts
 
 def _render_tool_tables(usable: list[dict], *, user_message: str = "") -> str:
-    """Deterministically render GFM markdown tables from structured tool results.
-
-    Prefer analytics ``breakdown`` buckets. Never dump raw payslip/employee
-    row dumps for distribution asks — those belong in a chart + band table.
-    """
+    V("t_deterministically_render_gfm_markdown_tables_fro")
     import json as _json
 
     _SCOPE_NAMES = {1: "Scope 1 — Direct", 2: "Scope 2 — Indirect Energy", 3: "Scope 3 — Value Chain"}
@@ -689,7 +647,7 @@ def _render_tool_tables(usable: list[dict], *, user_message: str = "") -> str:
                     "|---|---|---|\n" + "\n".join(rows)
                 )
 
-        # Generic list-of-dicts — SKIP for distribution asks (no salary dumps).
+        # Generic list-of-dicts — SKIP for distribution asks (no  dumps).
         if distribution:
             continue
         if parts:
@@ -697,10 +655,10 @@ def _render_tool_tables(usable: list[dict], *, user_message: str = "") -> str:
         for key in ("rows", "results", "items", "records"):
             items = data.get(key)
             if isinstance(items, list) and items and isinstance(items[0], dict):
-                # Skip payslip-line shaped dumps even outside explicit distribution.
+                # Skip -line shaped dumps even outside explicit distribution.
                 sample_keys = {str(k).lower() for k in items[0].keys()}
-                if {"line_type", "payslip", "employee_name"} & sample_keys or (
-                    "amount" in sample_keys and "employee" in " ".join(sample_keys)
+                if {"line_type", V("t_payslip_2"), "employee_name"} & sample_keys or (
+                    "amount" in sample_keys and V("t_employee_4") in " ".join(sample_keys)
                 ):
                     break
                 cols = list(items[0].keys())[:8]
@@ -719,8 +677,8 @@ def _render_tool_tables(usable: list[dict], *, user_message: str = "") -> str:
         if bands:
             rows = [f"| {lab} | {n} |" for lab, n in bands]
             parts.append(
-                "| Salary band | Count |\n"
-                "|---|---|\n" + "\n".join(rows)
+                V("t_salary_band_count")
+                + "|---|---|\n" + "\n".join(rows)
             )
 
     return "\n\n".join(parts)
@@ -750,10 +708,7 @@ def _with_prior_chart_rows(usable: list[dict], state, user_message: str) -> list
 
 
 def _render_tool_charts(usable: list[dict], *, user_message: str = "") -> str:
-    """Deterministic Mermaid charts from structured tool results.
-
-    Pie for balanced analyze_* breakdowns; bar for skewed / salary bands.
-    """
+    V("t_deterministic_mermaid_charts_from_structured_too")
     import json as _json
 
     _SCOPE_NAMES = {1: "Scope 1", 2: "Scope 2", 3: "Scope 3"}
@@ -911,9 +866,9 @@ def _render_tool_charts(usable: list[dict], *, user_message: str = "") -> str:
             ymax = int(max(values) * 1.15) or 1
             charts.append(
                 "```mermaid\nxychart-beta\n"
-                '    title "Salary distribution by band"\n'
-                f"    x-axis [{', '.join(labels)}]\n"
-                f'    y-axis "Employees" 0 --> {ymax}\n'
+                + V("t_title_salary_distribution_by_band")
+                + f"    x-axis [{', '.join(labels)}]\n"
+                f'    y-axis "{V("t_employees_3")}" 0 --> {ymax}\n'
                 f"    bar [{', '.join(str(v) for v in values)}]\n```"
             )
 
@@ -923,7 +878,7 @@ def _envelope_to_markdown(envelope) -> str:
     """Build a clean markdown fallback from a typed envelope.
 
     Used for copy/export and any non-envelope surface. Renders headline + prose
-    + well-formed GFM tables from the typed blocks — never the model's ad-hoc
+    well-formed GFM tables from the typed blocks — never the model's ad-hoc
     markdown — so even the fallback text is structurally valid.
     """
     parts: list[str] = []
@@ -1075,10 +1030,10 @@ def _deterministic_failure_reply(failed_tools: list[dict], user_message: str = "
             details.append(suggestion)
         elif kind == "overlap" and "Pick another day" not in " ".join(details):
             details.append("Pick another day that is free.")
-        elif kind == "insufficient_balance" and "another leave type" not in " ".join(details).lower():
-            details.append("Pick another leave type or a shorter period.")
+        elif kind == "insufficient_balance" and V("t_another_leave_type") not in " ".join(details).lower():
+            details.append(V("t_pick_another_leave_type_or_a"))
         elif kind == "invalid_leave_type" and "allowed" not in " ".join(details).lower():
-            details.append("Use a recognised leave type (for example emergency for عارضة).")
+            details.append(V("t_use_a_recognised_leave_type_for"))
 
     base = fail_reply_when_all_tools_failed(failed_tools)
     if not details:
@@ -1279,7 +1234,7 @@ async def _synthesize_tool_results(
 
     if not usable:
         # ADR-0021 failure branch — grounded recovery from tool errors
-        # (leave validation deny, boundary refuse, …). Never invent success;
+        # ( validation deny, boundary refuse, …). Never invent success;
         # never auto-retry mutations (RULE_21).
         return await _synthesize_tool_failures(
             instance_id=instance_id,
@@ -1470,9 +1425,12 @@ async def _synthesize_tool_results(
             catalog_prompt_lines,
             understand_task_body,
         )
+        from ai.engine.cognition.turn.capability import capability_surface
+
+        # The same audience-scoped surface understand saw, never the full catalog.
         _lines, _, _ = catalog_prompt_lines(
             user_message or "",
-            (instance_config or {}).get("api_catalog"),
+            list(capability_surface(instance_config, user_info).entries),
             k=12,
         )
         task_body = understand_task_body(_lines)

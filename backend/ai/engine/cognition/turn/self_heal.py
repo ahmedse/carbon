@@ -21,6 +21,9 @@ Strategies live in ``_STRATEGIES`` — adding a repair means adding a function,
 not touching the dispatcher.
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+
+from ai.engine.pack_vocab import V
 
 import json
 import logging
@@ -30,16 +33,9 @@ from dataclasses import dataclass, field
 logger = logging.getLogger(__name__)
 
 #: Tools whose misses are worth a repair hop. All read-only.
-_REPAIRABLE_TOOLS: frozenset[str] = frozenset({
-    "get_entity_details",
-    "search_knowledge",
-    "call_host_api",
-})
+_REPAIRABLE_TOOLS = T("turn/self_heal.py::_REPAIRABLE_TOOLS")
 
-_UNKNOWN_API_PHRASES = (
-    "unknown api", "api not found", "no such api", "not in catalog",
-    "not in the catalog",
-)
+_UNKNOWN_API_PHRASES = T("turn/self_heal.py::_UNKNOWN_API_PHRASES")
 
 
 @dataclass(frozen=True)
@@ -66,11 +62,7 @@ def _as_dict(result) -> dict | None:
 
 
 def is_repairable_miss(tool_name: str, result) -> bool:
-    """True when the tool came back empty-handed in a way a retry could fix.
-
-    A legitimately empty answer ("you have no leave records") is NOT a miss —
-    only a lookup that never reached real data is.
-    """
+    V("t_true_when_the_tool_came_back")
     if tool_name not in _REPAIRABLE_TOOLS:
         return False
     data = _as_dict(result)

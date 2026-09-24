@@ -1,8 +1,9 @@
 """Arabic needles for ``contracts`` (ADR-0049 L7). No compiled regex."""
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
 
-NONEXISTENCE_AR = ("لا يوجد", "غير موجود", "لم يتم العثور")
-UNIVERSAL_AR = ("جميع الموظفين",)
+
+NONEXISTENCE_AR = T("entity/contracts_i18n.py::NONEXISTENCE_AR")
 
 
 def any_needle(text: str, needles: tuple[str, ...]) -> bool:

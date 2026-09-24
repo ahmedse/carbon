@@ -4,40 +4,25 @@ No ``compiled regex`` in this module — Arabic literals stay outside harness
 ``arabic_regex`` windows in ``zero_llm.py``.
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+from ai.engine.pack_vocab import V
 
-THANKS_AR = ("شكرا", "شكراً", "مشكور")
-THANKS_WRITE_AR = ("قدّم", "قدم", "أرسل", "ارسل")
-DAY_SPAN_AR = ("من الآن", "من الان", "حتى إجاز", "حتى اجاز")
-WHEN_START_AR = ("متى تبدأ", "متى تبدا", "متى يبدأ", "متى يبدا")
-CLOCK_AR = (
-    "ما هو تاريخ",
-    "ما تاريخ",
-    "ما هو اليوم",
-    "ما اليوم",
-    "ما هو الشهر",
-    "اليوم كم",
-)
-MONTH_ASK_AR = ("الشهر",)
-NOTIFICATION_AR = ("إشعارات", "اشعارات", "تنبيهات")
-SHOW_OPEN_AR = ("أرني", "ارني", "افتح", "وين", "أين")
-PAYROLL_SCHEDULE_AR = (
-    "متى ستتم معالجة الرواتب",
-    "متى يتم معالجة الرواتب",
-    "متى سيكون الراتب",
-)
-PAYSLIP_DOWNLOAD_AR = ("تحميل قسيمة", "تحميل القسيمة")
-PAYROLL_FOLLOWUP_AR = (
-    "راتبي",
-    "الراتب",
-    "صافي",
-    "الاستقطاعات",
-    "خصومات",
-    "قسيمة",
-)
-COWORKER_FOLLOWUP_AR = ("قسم", "منصب", "مدير")
-PAYROLL_POLICY_AR = ("اعتراض", "شهادة طبية", "سياسة")
-EMPTY_PAYSLIP_REPLY_AR = ("لم أجد قسائم",)
-PROFILE_ASK_AR = ("رقم الموظف", "قسم", "مدير")
+
+THANKS_AR = T("turn/zero_llm_i18n.py::THANKS_AR")
+THANKS_WRITE_AR = T("turn/zero_llm_i18n.py::THANKS_WRITE_AR")
+DAY_SPAN_AR = T("turn/zero_llm_i18n.py::DAY_SPAN_AR")
+WHEN_START_AR = T("turn/zero_llm_i18n.py::WHEN_START_AR")
+CLOCK_AR = T("turn/zero_llm_i18n.py::CLOCK_AR")
+MONTH_ASK_AR = T("turn/zero_llm_i18n.py::MONTH_ASK_AR")
+NOTIFICATION_AR = T("turn/zero_llm_i18n.py::NOTIFICATION_AR")
+SHOW_OPEN_AR = T("turn/zero_llm_i18n.py::SHOW_OPEN_AR")
+PAYROLL_SCHEDULE_AR = T("turn/zero_llm_i18n.py::PAYROLL_SCHEDULE_AR")
+PAYSLIP_DOWNLOAD_AR = T("turn/zero_llm_i18n.py::PAYSLIP_DOWNLOAD_AR")
+PAYROLL_FOLLOWUP_AR = T("turn/zero_llm_i18n.py::PAYROLL_FOLLOWUP_AR")
+COWORKER_FOLLOWUP_AR = T("turn/zero_llm_i18n.py::COWORKER_FOLLOWUP_AR")
+PAYROLL_POLICY_AR = T("turn/zero_llm_i18n.py::PAYROLL_POLICY_AR")
+EMPTY_PAYSLIP_REPLY_AR = T("turn/zero_llm_i18n.py::EMPTY_PAYSLIP_REPLY_AR")
+PROFILE_ASK_AR = T("turn/zero_llm_i18n.py::PROFILE_ASK_AR")
 
 THANKS_TEXT = {
     "en": "You're welcome. Ask if you need anything else.",
@@ -52,17 +37,17 @@ NOTIFICATION_TEXT = {
 }
 PAYROLL_SCHEDULE_TEXT = {
     "en": (
-        "I don't have next month's payroll run date. "
-        "That date is on the committed run in People — I won't guess it."
+        V("t_i_don_t_have_next_month")
+        + "That date is on the committed run in People — I won't guess it."
     ),
     "ar": (
-        "ليس لدي تاريخ معالجة رواتب الشهر القادم. "
-        "التاريخ على مسير الرواتب المعتمد في تطبيقاتي، ولن أخمنه."
+        V("t_ليس_لدي_تاريخ_معالجة_رواتب_الشهر")
+        + V("t_التاريخ_على_مسير_الرواتب_المعتمد_في")
     ),
 }
 PAYSLIP_DOWNLOAD_TEXT = {
     "en": (
-        "Payslips are in My. If none are committed yet, there is nothing to download."
+        V("t_payslips_are_in_my_if_none")
     ),
     "ar": (
         "القسائم في تطبيقاتي. إذا لم تُعتمد قسيمة بعد، فلا يوجد ما يُحمَّل."

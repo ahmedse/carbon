@@ -20,4 +20,49 @@ subjects:
     paths: [carbon-frontend/src/apps/carbon]
     tests: [carbon-frontend/src/apps/carbon]
 
-checks: []
+checks:
+  - id: CARBON-SPC-01
+    title: Emissions storage ADR is declared
+    dimension: specified
+    rank: 1
+    collector: repo
+    probe: { type: file_exists, file: .ai-toolkit/decisions/0025-typed-vs-dataschema-storage.md }
+    applies_to: [module, journey]
+    solution: Keep ADR-0025.
+    source: ADR-0025
+  - id: CARBON-COR-01
+    title: Emissions module names its test tree
+    dimension: correct
+    rank: 1
+    collector: repo
+    probe: { type: tests_present }
+    applies_to: [module]
+    solution: "Declare tests: for the emissions module."
+    source: ADR-0025
+  - id: CARBON-REL-01
+    title: Carbon subject has an owner
+    dimension: reliable
+    rank: 1
+    collector: repo
+    probe: { type: field_nonempty, field: owner }
+    applies_to: [module, journey]
+    solution: Set owner on the subject.
+    source: ADR-0025
+  - id: CARBON-OBS-01
+    title: Carbon ladder manifest is the declared signal
+    dimension: observed
+    rank: 1
+    collector: repo
+    probe: { type: file_exists, file: assurance/carbon/ladder.yaml }
+    applies_to: [module, journey]
+    solution: Keep assurance/carbon/ladder.yaml.
+    source: ADR-0051
+  - id: CARBON-MNT-01
+    title: Carbon subject paths exist
+    dimension: maintainable
+    rank: 1
+    collector: repo
+    probe: { type: paths_exist, field: paths }
+    applies_to: [module, journey]
+    solution: Declare paths that exist in the tree.
+    source: ADR-0020

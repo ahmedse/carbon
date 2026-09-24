@@ -3,13 +3,13 @@
   "instance": "nibras",
   "budget": {
     "staged_exits": 3,
-    "re_compile": 60,
+    "re_compile": 59,
     "arabic_regex": 0,
     "runner_lines": 367,
     "tool_choice_uses": 33,
-    "routing_phrase_sets": 280,
-    "domain_terms_in_core": 846,
-    "brand_literals_in_core": 11
+    "routing_phrase_sets": 260,
+    "domain_terms_in_core": 0,
+    "brand_literals_in_core": 0
   },
   "ladder": {
     "levels": {
@@ -19,21 +19,26 @@
       "L3": "reached",
       "L4": "reached",
       "L5": "reached",
-      "L6": "reached",
+      "L6": "partial",
       "L7": "reached"
     },
-    "misses": {},
+    "misses": {
+      "L6": [
+        "g6_parity",
+        "forced_call_misses"
+      ]
+    },
     "six_b_streak": 5,
     "soak_complete": true,
     "adr_0047": "Accepted"
   },
   "g6": {
     "source": "PV2.1-g6-understand-2026-09-24.json",
-    "n": 74,
-    "decision_accuracy": 0.9932432432432432,
-    "parity": 0.9864864864864865,
+    "n": 75,
+    "decision_accuracy": 0.9866666666666667,
+    "parity": 0.96,
     "gate_pass": true,
-    "misses": 1
+    "misses": 2
   },
   "g5": {
     "source": "PV2-g5-2026-09-23s.json",
@@ -77,9 +82,23 @@
     "misses": [],
     "gate_pass": true
   },
+  "followup": {
+    "n": 4,
+    "passed": 4,
+    "ratio": 1.0,
+    "gate_pass": true,
+    "misses": []
+  },
+  "portability": {
+    "n": 3,
+    "passed": 3,
+    "process_id": "cohort.review.lifecycle",
+    "gate_pass": true,
+    "misses": []
+  },
   "coverage": {
     "chat_turn_path": "ladder L0–L7 · G5 · G6 · budget",
     "agent_plan_path": "bank 12/12 pass",
-    "second_instance": "none — all banks are Nibras ESS"
+    "second_instance": "eduos cohort.review.lifecycle 3/3"
   }
 }

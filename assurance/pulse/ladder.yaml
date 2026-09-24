@@ -29,6 +29,60 @@ checks:
     applies_to: [module]
     solution: python -m ai.eval.pulse_gauge --gate ; remove the exit / regex / phrase table you added.
     source: ADR-0049 Budget row
+  - id: PULSE-SEC-01
+    title: Chat must not host-mutate (ADR-0046 is present)
+    dimension: secure
+    rank: 1
+    collector: repo
+    probe: { type: file_exists, file: .ai-toolkit/decisions/0046-pulse-chat-no-host-mutation-stage.md }
+    applies_to: [module, process, journey, ai_pack]
+    solution: Keep ADR-0046. Chat proposes; Agent applies.
+    source: ADR-0046
+  - id: PULSE-SEC-03
+    title: Chat turn has a test tree for the no-mutation guard
+    dimension: secure
+    rank: 3
+    collector: repo
+    probe: { type: tests_present, subjects: [pulse.chat.turn] }
+    applies_to: [process]
+    solution: Keep backend/ai/tests covering the Chat write guard.
+    source: ADR-0046 G2
+  - id: PULSE-PRF-01
+    title: Harness budget ceiling file is declared
+    dimension: performant
+    rank: 1
+    collector: repo
+    probe: { type: file_exists, file: docs/pulse/evidence/PV2.1-budget-ceiling.json }
+    applies_to: [module, process, journey, ai_pack]
+    solution: Keep PV2.1-budget-ceiling.json.
+    source: ADR-0049 Budget row
+  - id: PULSE-PRF-03
+    title: Harness budget within ceiling
+    dimension: performant
+    rank: 3
+    collector: pulse_gauge
+    probe: { type: budget_gate, subjects: [pulse.engine.core] }
+    applies_to: [module]
+    solution: python -m ai.eval.pulse_gauge --gate
+    source: ADR-0049 Budget row
+  - id: PULSE-USE-01
+    title: Chat surface file is declared
+    dimension: usable
+    rank: 1
+    collector: repo
+    probe: { type: file_exists, file: carbon-frontend/src/shell/AIMessageBubble.jsx }
+    applies_to: [module, process, journey, ai_pack]
+    solution: Keep the Chat message surface.
+    source: ADR-0046
+  - id: PULSE-USE-04
+    title: Chat surface vitest green on HEAD
+    dimension: usable
+    rank: 4
+    collector: vitest
+    probe: { type: vitest_file, file: src/__tests__/AIMessageBubble.operations.test.jsx, subjects: [pulse.chat.ui] }
+    applies_to: [journey]
+    solution: "python -m excellence.gauge --run vitest:src/shell/__tests__"
+    source: shell vitest
   - id: PULSE-SPC-01
     title: Intelligence contract document present
     dimension: specified

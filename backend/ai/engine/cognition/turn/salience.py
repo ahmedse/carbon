@@ -3,6 +3,7 @@
 Routes user messages into one of four domains and chooses a processing
 route (fast / full / deep). Also detects urgency keywords to bump weight.
 """
+from ai.engine.cognition.phrase_tables import T
 import logging
 
 from ai.engine.agent.reasoning import _CONVERSATIONAL_RE, _IDENTITY_RE
@@ -21,7 +22,7 @@ _TREND_PATTERNS = [
     "accuracy", "precision", "recall", "metric",
 ]
 
-_URGENCY_KEYWORDS = {"urgent", "asap", "critical", "broken", "down", "error", "failing", "emergency"}
+_URGENCY_KEYWORDS = T("turn/salience.py::_URGENCY_KEYWORDS")
 
 # Reasoning-heavy signals → route to the "deep" lane. A "why"/"explain"/
 # "root cause" question needs genuine reasoning, not a plain data lookup.

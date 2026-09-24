@@ -1,5 +1,6 @@
 """Extracted stage block from TurnPipelineRunner._run_metered."""
 from __future__ import annotations
+from ai.engine.pack_vocab import V
 
 import asyncio
 import inspect
@@ -105,9 +106,10 @@ async def run_s3_through_s5(
             navigation_prompt_lines,
             understand_task_body,
         )
+        from ai.engine.cognition.turn.capability import capability_surface
         _lines, _allowed, _writes = catalog_prompt_lines(
             st.user_message or "",
-            _catalog,
+            list(capability_surface(config, user_info).entries),
             k=12,
             context=catalog_context(conversation_history),
         )
@@ -144,7 +146,7 @@ async def run_s3_through_s5(
         # turn hands it to the Tasks panel without another LLM call.
         _plan_title = str((st.plan_revision_ref or {}).get('title') or '').strip()
         _plan_line = f' The plan under discussion: "{_plan_title}".' if _plan_title else ''
-        system_prompt = f'{system_prompt}\n\nAGENT DISCUSS MODE — follow exactly:\n- The user is refining or discussing an existing Agent plan in Chat.{_plan_line}\n- Reply in prose only: one improved brief and/or a short numbered step list. Your reply IS the proposed revision — write it so it can be applied verbatim.\n- Keep the step list multi-step when the brief has multiple actions (compute, validate, compare rates, report, do-not-commit). Never collapse to a single vague step.\n- Do NOT call any tools (no invoke_skill, call_host_api, resolve_entity, aggregate_entity, plan_task, edit_plan, approve_plan, web_research, export_document).\n- Do NOT re-run the prior analysis or fetch live data.\n- Do NOT navigate the user to an app (Payroll, People, …).\n- Do NOT claim the plan was changed. End with one line: the user can say "apply" to take this revision to Agent, where they review the diff and approve it.\n'
+        system_prompt = f'{system_prompt}\n\nAGENT DISCUSS MODE — follow exactly:\n- The user is refining or discussing an existing Agent plan in Chat.{_plan_line}\n- Reply in prose only: one improved brief and/or a short numbered step list. Your reply IS the proposed revision — write it so it can be applied verbatim.\n- Keep the step list multi-step when the brief has multiple actions (compute, validate, compare rates, report, do-not-commit). Never collapse to a single vague step.\n- Do NOT call any tools (no invoke_skill, call_host_api, resolve_entity, aggregate_entity, plan_task, edit_plan, approve_plan, web_research, export_document).\n- Do NOT re-run the prior analysis or fetch live data.\n- Do NOT navigate the user to an app ({V("t_payroll_2")}, People, …).\n- Do NOT claim the plan was changed. End with one line: the user can say "apply" to take this revision to Agent, where they review the diff and approve it.\n'
     elif draft_tools and _is_platform_zone:
         from ai.engine.cognition.turn.handoff_agent import chat_grounding_rules_block
         system_prompt = f'{system_prompt}\n\n{chat_grounding_rules_block(surface, process_mode=process_mode)}'
@@ -389,7 +391,7 @@ async def run_s3_through_s5(
     _ess_empty = empty_history_misread(st.execution.completed_tools, user_message=_resolved_user_message)
     if _plan_receipt:
         # plan_task already returns a grounded product receipt. Synthesizing
-        # and verifying that one line added multiple LLM calls and could leave
+        # and verifying that one line added multiple LLM calls and could 
         # the UI spinning on provider retries after the task already existed.
         st.final_text = _plan_receipt
         _synth = None
@@ -431,7 +433,7 @@ async def run_s3_through_s5(
         except Exception:
             _catalog_render = None
         # When a Word/Excel export landed, the download receipt is the answer —
-        # do not let a leave/loan catalog dump become the chat headline.
+        # do not let a / catalog dump become the chat headline.
         _export_landed = False
         for _item in st.execution.completed_tools or []:
             if not isinstance(_item, dict):

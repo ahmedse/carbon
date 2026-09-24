@@ -5,6 +5,7 @@ Supports two subscriber channels:
   - Widget subscribers (chat WS) — receive notifications only
   - Studio subscribers (admin WS) — receive notifications + cognition events + dashboard updates
 """
+from ai.engine.cognition.phrase_tables import T
 import json
 import logging
 from datetime import datetime
@@ -182,23 +183,7 @@ async def broadcast_cognition_event(
 # P1.4 — AG-UI run event stream (TASK-BE-01-4)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-RUN_EVENT_TYPES: frozenset[str] = frozenset({
-    "run.started",
-    "run.phase.started",
-    "run.phase.completed",
-    "run.step.started",
-    "run.step.completed",
-    "run.step.failed",
-    "run.step.skipped",
-    "run.paused",
-    "run.resumed",
-    "run.completed",
-    "run.failed",
-    "run.cancelled",
-    "tool.started",
-    "tool.completed",
-    "tool.failed",
-})
+RUN_EVENT_TYPES = T("notifier.py::RUN_EVENT_TYPES")
 
 
 async def broadcast_run_event(instance_id: str, event_type: str, payload: dict):

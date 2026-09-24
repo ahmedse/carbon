@@ -91,6 +91,13 @@ def feed_run_feedback(run_id: str, *, instance_id: str = PLAN_INSTANCE_ID) -> di
         return None
 
     steps = list(RunStep.objects.filter(run_id=run.id).order_by("step_index"))
+    # A skill that executed nothing earned neither a success nor a failure.
+    if any(
+        isinstance(s.critic_flags_json, dict)
+        and s.critic_flags_json.get("failure_class") == "no_effect"
+        for s in steps
+    ):
+        return None
     # Mirror the ReAct loop's ``succeeded`` predicate (loop.py) — every
     # executed (non-skipped) step must pass and carry no error.
     non_skipped = [s for s in steps if s.status != _STEP_SKIPPED]

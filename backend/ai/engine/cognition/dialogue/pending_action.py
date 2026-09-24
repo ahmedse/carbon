@@ -12,6 +12,7 @@ path (``create_pending_execution`` → user confirms the card).
 Uses the same lock-per-dict singleton pattern as ``engine/memory/working.py``.
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
 
 import threading
 from dataclasses import dataclass, field
@@ -38,16 +39,11 @@ class PendingAction:
 # confirmation — it is a fresh query that must flow through the normal pipeline.
 # The general vocabulary lives in ``dialogue.affirmation`` (shared with the
 # deixis gate and consent resume); these are the memory-card-specific extras.
-_MEMORY_CONFIRMATION_SIGNALS: frozenset[str] = frozenset({
-    "store it", "remember it", "save it", "keep it",
-    "احفظها", "تذكرها", "سجلها",
-})
+_MEMORY_CONFIRMATION_SIGNALS = T("dialogue/pending_action.py::_MEMORY_CONFIRMATION_SIGNALS")
 
 # ── Proposal detection (regex only, no LLM, no domain terms) ──────────────────
-_PROPOSAL_PREFIX_PHRASES = (
-    "shall ", "should ", "would you like me to ", "want me to ", "can i ",
-)
-_PROPOSAL_VERBS = ("store", "remember", "memorize", "save", "note")
+_PROPOSAL_PREFIX_PHRASES = T("dialogue/pending_action.py::_PROPOSAL_PREFIX_PHRASES")
+_PROPOSAL_VERBS = T("dialogue/pending_action.py::_PROPOSAL_VERBS")
 
 
 def _strip_trailing_punct(text: str) -> str:

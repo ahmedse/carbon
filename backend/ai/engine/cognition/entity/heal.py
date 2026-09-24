@@ -12,6 +12,9 @@ Plan + Execute:
 This module never auto-mutates business data (RULE_21).
 """
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
+
+from ai.engine.pack_vocab import V
 
 import json
 import logging
@@ -24,7 +27,7 @@ from ai.engine.cognition.entity.heal_i18n import CORRECTION_AR, any_needle
 logger = logging.getLogger("pulse.ecf.heal")
 
 # Correction signals from the user in Arabic or English
-_CORRECTION_PHRASES = ("wrong", "incorrect", "not right", "that's wrong")
+_CORRECTION_PHRASES = T("entity/heal.py::_CORRECTION_PHRASES")
 
 # Confidence threshold below which a result is considered suspect
 _LOW_CONFIDENCE_THRESHOLD = 0.5
@@ -164,7 +167,7 @@ def handle_turn_signal(
     prior_tool_result: dict | None,
     prior_assistant_response: str,
     *,
-    entity_type: str = "employee",
+    entity_type: str = V("t_employee_4"),
     query: str = "",
     instance_config: dict | None = None,
     fetch_fn=None,

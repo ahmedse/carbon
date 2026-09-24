@@ -1,25 +1,5 @@
-"""P4.3 — Skills Admission Gate — Three Critics + Marginal-Gain Check.
-
-Before a draft skill can be promoted to instance_promoted, it must pass
-three heterogeneous critics and a marginal-gain check. This is the
-non-negotiable gate from MASTER-PLAN §4.
-
-Critics
--------
-1. STRUCTURAL   (rules, no LLM) — validates signature/body JSON, kind,
-   name collision with existing tools.
-2. HARMLESSNESS (rules + optional LLM) — checks for dangerous patterns.
-   Only calls LLM for api_call / code_snippet kinds.
-3. CONSISTENCY  (LLM) — checks that the new skill doesn't contradict
-   any existing instance_promoted skill.
-4. MARGINAL GAIN (eval) — runs the skill on a small sample, compares
-   to baseline.
-
-All results are written to SkillAdmissionLog. Critic exceptions are
-fail-closed: if a critic raises or returns an unparseable LLM response it
-rejects the skill (reason ``critic_error``) and leaves it pending, so removing
-the LLM key means nothing is promoted.
-"""
+from ai.engine.pack_vocab import V
+V("t_p4_3_skills_admission_gate_three")
 
 import json
 import logging
@@ -499,14 +479,7 @@ async def admit_skill(skill_id: str, db: Session, admitted_by: str = "auto") -> 
 
 
 async def _promote_skill(skill_id: str, db: Session, promoted_by: str = "auto") -> Skill:
-    """Gate-only promotion: admit then promote a skill to instance_promoted.
-
-    Private by design (P1-06).  The only sanctioned way to move a skill into
-    ``instance_promoted``.  Unlike the previous implementation, this *always*
-    runs the admission gate — there is no ``gate_status`` short-circuit that
-    would let a non-pending skill skip the critics.  If admission fails, it
-    raises ``ValueError`` and leaves the skill untouched.
-    """
+    V("t_gate_only_promotion_admit_then_promote")
     skill = first(await db.select(Skill, ("id", skill_id)))
     if not skill:
         raise ValueError(f"Skill not found: {skill_id}")

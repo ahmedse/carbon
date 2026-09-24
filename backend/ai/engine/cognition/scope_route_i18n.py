@@ -1,19 +1,16 @@
 """Arabic needles for ``scope_route`` (ADR-0049 L7). No compiled regex."""
 from __future__ import annotations
+from ai.engine.cognition.phrase_tables import T
 
-LEAVE_WANT_AR = ("أريد", "ابغى", "أبغى", "عايز", "عاوز", "اريد")
-LEAVE_WORD_AR = ("إجازة", "اجازة", "اجازه")
-LEAVE_PLEASE_AR = ("من فضلك", "لو سمحت")
-ABSENCE_REPORT_AR = (
-    "الإبلاغ عن غياب",
-    "الابلاغ عن غياب",
-    "أبلغ عن غياب",
-    "ابلغ عن غياب",
-)
-LEAVE_COMPLIANCE_TERM_AR = ("تقرير", "مخاطر", "امتثال", "أكتوبر")
-BARE_LEAVE_AR = frozenset({"إجازة", "اجازة", "اجازه"})
-ADVISORY_AR = ("من هو", "من هي", "من هم", "عرفني", "اشرح لي")
-PLAN_SIGNAL_AR = ("بيانات", "تقرير", "خطة", "جودة بيانات")
+
+LEAVE_WANT_AR = T("scope_route_i18n.py::LEAVE_WANT_AR")
+LEAVE_WORD_AR = T("scope_route_i18n.py::LEAVE_WORD_AR")
+LEAVE_PLEASE_AR = T("scope_route_i18n.py::LEAVE_PLEASE_AR")
+ABSENCE_REPORT_AR = T("scope_route_i18n.py::ABSENCE_REPORT_AR")
+LEAVE_COMPLIANCE_TERM_AR = T("scope_route_i18n.py::LEAVE_COMPLIANCE_TERM_AR")
+BARE_LEAVE_AR = T("scope_route_i18n.py::BARE_LEAVE_AR")
+ADVISORY_AR = T("scope_route_i18n.py::ADVISORY_AR")
+PLAN_SIGNAL_AR = T("scope_route_i18n.py::PLAN_SIGNAL_AR")
 
 
 def any_needle(text: str, needles: tuple[str, ...]) -> bool:
