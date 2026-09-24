@@ -19,6 +19,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Callable
 
+from ai.engine.agent.surface import Surface
 from ai.engine.core.config import get_settings
 from ai.engine.core.exceptions import ToolExecutionError
 
@@ -44,13 +45,14 @@ class HookContext:
     is_worker: bool = False           # True if called from a worker subagent
     db: object | None = None          # P3.4: optional async session for budget_hook
     instance_config: dict | None = None  # per-instance YAML config for guardrail overrides
-    # ADR-0046 / RULE_35 — where this tool call runs.
-    # ``chat`` / ``advisory``: no host mutation staging (G2).
-    # ``agent`` / ``plan``: propose→confirm / RULE_21 consent allowed.
-    surface: str = "chat"
+    # ADR-0046 / RULE_35 — where this tool call runs. A ``Surface`` (or a
+    # legacy name it resolves) decides whether a mutation may stage.
+    # ``None`` means *unset*, not Chat: ``Surface.resolve`` consults
+    # ``process_mode`` first and only then fails closed to ``chat.ask``.
+    surface: "str | Surface | None" = None
     # Utterance for locale-aware handoff copy (optional).
     user_message: str = ""
-    # Structured Ask/Plan process dial from transport metadata.
+    # Structured process dial from transport metadata (ask / plan / agent).
     process_mode: str = ""
 
 
@@ -168,15 +170,14 @@ class HookPipeline:
 async def chat_surface_hook(ctx: HookContext) -> HookResult:
     """ADR-0046 / G2 — Chat never stages host writes.
 
-    On Chat/advisory surfaces, cancel host mutations / DQ creates before
+    On Chat surfaces, cancel host mutations / DQ creates before
     ``consent_hook`` / the executor can create ``pending_exec``. Memory
-    (`learn_fact`) remains allowed. Agent/plan surfaces pass through.
+    (`learn_fact`) remains allowed. Agent surfaces pass through.
 
-    **Plan dial exception:** ``plan_task`` drafts a reviewable Tasks-panel
-    plan (nothing runs until Approve). That is the Plan dial's job — do not
-    cancel it with "Ask mode does not create tasks" when the user message
-    carries ``[Pulse mode: Plan.…]``. ``approve_plan`` / ``edit_plan`` and
-    host writes still cancel on Chat.
+    ``plan_task`` on the Plan dial is not a special case: ``chat.plan`` is a
+    drafting surface, so the tool is simply not a host mutation there. The
+    surface is resolved once from ``surface`` + ``process_mode`` so the copy
+    names the dial the user can actually see.
 
     The cancel carries a structured ``payload`` (``chat_handoff``) so the
     turn layer can emit Open-in-Agent / Open-My CTAs instead of a dead
@@ -184,26 +185,20 @@ async def chat_surface_hook(ctx: HookContext) -> HookResult:
     """
     from ai.engine.agent.chat_surface import (
         build_chat_handoff_result,
-        is_chat_surface,
         is_host_mutation_tool,
     )
+    from ai.engine.agent.surface import Surface
 
-    if not is_chat_surface(ctx.surface):
+    surface = Surface.resolve(
+        ctx.surface,
+        process_mode=ctx.process_mode,
+        user_message=str(ctx.user_message or ""),
+    )
+    if surface.may_host_mutate:
         return HookResult(action="pass")
 
     tool = (ctx.tool_name or "").strip()
-    # Plan dial may call plan_task — drafts only, no host mutation.
-    if tool == "plan_task":
-        try:
-            from ai.engine.cognition.plan.process_dial import is_plan_dial_turn
-            if is_plan_dial_turn(
-                str(ctx.user_message or ""), ctx.process_mode,
-            ):
-                return HookResult(action="pass")
-        except Exception:  # noqa: BLE001 — fail closed to cancel below
-            pass
-
-    if not is_host_mutation_tool(ctx.tool_name, ctx.tool_args):
+    if not is_host_mutation_tool(ctx.tool_name, ctx.tool_args, surface=surface):
         return HookResult(action="pass")
 
     # Payload carries internal reason + product copy; HookResult.reason is
@@ -212,12 +207,18 @@ async def chat_surface_hook(ctx: HookContext) -> HookResult:
         ctx.tool_name,
         ctx.tool_args,
         user_message=str(ctx.user_message or ""),
+        surface=surface,
     )
+    dial = surface.dial_label_en
     if tool in {"plan_task", "approve_plan", "edit_plan"}:
-        reason = "Ask mode doesn’t create tasks — switch to Plan to draft one."
+        reason = (
+            "Plans are approved in Agent — open the Tasks panel."
+            if surface is Surface.CHAT_PLAN
+            else "Ask mode doesn’t create tasks — switch to Plan to draft one."
+        )
     else:
         reason = (
-            "This change can’t be submitted in Chat — use Agent or My."
+            f"This change can’t be submitted in {dial} — use Agent or My."
         )
     return HookResult(
         action="cancel",

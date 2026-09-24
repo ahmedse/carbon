@@ -313,7 +313,7 @@ class ExecuteWitness:
                             await progress_callback(_narrate_tool(
                                 tc.get("function", {}).get("name", "tool"),
                                 _parse_tool_args(tc),
-                                surface=ctx_defaults.get("surface", "chat"),
+                                surface=ctx_defaults.get("surface"),
                             ))
                         except Exception:
                             pass
@@ -365,7 +365,7 @@ class ExecuteWitness:
                         await progress_callback(_narrate_tool(
                             tool_name,
                             _parse_tool_args(tc),
-                            surface=ctx_defaults.get("surface", "chat"),
+                            surface=ctx_defaults.get("surface"),
                         ))
                     except Exception:
                         pass
@@ -526,7 +526,7 @@ def _narrate_tool(
     tool_name: str,
     args: dict | None,
     *,
-    surface: str = "chat",
+    surface: str | None = None,
 ) -> str:
     """Human, first-person narration of what the assistant is doing right now.
 
@@ -544,7 +544,7 @@ def _narrate_tool(
 
     a = args or {}
     name = tool_name or "tool"
-    if is_chat_surface(surface) and is_host_mutation_tool(name, a):
+    if is_chat_surface(surface) and is_host_mutation_tool(name, a, surface=surface):
         api = (a.get("api_name") or a.get("api") or name or "").strip()
         return f"✍️ {chat_mutation_narration(api)}"
 
@@ -672,7 +672,7 @@ async def _execute_single_tool(
             agent_role=ctx_defaults.get("agent_role", "orchestrator"),
             is_worker=ctx_defaults.get("is_worker", False),
             instance_config=ctx_defaults.get("instance_config"),
-            surface=ctx_defaults.get("surface", "chat"),
+            surface=ctx_defaults.get("surface"),
             user_message=str(ctx_defaults.get("user_message") or ""),
             process_mode=str(ctx_defaults.get("process_mode") or ""),
         )
@@ -696,6 +696,7 @@ async def _execute_single_tool(
                         handoff = build_chat_handoff_result(
                             tool_name, args,
                             user_message=str(ctx_defaults.get("user_message") or ""),
+                            surface=hook_ctx.surface,
                         )
                     logger.info(
                         "Chat surface blocked host mutation tool=%s api=%s",

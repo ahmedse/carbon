@@ -127,6 +127,8 @@ def _balance_row_chunk(row: dict, *, ar: bool) -> str | None:
     if entitled is None:
         entitled = row.get("entitled_days")
     used = row.get("used_days")
+    if used is None:
+        used = row.get("used")
     if remaining is not None:
         if ar:
             chunk = f"{kind} المتبقي {remaining}"
@@ -150,8 +152,40 @@ def _balance_row_chunk(row: dict, *, ar: bool) -> str | None:
     return None
 
 
+def _balance_who(row: dict) -> str:
+    """Employee label on an org-wide entitlement row. Empty for a self balance."""
+    name = str(row.get("employee_name") or "").strip()
+    no = str(row.get("employee_no") or "").strip()
+    if not name and not no:
+        return ""
+    who = f"{name} ({no})" if name and no else (name or no)
+    year = row.get("year")
+    return f"{who}, {year}" if year not in (None, "") else who
+
+
 def render_balance_rows(rows: list[dict], language: str, *, empty_render: str) -> str | None:
     ar = _lang_code(language) == "ar"
+    # An org list (HR) carries employee_name on every row. Rendering it as
+    # "Your leave balance" drops the name, so the same six types repeat once
+    # per employee and look like one person's balance printed over and over.
+    roster = any(_balance_who(row) for row in rows)
+    if roster:
+        lines: list[str] = []
+        seen: set[str] = set()
+        for row in rows:
+            who = _balance_who(row)
+            chunk = _balance_row_chunk(row, ar=ar)
+            if not chunk:
+                continue
+            if who and who not in seen:
+                seen.add(who)
+                lines.append(f"{who}")
+            lines.append(f"- {chunk}")
+        if not lines:
+            return empty_render_text(empty_render or "no_balance_configured", language)
+        prefix = "أرصدة الإجازات" if ar else "Leave balances"
+        return f"{prefix}\n\n" + "\n".join(lines)
+
     parts: list[str] = []
     for row in rows:
         chunk = _balance_row_chunk(row, ar=ar)

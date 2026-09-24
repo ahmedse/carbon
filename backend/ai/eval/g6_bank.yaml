@@ -636,6 +636,11 @@
   category: empty_host
   ar: "لماذا رصيدي صفر"
   en: "why is my balance zero"
+  history:
+    - {role: user, content: "What is my leave balance?"}
+    - {role: assistant, content: "No leave balance is configured for your account."}
+  state_last_api: get_my_leave_balance
+  state_digest: "call_host_api get_my_leave_balance: count=0"
   expect_op: answer
   expect_api: ""
   expect_lang_ar: ar
@@ -646,6 +651,11 @@
   category: empty_host
   ar: "لا توجد طلبات إجازة"
   en: "no leave requests found"
+  history:
+    - {role: user, content: "Show my leave requests"}
+    - {role: assistant, content: "You have no leave requests on record."}
+  state_last_api: list_my_leave
+  state_digest: "call_host_api list_my_leave: count=0"
   expect_op: answer
   expect_api: ""
   expect_lang_ar: ar
@@ -656,6 +666,11 @@
   category: empty_host
   ar: "لا توجد قروض"
   en: "no loans on record"
+  history:
+    - {role: user, content: "What are my loans?"}
+    - {role: assistant, content: "You have no loans on record."}
+  state_last_api: list_my_loans
+  state_digest: "call_host_api list_my_loans: count=0"
   expect_op: answer
   expect_api: ""
   expect_lang_ar: ar
@@ -666,6 +681,11 @@
   category: empty_host
   ar: "لا توجد قسيمة لهذا الشهر"
   en: "no payslip for this month"
+  history:
+    - {role: user, content: "What was my last payslip?"}
+    - {role: assistant, content: "No payslips found for your account."}
+  state_last_api: list_my_payslips
+  state_digest: "call_host_api list_my_payslips: count=0"
   expect_op: answer
   expect_api: ""
   expect_lang_ar: ar
@@ -758,11 +778,11 @@
   tier: v21
   ar: "صدّر آخر قسيمة راتب لي كملف PDF"
   en: "export my last payslip as a PDF"
-  expect_op: answer
-  expect_api: ""
+  expect_op: call_tool
+  expect_api: list_my_payslips
   expect_lang_ar: ar
   expect_lang_en: en
-  notes: "contrast for g6-072: one export of my data is a Chat answer, not a plan"
+  notes: "contrast for g6-072: one export of my data with nothing in state → fetch the payslip (not a multi-step plan)"
 
 - id: g6-074
   category: process

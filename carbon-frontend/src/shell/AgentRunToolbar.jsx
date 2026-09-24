@@ -21,6 +21,7 @@ export default function AgentRunToolbar({
   onRun,
   onPause,
   onStop,
+  onCancel,
   onRerun,
   onRetry,
 }) {
@@ -31,9 +32,13 @@ export default function AgentRunToolbar({
   const paused = effectiveStatus === 'paused' || phase === 'paused';
   const failed = effectiveStatus === 'failed';
   const rerunnable = isRerunnableStatus(effectiveStatus);
-  const showStart = runnable && !running && !consentBlocksPlay;
-  const startLabel = paused ? t('resumeRun') : t('startWork');
-  const startAria = paused ? t('resumeRun') : t('runPlan');
+  // Resume continues a paused run. A step still waiting on Approve is not
+  // paused-in-the-middle — Resume would skip that consent.
+  const canResume = paused && !running && !consentBlocksPlay;
+  const canCancel = (paused || consentBlocksPlay) && !running;
+  const showStart = runnable && !running && !paused && !consentBlocksPlay;
+  const startLabel = t('startWork');
+  const startAria = t('runPlan');
 
   const actions = [];
   if (showStart && onRun) {
@@ -57,13 +62,34 @@ export default function AgentRunToolbar({
       variant: 'text',
     });
   }
-  if ((running || consentBlocksPlay) && onStop) {
+  if (canResume && onRun) {
+    actions.push({
+      key: 'resume',
+      testId: 'agent-run-resume',
+      label: t('resumeRun'),
+      aria: t('resumeRun'),
+      onClick: onRun,
+      variant: 'contained',
+    });
+  }
+  if (running && onStop) {
     actions.push({
       key: 'stop',
       testId: 'agent-run-stop',
       label: t('stopWord'),
       aria: 'Stop run',
       onClick: onStop,
+      color: 'error',
+      variant: 'text',
+    });
+  }
+  if (canCancel && onCancel) {
+    actions.push({
+      key: 'cancel',
+      testId: 'agent-run-cancel',
+      label: t('cancelRun'),
+      aria: t('cancelRun'),
+      onClick: onCancel,
       color: 'error',
       variant: 'text',
     });
@@ -132,6 +158,7 @@ AgentRunToolbar.propTypes = {
   onRun: PropTypes.func,
   onPause: PropTypes.func,
   onStop: PropTypes.func,
+  onCancel: PropTypes.func,
   onRerun: PropTypes.func,
   onRetry: PropTypes.func,
   onFork: PropTypes.func,

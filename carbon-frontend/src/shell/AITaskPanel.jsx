@@ -1280,14 +1280,21 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           intent: patch.intent || `Step ${patch.step_id}`,
           tool_name: null,
           tool_args: null,
-          status: 'running',
+          status: 'pending',
           tool_output: null,
           error: null,
           ...patch,
         }];
       }
+      const current = prev[idx].status;
+      const patchStatus = patch.status;
+      const settled = current === 'completed' || current === 'failed'
+        || current === 'skipped' || current === 'awaiting_approval';
+      const nextPatch = (patchStatus === 'running' && settled)
+        ? (({ status, ...rest }) => rest)(patch)
+        : patch;
       const next = [...prev];
-      next[idx] = { ...next[idx], ...patch };
+      next[idx] = { ...next[idx], ...nextPatch };
       return next;
     });
   }, []);
@@ -1317,7 +1324,11 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
         onFrame: (frame) => {
           if (stopRequestedRef.current) return;
           if (frame.type === 'step_start') {
-            upsertStep({ step_id: frame.step_id, intent: frame.intent, status: 'running' });
+            upsertStep({
+              step_id: frame.step_id,
+              intent: frame.intent,
+              status: 'running',
+            });
           } else if (frame.type === 'step_confirm') {
             upsertStep({ step_id: frame.step_id, intent: frame.intent, status: 'awaiting_approval' });
           } else if (frame.type === 'step_result') {
@@ -1376,14 +1387,28 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
 
   const handleStop = async () => {
     if (!selectedPlan || runPhaseRef.current !== 'working') return;
+    await handleCancel();
+  };
+
+  const handleCancel = async () => {
+    if (!selectedPlan) return;
+    const live = runPhaseRef.current === 'working'
+      || runPhaseRef.current === 'paused'
+      || phase === 'paused';
+    if (!live) return;
     stopRequestedRef.current = true;
     setPhase('stopped');
+    setMutating(true);
     try {
       await stopPlan(token, selectedPlan.id);
-      await refreshPlan(selectedPlan.id);
+      const updated = await refreshPlan(selectedPlan.id);
+      if (updated?.steps) applyPlanToView(updated);
+      setPhase('stopped');
     } catch (err) {
       stopRequestedRef.current = false;
-      notifyFromErrorRef.current(err, 'Could not stop the run');
+      notifyFromErrorRef.current(err, 'Could not cancel the run');
+    } finally {
+      setMutating(false);
     }
   };
 
@@ -1713,8 +1738,14 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           setMutating(false);
           return;
         }
-        await rerunPlan(token, selectedPlan.id);
-        await refreshPlan(selectedPlan.id);
+        const reset = await rerunPlan(token, selectedPlan.id);
+        // refreshPlan only replaces the plan row. The run list and the
+        // finished phase live in separate state, so a rerun stayed on Done
+        // with every step still completed until the stream happened to
+        // overwrite one. Apply the reset payload: steps are pending, phase
+        // leaves finished.
+        if (reset?.steps) applyPlanToView(reset);
+        else await refreshPlan(selectedPlan.id);
       }
     } catch (err) {
       notifyFromErrorRef.current(err, 'Could not re-run the plan');
@@ -2616,6 +2647,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       onRun: handleRun,
       onPause: handlePause,
       onStop: handleStop,
+      onCancel: handleCancel,
       onRerun: handleRerun,
       onRetry: handleRetry,
       onOpenPlan: () => handleSegmentChange('plan', { user: true }),

@@ -217,9 +217,14 @@ def _filter_draft_tools(
             if d.get("function", {}).get("name") != "list_my_capabilities"
         ]
     # Process mode is structured transport metadata. Prefix support remains
-    # only for replaying pre-migration transcripts.
-    msg = (user_message or "").lstrip()
-    ask_mode = process_mode != "plan" or msg.startswith("[Pulse mode: Ask.")
+    # only for replaying pre-migration transcripts, inside ``Surface.resolve``.
+    from ai.engine.agent.surface import Surface
+
+    # Only Ask withholds the planning tools. Plan drafts them, and Agent runs
+    # them — an "anything that is not plan is ask" test wrongly caught Agent.
+    ask_mode = Surface.resolve(
+        process_mode=process_mode, user_message=user_message or "",
+    ) is Surface.CHAT_ASK
     if tools and ask_mode:
         _ask_block = frozenset({"plan_task", "approve_plan", "edit_plan"})
         tools = [

@@ -11,6 +11,7 @@ import logging
 import time
 from dataclasses import asdict, dataclass, field
 
+from ai.engine.agent.surface import Surface
 from ai.engine.core.clock import utcnow
 from ai.engine.core.resolution import payload_status
 from ai.engine.core.query import first
@@ -330,7 +331,7 @@ class ReActLoop:
             "instance_config": instance_config,
             "user_message": user_message or "",
             # ADR-0046: ReAct / plan loops are agentic — may stage mutations.
-            "surface": "plan",
+            "surface": Surface.AGENT_PLAN,
         }
         if self.executor is not None:
             ex = self.executor

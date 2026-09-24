@@ -63,6 +63,47 @@ describe('AgentRunToolbar', () => {
     expect(screen.getByTestId('agent-run-rerun')).toBeInTheDocument();
   });
 
+  it('shows Resume and Cancel when the run is paused, not Stop', () => {
+    const onRun = vi.fn();
+    const onCancel = vi.fn();
+    render(
+      <AgentRunToolbar
+        plan={{ ...PLAN, status: 'paused' }}
+        phase="paused"
+        effectiveStatus="paused"
+        onRun={onRun}
+        onPause={vi.fn()}
+        onStop={vi.fn()}
+        onCancel={onCancel}
+      />,
+    );
+    expect(screen.getByTestId('agent-run-resume')).toHaveTextContent(/Resume/i);
+    expect(screen.getByTestId('agent-run-cancel')).toHaveTextContent(/Cancel run/i);
+    expect(screen.queryByTestId('agent-run-stop')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('agent-run-pause')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('agent-run-resume'));
+    fireEvent.click(screen.getByTestId('agent-run-cancel'));
+    expect(onRun).toHaveBeenCalled();
+    expect(onCancel).toHaveBeenCalled();
+  });
+
+  it('offers Cancel but not Resume while a step is waiting for approval', () => {
+    render(
+      <AgentRunToolbar
+        plan={{ ...PLAN, status: 'paused' }}
+        phase="paused"
+        effectiveStatus="paused"
+        awaitingConsent
+        onRun={vi.fn()}
+        onCancel={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('agent-run-cancel')).toBeInTheDocument();
+    expect(screen.queryByTestId('agent-run-resume')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('agent-run-stop')).not.toBeInTheDocument();
+  });
+
   it('shows retry only when failed', () => {
     render(
       <AgentRunToolbar

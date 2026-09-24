@@ -52,6 +52,7 @@ async def run_s3_through_s5(
     conversation_id: str,
     host_user_id: str | None,
     process_mode: str,
+    surface,
     page_context: str,
     conversation_history: list[dict] | None,
     instance_config: dict | None,
@@ -274,7 +275,7 @@ async def run_s3_through_s5(
     from ai.engine.cognition.turn.execute import ExecuteWitness
     from ai.engine.agent.guardrails import build_default_pipeline
     hook_pipeline = build_default_pipeline()
-    hook_ctx_defaults = {'instance_id': instance_id, 'conversation_id': conversation_id, 'host_user_id': host_user_id, 'run_id': turn_id, 'agent_role': 'orchestrator', 'is_worker': False, 'instance_config': instance_config, 'user_message': _resolved_user_message, 'process_mode': process_mode, 'surface': 'chat'}
+    hook_ctx_defaults = {'instance_id': instance_id, 'conversation_id': conversation_id, 'host_user_id': host_user_id, 'run_id': turn_id, 'agent_role': 'orchestrator', 'is_worker': False, 'instance_config': instance_config, 'user_message': _resolved_user_message, 'process_mode': process_mode, 'surface': surface}
     execute_witness = ExecuteWitness(executor=runner.executor, hook_pipeline=hook_pipeline, hook_ctx_defaults=hook_ctx_defaults, run_id=turn_id, instance_id=instance_id, knowledge_store=runner.knowledge_store)
     st.execution = await execute_witness.execute(text=st.final_text, tool_calls=st.draft.tool_calls, stream_callback=stream_callback, progress_callback=progress_callback)
     ledger.execution = st.execution

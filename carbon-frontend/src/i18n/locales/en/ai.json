@@ -73,6 +73,7 @@
   "pauseRun": "Pause run",
   "pauseWord": "Pause",
   "stopWord": "Stop",
+  "cancelRun": "Cancel run",
   "startWork": "Start",
   "stopRun": "Stop the run",
   "rerunPlan": "Rerun from a clean slate",

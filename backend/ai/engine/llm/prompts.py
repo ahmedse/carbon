@@ -61,23 +61,45 @@ async def build_chat_prompt(
     _ = (conversation_id, instance_id, system_description, persona, navigation_routes, domain_topics)
 
     config = instance_config or {}
-    mode = "plan" if str(process_mode).lower() == "plan" else "ask"
+    from ai.engine.agent.surface import Surface
+
+    # One vocabulary: the dial resolves to a surface, and the surface picks the
+    # directive. No prose prefix on the user's message (retired) and no second
+    # place where Ask-vs-Plan guidance can drift out of sync.
+    turn_surface = Surface.resolve(process_mode=str(process_mode))
 
     # ── Runtime header (per-conversation context) ──────────────────────────
     if not current_datetime:
         now_utc = datetime.now(timezone.utc)
         current_datetime = now_utc.strftime('%A, %B %d, %Y %H:%M UTC')
 
-    process_directive = (
-        "\nPROCESS MODE (structured host contract): PLAN. Draft a reviewable "
-        "Tasks plan. Use plan_task for a plannable task; do not execute host "
-        "writes. The user approves and runs later.\n"
-        if mode == "plan"
-        else
-        "\nPROCESS MODE (structured host contract): ASK. Answer/read/advice "
-        "only. plan_task, approve_plan and edit_plan are unavailable. For a "
-        "write request, provide the governed Agent/My handoff; never stage it.\n"
-    )
+    if turn_surface is Surface.CHAT_PLAN:
+        process_directive = (
+            "\nPROCESS MODE (structured host contract): PLAN. Draft a reviewable "
+            "Tasks plan. Use plan_task for a plannable task; ask one missing "
+            "fact at a time; do not execute host writes. The user approves and "
+            "runs later. When refusing a write, say Plan drafts only — never "
+            "tell the user to switch to Plan, they are already there.\n"
+        )
+    elif turn_surface.may_host_mutate:
+        process_directive = (
+            "\nPROCESS MODE (structured host contract): AGENT. An approved plan "
+            "may stage host effects with step consent. Never tell the user to "
+            "switch to Agent — they are already there.\n"
+        )
+    else:
+        process_directive = (
+            "\nPROCESS MODE (structured host contract): ASK. Answer/read/advice "
+            "only. plan_task, approve_plan and edit_plan are unavailable. For a "
+            "write request, provide the governed Agent/My handoff; never stage "
+            "it. For a vague 'full report' brief, ask ONE short clarifying "
+            "question about focus and audience before fetching data — do not "
+            "dump payslip rows. For distribution or analytics questions, "
+            "summarize with aggregates and charts, never raw salary rows. If "
+            "the user needs a multi-step or governed plan, tell them to switch "
+            "the dial to Plan — do not invent Open-in-Agent or Open-My for a "
+            "read question.\n"
+        )
     identity_directive = ""
     if user_info:
         username = user_info.get("username", "Unknown")

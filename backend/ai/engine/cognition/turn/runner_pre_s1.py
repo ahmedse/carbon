@@ -51,6 +51,7 @@ async def run_pre_s1_gates(
     conversation_id: str,
     host_user_id: str | None,
     process_mode: str,
+    surface,
     page_context: str,
     conversation_history: list[dict] | None,
     instance_config: dict | None,
@@ -171,7 +172,7 @@ async def run_pre_s1_gates(
         stage_soft_exit(staged, 'answer', 'plan_status', _plan_status[0])
     st.chat_handoff = None
     if not turn_route.committed and _plan_status is None:
-        st.chat_handoff = await runner._try_chat_write_handoff(user_message=st.user_message, conversation_history=conversation_history, state_ctx=state_ctx, instance_config=instance_config)
+        st.chat_handoff = await runner._try_chat_write_handoff(user_message=st.user_message, conversation_history=conversation_history, state_ctx=state_ctx, instance_config=instance_config, surface=surface)
     if st.chat_handoff is None and _plan_status is None and may_stage('next_step'):
         _next_step = await runner._try_next_step_offer(user_message=st.user_message, state_ctx=state_ctx, ledger=ledger, meter=meter, turn_id=turn_id, instance_id=instance_id, t0=t0)
         if _next_step is not None:
@@ -197,11 +198,11 @@ async def run_pre_s1_gates(
         logger.debug('[%s] deixis subject resolution skipped', turn_id[:8], exc_info=True)
     st.ess_bound = None
     if not turn_route.committed and st.chat_handoff is None and (runner.executor is not None):
-        st.ess_bound = await runner._try_bound_ess_self_read(user_message=st.user_message, conversation_history=conversation_history, state_ctx=state_ctx, ledger=ledger, meter=meter, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, host_user_id=host_user_id, instance_config=instance_config, t0=t0)
+        st.ess_bound = await runner._try_bound_ess_self_read(user_message=st.user_message, conversation_history=conversation_history, state_ctx=state_ctx, ledger=ledger, meter=meter, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, host_user_id=host_user_id, instance_config=instance_config, t0=t0, surface=surface)
     if st.ess_bound is not None:
         stage_exit(staged, 'tool_answer', 'ess_bound_self_read', st.ess_bound[0])
     if st.ess_bound is None and (not turn_route.committed) and (st.chat_handoff is None) and (runner.executor is not None):
-        _v21 = await runner._try_v21_understand(user_message=st.user_message, conversation_history=conversation_history, ledger=ledger, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, host_user_id=host_user_id, instance_config=instance_config, t0=t0, state_ctx=state_ctx, user_info=user_info)
+        _v21 = await runner._try_v21_understand(user_message=st.user_message, conversation_history=conversation_history, ledger=ledger, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, host_user_id=host_user_id, instance_config=instance_config, t0=t0, surface=surface, state_ctx=state_ctx, user_info=user_info)
         if _v21 is not None:
             return _v21
     _zero = None

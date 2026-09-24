@@ -42,10 +42,11 @@ def test_catalog_prompt_lines_describe_write_twin_as_agent_only():
     assert "submit_my_loan" in writes and "list_my_loans" not in writes
     read_line = next(l for l in lines if l.startswith("- list_my_loans"))
     write_line = next(l for l in lines if l.startswith("- submit_my_loan"))
-    assert "I have a loan" in read_line and "Not for:" in read_line
+    assert "OWN loans" in read_line or "loan_type" in read_line
+    assert "Not for:" in read_line
     assert "Agent only" in write_line and "handoff_agent" in write_line
-    assert "what type of loan" in write_line.lower()
-    # Examples ride along so the model sees the conversational phrasings.
+    assert "what type of loan" in write_line.lower() or "NEW loan" in write_line
+    # Examples ride along on top-k so the model sees conversational phrasings.
     assert any("I noticed I have a loan" in l for l in lines if l.startswith("  e.g."))
 
     decision = parse_decision(
@@ -248,7 +249,13 @@ def test_plan_handoff_reply_is_plan_copy():
         "language": "en", "confidence": 0.9,
     })
     text = asyncio.run(act_on_decision(decision, execute_tool=None, user_message="run it"))
-    assert "plan" in text and "Agent" in text
+    # Ask owns answers. Drafting a multi-step run is the Plan dial.
+    assert "Plan" in text
+    assert "Agent" not in text
+    on_plan = asyncio.run(act_on_decision(
+        decision, execute_tool=None, user_message="run it", surface="chat.plan",
+    ))
+    assert on_plan is None
 
 
 def test_malformed_understand_returns_none_so_legacy_speaks():
@@ -264,3 +271,52 @@ def test_malformed_understand_returns_none_so_legacy_speaks():
         complete=complete, messages=[{"role": "user", "content": "x"}],
     ))
     assert decision is None
+
+
+def test_rules_survive_hr_catalog_clip_and_all_tools_fit():
+    """HR catalog was ~14k; rules after the catalog were clipped. Rules first
+    + compact non-top-k lines keep process_id=plan and every allowed name."""
+    from ai.engine.cognition.context_pack import TASK_BLOCK_MAX_CHARS, filter_catalog_by_audience
+    from ai.engine.cognition.turn.understand import (
+        _UNDERSTAND_RULES,
+        build_understand_system_prompt,
+        catalog_prompt_lines,
+    )
+
+    scoped = filter_catalog_by_audience(_nibras_catalog(), ["ess", "hr"])
+    assert len(scoped) >= 30
+    lines, allowed, _writes = catalog_prompt_lines(
+        "Run October payroll variance for GOFSCO",
+        scoped,
+        k=12,
+    )
+    task = f"{_UNDERSTAND_RULES}\n\nCATALOG:\n" + "\n".join(lines)
+    assert len(task) <= TASK_BLOCK_MAX_CHARS, len(task)
+    prompt = build_understand_system_prompt(
+        catalog_lines=lines,
+        user_info={"username": "emp_2378", "audience": ["ess", "hr"]},
+        instance_config={"api_catalog": scoped},
+    )
+    assert "process_id=plan" in prompt
+    assert "Never clarify for a value" in prompt
+    for name in allowed:
+        assert f"- {name}" in prompt or f"- {name} (" in prompt
+
+
+def test_ess_sees_coworker_leave_read_and_module_nav():
+    """403-honest coworker leave + bare module navigate need ESS visibility."""
+    from ai.engine.cognition.context_pack import filter_catalog_by_audience
+    from ai.engine.cognition.turn.understand import navigation_prompt_lines
+
+    tools = filter_catalog_by_audience(_nibras_catalog(), ["ess"])
+    names = {t["name"] for t in tools}
+    assert "list_leave_entitlements" in names
+    assert "get_my_leave_balance" in names
+    from ai.engine.core.archetypes import load_instance_config
+    from ai.engine.cognition.turn.runner_helpers import _scoped_navigation_routes
+
+    nav = _scoped_navigation_routes(load_instance_config("nibras"), {"audience": ["ess"]})
+    nav_names = {r["name"] for r in nav}
+    assert {"attendance", "payroll"} <= nav_names
+    lines = navigation_prompt_lines(nav)
+    assert any(ln.startswith("- attendance:") for ln in lines)

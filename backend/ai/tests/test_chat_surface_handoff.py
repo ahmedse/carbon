@@ -316,20 +316,28 @@ def test_chat_narration_never_says_submitting():
     assert "Submitting" in agent_msg
 
 
-def test_ask_mode_prefix_is_not_a_mutation_or_task_request():
-    """Regression: Ask hint used to contain 'create a task' and force-handoff
-    clobbered salary/distribution answers with Open-in-Agent."""
+def test_ask_mode_guidance_is_not_a_mutation_or_task_request():
+    """Regression: the Ask hint used to be injected as prose *into the user's
+    message*, where 'create a task' read as a write intent and force-handoff
+    clobbered salary answers with Open-in-Agent.
+
+    The prefix is retired — Ask guidance lives in the system prompt only — so
+    the message the router sees is the user's own words, with nothing to
+    misparse. The legacy prefix stays parseable for replayed transcripts.
+    """
     from ai.engine.cognition.plan.planner import _wants_explicit_task_creation
     from ai.engine.cognition.turn.intent import _is_mutation_request
     from ai.intelligence import CarbonIntelligence
 
+    assert not hasattr(CarbonIntelligence, "_prepend_pulse_mode")
+
     user = "tell me more about the salaries distributions"
-    ask = CarbonIntelligence._prepend_pulse_mode("ask", user)
+    ask = "[Pulse mode: Ask. Never call plan_task.]\n\n" + user
     assert _is_mutation_request(ask) is False
     assert _is_mutation_request(user) is False
     assert _wants_explicit_task_creation(ask) is False
     assert _should_force_action(
-        ask,
+        user,
         types.SimpleNamespace(text="Here is the salary distribution by band."),
         types.SimpleNamespace(
             turn_decision="tool_answer",

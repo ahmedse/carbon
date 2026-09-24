@@ -85,18 +85,22 @@ def select_for_surface(
     utterance: str,
     catalog: list[dict] | None,
     *,
-    surface: str = "chat",
+    surface: str | None = None,
     k: int = 12,
     core_names: list[str] | None = None,
 ) -> list[dict]:
     """Top-k plus always-on core names. Chat drops tools with kind=write."""
+    from ai.engine.agent.surface import Surface
+
+    # ``chat.plan`` may draft a plan but still must not be handed write tools.
+    on_chat = Surface.resolve(surface).is_chat
     ranked = rank_tools(utterance, catalog, k=k)
     by_name = {str(t.get("name")): t for t in (catalog or []) if isinstance(t, dict)}
     chosen: list[dict] = []
     seen: set[str] = set()
     for tool in ranked:
         name = str(tool.get("name"))
-        if surface == "chat" and str(tool.get("kind") or "") == "write":
+        if on_chat and str(tool.get("kind") or "") == "write":
             continue
         if name not in seen:
             chosen.append(tool)
@@ -105,7 +109,7 @@ def select_for_surface(
         tool = by_name.get(name)
         if tool is None or name in seen:
             continue
-        if surface == "chat" and str(tool.get("kind") or "") == "write":
+        if on_chat and str(tool.get("kind") or "") == "write":
             continue
         chosen.append(tool)
         seen.add(name)

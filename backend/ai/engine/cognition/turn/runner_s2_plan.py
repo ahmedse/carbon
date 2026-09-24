@@ -52,6 +52,7 @@ async def run_s2_and_plan_gates(
     conversation_id: str,
     host_user_id: str | None,
     process_mode: str,
+    surface,
     page_context: str,
     conversation_history: list[dict] | None,
     instance_config: dict | None,
@@ -179,7 +180,7 @@ async def run_s2_and_plan_gates(
     if settings.KG_MULTI_STEP_ENABLED and runner.db is not None:
         try:
             with stage('multi_step_plan'):
-                react_result = await runner._try_multi_step_plan(instance_id=instance_id, conversation_id=conversation_id, user_message=st.user_message, process_mode=process_mode, host_user_id=host_user_id, page_context=page_context, conversation_history=conversation_history, instance_config=instance_config, user_info=user_info, retrieval=st.retrieval, progress_callback=progress_callback, stream_callback=stream_callback, state_ctx=state_ctx)
+                react_result = await runner._try_multi_step_plan(instance_id=instance_id, conversation_id=conversation_id, user_message=st.user_message, process_mode=process_mode, host_user_id=host_user_id, page_context=page_context, conversation_history=conversation_history, instance_config=instance_config, user_info=user_info, retrieval=st.retrieval, progress_callback=progress_callback, stream_callback=stream_callback, state_ctx=state_ctx, surface=surface)
         except Exception:
             logger.exception('Multi-step plan attempt failed; falling back to single-pass')
     from ai.engine.cognition.turn.handoff_agent import ChatHandoffOutcome

@@ -4,6 +4,7 @@ AI Workspace serializers — request/response shapes for the workspace API.
 
 from rest_framework import serializers
 
+from ai.engine.agent.surface import PULSE_DIAL_MODES
 from ai.models.core import WorkObjective
 
 
@@ -108,7 +109,7 @@ class SendMessageSerializer(serializers.Serializer):
     content = serializers.CharField(required=True, allow_blank=True, trim_whitespace=True)
     model = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
     pulse_mode = serializers.ChoiceField(
-        choices=["ask", "plan"],
+        choices=list(PULSE_DIAL_MODES),
         required=False,
         allow_null=True,
         default=None,

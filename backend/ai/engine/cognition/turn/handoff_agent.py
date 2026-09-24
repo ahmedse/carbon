@@ -504,9 +504,15 @@ def _carryover_handoff_copy(
     draft: dict | None,
     locale: str,
     user_message: str = "",
+    surface=None,
 ) -> str:
     """Bilingual handoff that lists bound slots and Agent carry-over."""
     from ai.engine.agent.chat_surface import _FIELD_LABELS, _label
+    from ai.engine.agent.surface import Surface
+
+    # Name the dial the user can see. "Chat does not submit" reads as a bug to
+    # someone whose dial says Plan, even though the refusal is right.
+    dial = Surface.resolve(surface).dial_label(locale)
 
     topic = _label(spec, "topic", locale)
     bits: list[str] = []
@@ -531,7 +537,7 @@ def _carryover_handoff_copy(
         return (
             f"{have}\n\n"
             "لإرسال الطلب بدّل إلى وضع الوكيل (Agent) — سأنقل هذه التفاصيل "
-            "معك. أو قدّم من تطبيقاتي. الدردشة لا تُرسل ولا تغيّر السجلات."
+            f"معك. أو قدّم من تطبيقاتي. وضع «{dial}» لا يُرسل ولا يغيّر السجلات."
         )
     if bits:
         have = "I have: " + "; ".join(bits) + "."
@@ -540,7 +546,7 @@ def _carryover_handoff_copy(
     return (
         f"{have}\n\n"
         "To submit it, switch to Agent — I'll carry these details over. "
-        "Or open My and submit there. Chat does not submit or change records."
+        f"Or open My and submit there. {dial} does not submit or change records."
     )
 
 
@@ -549,6 +555,7 @@ def build_chat_write_handoff(
     api_name: str,
     slots: dict,
     user_message: str = "",
+    surface=None,
 ) -> ChatHandoffOutcome:
     """Build text + actions + synthetic ``chat_handoff`` tool result."""
     from ai.engine.agent.chat_surface import (
@@ -565,13 +572,17 @@ def build_chat_write_handoff(
     spec = handoff_spec_for_api(api)
     text = _carryover_handoff_copy(
         spec, draft=body, locale=locale, user_message=user_message,
+        surface=surface,
     )
-    actions = build_handoff_actions(spec, locale=locale)
-    envelope = build_handoff_envelope(spec, draft=body, locale=locale)
+    actions = build_handoff_actions(spec, locale=locale, surface=surface)
+    envelope = build_handoff_envelope(
+        spec, draft=body, locale=locale, surface=surface,
+    )
     tool_result = build_chat_handoff_result(
         "call_host_api",
         {"api_name": api, "body": body},
         user_message=user_message,
+        surface=surface,
     )
     # Prefer carry-over copy over the generic handoff_copy inside tool_result.
     tool_result["message"] = text

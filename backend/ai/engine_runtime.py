@@ -244,8 +244,14 @@ async def _run_chat(
                 "emitting Agent/My handoff (logged fallback, no mutation force)",
                 str(conversation_id)[:8],
             )
+            from ai.engine.agent.surface import Surface
+
             handoff_text, handoff_actions, handoff_envelope = synthesize_intent_handoff(
-                message
+                message,
+                surface=Surface.resolve(
+                    process_mode=_run_kwargs["process_mode"],
+                    user_message=message,
+                ),
             )
             # Attach actions onto the response so merge below picks them up.
             existing = list(getattr(response, "actions", None) or [])
@@ -1998,6 +2004,7 @@ def _chat_handoff_note(completed_tools: list[dict] | None) -> str:
                 handoff_spec_for_api(api),
                 draft=data.get("draft"),
                 locale=str(data.get("locale") or "en"),
+                surface=data.get("surface"),
             )
     return ""
 

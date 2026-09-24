@@ -13,19 +13,27 @@ from typing import Any
 
 
 class ProcessMode(str, Enum):
+    """Dial position the composer sent. All three seats are representable.
+
+    ``AGENT`` exists so an Agent-originated turn can say so in transport
+    metadata instead of arriving as ``ask`` and being told it is Chat.
+    """
+
     ASK = "ask"
     PLAN = "plan"
+    AGENT = "agent"
 
     @classmethod
     def parse(cls, value: str | None, message: str = "") -> "ProcessMode":
         raw = (value or "").strip().lower()
-        if raw == cls.PLAN.value:
-            return cls.PLAN
-        if raw == cls.ASK.value:
-            return cls.ASK
+        for mode in cls:
+            if raw == mode.value:
+                return mode
         # Backward-compatible replay of old stored/eval turns.
         if (message or "").lstrip().startswith("[Pulse mode: Plan."):
             return cls.PLAN
+        if (message or "").lstrip().startswith("[Pulse mode: Agent."):
+            return cls.AGENT
         return cls.ASK
 
 

@@ -102,6 +102,7 @@ from ai.domain import emissions  # noqa: F401  (registers the emissions domain)
 from ai.domain import water  # noqa: F401  (registers the water domain)
 from ai.context_assembler import assemble_context
 from ai.adapter.contract import HostAdapterContract
+from ai.engine.agent.surface import PULSE_DIAL_MODES
 from ai.engine.llm.provider import classify_llm_error
 from ai.generation_registry import GENERATIONS
 from ai.usage_service import QuotaExceededError
@@ -644,7 +645,7 @@ class CarbonIntelligence:
                     "workspace_chat",
                     conversation.task_payload_json or {},
                 )
-                if pulse_mode in ("ask", "plan"):
+                if pulse_mode in PULSE_DIAL_MODES:
                     payload = dict(conversation.task_payload_json or {})
                     payload["pulse_mode"] = pulse_mode
                     conversation.task_payload_json = payload
@@ -663,7 +664,7 @@ class CarbonIntelligence:
                     temperature=resolved_temperature,
                     process_mode=(
                         pulse_mode
-                        if pulse_mode in ("ask", "plan")
+                        if pulse_mode in PULSE_DIAL_MODES
                         else str(
                             (conversation.task_payload_json or {}).get("pulse_mode")
                             or (conversation.task_payload_json or {}).get("pulse_process")
@@ -3865,33 +3866,6 @@ class CarbonIntelligence:
             tool_digest=getattr(chat_response, "tool_digest", "") or "",
             active_plans=getattr(chat_response, "active_plans", None) or [],
         )
-
-    @staticmethod
-    def _prepend_pulse_mode(pulse_mode: str | None, content: str) -> str:
-        """Tell the engine whether this turn is Ask or Plan. Stored text stays the user's words."""
-        mode = (pulse_mode or "").strip().lower()
-        if mode == "plan":
-            return (
-                "[Pulse mode: Plan. Draft a reviewable plan from this thread. "
-                "Ask one missing fact at a time. Do not submit or change host records.]\n\n"
-                f"{content}"
-            )
-        if mode == "ask":
-            return (
-                "[Pulse mode: Ask. Answers and advice only. "
-                "Never call plan_task. Never invent a Tasks-panel plan. "
-                "Never change host records. "
-                "For a vague 'full report' / 'report about salaries' brief, "
-                "ask ONE short clarifying question about focus and audience "
-                "before fetching data — do not dump payslip rows. "
-                "For distribution or analytics questions, summarize with "
-                "aggregates and charts — never dump raw salary rows. "
-                "If the user needs a multi-step or governed plan, tell them to "
-                "switch the dial to Plan — do not invent Open-in-Agent or Open-My "
-                "for a read question.]\n\n"
-                f"{content}"
-            )
-        return content
 
     def _prepend_workspace_context(
         self,

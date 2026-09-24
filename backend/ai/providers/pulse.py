@@ -11,6 +11,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from ai.engine.agent.surface import PULSE_DIAL_MODES
+
 from ai.protocol import (
     AIProvider,
     AnomalyDetectRequest,
@@ -474,7 +476,7 @@ class PulseProvider(AIProvider):
             "message": request.message,
             "process_mode": (
                 request.process_mode
-                if request.process_mode in {"ask", "plan"}
+                if request.process_mode in PULSE_DIAL_MODES
                 else "ask"
             ),
         }

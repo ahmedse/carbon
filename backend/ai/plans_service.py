@@ -43,6 +43,7 @@ from django.conf import settings
 from django.core.files.base import ContentFile
 from django.utils import timezone
 
+from ai.engine.agent.surface import Surface
 from ai.instance_registry import resolve_instance_id
 from ai import run_machine
 from ai import workflow
@@ -4255,7 +4256,7 @@ class PlansService:
                     "run_id": str(run.id),
                     "instance_config": instance_config,
                     # ADR-0046: Agent plan Run may stage mutations (RULE_21).
-                    "surface": "plan",
+                    "surface": Surface.AGENT_RUN,
                 },
             )
             # W4-D Flight Director (additive): in-loop supervisor wired onto
@@ -4742,12 +4743,16 @@ class PlansService:
         for step in steps:
             if step.status in (STEP_SKIPPED,):
                 continue
-            yield {
-                "type": "step_start",
-                "plan_id": run.id,
-                "step_id": step.step_index,
-                "intent": step.intent,
-            }
+            # step_start means "this step is in progress now". Emitting it for
+            # every row made the Now list flip pending and finished steps to
+            # Running as soon as Run was clicked.
+            if step.status == STEP_RUNNING:
+                yield {
+                    "type": "step_start",
+                    "plan_id": run.id,
+                    "step_id": step.step_index,
+                    "intent": step.intent,
+                }
             if step.status == STEP_AWAITING_APPROVAL and paused_step is not None:
                 yield {
                     "type": "step_confirm",

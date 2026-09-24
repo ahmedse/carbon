@@ -41,6 +41,31 @@ def test_list_leave_entitlements_six_row_render_en():
     assert ungrounded_numbers(rendered, [SIX_ROW_ENTITLEMENTS]) == []
 
 
+def test_org_entitlements_name_each_employee_instead_of_repeating_your_balance():
+    rows = []
+    for name, no, used in (
+        ("Bilagot Panta", "1067", 8),
+        ("Mohammad Bolto", "1712", 0),
+    ):
+        rows.append({
+            "employee_name": name,
+            "employee_no": no,
+            "year": 2026,
+            "leave_type": "annual",
+            "entitled_days": 30,
+            "used_days": used,
+        })
+    rendered = render_catalog_read(
+        {"result": rows}, "list_leave_entitlements", "en",
+    )
+    assert "Your leave balance" not in rendered
+    assert "Leave balances" in rendered
+    assert "Bilagot Panta (1067), 2026" in rendered
+    assert "Mohammad Bolto (1712), 2026" in rendered
+    assert "annual entitled 30 (used 8)" in rendered
+    assert rendered.count("annual entitled 30") == 2
+
+
 def test_list_leave_entitlements_six_row_render_ar():
     rendered = render_catalog_read(
         {"result": SIX_ROW_ENTITLEMENTS},

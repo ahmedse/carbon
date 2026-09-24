@@ -350,9 +350,13 @@ def _clip(text: str, max_chars: int) -> str:
 
 
 def _autonomy_for_surface(surface: str) -> str:
-    if surface == "agent_plan":
+    """Autonomy text for a surface, accepting canonical or legacy names."""
+    from ai.engine.agent.surface import Surface
+
+    resolved = Surface.resolve(surface)
+    if resolved is Surface.AGENT_PLAN:
         return AGENT_PLAN_AUTONOMY
-    if surface == "agent_discovery":
+    if resolved is Surface.AGENT_DISCOVERY:
         return AGENT_DISCOVERY_AUTONOMY
     return CHAT_AUTONOMY
 

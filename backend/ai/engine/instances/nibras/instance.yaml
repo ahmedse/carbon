@@ -477,9 +477,10 @@ api_catalog:
     domain: leave
     kind: balance
     not_for: >
-      Listing leave requests or their statuses. That is list_my_leave.
-      Not for counting days until a date already stated, and not for
-      "when does my leave start".
+      Named coworker's leave (person name or emp_NNNN) — list_leave_entitlements.
+      Same utterance that also asks loans or payslip — clarify, do not call.
+      Leave request lists — list_my_leave. Explaining an already-empty/zero
+      balance — answer (empty_render). Not for "when does my leave start".
     empty_render: no_balance_configured
     examples:
       - {ar: "كم باقي لي من إجازة؟", en: "How many leave days do I have left?"}
@@ -488,7 +489,7 @@ api_catalog:
       The logged-in employee's OWN leave balance per leave type: entitled,
       carried_forward, opening_balance, used, pending, remaining. Use for
       "how much leave do I have left", "my vacations", bare "leave" /
-      "الإجازات", "رصيد اجازاتي".
+      "الإجازات", "رصيد اجازاتي". First person only.
     requires_auth: true
     requires_confirmation: false
 
@@ -564,7 +565,9 @@ api_catalog:
     kind: history
     not_for: >
       Salary, compensation, or basic pay («راتبي»). Those are profile reads.
-      Do not invent a net figure when this list is empty.
+      Do not invent a net figure when this list is empty. Bare "payroll" /
+      "رواتب" alone is navigate to the payroll page, not this read.
+      Explaining that there is no payslip this month is answer (empty_render).
     empty_render: no_payslips
     examples:
       - {ar: "قسيمة راتبي", en: "What was my last payslip?"}
@@ -588,9 +591,13 @@ api_catalog:
     domain: leave
     kind: balance
     render: balance
+    # ESS may attempt a named-coworker read; host returns 403 when RBAC denies
+    # (ADR-0047 403-honest). Do not refuse in Chat — emit the call.
+    audience: [ess, hr]
     not_for: >
       The logged-in employee's own balance without an employee filter.
-      That is get_my_leave_balance.
+      That is get_my_leave_balance. Bare "my leave" / "إجازاتي" without a
+      named person is get_my_leave_balance.
     empty_render: no_balance_configured
     examples:
       - {ar: "ما رصيد إجازات Wellie؟", en: "what's Wellie's leave balance?"}
@@ -598,13 +605,11 @@ api_catalog:
     description: >
       List leave entitlements for employees visible to the user. Fields:
       id, employee, employee_no, employee_name, leave_type, entitled_days,
-      used_days, carried_forward. Use for a NAMED coworker's leave (Wellie,
-      Mohammad, Bilagot, emp_NNNN) — never get_my_leave_balance for them.
+      used_days, carried_forward. Use for a NAMED coworker's leave (a
+      person name or emp_NNNN) — never get_my_leave_balance for them.
       ALWAYS pass query_params.employee or employee_no when asking about one
-      person (use the focused employee_no from resolve_entity). Unfiltered
-      calls return a truncated org page and must not be used for a
-      single-person leave follow-up. Host RBAC returns 403 when the caller
-      cannot see that person — still emit this call_tool; do not refuse.
+      person. Host RBAC returns 403 when the caller cannot see that person —
+      still emit this call_tool; do not refuse.
     requires_auth: true
     requires_confirmation: false
 
@@ -680,7 +685,10 @@ api_catalog:
     kind: history
     not_for: >
       Short-hours permissions (استئذان). That is list_my_attendance_permissions.
-      Admin listing of other employees is list_attendance.
+      Admin listing of other employees is list_attendance. Bare place noun
+      "attendance" / "حضور" alone is navigate to the attendance page, not
+      this read. "Clock me in now" / "سجل حضوري الآن" is a write → Agent
+      (submit_my_attendance_permission / handoff), not this GET.
     empty_render: no_attendance_rows
     examples:
       - {ar: "سجل حضوري", en: "Show my attendance"}
@@ -693,7 +701,7 @@ api_catalog:
       overtime_hours, status (present | absent | leave | permission). Never
       returns another employee's rows. Empty means no records yet — do not
       invent clock times. Prefer this over list_attendance for every
-      first-person attendance / clock-in / check-in ask.
+      first-person attendance / clock-in / check-in ask about past rows.
     requires_auth: true
     requires_confirmation: false
 
@@ -720,16 +728,18 @@ api_catalog:
     domain: attendance
     kind: write
     not_for: >
-      Reading clock rows or listing permissions. Use list_attendance or
-      list_my_attendance_permissions.
+      Reading clock rows or listing permissions. Use list_my_attendance or
+      list_my_attendance_permissions. Past attendance ("show my attendance",
+      "سجل حضوري") is list_my_attendance — only "clock me in now" /
+      "سجل حضوري الآن" is this write (Chat → handoff_agent).
     description: >
       Employee self-service: submit a short-hours attendance permission for
       myself. Creates AttendancePermission(approved=false) + Correspondence
       (manager approve, skip_if_self). Body: {date: YYYY-MM-DD,
       permission_type: personal|medical|official|emergency, hours: number,
       notes?: string}. Prefer for attendance.permission.lifecycle submit /
-      "إذن حضور" / short hours. NEVER use submit_my_leave. Admin-on-behalf
-      remains create_attendance_permission (ops only).
+      "إذن حضور" / short hours / clock-me-in now. NEVER use submit_my_leave.
+      Admin-on-behalf remains create_attendance_permission (ops only).
     requires_auth: true
     requires_confirmation: true
     write_slots:
@@ -802,6 +812,7 @@ navigation_routes:
     path: /people/payroll
     description: Payroll runs list page.
     label: Payroll
+    audience: [ess, hr]
     labels:
       en: [payroll, payroll runs, payslips, salaries]
       ar: [الرواتب, كشوف المرتبات, مسيرات الرواتب]
@@ -809,17 +820,21 @@ navigation_routes:
   - name: leave
     type: page
     path: /people/leave
-    description: Leave records and entitlements page.
+    description: >
+      Leave admin page. Bare "leave" / "الإجازات" for an employee is
+      get_my_leave_balance (call_tool), not this navigate.
     label: Leave
+    audience: [ess, hr]
     labels:
-      en: [leave, leave records, entitlements, vacations, time off]
-      ar: [الإجازات, الرخص, العطل, إدارة الإجازات]
+      en: [leave admin, leave records page, entitlements page]
+      ar: [إدارة الإجازات, صفحة الإجازات]
 
   - name: loans
     type: page
     path: /people/loans
     description: Loans list page.
     label: Loans
+    audience: [ess, hr]
     labels:
       en: [loans, loan records, advances]
       ar: [القروض, السلف, السلفيات]
@@ -829,6 +844,7 @@ navigation_routes:
     path: /people/attendance
     description: Attendance records page.
     label: Attendance
+    audience: [ess, hr]
     labels:
       en: [attendance, attendance records, time and attendance]
       ar: [الحضور, سجل الحضور والانصراف, الحضور والانصراف]

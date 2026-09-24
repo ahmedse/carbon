@@ -283,12 +283,23 @@ class TurnPipelineRunner(SoftSurfacesMixin):
         from ai.engine.cognition.turn.runner_s3_s5 import run_s3_through_s5
         from ai.engine.cognition.turn.runner_s6 import run_s6_finalize
 
+        # Resolve *where this turn runs* exactly once, from the router's parsed
+        # dial. Every stage and guardrail reads this value; nothing downstream
+        # re-derives it from prose or defaults to Chat on its own.
+        from ai.engine.agent.surface import Surface
+
+        surface = Surface.resolve(
+            process_mode=turn_route.mode.value,
+            user_message=original_user_message,
+        )
+
         st = MeteredTurnState(user_message=user_message)
         _stage_kw = dict(
             instance_id=instance_id,
             conversation_id=conversation_id,
             host_user_id=host_user_id,
             process_mode=process_mode,
+            surface=surface,
             page_context=page_context,
             conversation_history=conversation_history,
             instance_config=instance_config,

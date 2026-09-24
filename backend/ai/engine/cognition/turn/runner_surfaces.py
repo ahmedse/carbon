@@ -387,6 +387,7 @@ class SoftSurfacesMixin:
         host_user_id: str | None,
         instance_config: dict | None,
         t0: float,
+        surface=None,
         state_ctx=None,
         user_info=None,
     ):
@@ -402,6 +403,7 @@ class SoftSurfacesMixin:
             build_understand_system_prompt,
             catalog_context,
             catalog_prompt_lines,
+            navigation_prompt_lines,
             understand_mode,
             understand_turn,
         )
@@ -420,6 +422,9 @@ class SoftSurfacesMixin:
             k=12,
             context=catalog_context(conversation_history),
         )
+        nav_lines = navigation_prompt_lines(
+            _scoped_navigation_routes(instance_config, user_info)
+        )
         cfg = dict(instance_config or {})
         if user_info is not None:
             cfg = {
@@ -428,6 +433,7 @@ class SoftSurfacesMixin:
             }
         system = build_understand_system_prompt(
             catalog_lines=lines,
+            navigation_lines=nav_lines,
             state=state,
             user_info=user_info,
             instance_config=cfg or None,
@@ -453,7 +459,7 @@ class SoftSurfacesMixin:
             decision = await understand_turn(
                 complete=complete,
                 messages=messages,
-                surface="chat",
+                surface=surface,
                 allowed_tools=allowed or None,
                 write_tools=write_names or None,
                 state=state,
@@ -491,7 +497,7 @@ class SoftSurfacesMixin:
                     "is_worker": False,
                     "instance_config": instance_config,
                     "user_message": user_message,
-                    "surface": "chat",
+                    "surface": surface,
                 },
                 run_id=turn_id,
                 instance_id=instance_id,
@@ -516,14 +522,27 @@ class SoftSurfacesMixin:
                 user_message=user_message or "",
                 state=state,
                 executed=executed,
+                surface=surface,
             )
         except Exception:  # noqa: BLE001
             logger.warning("v21 act failed", exc_info=True)
             _signal(ledger, "v21_understand", False, reason="act_error")
             return None
         if not (text or "").strip():
+            # Plan and Agent already own a multi-step goal. The canned
+            # "switch" sentence is None there so the planner can draft it.
             _signal(ledger, "v21_understand", False, reason="fallthrough")
             return None
+
+        handoff_actions: list[dict] = []
+        cmd0 = decision.commands[0]
+        if cmd0.op == "handoff_agent" and str(cmd0.process_id or "") == "plan":
+            from ai.engine.agent.chat_surface import build_plan_mode_switch_handoff
+
+            switch = build_plan_mode_switch_handoff(
+                user_message=user_message or "", surface=surface,
+            )
+            handoff_actions = list(switch.get("actions") or [])
 
         total_latency = (time.monotonic() - t0) * 1000
         ledger.final_response = text[:500]
@@ -557,6 +576,7 @@ class SoftSurfacesMixin:
             model="",
             response_type="inferred",
             envelope=envelope,
+            actions=handoff_actions,
         ), ledger
 
     async def _try_bound_ess_self_read(
@@ -573,6 +593,7 @@ class SoftSurfacesMixin:
         host_user_id: str | None,
         instance_config: dict | None,
         t0: float,
+        surface=None,
     ):
         """Bound ESS self-read: classify → call_host_api → 0-LLM restate.
 
@@ -612,7 +633,7 @@ class SoftSurfacesMixin:
             "is_worker": False,
             "instance_config": instance_config,
             "user_message": user_message,
-            "surface": "chat",
+            "surface": surface,
         }
         execute_witness = ExecuteWitness(
             executor=self.executor,
@@ -1000,6 +1021,7 @@ class SoftSurfacesMixin:
         conversation_history: list[dict] | None,
         state_ctx,
         instance_config: dict | None,
+        surface=None,
     ):
         """PV2-3B: ESS write with enough slots → ChatHandoffOutcome; else seed state.
 
@@ -1048,6 +1070,7 @@ class SoftSurfacesMixin:
                 api_name=prior_api,
                 slots=prior,
                 user_message=user_message,
+                surface=surface,
             )
         # Already handed off — do not re-fire on meta follow-ups
         # ("is the handoff complete?", thanks). Thanks is a 0-LLM ack
@@ -1066,6 +1089,7 @@ class SoftSurfacesMixin:
                     api_name=prior_api,
                     slots=prior,
                     user_message=user_message,
+                    surface=surface,
                 )
             if last_decision == "clarify":
                 return build_bound_write_confirmation_answer(
@@ -1160,6 +1184,7 @@ class SoftSurfacesMixin:
             api_name=api_name,
             slots=slots,
             user_message=user_message,
+            surface=surface,
         )
 
     async def _return_chat_handoff(
@@ -1274,6 +1299,7 @@ class SoftSurfacesMixin:
         progress_callback=None,
         stream_callback=None,
         state_ctx=None,
+        surface=None,
     ):
         """PR-20: Attempt multi-step planning. Returns ReActResult, ChatHandoffOutcome, or None.
 
@@ -1356,6 +1382,7 @@ class SoftSurfacesMixin:
                     api_name=api_name,
                     slots=slots,
                     user_message=user_message,
+                    surface=surface,
                 )
             logger.info(
                 "TurnPipelineRunner: mutating plan incomplete slots — "

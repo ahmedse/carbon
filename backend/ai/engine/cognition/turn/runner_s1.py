@@ -51,6 +51,7 @@ async def run_s1_intent(
     conversation_id: str,
     host_user_id: str | None,
     process_mode: str,
+    surface,
     page_context: str,
     conversation_history: list[dict] | None,
     instance_config: dict | None,

@@ -19,6 +19,8 @@ from ai.engine.text.word_match import (
     has_word,
 )
 
+from ai.engine.agent.surface import HandoffLoopError, Surface
+
 from ai.engine.agent.chat_surface_i18n import (
     ATTENDANCE_INTENT_AR,
     ESS_TOPIC_AR,
@@ -33,7 +35,8 @@ from ai.engine.agent.chat_surface_i18n import (
 
 _FIELD_LABELS = FIELD_LABELS
 
-#: Surfaces that may stage host mutations / DQ creates.
+#: Surfaces that may stage host mutations / DQ creates. Kept for callers that
+#: still compare raw strings; :class:`Surface` is the real answer.
 AGENT_SURFACES = frozenset({"agent", "plan"})
 
 #: Tools that may stage in Chat (personal memory only).
@@ -41,6 +44,10 @@ CHAT_WRITE_ALLOWLIST = frozenset({
     "learn_fact",
     "forget_fact",
 })
+
+#: Tools that draft instead of commit. Allowed on the drafting Chat surface
+#: (``chat.plan``), cancelled on the answering one (``chat.ask``).
+CHAT_DRAFT_TOOLS = frozenset({"plan_task"})
 
 #: Maps host api_name → My route + Agent process dial + labels.
 _API_HANDOFF: dict[str, dict[str, str]] = {
@@ -151,12 +158,18 @@ def _profile_change_intent(text: str) -> bool:
 INTERNAL_REASON = "chat_no_host_mutation"
 
 
-def is_chat_surface(surface: str | None) -> bool:
-    """True when host mutations must not stage."""
-    s = (surface or "chat").strip().lower()
-    if s in AGENT_SURFACES:
-        return False
-    return True  # fail-closed: unspecified → treat as Chat
+def is_chat_surface(
+    surface: str | Surface | None,
+    process_mode: str | None = None,
+) -> bool:
+    """True when host mutations must not stage.
+
+    Fail-closed through :meth:`Surface.resolve`: an unknown or missing surface
+    is Chat. Pass ``process_mode`` so a Plan-dial turn resolves to
+    ``chat.plan`` instead of being flattened into ``chat.ask`` — both are Chat,
+    but only the first can name the dial honestly in the handoff copy.
+    """
+    return Surface.resolve(surface, process_mode=process_mode).is_chat
 
 
 def detect_locale(text: str | None) -> str:
@@ -164,11 +177,98 @@ def detect_locale(text: str | None) -> str:
     return "ar" if has_arabic_script(text or "") else "en"
 
 
-def is_host_mutation_tool(tool_name: str, tool_args: dict | None) -> bool:
-    """True for tools that create host/system side effects (not memory)."""
+#: Which Pulse surface a CTA sends the user to. ``navigate`` CTAs open the host
+#: ESS app (My / Team), which is never a Pulse surface, so they never loop.
+_CTA_TARGET: dict[str, Surface] = {
+    "tasks": Surface.AGENT_RUN,
+    "plan": Surface.CHAT_PLAN,
+}
+
+
+def cta_target_surface(action: dict[str, Any] | None) -> Surface | None:
+    """The Pulse surface a CTA would move the user to, if any."""
+    act = action or {}
+    if str(act.get("type") or "") != "open_panel":
+        return None
+    return _CTA_TARGET.get(str(act.get("panel") or ""))
+
+
+def handoff_problems(
+    surface: str | Surface | None,
+    actions: list[dict[str, Any]] | None,
+) -> list[str]:
+    """Ways a handoff would embarrass us, given where the user actually is.
+
+    Two failures matter. A handoff built on a surface that can already stage
+    the write means the guardrail cancelled something it should have passed. A
+    CTA pointing at the current surface tells the user to go where they are —
+    the "Open in Agent while the dial reads Agent" bug. Both are plumbing
+    regressions, so they are reported by identity rather than by copy review.
+    """
+    current = Surface.resolve(surface)
+    problems: list[str] = []
+    if current.may_host_mutate:
+        problems.append(
+            f"write handoff built on {current.value}, which may stage the write itself"
+        )
+    for action in actions or []:
+        if cta_target_surface(action) is current:
+            problems.append(
+                f"CTA {action.get('label') or action.get('panel')!r} "
+                f"points at {current.value}, the surface already in use"
+            )
+    return problems
+
+
+def assert_handoff_is_honest(
+    surface: str | Surface | None,
+    actions: list[dict[str, Any]] | None,
+) -> None:
+    """Raise when a handoff advises the surface the user is already on."""
+    problems = handoff_problems(surface, actions)
+    if problems:
+        raise HandoffLoopError("; ".join(problems))
+
+
+def verify_handoff(
+    surface: str | Surface | None,
+    actions: list[dict[str, Any]] | None,
+) -> bool:
+    """Production form of :func:`assert_handoff_is_honest` — log, do not raise.
+
+    ``build_handoff_actions`` already drops self-referential CTAs, so a problem
+    here means the surface reaching the builder was wrong. Users get the
+    degraded-but-honest copy; we get a loud log instead of a support ticket.
+    """
+    problems = handoff_problems(surface, actions)
+    if problems:
+        import logging
+
+        logging.getLogger(__name__).error(
+            "Handoff would loop on its own surface: %s", "; ".join(problems),
+        )
+        return False
+    return True
+
+
+def is_host_mutation_tool(
+    tool_name: str,
+    tool_args: dict | None,
+    *,
+    surface: str | Surface | None = None,
+) -> bool:
+    """True for tools that create host/system side effects (not memory).
+
+    ``surface`` matters for drafting tools: ``plan_task`` produces a reviewable
+    Tasks-panel plan and nothing runs until Approve, so it is a legitimate
+    ``chat.plan`` call and a cancelled one on ``chat.ask``. Committing tools
+    (``approve_plan`` / ``edit_plan``) stay blocked on every Chat surface.
+    """
     name = (tool_name or "").strip()
     if name in CHAT_WRITE_ALLOWLIST:
         return False
+    if name in CHAT_DRAFT_TOOLS:
+        return Surface.resolve(surface) is not Surface.CHAT_PLAN
     if name in {
         "create_dq_rule",
         "propose_dq_rule",
@@ -257,29 +357,51 @@ def handoff_spec_for_api(api_name: str | None) -> dict[str, str]:
     }
 
 
-def build_plan_mode_switch_handoff(*, user_message: str = "") -> dict[str, Any]:
+def build_plan_mode_switch_handoff(
+    *,
+    user_message: str = "",
+    surface: str | Surface | None = None,
+) -> dict[str, Any]:
     """Ask mode must not create tasks — steer the user to the Plan dial.
 
     Used when Chat cancels ``plan_task`` (or similar). No Agent Tasks panel,
     no My route — just Switch to Plan so the same thread can draft a plan.
+
+    On the Plan dial itself there is nothing to switch to, so the CTA becomes
+    the Tasks panel: approving or editing a plan is Agent's job, not Plan's.
     """
     locale = detect_locale(user_message)
+    already_plan = Surface.resolve(surface) is Surface.CHAT_PLAN
     if locale == "ar":
-        headline = "وضع السؤال لا يُنشئ مهاماً"
+        if already_plan:
+            headline = "اعتماد الخطط يتم في الوكيل"
+            prose = [
+                "وضع الخطّة يصيغ الخطة فقط. "
+                "افتح لوحة المهام لمراجعتها واعتمادها وتشغيلها.",
+            ]
+            label, summary = "فتح الوكيل", "مراجعة الخطة في الوكيل"
+        else:
+            headline = "وضع السؤال لا يُنشئ مهاماً"
+            prose = [
+                "وضع السؤال للإجابات والنصح فقط. "
+                "بدّل المفتاح إلى «خطّة» لصياغة خطة قابلة للمراجعة من هذه المحادثة.",
+            ]
+            label, summary = "التبديل إلى خطّة", "بدّل إلى وضع الخطّة"
+    elif already_plan:
+        headline = "Plans are approved in Agent"
         prose = [
-            "وضع السؤال للإجابات والنصح فقط. "
-            "بدّل المفتاح إلى «خطّة» لصياغة خطة قابلة للمراجعة من هذه المحادثة.",
+            "Plan drafts the plan only. "
+            "Open the Tasks panel to review, approve, and run it.",
         ]
-        label = "التبديل إلى خطّة"
-        summary = "بدّل إلى وضع الخطّة"
+        label, summary = "Open in Agent", "Review the plan in Agent"
     else:
         headline = "Ask mode does not create tasks"
         prose = [
             "Ask is answers and advice only. "
             "Switch the dial to Plan to draft a reviewable plan from this thread.",
         ]
-        label = "Switch to Plan"
-        summary = "Switch to Plan mode"
+        label, summary = "Switch to Plan", "Switch to Plan mode"
+    panel = "tasks" if already_plan else "plan"
     envelope = {
         "version": 1,
         "headline": headline,
@@ -300,7 +422,7 @@ def build_plan_mode_switch_handoff(*, user_message: str = "") -> dict[str, Any]:
         "actions": [
             {
                 "type": "open_panel",
-                "panel": "plan",
+                "panel": panel,
                 "plan_id": "",
                 "label": label,
                 "summary": summary,
@@ -323,21 +445,27 @@ def build_chat_handoff_result(
     *,
     reason: str = "",
     user_message: str = "",
+    surface: str | Surface | None = None,
 ) -> dict[str, Any]:
     """Tool-result shape for a cancelled Chat mutation (not an error)."""
     name = (tool_name or "").strip()
     # plan_task in Chat/Ask → switch to Plan dial; never invent Agent/My CTAs.
     if name in {"plan_task", "approve_plan", "edit_plan"}:
-        return build_plan_mode_switch_handoff(user_message=user_message)
+        return build_plan_mode_switch_handoff(
+            user_message=user_message, surface=surface,
+        )
 
     args = tool_args or {}
     api = str(args.get("api_name") or args.get("api") or "").strip()
     body = args.get("body") if isinstance(args.get("body"), dict) else {}
     locale = detect_locale(user_message)
     spec = handoff_spec_for_api(api)
-    actions = build_handoff_actions(spec, locale=locale)
-    message = handoff_copy(spec, draft=body, locale=locale)
-    envelope = build_handoff_envelope(spec, draft=body, locale=locale)
+    actions = build_handoff_actions(spec, locale=locale, surface=surface)
+    verify_handoff(surface, actions)
+    message = handoff_copy(spec, draft=body, locale=locale, surface=surface)
+    envelope = build_handoff_envelope(
+        spec, draft=body, locale=locale, surface=surface,
+    )
     summary = (
         "Prepared leave draft — handoff to Agent or My"
         if "leave" in (spec.get("topic_en") or "")
@@ -358,6 +486,9 @@ def build_chat_handoff_result(
         "summary": summary,
         "envelope": envelope,
         "locale": locale,
+        # Self-describing: downstream copy (``_chat_handoff_note``) rebuilds the
+        # message from this result and must not re-guess the dial.
+        "surface": Surface.resolve(surface).value,
         "requires_confirmation": False,
         "pending_exec": False,
         # Explicit empty so envelope synthesizers have nothing to quote.
@@ -400,11 +531,26 @@ def _label(spec: dict[str, str], key: str, locale: str) -> str:
     )
 
 
-def build_handoff_actions(spec: dict[str, str], *, locale: str = "en") -> list[dict[str, Any]]:
+def build_handoff_actions(
+    spec: dict[str, str],
+    *,
+    locale: str = "en",
+    surface: str | Surface | None = None,
+) -> list[dict[str, Any]]:
     """Machine-readable CTAs — Agent first, then My (AIMessageBubble order).
 
-    Manager Team-review and My-only profile intents skip Agent.
+    Manager Team-review and My-only profile intents skip Agent. A CTA that
+    would send the user to ``surface`` is dropped: offering the seat they are
+    already sitting in is the bug this argument exists to prevent.
     """
+    actions = _build_handoff_actions(spec, locale=locale)
+    current = Surface.resolve(surface)
+    return [a for a in actions if cta_target_surface(a) is not current]
+
+
+def _build_handoff_actions(
+    spec: dict[str, str], *, locale: str = "en",
+) -> list[dict[str, Any]]:
     route = (spec.get("my_route") or "").strip()
     if spec.get("manager_only") or spec.get("my_only"):
         if not route:
@@ -443,11 +589,40 @@ def build_handoff_actions(spec: dict[str, str], *, locale: str = "en") -> list[d
     return actions
 
 
+#: Lead sentence per Chat surface. The dial the user can see is the dial we
+#: name: telling a Plan-mode user that "Chat" cannot submit reads as a bug even
+#: though the refusal is correct.
+_NO_SUBMIT_LEAD: dict[Surface, tuple[str, str]] = {
+    Surface.CHAT_ASK: (
+        "I can help you prepare a {topic}, but Chat does not submit or "
+        "change records in the system.",
+        "يمكنني مساعدتك في تجهيز {topic}، لكن الدردشة لا تُرسل ولا تغيّر "
+        "السجلات في النظام.",
+    ),
+    Surface.CHAT_PLAN: (
+        "I can draft this {topic} here, but Plan only drafts — it does not "
+        "submit or change records in the system.",
+        "أستطيع صياغة {topic} هنا، لكن وضع الخطّة يصيغ فقط — "
+        "ولا يُرسل ولا يغيّر السجلات في النظام.",
+    ),
+}
+
+
+def no_submit_lead(
+    topic: str, *, locale: str = "en", surface: str | Surface | None = None,
+) -> str:
+    """Honest first line for a refused write, named after the user's own dial."""
+    current = Surface.resolve(surface)
+    en, ar = _NO_SUBMIT_LEAD.get(current, _NO_SUBMIT_LEAD[Surface.CHAT_ASK])
+    return (ar if locale == "ar" else en).format(topic=topic)
+
+
 def handoff_copy(
     spec: dict[str, str],
     *,
     draft: dict | None = None,
     locale: str = "en",
+    surface: str | Surface | None = None,
 ) -> str:
     """Deterministic Chat reply — one next step, no fake Confirm (RULE_23)."""
     topic = _label(spec, "topic", locale)
@@ -472,10 +647,10 @@ def handoff_copy(
             f"Profile changes are submitted in My — not via Agent.\n\n"
             f"Open {my_label} and submit the change there."
         )
+    lead = no_submit_lead(topic, locale=locale, surface=surface)
     if locale == "ar":
         lines = [
-            f"يمكنني مساعدتك في تجهيز {topic}، لكن الدردشة لا تُرسل ولا تغيّر "
-            "السجلات في النظام.",
+            lead,
             "",
             "لإتمام التغيير استخدم أحد المسارين:",
             "• **الوكيل (Agent)** — بدّل إلى وضع الوكيل وشغّل العملية المعتمدة "
@@ -484,8 +659,7 @@ def handoff_copy(
         ]
     else:
         lines = [
-            f"I can help you prepare a {topic}, but Chat does not submit or "
-            "change records in the system.",
+            lead,
             "",
             "To make the change, use one of these paths:",
             "• **Agent** — switch to Agent and run the governed process "
@@ -513,20 +687,22 @@ def build_handoff_envelope(
     *,
     draft: dict | None = None,
     locale: str = "en",
+    surface: str | Surface | None = None,
 ) -> dict[str, Any]:
     """Typed envelope for handoff — draft table, **empty caveats** (RULE_23)."""
     topic = _label(spec, "topic", locale)
+    dial = Surface.resolve(surface).dial_label(locale)
     if locale == "ar":
-        headline = f"لا يمكن تقديم {topic} مباشرة من الدردشة"
+        headline = f"لا يمكن تقديم {topic} من وضع «{dial}»"
         prose = [
-            "جهّزنا التفاصيل أدناه. للدردشة دور استشاري فقط — "
+            f"جهّزنا التفاصيل أدناه. وضع «{dial}» لا يغيّر السجلات — "
             "أكمل عبر الوكيل أو من تطبيقاتي.",
         ]
         table_title = "مسودة الطلب"
         col_field, col_value = "الحقل", "القيمة"
         source_tool = "draft"
     else:
-        headline = f"This {topic} cannot be submitted from Chat"
+        headline = f"This {topic} cannot be submitted from {dial}"
         prose = [
             "The details below are prepared as a draft only. "
             "Use Agent or My to submit.",
@@ -573,14 +749,18 @@ def build_handoff_envelope(
 
 def synthesize_intent_handoff(
     user_message: str,
+    *,
+    surface: str | Surface | None = None,
 ) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
     """When Chat write intent had no tool call — copy + CTAs + envelope."""
     locale = detect_locale(user_message)
     spec = handoff_spec_for_intent(user_message)
+    actions = build_handoff_actions(spec, locale=locale, surface=surface)
+    verify_handoff(surface, actions)
     return (
-        handoff_copy(spec, locale=locale),
-        build_handoff_actions(spec, locale=locale),
-        build_handoff_envelope(spec, locale=locale),
+        handoff_copy(spec, locale=locale, surface=surface),
+        actions,
+        build_handoff_envelope(spec, locale=locale, surface=surface),
     )
 
 

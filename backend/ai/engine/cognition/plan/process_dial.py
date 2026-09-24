@@ -148,10 +148,16 @@ def is_plan_dial_turn(
     utterance: str,
     process_mode: str | None = None,
 ) -> bool:
-    """True when structured transport (or legacy prefix) says Plan."""
-    if (process_mode or "").strip().lower() in {"ask", "plan"}:
-        return (process_mode or "").strip().lower() == "plan"
-    return (utterance or "").lstrip().startswith(_PULSE_PLAN_PREFIX)
+    """True when the resolved surface is the Chat Plan dial.
+
+    ``Surface.resolve`` reads the structured dial first and only falls back to
+    the retired ``[Pulse mode: …]`` prefix when replaying old transcripts.
+    """
+    from ai.engine.agent.surface import Surface
+
+    return Surface.resolve(
+        process_mode=process_mode, user_message=utterance or "",
+    ) is Surface.CHAT_PLAN
 
 
 def is_composite_brief(utterance: str) -> bool:

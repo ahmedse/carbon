@@ -336,9 +336,13 @@ async def understand_decision(
         build_understand_system_prompt,
         catalog_context,
         catalog_prompt_lines,
+        navigation_prompt_lines,
         understand_turn,
     )
-    from ai.engine.cognition.turn.runner_helpers import _scoped_api_catalog
+    from ai.engine.cognition.turn.runner_helpers import (
+        _scoped_api_catalog,
+        _scoped_navigation_routes,
+    )
     from ai.engine.llm.router import route_chat
 
     lines, allowed, writes = catalog_prompt_lines(
@@ -349,6 +353,9 @@ async def understand_decision(
     )
     system = build_understand_system_prompt(
         catalog_lines=lines,
+        navigation_lines=navigation_prompt_lines(
+            _scoped_navigation_routes(instance_config, user_info)
+        ),
         state=state,
         user_info=user_info,
         instance_config=instance_config,

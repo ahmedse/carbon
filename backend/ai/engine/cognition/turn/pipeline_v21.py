@@ -14,9 +14,16 @@ from ai.engine.cognition.turn.grounding import ungrounded_numbers
 ExecuteTool = Callable[[str, dict], Awaitable[Any]]
 
 
-def _reply_for(cmd_op: str, decision: Decision) -> str | None:
+def _reply_for(
+    cmd_op: str, decision: Decision, *, surface: str | None = None,
+) -> str | None:
+    from ai.engine.agent.surface import Surface
+
     cmd = decision.commands[0]
     lang = decision.language
+    # Unset surface is Ask. A caller that already resolved the dial passes it
+    # so this copy cannot tell someone to switch to the seat they are in.
+    current = Surface.resolve(surface)
     if cmd_op == "clarify":
         if cmd.question:
             return cmd.question
@@ -29,18 +36,33 @@ def _reply_for(cmd_op: str, decision: Decision) -> str | None:
         return "ما أقدر أساعد في هذا." if lang == "ar" else "I can't help with that."
     if cmd_op == "handoff_agent":
         if cmd.process_id == PLAN_PROCESS_ID:
+            # Plan drafts the plan. Agent runs an approved one. Either seat
+            # already owns the next step, so a "switch" sentence would loop.
+            # None lets the turn fall through to the planner.
+            if current is Surface.CHAT_PLAN or current.may_host_mutate:
+                return None
             if lang == "ar":
                 return (
-                    "هذه مهمة متعددة الخطوات. حوّل إلى وضع الوكيل لأضع لك "
+                    "هذه مهمة متعددة الخطوات. بدّل المفتاح إلى «خطّة» لأضع لك "
                     "خطة تراجعها وتوافق عليها قبل التنفيذ."
                 )
             return (
-                "This is a multi-step run. Switch to Agent and I'll draft a "
-                "plan for you to review and approve before anything runs."
+                "This is a multi-step run. Switch the dial to Plan and I'll "
+                "draft a plan for you to review and approve before anything runs."
             )
+        # A host write. Agent stages it with consent; saying "switch to Agent"
+        # there is the same loop. Chat names the dial the user can see.
+        if current.may_host_mutate:
+            return None
         if lang == "ar":
-            return "هذا يغيّر بيانات في النظام. حوّل إلى وضع الوكيل لإتمامه."
-        return "This changes data in the system. Switch to Agent to submit it."
+            return (
+                f"هذا يغيّر بيانات في النظام. وضع «{current.dial_label('ar')}» "
+                "لا يُرسله — حوّل إلى الوكيل لإتمامه."
+            )
+        return (
+            f"This changes data in the system. {current.dial_label('en')} "
+            "does not submit it — switch to Agent to submit it."
+        )
     return None
 
 
@@ -100,6 +122,7 @@ async def act_on_decision(
     user_message: str,
     state: Any = None,
     executed: list[dict] | None = None,
+    surface: str | None = None,
 ) -> str | None:
     """Reply text, or None to fall through to the legacy turn.
 
@@ -109,7 +132,7 @@ async def act_on_decision(
     if decision is None or not decision.commands:
         return None
     cmd = decision.commands[0]
-    fixed = _reply_for(cmd.op, decision)
+    fixed = _reply_for(cmd.op, decision, surface=surface)
     if fixed is not None:
         return fixed
     if cmd.op == "confirm":

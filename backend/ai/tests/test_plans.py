@@ -460,17 +460,27 @@ def test_agreement_turns_and_heal_note_are_operator_safe():
     assert _public_heal_note({"result": "ok"}) == ""
 
 
-def test_prepend_pulse_mode_tells_the_engine_ask_or_plan():
-    from ai.intelligence import CarbonIntelligence
+def test_the_dial_is_transport_metadata_not_prose_on_the_message():
+    """The engine learns Ask/Plan/Agent from ``process_mode``, never from text.
 
-    ask = CarbonIntelligence._prepend_pulse_mode("ask", "How much leave?")
-    plan = CarbonIntelligence._prepend_pulse_mode("plan", "Loan 500 for 12 months")
-    assert "Pulse mode: Ask" in ask
-    assert "Never call plan_task" in ask
-    assert "How much leave?" in ask
-    assert "Pulse mode: Plan" in plan
-    assert "Loan 500" in plan
-    assert CarbonIntelligence._prepend_pulse_mode(None, "plain") == "plain"
+    ``_prepend_pulse_mode`` used to glue guidance onto the user's message; a
+    dozen modules then stripped it back off, and the copy that read ``surface``
+    disagreed with the dial the user could see.
+    """
+    from ai.engine.agent.surface import PULSE_DIAL_MODES, Surface
+    from ai.intelligence import CarbonIntelligence
+    from ai.serializers import SendMessageSerializer
+
+    assert not hasattr(CarbonIntelligence, "_prepend_pulse_mode")
+
+    # All three seats are representable end to end.
+    assert PULSE_DIAL_MODES == ("ask", "plan", "agent")
+    choices = SendMessageSerializer().fields["pulse_mode"].choices
+    assert set(choices) == set(PULSE_DIAL_MODES)
+
+    assert Surface.resolve(process_mode="ask") is Surface.CHAT_ASK
+    assert Surface.resolve(process_mode="plan") is Surface.CHAT_PLAN
+    assert Surface.resolve(process_mode="agent") is Surface.AGENT_RUN
 
 
 @pytest.mark.django_db
@@ -992,7 +1002,8 @@ def test_run_stream_emits_step_frames_and_done(user, patch_engine_seams, run_ids
 
     types = [f["type"] for f in frames]
     assert types[0] == "plan_start"
-    assert types.count("step_start") == 2
+    # Both steps finished before the frames were built, so neither is "running now".
+    assert types.count("step_start") == 0
     assert types.count("step_result") == 2
     assert types.count("step_end") == 2
     assert types[-1] == "done"

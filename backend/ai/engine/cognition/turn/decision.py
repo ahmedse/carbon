@@ -166,7 +166,7 @@ def _confirm_call_api(confirm: Any) -> str:
 def validate_decision(
     decision: Decision,
     *,
-    surface: str = "chat",
+    surface: str | None = None,
     allowed_tools: set[str] | None = None,
     write_tools: set[str] | None = None,
     state: Any = None,
@@ -177,7 +177,11 @@ def validate_decision(
     Unknown tool names become clarify.
     ``confirm`` without a pending open question becomes clarify.
     """
-    surface = (surface or "chat").strip().lower()
+    from ai.engine.agent.surface import Surface
+
+    # Ask the enum, never the spelling: ``chat.plan`` is Chat too, and a raw
+    # ``== "chat"`` would have let its write tools through.
+    on_chat = Surface.resolve(surface).is_chat
     pending = _pending_open_question(state)
     out: list[Command] = []
     for cmd in decision.commands:
@@ -191,7 +195,7 @@ def validate_decision(
                 )
                 continue
             api = _confirm_call_api(pending.get("confirm"))
-            if surface == "chat" and api and _is_write_tool(api, write_tools):
+            if on_chat and api and _is_write_tool(api, write_tools):
                 out.append(
                     Command(
                         op="handoff_agent",
@@ -213,7 +217,7 @@ def validate_decision(
                     )
                 )
                 continue
-            if surface == "chat" and _is_write_tool(name, write_tools):
+            if on_chat and _is_write_tool(name, write_tools):
                 out.append(
                     Command(
                         op="handoff_agent",
