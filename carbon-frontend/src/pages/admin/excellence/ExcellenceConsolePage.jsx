@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Alert, Button, Chip, Skeleton, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
 import StairsIcon from '@mui/icons-material/Stairs';
 import { useAuth } from '../../../auth/AuthContext';
@@ -8,7 +8,6 @@ import PageContainer from '../../../components/layout/PageContainer';
 import PageHeader from '../../../components/Page/PageHeader';
 import { SearchSelect } from '../../../components/Form';
 import FilteredDataGrid from '../../../components/FilteredDataGrid';
-import RightPanel from '../../../components/Layout/RightPanel';
 import TabPanel from '../../../components/Layout/TabPanel';
 import SystemDialog from '../../../components/SystemDialog';
 import { useNotification } from '../../../components/NotificationProvider';
@@ -17,14 +16,6 @@ import AssuranceRulesPanel from './AssuranceRulesPanel';
 import ExcellenceCellMap from './ExcellenceCellMap';
 import EmptyState from '../../../components/Page/EmptyState';
 import { aspectLabel, levelColor, levelName, stateColor } from './excellenceUi';
-
-const NAV = [
-  ['/admin/excellence/runs', 'Runs', 'runs'],
-  ['/admin/excellence/exemptions', 'Exemptions', 'exemptions'],
-  ['/admin/excellence/initiatives', 'Initiatives', 'initiatives'],
-  ['/admin/excellence/standard', 'Standard', 'standard'],
-  ['/admin/excellence/rules', 'Rules', 'rules'],
-];
 
 const COLLECTORS = [
   { value: 'repo', label: 'Repo probes' },
@@ -152,44 +143,6 @@ export default function ExcellenceConsolePage() {
     }
   }
 
-  const crumbs = [{ to: '/admin/excellence', label: 'Contexts' }];
-  if (current) crumbs.push({ to: `/admin/excellence/${current.id}`, label: current.title });
-  if (grid && !(current && grid.title === current.title)) {
-    crumbs.push({ to: pathname, label: grid.title });
-  }
-
-  const nav = (
-    <Stack component="nav" aria-label="Excellence" spacing={1}>
-      <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap alignItems="center">
-        {crumbs.map((crumb, i) => (
-          <React.Fragment key={crumb.to}>
-            {i > 0 && <Typography variant="body2" color="text.secondary">/</Typography>}
-            {i === crumbs.length - 1 ? (
-              <Typography variant="body2">{crumb.label}</Typography>
-            ) : (
-              <Button size="small" component={Link} to={crumb.to}>{crumb.label}</Button>
-            )}
-          </React.Fragment>
-        ))}
-      </Stack>
-      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-        {NAV.map(([to, label, id]) => (
-          <Button
-            key={to}
-            size="small"
-            component={Link}
-            to={to}
-            variant="text"
-            color={section === id ? 'primary' : 'inherit'}
-            aria-current={section === id ? 'page' : undefined}
-          >
-            {label}
-          </Button>
-        ))}
-      </Stack>
-    </Stack>
-  );
-
   const checkRows = (grid?.checks || []).map((c, i) => ({ ...c, id: `${c.check_id}-${c.subject_id}-${i}` }));
 
   useEffect(() => {
@@ -214,7 +167,6 @@ export default function ExcellenceConsolePage() {
           </Button>
         ) : null}
       />
-      {nav}
 
       {loading && (
         <Stack spacing={1} aria-busy="true" aria-label="Loading excellence">

@@ -272,6 +272,46 @@ const ROUTE_CONFIG = {
     icon: AdminPanelSettingsIcon,
     parent: '/admin',
   },
+  '/admin/excellence': {
+    label: 'Excellence',
+    icon: AdminPanelSettingsIcon,
+    parent: '/admin',
+  },
+  '/admin/excellence/runs': {
+    label: 'Runs',
+    icon: AdminPanelSettingsIcon,
+    parent: '/admin/excellence',
+  },
+  '/admin/excellence/exemptions': {
+    label: 'Exemptions',
+    icon: AdminPanelSettingsIcon,
+    parent: '/admin/excellence',
+  },
+  '/admin/excellence/initiatives': {
+    label: 'Initiatives',
+    icon: AdminPanelSettingsIcon,
+    parent: '/admin/excellence',
+  },
+  '/admin/excellence/standard': {
+    label: 'Standard',
+    icon: AdminPanelSettingsIcon,
+    parent: '/admin/excellence',
+  },
+  '/admin/excellence/rules': {
+    label: 'Rules',
+    icon: AdminPanelSettingsIcon,
+    parent: '/admin/excellence',
+  },
+  '/admin/excellence/:context': {
+    label: 'Context',
+    icon: AdminPanelSettingsIcon,
+    parent: '/admin/excellence',
+  },
+  '/admin/excellence/:context/:app': {
+    label: 'App',
+    icon: AdminPanelSettingsIcon,
+    parent: '/admin/excellence/:context',
+  },
   '/settings': {
     label: 'Settings',
     icon: SettingsIcon,
