@@ -1085,7 +1085,11 @@ def test_confirm_step_executes_staged_mutation(user, patch_engine_seams, run_ids
     service = PlansService()
     result = service.confirm_step(user, plan.id, 1)
 
-    assert result == {"status": "confirmed", "plan_id": plan.id, "step_id": 1}
+    assert result["status"] == "confirmed"
+    assert result["plan_id"] == plan.id
+    assert result["step_id"] == 1
+    assert result.get("committed") is True
+    assert result.get("plan_status") == "completed"
     step = RunStep.objects.get(run_id=plan.id, step_index=1)
     assert step.status == "completed"
     assert isinstance(step.critic_flags_json, dict)

@@ -5045,6 +5045,8 @@ class PlansService:
             "plan_id": run.id,
             "step_id": step.step_index,
             "committed_inline": True,
+            "committed": True,
+            "plan_status": run.status,
         }
 
     def _render_bound_step_summary(
@@ -5268,11 +5270,20 @@ class PlansService:
         if _tpl:
             run.final_response = _tpl
             run.save(update_fields=["final_response", "updated_at"])
+        from ai.models.core import RunStep
+        siblings = list(RunStep.objects.filter(run_id=run.id).order_by("step_index"))
+        _reconcile_run_status_from_steps(run, siblings)
         logger.info(
             "Plan step confirmed plan=%s step=%s user=%s",
             plan_id, step.step_index, user_pk,
         )
-        return {"status": "confirmed", "plan_id": plan_id, "step_id": step.step_index}
+        return {
+            "status": "confirmed",
+            "plan_id": plan_id,
+            "step_id": step.step_index,
+            "plan_status": run.status,
+            "committed": True,
+        }
 
     def decline_step(self, user, plan_id: str, step_id) -> dict:
         """Decline a paused consent step — nothing is written.

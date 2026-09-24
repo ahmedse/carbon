@@ -6,7 +6,7 @@
  * component is the same for leave, loans, attendance permissions and hires —
  * no per-API field tables, no client-side synonym or date guessing.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   Box,
@@ -245,6 +245,23 @@ ChangePreviewPanel.propTypes = {
   partial: PropTypes.bool,
 };
 
+function serverConsentValues(step) {
+  return { ...(consentInputSpec(step)?.values || {}) };
+}
+
+function mergeConsentValues(prev, server) {
+  // Keep operator answers across plan polls. Polling rebuilds tool_args /
+  // consent_slots as new object identities every few seconds; wiping local
+  // state on those identity changes sent the chip picker back to "select again".
+  const next = { ...server };
+  Object.entries(prev || {}).forEach(([key, value]) => {
+    if (value != null && String(value).trim() !== '') {
+      next[key] = value;
+    }
+  });
+  return next;
+}
+
 export default function TimelineConsentForm({
   step,
   confirming,
@@ -252,10 +269,18 @@ export default function TimelineConsentForm({
   onDecline,
 }) {
   const spec = useMemo(() => consentInputSpec(step), [step]);
-  const [values, setValues] = useState(() => ({ ...(spec?.values || {}) }));
+  const [values, setValues] = useState(() => serverConsentValues(step));
+  const seedKeyRef = useRef(null);
 
   useEffect(() => {
-    setValues({ ...(consentInputSpec(step)?.values || {}) });
+    const seedKey = `${step?.step_id ?? ''}:${step?.status ?? ''}`;
+    const server = serverConsentValues(step);
+    if (seedKeyRef.current !== seedKey) {
+      seedKeyRef.current = seedKey;
+      setValues(server);
+      return;
+    }
+    setValues((prev) => mergeConsentValues(prev, server));
   }, [step?.step_id, step?.status, step?.tool_args, step?.consent_slots]);
 
   if (!step || step.status !== 'awaiting_approval') return null;

@@ -1037,6 +1037,10 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
               output_type: fresh.output_type ?? s.output_type,
               artifacts: fresh.artifacts ?? s.artifacts,
               consent_granted: Boolean(fresh.consent_granted) || Boolean(s.consent_granted),
+              consent_slots: Array.isArray(fresh.consent_slots)
+                ? fresh.consent_slots
+                : s.consent_slots,
+              tool_args: fresh.tool_args ?? s.tool_args,
             };
           });
         });
@@ -1085,6 +1089,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             is_mutation: Boolean(s.is_mutation),
             heal_note: s.heal_note || '',
             consent_granted: Boolean(s.consent_granted),
+            consent_slots: Array.isArray(s.consent_slots) ? s.consent_slots : [],
             // W7-A execution contract (F-26 / F-28): parallel lane grouping
             // + the runnable_state enum the UI locks/edits on.
             strategy: s.strategy || 'sequential',
@@ -1336,12 +1341,25 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   const handleRun = async ({ forceResume = false } = {}) => {
     if (!selectedPlan) return;
     const planId = selectedPlan.id;
-    // Prefer resume whenever the durable plan is paused — stale FE status
-    // after a failed refresh used to call /run/ and re-open the consent gate.
-    const streamFn = (
+    // Resume only from durable paused/approved. Never trust phase alone —
+    // after Approve, get_plan may already reconcile to completed while phase
+    // still says paused; resuming then paints a false "Didn't finish".
+    const durableResume = (
+      selectedPlan.status === 'paused'
+      || selectedPlan.status === 'approved'
+    );
+    if (
       forceResume
-      || selectedPlan.status === 'paused'
-      || phase === 'paused'
+      && !durableResume
+      && (selectedPlan.status === 'completed' || selectedPlan.status === 'completed_with_gaps')
+    ) {
+      setPhase('finished');
+      setErrorMessage(null);
+      await refreshPlan(planId);
+      return;
+    }
+    const streamFn = (
+      forceResume || durableResume
     ) ? resumePlanStream : runPlanStream;
     stopRequestedRef.current = false;
     setPhase('working');
@@ -1404,16 +1422,37 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             loadLedger(planId);
           }
         },
-        onError: (message) => {
+        onError: async (message) => {
+          const msg = message || 'The run failed';
+          const fresh = await refreshPlan(planId);
+          // Resume after Approve can race a completed reconcile ("Plan is not
+          // runnable (status: completed)"). If the host write already landed,
+          // keep the success receipt — never paint "Didn't finish".
+          if (
+            /not runnable.*completed/i.test(msg)
+            && (fresh?.status === 'completed' || fresh?.status === 'completed_with_gaps')
+          ) {
+            setPhase('finished');
+            setErrorMessage(null);
+            return;
+          }
           setPhase('error');
-          setErrorMessage(message || 'The run failed');
-          refreshPlan(planId);
+          setErrorMessage(msg);
         },
       });
     } catch (err) {
+      const msg = err.message || 'The run failed';
+      const fresh = await refreshPlan(planId);
+      if (
+        /not runnable.*completed/i.test(msg)
+        && (fresh?.status === 'completed' || fresh?.status === 'completed_with_gaps')
+      ) {
+        setPhase('finished');
+        setErrorMessage(null);
+        return;
+      }
       setPhase('error');
-      setErrorMessage(err.message || 'The run failed');
-      refreshPlan(planId);
+      setErrorMessage(msg);
     }
   };
 
@@ -1444,23 +1483,38 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     }
   };
 
-  // ── Per-step consent (resumes the run afterwards via "Resume run") ────
+  // ── Per-step consent (resume only when work remains) ────
   const handleConfirmStep = async (stepId, opts = {}) => {
     if (!selectedPlan) return;
     setConfirmingId(stepId);
     try {
       const result = await confirmPlanStep(token, selectedPlan.id, stepId, opts);
-      if (result?.unstaged) {
-        // Pre-execution consent: token recorded — force resume so
-        // resume_tokens load (never /run/ from a stale non-paused FE status).
-        setSelectedPlan((prev) => (
-          prev ? { ...prev, status: 'paused' } : prev
-        ));
-        await handleRun({ forceResume: true });
-      } else {
-        // Post-execution confirmation: the staged host mutation ran; step done.
-        upsertStep({ step_id: stepId, status: 'completed' });
-        await refreshPlan(selectedPlan.id);
+      upsertStep({ step_id: stepId, status: 'completed' });
+      const updated = await refreshPlan(selectedPlan.id);
+      const planStatus = (
+        result?.plan_status
+        || updated?.status
+        || selectedPlan.status
+      );
+      const stillRunnable = planStatus === 'paused' || planStatus === 'approved';
+      const alreadyDone = (
+        planStatus === 'completed'
+        || planStatus === 'completed_with_gaps'
+      );
+      if (alreadyDone) {
+        // Host write already landed (loan/leave/etc). Do not resume a
+        // completed plan — that surfaces as "Didn't finish".
+        setPhase('finished');
+        setErrorMessage(null);
+        return;
+      }
+      if (result?.unstaged || result?.committed || result?.committed_inline || stillRunnable) {
+        if (stillRunnable) {
+          setSelectedPlan((prev) => (
+            prev ? { ...prev, status: planStatus } : prev
+          ));
+          await handleRun({ forceResume: true });
+        }
       }
     } catch (err) {
       notifyFromErrorRef.current(err, 'Could not approve the step');

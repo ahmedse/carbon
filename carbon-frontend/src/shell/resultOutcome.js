@@ -31,6 +31,15 @@ export function receiptFactsFromActions(hostActions = []) {
 
 export function receiptStateFromPlan(plan, phase) {
   const effective = effectivePlanStatus(plan) || plan?.status || '';
+  // Durable success wins over a stale FE error phase (e.g. resume raced a
+  // completed Approve). The host write already landed.
+  if (effective === 'completed' || effective === 'completed_with_gaps') {
+    const meta = planStatusMeta(effective);
+    return {
+      label: meta?.label || '',
+      color: meta?.color || 'success',
+    };
+  }
   if (phase === 'error' || effective === 'failed') {
     return { labelKey: 'boardChipFailed', color: 'error' };
   }
