@@ -178,7 +178,11 @@ def test_discuss_followup_stays_in_context():
         history,
     ) is True
     assert _is_discuss_apply_turn("proceed") is True
+    assert _is_discuss_apply_turn("apply") is True
+    assert _is_discuss_apply_turn("accept") is True
     assert _is_agent_discuss_context("proceed", history) is False
+    assert _is_agent_discuss_context("apply", history) is False
+    assert _is_agent_discuss_context("accept", history) is False
     assert _is_agent_discuss_context("go", history) is False
     assert _is_agent_discuss_context("replan", history) is False
 
@@ -186,6 +190,8 @@ def test_discuss_followup_stays_in_context():
 def test_discuss_apply_ignores_why_replan():
     assert _is_discuss_apply_turn("why replan into one step?") is False
     assert _is_discuss_apply_turn("do not replan yet") is False
+    # Bare "apply" alone must exit discuss; "do not apply yet" must not.
+    assert _is_discuss_apply_turn("do not apply yet") is False
 
 
 # ── export-step coercion (document-generation reliability) ──────────────────

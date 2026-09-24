@@ -350,6 +350,7 @@ _AGENT_DISCUSS_APPLY_PHRASES: tuple[str, ...] = (
 # Bare affirmatives — only exit discuss when history already has discuss markers.
 _AGENT_DISCUSS_APPLY_SHORT: frozenset[str] = frozenset({
     "go", "proceed", "yes", "ok", "okay", "do it", "confirm", "approved",
+    "apply", "accept",
     "lfg", "ship it",
 })
 

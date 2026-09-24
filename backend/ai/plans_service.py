@@ -4492,7 +4492,7 @@ class PlansService:
                     )
                 ),
             )
-        metrics = self._build_qos_metrics(run, results, flight)
+        metrics = await sync_to_async(self._build_qos_metrics)(run, results, flight)
         report = await sync_to_async(fd.build_acceptance_report)(
             run, results, metrics
         )
