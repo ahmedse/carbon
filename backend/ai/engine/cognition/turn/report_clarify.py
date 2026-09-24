@@ -9,62 +9,78 @@ follow-up (charts / all aspects / …).
 """
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from ai.engine.cognition.plan.process_dial import strip_pulse_mode_prefix
+from ai.engine.text.word_match import contains_any_phrase, has_any_word, has_gapped_words
 from ai.engine.cognition.turn.navigation import detect_lang
+from ai.engine.cognition.turn.report_clarify_i18n import (
+    ASPECT_PICK_AR,
+    PRIOR_CLARIFY_AR,
+    SCOPED_AR,
+    any_needle,
+    broad_report_ar,
+)
 
 #: Vague "give me a full report" without an angle / audience.
-_BROAD_REPORT_RE = re.compile(
-    r"("
-    r"\b(?:full|complete|comprehensive|detailed|entire|overall)\b.{0,40}\b"
-    r"(?:report|overview|summary|pack)\b"
-    r"|\b(?:report|overview|summary|pack)\b.{0,40}\b"
-    r"(?:salary|salaries|payroll|compensation|pay)\b"
-    r"|\b(?:salary|salaries|payroll|compensation)\b.{0,24}\b"
-    r"(?:report|overview|summary)\b"
-    r"|تقرير\s*(?:كامل|شامل|مفصل)?\s*(?:عن\s+)?(?:ال)?(?:رواتب|راتب|مسير|الأجور)"
-    r"|(?:رواتب|راتب).{0,24}تقرير"
-    r")",
-    re.IGNORECASE | re.DOTALL,
-)
+_BROAD_HEADS = ("full", "complete", "comprehensive", "detailed", "entire", "overall")
+_BROAD_DOCS = ("report", "overview", "summary", "pack")
+_BROAD_PAY = ("salary", "salaries", "payroll", "compensation", "pay")
+_BROAD_PAY_DOCS = ("report", "overview", "summary")
+
+
+def _is_broad_report_en(text: str) -> bool:
+    if any(has_gapped_words(text, head, _BROAD_DOCS, max_gap=6) for head in _BROAD_HEADS):
+        return True
+    if any(has_gapped_words(text, doc, _BROAD_PAY, max_gap=6) for doc in _BROAD_DOCS):
+        return True
+    return any(has_gapped_words(text, pay, _BROAD_PAY_DOCS, max_gap=4) for pay in ("salary", "salaries", "payroll", "compensation"))
 
 #: Already scoped — do not re-ask.
 #: Note: ``charts?`` not ``chart`` — "with charts" must count as scoped.
-_SCOPED_RE = re.compile(
-    r"("
-    r"\b(?:board|executive|hr\s+lead|finance|manager|committee)\b"
-    r"|\b(?:distribution|breakdown|bands?|tiers?|histogram)\b"
-    r"|\b(?:charts?|graphs?|visuals?|viz)\b"
-    r"|\b(?:gosi|pifss|deduction|variance|committed|draft|failed)\b"
-    r"|\b(?:by\s+(?:band|tier|nationality|gender|dept|department|org|grade))\b"
-    r"|\b(?:word|excel|pdf|pptx|export|pack)\b"
-    r"|مجلس|إدارة|توزيع|شرائح|تأمينات|استقطاع|حسب|رسوم|مخططات"
-    r")",
-    re.IGNORECASE,
+_SCOPED_WORDS = (
+    "board", "executive", "finance", "manager", "committee",
+    "distribution", "breakdown", "band", "bands", "tier", "tiers", "histogram",
+    "chart", "charts", "graph", "graphs", "visual", "visuals", "viz",
+    "gosi", "pifss", "deduction", "variance", "committed", "draft", "failed",
+    "word", "excel", "pdf", "pptx", "export", "pack",
 )
+_SCOPED_PHRASES = (
+    "hr lead",
+    "by band", "by tier", "by nationality", "by gender", "by dept",
+    "by department", "by org", "by grade",
+)
+
+
+def _is_scoped_en(text: str) -> bool:
+    return has_any_word(text, _SCOPED_WORDS) or contains_any_phrase(text, _SCOPED_PHRASES)
 
 #: User reply that picks an option from the clarify list (or all of them).
-_ASPECT_PICK_RE = re.compile(
-    r"("
-    r"\b(?:distribution|bands?|tiers?|pay\s*mix)\b"
-    r"|\b(?:run\s*health|committed|draft|failed|payroll\s*runs?)\b"
-    r"|\b(?:gosi|pifss|deduction)\b"
-    r"|\b(?:board|executive|high[\s-]?level|summary)\b"
-    r"|\b(?:all\s+(?:of\s+)?(?:the\s+)?(?:4|four|aspects?|options?|above|them))\b"
-    r"|\b(?:both|everything|each\s+(?:aspect|one))\b"
-    r"|توزيع|شرائح|مسيرات|ملتزم|مسودة|فشل|تأمينات|مجلس|ملخص"
-    r"|كل\s*(?:ال)?(?:أربعة|الجوانب|الخيارات|ما\s*سبق)"
-    r")",
-    re.IGNORECASE,
+_ASPECT_WORDS = (
+    "distribution", "band", "bands", "tier", "tiers",
+    "committed", "draft", "failed", "gosi", "pifss", "deduction",
+    "board", "executive", "summary", "both", "everything",
+)
+_ASPECT_PHRASES = (
+    "pay mix", "run health", "payroll run", "payroll runs",
+    "high level", "high-level",
+    "all of the", "all the", "all four", "all aspects", "all options",
+    "all above", "all them", "each aspect", "each one",
 )
 
-#: Bare "1" / "2" / "option 3" after a numbered clarify menu.
-_NUMBERED_PICK_RE = re.compile(
-    r"^\s*(?:option\s*)?([1-5]|both)\s*[.)]?\s*$",
-    re.IGNORECASE,
-)
+
+def _is_aspect_pick_en(text: str) -> bool:
+    return has_any_word(text, _ASPECT_WORDS) or contains_any_phrase(text, _ASPECT_PHRASES)
+
+
+def _numbered_pick_key(text: str) -> str | None:
+    raw = (text or "").strip().rstrip(".)").strip()
+    folded = raw.casefold()
+    if folded.startswith("option "):
+        folded = folded[7:].strip().rstrip(".)").strip()
+    if folded in {"1", "2", "3", "4", "5", "both"}:
+        return folded
+    return None
 
 #: Expand numbered picks into scoped tool briefs (salary report menu).
 _SALARY_ASPECT_BY_NUM = {
@@ -95,41 +111,28 @@ _TOPIC_ASPECT_BY_NUM = {
     ),
 }
 
-_TOPIC_MENU_RE = re.compile(
-    r"Headcount\s*&\s*Organization|Payroll\s*&\s*Compensation"
-    r"|What's the main topic|I'd like to focus this report",
-    re.IGNORECASE,
+_TOPIC_MENU_MARKERS = (
+    "headcount & organization", "payroll & compensation",
+    "what's the main topic", "i'd like to focus this report",
 )
 
 #: Prior assistant clarify — match even after entity-chip mutation of "it".
-_PRIOR_CLARIFY_RE = re.compile(
-    r"("
-    r"what should .{0,80} focus on"
-    r"|على ماذا تريد التركيز"
-    r"|Happy to help with a salary report"
-    r"|بكل سرور أساعد في تقرير الرواتب"
-    r")",
-    re.IGNORECASE,
+_PRIOR_CLARIFY_MARKERS = (
+    "what should", "focus on", "happy to help with a salary report",
+    "بكل سرور أساعد في تقرير الرواتب", "على ماذا تريد التركيز",
 )
 
 #: Thread already answered a salary/payroll report (continuity).
-_PRIOR_REPORT_ANSWER_RE = re.compile(
-    r"("
-    r"Payroll Run Status|payslip line|active employees"
-    r"|Headcount by|salary band|pay distribution"
-    r"|Committed.+(?:Draft|Failed)|GOSI|PIFSS"
-    r")",
-    re.IGNORECASE,
+_PRIOR_REPORT_ANSWER_MARKERS = (
+    "payroll run status", "payslip line", "active employees", "headcount by",
+    "salary band", "pay distribution", "gosi", "pifss", "committed", "draft",
+    "failed",
 )
 
 #: Digests that mean we already fetched payroll/salary context this thread.
-_PAYROLL_DIGEST_RE = re.compile(
-    r"("
-    r"list_payroll_runs|list_payslip_lines|analyze_employees"
-    r"|aggregate_entity.*headcount|payslip|payroll"
-    r"|metric=headcount"
-    r")",
-    re.IGNORECASE,
+_PAYROLL_DIGEST_MARKERS = (
+    "list_payroll_runs", "list_payslip_lines", "analyze_employees",
+    "aggregate_entity", "headcount", "payslip", "payroll", "metric=headcount",
 )
 
 # Avoid pronoun "it" — entity annotator casefolds OrgUnit "IT" onto "it".
@@ -158,9 +161,9 @@ def is_broad_report_ask(utterance: str) -> bool:
     text = strip_pulse_mode_prefix(utterance or "").strip()
     if not text or len(text) > 280:
         return False
-    if not _BROAD_REPORT_RE.search(text):
+    if not (_is_broad_report_en(text) or broad_report_ar(text)):
         return False
-    if _SCOPED_RE.search(text):
+    if _is_scoped_en(text) or any_needle(text, SCOPED_AR):
         return False
     return True
 
@@ -170,7 +173,7 @@ def looks_like_report_aspect_reply(utterance: str) -> bool:
     text = strip_pulse_mode_prefix(utterance or "").strip()
     if not text or len(text) > 200:
         return False
-    return bool(_ASPECT_PICK_RE.search(text))
+    return bool(_is_aspect_pick_en(text) or any_needle(text, ASPECT_PICK_AR))
 
 
 def expand_numbered_report_pick(
@@ -184,12 +187,11 @@ def expand_numbered_report_pick(
     headcount scalar. Expand so the normal tool pipeline runs the aspect.
     """
     text = strip_pulse_mode_prefix(utterance or "").strip()
-    m = _NUMBERED_PICK_RE.match(text)
-    if not m:
+    key = _numbered_pick_key(text)
+    if not key:
         return None
     if not _history_has_clarify(history) and not _history_has_topic_menu(history):
         return None
-    key = m.group(1).lower()
     if _history_has_topic_menu(history):
         return _TOPIC_ASPECT_BY_NUM.get(key)
     return _SALARY_ASPECT_BY_NUM.get(key)
@@ -199,7 +201,7 @@ def _history_has_topic_menu(history: list[dict] | None) -> bool:
     for msg in history or []:
         if not isinstance(msg, dict) or msg.get("role") != "assistant":
             continue
-        if _TOPIC_MENU_RE.search(str(msg.get("content") or "")):
+        if contains_any_phrase(str(msg.get("content") or ""), _TOPIC_MENU_MARKERS):
             return True
     return False
 
@@ -208,7 +210,11 @@ def _history_has_clarify(history: list[dict] | None) -> bool:
     for msg in history or []:
         if not isinstance(msg, dict) or msg.get("role") != "assistant":
             continue
-        if _PRIOR_CLARIFY_RE.search(str(msg.get("content") or "")):
+        content = str(msg.get("content") or "")
+        if (
+            contains_any_phrase(content, _PRIOR_CLARIFY_MARKERS)
+            or any_needle(content, PRIOR_CLARIFY_AR)
+        ):
             return True
     return False
 
@@ -218,9 +224,9 @@ def _history_has_report_answer(history: list[dict] | None) -> bool:
         if not isinstance(msg, dict) or msg.get("role") != "assistant":
             continue
         content = str(msg.get("content") or "")
-        if _PRIOR_CLARIFY_RE.search(content):
+        if contains_any_phrase(content, _PRIOR_CLARIFY_MARKERS):
             continue
-        if _PRIOR_REPORT_ANSWER_RE.search(content):
+        if contains_any_phrase(content, _PRIOR_REPORT_ANSWER_MARKERS):
             return True
     return False
 
@@ -233,7 +239,7 @@ def _last_results_have_payroll(last_results: list[dict] | None) -> bool:
             str(row.get(k) or "")
             for k in ("tool", "api", "digest", "ref")
         )
-        if _PAYROLL_DIGEST_RE.search(blob):
+        if any(marker in blob.lower() for marker in _PAYROLL_DIGEST_MARKERS):
             return True
     return False
 
@@ -269,12 +275,12 @@ def try_report_clarify(
         return None
 
     # Aspect / "all 4" / charts follow-up → normal pipeline (tools + visuals).
-    if looks_like_report_aspect_reply(text) or _SCOPED_RE.search(text):
+    if looks_like_report_aspect_reply(text) or _is_scoped_en(text):
         return None
 
     oq = open_question if isinstance(open_question, dict) else {}
     if oq.get("slot") == "report_aspect" or (
-        oq.get("text") and _PRIOR_CLARIFY_RE.search(str(oq.get("text") or ""))
+        oq.get("text") and contains_any_phrase(str(oq.get("text") or ""), _PRIOR_CLARIFY_MARKERS)
     ):
         return None
 

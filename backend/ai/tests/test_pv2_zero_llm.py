@@ -66,6 +66,24 @@ def test_clock_and_not_payroll_when():
     assert not is_clock_ask("When does my leave start?")
 
 
+def test_day_span_uses_the_date_already_stated():
+    from ai.engine.cognition.turn.zero_llm import render_day_span
+
+    history = [
+        {"role": "assistant", "content": "Your next payday is September 25, 2026."},
+        {"role": "assistant", "content": "Your leave starts on October 1, 2026."},
+    ]
+    text = render_day_span(
+        "How many days from now until my leave?",
+        history,
+        date(2026, 9, 24),
+    )
+    assert text is not None
+    assert "7 days" in text
+    assert "October 1" in text
+    assert render_day_span("How many days until end of month?", history, date(2026, 9, 24)) is None
+
+
 def test_clock_render_avoids_echoing_what_month():
     text = render_clock("What month are we in?", date(2026, 9, 23))
     assert "September" in text and "2026" in text
@@ -89,9 +107,7 @@ def test_nav_commands_that_were_missing():
     assert resolve_navigation("Show me the loans section", cfg).action in (
         "navigate", "disambiguate",
     )
-    assert resolve_navigation("Show my payslips", cfg).action in (
-        "navigate", "disambiguate",
-    )
+    assert resolve_navigation("Show my payslips", cfg).action == "none"
     assert resolve_navigation("Go back to home", cfg).action == "navigate"
     assert resolve_navigation("Go back to home", cfg).targets[0].route == "/my"
 

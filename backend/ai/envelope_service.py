@@ -17,7 +17,14 @@ import logging
 import re
 from typing import Any
 
-from ai.envelope import AnswerEnvelope, EnvelopeChart, EnvelopeSource, envelope_from_json
+from ai.envelope import (
+    AnswerEnvelope,
+    EnvelopeCaveat,
+    EnvelopeChart,
+    EnvelopeSource,
+    EnvelopeTable,
+    envelope_from_json,
+)
 from ai.envelope_prompt import build_envelope_system_prompt
 from ai.engine.core.resolution import payload_status
 
@@ -82,23 +89,42 @@ async def synthesize_envelope(
         )
     except Exception:
         logger.warning("Envelope synthesis LLM call failed", exc_info=True)
-        return None
+        return _deterministic_fallback_envelope(usable, user_message)
 
     content = (result.get("content") or "").strip()
     if not content:
-        return None
+        return _deterministic_fallback_envelope(usable, user_message)
     try:
         envelope = envelope_from_json(content)
     except ValueError:
         logger.warning("Envelope synthesis returned invalid JSON/schema", exc_info=True)
-        return None
+        return _deterministic_fallback_envelope(usable, user_message)
 
     try:
+        envelope = ground_envelope_blocks(envelope, usable, user_message=user_message)
         envelope = enrich_envelope_charts(envelope, usable)
         return sanitize_envelope_tables(envelope)
     except Exception:
         logger.warning("Envelope enrichment failed; returning raw envelope", exc_info=True)
         return envelope
+
+
+def _deterministic_fallback_envelope(
+    usable: list[dict],
+    user_message: str,
+) -> AnswerEnvelope | None:
+    """Typed data blocks when prose synthesis is unavailable."""
+    blocks = deterministic_envelope_blocks(usable, user_message=user_message)
+    if not (blocks["tables"] or blocks["charts"]) or not blocks["sources"]:
+        return None
+    return AnswerEnvelope(
+        headline="Live data summary",
+        prose=[
+            "The tables and charts below are computed directly from the "
+            "returned platform data."
+        ],
+        **blocks,
+    )
 
 
 # ── Chart enrichment (scalar → series) ───────────────────────────────────────
@@ -403,3 +429,344 @@ def _render_tool_results(completed_tools: list[dict], max_chars: int = 20000) ->
             break
 
     return "\n\n".join(sections)
+
+
+# ── Deterministic typed blocks (host rows → tables/charts) ─────────────────
+
+
+def _numeric(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        s = value.strip().replace(",", "").replace("%", "")
+        try:
+            return float(s)
+        except ValueError:
+            return None
+    return None
+
+
+def _salary_bands(values: list[float]) -> list[list[str | int]]:
+    """Bucket gross amounts into operator-readable salary bands."""
+    bands = (
+        ("≤500", 0, 500),
+        ("501–1k", 500, 1000),
+        ("1k–2k", 1000, 2000),
+        ("2k–5k", 2000, 5000),
+        ("5k+", 5000, float("inf")),
+    )
+    rows: list[list[str | int]] = []
+    for label, low, high in bands:
+        count = sum(
+            1 for value in values
+            if (value <= high if low == 0 else low < value <= high)
+        )
+        if count:
+            rows.append([label, count])
+    return rows
+
+
+#: Keys that identify a record rather than describe a category, and keys whose
+#: numbers are identifiers/timestamps. Neither can become a chart axis.
+_NON_LABEL_KEY_RE = re.compile(
+    r"(?:^|_)(?:id|pk|uuid|code|no|number|url|slug|created|updated|date|"
+    r"datetime|timestamp|from|to|start|end|period|month|year|status)(?:_|$)",
+    re.IGNORECASE,
+)
+_NON_VALUE_KEY_RE = re.compile(
+    r"(?:^|_)(?:id|pk|uuid|no|number|year|month|day|version|order|index|"
+    r"sequence|seq)(?:_|$)",
+    re.IGNORECASE,
+)
+#: Display titles for well-known series shapes. Presentation only — never a
+#: routing decision. An unknown label key is humanized from its own name, so a
+#: new catalog endpoint charts without touching this module.
+_SERIES_TITLES = {
+    "leave_type": "Leave balance",
+    "leave_type_label": "Leave balance",
+    "line_type": "Payslip lines",
+    "category": "Breakdown",
+}
+
+
+def _label_text(value: Any) -> str:
+    if isinstance(value, dict):
+        for key in ("label", "name", "code", "title"):
+            if value.get(key) not in (None, ""):
+                return str(value[key]).strip()
+        return ""
+    return str(value or "").strip()
+
+
+def _series_keys(rows: list[dict]) -> tuple[str, str] | None:
+    """Find the (category, measure) pair in host rows by shape, not by name.
+
+    A chartable series needs one key whose values read as distinct category
+    labels and one key whose values are measures. Identifier / date / status
+    columns are excluded because they are neither. Works for any endpoint that
+    returns rows in this shape — no per-topic key list to maintain.
+    """
+    keys = [str(k) for k in rows[0]]
+    label_key = None
+    for key in keys:
+        if _NON_LABEL_KEY_RE.search(key):
+            continue
+        texts = [_label_text(row.get(key)) for row in rows]
+        if any(not t for t in texts):
+            continue
+        if any(_numeric(row.get(key)) is not None for row in rows):
+            continue  # a number is a measure, not a category
+        if len({t.casefold() for t in texts}) < 2:
+            continue  # one repeated label is not a breakdown
+        label_key = key
+        break
+    if label_key is None:
+        return None
+    candidates: list[str] = []
+    for key in keys:
+        if key == label_key or _NON_VALUE_KEY_RE.search(key):
+            continue
+        values = [_numeric(row.get(key)) for row in rows]
+        if all(v is not None for v in values) and any(v > 0 for v in values):
+            candidates.append(key)
+    if not candidates:
+        return None
+    # A column with the same number in every row draws a flat chart and answers
+    # nothing. Prefer a measure that varies; fall back to the first candidate.
+    value_key = next(
+        (
+            key for key in candidates
+            if len({_numeric(row.get(key)) for row in rows}) > 1
+        ),
+        candidates[0],
+    )
+    return label_key, value_key
+
+
+def labeled_numeric_points(rows: list[dict]) -> tuple[str, list[list]] | None:
+    """Chart points from any host rows shaped as category → measure.
+
+    Needs two or more positive values. Employee-by-employee dumps are not a
+    chart: those aggregate into salary bands instead.
+    """
+    if len(rows) < 2 or not isinstance(rows[0], dict):
+        return None
+    names = {
+        _label_text(row.get(key))
+        for row in rows
+        for key in _PERSON_KEYS
+        if _label_text(row.get(key))
+    }
+    if len(names) > 1:
+        return None
+    keys = _series_keys(rows)
+    if keys is None:
+        return None
+    label_key, value_key = keys
+    points: list[list] = []
+    for row in rows[:12]:
+        label = _label_text(row.get(label_key))[:48]
+        value = _numeric(row.get(value_key))
+        if not label or value is None or value <= 0:
+            continue
+        points.append([label, int(value) if value.is_integer() else value])
+    if len(points) < 2:
+        return None
+    title = _SERIES_TITLES.get(label_key) or _humanize_metric(label_key)
+    return title, points
+
+
+_PERSON_KEYS = ("employee_id", "employee_no", "employee_name", "employee")
+
+
+def _gross_per_person(rows: list[dict]) -> list[float]:
+    """One gross value per distinct employee; rows without an identity don't count.
+
+    An "Employees" axis is a head count. A single person's payslip lines or
+    months carry no second identity, so they can never become salary bands.
+    """
+    seen: dict[str, float] = {}
+    for row in rows:
+        person = next(
+            (_label_text(row.get(key)) for key in _PERSON_KEYS if _label_text(row.get(key))),
+            "",
+        )
+        value = _numeric(row.get("gross", row.get("amount")))
+        if not person or person in seen or value is None or value < 0:
+            continue
+        seen[person] = value
+    return list(seen.values()) if len(seen) >= 2 else []
+
+
+def _payload_rows(data: dict) -> list[dict]:
+    for key in ("results", "rows", "items"):
+        rows = data.get(key)
+        if isinstance(rows, list):
+            return [row for row in rows if isinstance(row, dict)]
+    return []
+
+
+def deterministic_envelope_blocks(
+    usable_tools: list[dict] | None,
+    *,
+    user_message: str = "",
+) -> dict[str, list]:
+    """Build tables/charts/caveats/sources directly from typed tool data.
+
+    The LLM may write headline/prose, but it never owns numeric data blocks.
+    Employee-level payslip rows are aggregated into salary bands; identities
+    are never copied into the envelope.
+    """
+    tables: list[EnvelopeTable] = []
+    charts: list[EnvelopeChart] = []
+    caveats: list[EnvelopeCaveat] = []
+    sources: list[EnvelopeSource] = []
+    seen_source: set[str] = set()
+
+    for tr in usable_tools or []:
+        tool = str(tr.get("tool_name") or "unknown")
+        data = _unwrap_tool_payload(tr.get("result"))
+        if isinstance(data, list):
+            data = {"results": [row for row in data if isinstance(row, dict)]}
+        if not isinstance(data, dict) or data.get("error") or data.get("unauthorized"):
+            continue
+        if "breakdown" not in data and isinstance(data.get("data"), dict):
+            inner = data["data"]
+            if "breakdown" in inner or _payload_rows(inner):
+                data = inner
+
+        source_rows = 0
+        truncated = bool(data.get("truncated"))
+        breakdown = data.get("breakdown")
+        if isinstance(breakdown, list) and breakdown:
+            rows: list[list[str | int | float]] = []
+            for item in breakdown:
+                if not isinstance(item, dict):
+                    continue
+                label = str(item.get("label") or item.get("name") or "-")
+                value = _numeric(item.get("count", item.get("value")))
+                if value is None:
+                    continue
+                row: list[str | int | float] = [
+                    label,
+                    int(value) if value.is_integer() else value,
+                ]
+                pct = _numeric(item.get("pct", item.get("percentage")))
+                if pct is not None:
+                    row.append(f"{pct:g}%")
+                rows.append(row)
+            if len(rows) >= 2:
+                dim = _humanize_metric(str(data.get("dimension") or "distribution"))
+                columns = ["Category", "Count"]
+                if any(len(row) == 3 for row in rows):
+                    columns.append("Percentage")
+                    rows = [row if len(row) == 3 else [*row, ""] for row in rows]
+                tables.append(EnvelopeTable(title=dim, columns=columns, rows=rows))
+                chart = _chart_from_breakdown(data)
+                if chart is not None:
+                    charts.append(chart)
+                source_rows = len(rows)
+
+        raw_rows = _payload_rows(data)
+        if raw_rows and all("status" in r for r in raw_rows):
+            counts: dict[str, int] = {}
+            for row in raw_rows:
+                status = str(row.get("status") or "Unknown").strip().title()
+                counts[status] = counts.get(status, 0) + 1
+            status_rows = [[key, value] for key, value in sorted(counts.items())]
+            if len(status_rows) >= 2:
+                tables.append(EnvelopeTable(
+                    title="Payroll Run Status",
+                    columns=["Status", "Count"],
+                    rows=status_rows,
+                ))
+                charts.append(EnvelopeChart(
+                    chart_type="bar",
+                    title="Payroll Run Status",
+                    series=[{"name": "Runs", "data": status_rows}],
+                ))
+                source_rows = len(raw_rows)
+
+        if raw_rows and any("gross" in row or "net" in row for row in raw_rows):
+            band_rows = _salary_bands(_gross_per_person(raw_rows))
+            if len(band_rows) >= 2:
+                tables.append(EnvelopeTable(
+                    title="Gross Pay Distribution",
+                    columns=["Salary band", "Employees"],
+                    rows=band_rows,
+                ))
+                charts.append(EnvelopeChart(
+                    chart_type="bar",
+                    title="Gross Pay Distribution",
+                    series=[{"name": "Employees", "data": band_rows}],
+                ))
+                source_rows = len(raw_rows)
+
+        # Any category → measure series charts on shape alone, exactly like a
+        # ``breakdown`` payload does. No topic, endpoint name, or "did they say
+        # chart?" test: a new endpoint that returns this shape charts for free.
+        if raw_rows and source_rows == 0:
+            labeled = labeled_numeric_points(raw_rows)
+            if labeled is not None:
+                title, points = labeled
+                tables.append(EnvelopeTable(
+                    title=title,
+                    columns=["Category", "Value"],
+                    rows=points,
+                ))
+                charts.append(EnvelopeChart(
+                    chart_type="bar",
+                    title=title,
+                    series=[{"name": title, "data": points}],
+                ))
+                source_rows = len(raw_rows)
+
+        for raw_caveat in data.get("caveats") or []:
+            if not isinstance(raw_caveat, dict):
+                continue
+            text = str(
+                raw_caveat.get("text") or raw_caveat.get("message") or ""
+            ).strip()
+            level = str(raw_caveat.get("level") or "warning").lower()
+            if text:
+                caveats.append(EnvelopeCaveat(
+                    level=level if level in {"info", "warning", "critical"} else "warning",
+                    text=text,
+                ))
+        if truncated and not any("truncat" in c.text.lower() for c in caveats):
+            caveats.append(EnvelopeCaveat(
+                level="critical",
+                text="The source result was truncated; totals may exceed returned rows.",
+            ))
+
+        if source_rows and tool not in seen_source:
+            seen_source.add(tool)
+            sources.append(EnvelopeSource(
+                tool=tool,
+                rows_returned=source_rows,
+                truncated=truncated,
+            ))
+
+    return {
+        "tables": tables,
+        "charts": charts,
+        "caveats": caveats,
+        "sources": sources,
+    }
+
+
+def ground_envelope_blocks(
+    envelope: AnswerEnvelope,
+    usable_tools: list[dict] | None,
+    *,
+    user_message: str = "",
+) -> AnswerEnvelope:
+    """Replace LLM-authored data blocks when deterministic blocks exist."""
+    blocks = deterministic_envelope_blocks(
+        usable_tools, user_message=user_message,
+    )
+    if not (blocks["tables"] or blocks["charts"]):
+        return sanitize_envelope_tables(envelope)
+    return envelope.model_copy(update=blocks)

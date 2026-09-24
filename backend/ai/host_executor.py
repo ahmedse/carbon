@@ -1438,6 +1438,14 @@ def _people_me(user, sub, method, body=None) -> dict:
         results = AttendancePermissionSerializer(qs, many=True).data
         return {"status_code": 200, "data": {"count": len(results), "results": results}}
 
+    if sub == "attendance":
+        from people.models import AttendanceRecord
+        from people.serializers import AttendanceRecordSerializer
+
+        qs = AttendanceRecord.objects.filter(employee=profile).order_by("-date", "-id")
+        results = AttendanceRecordSerializer(qs, many=True).data
+        return {"status_code": 200, "data": {"count": len(results), "results": results}}
+
     if sub == "payslips":
         from people.models import PayslipLine
         from people.self_views import COMMITTED_RUN_STATUSES

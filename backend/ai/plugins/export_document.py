@@ -97,6 +97,65 @@ def _to_number(value: Any) -> float | None:
         return None
 
 
+_GFM_ROW_RE = re.compile(r"^\|(.+)\|$")
+_GFM_SEP_CELL_RE = re.compile(r"^:?-{2,}:?$")
+
+
+def _split_gfm_row(line: str) -> list[str] | None:
+    """Split a GFM table row ``| a | b |`` into cells. None if not a row."""
+    stripped = (line or "").strip()
+    if not stripped.startswith("|"):
+        return None
+    # Trailing pipe optional (some models omit it).
+    body = stripped[1:]
+    if body.endswith("|"):
+        body = body[:-1]
+    cells = [c.strip() for c in body.split("|")]
+    if len(cells) < 2:
+        return None
+    return cells
+
+
+def _is_gfm_separator(cells: list[str]) -> bool:
+    return bool(cells) and all(_GFM_SEP_CELL_RE.match(c.replace(" ", "")) for c in cells)
+
+
+def parse_gfm_tables(content: str) -> tuple[str, list[dict]]:
+    """Pull GFM pipe tables out of markdown ``content``.
+
+    Returns ``(prose_without_tables, tables)`` where each table is
+    ``{"headers": [...], "rows": [[...], ...]}``. Used so Word/Excel never
+    show literal ``|---|`` delimiter lines (operator-facing deliverables).
+    """
+    if not (content or "").strip():
+        return "", []
+    lines = content.splitlines()
+    prose: list[str] = []
+    tables: list[dict] = []
+    i = 0
+    while i < len(lines):
+        header = _split_gfm_row(lines[i])
+        sep = _split_gfm_row(lines[i + 1]) if i + 1 < len(lines) else None
+        if header and sep and _is_gfm_separator(sep) and len(sep) == len(header):
+            rows: list[list[str]] = []
+            i += 2
+            while i < len(lines):
+                row = _split_gfm_row(lines[i])
+                if row is None or _is_gfm_separator(row):
+                    break
+                # Pad / trim to header width.
+                if len(row) < len(header):
+                    row = row + [""] * (len(header) - len(row))
+                rows.append(row[: len(header)])
+                i += 1
+            tables.append({"headers": header, "rows": rows})
+            prose.append("")  # keep a blank gap where the table was
+            continue
+        prose.append(lines[i])
+        i += 1
+    return "\n".join(prose), tables
+
+
 class ExportDocument(ToolPlugin):
     name = "export_document"
     description = (
@@ -314,14 +373,28 @@ class ExportDocument(ToolPlugin):
         from docx.shared import Pt, RGBColor
 
         doc = Document()
-        # Normal body typography
+        # Compact operator typography — Title/Heading defaults are oversized.
         normal = doc.styles["Normal"]
         normal.font.name = "Calibri"
         normal.font.size = Pt(10.5)
+        for style_name, size in (
+            ("Title", 16),
+            ("Heading 1", 13),
+            ("Heading 2", 12),
+            ("Heading 3", 11),
+        ):
+            try:
+                style = doc.styles[style_name]
+                style.font.name = "Calibri"
+                style.font.size = Pt(size)
+                style.font.color.rgb = RGBColor.from_string(_BRAND_TEAL)
+            except KeyError:
+                pass
 
-        heading = doc.add_heading(title, level=0)
+        heading = doc.add_heading(title, level=1)
         for run in heading.runs:
             run.font.color.rgb = RGBColor.from_string(_BRAND_TEAL)
+            run.font.size = Pt(16)
 
         for i, line in enumerate(_deliverable_identity_lines(run_id=_current_run_id())):
             para = doc.add_paragraph()
@@ -334,8 +407,11 @@ class ExportDocument(ToolPlugin):
             )
             para.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
-        if content:
-            self._render_markdown_to_docx(doc, content)
+        prose, md_tables = parse_gfm_tables(content or "")
+        if prose.strip():
+            self._render_markdown_to_docx(doc, prose)
+        for md_table in md_tables:
+            self._render_table_docx(doc, md_table)
         if table:
             self._render_table_docx(doc, table)
         if images:
@@ -428,12 +504,15 @@ class ExportDocument(ToolPlugin):
 
     @staticmethod
     def _render_markdown_to_docx(doc, content: str) -> None:
-        from docx.shared import RGBColor
+        """Render markdown *prose* (headings, lists, paragraphs). GFM tables
+        must already be stripped via ``parse_gfm_tables`` — any leftover pipe
+        row is skipped so ``|---|`` never lands as a paragraph.
+        """
+        from docx.shared import Pt, RGBColor
 
         head_color = RGBColor.from_string(_BRAND_TEAL)
 
         def add_rich(paragraph, text: str) -> None:
-            # Split on ** for inline bold; even segments plain, odd segments bold.
             for idx, seg in enumerate(re.split(r"\*\*", text)):
                 if not seg:
                     continue
@@ -445,24 +524,30 @@ class ExportDocument(ToolPlugin):
             stripped = line.strip()
             if not stripped:
                 continue
+            # Never dump raw GFM table syntax into the Word body.
+            if _split_gfm_row(stripped) is not None:
+                continue
             if stripped.startswith("### "):
                 h = doc.add_heading(stripped[4:], level=3)
                 for r in h.runs:
                     r.font.color.rgb = head_color
+                    r.font.size = Pt(11)
             elif stripped.startswith("## "):
                 h = doc.add_heading(stripped[3:], level=2)
                 for r in h.runs:
                     r.font.color.rgb = head_color
+                    r.font.size = Pt(12)
             elif stripped.startswith("# "):
                 h = doc.add_heading(stripped[2:], level=1)
                 for r in h.runs:
                     r.font.color.rgb = head_color
+                    r.font.size = Pt(13)
             elif re.match(r"^[-*•]\s+", stripped):
                 add_rich(doc.add_paragraph(style="List Bullet"), re.sub(r"^[-*•]\s+", "", stripped))
             elif re.match(r"^\d+[.)]\s+", stripped):
                 add_rich(doc.add_paragraph(style="List Number"), re.sub(r"^\d+[.)]\s+", "", stripped))
             elif stripped.startswith("> "):
-                add_rich(doc.add_paragraph(stripped[2:]), "")
+                add_rich(doc.add_paragraph(), stripped[2:])
             else:
                 add_rich(doc.add_paragraph(), stripped)
 
@@ -481,6 +566,14 @@ class ExportDocument(ToolPlugin):
 
         headers = (table or {}).get("headers") or []
         rows = (table or {}).get("rows") or []
+        prose = content or ""
+        md_tables: list[dict] = []
+        if content:
+            prose, md_tables = parse_gfm_tables(content)
+            if not headers and md_tables:
+                headers = list(md_tables[0].get("headers") or [])
+                rows = list(md_tables[0].get("rows") or [])
+                md_tables = md_tables[1:]
         ncols = max(3, len(headers))
 
         ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
@@ -527,7 +620,6 @@ class ExportDocument(ToolPlugin):
                         cell.fill = band_fill
                 row += 1
             ws.freeze_panes = ws.cell(row=header_row + 1, column=1)
-            # Auto-fit column widths from header + cell content.
             for c in range(1, len(headers) + 1):
                 longest = len(str(headers[c - 1]))
                 for r in rows:
@@ -536,11 +628,11 @@ class ExportDocument(ToolPlugin):
                 ws.column_dimensions[get_column_letter(c)].width = min(42, longest + 5)
             row += 1
 
-        if content:
+        if prose.strip():
             ws2 = wb.create_sheet("Summary")
             ws2.column_dimensions["A"].width = 96
             rr = 1
-            for line in content.splitlines():
+            for line in prose.splitlines():
                 stripped = line.strip()
                 if not stripped:
                     continue
@@ -553,6 +645,19 @@ class ExportDocument(ToolPlugin):
                     cell.font = Font(bold=True, size=12, color=_BRAND_TEAL)
                 rr += 1
 
+        for tidx, md_t in enumerate(md_tables, start=2):
+            th = md_t.get("headers") or []
+            if not th:
+                continue
+            sheet = wb.create_sheet(f"Table{tidx}"[:31])
+            for c, h in enumerate(th, start=1):
+                cell = sheet.cell(row=1, column=c, value=str(h))
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = teal_fill
+            for ridx, r in enumerate(md_t.get("rows") or [], start=2):
+                for c in range(len(th)):
+                    sheet.cell(row=ridx, column=c + 1, value=r[c] if c < len(r) else "")
+
         wb.save(str(path))
 
     def _write_pdf(self, path: Path, title: str, content: str, table: dict | None) -> None:
@@ -561,7 +666,8 @@ class ExportDocument(ToolPlugin):
         lines.extend(_deliverable_identity_lines(run_id=_current_run_id()))
         lines.append("")
         if content:
-            for raw in content.splitlines():
+            prose, md_tables = parse_gfm_tables(content)
+            for raw in prose.splitlines():
                 stripped = raw.strip()
                 if not stripped:
                     continue
@@ -572,6 +678,16 @@ class ExportDocument(ToolPlugin):
                     text = text[90:]
                 lines.append(text[:90])
             lines.append("")
+            # Flatten markdown tables into the PDF text block (no table layout).
+            for md_t in md_tables:
+                headers_md = md_t.get("headers") or []
+                if headers_md:
+                    lines.append(" | ".join(str(h) for h in headers_md)[:90])
+                    lines.append("-" * min(90, max(8, len(lines[-1]))))
+                    for row in (md_t.get("rows") or [])[:40]:
+                        cells = [str(row[i]) if i < len(row) else "" for i in range(len(headers_md))]
+                        lines.append(" | ".join(cells)[:90])
+                    lines.append("")
         if table:
             headers = table.get("headers") or []
             rows = table.get("rows") or []

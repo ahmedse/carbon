@@ -8,6 +8,15 @@ import re
 import time
 
 from ai.engine.agent.plugins import load_plugins
+from ai.engine.agent.tools_i18n import (
+    COMPENSATION_AR,
+    FIRST_PERSON_COMP_AR,
+    FIRST_PERSON_PROFILE_AR,
+    LEAVE_TOPIC_AR,
+    NAMED_LEAVE_AR,
+    PAYSLIP_SPECIFIC_AR,
+    any_needle,
+)
 from ai.engine.core.config import get_settings
 from ai.engine.core.exceptions import ToolExecutionError
 from ai.engine.llm.router import route_chat
@@ -2267,7 +2276,6 @@ def _enrich_ecf_tool_definitions(
     return enriched
 
 
-_AR_SCRIPT = re.compile(r"[\u0600-\u06FF]")
 
 # Structured JSON shadow logger (no ai_shadow_log model yet — ADR-0032 parity evidence).
 _shadow_logger = logging.getLogger("pulse.ecf.shadow")
@@ -2467,26 +2475,21 @@ async def _llm_transliterate(query: str, instance_id: str, conversation_id: str)
 
 # Compensation fields: omit from Chat identity lookups unless the user asked
 # about pay (A5 minimize-disclosure — even when CBAC allows the amount).
-_COMPENSATION_INTENT_RE = re.compile(
-    r"(?i)\b(salary|compensation|pay\b|wage|payroll|basic\s*pay|basic\s*salary|"
-    r"راتب|أجر|مرتب|تعويض)",
+_COMPENSATION_INTENT_WORDS = (
+    "salary", "compensation", "pay", "wage", "payroll",
 )
+_COMPENSATION_INTENT_PHRASES = ("basic pay", "basic salary")
 
 _PAYSLIP_SPECIFIC_RE = re.compile(
     r"(?i)("
-    r"payslip|pay[\s_-]*slip|قسيمة(?:\s*الراتب)?"
+    r"payslip|pay[\s_-]*slip"
     r"|net\s*pay|take[\s_-]*home|takehome"
     r"|last\s+month(?:'s)?\s+(?:net\s+)?pay"
-    r"|صافي\s*(?:ال)?راتب"
     r"|deductions?\s+(?:were|applied|on)"
     r"|gosi"
-    r"|الاستقطاعات|خصومات"
     r")"
 )
 
-_FIRST_PERSON_COMP_RE = re.compile(
-    r"(?i)\b(my|mine)\b|راتبي|أجري|مرتبي|تعويضي",
-)
 
 _COMP_DENY_MESSAGE = (
     "Not authorized to view compensation (people:view_compensation required)."
@@ -2502,33 +2505,45 @@ _PROFILE_API_NAMES = frozenset({
 })
 
 
+def _first_person_en(text: str) -> bool:
+    from ai.engine.text.word_match import has_any_word
+
+    return has_any_word(text, ("my", "mine", "i", "me"))
+
+
 def compensation_intent_asked(text: str | None) -> bool:
     """True when the utterance asks about salary / compensation (EN/AR)."""
-    return bool(_COMPENSATION_INTENT_RE.search(text or ""))
+    raw = text or ""
+    from ai.engine.text.word_match import contains_any_phrase, has_any_word
+
+    return bool(
+        has_any_word(raw, _COMPENSATION_INTENT_WORDS)
+        or contains_any_phrase(raw, _COMPENSATION_INTENT_PHRASES)
+        or any_needle(raw, COMPENSATION_AR)
+    )
 
 
 def payslip_specific_ask(text: str | None) -> bool:
     """True when the user explicitly asked for payslip lines (not basic pay)."""
-    return bool(_PAYSLIP_SPECIFIC_RE.search(text or ""))
+    raw = text or ""
+    return bool(
+        _PAYSLIP_SPECIFIC_RE.search(raw) or any_needle(raw, PAYSLIP_SPECIFIC_AR)
+    )
 
 
 def first_person_compensation_ask(text: str | None) -> bool:
     """True for first-person salary asks (my salary / راتبي)."""
-    return compensation_intent_asked(text) and bool(
-        _FIRST_PERSON_COMP_RE.search(text or "")
+    raw = text or ""
+    return compensation_intent_asked(raw) and bool(
+        _first_person_en(raw) or any_needle(raw, FIRST_PERSON_COMP_AR)
     )
 
 
-_FIRST_PERSON_PROFILE_RE = re.compile(
-    r"("
-    r"employee\s*(?:number|no\.?|#)"
-    r"|رقم\s*ال?موظف"
-    r"|what department am i|department am i|which department am i|my department"
-    r"|who is my manager|my manager|manager'?s?\s+name"
-    r"|who am i\b|my profile|بياناتي"
-    r"|قسمي|مديري"
-    r")",
-    re.IGNORECASE,
+_FIRST_PERSON_PROFILE_PHRASES = (
+    "employee number", "employee no", "employee #",
+    "what department am i", "department am i", "which department am i",
+    "my department", "who is my manager", "my manager", "manager's name",
+    "managers name", "who am i", "my profile",
 )
 
 
@@ -2542,7 +2557,12 @@ def first_person_profile_ask(text: str | None) -> bool:
     raw = text or ""
     if first_person_compensation_ask(raw):
         return False
-    return bool(_FIRST_PERSON_PROFILE_RE.search(raw))
+    from ai.engine.text.word_match import contains_any_phrase
+
+    return bool(
+        contains_any_phrase(raw, _FIRST_PERSON_PROFILE_PHRASES)
+        or any_needle(raw, FIRST_PERSON_PROFILE_AR)
+    )
 
 
 _NAMED_COWORKER_RE = re.compile(
@@ -2581,43 +2601,89 @@ _LEAVE_BALANCE_INTENT_RE = re.compile(
     r"days?\s+(?:of\s+)?leave\s+(?:left|remaining)|"
     r"how\s+much\s+leave|annual\s+leave(?:\s+remaining)?|"
     r"leave\s+entitlement|sick\s+leave\s+remaining|"
-    r"(?:my\s+)?leaves?\b|"
-    # Arabic stem + typo tolerance (عن الاجازلت / الإجازات / اجازاتي)
-    r"رصيد\s*ال?[اأإ]?جاز\w{0,4}|"
-    r"[اأإ]?جاز\w{0,4}\s*متبقي|"
-    r"ال?[اأإ]?جاز\w{0,4}\s*المتبقي|"
-    r"[اأإ]?جاز\w{0,4}ي|"
-    r"عن\s*ال?[اأإ]?جاز\w{0,4}|"
-    r"ال?[اأإ]?جاز\w{0,4}"
+    r"(?:my\s+)?leaves?\b"
     r")",
     re.IGNORECASE,
 )
 
-_FIRST_PERSON_LEAVE_RE = re.compile(
-    r"(?i)\b(my|mine)\b|"
-    r"[اأإ]?جاز\w{0,4}ي|رصيد\s*[اأإ]?جاز|"
-    r"عن\s*ال?[اأإ]?جاز\w{0,4}|ال?[اأإ]?جاز\w{0,4}",
-)
 
 _NAMED_LEAVE_HINT_RE = re.compile(
-    r"(?i)("
+    r"("
     r"\bemp[_\s-]?\d+\b|"
     r"\bemployee\s*(?:no\.?|number|#|:)?\s*\d+|"
-    r"\bfor\s+(?!me\b)[\w\u0600-\u06FF]|"
-    r"'s\s+(?:leave|annual|sick|balance)"
+    r"\bfor\s+(?!me\b)\w+|"
+    r"'s\s+(?:leave|annual|sick|balance)|"
+    r"\bdoes\s+[A-Z][\w'-]+\s+have\b"
     r")",
+    re.IGNORECASE,
 )
+
+
+def _named_leave_hint(text: str) -> bool:
+    return bool(_NAMED_LEAVE_HINT_RE.search(text) or any_needle(text, NAMED_LEAVE_AR))
+
+
+def _leave_intent_forms(text: str | None) -> tuple[str, ...]:
+    raw = (text or "").strip()
+    if not raw:
+        return ()
+    try:
+        from ai.engine.text.normalize import normalize_text
+
+        folded = normalize_text(raw)
+    except Exception:  # noqa: BLE001
+        folded = raw
+    if folded == raw:
+        return (raw,)
+    return (raw, folded)
+
+
+def _named_leave_proper(text: str) -> bool:
+    """Case-sensitive Given-name + leave topic (no extra re.compile)."""
+    tokens = (text or "").split()
+    nouns = {"leave", "annual", "sick", "balance"}
+    stop = {
+        "What", "How", "Show", "Where", "When", "Who", "Why", "Tell", "Please",
+        "Can", "Could", "Would", "Should", "May", "My", "The", "A", "An", "OK",
+        "Remaining", "List", "About", "Does", "Did", "Is", "Are", "I", "We",
+        "You", "Leave", "Loan", "Annual", "Sick", "Your", "Our", "Their",
+    }
+    for i, tok in enumerate(tokens):
+        clean = tok.strip(".,?؟!'\"")
+        if clean in stop:
+            continue
+        if (
+            len(clean) >= 3
+            and clean[0].isupper()
+            and clean[1:].islower()
+            and any(t.casefold() in nouns for t in tokens[i + 1 : i + 4])
+        ):
+            return True
+        if "جاز" in clean and i + 1 < len(tokens):
+            nxt = tokens[i + 1].strip(".,?؟!'\"")
+            if len(nxt) >= 3 and nxt[0].isupper() and nxt[1:].islower():
+                return True
+    return False
 
 
 def leave_balance_intent_asked(text: str | None) -> bool:
     """True when the utterance asks about leave remaining / balance (EN/AR)."""
-    return bool(_LEAVE_BALANCE_INTENT_RE.search(text or ""))
+    return any(
+        _LEAVE_BALANCE_INTENT_RE.search(form) or any_needle(form, LEAVE_TOPIC_AR)
+        for form in _leave_intent_forms(text)
+    )
 
 
 def first_person_leave_ask(text: str | None) -> bool:
     """True for first-person leave balance asks (my leave / اجازاتي)."""
-    return leave_balance_intent_asked(text) and bool(
-        _FIRST_PERSON_LEAVE_RE.search(text or "")
+    if not leave_balance_intent_asked(text):
+        return False
+    raw = text or ""
+    if _named_leave_hint(raw) or _named_leave_proper(raw):
+        return False
+    return any(
+        _first_person_en(form) or any_needle(form, LEAVE_TOPIC_AR)
+        for form in _leave_intent_forms(text)
     )
 
 
@@ -2631,7 +2697,8 @@ def named_leave_balance_ask(text: str | None) -> bool:
         return False
     if first_person_leave_ask(text):
         return False
-    return bool(_NAMED_LEAVE_HINT_RE.search(text or ""))
+    raw = text or ""
+    return bool(_named_leave_hint(raw) or _named_leave_proper(raw))
 
 
 def _compensation_intent_text(*parts: str | None) -> str:
@@ -2813,7 +2880,7 @@ def _omit_compensation_unless_asked(
     """Drop descriptor.masking fields unless the query is about compensation."""
     if not record or not getattr(descriptor, "masking", None):
         return record
-    if _COMPENSATION_INTENT_RE.search(query or ""):
+    if compensation_intent_asked(query):
         return record
     out = dict(record)
     for field_name in descriptor.masking:
@@ -2835,7 +2902,7 @@ def _compensation_unauthorized_payload(
     """
     if not record or not getattr(descriptor, "masking", None):
         return None
-    if not _COMPENSATION_INTENT_RE.search(intent_text or ""):
+    if not compensation_intent_asked(intent_text):
         return None
     missing: list[str] = []
     required_cap = None
@@ -2927,7 +2994,9 @@ async def execute_resolve_entity(
         return {"error": f"Resolver error: {exc}"}
 
     # ── 2. LLM transliteration fallback (only on a cross-script miss) ────────
-    if result.action == "none" and _AR_SCRIPT.search(query or ""):
+    from ai.engine.text.word_match import has_arabic_script
+
+    if result.action == "none" and has_arabic_script(query or ""):
         spellings = await _llm_transliterate(query, instance_id, conversation_id)
         for cand in spellings:
             try:

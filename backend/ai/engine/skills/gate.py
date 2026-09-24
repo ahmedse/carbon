@@ -23,7 +23,6 @@ the LLM key means nothing is promoted.
 
 import json
 import logging
-import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -52,22 +51,6 @@ class CriticVerdict:
     def rejected(self) -> bool:
         return not self.passed
 
-
-# ── Dangerous pattern registry (no LLM needed) ───────────────────────────
-
-_DANGEROUS_PATTERNS = [
-    (re.compile(r"\bDROP\s+(TABLE|DATABASE|SCHEMA|INDEX)\b", re.IGNORECASE), "DROP statement"),
-    (re.compile(r"\bDELETE\s+FROM\b", re.IGNORECASE), "DELETE FROM statement"),
-    (re.compile(r"\bTRUNCATE\b", re.IGNORECASE), "TRUNCATE statement"),
-    (re.compile(r"\bALTER\s+(TABLE|DATABASE)\b", re.IGNORECASE), "ALTER statement"),
-    (re.compile(r"\beval\s*\(", re.IGNORECASE), "eval() call"),
-    (re.compile(r"\bexec\s*\(", re.IGNORECASE), "exec() call"),
-    (re.compile(r"\bsubprocess\b", re.IGNORECASE), "subprocess usage"),
-    (re.compile(r"\bos\.system\b", re.IGNORECASE), "os.system() call"),
-    (re.compile(r"\bos\.popen\b", re.IGNORECASE), "os.popen() call"),
-    (re.compile(r"\b__import__\s*\(", re.IGNORECASE), "__import__() call"),
-    (re.compile(r"\bcompile\s*\(", re.IGNORECASE), "compile() call"),
-]
 
 SKILL_KINDS = {
     "sql_macro", "api_call", "prompt_template", "multi_step_plan",
@@ -175,9 +158,9 @@ async def harmlessness_critic(skill: Skill) -> CriticVerdict:
     # ── Rules phase: check body + signature for dangerous patterns ─────────
     text_to_scan = (skill.body or "") + (skill.signature or "") + (skill.description or "")
 
-    for pattern, label in _DANGEROUS_PATTERNS:
-        if pattern.search(text_to_scan):
-            flags.append(f"dangerous_pattern: {label}")
+    from ai.engine.core.danger_scan import skill_danger_flags
+
+    flags.extend(skill_danger_flags(text_to_scan))
 
     if flags:
         return CriticVerdict(passed=False, flags=flags,

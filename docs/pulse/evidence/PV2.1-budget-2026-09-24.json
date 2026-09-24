@@ -1,0 +1,25 @@
+{
+  "staged_exits": 3,
+  "re_compile": 60,
+  "arabic_regex": 0,
+  "runner_lines": 356,
+  "tool_choice_uses": 33,
+  "measured_at": "2026-09-24",
+  "g6": {"n": 61, "decision_accuracy": 1.0, "parity": 1.0, "misses": []},
+  "multiturn_offline_stub": {
+    "scripts_passed": 10,
+    "scripts_run": 14,
+    "turns_passed": 101,
+    "total_turns": 111,
+    "llm_calls_p50": 0,
+    "red": {
+      "payroll-followup-en-01": "golden expects stub-LLM `answer` with 4500; self-read is now a bound 0-LLM `tool_answer` and offline tier has no host payslip rows",
+      "language-fidelity-ar-01": "same cause (AR)",
+      "nav-zero-llm-01": "turn 5 `my net pay` → bound `tool_answer`; golden allowed navigate|answer",
+      "date-awareness-01": "baseline red at HEAD f500fdc (turn 6 leave balance → tool_answer)"
+    },
+    "note": "Goldens NOT loosened (rule: no YAML loosening without Master-approved host evidence). Fix path: offline stub host rows for bound reads."
+  },
+  "vacation_golden": "ess_leave_followup_subject 7/7",
+  "defaults": {"PULSE_UNDERSTAND": "legacy", "PULSE_TOOL_CHOICE": "off"}
+}

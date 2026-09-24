@@ -1,0 +1,9 @@
+{
+  "staged_exits": 4,
+  "re_compile": 231,
+  "arabic_regex": 110,
+  "runner_lines": 6020,
+  "tool_choice_uses": 33,
+  "measured_at": "2026-09-24",
+  "notes": "staged_exits = spine stage_exit( in runner only (Q4). Soft gates use stage_soft_exit."
+}

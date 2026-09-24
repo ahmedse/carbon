@@ -32,6 +32,25 @@ _ASK_PREFIX = "[Pulse mode: Ask. Answer from data; do not create tasks.]\n\n"
 
 # ── Gate ─────────────────────────────────────────────────────────────────
 
+def test_review_only_loan_brief_does_not_submit():
+    brief = "راجع قروضي المفتوحة ورصيد إجازتي في الوقت نفسه."
+    assert is_composite_brief(brief)
+    plan = materialize_loan_request_plan(brief)
+    apis = [s.tool_args.get("api_name") for s in plan.steps]
+    assert apis == ["list_my_loans", "get_my_leave_balance"]
+    assert all(not s.is_mutation for s in plan.steps)
+    text = render_plan_dial_answer(
+        brief=brief,
+        plan={"id": "f0e88412-0000", "steps": [
+            {"intent": s.intent, "tool_args": s.tool_args} for s in plan.steps
+        ]},
+        lang="ar",
+    )
+    assert "قراءة فقط" in text
+    assert text.count("\n- **") == 2
+    assert "submit_my_loan" not in text
+
+
 def test_plan_dial_composite_loan_brief_is_process_brief():
     brief = plan_dial_process_brief(_PLAN_PREFIX + _AR_COMPOSITE)
     assert brief == _AR_COMPOSITE

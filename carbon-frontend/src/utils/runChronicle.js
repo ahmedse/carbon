@@ -150,6 +150,54 @@ export function buildRunChronicle(plan, runSteps = []) {
   });
 }
 
+/**
+ * Short employee-facing activity lines for an optional accordion under Plan/Now.
+ * No tool names, no path_params — just what happened in plain language.
+ * @param {Array} chronicle — from buildRunChronicle
+ * @param {{ humanizeError?: (s: string) => string }} [opts]
+ * @returns {Array<{ id: string, tone: string, line: string }>}
+ */
+export function buildHumanActivityLog(chronicle, opts = {}) {
+  const humanize = typeof opts.humanizeError === 'function'
+    ? opts.humanizeError
+    : (s) => String(s || '').trim();
+  const events = Array.isArray(chronicle) ? chronicle : [];
+  return events.map((evt) => {
+    const title = String(evt.title || `Step ${evt.beat}`).trim();
+    const short = title.length > 90 ? `${title.slice(0, 87)}…` : title;
+    let line;
+    let tone = 'default';
+    switch (evt.status) {
+      case 'completed':
+        line = `Done — ${short}`;
+        tone = 'success';
+        break;
+      case 'failed': {
+        const why = humanize(evt.detail || '');
+        line = why ? `Couldn’t finish — ${short}. ${why}` : `Couldn’t finish — ${short}`;
+        tone = 'error';
+        break;
+      }
+      case 'awaiting_approval':
+        line = `Waiting for you — ${short}`;
+        tone = 'warning';
+        break;
+      case 'running':
+        line = `Working on — ${short}`;
+        tone = 'primary';
+        break;
+      case 'skipped':
+        line = `Skipped — ${short}`;
+        tone = 'default';
+        break;
+      default:
+        line = `Next up — ${short}`;
+        tone = 'default';
+    }
+    return { id: evt.id, tone, line, stepId: evt.stepId };
+  });
+}
+
 export function chronicleTone(kind) {
   switch (kind) {
     case 'done':

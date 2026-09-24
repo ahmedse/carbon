@@ -263,6 +263,26 @@ def test_edit_step_paused_pending_step_steers_in_place(user, cleanup):
 
 
 @pytest.mark.django_db
+def test_edit_step_agent_role_is_structured_not_prose(user, cleanup):
+    """agent_role is an AGENT_ROLES enum on the step — not inferred from text."""
+    ids, _ = cleanup
+    plan = _make_plan(user, status="pending_approval")
+    _make_step(plan, step_index=0, status="pending")
+    ids.append(plan.id)
+
+    service = PlansService()
+    result = service.edit_step(user, plan.id, 0, agent_role="researcher")
+    step0 = next(s for s in result["steps"] if s["step_id"] == 0)
+    assert step0["agent_role"] == "researcher"
+
+    try:
+        service.edit_step(user, plan.id, 0, agent_role="invented_role")
+        assert False, "expected ValueError for unknown role"
+    except ValueError as exc:
+        assert "Unknown agent role" in str(exc)
+
+
+@pytest.mark.django_db
 def test_edit_step_paused_awaiting_approval_drops_to_review(user, cleanup):
     ids, _ = cleanup
     plan = _make_plan(user, status="paused")

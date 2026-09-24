@@ -543,3 +543,9 @@ Track: PV2 — 6C ADR-0047 Accepted
 Ask: ADR-0047 is Accepted. Rule `.cursor/rules/pulse-intelligence-contract.mdc` is in force. G5 96/96 + 6B soak 5/5. Night 2026-09-23 FAIL not rewritten. 4A shadow calendar unchanged. F-LIVE-12 remains CBAC vs golden.
 Paths: .ai-toolkit/decisions/0047-pulse-unified-conversation-state.md, .cursor/rules/pulse-intelligence-contract.mdc
 Blockers: none for v2 exit; 4A soak and F-LIVE-12 goldens remain
+
+## [2026-09-23T22:05:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260923-53
+Track: PV21 — ADR-0049 Proposed, implementation started
+Ask: Pulse seat implementing 2.1 behind flags. Default path stays v2 (PULSE_UNDERSTAND=legacy, PULSE_TOOL_CHOICE=off). No manage.sh start/kill. No people/** edits. No golden loosening. Night 2026-09-23 FAIL stays. L6/L7 not claimed.
+Paths: .ai-toolkit/decisions/0049-pulse-2-1-model-understands-catalog-executes.md, backend/ai/**
+Blockers: none

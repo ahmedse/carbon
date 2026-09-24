@@ -507,6 +507,7 @@ _SELF_GET_NO_PATH = frozenset({
     "list_my_loans",
     "list_my_payslips",
     "list_my_attendance_permissions",
+    "list_attendance",
 })
 
 
@@ -585,112 +586,23 @@ def render_bound_catalog_read(
     tool_output: Any,
     api_name: str,
     language: str = "en",
+    *,
+    catalog_entry: dict | None = None,
 ) -> str | None:
     """0-LLM restatement of a bound ESS lookup. Invents no numbers."""
+    from ai.engine.cognition.turn.catalog_render import render_catalog_read
+
     api = str(api_name or "").strip()
+    rendered = render_catalog_read(
+        tool_output,
+        api,
+        language,
+        catalog_entry=catalog_entry,
+    )
+    if rendered:
+        return rendered
+
     payload = _unwrap_tool_payload(tool_output)
-    ar = str(language or "en").strip().casefold().startswith("ar")
-    rows = _as_record_list(payload)
-
-    if api == "get_my_leave_balance":
-        parts: list[str] = []
-        for row in rows:
-            kind = _code_or_text(row.get("leave_type"))
-            remaining = row.get("remaining")
-            if not kind or remaining is None:
-                continue
-            entitled = row.get("entitled")
-            if ar:
-                chunk = f"{kind} المتبقي {remaining}"
-                if entitled is not None:
-                    chunk += f" (المستحق {entitled})"
-            else:
-                chunk = f"{kind} remaining {remaining}"
-                if entitled is not None:
-                    chunk += f" (entitled {entitled})"
-            parts.append(chunk)
-        if not parts:
-            return "لا يوجد رصيد إجازة." if ar else "No leave-balance rows."
-        joined = "؛ ".join(parts) if ar else "; ".join(parts)
-        return (f"رصيد الإجازة: {joined}." if ar else f"Leave balance: {joined}.")
-
-    if api == "list_my_leave":
-        if not rows:
-            return (
-                "لا توجد طلبات إجازة مسجّلة."
-                if ar
-                else "No leave requests on record."
-            )
-        parts = []
-        for row in rows[:5]:
-            kind = _code_or_text(row.get("leave_type")) or "leave"
-            status = _code_or_text(row.get("status") or row.get("correspondence_status"))
-            start = row.get("start_date") or row.get("from_date")
-            end = row.get("end_date") or row.get("to_date")
-            bits = [kind]
-            if start:
-                bits.append(str(start))
-            if end:
-                bits.append(str(end))
-            if status:
-                bits.append(status)
-            parts.append(", ".join(bits) if not ar else "، ".join(bits))
-        body = "; ".join(parts) if not ar else "؛ ".join(parts)
-        return (
-            f"طلبات الإجازة ({len(rows)}): {body}."
-            if ar
-            else f"Leave requests ({len(rows)}): {body}."
-        )
-
-    if api == "list_my_loans":
-        if not rows:
-            return "لا توجد قروض قائمة." if ar else "No existing loans."
-        parts = []
-        for row in rows[:5]:
-            kind = _code_or_text(row.get("loan_type")) or "loan"
-            principal = row.get("principal")
-            months = row.get("term_months")
-            status = _code_or_text(row.get("status") or row.get("correspondence_status"))
-            bits = [kind]
-            if principal is not None:
-                bits.append(str(principal))
-            if months is not None:
-                bits.append(f"{months} mo" if not ar else f"{months} شهر")
-            if status:
-                bits.append(status)
-            parts.append(", ".join(bits) if not ar else "، ".join(bits))
-        body = "; ".join(parts) if not ar else "؛ ".join(parts)
-        return (
-            f"القروض القائمة ({len(rows)}): {body}."
-            if ar
-            else f"Existing loans ({len(rows)}): {body}."
-        )
-
-    if api == "list_my_attendance_permissions":
-        if not rows:
-            return (
-                "لا توجد أذونات حضور قائمة."
-                if ar
-                else "No existing attendance permissions."
-            )
-        parts = []
-        for row in rows[:5]:
-            kind = _code_or_text(row.get("permission_type")) or "permission"
-            hours = row.get("hours")
-            day = row.get("date")
-            bits = [kind]
-            if hours is not None:
-                bits.append(f"{hours}h" if not ar else f"{hours} س")
-            if day:
-                bits.append(str(day))
-            parts.append(", ".join(bits) if not ar else "، ".join(bits))
-        body = "; ".join(parts) if not ar else "؛ ".join(parts)
-        return (
-            f"أذونات الحضور القائمة ({len(rows)}): {body}."
-            if ar
-            else f"Existing permissions ({len(rows)}): {body}."
-        )
-
     if api in _SELF_GET_NO_PATH:
         from ai.engine.cognition.tool_digest import build_tool_digest
 

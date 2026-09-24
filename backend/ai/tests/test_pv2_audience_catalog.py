@@ -264,6 +264,21 @@ def test_employee_chat_catalog_excludes_hr_endpoints(
         instance_id="nibras",
     )
     assert data.get("status") == "completed", data
+    result = data.get("result") or {}
+    if "names" not in seen:
+        # ADR-0047 deterministic-first: a bound ESS self-read answers "my net
+        # pay" with 0 LLM calls, so no draft prompt is built. The audience
+        # contract is then visible on the executed tool instead.
+        assert result.get("llm_calls") == 0, result
+        called = {
+            (t.get("input") or "").split("api_name=")[-1].split(",")[0].strip()
+            for t in (result.get("tool_trace") or [])
+            if t.get("tool") == "call_host_api"
+        }
+        assert "list_my_payslips" in called, result
+        assert "list_payslip_lines" not in called, result
+        assert "list_employees" not in called, result
+        return
     names = seen.get("names") or set()
     assert "list_my_payslips" in names, names
     assert "list_payslip_lines" not in names, names

@@ -158,6 +158,7 @@ export const ROUTE_CAPABILITIES = {
   // My (employee self-service)
   '/my':           MY_ACCESS,
   '/my/leave':     MY_ACCESS,
+  '/my/payslips':  MY_ACCESS,
   '/my/attendance': MY_ACCESS,
   '/my/requests':  MY_ACCESS,
 

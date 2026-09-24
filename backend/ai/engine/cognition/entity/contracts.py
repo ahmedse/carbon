@@ -16,21 +16,20 @@ Usage (applied in engine_runtime after tool results, gated on ECF_ENABLED):
 """
 from __future__ import annotations
 
-import re
 from typing import Any
 
+from ai.engine.cognition.entity.contracts_i18n import (
+    NONEXISTENCE_AR,
+    any_needle,
+)
+from ai.engine.text.word_match import contains_any_phrase
 from ai.engine.cognition.entity.registry import EntityDescriptor
 
-# Phrases that indicate a universal existence claim that must not be made
+# Phrases that indicate a non-existence claim that must not be made
 # from a truncated source.
-_NONEXISTENCE_PATTERNS = re.compile(
-    r"\b(no (?:such|matching|employee|record)|not found|does not exist"
-    r"|لا يوجد|غير موجود|لم يتم العثور)\b",
-    re.IGNORECASE,
-)
-_UNIVERSAL_PATTERNS = re.compile(
-    r"\b(all employees|everyone|all records|جميع الموظفين)\b",
-    re.IGNORECASE,
+_NONEXISTENCE_PHRASES = (
+    "no such", "no matching", "no employee", "no record",
+    "not found", "does not exist",
 )
 
 
@@ -53,7 +52,7 @@ def no_truncation_as_truth(
     if not truncated:
         return prose
 
-    if _NONEXISTENCE_PATTERNS.search(prose):
+    if contains_any_phrase(prose, _NONEXISTENCE_PHRASES) or any_needle(prose, NONEXISTENCE_AR):
         total = (
             (tool_result.get("data") or {}).get("total")
             or (tool_result.get("data") or {}).get("count")
@@ -63,11 +62,15 @@ def no_truncation_as_truth(
             f" [Note: this searched only the first page of {total} total records. "
             "Use the entity resolver for a complete search.]"
         )
-        prose = _NONEXISTENCE_PATTERNS.sub(
-            lambda m: m.group(0) + disclaimer,
-            prose,
-            count=1,
-        )
+        cf = prose.casefold()
+        for phrase in (*_NONEXISTENCE_PHRASES, *NONEXISTENCE_AR):
+            pos = cf.find(phrase.casefold())
+            if pos >= 0:
+                end = pos + len(phrase)
+                prose = prose[:end] + disclaimer + prose[end:]
+                break
+        else:
+            prose = prose + disclaimer
     return prose
 
 

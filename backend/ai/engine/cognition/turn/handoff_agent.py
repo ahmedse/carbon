@@ -11,6 +11,37 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from ai.engine.text.word_match import contains_any_phrase, has_any_word, has_word
+from ai.engine.cognition.turn.handoff_agent_i18n import (
+    AFFIRM_AR,
+    AMOUNT_CURRENCY_AR,
+    AMOUNT_PREFIX_AR,
+    CLARIFY_TEXT,
+    DAYS_AR,
+    HOURS_AR,
+    JAILBREAK_AR,
+    LEAVE_ANNUAL_AR,
+    LEAVE_EMERGENCY_AR,
+    LEAVE_MATERNITY_AR,
+    LEAVE_SICK_AR,
+    LEAVE_UNPAID_AR,
+    LOAN_CAR_AR,
+    LOAN_EMERGENCY_AR,
+    LOAN_HOUSING_AR,
+    LOAN_PERSONAL_AR,
+    LOAN_SALARY_AR,
+    MONTHS_AR,
+    PERM_EMERGENCY_AR,
+    PERM_MEDICAL_AR,
+    PERM_OFFICIAL_AR,
+    PERM_PERSONAL_AR,
+    QUESTION_AR,
+    READY_TO_SUBMIT_AR,
+    RELATIVE_DAY_AR,
+    SLOT_STATUS_AR,
+    any_needle,
+)
+
 logger = logging.getLogger("pulse.cognition.turn.handoff_agent")
 
 # Minimum slots before Chat stops clarifying and hands off (Agent fills the rest).
@@ -152,7 +183,11 @@ def missing_slots_for_chat(api_name: str, slots: dict | None) -> list[str]:
 
 def is_slot_status_ask(text: str) -> bool:
     """True for 'what type / dates / amount did I request?' — not a new write."""
-    return bool(_SLOT_STATUS_RE.search(text or ""))
+    raw = text or ""
+    return bool(
+        contains_any_phrase(raw, _SLOT_STATUS_PHRASES)
+        or any_needle(raw, SLOT_STATUS_AR)
+    )
 
 
 def render_slot_status(text: str, slots: dict | None) -> str:
@@ -205,7 +240,7 @@ def build_chat_write_clarify(
     else:
         missing = missing_slots_for_chat(api, body)
         key = missing[0] if missing else "loan_type"
-        pack = (_CLARIFY_TEXT.get(api) or {}).get(key) or {}
+        pack = (CLARIFY_TEXT.get(api) or {}).get(key) or {}
         text = pack.get(locale) or pack.get("en") or "What else do I need to know?"
         loan = str(body.get("loan_type") or "").strip()
         if api == "submit_my_loan" and loan and key == "principal":
@@ -317,20 +352,21 @@ def build_slot_status_answer(
     )
 
 
-_READY_TO_SUBMIT_RE = re.compile(
-    r"("
-    r"anything else (?:you |i )?(?:need|needed)"
-    r"|is that (?:all|everything)"
-    r"|do you (?:need|have) (?:anything|everything|all)"
-    r"|هل (?:تحتاج|ينقص|بقي)"
-    r")",
-    re.IGNORECASE,
+_READY_TO_SUBMIT_PHRASES = (
+    "anything else you need", "anything else you needed", "anything else i need",
+    "anything else i needed", "is that all", "is that everything",
+    "do you need anything", "do you need everything", "do you need all",
+    "do you have anything", "do you have everything", "do you have all",
 )
 
 
 def is_ready_to_submit_ask(text: str) -> bool:
     """True for 'is there anything else you need?' after slots are bound."""
-    return bool(_READY_TO_SUBMIT_RE.search(text or ""))
+    raw = text or ""
+    return bool(
+        contains_any_phrase(raw, _READY_TO_SUBMIT_PHRASES)
+        or any_needle(raw, READY_TO_SUBMIT_AR)
+    )
 
 
 def build_bound_write_confirmation_answer(
@@ -400,17 +436,17 @@ def combine_user_brief(
     return "\n".join(parts)
 
 
-_EASTERN_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
-_TO_EASTERN_DIGITS = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
-_QUESTION_RE = re.compile(
-    r"[?؟]|^\s*(?:متى|هل|كيف|لماذا|ما|أين|وين|when|how|why|what|will|can|does)\b",
-    re.IGNORECASE,
+_EASTERN_DIGITS = str.maketrans(
+    "\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669",
+    "0123456789",
 )
-_AFFIRM_RE = re.compile(
-    r"(?:نعم|أجل|بالضبط|هذا كل شيء|تمام|موافق"
-    r"|\byes\b|\byep\b|\bexactly\b|\bthat'?s all\b|\bcorrect\b)",
-    re.IGNORECASE,
+_TO_EASTERN_DIGITS = str.maketrans(
+    "0123456789",
+    "\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669",
 )
+_QUESTION_START_WORDS = ("when", "how", "why", "what", "will", "can", "does")
+_AFFIRM_WORDS = ("yes", "yep", "exactly", "correct")
+_AFFIRM_PHRASES = ("that's all", "thats all")
 
 
 def _western_digits(text: str) -> str:
@@ -428,7 +464,21 @@ def is_bound_write_affirmation(text: str, slots: dict | None) -> bool:
     is not an affirmation. A different amount is a slot change, not a confirm.
     """
     raw = (text or "").strip()
-    if not raw or _QUESTION_RE.search(raw) or not _AFFIRM_RE.search(raw):
+    if not raw:
+        return False
+    stripped = raw.lstrip()
+    if (
+        "?" in raw
+        or any(stripped.casefold().startswith(f"{w} ") or stripped.casefold() == w
+               for w in _QUESTION_START_WORDS)
+        or any_needle(raw, QUESTION_AR)
+    ):
+        return False
+    if not (
+        has_any_word(raw, _AFFIRM_WORDS)
+        or contains_any_phrase(raw, _AFFIRM_PHRASES)
+        or any_needle(raw, AFFIRM_AR)
+    ):
         return False
     known = set()
     for value in (slots or {}).values():
@@ -537,13 +587,12 @@ def build_chat_write_handoff(
     )
 
 
-_PAYROLL_OR_STATUS_ASK_RE = re.compile(
-    r"("
-    r"\b(?:what was|what were|what is my|how much was|when will)\b"
-    r"|\b(?:net pay|take-home|payslip|deductions?|gosi|payroll)\b"
-    r"|\bcan i download\b"
-    r")",
-    re.IGNORECASE,
+_PAYROLL_STATUS_PHRASES = (
+    "what was", "what were", "what is my", "how much was", "when will",
+    "net pay", "take-home", "take home", "can i download",
+)
+_PAYROLL_STATUS_WORDS = (
+    "payslip", "payslips", "deduction", "deductions", "gosi", "payroll",
 )
 
 
@@ -558,12 +607,16 @@ def is_ess_write_utterance(text: str) -> bool:
     brief = (text or "").strip()
     if not brief:
         return False
-    if _PAYROLL_OR_STATUS_ASK_RE.search(brief):
+    if is_slot_status_ask(brief):
         return False
-    if re.search(
-        r"\b(?:ignore|disregard|bypass|override|jailbreak)\b|تجاهل|تجاوز",
-        brief,
-        re.IGNORECASE,
+    if (
+        contains_any_phrase(brief, _PAYROLL_STATUS_PHRASES)
+        or has_any_word(brief, _PAYROLL_STATUS_WORDS)
+    ):
+        return False
+    if (
+        has_any_word(brief, ("ignore", "disregard", "bypass", "override", "jailbreak"))
+        or any_needle(brief, JAILBREAK_AR)
     ):
         return False
     try:
@@ -589,17 +642,20 @@ def is_ess_slot_continuation(text: str, api_name: str | None) -> bool:
     if not api.startswith("submit_my_") or not raw:
         return False
     if api == "submit_my_loan":
-        return bool(_parse_amount(raw) or _first_alias(raw, _LOAN_TYPE_ALIASES))
+        return bool(
+            _parse_amount(raw)
+            or _first_alias(raw, _LOAN_TYPE_WORDS, _LOAN_TYPE_NEEDLES)
+        )
     if api == "submit_my_leave":
         return bool(
-            _first_alias(raw, _LEAVE_TYPE_ALIASES)
+            _first_alias(raw, _LEAVE_TYPE_WORDS, _LEAVE_TYPE_NEEDLES)
             or _parse_iso_date(raw)
             or _parse_named_dates(raw)
-            or _parse_int(_DAYS_RE, raw)
+            or _parse_count_with_units(raw, _DAYS_RE, DAYS_AR)
         )
     if api == "submit_my_attendance_permission":
         return bool(
-            _first_alias(raw, _PERMISSION_TYPE_ALIASES)
+            _first_alias(raw, _PERMISSION_TYPE_WORDS, _PERMISSION_TYPE_NEEDLES)
             or _parse_iso_date(raw)
             or _parse_hours(raw)
         )
@@ -608,45 +664,75 @@ def is_ess_slot_continuation(text: str, api_name: str | None) -> bool:
 
 # Lexical codes for Chat handoff only. Agent re-resolves via MDM on inherit.
 # Must not import ``mdm`` / ``fill_write_body`` — Chat run() is async.
-_LOAN_TYPE_ALIASES: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"\bemergency\b|طارئ|طارئة|طارئه", re.I), "emergency"),
-    (re.compile(r"\bhousing\b|سكن|عقاري", re.I), "housing"),
-    (re.compile(r"\bsalary\b|راتب", re.I), "salary"),
-    (re.compile(r"\bcar\b|سيارة|سياره", re.I), "car"),
-    (re.compile(r"\bpersonal\b|شخصي", re.I), "personal"),
+_NeedleRow = tuple[tuple[str, ...], str]
+_LOAN_TYPE_WORDS = ("emergency", "housing", "salary", "car", "personal")
+_LOAN_TYPE_NEEDLES: tuple[_NeedleRow, ...] = (
+    (LOAN_EMERGENCY_AR, "emergency"),
+    (LOAN_HOUSING_AR, "housing"),
+    (LOAN_SALARY_AR, "salary"),
+    (LOAN_CAR_AR, "car"),
+    (LOAN_PERSONAL_AR, "personal"),
 )
-_LEAVE_TYPE_ALIASES: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"\bannual\b|سنوي|سنوية|سنويه", re.I), "annual"),
-    (re.compile(r"\bsick\b|مرض|مرضية|مرضيه", re.I), "sick"),
-    (re.compile(r"\bemergency\b|طارئ|طارئة|عارضة|عارضه", re.I), "emergency"),
-    (re.compile(r"\bunpaid\b|بدون\s*راتب", re.I), "unpaid"),
-    (re.compile(r"\bmaternity\b|وضع|أمومة", re.I), "maternity"),
+_LEAVE_TYPE_WORDS = ("annual", "sick", "emergency", "unpaid", "maternity")
+_LEAVE_TYPE_NEEDLES: tuple[_NeedleRow, ...] = (
+    (LEAVE_ANNUAL_AR, "annual"),
+    (LEAVE_SICK_AR, "sick"),
+    (LEAVE_EMERGENCY_AR, "emergency"),
+    (LEAVE_UNPAID_AR, "unpaid"),
+    (LEAVE_MATERNITY_AR, "maternity"),
 )
-_PERMISSION_TYPE_ALIASES: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"\bofficial\b|رسمي", re.I), "official"),
-    (re.compile(r"\bmedical\b|طبي", re.I), "medical"),
-    (re.compile(r"\bemergency\b|طارئ", re.I), "emergency"),
-    (re.compile(r"\bpersonal\b|شخصي", re.I), "personal"),
+_PERMISSION_TYPE_WORDS = ("official", "medical", "emergency", "personal")
+_PERMISSION_TYPE_NEEDLES: tuple[_NeedleRow, ...] = (
+    (PERM_OFFICIAL_AR, "official"),
+    (PERM_MEDICAL_AR, "medical"),
+    (PERM_EMERGENCY_AR, "emergency"),
+    (PERM_PERSONAL_AR, "personal"),
+)
+_AliasRow = tuple[tuple[str, ...], tuple[str, ...], str]
+_LOAN_TYPE_ALIASES: tuple[_AliasRow, ...] = tuple(
+    ((code,), needles, code) for needles, code in _LOAN_TYPE_NEEDLES
+)
+_LEAVE_TYPE_ALIASES: tuple[_AliasRow, ...] = tuple(
+    ((code,), needles, code) for needles, code in _LEAVE_TYPE_NEEDLES
+)
+_PERMISSION_TYPE_ALIASES: tuple[_AliasRow, ...] = tuple(
+    ((code,), needles, code) for needles, code in _PERMISSION_TYPE_NEEDLES
 )
 
 
-def _first_alias(text: str, table: tuple[tuple[re.Pattern[str], str], ...]) -> str | None:
-    for pattern, code in table:
-        if pattern.search(text):
+def _first_alias(
+    text: str,
+    table_or_en: tuple[str, ...] | tuple[_AliasRow, ...],
+    needles_table: tuple[_NeedleRow, ...] | None = None,
+) -> str | None:
+    raw = text or ""
+    if needles_table is not None:
+        for word in table_or_en:
+            if has_word(raw, word):
+                return word
+        for needles, code in needles_table:
+            if any_needle(raw, needles):
+                return code
+        return None
+    for en_words, needles, code in table_or_en:
+        if has_any_word(raw, en_words) or any_needle(raw, needles):
             return code
     return None
 
 
-_AR_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
+_AR_DIGITS = str.maketrans(
+    "\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669",
+    "0123456789",
+)
 _AMOUNT_RE = re.compile(
-    r"([0-9]{2,}(?:[.,][0-9]+)?)\s*(?:sar|kwd|riyal|dinar|dinars|ريال|دينار|دنانير)?"
-    r"|(?:sar|kwd|مبلغ|قرض|loan)\s*([0-9]{2,}(?:[.,][0-9]+)?)",
+    r"([0-9]{2,}(?:[.,][0-9]+)?)\s*(?:sar|kwd|riyal|dinar|dinars)?"
+    r"|(?:sar|kwd|loan)\s*([0-9]{2,}(?:[.,][0-9]+)?)",
     re.I,
 )
-# No trailing \b after Arabic stems: «شهراً» / «أيامٍ» carry suffixes.
-_MONTHS_RE = re.compile(r"\b(\d{1,2})\s*(?:months?\b|شهر|أشهر|اشهر)", re.I)
-_DAYS_RE = re.compile(r"\b(\d{1,3})\s*(?:days?\b|يوم|أيام|ايام)", re.I)
-_HOURS_RE = re.compile(r"\b(\d{1,2}(?:\.\d+)?)\s*(?:hour|hours|ساعة|ساعات)\b", re.I)
+# No trailing word-boundary after unit stems that carry suffixes.
+_MONTHS_RE = re.compile(r"\b(\d{1,2})\s*(?:months?\b)", re.I)
+_DAYS_RE = re.compile(r"\b(\d{1,3})\s*(?:days?\b)", re.I)
+_HOURS_RE = re.compile(r"\b(\d{1,2}(?:\.\d+)?)\s*(?:hour|hours)\b", re.I)
 _ISO_DATE_RE = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
 _MONTH_NAMES = (
     "january", "february", "march", "april", "may", "june",
@@ -660,46 +746,11 @@ _NAMED_DATE_RE = re.compile(
     r"(?:,\s*(\d{4}))?\b",
     re.IGNORECASE,
 )
-_SLOT_STATUS_RE = re.compile(
-    r"("
-    r"\bwhat (?:type|dates?|amount|information)\b"
-    r"|\bhow much\b"
-    r"|\bwhat (?:did i|was)\b"
-    r"|\bwhich dates?\b"
-    r"|\bis it marked\b"
-    r"|\bmarked as\b"
-    r"|تم تسجيله"
-    r")",
-    re.IGNORECASE,
+_SLOT_STATUS_PHRASES = (
+    "what type", "what date", "what dates", "what amount", "what information",
+    "how much", "what did i", "what was", "which date", "which dates",
+    "is it marked", "marked as",
 )
-_CLARIFY_TEXT = {
-    "submit_my_loan": {
-        "loan_type": {
-            "en": "What type of loan are you interested in?",
-            "ar": "أي نوع قرض تريد؟",
-        },
-        "principal": {
-            "en": "How much do you need?",
-            "ar": "كم المبلغ الذي تحتاجه؟",
-        },
-    },
-    "submit_my_leave": {
-        "leave_type": {
-            "en": "What type of leave do you want to take?",
-            "ar": "أي نوع إجازة تريد؟",
-        },
-        "start_date": {
-            "en": "Which dates do you want to take leave?",
-            "ar": "ما تواريخ الإجازة؟",
-        },
-    },
-    "submit_my_attendance_permission": {
-        "permission_type": {
-            "en": "What type of permission do you need?",
-            "ar": "أي نوع استئذان تحتاج؟",
-        },
-    },
-}
 
 
 def _latin_digits(text: str) -> str:
@@ -707,16 +758,24 @@ def _latin_digits(text: str) -> str:
 
 
 def _parse_amount(text: str) -> float | None:
-    match = _AMOUNT_RE.search(_latin_digits(text))
-    if not match:
-        return None
-    raw = match.group(1) or match.group(2)
-    if not raw:
-        return None
-    try:
-        return float(raw.replace(",", ""))
-    except ValueError:
-        return None
+    raw_text = text or ""
+    latin = _latin_digits(raw_text)
+    match = _AMOUNT_RE.search(latin)
+    if match:
+        raw = match.group(1) or match.group(2)
+        if raw:
+            try:
+                return float(raw.replace(",", ""))
+            except ValueError:
+                pass
+    if any_needle(raw_text, AMOUNT_PREFIX_AR + AMOUNT_CURRENCY_AR):
+        nums = re.findall(r"\d+", latin)
+        if nums:
+            try:
+                return float(nums[0])
+            except ValueError:
+                return None
+    return None
 
 
 def _parse_int(pattern: re.Pattern[str], text: str) -> int | None:
@@ -729,14 +788,46 @@ def _parse_int(pattern: re.Pattern[str], text: str) -> int | None:
         return None
 
 
+def _parse_count_with_units(
+    text: str,
+    pattern: re.Pattern[str],
+    unit_needles: tuple[str, ...],
+) -> int | None:
+    latin = _latin_digits(text or "")
+    val = _parse_int(pattern, latin)
+    if val is not None:
+        return val
+    raw = text or ""
+    for unit in unit_needles:
+        if unit not in raw:
+            continue
+        direct = re.findall(rf"(\d+)\s*{re.escape(unit)}", latin)
+        if direct:
+            try:
+                return int(float(direct[-1]))
+            except ValueError:
+                continue
+        idx = raw.find(unit)
+        prefix = latin[: max(idx, 0)]
+        trailing = re.findall(r"\d+", prefix)
+        if trailing:
+            try:
+                return int(float(trailing[-1]))
+            except ValueError:
+                continue
+    return None
+
+
 def _parse_hours(text: str) -> float | None:
-    match = _HOURS_RE.search(_latin_digits(text))
-    if not match:
-        return None
-    try:
-        return float(match.group(1))
-    except ValueError:
-        return None
+    latin = _latin_digits(text or "")
+    match = _HOURS_RE.search(latin)
+    if match:
+        try:
+            return float(match.group(1))
+        except ValueError:
+            pass
+    count = _parse_count_with_units(text or "", _HOURS_RE, HOURS_AR)
+    return float(count) if count is not None else None
 
 
 def _pretty_date(value: Any) -> str:
@@ -758,7 +849,9 @@ def _parse_iso_date(text: str) -> str | None:
 
 def _parse_relative_day(text: str) -> str | None:
     raw = (text or "").strip()
-    if not re.search(r"\btoday\b|اليوم", raw, re.I):
+    if not re.search(r"\btoday\b", raw, re.I) and not any_needle(
+        raw, RELATIVE_DAY_AR
+    ):
         return None
     try:
         from django.utils import timezone
@@ -837,14 +930,14 @@ def resolve_ess_write_from_brief(
 
     if as_loan:
         body: dict = {}
-        code = _first_alias(text, _LOAN_TYPE_ALIASES)
+        code = _first_alias(text, _LOAN_TYPE_WORDS, _LOAN_TYPE_NEEDLES)
         if code:
             body["loan_type"] = code
         amount = _parse_amount(text)
         if amount is not None:
             body["principal"] = amount
             body["amount"] = amount  # C8 / StateBlock alias
-        months = _parse_int(_MONTHS_RE, text)
+        months = _parse_count_with_units(text, _MONTHS_RE, MONTHS_AR)
         if months:
             body["term_months"] = months
         parsed = _parse_iso_date(text)
@@ -854,7 +947,7 @@ def resolve_ess_write_from_brief(
 
     if as_leave:
         body = {}
-        code = _first_alias(text, _LEAVE_TYPE_ALIASES)
+        code = _first_alias(text, _LEAVE_TYPE_WORDS, _LEAVE_TYPE_NEEDLES)
         if code:
             body["leave_type"] = code
         parsed = _parse_iso_date(text)
@@ -868,14 +961,14 @@ def resolve_ess_write_from_brief(
         relative = _parse_relative_day(text)
         if relative and "start_date" not in body:
             body["start_date"] = relative
-        days = _parse_int(_DAYS_RE, text)
+        days = _parse_count_with_units(text, _DAYS_RE, DAYS_AR)
         if days:
             body["days"] = days
         return "submit_my_leave", body
 
     if as_attendance:
         body = {}
-        code = _first_alias(text, _PERMISSION_TYPE_ALIASES)
+        code = _first_alias(text, _PERMISSION_TYPE_WORDS, _PERMISSION_TYPE_NEEDLES)
         if code:
             body["permission_type"] = code
         parsed = _parse_iso_date(text)

@@ -53,21 +53,11 @@ import {
   computeBackEdgePath,
   assignCorridorOffsets,
 } from '../../utils/graphEdgePath';
+import { computeFitScale, FIT_ZOOM_CEIL } from '../../utils/graphFit';
 
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 1.15;
-/** Prefer pan/scroll over shrinking node type below readable size in the Pulse rail. */
-const FIT_ZOOM_FLOOR = 0.55;
-/**
- * Never auto-upscale. SVG `meet` + zoom>1 double-scales and blows compact
- * plans into a single giant clipped card ("graph corrupted"). Letterbox via
- * viewBox padding instead so small DAGs stay native size in the rail.
- */
-/** Inner zoom only. The viewBox is already padded to the viewport, so this
- *  does not stack on top of SVG `meet` upscale. 1.75 lets Fit fill empty
- *  canvas without turning a two-node plan into one clipped card. */
-const FIT_ZOOM_CEIL = 1.75;
 const NODE_MIN_W = 120;
 const NODE_MAX_W = 640;
 const NODE_MIN_H = 48;
@@ -246,9 +236,9 @@ export default function EnterpriseGraph({
   expandTestId = 'graph-maximize',
   exportFileName = 'graph',
   direction = 'lr',
-  /** 'contain' = fit both axes (may shrink); 'width' = fit width only; 'none' = 1× */
+  /** 'contain' | 'width' | 'none' | 'smart' (deep = zoom 1 full spine; short capped) */
   fitMode = 'contain',
-  /** Cap auto-fit scale-up (Plan graphs pass 1 — never blow up skinny DAGs). */
+  /** Cap auto-fit scale-up. Smart mode also caps short plans by on-screen card size. */
   fitZoomCeil = FIT_ZOOM_CEIL,
   /** Size the canvas to layoutHeight instead of stretching SVG into a tall empty rail. */
   contentSized = false,
@@ -279,15 +269,16 @@ export default function EnterpriseGraph({
     setZoom((z) => clamp(typeof updater === 'function' ? updater(z) : updater, ZOOM_MIN, ZOOM_MAX));
   }, []);
 
+  // Defined after fitView — see below. Placeholders keep header tools stable.
+  const fitViewRef = useRef(() => {});
   const resetView = useCallback(() => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
+    fitViewRef.current();
   }, []);
 
   const redraw = useCallback(() => {
     setOverrides({});
-    resetView();
-  }, [resetView]);
+    fitViewRef.current();
+  }, []);
 
   // Effective geometry: layout position/size unless the user moved/resized it.
   // The override is MERGED ON TOP of the layout node (not field-by-field) so a
@@ -515,28 +506,27 @@ export default function EnterpriseGraph({
   }, [expanded, fill]);
 
   const fitView = useCallback(() => {
-    if (fitMode === 'none') {
+    // Wait for ResizeObserver — fitting against layout-as-viewport shrinks
+    // tall DAGs to 0.94 forever and breaks drag math in tests.
+    if (viewport.w <= 0 || viewport.h <= 0) {
       setZoomClamped(1);
       setPan({ x: 0, y: 0 });
       return;
     }
-    const availW = viewport.w > 0 ? viewport.w : Math.max(width, 1);
-    const availH = viewport.h > 0 ? viewport.h : Math.max(height, layoutHeight);
-    // Fit against the *layout* size (not padded viewBox) so large DAGs shrink.
-    const fitX = availW / Math.max(width, 1);
-    const fitY = availH / Math.max(layoutHeight, 1);
-    const fitted = fitMode === 'width' ? fitX : Math.min(fitX, fitY);
-    // Default ceil 1 — padded viewBox already prevents meet-upscale; zoom>1
-    // is opt-in via fitZoomCeil for surfaces that truly want scale-up.
-    const ceil = Number.isFinite(fitZoomCeil) ? fitZoomCeil : FIT_ZOOM_CEIL;
-    const scale = clamp(fitted, FIT_ZOOM_FLOOR, ceil);
-    setZoomClamped(scale);
-    // Leftover canvas stays empty around the graph, as in a flowchart.
-    setPan({
-      x: Math.max(0, (availW - width * scale) / 2),
-      y: Math.max(0, (availH - layoutHeight * scale) / 2),
+    const sampleNodeW = nodes.find((n) => !n.is_dummy && n.w > 0)?.w || 240;
+    const { scale, panX, panY } = computeFitScale({
+      availW: viewport.w,
+      availH: viewport.h,
+      layoutW: width,
+      layoutH: layoutHeight,
+      fitMode,
+      fitZoomCeil,
+      sampleNodeW,
     });
-  }, [setZoomClamped, viewport.w, viewport.h, width, height, layoutHeight, fitMode, fitZoomCeil]);
+    setZoomClamped(scale);
+    setPan({ x: panX, y: panY });
+  }, [setZoomClamped, viewport.w, viewport.h, width, layoutHeight, fitMode, fitZoomCeil, nodes]);
+  fitViewRef.current = fitView;
 
   // Graph-first Run: fit the DAG when the layout size changes so the hero
   // isn't a tiny cluster in a sea of empty canvas.
@@ -1070,7 +1060,7 @@ EnterpriseGraph.propTypes = {
   expandTestId: PropTypes.string,
   exportFileName: PropTypes.string,
   direction: PropTypes.oneOf(['lr', 'tb']),
-  fitMode: PropTypes.oneOf(['contain', 'width', 'none']),
+  fitMode: PropTypes.oneOf(['contain', 'width', 'none', 'smart']),
   fitZoomCeil: PropTypes.number,
   contentSized: PropTypes.bool,
   focusIds: PropTypes.object,

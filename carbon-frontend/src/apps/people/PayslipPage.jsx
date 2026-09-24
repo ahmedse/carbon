@@ -18,7 +18,7 @@ import FilteredDataGrid from '../../components/FilteredDataGrid';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
 import { fetchPayrollRuns, fetchPayslipLines } from '../../api/people';
-import { formatAmount, formatDate } from './utils';
+import { formatAmount, formatDate, refCode, refLabel } from './utils';
 
 export default function PayslipPage() {
   const { t } = useTranslation('people');
@@ -60,19 +60,25 @@ export default function PayslipPage() {
       : (line.employee ?? '—')
   );
 
-  const lineTypeOptions = useMemo(
-    () => [...new Set(lines.map((line) => line.line_type).filter(Boolean))],
-    [lines],
-  );
+  const lineTypeOptions = useMemo(() => {
+    const seen = new Map();
+    for (const line of lines) {
+      const code = refCode(line.line_type);
+      if (!code || seen.has(code)) continue;
+      seen.set(code, refLabel(line.line_type) || code);
+    }
+    return [...seen.entries()].map(([value, label]) => ({ value, label }));
+  }, [lines]);
 
   const filteredLines = useMemo(() => {
     const q = searchValue.trim().toLowerCase();
     return lines.filter((line) => {
-      if (lineType && line.line_type !== lineType) return false;
+      if (lineType && refCode(line.line_type) !== lineType) return false;
       if (!q) return true;
       const hay = [
         lineLabel(line),
-        line.line_type,
+        refLabel(line.line_type),
+        refCode(line.line_type),
         formatAmount(line.amount),
         line.rule_id,
         line.rule_version,
@@ -86,7 +92,7 @@ export default function PayslipPage() {
       key: 'line_type',
       label: t('colLineType'),
       emptyLabel: t('filterAll'),
-      options: lineTypeOptions.map((value) => ({ value, label: value })),
+      options: lineTypeOptions,
     },
   ], [t, lineTypeOptions]);
 
@@ -98,7 +104,12 @@ export default function PayslipPage() {
       minWidth: 200,
       valueGetter: (_value, row) => lineLabel(row),
     },
-    { field: 'line_type', headerName: t('colLineType'), width: 140, valueGetter: (value) => value || '—' },
+    {
+      field: 'line_type',
+      headerName: t('colLineType'),
+      width: 160,
+      valueGetter: (value) => refLabel(value) || refCode(value) || '—',
+    },
     {
       field: 'amount',
       headerName: t('colAmount'),
@@ -128,11 +139,11 @@ export default function PayslipPage() {
   }
 
   const grossTotal = lines.reduce(
-    (sum, line) => (line.line_type === 'gross' ? sum + Number(line.amount || 0) : sum),
+    (sum, line) => (refCode(line.line_type) === 'gross' ? sum + Number(line.amount || 0) : sum),
     0,
   );
   const netTotal = lines.reduce(
-    (sum, line) => (line.line_type === 'net' ? sum + Number(line.amount || 0) : sum),
+    (sum, line) => (refCode(line.line_type) === 'net' ? sum + Number(line.amount || 0) : sum),
     0,
   );
 

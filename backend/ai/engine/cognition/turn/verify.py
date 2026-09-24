@@ -12,23 +12,28 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass, field
 
 from ai.engine.llm.router import route_chat
+from ai.engine.text.word_match import contains_any_phrase, has_gapped_words
 
 logger = logging.getLogger("pulse.cognition.verify")
 
 # A phrase in the ANSWER that asserts the absence of data. Deterministic guard:
 # if the answer says this while a tool returned rows, that is a contradiction.
 # Allows up to 3 words between "no" and the data noun ("no matching records").
-_NO_DATA_RE = re.compile(
-    r"\bno\s+(?:\w+\s+){0,3}(?:data|records?|results?|calculations?|entries|rows)\b"
-    r"|there (?:is|are) no \w"
-    r"|no matching\b"
-    r"|\bnot available\b",
-    re.IGNORECASE,
+_NO_DATA_NOUNS = (
+    "data", "record", "records", "result", "results", "calculation",
+    "calculations", "entries", "rows",
 )
+_NO_DATA_PHRASES = ("no matching", "not available", "there is no", "there are no")
+
+
+def _asserts_no_data(text: str) -> bool:
+    """'no <up to 3 words> data|records|...' or a bare absence phrase."""
+    return has_gapped_words(text, "no", _NO_DATA_NOUNS, max_gap=3) or contains_any_phrase(
+        text, _NO_DATA_PHRASES
+    )
 
 # Result keys that carry a positive row/record count.
 _COUNT_KEYS = ("total", "count", "total_calculations", "row_count", "n", "results_count")
@@ -77,7 +82,7 @@ def detect_no_data_contradiction(answer: str, tool_results: list[dict]) -> str |
     """Deterministic guard: answer asserts 'no data' while a tool returned data."""
     if not answer or not tool_results:
         return None
-    if not _NO_DATA_RE.search(answer):
+    if not _asserts_no_data(answer):
         return None
     for tr in tool_results:
         if not isinstance(tr, dict) or tr.get("error"):
@@ -206,7 +211,7 @@ async def _correct_no_data(
         # empty response, or re-hallucinate "no data" despite the directive.
         # When that happens, fall back to a deterministic render of the tool
         # results so the turn can never end on a false "no data" answer.
-        if text and not _NO_DATA_RE.search(text):
+        if text and not _asserts_no_data(text):
             return text
         deterministic = _deterministic_correction(tool_results)
         if deterministic:

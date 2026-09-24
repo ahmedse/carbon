@@ -13,12 +13,9 @@ Both are domain-agnostic: no domain terms in either class.
 """
 from __future__ import annotations
 
-import re
+from ai.engine.text.word_match import has_any_word
 
-_AMBIGUOUS_MARKERS = re.compile(
-    r"\b(which|either|or|between|versus|vs\.?|compare)\b",
-    re.IGNORECASE,
-)
+_AMBIGUOUS_WORDS = ("which", "either", "or", "between", "versus", "compare")
 
 
 class FallbackHandler:
@@ -47,7 +44,8 @@ class FallbackHandler:
         )
 
     def _is_ambiguous(self, user_message: str) -> bool:
-        return bool(_AMBIGUOUS_MARKERS.search(user_message))
+        raw = user_message or ""
+        return has_any_word(raw, _AMBIGUOUS_WORDS) or " vs" in raw.casefold() or raw.casefold().startswith("vs ")
 
 
 class HonestUncertaintyHandler:
@@ -84,11 +82,14 @@ class HonestUncertaintyHandler:
 
     def _strip_fake_clarification(self, text: str) -> str:
         """Remove generic 'please clarify' noise from a hedging LLM response."""
-        _FAKE_CLARIFY_RE = re.compile(
+        import re
+
+        cleaned = re.sub(
             r"(I want to give you the most useful answer.*?\.|Could you clarify which specific.*?\.|"
             r"Once you do, I can help you precisely\.?)",
-            re.IGNORECASE | re.DOTALL,
-        )
-        cleaned = _FAKE_CLARIFY_RE.sub("", text).strip()
+            "",
+            text,
+            flags=re.IGNORECASE | re.DOTALL,
+        ).strip()
         # If stripping left almost nothing, treat as empty.
         return cleaned if len(cleaned) > 40 else ""

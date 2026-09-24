@@ -1196,6 +1196,34 @@ def test_confirm_step_fails_visible_when_host_api_unbound(
 
 
 @pytest.mark.django_db
+def test_confirm_step_rejects_tool_id_as_api_name(
+    user, patch_engine_seams, run_ids_cleanup,
+):
+    """api_name=call_host_api (tool id) is not a catalog API — resolve or fail cleanly."""
+    plan = _make_plan(user, status="paused")
+    step = _make_step(plan, step_index=0, status="awaiting_approval", token="tok")
+    step.tool_name = "call_host_api"
+    step.tool_args_json = {
+        "api_name": "call_host_api",
+        "action": "escalate_to_finance",
+        "payroll_run_id": "run-1",
+    }
+    step.save(update_fields=["tool_name", "tool_args_json", "updated_at"])
+    run_ids_cleanup.append(plan.id)
+
+    svc = PlansService()
+    assert svc._step_mutation_api_name(step) == "escalate_to_finance"
+
+    # Tool-id-only args → unbound (honest fail, not Unknown host API 'call_host_api').
+    step.tool_args_json = {"api_name": "call_host_api"}
+    step.save(update_fields=["tool_args_json", "updated_at"])
+    assert svc._step_mutation_api_name(step) is None
+    with pytest.raises(PlanStepError, match="no host API name") as excinfo:
+        svc.confirm_step(user, plan.id, 0)
+    assert "Unknown host API 'call_host_api'" not in str(excinfo.value)
+
+
+@pytest.mark.django_db
 def test_confirm_step_keeps_navigate_receipt_for_output(
     user, patch_engine_seams, run_ids_cleanup, monkeypatch,
 ):

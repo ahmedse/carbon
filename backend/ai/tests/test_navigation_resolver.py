@@ -171,6 +171,15 @@ def test_ground_navigation_unknown_concept_no_fire():
     assert res.action == "none"
 
 
+def test_first_person_self_read_skips_navigation_offer():
+    from ai.engine.cognition.turn.navigation import resolve_navigation
+
+    assert resolve_navigation("Show my payslips", NIBRAS_CONFIG).action == "none"
+    assert resolve_navigation("What are my loans?", NIBRAS_CONFIG).action == "none"
+    assert resolve_navigation("قروضي", NIBRAS_CONFIG).action == "none"
+    assert resolve_navigation("Go to payroll", NIBRAS_CONFIG).action == "navigate"
+
+
 def test_ground_navigation_ignores_no_verb_needed():
     # grounding does not require a verb — the caller has already classified
     # the request as navigation.

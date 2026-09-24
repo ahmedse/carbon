@@ -52,6 +52,19 @@ describe('AIInputBar slash-commands', () => {
     expect(screen.queryByRole('listbox', { name: 'Commands' })).not.toBeInTheDocument();
   });
 
+  it('clear-context button dispatches the same action as /clear', () => {
+    const onCommand = vi.fn();
+    renderBar({ onCommand, conversationId: 'conv-1' });
+    fireEvent.click(screen.getByRole('button', { name: 'Clear context' }));
+    expect(onCommand).toHaveBeenCalledWith('clear');
+  });
+
+  it('clear-context button is disabled while a reply is in flight', () => {
+    const onCommand = vi.fn();
+    renderBar({ onCommand, conversationId: 'conv-1', working: true });
+    expect(screen.getByRole('button', { name: 'Clear context' })).toBeDisabled();
+  });
+
   it('action selection is a graceful no-op when onCommand is absent', () => {
     renderBar();
     const input = screen.getByLabelText('Message input');

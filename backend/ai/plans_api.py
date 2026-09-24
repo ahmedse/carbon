@@ -104,13 +104,14 @@ class PlanEditSerializer(serializers.Serializer):
 
 class PlanStepEditSerializer(serializers.Serializer):
     """PATCH /plans/{id}/steps/{step}/ — ``title`` → intent, instructions,
-    depends_on. All fields optional (PATCH semantics)."""
+    depends_on, agent_role. All fields optional (PATCH semantics)."""
 
     title = serializers.CharField(required=False, allow_blank=True)
     instructions = serializers.CharField(required=False, allow_blank=True)
     depends_on = serializers.ListField(
         child=serializers.IntegerField(), required=False
     )
+    agent_role = serializers.CharField(required=False, allow_blank=False)
 
 
 class PlanTemplateSerializer(serializers.Serializer):
@@ -330,7 +331,7 @@ class PlanViewSet(viewsets.GenericViewSet):
         url_name="edit-plan-step",
     )
     def edit_step(self, request, pk=None, step_id=None):
-        """Edit a single plan step (title/instructions/depends_on).
+        """Edit a single plan step (title/instructions/depends_on/agent_role).
 
         Same diff-review rule as ``partial_update``: non-pending plans drop
         to ``pending_approval`` (RULE_21).
@@ -345,6 +346,7 @@ class PlanViewSet(viewsets.GenericViewSet):
                 title=serializer.validated_data.get("title"),
                 instructions=serializer.validated_data.get("instructions"),
                 depends_on=serializer.validated_data.get("depends_on"),
+                agent_role=serializer.validated_data.get("agent_role"),
             )
         except PlanNotAccessibleError as exc:
             return Response(

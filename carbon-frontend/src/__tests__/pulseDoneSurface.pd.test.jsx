@@ -205,10 +205,8 @@ describe('PD-01/03/04/05 — Done Output Answer · Discuss · Artifacts · PNG',
 
     expect(await screen.findByTestId('agent-workspace')).toBeInTheDocument();
     // Auto-lands on Output for completed plans.
-    expect(await screen.findByTestId('markdown-message')).toBeInTheDocument();
+    expect(await screen.findByTestId('outcome-receipt')).toBeInTheDocument();
     expect(screen.getByTestId('markdown-message')).toHaveTextContent('### GOSI Exposure');
-    // Raw pre-wrap dump of ### must not appear outside the markdown mock.
-    expect(screen.queryByText('Answer')).toBeInTheDocument();
   });
 
   it('Track D: Output shows Rerun receipt when prior_run comparison is changed', async () => {
@@ -288,8 +286,11 @@ describe('PD-01/03/04/05 — Done Output Answer · Discuss · Artifacts · PNG',
     render(
       <AITaskPanel conversationId="conv-1" focusPlanId="plan-done-1" onSwitchToChat={onSwitchToChat} />,
     );
-    await screen.findByTestId('markdown-message');
-    // Settled → Run health auto-opens so audit is not a hidden click (Screen Spec).
+    await screen.findByTestId('outcome-receipt');
+    // Result is a receipt — full audit lives on Now → Run health (ADR-0043 V5/V11).
+    const cockpit = screen.getByTestId('agent-cockpit');
+    fireEvent.click(within(cockpit).getByRole('button', { name: 'Now' }));
+    expect(await screen.findByTestId('agent-run-health')).toBeInTheDocument();
     expect(await screen.findByText('Audit ledger')).toBeInTheDocument();
     expect(getPlanLedger).toHaveBeenCalled();
   });
@@ -329,11 +330,15 @@ describe('PD-01/03/04/05 — Done Output Answer · Discuss · Artifacts · PNG',
     render(
       <AITaskPanel conversationId="conv-1" focusPlanId="plan-done-1" onSwitchToChat={onSwitchToChat} />,
     );
-    await screen.findByTestId('markdown-message');
-    expect(screen.getByRole('button', { name: 'Rerun' })).toBeEnabled();
+    await screen.findByTestId('outcome-receipt');
+    const rerun = screen.getByRole('button', { name: 'Rerun' });
+    expect(rerun).toBeEnabled();
     expect(screen.queryByRole('button', { name: 'Fork' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Open Plan$/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Rerun' }));
+    fireEvent.click(screen.getByTestId('result-more-menu'));
+    expect(await screen.findByRole('menuitem', { name: /^Open Plan$/i })).toBeInTheDocument();
+    // Close menu so Rerun is unambiguous, then rerun.
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    fireEvent.click(rerun);
     await waitFor(() => expect(rerunPlan).toHaveBeenCalledWith(expect.anything(), 'plan-done-1'));
   });
 

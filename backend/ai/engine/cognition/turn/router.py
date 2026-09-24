@@ -64,6 +64,7 @@ class RouteDecision:
     reason: str = ""
     open_question: OpenQuestion | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    confirm: dict[str, Any] | None = None  # I2: confirm payload for open_question.confirm
 
 
 _REPORT_OPTIONS = (
@@ -138,13 +139,27 @@ class TurnRouter:
             is_restyle_request,
             plan_dial_process_brief,
         )
+        from ai.engine.cognition.turn.plan_status import is_plan_status_utterance
         from ai.engine.cognition.turn.report_clarify import (
-            build_report_clarify,
-            is_broad_report_ask,
+            try_report_clarify,
         )
 
         mode = ProcessMode.parse(process_mode, message)
         text = strip_pulse_mode_prefix(message or "").strip()
+
+        # I2: Affirmation to pending open_question.confirm is a FOLLOWUP (deterministic).
+        # Check this BEFORE other routes to ensure we never ask the same question twice.
+        from ai.engine.cognition.state_store import resolve_against_state
+        confirm_payload = resolve_against_state(text, state) if state else None
+        if confirm_payload:
+            return RouteDecision(
+                kind=RouteKind.FOLLOWUP,
+                mode=mode,
+                message=text,
+                committed=True,
+                reason="open_question_confirm",
+                confirm=confirm_payload,
+            )
 
         resolved = _resolve_open_question(text, state)
         if resolved:
@@ -164,6 +179,17 @@ class TurnRouter:
                 reason="restyle_previous_answer",
             )
 
+        # Recall/status questions about an already-created plan are reads, not
+        # new process briefs. Leave them uncommitted for the deterministic
+        # plan-status witness.
+        if is_plan_status_utterance(text):
+            return RouteDecision(
+                kind=RouteKind.NORMAL,
+                mode=mode,
+                message=text,
+                reason="plan_status",
+            )
+
         brief = plan_dial_process_brief(text, process_mode=mode.value)
         if brief:
             return RouteDecision(
@@ -174,11 +200,21 @@ class TurnRouter:
                 reason="governed_process_dial",
             )
 
-        has_report_context = bool(last_results) or bool(
-            getattr(state, "last_results", None)
+        report_results = (
+            last_results
+            if last_results is not None
+            else getattr(state, "last_results", None)
         )
-        if mode is ProcessMode.ASK and is_broad_report_ask(text) and not has_report_context:
-            hit = build_report_clarify(text)
+        hit = (
+            try_report_clarify(
+                text,
+                history=history,
+                last_results=report_results,
+            )
+            if mode is ProcessMode.ASK
+            else None
+        )
+        if hit is not None:
             question = OpenQuestion(
                 kind="report_focus",
                 prompt=str(hit.get("text") or ""),

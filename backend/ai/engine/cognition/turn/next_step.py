@@ -6,59 +6,47 @@ never submits (ADR-0046).
 """
 from __future__ import annotations
 
-import re
 from typing import Any
+
+from ai.engine.text.word_match import contains_any_phrase, has_any_word, has_arabic_script
+from ai.engine.cognition.turn.next_step_i18n import (
+    CONTINUER_AR,
+    NEXT_ASK_AR,
+    OFFER,
+    PAYROLL_AR,
+    any_needle,
+)
 
 _TERMINAL = frozenset({
     "completed", "completed_with_gaps", "failed", "cancelled",
 })
 
-_NEXT_ASK = re.compile(
-    r"("
-    r"\bwhat(?:'s| is)?\s+next\b"
-    r"|\bthen\s+what\b"
-    r"|\bwhat\s+(?:should|do)\s+i\s+do\b"
-    r"|\bwhat(?:'s| is) the next step\b"
-    r"|ماذا\s+بعد"
-    r"|وش\s+(?:الخطوة|بعدين)"
-    r"|ما\s+الخطوة"
-    r"|بعدين\s*\??"
-    r")",
-    re.IGNORECASE,
+_NEXT_ASK_PHRASES = (
+    "what's next", "whats next", "what is next", "what next",
+    "then what", "what should i do", "what do i do",
+    "what's the next step", "what is the next step",
 )
+_CONTINUERS = frozenset({"ok", "okay", "and", "then", "next", "go on"})
+_PAYROLL_WORDS = ("payslip", "payroll", "gosi", "deduction")
+_PAYROLL_PHRASES = ("net pay", "take-home", "take home")
 
-_CONTINUER = re.compile(
-    r"^\s*(?:ok|okay|and|then|next|go\s+on|بعدها|بعدين)\s*[.?؟]?\s*$",
-    re.IGNORECASE,
-)
 
-_PAYROLL_RE = re.compile(
-    r"\b(?:payslip|payroll|gosi|net pay|take-home|deduction)\b|قسيمة|راتب|استقطاع",
-    re.IGNORECASE,
-)
+def _is_next_ask(text: str) -> bool:
+    return contains_any_phrase(text, _NEXT_ASK_PHRASES)
 
-_OFFER = {
-    "submit_in_agent": {
-        "en": "Next: switch to Agent to submit. Chat will not send it.",
-        "ar": "التالي: بدّل إلى الوكيل لإرسال الطلب. الدردشة لا تُرسل.",
-    },
-    "approve_in_agent": {
-        "en": "Next: open Agent and Approve, then Run.",
-        "ar": "التالي: افتح الوكيل واضغط اعتماد ثم تشغيل.",
-    },
-    "run_in_agent": {
-        "en": "Next: open Agent and Run.",
-        "ar": "التالي: افتح الوكيل وشغّل الخطة.",
-    },
-    "confirm_in_agent": {
-        "en": "Next: open Agent and confirm the waiting step.",
-        "ar": "التالي: افتح الوكيل وأكّد الخطوة المنتظرة.",
-    },
-}
+
+def _is_continuer(text: str) -> bool:
+    raw = (text or "").strip().rstrip(".?! ").casefold()
+    return raw in _CONTINUERS
+
+
+def _is_payroll(text: str) -> bool:
+    return has_any_word(text, _PAYROLL_WORDS) or contains_any_phrase(text, _PAYROLL_PHRASES)
+
 
 
 def _lang(text: str, state: Any = None) -> str:
-    if re.search(r"[\u0600-\u06FF]", text or ""):
+    if has_arabic_script(text or ""):
         return "ar"
     lang = str(getattr(state, "language", "") or "")
     return "ar" if lang.startswith("ar") else "en"
@@ -113,14 +101,19 @@ def render_next_step_offer(state: Any, user_message: str = "") -> str | None:
     if not action:
         return None
     lang = _lang(user_message, state)
-    return (_OFFER.get(action) or {}).get(lang) or _OFFER[action]["en"]
+    return (OFFER.get(action) or {}).get(lang) or OFFER[action]["en"]
 
 
 def is_next_step_utterance(text: str) -> bool:
     raw = (text or "").strip()
-    if not raw or _PAYROLL_RE.search(raw):
+    if not raw or _is_payroll(raw) or any_needle(raw, PAYROLL_AR):
         return False
-    return bool(_NEXT_ASK.search(raw) or _CONTINUER.search(raw))
+    return bool(
+        _is_next_ask(raw)
+        or _is_continuer(raw)
+        or any_needle(raw, NEXT_ASK_AR)
+        or any_needle(raw, CONTINUER_AR)
+    )
 
 
 def should_offer_next_step(text: str, state: Any) -> bool:

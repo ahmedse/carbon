@@ -39,6 +39,8 @@ class DraftWitness:
         budget_tracker=None,  # P3.4: BudgetTracker for per-run token limits
         model: str | None = None,
         tools: list[dict] | None = None,
+        tool_choice: str | dict | None = None,
+        strict_tools: bool = False,
         # Phase 22-A — per-user default chat temperature (0.0-2.0); None
         # keeps this witness's built-in default (0.3).
         temperature: float | None = None,
@@ -140,6 +142,8 @@ class DraftWitness:
             temperature=temperature if temperature is not None else 0.3,
             model=model,
             tools=tools,
+            tool_choice=tool_choice,
+            strict_tools=strict_tools,
         )
         draft_latency = (time.monotonic() - t0) * 1000
 

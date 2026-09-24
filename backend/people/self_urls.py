@@ -4,6 +4,7 @@ from django.urls import path
 
 from .self_views import (
     AttendancePermissionSelfCollectionView,
+    AttendanceRecordSelfCollectionView,
     DirectReportsView,
     EmployeeMeView,
     LeaveBalanceView,
@@ -22,6 +23,11 @@ urlpatterns = [
     path('leave/', LeaveSelfCollectionView.as_view(), name='people-me-leave-collection'),
     path('leave/<int:pk>/', LeaveSelfDetailView.as_view(), name='people-me-leave-detail'),
     path('loan/', LoanSelfCollectionView.as_view(), name='people-me-loan-collection'),
+    path(
+        'attendance/',
+        AttendanceRecordSelfCollectionView.as_view(),
+        name='people-me-attendance-collection',
+    ),
     path(
         'attendance-permissions/',
         AttendancePermissionSelfCollectionView.as_view(),

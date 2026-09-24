@@ -129,6 +129,18 @@ export function submitLoanRequest(token, payload) {
 }
 
 /**
+ * Current employee daily attendance records (GET people/me/attendance/).
+ * Optional { dateFrom, dateTo } as YYYY-MM-DD query filters.
+ */
+export function fetchMyAttendance(token, { dateFrom, dateTo } = {}) {
+  const params = new URLSearchParams();
+  if (dateFrom) params.set('date_from', dateFrom);
+  if (dateTo) params.set('date_to', dateTo);
+  const q = params.toString();
+  return apiFetch(`${PROFILE_ROOT}attendance/${q ? `?${q}` : ''}`, { token });
+}
+
+/**
  * Current employee attendance permissions (GET people/me/attendance-permissions/).
  * Returns an array (or empty).
  */

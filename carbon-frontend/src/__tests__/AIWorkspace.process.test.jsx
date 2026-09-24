@@ -22,8 +22,12 @@ vi.mock('../shell/AIWorkspaceHeader', () => ({
 }));
 
 vi.mock('../shell/AIConversationView', () => ({
-  default: ({ process, onProcessChange }) => (
-    <div data-testid="conversation-view" data-process={process}>
+  default: ({ process, processSwitching, onProcessChange }) => (
+    <div
+      data-testid="conversation-view"
+      data-process={process}
+      data-switching={String(Boolean(processSwitching))}
+    >
       <button type="button" onClick={() => onProcessChange?.('plan')}>
         flip-to-plan
       </button>
@@ -98,5 +102,46 @@ describe('AIWorkspace Ask|Plan separate sessions', () => {
       );
     });
     expect(localStorage.getItem('carbon-ai-composer-process')).toBe('plan');
+  });
+
+  it('does not expose Plan on the Ask thread while the Plan thread is being created', async () => {
+    let resolveCreate;
+    createConversation.mockReturnValueOnce(new Promise((resolve) => {
+      resolveCreate = resolve;
+    }));
+    render(<AIWorkspace onClose={vi.fn()} />);
+    const view = await screen.findByTestId('conversation-view');
+    expect(view).toHaveAttribute('data-process', 'ask');
+
+    fireEvent.click(screen.getByRole('button', { name: 'flip-to-plan' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('conversation-view')).toHaveAttribute(
+        'data-switching',
+        'true',
+      );
+    });
+    // Critical invariant: Plan controls are never attached to conv-ask.
+    expect(screen.getByTestId('conversation-view')).toHaveAttribute(
+      'data-process',
+      'ask',
+    );
+
+    resolveCreate({
+      id: 'conv-plan',
+      conversation_type: 'chat',
+      title: 'Plan',
+      task_payload_json: { pulse_process: 'plan' },
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('conversation-view')).toHaveAttribute(
+        'data-process',
+        'plan',
+      );
+      expect(screen.getByTestId('conversation-view')).toHaveAttribute(
+        'data-switching',
+        'false',
+      );
+    });
   });
 });

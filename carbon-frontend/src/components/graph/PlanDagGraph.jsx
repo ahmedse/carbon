@@ -49,6 +49,7 @@ import {
 import { layoutExecutionGraph } from '../../utils/planGraph';
 import { agentRoleLabel, stepStatusMeta } from '../../shell/aiTaskStatus';
 import { GraphNodeForeign } from './GraphNodeLabel';
+import BeatDetailContent from '../../shell/BeatDetailContent';
 
 /** Wrap intent for graph cards — prefer readable journey labels over `…` soup. */
 export function wrapTitleLines(raw, maxPerLine, maxLines = 2) {
@@ -353,8 +354,16 @@ export default function PlanDagGraph({
 
   const { nodes, edges, width, height: layoutHeight, phaseBands, direction } = useMemo(
     () => layoutExecutionGraph(plan, {
-      // Always auto: parallel → LR fan, pure chain → TB (fills the rail).
-      direction: 'auto',
+      // Pulse Plan rail is tall: always top→bottom flowchart. Parallel branches
+      // sit side-by-side in a rank. LR auto made branched GOSI/payroll DAGs a
+      // one-row tiny strip in a sea of empty canvas.
+      direction: 'tb',
+      layout: {
+        nodeW: 260,
+        nodeH: 72,
+        colGap: 48,
+        rowGap: 44,
+      },
     }),
     [plan],
   );
@@ -734,11 +743,11 @@ export default function PlanDagGraph({
     );
   };
 
-  // Operator dock — intent + action first; engine internals behind "More detail".
+  // Operator dock — employee-friendly BeatDetailContent; full height of graph.
   const renderDetailPane = (variant) => {
     if (structure) return renderStructurePane(variant);
     if (!selected || !selectedStep) return null;
-    const paneWidth = variant === 'modal' ? 280 : 220;
+    const paneWidth = variant === 'modal' ? 300 : 280;
     const paneTestId = variant === 'modal' ? 'plan-step-detail-modal' : 'plan-step-detail';
     const needsApproval = selectedStep.status === 'awaiting_approval';
     const nextStep = selectedFeeds[0] || null;
@@ -747,77 +756,70 @@ export default function PlanDagGraph({
         sx={{
           width: paneWidth,
           flexShrink: 0,
+          alignSelf: 'stretch',
+          height: '100%',
+          minHeight: 0,
           borderLeft: 1,
           borderColor: 'divider',
-          p: 1.25,
-          overflowY: 'auto',
           bgcolor: 'background.paper',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
         }}
         data-testid={paneTestId}
       >
-        <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.75 }}>
-          <Typography variant="body2" fontWeight={600} sx={{ flex: 1, fontSize: '0.75rem' }}>
-            This step
+        <Stack
+          direction="row"
+          spacing={0.75}
+          alignItems="center"
+          sx={{ px: 1.25, py: 0.75, borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}
+        >
+          <Typography variant="caption" sx={{ flex: 1, fontWeight: 700, fontSize: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.secondary' }}>
+            Step details
           </Typography>
-          <Chip
-            size="small"
-            label={planStepStatusLabel(selectedStep.status)}
-            sx={{
-              height: 18,
-              fontSize: '0.5625rem',
-              bgcolor: colorFor(selectedStep.status),
-              color: theme.palette.getContrastText(colorFor(selectedStep.status)),
-            }}
-          />
           <IconButton size="small" aria-label="Close step details" onClick={clearSelection} sx={{ p: 0.25 }}>
             <CloseIcon sx={{ fontSize: '0.875rem' }} />
           </IconButton>
         </Stack>
 
-        <Typography variant="body2" sx={{ fontSize: '0.8125rem', lineHeight: 1.4, mb: 1, fontWeight: 600 }}>
-          {selectedStep.intent || 'No description'}
-        </Typography>
+        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 1.25 }}>
+          <BeatDetailContent step={selectedStep} hideConsentHint />
 
-        {needsApproval && (onConfirmStep || onDeclineStep) && (
-          <Stack direction="row" spacing={0.75} sx={{ mb: 1 }}>
-            <Button
-              size="small"
-              variant="contained"
-              disabled={confirmingId === selectedStep.step_id}
-              onClick={() => onConfirmStep?.(selectedStep.step_id)}
-              sx={{ flex: 1, fontSize: '0.6875rem', textTransform: 'none', py: 0.5 }}
-            >
-              Approve
-            </Button>
-            <Button
-              size="small"
-              variant="outlined"
-              disabled={confirmingId === selectedStep.step_id}
-              onClick={() => onDeclineStep?.(selectedStep.step_id)}
-              sx={{ flex: 1, fontSize: '0.6875rem', textTransform: 'none', py: 0.5 }}
-            >
-              Skip
-            </Button>
-          </Stack>
-        )}
+          {needsApproval && (onConfirmStep || onDeclineStep) && (
+            <Stack direction="row" spacing={0.75} sx={{ mt: 1.25 }}>
+              <Button
+                size="small"
+                variant="contained"
+                disabled={confirmingId === selectedStep.step_id}
+                onClick={() => onConfirmStep?.(selectedStep.step_id)}
+                sx={{ flex: 1, fontSize: '0.6875rem', textTransform: 'none', py: 0.5 }}
+              >
+                Approve
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                disabled={confirmingId === selectedStep.step_id}
+                onClick={() => onDeclineStep?.(selectedStep.step_id)}
+                sx={{ flex: 1, fontSize: '0.6875rem', textTransform: 'none', py: 0.5 }}
+              >
+                Skip
+              </Button>
+            </Stack>
+          )}
 
-        {selectedStep.error && (
-          <Typography variant="body2" color="error.main" sx={{ fontSize: '0.6875rem', mb: 1 }}>
-            {selectedStep.error}
-          </Typography>
-        )}
+          {nextStep && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.6875rem', mt: 1 }}>
+              Next: {nextStep.intent || `Step ${nextStep.step_id}`}
+            </Typography>
+          )}
 
-        {nextStep && (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.6875rem', mb: 0.5 }}>
-            Next: {nextStep.intent || `Step ${nextStep.step_id}`}
-          </Typography>
-        )}
-
-        {selectedPhase?.name && (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.625rem' }}>
-            Stage: {selectedPhase.name}
-          </Typography>
-        )}
+          {selectedPhase?.name && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.625rem', mt: 0.5 }}>
+              Stage: {selectedPhase.name}
+            </Typography>
+          )}
+        </Box>
       </Box>
     );
   };
@@ -894,9 +896,9 @@ export default function PlanDagGraph({
         exportFileName="plan-graph"
         fill={fill}
         direction={direction || 'tb'}
-        fitMode="contain"
-        // Stay at card size. Scaling up to fill the rail turned a two-step plan into giant boxes.
-        fitZoomCeil={1}
+        fitMode="smart"
+        // Smart: deep plans stay at zoom 1 (full spine visible); short stay ≤~1.08×.
+        fitZoomCeil={1.45}
       />
     </>
   );

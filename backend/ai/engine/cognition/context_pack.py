@@ -33,6 +33,7 @@ MY_AUDIENCE = ("ess", "hr")
 VALID_SURFACES = frozenset({"chat", "agent_plan", "agent_discovery"})
 VALID_STAGES = frozenset({
     "draft",
+    "understand",
     "critic",
     "intent",
     "synthesis",

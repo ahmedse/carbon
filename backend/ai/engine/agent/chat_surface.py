@@ -12,6 +12,27 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from ai.engine.text.word_match import (
+    contains_any_phrase,
+    has_any_word,
+    has_arabic_script,
+    has_word,
+)
+
+from ai.engine.agent.chat_surface_i18n import (
+    ATTENDANCE_INTENT_AR,
+    ESS_TOPIC_AR,
+    ESS_WRITE_VERB_AR,
+    LEAVE_INTENT_AR,
+    LOAN_INTENT_AR,
+    MANAGER_REVIEW_AR,
+    FIELD_LABELS,
+    PROFILE_CHANGE_AR,
+    any_needle,
+)
+
+_FIELD_LABELS = FIELD_LABELS
+
 #: Surfaces that may stage host mutations / DQ creates.
 AGENT_SURFACES = frozenset({"agent", "plan"})
 
@@ -66,49 +87,68 @@ _API_HANDOFF: dict[str, dict[str, str]] = {
     },
 }
 
-_LEAVE_INTENT = re.compile(
-    r"\b(?:leave|vacation|annual\s+leave|time\s+off)\b"
-    r"|إجاز|اجاز|عارضة|عارده|سنوي",
-    re.IGNORECASE,
-)
-_LOAN_INTENT = re.compile(r"\bloan\b|قرض", re.IGNORECASE)
-_ATTENDANCE_INTENT = re.compile(
-    r"\b(?:attendance|permission|excuse)\b|استئذان|حضور",
-    re.IGNORECASE,
-)
 #: Manager wants to act on Team inbox (approve leave/loan/attendance) — host /team.
-_MANAGER_REVIEW_INTENT = re.compile(
-    r"(?:\b(?:approve|reject|review)\b.{0,48}\b"
-    r"(?:leave|loan|request|inbox|attendance|permission)\b)"
-    r"|(?:\b(?:leave|loan|request|attendance|permission)\b.{0,48}\b"
-    r"(?:approve|reject|review)\b)"
-    r"|(?:\bteam\s+inbox\b|\bapprovals?\s+inbox\b)"
-    r"|موافق على|اعتماد\s*(?:ال)?(?:إجاز|اجاز|طلب|استئذان)|رفض\s*(?:ال)?(?:إجاز|اجاز|استئذان)",
-    re.IGNORECASE | re.DOTALL,
+_REVIEW_VERBS = ("approve", "reject", "review")
+_REVIEW_OBJECTS = ("leave", "loan", "request", "inbox", "attendance", "permission")
+_REVIEW_PHRASES = ("team inbox", "approvals inbox", "approval inbox")
+
+
+_PROFILE_CHANGE_PHRASES = (
+    "profile change", "update my phone", "update my email", "update my address",
+    "update my iban", "update my bank", "update phone", "update email",
+    "update address", "update iban", "update bank",
 )
-_PROFILE_CHANGE_INTENT = re.compile(
-    r"\b(?:profile\s+change|update\s+(?:my\s+)?(?:phone|email|address|iban|bank))\b"
-    r"|تغيير\s*(?:ال)?(?:ملف|بيانات)|تحديث\s*(?:رقم|جوال|بريد|عنوان|آيبان|ايبان)",
-    re.IGNORECASE,
-)
-_ARABIC_SCRIPT = re.compile(r"[\u0600-\u06FF]")
+
+
+def _leave_intent(text: str) -> bool:
+    raw = text or ""
+    return bool(
+        has_any_word(raw, ("leave", "vacation"))
+        or contains_any_phrase(raw, ("annual leave", "time off"))
+        or any_needle(raw, LEAVE_INTENT_AR)
+    )
+
+
+def _loan_intent(text: str) -> bool:
+    raw = text or ""
+    return bool(has_word(raw, "loan") or any_needle(raw, LOAN_INTENT_AR))
+
+
+def _attendance_intent(text: str) -> bool:
+    raw = text or ""
+    return bool(
+        has_any_word(raw, ("attendance", "permission", "excuse"))
+        or any_needle(raw, ATTENDANCE_INTENT_AR)
+    )
+
+
+def _manager_review_intent(text: str) -> bool:
+    from ai.engine.text.word_match import contains_any_phrase, has_gapped_words
+
+    raw = text or ""
+    if contains_any_phrase(raw, _REVIEW_PHRASES) or any(
+        has_gapped_words(raw, verb, _REVIEW_OBJECTS, max_gap=8) for verb in _REVIEW_VERBS
+    ) or any(has_gapped_words(raw, obj, _REVIEW_VERBS, max_gap=8) for obj in _REVIEW_OBJECTS):
+        return True
+    if not any_needle(raw, MANAGER_REVIEW_AR):
+        return False
+    return any(
+        tok in raw.casefold()
+        for tok in ("leave", "loan", "request", "attendance", "permission", "inbox")
+    ) or any(n in raw for n in ("إجاز", "اجاز", "طلب", "استئذان", "قرض"))
+
+
+def _profile_change_intent(text: str) -> bool:
+    raw = text or ""
+    if contains_any_phrase(raw, _PROFILE_CHANGE_PHRASES):
+        return True
+    if not any_needle(raw, ("تغيير", "تحديث")):
+        return False
+    return any_needle(raw, PROFILE_CHANGE_AR)
+
 
 #: Internal flag only — never shown in UI copy / caveats.
 INTERNAL_REASON = "chat_no_host_mutation"
-
-_FIELD_LABELS = {
-    "leave_type": ("Leave type", "نوع الإجازة"),
-    "start_date": ("Start date", "تاريخ البداية"),
-    "end_date": ("End date", "تاريخ النهاية"),
-    "days": ("Days", "الأيام"),
-    "reason": ("Reason", "السبب"),
-    "loan_type": ("Loan type", "نوع القرض"),
-    "principal": ("Principal", "المبلغ"),
-    "term_months": ("Term (months)", "المدة (أشهر)"),
-    "interest_rate": ("Interest rate", "الفائدة"),
-    "permission_type": ("Permission type", "نوع الاستئذان"),
-    "hours": ("Hours", "الساعات"),
-}
 
 
 def is_chat_surface(surface: str | None) -> bool:
@@ -121,7 +161,7 @@ def is_chat_surface(surface: str | None) -> bool:
 
 def detect_locale(text: str | None) -> str:
     """Return ``ar`` when the utterance is predominantly Arabic script."""
-    return "ar" if _ARABIC_SCRIPT.search(text or "") else "en"
+    return "ar" if has_arabic_script(text or "") else "en"
 
 
 def is_host_mutation_tool(tool_name: str, tool_args: dict | None) -> bool:
@@ -151,13 +191,16 @@ def is_host_mutation_tool(tool_name: str, tool_args: dict | None) -> bool:
     return api.startswith(("submit_", "create_", "update_", "delete_", "post_", "put_", "patch_"))
 
 
-_ESS_TOPIC_RE = re.compile(
-    r"\b(?:leave|loan|attendance|vacation|permission)\b"
-    r"|إجاز|اجاز|قرض|استئذان"
-    r"|submit_my_(?:leave|loan|attendance)"
-    r"|تقديم\s*(?:ال)?(?:طلب\s*)?(?:إجاز|اجاز)",
-    re.IGNORECASE,
-)
+def _ess_topic(text: str) -> bool:
+    raw = text or ""
+    cf = raw.casefold()
+    return bool(
+        has_any_word(raw, ("leave", "loan", "attendance", "vacation", "permission"))
+        or "submit_my_leave" in cf
+        or "submit_my_loan" in cf
+        or "submit_my_attendance" in cf
+        or any_needle(raw, ESS_TOPIC_AR)
+    )
 
 
 def is_ess_write_intent(message: str) -> bool:
@@ -171,7 +214,10 @@ def is_ess_write_intent(message: str) -> bool:
         text = strip_pulse_mode_prefix(message or "").strip()
     except Exception:  # noqa: BLE001
         text = (message or "").strip()
-    if not text or not _ESS_TOPIC_RE.search(text):
+    if not text or not _ess_topic(text):
+        return False
+    from ai.engine.cognition.turn.handoff_agent import is_slot_status_ask
+    if is_slot_status_ask(text):
         return False
     # Explicit apply/request verbs (EN + AR) — covers loan/attendance that
     # ``_is_mutation_request`` historically missed (leave-only regex).
@@ -179,11 +225,13 @@ def is_ess_write_intent(message: str) -> bool:
         r"\b(?:apply|request|submit|want|need)\b.{0,40}\b"
         r"(?:leave|loan|attendance|vacation|permission)\b"
         r"|\b(?:leave|loan|attendance|vacation|permission)\b.{0,40}\b"
-        r"(?:apply|request|submit)\b"
-        r"|(?:أريد|اريد|أبغى|ابغى|اطلب|أطلب|تقديم|قدّم|قدم).{0,40}"
-        r"(?:إجاز|اجاز|قرض|استئذان)",
+        r"(?:apply|request|submit)\b",
         text,
         re.IGNORECASE | re.DOTALL,
+    ):
+        return True
+    if any_needle(text, ESS_WRITE_VERB_AR) and any_needle(
+        text, ("إجاز", "اجاز", "قرض", "استئذان")
     ):
         return True
     try:
@@ -319,7 +367,7 @@ def build_chat_handoff_result(
 
 def handoff_spec_for_intent(user_message: str) -> dict[str, str]:
     text = user_message or ""
-    if _MANAGER_REVIEW_INTENT.search(text):
+    if _manager_review_intent(text):
         return {
             "my_route": "/team",
             "my_label_en": "Open Team inbox",
@@ -331,13 +379,13 @@ def handoff_spec_for_intent(user_message: str) -> dict[str, str]:
             "topic_ar": "اعتماد الفريق",
             "manager_only": "1",
         }
-    if _PROFILE_CHANGE_INTENT.search(text):
+    if _profile_change_intent(text):
         return handoff_spec_for_api("submit_my_profile_change")
-    if _LEAVE_INTENT.search(text):
+    if _leave_intent(text):
         return handoff_spec_for_api("submit_my_leave")
-    if _LOAN_INTENT.search(text):
+    if _loan_intent(text):
         return handoff_spec_for_api("submit_my_loan")
-    if _ATTENDANCE_INTENT.search(text):
+    if _attendance_intent(text):
         return handoff_spec_for_api("submit_my_attendance_permission")
     return handoff_spec_for_api(None)
 
@@ -449,7 +497,7 @@ def handoff_copy(
         for key, value in list(draft.items())[:6]:
             if value in (None, "", [], {}):
                 continue
-            en_lab, ar_lab = _FIELD_LABELS.get(
+            en_lab, ar_lab = FIELD_LABELS.get(
                 key, (key.replace("_", " "), key.replace("_", " "))
             )
             lab = ar_lab if locale == "ar" else en_lab
@@ -496,7 +544,7 @@ def build_handoff_envelope(
                 continue
             if isinstance(value, (dict, list)):
                 continue
-            en_lab, ar_lab = _FIELD_LABELS.get(
+            en_lab, ar_lab = FIELD_LABELS.get(
                 key, (str(key).replace("_", " "), str(key).replace("_", " "))
             )
             rows.append([ar_lab if locale == "ar" else en_lab, str(value)])

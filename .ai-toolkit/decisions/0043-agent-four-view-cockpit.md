@@ -123,6 +123,27 @@ Frontend worker required Screen Spec (`docs/SCREEN-SPEC-AGENT-FOUR-VIEW-COCKPIT.
 | **V9** | Run `mode="token"` strip · Plan stays structure-only |
 | **V10** | Back-edge (loop/catch) routing · edge dock guards · subflow collapse |
 
+### V11 Result receipt (binding — 2026-09-24)
+
+Amends V5 Output purity after the shipped Result tab became an ops wall
+(empty Artifacts, always-open Audit with L2 provenance chips, five peer
+Actions buttons, UPPERCASE headers).
+
+1. **Result body = OutcomeReceipt** — title · state pill · facts line · prose
+   (`MarkdownMessage`). No nested host-action box repeating the same sentence.
+2. **Result chrome = `AgentResultToolbar`** under cockpit tabs (same slot as
+   Plan / Now): host CTA · Discuss · Rerun · More (Open Plan · Ledger JSON ·
+   Response .md). ≤3 visible.
+3. **Artifacts only when files exist** — omit the empty block.
+4. **L1 on Result:** collapsed “Approvals & timing” (`ResultProofFold`) —
+   confirmations · requested by · finished at. No tokens / pattern / skill ids.
+5. **L2 on Now:** full `AITaskAuditCard` under collapsible **Run health**,
+   default-open when settled (Screen Spec). Result never mounts the full ledger.
+6. **Inherited Chat context** shows on Plan only (hidden on Now / Result).
+7. **TaskJourney** omits the Result chapter (the receipt is above the fold).
+8. **Shared receipt** (`OutcomeReceipt`) is the Chat-parity surface for
+   headline-only envelopes (no tables/charts).
+
 ## Alternatives Considered
 
 - **Keep stacking DAG + Job Map** — rejected; triple encoding; fails progressive disclosure.

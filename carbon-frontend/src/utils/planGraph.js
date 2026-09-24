@@ -630,8 +630,8 @@ function orderRanksBarycenter(byRank, ranks, preds, succs, edges, nodesById) {
  * @param {object} plan - plan payload from GET /ai/plans/{id}/
  * @param {object} [options]
  * @param {'auto'|'tb'|'lr'} [options.direction='auto']
- *   - auto: TB for pure chains; LR when a rank has parallel siblings
- *   - tb / lr: force flow (Plan structure uses tb so parallel fans use width + height)
+ *   - auto: TB flowchart by default; LR only for wide short fans (3+ siblings, shallow depth)
+ *   - tb / lr: force flow (Pulse Plan always uses tb — never a one-row skinny strip)
  * @param {object} [options.layout] - partial override of EXEC_LAYOUT
  * @returns {{nodes: Array<object>, edges: Array<object>, width:number, height:number, phaseBands: Array<object>, direction:'lr'|'tb'}}
  */
@@ -683,11 +683,12 @@ export function layoutExecutionGraph(plan, options = {}) {
     ? Math.max(...ranks.map((r) => byRank.get(r).filter((n) => !n.is_dummy).length || 1))
     : 0;
   const prefer = options.direction || 'auto';
-  // Smart axis: parallel fan-out → LR (ranks left→right, siblings stacked).
-  // Pure chain → TB (reads top→bottom, fills a tall rail — never a lonely 2-card row).
+  // Smart axis: default TB (flowchart). LR only when a shallow plan fans wide —
+  // otherwise branched depth-8 × 2-lane DAGs become a one-row tiny strip.
+  const wideShortFan = maxInRank >= 3 && maxRank <= 2;
   const direction = prefer === 'tb' || prefer === 'lr'
     ? prefer
-    : (maxInRank > 1 ? 'lr' : 'tb');
+    : (wideShortFan ? 'lr' : 'tb');
 
   let width;
   let height;

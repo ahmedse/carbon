@@ -1,0 +1,149 @@
+{
+  "tier": "offline_stub",
+  "caveats": [
+    "Tier offline_stub: every LLM call returns canned stub_reply text from the script YAML, so reply-text metrics mostly measure the stub, not the engine.",
+    "Engine-attributable in this tier: router_agreement (turn_decision), llm_calls_p50 / llm_calls_max / turns_over_budget (LLM call counting), and slot_carry_over only where the engine itself re-asks deterministically (e.g. a clarify template) instead of passing the stub text through.",
+    "Stub-dominated in this tier: focus_retention (mentions_any), mentions_none, language_fidelity, and per_objective_pass for text-based objectives; treat them as harness plumbing checks until the live tier (PV2-0C).",
+    "PV2-6A: stub is pinned per script turn (set_turn). Extra LLM calls in the same turn reuse that turn's stub_reply and no longer consume later turns. A turn index past the script still returns 'End of script.'.",
+    "host_user_id=None: call_host_api fails with 'requires an authenticated session' in ESS scripts; the live tier (PV2-0C) will pass a real user.",
+    "Fan-out agents and multi-step planning are disabled in the engine Settings (AGENT_ORCHESTRATOR_ENABLED=false, KG_MULTI_STEP_ENABLED=false set via os.environ + get_settings.cache_clear() since PV2-1C). Django override_settings does not reach the engine Settings, so the PV2-0B/0C baselines ran WITH fan-out on (the extra 'fanout' LLM call per turn)."
+  ],
+  "host_user": null,
+  "database": "test_nibras_dev_multiturn",
+  "errors": [],
+  "scripts_run": 1,
+  "scripts_passed": 0,
+  "total_turns": 8,
+  "turns_passed": 7,
+  "focus_retention": 0.8,
+  "slot_carry_over": 0.5,
+  "language_fidelity": 1.0,
+  "router_agreement": 0.875,
+  "llm_calls_p50": 0,
+  "llm_calls_max": 2,
+  "turns_over_budget": 0,
+  "latency_p50_ms": 98.9,
+  "latency_max_ms": 617.3,
+  "latency_samples": 8,
+  "latency_histogram": {
+    "0-250ms": 7,
+    "250-500ms": 0,
+    "500-1000ms": 1,
+    "1000-2000ms": 0,
+    "2000-4000ms": 0,
+    "4000ms+": 0
+  },
+  "per_objective_pass": {
+    "C1": 0.875,
+    "C2": 0.875,
+    "C3": 0.875
+  },
+  "scripts": [
+    {
+      "script_id": "payslip-loan-followup-en-01",
+      "turns": 8,
+      "turns_passed": 7,
+      "language_failures": 0,
+      "reask_violations": 1,
+      "decision_failures": 1,
+      "llm_budget_failures": 0,
+      "passed": false,
+      "error": null,
+      "turns_detail": [
+        {
+          "turn": 1,
+          "decision": "tool_answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 116.4,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Your payslip lines (4): gross, 6500; GOSI, 1200; loan_installment, 800; net, 4500."
+        },
+        {
+          "turn": 2,
+          "decision": "tool_answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 45.3,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Your payslip lines (4): gross, 6500; GOSI, 1200; loan_installment, 800; net, 4500."
+        },
+        {
+          "turn": 3,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 94.9,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "The committed GOSI line is 1200. I will not invent a statutory rate beyond that line."
+        },
+        {
+          "turn": 4,
+          "decision": "clarify",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 40.4,
+          "language": "en",
+          "passed": false,
+          "fail_reasons": [
+            "decision=clarify not in ['tool_answer', 'answer']",
+            "reask=['loan_type']",
+            "mentions_any missing ['emergency', '9600', '9,600']",
+            "mentions_none hit ['What type of loan', 'interested in']"
+          ],
+          "reply": "What type of loan are you interested in?"
+        },
+        {
+          "turn": 5,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 0,
+          "latency_ms": 617.3,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "Your loans: emergency, 9600, 12 mo, active."
+        },
+        {
+          "turn": 6,
+          "decision": "answer",
+          "llm_calls": 2,
+          "llm_calls_background": 1,
+          "latency_ms": 101.7,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "The host shows principal 9,600 over 12 months at 800 a month; it does not expose the remaining balance directly."
+        },
+        {
+          "turn": 7,
+          "decision": "clarify",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 49.4,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "What type of loan are you interested in?"
+        },
+        {
+          "turn": 8,
+          "decision": "answer",
+          "llm_calls": 0,
+          "llm_calls_background": 0,
+          "latency_ms": 98.9,
+          "language": "en",
+          "passed": true,
+          "fail_reasons": [],
+          "reply": "You're welcome. Ask if you need anything else."
+        }
+      ]
+    }
+  ]
+}

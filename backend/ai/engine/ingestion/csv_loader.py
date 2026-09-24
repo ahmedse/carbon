@@ -62,7 +62,6 @@ _TIMESTAMP_FORMATS = (
 )
 
 # Strip everything that is not part of a number (keeps digits, sign, dot, exponent).
-_NUMERIC_CLEAN_RE = re.compile(r"[^\d.\-+eE]")
 
 
 @dataclass(frozen=True)
@@ -345,7 +344,7 @@ def strip_units(raw: Any) -> str:
     s = str(raw).strip()
     if not s:
         return ""
-    return _NUMERIC_CLEAN_RE.sub("", s)
+    return "".join(ch for ch in s if ch.isdigit() or ch in ".-+eE")
 
 
 def _coerce_and_validate(

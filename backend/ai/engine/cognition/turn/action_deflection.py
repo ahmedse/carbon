@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import re
 
+from ai.engine.cognition.turn.action_deflection_i18n import RETRY_AR, any_needle
+
 #: "I can't do this" / "you must do it yourself, over there".
 _DENIAL_OR_HANDOFF = re.compile(
     r"\bi\s+(?:can'?t|cannot|am\s+unable\s+to|'?m\s+not\s+able\s+to)\b"
@@ -33,21 +35,18 @@ _RETRY_OR_ELSEWHERE = re.compile(
     r"\btry\s+again\b"
     r"|\bcomplete\s+the\s+confirmation\b"
     r"|\bconfirmation\s+(?:process|steps?)\b"
-    r"|\bthen\s+(?:come\s+back|retry|resubmit)\b"
-    r"|أعد\s+المحاولة|حاول\s+مرة\s+أخرى|المحاولة\s+مرة\s+أخرى"
-    r"|(?:إكمال|اكمال|أكمل|اكمل)\s+(?:خطوات|عملية|عمليه|إجراءات)?\s*(?:التأكيد|التاكيد)"
-    r"|(?:خطوات|عملية)\s+(?:التأكيد|التاكيد)"
-    r"|أولا?ً?\s*،?\s*ثم",
+    r"|\bthen\s+(?:come\s+back|retry|resubmit)\b",
     re.IGNORECASE,
 )
-
-
 def is_action_deflection(text: str) -> bool:
     """True when the answer refuses a write and points the user elsewhere."""
     body = (text or "").strip()
     if not body:
         return False
-    return bool(_DENIAL_OR_HANDOFF.search(body) and _RETRY_OR_ELSEWHERE.search(body))
+    return bool(
+        _DENIAL_OR_HANDOFF.search(body)
+        and (_RETRY_OR_ELSEWHERE.search(body) or any_needle(body, RETRY_AR))
+    )
 
 
 def build_forced_action_message(user_message: str, deflected_reply: str = "") -> str:

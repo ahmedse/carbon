@@ -1015,38 +1015,35 @@ const components = {
   // entity reference chip — [[kind:id:label]] → inline <EntityChip/>
   entityRef: ({ kind, id, label }) => <EntityChip kind={kind} id={id} label={label} />,
 
-  // paragraphs — enterprise 15px / 1.7 (Copilot density)
+  // paragraphs — match Carbon compact body2 (chat was oversized at 0.9375rem)
   p: ({ children }) => (
     <Typography
       variant="body2"
       sx={{
-        mb: 1,
+        mb: 0.75,
         '&:last-child': { mb: 0 },
-        fontSize: '0.9375rem',
-        lineHeight: 1.7,
+        fontSize: '0.8125rem',
+        lineHeight: 1.55,
         letterSpacing: '0.005em',
+        color: 'text.primary',
       }}
     >
       {children}
     </Typography>
   ),
 
-  // headings — H2 carries a 2px accent rule; no h5→caption jumps
+  // headings — chat-scale only (never page-hero sizes); no accent rule
   h1: ({ children }) => (
     <Typography
       component="h2"
       sx={{
-        mt: 2,
-        mb: 0.75,
-        fontSize: '1.125rem',
-        fontWeight: 650,
+        mt: 1.25,
+        mb: 0.5,
+        fontSize: '0.875rem',
+        fontWeight: 600,
         letterSpacing: '-0.01em',
         lineHeight: 1.35,
-        borderBottom: 2,
-        borderColor: 'primary.main',
-        pb: 0.5,
-        display: 'inline-block',
-        maxWidth: '100%',
+        color: 'text.primary',
       }}
     >
       {children}
@@ -1056,17 +1053,13 @@ const components = {
     <Typography
       component="h3"
       sx={{
-        mt: 1.75,
-        mb: 0.5,
-        fontSize: '1rem',
-        fontWeight: 650,
+        mt: 1,
+        mb: 0.4,
+        fontSize: '0.8125rem',
+        fontWeight: 600,
         letterSpacing: '-0.01em',
         lineHeight: 1.35,
-        borderBottom: 2,
-        borderColor: 'primary.main',
-        pb: 0.4,
-        display: 'inline-block',
-        maxWidth: '100%',
+        color: 'text.primary',
       }}
     >
       {children}
@@ -1076,11 +1069,12 @@ const components = {
     <Typography
       component="h4"
       sx={{
-        mt: 1.25,
-        mb: 0.4,
-        fontSize: '0.9375rem',
+        mt: 0.75,
+        mb: 0.35,
+        fontSize: '0.8125rem',
         fontWeight: 600,
         lineHeight: 1.4,
+        color: 'text.primary',
       }}
     >
       {children}
@@ -1089,7 +1083,7 @@ const components = {
   h4: ({ children }) => (
     <Typography
       component="h5"
-      sx={{ mt: 1, mb: 0.25, fontSize: '0.875rem', fontWeight: 600 }}
+      sx={{ mt: 0.75, mb: 0.25, fontSize: '0.75rem', fontWeight: 600, color: 'text.primary' }}
     >
       {children}
     </Typography>
@@ -1097,7 +1091,7 @@ const components = {
   h5: ({ children }) => (
     <Typography
       component="h6"
-      sx={{ mt: 0.75, mb: 0.25, fontSize: '0.8125rem', fontWeight: 600 }}
+      sx={{ mt: 0.5, mb: 0.25, fontSize: '0.75rem', fontWeight: 600, color: 'text.secondary' }}
     >
       {children}
     </Typography>
@@ -1108,7 +1102,7 @@ const components = {
       sx={{
         mt: 0.5,
         mb: 0.25,
-        fontSize: '0.75rem',
+        fontSize: '0.6875rem',
         fontWeight: 600,
         color: 'text.secondary',
       }}
@@ -1122,11 +1116,11 @@ const components = {
     <Box
       component="ul"
       sx={{
-        pl: 2.5,
-        my: 0.75,
-        mb: 1,
-        fontSize: '0.9375rem',
-        lineHeight: 1.7,
+        pl: 2,
+        my: 0.5,
+        mb: 0.75,
+        fontSize: '0.8125rem',
+        lineHeight: 1.55,
       }}
     >
       {children}
@@ -1136,11 +1130,11 @@ const components = {
     <Box
       component="ol"
       sx={{
-        pl: 2.5,
-        my: 0.75,
-        mb: 1,
-        fontSize: '0.9375rem',
-        lineHeight: 1.7,
+        pl: 2,
+        my: 0.5,
+        mb: 0.75,
+        fontSize: '0.8125rem',
+        lineHeight: 1.55,
       }}
     >
       {children}
@@ -1151,14 +1145,14 @@ const components = {
       return (
         <Box component="li" sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, listStyle: 'none', ml: -2 }}>
           <Checkbox size="small" checked={!!checked} disabled sx={{ p: 0, mt: 0.125 }} />
-          <Typography component="span" sx={{ fontSize: '0.9375rem', lineHeight: 1.7 }}>{children}</Typography>
+          <Typography component="span" sx={{ fontSize: '0.8125rem', lineHeight: 1.55 }}>{children}</Typography>
         </Box>
       );
     }
     return (
       <Typography
         component="li"
-        sx={{ mb: 0.35, fontSize: '0.9375rem', lineHeight: 1.7 }}
+        sx={{ mb: 0.25, fontSize: '0.8125rem', lineHeight: 1.55 }}
       >
         {children}
       </Typography>

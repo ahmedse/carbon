@@ -13,13 +13,13 @@ Uses the same lock-per-dict singleton pattern as ``engine/memory/working.py``.
 """
 from __future__ import annotations
 
-import re
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from ai.engine.cognition.dialogue.affirmation import is_affirmation
 from ai.engine.cognition.dialogue.affirmation import normalize as normalize_affirmation
+from ai.engine.text.word_match import contains_any_phrase, has_any_word
 
 
 @dataclass
@@ -44,24 +44,58 @@ _MEMORY_CONFIRMATION_SIGNALS: frozenset[str] = frozenset({
 })
 
 # ── Proposal detection (regex only, no LLM, no domain terms) ──────────────────
-_PROPOSAL_PATTERN = re.compile(
-    r"\b(?:shall|should|would you like me to|want me to|can i)\b\s+"
-    r"(?:i\s+|we\s+)?"
-    r"(?:store|remember|memorize|save|note)\s+(.+)",
-    re.IGNORECASE,
+_PROPOSAL_PREFIX_PHRASES = (
+    "shall ", "should ", "would you like me to ", "want me to ", "can i ",
 )
+_PROPOSAL_VERBS = ("store", "remember", "memorize", "save", "note")
 
-_IDENTITY_PATTERN = re.compile(r"\bI am\b|\bmy name is\b|\bI'm\b", re.IGNORECASE)
-_PREFERENCE_PATTERN = re.compile(r"\b(?:prefer|want|like|always)\b", re.IGNORECASE)
 
-_TRAILING_PUNCT = re.compile(r"[.!?\s]+$")
+def _strip_trailing_punct(text: str) -> str:
+    end = len(text)
+    while end and (text[end - 1].isspace() or text[end - 1] in ".!?"):
+        end -= 1
+    return text[:end]
+
+
+def _extract_proposal_fact(response_text: str) -> str | None:
+    lower = response_text.casefold()
+    for prefix in _PROPOSAL_PREFIX_PHRASES:
+        pos = lower.find(prefix)
+        if pos < 0:
+            continue
+        rest = response_text[pos + len(prefix):].lstrip()
+        if rest.casefold().startswith("i "):
+            rest = rest[2:].lstrip()
+        elif rest.casefold().startswith("we "):
+            rest = rest[3:].lstrip()
+        verb_pos = -1
+        matched_verb = ""
+        for verb in _PROPOSAL_VERBS:
+            if rest.casefold().startswith(verb):
+                verb_pos = 0
+                matched_verb = verb
+                break
+            needle = f" {verb} "
+            idx = rest.casefold().find(needle)
+            if idx >= 0 and (verb_pos < 0 or idx < verb_pos):
+                verb_pos = idx + 1
+                matched_verb = verb
+        if verb_pos < 0:
+            continue
+        if verb_pos == 0:
+            fact = rest[len(matched_verb):].lstrip(" :,-")
+        else:
+            fact = rest[verb_pos + len(matched_verb):].lstrip(" :,-")
+        fact = _strip_trailing_punct(fact.strip())
+        return fact or None
+    return None
 
 
 def _infer_category(fact: str) -> str:
     """Infer the memory category from the fact's wording (regex only)."""
-    if _IDENTITY_PATTERN.search(fact):
+    if contains_any_phrase(fact, ("i am", "my name is", "i'm")):
         return "identity"
-    if _PREFERENCE_PATTERN.search(fact):
+    if has_any_word(fact, ("prefer", "want", "like", "always")):
         return "preference"
     return "observation"
 
@@ -135,10 +169,7 @@ class PendingActionStore:
         """
         if not response_text:
             return None
-        m = _PROPOSAL_PATTERN.search(response_text)
-        if not m:
-            return None
-        fact = _TRAILING_PUNCT.sub("", m.group(1).strip()).strip()
+        fact = _extract_proposal_fact(response_text)
         if not fact:
             return None
         return {"fact": fact, "category": _infer_category(fact)}

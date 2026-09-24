@@ -13,7 +13,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { FONT } from '../theme/themeTokens';
 import { stepStatusMeta, toolLabel } from './aiTaskStatus';
-import { stripEngineJargon } from './humanizeOperatorCopy';
+import { stripEngineJargon, explainStepError } from './humanizeOperatorCopy';
 import { actionLabelForApi } from './consentInputSpec';
 import { presentToolLabel } from './presentationPlane';
 import { beatSituation } from './beatReport';
@@ -163,7 +163,7 @@ export default function BeatDetailContent({
             {t('beatFailWhat')}
           </Typography>
           <Typography variant="body2" sx={{ fontSize: '0.8125rem', mb: 0.75 }}>
-            {stripEngineJargon(situation.error || t('beatFailed')).slice(0, 280)}
+            {(explainStepError(situation.error).message || t('beatFailed')).slice(0, 320)}
           </Typography>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.75rem' }}>
             {t('beatFailMeans')}: {t('beatFailMeansBody')}
@@ -171,8 +171,8 @@ export default function BeatDetailContent({
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.75rem' }}>
             {t('beatFailDid')}: {situation.mutation || situation.retries === 0 ? t('beatFailDidWrite') : t('beatFailDidRead')}
           </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.75rem' }}>
-            {t('beatFailYou')}: {t('beatFailYouBody')}
+          <Typography variant="caption" sx={{ display: 'block', fontSize: '0.75rem', mt: 0.5, fontWeight: 600 }} data-testid="beat-fail-fix">
+            {t('beatFailYou')}: {explainStepError(situation.error).fix || t('beatFailYouBody')}
           </Typography>
         </Box>
       )}

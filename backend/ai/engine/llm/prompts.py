@@ -39,6 +39,7 @@ async def build_chat_prompt(
     instance_config: dict | None = None,
     conversation_id: str = "",
     instance_id: str = "",
+    process_mode: str = "ask",
 ) -> str:
     """Build the system prompt for chat interactions.
 
@@ -60,12 +61,23 @@ async def build_chat_prompt(
     _ = (conversation_id, instance_id, system_description, persona, navigation_routes, domain_topics)
 
     config = instance_config or {}
+    mode = "plan" if str(process_mode).lower() == "plan" else "ask"
 
     # ── Runtime header (per-conversation context) ──────────────────────────
     if not current_datetime:
         now_utc = datetime.now(timezone.utc)
         current_datetime = now_utc.strftime('%A, %B %d, %Y %H:%M UTC')
 
+    process_directive = (
+        "\nPROCESS MODE (structured host contract): PLAN. Draft a reviewable "
+        "Tasks plan. Use plan_task for a plannable task; do not execute host "
+        "writes. The user approves and runs later.\n"
+        if mode == "plan"
+        else
+        "\nPROCESS MODE (structured host contract): ASK. Answer/read/advice "
+        "only. plan_task, approve_plan and edit_plan are unavailable. For a "
+        "write request, provide the governed Agent/My handoff; never stage it.\n"
+    )
     identity_directive = ""
     if user_info:
         username = user_info.get("username", "Unknown")
@@ -141,6 +153,8 @@ async def build_chat_prompt(
     api_catalog_section = _build_api_catalog_section(api_catalog)
     if api_catalog_section:
         result = f"{result}\n\n{api_catalog_section}" if result else api_catalog_section
+
+    result = f"{result}\n\n{process_directive}" if result else process_directive
 
     # ── Caller identity directive (per-user) — appended so it is always
     # present regardless of the assembler/fallback path. Lets the model
@@ -469,7 +483,10 @@ right construct instead of describing things in prose:
   inline after prose, and NEVER collapse a diagram to a single line — a
   single-line or inline fence will NOT render as a diagram in the UI.
 - **Data charts** — when your answer holds 3+ comparable numeric records, emit a
-  Mermaid chart IN ADDITION to a table. Choose the type intelligently:
+  Mermaid chart IN ADDITION to a table (or rely on the Answer Envelope charts
+  the server builds from host rows). Do NOT call `code_execute` / matplotlib to
+  draw a chart for the screen — that sandbox PNG path is only for embedding
+  figures into Word/PDF exports. Choose the Mermaid type intelligently:
   - Use ```mermaid pie``` when the values are **parts of a whole** (scope %, category
     shares, breakdowns that add up to 100%). Pie slices must sum to a meaningful total.
   - Use ```mermaid xychart-beta``` with `bar` when comparing **magnitudes across

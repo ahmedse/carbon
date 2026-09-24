@@ -163,6 +163,51 @@ async def test_export_refuses_insert_slot_shell(plugin, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_export_docx_renders_gfm_tables_as_word_tables(plugin, tmp_path):
+    """GFM pipe tables in ``content`` become real Word tables — never literal |---|."""
+    content = (
+        "## القروض المفتوحة\n\n"
+        "| نوع القرض | المبلغ الأساسي | سعر الفائدة | المدة (شهر) | الحالة |\n"
+        "|---|---|---|---|---|\n"
+        "| قرض شخصي | 547,000 | 12% | 12 | قيد الإعداد |\n\n"
+        "## رصيد الإجازات\n\n"
+        "| النوع | المتبقي | المستحق |\n"
+        "|---|---|---|\n"
+        "| annual | 19 | 30 |\n"
+        "| sick | 15 | 15 |\n\n"
+        "## ملخص الوضع\n"
+        "- قرض شخصي قيد الإعداد بمبلغ 547,000.\n"
+        "- رصيد الإجازة السنوية المتبقي 19 يوماً.\n"
+    )
+    with override_settings(MEDIA_ROOT=str(tmp_path)):
+        result = await plugin.execute(
+            {
+                "title": "تقرير القروض المفتوحة ورصيد الإجازات",
+                "format": "docx",
+                "content": content,
+            },
+            ctx=None,
+        )
+    assert "error" not in result, result
+    from docx import Document
+
+    path = Path(tmp_path) / "ai_exports" / result["files"][0]["filename"]
+    doc = Document(str(path))
+    para_text = "\n".join(p.text for p in doc.paragraphs)
+    assert "|---|" not in para_text
+    assert "| نوع القرض |" not in para_text
+    assert "| annual |" not in para_text
+    assert len(doc.tables) >= 2
+    first = doc.tables[0]
+    assert "نوع القرض" in first.rows[0].cells[0].text
+    assert "قرض شخصي" in first.rows[1].cells[0].text
+    assert "547,000" in first.rows[1].cells[1].text
+    second = doc.tables[1]
+    assert "annual" in second.rows[1].cells[0].text
+    assert "19" in second.rows[1].cells[1].text
+
+
+@pytest.mark.asyncio
 async def test_export_docx_identity_header(plugin, tmp_path):
     with override_settings(MEDIA_ROOT=str(tmp_path)):
         result = await plugin.execute(

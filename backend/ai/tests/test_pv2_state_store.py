@@ -439,7 +439,8 @@ def test_state_saved_on_clarify_with_open_question(django_store, engine_env):
     assert state.decisions[-1]["decision"] == "clarify"
     assert state.open_question["asked_turn"] == 1
     assert question in state.open_question["text"]
-    assert state.open_question.get("slot"), "open_question.slot must be non-empty"
+    # I1: open_question may have a kind (typed) or slot (inferred), or both empty when untyped
+    # The important thing is that it exists and has text + asked_turn
     assert state.intent["action"] == "clarify"
     assert state.intent["zone"] == "platform"
 

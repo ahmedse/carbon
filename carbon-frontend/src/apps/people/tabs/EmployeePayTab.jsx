@@ -28,18 +28,22 @@ import {
 } from '../../../api/people';
 import { useAuth } from '../../../auth/AuthContext';
 import { PEOPLE_MANAGE } from '../../../capabilities';
-import { formatAmount, formatDate, statusColor, statusLabelKey } from '../utils';
+import { formatAmount, formatDate, statusColor, statusLabelKey, refCode, refLabel } from '../utils';
 
 // ─── payslip-line helpers (payroll runs section) ─────────────────────────────
 
-// Payslip `line_type` values are canonical free-text codes. Direction is
-// derived from the known deduction codes; everything else (except the explicit
-// gross/net lines) is an earning. The compensation *ledger* uses the API's
-// `component_direction` field instead — never a client-side classifier.
-const PAYSLIP_DEDUCTION_TYPES = ['gosi', 'deduction', 'loan', 'tax', 'wps'];
+// Payslip `line_type` is a governed value `{code,label}` (ADR-0027) or a
+// legacy plain code. Direction uses the code; everything else (except gross/net)
+// that isn't a known deduction is treated as an earning. The compensation
+// *ledger* uses the API's `component_direction` field instead.
+const PAYSLIP_DEDUCTION_TYPES = ['gosi', 'deduction', 'loan', 'loan_installment', 'tax', 'wps'];
+
+function payslipLineTypeCode(lineType) {
+  return refCode(lineType).toLowerCase();
+}
 
 function payslipLineDirection(lineType) {
-  const lt = String(lineType || '').toLowerCase();
+  const lt = payslipLineTypeCode(lineType);
   if (lt === 'gross' || lt === 'net') return lt;
   return PAYSLIP_DEDUCTION_TYPES.includes(lt) ? 'deduction' : 'earning';
 }
@@ -48,7 +52,7 @@ function PaylineRow({ line, secondary }) {
   return (
     <TableRow hover>
       <TableCell sx={{ textTransform: 'capitalize', color: secondary ? 'text.secondary' : 'text.primary', py: 0.5 }}>
-        {(line.line_type || '').replace(/_/g, ' ')}
+        {refLabel(line.line_type) || payslipLineTypeCode(line.line_type).replace(/_/g, ' ') || '—'}
       </TableCell>
       <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', py: 0.5 }} dir="ltr">
         {secondary ? `(${formatAmount(line.amount)})` : formatAmount(line.amount)}
@@ -664,8 +668,8 @@ function PayrollRunsSection({ empId, token }) {
   const deductions = currentLines.filter(
     (l) => payslipLineDirection(l.line_type) === 'deduction',
   );
-  const grossLine = currentLines.find((l) => l.line_type === 'gross');
-  const netLine = currentLines.find((l) => l.line_type === 'net');
+  const grossLine = currentLines.find((l) => payslipLineTypeCode(l.line_type) === 'gross');
+  const netLine = currentLines.find((l) => payslipLineTypeCode(l.line_type) === 'net');
 
   const grossTotal = grossLine
     ? Number(grossLine.amount)

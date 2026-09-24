@@ -31,7 +31,15 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Iterable
 
-_AR_SCRIPT_RE = re.compile(r"[\u0600-\u06FF]")
+from ai.engine.cognition.turn.navigation_i18n import (
+    HOW_WHERE_AR,
+    NAV_VERB_AR,
+    PLACE_TOPIC_AR,
+    SELF_READ_POSSESSIVE_AR,
+    SELF_READ_POSSESSIVE_EN,
+    any_needle,
+)
+from ai.engine.text.word_match import has_any_word, has_arabic_script
 
 # Arabic diacritics / tashkeel to strip (harakat + other combining marks are
 # removed separately via unicodedata.combining).
@@ -100,7 +108,7 @@ def detect_lang(text: str) -> str:
 
 
 def _AR_SEARCH(text: str) -> bool:
-    return bool(_AR_SCRIPT_RE.search(text or ""))
+    return has_arabic_script(text or "")
 
 
 # ── Target loading ────────────────────────────────────────────────────────────
@@ -198,7 +206,6 @@ def _common_prefix_len(a: str, b: str) -> int:
 # An explicit "app" noun (English "app"/"application" or Arabic "تطبيق") boosts
 # ``type: app`` home targets over same-named sub-pages, so "تطبيق الموظفين"
 # (the People *app*) resolves to /people rather than the employees page.
-_APP_NOUN_EN_RE = re.compile(r"\bapp\b|\bapplication\b|\bmodule\b")
 _APP_NOUN_BOOST = 1000
 # Minimum score gap for the top target to win outright; below this, the
 # resolver offers candidates instead of guessing.
@@ -206,8 +213,9 @@ _DISAMBIGUATION_GAP = 3
 
 
 def _has_app_noun(norm: str) -> bool:
-    return bool(_APP_NOUN_EN_RE.search(norm)) or any(
-        a in norm for a in ("تطبيق", "ابليكيشن")
+    return bool(
+        has_any_word(norm, ("app", "application", "module"))
+        or any(a in norm for a in ("تطبيق", "ابليكيشن"))
     )
 
 
@@ -306,37 +314,55 @@ _QUESTION_WORDS_EN: frozenset[str] = frozenset({
 _QUESTION_WORDS_AR: frozenset[str] = frozenset({
     "متي", "هل", "كيف", "لماذا", "ما", "ماذا", "اين", "أين",
 })
-_NAV_VERB_EN_RE = re.compile(
-    r"\b(?:open|go\s+to|goto|go\s+back|navigate\s+to|take\s+me\s+(?:back\s+)?to|"
-    r"show\s+me|show\s+my)\b"
+_NAV_VERB_WORDS = ("open", "goto")
+_NAV_VERB_PHRASES = (
+    "go to", "go back", "navigate to", "take me back to", "take me to",
+    "show me", "show my",
 )
-_HOW_WHERE_UI_RE = re.compile(
-    r"("
-    r"\bhow\s+(?:do\s+i|can\s+i|to)\s+"
-    r"(?:apply|request|open|get|submit|find|see|check)\b"
-    r"|\bwhere\s+(?:can\s+i|do\s+i|is)\s+"
-    r"(?:find|see|check|look|is)\b"
-    r"|كيف\s+(?:أقدم|اقدم|أفتح|افتح)"
-    r"|وين\s+|أين\s+|اين\s+"
-    r")",
-    re.IGNORECASE,
+_HOW_HEADS = ("how do i ", "how can i ", "how to ")
+_HOW_VERBS = frozenset({"apply", "request", "open", "get", "submit", "find", "see", "check"})
+_WHERE_HEADS = ("where can i ", "where do i ", "where is ")
+_WHERE_TAILS = frozenset({"find", "see", "check", "look", "is"})
+_PLACE_TOPICS = (
+    "loans", "loan", "leave", "payroll", "payslips", "payslip",
+    "attendance", "home", "notifications", "notification", "dashboard",
 )
-_PLACE_TOPIC_RE = re.compile(
-    r"\b(loan|loans|leave|payroll|payslip|payslips|attendance|home|"
-    r"notification|notifications|dashboard)\b"
-    r"|قرض|قروض|إجازة|اجازة|راتب|رواتب|قسيمة|حضور|رئيسية|إشعار",
-    re.IGNORECASE,
-)
-# Normalised Arabic imperative/request stems: افتح / اذهب / أرني (→ ارني) /
-# روح / ودّيني (→ وديني).
-_NAV_VERB_AR_RE = re.compile(
-    r"(?:^|\s)(?:و|ف)?(?:افتح|تفتح|اذهب|تذهب|ارني|روح|وديني|خذني)"
-)
+
+
+def _has_nav_verb_en(text: str) -> bool:
+    from ai.engine.text.word_match import contains_any_phrase, has_any_word
+
+    return has_any_word(text, _NAV_VERB_WORDS) or contains_any_phrase(text, _NAV_VERB_PHRASES)
+
+
+def _how_where_ui_en(text: str) -> bool:
+    cf = (text or "").casefold()
+    for head, tails in ((_HOW_HEADS, _HOW_VERBS), (_WHERE_HEADS, _WHERE_TAILS)):
+        for prefix in head:
+            pos = cf.find(prefix)
+            if pos < 0:
+                continue
+            rest = cf[pos + len(prefix):].split()
+            if rest and rest[0] in tails:
+                return True
+    return False
+
+
+def _place_topic_token(text: str) -> str:
+    from ai.engine.text.word_match import has_word
+
+    for word in _PLACE_TOPICS:
+        if has_word(text, word):
+            return word
+    return ""
 _INTERROGATIVE_MIN_TOKENS = 3
 
 
 def _has_nav_verb(norm: str) -> bool:
-    return bool(_NAV_VERB_EN_RE.search(norm) or _NAV_VERB_AR_RE.search(norm))
+    return bool(
+        _has_nav_verb_en(norm)
+        or any(f" {v}" in norm or norm.startswith(v) for v in NAV_VERB_AR)
+    )
 
 
 def is_interrogative_non_command(message: str) -> bool:
@@ -364,6 +390,22 @@ def is_interrogative_non_command(message: str) -> bool:
     return not _has_nav_verb(norm)
 
 
+def is_first_person_self_read(message: str) -> bool:
+    """True when the utterance asks for the caller's own ESS data, not a UI hop."""
+    raw = (message or "").strip()
+    if not raw:
+        return False
+    norm = normalize_text(raw)
+    if any_needle(raw, SELF_READ_POSSESSIVE_AR):
+        return True
+    tokens = norm.split()
+    if "mine" in tokens:
+        return True
+    if " my " in f" {norm} ":
+        return True
+    return any_needle(raw, SELF_READ_POSSESSIVE_EN)
+
+
 def resolve_navigation(
     message: str, instance_config: dict | None,
 ) -> NavigationResolution:
@@ -382,6 +424,8 @@ def resolve_navigation(
         if topic:
             return ground_navigation(topic, instance_config)
         return NavigationResolution(lang=detect_lang(message or ""))
+    if is_first_person_self_read(message):
+        return NavigationResolution(lang=detect_lang(message or ""))
     try:
         from ai.engine.cognition.turn.ess_read import should_skip_module_nav
 
@@ -399,15 +443,23 @@ def resolve_navigation(
 def is_how_where_ui(message: str) -> bool:
     """True for how-do-I / where-can-I-find UI questions (C8 FAQ, 0 LLM)."""
     raw = (message or "").strip()
-    return bool(raw and _HOW_WHERE_UI_RE.search(raw))
+    return bool(
+        raw
+        and (_how_where_ui_en(raw) or any_needle(raw, HOW_WHERE_AR))
+    )
 
 
 def place_topic(message: str) -> str:
     """Extract a declared place noun from a how/where UI ask."""
-    match = _PLACE_TOPIC_RE.search(message or "")
-    if not match:
+    raw = message or ""
+    token = _place_topic_token(raw)
+    if not token:
+        for needle in PLACE_TOPIC_AR:
+            if needle in raw:
+                token = needle
+                break
+    if not token:
         return ""
-    token = match.group(0).lower()
     aliases = {
         "loan": "loans",
         "payslip": "payslips",

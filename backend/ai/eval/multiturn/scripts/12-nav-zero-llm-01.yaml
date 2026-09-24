@@ -3,6 +3,9 @@ objective_ids: [C8, A2]
 language: en
 surface: chat
 persona: emp_1067
+stub_host:
+  list_my_payslips:
+    - {line_type: net, amount: 4500}
 turns:
   - user: "Show me the loans section"
     stub_reply: "Here's the loans section. You can view your active loans and apply for new ones."
@@ -35,7 +38,7 @@ turns:
   - user: "Show my payslips"
     stub_reply: "Here are your payslips. You can download them as PDF."
     expect:
-      decision_in: [navigate, answer]
+      decision_in: [navigate, answer, tool_answer]
       language: en
       max_llm_calls: 0
   

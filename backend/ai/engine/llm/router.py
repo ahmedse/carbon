@@ -259,6 +259,8 @@ async def route_chat(
     *,
     temperature: float = 0.3,
     tools: list[dict] | None = None,
+    tool_choice: str | dict | None = None,
+    strict_tools: bool = False,
     max_tokens: int | None = None,
     response_format: dict | None = None,
     model: str | None = None,
@@ -273,6 +275,8 @@ async def route_chat(
         messages:     OpenAI-format message list.
         temperature:  Model temperature.
         tools:        Optional tool definitions.
+        tool_choice:  Optional OpenAI tool_choice ('auto', 'required', or function name).
+        strict_tools: When True, deep-copy tools with strict JSON-schema flags.
         max_tokens:   Optional max output tokens.
         model:        Optional model override (defaults to the task's model).
         db:           Optional async session. If None, a short-lived session is created.
@@ -289,6 +293,7 @@ async def route_chat(
         }
     """
     from ai.engine.llm.provider import create_completion, get_llm_client
+    from ai.engine.llm.tool_choice import apply_strict, normalize_tool_choice
 
     settings = get_settings()
     model = model or get_model_for_task(task)
@@ -329,6 +334,12 @@ async def route_chat(
         }
         if tools:
             kwargs["tools"] = tools
+        tools_out = apply_strict(tools, strict_tools) if tools else None
+        if tools_out is not None:
+            kwargs["tools"] = tools_out
+        normalized = normalize_tool_choice(tool_choice)
+        if normalized is not None and tools_out:
+            kwargs["tool_choice"] = normalized
         if max_tokens:
             kwargs["max_tokens"] = max_tokens
         if response_format:
@@ -385,6 +396,7 @@ async def route_chat(
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
             "cost_usd": cost_usd,
+            "tool_choice": normalized,
         }
 
         logger.debug(

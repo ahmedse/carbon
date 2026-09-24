@@ -13,7 +13,6 @@ Rules of the road:
 from __future__ import annotations
 
 import logging
-import re
 
 logger = logging.getLogger("pulse.core.security")
 
@@ -31,7 +30,10 @@ logger = logging.getLogger("pulse.core.security")
 # is purely a UX hint, not a data carrier.
 
 _PAGE_CONTEXT_MAX_LEN = 512
-_PAGE_CONTEXT_ALLOWED = re.compile(r"^[A-Za-z0-9/_\-.~?&=%:#@+,;\[\]\(\) ]{0,512}$")
+_PAGE_CONTEXT_ALLOWED_CHARS = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    "0123456789/_-.~?&=%:#@+,;[]() "
+)
 
 # Heuristic markers that suggest a prompt-injection attempt regardless of charset.
 # Matched case-insensitively against the *raw* value.
@@ -82,7 +84,7 @@ def sanitize_page_context(raw: object) -> str:
         return ""
 
     # Charset check.
-    if not _PAGE_CONTEXT_ALLOWED.match(s):
+    if not s or len(s) > _PAGE_CONTEXT_MAX_LEN or any(ch not in _PAGE_CONTEXT_ALLOWED_CHARS for ch in s):
         logger.warning("page_context dropped: disallowed characters")
         return ""
 

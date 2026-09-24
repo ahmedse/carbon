@@ -95,6 +95,57 @@ describe('AgentRunSurface', () => {
     });
   });
 
+  it('does not steal focus back to consent when browsing another step', async () => {
+    const consentPlan = {
+      id: 'plan-focus',
+      status: 'paused',
+      brief: 'Send the GOSI file',
+      steps: [
+        {
+          step_id: 0,
+          intent: 'Payroll records',
+          tool_name: 'call_host_api',
+          status: 'completed',
+          depends_on: [],
+        },
+        {
+          step_id: 1,
+          intent: 'System check',
+          tool_name: 'call_host_api',
+          tool_args: { api_name: 'submit_gosi_wps_sif' },
+          status: 'awaiting_approval',
+          depends_on: [0],
+        },
+      ],
+    };
+    const { rerender } = render(
+      <AgentRunSurface
+        plan={consentPlan}
+        runSteps={[]}
+        phase="paused"
+      />,
+    );
+    // Auto-focus opens the consent step once.
+    expect(screen.getByTestId('run-step-detail-drawer')).toBeInTheDocument();
+    expect(screen.getByTestId('run-chronicle-row-1')).toHaveAttribute('data-selected', 'true');
+
+    // Operator opens a finished step to read it.
+    fireEvent.click(screen.getByTestId('run-timeline-open-0'));
+    expect(screen.getByTestId('run-chronicle-row-0')).toHaveAttribute('data-selected', 'true');
+    expect(screen.getByTestId('run-chronicle-row-1')).not.toHaveAttribute('data-selected');
+
+    // Poll/merge re-render must not snap selection back to consent.
+    rerender(
+      <AgentRunSurface
+        plan={{ ...consentPlan, steps: [...consentPlan.steps] }}
+        runSteps={[]}
+        phase="paused"
+      />,
+    );
+    expect(screen.getByTestId('run-chronicle-row-0')).toHaveAttribute('data-selected', 'true');
+    expect(screen.getByTestId('run-chronicle-row-1')).not.toHaveAttribute('data-selected');
+  });
+
   it('does not host Run health accordion', () => {
     render(
       <AgentRunSurface
@@ -208,5 +259,58 @@ describe('AgentRunSurface', () => {
     expect(panel).toHaveTextContent(/Amount · 3000/i);
     expect(panel).not.toHaveTextContent(/ConversationState|active_plans|Pulse|slots/i);
     expect(screen.queryByRole('button', { name: /Confirm/i })).toBeNull();
+  });
+});
+
+describe('AgentRunSurface — step controls + plain-language log (Now only)', () => {
+  const FAILED_PLAN = {
+    ...PLAN,
+    status: 'failed',
+    steps: [
+      PLAN.steps[0],
+      {
+        step_id: 1,
+        intent: 'Load payroll records',
+        tool_name: 'call_host_api',
+        status: 'failed',
+        error: "Missing required path parameter 'id'. Provide it in path_params.",
+        depends_on: [0],
+      },
+    ],
+  };
+
+  it('offers Retry / Skip / Edit in Plan / Discuss in Plan mode on a failed step', () => {
+    const onRetry = vi.fn();
+    const onDiscussInPlan = vi.fn();
+    render(
+      <AgentRunSurface
+        plan={FAILED_PLAN}
+        runSteps={[]}
+        phase="error"
+        stepActions={{
+          onRetry,
+          onSkip: vi.fn(),
+          onEditInPlan: vi.fn(),
+          onDiscussInPlan,
+        }}
+      />,
+    );
+    // Failure auto-selects the urgent beat and opens the drawer.
+    expect(screen.getByTestId('run-step-detail-drawer')).toBeInTheDocument();
+    expect(screen.getByTestId('beat-fail-fix')).toHaveTextContent(/Open Plan, edit this step/i);
+    fireEvent.click(screen.getByTestId('step-action-retry'));
+    expect(onRetry).toHaveBeenCalledWith(1);
+    fireEvent.click(screen.getByTestId('step-action-discuss'));
+    expect(onDiscussInPlan).toHaveBeenCalledWith(expect.objectContaining({ step_id: 1 }));
+    expect(screen.getByTestId('step-action-edit')).toBeInTheDocument();
+    expect(screen.getByTestId('step-action-skip')).toBeInTheDocument();
+  });
+
+  it('shows the plain-language activity log, open by default when something failed', () => {
+    render(<AgentRunSurface plan={FAILED_PLAN} runSteps={[]} phase="error" />);
+    const log = screen.getByTestId('human-activity-log');
+    expect(log).toBeInTheDocument();
+    expect(screen.getByTestId('human-activity-log-panel')).toHaveTextContent(/Couldn’t finish — Load payroll records/);
+    expect(screen.getByTestId('human-activity-log-panel')).not.toHaveTextContent(/path_params/);
   });
 });

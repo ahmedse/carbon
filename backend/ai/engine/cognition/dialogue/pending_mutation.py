@@ -23,6 +23,13 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+from ai.engine.cognition.dialogue.pending_mutation_i18n import (
+    ACTION_VERB_AR,
+    ASKS_PERMISSION_AR,
+    FIRST_PERSON_AR,
+    any_needle,
+)
+
 #: Proposals older than this are stale — the user moved on.
 DEFAULT_TTL_TURNS = 2
 
@@ -42,8 +49,7 @@ _MAX_PROPOSAL_CHARS = 1200
 #: The assistant speaking about its OWN next act, in the first person.
 _FIRST_PERSON = re.compile(
     r"\b(?:i'?ll|i\s+will|i\s+can|i\s+am\s+going\s+to|let\s+me|"
-    r"shall\s+i|should\s+i|may\s+i|me\s+to)\b"
-    r"|(?:سأ|سوف\s+أ|يمكنني|أستطيع|هل\s+أ|أن\s+أ|تريدني|تريد\s+أن\s+أ|دعني)",
+    r"shall\s+i|should\s+i|may\s+i|me\s+to)\b",
     re.IGNORECASE,
 )
 
@@ -51,21 +57,15 @@ _FIRST_PERSON = re.compile(
 _ACTION_VERB = re.compile(
     r"\b(?:submit|file|create|request|book|register|raise|send|apply|"
     r"prepare|draft|record|schedule|update|edit|modify|revise|cancel|"
-    r"approve|replan|fork|proceed|execute|run|start|begin|continue)\b"
-    r"|(?:تقديم|أقدم|إعداد|أعد|إنشاء|أنشئ|تسجيل|أسجل|إرسال|أرسل|حجز|أحجز|"
-    r"تعديل|أعدل|تحديث|أحدث|إلغاء|ألغي|اعتماد|تنفيذ|أنفذ|أبدأ|البدء|"
-    r"أتابع|المتابعة|إكمال|أكمل)",
+    r"approve|replan|fork|proceed|execute|run|start|begin|continue)\b",
     re.IGNORECASE,
 )
 
 #: Explicitly handing the decision back to the user.
 _ASKS_PERMISSION = re.compile(
-    r"[?؟]\s*$"
+    r"[?\u061F]\s*$"
     r"|\b(?:please\s+)?confirm\b"
-    r"|\blet\s+me\s+know\b"
-    r"|(?:يرجى|يُرجى|الرجاء|برجاء)\s+التأكيد"
-    r"|هل\s+تريد"
-    r"|قبل\s+(?:تقديم|إرسال|تنفيذ)",
+    r"|\blet\s+me\s+know\b",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -80,11 +80,11 @@ def detect_action_proposal(response_text: str) -> str | None:
     text = (response_text or "").strip()
     if not text:
         return None
-    if not _FIRST_PERSON.search(text):
+    if not (_FIRST_PERSON.search(text) or any_needle(text, FIRST_PERSON_AR)):
         return None
-    if not _ACTION_VERB.search(text):
+    if not (_ACTION_VERB.search(text) or any_needle(text, ACTION_VERB_AR)):
         return None
-    if not _ASKS_PERMISSION.search(text):
+    if not (_ASKS_PERMISSION.search(text) or any_needle(text, ASKS_PERMISSION_AR)):
         return None
     return text[:_MAX_PROPOSAL_CHARS]
 

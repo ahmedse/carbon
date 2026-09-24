@@ -150,8 +150,8 @@ describe('PlanDagGraph', () => {
 
     const pane = screen.getByTestId('plan-step-detail');
     expect(pane).toBeInTheDocument();
-    expect(within(pane).getByText('This step')).toBeInTheDocument();
-    expect(within(pane).getByText('Search for duplicate records')).toBeInTheDocument();
+    expect(within(pane).getByText('Step details')).toBeInTheDocument();
+    expect(within(pane).getByTestId('beat-detail-body')).toBeInTheDocument();
     expect(within(pane).getByText(/Next: Create a rule/)).toBeInTheDocument();
     expect(within(pane).queryByText('search_entity')).not.toBeInTheDocument();
     expect(within(pane).queryByText(/More detail/)).not.toBeInTheDocument();

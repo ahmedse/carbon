@@ -105,7 +105,7 @@ class CarbonHostAdapter(HostAdapterContract):
         # Spine tools (engine function-calling definitions) + registry-driven
         # domain tools, CBAC-filtered per user. Never hardcode tool names here.
         from ai.engine.agent.tools import get_tool_definitions
-        from ai.engine.cognition.turn.runner import _CHAT_STATIC_TOOLS, _ECF_CHAT_TOOLS
+        from ai.engine.cognition.turn.runner_util import _CHAT_STATIC_TOOLS, _ECF_CHAT_TOOLS
         from ai.engine.core.config import get_settings
         from ai.domain_protocol import get_domain, list_domains
 

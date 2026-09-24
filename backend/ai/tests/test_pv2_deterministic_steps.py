@@ -461,7 +461,8 @@ def test_render_bound_catalog_read_uses_host_fields_only():
         "get_my_leave_balance",
         "en",
     )
-    assert leave and "annual remaining 18" in leave and "sick remaining 10" in leave
+    assert leave and "Your leave balance" in leave
+    assert "annual remaining 18" in leave and "sick remaining 10" in leave
     assert "21" not in leave
 
     empty_loans = render_bound_catalog_read(
@@ -470,6 +471,15 @@ def test_render_bound_catalog_read_uses_host_fields_only():
         "en",
     )
     assert empty_loans == "No existing loans."
+    entitlements = render_bound_catalog_read(
+        {"result": json.dumps([
+            {"leave_type": "annual", "entitled_days": 30, "used_days": 0},
+        ])},
+        "list_leave_entitlements",
+        "en",
+    )
+    assert entitlements and "Your leave balance" in entitlements
+    assert "annual entitled 30" in entitlements
 
     empty_leave_history = render_bound_catalog_read(
         {"result": json.dumps({"count": 0, "results": []})},
@@ -510,7 +520,7 @@ def test_render_bound_catalog_read_uses_host_fields_only():
         (
             "list_my_attendance_permissions",
             [],
-            "No existing attendance permissions",
+            "No attendance permissions on record",
         ),
     ],
 )

@@ -66,8 +66,15 @@ so I can answer one question without triple-encoding the same job (DAG + steps +
   here → outcome. Raw `RULE_` / CBAC capability ids / tool names are demoted (expand or
   Analyst). No new chart library — still `OpsCanvasHost`.
 
-**Output purity (V5)**
-- Given Output, When settled, Then Answer + artifact cards only (no Run health accordion).
+**Output purity (V5 · amended V11 Result receipt)**
+- Given Output/Result, When settled, Then **OutcomeReceipt** (title · state · facts ·
+  prose) + artifact cards only when files exist (no empty Artifacts block).
+- Given Result chrome, Then `AgentResultToolbar`: host CTA · Discuss · Rerun · More
+  (Open Plan · Ledger JSON · Response .md) — ≤3 visible.
+- Given Result proof, Then collapsed “Approvals & timing” only (confirmations ·
+  requested by · finished at). No Run health / tokens / pattern · skill chips.
+- Given Now and a settled run, Then collapsible **Run health** hosts full
+  `AITaskAuditCard` (default open).
 - Given an artifact card, When Delete is confirmed, Then `DELETE ai/artifacts/:id/` and
   the card leaves the list.
 
@@ -118,8 +125,9 @@ AITaskPanel (chat-first)
       │            (no Job Map / no DAG / no artifact cards; post-done CTAs)
       ├─ Canvas → AgentCanvasSurface → OpsCanvasHost (story-first)
       │            data-testid=agent-cockpit-hero-canvas
-      └─ Output → Answer · artifact cards (Preview/Download/Delete) · Actions
-                   (no Run health)
+      └─ Output → OutcomeReceipt · files (if any) · Approvals fold
+                   · toolbar: host CTA · Discuss · Rerun · More
+                   (no Run health; audit on Now)
                    data-testid=agent-cockpit-hero-output
 ```
 

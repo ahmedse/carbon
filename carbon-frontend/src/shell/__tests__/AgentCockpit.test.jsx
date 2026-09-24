@@ -1,5 +1,5 @@
 // src/shell/__tests__/AgentCockpit.test.jsx
-// Task screens — Now · Picture · Result.
+// Task screens — Now · Plan · Result.
 import React, { useState } from 'react';
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -25,15 +25,19 @@ function Harness({ initial = 'run', resultReady = false, ...props }) {
 }
 
 describe('AgentCockpit — segmented control', () => {
-  it('renders Now and Picture; Result only after an outcome', () => {
+  it('renders Now, Plan and a dimmed Result until an outcome exists', () => {
     const { rerender } = render(<Harness />);
     expect(screen.getByRole('button', { name: 'Now' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Picture' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Result' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Plan' })).toBeInTheDocument();
+    const result = screen.getByRole('button', { name: 'Result' });
+    expect(result).toBeDisabled();
+    expect(result).toHaveAttribute('data-dimmed', 'true');
     expect(screen.queryByRole('button', { name: 'Journey' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Execution' })).not.toBeInTheDocument();
     rerender(<Harness resultReady />);
-    expect(screen.getByRole('button', { name: 'Result' })).toBeInTheDocument();
+    const ready = screen.getByRole('button', { name: 'Result' });
+    expect(ready).not.toBeDisabled();
+    expect(ready).not.toHaveAttribute('data-dimmed');
   });
 
   it('shows exactly one hero test-id at a time', () => {
@@ -44,7 +48,7 @@ describe('AgentCockpit — segmented control', () => {
   });
 
   it.each([
-    ['Picture', 'agent-cockpit-hero-plan', 'body-plan'],
+    ['Plan', 'agent-cockpit-hero-plan', 'body-plan'],
     ['Now', 'agent-cockpit-hero-run', 'body-run'],
   ])('switching to %s renders %s', (label, heroId, bodyId) => {
     render(<Harness initial="plan" />);
@@ -62,19 +66,22 @@ describe('AgentCockpit — segmented control', () => {
 });
 
 describe('AgentCockpit — inherited Chat context', () => {
-  it('shows carried conversation details on every segment', () => {
-    render(
-      <Harness
-        plan={{
-          id: 'p1',
-          inherited_context: [{ key: 'amount', value: '3000' }],
-        }}
-      />,
+  it('shows carried conversation details on Plan (not Result)', () => {
+    const plan = {
+      id: 'p1',
+      inherited_context: [{ key: 'amount', value: '3000' }],
+    };
+    const { unmount } = render(
+      <Harness initial="plan" plan={plan} resultReady />,
     );
     const panel = screen.getByTestId('agent-run-inherited-context');
     expect(panel).toHaveTextContent(/Carried from this conversation/i);
     expect(panel).toHaveTextContent(/Amount · 3000/);
     expect(panel).not.toHaveTextContent(/ConversationState|Pulse|slots/i);
+    unmount();
+
+    render(<Harness initial="output" plan={plan} resultReady />);
+    expect(screen.queryByTestId('agent-run-inherited-context')).not.toBeInTheDocument();
   });
 });
 

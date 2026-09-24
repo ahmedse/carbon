@@ -25,36 +25,44 @@ from ai.engine.cognition.plan.process_dial import (
     strip_pulse_mode_prefix,
 )
 from ai.engine.cognition.turn.navigation import detect_lang
+from ai.engine.text.word_match import contains_any_phrase, has_any_word
+from ai.engine.cognition.turn.plan_dial_i18n import (
+    NEW_CONTENT_AR,
+    RESTYLE_AR,
+    any_needle,
+)
 
 logger = logging.getLogger("pulse.cognition.turn.plan_dial")
 
 _TO_EASTERN = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
 
-#: «in arabic», «more details», «بالعربي», «بالتفصيل», «shorter», «elaborate».
-_RESTYLE_RE = re.compile(
-    r"("
-    r"\bin\s+(?:arabic|english)\b"
-    r"|\b(?:more|extra|further)\s+details?\b"
-    r"|\bin\s+(?:more|greater)\s+detail\b"
-    r"|\b(?:elaborate|expand(?:\s+on\s+(?:that|this|it))?)\b"
-    r"|\b(?:shorter|briefer|summari[sz]e\s+(?:that|this|it))\b"
-    r"|\b(?:translate|say|repeat|write|explain)\s+(?:that|this|it)\b"
-    r"|بالعرب|بالإنجليز|بالانجليز|بالتفصيل|أكثر\s+تفصيل|اكثر\s+تفصيل"
-    r"|بتفصيل\s+أكثر|بتفصيل\s+اكثر|وضّح\s+أكثر|وضح\s+اكثر|أعد\s+الصياغة|اعد\s+الصياغة"
-    r"|باختصار|مختصر"
-    r")",
-    re.IGNORECASE,
+_RESTYLE_PHRASES = (
+    "in arabic", "in english",
+    "more detail", "more details", "extra detail", "extra details",
+    "further detail", "further details", "in more detail", "in greater detail",
+    "expand on that", "expand on this", "expand on it",
+    "summarize that", "summarize this", "summarize it",
+    "summarise that", "summarise this", "summarise it",
+    "translate that", "translate this", "translate it",
+    "say that", "say this", "say it",
+    "repeat that", "repeat this", "repeat it",
+    "write that", "write this", "write it",
+    "explain that", "explain this", "explain it",
 )
-
-#: A restyle carries no new task content: no amounts, no ESS verbs.
-_NEW_CONTENT_RE = re.compile(
-    r"\d|[٠-٩]"
-    r"|\b(?:submit|apply|request|loan|leave|attendance|salary|payroll|report)\b"
-    r"|قرض|إجاز|اجاز|استئذان|راتب|رواتب|تقرير|قدّم|قدم|اطلب",
-    re.IGNORECASE,
+_RESTYLE_WORDS = ("elaborate", "expand", "shorter", "briefer")
+_NEW_CONTENT_WORDS = (
+    "submit", "apply", "request", "loan", "leave", "attendance",
+    "salary", "payroll", "report",
 )
 
 
+def _is_restyle_en(text: str) -> bool:
+    return has_any_word(text, _RESTYLE_WORDS) or contains_any_phrase(text, _RESTYLE_PHRASES)
+
+
+def _has_new_content_en(text: str) -> bool:
+    raw = text or ""
+    return any(ch.isdigit() for ch in raw) or has_any_word(raw, _NEW_CONTENT_WORDS)
 def plan_dial_process_brief(
     utterance: str,
     *,
@@ -87,9 +95,9 @@ def is_restyle_request(utterance: str) -> bool:
     text = strip_pulse_mode_prefix(utterance or "").strip()
     if not text or len(text) > 120:
         return False
-    if not _RESTYLE_RE.search(text):
+    if not (_is_restyle_en(text) or any_needle(text, RESTYLE_AR)):
         return False
-    return not _NEW_CONTENT_RE.search(text)
+    return not (_has_new_content_en(text) or any_needle(text, NEW_CONTENT_AR))
 
 
 def restyle_target_lang(utterance: str) -> str:
@@ -264,48 +272,55 @@ def render_plan_dial_answer(*, brief: str, plan: dict, lang: str) -> str:
 
     if lang == "ar":
         lines = [
-            f"**تمت صياغة الخطة {short_id}** — {_eastern(n)} خطوات، بانتظار موافقتك. "
-            "لم يُنفَّذ أي شيء بعد.",
+            f"**تمت صياغة الخطة {short_id}** — {_eastern(n)} خطوات، بانتظار موافقتك.",
+            "لم يُنفَّذ أي شيء بعد. راجع الخطوات ثم اعتمد الخطة من **المهام** قبل التشغيل.",
             "",
         ]
         for i, s in enumerate(steps, 1):
-            lines.append(f"{_eastern(i)}. {_step_line(s, lang)}")
+            lines.append(f"- **{_eastern(i)}.** {_step_line(s, lang)}")
         lines.append("")
-        if composite:
+        if any(str((s.get("tool_args") or {}).get("api_name") or "").startswith("submit_") for s in steps):
+            if composite:
+                lines.append(
+                    "**الشرط:** خطوة التقديم مربوطة بنتيجة القراءة — إذا ظهر قرض مفتوح تتوقف الخطة قبل التقديم."
+                )
+            if missing:
+                names = "، ".join(_AR_SLOT.get(k, k) for k in missing)
+                lines.append(f"**حقول تُستكمل عند الاعتماد:** {names} — لن أخترعها.")
             lines.append(
-                "**الشرط:** خطوة التقديم مربوطة بنتيجة القراءة — إذا ظهر قرض مفتوح "
-                "تتوقف الخطة قبل التقديم."
+                "كل خطوة تقديم تطلب موافقتك قبل أن تصل إلى النظام، ثم تستمر المراجعة لدى مديرك في «فريقي»."
             )
-        if missing:
-            names = "، ".join(_AR_SLOT.get(k, k) for k in missing)
-            lines.append(f"**حقول تُستكمل عند الاعتماد:** {names} — لن أخترعها.")
-        lines.append(
-            "راجع الخطة واعتمدها من لوحة **المهام**؛ كل خطوة تقديم تطلب موافقتك "
-            "قبل أن تصل إلى النظام، ثم تستمر المراجعة لدى مديرك في «فريقي»."
-        )
+        else:
+            lines.append("**قراءة فقط** — لن يُقدَّم أي قرض. التشغيل يبدأ بعد اعتمادك للخطة.")
         return "\n".join(lines)
 
     lines = [
-        f"**Plan {short_id} drafted** — {n} steps, pending your approval. "
-        "Nothing has run yet.",
+        f"**Plan {short_id} drafted** — {n} steps, waiting for your approval.",
+        "Nothing has run yet. Review the steps, then approve the plan in **Tasks** before it runs.",
         "",
     ]
     for i, s in enumerate(steps, 1):
-        lines.append(f"{i}. {_step_line(s, lang)}")
+        lines.append(f"- **{i}.** {_step_line(s, lang)}")
     lines.append("")
-    if composite:
-        lines.append(
-            "**Guard:** the submit step is tied to the read result — if an open "
-            "loan shows up, the plan stops before submitting."
-        )
-    if missing:
-        names = ", ".join(_EN_SLOT.get(k, k) for k in missing)
-        lines.append(f"**Filled at approval:** {names} — I will not invent them.")
-    lines.append(
-        "Review and approve it in the **Tasks** panel; each submit step asks "
-        "for your consent before it reaches the system, then your manager "
-        "reviews in Team."
+    has_submit = any(
+        str((s.get("tool_args") or {}).get("api_name") or "").startswith("submit_")
+        for s in steps
     )
+    if has_submit:
+        if composite:
+            lines.append(
+                "**Guard:** the submit step is tied to the read result — if an open "
+                "loan shows up, the plan stops before submitting."
+            )
+        if missing:
+            names = ", ".join(_EN_SLOT.get(k, k) for k in missing)
+            lines.append(f"**Filled at approval:** {names} — I will not invent them.")
+        lines.append(
+            "Each submit step asks for your consent before it reaches the system, "
+            "then your manager reviews in Team."
+        )
+    else:
+        lines.append("**Read only** — no loan will be submitted. It runs only after you approve.")
     return "\n".join(lines)
 
 

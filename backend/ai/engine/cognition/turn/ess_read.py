@@ -1,27 +1,44 @@
 """ESS self-read contract — balance vs history (ADR-0047 host identity).
 
-Hard rule for Chat/Agent self-service reads:
+Hard rule for Chat/Agent self-service reads across ESS domains:
 
-  Self topic (leave / loan / payslip) → one canonical HOST GET →
+  Exactly one matched domain → one canonical HOST GET →
   restate host fields only → never invent zeros from an empty sibling list.
 
-| Domain  | Balance / entitlement API     | History / records API   |
-|---------|-------------------------------|-------------------------|
-| leave   | get_my_leave_balance          | list_my_leave           |
-| loan    | (eligibility via list/detail) | list_my_loans           |
-| payslip | list_my_payslips (lines)      | list_my_payslips        |
+  Zero or multiple matched domains → do not bind (clarify / multi-tool /
+  normal spine). Domain twins live in ``ESS_SELF_DOMAINS`` — add a domain
+  there; do not special-case pairs in the binder.
 
-Empty ``list_my_leave`` means *no leave requests*, not *zero remaining days*.
-Empty ``list_my_loans`` means *no loans*, not invented installment figures.
+Empty history list ≠ zero entitlement/balance for that domain.
 """
 from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Pattern
 
 from ai.engine.cognition.plan.process_dial import strip_pulse_mode_prefix
+from ai.engine.cognition.turn.ess_read_i18n import (
+    ASPECT_FOLLOWUP_NEEDLES,
+    ATTENDANCE_AR_TOKENS,
+    BARE_PLACE_AR,
+    COMPREHENSIVE_NEEDLES,
+    EMPTY_BALANCE_TEXT,
+    EMPTY_RENDER,
+    HONEST_EMPTY,
+    LEAVE_HISTORY_AR,
+    LEAVE_TOPIC_AR,
+    LEAVE_ZERO_CLAIM_AR,
+    LOAN_SELF_AR,
+    LOAN_TOPIC_AR,
+    NAMED_EMP_AR,
+    PAYSLIP_TOPIC_AR,
+    UNAUTHORIZED_TEXT,
+    any_needle,
+)
 from ai.engine.cognition.turn.navigation import detect_lang
+from ai.engine.text.word_match import contains_any_phrase, has_any_word
 
 # ── Canonical APIs ──────────────────────────────────────────────────────────
 
@@ -29,42 +46,20 @@ LEAVE_BALANCE_API = "get_my_leave_balance"
 LEAVE_HISTORY_API = "list_my_leave"
 LOAN_HISTORY_API = "list_my_loans"
 PAYSLIP_API = "list_my_payslips"
+ATTENDANCE_API = "list_my_attendance"
 
 BALANCE_APIS = frozenset({LEAVE_BALANCE_API, PAYSLIP_API})
-HISTORY_APIS = frozenset({LEAVE_HISTORY_API, LOAN_HISTORY_API, PAYSLIP_API})
+HISTORY_APIS = frozenset({
+    LEAVE_HISTORY_API, LOAN_HISTORY_API, PAYSLIP_API, ATTENDANCE_API,
+})
 
 # ── Topic detectors (EN + AR, hamza-tolerant) ───────────────────────────────
 
 _LEAVE_TOPIC_RE = re.compile(
     r"("
-    r"\bleaves?\b|\bvacation\b|\bpto\b|\btime[\s-]?off\b|"
+    r"\bleav\w*\b|\bleaves?\b|\bvacation|\bpto\b|\btime[\s-]?off\b|"
     r"leave\s+balance|remaining\s+leave|leave\s+remaining|"
-    r"how\s+much\s+leave|annual\s+leave|leave\s+entitlement|"
-    # Arabic stem إجاز/اجاز + typo tolerance (الاجازلت, الإجازات, …)
-    r"رصيد\s*ال?[اأإ]?جاز\w{0,4}|"
-    r"[اأإ]?جاز\w{0,4}\s*متبقي|"
-    r"ال?[اأإ]?جاز\w{0,4}\s*المتبقي|"
-    r"[اأإ]?جاز\w{0,4}ي|"
-    r"عن\s*ال?[اأإ]?جاز\w{0,4}|"
-    r"ال?[اأإ]?جاز\w{0,4}"
-    r")",
-    re.IGNORECASE,
-)
-
-_LEAVE_ZERO_CLAIM_RE = re.compile(
-    r"("
-    r"رصيد\s*(?:ال)?(?:إ|ا)?جاز\w{0,4}\s*(?:المتبقي)?\s*:?\s*0|"
-    r"(?:المتبقي|المستخدمة?|المعلقة?)\s*:?\s*0\s*يوم|"
-    r"remaining\s*(?:leave\s*)?(?:balance\s*)?[:=]?\s*0|"
-    r"(?:used|pending)\s*[:=]?\s*0\s*day"
-    r")",
-    re.IGNORECASE,
-)
-
-_COMPREHENSIVE_PICK_RE = re.compile(
-    r"("
-    r"\b(?:comprehensive|full\s+report|all\s+(?:of\s+)?(?:it|them)|everything)\b|"
-    r"تقرير\s*شامل|شامل|كل\s*(?:شي|شيء)|التفاصيل\s*كلها"
+    r"how\s+much\s+leave|annual\s+leave|leave\s+entitlement"
     r")",
     re.IGNORECASE,
 )
@@ -72,156 +67,291 @@ _COMPREHENSIVE_PICK_RE = re.compile(
 _LEAVE_HISTORY_RE = re.compile(
     r"("
     r"\bleave\s+(?:requests?|history|records?|applications?)\b|"
-    r"\bmy\s+leave\s+(?:requests?|history)\b|"
-    r"طلبات?\s*ال?[اإ]جاز|سجل\s*ال?[اإ]جاز|إجازاتي\s*السابق"
+    r"\bmy\s+previous\s+leave\b|"
+    r"\bmy\s+leave\s+(?:requests?|history|applications?)\b|"
+    r"\b(?:previous|past)\s+leave\b|"
+    r"\blist\s+my\s+leave\b"
     r")",
     re.IGNORECASE,
 )
 
-_LOAN_TOPIC_RE = re.compile(
-    r"("
-    r"\bloans?\b|\binstallment\b|"
-    r"قرض|قروض|سلف[ةه]?|أقساط"
-    r")",
-    re.IGNORECASE,
-)
-
-_LOAN_SELF_RE = re.compile(
-    r"(?i)("
-    r"\bmy\s+loans?\b|"
-    r"قروضي|سلفتي|أقساطي|"
-    r"ما\s*(?:هي|هو)?\s*قروضي"
-    r")"
+_LOAN_TOPIC_WORDS = ("loan", "loans", "installment", "installments", "advance", "advances")
+_LOAN_SELF_PHRASES = (
+    "my loan", "my loans", "my advance", "my advances",
+    "my installment", "my installments",
 )
 
 _PAYSLIP_TOPIC_RE = re.compile(
     r"("
     r"\bpayslips?\b|\bnet\s+pay\b|\btake[\s-]?home\b|"
     r"\blast\s+(?:month'?s?\s+)?(?:pay|salary|payslip)\b|"
-    r"قسيمة|قسائم|صافي\s*ال?راتب|راتبي\s*(?:الشهر|الأخير)?"
+    r"\bmy\s+salary\b|\bsalary\b"
     r")",
     re.IGNORECASE,
 )
 
-_NAMED_EMP_RE = re.compile(
-    r"(?i)("
-    r"\bemp[_\s-]?\d+\b|"
-    r"\bemployee\s*(?:no\.?|number|#|:)?\s*\d+|"
-    r"\bfor\s+(?!me\b)[\w\u0600-\u06FF]|"
-    r"'s\s+(?:leave|annual|sick|balance|loan|payslip)"
-    r")",
+_ATTENDANCE_EN_NEEDLES = (
+    "attendance", "clock in", "clock-in", "check in", "check-in",
 )
 
-_HONEST_EMPTY = {
-    "en": {
-        "leave_history": (
-            "You have no leave requests on record yet. "
-            "That is not the same as a zero leave balance — "
-            "ask for your leave balance if you want remaining days by type."
-        ),
-        "loan_history": (
-            "You have no loans on record. "
-            "I will not invent installment or balance figures."
-        ),
-        "payslip": (
-            "No committed payslip lines were found for you for that period. "
-            "I will not invent net-pay figures."
-        ),
-    },
-    "ar": {
-        "leave_history": (
-            "لا توجد طلبات إجازة مسجّلة حتى الآن. "
-            "هذا ليس معناه أن رصيد الإجازات صفر — "
-            "اطلب رصيد الإجازات إن أردت الأيام المتبقية حسب النوع."
-        ),
-        "loan_history": (
-            "لا توجد قروض مسجّلة لك. "
-            "لن أخترع أرقام أقساط أو أرصدة."
-        ),
-        "payslip": (
-            "لا توجد بنود قسيمة راتب معتمدة لهذه الفترة. "
-            "لن أخترع أرقام صافي الراتب."
-        ),
-    },
-}
+_NAMED_EMP_RE = re.compile(
+    r"("
+    r"\bemp[_\s-]?\d+\b|"
+    r"\bemployee\s*(?:no\.?|number|#|:)?\s*\d+|"
+    r"\bfor\s+(?!me\b)\w+|"
+    r"'s\s+(?:leave|annual|sick|balance|loan|payslip)|"
+    r"\bdoes\s+[A-Z][\w'-]+"
+    r")",
+    re.IGNORECASE,
+)
+
+_LEAVE_ZERO_CLAIM_RE = re.compile(
+    r"("
+    r"remaining\s*(?:leave\s*)?(?:balance\s*)?[:=]?\s*0|"
+    r"(?:used|pending)\s*[:=]?\s*0\s*day"
+    r")",
+    re.IGNORECASE,
+)
+
+_PROPER_NAME_STOP = frozenset({
+    "What", "How", "Show", "Where", "When", "Who", "Why", "Tell", "Please",
+    "Can", "Could", "Would", "Should", "May", "My", "The", "A", "An", "OK",
+    "Remaining", "List", "About", "Does", "Did", "Is", "Are", "I", "We",
+    "You", "Leave", "Loan", "Annual", "Sick", "Your", "Our", "Their",
+})
+
+
+def empty_render_text(key: str | None, language: str = "en") -> str | None:
+    """Fixed sentence for a catalog empty_render key. None if the key is unknown."""
+    row = EMPTY_RENDER.get(str(key or "").strip())
+    if not row:
+        return None
+    lang = "ar" if str(language or "en").casefold().startswith("ar") else "en"
+    return row[lang]
+
+
+@dataclass(frozen=True)
+class EssSelfDomain:
+    """One ESS self-read twin (balance vs history).
+
+    Register new domains here — binder logic stays domain-agnostic.
+    """
+
+    id: str
+    balance_api: str | None
+    history_api: str | None
+    topic_re: Pattern[str] | None = None
+    history_re: Pattern[str] | None = None
+    #: When set, preferred bind requires a first-person hit (e.g. loans FAQ).
+    self_re: Pattern[str] | None = None
+    topic_words: tuple[str, ...] = ()
+    self_phrases: tuple[str, ...] = ()
+    topic_needles: tuple[str, ...] = ()
+    history_needles: tuple[str, ...] = ()
+    self_needles: tuple[str, ...] = ()
+    honesty_key: str = "payslip"
+
+    def topic_match(self, text: str) -> bool:
+        if self.id == "attendance":
+            return _attendance_topic(text)
+        raw = text or ""
+        if self.topic_re is not None and self.topic_re.search(raw):
+            return True
+        if self.topic_words and has_any_word(raw, self.topic_words):
+            return True
+        return any_needle(raw, self.topic_needles)
+
+    def history_match(self, text: str) -> bool:
+        raw = text or ""
+        if self.history_re and self.history_re.search(raw):
+            return True
+        return any_needle(raw, self.history_needles)
+
+    def self_match(self, text: str) -> bool:
+        if self.self_re is None and not self.self_needles:
+            return True
+        raw = text or ""
+        if self.self_re and self.self_re.search(raw):
+            return True
+        if self.self_phrases and contains_any_phrase(raw, self.self_phrases):
+            return True
+        return any_needle(raw, self.self_needles)
+
+    def preferred_api(self, text: str) -> str | None:
+        forms = _forms(text)
+        if any(self.history_match(form) for form in forms) and self.history_api:
+            return self.history_api
+        if (self.self_re is not None or self.self_phrases) and not any(
+            self.self_match(form) for form in forms
+        ):
+            return None
+        if self.balance_api:
+            return self.balance_api
+        return self.history_api
+
+
+#: Instance-local catalog. Add attendance / GOSI / … as twins without binder ifs.
+ESS_SELF_DOMAINS: tuple[EssSelfDomain, ...] = (
+    EssSelfDomain(
+        id="leave",
+        balance_api=LEAVE_BALANCE_API,
+        history_api=LEAVE_HISTORY_API,
+        topic_re=_LEAVE_TOPIC_RE,
+        history_re=_LEAVE_HISTORY_RE,
+        topic_needles=LEAVE_TOPIC_AR,
+        history_needles=LEAVE_HISTORY_AR,
+        honesty_key="leave_history",
+    ),
+    EssSelfDomain(
+        id="loan",
+        balance_api=None,
+        history_api=LOAN_HISTORY_API,
+        topic_words=_LOAN_TOPIC_WORDS,
+        self_phrases=_LOAN_SELF_PHRASES,
+        topic_needles=LOAN_TOPIC_AR,
+        self_needles=LOAN_SELF_AR,
+        honesty_key="loan_history",
+    ),
+    EssSelfDomain(
+        id="payslip",
+        balance_api=PAYSLIP_API,
+        history_api=PAYSLIP_API,
+        topic_re=_PAYSLIP_TOPIC_RE,
+        topic_needles=PAYSLIP_TOPIC_AR,
+        honesty_key="payslip",
+    ),
+    EssSelfDomain(
+        id="attendance",
+        balance_api=ATTENDANCE_API,
+        history_api=ATTENDANCE_API,
+        # topic_re unused — topic_match uses _attendance_topic (no new compile).
+        topic_re=_PAYSLIP_TOPIC_RE,
+        honesty_key="attendance",
+    ),
+)
+
+_DOMAIN_BY_ID = {d.id: d for d in ESS_SELF_DOMAINS}
 
 
 def _norm(text: str) -> str:
     return strip_pulse_mode_prefix(text or "").strip()
 
 
+def _forms(text: str | None) -> tuple[str, ...]:
+    """Raw utterance plus the shared Arabic fold. Match either; do not replace."""
+    from ai.engine.text.normalize import normalize_text
+
+    raw = _norm(text or "")
+    if not raw:
+        return ()
+    folded = normalize_text(raw)
+    if folded == raw:
+        return (raw,)
+    return (raw, folded)
+
+
 def is_named_employee_ask(text: str | None) -> bool:
-    return bool(_NAMED_EMP_RE.search(_norm(text or "")))
+    raw = _norm(text or "")
+    if _NAMED_EMP_RE.search(raw) or any_needle(raw, NAMED_EMP_AR):
+        return True
+    nouns = {"leave", "annual", "sick", "balance", "loan", "payslip", "loans"}
+    tokens = raw.split()
+    for i, tok in enumerate(tokens):
+        clean = tok.strip(".,?؟!'\"")
+        if clean in _PROPER_NAME_STOP:
+            continue
+        if (
+            len(clean) >= 3
+            and clean[0].isupper()
+            and clean[1:].islower()
+            and any(t.casefold() in nouns for t in tokens[i + 1 : i + 4])
+        ):
+            return True
+    return False
 
 
-def leave_topic_asked(text: str | None) -> bool:
-    return bool(_LEAVE_TOPIC_RE.search(_norm(text or "")))
+def _attendance_topic(text: str) -> bool:
+    low = (text or "").casefold()
+    if any(needle in low for needle in _ATTENDANCE_EN_NEEDLES):
+        return True
+    if "hour" in low and "month" in low:
+        return True
+    return any(tok in (text or "") for tok in ATTENDANCE_AR_TOKENS)
 
 
-def leave_history_asked(text: str | None) -> bool:
-    return bool(_LEAVE_HISTORY_RE.search(_norm(text or "")))
+def _is_aspect_followup(text: str) -> bool:
+    low = (text or "").casefold().strip()
+    raw = (text or "").strip()
+    for needle in ASPECT_FOLLOWUP_NEEDLES:
+        if needle.casefold() in low or needle in raw:
+            return True
+    return False
 
 
-def loan_topic_asked(text: str | None) -> bool:
-    return bool(_LOAN_TOPIC_RE.search(_norm(text or "")))
+def _is_comprehensive_pick(text: str) -> bool:
+    low = (text or "").casefold()
+    raw = text or ""
+    return any(n in low or n in raw for n in COMPREHENSIVE_NEEDLES)
 
 
-def loan_history_asked(text: str | None) -> bool:
-    """True for first-person loan list asks (not 'what types of loans')."""
-    return bool(_LOAN_SELF_RE.search(_norm(text or "")))
+def get_self_domain(domain_id: str) -> EssSelfDomain | None:
+    return _DOMAIN_BY_ID.get(str(domain_id or "").strip())
 
 
-def payslip_topic_asked(text: str | None) -> bool:
-    return bool(_PAYSLIP_TOPIC_RE.search(_norm(text or "")))
+def domain_topic_asked(domain_id: str, text: str | None) -> bool:
+    d = get_self_domain(domain_id)
+    return bool(d and any(d.topic_match(form) for form in _forms(text)))
+
+
+def domain_history_asked(domain_id: str, text: str | None) -> bool:
+    d = get_self_domain(domain_id)
+    return bool(d and any(d.history_match(form) for form in _forms(text)))
+
+
+def matching_self_domains(text: str | None) -> list[EssSelfDomain]:
+    """Domains whose topic detector hits ``text`` (order = catalog order)."""
+    forms = _forms(text)
+    if not forms:
+        return []
+    return [
+        d for d in ESS_SELF_DOMAINS if any(d.topic_match(form) for form in forms)
+    ]
 
 
 def preferred_self_api(text: str | None) -> str | None:
-    """Canonical host API for a self ESS read ask."""
+    """Canonical host API when exactly one ESS domain matches."""
     t = _norm(text or "")
     if not t or is_named_employee_ask(t):
         return None
-    # History before balance — «طلبات الإجازة» must not become get_my_leave_balance.
-    if leave_history_asked(t):
-        return LEAVE_HISTORY_API
-    if leave_topic_asked(t):
-        return LEAVE_BALANCE_API
-    if loan_history_asked(t):
-        return LOAN_HISTORY_API
-    if payslip_topic_asked(t):
-        return PAYSLIP_API
-    return None
+    domains = matching_self_domains(t)
+    if len(domains) != 1:
+        return None
+    return domains[0].preferred_api(t)
 
 
 def ess_self_read_topic(text: str | None) -> str | None:
-    """Return ``leave`` | ``loan`` | ``payslip`` for self-service topic asks.
-
-    Nav skip uses broader loan_topic so «قروض؟» does not open UI; preferred
-    API still requires first-person for loans.
-    """
+    """Return domain id when exactly one domain matches; else None."""
     t = _norm(text or "")
     if not t or is_named_employee_ask(t):
         return None
-    if leave_history_asked(t) or leave_topic_asked(t):
-        return "leave"
-    if loan_history_asked(t) or loan_topic_asked(t):
-        return "loan"
-    if payslip_topic_asked(t):
-        return "payslip"
+    hits = matching_self_domains(t)
+    if len(hits) == 1:
+        return hits[0].id
     return None
 
 
-_BARE_PLACE_RE = re.compile(
-    r"^(?:"
-    r"leave|leaves|loan|loans|payroll|payslips?|attendance|home|"
-    r"إجازة|اجازة|إجازات|اجازات|قرض|قروض|رواتب|راتب|قسائم|قسيمة|حضور"
-    r")\s*[?؟!]*$",
-    re.IGNORECASE,
-)
+_BARE_PLACE_EN = frozenset({
+    "leave", "leaves", "loan", "loans", "payroll", "payslip", "payslips",
+    "attendance", "home",
+})
 
 
 def is_bare_place_noun(text: str | None) -> bool:
     """True for terse destination nouns («leave», «قروض») — still navigate."""
-    return bool(_BARE_PLACE_RE.match(_norm(text or "")))
+    stripped = _norm(text or "").strip("?؟!").casefold()
+    if stripped in {word.casefold() for word in _BARE_PLACE_EN}:
+        return True
+    return stripped in {word.casefold() for word in BARE_PLACE_AR}
 
 
 def should_skip_module_nav(text: str | None) -> bool:
@@ -229,58 +359,149 @@ def should_skip_module_nav(text: str | None) -> bool:
     t = _norm(text or "")
     if not t or is_bare_place_noun(t):
         return False
-    return preferred_self_api(t) is not None or (
-        leave_topic_asked(t) and not is_named_employee_ask(t)
+    if preferred_self_api(t) is not None:
+        return True
+    # Single-domain topic read even when preferred is None (loan FAQ).
+    domains = matching_self_domains(t)
+    return len(domains) == 1 and not is_named_employee_ask(t)
+
+
+def domains_in_recent_history(history: list | None) -> list[EssSelfDomain]:
+    """Unique domains mentioned in recent turns (catalog order)."""
+    seen: set[str] = set()
+    ordered: list[EssSelfDomain] = []
+    for msg in reversed(history or []):
+        if not isinstance(msg, dict):
+            continue
+        content = str(msg.get("content") or "")
+        for d in matching_self_domains(content):
+            if d.id not in seen:
+                seen.add(d.id)
+                ordered.append(d)
+        if len(ordered) >= len(ESS_SELF_DOMAINS):
+            break
+    # Preserve catalog order for stability.
+    return [d for d in ESS_SELF_DOMAINS if d.id in seen]
+
+
+def bound_ess_self_api(
+    text: str | None,
+    *,
+    history: list | None = None,
+) -> str | None:
+    """API for a Chat-bound ESS self-read, or None (fall through).
+
+    Rules (domain-agnostic):
+    - Named-employee / third-person → None.
+    - A day-count or a start-date question → None (not a balance GET).
+    - Exactly one domain in the utterance → that domain's preferred API.
+    - Multiple domains in the utterance → None (not a single bound GET).
+    - Aspect / comprehensive follow-up with exactly one domain in recent
+      history → that domain's balance API (or history if no balance twin).
+    """
+    t = _norm(text or "")
+    if not t or is_named_employee_ask(t):
+        return None
+    from ai.engine.cognition.turn.handoff_agent import is_slot_status_ask
+    from ai.engine.cognition.turn.zero_llm import is_calendar_not_balance
+
+    if is_calendar_not_balance(t) or is_slot_status_ask(t):
+        return None
+
+    domains = matching_self_domains(t)
+    if len(domains) > 1:
+        return None
+    if len(domains) == 1:
+        return domains[0].preferred_api(t)
+
+    # No domain in this utterance — aspect follow-up against thread focus.
+    if not (_is_aspect_followup(t) or _is_comprehensive_pick(t)):
+        return None
+    prior = domains_in_recent_history(history)
+    if len(prior) != 1:
+        return None
+    d = prior[0]
+    return d.balance_api or d.history_api
+
+
+def build_ess_self_tool_call(api_name: str, turn_id: str = "") -> dict[str, Any]:
+    """Injected ``call_host_api`` for a bound ESS self-read."""
+    import json as _json
+
+    suffix = (turn_id or "ess")[:8]
+    api = str(api_name or "").strip()
+    return {
+        "id": f"call_ess_{suffix}",
+        "function": {
+            "name": "call_host_api",
+            "arguments": _json.dumps({
+                "api_name": api,
+                "explanation": f"Bound ESS self-read: {api}",
+            }),
+        },
+    }
+
+
+def answer_bound_ess_tools(
+    completed_tools: list | None,
+    *,
+    api_name: str,
+    user_message: str,
+) -> str:
+    """0-LLM restatement or honesty from completed bound tools."""
+    from ai.engine.cognition.plan.export_bind import render_bound_catalog_read
+
+    lang = "ar" if detect_lang(user_message or "") == "ar" else "en"
+    api = str(api_name or "").strip()
+    for item in completed_tools or []:
+        if not isinstance(item, dict):
+            continue
+        if item.get("error"):
+            continue
+        data = _unwrap(item.get("result"))
+        if isinstance(data, dict) and data.get("unauthorized"):
+            return UNAUTHORIZED_TEXT[lang]
+        empty = empty_history_misread([item], user_message=user_message)
+        if empty is not None and api in HISTORY_APIS and api not in BALANCE_APIS:
+            return str(empty.get("text") or "")
+        restated = render_bound_catalog_read(item, api, lang)
+        if restated:
+            from ai.engine.cognition.turn.grounding import ungrounded_numbers
+
+            bad = ungrounded_numbers(restated, [data])
+            if bad:
+                # Prefer catalog empty honesty over a numeral that never appeared.
+                for d in ESS_SELF_DOMAINS:
+                    if api == d.history_api and d.honesty_key in HONEST_EMPTY[lang]:
+                        return HONEST_EMPTY[lang][d.honesty_key]
+                return empty_render_text("no_balance_configured", lang) or restated
+            return restated
+    if api == LEAVE_BALANCE_API:
+        return EMPTY_BALANCE_TEXT[lang]
+    for d in ESS_SELF_DOMAINS:
+        if api in {d.balance_api, d.history_api}:
+            return HONEST_EMPTY[lang][d.honesty_key]
+    return (
+        "لم أتمكن من قراءة البيانات من النظام."
+        if lang == "ar"
+        else "Could not read that data from the host."
     )
 
 
 def preferred_admin_leave_api(text: str | None) -> str | None:
     """Named-employee leave remaining → entitlements list."""
     t = _norm(text or "")
-    if not leave_topic_asked(t) or not is_named_employee_ask(t):
+    if not domain_topic_asked("leave", t) or not is_named_employee_ask(t):
         return None
     return "list_leave_entitlements"
 
 
 def leave_zero_claim_in_text(text: str | None) -> bool:
     """True when copy invents remaining/used/pending = 0 days."""
-    return bool(_LEAVE_ZERO_CLAIM_RE.search(text or ""))
-
-
-def last_results_have_leave_balance(last_results: list | None) -> bool:
-    for row in last_results or []:
-        if not isinstance(row, dict):
-            continue
-        blob = f"{row.get('api') or ''} {row.get('digest') or ''} {row.get('tool') or ''}"
-        if LEAVE_BALANCE_API in blob:
-            return True
-    return False
-
-
-def last_results_only_empty_leave_history(last_results: list | None) -> bool:
-    """True when thread saw empty list_my_leave and never get_my_leave_balance."""
-    saw_empty_history = False
-    for row in last_results or []:
-        if not isinstance(row, dict):
-            continue
-        blob = f"{row.get('api') or ''} {row.get('digest') or ''}"
-        if LEAVE_BALANCE_API in blob:
-            return False
-        if LEAVE_HISTORY_API in blob and (
-            "count=0" in blob or "results=[]" in blob or "No leave" in blob
-        ):
-            saw_empty_history = True
-    return saw_empty_history
-
-
-def leave_in_recent_history(history: list | None) -> bool:
-    for msg in reversed(history or []):
-        if not isinstance(msg, dict):
-            continue
-        content = str(msg.get("content") or "")
-        if leave_topic_asked(content):
-            return True
-    return False
+    raw = text or ""
+    return bool(
+        _LEAVE_ZERO_CLAIM_RE.search(raw) or any_needle(raw, LEAVE_ZERO_CLAIM_AR)
+    )
 
 
 def tool_calls_include_api(tool_calls: list | None, api_name: str) -> bool:
@@ -308,48 +529,6 @@ def tool_calls_include_api(tool_calls: list | None, api_name: str) -> bool:
         if needle in blob:
             return True
     return False
-
-
-def leave_balance_force_needed(
-    user_message: str | None,
-    *,
-    history: list | None = None,
-    tool_calls: list | None = None,
-    last_results: list | None = None,
-) -> bool:
-    """Chat must call get_my_leave_balance — never invent 0 from empty requests."""
-    t = _norm(user_message or "")
-    if not t or is_named_employee_ask(t) or leave_history_asked(t):
-        return False
-    wants_balance = preferred_self_api(t) == LEAVE_BALANCE_API or leave_topic_asked(t)
-    if not wants_balance:
-        # «تقرير شامل» after a salary+leave brief still needs balance rows.
-        if _COMPREHENSIVE_PICK_RE.search(t) and leave_in_recent_history(history):
-            wants_balance = True
-    if not wants_balance:
-        return False
-    if tool_calls_include_api(tool_calls, LEAVE_BALANCE_API):
-        return False
-    if last_results_have_leave_balance(last_results):
-        return False
-    return True
-
-
-def build_leave_balance_tool_call(turn_id: str = "") -> dict[str, Any]:
-    """Injected call_host_api for Chat leave-balance force (weather twin)."""
-    import json as _json
-
-    suffix = (turn_id or "ess")[:8]
-    return {
-        "id": f"call_leave_bal_{suffix}",
-        "function": {
-            "name": "call_host_api",
-            "arguments": _json.dumps({
-                "api_name": LEAVE_BALANCE_API,
-                "explanation": "Fetch self leave entitlements/remaining by type",
-            }),
-        },
-    }
 
 
 def _unwrap(raw: Any) -> Any:
@@ -405,15 +584,12 @@ def empty_history_misread(
     *,
     user_message: str,
 ) -> dict[str, Any] | None:
-    """When history list is empty but user asked balance/topic — honest reply.
-
-    Returns ``{decision, text, gate}`` for 0-LLM surface, or None.
-    """
+    """When history list is empty but user asked balance/topic — honest reply."""
     topic = ess_self_read_topic(user_message)
     if not topic:
-        return None
-    # Balance ask + empty leave *records* → do not invent zero remaining.
-    want_balance = topic == "leave" and not leave_history_asked(user_message)
+        # Still honesty when tools are empty history for a known twin.
+        pass
+    want_balance = topic == "leave" and not domain_history_asked("leave", user_message)
     lang = "ar" if detect_lang(user_message or "") == "ar" else "en"
     for item in completed_tools or []:
         if not isinstance(item, dict) or item.get("error"):
@@ -422,30 +598,23 @@ def empty_history_misread(
         data = _unwrap(item.get("result"))
         if not _payload_empty_list(data):
             continue
-        if api == LEAVE_HISTORY_API and (want_balance or topic == "leave"):
-            # Empty records must never become "remaining = 0".
-            if want_balance:
-                return {
-                    "decision": "answer",
-                    "text": _HONEST_EMPTY[lang]["leave_history"],
-                    "gate": "ess_empty_leave_history",
-                    "prefer_api": LEAVE_BALANCE_API,
-                }
+        if api == LEAVE_HISTORY_API and (want_balance or topic == "leave" or topic is None):
             return {
                 "decision": "answer",
-                "text": _HONEST_EMPTY[lang]["leave_history"],
+                "text": HONEST_EMPTY[lang]["leave_history"],
                 "gate": "ess_empty_leave_history",
+                "prefer_api": LEAVE_BALANCE_API,
             }
-        if api == LOAN_HISTORY_API and topic == "loan":
+        if api == LOAN_HISTORY_API and (topic == "loan" or topic is None):
             return {
                 "decision": "answer",
-                "text": _HONEST_EMPTY[lang]["loan_history"],
+                "text": HONEST_EMPTY[lang]["loan_history"],
                 "gate": "ess_empty_loan_history",
             }
-        if api == PAYSLIP_API and topic == "payslip":
+        if api == PAYSLIP_API and (topic == "payslip" or topic is None):
             return {
                 "decision": "answer",
-                "text": _HONEST_EMPTY[lang]["payslip"],
+                "text": HONEST_EMPTY[lang]["payslip"],
                 "gate": "ess_empty_payslip",
             }
     return None

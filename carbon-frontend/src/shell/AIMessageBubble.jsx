@@ -25,8 +25,6 @@ import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DownloadIcon from '@mui/icons-material/Download';
 import EditIcon from '@mui/icons-material/Edit';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import ThumbDownAltIcon from '@mui/icons-material/ThumbDownAlt';
@@ -58,6 +56,7 @@ import { KeyValueOutput } from '../components/ai/StepOutputRenderer';
 import MarkdownMessage from './MarkdownMessage';
 import EnvelopeMessage from './EnvelopeMessage';
 import LongContent from './LongContent';
+import { splitAnswerAppendix } from './splitAnswerAppendix';
 import NLRuleTestCard from './NLRuleTestCard';
 import InvestigationCard from './InvestigationCard';
 import ReportDraftCard from './ReportDraftCard';
@@ -227,52 +226,9 @@ function TooltipLines({ lines }) {
   );
 }
 
-// Phase I2-F (RULE_29) — collapsed-by-default "Code used" disclosure for
-// code-sandbox results. Mirrors the PlanningHeader pattern: a real MUI Button
-// (Enter/Space toggle) with aria-expanded, and an LTR <pre> for code + stdout.
-// Always defaults collapsed (no localStorage persistence).
-function CodeUsedDisclosure({ code, stdout, label }) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <Box sx={{ mt: 0.5 }}>
-      <Button
-        size="small"
-        variant="outlined"
-        color="inherit"
-        onClick={() => setExpanded((v) => !v)}
-        aria-expanded={expanded}
-        startIcon={expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-        sx={{ textTransform: 'none', py: 0.25, px: 1, fontSize: '0.75rem' }}
-      >
-        {label}
-      </Button>
-      {expanded && (
-        <Paper variant="outlined" sx={{ mt: 0.5, p: 1 }}>
-          <Box
-            component="pre"
-            dir="ltr"
-            sx={{
-              m: 0,
-              fontSize: '0.6875rem',
-              lineHeight: 1.45,
-              whiteSpace: 'pre-wrap',
-              overflow: 'auto',
-              maxHeight: 200,
-            }}
-          >
-            {stdout ? `${code}\n\n${stdout}` : code}
-          </Box>
-        </Paper>
-      )}
-    </Box>
-  );
-}
-
-CodeUsedDisclosure.propTypes = {
-  code: PropTypes.string,
-  stdout: PropTypes.string,
-  label: PropTypes.string,
-};
+// Phase I2-F (RULE_29) — code-sandbox *outputs* (chart / table / value) may
+// render in Chat. Sandbox *source* never does (RULE_23 — employees must not
+// see engine code). Admin audit / logs remain the place to inspect what ran.
 
 function AIMessageBubble({
   message,
@@ -508,6 +464,12 @@ function AIMessageBubble({
     provenancePayload,
     message.sources,
   );
+  // RULE_23 — Chat never renders sandbox/engine code fences to employees.
+  // Keep charts/tables via code_result outputs; strip ```python/json dumps
+  // from the prose body so they cannot appear as markdown code blocks.
+  const operatorContent = isUser
+    ? message.content
+    : (splitAnswerAppendix(message.content).prose || message.content);
   const provenanceLines = [];
   if (provenancePayload && typeof provenancePayload === 'object') {
     if (provenancePayload.model) provenanceLines.push(`Model: ${provenancePayload.model}`);
@@ -778,6 +740,10 @@ function AIMessageBubble({
     // code_result defensively from the top-level field or metadata_json; the
     // backend has already run the sandbox (nothing is re-fetched here).
     const codeResult = message.code_result || message.metadata_json?.code_result;
+    // Prefer Answer Envelope Chart.js / Mermaid over sandbox matplotlib PNG.
+    const envelopeHasCharts = Array.isArray(envelope?.charts) && envelope.charts.length > 0;
+    const proseHasMermaid = typeof operatorContent === 'string'
+      && operatorContent.includes('```mermaid');
     if (codeResult) {
       const errorText = typeof codeResult.error === 'string' ? codeResult.error.trim() : '';
       if (errorText) {
@@ -792,10 +758,16 @@ function AIMessageBubble({
 
       const hasTable = Array.isArray(codeResult.table_rows) && codeResult.table_rows.length > 0;
       const hasResult = codeResult.result != null && codeResult.result !== '';
+      const showSandboxImage = Boolean(codeResult.image_b64)
+        && !envelopeHasCharts
+        && !proseHasMermaid;
+      if (!showSandboxImage && !hasTable && !hasResult) {
+        return null;
+      }
 
       return (
         <Box sx={{ mt: 1 }}>
-          {codeResult.image_b64 ? (
+          {showSandboxImage ? (
             <Box dir="ltr">
               <img
                 src={`data:image/png;base64,${codeResult.image_b64}`}
@@ -830,21 +802,11 @@ function AIMessageBubble({
                 {codeResult.table_rows.length} rows
               </Typography>
             </Box>
-          ) : hasResult ? (
-            <KeyValueOutput value={{ result: codeResult.result }} />
           ) : (
-            <Typography variant="caption" color="text.secondary">
-              {t('noOutput')}
-            </Typography>
+            <KeyValueOutput value={{ result: codeResult.result }} />
           )}
-
-          {codeResult.code ? (
-            <CodeUsedDisclosure
-              code={codeResult.code}
-              stdout={codeResult.stdout || ''}
-              label={t('codeUsed')}
-            />
-          ) : null}
+          {/* RULE_23 — never surface sandbox source in Chat. Charts / tables /
+              images above are the employee deliverable; code stays off-UI. */}
         </Box>
       );
     }
@@ -1277,14 +1239,14 @@ function AIMessageBubble({
             </Typography>
           )
         ) : (
-          <LongContent content={message.content}>
+          <LongContent content={operatorContent}>
             <Box
               ref={contentRef}
               data-testid="message-content"
               dir="auto"
-              sx={{ color: 'text.secondary', unicodeBidi: 'plaintext' }}
+              sx={{ color: 'text.primary', unicodeBidi: 'plaintext' }}
             >
-              <EnvelopeMessage envelope={envelope} fallbackContent={message.content} />
+              <EnvelopeMessage envelope={envelope} fallbackContent={operatorContent} />
             </Box>
           </LongContent>
         )}

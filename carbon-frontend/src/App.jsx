@@ -152,6 +152,7 @@ const PoliciesPage = React.lazy(() => import("./apps/people/PoliciesPage"));
 const PolicyDetailPage = React.lazy(() => import("./apps/people/PolicyDetailPage"));
 const MyDashboard = React.lazy(() => import("./apps/my/MyDashboard"));
 const MyLeave = React.lazy(() => import("./apps/my/MyLeave"));
+const MyPayslips = React.lazy(() => import("./apps/my/MyPayslips"));
 const MyAttendance = React.lazy(() => import("./apps/my/MyAttendance"));
 const MyRequests = React.lazy(() => import("./apps/my/MyRequests"));
 const RequestDetail = React.lazy(() => import("./apps/my/components/RequestDetail"));
@@ -379,6 +380,7 @@ export default function App() {
                 {/* My app — employee self-service. Bare namespace root resolves to MyDashboard. RULE_22. */}
                 <Route path="/my" element={<MyDashboard />} />
                 <Route path="/my/leave" element={<MyLeave />} />
+                <Route path="/my/payslips" element={<MyPayslips />} />
                 <Route path="/my/attendance" element={<MyAttendance />} />
                 <Route path="/my/requests" element={<MyRequests />} />
                 <Route path="/my/requests/:id" element={<RequestDetail />} />

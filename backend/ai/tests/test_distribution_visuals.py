@@ -68,6 +68,29 @@ def test_analyze_breakdown_renders_table_and_chart():
     assert "```mermaid" in charts
 
 
+def test_leave_balance_rows_chart_instead_of_a_sandbox_image():
+    usable = [{
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": "get_my_leave_balance"},
+        "result": {
+            "results": [
+                {"leave_type": "Annual", "remaining": 12},
+                {"leave_type": "Sick", "remaining": 5},
+            ],
+        },
+    }]
+    charts = _render_tool_charts(usable, user_message="create a report with charts")
+    assert "```mermaid" in charts
+    assert "Annual" in charts and "Sick" in charts
+    assert "12" in charts and "5" in charts
+    from ai.envelope_service import deterministic_envelope_blocks
+
+    blocks = deterministic_envelope_blocks(usable, user_message="create a report with charts")
+    assert blocks["charts"]
+    assert blocks["charts"][0].title == "Leave balance"
+    assert blocks["charts"][0].series[0]["data"][0] == ["Annual", 12]
+
+
 def test_salary_band_buckets():
     bands = dict(_salary_band_buckets([50, 150, 250, 350, 500, 800, 1500, 3000, 8000]))
     assert bands["≤100"] == 1

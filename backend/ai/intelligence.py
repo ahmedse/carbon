@@ -665,9 +665,9 @@ class CarbonIntelligence:
                         pulse_mode
                         if pulse_mode in ("ask", "plan")
                         else str(
-                            (conversation.task_payload_json or {}).get(
-                                "pulse_mode", "ask",
-                            )
+                            (conversation.task_payload_json or {}).get("pulse_mode")
+                            or (conversation.task_payload_json or {}).get("pulse_process")
+                            or "ask"
                         )
                     ),
                 )
@@ -3832,7 +3832,9 @@ class CarbonIntelligence:
             model=model,
             temperature=temperature,
             process_mode=str(
-                (conversation.task_payload_json or {}).get("pulse_mode", "ask")
+                (conversation.task_payload_json or {}).get("pulse_mode")
+                or (conversation.task_payload_json or {}).get("pulse_process")
+                or "ask"
             ),
         )
         started_at = time.perf_counter()

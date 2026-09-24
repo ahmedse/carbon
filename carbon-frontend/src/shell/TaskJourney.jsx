@@ -72,7 +72,7 @@ function TaskJourney({ plan, defaultOpen = false }) {
   const chat = chatBody(turns, plan.brief || '');
   const picture = planBody(steps);
   const path = pathBody(steps, t);
-  const result = (plan.final_response || '').trim();
+  // Result chapter omitted — OutcomeReceipt is the receipt above this fold.
   return (
     <Stack spacing={1} data-testid="task-journey" sx={{ mb: 1.5 }}>
       <Typography
@@ -88,7 +88,7 @@ function TaskJourney({ plan, defaultOpen = false }) {
           bgcolor: 'transparent',
           p: 0,
           cursor: 'pointer',
-          fontSize: '0.75rem',
+          typography: 'body2',
           fontWeight: 600,
           color: 'text.secondary',
         }}
@@ -100,7 +100,6 @@ function TaskJourney({ plan, defaultOpen = false }) {
           <Chapter label={t('journeyChat')} body={chat || t('journeyEmpty')} />
           <Chapter label={t('journeyPlan')} body={picture || t('journeyEmpty')} />
           <Chapter label={t('journeyPath')} body={path || t('journeyEmpty')} />
-          <Chapter label={t('journeyResult')} body={result || t('journeyResultPending')} />
         </Stack>
       </Collapse>
     </Stack>

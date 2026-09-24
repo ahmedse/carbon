@@ -6,7 +6,6 @@ BE-02-2: Added valid_from/valid_to temporal validity, supersede_fact(),
 and write-path semantic dedup + contradiction detection.
 """
 import logging
-import re
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -14,14 +13,14 @@ from ai.engine.core.clock import utcnow
 
 # Patterns that indicate the content is LLM noise rather than a real fact.
 # Applied in store_fact() before any DB/vector write.
-_MEMORY_NOISE_RE = re.compile(
-    r"^(?:hello|hi|hey|yes|no|ok|okay|sure|thanks|thank you|you'?re welcome)[!.,]?$"
-    r"|chat failed:"
-    r"|connection error"
-    r"|you'?re working on a workspace"
-    r"|how can i (?:assist|help) you",
-    re.IGNORECASE,
+_MEMORY_NOISE_PHRASES = (
+    "chat failed:", "connection error", "you're working on a workspace",
+    "how can i assist you", "how can i help you",
 )
+_MEMORY_NOISE_GREETINGS = frozenset({
+    "hello", "hi", "hey", "yes", "no", "ok", "okay", "sure",
+    "thanks", "thank you", "you're welcome", "youre welcome",
+})
 
 from ai.engine.core.query import first, scope
 
@@ -36,11 +35,34 @@ _STOPWORDS = frozenset({
     "more", "show", "list", "give", "tell", "many", "much", "some",
     "your", "my", "me", "is", "do", "does", "please", "remember",
 })
-_TOKEN_RE = re.compile(r"[\w-]+", re.UNICODE)
 # Lexical recall scans only the most recent active facts in scope.
 KEYWORD_SCAN_LIMIT = 500
 
 logger = logging.getLogger("pulse.memory.long_term")
+
+
+def _lex_tokens(text: str) -> list[str]:
+    tokens: list[str] = []
+    current: list[str] = []
+    for ch in (text or "").lower():
+        if ch.isalnum() or ch in "_-":
+            current.append(ch)
+            continue
+        if current:
+            tokens.append("".join(current))
+            current = []
+    if current:
+        tokens.append("".join(current))
+    return tokens
+
+
+def _is_memory_noise(stripped: str) -> bool:
+    from ai.engine.text.word_match import contains_any_phrase
+
+    lower = stripped.casefold().strip("!., ")
+    if lower in _MEMORY_NOISE_GREETINGS:
+        return True
+    return contains_any_phrase(stripped, _MEMORY_NOISE_PHRASES)
 
 
 class LongTermMemory:
@@ -91,7 +113,7 @@ class LongTermMemory:
         # Reject noise before any write: error strings, generic greetings, or
         # very short content that carries no durable information.
         stripped = content.strip()
-        if len(stripped) < 15 or _MEMORY_NOISE_RE.search(stripped):
+        if len(stripped) < 15 or _is_memory_noise(stripped):
             logger.debug("store_fact: rejected noise content (%r)", stripped[:80])
             return fact_id  # return a valid-looking id; nothing was stored
 
@@ -418,7 +440,7 @@ class LongTermMemory:
         stored "my cost centre is CC-42". Ranked by distinct matching tokens.
         """
         words = {
-            w for w in _TOKEN_RE.findall((query or "").lower())
+            w for w in _lex_tokens(query or "")
             if len(w) >= 3 and w not in _STOPWORDS
         }
         if not words or limit <= 0:
@@ -438,7 +460,7 @@ class LongTermMemory:
                 continue
             if fact.valid_to is not None and fact.valid_to <= now:
                 continue
-            tokens = set(_TOKEN_RE.findall((fact.content or "").lower()))
+            tokens = set(_lex_tokens(fact.content or ""))
             hits = len(words & tokens)
             if hits:
                 scored.append((hits, fact))

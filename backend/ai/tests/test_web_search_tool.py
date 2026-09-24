@@ -463,7 +463,7 @@ def test_synthesize_tool_results_marks_clarification_and_hints():
     mock_clarify = {"text": "Which location do you mean?", "tokens": 50, "model": "test"}
 
     with patch(
-        "ai.engine.cognition.turn.runner._clarify_no_matches",
+        "ai.engine.cognition.turn.runner_render._clarify_no_matches",
         new=AsyncMock(return_value=mock_clarify),
     ):
         result = asyncio.run(

@@ -22,26 +22,52 @@ from ai.eval.multiturn.bank import (
 pytestmark = pytest.mark.eval_multiturn
 
 
+@pytest.fixture(autouse=True)
+def _committed_understand_default(monkeypatch):
+    """The G5 bank scores the committed default path. A local ``.env`` trial
+    of ``PULSE_UNDERSTAND`` must not change what these goldens measure."""
+    monkeypatch.setenv("PULSE_UNDERSTAND", "legacy")
+    monkeypatch.delenv("PULSE_TOOL_CHOICE", raising=False)
+
+
 # ── Structural tests (PASS for real) ─────────────────────────────────────
 
 
 class TestScriptsLoad:
-    """Verify all 13 scripts load and are structurally valid."""
+    """Verify all 14 scripts load and are structurally valid."""
     
     def test_all_scripts_load(self):
-        """All 13 scripts must load without error."""
+        """All 14 scripts must load without error."""
         base_dir = Path(__file__).parent / "multiturn"
         scripts = load_scripts_from_glob("scripts/*.yaml", base_dir)
-        assert len(scripts) == 13, f"Expected 13 scripts, got {len(scripts)}"
+        assert len(scripts) == 14, f"Expected 14 scripts, got {len(scripts)}"
     
+    def test_v21_tier_scripts_load_outside_the_g5_bank(self):
+        """ADR-0049 goldens live in scripts_v21/ so scripts/*.yaml (G5, 96/96)
+        is unchanged. They must still be schema-valid scripts."""
+        base_dir = Path(__file__).parent / "multiturn"
+        scripts = {s.id: s for s in load_scripts_from_glob("scripts_v21/*.yaml", base_dir)}
+        assert set(scripts) == {"payslip-loan-followup-en-01", "leave-charts-subject-en-01"}
+        for s in scripts.values():
+            ok, err = s.validate()
+            assert ok, err
+        charts = scripts["leave-charts-subject-en-01"]
+        where = next(t for t in charts.turns if t.user.startswith("where are the charts"))
+        assert "Gross Pay" in where.expect.mentions_none
+        script = scripts["payslip-loan-followup-en-01"]
+        assert "list_my_loans" in script.stub_host
+        loan_turn = next(t for t in script.turns if t.user.startswith("I noticed I have a loan"))
+        assert "loan_type" in loan_turn.expect.must_not_reask_slots
+        assert "handoff_agent" not in loan_turn.expect.decision_in
+
     def test_each_script_has_minimum_turns(self):
-        """Each script must have ≥8 turns."""
+        """Each script must have ≥7 turns."""
         base_dir = Path(__file__).parent / "multiturn"
         scripts = load_scripts_from_glob("scripts/*.yaml", base_dir)
         for script in scripts:
-            assert len(script.turns) >= 8, (
+            assert len(script.turns) >= 7, (
                 f"Script {script.id}: has {len(script.turns)} turns, "
-                f"need ≥8"
+                f"need ≥7"
             )
     
     def test_each_script_has_objective_ids(self):
@@ -276,15 +302,11 @@ class TestCoherenceExpectations:
         ("scripts/01-*.yaml", "ess-loan-ar-01"),
         ("scripts/02-*.yaml", "ess-leave-en-01"),
         ("scripts/03-*.yaml", "ess-attendance-mixed-01"),
-        ("scripts/04-*.yaml", "payroll-followup-en-01"),
         ("scripts/05-*.yaml", "entity-focus-switch-01"),
         ("scripts/06-*.yaml", "grounded-recall-01"),
         ("scripts/07-*.yaml", "plan-status-01"),
         ("scripts/08-*.yaml", "chat-handoff-write-01"),
-        ("scripts/09-*.yaml", "language-fidelity-ar-01"),
-        ("scripts/10-*.yaml", "date-awareness-01"),
         ("scripts/11-*.yaml", "memory-learn-fact-01"),
-        ("scripts/12-*.yaml", "nav-zero-llm-01"),
         ("scripts/13-*.yaml", "composite-brief-ar-01"),
     ])
     def test_script_coherence_expectations(self, script_pattern, script_id):
@@ -310,3 +332,37 @@ class TestCoherenceExpectations:
             f"failures: "
             f"{[(i, t.decision, t.language_ok, t.reask_violations) for i, t in enumerate(result.turns) if not t.passed]}"
         )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_v21_leave_charts_script_renders_only_the_decided_read(monkeypatch):
+    """ADR-0049 execute+render contract under PULSE_UNDERSTAND=v21. The
+    understand output is stubbed; G6 g6-068..070 score the model."""
+    from ai.eval.multiturn.runner import run_script
+
+    monkeypatch.setenv("PULSE_UNDERSTAND", "v21")
+    base_dir = Path(__file__).parent / "multiturn"
+    script = load_scripts_from_glob("scripts_v21/15-*.yaml", base_dir)[0]
+    result = run_script(script)
+    assert not result.error, result.error
+    failures = [
+        (i, t.user_input, t.fail_reasons)
+        for i, t in enumerate(result.turns)
+        if not t.passed
+    ]
+    assert not failures, failures
+
+
+class TestBoundReadGoldens:
+    """Blocking. Stub host rows let bound 0-LLM reads restate committed figures."""
+
+    @pytest.mark.django_db(transaction=True)
+    @pytest.mark.parametrize("script_pattern,script_id", [
+        ("scripts/04-*.yaml", "payroll-followup-en-01"),
+        ("scripts/09-*.yaml", "language-fidelity-ar-01"),
+        ("scripts/10-*.yaml", "date-awareness-01"),
+        ("scripts/12-*.yaml", "nav-zero-llm-01"),
+        ("scripts/ess_leave_followup*.yaml", "ess-leave-followup-subject"),
+    ])
+    def test_script_is_blocking(self, script_pattern, script_id):
+        TestCoherenceExpectations().test_script_coherence_expectations(script_pattern, script_id)

@@ -502,6 +502,11 @@ const ROUTE_CONFIG = {
     icon: EventAvailableIcon,
     parent: '/my',
   },
+  '/my/payslips': {
+    label: 'My Payslips',
+    icon: ReceiptLongIcon,
+    parent: '/my',
+  },
   '/my/attendance': {
     label: 'My Attendance',
     icon: AccessTimeIcon,

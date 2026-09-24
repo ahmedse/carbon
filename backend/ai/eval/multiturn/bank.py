@@ -176,6 +176,7 @@ class Turn:
     stub_reply: str  # what the scripted LLM returns for this turn
     stub_tool_calls: Optional[list[dict]] = None  # tool calls stub (P1+)
     expect: Optional[ExpectationBlock] = None
+    process_mode: str = "ask"
 
 
 @dataclass
@@ -188,6 +189,9 @@ class Script:
     surface: str  # chat | agent_discovery | agent_plan (P0: chat only)
     persona: str  # e.g. emp_1067
     turns: list[Turn]
+    # Offline tier only: api_name → host payload. Bound 0-LLM reads restate
+    # these rows instead of the empty throwaway database. Live tier ignores it.
+    stub_host: dict = field(default_factory=dict)
     
     def validate(self) -> tuple[bool, str]:
         """Validate the script. Returns (ok, error_msg)."""
@@ -198,8 +202,8 @@ class Script:
         for oid in self.objective_ids:
             if oid not in [f"C{i}" for i in range(1, 11)] + [f"A{i}" for i in range(1, 11)]:
                 return False, f"Script {self.id}: invalid objective_id {oid}"
-        if len(self.turns) < 8:
-            return False, f"Script {self.id} must have ≥8 turns (has {len(self.turns)})"
+        if len(self.turns) < 7:
+            return False, f"Script {self.id} must have ≥7 turns (has {len(self.turns)})"
         if self.language not in ["ar", "en", "mixed"]:
             return False, f"Script {self.id}: invalid language {self.language}"
         if self.surface != "chat":
@@ -228,8 +232,12 @@ def load_script_from_dict(data: dict) -> Script:
             must_not_reask_slots=expect_data.get("must_not_reask_slots", []),
             language=expect_data.get("language", data.get("language", "en")),
             max_llm_calls=expect_data.get("max_llm_calls", 2),
-            mentions_any=expect_data.get("mentions_any", []),
-            mentions_none=expect_data.get("mentions_none", []),
+            mentions_any=expect_data.get(
+                "must_contain", expect_data.get("mentions_any", [])
+            ),
+            mentions_none=expect_data.get(
+                "must_not_contain", expect_data.get("mentions_none", [])
+            ),
             focus_entity=expect_data.get("focus_entity"),
         ) if expect_data else None
         
@@ -238,6 +246,9 @@ def load_script_from_dict(data: dict) -> Script:
             stub_reply=turn_data.get("stub_reply", ""),
             stub_tool_calls=turn_data.get("stub_tool_calls"),
             expect=expect,
+            process_mode=(
+                "plan" if turn_data.get("process_mode") == "plan" else "ask"
+            ),
         ))
     
     script = Script(
@@ -247,6 +258,7 @@ def load_script_from_dict(data: dict) -> Script:
         surface=data.get("surface", "chat"),
         persona=data.get("persona", "emp_1067"),
         turns=turns,
+        stub_host=dict(data.get("stub_host") or {}),
     )
     
     return script

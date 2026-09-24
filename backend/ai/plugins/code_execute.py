@@ -28,12 +28,14 @@ logger = logging.getLogger("carbon.ai.plugins.code_execute")
 class CodeExecuteTool(ToolPlugin):
     name = "code_execute"
     description = (
-        "Run Python/pandas/matplotlib code over a provided result set and "
-        "return a chart image, a table, or a scalar. Read-only sandbox: no "
-        "network, no disk writes, no subprocess. Build charts with plt "
-        "(they are captured automatically) — do NOT call savefig to a file "
-        "path. Assign the final answer to `result` (a DataFrame for a table, "
-        "or a scalar)."
+        "Run Python/pandas code over a provided result set and return a table, "
+        "scalar, or PNG chart. Read-only sandbox: no network, no disk writes, "
+        "no subprocess. Prefer this ONLY for multi-step pandas analysis, or to "
+        "embed PNG figures into export_document (Word/PDF pack). Do NOT use it "
+        "to draw a chart for the screen: host rows shaped as category → measure "
+        "already render as interactive charts from the answer envelope. When "
+        "you must plot for an export, use plt (auto-captured); do NOT call "
+        "savefig to a path. Assign the final answer to `result`."
     )
     input_schema: dict[str, Any] = {
         "type": "object",
@@ -59,7 +61,8 @@ class CodeExecuteTool(ToolPlugin):
     app_identifier: str | None = None
     chat_visible = True
     capability_claim = (
-        "I can run Python/pandas code over a result set to compute tables and charts."
+        "I can run Python/pandas analysis over a result set; PNG charts are "
+        "for document export — on-screen charts use the answer envelope."
     )
 
     async def execute(self, args: dict, *, ctx) -> dict:

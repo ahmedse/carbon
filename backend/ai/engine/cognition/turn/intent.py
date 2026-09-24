@@ -24,6 +24,8 @@ import logging
 import re
 from dataclasses import dataclass, field
 
+from ai.engine.cognition.turn.intent_i18n import leave_mutation_ar
+
 logger = logging.getLogger("pulse.cognition.intent")
 
 # The only endpoints the classifier is allowed to match are read-only GETs —
@@ -49,12 +51,13 @@ _ZONES = {"platform", "concept", "real_time", "general", "off_limits"}
 # produced an endless clarify/disambiguate loop ("create new or view
 # existing?"). These turns belong to the full pipeline, where the mutation
 # tools (create_dq_rule, learn_fact, plan_task, …) actually run.
-_MUTATION_VERB_RE = re.compile(
-    r"\b(?:create|creating|created|add|adding|added|delete|deleting|deleted|"
-    r"remove|removing|removed|drop|dropping|insert|inserting|write|writing|"
-    r"setup|set\s+up|generate|generating|bind|binding|make)\b",
-    re.IGNORECASE,
+_MUTATION_VERBS = (
+    "create", "creating", "created", "add", "adding", "added", "delete",
+    "deleting", "deleted", "remove", "removing", "removed", "drop", "dropping",
+    "insert", "inserting", "write", "writing", "setup", "generate",
+    "generating", "bind", "binding", "make",
 )
+_MUTATION_PHRASES = ("set up",)
 
 # First-person leave / time-off submission (EN + AR) — owned by the full
 # pipeline (``submit_my_leave`` / RULE_21), never the read-only intent resolver.
@@ -62,18 +65,12 @@ _LEAVE_MUTATION_RE = re.compile(
     r"(?i)("
     r"\b(?:request|apply\s+for|take|submit|book)\s+.{0,24}\b(?:leave|time\s*off|vacation|pto)\b"
     r"|\b(?:leave|vacation)\s+(?:request|application)\b"
-    r"|(?:أريد|اريد|أبغى|ابغى|عايز|عاوز|اطلب|أطلب).{0,24}(?:إجازة|اجازة|اجازه)"
-    r"|(?:تقديم|قدّم|قدم).{0,16}(?:إجازة|اجازة|اجازه)"
-    r"|(?:إجازة|اجازة|اجازه).{0,16}(?:عارضة|عارضه|طارئة|طارئه|سنوية|سنويه|مرضية)"
     r")"
 )
-
-# "a new <thing>" — strongly implies creation even without a verb ("a new
-# dq rule", "new table").
-_NEW_THING_RE = re.compile(
-    r"\b(?:a\s+|another\s+)?new\s+"
-    r"(?:data-?quality\s+)?(?:dq\s+)?(?:rule|table|field|column|schema|row|record)\b",
-    re.IGNORECASE,
+_NEW_THING_PHRASES = (
+    "new rule", "new dq rule", "new data-quality rule", "new data quality rule",
+    "new table", "new field", "new column", "new schema", "new row", "new record",
+    "another new rule", "a new rule", "a new table", "a new field",
 )
 
 
@@ -95,10 +92,13 @@ def _is_mutation_request(text: str) -> bool:
         pass
     if not text:
         return False
+    from ai.engine.text.word_match import contains_any_phrase, has_any_word
+
     return (
-        bool(_MUTATION_VERB_RE.search(text))
-        or bool(_NEW_THING_RE.search(text))
-        or bool(_LEAVE_MUTATION_RE.search(text))
+        has_any_word(text, _MUTATION_VERBS)
+        or contains_any_phrase(text, _MUTATION_PHRASES)
+        or contains_any_phrase(text, _NEW_THING_PHRASES)
+        or bool(_LEAVE_MUTATION_RE.search(text) or leave_mutation_ar(text))
     )
 
 
@@ -606,7 +606,7 @@ def _apply_named_leave_override(
         leave_balance_intent_asked,
         named_leave_balance_ask,
     )
-    from ai.engine.cognition.turn.ess_read import leave_history_asked
+    from ai.engine.cognition.turn.ess_read import domain_history_asked
 
     if not leave_balance_intent_asked(user_message):
         return resolution
@@ -617,7 +617,7 @@ def _apply_named_leave_override(
     # (records) → empty → invented remaining/used/pending = 0.
     if named_leave_balance_ask(user_message):
         preferred = ("list_leave_entitlements", "list_leave_records")
-    elif leave_history_asked(user_message):
+    elif domain_history_asked("leave", user_message):
         preferred = ("list_my_leave", "get_my_leave_balance")
     elif first_person_leave_ask(user_message) or not named_leave_balance_ask(
         user_message

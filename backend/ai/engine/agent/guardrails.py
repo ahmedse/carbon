@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -51,6 +50,8 @@ class HookContext:
     surface: str = "chat"
     # Utterance for locale-aware handoff copy (optional).
     user_message: str = ""
+    # Structured Ask/Plan process dial from transport metadata.
+    process_mode: str = ""
 
 
 @dataclass
@@ -142,6 +143,11 @@ class HookPipeline:
                     step_id=ctx.step_id,
                     agent_role=ctx.agent_role,
                     is_worker=ctx.is_worker,
+                    db=ctx.db,
+                    instance_config=ctx.instance_config,
+                    surface=ctx.surface,
+                    user_message=ctx.user_message,
+                    process_mode=ctx.process_mode,
                 )
                 result = await hook(ctx_with_result)
             except Exception as exc:
@@ -190,7 +196,9 @@ async def chat_surface_hook(ctx: HookContext) -> HookResult:
     if tool == "plan_task":
         try:
             from ai.engine.cognition.plan.process_dial import is_plan_dial_turn
-            if is_plan_dial_turn(str(ctx.user_message or "")):
+            if is_plan_dial_turn(
+                str(ctx.user_message or ""), ctx.process_mode,
+            ):
                 return HookResult(action="pass")
         except Exception:  # noqa: BLE001 — fail closed to cancel below
             pass
@@ -412,45 +420,15 @@ async def rate_limit_hook(ctx: HookContext) -> HookResult:
     return HookResult(action="pass")
 
 
-# Patterns considered dangerous in tool arguments
-_DANGEROUS_SQL_PATTERNS = [
-    (re.compile(r'\bDROP\s+TABLE\b', re.IGNORECASE), "DROP TABLE detected in tool args"),
-    (re.compile(r'\bDELETE\s+FROM\b', re.IGNORECASE), "DELETE FROM detected in tool args"),
-    (re.compile(r'\bTRUNCATE\s+(TABLE\s+)?\w+', re.IGNORECASE), "TRUNCATE detected in tool args"),
-    (re.compile(r'\bALTER\s+TABLE\b', re.IGNORECASE), "ALTER TABLE detected in tool args"),
-    (re.compile(r'\bINSERT\s+INTO\b', re.IGNORECASE), "INSERT INTO detected in tool args"),
-    (re.compile(r'\bUPDATE\s+\w+\s+SET\b', re.IGNORECASE), "UPDATE ... SET detected in tool args"),
-]
-
-_DANGEROUS_SHELL_PATTERNS = [
-    (re.compile(r'\brm\s+(-[rRf]+\s+)*[/~]'), "rm with path detected in tool args"),
-    (re.compile(r'\bsudo\b'), "sudo detected in tool args"),
-]
-
-_SQL_INJECTION_PATTERNS = [
-    (re.compile(r"'\s*OR\s+['\"]?\s*1\s*=\s*['\"]?\s*1", re.IGNORECASE), "SQL injection pattern: ' OR 1=1"),
-    (re.compile(r"'\s*OR\s+['\"]?\s*['\"]?\s*=\s*['\"]?\s*['\"]?", re.IGNORECASE), "SQL injection pattern: OR ''=''"),
-    (re.compile(r"'\s*OR\s+\S+\s*=\s*\S+", re.IGNORECASE), "SQL injection pattern: ' OR x=y"),
-    (re.compile(r";\s*--"), "SQL injection pattern: ;-- comment"),
-    (re.compile(r"UNION\s+SELECT", re.IGNORECASE), "UNION SELECT detected"),
-]
-
-
 def _search_dangerous_patterns(args: dict) -> list[str]:
     """Search tool args (recursively) for dangerous patterns. Returns list of reasons."""
+    from ai.engine.core.danger_scan import scan_tool_args_danger
+
     reasons: list[str] = []
 
     def _check_value(v):
         if isinstance(v, str):
-            for pattern, reason in _DANGEROUS_SQL_PATTERNS:
-                if pattern.search(v):
-                    reasons.append(reason)
-            for pattern, reason in _DANGEROUS_SHELL_PATTERNS:
-                if pattern.search(v):
-                    reasons.append(reason)
-            for pattern, reason in _SQL_INJECTION_PATTERNS:
-                if pattern.search(v):
-                    reasons.append(reason)
+            reasons.extend(scan_tool_args_danger(v))
         elif isinstance(v, dict):
             for sv in v.values():
                 _check_value(sv)

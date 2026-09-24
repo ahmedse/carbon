@@ -1,5 +1,5 @@
 // src/shell/AgentCockpit.jsx
-// Task screens: Now · Picture · Result (Result only after an outcome).
+// Task screens: Now · Plan · Result (Result only after an outcome).
 // Journey is a fold under Result, not a fourth tab. Parent owns state.
 import React from 'react';
 import PropTypes from 'prop-types';
@@ -15,7 +15,7 @@ import { hasTaskOutcome } from './taskWorkspace';
 
 const SEGMENTS = [
   { value: 'run', labelKey: 'cockpitNow' },
-  { value: 'plan', labelKey: 'cockpitPicture' },
+  { value: 'plan', labelKey: 'cockpitPlan' },
   { value: 'output', labelKey: 'cockpitResult', needsOutcome: true },
 ];
 
@@ -73,7 +73,10 @@ function AgentCockpit({
     }
   };
 
-  const tabs = SEGMENTS.filter((item) => !item.needsOutcome || resultReady);
+  // Result is always visible so the journey reads Now → Plan → Result; it
+  // stays dimmed (disabled) until an outcome exists.
+  const tabs = SEGMENTS;
+  const showInherited = view !== 'output' && view !== 'run';
 
   return (
     <Box
@@ -104,14 +107,18 @@ function AgentCockpit({
           value={view}
           exclusive
           size="small"
-          onChange={(_e, next) => { if (next) onSegment?.(next); }}
+          /* Clicks are handled per button (below) so choosing the tab that is
+             already displayed still counts as a user choice — e.g. Now is shown
+             while `segment` is still 'output' waiting for an outcome; a click
+             must pin Now instead of being swallowed as a "deselect". */
+          onChange={() => {}}
           aria-label={t('cockpitView')}
           sx={{
             '& .MuiToggleButton-root': {
               border: 'none',
               px: 1.25,
               py: 0.25,
-              fontSize: '0.75rem',
+              typography: 'body2',
               textTransform: 'none',
               fontWeight: 500,
               color: 'text.secondary',
@@ -127,15 +134,24 @@ function AgentCockpit({
             },
           }}
         >
-          {tabs.map(({ value, labelKey }) => (
-            <ToggleButton
-              key={value}
-              value={value}
-              aria-label={t(labelKey)}
-            >
-              {t(labelKey)}
-            </ToggleButton>
-          ))}
+          {tabs.map(({ value, labelKey, needsOutcome }) => {
+            const dimmed = Boolean(needsOutcome) && !resultReady;
+            return (
+              <ToggleButton
+                key={value}
+                value={value}
+                aria-label={t(labelKey)}
+                disabled={dimmed}
+                onClick={() => { if (!dimmed) onSegment?.(value); }}
+                title={dimmed ? t('cockpitResultPending') : undefined}
+                data-testid={`cockpit-tab-${value}`}
+                data-dimmed={dimmed ? 'true' : undefined}
+                sx={dimmed ? { opacity: 0.45 } : undefined}
+              >
+                {t(labelKey)}
+              </ToggleButton>
+            );
+          })}
         </ToggleButtonGroup>
       </Box>
 
@@ -154,9 +170,11 @@ function AgentCockpit({
         data-hero={view}
       >
         <Box data-testid={heroTestId}>
-          <Box sx={{ mb: 1 }}>
-            <InheritedContextPanel plan={plan} />
-          </Box>
+          {showInherited ? (
+            <Box sx={{ mb: 1 }}>
+              <InheritedContextPanel plan={plan} />
+            </Box>
+          ) : null}
           {body()}
         </Box>
       </Box>
@@ -180,7 +198,7 @@ AgentCockpit.propTypes = {
 
 export default AgentCockpit;
 
-/** Soft lifecycle default — Now while work is live, Picture to approve, Result after outcome. */
+/** Soft lifecycle default — Now while work is live, Plan to approve, Result after outcome. */
 export function defaultCockpitSegment(effectiveStatus, phase) {
   if (phase === 'stopped' || phase === 'error') {
     return 'output';
@@ -214,7 +232,7 @@ export function defaultCockpitSegment(effectiveStatus, phase) {
   return 'run';
 }
 
-/** Migrate ADR-0034 / Journey tab ids → Now · Picture · Result. */
+/** Migrate ADR-0034 / Journey tab ids → Now · Plan · Result. */
 export function normalizeCockpitSegment(raw) {
   if (raw === 'steps') return 'run';
   if (raw === 'metrics') return 'output';

@@ -7,7 +7,6 @@ one append-only row to the ``trajectory`` table.  The consolidation sweep
 
 import json
 import logging
-import re
 
 from ai.engine.core.models import Trajectory, Run, RunStep, TurnLedgerRow
 from ai.engine.core.query import first
@@ -16,30 +15,41 @@ logger = logging.getLogger("pulse.cognition.trajectory")
 
 # ── Regex classifier for task_intent (no LLM — fast, deterministic) ────────
 
-_INTENT_RULES: list[tuple[str, re.Pattern]] = [
-    ("data_query", re.compile(
-        r"\b(how many|count|list|show|display|what (are|is)|find|search|fetch|get|retrieve)\b",
-        re.IGNORECASE,
-    )),
-    ("diagnostic", re.compile(
-        r"\b(why|error|fail|broken|wrong|issue|problem|debug|trace|bug)\b",
-        re.IGNORECASE,
-    )),
-    ("how_to", re.compile(
-        r"\b(how (do|can|to|should)|steps|guide|tutorial|explain|walkthrough)\b",
-        re.IGNORECASE,
-    )),
-    ("action", re.compile(
-        r"\b(create|delete|update|change|modify|trigger|run|execute|start|stop|approve|reject)\b",
-        re.IGNORECASE,
+_INTENT_PHRASES: list[tuple[str, tuple[str, ...]]] = [
+    ("data_query", (
+        "how many", "what are", "what is",
     )),
 ]
+_INTENT_WORDS: list[tuple[str, tuple[str, ...]]] = [
+    ("data_query", (
+        "count", "list", "show", "display", "find", "search", "fetch", "get", "retrieve",
+    )),
+    ("diagnostic", (
+        "why", "error", "fail", "broken", "wrong", "issue", "problem", "debug", "trace", "bug",
+    )),
+    ("how_to", (
+        "steps", "guide", "tutorial", "explain", "walkthrough",
+    )),
+    ("action", (
+        "create", "delete", "update", "change", "modify", "trigger", "run", "execute",
+        "start", "stop", "approve", "reject",
+    )),
+]
+_HOW_TO_PHRASES = ("how do", "how can", "how to", "how should")
 
 
 def _classify_intent(user_message: str) -> str:
-    """Classify the user's task intent using regex rules. Returns the best match or 'clarification'."""
-    for intent_name, pattern in _INTENT_RULES:
-        if pattern.search(user_message):
+    """Classify the user's task intent using lexical rules. Returns the best match or 'clarification'."""
+    from ai.engine.text.word_match import contains_any_phrase, has_any_word
+
+    raw = user_message or ""
+    for intent_name, phrases in _INTENT_PHRASES:
+        if contains_any_phrase(raw, phrases):
+            return intent_name
+    if contains_any_phrase(raw, _HOW_TO_PHRASES):
+        return "how_to"
+    for intent_name, words in _INTENT_WORDS:
+        if has_any_word(raw, words):
             return intent_name
     return "clarification"
 

@@ -39,8 +39,10 @@ import ErrorOutlineOutlinedIcon from '@mui/icons-material/ErrorOutlineOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import MarkdownMessage from './MarkdownMessage';
+import OutcomeReceipt from './OutcomeReceipt';
 import { formatDisplayDateTime } from '../utils/dateUtils';
 import { presentCaveats, presentSources } from './presentationPlane';
+import { receiptTitleFromAnswer } from './resultOutcome';
 import { Bar, Doughnut, Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -136,7 +138,7 @@ function EnvelopeTable({ table, t }) {
   return (
     <Box data-testid="envelope-table">
       {title ? (
-        <Typography variant="subtitle2" sx={{ mb: 0.5, fontWeight: 600 }}>
+        <Typography variant="subtitle2" sx={{ mb: 0.5, fontWeight: 600, fontSize: '0.75rem' }}>
           {cellString(title)}
         </Typography>
       ) : null}
@@ -434,23 +436,23 @@ function EnvelopeChart({ chart, t }) {
     <Box
       data-testid="envelope-chart"
       sx={{
-        borderRadius: 2,
+        borderRadius: 1.5,
         border: 1,
         borderColor: 'divider',
         bgcolor: 'background.paper',
-        p: 2,
-        boxShadow: '0 1px 4px 0 rgba(0,0,0,0.06)',
+        p: 1.25,
+        boxShadow: 'none',
       }}
     >
       {title ? (
         <Typography
           variant="subtitle2"
-          sx={{ mb: 1.5, fontWeight: 700, color: 'text.primary', letterSpacing: 0 }}
+          sx={{ mb: 1, fontWeight: 600, fontSize: '0.75rem', color: 'text.primary', letterSpacing: 0 }}
         >
           {cellString(title)}
         </Typography>
       ) : null}
-      <Box sx={{ height: 260 }}>
+      <Box sx={{ height: 200 }}>
         <ChartComp data={data} options={options} plugins={plugins} />
       </Box>
     </Box>
@@ -571,6 +573,22 @@ export default function EnvelopeMessage({ envelope, fallbackContent }) {
   }
 
   const { headline, prose, tables, charts, caveats, sources } = envelope;
+  const proseMd = Array.isArray(prose) ? prose.filter(Boolean).join('\n\n') : '';
+  const rich = (Array.isArray(tables) && tables.length > 0)
+    || (Array.isArray(charts) && charts.length > 0);
+  // Headline-only envelopes share OutcomeReceipt with Result (ADR-0043 V11).
+  if (headline && !rich) {
+    return (
+      <Stack spacing={1.25} sx={{ width: '100%', maxWidth: '100%' }} data-testid="envelope-receipt">
+        <OutcomeReceipt
+          title={receiptTitleFromAnswer(headline)}
+          markdown={proseMd || headline}
+        />
+        <EnvelopeCaveats caveats={caveats} t={t} />
+        <EnvelopeSources sources={sources} t={t} />
+      </Stack>
+    );
+  }
 
   return (
     <Stack
@@ -583,13 +601,14 @@ export default function EnvelopeMessage({ envelope, fallbackContent }) {
     >
       {headline ? (
         <Typography
-          variant="h5"
           component="div"
           sx={{
-            fontWeight: 700,
+            fontSize: '0.875rem',
+            fontWeight: 600,
             letterSpacing: '-0.01em',
             lineHeight: 1.35,
             color: 'text.primary',
+            textAlign: 'left',
             maxWidth: '56ch',
             '& p': {
               fontSize: 'inherit',
@@ -597,6 +616,14 @@ export default function EnvelopeMessage({ envelope, fallbackContent }) {
               color: 'inherit',
               mb: 0,
               lineHeight: 'inherit',
+            },
+            // Demote any markdown # headings the model stuffed into headline
+            '& h1, & h2, & h3, & h4, & h5, & h6': {
+              fontSize: 'inherit',
+              fontWeight: 'inherit',
+              mt: 0,
+              mb: 0,
+              borderBottom: 'none',
             },
           }}
         >
@@ -606,10 +633,10 @@ export default function EnvelopeMessage({ envelope, fallbackContent }) {
 
       {Array.isArray(prose) && prose.length > 0 ? (
         <Stack
-          spacing={1.25}
+          spacing={1}
           sx={{
-            color: 'text.secondary',
-            '& p': { fontSize: '0.975rem', lineHeight: 1.75, mb: 0 },
+            color: 'text.primary',
+            '& p': { fontSize: '0.8125rem', lineHeight: 1.55, mb: 0 },
           }}
         >
           {prose.map((paragraph, i) => (

@@ -62,6 +62,39 @@ def test_topic_stack_lists_recent_distinct():
     assert "GradeVance" in stack
 
 
+def test_deixis_skips_tool_identifier_in_bold():
+    history = [
+        {
+            "role": "assistant",
+            "content": "Here's what I found:\n\n**call_host_api**: Retrieved 6 row(s)",
+        },
+    ]
+    q = should_gate_deixis("where those are?", conversation_history=history)
+    assert q is not None
+    assert "call_host_api" not in (q or "")
+    assert "Which item" in (q or "")
+
+
+def test_deixis_prefers_last_results_topic():
+    history = [
+        {
+            "role": "assistant",
+            "content": "Here's what I found:\n\n**call_host_api**: Retrieved 6 row(s)",
+        },
+    ]
+    last_results = [
+        {"turn": 1, "tool": "call_host_api", "api": "list_leave_entitlements", "digest": "count=6"},
+    ]
+    q = should_gate_deixis(
+        "where those are?",
+        conversation_history=history,
+        last_results=last_results,
+    )
+    assert q is not None
+    assert "leave balance" in q.lower()
+    assert "call_host_api" not in q
+
+
 def test_deixis_gate_offers_stack_when_multiple_topics():
     history = [
         {"role": "assistant", "content": "## GradeVance\n\nOverview."},

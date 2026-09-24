@@ -3,11 +3,16 @@ objective_ids: [C7]
 language: ar
 surface: chat
 persona: emp_1067
+stub_host:
+  list_my_payslips:
+    - {line_type: gross, amount: 6500}
+    - {line_type: GOSI, amount: 1200}
+    - {line_type: net, amount: 4500}
 turns:
   - user: "أريد معرفة راتبي"
     stub_reply: "سأساعدك في معرفة راتبك. دعني أتحقق من معلوماتك."
     expect:
-      decision_in: [answer]
+      decision_in: [answer, tool_answer]
       language: ar
       max_llm_calls: 2
   
@@ -15,7 +20,7 @@ turns:
     # Host committed gross is 6500 (٦٥٠٠). ٦٠٠٠ was never a payslip line.
     stub_reply: "راتبك الشهري الإجمالي هو ٦٥٠٠."
     expect:
-      decision_in: [answer]
+      decision_in: [answer, tool_answer]
       language: ar
       max_llm_calls: 2
       mentions_any: ["٦٥٠٠", "6500"]
@@ -23,15 +28,15 @@ turns:
   - user: "كم يتم خصمه من راتبي؟"
     stub_reply: "يتم خصم ١٥٠٠ دينار من راتبك (بما فيها GOSI والقروض)."
     expect:
-      decision_in: [answer]
+      decision_in: [answer, tool_answer]
       language: ar
       max_llm_calls: 2
-      mentions_any: ["١٥٠٠", "GOSI"]
+      mentions_any: ["١٥٠٠", "GOSI", "1200"]
   
   - user: "فما صافي راتبي؟"
     stub_reply: "صافي راتبك هو ٤٥٠٠ دينار بعد جميع الخصومات."
     expect:
-      decision_in: [answer]
+      decision_in: [answer, tool_answer]
       language: ar
       max_llm_calls: 2
       mentions_any: ["٤٥٠٠", "4500"]
@@ -53,7 +58,7 @@ turns:
   - user: "هل هناك أي تغييرات في راتبي؟"
     stub_reply: "لا توجد تغييرات في راتبك الأساسي، الخصومات كما هي."
     expect:
-      decision_in: [answer]
+      decision_in: [answer, tool_answer]
       language: ar
       max_llm_calls: 2
   

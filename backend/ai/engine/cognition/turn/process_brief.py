@@ -8,9 +8,18 @@ Deterministic (stdlib + optional Django ORM / pack YAML). No LLM.
 """
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any
+
+from ai.engine.text.word_match import contains_any_phrase, has_any_word
+
+from ai.engine.cognition.turn.process_brief_i18n import (
+    BRIEFING_ASK_AR,
+    DELIVERABLE_ASK_AR,
+    STEP_LABELS,
+    any_needle,
+    has_arabic_script,
+)
 
 # Canonical Nibras process ids (domain_packs/nibras/processes).
 KNOWN_PROCESS_IDS: tuple[str, ...] = (
@@ -22,55 +31,37 @@ KNOWN_PROCESS_IDS: tuple[str, ...] = (
     "attendance.permission.lifecycle",
 )
 
-# Explicit process id token (backticks optional).
-_PROCESS_ID_RE = re.compile(
-    r"(?i)\b("
-    + "|".join(re.escape(p) for p in KNOWN_PROCESS_IDS)
-    + r")\b"
+_BRIEFING_WORDS = ("explain", "describe", "lifecycle")
+_BRIEFING_PHRASES = (
+    "walk me through", "how does", "what is the steps", "what are the steps",
+    "list step", "list every step", "end-to-end", "end to end",
+    "human approval", "human-only", "human only",
+    "governed process", "process lifecycle",
 )
 
-# Explain / list-steps asks about a governed process or lifecycle (EN + AR).
-_BRIEFING_ASK_RE = re.compile(
-    r"(?is)("
-    r"\b(explain|describe|walk\s*me\s*through|how\s+does|what\s+(is|are)\s+the\s+steps|"
-    r"list\s+(every\s+)?step|end[- ]to[- ]end|human\s+approval|human[- ]only|"
-    r"governed\s+process|process\s+lifecycle|lifecycle)\b"
-    r"|اشرح|شرح|خطوة\s*بخطوة|موافقة\s*بشرية|عملية|دورة\s*الحياة|lifecycle"
-    r")",
-)
 
-_AR_SCRIPT_RE = re.compile(r"[\u0600-\u06FF]")
+def _find_process_id(text: str) -> str | None:
+    cf = (text or "").casefold()
+    for pid in KNOWN_PROCESS_IDS:
+        if pid.casefold() in cf:
+            return pid
+    return None
+
+
+def _is_briefing_ask_en(text: str) -> bool:
+    return has_any_word(text, _BRIEFING_WORDS) or contains_any_phrase(text, _BRIEFING_PHRASES)
 
 _PACK_DIR = (
     Path(__file__).resolve().parents[5] / "domain_packs" / "nibras" / "processes"
 )
 
-# Short human labels for step ids (EN / AR).
-_STEP_LABELS: dict[str, tuple[str, str]] = {
-    "submit": ("Submit", "تقديم"),
-    "review": ("Review (human approval)", "مراجعة (موافقة بشرية)"),
-    "record": ("Record", "تسجيل"),
-    "verify": ("Verify", "تحقق"),
-    "compute": ("Compute", "احتساب"),
-    "validate": ("Validate", "تدقيق"),
-    "commit": ("Commit", "اعتماد / ترحيل"),
-    "generate": ("Generate", "توليد"),
-    "activate": ("Activate", "تفعيل"),
-    "approve": ("Approve", "موافقة"),
-}
-
-
 # Mentions of place nouns inside a *deliverable* ask (report / Word / tables)
-# must NOT short-circuit to open-app propose. "تقرير عن المرتبات … word file"
-# mentions payroll but wants a document, not /people.
-_DELIVERABLE_ASK_RE = re.compile(
-    r"(?is)("
-    r"\b(report|reports|document|documents|word|docx|xlsx|excel|pdf|csv|"
-    r"export|generate|produce|create|draft|write|summar(y|ise|ize)|"
-    r"breakdown|comprehensive|analysis|analyse|analyze)\b"
-    r"|تقرير|تقارير|ملف|مستند|وورد|اكسل|إكسل|رسوم|جداول|جدول|صدّر|صدر|"
-    r"أنشئ|انشئ|ولّد|ولد|اكتب|تحليل|ملخص"
-    r")",
+# must NOT short-circuit to open-app propose when the user wants a document.
+_DELIVERABLE_WORDS = (
+    "report", "reports", "document", "documents", "word", "docx", "xlsx",
+    "excel", "pdf", "csv", "export", "generate", "produce", "create", "draft",
+    "write", "summary", "summarise", "summarize", "breakdown", "comprehensive",
+    "analysis", "analyse", "analyze",
 )
 
 
@@ -79,7 +70,7 @@ def is_deliverable_request(text: str) -> bool:
     raw = (text or "").strip()
     if not raw:
         return False
-    return bool(_DELIVERABLE_ASK_RE.search(raw))
+    return bool(has_any_word(raw, _DELIVERABLE_WORDS) or any_needle(raw, DELIVERABLE_ASK_AR))
 
 
 def is_process_briefing(text: str) -> bool:
@@ -91,13 +82,12 @@ def is_process_briefing(text: str) -> bool:
     raw = (text or "").strip()
     if not raw:
         return False
-    if _PROCESS_ID_RE.search(raw):
+    if _find_process_id(raw):
         return True
     # Lifecycle + explain verbs without an exact id (still concept, not nav).
-    if _BRIEFING_ASK_RE.search(raw) and re.search(
-        r"(?i)\b(leave|loan|payroll|gosi|wps|sif|onboarding|onboard|"
-        r"إجازة|اجازة|قرض|رواتب|تأمينات|توظيف|تعيين)\b",
-        raw,
+    if (_is_briefing_ask_en(raw) or any_needle(raw, BRIEFING_ASK_AR)) and (
+        has_any_word(raw, ("leave", "loan", "payroll", "gosi", "wps", "sif", "onboarding", "onboard"))
+        or any_needle(raw, ("إجازة", "اجازة", "قرض", "رواتب", "تأمينات", "توظيف", "تعيين"))
     ):
         return True
     return False
@@ -106,9 +96,9 @@ def is_process_briefing(text: str) -> bool:
 def extract_process_id(text: str) -> str | None:
     """Return the first known process id mentioned, or a best-effort alias."""
     raw = text or ""
-    m = _PROCESS_ID_RE.search(raw)
-    if m:
-        return m.group(1).lower()
+    found = _find_process_id(raw)
+    if found:
+        return found
     low = raw.casefold()
     aliases = (
         ("leave.request.lifecycle", ("leave.request", "leave lifecycle", "leave process", "إجازة", "اجازة")),
@@ -121,7 +111,7 @@ def extract_process_id(text: str) -> str | None:
             "short hours", "إذن حضور", "اذن حضور", "صلاحية حضور",
         )),
     )
-    if not _BRIEFING_ASK_RE.search(raw):
+    if not (_is_briefing_ask_en(raw) or any_needle(raw, BRIEFING_ASK_AR)):
         return None
     for pid, needles in aliases:
         if any(n.casefold() in low or n in raw for n in needles):
@@ -130,7 +120,7 @@ def extract_process_id(text: str) -> str | None:
 
 
 def detect_brief_lang(text: str) -> str:
-    return "ar" if _AR_SCRIPT_RE.search(text or "") else "en"
+    return "ar" if has_arabic_script(text) else "en"
 
 
 def _load_definition(process_id: str) -> dict[str, Any] | None:
@@ -189,7 +179,7 @@ def format_process_briefing(process_id: str, *, lang: str = "en") -> str | None:
 
     for i, step in enumerate(steps, start=1):
         sid = str(step.get("id") or f"step_{i}")
-        en_lbl, ar_lbl = _STEP_LABELS.get(sid, (sid, sid))
+        en_lbl, ar_lbl = STEP_LABELS.get(sid, (sid, sid))
         label = ar_lbl if ar else en_lbl
         human = _step_is_human(step)
         sod = step.get("separation_of_duties") or []
@@ -248,3 +238,4 @@ def try_process_briefing(text: str) -> tuple[str, str] | None:
     if not reply:
         return None
     return pid, reply
+

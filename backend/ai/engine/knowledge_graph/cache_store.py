@@ -34,11 +34,6 @@ def first(rows):
 
 # ── SQL table-name extractor ──────────────────────────────────────────────────
 
-_FROM_PATTERN = re.compile(
-    r'\b(?:FROM|JOIN)\s+(?:"?(\w+)"?\.)?"?(\w+)"?',
-    re.IGNORECASE,
-)
-
 _STOP_WORDS = frozenset({
     "select", "where", "on", "and", "or", "not", "in", "as", "is",
     "null", "true", "false", "by", "having", "with", "only",
@@ -48,7 +43,11 @@ _STOP_WORDS = frozenset({
 def extract_table_tags(sql: str) -> list[str]:
     """Extract table (relation) names referenced in a SQL query."""
     tables: list[str] = []
-    for m in _FROM_PATTERN.finditer(sql):
+    for m in re.finditer(
+        r'\b(?:FROM|JOIN)\s+(?:"?(\w+)"?\.)?"?(\w+)"?',
+        sql,
+        flags=re.IGNORECASE,
+    ):
         table = m.group(2).lower()
         if table and table not in _STOP_WORDS and table not in tables:
             tables.append(table)

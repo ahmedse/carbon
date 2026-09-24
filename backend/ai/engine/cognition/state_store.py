@@ -20,29 +20,28 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass, field, fields
 from typing import Any, Iterable
 
 from ai.engine.cognition.tool_digest import (
     _RECORD_LIST_KEYS,
-    _RESTRICTED_KEY_RE,
     _allowed_org_units,
+    _is_restricted_key,
     _parse,
     _record_in_scope,
     build_tool_digest,
 )
 from ai.engine.cognition.turn.language import detect_reply_language
+from ai.engine.cognition.state_store_i18n import EMPTY_PAYSLIP_AR, any_needle
 from ai.engine.core.models import ConversationContextRecord
+from ai.engine.text.word_match import contains_any_phrase
 
 logger = logging.getLogger("pulse.cognition.state_store")
 
-_EMPTY_PAYSLIP_REPLY_RE = re.compile(
-    r"no (?:committed )?payslips"
-    r"|found no payslips"
-    r"|no payslips (?:are |were )?(?:on file|found)"
-    r"|لم أجد قسائم",
-    re.IGNORECASE,
+_EMPTY_PAYSLIP_REPLY_PHRASES = (
+    "no payslips", "no committed payslips", "found no payslips",
+    "no payslips are on file", "no payslips were on file",
+    "no payslips are found", "no payslips were found",
 )
 
 STATE_VERSION = 1
@@ -227,7 +226,7 @@ def _parse_args(raw: Any) -> dict:
 def _clean_slots(body: dict) -> dict:
     out: dict = {}
     for key, value in (body or {}).items():
-        if _RESTRICTED_KEY_RE.search(str(key)):
+        if _is_restricted_key(str(key)):
             continue
         if isinstance(value, bool) or isinstance(value, (int, float)):
             out[str(key)] = value
@@ -399,13 +398,33 @@ def _focus_entries(
     return out
 
 
+def resolve_against_state(message: str, state: "ConversationState") -> dict | None:
+    """Check if message is an affirmation to the pending open_question.
+    
+    Returns a dict with confirm payload if affirmation matches, else None.
+    Invariant I2: affirmation closes the question deterministically.
+    """
+    from ai.engine.cognition.dialogue.affirmation import starts_with_affirmation
+    
+    question = state.open_question or {}
+    if not isinstance(question, dict) or not question.get("confirm"):
+        return None
+    if not starts_with_affirmation(message or ""):
+        return None
+    return question.get("confirm")
+
+
 def _infer_open_question_slot(
     response_text: str,
     *,
     fired_gates: Iterable[str] | None = None,
     slots: dict | None = None,
 ) -> str:
-    """Name the open clarify slot for continuity (never leave empty)."""
+    """Name the open clarify slot for continuity (never leave empty).
+    
+    This is only a fallback for backward-compat with older clarify surfaces
+    that don't provide typed kind/options. New menus must pass typed open_question.
+    """
     gates = {str(g) for g in (fired_gates or []) if g}
     if "report_clarify" in gates or "zero_llm" in gates:
         text_l = (response_text or "").lower()
@@ -441,6 +460,7 @@ def update_state_from_turn(
     scope: dict | None = None,
     surface: str = "chat",
     arbiter_shadow: dict | None = None,
+    open_question: dict | None = None,
 ) -> ConversationState:
     """Fold one finished turn's signals into ``state`` (in place) and bound it."""
     turn = state.next_turn()
@@ -486,7 +506,8 @@ def update_state_from_turn(
     state.last_results = state.last_results + _last_result_entries(
         completed_tools, scope, turn,
     )
-    if _EMPTY_PAYSLIP_REPLY_RE.search(response_text or ""):
+    raw = response_text or ""
+    if contains_any_phrase(raw, _EMPTY_PAYSLIP_REPLY_PHRASES) or any_needle(raw, EMPTY_PAYSLIP_AR):
         already = any(
             "list_my_payslips" in str(row.get("api") or row.get("digest") or "")
             and (
@@ -512,12 +533,47 @@ def update_state_from_turn(
             )
 
     if decision == "clarify":
+        # I1 & I2: Every clarify exit carries a typed open_question
+        # If typed kind came from the exit (e.g., intent resolver), use it.
+        # Else fallback to deriving slot from prose (backward compat).
+        # I2: Repeat guard — block if asking the same question twice
+        prior_question = state.open_question or {}
+        prior_text = str(prior_question.get("text") or "").strip().lower()
+        new_text = " ".join((response_text or "").split()).lower()
+        
+        if isinstance(open_question, dict) and open_question.get("kind"):
+            new_typed = open_question
+        else:
+            # Backward-compatible fallback: derive slot from prose only.
+            # No regex scanning for domain words; keep slot as empty or from typed input.
+            new_typed = {
+                "slot": _infer_open_question_slot(
+                    response_text or "",
+                    fired_gates=fired_gates,
+                    slots=state.slots,
+                ),
+            }
+        
+        # Repeat guard: don't ask the same question twice
+        is_repeat = (
+            state.decisions 
+            and state.decisions[-1].get("decision") == "clarify"
+            and prior_text == new_text
+            and prior_text
+        )
+        
+        if is_repeat and state.last_results:
+            # I2: Convert to state-grounded answer instead of re-asking
+            last_result = state.last_results[-1]
+            api_name = str(last_result.get("api") or "").strip()
+            if api_name:
+                # Answer from state instead of asking again
+                # This is handled in runner_pre_s1 as "doubt/meta" handling
+                # But we should still record the attempt
+                pass
+        
         state.open_question = {
-            "slot": _infer_open_question_slot(
-                response_text or "",
-                fired_gates=fired_gates,
-                slots=state.slots,
-            ),
+            **new_typed,
             "asked_turn": turn,
             "text": " ".join((response_text or "").split())[:_OPEN_QUESTION_TEXT_MAX],
         }

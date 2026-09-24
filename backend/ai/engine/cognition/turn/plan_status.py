@@ -8,67 +8,36 @@ from __future__ import annotations
 import re
 from typing import Any
 
-_STATUS_ASK = re.compile(
-    r"("
-    r"\b(?:what(?:'s| is)|how is|where(?:'s| is))\b.{0,48}"
-    r"\b(?:status|request|application|plan|loan|leave)\b"
-    r"|\bstatus\s+of\s+my\b"
-    r"|\bwhat happened\b.{0,32}\b(?:request|loan|leave|plan|application)\b"
-    r"|(?:حالة|وضع).{0,24}(?:طلب|قرض|إجازة|اجازة|المخطط|الخطة)"
-    r"|ماذا\s+حدث.{0,24}(?:طلب|قرض|إجازة|اجازة)"
-    r"|وش\s+صار.{0,16}(?:طلب|قرض)"
-    r")",
-    re.IGNORECASE | re.DOTALL,
+from ai.engine.text.word_match import contains_any_phrase, has_any_word
+from ai.engine.cognition.turn.plan_status_i18n import (
+    WRITE_ASK_AR,
+    STATUS_LABEL,
+    any_needle,
+    is_status_ask_ar,
 )
 
-_WRITE_ASK = re.compile(
-    r"\b(?:i\s+(?:want|need)|apply|submit|request a)\b"
-    r"|أريد|اريد|أبغى|اطلب",
-    re.IGNORECASE,
-)
+_STATUS_TAILS = ("status", "request", "application", "plan", "loan", "leave")
+_HAPPENED_TAILS = ("request", "loan", "leave", "plan", "application")
 
-_STATUS_LABEL = {
-    "handoff_ready": {
-        "en": "ready to submit in Agent — not under review until you submit",
-        "ar": "جاهز للتقديم في الوكيل — ليس قيد المراجعة حتى تُرسله",
-    },
-    "discovering": {
-        "en": "still gathering details",
-        "ar": "ما زال يجمع التفاصيل",
-    },
-    "pending_approval": {
-        "en": "pending your approval in Tasks, then review",
-        "ar": "بانتظار موافقتك في المهام ثم المراجعة",
-    },
-    "approved": {
-        "en": "approved and waiting to run",
-        "ar": "مُعتمد وبانتظار التشغيل",
-    },
-    "running": {
-        "en": "running now",
-        "ar": "قيد التشغيل الآن",
-    },
-    "paused": {
-        "en": "paused — waiting for a confirmation",
-        "ar": "متوقف — بانتظار تأكيد",
-    },
-    "completed": {
-        "en": "completed",
-        "ar": "مكتمل",
-    },
-    "completed_with_gaps": {
-        "en": "completed with gaps",
-        "ar": "مكتمل مع نواقص",
-    },
-    "failed": {
-        "en": "failed",
-        "ar": "فشل",
-    },
-    "cancelled": {
-        "en": "cancelled",
-        "ar": "ملغى",
-    },
-}
+
+def _is_status_ask_en(text: str) -> bool:
+    from ai.engine.text.word_match import has_gapped_words
+
+    if contains_any_phrase(text, ("status of my",)):
+        return True
+    if has_gapped_words(text, "happened", _HAPPENED_TAILS, max_gap=6):
+        return True
+    return any(
+        has_gapped_words(text, head, _STATUS_TAILS, max_gap=8)
+        for head in ("what", "how", "where")
+    )
+
+def _is_write_ask_en(text: str) -> bool:
+    return (
+        has_any_word(text, ("apply", "submit"))
+        or contains_any_phrase(text, ("i want", "i need", "request a"))
+    )
+
 
 
 def is_plan_status_utterance(text: str) -> bool:
@@ -76,9 +45,10 @@ def is_plan_status_utterance(text: str) -> bool:
     body = (text or "").strip()
     if not body:
         return False
-    if _WRITE_ASK.search(body) and not _STATUS_ASK.search(body):
+    is_status = bool(_is_status_ask_en(body) or is_status_ask_ar(body))
+    if (_is_write_ask_en(body) or any_needle(body, WRITE_ASK_AR)) and not is_status:
         return False
-    return bool(_STATUS_ASK.search(body))
+    return is_status
 
 
 def _lang(text: str, state: Any = None) -> str:
@@ -133,7 +103,7 @@ def render_plan_status(state: Any, user_message: str = "") -> str:
         title = _title_from_slots(slots)
         extra = ""
 
-    label = (_STATUS_LABEL.get(status) or _STATUS_LABEL["handoff_ready"])[lang]
+    label = (STATUS_LABEL.get(status) or STATUS_LABEL["handoff_ready"])[lang]
     amount = slots.get("amount") or slots.get("principal")
     bits: list[str] = []
     if title:

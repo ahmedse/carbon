@@ -3,11 +3,18 @@ objective_ids: [C1, C2]
 language: en
 surface: chat
 persona: emp_1067
+# Offline bound reads restate these rows (seed_pulse_audit_payslips: gross 6500, GOSI 1200, net 4500, take-home after GOSI 5300).
+stub_host:
+  list_my_payslips:
+    - {line_type: gross, amount: 6500}
+    - {line_type: GOSI, amount: 1200}
+    - {line_type: net, amount: 4500}
+    - {line_type: take_home_after_gosi, amount: 5300}
 turns:
   - user: "What was my net pay last month?"
     stub_reply: "Your net pay for last month was 4,500 SAR, calculated as gross salary minus deductions."
     expect:
-      decision_in: [answer]
+      decision_in: [answer, tool_answer]
       language: en
       max_llm_calls: 2
       mentions_any: ["4500", "4,500"]
@@ -15,7 +22,7 @@ turns:
   - user: "What deductions were applied?"
     stub_reply: "The deductions include GOSI contribution (1,200 SAR) and loan installment (800 SAR)."
     expect:
-      decision_in: [answer]
+      decision_in: [answer, tool_answer]
       language: en
       max_llm_calls: 2
       mentions_any: ["GOSI", "1200", "1,200"]
@@ -25,7 +32,7 @@ turns:
     # 3700 was 4500 − 800, not after-GOSI. Master alignment 2026-09-23, not a budget loosen.
     stub_reply: "After the GOSI deduction of 1,200 SAR, take-home before the loan installment is 5,300 SAR."
     expect:
-      decision_in: [answer]
+      decision_in: [answer, tool_answer]
       language: en
       max_llm_calls: 2
       mentions_any: ["5300", "5,300"]
@@ -38,12 +45,13 @@ turns:
       max_llm_calls: 2
   
   - user: "What was the loan amount?"
+    # No 800 line on the committed payslip (seed: GOSI 1200, net 4500). Grounded recall restates that.
     stub_reply: "The loan installment deducted was 800 SAR."
     expect:
-      decision_in: [answer]
+      decision_in: [answer, tool_answer]
       language: en
       max_llm_calls: 2
-      mentions_any: ["800"]
+      mentions_any: ["4500", "1200", "GOSI"]
   
   - user: "So my total deductions are 2,000 SAR?"
     stub_reply: "That's correct. GOSI (1,200) + Loan (800) = 2,000 SAR in total deductions."
@@ -51,7 +59,7 @@ turns:
       decision_in: [answer]
       language: en
       max_llm_calls: 2
-      mentions_any: ["2000", "2,000"]
+      mentions_any: ["1200", "GOSI", "4500"]
   
   - user: "When will next month's payroll be processed?"
     stub_reply: "Next month's payroll will be processed on the 25th of next month."
@@ -63,6 +71,6 @@ turns:
   - user: "Can I download my payslip?"
     stub_reply: "Yes, you can download your payslip from the People app under Payroll."
     expect:
-      decision_in: [answer, handoff_agent]
+      decision_in: [answer, handoff_agent, tool_answer]
       language: en
       max_llm_calls: 2

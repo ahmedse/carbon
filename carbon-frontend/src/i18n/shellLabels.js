@@ -143,6 +143,7 @@ export const NAV_LABEL_KEYS = {
   Attendance: 'nav.attendance',
   'App Config': 'nav.appConfig',
   'My Leave': 'nav.myLeave',
+  'My Payslips': 'nav.myPayslips',
   'My Attendance': 'nav.myAttendance',
   'My Requests': 'nav.myRequests',
   My: 'nav.my',

@@ -59,6 +59,7 @@ evidence → not done.
 | **GradeVance E2E QA** | **EduOS** | **DONE** | Seed 6 runs + LCT report · `docs/eduos/qa-evidence/E2E-SUMMARY.json` |
 | **GradeVance HITL P2** | **EduOS** | **ACTIVE** | Learning loop proven: edit→proposal→accept→bump→repin · `docs/eduos/qa-evidence/HITL-LEARNING-LOOP.json` · next: UI path + Phase C depth |
 | **PV2** (Pulse v2 Intelligence Contract, ADR-0047) | **Pulse** | **ACTIVE** | **20/20 · L0–L5 · 6B DONE 5/5 · ADR-0047 Accepted** · 4A still soaking |
+| **PV21** (Pulse 2.1, ADR-0049 Proposed) | **Pulse** | **ACTIVE** | Model understands, catalog executes. Flags default legacy/off. No live flip. No stack restart. |
 
 **Multi-Master:** `.ai-toolkit/shared/multi-master.md` · seats · `docs/ops/MASTERS-COMMS.md` · RULE_30. · **This session seat: Nibras.**
 

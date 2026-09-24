@@ -20,7 +20,6 @@ Pure function — no Django, no I/O.
 from __future__ import annotations
 
 import json
-import re
 from typing import Any, Iterable
 
 DIGEST_MAX_CHARS = 200
@@ -30,11 +29,11 @@ _MAX_VALUE_CHARS = 40
 
 _RECORD_LIST_KEYS = ("results", "rows", "items", "records", "entities", "data")
 
-_RESTRICTED_KEY_RE = re.compile(
-    r"password|passwd|secret|token|api_?key|credential|iban|swift|"
-    r"national_?id|iqama|ssn|passport|bank_?account|account_?number|"
-    r"card_?number|cvv|pin_?code|hash|salt",
-    re.IGNORECASE,
+_RESTRICTED_KEY_NEEDLES = (
+    "password", "passwd", "secret", "token", "apikey", "api_key", "credential",
+    "iban", "swift", "nationalid", "national_id", "iqama", "ssn", "passport",
+    "bankaccount", "bank_account", "accountnumber", "account_number",
+    "cardnumber", "card_number", "cvv", "pincode", "pin_code", "hash", "salt",
 )
 
 _PLUMBING_KEYS = frozenset({
@@ -71,6 +70,12 @@ def _record_in_scope(record: dict, allowed: set[str]) -> bool:
     return str(org) in allowed
 
 
+def _is_restricted_key(key: str) -> bool:
+    """True when a field name matches a RULE_23 restricted identifier needle."""
+    compact = str(key).lower().replace("_", "")
+    return any(needle.replace("_", "") in compact for needle in _RESTRICTED_KEY_NEEDLES)
+
+
 def _skip_key(key: str) -> bool:
     k = str(key).lower()
     return (
@@ -78,7 +83,7 @@ def _skip_key(key: str) -> bool:
         or k == "id"
         or k.endswith("_id")
         or k.endswith("_ids")
-        or bool(_RESTRICTED_KEY_RE.search(k))
+        or _is_restricted_key(k)
     )
 
 

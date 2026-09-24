@@ -3,23 +3,21 @@ objective_ids: [C1, C5, C6]
 language: ar
 surface: chat
 persona: emp_1067
-# A brief with a guard («إذا كان لدي قرض مفتوح، توقف») and a parallel read is a
-# plan, not a loan form. Chat must never answer it with a bare «أي نوع قرض تريد؟».
-# When Chat does clarify a governed slot, the choices ride follow_ups (chips)
-# and every chip label re-parses as a slot fill.
+# One coherent Plan session. Ask and Plan are separate conversations; this bank
+# must not mix their state in one conversation.
 turns:
   - user: "راجع قروضي المفتوحة ورصيد إجازتي في الوقت نفسه. إذا كان لدي قرض مفتوح، توقف. إذا لا، قدّم طلب قرض ٥٠٠ دينار لمدة ١٢ شهراً."
+    process_mode: plan
     stub_reply: "خطة مقترحة: ١) قراءة قروضي المفتوحة ورصيد الإجازة معاً. ٢) إن وُجد قرض مفتوح — توقف. ٣) وإلا — مسودة طلب قرض ٥٠٠ دينار لمدة ١٢ شهراً للمراجعة. لا يُرسل شيء قبل موافقتك."
     expect:
-      # Ask surface: a composite write brief is an honest handoff (switch to
-      # Plan / My) — never a silent submit, never a bare loan-type question.
-      decision_in: [answer, tool_answer, handoff_agent]
+      decision_in: [tool_answer]
       language: ar
-      max_llm_calls: 3
+      max_llm_calls: 0
+      mentions_any: ["الشرط", "قرض مفتوح"]
       mentions_none: ["أي نوع قرض تريد"]
 
-  # Restyle follow-up: rewrite the previous answer — never a fresh topic menu.
   - user: "بالعربي وبالتفصيل"
+    process_mode: plan
     stub_reply: "بالتفصيل: أولاً أقرأ قروضي المفتوحة ورصيد الإجازة معاً، ثم إن وُجد قرض مفتوح أتوقف، وإلا أُجهّز مسودة طلب قرض ٥٠٠ دينار لمدة ١٢ شهراً للمراجعة قبل أي إرسال."
     expect:
       decision_in: [answer]
@@ -27,56 +25,56 @@ turns:
       max_llm_calls: 1
       mentions_none: ["ما هو الموضوع", "أي نوع قرض تريد", "Plan Review"]
 
+  - user: "ما حالة الخطة؟"
+    process_mode: plan
+    stub_reply: "الخطة بانتظار موافقتك في المهام."
+    expect:
+      decision_in: [answer]
+      language: ar
+      max_llm_calls: 0
+      mentions_any: ["بانتظار موافقتك", "المهام"]
+
+  - user: "ما وضع طلب القرض؟"
+    process_mode: plan
+    stub_reply: "الخطة بانتظار موافقتك في المهام."
+    expect:
+      decision_in: [answer]
+      language: ar
+      max_llm_calls: 0
+      mentions_any: ["بانتظار موافقتك", "المهام"]
+
   - user: "ما الخطوات التي ستقوم بها بالترتيب؟"
-    stub_reply: "أولاً أقرأ القروض والرصيد، ثم أتحقق من الشرط، ثم أُجهّز مسودة الطلب فقط إذا لم يكن لديك قرض مفتوح."
+    process_mode: plan
+    stub_reply: "أولاً أقرأ القروض ورصيد الإجازة بالتوازي، ثم أتحقق من الشرط، ثم أُجهّز طلب ٥٠٠ دينار لمدة ١٢ شهراً فقط إذا لم يوجد قرض مفتوح."
     expect:
       decision_in: [answer, tool_answer]
       language: ar
       max_llm_calls: 2
+      mentions_any: ["٥٠٠", "500", "١٢", "12"]
+      mentions_none: ["أي نوع قرض تريد"]
 
-  - user: "أريد قرض طارئ ٥٠٠٠ لمدة ١٢ شهراً"
-    stub_reply: "لدي: نوع القرض: طارئ؛ المبلغ: ٥٠٠٠؛ المدة: ١٢. لإرسال الطلب بدّل إلى الوكيل."
+  - user: "هل تم تقديم القرض فعلاً؟"
+    process_mode: plan
+    stub_reply: "لا. لم يُقدَّم القرض؛ الخطة مسودة بانتظار موافقتك ولم تُنفّذ."
     expect:
-      decision_in: [handoff_agent, clarify, answer]
+      decision_in: [answer, tool_answer]
+      language: ar
+      max_llm_calls: 2
+      mentions_any: ["لم يُقدَّم", "لم تُنفّذ", "بانتظار موافقتك"]
+
+  - user: "اختصر الإجابة السابقة بالعربية"
+    process_mode: plan
+    stub_reply: "لا، القرض لم يُقدَّم. الخطة تنتظر موافقتك."
+    expect:
+      decision_in: [answer]
       language: ar
       max_llm_calls: 1
-      mentions_any: ["٥٠٠٠", "5000", "طارئ"]
-
-  - user: "ما نوع القرض الذي طلبته؟"
-    stub_reply: "نوع القرض الذي طلبته هو قرض طارئ."
-    expect:
-      decision_in: [answer, handoff_agent]
-      language: ar
-      max_llm_calls: 1
-      mentions_any: ["طارئ", "emergency"]
+      mentions_none: ["ما هو الموضوع", "أي نوع قرض تريد"]
 
   - user: "شكراً"
+    process_mode: plan
     stub_reply: "على الرحب والسعة."
     expect:
       decision_in: [answer, navigate]
       language: ar
       max_llm_calls: 0
-
-  - user: "أريد إجازة"
-    stub_reply: "أي نوع إجازة تريد؟"
-    expect:
-      decision_in: [clarify]
-      language: ar
-      max_llm_calls: 1
-      mentions_any: ["نوع إجازة", "نوع الإجازة"]
-
-  - user: "إجازة سنوية"
-    stub_reply: "ما تواريخ الإجازة؟"
-    expect:
-      decision_in: [clarify]
-      language: ar
-      max_llm_calls: 1
-      must_not_reask_slots: [leave_type]
-
-  - user: "من 2026-10-05 إلى 2026-10-09"
-    stub_reply: "فهمت: إجازة سنوية من ٥ أكتوبر إلى ٩ أكتوبر. أأكد التواريخ؟"
-    expect:
-      decision_in: [clarify, answer, handoff_agent]
-      language: ar
-      max_llm_calls: 1
-      must_not_reask_slots: [leave_type]

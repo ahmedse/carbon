@@ -1,0 +1,1269 @@
+{
+  "n": 70,
+  "decision_accuracy": 0.6785714285714286,
+  "parity": 0.9,
+  "misses": [
+    "g6-017",
+    "g6-022",
+    "g6-026",
+    "g6-027",
+    "g6-028",
+    "g6-029",
+    "g6-068",
+    "g6-037",
+    "g6-038",
+    "g6-039",
+    "g6-040",
+    "g6-041",
+    "g6-043",
+    "g6-044",
+    "g6-045",
+    "g6-046",
+    "g6-047",
+    "g6-048",
+    "g6-049",
+    "g6-052",
+    "g6-053",
+    "g6-054",
+    "g6-056",
+    "g6-058"
+  ],
+  "mode": "understand",
+  "tier": "all",
+  "measured_at": "2026-09-24",
+  "gate_min": 0.95,
+  "gate_pass": false,
+  "by_tier": {
+    "baseline": {
+      "n": 61,
+      "decision_accuracy": 0.639344262295082,
+      "parity": 0.9016393442622951,
+      "misses": [
+        "g6-017",
+        "g6-022",
+        "g6-026",
+        "g6-027",
+        "g6-028",
+        "g6-029",
+        "g6-037",
+        "g6-038",
+        "g6-039",
+        "g6-040",
+        "g6-041",
+        "g6-043",
+        "g6-044",
+        "g6-045",
+        "g6-046",
+        "g6-047",
+        "g6-048",
+        "g6-049",
+        "g6-052",
+        "g6-053",
+        "g6-054",
+        "g6-056",
+        "g6-058"
+      ]
+    },
+    "v21": {
+      "n": 9,
+      "decision_accuracy": 0.9444444444444444,
+      "parity": 0.8888888888888888,
+      "misses": [
+        "g6-068"
+      ]
+    }
+  },
+  "errors": [],
+  "cases": [
+    {
+      "id": "g6-001",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-002",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-003",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-004",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-005",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-006",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-007",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-061",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-008",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_leave",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_leave",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-009",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_leave",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_leave",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-010",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_leave",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_leave",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-011",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_leave",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_leave",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-012",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_leave",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_leave",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-013",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_leave",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_leave",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-014",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-015",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-016",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-017",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "en": {
+        "op": "clarify",
+        "api": "",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": false,
+      "parity": false
+    },
+    {
+      "id": "g6-018",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-019",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-062",
+      "tier": "v21",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-063",
+      "tier": "v21",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-064",
+      "tier": "v21",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-065",
+      "tier": "v21",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-020",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_payslips",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_payslips",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-021",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_payslips",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_payslips",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-022",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "get_my_profile",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_profile",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": false,
+      "parity": true
+    },
+    {
+      "id": "g6-023",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_payslips",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_payslips",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-024",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_payslips",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_payslips",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-025",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_payslips",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_payslips",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-026",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_attendance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_attendance",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": false,
+      "parity": true
+    },
+    {
+      "id": "g6-027",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_attendance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_attendance",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": false,
+      "parity": true
+    },
+    {
+      "id": "g6-028",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_attendance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_attendance",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": false,
+      "parity": true
+    },
+    {
+      "id": "g6-029",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_attendance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_attendance",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": false,
+      "parity": true
+    },
+    {
+      "id": "g6-030",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-031",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-032",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-033",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-066",
+      "tier": "v21",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-068",
+      "tier": "v21",
+      "ar": {
+        "op": "answer",
+        "api": "",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "chart"
+      },
+      "ar_ok": false,
+      "en_ok": true,
+      "parity": false
+    },
+    {
+      "id": "g6-069",
+      "tier": "v21",
+      "ar": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "chart"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "chart"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-070",
+      "tier": "v21",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_payslips",
+        "render": "chart"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_payslips",
+        "render": "chart"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-034",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-035",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-036",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_payslips",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_payslips",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-037",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": false,
+      "parity": true
+    },
+    {
+      "id": "g6-038",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": false,
+      "parity": true
+    },
+    {
+      "id": "g6-039",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": false,
+      "parity": true
+    },
+    {
+      "id": "g6-040",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_loans",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": false,
+      "parity": true
+    },
+    {
+      "id": "g6-041",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_leave",
+        "render": "text"
+      },
+      "en": {
+        "op": "clarify",
+        "api": "",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": false,
+      "parity": false
+    },
+    {
+      "id": "g6-042",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_payslips",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_payslips",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-043",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_attendance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_attendance",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": false,
+      "parity": true
+    },
+    {
+      "id": "g6-044",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "get_my_profile",
+        "render": "text"
+      },
+      "en": {
+        "op": "clarify",
+        "api": "",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": false,
+      "parity": false
+    },
+    {
+      "id": "g6-045",
+      "tier": "baseline",
+      "ar": {
+        "op": "refuse",
+        "api": "",
+        "render": "text"
+      },
+      "en": {
+        "op": "refuse",
+        "api": "",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": false,
+      "parity": true
+    },
+    {
+      "id": "g6-046",
+      "tier": "baseline",
+      "ar": {
+        "op": "refuse",
+        "api": "",
+        "render": "text"
+      },
+      "en": {
+        "op": "refuse",
+        "api": "",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": false,
+      "parity": true
+    },
+    {
+      "id": "g6-047",
+      "tier": "baseline",
+      "ar": {
+        "op": "refuse",
+        "api": "",
+        "render": "text"
+      },
+      "en": {
+        "op": "refuse",
+        "api": "",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": false,
+      "parity": true
+    },
+    {
+      "id": "g6-048",
+      "tier": "baseline",
+      "ar": {
+        "op": "clarify",
+        "api": "",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": false,
+      "parity": false
+    },
+    {
+      "id": "g6-049",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "get_my_leave_balance",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": false,
+      "parity": true
+    },
+    {
+      "id": "g6-050",
+      "tier": "baseline",
+      "ar": {
+        "op": "answer",
+        "api": "",
+        "render": "text"
+      },
+      "en": {
+        "op": "answer",
+        "api": "",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-051",
+      "tier": "baseline",
+      "ar": {
+        "op": "answer",
+        "api": "",
+        "render": "text"
+      },
+      "en": {
+        "op": "answer",
+        "api": "",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-052",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_payslips",
+        "render": "text"
+      },
+      "en": {
+        "op": "call_tool",
+        "api": "list_my_payslips",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": false,
+      "parity": true
+    },
+    {
+      "id": "g6-053",
+      "tier": "baseline",
+      "ar": {
+        "op": "clarify",
+        "api": "",
+        "render": "text"
+      },
+      "en": {
+        "op": "clarify",
+        "api": "",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": false,
+      "parity": true
+    },
+    {
+      "id": "g6-054",
+      "tier": "baseline",
+      "ar": {
+        "op": "call_tool",
+        "api": "list_my_attendance",
+        "render": "text"
+      },
+      "en": {
+        "op": "refuse",
+        "api": "",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": false,
+      "parity": false
+    },
+    {
+      "id": "g6-055",
+      "tier": "baseline",
+      "ar": {
+        "op": "handoff_agent",
+        "api": "",
+        "render": "text"
+      },
+      "en": {
+        "op": "handoff_agent",
+        "api": "",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-056",
+      "tier": "baseline",
+      "ar": {
+        "op": "clarify",
+        "api": "",
+        "render": "text"
+      },
+      "en": {
+        "op": "clarify",
+        "api": "",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": false,
+      "parity": true
+    },
+    {
+      "id": "g6-067",
+      "tier": "v21",
+      "ar": {
+        "op": "handoff_agent",
+        "api": "",
+        "render": "text"
+      },
+      "en": {
+        "op": "handoff_agent",
+        "api": "",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-057",
+      "tier": "baseline",
+      "ar": {
+        "op": "refuse",
+        "api": "",
+        "render": "text"
+      },
+      "en": {
+        "op": "refuse",
+        "api": "",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-058",
+      "tier": "baseline",
+      "ar": {
+        "op": "answer",
+        "api": "",
+        "render": "text"
+      },
+      "en": {
+        "op": "refuse",
+        "api": "",
+        "render": "text"
+      },
+      "ar_ok": false,
+      "en_ok": true,
+      "parity": false
+    },
+    {
+      "id": "g6-059",
+      "tier": "baseline",
+      "ar": {
+        "op": "refuse",
+        "api": "",
+        "render": "text"
+      },
+      "en": {
+        "op": "refuse",
+        "api": "",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    },
+    {
+      "id": "g6-060",
+      "tier": "baseline",
+      "ar": {
+        "op": "refuse",
+        "api": "",
+        "render": "text"
+      },
+      "en": {
+        "op": "refuse",
+        "api": "",
+        "render": "text"
+      },
+      "ar_ok": true,
+      "en_ok": true,
+      "parity": true
+    }
+  ]
+}

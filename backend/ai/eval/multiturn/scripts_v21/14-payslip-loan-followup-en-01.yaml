@@ -1,0 +1,91 @@
+id: payslip-loan-followup-en-01
+objective_ids: [C1, C2, C3]
+language: en
+surface: chat
+persona: emp_1067
+# v21-tier golden (ADR-0049 §8). Source: Nibras Chat transcript 2026-09-24 as emp_1067.
+# Legacy failures this script pins:
+#   turn 4  — "I noticed I have a loan …" hit the write brief → chat_clarify
+#             "What type of loan are you interested in?" (read/write twin misroute).
+#   turn 5  — "get it" fetched /people/me/loan/ 200, then honest_unsummarized_fallback
+#             replaced the render ("I fetched the data but couldn't summarize… Open My").
+#   turn 3  — "what is GOSI?!" fell to payslip_recall (terse restate) instead of an explanation.
+# Lives outside scripts/*.yaml so the G5 bank (96/96) is unchanged; run with
+#   python -m ai.eval.multiturn.runner --scripts "scripts_v21/*.yaml" --report /tmp/v21.json --verbose
+stub_host:
+  list_my_payslips:
+    - {line_type: gross, amount: 6500}
+    - {line_type: GOSI, amount: 1200}
+    - {line_type: loan_installment, amount: 800}
+    - {line_type: net, amount: 4500}
+  list_my_loans:
+    - {id: 7, loan_type: emergency, principal: 9600, term_months: 12, status: active}
+turns:
+  - user: "What was my last payslip?"
+    stub_reply: "Your last payslip: gross 6,500, GOSI 1,200, loan installment 800, net 4,500."
+    expect:
+      decision_in: [tool_answer, answer]
+      language: en
+      max_llm_calls: 2
+      mentions_any: ["6500", "6,500", "4500", "4,500"]
+
+  - user: "educate me about my payslip"
+    stub_reply: "Gross is what you earn before deductions. GOSI is the social insurance contribution. The loan installment is your monthly repayment. Net is what reaches your account."
+    expect:
+      decision_in: [answer, tool_answer]
+      language: en
+      max_llm_calls: 2
+      mentions_any: ["GOSI", "gross", "net"]
+
+  - user: "what is GOSI?!"
+    stub_reply: "GOSI is the General Organization for Social Insurance. The 1,200 on your payslip is your contribution toward pension and insurance."
+    expect:
+      decision_in: [answer, tool_answer]
+      language: en
+      max_llm_calls: 2
+      mentions_any: ["GOSI", "insurance"]
+
+  - user: "I noticed I have a loan, can you give me more details?"
+    stub_reply: "You have one active emergency loan: principal 9,600 over 12 months."
+    expect:
+      # Existing loan → read. Never the submit_my_loan slot-fill.
+      decision_in: [tool_answer, answer]
+      language: en
+      max_llm_calls: 2
+      must_not_reask_slots: [loan_type]
+      must_not_contain: ["What type of loan", "interested in", "Open My"]
+      mentions_any: ["emergency", "9600", "9,600"]
+
+  - user: "get it"
+    stub_reply: "Your loans: emergency, 9600, 12 mo, active."
+    expect:
+      # Offered read → execute and render. Never the honest fallback.
+      decision_in: [tool_answer, answer]
+      language: en
+      max_llm_calls: 2
+      must_not_contain: ["couldn't summarize", "could not summarize", "Open My"]
+      mentions_any: ["emergency", "9600", "9,600"]
+
+  - user: "how much is left on it?"
+    stub_reply: "The host shows principal 9,600 over 12 months at 800 a month; it does not expose the remaining balance directly."
+    expect:
+      decision_in: [answer, tool_answer]
+      language: en
+      max_llm_calls: 2
+      must_not_reask_slots: [loan_type]
+
+  - user: "I want to take a new loan"
+    stub_reply: "That changes data in the system. Switch to Agent to submit a loan request."
+    expect:
+      # Contrast: a NEW loan is a write → Agent handoff (ADR-0046), even mid-thread.
+      decision_in: [handoff_agent, clarify]
+      language: en
+      max_llm_calls: 2
+      must_not_contain: ["submitted", "I have submitted"]
+
+  - user: "thanks"
+    stub_reply: "You're welcome."
+    expect:
+      decision_in: [answer]
+      language: en
+      max_llm_calls: 2

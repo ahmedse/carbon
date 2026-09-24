@@ -681,6 +681,20 @@ function AIInputBar({
         )}
       </Box>
 
+      {conversationId && (
+        <Tooltip title={t('clearContext')}>
+          <span>
+            <IconButton
+              size="small"
+              onClick={() => onCommand?.('clear')}
+              disabled={working || !onCommand}
+              aria-label={t('clearContext')}
+            >
+              <ClearAllIcon fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
+      )}
       {working && (
         <Tooltip title={t('stopGeneration')}>
           <IconButton size="small" color="warning" onClick={handleStop} aria-label={t('stopGeneration')}>

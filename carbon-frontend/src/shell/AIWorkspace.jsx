@@ -122,6 +122,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
       return 'ask';
     }
   });
+  const [processSwitching, setProcessSwitching] = useState(false);
   // W5-A — lifecycle state reported by AITaskPanel; drives the header's
   // always-visible safety-contract text (ADR-0014 §4).
   const [agentLifecycleState, setAgentLifecycleState] = useState('idle');
@@ -157,6 +158,10 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
           id: payload.planId,
           brief: typeof payload.planBrief === 'string' ? payload.planBrief : '',
         });
+      }
+      // Discuss to refine a plan → Plan dial; outcome talk stays Ask.
+      if (payload.process === 'plan' || payload.process === 'ask') {
+        setComposerProcess(payload.process);
       }
     }
   }, []);
@@ -386,18 +391,21 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   // Ask ↔ Plan flips the conversation, not a flag on the same thread.
   const handleComposerProcessChange = useCallback(
     async (next) => {
+      if (processSwitching) return;
       const dial = normalizePulseProcess(next);
       if (dial === composerProcess && activeId) {
         rememberConversationProcess(activeId, dial);
         return;
       }
-      setComposerProcess(dial);
       const visible = order
         .map((id) => byId[id])
         .filter(Boolean);
       const targetId = findConversationForProcess(dial, visible);
       if (targetId && targetId !== activeId) {
         rememberConversationProcess(targetId, dial);
+        // Atomic thread + dial switch: never render Plan controls on the old
+        // Ask conversation (or vice versa).
+        setComposerProcess(dial);
         setActiveId(targetId);
         setShowArchived(false);
         return;
@@ -406,6 +414,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
         rememberConversationProcess(activeId, dial);
         return;
       }
+      setProcessSwitching(true);
       try {
         const title = dial === 'plan' ? t('newPlanChatTitle') : t('newAskChatTitle');
         const conv = await apiCreateConversation(
@@ -415,15 +424,16 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
         rememberConversationProcess(conv.id, dial);
         setById((prev) => ({ ...prev, [conv.id]: conv }));
         setOrder((prev) => [conv.id, ...prev]);
+        setComposerProcess(dial);
         setActiveId(conv.id);
         setShowArchived(false);
       } catch (err) {
         notifyFromError(err, 'Could not open conversation');
-        // Roll dial back if create failed — stay on the open thread.
-        setComposerProcess(composerProcess);
+      } finally {
+        setProcessSwitching(false);
       }
     },
-    [composerProcess, activeId, order, byId, token, notifyFromError, t],
+    [processSwitching, composerProcess, activeId, order, byId, token, notifyFromError, t],
   );
 
   // Handle a manifest starter chip: open a conversation of the right type and
@@ -806,6 +816,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
                   onSeedDraftConsumed={() => setChatSeedDraft(null)}
                   onActivePlans={setChatActivePlans}
                   process={composerProcess}
+                  processSwitching={processSwitching}
                   onProcessChange={handleComposerProcessChange}
                 />
               ) : (

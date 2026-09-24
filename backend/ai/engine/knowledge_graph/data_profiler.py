@@ -22,23 +22,16 @@ from typing import Optional
 logger = logging.getLogger("pulse.knowledge_graph.data_profiler")
 
 # ── Default PII column-name patterns ─────────────────────────────────────────
-_DEFAULT_PII_PATTERNS: list[re.Pattern] = [
-    re.compile(r"\bemail\b", re.I),
-    re.compile(r"\bpassword\b", re.I),
-    re.compile(r"\bphone\b", re.I),
-    re.compile(r"\bssn\b", re.I),
-    re.compile(r"\b(first|last)_?name\b", re.I),
-    re.compile(r"\baddress\b", re.I),
-    re.compile(r"\bip_?addr", re.I),
-    re.compile(r"\bcredit_?card\b", re.I),
-    re.compile(r"\bdob\b", re.I),
-    re.compile(r"\bbirthdate\b", re.I),
-]
+_DEFAULT_PII_PATTERN = re.compile(
+    r"\b(?:email|password|phone|ssn|address|credit_?card|dob|birthdate|"
+    r"ip_?addr|(?:first|last)_?name)\b",
+    re.I,
+)
 
 
 def _build_pii_patterns(extra: str) -> list[re.Pattern]:
-    """Combine default patterns with any user-supplied extras (comma-separated)."""
-    patterns = list(_DEFAULT_PII_PATTERNS)
+    """Combine default pattern with any user-supplied extras (comma-separated)."""
+    patterns: list[re.Pattern] = [_DEFAULT_PII_PATTERN]
     if extra:
         for pat in extra.split(","):
             pat = pat.strip()

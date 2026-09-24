@@ -1,0 +1,32 @@
+---
+description: Pulse 2.1 contract — model understands, catalog executes (ADR-0049 Proposed). Flags default off.
+globs:
+  - backend/ai/engine/**/*
+  - backend/ai/eval/**/*
+  - .ai-toolkit/decisions/0049-pulse-2-1-model-understands-catalog-executes.md
+alwaysApply: true
+---
+
+# Pulse 2.1 contract (ADR-0049 · Proposed)
+
+v2 (ADR-0047) stays the default path. Do not flip `PULSE_UNDERSTAND` or `PULSE_TOOL_CHOICE` on in committed defaults.
+
+## Hard contract
+
+| Commitment | Rule |
+|---|---|
+| **Understanding** | One call emits a `Decision` (`turn/decision.py`). Regex may normalize (`engine/text/normalize.py`) or add a signal. Regex must not be a new turn exit. |
+| **Catalog** | Twins differ by description, `not_for`, `kind`, `empty_render`. Not by a new `topic_re`. |
+| **tool_choice** | Force with `choice_from_resolution` only when `PULSE_TOOL_CHOICE=on`. Omitted kwarg = today's behavior. |
+| **Chat** | ADR-0046. `validate_decision` turns Chat write tools into `handoff_agent`. |
+| **Facts** | Numbers in a tool answer must appear in the tool payload (`turn/grounding.py`). |
+| **Ladder** | L0–L5 are the v2 exit. L6/L7 live in `v21_levels` and stay missing until evidence clears. Do not claim them in the canvas. |
+| **Budget** | Do not add `StagedExit` or routing `re.compile` on the v21 path. `harness_budget` must not rise. |
+| **Soak** | Night 2026-09-23 FAIL stays. No live smoke without STACK-HOLD. No `manage.sh` start/kill. |
+
+## Do NOT
+
+- Default `PULSE_UNDERSTAND=v21` or `PULSE_TOOL_CHOICE=on`.
+- Delete the legacy Intent→Draft path before G6 ≥ 0.95 and a shadow window.
+- Add `leave_*` phrase wrappers back into `ess_read.py`.
+- Loosen YAML goldens. Grant `people:view` to `emp_1067`.

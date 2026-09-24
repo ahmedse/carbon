@@ -29,7 +29,6 @@ class GuardError(ValueError):
 _TRUE = frozenset({"true", "True", "TRUE"})
 _FALSE = frozenset({"false", "False", "FALSE"})
 _NULL = frozenset({"null", "None", "none", "NULL"})
-_FORBIDDEN = re.compile(r"__|import\b|exec\b|eval\b|lambda\b|globals\b|locals\b")
 
 
 class _Tok:
@@ -41,7 +40,10 @@ class _Tok:
 
 
 def _tokenize(src: str) -> list[_Tok]:
-    if _FORBIDDEN.search(src or ""):
+    raw = src or ""
+    if "__" in raw or re.search(
+        r"\b(?:import|exec|eval|lambda|globals|locals)\b", raw,
+    ):
         raise GuardError("guard expression contains forbidden tokens")
     s = (src or "").strip()
     if not s:

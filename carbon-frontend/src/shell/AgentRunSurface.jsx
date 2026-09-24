@@ -1,7 +1,7 @@
 // src/shell/AgentRunSurface.jsx
 // ADR-0043 Run view — timeline + collapsible step detail drawer.
 // Plan owns the DAG; Canvas owns Job Map. No bottom "Show details" list.
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   Alert,
@@ -14,10 +14,12 @@ import {
 import { useIsMobile } from '../hooks/useIsMobile';
 import { FONT } from '../theme/themeTokens';
 import { useTranslation } from 'react-i18next';
-import { buildRunChronicle } from '../utils/runChronicle';
+import { buildRunChronicle, buildHumanActivityLog } from '../utils/runChronicle';
 import RunTimeline from './RunTimeline';
 import RunStepDetailDrawer from './RunStepDetailDrawer';
 import InheritedContextPanel from './InheritedContextPanel';
+import HumanActivityLog from './HumanActivityLog';
+import { friendlyStepError } from './humanizeOperatorCopy';
 
 function formatDuration(ms) {
   if (ms == null || !Number.isFinite(ms)) return null;
@@ -66,31 +68,44 @@ function AgentRunSurface({
   onDeclineStep = null,
   confirmingId = null,
   hideInherited = false,
+  stepActions = null,
 }) {
   const { t } = useTranslation('ai');
   const isMobile = useIsMobile();
   const [selectedStepId, setSelectedStepId] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Auto-focus an urgent beat once when it appears — never steal focus again
+  // while the operator browses other finished steps (poll/merge re-renders).
+  const autoFocusedUrgentRef = useRef(null);
 
   const mergedPlan = useMemo(
     () => mergePlanWithRunSteps(plan, runSteps),
     [plan, runSteps],
   );
 
-  // Focus the urgent beat when consent / failure arrives — open drawer.
+  // Focus the urgent beat when consent / failure first arrives — open drawer.
   useEffect(() => {
     const urgent = (mergedPlan?.steps || []).find(
       (s) => s.status === 'awaiting_approval' || s.status === 'failed',
     );
-    if (urgent) {
-      setSelectedStepId(urgent.step_id);
-      setDrawerOpen(true);
+    if (!urgent) {
+      autoFocusedUrgentRef.current = null;
+      return;
     }
+    const key = `${urgent.step_id}:${urgent.status}`;
+    if (autoFocusedUrgentRef.current === key) return;
+    autoFocusedUrgentRef.current = key;
+    setSelectedStepId(urgent.step_id);
+    setDrawerOpen(true);
   }, [mergedPlan, phase]);
 
   const chronicle = useMemo(
     () => buildRunChronicle(mergedPlan, runSteps),
     [mergedPlan, runSteps],
+  );
+  const activityLines = useMemo(
+    () => buildHumanActivityLog(chronicle, { humanizeError: friendlyStepError }),
+    [chronicle],
   );
 
   const handleSelectStep = (stepId) => {
@@ -144,7 +159,11 @@ function AgentRunSurface({
   const showPostDone = runSettled && (onRerun || onOpenPlan);
 
   return (
-    <Stack spacing={1} data-testid="agent-run-surface">
+    <Stack
+      spacing={1}
+      data-testid="agent-run-surface"
+      sx={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}
+    >
       {banner}
       {consentHero}
 
@@ -189,7 +208,8 @@ function AgentRunSurface({
           flexDirection: isMobile ? 'column' : 'row',
           alignItems: 'stretch',
           gap: 0,
-          minHeight: { xs: 0, sm: 280 },
+          flex: 1,
+          minHeight: { xs: 240, sm: 320 },
           border: 1,
           borderColor: 'divider',
           borderRadius: 1,
@@ -202,6 +222,7 @@ function AgentRunSurface({
           sx={{
             flex: 1,
             minWidth: 0,
+            minHeight: 0,
             overflowY: isMobile ? 'visible' : 'auto',
             p: 0.5,
           }}
@@ -225,8 +246,12 @@ function AgentRunSurface({
           onConfirm={onConfirmStep}
           onDecline={onDeclineStep}
           onClose={handleCloseDrawer}
+          busy={busy}
+          stepActions={stepActions}
         />
       </Box>
+
+      <HumanActivityLog lines={activityLines} defaultOpen={failed > 0} />
 
       {showPostDone && (
         <Stack
@@ -320,6 +345,7 @@ AgentRunSurface.propTypes = {
   onDeclineStep: PropTypes.func,
   confirmingId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
   hideInherited: PropTypes.bool,
+  stepActions: PropTypes.object,
 };
 
 export default AgentRunSurface;

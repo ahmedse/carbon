@@ -1237,11 +1237,12 @@ export function discardPlanEdit(token, planId) {
  * @param {object} params - { title?, instructions?, depends_on? }
  * @returns {Promise<object>} Plan payload with { diff, replan_gate }
  */
-export function editPlanStep(token, planId, stepId, { title, instructions, depends_on } = {}) {
+export function editPlanStep(token, planId, stepId, { title, instructions, depends_on, agent_role } = {}) {
   const body = {};
   if (title !== undefined) body.title = title;
   if (instructions !== undefined) body.instructions = instructions;
   if (depends_on !== undefined) body.depends_on = depends_on;
+  if (agent_role !== undefined) body.agent_role = agent_role;
   return apiFetch(`${PLANS_BASE}${planId}/steps/${stepId}/`, { token, method: 'PATCH', body });
 }
 

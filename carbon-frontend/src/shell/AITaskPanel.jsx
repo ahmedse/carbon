@@ -46,7 +46,6 @@ import SkipNextIcon from '@mui/icons-material/SkipNext';
 import CloseIcon from '@mui/icons-material/Close';
 import PauseIcon from '@mui/icons-material/Pause';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
@@ -108,7 +107,6 @@ import {
   toolLabel,
 } from './aiTaskStatus';
 import AITaskPlanCard from './AITaskPlanCard';
-import MarkdownMessage from './MarkdownMessage';
 import PlanDiffReviewDialog from './PlanDiffReviewDialog';
 import StepEditDialog from './StepEditDialog';
 import DiscoveryComposer from './DiscoveryComposer';
@@ -121,17 +119,23 @@ import AgentReviewSurface from './AgentReviewSurface';
 import AgentCockpit, { defaultCockpitSegment, normalizeCockpitSegment } from './AgentCockpit';
 import AgentPlanToolbar from './AgentPlanToolbar';
 import AgentRunToolbar from './AgentRunToolbar';
+import AgentResultToolbar from './AgentResultToolbar';
 import TaskJourney from './TaskJourney';
 import AITaskAuditCard from './AITaskAuditCard';
+import OutcomeReceipt from './OutcomeReceipt';
+import ResultProofFold from './ResultProofFold';
+import {
+  receiptFactsFromActions,
+  receiptStateFromPlan,
+  receiptTitleFromAnswer,
+} from './resultOutcome';
 import { hasTaskOutcome, humanTaskTitle, taskCoworkerLine } from './taskWorkspace';
 import { ArtifactCard } from '../components/ai/StepOutputRenderer';
 import { buildDiscussHandoff } from './buildDiscussDraft';
-import { splitAnswerAppendix } from './splitAnswerAppendix';
 import { humanizeStepError } from './humanizeStepError';
 import ConsentHeroCard from './ConsentHeroCard';
 import { stripEngineJargon } from './humanizeOperatorCopy';
 import { resolveOutputActions } from './resolveOutputActions';
-import { Link as RouterLink } from 'react-router-dom';
 import { autonomyDefaultListOpen, readAutonomyMode } from './autonomyMode';
 import { isImageMime, isPreviewableMime } from './artifactMime';
 import {
@@ -273,33 +277,6 @@ function StepStatusIcon({ status }) {
 }
 
 StepStatusIcon.propTypes = { status: PropTypes.string };
-
-/** Collapsed tool/JSON dumps peeled from Output Answer (default closed). */
-function AnswerTechnicalDetails({ appendix }) {
-  const [open, setOpen] = useState(false);
-  if (!appendix) return null;
-  return (
-    <Box>
-      <Button
-        size="small"
-        color="inherit"
-        onClick={() => setOpen((v) => !v)}
-        endIcon={open ? <ExpandLessIcon sx={{ fontSize: 14 }} /> : <ExpandMoreIcon sx={{ fontSize: 14 }} />}
-        sx={{ fontSize: '0.6875rem', textTransform: 'none', px: 0, minWidth: 0, color: 'text.secondary' }}
-        aria-expanded={open}
-      >
-        Technical details
-      </Button>
-      <Collapse in={open} unmountOnExit>
-        <Box sx={{ mt: 0.5, fontSize: '0.75rem', wordBreak: 'break-word' }}>
-          <MarkdownMessage content={appendix} />
-        </Box>
-      </Collapse>
-    </Box>
-  );
-}
-
-AnswerTechnicalDetails.propTypes = { appendix: PropTypes.string };
 
 /** Failed-step banner: short outcome + optional collapsed traceback. */
 function StepErrorBanner({ error }) {
@@ -1041,11 +1018,12 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     }
   }, [token]);
 
-  // Live plan polling — while a run is active, refresh the plan so the plan
-  // DAG reflects live step statuses (W3-F).
+  // Live plan polling — while a run is active or paused for consent, refresh
+  // the plan so the Plan graph reflects live step statuses (SSE covers Now;
+  // poll keeps the Plan DAG in sync through pauses).
   useEffect(() => {
     const planId = selectedPlan?.id;
-    if (!planId || phase !== 'working') return undefined;
+    if (!planId || (phase !== 'working' && phase !== 'paused')) return undefined;
     const timer = setInterval(() => {
       refreshPlan(planId, { quiet: true });
     }, LIVE_PLAN_POLL_MS);
@@ -2106,7 +2084,61 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           confirmingId={confirmingId}
           onConfirmStep={handleConfirmStep}
           onDeclineStep={handleDeclineStep}
+          stepActions={{
+            onRetry: handleStepRetry,
+            onSkip: handleStepSkip,
+            onPause: handleStepPause,
+            onResume: handleStepResume,
+            onCancel: handleStepCancel,
+            onEditInPlan: chatFirst
+              ? () => handleSegmentChange('plan', { user: true })
+              : () => setTab('tasks'),
+            onDiscussInPlan: onSwitchToChat
+              ? (step) => onSwitchToChat(
+                buildDiscussHandoff(
+                  selectedPlan,
+                  ledger?.final_response || selectedPlan?.final_response,
+                  { refine: true, failedStep: step },
+                ),
+              )
+              : null,
+          }}
         />
+
+        {isSettledPhase(phase) && (
+          <Paper variant="outlined" data-testid="agent-run-health" sx={{ bgcolor: 'background.paper', overflow: 'hidden' }}>
+            <Button
+              fullWidth
+              size="small"
+              onClick={() => setRunHealthOpen((v) => !v)}
+              endIcon={runHealthOpen
+                ? <ExpandLessIcon sx={{ fontSize: 16 }} />
+                : <ExpandMoreIcon sx={{ fontSize: 16 }} />}
+              sx={{
+                justifyContent: 'space-between',
+                textTransform: 'none',
+                px: 1.25,
+                py: 0.75,
+                color: 'text.secondary',
+                fontWeight: 600,
+              }}
+              aria-expanded={runHealthOpen}
+            >
+              {t('runHealth')}
+            </Button>
+            <Collapse in={runHealthOpen}>
+              <Box sx={{ px: 1.25, pb: 1.25 }}>
+                {ledger
+                  ? <AITaskAuditCard ledger={ledger} />
+                  : (
+                    <Typography variant="caption" color="text.secondary">
+                      {ledgerLoading ? t('boardCoworkerLoading') : t('resultNoConfirmations')}
+                    </Typography>
+                  )}
+              </Box>
+            </Collapse>
+          </Paper>
+        )}
       </Stack>
     );
   };
@@ -2427,7 +2459,6 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     }
 
     const finalResponse = ledger?.final_response || selectedPlan.final_response;
-    const { prose: answerProse, appendix: answerAppendix, hasAppendix } = splitAnswerAppendix(finalResponse);
     const outputActions = resolveOutputActions(selectedPlan, runSteps);
     const effective = effectivePlanStatus(selectedPlan);
     const rerunnable = isRerunnableStatus(selectedPlan.status)
@@ -2440,6 +2471,15 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     });
     const priorRun = selectedPlan.prior_run;
     const priorComparison = priorRun?.comparison;
+    const facts = receiptFactsFromActions(outputActions);
+    const title = receiptTitleFromAnswer(finalResponse, humanTaskTitle(selectedPlan, t('untitledTask')));
+    const state = receiptStateFromPlan(
+      runSteps.length
+        ? { ...selectedPlan, steps: mergePlanWithRunSteps(selectedPlan, runSteps).steps }
+        : selectedPlan,
+      phase,
+    );
+    const stateLabel = state.labelKey ? t(state.labelKey) : (state.label || '');
 
     return (
       <Stack spacing={1.25}>
@@ -2447,14 +2487,15 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           <Alert
             severity="warning"
             data-testid="output-export-gaps"
-            sx={{ fontSize: '0.6875rem', py: 0.5, '& .MuiAlert-message': { py: 0 } }}
+            sx={{ typography: 'caption', py: 0.5, '& .MuiAlert-message': { py: 0 } }}
           >
-            <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, fontSize: '0.75rem', mb: 0.25 }}>
-              Export gap
+            <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, mb: 0.25 }}>
+              {t('resultExportGap')}
             </Typography>
             {exportGaps.map((s) => (
-              <Typography key={s.step_id} variant="caption" sx={{ display: 'block', fontSize: '0.6875rem' }}>
-                {stripEngineJargon(s.intent) || `Step ${s.step_id}`}:{' '}
+              <Typography key={s.step_id} variant="caption" sx={{ display: 'block' }}>
+                {stripEngineJargon(s.intent) || t('resultStepFallback', { id: s.step_id })}
+                {': '}
                 {s.error || s.tool_output?.error || 'Document export was refused.'}
               </Typography>
             ))}
@@ -2464,13 +2505,13 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           <Alert
             severity={priorComparison === 'changed' ? 'info' : priorComparison === 'unchanged' ? 'success' : 'info'}
             data-testid="output-rerun-receipt"
-            sx={{ fontSize: '0.6875rem', py: 0.5, '& .MuiAlert-message': { py: 0 } }}
+            sx={{ typography: 'caption', py: 0.5, '& .MuiAlert-message': { py: 0 } }}
           >
-            <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, fontSize: '0.75rem', mb: 0.25 }}>
-              {priorComparison === 'changed' && 'Rerun — Answer changed vs last run'}
-              {priorComparison === 'unchanged' && 'Rerun — Answer unchanged vs last run'}
-              {priorComparison === 'pending' && 'Rerun — Previous Answer kept for comparison'}
-              {!priorComparison && 'Rerun — Previous Answer available'}
+            <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, mb: 0.25 }}>
+              {priorComparison === 'changed' && t('resultRerunChanged')}
+              {priorComparison === 'unchanged' && t('resultRerunUnchanged')}
+              {priorComparison === 'pending' && t('resultRerunPending')}
+              {!priorComparison && t('resultRerunAvailable')}
             </Typography>
             {priorComparison === 'changed' && priorRun.prior_final_response && (
               <Typography
@@ -2478,7 +2519,6 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
                 component="div"
                 sx={{
                   display: 'block',
-                  fontSize: '0.6875rem',
                   mt: 0.5,
                   maxHeight: 120,
                   overflow: 'auto',
@@ -2492,76 +2532,24 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             )}
           </Alert>
         )}
-        <Paper variant="outlined" sx={{ p: 1.25, bgcolor: 'background.paper' }}>
-          <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.secondary', mb: 0.5 }}>
-            Answer
-          </Typography>
-          {finalResponse ? (
-            <Stack spacing={1}>
-              <Box sx={{ fontSize: '0.8125rem', wordBreak: 'break-word' }}>
-                <MarkdownMessage content={answerProse || finalResponse} />
-              </Box>
-              {hasAppendix && (
-                <AnswerTechnicalDetails appendix={answerAppendix} />
-              )}
-            </Stack>
-          ) : outputActions.length === 0 ? (
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
-              No final response recorded for this run.
-            </Typography>
-          ) : null}
-          {outputActions.length > 0 && (
-            <Stack spacing={0.75} sx={{ mt: finalResponse ? 1 : 0 }} data-testid="output-host-actions">
-              {outputActions.map((action) => (
-                <Stack
-                  key={action.route}
-                  direction={{ xs: 'column', sm: 'row' }}
-                  spacing={0.75}
-                  alignItems={{ sm: 'center' }}
-                  sx={{
-                    border: 1,
-                    borderColor: 'divider',
-                    borderRadius: 1,
-                    px: 1,
-                    py: 0.75,
-                  }}
-                >
-                  <Typography variant="body2" sx={{ flex: 1, fontSize: '0.75rem', minWidth: 0 }}>
-                    {action.summary || action.label}
-                  </Typography>
-                  <Button
-                    size="small"
-                    variant="contained"
-                    component={RouterLink}
-                    to={action.route}
-                    sx={{ fontSize: '0.6875rem', textTransform: 'none', flexShrink: 0 }}
-                  >
-                    {action.label}
-                  </Button>
-                </Stack>
-              ))}
-            </Stack>
-          )}
-        </Paper>
 
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <Typography variant="caption" sx={{ flex: 1, fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.secondary' }}>
-            Artifacts
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
-            {artifacts.length}
-          </Typography>
-        </Stack>
+        <OutcomeReceipt
+          title={title}
+          stateLabel={stateLabel}
+          stateColor={state.color || 'default'}
+          facts={facts}
+          markdown={finalResponse || ''}
+        />
 
         {artifactsLoading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={20} /></Box>
-        ) : artifacts.length === 0 ? (
-          <Typography variant="body2" color="text.secondary" sx={{ py: 2, fontSize: '0.75rem' }}>
-            No downloadable files for this run. Artifacts appear when a step exports a document
-            (Word/Excel/PDF). Use Discuss in Chat and ask for an export.
-          </Typography>
-        ) : (
-          <Stack spacing={0.75}>
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}><CircularProgress size={20} /></Box>
+        ) : artifacts.length > 0 ? (
+          <Stack spacing={0.75} data-testid="result-artifacts">
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+              {t('resultArtifactsHeading')}
+              {' · '}
+              {artifacts.length}
+            </Typography>
             {artifacts.map((artifact) => (
               <ResultArtifactCard
                 key={artifact.id ?? artifact.name}
@@ -2572,69 +2560,27 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
               />
             ))}
           </Stack>
-        )}
+        ) : null}
 
-        <Paper variant="outlined" sx={{ p: 1.25, bgcolor: 'background.paper' }}>
-          <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.secondary', mb: 0.75 }}>
-            Actions
-          </Typography>
-          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
-            <Tooltip title={rerunnable ? t('rerunPlan') : 'Approve the plan to run it'}>
-              <span>
-                <Button
-                  size="small"
-                  variant="contained"
-                  disabled={!rerunnable || mutating}
-                  onClick={handleRerun}
-                  sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
-                >
-                  {t('rerunPlanShort')}
-                </Button>
-              </span>
-            </Tooltip>
-            {chatFirst && (
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<EditOutlinedIcon sx={{ fontSize: 14 }} />}
-                disabled={mutating || selectedPlan.status === 'running' || phase === 'working'}
-                onClick={() => handleSegmentChange('plan', { user: true })}
-                sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
-              >
-                {t('openPlanToEdit')}
-              </Button>
-            )}
-            <Button
-              size="small"
-              variant="outlined"
-              disabled={!ledger}
-              onClick={exportLedgerJson}
-              sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
-            >
-              Ledger JSON
-            </Button>
-            <Button
-              size="small"
-              variant="outlined"
-              disabled={!finalResponse}
-              onClick={exportFinalResponseMd}
-              sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
-            >
-              Response .md
-            </Button>
-            {onSwitchToChat && (
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 14 }} />}
-                onClick={() => onSwitchToChat(buildDiscussHandoff(selectedPlan, finalResponse, { refine: true }))}
-                sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
-              >
-                {t('discussInChat')}
-              </Button>
-            )}
-          </Stack>
-        </Paper>
+        {/* Classic Results tab: same ≤3 toolbar (no duplicate Actions Paper). */}
+        {!chatFirst && (
+          <AgentResultToolbar
+            hostActions={outputActions}
+            rerunnable={rerunnable}
+            busy={mutating}
+            canExportLedger={Boolean(ledger)}
+            canExportResponse={Boolean(finalResponse)}
+            onRerun={handleRerun}
+            onDiscuss={
+              onSwitchToChat
+                ? () => onSwitchToChat(buildDiscussHandoff(selectedPlan, finalResponse, { refine: true }))
+                : undefined
+            }
+            onOpenPlan={() => setTab('tasks')}
+            onExportLedger={exportLedgerJson}
+            onExportResponse={exportFinalResponseMd}
+          />
+        )}
       </Stack>
     );
   };
@@ -2714,8 +2660,16 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       }
       return (
         <AgentReviewSurface
-          plan={selectedPlan}
-          live={phase === 'working'}
+          plan={
+            runSteps.length
+              ? { ...selectedPlan, steps: mergePlanWithRunSteps(selectedPlan, runSteps).steps }
+              : selectedPlan
+          }
+          live={
+            phase === 'working'
+            || phase === 'paused'
+            || ['running', 'paused', 'approved'].includes(selectedPlan?.status)
+          }
           confirmingId={confirmingId}
           onConfirmStep={handleConfirmStep}
           onDeclineStep={handleDeclineStep}
@@ -2765,7 +2719,42 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       return <AgentRunToolbar {...buildRunToolbarProps()} />;
     })();
 
-    const cockpitToolbar = segment === 'plan' ? planToolbar : segment === 'run' ? runToolbar : null;
+    const resultToolbar = (() => {
+      if (!selectedPlan || selectedPlan.status === 'discovering') return null;
+      if (segment !== 'output') return null;
+      const finalResponse = ledger?.final_response || selectedPlan.final_response;
+      const hostActions = resolveOutputActions(selectedPlan, runSteps);
+      const effective = effectivePlanStatus(selectedPlan);
+      const rerunnable = isRerunnableStatus(selectedPlan.status)
+        || isRerunnableStatus(effective)
+        || selectedPlan.status === 'approved';
+      return (
+        <AgentResultToolbar
+          hostActions={hostActions}
+          rerunnable={rerunnable}
+          busy={mutating}
+          canExportLedger={Boolean(ledger)}
+          canExportResponse={Boolean(finalResponse)}
+          onRerun={handleRerun}
+          onDiscuss={
+            onSwitchToChat
+              ? () => onSwitchToChat(buildDiscussHandoff(selectedPlan, finalResponse, { refine: true }))
+              : undefined
+          }
+          onOpenPlan={() => handleSegmentChange('plan', { user: true })}
+          onExportLedger={exportLedgerJson}
+          onExportResponse={exportFinalResponseMd}
+        />
+      );
+    })();
+
+    const cockpitToolbar = segment === 'plan'
+      ? planToolbar
+      : segment === 'run'
+        ? runToolbar
+        : segment === 'output'
+          ? resultToolbar
+          : null;
 
     const renderCockpitRun = () => renderRun({ hideInherited: true, quietChrome: true });
 
@@ -2782,9 +2771,9 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
         : null;
       return (
         <Stack spacing={1.25} data-testid="agent-output-pure">
-          <TaskJourney plan={journeyPlan} />
           {renderResults()}
-          {ledger ? <AITaskAuditCard ledger={ledger} /> : null}
+          <TaskJourney plan={journeyPlan} />
+          <ResultProofFold ledger={ledger} />
         </Stack>
       );
     };

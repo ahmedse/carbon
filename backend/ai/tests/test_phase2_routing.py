@@ -74,7 +74,7 @@ def test_weather_deterministic_block_guards_text_transform():
     import pathlib
     runner_path = (
         pathlib.Path(__file__).resolve().parent.parent
-        / "engine" / "cognition" / "turn" / "runner.py"
+        / "engine" / "cognition" / "turn" / "runner_s3_s5.py"
     )
     source = runner_path.read_text()
     assert "not _is_text_transform_request(_resolved_user_message)" in source

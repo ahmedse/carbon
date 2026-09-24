@@ -1,0 +1,330 @@
+"""Catalog-metadata-driven ESS read renderers (I4).
+
+Resolve renderers by ``kind`` / ``empty_render`` from the instance catalog,
+not by hard-coded ``api_name`` branches in the runner.
+"""
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from ai.engine.cognition.turn.ess_read import empty_render_text
+from ai.engine.cognition.turn.ess_read_i18n import RENDER_SCOPE, UNSUMMARIZED_FALLBACK
+
+# APIs that share the balance renderer (same row shape / alias in one place).
+BALANCE_APIS = frozenset({"get_my_leave_balance", "list_leave_entitlements"})
+
+PAYSLIP_APIS = frozenset({"list_my_payslips"})
+
+# Fallback when the scoped catalog entry is not passed into the renderer.
+_API_RENDER_META: dict[str, dict[str, str]] = {
+    "get_my_leave_balance": {"kind": "balance", "empty_render": "no_balance_configured"},
+    "list_leave_entitlements": {"kind": "balance", "empty_render": "no_balance_configured"},
+    "list_my_leave": {"kind": "history", "empty_render": "no_leave_requests", "scope": "leave_history"},
+    "list_my_loans": {"kind": "history", "empty_render": "no_loans", "scope": "loans"},
+    "list_my_payslips": {"kind": "payslip", "empty_render": "no_payslips", "scope": "payslip"},
+    "list_attendance": {"kind": "history", "empty_render": "no_attendance_rows", "scope": "attendance"},
+    "list_my_attendance_permissions": {
+        "kind": "history",
+        "empty_render": "no_attendance_permissions",
+        "scope": "permissions",
+    },
+}
+
+
+def _unwrap_tool_payload(tool_output: Any) -> Any:
+    if not isinstance(tool_output, dict):
+        return tool_output
+    raw = tool_output.get("result", tool_output.get("data"))
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (TypeError, ValueError):
+            return raw
+    if isinstance(raw, dict) and "data" in raw and "status_code" in raw:
+        return raw.get("data")
+    return raw
+
+
+def _code_or_text(value: Any) -> str:
+    if isinstance(value, dict):
+        text = value.get("code") or value.get("name") or value.get("label")
+        return str(text).strip() if text else ""
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _as_record_list(payload: Any) -> list[dict]:
+    if isinstance(payload, list):
+        return [row for row in payload if isinstance(row, dict)]
+    if isinstance(payload, dict):
+        for key in ("results", "rows", "items", "records", "data"):
+            if isinstance(payload.get(key), list):
+                return [row for row in payload[key] if isinstance(row, dict)]
+        return [payload]
+    return []
+
+
+def _lang_code(language: str) -> str:
+    return "ar" if str(language or "en").strip().casefold().startswith("ar") else "en"
+
+
+def _scope_prefix(scope_key: str, language: str) -> str:
+    lang = _lang_code(language)
+    row = RENDER_SCOPE.get(scope_key) or {}
+    return str(row.get(lang) or row.get("en") or "").strip()
+
+
+def resolve_render_meta(api_name: str, catalog_entry: dict | None = None) -> dict[str, str] | None:
+    """Return ``{kind, empty_render, scope?}`` for a catalog GET read."""
+    api = str(api_name or "").strip()
+    if not api:
+        return None
+    entry = catalog_entry if isinstance(catalog_entry, dict) else None
+    if entry is None:
+        entry = _API_RENDER_META.get(api)
+    if not isinstance(entry, dict):
+        return _API_RENDER_META.get(api)
+    kind = str(entry.get("kind") or entry.get("render") or "").strip()
+    if kind == "write" or not kind:
+        return _API_RENDER_META.get(api)
+    meta = {
+        "kind": kind,
+        "empty_render": str(entry.get("empty_render") or "").strip(),
+    }
+    scope = entry.get("scope")
+    if scope:
+        meta["scope"] = str(scope)
+    elif api in BALANCE_APIS:
+        meta["scope"] = "balance"
+    elif api in PAYSLIP_APIS:
+        meta["scope"] = "payslip"
+    elif api == "list_my_leave":
+        meta["scope"] = "leave_history"
+    elif api == "list_my_loans":
+        meta["scope"] = "loans"
+    elif api == "list_attendance":
+        meta["scope"] = "attendance"
+    elif api == "list_my_attendance_permissions":
+        meta["scope"] = "permissions"
+    if not meta["empty_render"]:
+        fallback = _API_RENDER_META.get(api) or {}
+        meta["empty_render"] = str(fallback.get("empty_render") or "").strip()
+    return meta
+
+
+def _balance_row_chunk(row: dict, *, ar: bool) -> str | None:
+    kind = (
+        _code_or_text(row.get("leave_type"))
+        or _code_or_text(row.get("leave_type_label"))
+    )
+    if not kind:
+        return None
+    remaining = row.get("remaining")
+    entitled = row.get("entitled")
+    if entitled is None:
+        entitled = row.get("entitled_days")
+    used = row.get("used_days")
+    if remaining is not None:
+        if ar:
+            chunk = f"{kind} المتبقي {remaining}"
+            if entitled is not None:
+                chunk += f" (المستحق {entitled})"
+        else:
+            chunk = f"{kind} remaining {remaining}"
+            if entitled is not None:
+                chunk += f" (entitled {entitled})"
+        return chunk
+    if entitled is not None:
+        if ar:
+            chunk = f"{kind} المستحق {entitled}"
+            if used is not None:
+                chunk += f" (المستخدم {used})"
+        else:
+            chunk = f"{kind} entitled {entitled}"
+            if used is not None:
+                chunk += f" (used {used})"
+        return chunk
+    return None
+
+
+def render_balance_rows(rows: list[dict], language: str, *, empty_render: str) -> str | None:
+    ar = _lang_code(language) == "ar"
+    parts: list[str] = []
+    for row in rows:
+        chunk = _balance_row_chunk(row, ar=ar)
+        if chunk:
+            parts.append(chunk)
+    if not parts:
+        return empty_render_text(empty_render or "no_balance_configured", language)
+    # Markdown bullets — Chat MarkdownMessage renders a readable list instead of
+    # one semicolon-glued paragraph (which looked oversized / washed out).
+    # Plain prefix (not **bold**) so Chat never promotes the label to a big heading.
+    prefix = _scope_prefix("balance", language)
+    bullets = "\n".join(f"- {chunk}" for chunk in parts)
+    return f"{prefix}\n\n{bullets}" if prefix else bullets
+
+
+def render_history_rows(
+    rows: list[dict],
+    language: str,
+    *,
+    empty_render: str,
+    scope_key: str,
+    row_formatter,
+) -> str | None:
+    if not rows:
+        return empty_render_text(empty_render, language)
+    ar = _lang_code(language) == "ar"
+    parts = [row_formatter(row, ar=ar) for row in rows[:5]]
+    parts = [p for p in parts if p]
+    if not parts:
+        return empty_render_text(empty_render, language)
+    body = "; ".join(parts) if not ar else "؛ ".join(parts)
+    prefix = _scope_prefix(scope_key, language)
+    return f"{prefix} ({len(rows)}): {body}."
+
+
+def _format_leave_history_row(row: dict, *, ar: bool) -> str:
+    kind = _code_or_text(row.get("leave_type")) or "leave"
+    status = _code_or_text(row.get("status") or row.get("correspondence_status"))
+    start = row.get("start_date") or row.get("from_date")
+    end = row.get("end_date") or row.get("to_date")
+    bits = [kind]
+    if start:
+        bits.append(str(start))
+    if end:
+        bits.append(str(end))
+    if status:
+        bits.append(status)
+    return ", ".join(bits) if not ar else "، ".join(bits)
+
+
+def _format_loan_history_row(row: dict, *, ar: bool) -> str:
+    kind = _code_or_text(row.get("loan_type")) or "loan"
+    principal = row.get("principal")
+    months = row.get("term_months")
+    status = _code_or_text(row.get("status") or row.get("correspondence_status"))
+    bits = [kind]
+    if principal is not None:
+        bits.append(str(principal))
+    if months is not None:
+        bits.append(f"{months} mo" if not ar else f"{months} شهر")
+    if status:
+        bits.append(status)
+    return ", ".join(bits) if not ar else "، ".join(bits)
+
+
+def _format_payslip_row(row: dict, *, ar: bool) -> str:
+    line = _code_or_text(row.get("line_type")) or "line"
+    amount = row.get("amount")
+    bits = [line]
+    if amount is not None:
+        bits.append(str(amount))
+    return ", ".join(bits) if not ar else "، ".join(bits)
+
+
+def _format_attendance_row(row: dict, *, ar: bool) -> str:
+    day = row.get("date")
+    status = _code_or_text(row.get("status")) or ""
+    bits: list[str] = []
+    if day:
+        bits.append(str(day))
+    if status:
+        bits.append(status)
+    return ", ".join(bits) if not ar else "، ".join(bits)
+
+
+def _format_permission_row(row: dict, *, ar: bool) -> str:
+    kind = _code_or_text(row.get("permission_type")) or "permission"
+    hours = row.get("hours")
+    day = row.get("date")
+    bits = [kind]
+    if hours is not None:
+        bits.append(f"{hours}h" if not ar else f"{hours} س")
+    if day:
+        bits.append(str(day))
+    return ", ".join(bits) if not ar else "، ".join(bits)
+
+
+def render_catalog_read(
+    tool_output: Any,
+    api_name: str,
+    language: str = "en",
+    *,
+    catalog_entry: dict | None = None,
+) -> str | None:
+    """0-LLM restatement resolved by catalog ``kind``. Invents no numbers."""
+    api = str(api_name or "").strip()
+    meta = resolve_render_meta(api, catalog_entry)
+    if not meta:
+        return None
+    payload = _unwrap_tool_payload(tool_output)
+    rows = _as_record_list(payload)
+    kind = meta["kind"]
+    empty_key = meta.get("empty_render") or ""
+
+    if kind == "balance" or api in BALANCE_APIS:
+        return render_balance_rows(rows, language, empty_render=empty_key or "no_balance_configured")
+
+    if kind == "payslip" or api in PAYSLIP_APIS:
+        return render_history_rows(
+            rows,
+            language,
+            empty_render=empty_key or "no_payslips",
+            scope_key=meta.get("scope") or "payslip",
+            row_formatter=_format_payslip_row,
+        )
+
+    if kind == "history":
+        if api == "list_my_leave":
+            return render_history_rows(
+                rows, language,
+                empty_render=empty_key or "no_leave_requests",
+                scope_key="leave_history",
+                row_formatter=_format_leave_history_row,
+            )
+        if api == "list_my_loans":
+            return render_history_rows(
+                rows, language,
+                empty_render=empty_key or "no_loans",
+                scope_key="loans",
+                row_formatter=_format_loan_history_row,
+            )
+        if api == "list_attendance":
+            return render_history_rows(
+                rows, language,
+                empty_render=empty_key or "no_attendance_rows",
+                scope_key="attendance",
+                row_formatter=_format_attendance_row,
+            )
+        if api == "list_my_attendance_permissions":
+            return render_history_rows(
+                rows, language,
+                empty_render=empty_key or "no_attendance_permissions",
+                scope_key="permissions",
+                row_formatter=_format_permission_row,
+            )
+
+    return None
+
+
+def honest_unsummarized_fallback(language: str = "en") -> str:
+    """User-visible fallback when catalog render and synthesis both miss."""
+    lang = _lang_code(language)
+    return UNSUMMARIZED_FALLBACK[lang]
+
+
+def should_honest_fallback(final_text: str | None, completed_tools: list | None) -> bool:
+    """Stage invariant (ADR-0049): the fallback fires only when tools ran and
+    **no render exists** — not when the *draft* was empty.
+
+    A forced tool call blanks the draft by design (``force_tool``); the
+    catalog render, the empty-payslip answer, or the empty-history answer
+    that follows is the real answer and must never be replaced by this
+    fallback.
+    """
+    if not completed_tools:
+        return False
+    return not (final_text or "").strip()

@@ -219,7 +219,7 @@ describe('AITaskPanel — plan review and approval', () => {
 
 // ── Streamed run + steps ──────────────────────────────────────────────────
 describe('AITaskPanel — streamed run and step consent', () => {
-  it('streams step frames and completes without Run health / audit on Run tab', async () => {
+  it('streams step frames and completes; settled Now shows Run health', async () => {
     render(<AITaskPanel conversationId="conv-1" />);
     await openListedTask();
 
@@ -247,7 +247,10 @@ describe('AITaskPanel — streamed run and step consent', () => {
     streamHandlers.onDone({ type: 'done', plan_id: 'plan-1', status: 'completed', final_response: 'Found 3 duplicate rows.' });
 
     expect((await screen.findAllByText(/Finished|Here’s what changed|Run completed/i)).length).toBeGreaterThan(0);
-    expect(screen.queryByRole('button', { name: 'Run health' })).toBeNull();
+    // Soft-default lands on Result (receipt). Full audit is on Now → Run health.
+    const cockpit = screen.getByTestId('agent-cockpit');
+    fireEvent.click(within(cockpit).getByRole('button', { name: 'Now' }));
+    expect(await screen.findByRole('button', { name: 'Run health' })).toBeInTheDocument();
     expect(screen.queryByText('No subagents dispatched yet.')).toBeNull();
   });
 
@@ -312,7 +315,7 @@ describe('AITaskPanel — streamed run and step consent', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Stop run' }));
 
     await waitFor(() => expect(stopPlan).toHaveBeenCalledWith('test-token', 'plan-1'));
-    expect(await screen.findByText(/I stopped|Run stopped/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/I stopped|Run stopped/i).length).toBeGreaterThan(0);
   });
 
   it('reports a failed run via the stream error frame', async () => {

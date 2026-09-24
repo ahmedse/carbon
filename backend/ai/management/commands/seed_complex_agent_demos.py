@@ -1,14 +1,18 @@
 """Seed specialized Pulse agents + multi-step templates with file deliverables.
 
-Creates domain agents (payroll / compliance / workforce / finance packager),
-wires handoffs from the orchestrator, promotes three PlanTemplates that end in
-``export_document`` (docx / xlsx / pdf / png pack), and optionally materializes
-a completed demo Run with real downloadable artifacts for the given user.
+Creates domain agents (payroll / GOSI / compliance / workforce / finance packager),
+wires handoffs from the orchestrator, promotes PlanTemplates for Nibras/GOFSCO
+(board pack, leave coverage, loan risk, attendance backlog, Field Ops slice)
+that end in ``export_document`` (docx / xlsx / pdf / png pack), and optionally
+materializes a completed demo Run with real downloadable artifacts.
+
+Host steps use ``call_host_api(api_name=…)`` from the Nibras catalog — not
+path hardcoding and not intent-from-text.
 
 Usage:
     python manage.py seed_complex_agent_demos
-    python manage.py seed_complex_agent_demos --user admin
-    python manage.py seed_complex_agent_demos --user admin --with-demo-run
+    python manage.py seed_complex_agent_demos --user ahmed
+    python manage.py seed_complex_agent_demos --user ahmed --with-demo-run
     python manage.py seed_complex_agent_demos --reset-templates
 """
 
@@ -92,7 +96,7 @@ def build_payroll_board_pack_plan_json() -> dict:
             "step_id": 0,
             "intent": "Fetch headcount and payroll totals for the period",
             "tool_name": "call_host_api",
-            "tool_args": {"path": "/api/analyze_employees", "method": "GET"},
+            "tool_args": {"api_name": "analyze_employees"},
             "depends_on": [],
             "agent_role": "domain_specialist",
         },
@@ -100,7 +104,7 @@ def build_payroll_board_pack_plan_json() -> dict:
             "step_id": 1,
             "intent": "Compute payroll variance vs prior month",
             "tool_name": "call_host_api",
-            "tool_args": {"path": "/api/payroll/variance", "method": "GET"},
+            "tool_args": {"api_name": "list_payroll_runs"},
             "depends_on": [0],
             "agent_role": "domain_specialist",
         },
@@ -148,7 +152,7 @@ def build_payroll_board_pack_plan_json() -> dict:
                 "node_type": "task",
                 "intent": steps[0]["intent"],
                 "tool_name": "call_host_api",
-                "tool_args": steps[0]["tool_args"],
+                "tool_args": {"api_name": "analyze_employees"},
                 "retry": dict(_HOST_RETRY),
                 "timeout_ms": 15_000,
                 "meta": {"step_id": 0, "agent_role": "domain_specialist"},
@@ -158,7 +162,7 @@ def build_payroll_board_pack_plan_json() -> dict:
                 "node_type": "task",
                 "intent": steps[1]["intent"],
                 "tool_name": "call_host_api",
-                "tool_args": steps[1]["tool_args"],
+                "tool_args": {"api_name": "list_payroll_runs"},
                 "retry": dict(_HOST_RETRY),
                 "timeout_ms": 15_000,
                 "meta": {"step_id": 1, "agent_role": "domain_specialist"},
@@ -301,15 +305,15 @@ TEMPLATE_SPECS = [
                     "step_id": 0,
                     "intent": "Pull leave balances and pending requests",
                     "tool_name": "call_host_api",
-                    "tool_args": {"path": "/api/leave/balances", "method": "GET"},
+                    "tool_args": {"api_name": "list_leave_entitlements"},
                     "depends_on": [],
                     "agent_role": "researcher",
                 },
                 {
                     "step_id": 1,
                     "intent": "Flag attendance anomalies and policy breaches",
-                    "tool_name": None,
-                    "tool_args": {},
+                    "tool_name": "call_host_api",
+                    "tool_args": {"api_name": "list_attendance"},
                     "depends_on": [0],
                     "agent_role": "critic",
                 },
@@ -365,7 +369,7 @@ TEMPLATE_SPECS = [
                     "step_id": 0,
                     "intent": "Analyze employee headcount trends",
                     "tool_name": "call_host_api",
-                    "tool_args": {"path": "/api/analyze_employees", "method": "GET"},
+                    "tool_args": {"api_name": "analyze_employees"},
                     "depends_on": [],
                     "agent_role": "researcher",
                 },
@@ -401,6 +405,379 @@ TEMPLATE_SPECS = [
                         },
                     },
                     "depends_on": [1],
+                    "agent_role": "orchestrator",
+                    "is_mutation": True,
+                },
+            ],
+        },
+    },
+    {
+        "name": "GOFSCO GOSI WPS prep pack",
+        "description": (
+            "Nibras/GOFSCO: generate → validate GOSI WPS SIF, critic gates "
+            "submit, then export HR action pack. Submit stays human-gated."
+        ),
+        "brief": (
+            "Prepare the GOFSCO GOSI WPS SIF for this payroll period: generate, "
+            "validate, pass critic, then package findings. Do not submit until "
+            "Finance/HR approves the run."
+        ),
+        "plan_json": {
+            "pattern": "gofsco_gosi_wps_prep",
+            "brief": "GOFSCO GOSI WPS prep pack",
+            "persona": "emp_2400",
+            "steps": [
+                {
+                    "step_id": 0,
+                    "intent": "Generate GOSI WPS SIF for the locked payroll run",
+                    "tool_name": "call_host_api",
+                    "tool_args": {"api_name": "generate_gosi_wps_sif"},
+                    "depends_on": [],
+                    "agent_role": "domain_specialist",
+                    "is_mutation": True,
+                },
+                {
+                    "step_id": 1,
+                    "intent": "Validate GOSI WPS SIF against Kuwait rules",
+                    "tool_name": "call_host_api",
+                    "tool_args": {"api_name": "validate_gosi_wps_sif"},
+                    "depends_on": [0],
+                    "agent_role": "domain_specialist",
+                },
+                {
+                    "step_id": 2,
+                    "intent": "Critic: block silent submit on validation flags",
+                    "tool_name": None,
+                    "tool_args": {},
+                    "depends_on": [1],
+                    "agent_role": "critic",
+                },
+                {
+                    "step_id": 3,
+                    "intent": "Human gate — Finance/HR approve before bank submit",
+                    "tool_name": None,
+                    "tool_args": {},
+                    "depends_on": [2],
+                    "agent_role": "orchestrator",
+                    "branch": "await_human",
+                },
+                {
+                    "step_id": 4,
+                    "intent": "Export GOSI prep brief (Word + Excel + PDF)",
+                    "tool_name": "export_document",
+                    "tool_args": {
+                        "format": "pack",
+                        "title": "GOFSCO GOSI WPS Prep Pack",
+                        "content": (
+                            "## GOFSCO · GOSI WPS\n"
+                            "SIF generated and validated. Submit held for human approval.\n\n"
+                            "### Validation\n"
+                            "- Schema OK\n"
+                            "- 2 late-enrollment flags for HR follow-up\n\n"
+                            "### Next\n"
+                            "Approve step → `submit_gosi_wps_sif` (Agent + RULE_21).\n"
+                        ),
+                        "table": {
+                            "headers": ["Check", "Result"],
+                            "rows": [
+                                ["Generate", "ok"],
+                                ["Validate", "ok · 2 flags"],
+                                ["Submit", "held"],
+                            ],
+                        },
+                    },
+                    "depends_on": [3],
+                    "agent_role": "orchestrator",
+                    "is_mutation": True,
+                },
+            ],
+        },
+    },
+    {
+        "name": "Team leave coverage — Coiled Tubing",
+        "description": (
+            "Nibras Team (emp_1712): who is out on the CT crew this week, "
+            "coverage plan, critic conflict check, manager brief."
+        ),
+        "brief": (
+            "For Mohammad Bolto Ali's Coiled Tubing team: list leave this week, "
+            "draft coverage, flag conflicts, export a manager brief."
+        ),
+        "plan_json": {
+            "pattern": "team_leave_coverage_ct",
+            "brief": "Team leave coverage — Coiled Tubing",
+            "persona": "emp_1712",
+            "steps": [
+                {
+                    "step_id": 0,
+                    "intent": "List leave records for the manager's crew this week",
+                    "tool_name": "call_host_api",
+                    "tool_args": {"api_name": "list_leave_records"},
+                    "depends_on": [],
+                    "agent_role": "researcher",
+                },
+                {
+                    "step_id": 1,
+                    "intent": "Resolve crew roster (incl. emp_1067 Bilagot)",
+                    "tool_name": "call_host_api",
+                    "tool_args": {"api_name": "list_employees"},
+                    "depends_on": [],
+                    "agent_role": "researcher",
+                },
+                {
+                    "step_id": 2,
+                    "intent": "Draft day-by-day coverage for Field Ops / CT",
+                    "tool_name": None,
+                    "tool_args": {},
+                    "depends_on": [0, 1],
+                    "agent_role": "planner",
+                },
+                {
+                    "step_id": 3,
+                    "intent": "Critic: overlapping absences and understaffed shifts",
+                    "tool_name": None,
+                    "tool_args": {},
+                    "depends_on": [2],
+                    "agent_role": "critic",
+                },
+                {
+                    "step_id": 4,
+                    "intent": "Export manager coverage brief",
+                    "tool_name": "export_document",
+                    "tool_args": {
+                        "format": "pack",
+                        "title": "CT Crew Leave Coverage — This Week",
+                        "content": (
+                            "## Coiled Tubing · Team coverage\n"
+                            "Manager: Mohammad Bolto Ali (`emp_1712`)\n\n"
+                            "### Out this week\n"
+                            "- Review leave_records + roster before approving swaps\n\n"
+                            "### Critic\n"
+                            "- Flag any day with < minimum CT staffing\n"
+                        ),
+                        "table": {
+                            "headers": ["Day", "Out", "Coverage"],
+                            "rows": [
+                                ["Sun", "1", "OK"],
+                                ["Mon", "2", "Watch"],
+                                ["Tue", "0", "OK"],
+                            ],
+                        },
+                    },
+                    "depends_on": [3],
+                    "agent_role": "orchestrator",
+                    "is_mutation": True,
+                },
+            ],
+        },
+    },
+    {
+        "name": "GOFSCO loan portfolio risk brief",
+        "description": (
+            "Nibras People/Finance: company loan book → concentration → "
+            "critic policy band → board-ready pack."
+        ),
+        "brief": (
+            "Pull GOFSCO company loans and installments, assess concentration "
+            "risk, pass critic, export a risk brief for HR leadership."
+        ),
+        "plan_json": {
+            "pattern": "gofsco_loan_portfolio_risk",
+            "brief": "GOFSCO loan portfolio risk brief",
+            "persona": "emp_2400",
+            "steps": [
+                {
+                    "step_id": 0,
+                    "intent": "List company loans",
+                    "tool_name": "call_host_api",
+                    "tool_args": {"api_name": "list_loans"},
+                    "depends_on": [],
+                    "agent_role": "researcher",
+                },
+                {
+                    "step_id": 1,
+                    "intent": "List installments / outstanding schedule",
+                    "tool_name": "call_host_api",
+                    "tool_args": {"api_name": "list_loan_installments"},
+                    "depends_on": [0],
+                    "agent_role": "domain_specialist",
+                },
+                {
+                    "step_id": 2,
+                    "intent": "Critic: policy band, high balance, arrears",
+                    "tool_name": None,
+                    "tool_args": {},
+                    "depends_on": [1],
+                    "agent_role": "critic",
+                },
+                {
+                    "step_id": 3,
+                    "intent": "Export loan risk pack",
+                    "tool_name": "export_document",
+                    "tool_args": {
+                        "format": "pack",
+                        "title": "GOFSCO Loan Portfolio Risk Brief",
+                        "content": (
+                            "## Loan book\n"
+                            "Company-wide outstanding loans for GOFSCO.\n\n"
+                            "### Critic focus\n"
+                            "- Concentration by department\n"
+                            "- Arrears and near-limit balances\n"
+                        ),
+                        "table": {
+                            "headers": ["Metric", "Value"],
+                            "rows": [
+                                ["Active loans", "42"],
+                                ["Outstanding (KWD)", "312400"],
+                                ["Arrears flags", "3"],
+                            ],
+                        },
+                    },
+                    "depends_on": [2],
+                    "agent_role": "orchestrator",
+                    "is_mutation": True,
+                },
+            ],
+        },
+    },
+    {
+        "name": "Attendance permission backlog — HR",
+        "description": (
+            "Nibras People lead (emp_2400): open attendance permissions, "
+            "SLA critic, action pack — Approve stays Agent/host UI."
+        ),
+        "brief": (
+            "List open attendance permissions across GOFSCO, flag SLA breaches, "
+            "export an HR triage pack. Do not auto-approve."
+        ),
+        "plan_json": {
+            "pattern": "attendance_permission_backlog",
+            "brief": "Attendance permission backlog — HR",
+            "persona": "emp_2400",
+            "steps": [
+                {
+                    "step_id": 0,
+                    "intent": "List attendance permissions awaiting action",
+                    "tool_name": "call_host_api",
+                    "tool_args": {"api_name": "list_attendance_permissions"},
+                    "depends_on": [],
+                    "agent_role": "researcher",
+                },
+                {
+                    "step_id": 1,
+                    "intent": "Cross-check attendance rows for the same window",
+                    "tool_name": "call_host_api",
+                    "tool_args": {"api_name": "list_attendance"},
+                    "depends_on": [0],
+                    "agent_role": "researcher",
+                },
+                {
+                    "step_id": 2,
+                    "intent": "Critic: age > 5 days, missing manager, duplicates",
+                    "tool_name": None,
+                    "tool_args": {},
+                    "depends_on": [1],
+                    "agent_role": "critic",
+                },
+                {
+                    "step_id": 3,
+                    "intent": "Plan triage order for Abdullah (People lead)",
+                    "tool_name": None,
+                    "tool_args": {},
+                    "depends_on": [2],
+                    "agent_role": "planner",
+                },
+                {
+                    "step_id": 4,
+                    "intent": "Export HR triage pack",
+                    "tool_name": "export_document",
+                    "tool_args": {
+                        "format": "pack",
+                        "title": "Attendance Permission Backlog — GOFSCO",
+                        "content": (
+                            "## HR triage\n"
+                            "Owner: Abdullah Mubarak Rashed AlHajri (`emp_2400`)\n\n"
+                            "Approvals stay on Agent Run / People UI (ADR-0046).\n"
+                        ),
+                        "table": {
+                            "headers": ["Priority", "Count"],
+                            "rows": [
+                                ["SLA breach", "4"],
+                                ["Normal", "11"],
+                                ["Duplicate suspect", "1"],
+                            ],
+                        },
+                    },
+                    "depends_on": [3],
+                    "agent_role": "orchestrator",
+                    "is_mutation": True,
+                },
+            ],
+        },
+    },
+    {
+        "name": "Field Ops headcount slice",
+        "description": (
+            "Nibras analytics: analyze_employees by department/position, "
+            "planner narrative, chart pack for weekly ops standup."
+        ),
+        "brief": (
+            "Break down GOFSCO headcount for Field Ops / Coiled Tubing. "
+            "Export Excel + PNG for the ops standup."
+        ),
+        "plan_json": {
+            "pattern": "field_ops_headcount_slice",
+            "brief": "Field Ops headcount slice",
+            "persona": "ahmed",
+            "steps": [
+                {
+                    "step_id": 0,
+                    "intent": "Analyze employees by department / position",
+                    "tool_name": "call_host_api",
+                    "tool_args": {
+                        "api_name": "analyze_employees",
+                        "dimension": "department",
+                    },
+                    "depends_on": [],
+                    "agent_role": "researcher",
+                },
+                {
+                    "step_id": 1,
+                    "intent": "List positions to map CT / Field Ops titles",
+                    "tool_name": "call_host_api",
+                    "tool_args": {"api_name": "list_positions"},
+                    "depends_on": [],
+                    "agent_role": "researcher",
+                },
+                {
+                    "step_id": 2,
+                    "intent": "Draft Field Ops standup narrative",
+                    "tool_name": None,
+                    "tool_args": {},
+                    "depends_on": [0, 1],
+                    "agent_role": "planner",
+                },
+                {
+                    "step_id": 3,
+                    "intent": "Export Field Ops chart pack",
+                    "tool_name": "export_document",
+                    "tool_args": {
+                        "format": "pack",
+                        "title": "GOFSCO Field Ops Headcount Slice",
+                        "content": (
+                            "## Field Ops\n"
+                            "Department and position cut for weekly ops standup.\n"
+                        ),
+                        "table": {
+                            "headers": ["Slice", "Headcount"],
+                            "rows": [
+                                ["Field Ops", "186"],
+                                ["Coiled Tubing", "42"],
+                                ["Projects", "61"],
+                            ],
+                        },
+                    },
+                    "depends_on": [2],
                     "agent_role": "orchestrator",
                     "is_mutation": True,
                 },
@@ -458,6 +835,21 @@ AGENT_SPECS = [
         "max_turns": 4,
     },
     {
+        "name": "gosi_controller",
+        "role": "domain_specialist",
+        "tool_set": [
+            "search_knowledge",
+            "get_entity_details",
+            "call_host_api",
+            "export_document",
+        ],
+        "playbook_blocks": [
+            "Own generate/validate GOSI WPS SIF for GOFSCO payroll periods.",
+            "Never submit_gosi_wps_sif without critic pass + human gate.",
+        ],
+        "max_turns": 5,
+    },
+    {
         "name": "finance_packager",
         "role": "planner",
         "tool_set": [
@@ -475,10 +867,12 @@ AGENT_SPECS = [
 
 HANDOFF_SPECS = [
     ("orchestrator", "payroll_controller", 2, "payroll variance and GOSI packs"),
+    ("orchestrator", "gosi_controller", 1, "GOSI WPS generate/validate"),
     ("orchestrator", "compliance_auditor", 1, "compliance critique before export"),
     ("orchestrator", "workforce_researcher", 2, "workforce trend research"),
     ("orchestrator", "finance_packager", 1, "assemble file deliverable packs"),
     ("payroll_controller", "orchestrator", 1, "return payroll findings"),
+    ("gosi_controller", "orchestrator", 1, "return GOSI SIF findings"),
     ("compliance_auditor", "orchestrator", 1, "return compliance verdict"),
     ("workforce_researcher", "orchestrator", 1, "return workforce findings"),
     ("finance_packager", "orchestrator", 1, "return packaged deliverables"),

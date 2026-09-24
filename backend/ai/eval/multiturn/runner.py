@@ -54,6 +54,35 @@ _SINGLE_PASS_ENV = {
 
 
 @contextlib.contextmanager
+def stub_host_api(stub_host: dict | None):
+    """Offline bound reads restate ``stub_host[api_name]`` instead of the empty DB.
+
+    Live runs pass ``None`` and the real executor is unchanged.
+    """
+    if not stub_host:
+        yield
+        return
+    from ai.engine.agent import tools as tools_mod
+
+    original = tools_mod.STATIC_TOOL_EXECUTORS["call_host_api"]
+
+    async def _wrapped(*args, **kwargs):
+        api = kwargs.get("api_name")
+        if api is None and args:
+            api = args[0]
+        payload = stub_host.get(api) if isinstance(api, str) else None
+        if payload is not None:
+            return {"status_code": 200, "data": payload}
+        return await original(*args, **kwargs)
+
+    tools_mod.STATIC_TOOL_EXECUTORS["call_host_api"] = _wrapped
+    try:
+        yield
+    finally:
+        tools_mod.STATIC_TOOL_EXECUTORS["call_host_api"] = original
+
+
+@contextlib.contextmanager
 def engine_single_pass():
     """Force the engine's single-pass spine for the duration of a run.
 
@@ -80,6 +109,25 @@ def engine_single_pass():
 # ── Stub LLM fixture ─────────────────────────────────────────────────────
 
 
+def _openai_tool_calls(raw: list | None) -> list | None:
+    """YAML tool-call dicts → attribute objects, as the OpenAI SDK returns."""
+    out = []
+    for item in raw or []:
+        if not isinstance(item, dict):
+            out.append(item)
+            continue
+        fn = item.get("function") if isinstance(item.get("function"), dict) else {}
+        out.append(types.SimpleNamespace(
+            id=str(item.get("id") or f"stub_{len(out)}"),
+            type=str(item.get("type") or "function"),
+            function=types.SimpleNamespace(
+                name=str(fn.get("name") or ""),
+                arguments=str(fn.get("arguments") or "{}"),
+            ),
+        ))
+    return out or None
+
+
 def _make_stub_llm_factory(turns: list[Turn]):
     """Factory that returns a stub LLM client.
 
@@ -99,7 +147,7 @@ def _make_stub_llm_factory(turns: list[Turn]):
             idx = current[0]
             if 0 <= idx < len(turns):
                 content = turns[idx].stub_reply
-                tool_calls = turns[idx].stub_tool_calls or None
+                tool_calls = _openai_tool_calls(turns[idx].stub_tool_calls)
             else:
                 content = "End of script."
                 tool_calls = None
@@ -243,6 +291,26 @@ def _latency_histogram(values: list[float]) -> dict[str, int]:
 # ── Main runner ──────────────────────────────────────────────────────────
 
 
+def _visible_text(content: str, envelope: Any) -> str:
+    """Reply text plus the envelope's headline, prose, and block titles/labels."""
+    parts = [content or ""]
+    if isinstance(envelope, dict):
+        parts.append(str(envelope.get("headline") or ""))
+        parts.extend(str(p) for p in envelope.get("prose") or [])
+        for block in (envelope.get("tables") or []) + (envelope.get("charts") or []):
+            if not isinstance(block, dict):
+                continue
+            parts.append(str(block.get("title") or ""))
+            parts.extend(str(c) for c in block.get("columns") or [])
+            for series in block.get("series") or []:
+                if isinstance(series, dict):
+                    parts.append(str(series.get("name") or ""))
+            for row in block.get("rows") or []:
+                if isinstance(row, (list, tuple)) and row:
+                    parts.append(str(row[0]))
+    return "\n".join(parts)
+
+
 def run_script(
     script: "Script",
     *,
@@ -274,6 +342,17 @@ def run_script(
         stub_llm_turns = script.turns
     
     result = ScriptResult(script_id=script.id)
+    effective_host_user_id = host_user_id
+    if effective_host_user_id is None and any(
+        turn.process_mode == "plan" for turn in script.turns
+    ):
+        # Structured Plan routes persist a reviewable plan and therefore need
+        # an owner. This user exists only in the isolated throwaway test DB.
+        from django.contrib.auth import get_user_model
+
+        username = f"eval_{script.id}"[:150]
+        user, _ = get_user_model().objects.get_or_create(username=username)
+        effective_host_user_id = user.pk
     conversation_history = {
         "conversation_id": f"conv-{uuid4().hex[:12]}",
         "messages": [],
@@ -287,7 +366,8 @@ def run_script(
     else:
         llm_ctx = patch("ai.engine.llm.provider.get_llm_client")
     
-    with override_settings(AI_STORE_BACKEND="django"), engine_single_pass():
+    host_stub = None if live else getattr(script, "stub_host", None)
+    with override_settings(AI_STORE_BACKEND="django"), engine_single_pass(), stub_host_api(host_stub):
         reset_store()
         
         with llm_ctx as mock_client:
@@ -304,8 +384,9 @@ def run_script(
                     "chat",
                     {
                         "message": turn.user,
+                        "process_mode": turn.process_mode,
                         "conversation_history": conversation_history,
-                        "host_user_id": host_user_id,
+                        "host_user_id": effective_host_user_id,
                     },
                     instance_id=instance_id,
                 )
@@ -357,11 +438,13 @@ def run_script(
                         if reasks_slot(reply_content, slot):
                             turn_result.reask_violations.append(slot)
                     
-                    # Mentions check
+                    # Mentions check — against everything the user sees,
+                    # including envelope chart/table titles and labels.
+                    visible = _visible_text(reply_content, response.get("envelope")).lower()
                     mentions_match = False
                     if exp.mentions_any:
                         for mention in exp.mentions_any:
-                            if mention.lower() in reply_content.lower():
+                            if mention.lower() in visible:
                                 mentions_match = True
                                 break
                         turn_result.mentions_ok = mentions_match
@@ -370,7 +453,7 @@ def run_script(
                     
                     if exp.mentions_none:
                         for mention in exp.mentions_none:
-                            if mention.lower() in reply_content.lower():
+                            if mention.lower() in visible:
                                 turn_result.mentions_unwanted.append(mention)
                         turn_result.mentions_ok = (
                             turn_result.mentions_ok and not turn_result.mentions_unwanted

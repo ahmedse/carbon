@@ -265,15 +265,22 @@ class PayslipLineSerializer(serializers.ModelSerializer):
     line_type = GovernedValueField(set_name='payslip_line_type', allow_null=False)
     employee_no = serializers.CharField(source='employee.employee_no', read_only=True)
     employee_name = serializers.CharField(source='employee.full_name', read_only=True)
+    period_start = serializers.DateField(source='payroll_run.period_start', read_only=True)
+    period_end = serializers.DateField(source='payroll_run.period_end', read_only=True)
+    run_status = serializers.CharField(source='payroll_run.status', read_only=True)
 
     class Meta:
         model = PayslipLine
         fields = [
             'id', 'payroll_run', 'employee', 'employee_no', 'employee_name',
             'line_type', 'amount',
+            'period_start', 'period_end', 'run_status',
             'rule_id', 'rule_version', 'inputs', 'created_at',
         ]
-        read_only_fields = ['id', 'employee_no', 'employee_name', 'created_at']
+        read_only_fields = [
+            'id', 'employee_no', 'employee_name',
+            'period_start', 'period_end', 'run_status', 'created_at',
+        ]
 
 
 class PositionSerializer(serializers.ModelSerializer):

@@ -101,14 +101,23 @@ def test_matplotlib_savefig_path_is_redirected_not_blocked():
 
 def test_build_code_result_extracts_code_execute():
     payload = {
-        "stdout": "",
+        "stdout": "printed",
+        "code": "import pandas as pd\nprint(1)",
         "error": None,
         "image_b64": "abc",
         "table_rows": None,
         "result": None,
     }
     completed = [{"tool_name": "code_execute", "result": json.dumps(payload)}]
-    assert _build_code_result(completed) == payload
+    out = _build_code_result(completed)
+    assert out == {
+        "error": None,
+        "image_b64": "abc",
+        "table_rows": None,
+        "result": None,
+    }
+    assert "code" not in out
+    assert "stdout" not in out
 
 
 def test_build_code_result_ignores_non_code_tools():
@@ -122,10 +131,11 @@ def test_build_code_result_surfaces_promoted_error():
     # ExecuteWitness "nested-error promotion": the inner sandbox error is
     # lifted to ``item["error"]`` while the FULL sandbox dict (with its own
     # ``error`` key) is preserved in ``item["result"]``. The frontend needs
-    # this dict to render the friendly error state.
+    # this dict to render the friendly error state — without the source.
     payload = {
         "stdout": "",
-        "error": "NameError: name 'x' is not defined",
+        "code": "x = y",
+        "error": "NameError: name 'x' is not defined\n  File ...",
         "image_b64": None,
         "table_rows": None,
         "result": None,
@@ -137,7 +147,10 @@ def test_build_code_result_surfaces_promoted_error():
             "result": json.dumps(payload),
         },
     ]
-    assert _build_code_result(completed) == payload
+    out = _build_code_result(completed)
+    assert out["error"] == "NameError: name 'x' is not defined"
+    assert "code" not in out
+    assert "stdout" not in out
 
 
 def test_build_code_result_skips_guardrail_cancel():
@@ -162,3 +175,15 @@ def test_build_code_result_skips_non_sandbox_shape():
 
 def test_build_code_result_returns_none_when_absent():
     assert _build_code_result([]) is None
+
+
+def test_row_chart_replaces_the_sandbox_png():
+    from ai.engine_runtime import _drop_sandbox_image_when_row_chart
+
+    image = {"error": None, "image_b64": "abc", "table_rows": None, "result": None}
+    kept = _drop_sandbox_image_when_row_chart(
+        image,
+        envelope={"charts": [{"chart_type": "bar", "title": "Leave balance"}]},
+    )
+    assert kept is None
+    assert _drop_sandbox_image_when_row_chart(image, text="no chart here")["image_b64"] == "abc"

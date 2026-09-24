@@ -1,0 +1,140 @@
+id: leave-charts-subject-en-01
+objective_ids: [C1, C3]
+language: en
+surface: chat
+persona: emp_1067
+# v21-tier golden (ADR-0049 §8). Source: Nibras Chat conv 5719114d as emp_1067.
+# Legacy failure this script pins:
+#   "where are the charts ?" in a leave thread → Draft fanned out to
+#   get_my_profile + get_my_leave_balance + list_my_payslips + list_my_loans,
+#   and the envelope charted the first chartable payload: "Gross Pay
+#   Distribution" with the user's own payslip lines counted as "Employees".
+# Contract pinned here: a chart is a render of the decided read only.
+# The understand output is stubbed (emit_decision) — G6 g6-068..070 score
+# whether the model emits it. This script scores execute + render.
+# Run with PULSE_UNDERSTAND=v21:
+#   python -m ai.eval.multiturn.runner --scripts "scripts_v21/*.yaml" --report /tmp/v21.json --verbose
+stub_host:
+  get_my_leave_balance:
+    - {leave_type: annual, entitled: 30, remaining: 30}
+    - {leave_type: sick, entitled: 30, remaining: 29}
+    - {leave_type: emergency, entitled: 5, remaining: 4}
+  list_my_payslips:
+    - {line_type: gross, amount: 6500}
+    - {line_type: GOSI, amount: 1200}
+    - {line_type: loan_installment, amount: 800}
+    - {line_type: net, amount: 4500}
+  get_my_profile:
+    - {employee_no: "1067", department: Coiled Tubing, job_title: Heavy Duty Driver}
+  list_my_loans:
+    - {id: 7, loan_type: emergency, principal: 9600, term_months: 12, status: active}
+turns:
+  - user: "What is my leave balance?"
+    stub_reply: "Your leave balance."
+    stub_tool_calls:
+      - id: understand_1
+        type: function
+        function:
+          name: emit_decision
+          arguments: '{"commands":[{"op":"call_tool","name":"get_my_leave_balance","render":"text"}],"language":"en","confidence":0.9}'
+    expect:
+      # A bound 0-LLM read may answer first (deterministic-first).
+      decision_in: [call_tool, tool_answer]
+      language: en
+      max_llm_calls: 2
+      mentions_any: ["annual"]
+
+  - user: "give me a detailed report with charts"
+    stub_reply: "Your leave balance."
+    stub_tool_calls:
+      - id: understand_2
+        type: function
+        function:
+          name: emit_decision
+          arguments: '{"commands":[{"op":"call_tool","name":"get_my_leave_balance","render":"chart"}],"language":"en","confidence":0.9}'
+    expect:
+      decision_in: [call_tool]
+      language: en
+      max_llm_calls: 2
+      mentions_any: ["Leave balance"]
+      must_not_contain: ["Gross Pay", "Salary band", "Employees", "Payslip lines", "Coiled Tubing"]
+
+  - user: "where are the charts ?"
+    stub_reply: "Your leave balance."
+    stub_tool_calls:
+      - id: understand_3
+        type: function
+        function:
+          name: emit_decision
+          arguments: '{"commands":[{"op":"continue","render":"chart"}],"language":"en","confidence":0.9}'
+    expect:
+      # continue → the state's last read (leave), rendered as a chart.
+      decision_in: [continue]
+      language: en
+      max_llm_calls: 2
+      mentions_any: ["Leave balance"]
+      must_not_contain: ["Gross Pay", "Salary band", "Employees", "Payslip lines", "Coiled Tubing"]
+
+  - user: "show it as a table"
+    stub_reply: "Your leave balance."
+    stub_tool_calls:
+      - id: understand_4
+        type: function
+        function:
+          name: emit_decision
+          arguments: '{"commands":[{"op":"continue","render":"table"}],"language":"en","confidence":0.9}'
+    expect:
+      decision_in: [continue]
+      language: en
+      max_llm_calls: 2
+      mentions_any: ["annual"]
+      must_not_contain: ["Gross Pay", "Salary band", "Payslip lines"]
+
+  - user: "and my sick leave?"
+    stub_reply: "Your leave balance."
+    stub_tool_calls:
+      - id: understand_5
+        type: function
+        function:
+          name: emit_decision
+          arguments: '{"commands":[{"op":"call_tool","name":"get_my_leave_balance","render":"text"}],"language":"en","confidence":0.9}'
+    expect:
+      decision_in: [call_tool, tool_answer]
+      language: en
+      max_llm_calls: 2
+      mentions_any: ["sick"]
+      must_not_contain: ["Gross Pay", "Salary band"]
+
+  - user: "now show my last payslip as a chart"
+    stub_reply: "Your payslip."
+    stub_tool_calls:
+      - id: understand_6
+        type: function
+        function:
+          name: emit_decision
+          arguments: '{"commands":[{"op":"call_tool","name":"list_my_payslips","render":"chart"}],"language":"en","confidence":0.9}'
+    expect:
+      # Contrast: a named new subject moves the chart. One person's payslip
+      # lines are never a head-count "Employees" distribution. The bound
+      # 0-LLM read may answer; it charts its own payload only.
+      decision_in: [call_tool, tool_answer]
+      language: en
+      max_llm_calls: 2
+      mentions_any: ["Payslip lines"]
+      must_not_contain: ["Salary band", "Employees", "Leave balance"]
+
+  - user: "what about my loans?"
+    stub_reply: "Your loans."
+    stub_tool_calls:
+      - id: understand_7
+        type: function
+        function:
+          name: emit_decision
+          arguments: '{"commands":[{"op":"call_tool","name":"list_my_loans","render":"text"}],"language":"en","confidence":0.9}'
+    expect:
+      # Subject switch by name: loans, with no chart carried over.
+      decision_in: [call_tool, tool_answer]
+      language: en
+      max_llm_calls: 2
+      mentions_any: ["emergency", "9600", "9,600"]
+      must_not_contain: ["Leave balance", "Payslip lines", "Gross Pay"]

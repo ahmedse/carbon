@@ -329,7 +329,7 @@ describe('layoutExecutionGraph', () => {
     expect(byId[0].x).toBe(byId[1].x);
   });
 
-  it('lays out branched board-pack as L→R with chosen path above escalate and no orphan at rank 0', () => {
+  it('lays out branched board-pack as T→B flowchart with chosen path left of escalate', () => {
     const plan = {
       id: 'board-pack',
       status: 'completed',
@@ -369,7 +369,7 @@ describe('layoutExecutionGraph', () => {
       },
     };
     const { nodes, direction } = layoutExecutionGraph(plan);
-    expect(direction).toBe('lr');
+    expect(direction).toBe('tb');
     const visible = nodes.filter((n) => !n.is_dummy);
     const byId = Object.fromEntries(visible.map((n) => [n.id, n]));
 
@@ -377,13 +377,14 @@ describe('layoutExecutionGraph', () => {
     expect(byId.observe_repair.rank).toBeGreaterThan(0);
     expect(byId.observe_repair.rank).toBeLessThanOrEqual(byId[4].rank);
 
-    // Chosen summarize lane above skipped escalate.
-    expect(byId[2].y).toBeLessThan(byId[5].y);
+    // Branch siblings share a rank: chosen summarize left of escalate.
+    expect(byId[2].rank).toBe(byId[5].rank);
+    expect(byId[2].x).toBeLessThan(byId[5].x);
 
-    // Flow left→right along the happy path.
-    expect(byId[1].x).toBeGreaterThan(byId[0].x);
-    expect(byId.choice_variance.x).toBeGreaterThan(byId[1].x);
-    expect(byId[4].x).toBeGreaterThan(byId[3].x);
+    // Flow top→bottom along the happy path.
+    expect(byId[1].y).toBeGreaterThan(byId[0].y);
+    expect(byId.choice_variance.y).toBeGreaterThan(byId[1].y);
+    expect(byId[4].y).toBeGreaterThan(byId[3].y);
   });
 });
 

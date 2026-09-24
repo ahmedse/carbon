@@ -38,7 +38,9 @@ persona: >
   organisations. Your role is advisory and drafting: you explain, guide,
   and draft — you do not change payroll runs, payslips, leave records,
   loans, attendance, or HR data, and you never state an ungrounded figure
-  as fact. Mark placeholders explicitly and ask for actual values when you
+  as fact. When a tool returns a chart image, that chart is already on
+  screen: describe the figures. Never say you cannot create charts, and
+  never paste source code or base64. Mark placeholders explicitly and ask for actual values when you
   do not have them.
 
   ## Company / GOFSCO questions
@@ -408,6 +410,14 @@ api_catalog:
   - name: list_my_leave
     method: GET
     path: /carbon-api/people/me/leave/
+    domain: leave
+    kind: history
+    not_for: >
+      Remaining days, entitlement, or «رصيد». That is get_my_leave_balance.
+      An empty request list is not a zero balance.
+    empty_render: no_leave_requests
+    examples:
+      - {ar: "طلبات الإجازة", en: "Show my leave requests"}
     description: >
       The logged-in employee's OWN leave records (all statuses) with linked
       correspondence status. Fields: id, leave_type, start_date, end_date,
@@ -418,6 +428,10 @@ api_catalog:
   - name: submit_my_leave
     method: POST
     path: /carbon-api/people/me/leave/
+    domain: leave
+    kind: write
+    not_for: >
+      Reading a balance or a history list. Use get_my_leave_balance or list_my_leave.
     description: >
       Submit a leave request for the logged-in employee (self-service). Body:
       {leave_type: code, start_date: YYYY-MM-DD, end_date: YYYY-MM-DD,
@@ -456,30 +470,64 @@ api_catalog:
   - name: get_my_leave_balance
     method: GET
     path: /carbon-api/people/me/leave-balance/
+    domain: leave
+    kind: balance
+    not_for: >
+      Listing leave requests or their statuses. That is list_my_leave.
+      Not for counting days until a date already stated, and not for
+      "when does my leave start".
+    empty_render: no_balance_configured
+    examples:
+      - {ar: "كم باقي لي من إجازة؟", en: "How many leave days do I have left?"}
     description: >
       The logged-in employee's OWN leave balance per leave type: entitled,
       carried_forward, opening_balance, used, pending, remaining. Use for
-      "how much leave do I have left", "رصيد اجازاتي".
+      "how much leave do I have left", "my vacations", "رصيد اجازاتي".
     requires_auth: true
     requires_confirmation: false
 
   - name: list_my_loans
     method: GET
     path: /carbon-api/people/me/loan/
+    domain: loan
+    kind: history
+    not_for: >
+      Loan product types in general. Requesting a NEW loan ("I want / need a
+      loan", "أريد قرض") — that is submit_my_loan (Agent). First person only.
+    empty_render: no_loans
+    examples:
+      - {ar: "قروضي", en: "What are my loans?"}
+      - {ar: "لاحظت أن عندي قرض، أعطني تفاصيل أكثر", en: "I noticed I have a loan, can you give me more details?"}
+      - {ar: "أنا أدفع قسط قرض، اعرضه لي", en: "I pay for a loan, show it to me"}
+      - {ar: "ما هذا الخصم للقرض في قسيمتي؟", en: "what is this loan deduction on my payslip?"}
+      - {ar: "عندي قرض، كم باقي؟", en: "I have a loan, how much is left?"}
     description: >
       The logged-in employee's OWN loans: id, loan_type, principal,
-      interest_rate, term_months, status. Use for "my loans", "قروضي".
+      interest_rate, term_months, status. Use for "my loans", "قروضي", and
+      for any question about a loan the employee ALREADY has — even when
+      phrased as a statement: "I have a loan", "I pay a loan", "the loan
+      deduction on my payslip", "عندي قرض", "أقساطي", "خصم القرض". After a
+      payslip that shows a loan_installment line, "details of that loan" or
+      "get it" means this read.
     requires_auth: true
     requires_confirmation: false
 
   - name: submit_my_loan
     method: POST
     path: /carbon-api/people/me/loan/
+    domain: loan
+    kind: write
+    not_for: >
+      Listing, reading, or explaining a loan the employee ALREADY has — its
+      installments, balance, or the loan deduction on a payslip ("I have a
+      loan", "I pay a loan", "عندي قرض", "قسط القرض"). Those are list_my_loans.
+      Never ask "what type of loan" unless the employee asked to take a new one.
     description: >
-      Submit a loan request for the logged-in employee (self-service). Body:
+      Submit a NEW loan request for the logged-in employee (self-service). Body:
       {loan_type: code (emergency|housing|…), principal: number,
       interest_rate: number, term_months: int, start_date: YYYY-MM-DD}.
-      Use for "I want a loan", "request loan", "أريد قرض", "تقديم قرض".
+      Use only for a request to take a new loan: "I want a loan", "request
+      loan", "I need an emergency loan", "أريد قرض", "تقديم قرض".
       Prefer this over admin loan create — employee is implied from the session.
       NEVER use submit_my_leave for loans.
     requires_auth: true
@@ -505,12 +553,23 @@ api_catalog:
   - name: list_my_payslips
     method: GET
     path: /carbon-api/people/me/payslips/
+    domain: payslip
+    kind: history
+    not_for: >
+      Salary, compensation, or basic pay («راتبي»). Those are profile reads.
+      Do not invent a net figure when this list is empty.
+    empty_render: no_payslips
+    examples:
+      - {ar: "قسيمة راتبي", en: "What was my last payslip?"}
     description: >
       The logged-in employee's OWN payslip lines from committed/validated
       payroll runs only: id, line_type (gross | gosi | loan_installment | net),
       amount, payroll_run. Use ONLY for explicit "my payslip" / "قسيمة" asks —
       NOT for salary / compensation / basic pay / "راتبي" (those use
       get_my_profile or get_employee / resolve_entity so CBAC deny is explicit).
+      Explaining a line already shown ("what is GOSI?", "educate me about my
+      payslip", "ما هو التأمينات") is an answer from state, not a new call;
+      a follow-up about the loan_installment line is list_my_loans.
     requires_auth: true
     requires_confirmation: false
 
@@ -519,6 +578,13 @@ api_catalog:
   - name: list_leave_entitlements
     method: GET
     path: /carbon-api/people/leave-entitlements/
+    domain: leave
+    kind: balance
+    render: balance
+    not_for: >
+      The logged-in employee's own balance without an employee filter.
+      That is get_my_leave_balance.
+    empty_render: no_balance_configured
     description: >
       List leave entitlements for employees visible to the user. Fields:
       id, employee, employee_no, employee_name, leave_type, entitled_days,
@@ -576,16 +642,56 @@ api_catalog:
   - name: list_attendance
     method: GET
     path: /carbon-api/people/attendance/
+    domain: attendance
+    kind: history
+    not_for: >
+      Short-hours permissions (استئذان). That is list_my_attendance_permissions.
+      The caller's own daily rows prefer list_my_attendance (self-scoped).
+      Submitting a permission write is Agent / host UI, not this GET.
+    empty_render: no_attendance_rows
+    examples:
+      - {ar: "سجل الحضور للموظف", en: "Show attendance for an employee"}
     description: >
-      List attendance records. Filter by query param employee=<id> or
-      date_from / date_to (YYYY-MM-DD). Fields: id, employee, date,
-      check_in, check_out, status.
+      List attendance records (ops / people:view). Filter by query param
+      employee=<id> or date_from / date_to (YYYY-MM-DD). Fields: id, employee,
+      date, hours_worked, overtime_hours, status (present | absent | leave |
+      permission). Prefer list_my_attendance for "my attendance" / سجل حضوري.
+      An empty list is not a fabricated zero hours.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_my_attendance
+    method: GET
+    path: /carbon-api/people/me/attendance/
+    domain: attendance
+    kind: history
+    not_for: >
+      Short-hours permissions (استئذان). That is list_my_attendance_permissions.
+      Admin listing of other employees is list_attendance.
+    empty_render: no_attendance_rows
+    examples:
+      - {ar: "سجل حضوري", en: "Show my attendance"}
+      - {ar: "ساعات حضوري", en: "my hours worked"}
+    description: >
+      List the caller's own daily attendance records (self-service). Optional
+      date_from / date_to (YYYY-MM-DD). Fields: id, date, hours_worked,
+      overtime_hours, status (present | absent | leave | permission). Never
+      returns another employee's rows. Empty means no records yet — do not
+      invent clock times.
     requires_auth: true
     requires_confirmation: false
 
   - name: list_my_attendance_permissions
     method: GET
     path: /carbon-api/people/me/attendance-permissions/
+    domain: attendance
+    kind: history
+    not_for: >
+      Daily attendance rows (hours / present / absent). That is list_my_attendance.
+      Submitting a permission is submit_my_attendance_permission (Agent).
+    empty_render: no_attendance_permissions
+    examples:
+      - {ar: "استئذاناتي", en: "my attendance permissions"}
     description: >
       List the caller's own attendance permissions (short-hours /
       no-deduction). Self-service only — never returns another employee's rows.
@@ -595,6 +701,11 @@ api_catalog:
   - name: submit_my_attendance_permission
     method: POST
     path: /carbon-api/people/me/attendance-permissions/
+    domain: attendance
+    kind: write
+    not_for: >
+      Reading clock rows or listing permissions. Use list_attendance or
+      list_my_attendance_permissions.
     description: >
       Employee self-service: submit a short-hours attendance permission for
       myself. Creates AttendancePermission(approved=false) + Correspondence

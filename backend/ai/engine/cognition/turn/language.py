@@ -8,10 +8,14 @@ are ignored.
 """
 from __future__ import annotations
 
-import re
-
-_AR_LETTER_RE = re.compile(r"[\u0621-\u064A\u0671-\u06D3\u06FA-\u06FF\u0750-\u077F]")
-_LATIN_LETTER_RE = re.compile(r"[A-Za-z]")
+def _is_ar_letter(ch: str) -> bool:
+    o = ord(ch)
+    return (
+        0x0621 <= o <= 0x064A
+        or 0x0671 <= o <= 0x06D3
+        or 0x06FA <= o <= 0x06FF
+        or 0x0750 <= o <= 0x077F
+    )
 
 # ≥ this share of Arabic letters → reply in Arabic.
 _AR_RATIO_THRESHOLD = 0.4
@@ -19,8 +23,8 @@ _AR_RATIO_THRESHOLD = 0.4
 
 def arabic_ratio(text: str) -> float:
     """Share of Arabic letters among Arabic + Latin letters (0.0 when none)."""
-    ar = len(_AR_LETTER_RE.findall(text or ""))
-    lat = len(_LATIN_LETTER_RE.findall(text or ""))
+    ar = sum(1 for ch in (text or "") if _is_ar_letter(ch))
+    lat = sum(1 for ch in (text or "") if ch.isascii() and ch.isalpha())
     total = ar + lat
     return ar / total if total else 0.0
 

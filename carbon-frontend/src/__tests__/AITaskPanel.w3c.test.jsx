@@ -241,11 +241,16 @@ describe('AITaskPanel — edit step with diff consent gate', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() =>
-      expect(editPlanStep).toHaveBeenCalledWith('test-token', 'plan-1', 1, {
-        title: 'Create two rules',
-        instructions: '',
-        depends_on: [0],
-      }),
+      expect(editPlanStep).toHaveBeenCalledWith(
+        'test-token',
+        'plan-1',
+        1,
+        expect.objectContaining({
+          title: 'Create two rules',
+          instructions: '',
+          depends_on: [0],
+        }),
+      ),
     );
 
     expect(await screen.findByText('Review plan changes')).toBeInTheDocument();
@@ -471,22 +476,21 @@ describe('AITaskPanel — W5-D Results tab', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Results' }));
 
-    expect(await screen.findByText('Found 3 duplicate rows and created rule no_dupes.')).toBeInTheDocument();
+    expect(await screen.findByTestId('outcome-receipt')).toBeInTheDocument();
+    expect(screen.getAllByText(/Found 3 duplicate rows and created rule no_dupes/).length).toBeGreaterThanOrEqual(1);
     await waitFor(() => expect(listPlanArtifacts).toHaveBeenCalledWith('test-token', 'plan-1'));
     expect(await screen.findByText('report.csv')).toBeInTheDocument();
     expect(screen.getByText('summary.json')).toBeInTheDocument();
     expect(screen.getByText('📊')).toBeInTheDocument();
     expect(screen.getByText('🗄')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Fork' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Ledger JSON' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Response .md' })).toBeInTheDocument();
-    // Artifact card body: size via formatBytes + download action.
+    // Artifact card body: size via formatBytes + download action (before opening More).
     expect(screen.getByText('2.0 KB')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Download' }).length).toBeGreaterThanOrEqual(1);
-    // Headings for the outcome copy + actions.
-    expect(screen.getByText('Answer')).toBeInTheDocument();
-    expect(screen.getByText('Artifacts')).toBeInTheDocument();
-    expect(screen.getByText('Actions')).toBeInTheDocument();
+    expect(screen.getByText(/Files/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('result-more-menu'));
+    expect(await screen.findByRole('menuitem', { name: 'Ledger JSON' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Response .md' })).toBeInTheDocument();
   });
 
   it('renders step outputs on the Run view and the artifact list on Results', async () => {
@@ -540,7 +544,8 @@ describe('AITaskPanel — W5-D Results tab', () => {
     if (resultTab) fireEvent.click(resultTab);
 
     // Results tab: final response + artifact card with download action.
-    expect(await screen.findByText('Found 3 duplicate rows and created rule no_dupes.')).toBeInTheDocument();
+    expect(await screen.findByTestId('outcome-receipt')).toBeInTheDocument();
+    expect(screen.getAllByText(/Found 3 duplicate rows and created rule no_dupes/).length).toBeGreaterThanOrEqual(1);
     expect(await screen.findByText('report.csv')).toBeInTheDocument();
     expect(screen.getByText('2.0 KB')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Download' }).length).toBeGreaterThanOrEqual(1);

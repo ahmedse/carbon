@@ -11,10 +11,14 @@ from __future__ import annotations
 import re
 from typing import Any
 
-_STORE_REMEMBER_RE = re.compile(
-    r"(?:please\s+)?remember\s+that|learn_fact|تذكر|احفظ",
-    re.IGNORECASE,
+from ai.engine.cognition.turn.memory_recall_i18n import (
+    HOST_IDENTITY_AR,
+    STORE_REMEMBER_AR,
+    any_needle,
 )
+from ai.engine.text.word_match import contains_any_phrase, has_any_word, has_word
+
+_STORE_REMEMBER_PHRASES = ("remember that", "please remember that", "learn_fact")
 _FACT_EN_RE = re.compile(
     r"\bmy\s+([a-z][a-z0-9][a-z0-9 /-]{0,40}?)\s+is\s+"
     r"([A-Za-z0-9][A-Za-z0-9._/-]{1,48})\b",
@@ -24,25 +28,16 @@ _FACT_NAME_RE = re.compile(
     r"\bmy\s+((?:full\s+)?name)\s+is\s+([A-Za-z][A-Za-z .'-]{1,60})\b",
     re.IGNORECASE,
 )
-_RECALL_RE = re.compile(
-    r"("
-    r"\b(?:can you )?(?:confirm you have|confirm that)\b"
-    r"|\bwhat(?:'s| is) my\b"
-    r"|\bis that still\b"
-    r"|\btell me about\b"
-    r"|\bcan you remember\b"
-    r")",
-    re.IGNORECASE,
+_RECALL_PHRASES = (
+    "confirm you have", "confirm that", "can you confirm you have",
+    "can you confirm that", "what's my", "what is my", "is that still",
+    "tell me about", "can you remember",
 )
-_TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9_-]{1,}", re.IGNORECASE)
-_HOST_IDENTITY_RE = re.compile(
-    r"\b("
-    r"manager|department|employee\s*(?:number|no)|job\s*title|"
-    r"org(?:anisation|anization| unit)"
-    r"|مدير|قسم|رقم\s*ال?موظف"
-    r")\b",
-    re.IGNORECASE,
+_HOST_IDENTITY_PHRASES = (
+    "employee number", "employee no", "job title", "organisation",
+    "organization", "org unit",
 )
+_HOST_IDENTITY_WORDS = ("manager", "department")
 _STOP = frozenset({
     "the", "and", "for", "that", "this", "still", "have", "you", "can",
     "about", "tell", "what", "your", "my", "is", "are", "was", "were",
@@ -54,7 +49,11 @@ _FACT_TOOL = "user_fact"
 
 def is_remember_store(text: str) -> bool:
     """True when the user asked Chat to persist a learn_fact card."""
-    return bool(_STORE_REMEMBER_RE.search(text or ""))
+    raw = text or ""
+    return bool(
+        contains_any_phrase(raw, _STORE_REMEMBER_PHRASES)
+        or any_needle(raw, STORE_REMEMBER_AR)
+    )
 
 
 def extract_stated_facts(text: str) -> list[dict[str, str]]:
@@ -125,14 +124,31 @@ def remember_facts(state: Any, facts: list[dict[str, str]]) -> list[dict[str, st
     return facts_from_state(state)
 
 
+def _host_identity_facet(text: str) -> set[str]:
+    """Tokens from host-field wording only — not the whole utterance."""
+    facet: set[str] = set()
+    raw = text or ""
+    cf = raw.casefold()
+    for phrase in _HOST_IDENTITY_PHRASES:
+        if phrase in cf:
+            facet |= _tokens(phrase)
+    for word in _HOST_IDENTITY_WORDS:
+        if has_word(raw, word):
+            facet.add(word.casefold())
+    if any_needle(raw, HOST_IDENTITY_AR):
+        facet |= _tokens(" ".join(n for n in HOST_IDENTITY_AR if n in raw))
+    return facet
+
+
 def is_memory_use(text: str, facts: list[dict[str, str]]) -> bool:
     if not facts or not (text or "").strip():
         return False
-    host = _HOST_IDENTITY_RE.search(text)
-    if host:
-        facet = _tokens(host.group(0))
-        return any(bool(facet & _tokens(f.get("key") or "")) for f in facts)
-    if _RECALL_RE.search(text):
+    host_facet = _host_identity_facet(text)
+    if host_facet:
+        return any(
+            bool(host_facet & _tokens(f.get("key") or "")) for f in facts
+        )
+    if contains_any_phrase(text, _RECALL_PHRASES):
         return True
     blob = " ".join(f"{f['key']} {f['value']}" for f in facts)
     return bool(_tokens(text) & _tokens(blob))
@@ -174,11 +190,22 @@ def _split_digest(digest: str) -> tuple[str, str]:
 
 def _tokens(text: str) -> set[str]:
     out: set[str] = set()
-    for match in _TOKEN_RE.finditer(text or ""):
-        tok = match.group(0).lower()
-        if tok in _STOP or len(tok) < 3:
+    current: list[str] = []
+    for ch in (text or "").lower():
+        if ch.isalnum() or ch in "_-":
+            current.append(ch)
             continue
-        out.add(tok)
-        if tok.endswith("s") and len(tok) > 4:
-            out.add(tok[:-1])
+        if len(current) >= 2:
+            tok = "".join(current)
+            if tok not in _STOP and len(tok) >= 3:
+                out.add(tok)
+                if tok.endswith("s") and len(tok) > 4:
+                    out.add(tok[:-1])
+        current = []
+    if len(current) >= 2:
+        tok = "".join(current)
+        if tok not in _STOP and len(tok) >= 3:
+            out.add(tok)
+            if tok.endswith("s") and len(tok) > 4:
+                out.add(tok[:-1])
     return out

@@ -29,7 +29,7 @@ from correspondence.policies import PolicyNotFound
 from correspondence.serializers import CorrespondenceDetailSerializer
 from mdm.models import ReferenceValue
 
-from .models import AttendancePermission, Employee, LeaveRecord, Loan, PayslipLine
+from .models import AttendancePermission, AttendanceRecord, Employee, LeaveRecord, Loan, PayslipLine
 from .permissions import IsActiveEmployee, HasTeamAccess
 from .leave_days import leave_days_json
 from .leave_guards import (
@@ -54,6 +54,7 @@ from .self_serializers import (
 )
 from .serializers import (
     AttendancePermissionSerializer,
+    AttendanceRecordSerializer,
     LoanSerializer,
     PayslipLineSerializer,
     SelfLoanSerializer,
@@ -485,9 +486,13 @@ class PayslipSelfCollectionView(APIView):
 
     def get(self, request):
         profile = request.user.employee_profile
-        qs = PayslipLine.objects.filter(
-            employee=profile,
-            payroll_run__status__in=COMMITTED_RUN_STATUSES,
+        qs = (
+            PayslipLine.objects.filter(
+                employee=profile,
+                payroll_run__status__in=COMMITTED_RUN_STATUSES,
+            )
+            .select_related('payroll_run', 'line_type', 'employee')
+            .order_by('-payroll_run__period_start', 'payroll_run_id', 'id')
         )
         return Response(PayslipLineSerializer(qs, many=True).data)
 
@@ -608,6 +613,23 @@ class AttendancePermissionSelfCollectionView(APIView):
             CorrespondenceDetailSerializer(corr).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+class AttendanceRecordSelfCollectionView(APIView):
+    """GET lists my daily attendance records (read-only ESS)."""
+
+    permission_classes = [IsAuthenticated, IsActiveEmployee]
+
+    def get(self, request):
+        profile = request.user.employee_profile
+        qs = AttendanceRecord.objects.filter(employee=profile).order_by('-date', '-id')
+        date_from = (request.query_params.get('date_from') or '').strip()
+        date_to = (request.query_params.get('date_to') or '').strip()
+        if date_from:
+            qs = qs.filter(date__gte=date_from)
+        if date_to:
+            qs = qs.filter(date__lte=date_to)
+        return Response(AttendanceRecordSerializer(qs, many=True).data)
 
 
 def _month_bounds(year: int, month: int) -> tuple[date, date]:

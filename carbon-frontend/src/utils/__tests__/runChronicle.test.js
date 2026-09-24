@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildRunChronicle, chronicleTone } from '../../utils/runChronicle';
+import { buildRunChronicle, buildHumanActivityLog, chronicleTone } from '../../utils/runChronicle';
+import { friendlyStepError } from '../../shell/humanizeOperatorCopy';
 import { humanizeCanvasText, humanStatusLabel } from '../../utils/humanizeCanvas';
 
 describe('buildRunChronicle', () => {
@@ -51,6 +52,28 @@ describe('buildRunChronicle', () => {
     });
     expect(evt.detail).toMatch(/OK to continue/i);
     expect(evt.beatLabel).toBe('#1');
+  });
+});
+
+describe('buildHumanActivityLog', () => {
+  it('writes employee-friendly lines and humanizes path_param failures', () => {
+    const chronicle = buildRunChronicle({
+      steps: [
+        { step_id: 0, intent: 'List payroll runs', status: 'completed' },
+        {
+          step_id: 1,
+          intent: 'Load payroll records',
+          status: 'failed',
+          error: "Missing required path parameter 'id'. Provide it in path_params.",
+        },
+      ],
+    });
+    const lines = buildHumanActivityLog(chronicle, { humanizeError: friendlyStepError });
+    expect(lines[0].line).toMatch(/^Done —/);
+    expect(lines[1].tone).toBe('error');
+    expect(lines[1].line).toMatch(/Couldn’t finish/);
+    expect(lines[1].line).toMatch(/payroll run or record/i);
+    expect(lines[1].line).not.toMatch(/path_params/);
   });
 });
 

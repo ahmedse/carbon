@@ -102,6 +102,7 @@ function AIConversationView({
   seedDraft = null,
   onSeedDraftConsumed,
   process: processProp = null,
+  processSwitching = false,
   onProcessChange = null,
   contextPulse = null,
   onActivePlans,
@@ -1812,7 +1813,7 @@ function AIConversationView({
       {isOwner ? (
         <AIInputBar
           onSend={handleInputSend}
-          working={isWorking}
+          working={isWorking || processSwitching}
           onStop={handleStop}
           conversationStatus={convStatus}
           onMentionsChange={setMentions}
@@ -1944,6 +1945,7 @@ AIConversationView.propTypes = {
   seedDraft: PropTypes.string,
   onSeedDraftConsumed: PropTypes.func,
   process: PropTypes.oneOf(['ask', 'plan']),
+  processSwitching: PropTypes.bool,
   onProcessChange: PropTypes.func,
   contextPulse: PropTypes.shape({
     id: PropTypes.string,

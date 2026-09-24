@@ -20,6 +20,15 @@ import re
 from datetime import date
 from typing import Any
 
+from ai.engine.cognition.plan.process_dial_i18n import (
+    ATTENDANCE_BRIEF_AR,
+    COMPOSITE_CONDITIONAL_AR,
+    COMPOSITE_PARALLEL_AR,
+    COMPOSITE_READ_WRITE_AR,
+    LOAN_BRIEF_AR,
+    any_needle,
+)
+
 logger = logging.getLogger("pulse.cognition.plan.process_dial")
 
 PROCESS_LEAVE = "leave.request.lifecycle"
@@ -52,15 +61,24 @@ _ATTENDANCE_SLOTS: list[dict[str, Any]] = [
     {"field": "hours", "type": "hours", "required": True},
 ]
 
-_LOAN_BRIEF = re.compile(
-    r"\bloan\b|قرض|قروضي|أريد\s*قرض|اريد\s*قرض|تقديم\s*قرض",
-    re.IGNORECASE,
-)
-_ATTENDANCE_BRIEF = re.compile(
-    r"\b(?:attendance\s+permission|short\s+hours|early\s+leave|permission)\b"
-    r"|استئذان|إذن\s*حضور|اذن\s*حضور|ساعات\s*قصيرة",
-    re.IGNORECASE,
-)
+def _loan_brief(text: str) -> bool:
+    from ai.engine.text.word_match import has_word
+
+    raw = text or ""
+    return bool(has_word(raw, "loan") or any_needle(raw, LOAN_BRIEF_AR))
+
+
+def _attendance_brief(text: str) -> bool:
+    from ai.engine.text.word_match import contains_any_phrase, has_any_word
+
+    raw = text or ""
+    return bool(
+        has_any_word(raw, ("permission",))
+        or contains_any_phrase(
+            raw, ("attendance permission", "short hours", "early leave"),
+        )
+        or any_needle(raw, ATTENDANCE_BRIEF_AR)
+    )
 
 
 _PULSE_PLAN_PREFIX = "[Pulse mode: Plan."
@@ -69,28 +87,51 @@ _PULSE_PLAN_PREFIX = "[Pulse mode: Plan."
 # not a form. The single-write slot-filler must never hijack it with
 # "which loan type?" — the planner drafts the DAG and asks inside it.
 _COMPOSITE_CONDITIONAL = re.compile(
-    r"\bif\b[^.؟?!\n]{0,160}\b(?:then|stop|otherwise|else|don'?t|do\s+not|only)\b"
-    r"|\b(?:otherwise|unless|else\s+stop)\b"
-    r"|(?:إذا|اذا|إن\s+كان|ان\s+كان|لو|في\s+حال)[^.؟?!\n]{0,160}"
-    r"(?:توقف|وإلا|والا|فلا|لا\s+تقدّ?م|لا\s+تطلب|إذا\s+لا|اذا\s+لا|إن\s+لم|ان\s+لم)"
-    r"|إذا\s+لا\b|اذا\s+لا\b|وإلا\b|والا\b|إن\s+لم\b|ان\s+لم\b",
+    r"\bif\b[^.\?\u061F!\n]{0,160}\b(?:then|stop|otherwise|else|don'?t|do\s+not|only)\b"
+    r"|\b(?:otherwise|unless|else\s+stop)\b",
     re.IGNORECASE,
 )
-_COMPOSITE_PARALLEL = re.compile(
-    r"\b(?:at\s+the\s+same\s+time|in\s+parallel|simultaneously|side\s+by\s+side)\b"
-    r"|في\s+الوقت\s+نفسه|في\s+نفس\s+الوقت|بالتوازي|بشكل\s+متوازٍ?",
-    re.IGNORECASE,
+_COMPOSITE_PARALLEL_PHRASES = (
+    "at the same time", "in parallel", "simultaneously", "side by side",
 )
 # "Check X, then submit Y" — a read that gates a write is a two-step plan.
 _COMPOSITE_READ_THEN_WRITE = re.compile(
-    r"\b(?:check|review|verify|look\s+at|confirm|see)\b[^.؟?!\n]{0,160}"
-    r"\b(?:then|before|after\s+that|and\s+only\s+then)\b[^.؟?!\n]{0,160}"
-    r"\b(?:submit|apply|request|file|raise)\b"
-    r"|(?:راجع|تحقق|افحص|تأكد|اطّلع|اطلع|شوف)[^.؟?!\n]{0,160}"
-    r"(?:ثم|بعدها|وبعد\s+ذلك|قبل\s+أن|قبل\s+ان)[^.؟?!\n]{0,160}"
-    r"(?:قدّم|قدم|اطلب|أرسل|ارسل)",
+    r"\b(?:check|review|verify|look\s+at|confirm|see)\b[^.\?\?!\n]{0,160}"
+    r"\b(?:then|before|after\s+that|and\s+only\s+then)\b[^.\?\?!\n]{0,160}"
+    r"\b(?:submit|apply|request|file|raise)\b",
     re.IGNORECASE,
 )
+def _composite_conditional(text: str) -> bool:
+    raw = text or ""
+    if _COMPOSITE_CONDITIONAL.search(raw):
+        return True
+    if not any_needle(raw, COMPOSITE_CONDITIONAL_AR):
+        return False
+    return any(n in raw for n in COMPOSITE_CONDITIONAL_AR[-8:])
+
+
+def _composite_parallel(text: str) -> bool:
+    from ai.engine.text.word_match import contains_any_phrase
+
+    raw = text or ""
+    return bool(
+        contains_any_phrase(raw, _COMPOSITE_PARALLEL_PHRASES)
+        or any_needle(raw, COMPOSITE_PARALLEL_AR)
+    )
+
+
+def _composite_read_then_write(text: str) -> bool:
+    raw = text or ""
+    if _COMPOSITE_READ_THEN_WRITE.search(raw):
+        return True
+    read_needles = COMPOSITE_READ_WRITE_AR[:6]
+    gate_needles = COMPOSITE_READ_WRITE_AR[6:11]
+    write_needles = COMPOSITE_READ_WRITE_AR[11:]
+    return (
+        any_needle(raw, read_needles)
+        and any_needle(raw, gate_needles)
+        and any_needle(raw, write_needles)
+    )
 
 
 def strip_pulse_mode_prefix(utterance: str) -> str:
@@ -124,18 +165,18 @@ def is_composite_brief(utterance: str) -> bool:
     if not text:
         return False
     return bool(
-        _COMPOSITE_CONDITIONAL.search(text)
-        or _COMPOSITE_PARALLEL.search(text)
-        or _COMPOSITE_READ_THEN_WRITE.search(text)
+        _composite_conditional(text)
+        or _composite_parallel(text)
+        or _composite_read_then_write(text)
     )
 
 
 def is_personal_leave_brief(utterance: str) -> bool:
     """True when Agent should materialize the leave process dial (not LLM DAG)."""
     from ai.engine.cognition.scope_route import (
-        _BARE_LEAVE,
-        _LEAVE_COMPLIANCE,
-        _LEAVE_PERSONAL,
+        _bare_leave,
+        _leave_compliance,
+        _leave_personal,
     )
 
     text = (utterance or "").strip()
@@ -144,9 +185,9 @@ def is_personal_leave_brief(utterance: str) -> bool:
     # More specific ESS dials win.
     if is_personal_loan_brief(text) or is_personal_attendance_brief(text):
         return False
-    if _LEAVE_COMPLIANCE.search(text):
+    if _leave_compliance(text):
         return False
-    if _LEAVE_PERSONAL.search(text) or _BARE_LEAVE.search(text):
+    if _leave_personal(text) or _bare_leave(text):
         return True
     return bool(
         re.search(
@@ -163,7 +204,7 @@ def is_personal_loan_brief(utterance: str) -> bool:
     text = (utterance or "").strip()
     if not text:
         return False
-    if not _LOAN_BRIEF.search(text):
+    if not _loan_brief(text):
         return False
     if re.search(
         r"\b(?:all\s+loans|loan\s+portfolio|board\s+pack|compliance)\b"
@@ -182,7 +223,7 @@ def is_personal_attendance_brief(utterance: str) -> bool:
         return False
     if is_personal_loan_brief(text):
         return False
-    if not _ATTENDANCE_BRIEF.search(text):
+    if not _attendance_brief(text):
         return False
     # Bare "permission" without attendance/استئذان context is too weak.
     if re.search(r"\bpermission\b", text, re.I) and not re.search(
@@ -311,6 +352,89 @@ def materialize_leave_request_plan(
     return plan
 
 
+def brief_requests_loan_submit(utterance: str) -> bool:
+    """True when the brief asks to stage a loan, not only to read loans/leave.
+
+    «راجع قروضي ورصيد إجازتي في الوقت نفسه» is a read. A conditional
+    «إذا لا، قدّم طلب قرض» or «أريد قرض» is a submit.
+    """
+    text = strip_pulse_mode_prefix(utterance or "")
+    if not text or not _loan_brief(text):
+        return False
+    if _composite_conditional(text) or _composite_read_then_write(text):
+        return True
+    if any_needle(text, (
+        "أريد قرض", "اريد قرض", "تقديم قرض", "طلب قرض", "قدّم طلب", "قدم طلب",
+    )):
+        return True
+    return bool(re.search(
+        r"\b(?:i\s+(?:want|need)|i'?d\s+like|apply|submit|request|file|raise)\b"
+        r".{0,64}\bloan\b",
+        text,
+        re.IGNORECASE | re.DOTALL,
+    ))
+
+
+def _materialize_loan_read_plan(brief: str):
+    """Review-only plan: list loans (and leave when asked). No submit step."""
+    from ai.engine.cognition.plan.planner import Plan, PlanPhase, PlanStep
+
+    wants_leave = bool(re.search(
+        r"\b(?:leave|vacation|pto)\b|إجاز|اجاز",
+        brief or "",
+        re.IGNORECASE,
+    ))
+    steps = [
+        PlanStep(
+            step_id=0,
+            intent="Check existing loans (read only — no request)",
+            tool_name="call_host_api",
+            tool_args={
+                "api_name": "list_my_loans",
+                "explanation": "The brief asked to review loans, not to submit one.",
+            },
+            depends_on=[],
+            is_mutation=False,
+            agent_role="orchestrator",
+        ),
+    ]
+    if wants_leave:
+        steps.append(PlanStep(
+            step_id=1,
+            intent="Read leave balance (read only)",
+            tool_name="call_host_api",
+            tool_args={
+                "api_name": "get_my_leave_balance",
+                "explanation": "Parallel read the brief asked for; no write.",
+            },
+            depends_on=[],
+            is_mutation=False,
+            agent_role="orchestrator",
+        ))
+    step_ids = [s.step_id for s in steps]
+    return Plan(
+        pattern="ess_read",
+        steps=steps,
+        synthesis_instruction=(
+            "Read-only plan. List the employee's loans"
+            + (" and leave balance" if wants_leave else "")
+            + ". Do not submit a loan. Nothing runs until the operator approves."
+        ),
+        source="process_dial",
+        skill_name=PROCESS_LOAN,
+        needs_confirmation=True,
+        phases=[
+            PlanPhase(
+                phase_id=0,
+                name="Review",
+                goal="Read loans and leave — no submit",
+                strategy="parallel" if wants_leave else "sequential",
+                step_ids=step_ids,
+            ),
+        ],
+    )
+
+
 def materialize_loan_request_plan(
     utterance: str,
     *,
@@ -319,11 +443,14 @@ def materialize_loan_request_plan(
     """Build a reviewable Plan from ``loan.request.lifecycle`` + brief slots.
 
     Host review is manager then finance (Team) — Pulse only stages submit.
+    A review-only brief (check loans / leave, no apply) stays a read plan.
     """
     from ai.engine.cognition.plan.planner import Plan, PlanPhase, PlanStep
     from ai.write_slots import fill_write_body
 
     brief = (utterance or "").strip()
+    if not brief_requests_loan_submit(brief):
+        return _materialize_loan_read_plan(brief)
     body = fill_write_body(
         {},
         slots=_LOAN_SLOTS,
@@ -347,7 +474,7 @@ def materialize_loan_request_plan(
     wants_leave_read = composite and bool(
         re.search(r"\b(?:leave|vacation|pto)\b|إجاز|اجاز", brief, re.IGNORECASE)
     )
-    guard_no_open_loan = composite and bool(_COMPOSITE_CONDITIONAL.search(brief))
+    guard_no_open_loan = composite and _composite_conditional(brief)
 
     list_step = PlanStep(
         step_id=0,

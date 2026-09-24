@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 
 from ai.engine.memory.working import WorkingFocus, WorkingMemory
+from ai.engine.text.word_match import contains_any_phrase, has_any_word
 
 # Patterns where "it" acts as the OBJECT of an action verb
 _ACTION_IT = re.compile(
@@ -52,11 +53,15 @@ _BACK_TO = re.compile(
     re.IGNORECASE,
 )
 
-# Soft restore cues that mention a prior name again
-_AGAIN_CUES = re.compile(
-    r"\b(?:again|once\s+more|as\s+before|earlier|previously)\b",
-    re.IGNORECASE,
-)
+_AGAIN_CUE_PHRASES = ("once more", "as before")
+_AGAIN_CUE_WORDS = ("again", "earlier", "previously")
+
+
+def _has_again_cue(text: str) -> bool:
+    return (
+        contains_any_phrase(text, _AGAIN_CUE_PHRASES)
+        or has_any_word(text, _AGAIN_CUE_WORDS)
+    )
 
 
 def _focus_label(focus: WorkingFocus) -> str:
@@ -75,9 +80,8 @@ def _rewrite_with_stable_id(message: str, mention: str, focus: WorkingFocus) -> 
         return message
     # Prefer replacing the mention span with "Name (employee_no N)"
     label = _focus_label(focus)
-    pattern = re.compile(re.escape(mention), re.IGNORECASE)
-    if pattern.search(message):
-        return pattern.sub(label, message, count=1)
+    if re.search(re.escape(mention), message, re.IGNORECASE):
+        return re.sub(re.escape(mention), label, message, count=1, flags=re.IGNORECASE)
     return f"{message.rstrip()} — {label}"
 
 
@@ -145,7 +149,7 @@ class AnaphoraResolver:
                         current is not None
                         and focus is current
                         and not back
-                        and not _AGAIN_CUES.search(user_message)
+                        and not _has_again_cue(user_message)
                     ):
                         continue
                     candidates.append((len(alias), focus, alias))

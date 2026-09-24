@@ -45,6 +45,24 @@ describe('EnvelopeMessage — full envelope', () => {
     expect(screen.getByText(/Paragraph two with/)).toBeInTheDocument();
   });
 
+  it('headline-only envelopes use OutcomeReceipt (Result parity)', () => {
+    render(
+      <EnvelopeMessage
+        envelope={{
+          headline: 'Loan request submitted.',
+          prose: ['Awaiting manager in Team.'],
+          tables: [],
+          charts: [],
+          caveats: [],
+          sources: [],
+        }}
+        fallbackContent=""
+      />,
+    );
+    expect(screen.getByTestId('envelope-receipt')).toBeInTheDocument();
+    expect(screen.getByTestId('outcome-receipt')).toBeInTheDocument();
+  });
+
   it('renders table cells and column headers deterministically', () => {
     render(<EnvelopeMessage envelope={sampleEnvelope} fallbackContent="" />);
 

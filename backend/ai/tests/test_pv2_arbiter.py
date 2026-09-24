@@ -21,7 +21,7 @@ def _fresh_settings_cache():
 def _sigs(*fired: str, extra: list[dict] | None = None) -> list[dict]:
     out = [{"gate": g, "fired": True} for g in fired]
     for g in ("off_limits", "pending_confirm", "process_brief", "chat_handoff",
-              "nav_fast_path", "deixis", "weather_force"):
+              "nav_fast_path", "deixis", "weather_force", "ess_bound_self_read"):
         if g not in fired:
             out.append({"gate": g, "fired": False})
     if extra:
@@ -38,6 +38,7 @@ def test_precedence_refuse_beats_nav_and_handoff():
     assert arb.decide(_sigs("nav_fast_path", "deixis")) == TurnDecision.NAVIGATE
     assert arb.decide(_sigs("deixis")) == TurnDecision.CLARIFY
     assert arb.decide(_sigs("weather_force")) == TurnDecision.TOOL_ANSWER
+    assert arb.decide(_sigs("ess_bound_self_read")) == TurnDecision.TOOL_ANSWER
     assert arb.decide(_sigs()) == TurnDecision.ANSWER
 
 

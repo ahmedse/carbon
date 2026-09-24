@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDiscussDraft } from '../buildDiscussDraft';
+import { buildDiscussDraft, buildDiscussHandoff } from '../buildDiscussDraft';
 
 const plan = {
   id: '74a5e6a6-942c-4185-a986-8f895601d5ca',
@@ -31,5 +31,12 @@ describe('buildDiscussDraft', () => {
     expect(draft).toMatch(/Prior outcome \(context only/);
     expect(draft).toMatch(/DISCUSSION ONLY/);
     expect(draft).toMatch(/do not re-execute|Do not call tools/i);
+  });
+});
+
+describe('buildDiscussHandoff', () => {
+  it('refine → process plan; outcome → process ask', () => {
+    expect(buildDiscussHandoff(plan, '', { refine: true }).process).toBe('plan');
+    expect(buildDiscussHandoff(plan, noisyOutcome, { refine: false }).process).toBe('ask');
   });
 });

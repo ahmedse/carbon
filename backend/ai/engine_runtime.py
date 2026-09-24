@@ -296,7 +296,11 @@ async def _run_chat(
             label_fetch_fn=getattr(executor, "entity_fetch", None),
         )
         external_sources = _build_external_sources(completed_tools)
-        code_result = _build_code_result(completed_tools)
+        code_result = _drop_sandbox_image_when_row_chart(
+            _build_code_result(completed_tools),
+            text=getattr(response, "text", None) or "",
+            envelope=getattr(response, "envelope", None),
+        )
         # All-failed turns: prefer ADR-0021 recovery synthesis from the runner
         # (grounded host detail / next step). Fall back to mutation-aware refuse
         # only when recovery produced nothing. Never append a grounded twin.
@@ -845,6 +849,10 @@ def _should_force_action(message: str, response, ledger) -> bool:
     handoff. Anything else that drops the write also earns a handoff.
     """
     try:
+        # A typed pre-draft route owns the response end-to-end. Runtime safety
+        # backstops may not reinterpret and replace it after the Arbiter.
+        if bool(getattr(ledger, "decision_committed", False)):
+            return False
         from ai.engine.agent.chat_surface import is_ess_write_intent
         from ai.engine.cognition.dialogue.pending_mutation import detect_action_proposal
         from ai.engine.cognition.plan.process_dial import strip_pulse_mode_prefix
@@ -1775,12 +1783,38 @@ def _build_external_sources(completed_tools: list[dict]) -> list[dict]:
     return sources
 
 
-def _build_code_result(completed_tools: list[dict]) -> dict | None:
-    """Code-sandbox result (I2-F) for answers that ran ``code_execute``.
+def _drop_sandbox_image_when_row_chart(
+    code_result: dict | None,
+    *,
+    text: str = "",
+    envelope=None,
+) -> dict | None:
+    """A chart built from host rows replaces the sandbox PNG.
 
-    Returns the sandbox dict verbatim ({"stdout","error","image_b64",
-    "table_rows","result"}), or ``None`` when no ``code_execute`` tool ran.
-    Never raises — malformed results are skipped.
+    The image stays when this turn has no row chart. Source stays stripped.
+    """
+    if not code_result or not code_result.get("image_b64"):
+        return code_result
+    charts = None
+    if isinstance(envelope, dict):
+        charts = envelope.get("charts")
+    else:
+        charts = getattr(envelope, "charts", None)
+    has_row_chart = bool(charts) or "```mermaid" in (text or "")
+    if not has_row_chart:
+        return code_result
+    kept = {key: value for key, value in code_result.items() if key != "image_b64"}
+    if any(kept.get(key) for key in ("error", "table_rows", "result")):
+        return kept
+    return None
+
+
+def _build_code_result(completed_tools: list[dict]) -> dict | None:
+    """Code-sandbox *outputs* for Chat (I2-F).
+
+    Returns chart/table/value fields only. Never includes the executed source
+    (``code`` / ``stdout``) — employees must not see sandbox scripts (RULE_23).
+    Admin audit remains the place to inspect what ran.
     """
     for item in completed_tools or []:
         if not isinstance(item, dict):
@@ -1804,9 +1838,22 @@ def _build_code_result(completed_tools: list[dict]) -> dict | None:
         # payload whose ``result`` is None). The sandbox dict itself carries
         # ``error`` (None on success, traceback on user-code failure) so the
         # frontend can render the friendly error state when it is non-empty.
-        if not any(k in data for k in ("stdout", "error", "image_b64", "table_rows", "result")):
+        if not any(k in data for k in ("stdout", "error", "image_b64", "table_rows", "result", "code")):
             continue
-        return data
+        # Strip source — never ship sandbox scripts to the Chat client.
+        out = {
+            k: data.get(k)
+            for k in ("error", "image_b64", "table_rows", "result")
+            if k in data
+        }
+        # Friendly one-line error only (no traceback dump).
+        err = out.get("error")
+        if isinstance(err, str) and err.strip():
+            first = err.strip().splitlines()[0].strip()
+            out["error"] = first[:240]
+        elif err is None and "error" in out:
+            out["error"] = None
+        return out
     return None
 
 

@@ -29,6 +29,18 @@ class TestRenderToolResultsForSynthesis:
         # The envelope keys must NOT leak into the render.
         assert "status_code" not in out
 
+    def test_chart_image_and_source_never_reach_the_model(self):
+        blob = "A" * 240
+        source = "import matplotlib\n" + ("plt.plot([1])\n" * 8)
+        out = _render_tool_results_for_synthesis([
+            {"tool_name": "code_execute",
+             "result": {"image_b64": blob, "code": source, "result": "ok"}},
+        ])
+        assert blob not in out
+        assert "import matplotlib" not in out
+        assert "chart_image" in out
+        assert "already shown" in out
+
     def test_list_payload_counts_rows(self):
         out = _render_tool_results_for_synthesis([
             {"tool_name": "list_gwp_gases",
@@ -145,6 +157,27 @@ class TestSynthesizeToolResultsNoDataNet:
         mock_route.assert_awaited_once()
         assert result is not None
         assert result["text"].startswith("115 calculations found.")
+
+    @pytest.mark.asyncio
+    async def test_chart_denial_is_replaced_by_the_tool_fact(self):
+        denial = (
+            "I cannot create, generate, or render charts. "
+            "import matplotlib\nplt.bar([1],[2])\n"
+        ) * 8
+        with patch("ai.engine.llm.router.route_chat") as mock_route:
+            result = await _synthesize_tool_results(
+                instance_id="i", conversation_id="c",
+                user_message="create a nice report with charts",
+                completed_tools=[{
+                    "tool_name": "code_execute",
+                    "result": {"image_b64": "A" * 80, "code": "import matplotlib\n" + "x" * 90},
+                }],
+                draft_text=denial,
+            )
+        mock_route.assert_not_awaited()
+        assert result is not None
+        assert result["text"] == "Here is the chart from your data."
+        assert "import matplotlib" not in result["text"]
 
     @pytest.mark.asyncio
     async def test_long_no_data_draft_over_empty_data_kept(self):

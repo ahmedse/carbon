@@ -1,0 +1,88 @@
+# ADR-0049 P11 — real failed transcript (emp_1067, Nibras, en).
+# Captures subject-scope regression: first-person "my vacations" must bind
+# get_my_leave_balance, never org entitlements or navigation offers.
+#
+# Expectation keys: decision_in, mentions_any (= must_contain), mentions_none
+# (= must_not_contain / forbidden_phrases), must_not_reask_slots, language,
+# max_llm_calls. No separate must_not_contain key — use mentions_none.
+#
+# Offline tier: host_user_id=None so call_host_api may fail; golden records
+# engine routing + reply text either way.
+
+id: ess-leave-followup-subject
+objective_ids: [C1, C3, C5]
+language: en
+surface: chat
+persona: emp_1067
+
+_leave_balance_stub: &leave_balance_stub
+  - id: call_leave_balance_1
+    type: function
+    function:
+      name: call_host_api
+      arguments: '{"api_name":"get_my_leave_balance"}'
+
+_leave_balance_reply: &leave_balance_reply |
+  Your leave balance: annual 30/30, sick 15/15, emergency 4/5, unpaid 90/90,
+  maternity 70/70, paternity 3/3 days remaining.
+
+turns:
+  - user: "tell me more about my vacations"
+    stub_reply: *leave_balance_reply
+    stub_tool_calls: *leave_balance_stub
+    expect:
+      decision_in: [tool_answer]
+      language: en
+      max_llm_calls: 2
+      mentions_none: ["Would you like to open Leave", "open Leave?"]
+
+  - user: "just tell me about my vacations, not all employees vacations and leaves"
+    stub_reply: *leave_balance_reply
+    stub_tool_calls: *leave_balance_stub
+    expect:
+      decision_in: [tool_answer]
+      language: en
+      max_llm_calls: 2
+      mentions_any: ["Your"]
+      mentions_none: ["all employees", "employees vacations"]
+
+  - user: "thats for me?"
+    stub_reply: "Yes — these are your leave balances."
+    expect:
+      decision_in: [answer, tool_answer]
+      language: en
+      max_llm_calls: 2
+      mentions_none: ["Just to be sure"]
+
+  - user: "yes"
+    stub_reply: "Yes, the figures above are your personal leave entitlements."
+    expect:
+      decision_in: [answer, tool_answer]
+      language: en
+      max_llm_calls: 2
+      mentions_none: ["Just to be sure"]
+
+  - user: "yes, why keep asking same question ?!"
+    stub_reply: "Understood — your leave balances are listed above; I won't ask again."
+    expect:
+      decision_in: [answer, tool_answer]
+      language: en
+      max_llm_calls: 2
+      mentions_none: ["call_host_api", "Retrieved", "row", "Just to be sure"]
+
+  - user: "where those are ?"
+    stub_reply: "You can view leave balances anytime in the My app under Leave."
+    expect:
+      decision_in: [answer, tool_answer]
+      language: en
+      max_llm_calls: 2
+      mentions_any: ["leave", "Leave", "My"]
+      mentions_none: ["Did you mean", "get_my_leave_balance", "list_leave_entitlements"]
+
+  - user: "yes"
+    stub_reply: "Got it — your leave info stays in My → Leave whenever you need it."
+    expect:
+      decision_in: [answer, tool_answer]
+      language: en
+      max_llm_calls: 2
+      mentions_none: ["Just to be sure", "get_my_leave_balance", "call_host_api", "Did you mean"]

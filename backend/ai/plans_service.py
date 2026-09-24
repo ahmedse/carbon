@@ -1980,17 +1980,25 @@ class PlansService:
 
     @classmethod
     def _surgical_incremental_steps(cls, old_steps: list, feedback: str) -> list:
-        """Keep existing steps; append chart/export work for additive feedback."""
+        """Keep existing steps; append chart/export work for additive feedback.
+
+        On-screen charts use envelope Chart.js / Mermaid from prior host rows.
+        Matplotlib ``code_execute`` PNG is only for a Word/PDF/PNG export pack.
+        """
         steps = [dict(s) for s in old_steps if isinstance(s, dict)]
         fl = (feedback or "").lower()
         wants_chart = bool(
             re.search(r"\b(chart|charts|graph|graphs|visual|plot)\b", fl)
         )
+        wants_export = bool(
+            re.search(r"\b(export|word|docx|excel|xlsx|pack|pdf)\b", fl)
+        )
         has_chartish = any(
             re.search(
-                r"\b(chart|graph|visual|plot)\b",
-                f"{s.get('intent') or ''}".lower(),
+                r"\b(chart|graph|visual|plot|mermaid|envelope|interactive visuals)\b",
+                f"{s.get('intent') or ''}{s.get('tool_name') or ''}".lower(),
             )
+            or (s.get("tool_name") or "") == "code_execute"
             for s in steps
         )
         has_export = any(
@@ -1998,43 +2006,82 @@ class PlansService:
             or re.search(r"\b(export|word|docx)\b", (s.get("intent") or "").lower())
             for s in steps
         )
+        needs_png = has_export or wants_export
         next_id = max((int(s.get("step_id", 0)) for s in steps), default=-1) + 1
         last_ids = [s.get("step_id") for s in steps[-2:]] if steps else []
 
         if wants_chart and not has_chartish:
-            steps.append({
-                "step_id": next_id,
-                "intent": (
-                    "Generate visually compelling charts for each salary "
-                    "dimension (nationality, org unit, position)"
-                ),
-                "tool_name": "code_execute",
-                "tool_args": {},
-                "depends_on": [last_ids[-1]] if last_ids else [],
-                "is_mutation": False,
-                "dry_run_supported": False,
-                "instructions": (
-                    "Build bar/pie charts from prior analysis tables; "
-                    "return image_b64 PNG figures for the Word pack."
-                ),
-            })
+            if needs_png:
+                steps.append({
+                    "step_id": next_id,
+                    "intent": (
+                        "Generate PNG charts from prior analysis tables "
+                        "for the export pack"
+                    ),
+                    "tool_name": "code_execute",
+                    "tool_args": {},
+                    "depends_on": [last_ids[-1]] if last_ids else [],
+                    "is_mutation": False,
+                    "dry_run_supported": False,
+                    "instructions": (
+                        "Build bar/pie charts from prior analysis tables; "
+                        "return image_b64 PNG figures for the Word/PDF pack."
+                    ),
+                })
+            else:
+                # Screen-only: no matplotlib. Result/Chat synthesizers chart
+                # labeled host rows via Answer Envelope or Mermaid.
+                # Avoid the words word/docx/pdf/png here — `_coerce_export_steps`
+                # would otherwise promote this into export_document.
+                steps.append({
+                    "step_id": next_id,
+                    "intent": (
+                        "Present interactive charts from prior host rows "
+                        "(answer envelope / Mermaid, not a sandbox figure)"
+                    ),
+                    "tool_name": None,
+                    # Declares the render surface, which keeps
+                    # ``_coerce_export_steps`` from reading the word "chart"
+                    # in the intent and promoting this to export_document.
+                    "tool_args": {"render": "envelope"},
+                    "depends_on": [last_ids[-1]] if last_ids else [],
+                    "is_mutation": False,
+                    "dry_run_supported": False,
+                    "instructions": (
+                        "Do not call code_execute. Emit Mermaid xychart-beta "
+                        "or rely on Answer Envelope series from labeled host "
+                        "rows (leave types, breakdowns, salary bands)."
+                    ),
+                })
             next_id += 1
             has_chartish = True
 
         if wants_chart and has_export:
-            # Point the last export at embedding visuals.
+            # Point the last export at embedding visuals (match the tool,
+            # not a chart step whose intent happens to say "export pack").
             for s in reversed(steps):
-                if (s.get("tool_name") or "") == "export_document" or re.search(
-                    r"\b(export|word|docx)\b", (s.get("intent") or "").lower()
-                ):
-                    intent = (s.get("intent") or "").rstrip(".")
-                    if "chart" not in intent.lower() and "visual" not in intent.lower():
-                        s["intent"] = f"{intent} with embedded charts"
-                    break
-        elif wants_chart and not has_export:
+                if (s.get("tool_name") or "") != "export_document":
+                    continue
+                intent = (s.get("intent") or "").rstrip(".")
+                if "chart" not in intent.lower() and "visual" not in intent.lower():
+                    s["intent"] = f"{intent} with embedded charts"
+                break
+            else:
+                for s in reversed(steps):
+                    if re.search(
+                        r"\b(export|word|docx)\b", (s.get("intent") or "").lower()
+                    ) and (s.get("tool_name") or "") != "code_execute":
+                        intent = (s.get("intent") or "").rstrip(".")
+                        if "chart" not in intent.lower() and "visual" not in intent.lower():
+                            s["intent"] = f"{intent} with embedded charts"
+                        break
+        elif wants_chart and wants_export and not has_export:
             chart_deps = [
                 s.get("step_id") for s in steps
-                if re.search(r"chart|visual|code_execute", f"{s.get('intent')}{s.get('tool_name')}".lower())
+                if re.search(
+                    r"chart|visual|code_execute|mermaid|envelope",
+                    f"{s.get('intent')}{s.get('tool_name')}".lower(),
+                )
             ]
             steps.append({
                 "step_id": next_id,
@@ -2636,9 +2683,16 @@ class PlansService:
             )
             payload = state.to_dict()
             if row is None:
+                # ConversationState belongs to the active host instance and
+                # conversation owner—not PLAN_INSTANCE_ID. The old values
+                # poisoned the runner's same-turn save with an owner/instance
+                # mismatch.
+                from ai.instance_registry import resolve_instance_id
+
                 ConversationContextRecord.objects.create(
                     conversation_id=cid,
-                    instance_id=getattr(run, "instance_id", None) or PLAN_INSTANCE_ID,
+                    instance_id=resolve_instance_id(),
+                    host_user_id=str(getattr(run, "host_user_id", "") or "") or None,
                     session_json=payload,
                 )
             else:
@@ -3401,9 +3455,10 @@ class PlansService:
         return result
 
     def edit_step(self, user, plan_id: str, step_id, title=None,
-                  instructions=None, depends_on=None) -> dict:
-        """Edit one plan step — ``title`` → intent, plus instructions and
-        depends_on — with the same diff-review rule as ``edit_plan``.
+                  instructions=None, depends_on=None, agent_role=None) -> dict:
+        """Edit one plan step — ``title`` → intent, plus instructions,
+        depends_on, and ``agent_role`` — with the same diff-review rule as
+        ``edit_plan``.
 
         A non-pending plan drops to ``pending_approval`` and all step
         execution state resets to ``pending``: the edited plan must be
@@ -3411,11 +3466,13 @@ class PlansService:
 
         W6-E F-28 steering: on a PAUSED run, editing a not-yet-executed
         (``pending``) step's service-owned metadata (``instructions``/
-        ``intent``) keeps the plan paused and is honored on resume — no
-        re-approval, no ledger wipe. Editing an executed or consent-awaiting
-        step on a paused run still drops to ``pending_approval`` (RULE_21).
+        ``intent`` / ``agent_role``) keeps the plan paused and is honored on
+        resume — no re-approval, no ledger wipe. Editing an executed or
+        consent-awaiting step on a paused run still drops to
+        ``pending_approval`` (RULE_21).
         """
         from ai.models.core import RunStep
+        from ai.engine.core.models import AGENT_ROLES
 
         run = self._get_owned_run(user, plan_id)
         plan_json = dict(_coerce_plan_json(run.plan_json))
@@ -3437,6 +3494,14 @@ class PlansService:
             target["instructions"] = str(instructions).strip()
         if depends_on is not None:
             target["depends_on"] = depends_on
+        if agent_role is not None:
+            role = str(agent_role).strip()
+            if role not in AGENT_ROLES:
+                raise ValueError(
+                    f"Unknown agent role {role!r}; must be one of "
+                    f"{sorted(AGENT_ROLES)}."
+                )
+            target["agent_role"] = role
 
         step_row = RunStep.objects.filter(
             run_id=run.id, step_index=int(step_id)
@@ -4775,17 +4840,39 @@ class PlansService:
     # Token-only unstaged grant + LLM resume is a last resort for tools that
     # cannot be bound from tool_args (e.g. export_document).
 
+    # Tool ids must never be treated as catalog api_name (LLM sometimes puts
+    # ``api_name: "call_host_api"`` when the real action is missing/wrong).
+    _NOT_CATALOG_API = frozenset({
+        "call_host_api",
+        "invoke_skill",
+        "export_document",
+        "plan_task",
+        "edit_plan",
+        "approve_plan",
+        "web_research",
+        "code_execute",
+        "cross_synthesize",
+        "search_knowledge",
+        "get_entity_details",
+        "resolve_entity",
+    })
+
     def _step_mutation_api_name(self, step) -> str | None:
         """Return catalog api_name when this step is a host API mutation."""
         args = step.tool_args_json if isinstance(step.tool_args_json, dict) else {}
-        api_name = str(args.get("api_name") or "").strip()
         tool_name = (step.tool_name or "").strip()
         if tool_name and tool_name not in ("call_host_api", ""):
             # Plugin tools (create_dq_rule, …) stage their own execution_id.
             return None
-        if not api_name and tool_name == "call_host_api":
-            return None
-        return api_name or None
+        # Prefer api_name; fall back to keys LLMs use when they mis-label the tool.
+        for key in ("api_name", "api", "action", "name"):
+            candidate = str(args.get(key) or "").strip()
+            if not candidate:
+                continue
+            if candidate in self._NOT_CATALOG_API or candidate == tool_name:
+                continue
+            return candidate
+        return None
 
     def _commit_unstaged_from_tool_args(
         self, user, run, step, *, body_override=None,
@@ -4837,7 +4924,9 @@ class PlansService:
                 entry = executor.get_catalog_entry(api_name)
                 if not entry:
                     raise PlanStepError(
-                        f"Unknown host API '{api_name}' — cannot complete Approve."
+                        f"Approve could not complete this write: '{api_name}' "
+                        "is not a host API in the catalog. Decline and re-plan, "
+                        "or use My."
                     )
                 method = str(entry.get("method") or "GET").upper()
                 needs_confirm = (

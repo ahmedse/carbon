@@ -14,13 +14,13 @@ the host adapter (``ai.adapters.preferences``) via the
 """
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
 from ai.engine.ports.preferences import UserPreferenceStore
+from ai.engine.text.word_match import contains_any_phrase, has_any_word
 
 # Host-injected adapter provider (constructed once in host code). The engine
 # never imports ``ai.adapters``; callers wire it during bootstrap.
@@ -119,42 +119,70 @@ class SessionPreferences:
         return "\n".join(constraints)
 
 
-# ── Signal detection patterns ──────────────────────────────────────────────────
+# ── Signal detection (no pre-compiled regex — ADR-0049 L7) ───────────────────
 
-_BRIEF_RE = re.compile(
-    r"\b(?:in\s+a\s+hurry|quick(?:ly)?|brief(?:ly)?|short(?:ly)?|concise(?:ly)?|"
-    r"keep\s+it\s+short|2[- ]minute|two[- ]minute|tl[;,]?dr|"
-    r"don'?t\s+go\s+into\s+detail|skip\s+the\s+intro|no\s+intro|"
-    r"quick\s+answer|summarize|summarise)\b",
-    re.IGNORECASE,
+_BRIEF_PHRASES = (
+    "in a hurry", "keep it short", "2-minute", "2 minute", "two-minute",
+    "two minute", "tl;dr", "tl,dr", "don't go into detail", "dont go into detail",
+    "skip the intro", "no intro", "quick answer",
 )
-_VERBOSE_RE = re.compile(
-    r"\b(?:explain(?:\s+in\s+detail)?|detailed|thorough(?:ly)?|in\s+depth|"
-    r"step\s+by\s+step|elaborate|give\s+me\s+(?:the\s+)?(?:full|complete)|"
-    r"more\s+detail|comprehensive|walk\s+me\s+through|in\s+full)\b",
-    re.IGNORECASE,
+_BRIEF_WORDS = (
+    "quickly", "quick", "briefly", "brief", "shortly", "short", "concisely",
+    "concise", "summarize", "summarise",
 )
-_BULLETS_RE = re.compile(
-    r"\b(?:bullet\s+points?|as\s+a\s+list|list\s+format|numbered\s+list|"
-    r"bulleted|in\s+bullets?)\b",
-    re.IGNORECASE,
+_VERBOSE_PHRASES = (
+    "explain in detail", "in depth", "step by step", "give me the full",
+    "give me full", "give me the complete", "give me complete", "more detail",
+    "walk me through", "in full",
 )
-_PROSE_RE = re.compile(
-    r"\b(?:prose|paragraph|no\s+bullets?|not\s+as\s+a\s+list|"
-    r"flowing\s+text|narrative)\b",
-    re.IGNORECASE,
+_VERBOSE_WORDS = (
+    "explain", "detailed", "thoroughly", "thorough", "elaborate", "comprehensive",
 )
-_EXPERT_RE = re.compile(
-    r"\b(?:I(?:'m|\s+am)\s+(?:an?\s+)?expert|expert\s+level|technical\s+detail|advanced|"
-    r"assume\s+I\s+know|skip\s+(?:the\s+)?basics?|I\s+know\s+the\s+basics)\b",
-    re.IGNORECASE,
+_BULLETS_PHRASES = (
+    "bullet points", "bullet point", "as a list", "list format", "numbered list",
+    "in bullets", "in bullet",
 )
-_BEGINNER_RE = re.compile(
-    r"\b(?:beginner|explain\s+(?:it\s+)?(?:simply|to\s+me|from\s+scratch)|"
-    r"I(?:'m|\s+am)\s+new(?:\s+to\s+this)?|not\s+(?:familiar|sure|certain)|"
-    r"what\s+is\s+(?:a|an)\b)\b",
-    re.IGNORECASE,
+_BULLETS_WORDS = ("bulleted",)
+_PROSE_WORDS = ("prose", "paragraph", "narrative")
+_PROSE_PHRASES = (
+    "no bullets", "no bullet", "not as a list", "flowing text",
 )
+_EXPERT_PHRASES = (
+    "i am an expert", "i'm an expert", "i am a expert", "i'm a expert",
+    "expert level", "technical detail", "assume i know", "skip the basics",
+    "skip basics", "i know the basics",
+)
+_EXPERT_WORDS = ("advanced",)
+_BEGINNER_WORDS = ("beginner",)
+_BEGINNER_PHRASES = (
+    "explain it simply", "explain simply", "explain to me", "explain from scratch",
+    "i am new to this", "i'm new to this", "i am new", "i'm new",
+    "not familiar", "not sure", "not certain", "what is a", "what is an",
+)
+
+
+def _is_brief_signal(text: str) -> bool:
+    return has_any_word(text, _BRIEF_WORDS) or contains_any_phrase(text, _BRIEF_PHRASES)
+
+
+def _is_verbose_signal(text: str) -> bool:
+    return has_any_word(text, _VERBOSE_WORDS) or contains_any_phrase(text, _VERBOSE_PHRASES)
+
+
+def _is_bullets_signal(text: str) -> bool:
+    return has_any_word(text, _BULLETS_WORDS) or contains_any_phrase(text, _BULLETS_PHRASES)
+
+
+def _is_prose_signal(text: str) -> bool:
+    return has_any_word(text, _PROSE_WORDS) or contains_any_phrase(text, _PROSE_PHRASES)
+
+
+def _is_expert_signal(text: str) -> bool:
+    return has_any_word(text, _EXPERT_WORDS) or contains_any_phrase(text, _EXPERT_PHRASES)
+
+
+def _is_beginner_signal(text: str) -> bool:
+    return has_any_word(text, _BEGINNER_WORDS) or contains_any_phrase(text, _BEGINNER_PHRASES)
 
 
 class PreferenceClassifier:
@@ -166,19 +194,19 @@ class PreferenceClassifier:
     def classify(self, user_message: str) -> PreferenceSignal:
         signal = PreferenceSignal()
 
-        if _BRIEF_RE.search(user_message):
+        if _is_brief_signal(user_message):
             signal.verbosity = Verbosity.BRIEF
-        elif _VERBOSE_RE.search(user_message):
+        elif _is_verbose_signal(user_message):
             signal.verbosity = Verbosity.VERBOSE
 
-        if _BULLETS_RE.search(user_message):
+        if _is_bullets_signal(user_message):
             signal.format = Format.BULLETS
-        elif _PROSE_RE.search(user_message):
+        elif _is_prose_signal(user_message):
             signal.format = Format.PROSE
 
-        if _EXPERT_RE.search(user_message):
+        if _is_expert_signal(user_message):
             signal.depth = Depth.EXPERT
-        elif _BEGINNER_RE.search(user_message):
+        elif _is_beginner_signal(user_message):
             signal.depth = Depth.BEGINNER
 
         return signal

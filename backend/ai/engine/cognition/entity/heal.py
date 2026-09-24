@@ -19,13 +19,12 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ai.engine.cognition.entity.heal_i18n import CORRECTION_AR, any_needle
+
 logger = logging.getLogger("pulse.ecf.heal")
 
 # Correction signals from the user in Arabic or English
-_CORRECTION_PATTERNS = re.compile(
-    r"\b(wrong|incorrect|غلط|مخطأ|ليس صحيح|ليس صحيحاً|not right|that's wrong|هذا خطأ)\b",
-    re.IGNORECASE,
-)
+_CORRECTION_PHRASES = ("wrong", "incorrect", "not right", "that's wrong")
 
 # Confidence threshold below which a result is considered suspect
 _LOW_CONFIDENCE_THRESHOLD = 0.5
@@ -37,7 +36,13 @@ _NOMINATIONS_FILE = Path(__file__).parent.parent.parent.parent / "eval" / "pendi
 # ── Tier classification ───────────────────────────────────────────────────────
 
 def _is_correction_signal(user_message: str) -> bool:
-    return bool(_CORRECTION_PATTERNS.search(user_message or ""))
+    from ai.engine.text.word_match import contains_any_phrase
+
+    raw = user_message or ""
+    return bool(
+        contains_any_phrase(raw, _CORRECTION_PHRASES)
+        or any_needle(raw, CORRECTION_AR)
+    )
 
 
 def _is_contract_violation(tool_result: dict) -> bool:

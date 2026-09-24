@@ -14,70 +14,85 @@ Classes:
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from typing import Any
 
-# Personal leave / time-off (transaction — not a board-pack plan by default)
-_LEAVE_PERSONAL = re.compile(
-    r"("
-    r"\b(i\s+(want|need|request)|request(ing)?|apply\s+for|take)\s+"
-    r"(annual\s+)?(leave|time\s*off|vacation|pto|holiday)\b"
-    r"|\b(أريد|ابغى|أبغى|عايز|عاوز|اريد)\s*.{0,12}(إجازة|اجازة|اجازه)"
-    r"|(إجازة|اجازة|اجازه)\s*(من فضلك|لو سمحت)?"
-    r"|report(?:ing)?\s+(?:an\s+)?absence"
-    r"|الإبلاغ عن غياب|الابلاغ عن غياب|أبلغ عن غياب|ابلغ عن غياب"
-    r")",
-    re.IGNORECASE | re.UNICODE,
+from ai.engine.cognition.scope_route_i18n import (
+    advisory_ar,
+    bare_leave_ar,
+    leave_compliance_ar,
+    leave_personal_ar,
+    plan_signal_ar,
+)
+from ai.engine.text.word_match import contains_any_phrase, has_any_word
+
+_LEAVE_PERSONAL_PHRASES = (
+    "i want leave", "i want annual leave", "i want time off", "i want timeoff",
+    "i want vacation", "i want pto", "i want holiday",
+    "i need leave", "i need annual leave", "i need time off", "i need vacation",
+    "i need pto", "i need holiday",
+    "i request leave", "i request annual leave", "i request time off",
+    "i request vacation", "i request pto", "i request holiday",
+    "requesting leave", "requesting annual leave", "requesting time off",
+    "requesting vacation", "request leave", "request annual leave",
+    "apply for leave", "apply for annual leave", "apply for time off",
+    "apply for vacation", "apply for pto", "apply for holiday",
+    "take leave", "take annual leave", "take time off", "take vacation",
+    "take pto", "take holiday",
+    "reporting an absence", "reporting absence", "report an absence", "report absence",
+)
+_LEAVE_COMPLIANCE_PHRASES = (
+    "leave compliance", "leave risk", "leave variance", "leave report",
+    "leave pack", "leave board", "absence rate",
 )
 
-# Org analytics / compliance pack (Agent-plannable)
-_LEAVE_COMPLIANCE = re.compile(
-    r"("
-    r"leave\s+(compliance|risk|variance|report|pack|board)"
-    r"|board\s+pack.*leave"
-    r"|absenteeism|absence\s+rate"
-    r"|(تقرير|مخاطر|امتثال).{0,20}(إجازة|اجازة)"
-    r"|(إجازة|اجازة).{0,20}(تقرير|مخاطر|امتثال|أكتوبر|october)"
-    r")",
-    re.IGNORECASE | re.UNICODE,
+_BARE_LEAVE_EN = frozenset({"leave", "time off", "time-off", "vacation", "pto"})
+_ADVISORY_PHRASES = (
+    "who is", "who are", "who was", "who were", "what is", "tell me about",
 )
-
-_BARE_LEAVE = re.compile(
-    r"^[\s]*(leave|time\s*off|vacation|pto|إجازة|اجازة|اجازه)[\s.!؟?]*$",
-    re.IGNORECASE | re.UNICODE,
+_ABUSE_PHRASES = (
+    "ignore previous instructions", "ignore all previous instructions",
+    "ignore prior instructions", "ignore all prior instructions",
+    "jailbreak", "dan mode", "system prompt", "do anything now",
 )
-
-_ADVISORY = re.compile(
-    r"("
-    r"\bwho\s+(is|are|was|were)\b"
-    r"|\bwhat\s+is\b"
-    r"|من\s+هو|من\s+هي|من\s+هم"
-    r"|\btell\s+me\s+about\b"
-    r"|عرفني|اشرح\s+لي"
-    r")",
-    re.IGNORECASE | re.UNICODE,
+_PLAN_SIGNAL_WORDS = (
+    "plan", "prepare", "build", "create", "export", "summarize", "analyse",
+    "analyze", "report",
 )
-
-_ABUSE = re.compile(
-    r"("
-    r"ignore\s+(all\s+)?(previous|prior)\s+instructions"
-    r"|jailbreak|dan\s+mode"
-    r"|system\s+prompt"
-    r"|do\s+anything\s+now"
-    r")",
-    re.IGNORECASE,
-)
-
-_PLAN_SIGNAL = re.compile(
-    r"("
-    r"\b(plan|prepare|build|create|export|summarize|analyse|analyze|report|board\s+pack)\b"
-    r"|بيانات|تقرير|خطة|جودة\s+بيانات|data\s+quality|dq\s+rule"
-    r")",
-    re.IGNORECASE | re.UNICODE,
-)
+_PLAN_SIGNAL_PHRASES = ("board pack", "data quality", "dq rule")
 
 PLANNABLE = frozenset({"PLAN_CLEAR", "PLAN_AMBIG"})
+
+
+def _leave_personal(text: str) -> bool:
+    return contains_any_phrase(text, _LEAVE_PERSONAL_PHRASES) or leave_personal_ar(text)
+
+
+def _leave_compliance(text: str) -> bool:
+    raw = text or ""
+    return bool(
+        contains_any_phrase(raw, _LEAVE_COMPLIANCE_PHRASES)
+        or has_any_word(raw, ("absenteeism",))
+        or (contains_any_phrase(raw, ("board pack",)) and has_any_word(raw, ("leave",)))
+        or leave_compliance_ar(raw)
+    )
+
+
+def _bare_leave(text: str) -> bool:
+    stripped = (text or "").strip().strip(".!?").casefold()
+    return stripped in {w.casefold() for w in _BARE_LEAVE_EN} or bare_leave_ar(text)
+
+
+def _advisory(text: str) -> bool:
+    return contains_any_phrase(text, _ADVISORY_PHRASES) or advisory_ar(text)
+
+
+def _plan_signal(text: str) -> bool:
+    return (
+        has_any_word(text, _PLAN_SIGNAL_WORDS)
+        or contains_any_phrase(text, _PLAN_SIGNAL_PHRASES)
+        or plan_signal_ar(text)
+    )
 
 
 @dataclass
@@ -134,7 +149,7 @@ def scope_route(text: str, *, stage: str = "brief") -> ScopeRoute:
             cards=[],
         )
 
-    if _ABUSE.search(raw):
+    if contains_any_phrase(raw, _ABUSE_PHRASES):
         return ScopeRoute(
             cls="ABUSE",
             message=(
@@ -146,7 +161,7 @@ def scope_route(text: str, *, stage: str = "brief") -> ScopeRoute:
             handoff_target="none",
         )
 
-    if _LEAVE_COMPLIANCE.search(raw):
+    if _leave_compliance(raw):
         return ScopeRoute(
             cls="PLAN_CLEAR",
             message="I'll treat this as a leave-compliance / board-pack plan.",
@@ -158,7 +173,7 @@ def scope_route(text: str, *, stage: str = "brief") -> ScopeRoute:
     # Personal leave → recommend leave path (asymmetric vs compliance).
     # Loan / attendance must not fall into generic clarifying — they have
     # process dials (handled in plans_service.start_discovery short-circuit).
-    if _LEAVE_PERSONAL.search(raw) or _BARE_LEAVE.search(raw):
+    if _leave_personal(raw) or _bare_leave(raw):
         # Loan/attendance briefs can contain "leave early" etc. — check first.
         from ai.engine.cognition.plan.process_dial import (
             is_personal_attendance_brief,
@@ -171,7 +186,7 @@ def scope_route(text: str, *, stage: str = "brief") -> ScopeRoute:
                 message="",
                 plannable=True,
             )
-        personal = bool(_LEAVE_PERSONAL.search(raw)) or bool(_BARE_LEAVE.search(raw))
+        personal = bool(_leave_personal(raw)) or bool(_bare_leave(raw))
         return ScopeRoute(
             cls="TRANSACTION" if personal else "PLAN_AMBIG",
             message=(
@@ -202,7 +217,7 @@ def scope_route(text: str, *, stage: str = "brief") -> ScopeRoute:
     except Exception:  # noqa: BLE001
         pass
 
-    if _ADVISORY.search(raw) and not _PLAN_SIGNAL.search(raw):
+    if _advisory(raw) and not _plan_signal(raw):
         return ScopeRoute(
             cls="ADVISORY" if stage == "brief" else "DIGRESSION",
             message=(

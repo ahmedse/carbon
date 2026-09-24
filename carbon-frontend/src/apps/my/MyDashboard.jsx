@@ -368,13 +368,26 @@ function LeaveBalanceCard({ balances, loading, error, onRetry }) {
 const PAYSLIP_LINE_LABEL_KEYS = {
   gross: 'payslipLineGross',
   gosi: 'payslipLineGosi',
+  loan_installment: 'payslipLineLoan',
   net: 'payslipLineNet',
 };
 
+/** Governed `{code,label}` or plain string → i18n label / display text. */
+function payslipLineTypeCode(lineType) {
+  if (lineType == null || lineType === '') return '';
+  if (typeof lineType === 'object') return String(lineType.code || '').trim().toLowerCase();
+  return String(lineType).trim().toLowerCase();
+}
+
 function payslipLineLabel(lineType, t) {
-  const key = PAYSLIP_LINE_LABEL_KEYS[String(lineType || '').toLowerCase()];
+  const code = payslipLineTypeCode(lineType);
+  const key = PAYSLIP_LINE_LABEL_KEYS[code];
   if (key) return t(key);
-  return String(lineType || '').replace(/_/g, ' ') || '—';
+  if (typeof lineType === 'object') {
+    const label = String(lineType.label || '').trim();
+    if (label) return label;
+  }
+  return code.replace(/_/g, ' ') || '—';
 }
 
 function formatPayslipAmount(amount) {
@@ -386,7 +399,7 @@ function formatPayslipAmount(amount) {
   });
 }
 
-function PayslipsCard({ payslips, loading, error, onRetry }) {
+function PayslipsCard({ payslips, loading, error, onRetry, onOpen }) {
   const { t } = useTranslation('my');
 
   if (loading) {
@@ -419,7 +432,14 @@ function PayslipsCard({ payslips, loading, error, onRetry }) {
     return (
       <Card variant="outlined">
         <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
-          <SectionTitle icon={ReceiptLongIcon} title={t('payslipsTitle')} />
+          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
+            <SectionTitle icon={ReceiptLongIcon} title={t('payslipsTitle')} />
+            {onOpen ? (
+              <Button size="small" onClick={onOpen} sx={{ textTransform: 'none', minWidth: 0 }}>
+                {t('payslipsOpen')}
+              </Button>
+            ) : null}
+          </Stack>
           <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mb: 0.5 }}>
             {t('payslipsHonesty')}
           </Typography>
@@ -449,7 +469,14 @@ function PayslipsCard({ payslips, loading, error, onRetry }) {
   return (
     <Card variant="outlined">
       <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
-        <SectionTitle icon={ReceiptLongIcon} title={t('payslipsTitle')} />
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
+          <SectionTitle icon={ReceiptLongIcon} title={t('payslipsTitle')} />
+          {onOpen ? (
+            <Button size="small" onClick={onOpen} sx={{ textTransform: 'none', minWidth: 0 }} data-testid="payslips-open">
+              {t('payslipsOpen')}
+            </Button>
+          ) : null}
+        </Stack>
         <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mb: 0.5 }}>
           {t('payslipsHonesty')}
         </Typography>
@@ -700,6 +727,7 @@ export default function MyDashboard() {
             loading={payslipsLoading}
             error={payslipsError}
             onRetry={loadPayslips}
+            onOpen={() => navigate('/my/payslips')}
           />
           <MyLoansCard
             loans={loans}

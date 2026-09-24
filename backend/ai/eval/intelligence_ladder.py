@@ -205,6 +205,85 @@ def score_l5(
     return LevelScore("L5", "Autonomous within consent", status, gates, note)
 
 
+def score_l6(g6: dict[str, Any] | None = None) -> LevelScore:
+    """L6 Understands. Missing until a committed G6 evidence file clears the bars."""
+    row = g6 if g6 is not None else _load("PV2.1-g6-baseline-2026-09-23.json")
+    try:
+        accuracy = float(row.get("decision_accuracy")) if row else -1.0
+    except (TypeError, ValueError):
+        accuracy = -1.0
+    try:
+        parity = float(row.get("parity")) if row else -1.0
+    except (TypeError, ValueError):
+        parity = -1.0
+    misses = row.get("forced_call_misses") if isinstance(row, dict) else None
+    misses_ok = misses == 0
+    gates = [
+        Gate(
+            "g6_accuracy",
+            accuracy >= 0.95,
+            "G6 decision_accuracy ≥ 0.95",
+            "PV2.1-g6",
+        ),
+        Gate(
+            "g6_parity",
+            parity >= 0.98,
+            "G6 AR/EN parity ≥ 0.98",
+            "PV2.1-g6",
+        ),
+        Gate(
+            "forced_call_misses",
+            misses_ok,
+            "forced-call misses == 0",
+            "PV2.1-g6",
+        ),
+    ]
+    return LevelScore(
+        "L6",
+        "Understands",
+        _status(gates),
+        gates,
+        "v21 rung; not part of ADR-0047 exit",
+    )
+
+
+def score_l7(budget: dict[str, Any] | None = None) -> LevelScore:
+    """L7 Lean harness. Ceilings from ADR-0049. Missing until the budget is inside them."""
+    row = budget if budget is not None else _load("PV2.1-budget-2026-09-23.json")
+    ceilings = {
+        "staged_exits": 4,
+        "re_compile": 60,
+        "arabic_regex": 5,
+        "runner_lines": 1500,
+    }
+
+    def _ok(key: str) -> bool:
+        try:
+            return int(row.get(key)) <= ceilings[key]
+        except (TypeError, ValueError):
+            return False
+
+    tool_choice_present = False
+    try:
+        tool_choice_present = int(row.get("tool_choice_uses") or 0) > 0
+    except (TypeError, ValueError):
+        tool_choice_present = False
+    gates = [
+        Gate("staged_exits", _ok("staged_exits"), "staged exits ≤ 4", "harness_budget"),
+        Gate("re_compile", _ok("re_compile"), "routing re.compile ≤ 60", "harness_budget"),
+        Gate("arabic_regex", _ok("arabic_regex"), "Arabic regex ≤ 5", "harness_budget"),
+        Gate("runner_lines", _ok("runner_lines"), "runner ≤ 1500 lines", "harness_budget"),
+        Gate("tool_choice", tool_choice_present, "tool_choice present in engine/llm", "harness_budget"),
+    ]
+    return LevelScore(
+        "L7",
+        "Lean harness",
+        _status(gates),
+        gates,
+        "v21 rung; baseline is expected missing",
+    )
+
+
 def score_ladder(
     *,
     lookup_zero_llm: bool,
@@ -237,6 +316,7 @@ def score_ladder(
                 streak = max(streak, int(last.get("consecutive_green") or 0))
         soak_done = soak_done or streak >= 5
     levels_reached = all(lvl.status == "reached" for lvl in levels)
+    v21 = [score_l6(), score_l7()]
     return {
         "levels": [
             {
@@ -244,6 +324,13 @@ def score_ladder(
                 "gates": [asdict(g) for g in lvl.gates],
             }
             for lvl in levels
+        ],
+        "v21_levels": [
+            {
+                **{k: v for k, v in asdict(lvl).items() if k != "gates"},
+                "gates": [asdict(g) for g in lvl.gates],
+            }
+            for lvl in v21
         ],
         "six_b_streak": streak,
         "soak_complete": soak_done,

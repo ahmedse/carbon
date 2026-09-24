@@ -31,6 +31,7 @@ _MY_API_TWINS: dict[str, str] = {
     "list_loans": "list_my_loans",
     "list_loan_installments": "list_my_loans",
     "list_attendance_permissions": "list_my_attendance_permissions",
+    "list_attendance": "list_my_attendance",
     "get_leave_balance": "get_my_leave_balance",
 }
 
@@ -65,6 +66,79 @@ def find_my_api_twin(api_name: str, catalog: list | None) -> str | None:
             if cand in names:
                 return cand
     return None
+
+
+# Query fields models often put at the top level of a bare catalog call.
+_CATALOG_QUERY_KEYS = frozenset({
+    "dimension", "is_active", "page", "page_size", "limit", "offset",
+    "search", "q", "ordering", "status", "employee_no", "date",
+    "date_from", "date_to", "period", "year", "month",
+})
+_CATALOG_PATH_KEYS = frozenset({"id", "pk", "employee_id", "run_id"})
+_CATALOG_KEEP_KEYS = frozenset({
+    "api_name", "path_params", "query_params", "body", "explanation",
+})
+
+
+def coerce_bare_catalog_tool(
+    tool_name: str,
+    args: dict | None,
+    instance_config: dict | None,
+) -> tuple[str, dict]:
+    """Rewrite a bare ``api_catalog`` name into ``call_host_api``.
+
+    Draft LLMs often emit ``analyze_employees(dimension=…)`` because the
+    prompt lists catalog endpoint names. Those names are not executor keys —
+    only ``call_host_api`` is. Without this coerce, execute logs
+    ``Unknown tool: analyze_employees`` and charts never get breakdown data.
+    """
+    name = (tool_name or "").strip()
+    call_args = dict(args or {}) if isinstance(args, dict) else {}
+    if not name or name == "call_host_api":
+        return name or "unknown", call_args
+
+    catalog = (instance_config or {}).get("api_catalog") or []
+    names = {
+        str(ep.get("name") or "")
+        for ep in catalog
+        if isinstance(ep, dict) and ep.get("name")
+    }
+    if name not in names:
+        return name, call_args
+
+    query = dict(call_args.get("query_params") or {})
+    path = dict(call_args.get("path_params") or {})
+    body = call_args.get("body")
+    if not isinstance(body, dict):
+        body = {} if body is None else {"value": body}
+
+    for key, value in list(call_args.items()):
+        if key in _CATALOG_KEEP_KEYS:
+            continue
+        if key in _CATALOG_QUERY_KEYS:
+            query.setdefault(key, value)
+            continue
+        if key in _CATALOG_PATH_KEYS:
+            path.setdefault(key, value)
+            continue
+        if key in {"executor", "instance_id", "conversation_id", "user_message"}:
+            continue
+        # Flat filters the model forgot to nest under query_params.
+        query.setdefault(key, value)
+
+    coerced = {
+        "api_name": name,
+        "explanation": str(
+            call_args.get("explanation") or f"Live {name} lookup"
+        ),
+    }
+    if query:
+        coerced["query_params"] = query
+    if path:
+        coerced["path_params"] = path
+    if body:
+        coerced["body"] = body
+    return "call_host_api", coerced
 
 
 def own_records_403_message(lang: str, api_name: str = "") -> str:
@@ -567,11 +641,27 @@ async def _execute_single_tool(
             "tool_args": {},
         }
 
+    # Bare catalog names (analyze_employees, list_employees, …) are not
+    # executor keys — rewrite to call_host_api before guardrails so Chat
+    # mutation handoff and host routing see the real capability.
+    ctx_defaults = hook_ctx_defaults or {}
+    original_tool_name = tool_name
+    tool_name, args = coerce_bare_catalog_tool(
+        tool_name,
+        args,
+        ctx_defaults.get("instance_config"),
+    )
+    if tool_name != original_tool_name:
+        logger.info(
+            "Coerced bare catalog tool %s → call_host_api api=%s",
+            original_tool_name,
+            (args or {}).get("api_name"),
+        )
+
     # ── P3.3: Before-hook pipeline ──────────────────────────────────────
     guardrail_flags: list[str] = []
     if hook_pipeline is not None:
         from ai.engine.agent.guardrails import HookContext
-        ctx_defaults = hook_ctx_defaults or {}
         hook_ctx = HookContext(
             tool_name=tool_name,
             tool_args=args,
@@ -584,6 +674,7 @@ async def _execute_single_tool(
             instance_config=ctx_defaults.get("instance_config"),
             surface=ctx_defaults.get("surface", "chat"),
             user_message=str(ctx_defaults.get("user_message") or ""),
+            process_mode=str(ctx_defaults.get("process_mode") or ""),
         )
 
         try:
@@ -660,7 +751,6 @@ async def _execute_single_tool(
 
         # ── Sprint 12: expose turn context to tool/workflow plugins ──────
         from ai.engine.agent.plugins import ToolContext, set_tool_context
-        ctx_defaults = hook_ctx_defaults or {}
         set_tool_context(ToolContext(
             instance_id=ctx_defaults.get("instance_id", ""),
             conversation_id=ctx_defaults.get("conversation_id", ""),

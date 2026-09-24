@@ -1,0 +1,51 @@
+{
+  "n": 61,
+  "decision_accuracy": 1.0,
+  "parity": 1.0,
+  "misses": [],
+  "tier": "baseline",
+  "v21_pending": [
+    {
+      "id": "g6-062",
+      "expect": "call_tool:list_my_loans",
+      "baseline_ar": "answer:",
+      "baseline_en": "answer:",
+      "baseline_passes": false
+    },
+    {
+      "id": "g6-063",
+      "expect": "call_tool:list_my_loans",
+      "baseline_ar": "answer:",
+      "baseline_en": "answer:",
+      "baseline_passes": false
+    },
+    {
+      "id": "g6-064",
+      "expect": "call_tool:list_my_loans",
+      "baseline_ar": "answer:",
+      "baseline_en": "clarify:",
+      "baseline_passes": false
+    },
+    {
+      "id": "g6-065",
+      "expect": "call_tool:list_my_loans",
+      "baseline_ar": "answer:",
+      "baseline_en": "answer:",
+      "baseline_passes": false
+    },
+    {
+      "id": "g6-066",
+      "expect": "call_tool:list_my_loans",
+      "baseline_ar": "answer:",
+      "baseline_en": "answer:",
+      "baseline_passes": false
+    },
+    {
+      "id": "g6-067",
+      "expect": "handoff_agent:",
+      "baseline_ar": "answer:",
+      "baseline_en": "answer:",
+      "baseline_passes": false
+    }
+  ]
+}

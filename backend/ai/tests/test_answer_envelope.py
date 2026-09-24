@@ -14,7 +14,12 @@ import ai.engine.cognition.turn.runner as runner_mod
 import ai.engine.llm.router as router_mod
 from ai.envelope import envelope_from_json, envelope_json_schema
 from ai.envelope_prompt import build_envelope_system_prompt
-from ai.envelope_service import enrich_envelope_charts, synthesize_envelope
+from ai.envelope_service import (
+    deterministic_envelope_blocks,
+    enrich_envelope_charts,
+    ground_envelope_blocks,
+    synthesize_envelope,
+)
 
 
 # ── fixtures / helpers ──────────────────────────────────────────────────────
@@ -288,6 +293,176 @@ def test_enrich_injects_charts_from_analyze_breakdown():
     assert points[0][0] == "Drilling"
 
 
+def test_deterministic_blocks_own_breakdown_not_llm_tables():
+    usable = [{
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": "analyze_employees"},
+        "result": {
+            "status_code": 200,
+            "data": {
+                "dimension": "org_unit",
+                "suggested_chart_type": "bar",
+                "breakdown": [
+                    {"label": "Drilling", "count": 133, "pct": 24.0},
+                    {"label": "Coiled Tubing", "count": 93, "pct": 16.8},
+                ],
+            },
+        },
+    }]
+    blocks = deterministic_envelope_blocks(usable)
+    assert blocks["tables"][0].rows[0] == ["Drilling", 133, "24%"]
+    assert blocks["charts"][0].series[0]["data"][1] == ["Coiled Tubing", 93]
+    assert blocks["sources"][0].tool == "call_host_api"
+
+
+def test_deterministic_salary_blocks_never_copy_employee_identity():
+    usable = [{
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": "list_payslip_lines"},
+        "result": {
+            "results": [
+                {"employee_name": "Wellie", "employee_no": "1001", "gross": 85},
+                {"employee_name": "Juan", "employee_no": "1059", "gross": 180},
+                {"employee_name": "Aminul", "employee_no": "1172", "gross": 420},
+                {"employee_name": "Raymundo", "employee_no": "2074", "gross": 1200},
+            ],
+            "truncated": True,
+        },
+    }]
+    blocks = deterministic_envelope_blocks(usable)
+    rendered = repr(blocks)
+    assert "Wellie" not in rendered
+    assert "employee_no" not in rendered
+    assert blocks["tables"][0].title == "Gross Pay Distribution"
+    assert blocks["caveats"][0].level == "critical"
+
+
+def test_one_persons_payslip_lines_are_never_an_employee_distribution():
+    """No second identity → no head count. Lines chart as lines."""
+    usable = [{
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": "list_my_payslips"},
+        "result": {"status_code": 200, "data": [
+            {"line_type": "gross", "amount": 6500},
+            {"line_type": "GOSI", "amount": 1200},
+            {"line_type": "loan_installment", "amount": 800},
+            {"line_type": "net", "amount": 4500},
+        ]},
+    }]
+    blocks = deterministic_envelope_blocks(usable, user_message="where are the charts?")
+    titles = [t.title for t in blocks["tables"]] + [c.title for c in blocks["charts"]]
+    assert "Gross Pay Distribution" not in titles
+    assert "Payslip lines" in titles
+    assert "Employees" not in repr(blocks)
+
+
+def test_repeated_rows_for_one_employee_do_not_inflate_head_count():
+    usable = [{
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": "list_payslip_lines"},
+        "result": {"results": [
+            {"employee_no": "1001", "gross": 85},
+            {"employee_no": "1001", "gross": 90},
+            {"employee_no": "1001", "gross": 95},
+        ]},
+    }]
+    blocks = deterministic_envelope_blocks(usable)
+    assert all(t.title != "Gross Pay Distribution" for t in blocks["tables"])
+
+
+def test_unknown_endpoint_charts_by_shape_without_a_code_change():
+    """Growth contract: no endpoint name, topic word, or key list is consulted.
+
+    A catalog endpoint this module has never heard of returns category → measure
+    rows and charts anyway, titled from its own column name.
+    """
+    usable = [{
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": "list_training_completions"},
+        "result": {"results": [
+            {"course_name": "Well Control", "completed_hours": 18},
+            {"course_name": "H2S Safety", "completed_hours": 7},
+            {"course_name": "Rigging", "completed_hours": 12},
+        ]},
+    }]
+    blocks = deterministic_envelope_blocks(usable)
+    assert blocks["charts"], "an unseen endpoint must chart on shape alone"
+    assert blocks["charts"][0].title == "Course name"
+    assert blocks["charts"][0].series[0]["data"][0] == ["Well Control", 18]
+
+
+def test_identifier_and_date_columns_are_never_chart_axes():
+    usable = [{
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": "list_some_records"},
+        "result": {"results": [
+            {"id": 51, "record_code": "A-1", "created_at": "2026-01-02", "year": 2026},
+            {"id": 52, "record_code": "A-2", "created_at": "2026-02-03", "year": 2026},
+        ]},
+    }]
+    blocks = deterministic_envelope_blocks(usable)
+    assert not blocks["charts"]
+
+
+def test_constant_measure_loses_to_the_one_that_varies():
+    """A flat column answers nothing; the varying measure is the finding."""
+    usable = [{
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": "list_anything"},
+        "result": {"results": [
+            {"bucket": "a", "quota": 30, "consumed": 4},
+            {"bucket": "b", "quota": 30, "consumed": 19},
+        ]},
+    }]
+    blocks = deterministic_envelope_blocks(usable)
+    assert blocks["charts"][0].series[0]["data"] == [["a", 4], ["b", 19]]
+
+
+def test_top_level_list_leave_payload_charts_leave_types():
+    usable = [{
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": "get_my_leave_balance"},
+        "result": {"status_code": 200, "data": [
+            {"leave_type": "annual", "entitled": 30, "remaining": 30},
+            {"leave_type": "sick", "entitled": 30, "remaining": 29},
+        ]},
+    }]
+    blocks = deterministic_envelope_blocks(usable)
+    assert blocks["charts"][0].title == "Leave balance"
+    assert blocks["charts"][0].series[0]["data"] == [["annual", 30], ["sick", 29]]
+
+
+def test_ground_blocks_replaces_llm_authored_numeric_blocks():
+    raw = _envelope(
+        tables=[{
+            "title": "Invented",
+            "columns": ["Thing", "Count"],
+            "rows": [["Wrong", 999]],
+        }],
+        charts=[{
+            "chart_type": "bar",
+            "title": "Invented",
+            "series": [{"name": "X", "data": [["Wrong", 999], ["Also", 1]]}],
+        }],
+        sources=[{"tool": "llm", "rows_returned": 2, "truncated": False}],
+    )
+    env = envelope_from_json(json.dumps(raw))
+    grounded = ground_envelope_blocks(env, [{
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": "analyze_employees"},
+        "result": {
+            "dimension": "gender",
+            "breakdown": [
+                {"label": "Male", "count": 80},
+                {"label": "Female", "count": 20},
+            ],
+        },
+    }])
+    assert grounded.tables[0].title == "Gender"
+    assert grounded.tables[0].rows == [["Male", 80], ["Female", 20]]
+    assert "Wrong" not in repr(grounded.model_dump())
+
+
 def test_sanitize_drops_sample_payslip_table():
     from ai.envelope_service import sanitize_envelope_tables
 
@@ -382,6 +557,31 @@ async def test_synthesize_envelope_invalid_json_returns_none(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_synthesize_invalid_prose_still_returns_typed_tool_blocks(monkeypatch):
+    _stub_route_chat(monkeypatch, "### not json at all")
+    env = await synthesize_envelope(
+        instance_id="i",
+        conversation_id="c",
+        user_message="headcount by gender with charts",
+        usable_tools=[{
+            "tool_name": "call_host_api",
+            "tool_args": {"api_name": "analyze_employees"},
+            "result": {
+                "dimension": "gender",
+                "breakdown": [
+                    {"label": "Male", "count": 80},
+                    {"label": "Female", "count": 20},
+                ],
+            },
+        }],
+    )
+    assert env is not None
+    assert env.headline == "Live data summary"
+    assert env.tables[0].rows == [["Male", 80], ["Female", 20]]
+    assert len(env.charts) == 1
+
+
+@pytest.mark.asyncio
 async def test_synthesize_envelope_no_usable_tools_returns_none():
     # No route_chat stub here: the service must short-circuit before any LLM call.
     env = await synthesize_envelope(
@@ -449,6 +649,44 @@ async def test_flag_on_attaches_envelope_alongside_markdown(monkeypatch):
     assert "text" in result          # markdown still produced
     assert "envelope" in result      # additive typed block
     assert result["envelope"]["headline"] == _VALID_ENVELOPE["headline"]
+
+
+@pytest.mark.asyncio
+async def test_visual_fast_path_attaches_deterministic_charts(monkeypatch):
+    """Charts+graphs asks must return typed envelope charts, not Mermaid-only."""
+    _set_envelope_flag(monkeypatch, enabled=True)
+
+    async def _boom(**kwargs):
+        raise AssertionError("visual fast path must not call the LLM")
+
+    monkeypatch.setattr(router_mod, "route_chat", _boom)
+
+    result = await runner_mod._synthesize_tool_results(
+        instance_id="i",
+        conversation_id="c",
+        user_message="tell me more about gofsco with charts and graphs",
+        completed_tools=[{
+            "tool_name": "call_host_api",
+            "tool_args": {"api_name": "analyze_employees"},
+            "result": {
+                "dimension": "nationality",
+                "total": 555,
+                "breakdown": [
+                    {"label": "Expat", "count": 495, "pct": 89.2},
+                    {"label": "Kuwaiti", "count": 60, "pct": 10.8},
+                ],
+                "suggested_chart_type": "pie",
+            },
+        }],
+        draft_text="",
+        envelope_synthesizer=synthesize_envelope,
+    )
+    assert result is not None
+    assert result.get("tokens") == 0
+    env = result.get("envelope") or {}
+    charts = env.get("charts") or []
+    assert charts, "typed charts required for Chat Chart.js render"
+    assert charts[0].get("chart_type") in {"pie", "bar", "line"}
 
 
 # ── envelope propagation to the persisted message (PAQ-2B contract) ─────────

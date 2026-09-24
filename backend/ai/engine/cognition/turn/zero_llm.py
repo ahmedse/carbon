@@ -15,44 +15,44 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from ai.engine.cognition.turn.navigation import detect_lang, normalize_text
+from ai.engine.text.word_match import contains_any_phrase, has_any_word, has_word
+from ai.engine.cognition.turn.zero_llm_i18n import (
+    CLOCK_AR,
+    DAY_SPAN_AR,
+    WHEN_START_AR,
+    COWORKER_FOLLOWUP_AR,
+    EMPTY_PAYSLIP_REPLY_AR,
+    MONTH_ASK_AR,
+    NOTIFICATION_AR,
+    NOTIFICATION_TEXT,
+    PAYROLL_FOLLOWUP_AR,
+    PAYROLL_POLICY_AR,
+    PAYROLL_SCHEDULE_AR,
+    PAYROLL_SCHEDULE_TEXT,
+    PAYSLIP_DOWNLOAD_AR,
+    PAYSLIP_DOWNLOAD_TEXT,
+    PROFILE_ASK_AR,
+    SHOW_OPEN_AR,
+    THANKS_AR,
+    THANKS_TEXT,
+    THANKS_WRITE_AR,
+    any_needle,
+)
 
-_THANKS_RE = re.compile(
-    r"("
-    r"^\s*(thanks|thank\s+you|thx|ty)\b"
-    r"|شكرا"
-    r")",
-    re.IGNORECASE,
-)
-_THANKS_WRITE_RE = re.compile(
-    r"\b(?:submit|apply|request|approve|send)\b"
-    r"|قدّم|قدم|أرسل|ارسل",
-    re.IGNORECASE,
-)
+# EN-only patterns — Arabic literals live in ``zero_llm_i18n`` (ADR-0049 L7).
+_THANKS_STARTS = ("thanks", "thank you", "thx", "ty")
+_THANKS_WRITE_WORDS = ("submit", "apply", "request", "approve", "send")
 _CLOCK_RE = re.compile(
     r"("
     r"\b(?:what(?:'s| is)|tell\s+me)\b.{0,24}"
     r"\b(?:today'?s\s+date|the\s+date|date\s+today|day\s+is\s+it|month)\b"
     r"|\bwhat\s+month\b"
     r"|\bwhat\s+year\b"
-    r"|ما\s+(?:هو\s+)?(?:تاريخ|اليوم|الشهر)"
-    r"|اليوم\s+كم"
     r")",
     re.IGNORECASE | re.DOTALL,
 )
-_MONTH_ASK_RE = re.compile(r"\bmonth\b|الشهر", re.IGNORECASE)
-_NOTIFICATION_RE = re.compile(
-    r"\bnotifications?\b|إشعارات|اشعارات|تنبيهات",
-    re.IGNORECASE,
-)
-_SHOW_OPEN_RE = re.compile(
-    r"\b(?:show|open|go\s+to|where)\b|أرني|ارني|افتح|وين|أين",
-    re.IGNORECASE,
-)
-
-_THANKS_TEXT = {
-    "en": "You're welcome. Ask if you need anything else.",
-    "ar": "على الرحب والسعة. أنا هنا إذا احتجت شيئاً آخر.",
-}
+_SHOW_OPEN_WORDS = ("show", "open", "where")
+_SHOW_OPEN_PHRASES = ("go to",)
 _MONTHS = {
     "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
     "july": 7, "august": 8, "september": 9, "october": 10, "november": 11,
@@ -67,58 +67,41 @@ _DEIXIS_RE = re.compile(
     r"\bis that\s+(before|after|earlier than|later than)\b",
     re.IGNORECASE,
 )
-_END_MONTH_RE = re.compile(r"end of (the )?month", re.IGNORECASE)
-_NOTIFICATION_TEXT = {
-    "en": "Notifications are in the bell in the header — there is no separate notifications page.",
-    "ar": "الإشعارات في الجرس أعلى الصفحة — لا توجد صفحة منفصلة للإشعارات.",
-}
-_PAYROLL_SCHEDULE_RE = re.compile(
-    r"when will (?:next month'?s )?payroll be processed"
-    r"|when (?:is|does) (?:the )?payroll (?:run|get processed)"
-    r"|متى (?:ستتم|يتم) معالجة الرواتب"
-    r"|متى سيكون الراتب",
-    re.IGNORECASE,
+_PAYROLL_SCHEDULE_PHRASES = (
+    "when will payroll be processed",
+    "when will next month's payroll be processed",
+    "when will next months payroll be processed",
+    "when is payroll run",
+    "when is the payroll run",
+    "when does payroll run",
+    "when does the payroll run",
+    "when does payroll get processed",
+    "when is payroll get processed",
 )
-_PAYSLIP_DOWNLOAD_RE = re.compile(
-    r"\b(?:can i download|download) (?:my )?payslips?\b"
-    r"|تحميل (?:قسيمة|القسيمة)",
-    re.IGNORECASE,
+_PAYSLIP_DOWNLOAD_PHRASES = (
+    "can i download my payslip", "can i download my payslips",
+    "can i download payslip", "can i download payslips",
+    "download my payslip", "download my payslips", "download payslip",
+    "download payslips",
 )
-_PAYROLL_SCHEDULE_TEXT = {
-    "en": (
-        "I don't have next month's payroll run date. "
-        "That date is on the committed run in People — I won't guess it."
-    ),
-    "ar": (
-        "ليس لدي تاريخ معالجة رواتب الشهر القادم. "
-        "التاريخ على مسير الرواتب المعتمد في تطبيقاتي، ولن أخمنه."
-    ),
-}
-_PAYSLIP_DOWNLOAD_TEXT = {
-    "en": (
-        "Payslips are in My. If none are committed yet, there is nothing to download."
-    ),
-    "ar": (
-        "القسائم في تطبيقاتي. إذا لم تُعتمد قسيمة بعد، فلا يوجد ما يُحمَّل."
-    ),
-}
-_PAYROLL_FOLLOWUP_RE = re.compile(
-    r"("
-    r"deductions?|take[\s_-]*home|net\s*pay|gosi|loan amount"
-    r"|total deductions|after gosi"
-    r"|راتبي|الراتب|صافي|الاستقطاعات|خصومات|قسيمة"
-    r")",
-    re.IGNORECASE,
+_PAYROLL_FOLLOWUP_WORDS = ("deduction", "deductions", "gosi")
+_PAYROLL_FOLLOWUP_PHRASES = (
+    "take-home", "take home", "take_home", "net pay", "loan amount",
+    "total deductions", "after gosi",
 )
-_COWORKER_FOLLOWUP_RE = re.compile(
-    r"("
-    r"\b(?:her|his|she|he|their)\b"
-    r"|\b(?:position|department|role|title|manager|reports?)\b"
-    r"|is\s+she\s+a\s+manager"
-    r"|قسم|منصب|مدير"
-    r")",
-    re.IGNORECASE,
+_COWORKER_FOLLOWUP_WORDS = (
+    "her", "his", "she", "he", "their", "position", "department", "role",
+    "title", "manager", "report", "reports",
 )
+_COWORKER_FOLLOWUP_PHRASES = ("is she a manager",)
+_EASTERN_DIGITS = str.maketrans(
+    "\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669",
+    "0123456789",
+)
+_PROFILE_ASK_PHRASES = (
+    "employee number", "employee no", "what number",
+)
+_PROFILE_ASK_WORDS = ("department", "manager")
 _OTHER_NAME_RE = re.compile(r"\b([A-Z][a-z]{2,})\b")
 _OTHER_NAME_STOP = frozenset({
     "what", "how", "who", "which", "her", "his", "she", "the", "now",
@@ -172,7 +155,12 @@ def should_replay_directory_deny(text: str, deny: dict | None) -> bool:
         if not query:
             return True
         return named.casefold() == query.casefold() or named.casefold() in query.casefold()
-    return bool(_COWORKER_FOLLOWUP_RE.search(text or ""))
+    raw = text or ""
+    return bool(
+        has_any_word(raw, _COWORKER_FOLLOWUP_WORDS)
+        or contains_any_phrase(raw, _COWORKER_FOLLOWUP_PHRASES)
+        or any_needle(raw, COWORKER_FOLLOWUP_AR)
+    )
 
 
 def render_directory_deny(deny: dict, text: str = "") -> str:
@@ -186,51 +174,131 @@ def render_directory_deny(deny: dict, text: str = "") -> str:
     return grounded or "Not authorized to look up other employees (people:view required)."
 
 
-_PAYROLL_POLICY_RE = re.compile(
-    r"("
-    r"\bappeal\b|\bobject(?:ion)?\b|\bcertificate\b"
-    r"|اعتراض|شهادة طبية|سياسة"
-    r")",
-    re.IGNORECASE,
-)
-_EMPTY_PAYSLIP_DIGEST_RE = re.compile(
-    r"count\s*=\s*0|count\"\s*:\s*0|results\s*=\s*\[\]|results\"\s*:\s*\[\]"
-    r"|no payslips|0 rows?",
-    re.I,
-)
+_PAYROLL_POLICY_WORDS = ("appeal", "objection", "object", "certificate")
 _USER_AMOUNT_RE = re.compile(
-    r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+|\d+"
-    r"|[٠-٩]+",
+    r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+|\d+",
 )
+
+
+def _western_digits(text: str) -> str:
+    return (text or "").translate(_EASTERN_DIGITS)
+
+
+def _is_payroll_followup(text: str) -> bool:
+    raw = text or ""
+    return bool(
+        has_any_word(raw, _PAYROLL_FOLLOWUP_WORDS)
+        or contains_any_phrase(raw, _PAYROLL_FOLLOWUP_PHRASES)
+        or any_needle(raw, PAYROLL_FOLLOWUP_AR)
+    )
+
+
+def _is_payroll_policy(text: str) -> bool:
+    raw = text or ""
+    return bool(
+        has_any_word(raw, _PAYROLL_POLICY_WORDS)
+        or any_needle(raw, PAYROLL_POLICY_AR)
+    )
+
+
+def _is_profile_ask(text: str) -> bool:
+    raw = text or ""
+    return bool(
+        contains_any_phrase(raw, _PROFILE_ASK_PHRASES)
+        or has_any_word(raw, _PROFILE_ASK_WORDS)
+        or any_needle(raw, PROFILE_ASK_AR)
+    )
 
 
 def is_thanks(text: str) -> bool:
     """True for a bare thank-you — not 'thanks for submitting'."""
     raw = (text or "").strip()
-    if not raw or not _THANKS_RE.search(raw):
+    if not raw:
         return False
-    return not _THANKS_WRITE_RE.search(raw)
+    cf = raw.casefold().lstrip()
+    if not (
+        any(cf.startswith(prefix) for prefix in _THANKS_STARTS)
+        or any_needle(raw, THANKS_AR)
+    ):
+        return False
+    return not (
+        has_any_word(raw, _THANKS_WRITE_WORDS)
+        or any_needle(raw, THANKS_WRITE_AR)
+    )
+
+
+def is_day_span_ask(text: str) -> bool:
+    """Days between today and a date already in the transcript.
+
+    Not a balance read, and not 'how many days until end of month'.
+    """
+    raw = text or ""
+    if contains_any_phrase(raw, ("end of month", "end of the month")):
+        return False
+    if any_needle(raw, DAY_SPAN_AR):
+        return True
+    return bool(
+        has_any_word(raw, ("day", "days"))
+        and contains_any_phrase(raw, ("from now", "from today", "until"))
+    )
+
+
+def is_when_start_ask(text: str) -> bool:
+    """'When does my leave start' is a date, not a balance GET."""
+    raw = text or ""
+    if any_needle(raw, WHEN_START_AR):
+        return True
+    return bool(
+        has_word(raw, "when")
+        and has_any_word(raw, ("start", "starts", "begin", "begins"))
+    )
+
+
+def is_calendar_not_balance(text: str) -> bool:
+    return is_day_span_ask(text) or is_when_start_ask(text)
 
 
 def is_clock_ask(text: str) -> bool:
     """True for today's date / current month — not leave-start or payroll when."""
     raw = (text or "").strip()
-    return bool(raw and _CLOCK_RE.search(raw))
+    return bool(raw and (_CLOCK_RE.search(raw) or any_needle(raw, CLOCK_AR)))
 
 
 def is_payroll_schedule_ask(text: str) -> bool:
     """When is payroll processed — not leave start, not net pay."""
     raw = (text or "").strip()
-    return bool(raw and _PAYROLL_SCHEDULE_RE.search(raw))
+    return bool(
+        raw and (
+            contains_any_phrase(raw, _PAYROLL_SCHEDULE_PHRASES)
+            or any_needle(raw, PAYROLL_SCHEDULE_AR)
+        )
+    )
 
 
-_EMPTY_PAYSLIP_REPLY_RE = re.compile(
-    r"no (?:committed )?payslips"
-    r"|found no payslips"
-    r"|no payslips (?:are |were )?(?:on file|found)"
-    r"|لم أجد قسائم",
-    re.IGNORECASE,
+_EMPTY_PAYSLIP_REPLY_PHRASES = (
+    "no payslips", "no committed payslips", "found no payslips",
+    "no payslips are on file", "no payslips were on file",
+    "no payslips are found", "no payslips were found",
 )
+
+
+def _empty_payslip_digest(text: str) -> bool:
+    blob = (text or "").lower()
+    return (
+        "count=0" in blob
+        or 'count":0' in blob
+        or "count = 0" in blob
+        or "results=[]" in blob
+        or 'results":[]' in blob
+        or "results = []" in blob
+        or "no payslips" in blob
+        or "0 rows" in blob
+        or "0 row" in blob
+    )
+
+
+def _empty_payslip_reply(text: str) -> bool:
+    return contains_any_phrase(text or "", _EMPTY_PAYSLIP_REPLY_PHRASES)
 
 
 def _history_text(msg: dict) -> str:
@@ -287,7 +355,7 @@ def last_payslip_was_empty(
         digest = str(row.get("digest") or "")
         if "list_my_payslips" not in api and "list_my_payslips" not in digest:
             continue
-        if _EMPTY_PAYSLIP_DIGEST_RE.search(digest) or "count=0" in digest:
+        if _empty_payslip_digest(digest):
             return True
         if re.search(r"count=[1-9]", digest) or payslip_lines_from_state([row]):
             return False
@@ -299,7 +367,10 @@ def last_payslip_was_empty(
         role = str(msg.get("role") or "").lower()
         if role not in ("assistant", "ai", "model"):
             continue
-        if _EMPTY_PAYSLIP_REPLY_RE.search(_history_text(msg)):
+        hist = _history_text(msg)
+        if _empty_payslip_reply(hist) or any_needle(
+            hist, EMPTY_PAYSLIP_REPLY_AR
+        ):
             return True
     return False
 
@@ -429,7 +500,7 @@ def render_payslip_grounded(text: str, lines: dict[str, str]) -> str | None:
     if not lines:
         return None
     raw = (text or "").strip()
-    if _PAYROLL_POLICY_RE.search(raw):
+    if _is_payroll_policy(raw):
         return None
     net = lines.get("net")
     gosi = lines.get("gosi")
@@ -490,7 +561,10 @@ def render_payslip_grounded(text: str, lines: dict[str, str]) -> str | None:
             else f"The committed loan installment is {loan}."
         )
     if re.search(r"total deductions|إجمالي.{0,8}خصم|اجمالي.{0,8}خصم", lower) and total:
-        stated = [m.group(0) for m in _USER_AMOUNT_RE.finditer(raw)]
+        stated = [
+            m.group(0)
+            for m in _USER_AMOUNT_RE.finditer(_western_digits(raw))
+        ]
         base = (
             f"إجمالي الاستقطاعات المعتمدة {total} (GOSI {gosi} + قرض {loan})."
             if lang == "ar"
@@ -510,7 +584,7 @@ def render_payslip_grounded(text: str, lines: dict[str, str]) -> str | None:
                 "I will not invent a statutory rate beyond that line."
             )
         )
-    if net and _PAYROLL_FOLLOWUP_RE.search(raw):
+    if net and _is_payroll_followup(raw):
         return (
             f"صافي الراتب المعتمد هو {net}."
             if lang == "ar"
@@ -523,16 +597,6 @@ _PROFILE_DIGEST_RE = re.compile(
     r"\b(employee_no|department|manager|job_title|full_name)\s*=\s*([^,]+)",
     re.I,
 )
-_PROFILE_ASK_RE = re.compile(
-    r"("
-    r"employee number|employee no|what number"
-    r"|department|manager"
-    r"|رقم الموظف|قسم|مدير"
-    r")",
-    re.IGNORECASE,
-)
-
-
 def _nested_label(value: Any) -> str | None:
     if isinstance(value, dict):
         text = value.get("name") or value.get("full_name") or value.get("label")
@@ -669,7 +733,7 @@ def render_profile_grounded(text: str, profile: dict[str, str]) -> str | None:
     if not profile:
         return None
     raw = (text or "").strip()
-    if not _PROFILE_ASK_RE.search(raw):
+    if not _is_profile_ask(raw):
         return None
     lower = raw.lower()
     emp = profile.get("employee_no")
@@ -692,7 +756,10 @@ def render_profile_grounded(text: str, profile: dict[str, str]) -> str | None:
 def render_empty_payslip_answer(text: str) -> str:
     """Honest empty-payslip copy. Echoes figures the user typed; invents none."""
     lang = "ar" if detect_lang(text) == "ar" else "en"
-    stated = [m.group(0) for m in _USER_AMOUNT_RE.finditer(text or "")]
+    stated = [
+        m.group(0)
+        for m in _USER_AMOUNT_RE.finditer(_western_digits(text or ""))
+    ]
     if lang == "ar":
         base = (
             "لم أجد قسائم معتمدة، لذلك لا يوجد صافي راتب أو استقطاعات "
@@ -712,21 +779,33 @@ def render_empty_payslip_answer(text: str) -> str:
 
 def is_payslip_download_ask(text: str) -> bool:
     raw = (text or "").strip()
-    return bool(raw and _PAYSLIP_DOWNLOAD_RE.search(raw))
+    return bool(
+        raw and (
+            contains_any_phrase(raw, _PAYSLIP_DOWNLOAD_PHRASES)
+            or any_needle(raw, PAYSLIP_DOWNLOAD_AR)
+        )
+    )
 
 
 def is_notification_faq(text: str) -> bool:
     raw = (text or "").strip()
-    if not raw or not _NOTIFICATION_RE.search(raw):
+    if not raw or not (
+        has_word(raw, "notification")
+        or has_word(raw, "notifications")
+        or any_needle(raw, NOTIFICATION_AR)
+    ):
         return False
-    return bool(_SHOW_OPEN_RE.search(raw) or normalize_text(raw) in {
-        "notifications", "notification",
-    })
+    return bool(
+        has_any_word(raw, _SHOW_OPEN_WORDS)
+        or contains_any_phrase(raw, _SHOW_OPEN_PHRASES)
+        or any_needle(raw, SHOW_OPEN_AR)
+        or normalize_text(raw) in {"notifications", "notification"}
+    )
 
 
 def render_thanks(text: str, facts: list[dict[str, str]] | None = None) -> str:
     lang = "ar" if detect_lang(text) == "ar" else "en"
-    base = _THANKS_TEXT[lang]
+    base = THANKS_TEXT[lang]
     if not facts:
         return base
     fact = facts[-1]
@@ -742,7 +821,10 @@ def render_clock(text: str, today: date | None = None) -> str:
     day = today or date.today()
     lang = detect_lang(text)
     month = day.strftime("%B")
-    if _MONTH_ASK_RE.search(text or "") and "date" not in (text or "").lower():
+    if (
+        has_word(text or "", "month")
+        or any_needle(text or "", MONTH_ASK_AR)
+    ) and "date" not in (text or "").lower():
         if lang == "ar":
             return f"نحن في {month} {day.year}."
         return f"We are in {month} {day.year}."
@@ -752,7 +834,7 @@ def render_clock(text: str, today: date | None = None) -> str:
 
 
 def render_notification_faq(text: str) -> str:
-    return _NOTIFICATION_TEXT["ar" if detect_lang(text) == "ar" else "en"]
+    return NOTIFICATION_TEXT["ar" if detect_lang(text) == "ar" else "en"]
 
 
 def last_dates_in_history(
@@ -779,7 +861,11 @@ def last_dates_in_history(
 
 def is_date_deixis(text: str) -> bool:
     raw = (text or "").strip()
-    return bool(raw and _DEIXIS_RE.search(raw) and _END_MONTH_RE.search(raw))
+    return bool(
+        raw
+        and _DEIXIS_RE.search(raw)
+        and contains_any_phrase(raw, ("end of month", "end of the month"))
+    )
 
 
 def render_date_deixis(
@@ -807,6 +893,36 @@ def render_date_deixis(
         else f"{month} {last.day} is after the end of {end.strftime('%B')}"
     )
     return f"{'Yes' if yes else 'No'}, {clause}."
+
+
+def render_day_span(
+    text: str,
+    history: list[dict] | None = None,
+    today: date | None = None,
+) -> str | None:
+    """Day count from the latest date already stated. Invents no date."""
+    if not is_day_span_ask(text):
+        return None
+    day = today or date.today()
+    dates = last_dates_in_history(history, day)
+    if not dates:
+        return None
+    target = dates[-1]
+    delta = (target - day).days
+    span = f"{day.strftime('%B')} {day.day} to {target.strftime('%B')} {target.day}"
+    if detect_lang(text) == "ar":
+        if delta > 0:
+            return f"ذلك بعد {delta} يوم ({span})."
+        if delta == 0:
+            return f"ذلك اليوم ({span})."
+        return f"ذلك قبل {abs(delta)} يوم ({span})."
+    if delta > 0:
+        unit = "day" if delta == 1 else "days"
+        return f"That is {delta} {unit} from today ({span})."
+    if delta == 0:
+        return f"That is today ({span})."
+    unit = "day" if delta == -1 else "days"
+    return f"That was {abs(delta)} {unit} ago ({span})."
 
 
 def try_zero_llm_answer(
@@ -858,14 +974,14 @@ def try_zero_llm_answer(
         lang = "ar" if detect_lang(raw) == "ar" else "en"
         return {
             "decision": "answer",
-            "text": _PAYROLL_SCHEDULE_TEXT[lang],
+            "text": PAYROLL_SCHEDULE_TEXT[lang],
             "gate": "payroll_schedule",
         }
     if is_payslip_download_ask(raw):
         lang = "ar" if detect_lang(raw) == "ar" else "en"
         return {
             "decision": "answer",
-            "text": _PAYSLIP_DOWNLOAD_TEXT[lang],
+            "text": PAYSLIP_DOWNLOAD_TEXT[lang],
             "gate": "payslip_download",
         }
     deny = last_directory_deny(last_results)
@@ -876,7 +992,7 @@ def try_zero_llm_answer(
             "gate": "directory_deny",
         }
     profile = profile_from_state(last_results)
-    if profile and _PROFILE_ASK_RE.search(raw):
+    if profile and _is_profile_ask(raw):
         grounded = render_profile_grounded(raw, profile)
         if grounded:
             return {
@@ -887,8 +1003,8 @@ def try_zero_llm_answer(
     lines = payslip_lines_from_state(last_results)
     if (
         lines
-        and _PAYROLL_FOLLOWUP_RE.search(raw)
-        and not _PAYROLL_POLICY_RE.search(raw)
+        and _is_payroll_followup(raw)
+        and not _is_payroll_policy(raw)
     ):
         grounded = render_payslip_grounded(raw, lines)
         if grounded:
@@ -897,7 +1013,7 @@ def try_zero_llm_answer(
                 "text": grounded,
                 "gate": "payslip_recall",
             }
-    if last_payslip_was_empty(last_results, history) and _PAYROLL_FOLLOWUP_RE.search(raw):
+    if last_payslip_was_empty(last_results, history) and _is_payroll_followup(raw):
         return {
             "decision": "answer",
             "text": render_empty_payslip_answer(raw),
@@ -906,6 +1022,9 @@ def try_zero_llm_answer(
     deixis = render_date_deixis(raw, history, today)
     if deixis:
         return {"decision": "answer", "text": deixis, "gate": "date_deixis"}
+    span = render_day_span(raw, history, today)
+    if span:
+        return {"decision": "answer", "text": span, "gate": "day_span"}
     if known and is_memory_use(raw, known):
         return {"decision": "answer", "text": render_recall(raw, known), "gate": "memory_recall"}
     if newly_stored and known:

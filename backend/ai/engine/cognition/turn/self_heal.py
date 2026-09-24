@@ -36,9 +36,9 @@ _REPAIRABLE_TOOLS: frozenset[str] = frozenset({
     "call_host_api",
 })
 
-_UNKNOWN_API_RE = re.compile(
-    r"unknown\s+api|api\s+not\s+found|no\s+such\s+api|not\s+in\s+(?:the\s+)?catalog",
-    re.IGNORECASE,
+_UNKNOWN_API_PHRASES = (
+    "unknown api", "api not found", "no such api", "not in catalog",
+    "not in the catalog",
 )
 
 
@@ -80,7 +80,9 @@ def is_repairable_miss(tool_name: str, result) -> bool:
     error = str(data.get("error") or "")
     if error:
         # Only a naming error is repairable; a real host failure is not.
-        return bool(_UNKNOWN_API_RE.search(error))
+        from ai.engine.text.word_match import contains_any_phrase
+
+        return contains_any_phrase(error, _UNKNOWN_API_PHRASES)
 
     if "entity" in data and not data.get("entity"):
         return True

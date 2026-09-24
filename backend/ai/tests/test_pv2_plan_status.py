@@ -118,7 +118,7 @@ async def test_runner_plan_status_zero_llm():
 def test_create_plan_writes_active_plans(user, monkeypatch):
     from ai.engine.cognition.plan.planner import Plan, PlanStep
 
-    def _fake_decompose(self, user, brief):
+    def _fake_decompose(self, user, brief, conversation_id=""):
         return Plan(
             pattern="custom",
             steps=[

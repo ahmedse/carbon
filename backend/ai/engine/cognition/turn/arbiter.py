@@ -24,7 +24,7 @@ _PRECEDENCE: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("handoff_agent", ("chat_handoff",)),
     ("navigate", ("nav_fast_path", "nav_ground")),
     ("clarify", ("deixis", "chat_clarify")),
-    ("tool_answer", ("weather_force", "tools_executed", "plan_dial_process")),
+    ("tool_answer", ("weather_force", "tools_executed", "plan_dial_process", "ess_bound_self_read")),
     ("answer", ()),
 )
 
@@ -91,5 +91,46 @@ def shadow_compare(legacy: str, signals: Iterable[Any] | None) -> dict:
         payload["arbiter"],
         payload["agree"],
         payload["fired"],
+    )
+    return payload
+
+
+def validate_decision_against_policy(decision: Any, **kwargs: Any) -> Any:
+    """ADR-0049: validate a model Decision. Thin re-export for runners."""
+    from ai.engine.cognition.turn.decision import validate_decision
+
+    return validate_decision(decision, **kwargs)
+
+
+def shadow_understand(legacy_decision: str, decision: Any) -> dict:
+    """Log legacy vs v21 Decision ops. Never changes the executed path."""
+    ops = []
+    if decision is not None:
+        ops = [getattr(c, "op", "") for c in (getattr(decision, "commands", None) or [])]
+    primary = ops[0] if ops else "answer"
+    # Map Decision ops onto TurnDecision labels for comparison.
+    mapped = {
+        "call_tool": "tool_answer",
+        "navigate": "navigate",
+        "clarify": "clarify",
+        "handoff_agent": "handoff_agent",
+        "refuse": "refuse",
+        "answer": "answer",
+        "set_slot": "answer",
+    }.get(primary, "answer")
+    legacy_norm = TurnDecision.from_value(legacy_decision)
+    agree = mapped == legacy_norm.value
+    payload = {
+        "legacy": legacy_norm.value,
+        "v21": mapped,
+        "ops": ops,
+        "agree": agree,
+    }
+    logger.info(
+        "[understand-shadow] legacy=%s v21=%s agree=%s ops=%s",
+        payload["legacy"],
+        payload["v21"],
+        payload["agree"],
+        payload["ops"],
     )
     return payload
