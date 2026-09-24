@@ -2,7 +2,7 @@
 // State-driven: which buttons show comes from the step status the API returned.
 import React from 'react';
 import PropTypes from 'prop-types';
-import { Button, Stack, Typography } from '@mui/material';
+import { IconButton, Stack, Tooltip } from '@mui/material';
 import ReplayIcon from '@mui/icons-material/Replay';
 import SkipNextIcon from '@mui/icons-material/SkipNext';
 import PauseIcon from '@mui/icons-material/Pause';
@@ -11,8 +11,6 @@ import CloseIcon from '@mui/icons-material/Close';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import { useTranslation } from 'react-i18next';
-
-const BTN = { fontSize: '0.6875rem', textTransform: 'none', minWidth: 0, px: 1 };
 
 export default function StepActionBar({
   step,
@@ -51,36 +49,33 @@ export default function StepActionBar({
   if (!primary.length && !secondary.length) return null;
 
   const renderBtn = (b) => (
-    <Button
-      key={b.key}
-      size="small"
-      variant={b.variant || 'outlined'}
-      color={b.color || 'primary'}
-      disabled={busy}
-      startIcon={React.cloneElement(b.icon, { sx: { fontSize: 14 } })}
-      onClick={b.onClick}
-      data-testid={`step-action-${b.key}`}
-      sx={BTN}
-    >
-      {b.label}
-    </Button>
+    <Tooltip key={b.key} title={b.label}>
+      <span>
+        <IconButton
+          size="small"
+          color={b.color || 'default'}
+          disabled={busy}
+          aria-label={b.label}
+          onClick={b.onClick}
+          data-testid={`step-action-${b.key}`}
+          sx={{ p: 0.25 }}
+        >
+          {React.cloneElement(b.icon, { sx: { fontSize: 16 } })}
+        </IconButton>
+      </span>
+    </Tooltip>
   );
 
   return (
-    <Stack spacing={0.75} data-testid="step-action-bar" sx={{ mt: 1.25 }}>
-      <Typography variant="caption" sx={{ fontSize: '0.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
-        {t('stepNextTitle')}
-      </Typography>
-      {primary.length > 0 && (
-        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
-          {primary.map(renderBtn)}
-        </Stack>
-      )}
-      {secondary.length > 0 && (
-        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
-          {secondary.map((b) => renderBtn({ ...b, variant: 'text' }))}
-        </Stack>
-      )}
+    <Stack
+      direction="row"
+      spacing={0.25}
+      alignItems="center"
+      data-testid="step-action-bar"
+      sx={{ mt: 1 }}
+    >
+      {primary.map(renderBtn)}
+      {secondary.map(renderBtn)}
     </Stack>
   );
 }

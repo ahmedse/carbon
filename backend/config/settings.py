@@ -433,8 +433,8 @@ REST_FRAMEWORK = {
         # trips, *every* endpoint 429s (Pulse Tasks, /me/context, insights…),
         # which looks like a logout. Same treatment 'login'/'refresh' already
         # get below; production keeps the strict caps.
-        'anon': '10000/hour' if IS_DEVELOPMENT else '100/hour',
-        'user': '1000/hour',
+        'anon': '10000/hour' if IS_DEVELOPMENT else '2000/hour',
+        'user': '20000/hour',
         'user_minute': '1000/min',
         'anon_minute': '1000/min' if IS_DEVELOPMENT else '60/min',
         'ai': '60/min',
@@ -442,7 +442,7 @@ REST_FRAMEWORK = {
         # Development: allow rapid logins for E2E testing
         'login': '1000/minute' if IS_DEVELOPMENT else '5/minute',
         # JWT refresh: dedicated generous scope (core.throttling.RefreshRateThrottle)
-        'refresh': '1000/minute' if IS_DEVELOPMENT else '30/minute',
+        'refresh': '1000/minute' if IS_DEVELOPMENT else '120/minute',
     },
     # Phase 1.4: Default API pagination (overridable via APIConfig model)
     'DEFAULT_PAGINATION_CLASS': 'config.pagination.CarbonPageNumberPagination',

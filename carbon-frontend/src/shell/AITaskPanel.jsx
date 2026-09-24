@@ -768,6 +768,8 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   });
   // Soft lifecycle defaults: after the user picks a segment for a plan, keep it.
   const segmentOverrideRef = useRef(null);
+  // Once a task has shown Result, retry/rerun must not dim or hide that tab.
+  const resultStickyRef = useRef(null);
   const [runHealthOpen, setRunHealthOpen] = useState(false);
 
   // Task list + composer
@@ -847,7 +849,11 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     if (!value) return;
     let next = normalizeCockpitSegment(value);
     const effective = selectedPlan ? effectivePlanStatus(selectedPlan) : '';
-    if (next === 'output' && !hasTaskOutcome(effective, phaseRef.current)) {
+    if (
+      next === 'output'
+      && !hasTaskOutcome(effective, phaseRef.current)
+      && resultStickyRef.current !== selectedPlan?.id
+    ) {
       next = 'run';
     }
     setSegment(next);
@@ -1056,12 +1062,11 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     }
   }, [token]);
 
-  // Live plan polling — while a run is active or paused for consent, refresh
-  // the plan so the Plan graph reflects live step statuses (SSE covers Now;
-  // poll keeps the Plan DAG in sync through pauses).
+  // Poll only while a run is actually working. A paused consent wait used to
+  // poll every 2s (~1800/hour) and trip the production 1000/hour user cap.
   useEffect(() => {
     const planId = selectedPlan?.id;
-    if (!planId || (phase !== 'working' && phase !== 'paused')) return undefined;
+    if (!planId || phase !== 'working') return undefined;
     const timer = setInterval(() => {
       refreshPlan(planId, { quiet: true });
     }, LIVE_PLAN_POLL_MS);
@@ -1070,7 +1075,8 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
 
   const applyPlanToView = useCallback((plan) => {
     // New plan → allow lifecycle default to re-apply (ADR-0043 soft defaults).
-    segmentOverrideRef.current = null;
+    // Retry/rerun of the plan already on Result keeps that tab pinned.
+    if (resultStickyRef.current !== plan?.id) segmentOverrideRef.current = null;
     setSelectedPlan(plan);
     setRunSteps(
       Array.isArray(plan.steps)
@@ -1169,6 +1175,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   useEffect(() => {
     if (!chatFirst || !selectedPlan?.id || selectedPlan.status === 'discovering') return;
     if (segmentOverrideRef.current === selectedPlan.id) return;
+    if (segment === 'output' && resultStickyRef.current === selectedPlan.id) return;
     const effective = effectivePlanStatus(
       runSteps.length
         ? { ...selectedPlan, steps: mergePlanWithRunSteps(selectedPlan, runSteps).steps }
@@ -1366,7 +1373,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     stopRequestedRef.current = false;
     setPhase('working');
     setErrorMessage(null);
-    setLedger(null);
+    if (resultStickyRef.current !== planId) setLedger(null);
     // Do NOT flip awaiting_approval → running here: Approve already owns
     // that transition, and a premature "Running…" hides the consent surface
     // when the stream pauses again or times out mid-poll.
@@ -2743,7 +2750,10 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
         phase === 'error' && errorMessage ? errorMessage : '',
       ].filter(Boolean).join(' ')
       : '';
-    const resultReady = hasTaskOutcome(selectedEffective, phase);
+    const resultReady = hasTaskOutcome(selectedEffective, phase)
+      || Boolean(selectedPlan?.final_response || ledger?.final_response || selectedPlan?.prior_run)
+      || resultStickyRef.current === selectedPlan?.id;
+    if (selectedPlan?.id && resultReady) resultStickyRef.current = selectedPlan.id;
 
     const renderCockpitPlan = () => {
       if (!selectedPlan) {
