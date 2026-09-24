@@ -175,7 +175,19 @@ export const AuthProvider = ({ children }) => {
       refreshTimerRef.current = setInterval(async () => {
         try {
           debug("Background access token refresh...");
-          await refreshAccessToken();
+          const access = await refreshAccessToken();
+          // Keep React `user.token` aligned with localStorage so apiFetch
+          // (which prefers the React token) does not keep a stale access JWT.
+          if (access) {
+            setUser((prev) => {
+              if (!prev) return prev;
+              const next = { ...prev, token: access };
+              try {
+                localStorage.setItem("user", JSON.stringify(next));
+              } catch { /* ignore quota */ }
+              return next;
+            });
+          }
         } catch (err) {
           debug("Token refresh failed:", err);
           // Only log out when the refresh token itself is dead; transient
@@ -200,10 +212,22 @@ export const AuthProvider = ({ children }) => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         debug('Tab re-focused — proactive token refresh');
-        refreshAccessToken().catch(() => {
-          // Silently fail — the next API call will trigger a proper refresh or logout
-          debug('Proactive refresh on tab focus failed');
-        });
+        refreshAccessToken()
+          .then((access) => {
+            if (!access) return;
+            setUser((prev) => {
+              if (!prev) return prev;
+              const next = { ...prev, token: access };
+              try {
+                localStorage.setItem("user", JSON.stringify(next));
+              } catch { /* ignore */ }
+              return next;
+            });
+          })
+          .catch(() => {
+            // Silently fail — the next API call will trigger a proper refresh or logout
+            debug('Proactive refresh on tab focus failed');
+          });
         resetTimers();
       }
     };

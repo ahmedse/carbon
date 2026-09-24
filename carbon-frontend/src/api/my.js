@@ -97,7 +97,11 @@ export function fetchCorrespondenceDetail(token, id) {
 
 /** Requester cancels a non-terminal request (POST correspondence/{id}/cancel/). */
 export function cancelCorrespondence(token, id) {
-  return apiFetch(`${CORRESPONDENCE_ROOT}${id}/cancel/`, { method: 'POST', token });
+  return apiFetch(`${CORRESPONDENCE_ROOT}${id}/cancel/`, {
+    method: 'POST',
+    body: {},
+    token,
+  });
 }
 
 /**

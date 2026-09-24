@@ -40,6 +40,7 @@ from .models import (
 )
 from .permissions import (
     CanActOnCorrespondence,
+    CanRequesterMutateCorrespondence,
     CanSubmitCorrespondence,
     CanViewCorrespondence,
     CorrespondenceAdminOnly,
@@ -147,8 +148,13 @@ class CorrespondenceViewSet(viewsets.ReadOnlyModelViewSet):
         if self.action in ('approve', 'reject', 'send_back', 'acknowledge',
                            'review'):
             return base + [CanActOnCorrespondence()]
-        if self.action in ('cancel', 'resubmit', 'archive', 'edit'):
-            # requester-only (fsm enforces); CanViewCorrespondence is the view gate.
+        if self.action in ('cancel', 'resubmit', 'edit'):
+            # Requester-only at the permission layer (FSM still enforces).
+            # CanViewCorrespondence alone let approvers/admins open the detail
+            # and hit cancel → opaque NotActorError 403 in the My UI.
+            return base + [CanRequesterMutateCorrespondence()]
+        if self.action == 'archive':
+            # Requester or correspondence:admin (FSM enforces).
             return base + [CanViewCorrespondence()]
         if self.action in ('void', 'reopen'):
             return base + [CorrespondenceAdminOnly()]

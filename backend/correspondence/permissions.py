@@ -56,6 +56,23 @@ class CanViewCorrespondence(BasePermission):
         ).exists()
 
 
+class CanRequesterMutateCorrespondence(BasePermission):
+    """Requester-only mutations: cancel, resubmit, edit payload.
+
+    ``archive`` stays on ``CanViewCorrespondence`` because FSM also allows
+    ``correspondence:admin``.
+    """
+
+    message = "Only the requester may perform this action on the request."
+
+    def has_object_permission(self, request, view, obj):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and obj.requester_id == request.user.id
+        )
+
+
 class CorrespondenceAdminOnly(BasePermission):
     """Policy endpoints require the ``correspondence:admin`` capability."""
 

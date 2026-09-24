@@ -92,14 +92,22 @@ export function normalizeError(error, context = {}) {
   }
 
   // Auth (401/403)
+  // Prefer the real API message (error.message / envelope.message / detail).
+  // Structured handler puts the human text in `message`, not `feedback.detail`,
+  // so falling back only to feedback.detail always showed a generic 403 string
+  // (e.g. cancel NotActorError → "Only the requester may cancel a request").
   if (classifyStatus(status) === "auth") {
     const errorCode = status === 401 ? "authentication_failed" : "permission_denied";
+    const apiMessage =
+      (typeof feedback?.detail === "string" && feedback.detail)
+      || (typeof error?.message === "string" && error.message)
+      || null;
     return {
       type: "auth",
       message:
         status === 401
-          ? feedback?.detail || "Your session has expired. Please sign in again."
-          : feedback?.detail || "You don't have permission to perform this action.",
+          ? apiMessage || "Your session has expired. Please sign in again."
+          : apiMessage || "You don't have permission to perform this action.",
       errorCode,
       messageKey: errorMessageKey(errorCode),
       canRetry: false,

@@ -55,7 +55,7 @@ export default function RequestDetail() {
   const { t } = useTranslation('my');
   const theme = useTheme();
   const isRtl = theme.direction === 'rtl';
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { notify } = useNotification();
   const { id } = useParams();
   const navigate = useNavigate();
@@ -93,8 +93,14 @@ export default function RequestDetail() {
   }, [load]);
 
   const editKind = resolveEditKind(data);
-  const canCancel = data && CANCELLABLE.has(data.status);
-  const canResubmit = data && data.status === 'sent_back';
+  // Cancel / resubmit / edit are requester-only (backend FSM + permission).
+  // Approvers and correspondence:admin can still *view* the detail.
+  const isRequester =
+    data != null
+    && user?.id != null
+    && Number(data.requester) === Number(user.id);
+  const canCancel = Boolean(isRequester && CANCELLABLE.has(data.status));
+  const canResubmit = Boolean(isRequester && data.status === 'sent_back');
   const canEdit = Boolean(canResubmit && editKind);
 
   const openEdit = useCallback(async () => {
