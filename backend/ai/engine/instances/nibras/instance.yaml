@@ -402,8 +402,12 @@ api_catalog:
       The logged-in employee's OWN profile: id, employee_no, full_name,
       job_title, org_unit, manager, is_active. Use for "who am I", "my
       profile/department/manager", "بياناتي", and first-person salary /
-      compensation / basic pay / "راتبي" (authorization is enforced server-side;
-      do not treat a deny as missing salary data).
+      compensation / basic pay / "راتبي" / "مرتبي" / "my salary"
+      (authorization is enforced server-side; do not treat a deny as
+      missing salary data).
+    examples:
+      - {ar: "من أنا؟", en: "who am I?"}
+      - {ar: "مرتبي", en: "my salary"}
     requires_auth: true
     requires_confirmation: false
 
@@ -479,10 +483,12 @@ api_catalog:
     empty_render: no_balance_configured
     examples:
       - {ar: "كم باقي لي من إجازة؟", en: "How many leave days do I have left?"}
+      - {ar: "الإجازات", en: "leave"}
     description: >
       The logged-in employee's OWN leave balance per leave type: entitled,
       carried_forward, opening_balance, used, pending, remaining. Use for
-      "how much leave do I have left", "my vacations", "رصيد اجازاتي".
+      "how much leave do I have left", "my vacations", bare "leave" /
+      "الإجازات", "رصيد اجازاتي".
     requires_auth: true
     requires_confirmation: false
 
@@ -497,6 +503,7 @@ api_catalog:
     empty_render: no_loans
     examples:
       - {ar: "قروضي", en: "What are my loans?"}
+      - {ar: "سلفتي", en: "my advance"}
       - {ar: "لاحظت أن عندي قرض، أعطني تفاصيل أكثر", en: "I noticed I have a loan, can you give me more details?"}
       - {ar: "أنا أدفع قسط قرض، اعرضه لي", en: "I pay for a loan, show it to me"}
       - {ar: "ما هذا الخصم للقرض في قسيمتي؟", en: "what is this loan deduction on my payslip?"}
@@ -585,13 +592,19 @@ api_catalog:
       The logged-in employee's own balance without an employee filter.
       That is get_my_leave_balance.
     empty_render: no_balance_configured
+    examples:
+      - {ar: "ما رصيد إجازات Wellie؟", en: "what's Wellie's leave balance?"}
+      - {ar: "رصيد إجازة emp_1712", en: "leave balance for emp_1712"}
     description: >
       List leave entitlements for employees visible to the user. Fields:
       id, employee, employee_no, employee_name, leave_type, entitled_days,
-      used_days, carried_forward. ALWAYS pass query_params.employee or
-      employee_no when asking about one person (use the focused employee_no
-      from resolve_entity). Unfiltered calls return a truncated org page and
-      must not be used for a single-person leave follow-up.
+      used_days, carried_forward. Use for a NAMED coworker's leave (Wellie,
+      Mohammad, Bilagot, emp_NNNN) — never get_my_leave_balance for them.
+      ALWAYS pass query_params.employee or employee_no when asking about one
+      person (use the focused employee_no from resolve_entity). Unfiltered
+      calls return a truncated org page and must not be used for a
+      single-person leave follow-up. Host RBAC returns 403 when the caller
+      cannot see that person — still emit this call_tool; do not refuse.
     requires_auth: true
     requires_confirmation: false
 
@@ -672,12 +685,15 @@ api_catalog:
     examples:
       - {ar: "سجل حضوري", en: "Show my attendance"}
       - {ar: "ساعات حضوري", en: "my hours worked"}
+      - {ar: "متى حضرت اليوم", en: "When did I clock in today?"}
+      - {ar: "هل سجلت حضور اليوم", en: "Did I check in today?"}
     description: >
       List the caller's own daily attendance records (self-service). Optional
       date_from / date_to (YYYY-MM-DD). Fields: id, date, hours_worked,
       overtime_hours, status (present | absent | leave | permission). Never
       returns another employee's rows. Empty means no records yet — do not
-      invent clock times.
+      invent clock times. Prefer this over list_attendance for every
+      first-person attendance / clock-in / check-in ask.
     requires_auth: true
     requires_confirmation: false
 

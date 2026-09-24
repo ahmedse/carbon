@@ -105,7 +105,7 @@ def resolve_render_meta(api_name: str, catalog_entry: dict | None = None) -> dic
         meta["scope"] = "leave_history"
     elif api == "list_my_loans":
         meta["scope"] = "loans"
-    elif api == "list_attendance":
+    elif api in {"list_attendance", "list_my_attendance"}:
         meta["scope"] = "attendance"
     elif api == "list_my_attendance_permissions":
         meta["scope"] = "permissions"
@@ -293,7 +293,7 @@ def render_catalog_read(
                 scope_key="loans",
                 row_formatter=_format_loan_history_row,
             )
-        if api == "list_attendance":
+        if api in {"list_attendance", "list_my_attendance"}:
             return render_history_rows(
                 rows, language,
                 empty_render=empty_key or "no_attendance_rows",

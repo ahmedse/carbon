@@ -6,6 +6,7 @@ from ai.engine.cognition.turn.ess_read_i18n import LEAVE_TOPIC_AR, any_needle
 COMPENSATION_AR = ("راتب", "أجر", "مرتب", "تعويض")
 PAYSLIP_SPECIFIC_AR = (
     "قسيمة",
+    "قسيمه",  # common typo of قسيمة
     "صافي",
     "صافي راتب",
     "صافي الراتب",
