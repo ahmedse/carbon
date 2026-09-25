@@ -13,6 +13,7 @@ from ai.engine.cognition.plan.export_bind import (
     export_has_substance,
     extract_structured_facts,
     structured_table_from_results,
+    table_has_substance,
 )
 from ai.engine.cognition.plan.loop import (
     StepResult,
@@ -97,6 +98,37 @@ def test_quantitative_export_requires_numeric_structured_table():
     )
     assert ok is False
     assert "numeric" in reason.lower()
+
+
+def test_bind_replaces_headers_only_hollow_table_from_prior_breakdown():
+    """A draft table with headers and no rows must not block grounded bind."""
+    priors = [{
+        "tool_output": {
+            "result": json.dumps({
+                "status_code": 200,
+                "data": {
+                    "breakdown": [
+                        {"label": "Accountant I", "average": "1427.938", "headcount": 1},
+                        {"label": "Assistant Driller", "average": "1036.075", "headcount": 11},
+                    ],
+                },
+            }),
+        },
+    }]
+    bound = bind_export_args(
+        {
+            "format": "xlsx",
+            "title": "Committed pay structure",
+            "table": {"headers": ["label", "average", "headcount"], "rows": []},
+        },
+        priors,
+    )
+    assert table_has_substance(bound.get("table"))
+    assert len(bound["table"]["rows"]) == 2
+    ok, reason = export_has_substance(
+        bound.get("content"), bound.get("table"), require_table=True,
+    )
+    assert ok is True, reason
 
 
 def test_export_refuses_insert_slots_even_with_chart():

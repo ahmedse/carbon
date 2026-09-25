@@ -13,9 +13,10 @@
 # RULE_12: employees are selected by org scope — a run only ever includes
 # employees whose ``org_unit`` is the run's org_unit or one of its descendants.
 #
-# ADR 0029: gross basic is resolved from the verified compensation ledger
-# (``CompensationService.verified_basic_amount``), not ``Employee.basic_salary``.
-# Fail closed when no verified monthly ``basic`` line exists for the period.
+# ADR 0029: gross is resolved from verified monthly earnings on the compensation
+# ledger (basic required; housing/transport/etc. fold into the package), never
+# from ``Employee.basic_salary``. Fail closed when no verified monthly ``basic``
+# line exists for the period. GOSI withholding applies to Kuwaiti nationals only.
 #
 # ADR 0025 lineage seam: any payslip line derived from a governed measurement
 # (an AttendanceRecord backed by a dataschema.DataRow) carries ``data_row_id`` /
@@ -27,6 +28,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from . import calculation_engine
@@ -201,9 +203,15 @@ class PayrollRunService:
     # --- org scope (RULE_12) ----------------------------------------------
 
     def _scoped_employees(self, run):
-        """Employees whose org_unit is the run's org_unit or a descendant."""
+        """Employees whose org_unit is the run's org_unit or a descendant.
+
+        Skip people who joined after the period ends — they have no pay due.
+        Null ``join_date`` (bulk ERP) stays included.
+        """
         ids = run.org_unit.get_descendant_ids(include_self=True)
-        return Employee.objects.filter(org_unit_id__in=ids)
+        return Employee.objects.filter(org_unit_id__in=ids).filter(
+            Q(join_date__isnull=True) | Q(join_date__lte=run.period_end),
+        )
 
     # --- compute -----------------------------------------------------------
 
@@ -251,11 +259,11 @@ class PayrollRunService:
         rules = ComplianceRule.objects
         created = 0
 
-        # 1. gross — basic from verified ledger (ADR-0029); fail closed if missing.
-        basic = CompensationService.verified_basic_amount(
-            employee, as_of=run.period_end,
-        )
-        if basic is None:
+        # 1. gross — verified monthly earnings from the ledger (ADR-0029).
+        # ``basic`` is required; housing/transport/etc. fold into the package
+        # passed to the gross sum rule (which names the ``basic`` input).
+        package = self._verified_earnings_package(employee, as_of=run.period_end)
+        if package is None:
             raise PayrollServiceError(
                 f"Employee {employee.employee_no} has no verified monthly "
                 f"'basic' compensation ledger line for period ending "
@@ -263,7 +271,10 @@ class PayrollRunService:
                 f"Employee.basic_salary."
             )
         measurements = self._attendance_measurements(employee, run)
-        gross_inputs = {"basic": basic, "basic_source": "ledger"}
+        gross_inputs = {
+            "basic": package,
+            "basic_source": "ledger",
+        }
         if measurements:
             gross_inputs["measurements"] = measurements
             if len(measurements) == 1:
@@ -273,11 +284,14 @@ class PayrollRunService:
         self._line_from_result(run, employee, "gross", gross)
         created += 1
 
-        # 2. GOSI contribution (employee share becomes a net deduction).
-        gosi = calculation_engine.calculate_gosi(gosi_rule, gross["value"])
-        self._line_from_result(run, employee, "gosi", gosi)
-        created += 1
-        employee_share = gosi["lineage"].get("employee_share", Decimal("0"))
+        # 2. GOSI — Kuwaiti nationals only (PIFSS). Expatriates: EOSI/gratuity,
+        # not monthly social-security withholding.
+        employee_share = Decimal("0")
+        if getattr(employee, "kuwaitization", False) and gosi_rule is not None:
+            gosi = calculation_engine.calculate_gosi(gosi_rule, gross["value"])
+            self._line_from_result(run, employee, "gosi", gosi)
+            created += 1
+            employee_share = gosi["lineage"].get("employee_share", Decimal("0"))
 
         # 3. loan installments due this period.
         # Hybrid (NSR-3A): prefer persisted LoanInstallment rows due in the
@@ -300,6 +314,39 @@ class PayrollRunService:
         created += 1
 
         return created
+
+    @staticmethod
+    def _verified_earnings_package(employee, *, as_of) -> Decimal | None:
+        """Sum of verified monthly earning lines as of ``as_of``.
+
+        ``basic`` must be present (ADR-0029). Other verified monthly earnings
+        (housing, transport, …) are included so gross reflects the full package.
+        When multiple overlapping ``basic`` rows exist, the newest wins for the
+        basic component; other components take their current line.
+        """
+        basic = CompensationService.verified_basic_amount(employee, as_of=as_of)
+        if basic is None:
+            return None
+        total = Decimal(basic)
+        extras = (
+            CompensationService.current_lines(employee, as_of=as_of)
+            .filter(
+                component__direction="earning",
+                frequency="monthly",
+                is_verified=True,
+            )
+            .exclude(component__code="basic")
+            .select_related("component")
+        )
+        # One amount per component code (newest open line).
+        seen: set[str] = set()
+        for line in extras.order_by("-effective_start", "-pk"):
+            code = line.component.code
+            if code in seen:
+                continue
+            seen.add(code)
+            total += Decimal(line.amount)
+        return total
 
     # --- line writers ------------------------------------------------------
 

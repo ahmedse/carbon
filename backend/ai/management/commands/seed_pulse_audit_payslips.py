@@ -99,11 +99,25 @@ class Command(BaseCommand):
         except PayrollServiceError as exc:
             raise CommandError(str(exc)) from exc
 
-        run = PayrollRun.objects.filter(
-            org_unit=emp.org_unit,
-            period_start=start,
-            period_end=end,
-        ).exclude(status="failed").first()
+        # Prefer the company-wide committed run that already pays this employee
+        # for the period (populate_payroll_history writes at the root). Writing
+        # a second org-local run would double-count nets in period aggregates.
+        run = (
+            PayrollRun.objects.filter(
+                status="committed",
+                period_start=start,
+                period_end=end,
+                lines__employee=emp,
+            )
+            .order_by("org_unit__parent_id", "id")
+            .first()
+        )
+        if run is None:
+            run = PayrollRun.objects.filter(
+                org_unit=emp.org_unit,
+                period_start=start,
+                period_end=end,
+            ).exclude(status="failed").first()
         if run is None:
             run = PayrollRun.objects.create(
                 org_unit=emp.org_unit,
@@ -123,8 +137,11 @@ class Command(BaseCommand):
             run.committed_at = timezone.now()
             run.save(update_fields=["status", "committed_at"])
 
+        # One identity per employee per period across all runs.
         PayslipLine.objects.filter(
-            payroll_run=run, employee=emp, rule_id=RULE_ID,
+            employee=emp,
+            payroll_run__period_start=start,
+            payroll_run__period_end=end,
         ).delete()
 
         specs = (

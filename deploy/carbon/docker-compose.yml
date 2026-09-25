@@ -31,6 +31,8 @@ services:
       - evidence:/app/mediafiles/evidence
       - exports:/app/mediafiles/exports
       - imports:/app/mediafiles/imports
+      - ../../domain_packs:/domain_packs:ro
+      - ../../assurance:/assurance:ro
     ports:
       - "${BACKEND_PORT:-8002}:8000"
     healthcheck:

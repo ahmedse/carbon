@@ -14,7 +14,7 @@ import re
 from typing import Any
 
 # Cap rows so export args stay bounded for docx/xlsx writers.
-_MAX_TABLE_ROWS = 50
+_MAX_TABLE_ROWS = 300
 _MAX_IMAGES = 4
 _MAX_PROSE_CHARS = 3500
 
@@ -132,6 +132,26 @@ def table_has_substance(table: dict | None) -> bool:
             if str(c or "").strip() and not cell_is_placeholder(c):
                 filled += 1
     return filled >= _MIN_TABLE_CELLS
+
+
+def table_needs_bind(table: Any) -> bool:
+    """True when a draft table is hollow and should be replaced from priors.
+
+    Headers-only / empty rows / placeholder cells are replaced. A draft that
+    already has any real cell is kept (even if thin) so LLM layout wins.
+    """
+    if not isinstance(table, dict):
+        return True
+    if table_has_unfilled_slots(table):
+        return True
+    rows = table.get("rows")
+    if not isinstance(rows, list) or not rows:
+        return True
+    for row in rows:
+        cells = row if isinstance(row, (list, tuple)) else [row]
+        if any(str(c or "").strip() and not cell_is_placeholder(c) for c in cells):
+            return False
+    return True
 
 
 def images_have_substance(images: list | None) -> bool:
@@ -448,14 +468,15 @@ def bind_export_args(
             prose_chunks.append(facts["stats_prose"])
 
     existing_table = args.get("table")
-    table_empty = not (
-        isinstance(existing_table, dict)
-        and (existing_table.get("headers") or existing_table.get("rows"))
-    )
-    if table_empty:
+    # Headers without rows (or placeholder cells) are not grounded evidence —
+    # replace from prior host/tool payloads. A headers-only draft used to
+    # block bind and then fail xlsx with "requires a structured table".
+    if table_needs_bind(existing_table):
         richest = _richest_table(all_tables)
         if richest:
             args["table"] = richest
+        elif "table" in args and table_needs_bind(args.get("table")):
+            args.pop("table", None)
 
     # Images: keep LLM-supplied, else attach prior charts
     existing_images = args.get("images")

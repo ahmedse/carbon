@@ -114,11 +114,14 @@ def job_family_for(title):
 
 
 def salary_for(title, is_kuwaiti=False):
-    """Estimate monthly basic salary (KWD) from job title — Kuwait KOC contractor market rates.
+    """Estimate monthly basic salary (KWD) from job title — Kuwait OFS / KOC contractor rates.
 
-    Source: Kuwait private sector / KOC contractor prevailing rates 2026.
-    These are ESTIMATED values only (F8 — no salary column in ERP export).
-    Kuwaiti nationals receive ~2× basic (nationalization premium + PIFSS loading).
+    Anchors (public ads + surveys 2024–2026, KWD/month, estimated for seed only):
+      Assistant Driller ~675, Driller ~975, Toolpusher ~1350 (land-rig ads);
+      Accountant 600–1200, Senior/Chief 900–2500 (Kuwait accounting guides);
+      Well/drilling engineer packages ~800–1200; helpers/offsiders ~200–540.
+    F8 — no salary column in the ERP export; these are market estimates.
+    Kuwaiti nationals get a nationalization premium on top of the band.
     """
     t = (title or "").lower()
 
@@ -129,70 +132,91 @@ def salary_for(title, is_kuwaiti=False):
         base = Decimal("3200")
     # Directors
     elif any(k in t for k in ("project director", "director")):
-        base = Decimal("2200")
+        base = Decimal("2400")
     # Operations / functional managers
     elif any(k in t for k in ("operations manager", "operation manager", "gro manager",
                                "finance manager", "assistant operation manager")):
-        base = Decimal("1400")
+        base = Decimal("1600")
     # Generic managers
     elif "manager" in t:
+        base = Decimal("1250")
+    # Rig hierarchy — more specific titles before bare "driller"
+    elif "tool pusher" in t or "toolpusher" in t:
+        base = Decimal("1350")
+    elif "superintendent" in t:
+        base = Decimal("1200")
+    elif "assistant driller" in t:
+        base = Decimal("675")
+    elif "derrickman" in t or "derrick man" in t:
+        base = Decimal("350")
+    elif t.strip() == "driller" or t.startswith("driller ") or " driller" in t:
+        base = Decimal("975")
+    # Finance titles before generic accountant band
+    elif "chief accountant" in t:
+        base = Decimal("1600")
+    elif "senior accountant" in t:
         base = Decimal("1100")
+    elif "accountant" in t:
+        if any(k in t for k in ("iii", "iv", " 3", " 4")):
+            base = Decimal("950")
+        elif "ii" in t or " 2" in t:
+            base = Decimal("800")
+        else:
+            base = Decimal("700")  # Accountant I / plain
     # Lead / Senior engineers
-    elif any(k in t for k in ("lead engineer", "senior engineer", "tool pusher",
-                               "superintendent", "driller")):
-        base = Decimal("780")
+    elif any(k in t for k in ("lead engineer", "senior engineer")):
+        base = Decimal("900")
     # Engineers (grade by Roman suffix)
     elif "engineer" in t:
         if any(k in t for k in ("iii", "iv", " 3", " 4")):
-            base = Decimal("640")
+            base = Decimal("780")
         elif "ii" in t or " 2" in t:
-            base = Decimal("520")
+            base = Decimal("650")
         else:
-            base = Decimal("420")  # Engineer I / plain
+            base = Decimal("550")  # Engineer I / plain
     # Senior supervisors / team leaders / senior foremen
     elif any(k in t for k in ("senior supervisor", "team leader", "senior foreman",
-                               "senior accountant", "senior technical assistant",
+                               "senior technical assistant",
                                "lead admin officer", "lead technical")):
-        base = Decimal("420")
+        base = Decimal("520")
     # Supervisors / foremen / coordinators / safety officers / HSE
     elif any(k in t for k in ("supervisor", "foreman", "coordinator", "safety officer",
-                               "hse officer", "accountant", "analyst", "medic",
+                               "hse officer", "analyst", "medic",
                                "nurse", "security", "dispatcher")):
-        base = Decimal("320")
+        base = Decimal("420")
     # Technicians / operators / mechanics / electricians / welders
     elif any(k in t for k in ("technician", "technical assistant", "operator",
-                               "mechanic", "electrician", "welder", "rigger",
-                               "assistant driller", "derrickman")):
+                               "mechanic", "electrician", "welder", "rigger")):
         if any(k in t for k in ("iii", "iv", "senior", "lead")):
-            base = Decimal("270")
+            base = Decimal("380")
         elif "ii" in t:
-            base = Decimal("220")
+            base = Decimal("300")
         else:
-            base = Decimal("180")
+            base = Decimal("250")
     # Admin / secretaries / receptionists / clerks
     elif any(k in t for k in ("admin officer", "administrative", "secretary",
                                "receptionist", "clerk", "executive secretary")):
         if any(k in t for k in ("ii", "senior", "lead")):
-            base = Decimal("190")
+            base = Decimal("320")
         else:
-            base = Decimal("150")
+            base = Decimal("250")
     # Drivers / vehicle operators
     elif any(k in t for k in ("driver", "vehicle operator")):
-        base = Decimal("120")
+        base = Decimal("180")
     # Helpers / cleaners / roustabouts / floormen
     elif any(k in t for k in ("helper", "cleaner", "roustabout", "floorman", "floor man")):
-        base = Decimal("85")
+        base = Decimal("140")
     else:
-        base = Decimal("170")
+        base = Decimal("280")
 
-    # Kuwaiti nationals: nationalization premium (~2× for unskilled, ~1.6× for professionals)
+    # Kuwaiti nationals: nationalization premium (PIFSS loading + local market)
     if is_kuwaiti:
-        if base < Decimal("200"):
-            base = base * Decimal("2.2")
-        elif base < Decimal("600"):
-            base = base * Decimal("1.8")
+        if base < Decimal("300"):
+            base = base * Decimal("2.0")
+        elif base < Decimal("800"):
+            base = base * Decimal("1.7")
         else:
-            base = base * Decimal("1.4")
+            base = base * Decimal("1.35")
 
     return base.quantize(Decimal("1"))
 

@@ -1,21 +1,22 @@
 """Dev/Nibras: clean rubbish payroll runs and populate committed months for all employees.
 
 How payslips work (ADR-0029 / NIR-3C):
-  1. Verified compensation ledger holds monthly ``basic`` (not Employee.basic_salary).
+  1. Verified compensation ledger holds monthly earnings (basic + allowances).
   2. PayrollRun for an org + period: draft → compute → validate → commit (SoD).
   3. Compute walks org + descendants, writes PayslipLine (gross / gosi / loan / net).
   4. My Payslips reads only validated|committed lines for the logged-in employee.
 
 Usage (nibras / nibras_dev only)::
 
-    python manage.py populate_payroll_history --months 12 --purge
+    python manage.py populate_payroll_history --months 12 --purge --reseed-compensation
     python manage.py populate_payroll_history --months 6 --dry-run
 """
 from __future__ import annotations
 
+import hashlib
 from calendar import monthrange
-from datetime import date
-from decimal import Decimal
+from datetime import date, timedelta
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -25,8 +26,26 @@ from django.utils import timezone
 
 from mdm.models import OrgUnit
 from people.compensation_service import CompensationService
+from people.management.commands.import_gofsco_employees import salary_for
 from people.models import CompensationComponent, Employee, EmployeeCompensation, PayrollRun, PayslipLine
 from people.payroll_service import PayrollRunService, PayrollServiceError
+
+ANNUAL_INCREASE = Decimal("0.04")  # ~4% typical Kuwait private-sector increment
+HOUSING_PCT = Decimal("0.20")
+TRANSPORT_FLOOR = Decimal("40")
+TRANSPORT_CAP = Decimal("150")
+QUANT = Decimal("0.001")
+
+
+def _jitter(employee_no: str, span: Decimal = Decimal("0.06")) -> Decimal:
+    """Deterministic ±span factor from employee_no (stable across runs)."""
+    digest = hashlib.sha1(str(employee_no).encode("utf-8")).hexdigest()
+    unit = int(digest[:8], 16) / 0xFFFFFFFF
+    return (Decimal("1") - span) + (Decimal(str(unit)) * (span * 2))
+
+
+def _money(value: Decimal) -> Decimal:
+    return value.quantize(QUANT, rounding=ROUND_HALF_UP)
 
 
 class Command(BaseCommand):
@@ -38,6 +57,14 @@ class Command(BaseCommand):
             "--purge",
             action="store_true",
             help="Delete ALL PayrollRun + PayslipLine before seeding (failed/draft/fragmented child runs).",
+        )
+        parser.add_argument(
+            "--reseed-compensation",
+            action="store_true",
+            help=(
+                "Close overlapping/bogus ledger rows and rewrite verified basic + "
+                "housing + transport with market rates and annual increments."
+            ),
         )
         parser.add_argument(
             "--clean-only",
@@ -70,7 +97,7 @@ class Command(BaseCommand):
 
         self.stdout.write(
             f"db={db_name} root={root.id}:{root.name} months={months} "
-            f"purge={options['purge']} dry_run={dry}"
+            f"purge={options['purge']} reseed={options['reseed_compensation']} dry_run={dry}"
         )
 
         cleaned = self._clean(purge=options["purge"], dry=dry)
@@ -79,13 +106,19 @@ class Command(BaseCommand):
         if options["clean_only"]:
             return
 
-        ensured = self._ensure_verified_basics(dry=dry)
-        self.stdout.write(f"ledger ensured={ensured}")
+        if options["reseed_compensation"]:
+            n = self._reseed_compensation(dry=dry, admin=preparer)
+            self.stdout.write(self.style.SUCCESS(f"compensation reseeded employees={n}"))
+        else:
+            ensured = self._ensure_verified_basics(dry=dry)
+            self.stdout.write(f"ledger ensured={ensured}")
 
         if dry:
             periods = list(self._month_windows(months))
-            self.stdout.write(f"dry-run would commit {len(periods)} periods at root for "
-                              f"{Employee.objects.filter(is_active=True).count()} employees")
+            self.stdout.write(
+                f"dry-run would commit {len(periods)} periods at root for "
+                f"{Employee.objects.filter(is_active=True).count()} employees"
+            )
             return
 
         svc = PayrollRunService()
@@ -117,45 +150,155 @@ class Command(BaseCommand):
         n = qs.count()
         if dry:
             return n
-        # Lines cascade or explicit — PayslipLine has FK to run; delete runs.
         PayslipLine.objects.filter(payroll_run__in=qs).delete()
         deleted, _ = qs.delete()
         return deleted
 
-    def _ensure_verified_basics(self, *, dry: bool) -> int:
-        component, _ = CompensationComponent.objects.get_or_create(
-            code="basic",
+    def _component(self, code: str, *, name: str, sort_order: int) -> CompensationComponent:
+        obj, _ = CompensationComponent.objects.get_or_create(
+            code=code,
             defaults={
-                "name": "Basic Salary",
+                "name": name,
                 "direction": "earning",
                 "is_wps_relevant": True,
-                "sort_order": 10,
+                "sort_order": sort_order,
                 "is_active": True,
             },
         )
+        return obj
+
+    def _write_line(self, *, employee, component, amount, start, end, admin, note: str):
+        line = EmployeeCompensation.objects.create(
+            employee=employee,
+            component=component,
+            amount=_money(amount),
+            frequency="monthly",
+            effective_start=start,
+            effective_end=end,
+            is_verified=False,
+            reason_note=note,
+        )
+        if admin is not None:
+            CompensationService.verify_line(line, verified_by=admin)
+        else:
+            line.is_verified = True
+            line.save(update_fields=["is_verified"])
+        return line
+
+    def _reseed_compensation(self, *, dry: bool, admin) -> int:
+        """Rewrite basic/housing/transport from market title bands + annual steps."""
+        basic_c = self._component("basic", name="Basic Salary", sort_order=10)
+        housing_c = self._component("housing", name="Housing Allowance", sort_order=20)
+        transport_c = self._component("transport", name="Transport Allowance", sort_order=30)
+        today = timezone.localdate()
+        codes = {"basic", "housing", "transport"}
+        n = 0
+        qs = (
+            Employee.objects.filter(is_active=True)
+            .select_related("position")
+            .iterator()
+        )
+        for emp in qs:
+            title = getattr(emp.position, "title", None) or ""
+            band = salary_for(title, is_kuwaiti=bool(emp.kuwaitization))
+            current_basic = _money(band * _jitter(emp.employee_no))
+            # Cover the full history window even when join_date is recent/null
+            # (ERP imports often leave join blank or stamp the load day).
+            origin = date(today.year - 3, 1, 1)
+            steps = 3
+            start_basic = current_basic
+            for _ in range(steps):
+                start_basic = _money(start_basic / (Decimal("1") + ANNUAL_INCREASE))
+            start_basic = max(start_basic, Decimal("80.000"))
+
+            housing_ratio = HOUSING_PCT
+            if emp.kuwaitization:
+                housing_ratio = Decimal("0.25")
+            elif current_basic < Decimal("300"):
+                housing_ratio = Decimal("0.12")
+
+            if dry:
+                n += 1
+                continue
+
+            with transaction.atomic():
+                # Dev-only rewrite: drop managed earning rows so history is clean.
+                EmployeeCompensation.objects.filter(
+                    employee=emp,
+                    component__code__in=codes,
+                ).delete()
+
+                amount = start_basic
+                year = origin.year
+                while True:
+                    step_start = date(year, 1, 1) if year > origin.year else origin
+                    if step_start > today:
+                        break
+                    next_start = date(year + 1, 1, 1)
+                    step_end = next_start - timedelta(days=1) if next_start <= today else None
+                    housing = _money(amount * housing_ratio)
+                    note = (
+                        f"market reseed {title or 'untitled'} "
+                        f"{'Kuwaiti' if emp.kuwaitization else 'expat'} "
+                        f"y={year}"
+                    )
+                    self._write_line(
+                        employee=emp, component=basic_c, amount=amount,
+                        start=step_start, end=step_end, admin=admin, note=note,
+                    )
+                    self._write_line(
+                        employee=emp, component=housing_c, amount=housing,
+                        start=step_start, end=step_end, admin=admin,
+                        note=f"housing {housing_ratio:.0%} of basic",
+                    )
+                    # Transport steps with basic so annual increases show on package.
+                    step_transport = min(
+                        TRANSPORT_CAP,
+                        max(TRANSPORT_FLOOR, _money(amount * Decimal("0.08"))),
+                    )
+                    self._write_line(
+                        employee=emp, component=transport_c, amount=step_transport,
+                        start=step_start, end=step_end, admin=admin,
+                        note="transport allowance",
+                    )
+                    if step_end is None:
+                        break
+                    amount = _money(amount * (Decimal("1") + ANNUAL_INCREASE))
+                    year += 1
+
+                emp.basic_salary = current_basic
+                emp.save(update_fields=["basic_salary"])
+            n += 1
+        return n
+
+    def _ensure_verified_basics(self, *, dry: bool) -> int:
+        """Fill missing verified basic only — never invent a floor over a real band."""
+        component = self._component("basic", name="Basic Salary", sort_order=10)
         admin = get_user_model().objects.filter(username="ahmed").first()
         as_of = timezone.localdate()
         n = 0
-        for emp in Employee.objects.filter(is_active=True).iterator():
+        for emp in Employee.objects.filter(is_active=True).select_related("position").iterator():
             if CompensationService.verified_basic_amount(emp, as_of=as_of) is not None:
                 continue
-            raw = getattr(emp, "basic_salary", None) or Decimal("2000.000")
+            title = getattr(emp.position, "title", None) or ""
+            raw = getattr(emp, "basic_salary", None)
             try:
-                amt = Decimal(str(raw))
+                amt = Decimal(str(raw)) if raw not in (None, "") else Decimal("0")
             except Exception:  # noqa: BLE001
-                amt = Decimal("2000.000")
-            if amt < Decimal("2000.000"):
-                amt = Decimal("2000.000")
+                amt = Decimal("0")
+            if amt <= 0:
+                amt = salary_for(title, is_kuwaiti=bool(emp.kuwaitization))
             if dry:
                 n += 1
                 continue
             line = EmployeeCompensation.objects.create(
                 employee=emp,
                 component=component,
-                amount=amt,
+                amount=_money(amt),
                 frequency="monthly",
                 effective_start=date(2024, 1, 1),
                 is_verified=False,
+                reason_note="ensure verified basic from title/basic_salary",
             )
             if admin is not None:
                 CompensationService.verify_line(line, verified_by=admin)

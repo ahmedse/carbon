@@ -169,14 +169,17 @@ class PayrollRunServiceTests(TestCase):
         self.in_scope = Employee.objects.create(
             org_unit=self.hq, employee_no="E-1", full_name="In Scope",
             basic_salary=Decimal("1000.000"), join_date=date(2024, 1, 1),
+            kuwaitization=True,
         )
         self.sub_scope = Employee.objects.create(
             org_unit=self.sub, employee_no="E-2", full_name="Sub Scope",
             basic_salary=Decimal("1000.000"), join_date=date(2024, 1, 1),
+            kuwaitization=True,
         )
         self.out_scope = Employee.objects.create(
             org_unit=self.other, employee_no="E-3", full_name="Out Scope",
             basic_salary=Decimal("1000.000"), join_date=date(2024, 1, 1),
+            kuwaitization=True,
         )
         for emp in (self.in_scope, self.sub_scope, self.out_scope):
             _verified_basic_line(emp, Decimal("1000.000"))
@@ -478,6 +481,7 @@ class SeedGofscoComputeRegressionTests(TestCase):
         emp = Employee.objects.create(
             org_unit=hq, employee_no="E-1", full_name="In Scope",
             basic_salary=Decimal("1000.000"), join_date=date(2024, 1, 1),
+            kuwaitization=True,
         )
         _verified_basic_line(emp, Decimal("1000.000"))
         run = PayrollRun.objects.create(
