@@ -108,23 +108,36 @@ def _cmd_from_obj(raw: Any) -> Command | None:
 
 def parse_decision(payload: Any) -> Decision | None:
     """Parse a strict Decision object. None when the shape is unusable."""
-    if isinstance(payload, str):
-        import json
+    return decision_or_cause(payload)[0]
 
+
+def decision_or_cause(payload: Any) -> tuple[Decision | None, str]:
+    """The Decision, or None and why the shape is unusable.
+
+    Causes: ``not_json``, ``not_object``, ``commands_not_list``,
+    ``no_commands``, ``bad_command``, ``unknown_op``.
+    """
+    import json
+
+    if isinstance(payload, str):
         try:
             payload = json.loads(payload)
         except (TypeError, ValueError):
-            return None
+            return None, "not_json"
     if not isinstance(payload, dict):
-        return None
+        return None, "not_object"
     raw_cmds = payload.get("commands")
+    if isinstance(raw_cmds, str):
+        return None, "commands_not_list"
     if not isinstance(raw_cmds, list) or not raw_cmds:
-        return None
+        return None, "no_commands"
     commands: list[Command] = []
     for item in raw_cmds[:3]:
         cmd = _cmd_from_obj(item)
         if cmd is None:
-            return None
+            if isinstance(item, dict) and str(item.get("op") or "").strip() not in COMMAND_OPS:
+                return None, "unknown_op"
+            return None, "bad_command"
         commands.append(cmd)
     lang = str(payload.get("language") or "en").strip().lower()
     if lang not in {"ar", "en"}:
@@ -139,7 +152,7 @@ def parse_decision(payload: Any) -> Decision | None:
         language=lang,
         confidence=confidence,
         reason=str(payload.get("reason") or "")[:500],
-    )
+    ), ""
 
 
 def tool_choice_for(decision: Decision | None) -> dict | str | None:
@@ -238,6 +251,7 @@ def validate_decision(
                     Command(
                         op="handoff_agent",
                         process_id=cmd.process_id or name,
+                        args=dict(cmd.args or {}),
                         reason="Chat does not mutate the host (ADR-0046).",
                     )
                 )
@@ -264,10 +278,21 @@ EMIT_DECISION_TOOL: dict[str, Any] = {
             "question in CONVERSATION STATE. Use continue when they ask about "
             "the previous answer; it re-uses the last view with no new read, "
             "so a new filter or period is call_tool with those args. Use "
-            "reject when they decline. Use "
-            "handoff_agent for anything that would change host data while the "
-            "surface is Chat, and handoff_agent with process_id=plan for a "
-            "multi-step or conditional goal. Use clarify when two tools fit. "
+            "reject when they decline. To change host data, use call_tool "
+            "with the write's catalog name and the args the user gave; on "
+            "Chat it is handed to Agent with those args, never run. Use "
+            "handoff_agent with process_id=plan for a "
+            "multi-step or conditional goal. Use answer, with no tool, when "
+            "the reply needs no live read (greetings, identity, dates, "
+            "knowledge, advice, or a question the rows already in "
+            "CONVERSATION STATE fully answer). A follow-up about a different "
+            "record than those rows hold is call_tool for that record's "
+            "tool. The reply is written after this decision. Use navigate with "
+            "target_id set to one NAV name when the user wants to open a "
+            "place in the app. When one catalog example is this message, call "
+            "that tool. Use clarify when the message asks for two different "
+            "records at once, so only the first is not run, and when two "
+            "tools both fit and neither excludes the message. "
             "When the user must pick, put each choice in options as a short "
             "label. The question is one sentence and does not list the "
             "choices. Send options empty only when you need their own words "
@@ -325,7 +350,8 @@ EMIT_DECISION_TOOL: dict[str, Any] = {
                     "type": "string",
                     "description": (
                         "One or two sentences in the user's language: what you "
-                        "understood and what you will do. No tool names, no code."
+                        "understood the user wants. Do not list steps or promise "
+                        "work; the commands are the work. No tool names, no code."
                     ),
                 },
             },

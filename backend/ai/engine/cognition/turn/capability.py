@@ -15,7 +15,7 @@ from typing import Any
 def _is_write(entry: dict) -> bool:
     kind = str(entry.get("kind") or "")
     method = str(entry.get("method") or "GET").strip().upper()
-    return kind == "write" or method != "GET"
+    return kind in ("write", "request") or method != "GET"
 
 
 def _path_keys(path: str) -> set[str]:
@@ -98,7 +98,7 @@ class CapabilitySurface:
         raw = args if isinstance(args, dict) else {}
         flat = flat_args(raw)
         # The executor derives the transport from the entry; a caller never sets it.
-        for key in ("method", "path", "endpoint", "url"):
+        for key in ("method", "path", "endpoint", "url", "fills_gap"):
             flat.pop(key, None)
         schema = self.schema(name) or {}
         props = schema.get("properties") or {}
@@ -108,12 +108,15 @@ class CapabilitySurface:
         # A path segment is a scalar: an object in a path slot declares where
         # the value comes from (``bind``), it is not the value.
         bind = dict(raw["bind"]) if isinstance(raw.get("bind"), dict) else {}
-        for key in path_keys:
-            if isinstance(flat.get(key), dict):
+        for key in list(flat):
+            value = flat.get(key)
+            if isinstance(value, dict) and "step" in value and "field" in value:
                 bind.setdefault(key, flat.pop(key))
         path_params = {k: v for k, v in flat.items() if k in path_keys}
         rest = {k: v for k, v in flat.items() if k not in path_keys}
         out: dict[str, Any] = {"api_name": str(name or "")}
+        if raw.get("fills_gap"):
+            out["fills_gap"] = True
         if isinstance(raw.get("explanation"), str) and raw["explanation"].strip():
             out["explanation"] = raw["explanation"]
         if bind:
@@ -123,6 +126,19 @@ class CapabilitySurface:
         if rest:
             out["body" if _is_write(entry) else "query_params"] = rest
         return out
+
+    def call(self, name: str, args: dict | None, *, call_id: str) -> dict:
+        """The tool call that executes ``name``: the tool itself, or ``call_host_api``."""
+        entry = self.entry(name) or {}
+        if entry.get("source") != "tool":
+            return self.host_call(name, args, call_id=call_id)
+        return {
+            "id": call_id,
+            "function": {
+                "name": name,
+                "arguments": json.dumps(flat_args(args), ensure_ascii=False, default=str),
+            },
+        }
 
     def host_call(self, name: str, args: dict | None, *, call_id: str) -> dict:
         """The ``call_host_api`` tool call that executes ``name`` with ``args``."""
@@ -245,5 +261,45 @@ def capability_surface(
         registry = [e for e in host_api_capabilities(cfg) if e.get("name") not in known]
     except Exception:  # noqa: BLE001 — the host catalog alone is still a surface
         registry = []
+    known |= {str(e.get("name") or "") for e in registry}
+    tools = [e for e in tool_capabilities(cfg) if e.get("name") not in known]
     scoped = filter_catalog_by_audience(catalog + registry, _audience_from_user_info(user_info))
-    return CapabilitySurface(entries=tuple(scoped))
+    return CapabilitySurface(entries=tuple(scoped + tools))
+
+
+def tool_capabilities(instance_config: dict | None) -> list[dict]:
+    """Chat-visible engine tools as catalog entries run by their own name (ADR-0056).
+
+    ``kind`` comes from the tool's metadata: a plugin that requires
+    confirmation is a write. A plugin the planner owns (``decision_surface``
+    False) is not listed; a plan is ``handoff_agent process_id=plan``.
+    """
+    from ai.engine.agent.plugins import registered_plugins
+    from ai.engine.agent.tools import get_tool_definitions
+    from ai.engine.cognition.turn.runner_util import _chat_tool_allowlist
+
+    try:
+        allow = _chat_tool_allowlist()
+        defs = get_tool_definitions(instance_config)
+    except Exception:  # noqa: BLE001 — the host catalog alone is still a surface
+        return []
+    plugins = {p.name: p for p in registered_plugins()}
+    entries: list[dict] = []
+    for tool in defs:
+        fn = (tool or {}).get("function") or {}
+        name = str(fn.get("name") or "")
+        if not name or name not in allow or name == "call_host_api":
+            continue
+        plugin = plugins.get(name)
+        if plugin is not None and not getattr(plugin, "decision_surface", True):
+            continue
+        write = bool(plugin is not None and plugin.requires_confirmation)
+        entries.append({
+            "name": name,
+            "description": str(fn.get("description") or ""),
+            "method": "POST" if write else "GET",
+            "kind": "write" if write else "read",
+            "parameters": fn.get("parameters") or {},
+            "source": "tool",
+        })
+    return entries

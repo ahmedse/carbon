@@ -160,48 +160,8 @@ def _annotate_employee_identity(results: list, qs) -> list:
         enriched.append(clone)
     return enriched
 
-#: After normalization, collapse the tail into an "Other" bucket so the model
-#: never receives a 200-row breakdown it can't interpret.
-_ANALYTICS_MAX_BUCKETS = 15
-
-#: Synonym maps for free-text categorical fields.
-#: canonical_label → frozenset of raw string values that map to it (case-insensitive, stripped).
-_FIELD_SYNONYMS: dict[str, dict[str, frozenset]] = {
-    "gender": {
-        "male":   frozenset({"male", "m", "man", "boy", "males"}),
-        "female": frozenset({"female", "f", "woman", "girl", "females"}),
-    },
-}
-
-
-def _normalise_value(dimension: str, raw_val) -> str:
-    """Return the canonical label for a raw DB value (synonym merging + blank handling)."""
-    if raw_val is None or (isinstance(raw_val, str) and not raw_val.strip()):
-        return "(blank)"
-    synonyms = _FIELD_SYNONYMS.get(dimension, {})
-    low = str(raw_val).strip().lower()
-    for canonical, values in synonyms.items():
-        if low in values:
-            return canonical
-    return str(raw_val).strip()
-
-
-def _suggest_chart_type(breakdown: list[dict]) -> str:
-    """Return the most informative chart type given the breakdown shape.
-
-    Pie is only useful for balanced proportions (≤8 buckets, no dominant slice).
-    A 99% / 1% pie is meaningless — bar shows magnitude far better.
-    """
-    if not breakdown:
-        return "bar"
-    max_pct = max((r["pct"] for r in breakdown), default=0)
-    n = len(breakdown)
-    if max_pct >= 70:
-        # One dominant bucket — a single giant pie slice adds zero information
-        return "bar"
-    if n <= 8:
-        return "pie"
-    return "bar"
+# Re-export for existing tests; the aggregator lives on the People host.
+from people.headcount import MAX_BUCKETS as _ANALYTICS_MAX_BUCKETS
 
 #: Endpoints handled in-process instead of over HTTP.  Values are the names of
 #: private ``_<name>_in_process`` coroutines on :class:`CarbonHostExecutor`.
@@ -217,6 +177,9 @@ _IN_PROCESS_ENDPOINTS: dict[str, str] = {
     "carbon-api/carbon/chairman": "chairman_overview",
     # Server-side analytics (aggregation, label resolution, DQ disclosure)
     "carbon-api/people/analytics": "people_analytics",
+    "carbon-api/correspondence": "correspondence",
+    "carbon-api/correspondence/inbox": "correspondence_inbox",
+    "carbon-api/correspondence/history": "correspondence_history",
 }
 
 
@@ -408,343 +371,29 @@ def _normalize_entity_row(row: dict, model_cls) -> dict:
 
 
 def _people_analytics(user, params: dict) -> dict:
-    """Server-side analytics: GROUP BY ``dimension`` over the scoped Employee set.
+    """Same aggregator as ``EmployeeAnalyticsView`` (Plane A)."""
+    from people.headcount import summarize_headcount
 
-    Returns a pre-computed, normalised breakdown the LLM can narrate directly:
+    code, data = summarize_headcount(user, params or {})
+    return {"status_code": code, "data": data}
 
-    .. code-block:: json
 
-        {
-          "dimension": "gender",
-          "total": 535,
-          "breakdown": [
-            {"label": "(blank)", "count": 529, "pct": 98.9},
-            {"label": "male",    "count": 5,   "pct": 0.9,
-             "merged_from": ["M"]}
-          ],
-          "caveats": ["98.9% have no gender recorded…"],
-          "was_normalized": true,
-          "normalization_notes": ["'M' was merged into 'male' (likely a data-entry variant)"],
-          "suggested_chart_type": "bar",
-          "label_resolved": false
-        }
+def _people_drf_get(user, view_cls, path: str, params: dict | None = None) -> dict:
+    """Same DRF view as HTTP — Pulse never bypasses Plane A."""
+    from urllib.parse import urlencode
 
-    ``suggested_chart_type`` is determined by data shape, not by the LLM:
-    ``"pie"`` for balanced proportions (≤8 buckets, no dominant slice),
-    ``"bar"`` otherwise (including any distribution with a >70 % dominant bucket).
-    """
-    from collections import defaultdict
+    from rest_framework.test import APIRequestFactory, force_authenticate
 
-    from django.db.models import Count, Q
-    from people.models import Employee
-
-    ALLOWED_DIMENSIONS = {
-        "gender", "is_active", "nationality",
-        "employment_type", "contract_type",
-        "position", "org_unit", "kuwaitization", "rotation",
-    }
-    # Soft aliases for pre-ReferenceValue dimension names (CharField *_code era).
-    DIMENSION_ALIASES = {
-        "nationality_code": "nationality",
-        "employment_type_code": "employment_type",
-        "contract_type_code": "contract_type",
-        "department": "org_unit",
-        "department_name": "org_unit",
-        "position_name": "position",
-    }
-    FK_LABEL_MAP = {
-        "position": ("people.models.Position", "title"),
-        "org_unit": ("mdm.models.OrgUnit", "name"),
-        # Bucket-1 governed refs (NSR-7B): Employee FKs → ReferenceValue.code
-        "gender": ("mdm.models.ReferenceValue", "code"),
-        "nationality": ("mdm.models.ReferenceValue", "code"),
-        "employment_type": ("mdm.models.ReferenceValue", "code"),
-        "contract_type": ("mdm.models.ReferenceValue", "code"),
-        "rotation": ("mdm.models.ReferenceValue", "code"),
-    }
-    BLANK_CAVEAT_PCT = 50.0
-
-    raw_group_by = params.get("group_by") or []
-    if isinstance(raw_group_by, str):
-        try:
-            raw_group_by = json.loads(raw_group_by)
-        except (TypeError, ValueError, json.JSONDecodeError):
-            raw_group_by = [v.strip() for v in raw_group_by.split(",") if v.strip()]
-    group_by = [
-        DIMENSION_ALIASES.get(str(v).strip().lower(), str(v).strip().lower())
-        for v in (raw_group_by if isinstance(raw_group_by, list) else [])
-    ]
-    dimension = (params.get("dimension") or (group_by[-1] if group_by else "")).strip().lower()
-    dimension = DIMENSION_ALIASES.get(dimension, dimension)
-    requested_dimensions = group_by or [dimension]
-    invalid_dimensions = [d for d in requested_dimensions if d not in ALLOWED_DIMENSIONS]
-    if dimension not in ALLOWED_DIMENSIONS or invalid_dimensions:
-        return {
-            "status_code": 400,
-            "data": {
-                "detail": (
-                    f"Unknown dimension(s) '{', '.join(invalid_dimensions) or dimension}'. "
-                    f"Allowed: {', '.join(sorted(ALLOWED_DIMENSIONS | set(DIMENSION_ALIASES)))}"
-                )
-            },
-        }
-
-    qs = _people_scope(user, Employee.objects.all(), "org_unit_id__in")
-    raw_filters = params.get("filters", params.get("filter", {})) or {}
-    if isinstance(raw_filters, str):
-        try:
-            raw_filters = json.loads(raw_filters)
-        except (TypeError, ValueError, json.JSONDecodeError):
-            return {
-                "status_code": 400,
-                "data": {"detail": "Analytics filters must be a JSON object."},
-            }
-    if not isinstance(raw_filters, dict):
-        return {
-            "status_code": 400,
-            "data": {"detail": "Analytics filters must be a JSON object."},
-        }
-
-    applied_filters: dict[str, list | bool | str] = {}
-    for raw_key, raw_value in raw_filters.items():
-        key = DIMENSION_ALIASES.get(
-            str(raw_key).strip().lower(), str(raw_key).strip().lower()
-        )
-        if key not in ALLOWED_DIMENSIONS:
-            return {
-                "status_code": 400,
-                "data": {
-                    "detail": (
-                        f"Unknown analytics filter '{raw_key}'. "
-                        f"Allowed: {', '.join(sorted(ALLOWED_DIMENSIONS | set(DIMENSION_ALIASES)))}"
-                    )
-                },
-            }
-        values = raw_value if isinstance(raw_value, list) else [raw_value]
-        values = [v for v in values if v is not None and str(v).strip()]
-        if not values:
-            return {
-                "status_code": 400,
-                "data": {"detail": f"Analytics filter '{raw_key}' has no values."},
-            }
-        if key == "is_active":
-            normalized = []
-            for value in values:
-                if isinstance(value, bool):
-                    normalized.append(value)
-                elif str(value).strip().lower() in {"true", "1", "yes"}:
-                    normalized.append(True)
-                elif str(value).strip().lower() in {"false", "0", "no"}:
-                    normalized.append(False)
-                else:
-                    return {
-                        "status_code": 400,
-                        "data": {"detail": f"Invalid boolean filter value {value!r}."},
-                    }
-            qs = qs.filter(is_active__in=normalized)
-            applied_filters[key] = normalized
-            continue
-
-        if key in FK_LABEL_MAP:
-            _model_path, label_field = FK_LABEL_MAP[key]
-            lookup = f"{key}__{label_field}__iexact"
-        else:
-            lookup = f"{key}__iexact"
-        matched = Q()
-        unmatched: list[str] = []
-        for value in values:
-            if not qs.filter(**{lookup: value}).exists():
-                unmatched.append(str(value))
-            else:
-                matched |= Q(**{lookup: value})
-        if unmatched:
-            return {
-                "status_code": 400,
-                "data": {
-                    "detail": (
-                        f"Unknown filter value(s) for '{raw_key}': "
-                        f"{', '.join(unmatched)}. Resolve the exact host label first."
-                    )
-                },
-            }
-        qs = qs.filter(matched)
-        applied_filters[key] = [str(v) for v in values]
-
-    total = qs.count()
-    if total == 0:
-        return {
-            "status_code": 200,
-            "data": {
-                "dimension": dimension,
-                "total": 0,
-                "breakdown": [],
-                "caveats": ["No employees visible to this user."],
-                "was_normalized": False,
-                "normalization_notes": [],
-                "suggested_chart_type": "bar",
-                "label_resolved": False,
-                "applied_filters": applied_filters,
-                "group_by": requested_dimensions,
-            },
-        }
-
-    if len(requested_dimensions) > 1:
-        value_fields: dict[str, str] = {}
-        for dim in requested_dimensions:
-            if dim in FK_LABEL_MAP:
-                _model_path, label_field = FK_LABEL_MAP[dim]
-                value_fields[dim] = f"{dim}__{label_field}"
-            else:
-                value_fields[dim] = dim
-        query_fields = list(value_fields.values())
-        grouped = (
-            qs.values(*query_fields)
-            .annotate(count=Count("id"))
-            .order_by("-count")
-        )
-        breakdown: list[dict] = []
-        for raw in grouped[:100]:
-            row = {
-                dim: _normalise_value(dim, raw.get(field))
-                for dim, field in value_fields.items()
-            }
-            row["count"] = raw["count"]
-            row["pct"] = round(raw["count"] / total * 100, 1)
-            breakdown.append(row)
-        caveats = []
-        if grouped.count() > 100:
-            caveats.append("The grouped breakdown was limited to the top 100 rows.")
-        return {
-            "status_code": 200,
-            "data": {
-                "dimension": dimension,
-                "group_by": requested_dimensions,
-                "applied_filters": applied_filters,
-                "total": total,
-                "breakdown": breakdown,
-                "caveats": caveats,
-                "was_normalized": False,
-                "normalization_notes": [],
-                "suggested_chart_type": "bar",
-                "label_resolved": True,
-            },
-        }
-
-    raw_counts = (
-        qs.values(dimension)
-        .annotate(count=Count("id"))
-        .order_by("-count")
-    )
-
-    # ── Synonym normalisation + FK label resolution ─────────────────────────
-    # Merge raw DB values into canonical buckets so "M" and "male" become one row.
-    # For ReferenceValue / model FKs: resolve PK → label/code, then synonym-merge.
-    bucket_counts: dict[str, int] = defaultdict(int)
-    bucket_merged_from: dict[str, list[str]] = defaultdict(list)
-    label_resolved = False
-    pk_to_label: dict = {}
-    was_normalized = False
-
-    if dimension in FK_LABEL_MAP:
-        # FK dimensions: resolve PK → human label via a secondary query.
-        import importlib
-        module_path, label_field = FK_LABEL_MAP[dimension]
-        mod_name, cls_name = module_path.rsplit(".", 1)
-        mod = importlib.import_module(mod_name)
-        model_cls = getattr(mod, cls_name)
-        pk_ids = [r[dimension] for r in raw_counts if r[dimension] is not None]
-        for obj in model_cls.objects.filter(pk__in=pk_ids).values("pk", label_field):
-            pk_to_label[obj["pk"]] = obj[label_field]
-        label_resolved = True
-        for row in raw_counts:
-            raw_val = row[dimension]
-            displayed = (
-                pk_to_label.get(raw_val) if raw_val is not None else None
-            )
-            canonical = _normalise_value(dimension, displayed)
-            bucket_counts[canonical] += row["count"]
-            if displayed and str(displayed).strip() and str(displayed).strip() != canonical:
-                bucket_merged_from[canonical].append(str(displayed).strip())
-                was_normalized = True
-    else:
-        for row in raw_counts:
-            raw_val = row[dimension]
-            canonical = _normalise_value(dimension, raw_val)
-            bucket_counts[canonical] += row["count"]
-            # Track which raw strings were merged into this canonical bucket.
-            displayed = str(raw_val).strip() if raw_val is not None else ""
-            if displayed and displayed != canonical:
-                bucket_merged_from[canonical].append(displayed)
-                was_normalized = True
-
-    # ── Build sorted breakdown, collapse long tail into "Other" ────────────
-    sorted_buckets = sorted(bucket_counts.items(), key=lambda kv: -kv[1])
-    blank_count = bucket_counts.get("(blank)", 0)
-
-    breakdown: list[dict] = []
-    other_count = 0
-    other_labels: list[str] = []
-
-    for i, (label, count) in enumerate(sorted_buckets):
-        pct = round(count / total * 100, 1)
-        row: dict = {"label": label, "count": count, "pct": pct}
-        if bucket_merged_from.get(label):
-            row["merged_from"] = bucket_merged_from[label]
-        if i < _ANALYTICS_MAX_BUCKETS:
-            breakdown.append(row)
-        else:
-            other_count += count
-            other_labels.append(label)
-
-    if other_count:
-        breakdown.append({
-            "label": "Other",
-            "count": other_count,
-            "pct": round(other_count / total * 100, 1),
-            "collapsed_labels": other_labels[:20],  # sample for transparency
-        })
-
-    # ── Caveats ─────────────────────────────────────────────────────────────
-    caveats: list[str] = []
-    blank_pct = round(blank_count / total * 100, 1) if total else 0
-    if blank_pct >= BLANK_CAVEAT_PCT:
-        caveats.append(
-            f"{blank_pct}% of employees have no '{dimension}' recorded — "
-            f"this distribution is incomplete and should not be used for compliance reporting."
-        )
-    if not label_resolved and dimension in FK_LABEL_MAP:
-        caveats.append(f"'{dimension}' IDs could not be resolved to labels.")
-    if other_count:
-        caveats.append(
-            f"The breakdown has been truncated to the top {_ANALYTICS_MAX_BUCKETS} buckets; "
-            f"{len(other_labels)} additional values ({other_count} employees) are grouped as 'Other'."
-        )
-
-    # ── Normalization notes (explicit, machine-checkable) ───────────────────
-    normalization_notes: list[str] = []
-    for canonical, raw_list in bucket_merged_from.items():
-        if raw_list:
-            merged_str = ", ".join(f"'{v}'" for v in sorted(set(raw_list)))
-            normalization_notes.append(
-                f"{merged_str} → '{canonical}' (likely data-entry variants; "
-                f"recommend standardising the source data)"
-            )
-
-    return {
-        "status_code": 200,
-        "data": {
-            "dimension": dimension,
-            "total": total,
-            "breakdown": breakdown,
-            "caveats": caveats,
-            "was_normalized": was_normalized,
-            "normalization_notes": normalization_notes,
-            "suggested_chart_type": _suggest_chart_type(breakdown),
-            "label_resolved": label_resolved,
-            "applied_filters": applied_filters,
-            "group_by": requested_dimensions,
-        },
-    }
+    factory = APIRequestFactory()
+    query = {k: v for k, v in (params or {}).items() if v not in (None, "")}
+    if query:
+        path = f"{path}?{urlencode(query, doseq=True)}"
+    django_req = factory.get(path)
+    force_authenticate(django_req, user=user)
+    response = view_cls.as_view()(django_req)
+    if hasattr(response, "render") and not getattr(response, "_is_rendered", False):
+        response.render()
+    return {"status_code": int(response.status_code), "data": getattr(response, "data", None)}
 
 
 def _people_execute(user, resource, pk, action, method, params, body) -> dict:
@@ -1016,6 +665,15 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
                 except PayrollRun.DoesNotExist as exc:
                     return {"status_code": 404, "data": {"detail": str(exc)}}
                 return {"status_code": 200, "data": S.PayrollRunSerializer(run).data}
+            status_code = (params.get("status") or "").strip()
+            if status_code:
+                allowed = {c for c, _label in PayrollRun.STATUS_CHOICES}
+                if status_code not in allowed:
+                    return {
+                        "status_code": 400,
+                        "data": {"detail": f"Unknown status {status_code!r}."},
+                    }
+                qs = qs.filter(status=status_code)
             results = S.PayrollRunSerializer(qs, many=True).data
             return {"status_code": 200, "data": {"count": len(results), "results": results}}
 
@@ -1135,9 +793,34 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
                 "data": {"detail": f"Unsupported {method} {action}"},
             }
 
+    if resource == "compliance" and pk == "kuwaitization":
+        if method != "GET":
+            return {"status_code": 405, "data": {"detail": "Read-only"}}
+        from people.views import KuwaitizationQuotaView
+
+        return _people_drf_get(
+            user, KuwaitizationQuotaView,
+            "/carbon-api/people/compliance/kuwaitization/",
+        )
+
     # ── Payslip lines ───────────────────────────────────────────────────
     if resource == "payslip-lines":
         from people.models import PayslipLine
+
+        if method == "GET" and pk == "summary":
+            from people.views import PayslipLineSummaryView
+
+            return _people_drf_get(
+                user, PayslipLineSummaryView,
+                "/carbon-api/people/payslip-lines/summary/", params,
+            )
+        if method == "GET" and pk == "gosi-summary":
+            from people.views import PayslipLineGosiSummaryView
+
+            return _people_drf_get(
+                user, PayslipLineGosiSummaryView,
+                "/carbon-api/people/payslip-lines/gosi-summary/", params,
+            )
 
         if method == "GET":
             qs = PayslipLine.objects.all()
@@ -1156,6 +839,14 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
     # ── Leave entitlements ──────────────────────────────────────────────
     if resource == "leave-entitlements":
         from people.models import LeaveEntitlement
+
+        if method == "GET" and pk == "summary":
+            from people.views import LeaveEntitlementSummaryView
+
+            return _people_drf_get(
+                user, LeaveEntitlementSummaryView,
+                "/carbon-api/people/leave-entitlements/summary/", params,
+            )
 
         if method == "GET":
             qs = _people_scope(user, LeaveEntitlement.objects.all(), "employee__org_unit_id__in")
@@ -1176,6 +867,14 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
     # ── Leave records (list + create) ───────────────────────────────────
     if resource == "leave-records":
         from people.models import LeaveRecord
+
+        if method == "GET" and pk == "presence":
+            from people.views import LeavePresenceView
+
+            return _people_drf_get(
+                user, LeavePresenceView,
+                "/carbon-api/people/leave-records/presence/", params,
+            )
 
         if method == "GET":
             qs = _people_scope(user, LeaveRecord.objects.all(), "employee__org_unit_id__in")
@@ -1235,6 +934,14 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
     # ── Loans ───────────────────────────────────────────────────────────
     if resource == "loans":
         from people.models import Loan
+
+        if method == "GET" and pk == "summary":
+            from people.views import LoanBookSummaryView
+
+            return _people_drf_get(
+                user, LoanBookSummaryView,
+                "/carbon-api/people/loans/summary/", params,
+            )
 
         if method == "GET":
             qs = _people_scope(user, Loan.objects.all(), "employee__org_unit_id__in")
@@ -1434,10 +1141,20 @@ def _people_execute(user, resource, pk, action, method, params, body) -> dict:
                 data["caveat"] = f"Showing first {len(results)} of {total} attendance records."
             return {"status_code": 200, "data": data}
 
+    if resource == "certifications":
+        if method == "GET" and pk == "summary":
+            from people.views import CertificationSummaryView
+
+            return _people_drf_get(
+                user, CertificationSummaryView,
+                "/carbon-api/people/certifications/summary/", params,
+            )
+        return {"status_code": 404, "data": {"detail": "Unknown certifications action"}}
+
     return {"status_code": 404, "data": {"detail": f"Unknown People endpoint: {resource}"}}
 
 
-def _people_me(user, sub, method, body=None) -> dict:
+def _people_me(user, sub, method, body=None, params=None) -> dict:
     """Self-service People — scoped to the CALLER's own employee profile.
 
     Reads (GET) mirror ``people/self_views.py``. Writes (POST) are allowed for
@@ -1522,6 +1239,28 @@ def _people_me(user, sub, method, body=None) -> dict:
 
     if method not in ("GET", "HEAD", "OPTIONS"):
         return {"status_code": 405, "data": {"detail": "Self-service endpoints are read-only"}}
+
+    if sub in ("direct-reports", "team-leave"):
+        from rest_framework.test import APIRequestFactory, force_authenticate
+        from urllib.parse import urlencode
+
+        from people.self_views import DirectReportsView, TeamLeaveView
+
+        factory = APIRequestFactory()
+        path = f"/carbon-api/people/me/{sub}/"
+        query = {k: v for k, v in (params or {}).items() if v not in (None, "")}
+        if query:
+            path = f"{path}?{urlencode(query, doseq=True)}"
+        django_req = factory.get(path)
+        force_authenticate(django_req, user=user)
+        view = DirectReportsView.as_view() if sub == "direct-reports" else TeamLeaveView.as_view()
+        response = view(django_req)
+        if hasattr(response, "render") and not getattr(response, "_is_rendered", False):
+            response.render()
+        return {
+            "status_code": int(response.status_code),
+            "data": getattr(response, "data", None),
+        }
 
     from people.self_serializers import EmployeeSummarySerializer
 
@@ -3047,6 +2786,132 @@ class CarbonHostExecutor(HostAPIExecutor):
         # Coerce Decimal/date types so the payload is always JSON-safe.
         return {"status_code": 200, "data": json.loads(json.dumps(payload, default=_json_coerce))}
 
+    async def _correspondence_in_process(
+        self,
+        method: str = "POST",
+        params: dict | None = None,
+        body: dict | None = None,
+    ) -> dict:
+        """POST /carbon-api/correspondence/ — same create path as the host UI."""
+        from asgiref.sync import sync_to_async
+
+        verb = (method or "POST").upper()
+        if verb != "POST":
+            return {"status_code": 405, "data": {"detail": "Only POST is available."}}
+
+        user = await self._resolve_user()
+        if user is None:
+            return {"status_code": 401, "data": {"detail": "Authentication required"}}
+
+        def _post() -> dict:
+            from django.conf import settings
+            from rest_framework.test import APIRequestFactory, force_authenticate
+
+            from correspondence.views import CorrespondenceViewSet
+
+            prefix = str(getattr(settings, "API_PREFIX", "carbon-api") or "carbon-api").strip("/")
+            factory = APIRequestFactory()
+            django_req = factory.post(
+                f"/{prefix}/correspondence/", body or {}, format="json",
+            )
+            force_authenticate(django_req, user=user)
+            response = CorrespondenceViewSet.as_view({"post": "create"})(django_req)
+            if hasattr(response, "render") and not getattr(response, "_is_rendered", False):
+                response.render()
+            data = getattr(response, "data", None)
+            if data is None and getattr(response, "content", None):
+                import json as _json
+
+                try:
+                    data = _json.loads(response.content.decode("utf-8") or "{}")
+                except Exception:  # noqa: BLE001
+                    data = {
+                        "detail": (response.content or b"")[:200].decode(
+                            "utf-8", "replace"
+                        )
+                    }
+            code = int(response.status_code)
+            result = {"status_code": code, "data": data}
+            if 200 <= code < 300:
+                from ai.host_receipt import attach_receipt, correspondence_navigate_receipt
+
+                result = attach_receipt(
+                    result,
+                    correspondence_navigate_receipt(data, fallback_route="/my/requests"),
+                )
+            return result
+
+        try:
+            return await sync_to_async(_post, thread_sensitive=True)()
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("In-process correspondence create failed")
+            raise ToolExecutionError(f"Correspondence create failed: {exc}") from exc
+
+    async def _correspondence_inbox_in_process(
+        self,
+        method: str = "GET",
+        params: dict | None = None,
+        body: dict | None = None,
+    ) -> dict:
+        return await self._correspondence_read_in_process(
+            "inbox", method=method, params=params,
+        )
+
+    async def _correspondence_history_in_process(
+        self,
+        method: str = "GET",
+        params: dict | None = None,
+        body: dict | None = None,
+    ) -> dict:
+        return await self._correspondence_read_in_process(
+            "history", method=method, params=params,
+        )
+
+    async def _correspondence_read_in_process(
+        self,
+        action: str,
+        method: str = "GET",
+        params: dict | None = None,
+    ) -> dict:
+        """GET inbox/history — same ViewSet actions as Team / My."""
+        from asgiref.sync import sync_to_async
+
+        if (method or "GET").upper() != "GET":
+            return {"status_code": 405, "data": {"detail": "Read-only."}}
+
+        user = await self._resolve_user()
+        if user is None:
+            return {"status_code": 401, "data": {"detail": "Authentication required"}}
+
+        def _get() -> dict:
+            from django.conf import settings
+            from rest_framework.test import APIRequestFactory, force_authenticate
+            from urllib.parse import urlencode
+
+            from correspondence.views import CorrespondenceViewSet
+
+            prefix = str(getattr(settings, "API_PREFIX", "carbon-api") or "carbon-api").strip("/")
+            path = f"/{prefix}/correspondence/{action}/"
+            query = {k: v for k, v in (params or {}).items() if v not in (None, "")}
+            if query:
+                path = f"{path}?{urlencode(query, doseq=True)}"
+            factory = APIRequestFactory()
+            django_req = factory.get(path)
+            force_authenticate(django_req, user=user)
+            response = CorrespondenceViewSet.as_view({"get": action})(django_req)
+            if hasattr(response, "render") and not getattr(response, "_is_rendered", False):
+                response.render()
+            return {
+                "status_code": int(response.status_code),
+                "data": getattr(response, "data", None),
+            }
+
+        try:
+            return await sync_to_async(_get, thread_sensitive=True)()
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("In-process correspondence %s failed", action)
+            raise ToolExecutionError(f"Correspondence {action} failed: {exc}") from exc
+
     async def _people_analytics_in_process(
         self,
         method: str = "GET",
@@ -3110,7 +2975,7 @@ class CarbonHostExecutor(HostAPIExecutor):
                 # Self-service: the self-scoping IS the authorization (mirrors
                 # IsActiveEmployee). Must NOT require people:view — an ordinary
                 # employee holds only my:access, yet may read their own records.
-                return _people_me(user, pk, method, body=body or {})
+                return _people_me(user, pk, method, body=body or {}, params=params or {})
             cap = "people:view" if method in ("GET", "HEAD", "OPTIONS") else "people:manage"
             if not _people_can(user, cap):
                 return {

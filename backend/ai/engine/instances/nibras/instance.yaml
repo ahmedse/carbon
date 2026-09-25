@@ -200,10 +200,12 @@ api_catalog:
       Long tails (>15 buckets) are collapsed into "Other".
       suggested_chart_type is "pie" for balanced distributions, "bar" when one
       bucket dominates (>70%) — ALWAYS use this hint, never default to pie.
-      USE THIS for ANY distribution / breakdown / count-by-dimension question.
+      USE THIS for headcount / count-by-dimension only — not pay amounts,
+      average, median, range, or payroll cost (analyze_committed_pay).
       For TOTAL headcount or Kuwaiti count (canonical named metrics), prefer the
       canonical-metric capability when it is offered, so the filter definition
       is fixed and cited — do not invent alternate filters.
+    returns: [label, count, pct, total]
     parameters:
       type: object
       additionalProperties: false
@@ -261,6 +263,25 @@ api_catalog:
               - department_name
               - kuwaitization
               - rotation
+    not_for: >
+      KOC quota required/deficit (analyze_kuwaitization). Leave days, loan
+      amounts, GOSI totals, certification expiry.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: analyze_kuwaitization
+    method: GET
+    path: /carbon-api/people/compliance/kuwaitization/
+    kind: read
+    domain: people
+    audience: [hr]
+    label: KOC Kuwaitization quota
+    not_for: Nationality KWT count. Pay. One person's flag.
+    empty_render: no_kuwaitization_quota
+    description: >
+      KOC contract quota vs kuwaitization flag (not nationality). Returns
+      label, contract_no, required, actual, deficit, fill_rate_pct, status.
+    returns: [label, contract_no, required, actual, deficit, fill_rate_pct, status]
     requires_auth: true
     requires_confirmation: false
 
@@ -356,7 +377,16 @@ api_catalog:
       {count, results[]} with id, org_unit, period_start, period_end,
       status (draft | computed | validated | committed), created_at.
       Use to find the current/latest run or check its status.
+      Optional query status: draft | computed | validated | committed | failed.
+    returns: [id, org_unit, period_start, period_end, status, created_at]
     latest_by: period_end
+    parameters:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [draft, computed, validated, committed, failed]
     requires_auth: true
     requires_confirmation: false
 
@@ -364,9 +394,10 @@ api_catalog:
     method: GET
     path: /carbon-api/people/payroll-runs/{id}/
     description: >
-      Get full details of one payroll run including status, period, and
-      summary totals. Path param {id} is the run numeric id, bound from
-      list_payroll_runs.
+      Get one payroll run: id, org_unit, period_start, period_end, status,
+      committed_at. No pay totals. Path param {id} is the run numeric id,
+      bound from list_payroll_runs.
+    returns: [id, org_unit, period_start, period_end, status, committed_at]
     parameters:
       type: object
       additionalProperties: false
@@ -384,7 +415,76 @@ api_catalog:
       List payslip lines. Filter by query param payroll_run=<run_id> to get
       all lines for a specific run. Fields: id, employee, line_type
       (gross | gosi | loan_installment | net), amount, payroll_run.
-      Use to answer net-pay or payslip-breakdown questions.
+      Use to answer net-pay or payslip-breakdown questions, not a
+      distribution workbook (analyze_committed_pay) or GOSI workbook.
+    returns: [id, employee, line_type, amount, payroll_run]
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: analyze_committed_pay
+    method: GET
+    path: /carbon-api/people/payslip-lines/summary/
+    kind: read
+    domain: people
+    label: Committed pay structure
+    not_for: >
+      Roster headcount (analyze_employees). Draft runs. One person's pay.
+      GOSI totals (separate GOSI GET). Metrics not in returns.
+    empty_render: no_committed_pay
+    examples:
+      - {ar: "متوسط وصافي الراتب المعتمد حسب الإدارة لأحدث فترة", en: "committed pay average and median by org unit for the latest period"}
+    description: >
+      Committed-pay aggregate for one period_end. Required: period_end,
+      dimension (org unit | nationality | position | is_active). Optional
+      line_type (net | gross). Host computes breakdown label, headcount,
+      average, median, min, max, total. Requires people:view_compensation.
+    returns: [label, headcount, average, median, min, max, total,
+              period_end, dimension, line_type, status]
+    parameters:
+      type: object
+      additionalProperties: false
+      required: [period_end, dimension]
+      properties:
+        period_end:
+          type: string
+        dimension:
+          type: string
+          enum: [org_unit, nationality, position, is_active]
+        line_type:
+          type: string
+          enum: [net, gross]
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: analyze_gosi_committed
+    method: GET
+    path: /carbon-api/people/payslip-lines/gosi-summary/
+    kind: read
+    domain: people
+    audience: [hr]
+    label: Committed GOSI
+    not_for: >
+      Net or gross pay (analyze_committed_pay). Draft runs. One person's line.
+    empty_render: no_committed_gosi
+    examples:
+      - {ar: "إجمالي التأمينات المعتمدة حسب الجنسية للفترة", en: "committed GOSI totals by nationality for the period"}
+    description: >
+      Committed GOSI totals for one period_end. Required: period_end,
+      dimension (org unit | nationality | position | is_active). Host
+      computes label, headcount, average, median, min, max, total.
+      Requires people:view_compensation. Not a line_type on pay.
+    returns: [label, headcount, average, median, min, max, total,
+              period_end, dimension, line_type, status]
+    parameters:
+      type: object
+      additionalProperties: false
+      required: [period_end, dimension]
+      properties:
+        period_end:
+          type: string
+        dimension:
+          type: string
+          enum: [org_unit, nationality, position, is_active]
     requires_auth: true
     requires_confirmation: false
 
@@ -472,9 +572,43 @@ api_catalog:
       compensation / basic pay / "راتبي" / "مرتبي" / "my salary"
       (authorization is enforced server-side; do not treat a deny as
       missing salary data).
+    not_for: >
+      How pay is structured in general: salary components, payslip lines,
+      deductions, allowances, grades, or pay policy («هيكل الرواتب»). Those
+      are answered in words from domain facts, not read from a profile.
     examples:
       - {ar: "من أنا؟", en: "who am I?"}
       - {ar: "مرتبي", en: "my salary"}
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_my_direct_reports
+    method: GET
+    path: /carbon-api/people/me/direct-reports/
+    kind: read
+    domain: people
+    audience: [ess, hr]
+    not_for: Org-wide headcount. People who do not report to you.
+    empty_render: no_direct_reports
+    description: Direct reports of the caller. Requires team:access.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_team_leave
+    method: GET
+    path: /carbon-api/people/me/team-leave/
+    kind: read
+    domain: leave
+    audience: [ess, hr]
+    not_for: Org-wide presence. Own leave (list_my_leave).
+    empty_render: no_team_leave
+    description: Who's Out for direct reports. Query year, month. Requires team:access.
+    parameters:
+      type: object
+      additionalProperties: false
+      properties:
+        year: {type: integer}
+        month: {type: integer}
     requires_auth: true
     requires_confirmation: false
 
@@ -544,8 +678,8 @@ api_catalog:
     domain: leave
     kind: balance
     not_for: >
-      Named coworker's leave (person name or emp_NNNN) — list_leave_entitlements.
-      Same utterance that also asks loans or payslip — clarify, do not call.
+      Two records in one message (also loans or a payslip) — clarify.
+      A named person or emp_NNNN — list_leave_entitlements.
       Leave request lists — list_my_leave. Explaining an already-empty/zero
       balance — answer (empty_render). Not for "when does my leave start".
     empty_render: no_balance_configured
@@ -578,11 +712,10 @@ api_catalog:
       - {ar: "ما هذا الخصم للقرض في قسيمتي؟", en: "what is this loan deduction on my payslip?"}
       - {ar: "عندي قرض، كم باقي؟", en: "I have a loan, how much is left?"}
     description: >
-      The logged-in employee's OWN loans: id, loan_type, principal,
-      interest_rate, term_months, status. Use for "my loans", "قروضي", and
-      for any question about a loan the employee ALREADY has — even when
-      phrased as a statement: "I have a loan", "I pay a loan", "the loan
-      deduction on my payslip", "عندي قرض", "أقساطي", "خصم القرض". After a
+      Use for a loan the employee ALREADY has, including "I pay a loan",
+      "I have a loan", "قسط القرض", "عندي قرض". Fields: id, loan_type,
+      principal, interest_rate, term_months, status. Also "my loans",
+      "قروضي", "the loan deduction on my payslip", "أقساطي", "خصم القرض". After a
       payslip that shows a loan_installment line, "details of that loan" or
       "get it" means this read.
     requires_auth: true
@@ -632,7 +765,8 @@ api_catalog:
     domain: payslip
     kind: history
     not_for: >
-      Salary, compensation, or basic pay («راتبي»). Those are profile reads.
+      «أدفع قسط قرض» or a loan installment — list_my_loans.
+      «راتبي» / «مرتبي» / my salary — get_my_profile.
       Do not invent a net figure when this list is empty. Bare "payroll" /
       "رواتب" alone is navigate to the payroll page, not this read.
       Explaining that there is no payslip this month is answer (empty_render).
@@ -666,7 +800,7 @@ api_catalog:
     not_for: >
       The logged-in employee's own balance without an employee filter.
       That is get_my_leave_balance. Bare "my leave" / "إجازاتي" without a
-      named person is get_my_leave_balance.
+      named person is get_my_leave_balance. Org-wide entitlement book.
     empty_render: no_balance_configured
     examples:
       - {ar: "ما رصيد إجازات Wellie؟", en: "what's Wellie's leave balance?"}
@@ -680,6 +814,8 @@ api_catalog:
       ALWAYS pass query_params.employee or employee_no when asking about one
       person. Host RBAC returns 403 when the caller cannot see that person —
       still emit this call_tool; do not refuse.
+    returns: [id, employee, employee_no, employee_name, leave_type,
+              entitled_days, used_days, carried_forward]
     requires_auth: true
     requires_confirmation: false
 
@@ -690,7 +826,69 @@ api_catalog:
       List leave records (approved, pending, rejected). Fields: id,
       employee, employee_no, employee_name, leave_type, start_date, end_date,
       status, days. Filter by query_params.employee / employee_no (required
-      for a specific person) or status=<value>.
+      for a specific person) or status=<value>. Not an org-wide on-leave month book.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: analyze_leave_utilization
+    method: GET
+    path: /carbon-api/people/leave-entitlements/summary/
+    kind: read
+    domain: people
+    audience: [hr]
+    label: Leave utilization
+    not_for: >
+      One person's balance. Leave in money. Team Who's Out.
+    empty_render: no_leave_utilization
+    examples:
+      - {ar: "استخدام الإجازات حسب الإدارة لهذه السنة", en: "leave utilization by org unit for this year"}
+    description: >
+      Year entitlement book. Required: year, dimension (org unit |
+      leave_type | nationality | position | is_active). Days: entitled,
+      used, remaining, utilization_pct. Not money. Requires people:view.
+    returns: [label, headcount, entitled_days, used_days, remaining_days,
+              utilization_pct]
+    parameters:
+      type: object
+      additionalProperties: false
+      required: [year, dimension]
+      properties:
+        year: {type: string}
+        dimension:
+          type: string
+          enum: [org_unit, leave_type, nationality, position, is_active]
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: analyze_leave_presence
+    method: GET
+    path: /carbon-api/people/leave-records/presence/
+    kind: read
+    domain: people
+    audience: [hr]
+    label: Leave presence
+    not_for: >
+      Team Who's Out (direct reports). One person's leave list.
+      Entitlement book.
+    empty_render: no_leave_presence
+    examples:
+      - {ar: "من في إجازة معتمدة هذا الشهر حسب الإدارة", en: "who is on approved leave this month by department"}
+    description: >
+      Org on-leave for one month. Required: year, month, dimension
+      (org unit | leave_type | nationality | position | is_active).
+      Submitted or approved only. Returns label, on_leave_count, days.
+      Requires people:view.
+    returns: [label, on_leave_count, days]
+    parameters:
+      type: object
+      additionalProperties: false
+      required: [year, month, dimension]
+      properties:
+        year: {type: string}
+        month: {type: string}
+        dimension:
+          type: string
+          enum: [org_unit, leave_type, nationality, position, is_active]
     requires_auth: true
     requires_confirmation: false
 
@@ -711,8 +909,43 @@ api_catalog:
     method: GET
     path: /carbon-api/people/loans/
     description: >
-      List loans for employees visible to the user. Fields: id, employee,
-      principal, monthly_installment, remaining_balance, status.
+      Sample page of loans (first 100; check total and truncated). Fields:
+      id, employee, employee_no, employee_name, loan_type, principal,
+      interest_rate, term_months, start_date, status. Host has no remaining
+      balance and no monthly installment on this list. Not an org
+      outstanding-principal workbook.
+    returns: [id, employee, employee_no, employee_name, loan_type, principal,
+              interest_rate, term_months, start_date, status]
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: analyze_loan_book
+    method: GET
+    path: /carbon-api/people/loans/summary/
+    kind: read
+    domain: people
+    audience: [hr]
+    label: Loan book
+    not_for: >
+      One person's loans. Installment schedule. Net pay.
+    empty_render: no_loan_book
+    examples:
+      - {ar: "أصل القروض القائم حسب الإدارة حتى تاريخه", en: "outstanding loan principal by org unit as of 2026-09-30"}
+    description: >
+      Outstanding principal at as_of. Required: as_of, dimension
+      (org unit | status | loan_type | nationality | position | is_active).
+      Returns count, principal_total, remaining_total. Requires
+      people:view_compensation.
+    returns: [label, count, principal_total, remaining_total]
+    parameters:
+      type: object
+      additionalProperties: false
+      required: [as_of, dimension]
+      properties:
+        as_of: {type: string}
+        dimension:
+          type: string
+          enum: [org_unit, status, loan_type, nationality, position, is_active]
     requires_auth: true
     requires_confirmation: false
 
@@ -722,6 +955,39 @@ api_catalog:
     description: >
       List loan installment schedule lines. Filter by query param
       loan=<id>. Fields: id, loan, due_date, amount, status (paid | due).
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: analyze_cert_expiry
+    method: GET
+    path: /carbon-api/people/certifications/summary/
+    kind: read
+    domain: people
+    audience: [hr]
+    label: Certification expiry
+    not_for: >
+      One person's cert list. Pay. Headcount.
+    empty_render: no_cert_expiry
+    examples:
+      - {ar: "الشهادات التي تنتهي خلال 90 يوما حسب الإدارة", en: "certifications expiring in 90 days by org unit"}
+    description: >
+      Expiry pipeline. Required: horizon (30 | 60 | 90), dimension
+      (org unit | cert_type | nationality | position | is_active).
+      Optional as_of. Returns expired, expiring, current. Null expiry
+      omitted. Requires people:view.
+    returns: [label, expired, expiring, current]
+    parameters:
+      type: object
+      additionalProperties: false
+      required: [horizon, dimension]
+      properties:
+        horizon:
+          type: string
+          enum: ["30", "60", "90"]
+        dimension:
+          type: string
+          enum: [org_unit, cert_type, nationality, position, is_active]
+        as_of: {type: string}
     requires_auth: true
     requires_confirmation: false
 
@@ -852,6 +1118,50 @@ api_catalog:
       this PATCH as the first-person path.
     requires_auth: true
     requires_confirmation: true
+
+  - name: list_correspondence_inbox
+    method: GET
+    path: /carbon-api/correspondence/inbox/
+    kind: read
+    domain: people
+    audience: [ess, hr]
+    not_for: History (list_correspondence_history). Filing a new request.
+    empty_render: no_inbox_items
+    description: Caller's actionable inbox. Own queue only. Chat reads.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_correspondence_history
+    method: GET
+    path: /carbon-api/correspondence/history/
+    kind: read
+    domain: people
+    audience: [ess, hr]
+    not_for: Open inbox (list_correspondence_inbox).
+    empty_render: no_history_items
+    description: Items the caller already acted on. Own history only.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: submit_correspondence
+    method: POST
+    path: /carbon-api/correspondence/
+    kind: request
+    domain: people
+    label: File a request
+    not_for: >
+      A read an existing catalog entry already returns.
+    description: >
+      File a request when no catalog entry declares the asked deliverable.
+      Body: corr_type, title, payload (findings + brief). Chat proposes only.
+    default_body:
+      corr_type: internal_memo
+    requires_auth: true
+    requires_confirmation: true
+    write_slots:
+      - field: title
+        required: true
+    audience: [ess, hr]
 
 navigation_routes:
   - name: people_home
@@ -1024,6 +1334,11 @@ step_templates:
     ar: >-
       تم تقديم إذن الحضور: {permission_type} بتاريخ {date}
       ({hours} ساعات). بانتظار مراجعة المدير في الفريق.
+  submit_correspondence:
+    en: >-
+      Request submitted: {title}. Open it in My.
+    ar: >-
+      تم تقديم الطلب: {title}. افتحه في حسابي.
 
 # Pre-LLM topic guard: patterns matched against the user's message text.
 # Any match returns a canned refusal WITHOUT calling the LLM.  This is

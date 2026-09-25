@@ -1,7 +1,8 @@
-"""v21 act-on-Decision. Used only when PULSE_UNDERSTAND=v21.
+"""v21 act-on-Decision.
 
-``answer`` and ``navigate`` return None so the legacy spine still speaks.
-A forced ``call_tool`` is executed by the caller-supplied coroutine.
+Reads run through the caller-supplied coroutine. ``answer``, ``set_slot``,
+``navigate`` and a plan handoff return None here; the runner finishes them
+from the Decision (``finish.py``, ADR-0056).
 """
 from __future__ import annotations
 from ai.engine.pack_vocab import V
@@ -116,11 +117,10 @@ async def _execute_bound_read(
         user_message=user_message,
         unread_text=False,
     )
-    bad = ungrounded_numbers(text, [payload])
-    if bad:
-        for token in bad:
-            text = text.replace(token, "")
-        text = " ".join(text.split())
+    # A restatement with a number the payload lacks is not edited: it is
+    # withheld, and the writer speaks from the payload instead (ADR-0056).
+    if ungrounded_numbers(text, [payload]):
+        return None
     return text or None
 
 
@@ -190,9 +190,11 @@ def arbiter_gate(decision: Decision | None, *, executed: bool) -> str:
     if lead is None:
         return ""
     if lead.reads_host():
-        return "tools_executed" if executed else ""
+        # A continue that re-renders the last view speaks from tool rows too.
+        return "tools_executed" if executed or lead.op == "continue" else ""
     return {
         "clarify": "chat_clarify",
+        "navigate": "nav_ground",
         "handoff_agent": "chat_handoff",
         "refuse": "off_limits",
     }.get(lead.op, "")
@@ -262,8 +264,9 @@ async def narrate_envelope(
 ) -> tuple[str, dict, Degradation | None] | None:
     """Headline and prose written for this turn's message, from ``evidence`` only.
 
-    Data blocks stay deterministic. A sentence whose numbers are not in the
-    evidence is dropped. When the writer fails the reply says so and carries
+    Data blocks stay deterministic. The model's words are shown as written:
+    a number not in the evidence gets one retry naming it, then the turn
+    fails visibly (ADR-0056). When the writer fails the reply says so and carries
     a typed ``Degradation`` (ADR-0053); it never returns the template.
     None only when the writer is switched off by configuration.
     """
@@ -280,28 +283,42 @@ async def narrate_envelope(
     question = user_message
     if understood:
         question = f"{user_message}\n(Understood as: {understood})"
+    payloads = [r.get("result") for r in ok_rows]
     cause = ""
     typed = None
-    try:
-        with stage("draft"):
-            typed = await synthesize_envelope(
-                instance_id=instance_id,
-                conversation_id=conversation_id,
-                user_message=question,
-                usable_tools=ok_rows,
-                strict=True,
+    headline = ""
+    prose: list[str] = []
+    note = ""
+    for _attempt in range(2):
+        cause = ""
+        try:
+            with stage("draft"):
+                typed = await synthesize_envelope(
+                    instance_id=instance_id,
+                    conversation_id=conversation_id,
+                    user_message=f"{question}\n{note}" if note else question,
+                    usable_tools=ok_rows,
+                    strict=True,
+                )
+        except EnvelopeWriteError as exc:
+            cause = exc.cause
+        except Exception:  # noqa: BLE001 — reported below as a typed degradation
+            cause = "model_error"
+        if cause:
+            break
+        headline = (typed.headline or "").strip() if typed is not None else ""
+        prose = [p.strip() for p in (typed.prose if typed is not None else []) or [] if p and p.strip()]
+        bad = ungrounded_numbers("\n".join([headline, *prose]), payloads)
+        if not prose:
+            cause = "empty_output"
+        elif bad:
+            cause = "ungrounded"
+            note = (
+                "(These numbers are not in the tool results: "
+                f"{', '.join(bad[:8])}. Use only numbers that appear in them.)"
             )
-    except EnvelopeWriteError as exc:
-        cause = exc.cause
-    except Exception:  # noqa: BLE001 — reported below as a typed degradation
-        cause = "model_error"
-    payloads = [r.get("result") for r in ok_rows]
-    prose = [
-        p.strip() for p in (typed.prose if typed is not None else []) or []
-        if p and p.strip() and not ungrounded_numbers(p, payloads)
-    ]
-    if not cause and not prose:
-        cause = "ungrounded"
+            continue
+        break
     if cause:
         failed = Degradation(stage="write", cause=cause)
         line = degradation_sentence(failed, language)
@@ -312,9 +329,6 @@ async def narrate_envelope(
             "caveats": [*(envelope.get("caveats") or []), degradation_caveat(failed)],
         }
         return line, degraded, failed
-    headline = (typed.headline or "").strip()
-    if ungrounded_numbers(headline, payloads):
-        headline = ""
     merged = {**envelope, "headline": headline, "prose": prose}
     return "\n\n".join(ln for ln in [headline, *prose] if ln), merged, None
 
@@ -393,6 +407,10 @@ async def speak_turn(
     spoken, envelope = speak_rows(decision, executed, text=text, user_message=user_message)
     if envelope and executed:
         _remember_view(state, envelope, executed)
+    if not envelope and not restated and any(not _is_error(r) for r in executed or []):
+        # A payload with no table (a receipt, a passage, a card) is still
+        # evidence: the grounded writer speaks from it (ADR-0056).
+        envelope = {"headline": "", "prose": [], "tables": [], "charts": [], "caveats": [], "sources": []}
     if not envelope or restated:
         return spoken, envelope, None
     narrated = await narrate_envelope(

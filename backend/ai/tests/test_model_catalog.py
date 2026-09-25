@@ -99,6 +99,24 @@ def test_models_endpoint_superset_shape(user, catalog_seed):
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("understanding_model", "available"),
+    [("anthropic/claude-haiku-4.5", True), ("gpt-4o-mini", False)],
+)
+def test_models_endpoint_reports_think_switch_from_the_understanding_model(
+    user, catalog_seed, monkeypatch, understanding_model, available,
+):
+    monkeypatch.setattr(
+        "ai.engine.llm.router.get_model_for_task",
+        lambda task: understanding_model if task == "cognition" else "gpt-4o",
+    )
+    client = APIClient()
+    client.force_authenticate(user=user)
+    resp = client.get(reverse("ai-workspace-models"))
+    assert resp.data["thinking_available"] is available
+
+
+@pytest.mark.django_db
 def test_models_endpoint_returns_deprecated(user, catalog_seed):
     client = APIClient()
     client.force_authenticate(user=user)

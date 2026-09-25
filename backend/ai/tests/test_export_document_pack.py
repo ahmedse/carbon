@@ -51,6 +51,34 @@ async def test_export_pack_writes_four_formats(plugin, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_export_pdf_keeps_arabic_glyphs(plugin, tmp_path):
+    """Helvetica + latin-1 replace shipped '?' for every Arabic letter."""
+    with override_settings(MEDIA_ROOT=str(tmp_path)):
+        result = await plugin.execute(
+            {
+                "title": "تقرير بيانات الموظف",
+                "format": "pdf",
+                "content": (
+                    "## الملخص\n"
+                    "أُعد هذا التقرير من السجلات المعتمدة في المنصة. "
+                    "الصافي 4725 والإجمالي 5000 والتأمينات 825 للفترة "
+                    "المعروضة. لا توجد قروض قائمة. الحالة مسودة حتى الاعتماد.\n"
+                    "- الصافي 4725\n"
+                    "- الإجمالي 5000\n"
+                    "- التأمينات 825\n"
+                ),
+            },
+            ctx=None,
+        )
+    assert "error" not in result, result
+    path = Path(tmp_path) / "ai_exports" / result["files"][0]["filename"]
+    raw = path.read_bytes()
+    assert raw[:5] == b"%PDF-"
+    assert b"FontFile2" in raw
+    assert path.stat().st_size > 4000
+
+
+@pytest.mark.asyncio
 async def test_export_pdf_only(plugin, tmp_path):
     with override_settings(MEDIA_ROOT=str(tmp_path)):
         result = await plugin.execute(
@@ -276,4 +304,16 @@ async def test_export_docx_embeds_image(plugin, tmp_path):
     path = Path(tmp_path) / "ai_exports" / result["files"][0]["filename"]
     assert path.exists()
     assert path.read_bytes()[:2] == b"PK"
+
+
+def test_a_row_list_is_a_table_and_does_not_drop_the_call():
+    from ai.engine.cognition.plan.planner import _schema_violations
+    from ai.plugins.export_document import coerce_table
+
+    schema = ExportDocument.input_schema
+    rows = [{"name": "Ada", "days": 3}]
+    assert _schema_violations(schema, {"title": "Leave", "table": rows}) == []
+    coerced = coerce_table(rows)
+    assert coerced["headers"] == ["name", "days"]
+    assert coerced["rows"] == [["Ada", 3]]
 

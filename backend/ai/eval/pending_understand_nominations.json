@@ -173,5 +173,127 @@
     "conversation_id": "c5801082-eb12-4667-9abb-c23b4d723b48",
     "nominated_at": "2026-09-24T22:38:35.567598+00:00",
     "status": "pending_human_review"
+  },
+  {
+    "utterance": "Am I eligible for a loan?",
+    "audience": [
+      "ess"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "answer"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "get_my_loan_eligibility",
+        "code": "not_on_surface",
+        "detail": ""
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "conv-pv2-1c-digest",
+    "nominated_at": "2026-09-25T11:21:25.854819+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "Am I eligible for a loan?",
+    "audience": [
+      "ess"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "answer"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "get_calculation_summary",
+        "code": "not_on_surface",
+        "detail": ""
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "conv-pv2-1c-digest",
+    "nominated_at": "2026-09-25T11:22:30.353633+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "Am I eligible for a loan?",
+    "audience": [
+      "ess"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "answer"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "carbon_home",
+        "code": "not_on_surface",
+        "detail": ""
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "conv-pv2-1c-digest",
+    "nominated_at": "2026-09-25T11:23:41.902890+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "طيب من حيث الجنسية",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "analyze_committed_pay",
+        "code": "invalid_args",
+        "detail": "unknown field 'status'"
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "fc9eb86b-34ce-4075-870b-1ad9d79e2681",
+    "nominated_at": "2026-09-25T15:02:00.271229+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "حاول",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "call_host_api",
+        "code": "not_on_surface",
+        "detail": ""
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "fc9eb86b-34ce-4075-870b-1ad9d79e2681",
+    "nominated_at": "2026-09-25T15:18:49.318147+00:00",
+    "status": "pending_human_review"
   }
 ]

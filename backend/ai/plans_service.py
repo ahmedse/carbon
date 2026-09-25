@@ -2539,26 +2539,69 @@ class PlansService:
             return None
         return self._decompose(user, brief, conversation_id=conversation_id)
 
-    def propose_plan(self, user, brief: str, conversation_id: str = "") -> tuple:
+    def propose_plan(
+        self, user, brief: str, conversation_id: str = "",
+        *, prior_plan: dict | None = None, revision: str = "",
+    ) -> tuple:
         """``(plan_json, proposal)`` for a brief worth planning, ``(None, None)`` otherwise.
 
         Nothing is stored. The planner decides what a task is: a brief that
         decomposes to one bound read is a question the turn should answer.
         The caller keeps ``plan_json`` in conversation state; the task exists
         only after the user commits it (``commit_proposal``).
+
+        When a draft is already open and ``revision`` only names extra file
+        formats, the existing steps stay — the planner does not re-decompose.
         """
         from ai.engine.cognition.turn.plan_proposal import (
             is_task_plan,
             proposal_payload,
         )
 
+        if prior_plan and revision:
+            shaped, proposal = self._propose_format_revision(
+                prior_plan, revision, brief,
+            )
+            if shaped is not None:
+                return shaped, proposal
         drafted = self.decompose_for_review(user, brief, conversation_id=conversation_id)
         if drafted is None:
             return None, None
         shaped = self._plan_to_dict(drafted)
         if not is_task_plan(shaped):
             return None, None
-        return shaped, proposal_payload(shaped, brief=brief)
+        return shaped, proposal_payload(
+            shaped, brief=brief, findings=shaped.get("contract_findings"),
+        )
+
+    def _propose_format_revision(
+        self, prior_plan: dict, revision: str, brief: str,
+    ) -> tuple:
+        """``(plan_json, proposal)`` when the change only widens the file set."""
+        from types import SimpleNamespace
+
+        from ai.engine.cognition.plan.contract import apply_plan_contract
+        from ai.engine.cognition.turn.plan_proposal import (
+            apply_format_revision,
+            is_task_plan,
+            proposal_payload,
+        )
+
+        revised = apply_format_revision(prior_plan, revision)
+        if revised is None:
+            return None, None
+        drafted = self._rebuild_plan(SimpleNamespace(id="", plan_json=revised))
+        catalog = list((_plan_instance_config(None) or {}).get("api_catalog") or [])
+        names = {str(e.get("name") or "") for e in catalog if isinstance(e, dict)}
+        findings = apply_plan_contract(
+            drafted.steps, api_catalog=catalog, catalog_names=names,
+            utterance=brief,
+        )
+        drafted.findings = [f.as_dict() for f in findings]
+        shaped = self._plan_to_dict(drafted)
+        if not is_task_plan(shaped):
+            return None, None
+        return shaped, proposal_payload(shaped, brief=brief, findings=findings)
 
     def commit_proposal(self, user, conversation_id: str) -> dict:
         """Store the drafted plan the user just consented to, exactly as reviewed.
@@ -2581,11 +2624,23 @@ class PlansService:
         plan_json = question.get("plan_json") if question.get("kind") == KIND else None
         if not isinstance(plan_json, dict) or not plan_json.get("steps"):
             raise ValueError("There is no drafted plan to create.")
+        from ai.engine.cognition.plan.contract import apply_plan_contract, blocks_create
+
+        drafted = self._rebuild_plan(SimpleNamespace(id="", plan_json=plan_json))
+        catalog = list((_plan_instance_config(None) or {}).get("api_catalog") or [])
+        names = {str(e.get("name") or "") for e in catalog if isinstance(e, dict)}
+        findings = apply_plan_contract(
+            drafted.steps, api_catalog=catalog, catalog_names=names,
+            utterance=str(question.get("brief") or ""),
+        )
+        refused = blocks_create(findings, drafted.steps, catalog)
+        if refused is not None:
+            raise ValueError(refused.detail)
         plan = self.create_plan(
             user,
             str(question.get("brief") or ""),
             conversation_id=cid,
-            plan=self._rebuild_plan(SimpleNamespace(id="", plan_json=plan_json)),
+            plan=drafted,
         )
         state.open_question = {}
         row.session_json = state.to_dict()

@@ -57,6 +57,22 @@ def rejection_feedback(rejections: list, *, kept: list[str]) -> dict[str, Any]:
     }
 
 
+def malformed_feedback(cause: str) -> dict[str, Any]:
+    """Tool-result body for an ``emit_decision`` whose shape did not parse."""
+    from ai.engine.cognition.turn.decision import COMMAND_OPS
+
+    return {
+        "status": "malformed",
+        "cause": cause,
+        "instruction": (
+            "Emit emit_decision again. commands is a JSON array (not a string) "
+            "of one to three objects, each with op set to one of: "
+            + ", ".join(sorted(COMMAND_OPS))
+            + ". Follow the emit_decision schema exactly."
+        ),
+    }
+
+
 def host_error_detail(payload: Any) -> str:
     """Short host rejection detail from a failed read payload."""
     if isinstance(payload, dict):

@@ -33,6 +33,29 @@ def test_budget_reads_state_not_the_message():
     assert budget_on(None) is False
 
 
+def test_dense_opt_in_turns_budget_on_without_state():
+    quiet = SimpleNamespace(intent={"confidence": 0.9}, decisions=[], open_question={})
+    assert budget_on(quiet, dense=True) is True
+    assert budget_on(None, dense=True) is True
+
+
+def test_dense_scrub_keeps_more_sentences_still_drops_calls():
+    raw = "\n".join([
+        "First. Second. Third. Fourth.",
+        "```",
+        "secret",
+        "```",
+        "Use `call_host_api` never. Fifth. Sixth. Seventh.",
+    ])
+    short = scrub(raw)
+    long = scrub(raw, dense=True)
+    assert "call_" not in short and "call_" not in long
+    assert "```" not in long
+    assert "secret" not in long
+    assert short.startswith("First.")
+    assert "Fifth" in long
+    assert len(long) > len(short)
+
 def test_revision_only_when_shown_text_changes():
     assert revision("Same.", "Same.", "x") is None
     assert revision("", "New.", "x") is None

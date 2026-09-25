@@ -133,16 +133,8 @@ def _enforce_structured_export_source(
 
     table = structured_table_from_results(prior_results)
     if table:
-        result.tool_output = {
-            "tool_name": "structured_synthesis",
-            "result": json.dumps({
-                **table,
-                "source_step_ids": [
-                    getattr(prior, "step_id", None) for prior in prior_results
-                ],
-            }, ensure_ascii=False, default=str),
-            "error": None,
-        }
+        # Prior rows stay on the steps that produced them. Do not invent a
+        # tool result so a later export can fire (ADR-0053).
         return
     result.error = (
         "This analysis step produced no structured evidence for "
@@ -1456,9 +1448,14 @@ class ReActLoop:
                 if step.is_mutation and not dry_run and not resume_tokens.get(step.step_id):
                     confirmations_required += 1
 
-                completed_ids.add(step.step_id)
-                if result.draft_text:
-                    step_contexts[step.step_id] = result.draft_text
+                if (
+                    not result.error
+                    and result.critic_verdict != "veto"
+                    and not result.failure_class
+                ):
+                    completed_ids.add(step.step_id)
+                if result.draft_text or result.error:
+                    step_contexts[step.step_id] = result.draft_text or str(result.error)
 
                 # ADR-0034: refresh guard context for subsequent choice nodes.
                 if _wf_graph is not None:
@@ -2620,7 +2617,10 @@ class ReActLoop:
             #    Phase 5: the observation may also request a read-only follow-up.
             #    PV2-3A / L5: bound writes and bound ESS lookups never call
             #    observe (llm_calls==0). Lookup restatement is deterministic.
-            if (
+            if (step.agent_role or "") == "critic":
+                # A review verdict lives on the critic draft. Observe must not replace it.
+                pass
+            elif (
                 not _deterministic
                 and not _read_bound
                 and result.tool_output

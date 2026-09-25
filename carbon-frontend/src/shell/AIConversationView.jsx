@@ -25,6 +25,7 @@ import {
   forkConversation,
   getConversation,
   listMessages,
+  listModels,
   recordFeedback,
   rejectSuggestion,
   resumeConversation,
@@ -136,6 +137,29 @@ function AIConversationView({
   // the narrated working stages. Expanded by default and kept after the turn.
   const [stageHistory, setStageHistory] = useState([]);
   const [thinkingExpanded, setThinkingExpanded] = useState(true);
+  const [denseThinking, setDenseThinking] = useState(() => {
+    try {
+      return localStorage.getItem('pulse.denseThinking') === '1';
+    } catch {
+      return false;
+    }
+  });
+  // The Think switch shows only when the understanding model can return a trace.
+  const [thinkingAvailable, setThinkingAvailable] = useState(false);
+  useEffect(() => {
+    if (!token) return undefined;
+    let live = true;
+    listModels(token)
+      .then((res) => {
+        if (live) setThinkingAvailable(Boolean(res?.thinking_available));
+      })
+      .catch(() => {
+        if (live) setThinkingAvailable(false);
+      });
+    return () => {
+      live = false;
+    };
+  }, [token]);
   const [sendMode, setSendMode] = useState('queue');
   const [process, setProcess] = useState(processProp === 'plan' ? 'plan' : 'ask');
   useEffect(() => {
@@ -468,6 +492,7 @@ function AIConversationView({
       await sendMessageStream(token, conversationId, content, {
         workspaceContext,
         pulseMode: process,
+        denseThinking: thinkingAvailable && denseThinking,
         model: selectedModel || undefined,
         signal: controller.signal,
         onChunk: (delta) => {
@@ -500,7 +525,10 @@ function AIConversationView({
         setSending(false);
       }
     },
-    [token, conversationId, finishStream, onStreamError, selectedModel, process, persistThreadState],
+    [
+      token, conversationId, finishStream, onStreamError, selectedModel, process,
+      persistThreadState, thinkingAvailable, denseThinking,
+    ],
   );
 
   const handleSend = useCallback(
@@ -1149,12 +1177,15 @@ function AIConversationView({
     setExportAnchorEl(null);
   }, []);
 
-  // Phase 4C-B — client-side rich export of the full transcript (self-contained
-  // HTML with embedded images, or a .docx built from the same markdown AST).
+  // Client-side rich export of the active context (self-contained HTML, or a
+  // .docx). Turns before Clear context stay in the log for Restore only.
   const handleExportRich = useCallback(
     async (format) => {
       setExportAnchorEl(null);
-      const exportable = (messages || []).filter((m) => m.content && !m.is_deleted);
+      const exportable = messagesAfterClearBreak(
+        messages || [],
+        conversation?.context_snapshot_json?._clear_break,
+      ).filter((m) => m.content && !m.is_deleted);
       const safeTitle =
         (conversation?.title || 'conversation')
           .toLowerCase()
@@ -1868,7 +1899,20 @@ function AIConversationView({
           bgcolor: executeMode ? 'warning.50' : 'background.default',
         }}
       >
-        <AIStatusBar variant={statusVariant} label={statusLabel} onRetry={handleRetry} />
+        <AIStatusBar
+          variant={statusVariant}
+          label={statusLabel}
+          onRetry={handleRetry}
+          denseThinking={denseThinking}
+          onDenseThinkingChange={thinkingAvailable ? (on) => {
+            setDenseThinking(on);
+            try {
+              localStorage.setItem('pulse.denseThinking', on ? '1' : '0');
+            } catch {
+              /* ignore quota / private mode */
+            }
+          } : undefined}
+        />
         <PulsePresence />
         <Tooltip title={t('textSize')}>
           <Stack direction="row" alignItems="center" spacing={0.25} sx={{ borderLeft: 1, borderColor: 'divider', pl: 0.5 }}>

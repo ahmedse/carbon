@@ -112,3 +112,38 @@ def test_a_change_revises_the_open_draft():
         "lowest 20 salaries\nRevision: add department"
     )
     assert revised_brief("", "new brief") == "new brief"
+
+
+def test_format_revision_keeps_reads_and_widens_export():
+    from ai.engine.cognition.turn.plan_proposal import apply_format_revision
+
+    plan = {
+        "steps": [
+            {"step_id": 0, "tool_name": "call_host_api",
+             "tool_args": {"api_name": "analyze_committed_pay", "dimension": "org_unit"}},
+            {"step_id": 1, "tool_name": "call_host_api",
+             "tool_args": {"api_name": "analyze_committed_pay", "dimension": "nationality"}},
+            {"step_id": 2, "tool_name": "export_document",
+             "tool_args": {"format": "xlsx", "title": "Pay"}},
+        ]
+    }
+    out = apply_format_revision(
+        plan, "add also a nice executive word or pdf report",
+    )
+    assert [s["tool_args"].get("api_name") for s in out["steps"][:2]] == [
+        "analyze_committed_pay", "analyze_committed_pay",
+    ]
+    exports = [s for s in out["steps"] if s["tool_name"] == "export_document"]
+    assert len(exports) == 1
+    assert exports[0]["tool_args"]["format"] == "pack"
+
+
+def test_format_revision_ignores_a_scope_change():
+    from ai.engine.cognition.turn.plan_proposal import apply_format_revision
+
+    plan = {
+        "steps": [
+            {"step_id": 0, "tool_name": "export_document", "tool_args": {"format": "xlsx"}},
+        ]
+    }
+    assert apply_format_revision(plan, "add department") is None

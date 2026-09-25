@@ -116,7 +116,8 @@ def test_fanout_skipped_for_short_utterance(django_store, engine_env):
     result = _chat("How are you?", conv="conv-1b-fan-short")
     by_stage = result.get("llm_calls_by_stage") or {}
     assert "fanout" not in by_stage, by_stage
-    assert "draft" in by_stage, by_stage
+    # ADR-0056: the Decision's answer is written by v21, not the legacy draft.
+    assert "answer" in by_stage, by_stage
 
 
 @pytest.mark.django_db(transaction=True)
@@ -149,7 +150,8 @@ def test_fanout_skipped_when_history_has_active_process_brief(django_store, engi
 
 @pytest.mark.django_db(transaction=True)
 def test_fanout_probe_still_runs_on_long_analytical_question(django_store, engine_env):
-    engine_env(orchestrator=True, nav=False)
+    # The fan-out probe lives on the legacy spine (ADR-0056 step 6 retires both).
+    engine_env(orchestrator=True, nav=False, PULSE_UNDERSTAND="legacy")
     result = _chat(_ANALYTICAL_Q, conv="conv-1b-fan-analytic")
     by_stage = result.get("llm_calls_by_stage") or {}
     assert by_stage.get("fanout") == 1, by_stage
@@ -318,4 +320,4 @@ def test_payroll_question_is_not_hijacked_end_to_end(django_store, engine_env):
         conv="conv-1b-nav-q",
     )
     assert result.get("turn_decision") != "navigate", result
-    assert "draft" in (result.get("llm_calls_by_stage") or {}), result
+    assert "answer" in (result.get("llm_calls_by_stage") or {}), result

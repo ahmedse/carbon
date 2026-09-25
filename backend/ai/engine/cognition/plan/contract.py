@@ -96,6 +96,309 @@ def _entry(catalog: list | None, name: str) -> dict | None:
     return None
 
 
+def _declared_names(raw) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    return [str(item) for item in raw if isinstance(item, str) and item.strip()]
+
+
+def _claimed_fields(step) -> list[str]:
+    """Fields a step says its deliverable contains. Empty when it claims none."""
+    args = getattr(step, "tool_args", None) or {}
+    if not isinstance(args, dict):
+        return []
+    names: list[str] = []
+    for key in ("produces", "columns"):
+        names.extend(_declared_names(args.get(key)))
+    return names
+
+
+def _entry_returns(entry: dict | None) -> set[str]:
+    if not isinstance(entry, dict):
+        return set()
+    return set(_declared_names(entry.get("returns")))
+
+
+def _is_measure(name: str) -> bool:
+    """Host-computed workbook measures. Row fields (id / amount) are not."""
+    return name in ("average", "median", "min", "max", "total", "headcount", "count")
+
+
+def _is_closed_aggregate(entry: dict | None) -> bool:
+    declared = _entry_returns(entry)
+    return "label" in declared and any(_is_measure(n) for n in declared)
+
+
+def _closed_aggregate_sources(steps: list, catalog: list | None) -> list:
+    sources = []
+    for step in steps:
+        if getattr(step, "tool_name", None) != "call_host_api":
+            continue
+        api = str((getattr(step, "tool_args", None) or {}).get("api_name") or "")
+        if _is_closed_aggregate(_entry(catalog, api)):
+            sources.append(step)
+    return sources
+
+
+def _bind_unnamed_export(step, steps: list, catalog: list | None) -> bool:
+    """Name columns from closed-aggregate GETs already on the plan."""
+    sources = _closed_aggregate_sources(steps, catalog)
+    if not sources:
+        return False
+    columns: list[str] = []
+    seen: set[str] = set()
+    for other in sources:
+        api = str((getattr(other, "tool_args", None) or {}).get("api_name") or "")
+        for name in _declared_names((_entry(catalog, api) or {}).get("returns")):
+            if name in seen:
+                continue
+            seen.add(name)
+            columns.append(name)
+    if not columns:
+        return False
+    args = dict(getattr(step, "tool_args", None) or {})
+    args["columns"] = columns
+    step.tool_args = args
+    step.depends_on = sorted({s.step_id for s in sources})
+    step.tool_name = "export_document"
+    step.gap = None
+    return True
+
+
+def _drop_rewired_hops(steps: list, former_ancestors: set[int]) -> None:
+    """Drop tool-less hops the export no longer depends on after a bind."""
+    referenced: set[int] = set()
+    for step in steps:
+        referenced.update(getattr(step, "depends_on", None) or [])
+    keep = []
+    for step in steps:
+        hop = (
+            step.step_id in former_ancestors
+            and not getattr(step, "tool_name", None)
+            and step.step_id not in referenced
+            and (getattr(step, "agent_role", "") or "") != REVIEW_ROLE
+        )
+        if not hop:
+            keep.append(step)
+    steps[:] = keep
+
+
+def _covered_returns(step, by_id: dict, catalog: list | None) -> set[str]:
+    """Fields catalog entries declare on this step and the steps it depends on."""
+    covered: set[str] = set()
+    pending = [step]
+    seen: set[int] = set()
+    while pending:
+        cur = pending.pop()
+        sid = getattr(cur, "step_id", None)
+        if sid in seen:
+            continue
+        seen.add(sid)
+        if getattr(cur, "tool_name", None) == "call_host_api":
+            api = str((getattr(cur, "tool_args", None) or {}).get("api_name") or "")
+            covered |= _entry_returns(_entry(catalog, api))
+        for dep in getattr(cur, "depends_on", None) or []:
+            parent = by_id.get(dep)
+            if parent is not None:
+                pending.append(parent)
+    return covered
+
+
+def _drop_export(step) -> None:
+    step.gap = step.gap or "declared output"
+    if step.tool_name == "export_document":
+        step.tool_name = None
+        step.tool_args = {}
+        step.is_mutation = False
+
+
+def _guard_sources(steps: list) -> set[int]:
+    out: set[int] = set()
+    for step in steps:
+        guard = getattr(step, "guard", None) or {}
+        if isinstance(guard, dict) and guard.get("step") is not None:
+            try:
+                out.add(int(guard["step"]))
+            except (TypeError, ValueError):
+                continue
+    return out
+
+
+def _export_ancestors(steps: list) -> set[int]:
+    """Every step an export transitively depends on. Taken before exports are dropped."""
+    by_id = {s.step_id: s for s in steps}
+    wanted: set[int] = set()
+    for step in steps:
+        if getattr(step, "tool_name", None) != "export_document":
+            continue
+        pending = list(getattr(step, "depends_on", None) or [])
+        while pending:
+            sid = pending.pop()
+            if sid in wanted:
+                continue
+            wanted.add(sid)
+            parent = by_id.get(sid)
+            if parent is not None:
+                pending.extend(getattr(parent, "depends_on", None) or [])
+    return wanted
+
+
+def _step_args(step: Any) -> dict:
+    if isinstance(step, dict):
+        args = step.get("tool_args")
+        return args if isinstance(args, dict) else {}
+    args = getattr(step, "tool_args", None)
+    return args if isinstance(args, dict) else {}
+
+
+def _step_tool(step: Any) -> str:
+    if isinstance(step, dict):
+        return str(step.get("tool_name") or "")
+    return str(getattr(step, "tool_name", None) or "")
+
+
+def _step_is_request(step: Any, catalog: list | None = None) -> bool:
+    """True when the step is the catalog's request write (kind=request)."""
+    args = _step_args(step)
+    if args.get("fills_gap"):
+        return True
+    if _step_tool(step) != "call_host_api":
+        return False
+    api = str(args.get("api_name") or "")
+    entry = _entry(catalog, api)
+    return str((entry or {}).get("kind") or "") == "request"
+
+
+def _request_entry(catalog: list | None) -> dict | None:
+    for item in catalog or []:
+        if isinstance(item, dict) and str(item.get("kind") or "") == "request":
+            return item
+    return None
+
+
+def blocks_create(
+    findings: list[Finding] | None,
+    steps: list | None = None,
+    catalog: list | None = None,
+) -> Finding | None:
+    """A missing capability is not a plan the user can store. A request write is."""
+    if any(_step_is_request(s, catalog) for s in (steps or [])):
+        return None
+    if any(f.code == "request" for f in (findings or [])):
+        return None
+    for finding in findings or []:
+        if finding.blocks and finding.code in ("output_fit", "capability", "branch"):
+            return finding
+    return None
+
+
+def offer_request_write(
+    steps: list,
+    catalog: list | None,
+    *,
+    brief: str = "",
+    findings: list[Finding] | None = None,
+) -> list[Finding]:
+    """Append the catalog request write when output-fit blocked and none is present."""
+    hits = [f for f in (findings or []) if f.blocks and f.code == "output_fit"]
+    if not hits:
+        return []
+    if any(_step_is_request(s, catalog) for s in steps):
+        return []
+    entry = _request_entry(catalog)
+    name = str((entry or {}).get("name") or "")
+    if not name:
+        return []
+    from ai.engine.cognition.plan.planner import PlanStep
+
+    body = dict((entry or {}).get("default_body") or {})
+    title = (brief or "").strip() or str(body.get("title") or "Capability request")
+    body["title"] = title[:200]
+    body["payload"] = {
+        "brief": brief,
+        "findings": [f.as_dict() for f in hits],
+    }
+    next_id = max((s.step_id for s in steps), default=-1) + 1
+    deps = sorted({f.step_id for f in hits if f.step_id is not None})
+    steps.append(PlanStep(
+        next_id,
+        str((entry or {}).get("label") or "File a request"),
+        "call_host_api",
+        {"api_name": name, "fills_gap": True, **body},
+        depends_on=deps,
+        is_mutation=True,
+    ))
+    return [Finding(
+        "request", next_id,
+        "A request write covers the missing capability.",
+        blocks=False,
+    )]
+
+
+def output_fit_findings(steps: list, catalog: list | None) -> list[Finding]:
+    """I1 output-fit. A file may contain only fields a catalog entry declares.
+
+    An export that names columns is a gap when those names are not in ``returns``.
+    An export that names nothing is bound to closed-aggregate ``returns`` already
+    on the plan; otherwise it is a gap. A row-list GET never fills an unnamed
+    file — that is how a line list became a distribution workbook.
+    """
+    former_ancestors = _export_ancestors(steps)
+    rebound = False
+    for step in steps:
+        if getattr(step, "tool_name", None) != "export_document":
+            continue
+        if _claimed_fields(step):
+            continue
+        if _bind_unnamed_export(step, steps, catalog):
+            rebound = True
+    if rebound:
+        _drop_rewired_hops(steps, former_ancestors)
+    by_id = {s.step_id: s for s in steps}
+    out: list[Finding] = []
+    ancestors = _export_ancestors(steps)
+    guards = _guard_sources(steps)
+    for step in steps:
+        if step.step_id not in ancestors:
+            continue
+        if (getattr(step, "agent_role", "") or "") == REVIEW_ROLE:
+            continue
+        if step.step_id in guards:
+            continue
+        if getattr(step, "tool_name", None):
+            continue
+        if _claimed_fields(step):
+            continue
+        out.append(Finding(
+            "output_fit",
+            step.step_id,
+            "This step has no catalog capability.",
+        ))
+    for step in steps:
+        claimed = _claimed_fields(step)
+        if step.tool_name != "export_document" and not claimed:
+            continue
+        covered = _covered_returns(step, by_id, catalog)
+        if not claimed:
+            _drop_export(step)
+            out.append(Finding(
+                "output_fit",
+                step.step_id,
+                "This export does not name the fields it will contain.",
+            ))
+            continue
+        missing = [name for name in claimed if name not in covered]
+        if not missing:
+            continue
+        _drop_export(step)
+        out.append(Finding(
+            "output_fit",
+            step.step_id,
+            "No catalog entry declares: " + ", ".join(missing),
+        ))
+    return out
+
+
 def _depends_on(step: Any, other_id: int, by_id: dict) -> bool:
     pending = list(getattr(step, "depends_on", None) or [])
     seen: set[int] = set()
@@ -122,6 +425,46 @@ def _exclusive(a: Any, b: Any) -> bool:
     if ga.get("field") != gb.get("field"):
         return False
     return ga.get("value") != gb.get("value")
+
+
+def _coalesce_export_steps(steps: list) -> None:
+    """One file-write effect. Format is a set. Sibling exports are the same effect split."""
+    from ai.engine.cognition.plan.planner import _union_export_formats
+
+    exports = [s for s in steps if getattr(s, "tool_name", None) == "export_document"]
+    if len(exports) < 2:
+        return
+    keep = exports[0]
+    formats = [
+        str((getattr(s, "tool_args", None) or {}).get("format") or "")
+        for s in exports
+    ]
+    columns: list[str] = []
+    seen: set[str] = set()
+    deps: set[int] = set()
+    title = ""
+    for step in exports:
+        args = getattr(step, "tool_args", None) or {}
+        for name in _declared_names(args.get("columns")):
+            if name in seen:
+                continue
+            seen.add(name)
+            columns.append(name)
+        deps.update(getattr(step, "depends_on", None) or [])
+        if not title:
+            title = str(args.get("title") or "").strip()
+    args = dict(getattr(keep, "tool_args", None) or {})
+    args["format"] = _union_export_formats(formats)
+    if columns:
+        args["columns"] = columns
+    if title and not str(args.get("title") or "").strip():
+        args["title"] = title
+    keep.tool_args = args
+    keep.depends_on = sorted(deps)
+    keep.tool_name = "export_document"
+    keep.gap = None
+    drop = {s.step_id for s in exports[1:]}
+    steps[:] = [s for s in steps if s.step_id not in drop]
 
 
 def _is_effect(step: Any) -> bool:
@@ -165,9 +508,7 @@ def apply_plan_contract(
     """Repair what is mechanical, reject what is not. Mutates ``steps``."""
     from ai.engine.cognition.plan.planner import (
         _canonicalize_host_steps,
-        _coerce_export_steps,
         _coerce_host_api_steps,
-        _ensure_export_deliverable,
         _strip_invalid_tool_args,
         _unbind_unknown_host_api_steps,
     )
@@ -222,12 +563,15 @@ def apply_plan_contract(
             findings.append(Finding(
                 "capability", step.step_id, f"No catalog entry {api}.",
             ))
-    # Export last, once, so an earlier pass cannot drop it and a later one put it back.
-    _coerce_export_steps(steps)
-    _ensure_export_deliverable(utterance, steps)
     for step in steps:
         if step.tool_name == "export_document":
             step.is_mutation = True
+    _coalesce_export_steps(steps)
+    fit = output_fit_findings(steps, api_catalog)
+    findings.extend(fit)
+    findings.extend(offer_request_write(
+        steps, api_catalog, brief=utterance, findings=fit,
+    ))
     findings.extend(review_findings(steps))
     findings.extend(branch_findings(steps))
     return findings

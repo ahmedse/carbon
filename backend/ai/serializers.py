@@ -114,6 +114,8 @@ class SendMessageSerializer(serializers.Serializer):
         allow_null=True,
         default=None,
     )
+    # Opt-in denser Thought panel (everyone). Default off — no extra thinking cost.
+    dense_thinking = serializers.BooleanField(required=False, default=False)
 
 
 class EditMessageSerializer(serializers.Serializer):

@@ -395,7 +395,7 @@ StepToolbar.propTypes = {
 function StepCard({
   step, phaseName, confirming, busy, onConfirm, onDecline, onRetry, onSkip, onCancel, onPause, onResume, onEdit, forceOpen = null,
 }) {
-  const meta = stepStatusMeta(step.status);
+  const meta = stepStatusMeta(step.status, step);
   const urgent = step.status === 'awaiting_approval' || step.status === 'failed';
   const [open, setOpen] = useState(urgent);
   const expanded = forceOpen == null ? open : forceOpen;
@@ -2430,7 +2430,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           ) : (
             <Stack sx={{ maxHeight: 320, overflowY: 'auto' }}>
               {steps.map((step) => {
-                const stepMeta = stepStatusMeta(step.status);
+                const stepMeta = stepStatusMeta(step.status, step);
                 return (
                   <Stack key={step.step_id} direction="row" alignItems="center" spacing={0.75} sx={{ px: 1.25, py: 0.5, borderBottom: 1, borderColor: 'divider' }}>
                     <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.625rem', minWidth: 52, fontFamily: 'monospace' }}>

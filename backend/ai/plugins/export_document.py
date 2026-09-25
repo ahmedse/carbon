@@ -71,6 +71,81 @@ def _deliverable_identity_lines(*, run_id: str | None = None) -> list[str]:
     return lines
 
 
+def _pdf_font_path() -> Path | None:
+    """A TTF that covers Latin + Arabic. Helvetica does not."""
+    for raw in (
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSerif.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    ):
+        path = Path(raw)
+        if path.is_file():
+            return path
+    return None
+
+
+def _shape_pdf_text(text: str) -> str:
+    """Presentation forms + visual order when the line has Arabic letters."""
+    if not any("\u0600" <= ch <= "\u06ff" for ch in (text or "")):
+        return text
+    import arabic_reshaper
+    from bidi.algorithm import get_display
+
+    return get_display(arabic_reshaper.reshape(text or ""))
+
+
+def _wrap_pdf_line(text: str, font: str, size: int, max_width: float) -> list[str]:
+    from reportlab.pdfbase import pdfmetrics
+
+    shaped = _shape_pdf_text(text)
+    if pdfmetrics.stringWidth(shaped, font, size) <= max_width:
+        return [shaped]
+    words = shaped.split(" ")
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        trial = word if not current else f"{current} {word}"
+        if pdfmetrics.stringWidth(trial, font, size) <= max_width:
+            current = trial
+            continue
+        if current:
+            lines.append(current)
+        current = word
+    if current:
+        lines.append(current)
+    return lines or [shaped]
+
+
+def _render_pdf_lines(path: Path, lines: list[str]) -> None:
+    """Unicode PDF. Helvetica + latin-1 replace is what turned Arabic into '?'."""
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.pdfgen import canvas
+
+    font_path = _pdf_font_path()
+    if font_path is None:
+        raise ValueError("No Unicode TTF on this host — cannot write a PDF.")
+    pdfmetrics.registerFont(TTFont("PulseBody", str(font_path)))
+    page_w, page_h = letter
+    left, right = 50, 50
+    max_w = page_w - left - right
+    c = canvas.Canvas(str(path), pagesize=letter)
+    y = page_h - 56
+    leading = 14
+    for i, raw in enumerate(lines):
+        size = 16 if i == 0 else 11
+        for piece in _wrap_pdf_line(raw, "PulseBody", size, max_w):
+            if y < 48:
+                c.showPage()
+                y = page_h - 56
+            c.setFont("PulseBody", size)
+            c.setFillColorRGB(0.05, 0.07, 0.09)
+            c.drawString(left, y, piece)
+            y -= leading if size == 11 else 20
+    c.save()
+
+
 def _current_run_id() -> str | None:
     try:
         from ai.plans_service import get_current_plan_run
@@ -118,6 +193,31 @@ def _split_gfm_row(line: str) -> list[str] | None:
 
 def _is_gfm_separator(cells: list[str]) -> bool:
     return bool(cells) and all(_GFM_SEP_CELL_RE.match(c.replace(" ", "")) for c in cells)
+
+
+def coerce_table(value):
+    """Accept a row list as well as ``{headers, rows}``.
+
+    A list of objects uses the keys as headers. A list of lists uses the
+    first row as headers. Anything else is left for the caller to reject.
+    """
+    if value is None or isinstance(value, dict):
+        return value
+    if not isinstance(value, list) or not value:
+        return value
+    if all(isinstance(row, dict) for row in value):
+        headers: list[str] = []
+        for row in value:
+            for key in row:
+                if str(key) not in headers:
+                    headers.append(str(key))
+        rows = [[row.get(h, "") for h in headers] for row in value]
+        return {"headers": headers, "rows": rows}
+    if all(isinstance(row, list) for row in value):
+        headers = [str(cell) for cell in value[0]]
+        rows = [list(row) for row in value[1:]]
+        return {"headers": headers, "rows": rows}
+    return value
 
 
 def parse_gfm_tables(content: str) -> tuple[str, list[dict]]:
@@ -191,8 +291,12 @@ class ExportDocument(ToolPlugin):
                 ),
             },
             "table": {
-                "type": "object",
-                "description": "Optional structured table for Excel / Word.",
+                "type": ["object", "array"],
+                "description": (
+                    "Optional table for Excel / Word. Prefer "
+                    "{headers, rows}. A list of row objects, or a list of "
+                    "lists whose first row is the headers, is accepted too."
+                ),
                 "properties": {
                     "headers": {
                         "type": "array",
@@ -240,7 +344,9 @@ class ExportDocument(ToolPlugin):
         wanted = _FORMAT_SETS.get(fmt) or _FORMAT_SETS["both"]
 
         content = (args.get("content") or "").strip()
-        table = args.get("table") or None
+        table = coerce_table(args.get("table") or None)
+        if table is not None and not isinstance(table, dict):
+            return {"error": "table must be {headers, rows} or a list of rows."}
         images = args.get("images") if isinstance(args.get("images"), list) else []
 
         # Fail-visible substance gate: never ship hollow, mid-run, or title-only packs.
@@ -694,7 +800,7 @@ class ExportDocument(ToolPlugin):
         wb.save(str(path))
 
     def _write_pdf(self, path: Path, title: str, content: str, table: dict | None) -> None:
-        """Minimal PDF 1.4 (Helvetica) — no reportlab dependency."""
+        """Unicode PDF with an embedded TTF. Helvetica cannot carry Arabic."""
         lines: list[str] = [title[:120], ""]
         lines.extend(_deliverable_identity_lines(run_id=_current_run_id()))
         lines.append("")
@@ -706,20 +812,16 @@ class ExportDocument(ToolPlugin):
                     continue
                 text = re.sub(r"^#+\s+", "", stripped)
                 text = re.sub(r"^[-*•]\s+", "• ", text).replace("**", "")
-                while len(text) > 90:
-                    lines.append(text[:90])
-                    text = text[90:]
-                lines.append(text[:90])
+                lines.append(text)
             lines.append("")
-            # Flatten markdown tables into the PDF text block (no table layout).
             for md_t in md_tables:
                 headers_md = md_t.get("headers") or []
                 if headers_md:
-                    lines.append(" | ".join(str(h) for h in headers_md)[:90])
+                    lines.append(" | ".join(str(h) for h in headers_md))
                     lines.append("-" * min(90, max(8, len(lines[-1]))))
                     for row in (md_t.get("rows") or [])[:40]:
                         cells = [str(row[i]) if i < len(row) else "" for i in range(len(headers_md))]
-                        lines.append(" | ".join(cells)[:90])
+                        lines.append(" | ".join(cells))
                     lines.append("")
         if table:
             headers = table.get("headers") or []
@@ -729,57 +831,9 @@ class ExportDocument(ToolPlugin):
                 lines.append("-" * min(90, max(8, len(lines[-1]))))
                 for row in rows[:40]:
                     cells = [str(row[i]) if i < len(row) else "" for i in range(len(headers))]
-                    lines.append(" | ".join(cells)[:90])
+                    lines.append(" | ".join(cells))
 
-        def esc(s: str) -> str:
-            return s.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
-
-        y0 = 800
-        leading = 14
-        max_lines = min(len(lines), 52)
-        content_ops = ["BT", "/F1 11 Tf", "14 TL", f"50 {y0} Td"]
-        for i, line in enumerate(lines[:max_lines]):
-            if i == 0:
-                content_ops.append("/F1 16 Tf")
-                content_ops.append(f"({esc(line)}) Tj")
-                content_ops.append("/F1 11 Tf")
-            else:
-                content_ops.append(f"({esc(line)}) Tj")
-            content_ops.append(f"0 -{leading} Td")
-        content_ops.append("ET")
-        stream = "\n".join(content_ops).encode("latin-1", errors="replace")
-
-        objects: list[bytes] = []
-        objects.append(b"1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj\n")
-        objects.append(b"2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj\n")
-        objects.append(
-            b"3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
-            b"/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>endobj\n"
-        )
-        objects.append(
-            f"4 0 obj<< /Length {len(stream)} >>stream\n".encode("ascii")
-            + stream
-            + b"\nendstream\nendobj\n"
-        )
-        objects.append(
-            b"5 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj\n"
-        )
-
-        out = bytearray(b"%PDF-1.4\n")
-        offsets = [0]
-        for obj in objects:
-            offsets.append(len(out))
-            out.extend(obj)
-        xref_pos = len(out)
-        out.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
-        out.extend(b"0000000000 65535 f \n")
-        for off in offsets[1:]:
-            out.extend(f"{off:010d} 00000 n \n".encode("ascii"))
-        out.extend(
-            f"trailer<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
-            f"startxref\n{xref_pos}\n%%EOF\n".encode("ascii")
-        )
-        path.write_bytes(bytes(out))
+        _render_pdf_lines(path, lines)
 
     def _write_png_chart(self, path: Path, title: str, content: str, table: dict | None) -> None:
         """PNG bar chart from the first numeric column of ``table`` (Pillow)."""

@@ -23,7 +23,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from django.test import override_settings
 
-from ai.tests.pv21_stub import answer_decision
+from ai.tests.pv21_stub import decision_for
 from ai.engine.core.config import get_settings
 from ai.store import reset_store
 
@@ -66,7 +66,7 @@ def _scripted_client(decide):
     async def _create(**kw):
         calls.append(kw)
         content, tool_calls = decide(kw)
-        tool_calls = answer_decision(kw) or tool_calls
+        tool_calls = decision_for(kw, decide) or tool_calls
         return types.SimpleNamespace(
             choices=[
                 types.SimpleNamespace(
@@ -274,13 +274,34 @@ def test_private_fact_is_invisible_to_another_user(django_store):
 # ── 2. Tool digests ──────────────────────────────────────────────────────
 
 
-def _host_api_tool(data, api_name="get_my_loan_eligibility"):
+def _host_api_tool(data, api_name="get_calculation_summary"):
     return {
         "tool_name": "call_host_api",
         "tool_args": {"api_name": api_name},
         "result": json.dumps({"status_code": 200, "data": data}),
         "latency_ms": 4,
     }
+
+
+def test_digest_names_export_files():
+    from ai.engine.cognition.tool_digest import build_tool_digest
+
+    digest = build_tool_digest(
+        [{
+            "tool_name": "export_document",
+            "result": json.dumps({
+                "files": [{
+                    "filename": "152319-20260925-report.pdf",
+                    "format": "pdf",
+                    "size_bytes": 18577,
+                }],
+                "download_url": "/media/ai_exports/152319-20260925-report.pdf",
+            }),
+        }],
+        scope=None,
+    )
+    assert "152319-20260925-report.pdf" in digest
+    assert digest.startswith("export_document:")
 
 
 def test_digest_carries_scalar_fields_within_budget():
@@ -294,7 +315,7 @@ def test_digest_carries_scalar_fields_within_budget():
         })],
         scope={"org_unit_ids": [5], "org_unit_id": 5},
     )
-    assert "get_my_loan_eligibility" in digest
+    assert "get_calculation_summary" in digest
     assert "eligible=true" in digest
     assert "max_amount=8000" in digest
     assert "SAR" in digest
@@ -462,8 +483,8 @@ _LOAN_RESULT = {
 
 def _loan_decide(kw: dict):
     user_text = _last_user_text(kw).lower()
-    if "call_host_api" in _tool_names(kw) and "eligible" in user_text and not _has_tool_result(kw):
-        return None, _tool_call("call_host_api", {"api_name": "get_my_loan_eligibility"})
+    if "get_work_objectives" in _tool_names(kw) and "eligible" in user_text and not _has_tool_result(kw):
+        return None, _tool_call("get_work_objectives", {})
     if "maximum" in user_text:
         blob = json.dumps(kw.get("messages") or [])
         if "max_amount=8000" in blob:
@@ -481,8 +502,8 @@ def test_tool_digest_lets_the_model_recall_three_turns_later(
 
     async def _fake_tool(tool_call, *args, **kwargs):
         return {
-            "tool_name": "call_host_api",
-            "tool_args": {"api_name": "get_my_loan_eligibility"},
+            "tool_name": "get_work_objectives",
+            "tool_args": {},
             "tool_call_id": tool_call.get("id", ""),
             "result": json.dumps({"status_code": 200, "data": _LOAN_RESULT}),
             "latency_ms": 3,

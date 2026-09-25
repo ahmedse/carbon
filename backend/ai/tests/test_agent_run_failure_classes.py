@@ -174,6 +174,45 @@ def test_one_candidate_binds_without_select():
     assert b.status == "bound" and b.tool_args["path_params"] == {"id": 30}
 
 
+HOST_ENVELOPE = {
+    "tool_name": "call_host_api",
+    "result": json.dumps({
+        "status_code": 200,
+        "data": {
+            "count": 3,
+            "results": [
+                {"id": 21, "period_end": "2026-06-30", "status": "committed"},
+                {"id": 30, "period_end": "2026-09-30", "status": "draft"},
+                {"id": 28, "period_end": "2026-08-31", "status": "computed"},
+            ],
+        },
+    }),
+}
+
+
+def test_host_envelope_rows_are_visible_to_bind():
+    from ai.engine.cognition.plan.bindings import output_rows
+
+    assert [r["period_end"] for r in output_rows(HOST_ENVELOPE)] == [
+        "2026-06-30", "2026-09-30", "2026-08-31",
+    ]
+
+
+def test_query_bind_latest_from_host_envelope():
+    """Live Agent GET stores {status_code, data:{results}}. Bind must see period_end."""
+    args = {
+        "api_name": "analyze_employees",
+        "query_params": {"dimension": "org_unit"},
+        "bind": {
+            "period_end": {"step": 2, "field": "period_end", "select": "latest"},
+        },
+    }
+    b = resolve_bindings(args, SURFACE, {2: HOST_ENVELOPE}, {2: "list_payroll_runs"})
+    assert b.status == "bound"
+    assert b.tool_args["query_params"]["period_end"] == "2026-09-30"
+    assert b.tool_args["query_params"]["dimension"] == "org_unit"
+
+
 def _loop_call(loop, step, prior_results=()):
     return loop._execute_step(
         step=step, dw=None, cw=None, ex=None, instance_id="t", conversation_id="c",

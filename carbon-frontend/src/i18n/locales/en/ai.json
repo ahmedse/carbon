@@ -954,7 +954,12 @@
     "blocked": "Blocked",
     "blockedWith": "Blocked: {{gap}}",
     "blockedSummary": "{{count}} step(s) cannot run as planned.",
+    "createBlocked": "Create task stays off until every step has a catalog capability, or you drop the file and the fields it cannot produce.",
     "open": "Open in Tasks"
+  },
+  "denseThinking": {
+    "label": "Think",
+    "hint": "Show the model's own reasoning in the Thought panel. Slower replies. Tool names and code stay hidden. Default off."
   },
   "choice": {
     "own": "Or type your own",

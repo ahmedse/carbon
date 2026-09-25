@@ -68,7 +68,12 @@ def test_surface_is_audience_scoped_and_carries_registry_capabilities(monkeypatc
     hr = capability_surface(_CFG, _HR)
     ess = capability_surface(_CFG, _ESS)
     assert {"org_breakdown", "get_record", "aggregate_entity", "resolve_entity"} <= hr.names
-    assert ess.names == {"get_my_summary"}
+    host = {e["name"] for e in ess.entries if e.get("source") != "tool"}
+    assert host == {"get_my_summary"}
+    # ADR-0056: the engine's chat tools are on the same surface, run by name.
+    tools = {e["name"] for e in ess.entries if e.get("source") == "tool"}
+    assert {"learn_fact", "search_knowledge", "export_document"} <= tools
+    assert not tools & {"plan_task", "edit_plan", "approve_plan"}
     # The prompt offers exactly what validation allows.
     _lines, allowed, _writes = catalog_prompt_lines("report", list(hr.entries))
     assert allowed == hr.names

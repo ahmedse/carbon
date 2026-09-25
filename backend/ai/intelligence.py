@@ -100,7 +100,7 @@ from ai.providers.pulse import PulseProvider
 from ai.domain_protocol import DomainContext, get_domain, has_domain
 from ai.domain import emissions  # noqa: F401  (registers the emissions domain)
 from ai.domain import water  # noqa: F401  (registers the water domain)
-from ai.context_assembler import assemble_context
+from ai.context_assembler import assemble_context, messages_after_clear_break
 from ai.adapter.contract import HostAdapterContract
 from ai.engine.agent.surface import PULSE_DIAL_MODES
 from ai.engine.llm.provider import classify_llm_error
@@ -519,6 +519,7 @@ class CarbonIntelligence:
         content: str,
         model: str | None = None,
         pulse_mode: str | None = None,
+        dense_thinking: bool = False,
     ):
         """Stream an answer as a generator of SSE-ready dict frames.
 
@@ -671,6 +672,7 @@ class CarbonIntelligence:
                             or "ask"
                         )
                     ),
+                    dense_thinking=bool(dense_thinking),
                 )
 
                 partial_parts: list[str] = []
@@ -1447,6 +1449,14 @@ class CarbonIntelligence:
         messages = [
             _serialize_message(m)
             for m in conversation.messages.order_by("created_at")
+        ]
+        # Download is the active context. Turns before Clear context stay in
+        # the durable log for Restore; they are not part of this export.
+        clear_break = (conversation.context_snapshot_json or {}).get("_clear_break")
+        messages = [
+            m
+            for m in messages_after_clear_break(messages, clear_break)
+            if not m.get("is_deleted")
         ]
 
         if fmt == "markdown":

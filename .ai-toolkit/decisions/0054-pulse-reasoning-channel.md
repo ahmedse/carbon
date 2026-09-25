@@ -13,7 +13,13 @@ The thinking timeline shows stage labels ("Composing response…"). A draft can 
 
 1. **Rationale is the Decision reason.** The understand call already emits `reason`. That sentence is the turn rationale. It is scrubbed and shown. No second model call.
 2. **A step says what it is waiting on.** An Agent step's narration is its intent plus the dependency ids that have not finished. It is built from the step record, not from a model call.
-3. **Provider reasoning is state-gated.** Thinking is enabled on the understand call only when conversation state already says so: intent confidence below 0.6, the previous turn recorded a degradation, or the open question kind is `correct_previous`. No keyword match. The summary is scrubbed and stored. Other turns stay with thinking disabled.
+3. **Provider reasoning is state-gated, with a client opt-in.** Thinking is
+   enabled on the understand call when conversation state already says so:
+   intent confidence below 0.6, the previous turn recorded a degradation, or
+   the open question kind is `correct_previous`. The Pulse status-bar
+   **Think** switch (everyone, default off) sets `dense_thinking` on the
+   request and widens that budget for the turn; scrub still drops fences,
+   backticks, and `call_` tokens, but keeps more sentences. No keyword match.
 4. **A replacement is a revision.** When the reply text differs from text already produced for the same turn, the reply carries `{shown, reason}`. The ledger row `reasoning` stores rationale, summary, draft, and revision reason. The draft row stores the draft text, not only its length.
 5. **The rationale survives the turn.** Scrubbed lines and the revision are saved on the assistant message and restored into the thinking timeline on reload. `ai/eval/reasoning_bank.yaml` checks both: a tool answer with a reason keeps it, and only a real replacement produces a revision.
 6. **Scrub is structural.** Fenced blocks, backtick spans, and `call_` tokens are removed. The scrub does not decide a route.

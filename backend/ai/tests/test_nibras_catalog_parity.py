@@ -10,9 +10,8 @@ REPO = Path(__file__).resolve().parents[3]
 PACK = REPO / "domain_packs" / "nibras" / "api_catalog.yaml"
 INSTANCE = REPO / "backend" / "ai" / "engine" / "instances" / "nibras" / "instance.yaml"
 
-# Nav-only / analytics entries in instance that packs need not declare as tools.
+# Nav-only / self-service entries in instance that packs need not declare as tools.
 INSTANCE_ONLY_OK = {
-    "analyze_employees",
     "get_my_profile",
     "list_my_payslips",
     "list_attendance",
@@ -80,6 +79,43 @@ def test_nibras_attendance_tools_in_pack():
         "approve_attendance_permission",
     ):
         assert name in inst, name
+
+
+def test_nibras_committed_pay_in_both():
+    pack = _pack_tool_names()
+    inst = _instance_api_names()
+    assert "analyze_committed_pay" in pack
+    assert "analyze_committed_pay" in inst
+    assert "analyze_kuwaitization" in pack
+    assert "analyze_kuwaitization" in inst
+
+
+def test_nibras_closed_aggregates_in_both():
+    required = {
+        "analyze_leave_utilization",
+        "analyze_loan_book",
+        "analyze_gosi_committed",
+        "analyze_cert_expiry",
+        "analyze_leave_presence",
+    }
+    pack = _pack_tool_names()
+    inst = _instance_api_names()
+    assert required <= pack
+    assert required <= inst
+
+
+def test_nibras_item1_host_reads_in_both():
+    required = {
+        "analyze_employees",
+        "list_my_direct_reports",
+        "list_team_leave",
+        "list_correspondence_inbox",
+        "list_correspondence_history",
+    }
+    pack = _pack_tool_names()
+    inst = _instance_api_names()
+    assert required <= pack
+    assert required <= inst
 
 
 def test_nibras_loan_onboarding_tools_in_pack():

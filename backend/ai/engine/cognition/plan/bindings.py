@@ -30,18 +30,26 @@ class Binding:
     options: list[dict] = field(default_factory=list)
 
 
+def _unwrap_host(raw: Any) -> Any:
+    """Drop the executor envelope ``{status_code, data}`` / ``body`` so rows show."""
+    if isinstance(raw, dict) and "data" in raw and isinstance(raw.get("data"), (dict, list)):
+        if "status_code" in raw or "results" in (raw.get("data") or {}):
+            raw = raw["data"]
+    if isinstance(raw, dict) and "body" in raw and isinstance(raw["body"], (dict, list)):
+        raw = raw["body"]
+    return raw
+
+
 def _payload(tool_output: Any) -> Any:
     if not isinstance(tool_output, dict):
-        return tool_output
+        return _unwrap_host(tool_output)
     raw = tool_output.get("result", tool_output.get("data", tool_output))
     if isinstance(raw, str):
         try:
             raw = json.loads(raw)
         except (json.JSONDecodeError, TypeError):
             return None
-    if isinstance(raw, dict) and "body" in raw and isinstance(raw["body"], (dict, list)):
-        raw = raw["body"]
-    return raw
+    return _unwrap_host(raw)
 
 
 def output_rows(tool_output: Any) -> list[dict]:
@@ -122,11 +130,12 @@ def resolve_bindings(
     """Run time: fill declared path keys from the listing step's rows."""
     args = dict(tool_args or {})
     name = str(args.get("api_name") or "")
-    missing = surface.missing_path_keys(name, args)
-    if not name or not missing:
-        return Binding(status="none", tool_args=args)
+    missing = surface.missing_path_keys(name, args) if name else []
     declared = args.get("bind") if isinstance(args.get("bind"), dict) else {}
+    if not name or (not missing and not declared):
+        return Binding(status="none", tool_args=args)
     path_params = dict(args.get("path_params") or {})
+    path_keys = set(surface.path_keys(name)) if name else set()
     for key in missing:
         spec = declared.get(key) if isinstance(declared.get(key), dict) else {}
         src = spec.get("step")
@@ -151,5 +160,35 @@ def resolve_bindings(
                 ],
             )
         path_params[key] = row.get(key_field)
-    args["path_params"] = path_params
+    if path_params:
+        args["path_params"] = path_params
+    query = dict(args.get("query_params") or {})
+    for key, spec in declared.items():
+        if key in path_keys or not isinstance(spec, dict) or spec.get("step") is None:
+            continue
+        if query.get(key) not in (None, ""):
+            continue
+        key_field = str(spec.get("field") or key)
+        rows = [r for r in output_rows(outputs_by_step.get(spec.get("step"))) if r.get(key_field) not in (None, "")]
+        if not rows:
+            return Binding(status="missing", tool_args=args, key=key, from_step=spec.get("step"))
+        src_name = str((names_by_step or {}).get(spec.get("step")) or "")
+        order_by = str((surface.entry(src_name) or {}).get("latest_by") or "")
+        row = _select(rows, key_field, str(spec.get("select") or ""), order_by)
+        if row is None:
+            return Binding(
+                status="choice",
+                tool_args=args,
+                key=key,
+                from_step=spec.get("step"),
+                options=[
+                    {"value": r.get(key_field), "label": _label(r, key_field)}
+                    for r in rows
+                ],
+            )
+        query[key] = row.get(key_field)
+    if query:
+        args["query_params"] = query
+    if not missing and query == dict((tool_args or {}).get("query_params") or {}):
+        return Binding(status="none", tool_args=args)
     return Binding(status="bound", tool_args=args)

@@ -6,8 +6,6 @@ examples. Ties keep catalog order.
 """
 from __future__ import annotations
 
-from typing import Any
-
 
 def _tokens(text: str | None) -> set[str]:
     out: set[str] = set()
@@ -121,43 +119,3 @@ def select_for_surface(
         chosen.append(tool)
         seen.add(name)
     return chosen
-
-
-def _example_sides(tool: dict) -> list[str]:
-    sides: list[str] = []
-    for ex in tool.get("examples") or []:
-        if isinstance(ex, dict):
-            for key in ("en", "ar"):
-                text = str(ex.get(key) or "").strip()
-                if text:
-                    sides.append(text)
-        else:
-            text = str(ex).strip()
-            if text:
-                sides.append(text)
-    return sides
-
-
-def catalog_choice(utterance: str, catalog: list[dict] | None) -> dict[str, str] | None:
-    """The catalog example that owns this utterance, when one clearly does.
-
-    ``None`` means the model's decision stands. A tool owns the utterance when
-    its own example shares at least four tokens and leads every other tool's
-    examples by at least three. The tokens come from the catalog examples.
-    """
-    rows = [t for t in (catalog or []) if isinstance(t, dict) and t.get("name")]
-    query = _tokens(utterance)
-    if not query or not rows:
-        return None
-    scores: list[tuple[int, str]] = []
-    for tool in rows:
-        best = 0
-        for side in _example_sides(tool):
-            best = max(best, len(query & _tokens(side)))
-        scores.append((best, str(tool.get("name"))))
-    scores.sort(reverse=True)
-    best, name = scores[0]
-    second = scores[1][0] if len(scores) > 1 else 0
-    if best >= 4 and best >= second + 3:
-        return {"op": "call_tool", "name": name}
-    return None

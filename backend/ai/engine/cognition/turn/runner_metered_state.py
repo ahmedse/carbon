@@ -32,3 +32,4 @@ class MeteredTurnState:
     synth: dict | None = None
     forced_tool_call: dict | None = None  # I2: injected tool call for open_question_confirm
     deixis_subject: str = ""  # I6: subject resolved from state for "those"/"that one"
+    dense_thinking: bool = False  # client opt-in: denser Thought panel (ADR-0054)

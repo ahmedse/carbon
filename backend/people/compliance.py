@@ -3,16 +3,7 @@
 # Imported by PeopleConfig.ready() — never imported by regulations/ directly.
 from regulations.registry import register, BaseEvaluator
 
-# ── KOC contract → org unit name mapping (stable GOFSCO configuration) ──────
-KOC_CONTRACT_ORG_UNITS: dict[str, list[str]] = {
-    'coiled_tubing': ['Coiled Tubing', 'Coiled Tubing - KIRI'],
-    'drilling_60':   ['Drilling'],
-    'drilling_61':   ['Drilling Rig 61'],
-    'pcp':           ['Progressive Cavity Pump (PCP)'],
-    'swt_intl':      ['Surface Well Testing International', 'Surface Well Testing - International'],
-    'swt_local':     ['Surface Well Testing'],
-    'wireline':      ['Wireline Logging Operation', 'Wire Line'],
-}
+from people.kuwaitization import KOC_CONTRACT_ORG_UNITS, quota_for_contract
 
 
 @register('koc_kuwaitization_quota')
@@ -35,38 +26,26 @@ class KuwaitizationQuotaEvaluator(BaseEvaluator):
         ]
 
     def evaluate(self, scope_type: str, scope_id: int, run) -> dict:
-        from mdm.models import ReferenceValue, OrgUnit
+        from mdm.models import ReferenceValue
         from people.models import Employee
 
         rv = ReferenceValue.objects.get(id=scope_id)
-        meta = rv.metadata
-        required = meta.get('required', 0)
-
-        org_names = KOC_CONTRACT_ORG_UNITS.get(rv.code, [])
-        org_units = OrgUnit.objects.filter(name__in=org_names)
-        actual = Employee.objects.filter(
-            kuwaitization=True,
-            org_unit__in=org_units,
-        ).count()
-
-        deficit = required - actual
-        if deficit <= 0:
-            status = 'compliant'
+        meta = rv.metadata or {}
+        row = quota_for_contract(rv, Employee.objects.all())
+        if row['deficit'] <= 0:
             severity_override = self.obligation.severity
         else:
-            status = 'non_compliant'
-            # Full vacancy on a contract = critical
-            severity_override = 'critical' if actual == 0 else self.obligation.severity
+            severity_override = 'critical' if row['actual'] == 0 else self.obligation.severity
 
         return {
-            'status': status,
-            'actual': actual,
-            'expected': required,
-            'delta': actual - required,
-            'contract_no': meta.get('contract_no'),
-            'contract_name': rv.label,
-            'deficit': max(0, deficit),
-            'fill_rate_pct': round(100 * actual / required, 1) if required else 100,
+            'status': row['status'],
+            'actual': row['actual'],
+            'expected': row['required'],
+            'delta': row['actual'] - row['required'],
+            'contract_no': row['contract_no'],
+            'contract_name': row['label'],
+            'deficit': row['deficit'],
+            'fill_rate_pct': row['fill_rate_pct'],
             'reimbursement': meta.get('reimbursement', {}),
             'severity_override': severity_override,
         }

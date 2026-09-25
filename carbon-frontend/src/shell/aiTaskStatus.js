@@ -76,7 +76,14 @@ export const STEP_STATUS = {
 };
 
 /** Resolve step status chip meta; unknown statuses fall back to raw label. */
-export function stepStatusMeta(status) {
+export function stepStatusMeta(status, step) {
+  const flags = step && (step.failure_class || step.critic_flags || step.flags);
+  const klass = typeof flags === 'string'
+    ? flags
+    : flags && (flags.failure_class || '');
+  if (klass && status === 'completed') {
+    return STEP_STATUS.failed;
+  }
   return STEP_STATUS[status] || { label: status || 'Pending', color: 'default' };
 }
 

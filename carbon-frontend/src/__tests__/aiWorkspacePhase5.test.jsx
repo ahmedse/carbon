@@ -27,6 +27,7 @@ vi.mock('../api/aiWorkspace', () => ({
   resumeConversation: vi.fn(),
   getConversation: vi.fn(),
   listMessages: vi.fn(),
+  listModels: vi.fn(() => Promise.resolve({ models: [] })),
   sendMessageStream: vi.fn(),
   stopGeneration: vi.fn(),
   acceptSuggestion: vi.fn(),

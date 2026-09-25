@@ -166,7 +166,7 @@ def test_chat_turn_reports_decision_and_meter(
         "answer", "handoff_agent", "tool_answer",
     }
     assert int(result.get("llm_calls") or 0) >= 1
-    assert "draft" in (result.get("llm_calls_by_stage") or {})
+    assert "answer" in (result.get("llm_calls_by_stage") or {})
     assert "unattributed" not in result["llm_calls_by_stage"], result["llm_calls_by_stage"]
 
 

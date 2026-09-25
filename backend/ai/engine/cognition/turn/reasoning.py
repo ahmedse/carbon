@@ -6,16 +6,23 @@ Four layers, no extra model round for the rationale:
 * a step line from the step record (intent + unfinished dependencies)
 * a provider summary only when conversation state already asks for it
 * a revision when text already produced for the turn is replaced
+
+``dense=True`` (client opt-in) widens the provider thinking budget and the
+scrubbed length. It still drops fences, backticks, and ``call_`` tokens.
 """
 from __future__ import annotations
 
 from typing import Any
 
 CONFIDENCE_FLOOR = 0.6
+_SCRUB_SENTENCES = 2
+_SCRUB_CHARS = 400
+_DENSE_SENTENCES = 12
+_DENSE_CHARS = 2400
 
 
-def scrub(text: str) -> str:
-    """Drop fenced blocks, backtick spans, and call tokens. Cap to two sentences."""
+def scrub(text: str, *, dense: bool = False) -> str:
+    """Drop fenced blocks, backtick spans, and call tokens. Cap by density."""
     raw = str(text or "")
     kept: list[str] = []
     fence = False
@@ -37,20 +44,31 @@ def scrub(text: str) -> str:
         words = [w for w in line.split() if not w.startswith("call_")]
         if words:
             kept.append(" ".join(words))
+    if dense:
+        # Keep paragraph breaks so the Thought panel can read as prose.
+        out = "\n".join(kept).strip()
+        parts = [p.strip() for p in out.replace("\n", ". ").split(". ") if p.strip()]
+        out = ". ".join(parts[:_DENSE_SENTENCES])
+        if out and not out.endswith("."):
+            out = out + "."
+        return out[:_DENSE_CHARS]
     out = " ".join(kept).strip()
     parts = [p.strip() for p in out.split(". ") if p.strip()]
-    out = ". ".join(parts[:2])
+    out = ". ".join(parts[:_SCRUB_SENTENCES])
     if out and not out.endswith("."):
         out = out + "."
-    return out[:400]
+    return out[:_SCRUB_CHARS]
 
 
-def budget_on(state: Any) -> bool:
-    """True when state already marks this turn for a reasoning summary.
+def budget_on(state: Any, *, dense: bool = False) -> bool:
+    """True when this turn should request a provider reasoning summary.
 
-    Low intent confidence, a previous degradation, or an open correction.
-    Nothing here reads the user's words.
+    Default: low intent confidence, a previous degradation, or an open
+    correction. ``dense`` is the client's opt-in (status-bar switch) — it
+    does not read the user's words.
     """
+    if dense:
+        return True
     if state is None:
         return False
     intent = getattr(state, "intent", None) or {}
@@ -66,13 +84,13 @@ def budget_on(state: Any) -> bool:
     return str(question.get("kind") or "") == "correct_previous"
 
 
-def revision(shown: str, replacement: str, reason: str) -> dict | None:
+def revision(shown: str, replacement: str, reason: str, *, dense: bool = False) -> dict | None:
     """A revision when the turn replaces text it already produced."""
     prior = (shown or "").strip()
     nxt = (replacement or "").strip()
     if not prior or prior == nxt:
         return None
-    return {"shown": scrub(prior), "reason": scrub(reason)}
+    return {"shown": scrub(prior, dense=dense), "reason": scrub(reason, dense=dense)}
 
 
 def step_narration(intent: str, waiting: list[str]) -> str:

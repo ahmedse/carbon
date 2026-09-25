@@ -45,9 +45,19 @@ def test_catalog_prompt_lines_describe_write_twin_as_agent_only():
     assert "OWN loans" in read_line or "loan_type" in read_line
     assert "Not for:" in read_line
     assert "Agent only" in write_line and "handoff_agent" in write_line
+    assert "principal*" in write_line
     assert "what type of loan" in write_line.lower() or "NEW loan" in write_line
     # Examples ride along on top-k so the model sees conversational phrasings.
     assert any("I noticed I have a loan" in l for l in lines if l.startswith("  e.g."))
+    pay_lines, _, _ = catalog_prompt_lines(
+        "أنا أدفع قسط قرض، اعرضه لي", _nibras_catalog(), k=12
+    )
+    assert any("أدفع قسط قرض" in l for l in pay_lines if l.startswith("  e.g."))
+    dual, _, _ = catalog_prompt_lines("How much leave and what loans?", _nibras_catalog(), k=12)
+    leave_line = next(l for l in dual if l.startswith("- get_my_leave_balance"))
+    assert "clarify" in leave_line
+    payslip_line = next(l for l in pay_lines if l.startswith("- list_my_payslips"))
+    assert "list_my_loans" in payslip_line
 
     decision = parse_decision(
         {
@@ -275,7 +285,8 @@ def test_malformed_understand_returns_none_so_legacy_speaks():
 
 def test_rules_survive_hr_catalog_clip_and_all_tools_fit():
     """HR catalog was ~14k; rules after the catalog were clipped. Rules first
-    + compact non-top-k lines keep process_id=plan and every allowed name."""
+    + compact non-top-k lines keep process_id=plan and every allowed name.
+    Ceiling is 10200 so named closed-aggregate entries still fit."""
     from ai.engine.cognition.context_pack import TASK_BLOCK_MAX_CHARS, filter_catalog_by_audience
     from ai.engine.cognition.turn.understand import (
         _UNDERSTAND_RULES,
@@ -298,7 +309,7 @@ def test_rules_survive_hr_catalog_clip_and_all_tools_fit():
         instance_config={"api_catalog": scoped},
     )
     assert "process_id=plan" in prompt
-    assert "Never clarify for a value" in prompt
+    assert "not a clarify" in prompt
     for name in allowed:
         assert f"- {name}" in prompt or f"- {name} (" in prompt
 
@@ -320,3 +331,71 @@ def test_ess_sees_coworker_leave_read_and_module_nav():
     assert {"attendance", "payroll"} <= nav_names
     lines = navigation_prompt_lines(nav)
     assert any(ln.startswith("- attendance:") for ln in lines)
+
+
+def test_ess_does_not_see_hr_closed_aggregates():
+    from ai.engine.cognition.context_pack import filter_catalog_by_audience
+
+    ess = {t["name"] for t in filter_catalog_by_audience(_nibras_catalog(), ["ess"])}
+    hr = {t["name"] for t in filter_catalog_by_audience(_nibras_catalog(), ["hr"])}
+    hidden = {
+        "analyze_kuwaitization",
+        "analyze_leave_utilization",
+        "analyze_loan_book",
+        "analyze_gosi_committed",
+        "analyze_cert_expiry",
+        "analyze_leave_presence",
+    }
+    assert hidden.isdisjoint(ess)
+    assert hidden <= hr
+
+
+def test_hr_closed_aggregate_utterances_rank_the_named_get():
+    """Top-k must describe the named GET, not a truncated list hop."""
+    from ai.engine.cognition.catalog_retrieval import rank_tools
+    from ai.engine.cognition.context_pack import filter_catalog_by_audience
+    from ai.engine.cognition.turn.understand import catalog_prompt_lines
+
+    hr = filter_catalog_by_audience(_nibras_catalog(), ["ess", "hr"])
+    pairs = [
+        ("leave utilization by org unit for this year", "analyze_leave_utilization",
+         "list_leave_entitlements"),
+        ("who is on approved leave this month by department", "analyze_leave_presence",
+         "list_leave_records"),
+        ("outstanding loan principal by org unit as of 2026-09-30", "analyze_loan_book",
+         "list_loans"),
+        ("committed GOSI totals by nationality for the period", "analyze_gosi_committed",
+         "list_payslip_lines"),
+        ("certifications expiring in 90 days by org unit", "analyze_cert_expiry",
+         "list_employees"),
+        ("committed pay average and median by org unit for the latest period",
+         "analyze_committed_pay", "list_payslip_lines"),
+    ]
+    for utterance, named, hop in pairs:
+        ranked = [t["name"] for t in rank_tools(utterance, hr, k=12)]
+        assert named in ranked[:5], (utterance, ranked[:8])
+        assert ranked.index(named) < ranked.index(hop) if hop in ranked else True
+        lines, allowed, _ = catalog_prompt_lines(utterance, hr, k=12)
+        assert named in allowed
+        described = next(ln for ln in lines if ln.startswith(f"- {named}"))
+        assert "Returns:" in described, named
+
+
+def test_coworker_leave_still_outranks_utilization():
+    from ai.engine.cognition.catalog_retrieval import rank_tools
+    from ai.engine.cognition.context_pack import filter_catalog_by_audience
+
+    hr = filter_catalog_by_audience(_nibras_catalog(), ["ess", "hr"])
+    ranked = [t["name"] for t in rank_tools("what's Wellie's leave balance?", hr, k=8)]
+    assert ranked[0] == "list_leave_entitlements"
+    assert ranked.index("list_leave_entitlements") < ranked.index("analyze_leave_utilization")
+
+
+def test_list_loans_does_not_claim_remaining_balance():
+    entry = next(t for t in _nibras_catalog() if t.get("name") == "list_loans")
+    blob = f"{entry.get('description') or ''} {' '.join(entry.get('returns') or [])}"
+    assert "remaining_balance" not in blob
+    assert "monthly_installment" not in blob
+    assert "principal" in (entry.get("returns") or [])
+    assert "status" in (entry.get("returns") or [])
+    assert "remaining_balance" not in (entry.get("returns") or [])

@@ -18,7 +18,7 @@ from ai.eval.g6_runner import (
 BANK_PATH = Path(__file__).resolve().parent / "g6_bank.yaml"
 
 BASELINE_N = 61
-V21_N = 14
+V21_N = 22
 
 
 def test_bank_has_unique_ids_per_tier():
@@ -40,7 +40,8 @@ def test_v21_tier_cases_are_shaped_and_stay_out_of_offline_gate():
     assert {c["id"] for c in v21} == {
         "g6-062", "g6-063", "g6-064", "g6-065", "g6-066", "g6-067",
         "g6-068", "g6-069", "g6-070", "g6-071", "g6-072", "g6-073", "g6-074",
-        "g6-075",
+        "g6-075", "g6-076", "g6-077", "g6-078", "g6-079", "g6-080", "g6-081",
+        "g6-082", "g6-083",
     }
     for case in v21:
         assert case["expect_op"] in {"call_tool", "handoff_agent", "answer", "clarify"}
@@ -61,6 +62,9 @@ def test_v21_tier_cases_are_shaped_and_stay_out_of_offline_gate():
     # The ladder has no render mode, so no chart follow-up can pass it.
     for cid in ("g6-068", "g6-069", "g6-070"):
         assert pending[cid]["baseline_passes"] is False
+    # Org closed GETs are catalog + understand, not the ESS lexical ladder.
+    for cid in ("g6-078", "g6-079", "g6-080", "g6-081", "g6-082", "g6-083"):
+        assert pending[cid]["baseline_passes"] is False, cid
 
 
 def test_chart_followups_pin_subject_from_state():
@@ -141,28 +145,3 @@ def test_plan_goldens_pin_process_and_persona():
     assert _matches_expect(plan, case)
     assert not _matches_expect(other, case)
     assert _decision_to_dict(None)["op"] == "malformed"
-
-
-def test_catalog_example_owns_the_three_l6_splits_only():
-    """A catalog example owns Wellie, Mohammad, and the payslip chart.
-
-    It must not steal an ordinary balance ask.
-    """
-    import yaml
-    from pathlib import Path
-    from ai.engine.cognition.catalog_retrieval import catalog_choice
-
-    root = Path(__file__).resolve().parents[1]
-    cfg = yaml.safe_load((root / "engine/instances/nibras/instance.yaml").read_text())
-    catalog = cfg["api_catalog"] if "api_catalog" in cfg else None
-    if catalog is None:
-        for value in cfg.values():
-            if isinstance(value, dict) and "api_catalog" in value:
-                catalog = value["api_catalog"]
-                break
-    bank = {c["id"]: c for c in load_bank()}
-    assert catalog_choice(bank["g6-045"]["en"], catalog)["name"] == "list_leave_entitlements"
-    assert catalog_choice(bank["g6-047"]["en"], catalog)["name"] == "list_leave_entitlements"
-    assert catalog_choice(bank["g6-070"]["en"], catalog)["name"] == "list_my_payslips"
-    assert catalog_choice(bank["g6-001"]["en"], catalog) is None
-    assert catalog_choice(bank["g6-038"]["ar"], catalog) is None

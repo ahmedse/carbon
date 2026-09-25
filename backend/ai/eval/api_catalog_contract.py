@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
-READ_KINDS = frozenset({"balance", "history", "detail"})
-WRITE_KINDS = frozenset({"write"})
+READ_KINDS = frozenset({"balance", "history", "detail", "read"})
+WRITE_KINDS = frozenset({"write", "request"})
 
 
 def catalog_violations(catalog: list[dict] | None) -> list[str]:

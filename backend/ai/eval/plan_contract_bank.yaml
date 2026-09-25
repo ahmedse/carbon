@@ -20,7 +20,7 @@ cases:
       - step_id: 3
         intent: board pack word excel pdf png
         tool_name: export_document
-        tool_args: {title: Board}
+        tool_args: {title: Board, columns: [id, status]}
         depends_on: [2]
         guard: {step: 1, field: within_band, value: true}
   - id: aec8f39a-over-band
@@ -41,14 +41,19 @@ cases:
         guard: {step: 1, field: within_band, value: false}
   - id: aec8f39a-both-branches
     brief: the failed run shape, export and escalate both runnable
-    blocking: [branch]
+    blocking: [output_fit, branch]
     steps:
+      - step_id: 0
+        intent: variance read
+        tool_name: call_host_api
+        tool_args: {api_name: list_payroll_runs}
       - step_id: 2
         intent: band decision
+        depends_on: [0]
       - step_id: 6
         intent: board pack
         tool_name: export_document
-        tool_args: {title: Board}
+        tool_args: {title: Board, columns: [id, status]}
         depends_on: [2]
       - step_id: 7
         intent: escalate
@@ -68,9 +73,322 @@ cases:
         tool_args: {api_name: list_payroll_runs}
       - step_id: 2
         intent: summarize
+        tool_args: {produces: [headcount]}
         depends_on: [0, 1]
       - step_id: 3
         intent: export the report
         tool_name: export_document
-        tool_args: {title: Weekly}
+        tool_args: {title: Weekly, columns: [headcount]}
         depends_on: [2]
+  - id: declared-output-uncovered
+    brief: distribution the catalog cannot produce
+    blocking: [output_fit]
+    steps:
+      - step_id: 0
+        intent: headcount
+        tool_name: call_host_api
+        tool_args: {api_name: analyze_employees, dimension: org_unit}
+      - step_id: 1
+        intent: export claimed columns
+        tool_name: export_document
+        tool_args:
+          title: Report
+          columns: [average, median, range]
+        depends_on: [0]
+  - id: declared-output-covered
+    brief: headcount the catalog does declare
+    blocking: []
+    steps:
+      - step_id: 0
+        intent: headcount
+        tool_name: call_host_api
+        tool_args: {api_name: analyze_employees, dimension: org_unit}
+      - step_id: 1
+        intent: export the declared column
+        tool_name: export_document
+        tool_args:
+          title: Report
+          columns: [headcount]
+        depends_on: [0]
+  - id: declared-output-unnamed
+    brief: a file whose reads declare no fields
+    blocking: [output_fit]
+    steps:
+      - step_id: 0
+        intent: validate
+        tool_name: call_host_api
+        tool_args: {api_name: validate_payroll_run}
+      - step_id: 1
+        intent: export
+        tool_name: export_document
+        tool_args: {title: Board}
+        depends_on: [0]
+  - id: declared-output-live-shape
+    brief: compute hops then an unnamed workbook
+    blocking: [output_fit, output_fit]
+    steps:
+      - step_id: 0
+        intent: latest run
+        tool_name: call_host_api
+        tool_args: {api_name: list_payroll_runs}
+      - step_id: 1
+        intent: lines
+        tool_name: call_host_api
+        tool_args: {api_name: list_payslip_lines}
+        depends_on: [0]
+      - step_id: 2
+        intent: compute groups
+        depends_on: [1]
+      - step_id: 3
+        intent: export workbook
+        tool_name: export_document
+        tool_args: {title: Report, format: xlsx}
+        depends_on: [2]
+  - id: declared-output-eight-step
+    brief: the live propose shape — three reads, four compute hops, unnamed xlsx
+    blocking: [output_fit, output_fit, output_fit, output_fit, output_fit]
+    steps:
+      - step_id: 1
+        intent: latest committed run
+        tool_name: call_host_api
+        tool_args: {api_name: list_payroll_runs}
+      - step_id: 2
+        intent: employee sample
+        tool_name: call_host_api
+        tool_args: {api_name: list_employees}
+        depends_on: [1]
+      - step_id: 3
+        intent: payslip lines
+        tool_name: call_host_api
+        tool_args: {api_name: list_payslip_lines}
+        depends_on: [1]
+      - step_id: 4
+        intent: compute by org
+        depends_on: [2, 3]
+      - step_id: 5
+        intent: compute by nationality
+        depends_on: [2, 3]
+      - step_id: 6
+        intent: compute by position
+        depends_on: [2, 3]
+      - step_id: 7
+        intent: compute by employment
+        depends_on: [2, 3]
+      - step_id: 8
+        intent: export workbook
+        tool_name: export_document
+        tool_args: {title: Salary Distribution Report, format: xlsx}
+        depends_on: [4, 5, 6, 7]
+  - id: declared-output-pay-structure
+    brief: committed pay structure, named columns the host declares
+    blocking: []
+    steps:
+      - step_id: 0
+        intent: latest committed period
+        tool_name: call_host_api
+        tool_args: {api_name: list_payroll_runs, status: committed}
+      - step_id: 1
+        intent: pay structure by org
+        tool_name: call_host_api
+        tool_args: {api_name: analyze_committed_pay, dimension: org_unit}
+        depends_on: [0]
+      - step_id: 2
+        intent: export declared columns
+        tool_name: export_document
+        tool_args: {title: Pay structure, columns: [average, median]}
+        depends_on: [1]
+  - id: declared-output-pay-structure-p90
+    brief: a column the host does not declare
+    blocking: [output_fit]
+    steps:
+      - step_id: 0
+        intent: pay structure
+        tool_name: call_host_api
+        tool_args: {api_name: analyze_committed_pay, dimension: org_unit}
+      - step_id: 1
+        intent: export
+        tool_name: export_document
+        tool_args: {title: Report, columns: [p90]}
+        depends_on: [0]
+  - id: declared-output-kuwaitization
+    brief: KOC quota columns the host declares
+    blocking: []
+    steps:
+      - step_id: 0
+        intent: kuwaitization quota
+        tool_name: call_host_api
+        tool_args: {api_name: analyze_kuwaitization}
+      - step_id: 1
+        intent: export declared columns
+        tool_name: export_document
+        tool_args: {title: Kuwaitization quota, columns: [required, actual, deficit]}
+        depends_on: [0]
+  - id: declared-output-kuwaitization-p90
+    brief: a column the quota GET does not declare
+    blocking: [output_fit]
+    steps:
+      - step_id: 0
+        intent: kuwaitization quota
+        tool_name: call_host_api
+        tool_args: {api_name: analyze_kuwaitization}
+      - step_id: 1
+        intent: export
+        tool_name: export_document
+        tool_args: {title: Report, columns: [p90]}
+        depends_on: [0]
+  - id: declared-output-no-hop-leave-list
+    brief: utilization is not on the entitlement list
+    blocking: [output_fit]
+    steps:
+      - step_id: 0
+        intent: entitlements
+        tool_name: call_host_api
+        tool_args: {api_name: list_leave_entitlements}
+      - step_id: 1
+        intent: export
+        tool_name: export_document
+        tool_args: {title: Report, columns: [utilization_pct]}
+        depends_on: [0]
+  - id: declared-output-no-hop-loan-list
+    brief: remaining is not on the loan list
+    blocking: [output_fit]
+    steps:
+      - step_id: 0
+        intent: loans
+        tool_name: call_host_api
+        tool_args: {api_name: list_loans}
+      - step_id: 1
+        intent: export
+        tool_name: export_document
+        tool_args: {title: Report, columns: [remaining_balance]}
+        depends_on: [0]
+  - id: declared-output-leave-utilization
+    brief: leave utilization columns the host declares
+    blocking: []
+    steps:
+      - step_id: 0
+        intent: leave utilization
+        tool_name: call_host_api
+        tool_args: {api_name: analyze_leave_utilization, year: "2026", dimension: org_unit}
+      - step_id: 1
+        intent: export declared columns
+        tool_name: export_document
+        tool_args: {title: Leave utilization, columns: [entitled_days, used_days, utilization_pct]}
+        depends_on: [0]
+  - id: declared-output-leave-utilization-p90
+    brief: a column the utilization GET does not declare
+    blocking: [output_fit]
+    steps:
+      - step_id: 0
+        intent: leave utilization
+        tool_name: call_host_api
+        tool_args: {api_name: analyze_leave_utilization, year: "2026", dimension: org_unit}
+      - step_id: 1
+        intent: export
+        tool_name: export_document
+        tool_args: {title: Report, columns: [p90]}
+        depends_on: [0]
+  - id: declared-output-loan-book
+    brief: loan book columns the host declares
+    blocking: []
+    steps:
+      - step_id: 0
+        intent: loan book
+        tool_name: call_host_api
+        tool_args: {api_name: analyze_loan_book, as_of: "2026-09-30", dimension: org_unit}
+      - step_id: 1
+        intent: export declared columns
+        tool_name: export_document
+        tool_args: {title: Loan book, columns: [principal_total, remaining_total]}
+        depends_on: [0]
+  - id: declared-output-loan-book-p90
+    brief: a column the loan book GET does not declare
+    blocking: [output_fit]
+    steps:
+      - step_id: 0
+        intent: loan book
+        tool_name: call_host_api
+        tool_args: {api_name: analyze_loan_book, as_of: "2026-09-30", dimension: org_unit}
+      - step_id: 1
+        intent: export
+        tool_name: export_document
+        tool_args: {title: Report, columns: [p90]}
+        depends_on: [0]
+  - id: declared-output-gosi
+    brief: committed GOSI columns the host declares
+    blocking: []
+    steps:
+      - step_id: 0
+        intent: gosi structure
+        tool_name: call_host_api
+        tool_args: {api_name: analyze_gosi_committed, dimension: org_unit}
+      - step_id: 1
+        intent: export declared columns
+        tool_name: export_document
+        tool_args: {title: GOSI, columns: [average, total]}
+        depends_on: [0]
+  - id: declared-output-gosi-p90
+    brief: a column the GOSI GET does not declare
+    blocking: [output_fit]
+    steps:
+      - step_id: 0
+        intent: gosi structure
+        tool_name: call_host_api
+        tool_args: {api_name: analyze_gosi_committed, dimension: org_unit}
+      - step_id: 1
+        intent: export
+        tool_name: export_document
+        tool_args: {title: Report, columns: [p90]}
+        depends_on: [0]
+  - id: declared-output-cert-expiry
+    brief: cert expiry columns the host declares
+    blocking: []
+    steps:
+      - step_id: 0
+        intent: cert expiry
+        tool_name: call_host_api
+        tool_args: {api_name: analyze_cert_expiry, horizon: "90", dimension: org_unit}
+      - step_id: 1
+        intent: export declared columns
+        tool_name: export_document
+        tool_args: {title: Cert expiry, columns: [expired, expiring, current]}
+        depends_on: [0]
+  - id: declared-output-cert-expiry-p90
+    brief: a column the cert GET does not declare
+    blocking: [output_fit]
+    steps:
+      - step_id: 0
+        intent: cert expiry
+        tool_name: call_host_api
+        tool_args: {api_name: analyze_cert_expiry, horizon: "90", dimension: org_unit}
+      - step_id: 1
+        intent: export
+        tool_name: export_document
+        tool_args: {title: Report, columns: [p90]}
+        depends_on: [0]
+  - id: declared-output-leave-presence
+    brief: leave presence columns the host declares
+    blocking: []
+    steps:
+      - step_id: 0
+        intent: leave presence
+        tool_name: call_host_api
+        tool_args: {api_name: analyze_leave_presence, year: "2026", month: "9", dimension: org_unit}
+      - step_id: 1
+        intent: export declared columns
+        tool_name: export_document
+        tool_args: {title: Presence, columns: [on_leave_count, days]}
+        depends_on: [0]
+  - id: declared-output-leave-presence-p90
+    brief: a column the presence GET does not declare
+    blocking: [output_fit]
+    steps:
+      - step_id: 0
+        intent: leave presence
+        tool_name: call_host_api
+        tool_args: {api_name: analyze_leave_presence, year: "2026", month: "9", dimension: org_unit}
+      - step_id: 1
+        intent: export
+        tool_name: export_document
+        tool_args: {title: Report, columns: [p90]}
+        depends_on: [0]

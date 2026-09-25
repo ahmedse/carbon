@@ -172,7 +172,14 @@ def baseline_decision(
     if api:
         return {"op": "call_tool", "api": api}
 
-    bound = bound_ess_self_api(raw, history=history)
+    prior_api = None
+    for msg in reversed(history or []):
+        if not isinstance(msg, dict) or msg.get("role") != "user":
+            continue
+        prior_api = preferred_self_api(str(msg.get("content") or ""))
+        if prior_api:
+            break
+    bound = bound_ess_self_api(raw, history=history, prior_api=prior_api)
     if bound:
         return {"op": "call_tool", "api": bound}
 
@@ -368,8 +375,13 @@ async def understand_decision(
     instance_id: str = "nibras",
     user_info: dict[str, Any] | None = None,
     state: Any = None,
-) -> dict[str, str]:
-    """One understand call, same prompt/catalog/validation as the runtime."""
+    with_decision: bool = False,
+) -> dict[str, str] | tuple[dict[str, str], Any, Any]:
+    """One understand call, same prompt/catalog/validation as the runtime.
+
+    ``with_decision`` also returns the validated Decision and the capability
+    surface, for callers that inspect targets and handoff names.
+    """
     from ai.engine.cognition.turn.understand import (
         build_understand_system_prompt,
         catalog_context,
@@ -423,13 +435,14 @@ async def understand_decision(
     decision = await understand_turn(
         complete=complete,
         messages=messages,
-        catalog_tools=scoped_catalog,
         surface="chat",
         allowed_tools=allowed or None,
         write_tools=writes or None,
         state=state,
         arg_violations=caps.arg_violations,
     )
+    if with_decision:
+        return _decision_to_dict(decision, state), decision, caps
     return _decision_to_dict(decision, state)
 
 

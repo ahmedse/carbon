@@ -105,6 +105,9 @@ class ToolPlugin(ABC):
     #: Whether the tool is exposed to the chat S3 planner. Sensitive or
     #: agent-mode-only tools set False (G-C: registry-driven chat surface).
     chat_visible: bool = True
+    #: Whether the understand call may name this tool in a Decision. Tools the
+    #: planner owns set False: a plan is ``handoff_agent process_id=plan``.
+    decision_surface: bool = True
 
     @abstractmethod
     async def execute(self, args: dict, *, ctx: ToolContext) -> dict:

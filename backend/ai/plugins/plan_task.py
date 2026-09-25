@@ -37,6 +37,7 @@ logger = logging.getLogger("carbon.ai.plugins.plan_task")
 
 class PlanTask(ToolPlugin):
     name = "plan_task"
+    decision_surface = False
     description = (
         "Turn a task brief into a reviewable execution plan. "
         "Use it when the user asks you to plan, orchestrate, or run a task, "

@@ -583,20 +583,6 @@ def is_bound_catalog_read(
     return True
 
 
-def _unwrap_tool_payload(tool_output: Any) -> Any:
-    if not isinstance(tool_output, dict):
-        return tool_output
-    raw = tool_output.get("result", tool_output.get("data"))
-    if isinstance(raw, str):
-        try:
-            raw = json.loads(raw)
-        except (TypeError, ValueError):
-            return raw
-    if isinstance(raw, dict) and "data" in raw and "status_code" in raw:
-        return raw.get("data")
-    return raw
-
-
 def _code_or_text(value: Any) -> str:
     if isinstance(value, dict):
         text = value.get("code") or value.get("name") or value.get("label")
@@ -624,33 +610,21 @@ def render_bound_catalog_read(
     *,
     catalog_entry: dict | None = None,
 ) -> str | None:
-    """0-LLM restatement of a bound ESS lookup. Invents no numbers."""
+    """0-LLM restatement of a bound ESS lookup. Invents no numbers.
+
+    Only a renderer the catalog declares (``kind`` / ``empty_render``) may
+    restate. Anything else is None, and the grounded writer speaks from the
+    payload. The tool digest is model memory, never a reply (ADR-0057).
+    """
     from ai.engine.cognition.turn.catalog_render import render_catalog_read
 
-    api = str(api_name or "").strip()
     rendered = render_catalog_read(
         tool_output,
-        api,
+        str(api_name or "").strip(),
         language,
         catalog_entry=catalog_entry,
     )
-    if rendered:
-        return rendered
-
-    payload = _unwrap_tool_payload(tool_output)
-    if api in _SELF_GET_NO_PATH:
-        from ai.engine.cognition.tool_digest import build_tool_digest
-
-        item = tool_output if isinstance(tool_output, dict) else {
-            "tool_name": "call_host_api",
-            "tool_args": {"api_name": api},
-            "result": payload,
-        }
-        if isinstance(item, dict) and not item.get("tool_args"):
-            item = {**item, "tool_args": {"api_name": api}}
-        digest = build_tool_digest([item], None)
-        return digest or None
-    return None
+    return rendered or None
 
 
 def is_bound_resolve_entity(

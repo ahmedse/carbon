@@ -255,6 +255,9 @@ class CorrespondenceViewSet(viewsets.ReadOnlyModelViewSet):
             )
 
         if not org_unit_id:
+            profile = getattr(request.user, 'employee_profile', None)
+            org_unit_id = getattr(profile, 'org_unit_id', None)
+        if not org_unit_id:
             return Response(
                 {'detail': 'org_unit is required'},
                 status=status.HTTP_400_BAD_REQUEST,

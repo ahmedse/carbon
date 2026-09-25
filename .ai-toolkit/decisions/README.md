@@ -85,5 +85,8 @@ cp .ai-toolkit/decisions/0000-template.md .ai-toolkit/decisions/00NN-short-title
 | [0054](0054-pulse-reasoning-channel.md) | Reasoning channel: rationale, step line, state-gated summary, revision | Proposed |
 | [0055](0055-pulse-plan-proposal-is-the-plan.md) | A proposed plan is the plan: typed proposal, planner decides what a task is | Proposed |
 | [0056](0056-pulse-one-pipeline-no-fallthrough.md) | One pipeline: the model decides, code blocks or verifies, nothing falls through | Proposed |
+| [0057](0057-pulse-declared-output.md) | Declared output is the only success (I1 output-fit; no invented export) | Proposed |
+| [0058](0058-pulse-catalog-request-write.md) | Catalog `kind: request` is the remaining effect when output-fit blocks | Proposed |
+| [0059](0059-pulse-named-pay-structure-get.md) | A pay-structure read is a named, closed GET; analytics stays headcount | Proposed |
 
 <!-- Add a row per ADR. Keep newest at the bottom. -->

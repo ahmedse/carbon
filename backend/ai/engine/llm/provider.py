@@ -9,6 +9,7 @@ seams (legacy + live-smoke-test only): callers that need usage accounting and
 budget enforcement MUST route through ``ai.engine.llm.router.route_chat``.
 """
 import logging
+from dataclasses import dataclass
 
 from openai import (
     APIConnectionError,
@@ -56,6 +57,35 @@ def _is_deepseek_endpoint(base_url: str | None = None) -> bool:
     """True when the configured LLM endpoint is DeepSeek's OpenAI-compatible API."""
     url = (base_url if base_url is not None else get_settings().LLM_BASE_URL) or ""
     return "deepseek.com" in url.lower()
+
+
+@dataclass(frozen=True)
+class ReasoningMode:
+    """How one provider returns a reasoning trace in ``reasoning_content``.
+
+    ``forced_tool``: the provider accepts a named or required tool_choice
+    while reasoning. Anthropic models reject that pair with a 400.
+    ``temperature``: the sampling temperature the provider requires while
+    reasoning, or None when any is accepted.
+    """
+
+    body: dict
+    forced_tool: bool
+    temperature: float | None = None
+
+
+def _is_anthropic_model(model: str | None) -> bool:
+    name = str(model or "").strip().lower()
+    return name.startswith("anthropic/") or "claude" in name
+
+
+def reasoning_mode(model: str | None, base_url: str | None = None) -> ReasoningMode | None:
+    """The declared reasoning request for this model, or None when it has none."""
+    if _is_deepseek_endpoint(base_url):
+        return ReasoningMode(body={"thinking": {"type": "enabled"}}, forced_tool=False)
+    if _is_anthropic_model(model):
+        return ReasoningMode(body={"reasoning_effort": "low"}, forced_tool=False, temperature=1.0)
+    return None
 
 
 def _apply_provider_kwargs(kwargs: dict) -> dict:

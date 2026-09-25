@@ -88,7 +88,11 @@ function AIWorkingIndicator({
                   <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.625rem', minWidth: 18, textAlign: 'right' }}>
                     {i + 1}.
                   </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ fontSize: '0.6875rem', whiteSpace: 'pre-wrap' }}
+                  >
                     {stepLabel}
                   </Typography>
                 </Box>

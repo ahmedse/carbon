@@ -52,6 +52,9 @@ redis==5.0.1                          # Memory cache / message broker
 xlsxwriter==3.2.2                     # Excel export for GHG reports (E3-1)
 python-docx==1.1.2                    # Word (.docx) generation for AI study exports
 openpyxl==3.1.5                       # Excel (.xlsx) generation for AI study exports
+reportlab==5.0.1                      # Unicode PDF (embedded TTF; Helvetica cannot carry Arabic)
+arabic-reshaper==3.0.1                # Arabic presentation forms for PDF
+python-bidi==0.6.11                   # Visual order for mixed Arabic/Latin PDF lines
 
 # ── Vendored Pulse Engine (backend/ai/engine) — INERT, import-only (ADR-0009) ──
 pydantic>=2.7.0,<3                  # Schema models (core/config.py, models)

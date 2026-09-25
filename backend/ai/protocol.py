@@ -476,6 +476,8 @@ class ChatRequest:
     # metadata, not prompt prose — the engine resolves it to a ``Surface``
     # before drafting, and nothing downstream re-derives the mode from text.
     process_mode: str = "ask"
+    # Client opt-in (Pulse status-bar switch): denser Thought panel. Default off.
+    dense_thinking: bool = False
 
 
 @dataclass

@@ -53,6 +53,7 @@ vi.mock('../api/aiWorkspace', () => ({
   deleteConversation: vi.fn(),
   sendMessage: vi.fn(),
   findOpenConversation: vi.fn(),
+  listModels: vi.fn(() => Promise.resolve({ models: [] })),
 }));
 
 import { AIWorkspace } from '../shell/AIWorkspace';

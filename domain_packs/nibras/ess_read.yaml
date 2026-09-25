@@ -184,3 +184,18 @@ EMPTY_RENDER:
   no_attendance_permissions:
     en: No attendance permissions on record.
     ar: لا توجد استئذانات حضور مسجّلة.
+  no_leave_utilization:
+    en: No leave entitlements for that year and dimension.
+    ar: لا توجد استحقاقات إجازة لتلك السنة والبعد.
+  no_leave_presence:
+    en: No submitted or approved leave overlapping that month.
+    ar: لا توجد إجازات مقدّمة أو معتمدة تتقاطع مع ذلك الشهر.
+  no_loan_book:
+    en: No loans visible for that as-of date and dimension.
+    ar: لا توجد قروض ظاهرة لتاريخ القطع والبعد.
+  no_committed_gosi:
+    en: No committed GOSI lines for that period and dimension.
+    ar: لا توجد بنود تأمينات معتمدة لتلك الفترة والبعد.
+  no_cert_expiry:
+    en: No certifications with an expiry date in this scope.
+    ar: لا توجد شهادات بتاريخ انتهاء في هذا النطاق.

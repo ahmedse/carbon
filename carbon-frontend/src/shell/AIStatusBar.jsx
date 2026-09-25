@@ -1,8 +1,7 @@
-// src/shell/AIStatusBar.jsx
 import React from 'react';
 import PropTypes from 'prop-types';
 import { useTranslation } from 'react-i18next';
-import { Box, Button, Typography } from '@mui/material';
+import { Box, Button, Switch, Tooltip, Typography } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 
 const DOT_COLORS = {
@@ -14,7 +13,13 @@ const DOT_COLORS = {
   offline: 'error.main',
 };
 
-function AIStatusBar({ variant = 'ready', label = 'Ready', onRetry }) {
+function AIStatusBar({
+  variant = 'ready',
+  label = 'Ready',
+  onRetry,
+  denseThinking = false,
+  onDenseThinkingChange,
+}) {
   const { t } = useTranslation('ai');
   const color = DOT_COLORS[variant] || DOT_COLORS.ready;
   const retryable = variant === 'transient' || variant === 'offline';
@@ -59,6 +64,46 @@ function AIStatusBar({ variant = 'ready', label = 'Ready', onRetry }) {
           {t('retry')}
         </Button>
       )}
+      {typeof onDenseThinkingChange === 'function' && (
+        <Tooltip title={t('denseThinking.hint')}>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.25,
+              ml: 0.5,
+              pl: 0.75,
+              borderLeft: 1,
+              borderColor: 'divider',
+              flexShrink: 0,
+            }}
+          >
+            <Typography
+              component="label"
+              htmlFor="pulse-dense-thinking"
+              variant="caption"
+              sx={{ fontSize: '0.65rem', color: 'text.secondary', cursor: 'pointer', userSelect: 'none' }}
+            >
+              {t('denseThinking.label')}
+            </Typography>
+            <Switch
+              id="pulse-dense-thinking"
+              size="small"
+              checked={Boolean(denseThinking)}
+              onChange={(event) => onDenseThinkingChange(event.target.checked)}
+              inputProps={{ 'aria-label': t('denseThinking.label') }}
+              sx={{
+                m: 0,
+                '& .MuiSwitch-switchBase': { p: 0.4 },
+                '& .MuiSwitch-thumb': { width: 12, height: 12 },
+                '& .MuiSwitch-track': { borderRadius: 8 },
+                width: 28,
+                height: 16,
+              }}
+            />
+          </Box>
+        </Tooltip>
+      )}
     </Box>
   );
 }
@@ -67,6 +112,8 @@ AIStatusBar.propTypes = {
   variant: PropTypes.oneOf(['ready', 'working', 'streaming', 'needs-input', 'transient', 'offline']),
   label: PropTypes.string,
   onRetry: PropTypes.func,
+  denseThinking: PropTypes.bool,
+  onDenseThinkingChange: PropTypes.func,
 };
 
 export default AIStatusBar;

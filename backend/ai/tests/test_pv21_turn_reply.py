@@ -79,22 +79,51 @@ def _stub_synth(monkeypatch, headline: str = "", prose: list[str] | None = None,
     return seen
 
 
+_GROUNDED = "Only 1 of 555 employees has a gender on file, so the split says more about the data than the people."
+_UNGROUNDED = "About 90 percent are in one site."
+
+
+def _stub_synth_seq(monkeypatch, replies: list[list[str]]):
+    from ai.envelope import AnswerEnvelope
+
+    seen: dict = {"messages": []}
+
+    async def fake(**kwargs):
+        seen["messages"].append(kwargs["user_message"])
+        seen["strict"] = kwargs.get("strict")
+        prose = replies[min(len(seen["messages"]), len(replies)) - 1]
+        return AnswerEnvelope(headline="Gender is almost all unrecorded", prose=prose)
+
+    monkeypatch.setattr("ai.envelope_service.synthesize_envelope", fake)
+    return seen
+
+
 def test_reply_is_written_for_this_message(monkeypatch):
-    seen = _stub_synth(monkeypatch, "Gender is almost all unrecorded", [
-        "Only 1 of 555 employees has a gender on file, so the split says more about the data than the people.",
-        "About 90 percent are in one site.",
-    ])
+    seen = _stub_synth_seq(monkeypatch, [[_GROUNDED, _UNGROUNDED], [_GROUNDED]])
     text, env, degraded = asyncio.run(speak_turn(
         _decision("pie", reason="user repeats that they asked for a pie"), _ROWS,
         text="", user_message="i told you pie", instance_id="i", conversation_id="c",
     ))
     assert degraded is None
     assert seen["strict"] is True
-    assert "i told you pie" in seen["user_message"]
-    assert "Understood as" in seen["user_message"]
-    assert text.startswith("Gender is almost all unrecorded")
-    assert "90 percent" not in text
+    assert "i told you pie" in seen["messages"][0]
+    assert "Understood as" in seen["messages"][0]
+    # ADR-0056: the ungrounded number is fed back once, never cut from the prose.
+    assert len(seen["messages"]) == 2 and "90" in seen["messages"][1]
+    assert text == "\n\n".join(["Gender is almost all unrecorded", _GROUNDED])
     assert env["charts"][0]["chart_type"] == "pie"
+    assert env["tables"]
+
+
+def test_a_number_still_ungrounded_after_one_retry_fails_visibly(monkeypatch):
+    seen = _stub_synth_seq(monkeypatch, [[_GROUNDED, _UNGROUNDED]])
+    text, env, degraded = asyncio.run(speak_turn(
+        _decision("pie"), _ROWS,
+        text="", user_message="i told you pie", instance_id="i", conversation_id="c",
+    ))
+    assert len(seen["messages"]) == 2
+    assert degraded is not None and degraded.to_dict() == {"stage": "write", "cause": "ungrounded"}
+    assert "90 percent" not in text and _GROUNDED not in text
     assert env["tables"]
 
 

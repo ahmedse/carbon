@@ -212,6 +212,7 @@ class TurnPipelineRunner(SoftSurfacesMixin):
         knowledge_items: list | None = None,
         scope: dict | None = None,
         process_state: dict | None = None,
+        dense_thinking: bool = False,
         *,
         meter=None,
         state_ctx=None,
@@ -293,7 +294,7 @@ class TurnPipelineRunner(SoftSurfacesMixin):
             user_message=original_user_message,
         )
 
-        st = MeteredTurnState(user_message=user_message)
+        st = MeteredTurnState(user_message=user_message, dense_thinking=bool(dense_thinking))
         _stage_kw = dict(
             instance_id=instance_id,
             conversation_id=conversation_id,

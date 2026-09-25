@@ -38,7 +38,11 @@ function PlanProposalStep({ step, index }) {
             color="warning"
             variant="outlined"
             sx={{ mt: 0.5 }}
-            label={step.gap ? t('plan.blockedWith', { gap: step.gap }) : t('plan.blocked')}
+            label={
+              (step.reason || step.gap)
+                ? t('plan.blockedWith', { gap: step.reason || step.gap })
+                : t('plan.blocked')
+            }
           />
         )}
       </Box>
@@ -51,6 +55,7 @@ PlanProposalStep.propTypes = {
     intent: PropTypes.string,
     blocked: PropTypes.bool,
     gap: PropTypes.string,
+    reason: PropTypes.string,
     args: PropTypes.array,
   }).isRequired,
   index: PropTypes.number.isRequired,
@@ -60,6 +65,7 @@ function PlanProposalForm({ proposal, onCreate, onChange, onOpenTasks }) {
   const { t } = useTranslation('ai');
   const steps = Array.isArray(proposal.steps) ? proposal.steps : [];
   const blocked = Number(proposal.blocked_count || 0);
+  const refuseCreate = Boolean(proposal.blocks_create);
   const [change, setChange] = useState('');
   const [state, setState] = useState('draft');
   const [error, setError] = useState('');
@@ -111,6 +117,11 @@ function PlanProposalForm({ proposal, onCreate, onChange, onOpenTasks }) {
           {t('plan.blockedSummary', { count: blocked })}
         </Typography>
       )}
+      {refuseCreate && (
+        <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'warning.main' }}>
+          {t('plan.createBlocked')}
+        </Typography>
+      )}
       {error && (
         <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'error.main' }}>
           {error}
@@ -142,7 +153,7 @@ function PlanProposalForm({ proposal, onCreate, onChange, onOpenTasks }) {
             <Button
               size="small"
               variant="contained"
-              disabled={locked || !onCreate}
+              disabled={locked || !onCreate || refuseCreate}
               onClick={create}
             >
               {t('plan.create')}
@@ -166,6 +177,7 @@ PlanProposalForm.propTypes = {
   proposal: PropTypes.shape({
     steps: PropTypes.array,
     blocked_count: PropTypes.number,
+    blocks_create: PropTypes.bool,
   }).isRequired,
   onCreate: PropTypes.func,
   onChange: PropTypes.func,

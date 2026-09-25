@@ -479,6 +479,7 @@ class PulseProvider(AIProvider):
                 if request.process_mode in PULSE_DIAL_MODES
                 else "ask"
             ),
+            "dense_thinking": bool(getattr(request, "dense_thinking", False)),
         }
         if request.model:
             payload["model"] = request.model

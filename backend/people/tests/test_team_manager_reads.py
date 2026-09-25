@@ -132,3 +132,39 @@ def test_team_leave_empty_other_month(manager_world, api_client, get_token_for_u
     resp = api_client.get(TEAM_LEAVE_URL, {'year': 2026, 'month': 1})
     assert resp.status_code == 200
     assert resp.json()['items'] == []
+
+
+@pytest.mark.django_db
+def test_in_process_direct_reports_uses_same_view(manager_world):
+    from asgiref.sync import async_to_sync
+    from ai.host_executor import CarbonHostExecutor
+
+    user = manager_world.mgr_user
+    exe = CarbonHostExecutor(
+        db=None, instance_config={},
+        user_token=f"inproc:nibras:{user.pk}", host_user_id=str(user.pk),
+    )
+    out = async_to_sync(exe._people_in_process)(
+        method="GET", params={}, body={},
+        endpoint="carbon-api/people/me/direct-reports",
+    )
+    assert out["status_code"] == 200, out
+    nos = {row["employee_no"] for row in out["data"]}
+    assert "TM-REP" in nos
+
+
+@pytest.mark.django_db
+def test_in_process_team_leave_requires_team_access(manager_world):
+    from asgiref.sync import async_to_sync
+    from ai.host_executor import CarbonHostExecutor
+
+    user = manager_world.rep.user
+    exe = CarbonHostExecutor(
+        db=None, instance_config={},
+        user_token=f"inproc:nibras:{user.pk}", host_user_id=str(user.pk),
+    )
+    out = async_to_sync(exe._people_in_process)(
+        method="GET", params={"year": 2026, "month": 9}, body={},
+        endpoint="carbon-api/people/me/team-leave",
+    )
+    assert out["status_code"] == 403

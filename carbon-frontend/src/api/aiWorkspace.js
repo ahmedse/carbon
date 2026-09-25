@@ -572,12 +572,13 @@ export async function sendMessageStream(
   token,
   conversationId,
   content,
-  { onChunk, onProgress, onDone, onStopped, onError, workspaceContext, pulseMode, model, signal },
+  { onChunk, onProgress, onDone, onStopped, onError, workspaceContext, pulseMode, denseThinking, model, signal },
 ) {
   const path = `${BASE}conversations/${conversationId}/messages/stream/`;
   const body = { content };
   if (workspaceContext) body.workspace_context = workspaceContext;
   if (pulseMode === 'ask' || pulseMode === 'plan') body.pulse_mode = pulseMode;
+  if (denseThinking) body.dense_thinking = true;
   if (model) body.model = model;
   await streamJsonPost(token, path, body, { onChunk, onProgress, onDone, onStopped, onError, signal });
 }

@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import json
 import types
+
+from ai.tests.pv21_stub import decision_for
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -78,6 +80,7 @@ def _scripted_client(decide):
     async def _create(**kw):
         calls.append(kw)
         content, tool_calls = decide(kw)
+        tool_calls = decision_for(kw, decide) or tool_calls
         return types.SimpleNamespace(
             choices=[
                 types.SimpleNamespace(
@@ -487,7 +490,7 @@ def test_state_saved_on_answer_and_every_turn_of_a_mixed_conversation(django_sto
 
 # ── 4. StateBlock in the draft prompt + slot carry-over ──────────────────
 
-_LOAN_BODY = {"loan_type": "emergency", "amount": 5000}
+_LOAN_BODY = {"loan_type": "emergency", "principal": 5000}
 
 
 def _loan_decide(kw: dict):
@@ -496,10 +499,10 @@ def _loan_decide(kw: dict):
     user_text = _last_user_text(kw).lower()
     if _is_draft_call(kw) and "emergency loan of 5000" in user_text:
         return None, _tool_call(
-            "call_host_api", {"api_name": "submit_loan_request", "body": _LOAN_BODY},
+            "call_host_api", {"api_name": "submit_my_loan", "body": _LOAN_BODY},
         )
     if "go ahead" in user_text:
-        if "amount=5000" in _system_text(kw):
+        if "principal=5000" in _system_text(kw):
             return "Your emergency loan request for 5000 is ready — open Agent to submit it.", None
         return "How much would you like to borrow?", None
     return "Noted.", None
@@ -529,11 +532,10 @@ def test_slots_carry_over_three_turns_without_reask_and_state_block_in_draft(
                     {"role": "assistant", "content": replies[-1]}]
 
     state = _stored_state(conv)
-    # PV2-3B: a complete loan brief hands off — slots persist as principal
-    # (catalog) plus amount (C8 / StateBlock alias). Chat never stages.
+    # PV2-3B: a complete loan brief hands off — slots persist under the
+    # catalog's own field names (ADR-0056). Chat never stages.
     assert state.slots.get("loan_type") == "emergency"
-    assert float(state.slots.get("principal") or state.slots.get("amount") or 0) == 5000
-    assert float(state.slots.get("amount") or 0) == 5000
+    assert float(state.slots.get("principal") or 0) == 5000
     assert state.intent.get("api") == "submit_my_loan"
     assert state.intent["since_turn"] == 1
 
@@ -556,7 +558,9 @@ def test_state_of_another_user_is_not_loaded_into_the_prompt(django_store, engin
 
     result, calls = _chat("Please go ahead", conv=conv, decide=_loan_decide,
                           host_user_id="7002")
-    assert not any(_STATE_HEADER in _system_text(kw) for kw in calls)
+    # The understand instructions name the block, so look for 7001's values.
+    assert not any("principal=5000" in _system_text(kw) for kw in calls)
+    assert not any("loan_type=emergency" in _system_text(kw) for kw in calls)
     assert result.get("state_saved") is False
     # Other user has no inherited slots — clarify / answer / handoff all OK.
     assert result.get("turn_decision") in {"clarify", "answer", "handoff_agent"}

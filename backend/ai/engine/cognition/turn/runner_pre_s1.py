@@ -197,8 +197,13 @@ async def run_pre_s1_gates(
         _plan_status = await runner._try_plan_status_answer(user_message=st.user_message, state_ctx=state_ctx, ledger=ledger, meter=meter, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, host_user_id=host_user_id, t0=t0)
     if _plan_status is not None:
         stage_soft_exit(staged, 'answer', 'plan_status', _plan_status[0])
+    # ADR-0056: on v21 the Decision owns writes, self-reads and deixis; these
+    # wording gates only run on the legacy path until it is deleted.
+    from ai.engine.cognition.turn.understand import understand_mode
+
+    _legacy = understand_mode() != "v21"
     st.chat_handoff = None
-    if not turn_route.committed and _plan_status is None:
+    if _legacy and not turn_route.committed and _plan_status is None:
         st.chat_handoff = await runner._try_chat_write_handoff(user_message=st.user_message, conversation_history=conversation_history, state_ctx=state_ctx, instance_config=instance_config, surface=surface)
     if st.chat_handoff is None and _plan_status is None and may_stage('next_step'):
         _next_step = await runner._try_next_step_offer(user_message=st.user_message, state_ctx=state_ctx, ledger=ledger, meter=meter, turn_id=turn_id, instance_id=instance_id, t0=t0)
@@ -212,9 +217,11 @@ async def run_pre_s1_gates(
     # continuation of that subject, not a question. Normalize the message so
     # the bound self-read binds it; the deixis gate in S1 then stays silent.
     try:
-        from ai.engine.cognition.dialogue.deixis import resolve_deixis_subject
-        _deixis_results = list(getattr(state, 'last_results', None) or []) if state is not None else []
-        _resolved_msg = resolve_deixis_subject(st.user_message, last_results=_deixis_results)
+        _resolved_msg = ''
+        if _legacy:
+            from ai.engine.cognition.dialogue.deixis import resolve_deixis_subject
+            _deixis_results = list(getattr(state, 'last_results', None) or []) if state is not None else []
+            _resolved_msg = resolve_deixis_subject(st.user_message, last_results=_deixis_results)
         if _resolved_msg:
             st.deixis_subject = _resolved_msg.rsplit(' — ', 1)[-1]
             st.user_message = _resolved_msg
@@ -224,12 +231,12 @@ async def run_pre_s1_gates(
     except Exception:
         logger.debug('[%s] deixis subject resolution skipped', turn_id[:8], exc_info=True)
     st.ess_bound = None
-    if not turn_route.committed and st.chat_handoff is None and (runner.executor is not None):
+    if _legacy and not turn_route.committed and st.chat_handoff is None and (runner.executor is not None):
         st.ess_bound = await runner._try_bound_ess_self_read(user_message=st.user_message, conversation_history=conversation_history, state_ctx=state_ctx, ledger=ledger, meter=meter, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, host_user_id=host_user_id, instance_config=instance_config, t0=t0, surface=surface)
     if st.ess_bound is not None:
         stage_exit(staged, 'tool_answer', 'ess_bound_self_read', st.ess_bound[0])
     if st.ess_bound is None and (not turn_route.committed) and (st.chat_handoff is None) and (runner.executor is not None):
-        _v21 = await runner._try_v21_understand(user_message=st.user_message, conversation_history=conversation_history, ledger=ledger, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, host_user_id=host_user_id, instance_config=instance_config, t0=t0, surface=surface, state_ctx=state_ctx, user_info=user_info, process_mode=process_mode, progress_callback=progress_callback)
+        _v21 = await runner._try_v21_understand(user_message=st.user_message, conversation_history=conversation_history, ledger=ledger, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, host_user_id=host_user_id, instance_config=instance_config, t0=t0, surface=surface, state_ctx=state_ctx, user_info=user_info, process_mode=process_mode, progress_callback=progress_callback, dense_thinking=bool(getattr(st, 'dense_thinking', False)))
         if _v21 is not None:
             return _v21
     _zero = None
@@ -246,7 +253,7 @@ async def run_pre_s1_gates(
         _plan_dial = await runner._try_plan_dial_process_plan(user_message=st.user_message, process_mode=process_mode, state_ctx=state_ctx, ledger=ledger, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, host_user_id=host_user_id, t0=t0)
         if _plan_dial is not None:
             return _plan_dial
-        _v21_plan = await runner._try_v21_understand(user_message=st.user_message, conversation_history=conversation_history, ledger=ledger, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, host_user_id=host_user_id, instance_config=instance_config, t0=t0, surface=surface, state_ctx=state_ctx, user_info=user_info, process_mode=process_mode, progress_callback=progress_callback)
+        _v21_plan = await runner._try_v21_understand(user_message=st.user_message, conversation_history=conversation_history, ledger=ledger, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, host_user_id=host_user_id, instance_config=instance_config, t0=t0, surface=surface, state_ctx=state_ctx, user_info=user_info, process_mode=process_mode, progress_callback=progress_callback, dense_thinking=bool(getattr(st, 'dense_thinking', False)))
         if _v21_plan is not None:
             return _v21_plan
     if turn_route.kind is RouteKind.RESTYLE and may_stage('restyle'):

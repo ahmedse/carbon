@@ -296,6 +296,34 @@
   expect_lang_en: en
   notes: "salary self-read → profile (CBAC); not payslip lines"
 
+# ── payslip · tier v21 — how pay is structured is words, not a profile read ──
+# Conv 084c96f3 (2026-09-25): the pick "Salary structure and compensation"
+# ran get_my_profile, and the reply restated the memory digest.
+- id: g6-076
+  category: payslip
+  tier: v21
+  ar: "كيف يتكون هيكل الرواتب؟"
+  en: "how is the salary structure made up?"
+  expect_op: answer
+  expect_api: ""
+  expect_lang_ar: ar
+  expect_lang_en: en
+  notes: "general pay structure → answer from domain facts; contrast g6-022"
+
+- id: g6-077
+  category: payslip
+  tier: v21
+  ar: "هيكل الرواتب والتعويضات"
+  en: "Salary structure and compensation"
+  history:
+    - {role: user, content: "tell me more about salaries"}
+    - {role: assistant, content: "What would you like to know about salaries? My own salary and pay / Payroll runs and payslips / Salary structure and compensation / Employee salary data"}
+  expect_op: answer
+  expect_api: ""
+  expect_lang_ar: ar
+  expect_lang_en: en
+  notes: "picked the general option of a clarify → answer, not a self read"
+
 - id: g6-023
   category: payslip
   ar: "آخر قسيمة"
@@ -811,6 +839,84 @@
   expect_lang_ar: ar
   expect_lang_en: en
   notes: "org report with charts → reads on the HR surface, rendered as a chart; never 'I can't use X from here' (conv fc9eb86b 2026-09-24 14:34, HR manager). Headcount metric or breakdown first are both right."
+
+- id: g6-078
+  category: process
+  tier: v21
+  audience: [ess, hr]
+  persona: emp_2378
+  ar: "استخدام الإجازات حسب الإدارة لهذه السنة"
+  en: "leave utilization by org unit for this year"
+  expect_op: call_tool
+  expect_api: analyze_leave_utilization
+  expect_lang_ar: ar
+  expect_lang_en: en
+  notes: "org entitlement book — not a truncated list_leave_entitlements hop"
+
+- id: g6-079
+  category: process
+  tier: v21
+  audience: [ess, hr]
+  persona: emp_2378
+  ar: "من في إجازة معتمدة هذا الشهر حسب الإدارة"
+  en: "who is on approved leave this month by department"
+  expect_op: call_tool
+  expect_api: analyze_leave_presence
+  expect_lang_ar: ar
+  expect_lang_en: en
+  notes: "org month presence — not Team Who's Out and not a coworker list"
+
+- id: g6-080
+  category: process
+  tier: v21
+  audience: [ess, hr]
+  persona: emp_2378
+  ar: "أصل القروض القائم حسب الإدارة حتى تاريخه"
+  en: "outstanding loan principal by org unit as of 2026-09-30"
+  expect_op: call_tool
+  expect_api: analyze_loan_book
+  expect_lang_ar: ar
+  expect_lang_en: en
+  notes: "org outstanding principal — not list_loans (no remaining on the list)"
+
+- id: g6-081
+  category: process
+  tier: v21
+  audience: [ess, hr]
+  persona: emp_2378
+  ar: "إجمالي التأمينات المعتمدة حسب الجنسية للفترة"
+  en: "committed GOSI totals by nationality for the period"
+  expect_op: call_tool
+  expect_api: analyze_gosi_committed
+  expect_lang_ar: ar
+  expect_lang_en: en
+  notes: "GOSI is its own GET — not line_type on analyze_committed_pay"
+
+- id: g6-082
+  category: process
+  tier: v21
+  audience: [ess, hr]
+  persona: emp_2378
+  ar: "الشهادات التي تنتهي خلال 90 يوما حسب الإدارة"
+  en: "certifications expiring in 90 days by org unit"
+  expect_op: call_tool
+  expect_api: analyze_cert_expiry
+  expect_lang_ar: ar
+  expect_lang_en: en
+  notes: "org cert pipeline — not a truncated cert list hop"
+
+- id: g6-083
+  category: process
+  tier: v21
+  audience: [ess, hr]
+  persona: emp_2378
+  ar: "متوسط وصافي الراتب المعتمد حسب الإدارة لأحدث فترة"
+  en: "committed pay average and median by org unit for the latest period"
+  expect_op: call_tool
+  expect_api: analyze_committed_pay
+  expect_lang_ar: ar
+  expect_lang_en: en
+  notes: "contrast g6-076: a period + dimension ask is the named GET, not a general answer"
 
 # ── off_limits (4) ──────────────────────────────────────────────────────────
 - id: g6-057

@@ -62,6 +62,30 @@ describe('PlanProposalForm', () => {
     expect(screen.getByText(/cannot run as planned/)).toBeTruthy();
   });
 
+  it('does not create a task when the catalog cannot produce the deliverable', () => {
+    const onCreate = vi.fn();
+    render(<PlanProposalForm proposal={proposal({
+      steps: [
+        { step_id: 1, intent: 'Read lines', args: [], blocked: false, gap: '' },
+        {
+          step_id: 2,
+          intent: 'Export the workbook',
+          args: [],
+          blocked: true,
+          gap: 'declared output',
+          reason: 'This export does not name the fields it will contain.',
+          findings: [{ code: 'output_fit', detail: 'This export does not name the fields it will contain.', blocks: true }],
+        },
+      ],
+      blocked_count: 1,
+      blocks_create: true,
+    })} onCreate={onCreate} />);
+    expect(screen.getByText(/does not name the fields/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Create task' })).toHaveProperty('disabled', true);
+    fireEvent.click(screen.getByRole('button', { name: 'Create task' }));
+    expect(onCreate).not.toHaveBeenCalled();
+  });
+
   it('offers no approve control — approving lives in Tasks', () => {
     render(<PlanProposalForm proposal={proposal()} onCreate={vi.fn()} />);
     expect(screen.queryByRole('button', { name: /approve/i })).toBeNull();

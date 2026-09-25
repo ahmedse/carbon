@@ -272,4 +272,15 @@ def test_ensure_export_noop_when_already_present():
     ]
     _ensure_export_deliverable("export a Word report", steps)
     assert len(steps) == 1
+    assert steps[0].tool_args["format"] == "docx"
+
+
+def test_ensure_export_widens_existing_format():
+    steps = [
+        PlanStep(step_id=0, intent="Export workbook", tool_name="export_document",
+                 tool_args={"format": "xlsx"}),
+    ]
+    _ensure_export_deliverable("also generate a PDF executive report", steps)
+    assert len(steps) == 1
+    assert steps[0].tool_args["format"] == "pack"
 

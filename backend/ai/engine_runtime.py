@@ -210,6 +210,7 @@ async def _run_chat(
             conversation_id=conversation_id,
             host_user_id=host_user_id,
             process_mode=str(payload.get("process_mode") or "ask"),
+            dense_thinking=bool(payload.get("dense_thinking")),
             conversation_history=history_messages,
             instance_config=instance_config,
             user_info=user_info,
@@ -472,6 +473,16 @@ async def _run_chat(
                 # badge (platform|concept|real_time|general|off_limits).
                 "intent_zone": getattr(ledger, "intent_zone", "platform"),
                 "turn_decision": getattr(ledger, "turn_decision", ""),
+                "v21_miss": next(
+                    (
+                        str((s.get("detail") or {}).get("reason") or "")
+                        for s in (getattr(ledger, "decision_signals", None) or [])
+                        if isinstance(s, dict)
+                        and s.get("gate") == "v21_understand"
+                        and not s.get("fired")
+                    ),
+                    "",
+                ),
                 "force_action_fired": bool(
                     getattr(ledger, "force_action_fired", False)
                 ),

@@ -745,6 +745,15 @@ class PayrollRunListCreateView(APIView):
             qs = PayrollRun.objects.filter(
                 org_unit_id__in=_visible_org_unit_ids(request.user),
             )
+        status_code = (request.query_params.get('status') or '').strip()
+        if status_code:
+            allowed = {c for c, _label in PayrollRun.STATUS_CHOICES}
+            if status_code not in allowed:
+                return Response(
+                    {'detail': f'Unknown status {status_code!r}.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            qs = qs.filter(status=status_code)
         return Response({
             'count': qs.count(),
             'results': PayrollRunSerializer(qs, many=True).data,
@@ -798,6 +807,219 @@ class PayrollRunDetailView(APIView):
         )
         run.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class KuwaitizationQuotaView(APIView):
+    """GET /compliance/kuwaitization/ — KOC quota vs live kuwaitization flag.
+
+    Same aggregator as Pulse ``analyze_kuwaitization``. Requires ``people:view``.
+    Does not return amounts. See ``people.kuwaitization``.
+    """
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def get(self, request):
+        from .kuwaitization import summarize_kuwaitization
+
+        code, payload = summarize_kuwaitization(request.user)
+        return Response(payload, status=code)
+
+
+class EmployeeAnalyticsView(APIView):
+    """GET /analytics/ — roster headcount (named, closed dimensions).
+
+    Same aggregator as Pulse ``analyze_employees``. Requires ``people:view``.
+    Does not return pay amounts. See ``people.headcount``.
+    """
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def get(self, request):
+        from .headcount import summarize_headcount
+
+        params = {}
+        for key in ("dimension", "group_by", "filters", "filter"):
+            if key in request.query_params:
+                params[key] = request.query_params.get(key)
+        code, payload = summarize_headcount(request.user, params)
+        return Response(payload, status=code)
+
+
+class PayslipLineSummaryView(APIView):
+    """GET /payslip-lines/summary/ — committed-pay structure (named, closed).
+
+    Population: committed runs for ``period_end``, one ``line_type`` amount
+    per employee, grouped by one employee ``dimension``. Requires
+    ``people:view_compensation``. See ``people.pay_structure``.
+    """
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def get(self, request):
+        if not can_view_compensation(request.user):
+            return Response(
+                {'detail': 'You do not have permission to view compensation.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        from .pay_structure import summarize_committed_pay
+
+        code, payload = summarize_committed_pay(
+            request.user,
+            period_end=request.query_params.get('period_end') or '',
+            dimension=request.query_params.get('dimension') or '',
+            line_type=request.query_params.get('line_type') or 'net',
+        )
+        if code == 200:
+            emit_governance_event(
+                entity_type='PayslipLine',
+                entity_id=0,
+                action='view_compensation',
+                before=None,
+                after={
+                    'period_end': payload.get('period_end'),
+                    'dimension': payload.get('dimension'),
+                    'line_type': payload.get('line_type'),
+                    'run_ids': payload.get('run_ids'),
+                },
+                user=request.user,
+            )
+        return Response(payload, status=code)
+
+
+class PayslipLineGosiSummaryView(APIView):
+    """GET /payslip-lines/gosi-summary/ — committed GOSI (named, closed).
+
+    Same population as committed pay, line_type fixed to gosi. Not a
+    line_type on ``PayslipLineSummaryView``. Requires
+    ``people:view_compensation``. See ``people.gosi_structure``.
+    """
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def get(self, request):
+        if not can_view_compensation(request.user):
+            return Response(
+                {'detail': 'You do not have permission to view compensation.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        from .gosi_structure import summarize_committed_gosi
+
+        code, payload = summarize_committed_gosi(
+            request.user,
+            period_end=request.query_params.get('period_end') or '',
+            dimension=request.query_params.get('dimension') or '',
+        )
+        if code == 200:
+            emit_governance_event(
+                entity_type='PayslipLine',
+                entity_id=0,
+                action='view_compensation',
+                before=None,
+                after={
+                    'period_end': payload.get('period_end'),
+                    'dimension': payload.get('dimension'),
+                    'line_type': payload.get('line_type'),
+                    'run_ids': payload.get('run_ids'),
+                },
+                user=request.user,
+            )
+        return Response(payload, status=code)
+
+
+class LeaveEntitlementSummaryView(APIView):
+    """GET /leave-entitlements/summary/ — utilization days (named, closed).
+
+    Requires ``people:view``. Days only. See ``people.leave_utilization``.
+    """
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def get(self, request):
+        from .leave_utilization import summarize_leave_utilization
+
+        code, payload = summarize_leave_utilization(
+            request.user,
+            year=request.query_params.get('year') or '',
+            dimension=request.query_params.get('dimension') or '',
+        )
+        return Response(payload, status=code)
+
+
+class LeavePresenceView(APIView):
+    """GET /leave-records/presence/ — org-wide on-leave for one month.
+
+    Submitted/approved only. Not Team Who's Out. Requires ``people:view``.
+    See ``people.leave_presence``.
+    """
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def get(self, request):
+        from .leave_presence import summarize_leave_presence
+
+        code, payload = summarize_leave_presence(
+            request.user,
+            year=request.query_params.get('year') or '',
+            month=request.query_params.get('month') or '',
+            dimension=request.query_params.get('dimension') or '',
+        )
+        return Response(payload, status=code)
+
+
+class LoanBookSummaryView(APIView):
+    """GET /loans/summary/ — outstanding principal at as_of.
+
+    Requires ``people:view_compensation``. See ``people.loan_book``.
+    """
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def get(self, request):
+        if not can_view_compensation(request.user):
+            return Response(
+                {'detail': 'You do not have permission to view compensation.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        from .loan_book import summarize_loan_book
+
+        code, payload = summarize_loan_book(
+            request.user,
+            as_of=request.query_params.get('as_of') or '',
+            dimension=request.query_params.get('dimension') or '',
+        )
+        if code == 200:
+            emit_governance_event(
+                entity_type='Loan',
+                entity_id=0,
+                action='view_compensation',
+                before=None,
+                after={
+                    'as_of': payload.get('as_of'),
+                    'dimension': payload.get('dimension'),
+                },
+                user=request.user,
+            )
+        return Response(payload, status=code)
+
+
+class CertificationSummaryView(APIView):
+    """GET /certifications/summary/ — expiry pipeline (named, closed).
+
+    Requires ``people:view``. No amounts. See ``people.cert_expiry``.
+    """
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def get(self, request):
+        from .cert_expiry import summarize_cert_expiry
+
+        code, payload = summarize_cert_expiry(
+            request.user,
+            horizon=request.query_params.get('horizon') or '',
+            dimension=request.query_params.get('dimension') or '',
+            as_of=request.query_params.get('as_of') or '',
+        )
+        return Response(payload, status=code)
 
 
 class PayslipLineListView(APIView):

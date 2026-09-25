@@ -655,6 +655,33 @@ def test_export_json_returns_conversation_and_messages(user):
 
 
 @pytest.mark.django_db
+def test_export_omits_messages_before_clear_break(user):
+    conversation = _make_conversation(user, "chat", summary="")
+    prior = [
+        AIMessage.objects.create(conversation=conversation, role="user", content=f"old-{i}")
+        for i in range(2)
+    ]
+    AIMessage.objects.create(conversation=conversation, role="user", content="after-clear")
+    conversation.context_snapshot_json = {
+        "_clear_break": {
+            "message_boundary_id": str(prior[-1].id),
+            "cleared_at": timezone.now().isoformat(),
+        },
+    }
+    conversation.save(update_fields=["context_snapshot_json"])
+
+    result = CarbonIntelligence().export_conversation(user, str(conversation.id), fmt="json")
+    contents = [m["content"] for m in result["content"]["messages"]]
+    assert contents == ["after-clear"]
+
+    md = CarbonIntelligence().export_conversation(
+        user, str(conversation.id), fmt="markdown",
+    )["content"]
+    assert "after-clear" in md
+    assert "old-0" not in md
+    assert "old-1" not in md
+
+
 def test_export_markdown_contains_title_and_content(user):
     conversation = _make_conversation(user, "chat", summary="")
     conversation.title = "Exported Chat"

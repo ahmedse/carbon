@@ -144,6 +144,8 @@ def test_deep_turn_selects_reason_model(
     monkeypatch, django_store, single_pass, stub_llm
 ):
     """A deep salience turn selects LLM_REASON_MODEL when configured."""
+    # Salience and the critic lane live on the legacy spine (ADR-0056 step 6).
+    monkeypatch.setenv("PULSE_UNDERSTAND", "legacy")
     _set_reason_model(monkeypatch, reason="reason-pro", escalation="")
 
     captured: dict = {}
@@ -199,6 +201,8 @@ def test_deep_turn_falls_back_when_reason_unset(
     monkeypatch, django_store, single_pass, stub_llm
 ):
     """A deep salience turn falls back cleanly (LLM_MODEL) when unset."""
+    # Salience and the critic lane live on the legacy spine (ADR-0056 step 6).
+    monkeypatch.setenv("PULSE_UNDERSTAND", "legacy")
     _set_reason_model(monkeypatch, reason="", escalation="")
 
     captured: dict = {}
@@ -259,6 +263,8 @@ def test_knowledge_gap_escalates_to_reason_lane_and_records_ledger(
     monkeypatch, django_store, single_pass, stub_llm
 ):
     """A critic knowledge_gap escalates to the reason lane and is recorded."""
+    # Salience and the critic lane live on the legacy spine (ADR-0056 step 6).
+    monkeypatch.setenv("PULSE_UNDERSTAND", "legacy")
     _set_reason_model(monkeypatch, reason="reason-pro", escalation="")
 
     captured: dict = {"models": []}

@@ -265,6 +265,7 @@ async def route_chat(
     response_format: dict | None = None,
     model: str | None = None,
     extra_body: dict | None = None,
+    reasoning: bool = False,
     db=None,  # optional: if None, creates its own session
 ) -> dict:
     """Route an LLM call by task type, logging cost and enforcing budget.
@@ -278,6 +279,11 @@ async def route_chat(
         tools:        Optional tool definitions.
         tool_choice:  Optional OpenAI tool_choice ('auto', 'required', or function name).
         strict_tools: When True, deep-copy tools with strict JSON-schema flags.
+        reasoning:    Ask for a reasoning trace in the model's declared mode
+                      (``provider.reasoning_mode``). A model without one is
+                      called unchanged. A mode that cannot reason under a
+                      forced tool_choice relaxes it to 'auto'; the result's
+                      ``tool_choice`` reports what was sent.
         max_tokens:   Optional max output tokens.
         model:        Optional model override (defaults to the task's model).
         db:           Optional async session. If None, a short-lived session is created.
@@ -293,7 +299,7 @@ async def route_chat(
             "cost_usd": float,
         }
     """
-    from ai.engine.llm.provider import create_completion, get_llm_client
+    from ai.engine.llm.provider import create_completion, get_llm_client, reasoning_mode
     from ai.engine.llm.tool_choice import apply_strict, normalize_tool_choice
 
     settings = get_settings()
@@ -347,6 +353,14 @@ async def route_chat(
             kwargs["response_format"] = response_format
         if extra_body:
             kwargs["extra_body"] = extra_body
+        mode = reasoning_mode(model, settings.LLM_BASE_URL) if reasoning else None
+        if mode is not None:
+            kwargs["extra_body"] = {**(kwargs.get("extra_body") or {}), **mode.body}
+            if mode.temperature is not None:
+                kwargs["temperature"] = mode.temperature
+            if not mode.forced_tool and kwargs.get("tool_choice") not in (None, "auto"):
+                kwargs["tool_choice"] = "auto"
+                normalized = "auto"
 
         response = await create_completion(client, **kwargs)
         duration_ms = int((time.monotonic() - t0) * 1000)
@@ -355,7 +369,8 @@ async def route_chat(
         content = choice.message.content
         from ai.engine.cognition.turn.reasoning import scrub
 
-        summary = scrub(str(getattr(choice.message, "reasoning_content", None) or ""))
+        reasoning_text = str(getattr(choice.message, "reasoning_content", None) or "")
+        summary = scrub(reasoning_text)
         tool_calls = None
         if choice.message.tool_calls:
             tool_calls = [
@@ -404,6 +419,7 @@ async def route_chat(
             "cost_usd": cost_usd,
             "tool_choice": normalized,
             "reasoning_summary": summary,
+            "reasoning_text": reasoning_text,
         }
 
         logger.debug(

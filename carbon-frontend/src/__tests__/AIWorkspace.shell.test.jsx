@@ -56,7 +56,7 @@ vi.mock('../api/aiWorkspace', () => ({
   getUsageByConversation: vi.fn(),
   getProfile: vi.fn(),
   patchProfile: vi.fn(),
-  listModels: vi.fn(),
+  listModels: vi.fn(() => Promise.resolve({ models: [] })),
   listFacts: vi.fn(),
   listEpisodes: vi.fn(),
   getRelationship: vi.fn(),

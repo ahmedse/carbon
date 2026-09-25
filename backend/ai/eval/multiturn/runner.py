@@ -201,6 +201,7 @@ class TurnResult:
     mentions_unwanted: list[str] = field(default_factory=list)
     decision_ok: bool = True
     llm_calls_ok: bool = True
+    fell_through: bool = False
     passed: bool = False
     error: Optional[str] = None
     fail_reasons: list[str] = field(default_factory=list)
@@ -418,6 +419,9 @@ def run_script(
                     llm_calls_background=llm_calls_background,
                     latency_ms=wall_ms,
                     language_detected=detect_language(reply_content),
+                    fell_through=str(response.get("v21_miss") or "") in {
+                        "fallthrough", "unrepairable",
+                    },
                 )
                 
                 # Validate against expectations if present
@@ -477,6 +481,8 @@ def run_script(
                         reasons.append(f"mentions_none hit {turn_result.mentions_unwanted}")
                     if not turn_result.llm_calls_ok:
                         reasons.append(f"llm_calls={llm_calls} > {exp.max_llm_calls}")
+                    if turn_result.fell_through:
+                        reasons.append("fallthrough")
 
                     # Overall turn pass
                     turn_result.passed = (
@@ -484,7 +490,8 @@ def run_script(
                         turn_result.language_ok and
                         len(turn_result.reask_violations) == 0 and
                         turn_result.mentions_ok and
-                        turn_result.llm_calls_ok
+                        turn_result.llm_calls_ok and
+                        not turn_result.fell_through
                     )
                 else:
                     # No expectations given; just record the turn
@@ -761,6 +768,7 @@ def report_to_json(
                         "latency_ms": t.latency_ms,
                         "language": t.language_detected,
                         "passed": t.passed,
+                        "fell_through": t.fell_through,
                         "fail_reasons": t.fail_reasons,
                         "reply": t.stub_reply[:160],
                     }
@@ -852,6 +860,9 @@ def g5_failures(report: BankReport) -> list[str]:
                 f"({simple_over}/{budget_applicable} simple turns; "
                 f"0-LLM misses stay in turns_over_budget={report.turns_over_budget})"
             )
+    fell = sum(1 for s in report.scripts for t in s.turns if t.fell_through)
+    if fell:
+        fails.append(f"fallthrough={fell}")
     return fails
 
 

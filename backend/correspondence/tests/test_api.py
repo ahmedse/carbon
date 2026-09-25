@@ -123,6 +123,25 @@ def test_inbox_returns_only_awaiting_mine(
 
 
 @pytest.mark.django_db
+def test_in_process_inbox_uses_same_view(workflow):
+    from asgiref.sync import async_to_sync
+    from ai.host_executor import CarbonHostExecutor
+
+    wf = workflow
+    corr = _draft(wf.corr_type, wf.org, wf.requester_user)
+    submit_correspondence(corr=corr, by=wf.requester_user)
+    user = wf.manager_user
+    exe = CarbonHostExecutor(
+        db=None, instance_config={},
+        user_token=f"inproc:nibras:{user.pk}", host_user_id=str(user.pk),
+    )
+    out = async_to_sync(exe._correspondence_inbox_in_process)(method="GET")
+    assert out["status_code"] == 200, out
+    rows = out["data"] if isinstance(out["data"], list) else out["data"].get("results", [])
+    assert any(row["id"] == corr.id for row in rows)
+
+
+@pytest.mark.django_db
 def test_history_lists_acted_items_and_detail_visible(
     workflow, api_client, get_token_for_user, create_user,
 ):

@@ -425,14 +425,17 @@ class SoftSurfacesMixin:
         user_info=None,
         process_mode: str = "",
         progress_callback=None,
+        dense_thinking: bool = False,
     ):
         """Understand path. ``legacy`` skip; ``shadow`` log+fallthrough; ``v21`` act."""
         from types import SimpleNamespace
 
         from ai.engine.agent.reasoning import AgentResponse
         from ai.engine.agent.guardrails import build_default_pipeline
-        from ai.engine.cognition.turn.capability import capability_surface
-        from ai.engine.cognition.turn.decision import Rejection
+        import json
+
+        from ai.engine.cognition.turn.capability import capability_surface, flat_args
+        from ai.engine.cognition.turn.decision import PLAN_PROCESS_ID, Rejection
         from ai.engine.cognition.turn.execute import ExecuteWitness
         from ai.engine.cognition.turn.pipeline_v21 import (
             act_on_decision,
@@ -504,13 +507,17 @@ class SoftSurfacesMixin:
 
         from ai.engine.cognition.turn.reasoning import budget_on, scrub
 
-        thinking = budget_on(state)
+        dense = bool(dense_thinking)
+        # Reasoning rides the first emission only. A repair re-emits with
+        # the forced choice a reasoning mode may have relaxed.
+        emissions = {"reasoning": budget_on(state, dense=dense)}
 
         async def complete(*, messages, tools, tool_choice, strict_tools):
             from ai.engine.llm.call_meter import stage
 
+            reasoning = emissions.pop("reasoning", False)
             with stage("understand"):
-                return await route_chat(
+                result = await route_chat(
                     task="cognition",
                     instance_id=instance_id,
                     conversation_id=f"understand-{conversation_id}",
@@ -519,19 +526,26 @@ class SoftSurfacesMixin:
                     tool_choice=tool_choice,
                     strict_tools=strict_tools,
                     temperature=0.0,
-                    extra_body={"thinking": {"type": "enabled"}} if thinking else None,
+                    reasoning=reasoning,
                 )
+            if reasoning and isinstance(result, dict):
+                emissions["trace"] = str(result.get("reasoning_text") or "")
+            return result
+
+        def malformed(cause: str, head: str) -> None:
+            logger.warning("v21 understand malformed cause=%s head=%r", cause, head)
+            _signal(ledger, "v21_understand_malformed", True, cause=cause, head=head)
 
         try:
             decision = await understand_turn(
                 complete=complete,
                 messages=messages,
-                catalog_tools=scoped_catalog,
                 surface=surface,
                 allowed_tools=allowed or None,
                 write_tools=write_names or None,
                 state=state,
                 arg_violations=caps.arg_violations,
+                on_malformed=malformed,
             )
         except Exception:
             # ADR-0053: the model call failed. The dispatcher's fail-visible
@@ -565,11 +579,15 @@ class SoftSurfacesMixin:
             await record("shadow", [])
             return None
 
-        # The panel reads top-down: what Pulse understood, then each read it ran.
-        rationale = scrub(decision.reason)
-        if rationale and progress_callback is not None:
+        # The panel reads top-down: the model's own trace, what Pulse
+        # understood, then each read it ran.
+        summary = scrub(emissions.get("trace") or "", dense=dense)
+        rationale = scrub(decision.reason, dense=dense)
+        for line in (summary, rationale):
+            if not line or progress_callback is None:
+                continue
             try:
-                shown = progress_callback(rationale)
+                shown = progress_callback(line)
                 if hasattr(shown, "__await__"):
                     await shown
             except Exception:  # noqa: BLE001 — narration never breaks a turn
@@ -583,9 +601,10 @@ class SoftSurfacesMixin:
                 from ai.engine.cognition.turn.execute import _narrate_tool
 
                 try:
-                    # Narrate the host call this read becomes, not the catalog name.
+                    # Narrate the call this read becomes, not the catalog name.
+                    fn = caps.call(name, args, call_id="narrate")["function"]
                     told = progress_callback(_narrate_tool(
-                        "call_host_api", caps.host_args(name, args), surface=surface,
+                        fn["name"], json.loads(fn["arguments"]), surface=surface,
                     ))
                     if hasattr(told, "__await__"):
                         await told
@@ -612,7 +631,7 @@ class SoftSurfacesMixin:
             call_id = f"call_v21_{(turn_id or 'turn')[:8]}_{calls['n']}"
             execution = await witness.execute(
                 text="",
-                tool_calls=[caps.host_call(name, args, call_id=call_id)],
+                tool_calls=[caps.call(name, args, call_id=call_id)],
                 stream_callback=None,
                 progress_callback=None,
             )
@@ -631,6 +650,13 @@ class SoftSurfacesMixin:
                 executed=rows,
                 surface=surface,
             )
+            # A tool entry ran as itself; its row says so, so its actions
+            # (download, memory card) reach the reply.
+            for row in rows:
+                api = str((row.get("tool_args") or {}).get("api_name") or "")
+                if (caps.entry(api) or {}).get("source") == "tool":
+                    row["tool_name"] = api
+                    row["tool_args"] = flat_args((row.get("tool_args") or {}))
             return reply, rows
 
         try:
@@ -664,17 +690,101 @@ class SoftSurfacesMixin:
         )
         if degraded is not None:
             record_degradation(ledger, degraded)
+        handoff_actions: list[dict] = []
+        lead = lead_command(decision)
+        from ai.engine.agent.surface import Surface
+
+        on_agent = Surface.resolve(surface).may_host_mutate
+        handoff_api = (
+            str(lead.process_id or "")
+            if lead is not None and lead.op == "handoff_agent" and not executed
+            else ""
+        )
+        if handoff_api and handoff_api != PLAN_PROCESS_ID and not on_agent:
+            # Chat proposes, Agent applies (ADR-0046): the model's own write
+            # and args become the handoff card and seed the slots in state.
+            from ai.engine.cognition.turn.handoff_agent import (
+                build_chat_write_handoff,
+                seed_slots_into_state,
+            )
+            from ai.engine.llm.call_meter import current_meter
+
+            slots = flat_args(dict(lead.args or {}))
+            seed_slots_into_state(state_ctx, handoff_api, slots)
+            outcome = build_chat_write_handoff(
+                api_name=handoff_api, slots=slots,
+                user_message=user_message or "", surface=surface,
+            )
+            await record("handoff", [])
+            return await self._return_chat_handoff(
+                outcome=outcome, ledger=ledger, meter=current_meter(),
+                turn_id=turn_id, instance_id=instance_id,
+                conversation_id=conversation_id, host_user_id=host_user_id, t0=t0,
+            )
+        if not (text or "").strip() and lead is not None and not executed:
+            # ADR-0056: the Decision's own op finishes the turn.
+            from ai.engine.cognition.turn.finish import (
+                navigation_for,
+                remember_slot,
+                write_answer,
+            )
+
+            if lead.op == "navigate":
+                nav = navigation_for(lead, instance_config, decision.language)
+                if nav.action != "navigate":
+                    _signal(ledger, "v21_understand", False, reason="unknown_route")
+                    await record("unknown_route", [])
+                    return _degraded_reply(ledger, Degradation("act", "unknown_route"), state, mode)
+                text = _navigation_text(nav)
+                handoff_actions = _navigation_actions(nav)
+            elif lead.op in {"answer", "set_slot"}:
+                if lead.op == "set_slot":
+                    remember_slot(lead, state)
+                from ai.engine.cognition.turn.retrieve import RetrievalWitness
+
+                retrieval = await RetrievalWitness(
+                    knowledge_store=self.knowledge_store,
+                    memory_manager=getattr(self, "memory_manager", None),
+                ).retrieve(
+                    instance_id, conversation_id, user_message or "", user_info,
+                    host_user_id=str(host_user_id) if host_user_id else None,
+                )
+                text, usage = await write_answer(
+                    decision,
+                    user_message=user_message or "",
+                    conversation_history=conversation_history,
+                    state=state,
+                    user_info=user_info,
+                    instance_config=instance_config,
+                    retrieval=retrieval,
+                    instance_id=instance_id,
+                    conversation_id=conversation_id,
+                )
+                if not text:
+                    cause = str((usage or {}).get("cause") or "empty_answer")
+                    if cause not in {"ungrounded", "empty_output", "model_error"}:
+                        cause = "empty_answer"
+                    _signal(ledger, "v21_understand", False, reason=cause)
+                    await record(cause, [])
+                    return _degraded_reply(ledger, Degradation("speak", cause), state, mode)
+            elif lead.op == "handoff_agent" and (handoff_api == PLAN_PROCESS_ID or on_agent):
+                planned = await self._try_plan_dial_process_plan(
+                    user_message=user_message or "", process_mode=process_mode,
+                    state_ctx=state_ctx, ledger=ledger, turn_id=turn_id,
+                    instance_id=instance_id, conversation_id=conversation_id,
+                    host_user_id=host_user_id, t0=t0, brief=user_message or "",
+                )
+                if planned is not None:
+                    await record("planned", [])
+                    return planned
         if not (text or "").strip():
-            # Plan and Agent already own a multi-step goal. The canned
-            # "switch" sentence is None there so the planner can draft it.
-            # A Decision with nothing valid left is not user text either:
-            # the legacy spine answers.
+            # Every op above finishes its turn; what is left is counted so the
+            # evidence gate (ADR-0056) can see each remaining fallthrough.
             reason = "unrepairable" if not decision.commands else "fallthrough"
-            _signal(ledger, "v21_understand", False, reason=reason)
+            _signal(ledger, "v21_understand", False, reason=reason, ops=decision.ops())
             await record(reason, executed)
             return None
 
-        handoff_actions: list[dict] = []
         cmd0 = lead_command(decision)
         if cmd0 is not None and cmd0.op == "handoff_agent" and str(cmd0.process_id or "") == "plan":
             from ai.engine.agent.chat_surface import build_plan_mode_switch_handoff
@@ -709,11 +819,6 @@ class SoftSurfacesMixin:
             repaired=decision.repaired,
             render=decision_render(decision),
         )
-        rationale = scrub(decision.reason) or rationale
-        summary = ""
-        exchanged = (decision.exchange or {}).get("result") if isinstance(decision.exchange, dict) else None
-        if isinstance(exchanged, dict):
-            summary = scrub(str(exchanged.get("reasoning_summary") or ""))
         rev = (envelope or {}).get("revision") if isinstance(envelope, dict) else None
         try:
             await self._write_ledger_row(
@@ -736,7 +841,7 @@ class SoftSurfacesMixin:
         )
         return AgentResponse(
             text=text,
-            reasoning_steps=[line for line in (rationale, summary) if line],
+            reasoning_steps=[line for line in (summary, rationale) if line],
             response_type="clarification" if choice else "inferred",
             open_question=choice,
             sources_cited=[],
@@ -902,9 +1007,12 @@ class SoftSurfacesMixin:
             completed,
             api_name=api,
             user_message=user_message or "",
+            unread_text=not any(
+                isinstance(item, dict) and not item.get("error") for item in completed
+            ),
         )
         if not (text or "").strip():
-            _signal(ledger, "ess_bound_self_read", False, reason="empty_answer")
+            _signal(ledger, "ess_bound_self_read", False, reason="no_declared_render")
             return None
 
         # Seed last_results so follow-ups see the bound API, not a sibling list.
@@ -1065,11 +1173,14 @@ class SoftSurfacesMixin:
         conversation_id: str,
         host_user_id: str | None,
         t0: float,
+        brief: str = "",
     ):
         """Plan dial + personal ESS brief → process-dial plan, 0 draft LLM.
 
         Drafts only (RULE_21): the plan lands in ``pending_approval``; nothing
         is submitted here. Answer + Open-in-Tasks action in the user's language.
+        ``brief`` is set when a Decision already chose a plan (ADR-0056), so the
+        dial check is skipped: the model decided, not the dial.
         """
         from asgiref.sync import sync_to_async
 
@@ -1080,13 +1191,15 @@ class SoftSurfacesMixin:
         from ai.engine.cognition.turn.plan_proposal import KIND as PROPOSAL_KIND
         from ai.engine.cognition.turn.plan_proposal import revised_brief
 
-        brief = plan_dial_process_brief(
+        brief = (brief or "").strip() or plan_dial_process_brief(
             user_message, process_mode=process_mode,
         )
         if not brief or not host_user_id:
             return None
         # A bare slot answer to an open Chat clarify stays with the slot-filler.
         state = getattr(state_ctx, "state", None) if state_ctx is not None else None
+        prior_plan = None
+        revision = ""
         if state is not None:
             decisions = getattr(state, "decisions", None) or []
             last = decisions[-1] if decisions and isinstance(decisions[-1], dict) else {}
@@ -1096,6 +1209,10 @@ class SoftSurfacesMixin:
             # With a draft open, the user's words revise that draft (typed state, not wording).
             open_q = getattr(state, "open_question", None) or {}
             if isinstance(open_q, dict) and open_q.get("kind") == PROPOSAL_KIND:
+                revision = brief
+                raw = open_q.get("plan_json")
+                if isinstance(raw, dict) and raw.get("steps"):
+                    prior_plan = raw
                 brief = revised_brief(str(open_q.get("brief") or ""), brief)
 
         def _create_plan_sync():
@@ -1110,6 +1227,7 @@ class SoftSurfacesMixin:
                 return None, None
             return PlansService().propose_plan(
                 user, brief, conversation_id=conversation_id or "",
+                prior_plan=prior_plan, revision=revision,
             )
 
         try:

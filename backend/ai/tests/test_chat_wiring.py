@@ -125,7 +125,7 @@ def test_dispatch_chat_returns_completed(django_store, single_pass, stub_llm):
     ledger_rows = TurnLedgerRow.objects.filter(conversation_id="conv-test-123")
     assert ledger_rows.count() >= 1
     llm_logs = LLMCallLog.objects.filter(
-        conversation_id__in=["draft-conv-test-123", "critic-conv-test-123"]
+        conversation_id__in=["understand-conv-test-123", "answer-conv-test-123"]
     )
     assert llm_logs.count() >= 1
 

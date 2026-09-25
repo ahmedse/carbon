@@ -253,6 +253,9 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
                     content=serializer.validated_data["content"],
                     model=serializer.validated_data.get("model") or None,
                     pulse_mode=serializer.validated_data.get("pulse_mode") or None,
+                    dense_thinking=bool(
+                        serializer.validated_data.get("dense_thinking")
+                    ),
                 ):
                     yield f"data: {json.dumps(frame)}\n\n"
             except ValueError as e:
@@ -1299,6 +1302,9 @@ class WorkspaceArtifactViewSet(viewsets.GenericViewSet):
                     content=serializer.validated_data["content"],
                     model=serializer.validated_data.get("model") or None,
                     pulse_mode=serializer.validated_data.get("pulse_mode") or None,
+                    dense_thinking=bool(
+                        serializer.validated_data.get("dense_thinking")
+                    ),
                 ):
                     yield f"data: {json.dumps(frame)}\n\n"
             except ValueError as e:

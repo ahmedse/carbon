@@ -99,6 +99,7 @@ async def _resolve_plan_id(service, user, plan_id: str | None) -> str:
 
 class EditPlan(ToolPlugin):
     name = "edit_plan"
+    decision_surface = False
     description = (
         "Revise an existing plan based on the user's chat feedback. Prefer "
         "step_deltas for small changes (add a chart step, remove a step, "
@@ -187,6 +188,7 @@ class EditPlan(ToolPlugin):
 
 class ApprovePlan(ToolPlugin):
     name = "approve_plan"
+    decision_surface = False
     description = (
         "Approve the settled plan and convert it into a real runnable task. "
         "Use it ONLY after the user has confirmed the plan is settled (e.g. "

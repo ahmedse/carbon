@@ -192,10 +192,32 @@ def _compact_profile_identity(data: Any) -> str | None:
     return ", ".join(str(p) for p in parts)
 
 
+def _compact_export_files(data: Any) -> str | None:
+    """Filenames from an export payload so a follow-up can name the file."""
+    if not isinstance(data, dict):
+        return None
+    files = data.get("files")
+    if not isinstance(files, list):
+        return None
+    names: list[str] = []
+    for row in files:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("filename") or "").strip()
+        if name:
+            names.append(name)
+    if not names:
+        return None
+    return "files=" + ", ".join(names[:3])
+
+
 def _digest_payload(data: Any, allowed: set[str]) -> list[str]:
     """Return one ``k=v, …`` chunk per in-scope record."""
     if isinstance(data, dict) and "data" in data and "status_code" in data:
         data = data["data"]
+    exported = _compact_export_files(data)
+    if exported:
+        return [exported]
     compact = _compact_payslip_identity(data)
     if compact:
         return [compact]

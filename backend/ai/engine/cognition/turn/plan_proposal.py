@@ -37,6 +37,38 @@ def revised_brief(prior: str, change: str) -> str:
     return f"{prior}\nRevision: {change}"
 
 
+def apply_format_revision(plan: dict | None, change: str) -> dict | None:
+    """Widen an existing export's format set. ``None`` when the change names no format.
+
+    The open draft's steps stay. A format add is not a new decomposition.
+    """
+    from ai.engine.cognition.plan.planner import _named_export_atoms, _union_export_formats
+
+    atoms = _named_export_atoms(change)
+    if not atoms:
+        return None
+    raw = [s for s in ((plan or {}).get("steps") or []) if isinstance(s, dict)]
+    exports = [s for s in raw if str(s.get("tool_name") or "") == "export_document"]
+    if not exports:
+        return None
+    keep_id = exports[0].get("step_id")
+    steps = []
+    for step in raw:
+        if str(step.get("tool_name") or "") == "export_document" and step.get("step_id") != keep_id:
+            continue
+        item = dict(step)
+        if item.get("step_id") == keep_id:
+            args = dict(item.get("tool_args") or {}) if isinstance(item.get("tool_args"), dict) else {}
+            args["format"] = _union_export_formats(
+                [str(args.get("format") or "")] + atoms,
+            )
+            item["tool_args"] = args
+            item["tool_name"] = "export_document"
+            item["gap"] = None
+        steps.append(item)
+    return {**dict(plan or {}), "steps": steps}
+
+
 def _args_preview(step: dict) -> list[dict]:
     """The bound arguments worth showing, as label/value pairs."""
     args = step.get("tool_args") if isinstance(step.get("tool_args"), dict) else {}
@@ -86,6 +118,10 @@ def proposal_payload(
         step_id = step.get("step_id")
         step_findings = _findings_for(step_id, findings)
         gap = str(step.get("gap") or "")
+        reason = next(
+            (f["detail"] for f in step_findings if f.get("blocks") and f.get("detail")),
+            "",
+        ) or gap
         steps.append({
             "step_id": step_id,
             "intent": str(step.get("intent") or ""),
@@ -93,6 +129,7 @@ def proposal_payload(
             "args": _args_preview(step),
             "effect": _step_effect(step),
             "gap": gap,
+            "reason": reason,
             "blocked": bool(gap) or any(f["blocks"] for f in step_findings),
             "findings": step_findings,
         })
@@ -103,4 +140,14 @@ def proposal_payload(
         "brief": " ".join((brief or "").split()),
         "steps": steps,
         "blocked_count": sum(1 for s in steps if s["blocked"]),
+        "blocks_create": any(
+            f.get("blocks") and f.get("code") in ("output_fit", "capability", "branch")
+            for s in steps
+            for f in s["findings"]
+        ) and not any(
+            (isinstance(raw.get("tool_args"), dict) and raw["tool_args"].get("fills_gap"))
+            or any(f.get("code") == "request" for f in _findings_for(raw.get("step_id"), findings))
+            for raw in ((plan or {}).get("steps") or [])
+            if isinstance(raw, dict)
+        ),
     }

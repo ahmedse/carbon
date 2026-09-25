@@ -414,39 +414,57 @@ _EXPORT_UTTERANCE = re.compile(
 )
 
 
+def _atoms_of(fmt: str) -> set[str]:
+    """Concrete generators one export_document format value runs."""
+    key = str(fmt or "").strip().lower()
+    if key == "both":
+        return {"docx", "xlsx"}
+    if key == "pack":
+        return {"docx", "xlsx", "pdf", "png"}
+    if key in {"docx", "xlsx", "pdf", "png"}:
+        return {key}
+    return set()
+
+
+def _named_export_atoms(text: str) -> list[str]:
+    """Formats the text names. Empty when it names none — not a default."""
+    t = text or ""
+    if re.search(r"\bpack\b|\ball\s+(?:four|formats)\b", t, re.I):
+        return ["docx", "xlsx", "pdf", "png"]
+    atoms: list[str] = []
+    if re.search(r"\b(?:word|docx|\.doc)\b", t, re.I):
+        atoms.append("docx")
+    if re.search(r"\b(?:excel|xlsx|spreadsheet|workbook|\.xls)\b", t, re.I):
+        atoms.append("xlsx")
+    if re.search(r"\bpdf\b|\.pdf\b", t, re.I):
+        atoms.append("pdf")
+    if re.search(r"\bpng\b|\bchart\b|\.png\b", t, re.I):
+        atoms.append("png")
+    return atoms
+
+
+def _union_export_formats(formats: list[str]) -> str:
+    """One export_document format value that covers every named generator."""
+    atoms: set[str] = set()
+    for fmt in formats:
+        atoms |= _atoms_of(fmt)
+    if not atoms:
+        return "both"
+    if atoms >= {"docx", "xlsx", "pdf", "png"} or len(atoms) >= 3:
+        return "pack"
+    if atoms == {"docx", "xlsx"}:
+        return "both"
+    if len(atoms) == 1:
+        return next(iter(atoms))
+    return "pack"
+
+
 def _infer_export_format(text: str) -> str:
     """Pick export_document format from intent / brief text."""
-    t = text or ""
-    wants_pack = bool(re.search(r"\bpack\b|\ball\s+(?:four|formats)\b", t, re.I))
-    if wants_pack:
-        return "pack"
-    wants_pdf = bool(re.search(r"\bpdf\b|\.pdf\b", t, re.I))
-    wants_png = bool(re.search(r"\bpng\b|\bchart\b|\.png\b", t, re.I))
-    wants_word = bool(re.search(r"\b(?:word|docx|\.doc)\b", t, re.I))
-    wants_excel = bool(re.search(r"\b(?:excel|xlsx|spreadsheet|workbook|\.xls)\b", t, re.I))
-    kinds = []
-    if wants_word:
-        kinds.append("docx")
-    if wants_excel:
-        kinds.append("xlsx")
-    if wants_pdf:
-        kinds.append("pdf")
-    if wants_png:
-        kinds.append("png")
-    if len(kinds) >= 3:
-        return "pack"
-    if kinds == ["docx"]:
-        return "docx"
-    if kinds == ["xlsx"]:
-        return "xlsx"
-    if kinds == ["pdf"]:
-        return "pdf"
-    if kinds == ["png"]:
-        return "png"
-    if set(kinds) == {"docx", "xlsx"} or not kinds:
+    atoms = _named_export_atoms(text)
+    if not atoms:
         return "both"
-    # Mixed pair including pdf/png → pack for a complete deliverable set.
-    return "pack"
+    return _union_export_formats(atoms)
 
 
 def _coerce_export_steps(steps: list[PlanStep]) -> None:
@@ -487,6 +505,21 @@ def _catalog_api_names(instance_config: dict | None) -> set[str]:
     """Exact host API names from brand ``api_catalog`` (not ECF entity types)."""
     catalog = (instance_config or {}).get("api_catalog") or []
     return {ep.get("name") for ep in catalog if isinstance(ep, dict) and ep.get("name")}
+
+
+def _load_plan_catalog(instance_id: str, user_id: str) -> tuple[list, set[str]]:
+    """Brand catalog for plan authoring. Empty when the instance has none."""
+    if not instance_id:
+        return [], set()
+    try:
+        from ai.engine_runtime import _instance_config
+
+        cfg = _instance_config(instance_id or "", user_id or None)
+        catalog = list((cfg or {}).get("api_catalog") or [])
+        return catalog, _catalog_api_names(cfg)
+    except Exception as exc:  # noqa: BLE001 — planning must still run
+        logger.warning("api_catalog load failed for catalog compile: %s", exc)
+        return [], set()
 
 
 def _coerce_host_api_steps(
@@ -844,9 +877,17 @@ def _ensure_export_deliverable(utterance: str, steps: list[PlanStep]) -> None:
     """
     if not _EXPORT_UTTERANCE.search(utterance or ""):
         return
-    if any((s.tool_name or "") == "export_document" for s in steps):
+    wanted = _infer_export_format(utterance or "")
+    existing = [s for s in steps if (s.tool_name or "") == "export_document"]
+    if existing:
+        for step in existing:
+            args = dict(step.tool_args or {})
+            args["format"] = _union_export_formats(
+                [str(args.get("format") or ""), wanted],
+            )
+            step.tool_args = args
         return
-    fmt = _infer_export_format(utterance or "")
+    fmt = wanted
     next_id = max((s.step_id for s in steps), default=-1) + 1
     deps = [s.step_id for s in steps]
     steps.append(
@@ -1066,6 +1107,16 @@ class SkillAwarePlanner:
                 )],
             )
 
+        # Catalog authors the DAG when returns cover the brief. The model
+        # does not invent host steps for a closed query it can already name.
+        compiled = self._catalog_compile(utterance, instance_id, user_id)
+        if compiled is not None:
+            logger.info(
+                "SkillAwarePlanner: catalog compile returned %d steps",
+                len(compiled.steps),
+            )
+            return compiled
+
         # ── Step 3: LLM decomposition fallback ──────────────────────────────
         # force_decompose bypasses the utterance heuristic: an explicit
         # "plan this" request must ALWAYS attempt LLM decomposition, even when
@@ -1107,6 +1158,29 @@ class SkillAwarePlanner:
         )
 
     # ── helpers ─────────────────────────────────────────────────────────────
+
+    def _catalog_compile(
+        self, utterance: str, instance_id: str, user_id: str,
+    ) -> Plan | None:
+        """Author from catalog ``returns``. ``None`` when the catalog cannot."""
+        from ai.engine.cognition.plan.compile import compile_catalog_plan
+        from ai.engine.cognition.plan.contract import apply_plan_contract
+
+        catalog, names = _load_plan_catalog(instance_id, user_id)
+        if not catalog:
+            return None
+        plan = compile_catalog_plan(utterance, catalog)
+        if plan is None or not plan.steps:
+            return None
+        findings = apply_plan_contract(
+            plan.steps,
+            api_catalog=catalog,
+            catalog_names=names,
+            utterance=utterance,
+        )
+        plan.findings = [f.as_dict() for f in findings]
+        plan.needs_confirmation = any(s.is_mutation for s in plan.steps)
+        return plan
 
     async def _search_skills(self, skill_registry, instance_id: str, user_id: str) -> list:
         """Return all skills available to this user: draft + user_approved + promoted."""

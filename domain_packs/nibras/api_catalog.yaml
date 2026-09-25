@@ -25,6 +25,66 @@ tools:
     requires_confirmation: false
     source_type: carbon_api
 
+  - name: analyze_committed_pay
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: analyze_employees
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: analyze_kuwaitization
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: analyze_leave_utilization
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: analyze_leave_presence
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: analyze_loan_book
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: analyze_gosi_committed
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: analyze_cert_expiry
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: list_my_direct_reports
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: list_team_leave
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: list_correspondence_inbox
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: list_correspondence_history
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
   # ── Run lifecycle mutations (staged + confirmed; RULE_21) ─────────────
   - name: compute_payroll_run
     kind: confirm
@@ -157,6 +217,11 @@ tools:
     source_type: carbon_api
 
   - name: approve_attendance_permission
+    kind: confirm
+    requires_confirmation: true
+    source_type: carbon_api
+
+  - name: submit_correspondence
     kind: confirm
     requires_confirmation: true
     source_type: carbon_api

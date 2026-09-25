@@ -81,6 +81,12 @@ def _report(*, router=1.0, slot=1.0, p50=1.0, over=0, measured=10, reask=True):
     return report
 
 
+def test_g5_fails_when_a_turn_falls_through():
+    report = _report()
+    report.scripts[0].turns[0].fell_through = True
+    assert any("fallthrough=1" in m for m in g5_failures(report))
+
+
 def test_g5_passes_on_contract_thresholds():
     assert g5_failures(_report()) == []
     assert exit_code_for(_report(), gate=True) == 0

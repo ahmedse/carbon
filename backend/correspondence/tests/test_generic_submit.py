@@ -128,11 +128,34 @@ def test_create_unknown_org_unit_400(memo_workflow, api_client, get_token_for_us
 
 
 @pytest.mark.django_db
-def test_create_missing_org_unit_400(memo_workflow, api_client, get_token_for_user):
+def test_create_omitted_org_unit_uses_employee_profile(
+    memo_workflow, api_client, get_token_for_user,
+):
     wf = memo_workflow
     _auth(api_client, wf.requester_user, get_token_for_user)
 
     resp = api_client.post(CREATE_URL, _payload(wf, org_unit=None), format='json')
+
+    assert resp.status_code == 201
+    assert resp.json()['org_unit'] == wf.org.id
+
+
+@pytest.mark.django_db
+def test_create_missing_org_unit_without_profile_400(
+    memo_workflow, api_client, get_token_for_user,
+):
+    wf = memo_workflow
+    _auth(api_client, wf.admin_user, get_token_for_user)
+
+    resp = api_client.post(
+        CREATE_URL,
+        {
+            'corr_type': 'internal_memo',
+            'title': 'Team announcement',
+            'payload': {'body': 'Hello'},
+        },
+        format='json',
+    )
 
     assert resp.status_code == 400
     assert resp.json()['detail'] == 'org_unit is required'
