@@ -10,6 +10,7 @@ import pytest
 from asgiref.sync import async_to_sync
 from django.test import override_settings
 
+from ai.tests.pv21_stub import answer_decision
 from ai.engine.core.config import get_settings
 from ai.engine.cognition.plan.loop import ReActLoop
 from ai.engine.cognition.plan.planner import Plan, PlanStep
@@ -30,7 +31,7 @@ def _fake_completion(*args, **kwargs) -> types.SimpleNamespace:
                 types.SimpleNamespace(
                     message=types.SimpleNamespace(
                         content="This is a stubbed chat reply.",
-                        tool_calls=None,
+                        tool_calls=answer_decision(kw),
                     ),
                     finish_reason="stop",
                 )
@@ -171,8 +172,9 @@ def test_chat_turn_reports_decision_and_meter(
 
 @pytest.mark.django_db(transaction=True)
 def test_nav_fast_path_records_zero_llm_and_navigate_decision(
-    django_store, single_pass, cfg,
+    django_store, single_pass, cfg, monkeypatch,
 ):
+    monkeypatch.setenv("PULSE_UNDERSTAND", "legacy")
     from ai.engine_runtime import dispatch_task
 
     payload = {
@@ -287,8 +289,9 @@ def test_advance_step_journal_payload_carries_llm_meter():
 
 @pytest.mark.django_db(transaction=True)
 def test_meter_is_truthful_where_hand_count_drifts(
-    django_store, single_pass, stub_llm, cfg, no_nav_fast_path,
+    django_store, single_pass, stub_llm, cfg, no_nav_fast_path, monkeypatch,
 ):
+    monkeypatch.setenv("PULSE_UNDERSTAND", "legacy")
     from ai.engine_runtime import dispatch_task
     from ai.models.core import TurnLedgerRow
 

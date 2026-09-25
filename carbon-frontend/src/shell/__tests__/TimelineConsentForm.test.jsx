@@ -95,4 +95,63 @@ describe('TimelineConsentForm', () => {
       }),
     });
   });
+
+  it('confirms a typed path choice with the picked value', () => {
+    const onConfirm = vi.fn();
+    render(
+      <TimelineConsentForm
+        step={{
+          step_id: 3,
+          status: 'awaiting_approval',
+          intent: 'Payroll run details',
+          choice: {
+            key: 'id',
+            options: [
+              { value: 30, label: '30 · period_end=2026-09-30' },
+              { value: 21, label: '21 · period_end=2026-06-30' },
+            ],
+          },
+        }}
+        confirming={false}
+        onConfirm={onConfirm}
+        onDecline={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('timeline-choice-3-30'));
+    expect(onConfirm).toHaveBeenCalledWith(3, { body: { id: 30 } });
+  });
+
+  it('lists green evidence and hides the card when a dependency failed', () => {
+    const { rerender } = render(
+      <TimelineConsentForm
+        step={{
+          step_id: 6,
+          status: 'awaiting_approval',
+          intent: 'Board pack',
+          tool_name: 'export_document',
+          tool_args: { title: 'Board' },
+          evidence: [{ step_id: 3, status: 'completed', ok: true }],
+        }}
+        confirming={false}
+        onConfirm={vi.fn()}
+        onDecline={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('timeline-evidence-6')).toHaveTextContent('Step 3: completed');
+    rerender(
+      <TimelineConsentForm
+        step={{
+          step_id: 6,
+          status: 'awaiting_approval',
+          intent: 'Board pack',
+          tool_name: 'export_document',
+          evidence: [{ step_id: 3, status: 'failed', ok: false }],
+        }}
+        confirming={false}
+        onConfirm={vi.fn()}
+        onDecline={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId('timeline-consent-6')).toBeNull();
+  });
 });

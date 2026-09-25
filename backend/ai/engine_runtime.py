@@ -509,6 +509,20 @@ async def _run_chat(
                     if handoff_envelope is not None
                     else getattr(response, "envelope", None)
                 ),
+                # The typed question this turn asks. ``kind`` tells the client
+                # which form to paint; prose never carries the options.
+                "form": (
+                    {k: v for k, v in response.open_question.items() if k != "plan_json"}
+                    if isinstance(getattr(response, "open_question", None), dict)
+                    and response.open_question.get("kind")
+                    else None
+                ),
+                "reasoning": list(getattr(response, "reasoning_steps", None) or []),
+                "revision": (
+                    (getattr(response, "envelope", None) or {}).get("revision")
+                    if isinstance(getattr(response, "envelope", None), dict)
+                    else None
+                ),
                 # Phase 5 — floor of the resolved tool inputs' confidence
                 # (None = no resolved numeric input, i.e. no constraint).
                 "min_input_confidence": min_input_conf,

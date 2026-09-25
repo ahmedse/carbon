@@ -61,7 +61,7 @@ describe('AssuranceRulesPanel', () => {
     render(<AssuranceRulesPanel embedded />);
     expect(await screen.findByText('NR-PAY-01')).toBeTruthy();
     expect(screen.getByText('PL-SSE-01')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Open NR-PAY-01' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View NR-PAY-01' }));
     expect(await screen.findByText(/Same actor is refused/)).toBeTruthy();
   });
 

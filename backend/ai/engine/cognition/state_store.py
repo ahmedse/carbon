@@ -64,6 +64,38 @@ _DICT_KEYS = T("state_store.py::_DICT_KEYS")
 _LIST_KEYS = T("state_store.py::_LIST_KEYS")
 
 
+VIEW_BLOCKS_MAX = 3
+VIEW_ROWS_MAX = 20
+
+
+def bound_view(view: Any) -> dict:
+    """Cap the stored view: a few aggregated tables and charts, never raw rows."""
+    if not isinstance(view, dict) or not view:
+        return {}
+    tables = []
+    for table in list(view.get("tables") or [])[:VIEW_BLOCKS_MAX]:
+        if isinstance(table, dict):
+            tables.append({**table, "rows": list(table.get("rows") or [])[:VIEW_ROWS_MAX]})
+    charts = []
+    for chart in list(view.get("charts") or [])[:VIEW_BLOCKS_MAX]:
+        if not isinstance(chart, dict):
+            continue
+        series = [
+            {**s, "data": list(s.get("data") or [])[:VIEW_ROWS_MAX]}
+            for s in (chart.get("series") or []) if isinstance(s, dict)
+        ]
+        charts.append({**chart, "series": series})
+    if not (tables or charts):
+        return {}
+    return {
+        "turn": view.get("turn"),
+        "apis": [str(a) for a in (view.get("apis") or [])][:VIEW_BLOCKS_MAX],
+        "tables": tables,
+        "charts": charts,
+        "caveats": [c for c in (view.get("caveats") or []) if isinstance(c, dict)][:VIEW_BLOCKS_MAX],
+    }
+
+
 # ── State object ────────────────────────────────────────────────────────
 
 
@@ -79,12 +111,15 @@ class ConversationState:
     decisions: list[dict] = field(default_factory=list)      # chronological
     language: str = ""
     surface_last: str = ""
+    # The last read turn's aggregated blocks, so a follow-up re-renders without a read (ADR-0053).
+    last_view: dict = field(default_factory=dict)
 
     def bound(self) -> "ConversationState":
         self.focus = self.focus[:FOCUS_MAX]
         self.last_results = self.last_results[-LAST_RESULTS_MAX:]
         self.decisions = self.decisions[-DECISIONS_MAX:]
         self.active_plans = self.active_plans[:ACTIVE_PLANS_MAX]
+        self.last_view = bound_view(self.last_view)
         return self
 
     def to_dict(self) -> dict:
@@ -670,6 +705,17 @@ def render_state_block(state: ConversationState, max_chars: int = STATE_BLOCK_MA
         lines.append("Earlier tool results: " + " | ".join(
             f"t{r.get('turn')} {r.get('digest')}" for r in reversed(state.last_results[-3:])
         ))
+    view = state.last_view or {}
+    if view.get("tables") or view.get("charts"):
+        titles = [str(t.get("title") or "") for t in view.get("tables") or []] or [
+            str(c.get("title") or "") for c in view.get("charts") or []
+        ]
+        shapes = sorted({str(c.get("chart_type") or "") for c in view.get("charts") or []} - {""})
+        lines.append(
+            f"Last view (t{view.get('turn')}): " + ", ".join(t for t in titles if t)
+            + (f" drawn as {'/'.join(shapes)}" if shapes else "")
+            + " — a follow-up about it is continue (no new read)"
+        )
     if state.active_plans:
         lines.append("Active plans: " + "; ".join(
             f"{p.get('title') or p.get('plan_id')} ({p.get('status')})"

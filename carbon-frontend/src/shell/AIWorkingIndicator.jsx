@@ -20,12 +20,15 @@ function AIWorkingIndicator({
   onToggle = null,
   history = [],
   done = false,
+  seconds = null,
 }) {
   const fallback = TYPE_MESSAGES[conversationType] || TYPE_MESSAGES.chat;
-  // While working: show live stage or fallback. When done: show step count summary.
+  // While working: show live stage or fallback. When done: elapsed time, then
+  // how many steps it took — the reader sees cost first, detail on expand.
   const steps = Array.isArray(history) ? history.filter(Boolean) : [];
+  const took = Number.isFinite(seconds) && seconds > 0 ? `Thought for ${seconds}s` : 'Thought';
   const label = done
-    ? `Thought for ${steps.length} step${steps.length !== 1 ? 's' : ''}`
+    ? `${took} · ${steps.length} step${steps.length !== 1 ? 's' : ''}`
     : (stage || fallback);
   const clickable = collapsible && typeof onToggle === 'function';
 
@@ -106,6 +109,7 @@ AIWorkingIndicator.propTypes = {
   onToggle: PropTypes.func,
   history: PropTypes.arrayOf(PropTypes.string),
   done: PropTypes.bool,
+  seconds: PropTypes.number,
 };
 
 export default AIWorkingIndicator;

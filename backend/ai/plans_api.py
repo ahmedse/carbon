@@ -208,6 +208,20 @@ class PlanViewSet(viewsets.GenericViewSet):
             )
         return Response(plan, status=status.HTTP_201_CREATED)
 
+    def commit_proposal(self, request):
+        """The user's consent to a Chat-drafted plan: store it as reviewed (ADR-0055).
+
+        Planning only — the task lands in pending_approval and nothing runs.
+        """
+        conversation_id = str(request.data.get("conversation_id") or "").strip()
+        try:
+            plan = self.service.commit_proposal(request.user, conversation_id)
+        except ValueError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST
+            )
+        return Response(plan, status=status.HTTP_201_CREATED)
+
     @action(
         detail=True,
         methods=["post"],

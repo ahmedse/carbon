@@ -52,22 +52,33 @@ async def synthesize_envelope(
     user_message: str,
     usable_tools: list[dict],
     model: str | None = None,
+    strict: bool = False,
 ) -> AnswerEnvelope | None:
     """Synthesize a typed envelope from usable tool results, or ``None``.
 
-    Never raises: parse/validation/LLM errors are logged and folded to ``None``
-    so the caller falls back to the markdown path unchanged.
+    Default: parse/validation/LLM errors fold to the deterministic envelope.
+    ``strict`` (ADR-0053): they raise ``EnvelopeWriteError`` with a typed cause
+    instead, so the caller can say the writer failed.
     """
     from ai.engine.llm.router import route_chat
+
+    def _failed(cause: str):
+        if strict:
+            raise EnvelopeWriteError(cause)
+        return _deterministic_fallback_envelope(usable, user_message)
 
     # Mirror the usable/no_match filtering in ``_synthesize_tool_results`` so
     # this service is safe to call even with an unfiltered list (idempotent).
     usable = _filter_usable(usable_tools)
     if not usable:
+        if strict:
+            raise EnvelopeWriteError("no_rows")
         return None
 
     results_text = _render_tool_results(usable)
     if not results_text.strip():
+        if strict:
+            raise EnvelopeWriteError("no_rows")
         return None
 
     system = build_envelope_system_prompt()
@@ -89,16 +100,16 @@ async def synthesize_envelope(
         )
     except Exception:
         logger.warning("Envelope synthesis LLM call failed", exc_info=True)
-        return _deterministic_fallback_envelope(usable, user_message)
+        return _failed("model_error")
 
     content = (result.get("content") or "").strip()
     if not content:
-        return _deterministic_fallback_envelope(usable, user_message)
+        return _failed("empty_output")
     try:
         envelope = envelope_from_json(content)
     except ValueError:
         logger.warning("Envelope synthesis returned invalid JSON/schema", exc_info=True)
-        return _deterministic_fallback_envelope(usable, user_message)
+        return _failed("invalid_output")
 
     try:
         envelope = ground_envelope_blocks(envelope, usable, user_message=user_message)
@@ -107,6 +118,17 @@ async def synthesize_envelope(
     except Exception:
         logger.warning("Envelope enrichment failed; returning raw envelope", exc_info=True)
         return envelope
+
+
+FALLBACK_HEADLINE = "Live data summary"
+
+
+class EnvelopeWriteError(Exception):
+    """The answer writer failed. ``cause`` is typed (ADR-0053)."""
+
+    def __init__(self, cause: str):
+        super().__init__(cause)
+        self.cause = cause
 
 
 def _deterministic_fallback_envelope(
@@ -118,7 +140,7 @@ def _deterministic_fallback_envelope(
     if not (blocks["tables"] or blocks["charts"]) or not blocks["sources"]:
         return None
     return AnswerEnvelope(
-        headline="Live data summary",
+        headline=FALLBACK_HEADLINE,
         prose=[
             "The tables and charts below are computed directly from the "
             "returned platform data."
@@ -724,6 +746,9 @@ def deterministic_envelope_blocks(
                 source_rows = len(raw_rows)
 
         for raw_caveat in data.get("caveats") or []:
+            # Hosts send a caveat as a sentence or as {level, text}; both are facts.
+            if isinstance(raw_caveat, str):
+                raw_caveat = {"text": raw_caveat}
             if not isinstance(raw_caveat, dict):
                 continue
             text = str(

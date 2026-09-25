@@ -157,6 +157,7 @@ def _paused_awaiting(owner, *, step_index=1):
                     "step_id": step_index,
                     "intent": "Write",
                     "tool_name": "call_host_api",
+                    "tool_args": {"api_name": "create_table"},
                 }
             ]
         },
@@ -166,6 +167,7 @@ def _paused_awaiting(owner, *, step_index=1):
         step_index=step_index,
         intent="Write",
         tool_name="call_host_api",
+        tool_args_json={"api_name": "create_table"},
         status="awaiting_approval",
         confirmation_token="tok-s1",
         tool_output_json={

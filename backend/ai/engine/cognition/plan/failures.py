@@ -44,10 +44,10 @@ def classify_step_failure(step: Any, result: Any, *, plan_source: str = "") -> s
 
     Empty string when the step did not fail.
     """
-    if getattr(result, "paused", False):
-        return ""
     if getattr(result, "failure_class", ""):
         return result.failure_class
+    if getattr(result, "paused", False):
+        return ""
     if (
         not getattr(result, "error", None)
         and getattr(step, "tool_name", None) == "invoke_skill"

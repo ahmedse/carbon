@@ -229,6 +229,7 @@ def test_employee_chat_catalog_excludes_hr_endpoints(
     django_store, single_pass, stub_llm, cfg, no_nav_fast_path, org_unit, monkeypatch,
 ):
     """emp tool list has list_my_payslips, not list_payslip_lines / list_employees."""
+    monkeypatch.setenv("PULSE_UNDERSTAND", "legacy")
     from ai.engine_runtime import dispatch_task
 
     emp = _make_employee_user("pv2c_chat_emp", org_unit, employee_no="9103")
@@ -295,6 +296,7 @@ def test_employee_chat_catalog_excludes_hr_endpoints(
 def test_admin_chat_catalog_includes_hr_and_ess(
     django_store, single_pass, stub_llm, cfg, no_nav_fast_path, monkeypatch,
 ):
+    monkeypatch.setenv("PULSE_UNDERSTAND", "legacy")
     from ai.engine_runtime import dispatch_task
 
     admin = _make_admin_user("pv2c_chat_admin")

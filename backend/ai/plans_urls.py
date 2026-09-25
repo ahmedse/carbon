@@ -46,6 +46,12 @@ urlpatterns = [
         PlanViewSet.as_view({"get": "list", "post": "create"}),
         name="ai-plan-list",
     ),
+    # Literal segment, so it MUST precede the ``<str:pk>/`` detail route.
+    path(
+        "proposal/commit/",
+        PlanViewSet.as_view({"post": "commit_proposal"}),
+        name="ai-plan-proposal-commit",
+    ),
     # Template routes MUST precede the ``<str:pk>/`` detail route so the
     # literal ``templates`` segment wins over a plan id.
     path(

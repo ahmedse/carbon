@@ -1,9 +1,8 @@
 {
   "n": 75,
-  "decision_accuracy": 0.9866666666666667,
-  "parity": 0.96,
+  "decision_accuracy": 0.9933333333333333,
+  "parity": 0.9866666666666667,
   "misses": [
-    "g6-039",
     "g6-072"
   ],
   "forced_call_misses": 0,
@@ -15,17 +14,15 @@
   "by_tier": {
     "baseline": {
       "n": 61,
-      "decision_accuracy": 0.9918032786885246,
-      "parity": 0.9836065573770492,
-      "misses": [
-        "g6-039"
-      ],
+      "decision_accuracy": 1.0,
+      "parity": 1.0,
+      "misses": [],
       "forced_call_misses": 0
     },
     "v21": {
       "n": 14,
       "decision_accuracy": 0.9642857142857143,
-      "parity": 0.8571428571428571,
+      "parity": 0.9285714285714286,
       "misses": [
         "g6-072"
       ],
@@ -1267,15 +1264,15 @@
         "repaired": false
       },
       "en": {
-        "op": "call_tool",
-        "api": "get_my_leave_balance",
+        "op": "clarify",
+        "api": "",
         "render": "text",
         "process": "",
         "repaired": false
       },
       "ar_ok": true,
-      "en_ok": false,
-      "parity": false,
+      "en_ok": true,
+      "parity": true,
       "_expect": {
         "op": "clarify",
         "api": "",
@@ -1857,7 +1854,7 @@
       "tier": "v21",
       "ar": {
         "op": "call_tool",
-        "api": "aggregate_entity",
+        "api": "analyze_employees",
         "render": "chart",
         "process": "",
         "repaired": false
@@ -1871,7 +1868,7 @@
       },
       "ar_ok": true,
       "en_ok": true,
-      "parity": false,
+      "parity": true,
       "_expect": {
         "op": "call_tool",
         "api": "analyze_employees",

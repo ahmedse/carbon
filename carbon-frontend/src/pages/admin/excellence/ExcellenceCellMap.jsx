@@ -41,7 +41,6 @@ export default function ExcellenceCellMap({ cells, level, selected, onSelect }) 
           variant="caption"
           align="center"
           color={lv === level + 1 ? 'primary' : 'text.secondary'}
-          fontWeight={lv === level + 1 ? 600 : 400}
         >
           {levelName(lv)}
         </Typography>

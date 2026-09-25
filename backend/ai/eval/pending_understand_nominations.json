@@ -23,5 +23,155 @@
     "conversation_id": "fc9eb86b-34ce-4075-870b-1ad9d79e2681",
     "nominated_at": "2026-09-24T15:08:39.398930+00:00",
     "status": "pending_human_review"
+  },
+  {
+    "utterance": "i told you pie chart",
+    "audience": [
+      "admin",
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool",
+      "call_tool",
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool",
+      "call_tool",
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 2,
+        "name": "analyze_employees",
+        "code": "invalid_args",
+        "detail": "dimension: invalid value 'employment_type' (allowed: 'gender', 'is_active', 'nationality', 'nationality_code', 'employment_type_code', 'contract_type_code', 'position', 'org_unit', 'kuwaitization', 'rotation')"
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "b7b03a52-39f6-45ad-9a76-923035e9765a",
+    "nominated_at": "2026-09-24T22:21:09.804045+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "are you dump ?",
+    "audience": [
+      "admin",
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool",
+      "call_tool",
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool",
+      "call_tool",
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 2,
+        "name": "analyze_employees",
+        "code": "invalid_args",
+        "detail": "dimension: invalid value 'employment_type' (allowed: 'gender', 'is_active', 'nationality', 'nationality_code', 'employment_type_code', 'contract_type_code', 'position', 'org_unit', 'kuwaitization', 'rotation')"
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "b7b03a52-39f6-45ad-9a76-923035e9765a",
+    "nominated_at": "2026-09-24T22:21:28.448097+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "i told you pie chart, not bat chart!",
+    "audience": [
+      "admin",
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool",
+      "call_tool",
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool",
+      "call_tool",
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "analyze_employees",
+        "code": "invalid_args",
+        "detail": "dimension: invalid value 'employment_type' (allowed: 'gender', 'is_active', 'nationality', 'nationality_code', 'employment_type_code', 'contract_type_code', 'position', 'org_unit', 'kuwaitization', 'rotation')"
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "ea1686b3-eb0f-4bf5-af1e-a1265dd26fbc",
+    "nominated_at": "2026-09-24T22:23:42.476770+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "i told you pie",
+    "audience": [
+      "admin",
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool",
+      "call_tool",
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool",
+      "call_tool",
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 2,
+        "name": "analyze_employees",
+        "code": "invalid_args",
+        "detail": "dimension: invalid value 'employment_type' (allowed: 'gender', 'is_active', 'nationality', 'nationality_code', 'employment_type_code', 'contract_type_code', 'position', 'org_unit', 'kuwaitization', 'rotation')"
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "c5801082-eb12-4667-9abb-c23b4d723b48",
+    "nominated_at": "2026-09-24T22:38:15.543859+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "what ?",
+    "audience": [
+      "admin",
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool",
+      "call_tool",
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool",
+      "call_tool",
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "analyze_employees",
+        "code": "invalid_args",
+        "detail": "dimension: invalid value 'employment_type' (allowed: 'gender', 'is_active', 'nationality', 'nationality_code', 'employment_type_code', 'contract_type_code', 'position', 'org_unit', 'kuwaitization', 'rotation')"
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "c5801082-eb12-4667-9abb-c23b4d723b48",
+    "nominated_at": "2026-09-24T22:38:35.567598+00:00",
+    "status": "pending_human_review"
   }
 ]

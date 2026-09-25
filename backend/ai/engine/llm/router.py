@@ -264,6 +264,7 @@ async def route_chat(
     max_tokens: int | None = None,
     response_format: dict | None = None,
     model: str | None = None,
+    extra_body: dict | None = None,
     db=None,  # optional: if None, creates its own session
 ) -> dict:
     """Route an LLM call by task type, logging cost and enforcing budget.
@@ -344,12 +345,17 @@ async def route_chat(
             kwargs["max_tokens"] = max_tokens
         if response_format:
             kwargs["response_format"] = response_format
+        if extra_body:
+            kwargs["extra_body"] = extra_body
 
         response = await create_completion(client, **kwargs)
         duration_ms = int((time.monotonic() - t0) * 1000)
 
         choice = response.choices[0]
         content = choice.message.content
+        from ai.engine.cognition.turn.reasoning import scrub
+
+        summary = scrub(str(getattr(choice.message, "reasoning_content", None) or ""))
         tool_calls = None
         if choice.message.tool_calls:
             tool_calls = [
@@ -397,6 +403,7 @@ async def route_chat(
             "output_tokens": output_tokens,
             "cost_usd": cost_usd,
             "tool_choice": normalized,
+            "reasoning_summary": summary,
         }
 
         logger.debug(

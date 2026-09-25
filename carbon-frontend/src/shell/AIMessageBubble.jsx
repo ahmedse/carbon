@@ -12,10 +12,13 @@ import {
   DialogContentText,
   DialogTitle,
   Divider,
+  FormControlLabel,
   IconButton,
   Menu,
   MenuItem,
   Paper,
+  Radio,
+  RadioGroup,
   Stack,
   TextField,
   Tooltip,
@@ -64,6 +67,9 @@ import ConfidenceIndicator from './ConfidenceIndicator';
 import AIGeneratedBadge from './AIGeneratedBadge';
 import ReasoningTrace from './ReasoningTrace';
 import PlanningHeader from './PlanningHeader';
+import PlanProposalForm from './PlanProposalForm';
+import { useAuth } from '../auth/AuthContext';
+import { commitPlanProposal } from '../api/aiWorkspace';
 import SuggestionDiff from './SuggestionDiff';
 
 const CarbonDataGrid = lazy(() => import('../components/DataGrid/CarbonDataGrid'));
@@ -231,6 +237,77 @@ function TooltipLines({ lines }) {
 // render in Chat. Sandbox *source* never does (RULE_23 — employees must not
 // see engine code). Admin audit / logs remain the place to inspect what ran.
 
+function ChoiceForm({ options, onSubmit }) {
+  const { t } = useTranslation('ai');
+  const [picked, setPicked] = useState('');
+  const [own, setOwn] = useState('');
+  const [sent, setSent] = useState(false);
+  const labels = options
+    .map((option) => String(option?.label || option?.value || '').trim())
+    .filter(Boolean);
+  const value = own.trim() || picked;
+  return (
+    <Box sx={{ mt: 1.25 }}>
+      <RadioGroup
+        value={picked}
+        onChange={(event) => {
+          setPicked(event.target.value);
+          setOwn('');
+        }}
+      >
+        {labels.map((label) => (
+          <FormControlLabel
+            key={label}
+            value={label}
+            disabled={sent}
+            control={<Radio size="small" />}
+            label={<Typography variant="body2">{label}</Typography>}
+          />
+        ))}
+      </RadioGroup>
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
+        <TextField
+          size="small"
+          fullWidth
+          disabled={sent}
+          placeholder={t('choice.own')}
+          value={own}
+          onChange={(event) => {
+            setOwn(event.target.value);
+            setPicked('');
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && own.trim() && !sent) {
+              event.preventDefault();
+              setSent(true);
+              onSubmit(own.trim());
+            }
+          }}
+        />
+        <Button
+          size="small"
+          variant="contained"
+          disabled={sent || !value}
+          onClick={() => {
+            setSent(true);
+            onSubmit(value);
+          }}
+        >
+          {t('choice.send')}
+        </Button>
+      </Stack>
+    </Box>
+  );
+}
+
+ChoiceForm.propTypes = {
+  options: PropTypes.arrayOf(PropTypes.shape({
+    label: PropTypes.string,
+    value: PropTypes.string,
+  })).isRequired,
+  onSubmit: PropTypes.func,
+};
+
 function AIMessageBubble({
   message,
   onAcceptSuggestion,
@@ -265,6 +342,8 @@ function AIMessageBubble({
   /** Current Ask|Plan dial — hide "Switch to Plan" when already on Plan. */
   composerProcess = 'ask',
 }) {
+  const { token } = useAuth();
+  const [createdPlanId, setCreatedPlanId] = useState('');
   const [showActions, setShowActions] = useState(false);
   const [copied, setCopied] = useState(false);
   const [moreMenuAnchor, setMoreMenuAnchor] = useState(null);
@@ -1313,6 +1392,27 @@ function AIMessageBubble({
         )}
 
         {/* Usage + time-ago metadata now live on the hover action row below. */}
+
+        {metadata.form?.kind === 'choice' && metadata.form.options?.length >= 2 && (
+          <ChoiceForm
+            options={metadata.form.options}
+            onSubmit={(value) => onFollowUp?.(value)}
+          />
+        )}
+
+        {metadata.form?.kind === 'plan_proposal' && (
+          <PlanProposalForm
+            proposal={metadata.form}
+            onCreate={metadata.form.conversation_id ? async () => {
+              const plan = await commitPlanProposal(token, metadata.form.conversation_id);
+              setCreatedPlanId(plan?.id || '');
+            } : undefined}
+            onChange={(text) => onFollowUp?.(text)}
+            onOpenTasks={onOpenPanel && createdPlanId
+              ? () => onOpenPanel('tasks', createdPlanId, {})
+              : undefined}
+          />
+        )}
 
         {followUps.length > 0 && (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>

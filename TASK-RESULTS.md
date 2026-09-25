@@ -4852,3 +4852,20 @@ Composer: clear-context button (`AIInputBar.jsx`, 17/17 vitest). Defaults unchan
 ## PV21-Q4-SKIP — 2026-09-24
 
 - On the default v21 path the superseded gates no longer run their bodies. Navigation fast-path, plan dial, restyle, report clarify, deixis exit, and the process-brief fallback stage only when `may_stage` is true, which is the legacy kill switch. Kept exits stay: refuse, Chat handoff, bound ESS read. The modules stay so `PULSE_UNDERSTAND=legacy` still works.
+
+## PV21-AGENT-RUN-CLASSES — 2026-09-25
+
+Run `0bd5072d` (emp_2378, weekly workforce briefing): 8 steps, 6 failed, 4 executions. Six classes fixed:
+
+- **Argument shape.** `CapabilitySurface.host_args` is the one `call_host_api` shape: path keys go to `path_params`, other values to `query_params` for a read and `body` for a write, and transport keys are dropped. The planner canonicalizes at plan save (`_canonicalize_host_steps`), the loop canonicalizes every executed call (`canonical_host_calls`), validation reads only what is sent (`parameter_values`), and repair writes back into the same shape (`apply_repaired_params`).
+- **Typed data between steps.** `plan/bindings.py`: `tool_args.bind` points a path id at a listing step's rows. One row binds. `select: latest` binds by the catalog's `latest_by`. Several rows without a select stop the step as `missing_binding` with the options in `critic_flags_json.choice`. An object in a path slot counts as a binding declaration (seen live). `list_payroll_runs` declares `latest_by`, and `get_payroll_run` has a `parameters` schema.
+- **Follow-ups.** `_admit_followup`: a host follow-up must name a catalog read, pass its schema, and be bindable from its parent step. Otherwise it is dropped, never remapped. Its intent is the catalog label.
+- **Hollow success.** `skill_has_effect`: only governed-process, code, and tool-bearing plan skills are offered to decomposition. A recipe return is `no_effect` (a failed step) and moves no skill stats (`invoke_skill`, `feed_run_feedback`).
+- **Typed failures.** `plan/failures.py`: transient, invalid_args, missing_binding, blocked_dependency, no_effect, permanent. `run_plan` retries only transient steps, once (`RUN_RETRY_MAX`). Deterministic classes are not replanned. A step whose dependency failed is not executed.
+- **Title.** `humanTaskTitle` has no GOSI/WPS keyword branch; the title comes from `plan.title` or the brief.
+- Planning replay (no run) of the same brief as emp_2378, twice: canonical `query_params`, a bind on the run id with `select: latest`, no stub skill.
+- Execution replay in-process as emp_2378 (reads only, no plan saved): org unit 16 buckets / 555, employment type 2 buckets / 555, 20 payroll runs, and `select: latest` bound run id 21. A choice with several rows and no `select` pauses the step (`awaiting_approval`) instead of failing it. Confirm writes the picked id into `path_params` and resume runs the read. The timeline shows one button per option.
+- The eight Chat tests that assert the legacy gates now set `PULSE_UNDERSTAND=legacy` themselves. They pass (81 with the choice tests).
+- L6 reached on the 01:14 understand run: n=75, accuracy 0.993, parity 0.987, forced_call_misses 0. One miss remains, g6-072 Arabic (malformed; English handed off to Agent). Gauge series row 2026-09-25 records L6 reached.
+- A request that names pie or bar is drawn that way. When the host suggested the other shape, the reply says so in one line. Unnamed chart requests still follow the host suggestion. Not live until the API restarts.
+- Gates: `pulse_gauge --gate` pass (no meter rose), `pack_contract --gate` 3/3. Tests: `test_agent_run_failure_classes.py` 23 pass. The remaining failures in the related suites also fail on `HEAD`.

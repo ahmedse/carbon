@@ -68,6 +68,36 @@ def _navigation_response(nav, *, total_tokens=0, total_llm_calls=0):
     )
 
 
+def _degraded_reply(ledger, degradation, state, mode: str):
+    """ADR-0053: a failed v21 stage answers with a typed error, not another path.
+
+    Shadow mode never answers; the legacy kill switch never reaches here.
+    """
+    if mode == "shadow":
+        return None
+    from ai.engine.agent.reasoning import AgentResponse
+    from ai.engine.cognition.turn.arbiter import Arbiter
+    from ai.engine.cognition.turn.degradation import caveat, record, sentence
+
+    record(ledger, degradation)
+    language = str(getattr(state, "language", "") or "en")
+    text = sentence(degradation, language)
+    ledger.final_response = text
+    ledger.turn_decision = Arbiter().decide(ledger.decision_signals).value
+    return AgentResponse(
+        text=text,
+        sources_cited=[],
+        tools_used=[],
+        confidence=0.0,
+        total_tokens=0,
+        llm_calls=1,
+        model="",
+        response_type="inferred",
+        envelope={"headline": "", "prose": [text], "tables": [], "charts": [],
+                  "caveats": [caveat(degradation)], "sources": []},
+    ), ledger
+
+
 class SoftSurfacesMixin:
     """Mixin: soft / understand / ESS / handoff helpers for TurnPipelineRunner."""
 
@@ -394,6 +424,7 @@ class SoftSurfacesMixin:
         state_ctx=None,
         user_info=None,
         process_mode: str = "",
+        progress_callback=None,
     ):
         """Understand path. ``legacy`` skip; ``shadow`` log+fallthrough; ``v21`` act."""
         from types import SimpleNamespace
@@ -409,8 +440,10 @@ class SoftSurfacesMixin:
             decision_render,
             failed_reads,
             lead_command,
-            speak_rows,
+            speak_turn,
         )
+        from ai.engine.cognition.turn.degradation import Degradation
+        from ai.engine.cognition.turn.degradation import record as record_degradation
         from ai.engine.cognition.turn.repair import rejection_feedback
         from ai.engine.cognition.turn.understand import (
             build_understand_system_prompt,
@@ -469,6 +502,10 @@ class SoftSurfacesMixin:
             messages.extend(list(conversation_history)[-8:])
         messages.append({"role": "user", "content": user_message or ""})
 
+        from ai.engine.cognition.turn.reasoning import budget_on, scrub
+
+        thinking = budget_on(state)
+
         async def complete(*, messages, tools, tool_choice, strict_tools):
             from ai.engine.llm.call_meter import stage
 
@@ -482,6 +519,7 @@ class SoftSurfacesMixin:
                     tool_choice=tool_choice,
                     strict_tools=strict_tools,
                     temperature=0.0,
+                    extra_body={"thinking": {"type": "enabled"}} if thinking else None,
                 )
 
         try:
@@ -495,13 +533,17 @@ class SoftSurfacesMixin:
                 state=state,
                 arg_violations=caps.arg_violations,
             )
-        except Exception:  # noqa: BLE001 — legacy spine remains
+        except Exception:
+            # ADR-0053: the model call failed. The dispatcher's fail-visible
+            # status reports it; another path does not answer in its place.
             logger.warning("v21 understand failed", exc_info=True)
             _signal(ledger, "v21_understand", False, reason="understand_error")
-            return None
+            if mode == "shadow":
+                return None
+            raise
         if decision is None:
             _signal(ledger, "v21_understand", False, reason="malformed_decision")
-            return None
+            return _degraded_reply(ledger, Degradation("understand", "malformed_decision"), state, mode)
 
         async def record(outcome: str, executed_rows: list[dict]) -> None:
             await self._record_understand(
@@ -523,10 +565,32 @@ class SoftSurfacesMixin:
             await record("shadow", [])
             return None
 
+        # The panel reads top-down: what Pulse understood, then each read it ran.
+        rationale = scrub(decision.reason)
+        if rationale and progress_callback is not None:
+            try:
+                shown = progress_callback(rationale)
+                if hasattr(shown, "__await__"):
+                    await shown
+            except Exception:  # noqa: BLE001 — narration never breaks a turn
+                logger.debug("v21 rationale narration skipped", exc_info=True)
+
         calls = {"n": 0}
 
         async def execute_tool(name: str, args: dict):
             calls["n"] += 1
+            if progress_callback is not None:
+                from ai.engine.cognition.turn.execute import _narrate_tool
+
+                try:
+                    # Narrate the host call this read becomes, not the catalog name.
+                    told = progress_callback(_narrate_tool(
+                        "call_host_api", caps.host_args(name, args), surface=surface,
+                    ))
+                    if hasattr(told, "__await__"):
+                        await told
+                except Exception:  # noqa: BLE001 — narration never breaks a read
+                    logger.debug("v21 read narration skipped", exc_info=True)
             witness = ExecuteWitness(
                 executor=self.executor,
                 hook_pipeline=build_default_pipeline(),
@@ -593,10 +657,13 @@ class SoftSurfacesMixin:
             logger.warning("v21 act failed", exc_info=True)
             _signal(ledger, "v21_understand", False, reason="act_error")
             await record("act_error", [])
-            return None
-        text, envelope = speak_rows(
+            return _degraded_reply(ledger, Degradation("act", "act_error"), state, mode)
+        text, envelope, degraded = await speak_turn(
             decision, executed, text=text, user_message=user_message or "",
+            instance_id=instance_id, conversation_id=conversation_id, state=state,
         )
+        if degraded is not None:
+            record_degradation(ledger, degraded)
         if not (text or "").strip():
             # Plan and Agent already own a multi-step goal. The canned
             # "switch" sentence is None there so the planner can draft it.
@@ -642,9 +709,36 @@ class SoftSurfacesMixin:
             repaired=decision.repaired,
             render=decision_render(decision),
         )
+        rationale = scrub(decision.reason) or rationale
+        summary = ""
+        exchanged = (decision.exchange or {}).get("result") if isinstance(decision.exchange, dict) else None
+        if isinstance(exchanged, dict):
+            summary = scrub(str(exchanged.get("reasoning_summary") or ""))
+        rev = (envelope or {}).get("revision") if isinstance(envelope, dict) else None
+        try:
+            await self._write_ledger_row(
+                turn_id, instance_id, conversation_id, host_user_id,
+                "reasoning", 9,
+                {"rationale": rationale, "summary": summary,
+                 "draft": (rev or {}).get("shown") or "",
+                 "revision": (rev or {}).get("reason") or ""},
+                0,
+            )
+        except Exception:  # noqa: BLE001 — the reply stands if the ledger row cannot
+            logger.debug("reasoning ledger skipped", exc_info=True)
         await record("answered", executed)
+        from ai.engine.cognition.turn.choice import choice_question
+
+        choice = choice_question(
+            cmd0.op if cmd0 is not None else "",
+            list(cmd0.options or []) if cmd0 is not None else [],
+            cmd0.key if cmd0 is not None else "",
+        )
         return AgentResponse(
             text=text,
+            reasoning_steps=[line for line in (rationale, summary) if line],
+            response_type="clarification" if choice else "inferred",
+            open_question=choice,
             sources_cited=[],
             tools_used=[
                 {"name": "call_host_api", "api_name": (row.get("tool_args") or {}).get("api_name")}
@@ -654,7 +748,6 @@ class SoftSurfacesMixin:
             total_tokens=0,
             llm_calls=1,
             model="",
-            response_type="inferred",
             envelope=envelope,
             actions=handoff_actions,
         ), ledger
@@ -983,11 +1076,9 @@ class SoftSurfacesMixin:
         from ai.engine.agent.reasoning import AgentResponse
         from ai.engine.cognition.notifier import broadcast_run_event as _broadcast_run
         from ai.engine.cognition.turn.navigation import detect_lang
-        from ai.engine.cognition.turn.plan_dial import (
-            open_tasks_action,
-            plan_dial_process_brief,
-            render_plan_dial_answer,
-        )
+        from ai.engine.cognition.turn.plan_dial import plan_dial_process_brief
+        from ai.engine.cognition.turn.plan_proposal import KIND as PROPOSAL_KIND
+        from ai.engine.cognition.turn.plan_proposal import revised_brief
 
         brief = plan_dial_process_brief(
             user_message, process_mode=process_mode,
@@ -1002,6 +1093,10 @@ class SoftSurfacesMixin:
             prior_api = str((getattr(state, "intent", None) or {}).get("api") or "")
             if prior_api and str(last.get("decision") or "") == "clarify" and len(brief) < 40:
                 return None
+            # With a draft open, the user's words revise that draft (typed state, not wording).
+            open_q = getattr(state, "open_question", None) or {}
+            if isinstance(open_q, dict) and open_q.get("kind") == PROPOSAL_KIND:
+                brief = revised_brief(str(open_q.get("brief") or ""), brief)
 
         def _create_plan_sync():
             from django.contrib.auth import get_user_model
@@ -1012,42 +1107,34 @@ class SoftSurfacesMixin:
             try:
                 user = User.objects.get(pk=host_user_id)
             except (User.DoesNotExist, ValueError):
-                return None
-            return PlansService().create_plan(
+                return None, None
+            return PlansService().propose_plan(
                 user, brief, conversation_id=conversation_id or "",
             )
 
         try:
             # thread_sensitive=False: create_plan re-enters the async engine
             # (same reason as the plan_task plugin).
-            plan = await sync_to_async(_create_plan_sync, thread_sensitive=False)()
+            plan, proposal = await sync_to_async(
+                _create_plan_sync, thread_sensitive=False,
+            )()
         except Exception:  # noqa: BLE001 — never break the turn
             logger.warning("plan_dial process plan create failed", exc_info=True)
             return None
-        if not isinstance(plan, dict) or not plan.get("id"):
+        # A brief the planner reduced to one bound read is a question.
+        if not isinstance(plan, dict) or not proposal:
             return None
 
         lang = "ar" if detect_lang(brief) == "ar" else "en"
-        text = render_plan_dial_answer(brief=brief, plan=plan, lang=lang)
-        plan_id = str(plan.get("id") or "")
-
-        if state is not None:
-            try:
-                from ai.engine.cognition.state_store import upsert_active_plan
-
-                upsert_active_plan(
-                    state,
-                    plan_id=plan_id,
-                    status=str(plan.get("status") or "pending_approval"),
-                    title=brief[:80],
-                    step_summary="; ".join(
-                        str(s.get("intent") or "")
-                        for s in (plan.get("steps") or [])
-                        if isinstance(s, dict)
-                    ),
-                )
-            except Exception:  # noqa: BLE001
-                logger.debug("plan_dial active_plans write-back skipped", exc_info=True)
+        proposal = {**proposal, "conversation_id": conversation_id or ""}
+        # The form carries the steps; the text only says what the user decides.
+        text = (
+            "هذه مسودة للمراجعة. لن تُنشأ أي مهمة حتى تختار «إنشاء المهمة» — أو أخبرني بما تريد تغييره."
+            if lang == "ar"
+            else "Here is a draft for you to review. No task exists until you choose "
+            "Create task — or tell me what to change."
+        )
+        plan_id = ""
 
         total_latency = (time.monotonic() - t0) * 1000
         ledger.final_response = text[:500]
@@ -1062,8 +1149,9 @@ class SoftSurfacesMixin:
             total_tokens=0,
             llm_calls=0,
             model="",
-            response_type="inferred",
-            actions=[open_tasks_action(plan_id, lang)],
+            response_type="clarification",
+            # plan_json stays in ConversationState for commit; the client form never gets it.
+            open_question={**proposal, "plan_json": plan},
         )
         try:
             await _broadcast_run(instance_id, "run.completed", {
@@ -1075,11 +1163,12 @@ class SoftSurfacesMixin:
         except Exception:  # noqa: BLE001
             logger.debug("plan_dial broadcast skipped", exc_info=True)
         logger.info(
-            "TurnPipelineRunner: Plan dial process plan id=%s steps=%d lang=%s",
-            plan_id[:8], len(plan.get("steps") or []), lang,
+            "TurnPipelineRunner: Plan dial drafted steps=%d lang=%s (not stored)",
+            len(plan.get("steps") or []), lang,
         )
-        _signal(ledger, "plan_dial_process", True, plan_id=plan_id)
-        ledger.turn_decision = ledger.turn_decision or "tool_answer"
+        _signal(ledger, "plan_dial_process", True, drafted=True)
+        # The draft awaits the user's decision, so the typed question stays open.
+        ledger.turn_decision = "clarify"
         return response, ledger
 
     async def _try_restyle_previous_answer(

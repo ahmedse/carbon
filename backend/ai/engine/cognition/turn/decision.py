@@ -37,6 +37,8 @@ class Command:
     reason: str = ""
     text: str = ""
     render: str = "text"
+    # The chart shape the user named (pie / bar / line), or "" when none was named.
+    chart: str = ""
 
     def reads_host(self) -> bool:
         """A read the executor runs: a named call, a confirm, or a continue."""
@@ -84,6 +86,9 @@ def _cmd_from_obj(raw: Any) -> Command | None:
     render = str(raw.get("render") or "text").strip().lower()
     if render not in RENDER_MODES:
         render = "text"
+    chart = str(raw.get("chart") or "").strip().lower()
+    if chart not in {"pie", "bar", "line"}:
+        chart = ""
     return Command(
         op=op,
         name=str(raw.get("name") or ""),
@@ -97,6 +102,7 @@ def _cmd_from_obj(raw: Any) -> Command | None:
         reason=str(raw.get("reason") or ""),
         text=str(raw.get("text") or ""),
         render=render,
+        chart=chart,
     )
 
 
@@ -256,15 +262,24 @@ EMIT_DECISION_TOOL: dict[str, Any] = {
             "Emit the turn decision. Use call_tool only for a tool in the "
             "provided catalog. Use confirm when the user affirms a pending "
             "question in CONVERSATION STATE. Use continue when they ask about "
-            "the previous answer. Use reject when they decline. Use "
+            "the previous answer; it re-uses the last view with no new read, "
+            "so a new filter or period is call_tool with those args. Use "
+            "reject when they decline. Use "
             "handoff_agent for anything that would change host data while the "
             "surface is Chat, and handoff_agent with process_id=plan for a "
             "multi-step or conditional goal. Use clarify when two tools fit. "
+            "When the user must pick, put each choice in options as a short "
+            "label. The question is one sentence and does not list the "
+            "choices. Send options empty only when you need their own words "
+            "and have no menu. "
             "Set render=chart "
             "or render=table when the user wants a chart, visual, or report of "
             "that data; the chart is drawn from THAT tool's result only. A "
             "request for charts of the previous answer is continue (same tool) "
-            "with render=chart, never a different domain. Never invent figures."
+            "with render=chart, never a different domain. Set chart to the "
+            "shape the user named in any language (pie, bar, line); keep the "
+            "shape they named earlier when they follow up on the same chart; "
+            "use an empty string when they named none. Never invent figures."
         ),
         "parameters": {
             "type": "object",
@@ -296,13 +311,23 @@ EMIT_DECISION_TOOL: dict[str, Any] = {
                                 "type": "string",
                                 "enum": sorted(RENDER_MODES),
                             },
+                            "chart": {
+                                "type": "string",
+                                "enum": ["", "bar", "line", "pie"],
+                            },
                         },
                         "required": ["op"],
                     },
                 },
                 "language": {"type": "string", "enum": ["ar", "en"]},
                 "confidence": {"type": "number"},
-                "reason": {"type": "string"},
+                "reason": {
+                    "type": "string",
+                    "description": (
+                        "One or two sentences in the user's language: what you "
+                        "understood and what you will do. No tool names, no code."
+                    ),
+                },
             },
             "required": ["commands", "language", "confidence"],
         },

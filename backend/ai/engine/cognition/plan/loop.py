@@ -33,6 +33,61 @@ logger = logging.getLogger("pulse.cognition.plan.loop")
 _step_index_context = None
 
 
+def _with_guard_values(tool_output, flags):
+    """An operator's guard pick rides on the source step's output for ``guard_outcome``."""
+    picks = flags.get("guard_values") if isinstance(flags, dict) else None
+    if not isinstance(picks, dict) or not picks:
+        return tool_output
+    merged = dict(tool_output) if isinstance(tool_output, dict) else {"result": tool_output}
+    merged["guard_values"] = dict(picks)
+    return merged
+
+
+def _output_check(step, result) -> None:
+    """ADR-0052 auditor, between steps: a returned call that did not answer fails typed."""
+    from ai.engine.cognition.plan.contract import (
+        REVIEW_ROLE,
+        error_status,
+        output_finding,
+        review_verdict,
+    )
+    from ai.engine.cognition.plan.failures import INVALID_ARGS, NO_EFFECT, PERMANENT, TRANSIENT
+
+    if (
+        step.agent_role == REVIEW_ROLE
+        and not result.error
+        and not result.paused
+        and result.critic_verdict != "veto"
+    ):
+        verdict, findings = review_verdict(result.draft_text or "")
+        if verdict != "pass":
+            result.critic_verdict = "veto"
+            if verdict == "fail":
+                detail = "; ".join(
+                    str(f.get("detail") or f.get("code") or "") for f in findings
+                ).strip("; ")
+                result.error = f"Review failed: {detail or 'no reason given'}"
+                result.failure_class = PERMANENT
+            else:
+                result.error = "Review returned no verdict."
+                result.failure_class = NO_EFFECT
+        return
+    finding = output_finding(step, result)
+    if finding is None:
+        return
+    status = error_status(result.tool_output)
+    result.error = finding.detail
+    result.critic_verdict = "veto"
+    if step.is_mutation:
+        result.failure_class = PERMANENT
+    elif status in (400, 422):
+        result.failure_class = INVALID_ARGS
+    elif status == 429 or status >= 500:
+        result.failure_class = TRANSIENT
+    else:
+        result.failure_class = PERMANENT
+
+
 def _transitive_prior_results(
     step: PlanStep,
     plan_steps: list[PlanStep],
@@ -512,8 +567,9 @@ class ReActLoop:
                             critic_verdict=s.critic_verdict or "pass",
                             critic_flags=_step_flags if isinstance(_step_flags, list) else [],
                             executed=s.status == "completed",
-                            tool_output=_coerce_json_field(
-                                s.tool_output_json, default=None,
+                            tool_output=_with_guard_values(
+                                _coerce_json_field(s.tool_output_json, default=None),
+                                _flags,
                             ),
                             error=s.error,
                         ))
@@ -1157,6 +1213,7 @@ class ReActLoop:
             # Phase 3 — fold back IN ORDER (same post-step logic as today)
             stopped_for_pause = False
             for step, result, step_latency in executed:
+                _output_check(step, result)
                 result.failure_class = classify_step_failure(
                     step, result, plan_source=plan.source,
                 )
@@ -1755,6 +1812,48 @@ class ReActLoop:
                 paused=False,
                 error=WRITE_HELD,
                 failure_class=BLOCKED_DEPENDENCY,
+            )
+        from ai.engine.cognition.plan.contract import (
+            evidence_blocked,
+            guard_choice,
+            guard_outcome,
+        )
+
+        if getattr(step, "gap", None):
+            from ai.engine.cognition.plan.failures import NO_EFFECT
+            return StepResult(
+                step_id=step.step_id,
+                intent=step.intent,
+                critic_verdict="veto",
+                executed=False,
+                error=f"No capability for this step: {step.gap}",
+                failure_class=NO_EFFECT,
+            )
+        _guard = guard_outcome(step, {
+            r.step_id: r.tool_output for r in (prior_results or [])
+            if getattr(r, "tool_output", None) is not None
+        })
+        if _guard == "skip":
+            return StepResult(
+                step_id=step.step_id, intent=step.intent,
+                critic_verdict="pass", executed=False, error=None,
+            )
+        if _guard == "pause":
+            from uuid import uuid4
+            return StepResult(
+                step_id=step.step_id, intent=step.intent,
+                critic_verdict="pass", executed=False, paused=True,
+                confirmation_token=str(uuid4()),
+                error="This branch needs a value from an earlier step.",
+                failure_class=MISSING_BINDING,
+                choice=guard_choice(step),
+            )
+        _evidence = evidence_blocked(step, prior_results or [])
+        if _evidence is not None:
+            return StepResult(
+                step_id=step.step_id, intent=step.intent,
+                critic_verdict="veto", executed=False,
+                error=_evidence.detail, failure_class=BLOCKED_DEPENDENCY,
             )
         if step.tool_name == "call_host_api" and isinstance(step.tool_args, dict):
             _bind_gap = self._bind_host_step(step, instance_config, prior_results)
@@ -2992,11 +3091,15 @@ class ReActLoop:
             "ReActLoop: step %d %s unbound path %r (%s)",
             step.step_id, name, binding.key, binding.status,
         )
+        from uuid import uuid4
+
         return StepResult(
             step_id=step.step_id,
             intent=step.intent,
-            critic_verdict="veto",
+            critic_verdict="pass",
             executed=False,
+            paused=choice is not None,
+            confirmation_token=str(uuid4()) if choice is not None else None,
             error=error,
             failure_class=MISSING_BINDING,
             choice=choice,
@@ -3016,6 +3119,10 @@ class ReActLoop:
             parts.append(f"Step instructions: {step.instructions}")
         if step.tool_name:
             parts.append(f"Use tool: {step.tool_name} with args: {step.tool_args}")
+        from ai.engine.cognition.plan.contract import REVIEW_INSTRUCTION, REVIEW_ROLE
+
+        if step.agent_role == REVIEW_ROLE:
+            parts.append(REVIEW_INSTRUCTION)
 
         if step.depends_on:
             deps_text = []

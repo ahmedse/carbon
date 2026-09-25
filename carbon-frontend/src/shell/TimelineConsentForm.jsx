@@ -284,6 +284,37 @@ export default function TimelineConsentForm({
   }, [step?.step_id, step?.status, step?.tool_args, step?.consent_slots]);
 
   if (!step || step.status !== 'awaiting_approval') return null;
+  const evidence = Array.isArray(step.evidence) ? step.evidence : [];
+  if (evidence.length && evidence.some((row) => !row.ok)) return null;
+  const choice = step.choice;
+  if (choice?.options?.length && choice.key) {
+    return (
+      <Stack
+        spacing={0.75}
+        data-testid={`timeline-choice-${step.step_id}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Typography variant="caption" sx={{ fontSize: '0.6875rem', fontWeight: 600 }}>
+          {`Which ${choice.key}?`}
+        </Typography>
+        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+          {choice.options.map((opt) => (
+            <Button
+              key={String(opt.value)}
+              size="small"
+              variant="outlined"
+              disabled={Boolean(confirming)}
+              data-testid={`timeline-choice-${step.step_id}-${opt.value}`}
+              onClick={() => onConfirm?.(step.step_id, { body: { [choice.key]: opt.value } })}
+              sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0 }}
+            >
+              {opt.label || String(opt.value)}
+            </Button>
+          ))}
+        </Stack>
+      </Stack>
+    );
+  }
   // Spec can be null only for non-write awaits; still allow Approve/Decline.
   const fields = spec?.fields || [];
   const busy = Boolean(confirming);
@@ -313,6 +344,25 @@ export default function TimelineConsentForm({
       onKeyDown={(e) => e.stopPropagation()}
       sx={{ mt: 0.5 }}
     >
+      {step.narration ? (
+        <Typography variant="caption" sx={{ display: 'block', mb: 0.5, fontSize: '0.6875rem' }} data-testid={`timeline-narration-${step.step_id}`}>
+          {step.narration}
+        </Typography>
+      ) : null}
+      {evidence.length ? (
+        <Stack spacing={0.25} sx={{ mb: 0.75 }} data-testid={`timeline-evidence-${step.step_id}`}>
+          {evidence.map((row) => (
+            <Typography
+              key={row.step_id}
+              variant="caption"
+              sx={{ fontSize: '0.625rem' }}
+            >
+              {`Step ${row.step_id}: ${row.ok ? 'completed' : row.status}`}
+            </Typography>
+          ))}
+        </Stack>
+      ) : null}
+
       {ready && (actionLabel || rows.length || consequence) ? (
         <ChangePreviewPanel
           stepId={step.step_id}

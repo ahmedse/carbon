@@ -1,0 +1,22 @@
+# ADR-0054. Shapes, not model output.
+# thinking: a tool answer keeps its rationale.
+# revision: replaced text carries what was shown and why; unchanged text does not.
+cases:
+  - id: think-tool-answer
+    kind: thinking
+    reason: "You asked for the split, so I will read it."
+    expect_rationale: true
+  - id: think-empty-reason
+    kind: thinking
+    reason: ""
+    expect_rationale: false
+  - id: rev-replaced
+    kind: revision
+    shown: "Live data summary."
+    replacement: "Gender is mostly blank."
+    expect_revision: true
+  - id: rev-unchanged
+    kind: revision
+    shown: "Gender is mostly blank."
+    replacement: "Gender is mostly blank."
+    expect_revision: false

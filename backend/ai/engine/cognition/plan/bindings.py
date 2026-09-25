@@ -6,7 +6,7 @@ The step declares where it comes from in ``tool_args.bind``::
     {"id": {"step": 2, "field": "id", "select": "latest"}}
 
 and the loop binds it from that step's rows before the call is built. When
-the rows leave more than one candidate and the plan did not say which, the
+the rows hold more than one candidate and the plan did not say which, the
 step stops with a typed choice instead of calling the host without the id.
 
 Pure helpers (RULE_20): no Django, no domain vocabulary. The catalog entry of

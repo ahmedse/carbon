@@ -25,6 +25,7 @@ import pytest
 from asgiref.sync import async_to_sync
 from django.test import override_settings
 
+from ai.tests.pv21_stub import answer_decision
 from ai.engine.core.config import get_settings
 from ai.store import reset_store
 
@@ -115,7 +116,7 @@ def _date_echo_client(calls: list):
                 types.SimpleNamespace(
                     message=types.SimpleNamespace(
                         content=content,
-                        tool_calls=None,
+                        tool_calls=answer_decision(kw),
                     ),
                     finish_reason="stop",
                 )

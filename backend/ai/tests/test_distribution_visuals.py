@@ -91,6 +91,31 @@ def test_leave_balance_rows_chart_instead_of_a_sandbox_image():
     assert blocks["charts"][0].series[0]["data"][0] == ["Annual", 12]
 
 
+def test_named_pie_is_drawn_when_the_shape_suggests_a_bar():
+    usable = [{
+        "tool_name": "call_host_api",
+        "result": {
+            "data": {
+                "dimension": "gender",
+                "suggested_chart_type": "bar",
+                "breakdown": [
+                    {"label": "(blank)", "count": 554, "pct": 99.8},
+                    {"label": "female", "count": 1, "pct": 0.2},
+                ],
+            },
+        },
+    }]
+    charts = _render_tool_charts(
+        usable,
+        user_message="give me a summary report with pie charts",
+    )
+    assert "pie showData" in charts
+    assert "Drawn as a pie" in charts
+    plain = _render_tool_charts(usable, user_message="summary report with charts")
+    assert "xychart-beta" in plain
+    assert "Drawn as a pie" not in plain
+
+
 def test_salary_band_buckets():
     bands = dict(_salary_band_buckets([50, 150, 250, 350, 500, 800, 1500, 3000, 8000]))
     assert bands["≤100"] == 1

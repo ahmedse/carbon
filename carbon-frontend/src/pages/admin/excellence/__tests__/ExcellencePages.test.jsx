@@ -57,10 +57,12 @@ function renderAt(path) {
 }
 
 describe('Excellence console', () => {
-  it('lists contexts as places (Pulse and Nibras)', async () => {
+  it('opens as a window on the framework', async () => {
     renderAt('/admin/excellence');
-    expect(await screen.findByRole('button', { name: 'Open Pulse' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Open Nibras' })).toBeTruthy();
+    expect(await screen.findByText(/quality framework/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'View Pulse' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'View Nibras' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'View Read the standard' })).toBeTruthy();
   });
 
   it('opens Pulse ladder with open cell and weakest-aspect copy', async () => {
@@ -70,11 +72,13 @@ describe('Excellence console', () => {
     expect(screen.getByText(/Weakest: Secure/i)).toBeTruthy();
   });
 
-  it('navigates single-app Pulse context straight to the ladder', async () => {
+  it('opens the Pulse product page with coverage before coworker maturity', async () => {
     const user = userEvent.setup();
     renderAt('/admin/excellence');
-    await screen.findByRole('button', { name: 'Open Pulse' });
-    await user.click(screen.getByRole('button', { name: 'Open Pulse' }));
-    expect(await screen.findByLabelText('Secure Declared open')).toBeTruthy();
+    await screen.findByRole('button', { name: 'View Pulse' });
+    await user.click(screen.getByRole('button', { name: 'View Pulse' }));
+    expect(await screen.findByText(/weakest of nine aspects/i)).toBeTruthy();
+    expect(screen.getByText(/Pulse coworker maturity/i)).toBeTruthy();
+    expect(screen.getByText('Understands · not mapped')).toBeTruthy();
   });
 });

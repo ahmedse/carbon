@@ -236,10 +236,10 @@ def test_chat_grounding_never_says_call_the_tool_for_writes():
     assert "learn_fact" in block
 
 
-def test_plan_grounding_shows_the_plan_before_creating_a_task():
+def test_plan_grounding_never_lets_the_draft_invent_steps():
     block = chat_grounding_rules_block(process_mode="plan")
-    assert "numbered list" in block
-    assert "Do not call plan_task until the user has accepted" in block
+    assert "Never write a plan of your own" in block
+    assert "could not turn this into a task" in block
     assert "Never tell the user to switch to Plan" in block
     assert "fetching live data" in block
 
@@ -247,8 +247,6 @@ def test_plan_grounding_shows_the_plan_before_creating_a_task():
 def test_plan_dial_withholds_host_reads_and_task_creation():
     from ai.engine.cognition.turn.runner_util import (
         _filter_draft_tools,
-        ensure_plan_review_text,
-        plan_accept_brief,
         plan_created_receipt,
         plan_task_error_receipt,
     )
@@ -260,43 +258,29 @@ def test_plan_dial_withholds_host_reads_and_task_creation():
         {"function": {"name": "search_knowledge"}},
         {"function": {"name": "web_research"}},
         {"function": {"name": "ask_clarification"}},
+        {"function": {"name": "get_entity_details"}},
     ]
     names = {
         d["function"]["name"]
         for d in _filter_draft_tools(tools, "pull the loans and export a brief", "general", "plan")
     }
     assert names == {"ask_clarification"}
+    # The plan is created from the brief, so no reply word re-opens plan_task.
     shown = [{
         "role": "assistant",
         "content": "1. Pull company loans\n2. Export the brief for HR",
     }]
-    accepted = {
-        d["function"]["name"]
-        for d in _filter_draft_tools(
-            tools, "yes", "general", "plan", shown,
-        )
-    }
-    assert accepted == {"plan_task", "ask_clarification"}
-    retried = {
-        d["function"]["name"]
-        for d in _filter_draft_tools(
-            tools, "retry", "general", "plan", shown,
-        )
-    }
-    assert retried == {"plan_task", "ask_clarification"}
+    for reply in ("yes", "accept", "retry", "looks good"):
+        assert {
+            d["function"]["name"]
+            for d in _filter_draft_tools(tools, reply, "general", "plan", shown)
+        } == {"ask_clarification"}
     ask_names = {
         d["function"]["name"]
         for d in _filter_draft_tools(tools, "what is my leave balance", "general", "ask")
     }
     assert "call_host_api" in ask_names
     assert "plan_task" not in ask_names
-    repaired = ensure_plan_review_text(
-        "Which department did you mean?",
-        "Break down headcount and export the results.",
-    )
-    assert "1. " in repaired
-    assert "2. " in repaired
-    assert "Reply “Accept”" in repaired
     receipt = plan_created_receipt([{
         "tool_name": "plan_task",
         "result": (
@@ -311,23 +295,6 @@ def test_plan_dial_withholds_host_reads_and_task_creation():
         "error": "Planning failed — nothing was created.",
     }])
     assert error == "Planning failed — nothing was created."
-
-    brief = (
-        "Break down GOFSCO headcount by department and position for "
-        "Field Ops / Coiled Tubing. Export Excel and a PNG chart."
-    )
-    history = [
-        {"role": "user", "content": brief},
-        {"role": "assistant", "content": "1. Read headcount\n2. Export files"},
-        {"role": "user", "content": "ok"},
-        {"role": "assistant", "content": "Task planning failed."},
-    ]
-    assert plan_accept_brief("retry", history) == brief
-    history.extend([
-        {"role": "user", "content": "retry"},
-        {"role": "assistant", "content": "1. Read headcount\n2. Export files"},
-    ])
-    assert plan_accept_brief("accept", history) == brief
 
 
 def test_is_ess_write_utterance():

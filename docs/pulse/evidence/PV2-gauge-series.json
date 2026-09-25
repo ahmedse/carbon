@@ -48,6 +48,34 @@
       "six_b_streak": 5,
       "packs_ok": true,
       "agent_plan": "12/12"
+    },
+    {
+      "date": "2026-09-25",
+      "instance": "nibras",
+      "staged_exits": 3,
+      "re_compile": 59,
+      "arabic_regex": 0,
+      "runner_lines": 367,
+      "tool_choice_uses": 33,
+      "routing_phrase_sets": 260,
+      "domain_terms_in_core": 0,
+      "brand_literals_in_core": 0,
+      "levels": {
+        "L0": "reached",
+        "L1": "reached",
+        "L2": "reached",
+        "L3": "reached",
+        "L4": "reached",
+        "L5": "reached",
+        "L6": "reached",
+        "L7": "reached"
+      },
+      "g6_accuracy": 0.9933333333333333,
+      "g6_parity": 0.9866666666666667,
+      "g5_turns": "96/96",
+      "six_b_streak": 5,
+      "packs_ok": true,
+      "agent_plan": "12/12"
     }
   ]
 }

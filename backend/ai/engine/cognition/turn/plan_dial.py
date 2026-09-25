@@ -53,18 +53,23 @@ def plan_dial_process_brief(
         return None
     if is_restyle_request(text):
         return None
-    # Read questions («كم رصيد إجازتي؟») are answers, not plans — even on Plan.
+    return text
+
+
+def is_governed_process_brief(utterance: str) -> bool:
+    """True for the briefs a pinned ProcessDefinition owns (slots, guards, consent)."""
+    text = strip_pulse_mode_prefix(utterance or "").strip()
+    if not text:
+        return False
     from ai.engine.cognition.turn.handoff_agent import is_ess_write_utterance
 
     if not is_ess_write_utterance(text):
-        return None
-    if (
+        return False
+    return (
         is_personal_loan_brief(text)
         or is_personal_attendance_brief(text)
         or is_personal_leave_brief(text)
-    ):
-        return text
-    return None
+    )
 
 
 def is_restyle_request(utterance: str) -> bool:

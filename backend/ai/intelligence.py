@@ -756,6 +756,9 @@ class CarbonIntelligence:
                             envelope=res.get("envelope"),
                             tool_digest=res.get("tool_digest") or "",
                             active_plans=res.get("active_plans"),
+                            reasoning=res.get("reasoning"),
+                            revision=res.get("revision"),
+                            form=res.get("form"),
                         )
                         _finalize_generation("completed", usage)
                         done_frame = {
@@ -2676,6 +2679,9 @@ class CarbonIntelligence:
                             envelope=res.get("envelope"),
                             tool_digest=res.get("tool_digest") or "",
                             active_plans=res.get("active_plans"),
+                            reasoning=res.get("reasoning"),
+                            revision=res.get("revision"),
+                            form=res.get("form"),
                         )
                         _finalize_generation("completed", usage)
                         done_frame = {
@@ -3869,6 +3875,9 @@ class CarbonIntelligence:
             envelope=chat_response.envelope,
             tool_digest=getattr(chat_response, "tool_digest", "") or "",
             active_plans=getattr(chat_response, "active_plans", None) or [],
+            reasoning=getattr(chat_response, "reasoning", None) or [],
+            revision=getattr(chat_response, "revision", None),
+            form=getattr(chat_response, "form", None),
         )
 
     def _prepend_workspace_context(
@@ -4138,6 +4147,9 @@ class CarbonIntelligence:
         envelope: dict | None = None,
         tool_digest: str = "",
         active_plans: list[dict] | None = None,
+        reasoning: list | None = None,
+        revision: dict | None = None,
+        form: dict | None = None,
     ) -> dict[str, Any]:
         """Save AI response message and update conversation status."""
         if status == "provider_unavailable":
@@ -4171,6 +4183,18 @@ class CarbonIntelligence:
             metadata["code_result"] = code_result
         if envelope:
             metadata["envelope"] = envelope
+        if reasoning:
+            metadata["reasoning"] = [str(line) for line in reasoning if str(line).strip()]
+        if isinstance(revision, dict) and revision.get("reason"):
+            metadata["revision"] = {
+                "shown": str(revision.get("shown") or ""),
+                "reason": str(revision.get("reason") or ""),
+            }
+        form_kind = str(form.get("kind") or "") if isinstance(form, dict) else ""
+        if form_kind:
+            metadata["form"] = form
+        # A menu is unanswered until the user picks. A proposal already exists.
+        awaits_pick = form_kind == "choice" and len(form.get("options") or []) >= 2
         # C2 — calibrated confidence (Faculty 7): outcome label + honest-
         # uncertainty flag (RULE_23 — outcome copy only, never raw internals).
         if confidence_label:
@@ -4184,7 +4208,7 @@ class CarbonIntelligence:
             conversation,
             content or "",
             metadata=metadata,
-            status="needs_input" if has_follow_ups else "completed",
+            status="needs_input" if (has_follow_ups or awaits_pick) else "completed",
             usage=usage,
         )
 

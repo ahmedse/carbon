@@ -105,13 +105,19 @@ class CapabilitySurface:
         path_keys = self.path_keys(name)
         if schema.get("additionalProperties") is False:
             flat = {k: v for k, v in flat.items() if k in props or k in path_keys}
+        # A path segment is a scalar: an object in a path slot declares where
+        # the value comes from (``bind``), it is not the value.
+        bind = dict(raw["bind"]) if isinstance(raw.get("bind"), dict) else {}
+        for key in path_keys:
+            if isinstance(flat.get(key), dict):
+                bind.setdefault(key, flat.pop(key))
         path_params = {k: v for k, v in flat.items() if k in path_keys}
         rest = {k: v for k, v in flat.items() if k not in path_keys}
         out: dict[str, Any] = {"api_name": str(name or "")}
         if isinstance(raw.get("explanation"), str) and raw["explanation"].strip():
             out["explanation"] = raw["explanation"]
-        if isinstance(raw.get("bind"), dict) and raw["bind"]:
-            out["bind"] = dict(raw["bind"])
+        if bind:
+            out["bind"] = bind
         if path_params:
             out["path_params"] = path_params
         if rest:

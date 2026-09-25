@@ -229,7 +229,7 @@ async def run_pre_s1_gates(
     if st.ess_bound is not None:
         stage_exit(staged, 'tool_answer', 'ess_bound_self_read', st.ess_bound[0])
     if st.ess_bound is None and (not turn_route.committed) and (st.chat_handoff is None) and (runner.executor is not None):
-        _v21 = await runner._try_v21_understand(user_message=st.user_message, conversation_history=conversation_history, ledger=ledger, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, host_user_id=host_user_id, instance_config=instance_config, t0=t0, surface=surface, state_ctx=state_ctx, user_info=user_info, process_mode=process_mode)
+        _v21 = await runner._try_v21_understand(user_message=st.user_message, conversation_history=conversation_history, ledger=ledger, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, host_user_id=host_user_id, instance_config=instance_config, t0=t0, surface=surface, state_ctx=state_ctx, user_info=user_info, process_mode=process_mode, progress_callback=progress_callback)
         if _v21 is not None:
             return _v21
     _zero = None
@@ -239,10 +239,16 @@ async def run_pre_s1_gates(
         _zero_resp = _zero[0]
         _zero_decision = 'clarify' if getattr(_zero_resp, 'response_type', '') == 'clarification' else 'answer'
         stage_soft_exit(staged, _zero_decision, 'zero_llm', _zero_resp)
-    if turn_route.kind is RouteKind.PLAN_PROCESS and may_stage('plan_dial_process'):
+    if turn_route.kind is RouteKind.PLAN_PROCESS:
+        # v21 supersedes the soft exit, so the planner owns the turn directly.
+        # A proposal returns here. One bound read is a question: understanding
+        # answers it, and the draft never invents a plan of its own.
         _plan_dial = await runner._try_plan_dial_process_plan(user_message=st.user_message, process_mode=process_mode, state_ctx=state_ctx, ledger=ledger, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, host_user_id=host_user_id, t0=t0)
         if _plan_dial is not None:
-            stage_soft_exit(staged, 'tool_answer', 'plan_dial_process', _plan_dial[0])
+            return _plan_dial
+        _v21_plan = await runner._try_v21_understand(user_message=st.user_message, conversation_history=conversation_history, ledger=ledger, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, host_user_id=host_user_id, instance_config=instance_config, t0=t0, surface=surface, state_ctx=state_ctx, user_info=user_info, process_mode=process_mode, progress_callback=progress_callback)
+        if _v21_plan is not None:
+            return _v21_plan
     if turn_route.kind is RouteKind.RESTYLE and may_stage('restyle'):
         _restyle = await runner._try_restyle_previous_answer(user_message=st.user_message, conversation_history=conversation_history, ledger=ledger, meter=meter, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, t0=t0)
         if _restyle is not None:

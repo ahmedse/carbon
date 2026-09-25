@@ -651,6 +651,7 @@ state_store.py::_DICT_KEYS:
   - intent
   - slots
   - open_question
+  - last_view
   kind: tuple
 state_store.py::_EMPTY_PAYSLIP_REPLY_PHRASES:
   items:
@@ -2236,25 +2237,6 @@ turn/runner_util.py::_ECF_CHAT_TOOLS:
   items:
   - resolve_entity
   - aggregate_entity
-  kind: frozenset
-turn/runner_util.py::_PLAN_ACCEPT:
-  items:
-  - 'yes'
-  - ok
-  - okay
-  - accept
-  - accepted
-  - approve
-  - approved
-  - go
-  - proceed
-  - confirm
-  - do it
-  - create it
-  - create the task
-  - retry
-  - try again
-  - retry planning
   kind: frozenset
 turn/runner_util.py::_SCOPE_BYPASS_PHRASES:
   items:

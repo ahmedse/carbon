@@ -297,6 +297,26 @@ def _extract_artifact_nouns(brief: str) -> list[str]:
     return nouns
 
 
+_NOUN_KINDS = {
+    "report": ("artifact", "reasoning"),
+    "export": ("artifact",),
+    "table": ("table",),
+    "field": ("table",),
+    "rule": ("rule",),
+    "binding": ("binding",),
+}
+
+
+def _step_artifact_kind(step: Any) -> str:
+    """What a step produces, from its tool and catalog name (not its prose)."""
+    tool = getattr(step, "tool_name", None) or ""
+    if tool == "export_document":
+        return "artifact"
+    if not tool:
+        return "reasoning"
+    return FlightDirector._kind_from_step(step)
+
+
 def _suggest_criterion(step: Any) -> dict | None:
     """Deterministic acceptance-criterion template for a step (spec §3.4)."""
     tool = step.tool_name
@@ -338,20 +358,27 @@ def _suggest_criterion(step: Any) -> dict | None:
 def contract_gate(plan: Any, brief: str) -> dict:
     """Deterministic artifact-noun coverage + per-step criteria suggestions.
 
-    Never blocks — records findings and suggestions for the flight state.
+    Findings are blocking: Approve and resume refuse a plan while any noun is missing.
     """
     nouns = _extract_artifact_nouns(brief)
     covered: set[str] = set()
     for step in getattr(plan, "steps", []) or []:
         haystack = f"{step.intent} {json.dumps(step.tool_args or {})}".lower()
+        kind = _step_artifact_kind(step)
         for noun in nouns:
-            if noun.lower() in haystack:
+            if noun.lower() in haystack or kind in _NOUN_KINDS.get(noun, ()):
                 covered.add(noun)
 
     findings: list[dict] = []
     for noun in nouns:
         if noun not in covered:
-            findings.append({"kind": "missing_artifact", "noun": noun, "missing": True})
+            findings.append({
+                "kind": "missing_artifact",
+                "noun": noun,
+                "missing": True,
+                # A quoted name is a hint, not a deliverable category.
+                "blocks": noun in _ARTIFACT_NOUNS,
+            })
 
     suggested_criteria: dict[str, dict] = {}
     for step in getattr(plan, "steps", []) or []:
@@ -717,7 +744,8 @@ class FlightDirector:
                 pass
         return _suggest_criterion(step)
 
-    def _kind_from_step(self, step: Any) -> str:
+    @staticmethod
+    def _kind_from_step(step: Any) -> str:
         """Best-effort ledger-kind for a step when the criterion says ``host``."""
         tool = (step.tool_name or "").lower()
         if "dq_rule" in tool or tool == "create_dq_rule":

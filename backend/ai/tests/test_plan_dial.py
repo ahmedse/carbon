@@ -62,8 +62,142 @@ def test_ask_dial_never_becomes_process_plan():
 
 
 def test_plan_dial_read_question_is_not_a_plan():
-    assert plan_dial_process_brief(_PLAN_PREFIX + "كم رصيد إجازتي؟") is None
-    assert plan_dial_process_brief(_PLAN_PREFIX + "What is my leave balance?") is None
+    """The planner decides, not the wording: one bound read is a question."""
+    from ai.engine.cognition.turn.plan_proposal import is_task_plan, proposal_payload
+
+    one_read = {
+        "id": "run-1",
+        "steps": [{
+            "step_id": 1,
+            "intent": "Read my leave balance",
+            "tool_name": "call_host_api",
+            "tool_args": {"api_name": "get_my_leave_balance"},
+            "is_mutation": False,
+        }],
+    }
+    assert is_task_plan(one_read) is False
+    assert proposal_payload(one_read, brief="What is my leave balance?") is None
+
+
+def test_a_read_that_takes_two_steps_is_a_task():
+    two_reads = {
+        "id": "run-2",
+        "status": "pending_approval",
+        "steps": [
+            {
+                "step_id": 1,
+                "intent": "Read the 20 lowest salaries",
+                "tool_name": "call_host_api",
+                "tool_args": {"api_name": "list_compensation", "body": {"limit": 20}},
+                "is_mutation": False,
+            },
+            {
+                "step_id": 2,
+                "intent": "Read their positions",
+                "tool_name": "call_host_api",
+                "tool_args": {"api_name": "list_positions"},
+                "is_mutation": False,
+                "gap": "",
+            },
+        ],
+    }
+    from ai.engine.cognition.turn.plan_proposal import proposal_payload
+
+    proposal = proposal_payload(two_reads, brief="lowest 20 salaries and their jobs")
+    assert proposal["kind"] == "plan_proposal"
+    assert proposal["plan_id"] == "run-2"
+    assert [s["step_id"] for s in proposal["steps"]] == [1, 2]
+    assert {"name": "limit", "value": "20"} in proposal["steps"][0]["args"]
+    assert proposal["blocked_count"] == 0
+
+
+def test_a_step_with_no_capability_is_blocked_in_the_proposal():
+    from ai.engine.cognition.turn.plan_proposal import proposal_payload
+
+    plan = {
+        "id": "run-3",
+        "steps": [
+            {"step_id": 1, "intent": "Read salaries", "tool_name": "call_host_api"},
+            {"step_id": 2, "intent": "Mail the board", "gap": "no capability"},
+        ],
+    }
+    proposal = proposal_payload(plan, brief="send the board a salary note")
+    assert proposal["blocked_count"] == 1
+    assert proposal["steps"][1]["blocked"] is True
+    assert proposal["steps"][1]["gap"] == "no capability"
+
+
+def test_plan_dial_still_owns_a_substantive_brief():
+    assert plan_dial_process_brief(
+        _PLAN_PREFIX + "full report about the lowest 20 salaries and their jobs"
+    ) == "full report about the lowest 20 salaries and their jobs"
+
+
+@pytest.mark.asyncio
+async def test_v21_plan_route_returns_the_planner_not_the_draft(monkeypatch):
+    """The superseded soft exit must not drop the plan. The planner owns the turn."""
+    from types import SimpleNamespace
+
+    from ai.engine.cognition.turn.exit_policy import may_stage
+    from ai.engine.cognition.turn.router import ProcessMode, RouteDecision, RouteKind
+    from ai.engine.cognition.turn.runner_metered_state import MeteredTurnState
+    from ai.engine.cognition.turn.runner_pre_s1 import run_pre_s1_gates
+
+    monkeypatch.setenv("PULSE_UNDERSTAND", "v21")
+    assert may_stage("plan_dial_process") is False
+
+    proposal = object()
+    ledger = SimpleNamespace(decision_signals=[])
+    runner = SimpleNamespace()
+
+    async def _plan(**kwargs):
+        return proposal, ledger
+
+    async def _understand(**kwargs):
+        raise AssertionError("understanding must not run once a proposal exists")
+
+    runner._try_plan_dial_process_plan = _plan
+    runner._try_v21_understand = _understand
+    route = RouteDecision(
+        kind=RouteKind.PLAN_PROCESS,
+        mode=ProcessMode.PLAN,
+        message="lowest 20 salaries and their jobs",
+        committed=True,
+        reason="governed_process_dial",
+    )
+    out = await run_pre_s1_gates(
+        runner,
+        MeteredTurnState(user_message=route.message),
+        instance_id="nibras",
+        conversation_id="c",
+        host_user_id="2",
+        process_mode="plan",
+        surface=None,
+        page_context="",
+        conversation_history=[],
+        instance_config={},
+        user_info={},
+        progress_callback=None,
+        stream_callback=None,
+        model=None,
+        temperature=None,
+        knowledge_items=None,
+        scope=None,
+        process_state=None,
+        meter=None,
+        state_ctx=None,
+        budget=None,
+        turn_id="t" * 8,
+        t0=0.0,
+        ledger=ledger,
+        staged=[],
+        settings=SimpleNamespace(NAVIGATION_RESOLVER_ENABLED=False),
+        turn_route=route,
+        original_user_message=route.message,
+        state=None,
+        _broadcast_run=None,
+    )
+    assert out[0] is proposal
 
 
 def test_plan_dial_restyle_is_not_a_plan():

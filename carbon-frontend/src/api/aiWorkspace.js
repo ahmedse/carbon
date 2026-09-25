@@ -948,6 +948,22 @@ export function createPlan(token, { brief, conversation_id = '' }) {
 }
 
 /**
+ * ADR-0055 — the user's consent to a plan Pulse drafted in Chat. The server
+ * stores the draft it holds for this conversation, exactly as reviewed.
+ * Planning only — the task lands in pending_approval and nothing runs.
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - conversation that holds the draft
+ * @returns {Promise<object>} Plan payload (status 'pending_approval')
+ */
+export function commitPlanProposal(token, conversationId) {
+  return apiFetch(`${PLANS_BASE}proposal/commit/`, {
+    token,
+    method: 'POST',
+    body: { conversation_id: conversationId },
+  });
+}
+
+/**
  * W5-B — start a guided discovery conversation (Pulse asks first).
  * POST /ai/plans/ with `discovery_mode: true`.
  * @param {string} token - JWT access token

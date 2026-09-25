@@ -277,6 +277,11 @@ const ROUTE_CONFIG = {
     icon: AdminPanelSettingsIcon,
     parent: '/admin',
   },
+  '/admin/excellence/evidence': {
+    label: 'Evidence',
+    icon: AdminPanelSettingsIcon,
+    parent: '/admin/excellence',
+  },
   '/admin/excellence/runs': {
     label: 'Runs',
     icon: AdminPanelSettingsIcon,
@@ -825,6 +830,27 @@ function resolveCrumbLabel(crumb, modules, tablesByModule) {
     }
   }
 
+  if (segs[0] === 'admin' && segs[1] === 'excellence' && segs.length >= 3) {
+    const EXCELLENCE_TITLES = {
+      platform: 'Platform',
+      pulse: 'Pulse',
+      trust: 'Trust & consent',
+      understand: 'Understand & respond',
+      remember: 'Know & remember',
+      coherent: 'Stay coherent',
+      act: 'Act with approval',
+      pack: 'Your domain pack',
+      production: 'Proven in production',
+      nibras: 'Nibras',
+      carbon: 'Carbon',
+      datatrust: 'Data Trust',
+    };
+    const id = segs.length === 3 ? segs[2] : segs[3];
+    if (EXCELLENCE_TITLES[id]) return EXCELLENCE_TITLES[id];
+    const tail = id.split('.').pop() || id;
+    return tail.charAt(0).toUpperCase() + tail.slice(1);
+  }
+
   return crumb.label;
 }
 
@@ -835,10 +861,20 @@ export function Breadcrumbs() {
   const { context, tablesByModule } = useAuth();
   const modules = context?.modules || [];
 
-  const breadcrumbs = buildBreadcrumbs(location.pathname).map((crumb) => ({
+  let breadcrumbs = buildBreadcrumbs(location.pathname).map((crumb) => ({
     ...crumb,
     label: shellLabel(t, resolveCrumbLabel(crumb, modules, tablesByModule)),
   }));
+  const excellenceSegs = location.pathname.split('/').filter(Boolean);
+  if (
+    excellenceSegs[0] === 'admin'
+    && excellenceSegs[1] === 'excellence'
+    && excellenceSegs.length === 4
+    && excellenceSegs[2] === excellenceSegs[3]
+    && breadcrumbs.length >= 2
+  ) {
+    breadcrumbs = [...breadcrumbs.slice(0, -2), breadcrumbs[breadcrumbs.length - 1]];
+  }
 
   if (breadcrumbs.length <= 1) {
     // Don't show breadcrumbs on home page

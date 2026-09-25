@@ -80,5 +80,10 @@ cp .ai-toolkit/decisions/0000-template.md .ai-toolkit/decisions/00NN-short-title
 | [0049](0049-pulse-2-1-model-understands-catalog-executes.md) | Pulse 2.1: model understands, catalog executes | Proposed |
 | [0050](0050-pulse-core-domain-free-versioned-packs.md) | Pulse core is domain-free; domains are self-contained, versioned packs (gauge + pack gates) | Proposed |
 | [0051](0051-excellence-ledger.md) | Excellence Ledger: one evidence store, many ladders (tier → track → subject; `excellence` DB) | Accepted |
+| [0052](0052-pulse-plan-contract.md) | One Plan Contract, with authority to reject | Proposed |
+| [0053](0053-pulse-no-masking-fallbacks.md) | No masking fallbacks; follow-ups answer from the last view | Proposed |
+| [0054](0054-pulse-reasoning-channel.md) | Reasoning channel: rationale, step line, state-gated summary, revision | Proposed |
+| [0055](0055-pulse-plan-proposal-is-the-plan.md) | A proposed plan is the plan: typed proposal, planner decides what a task is | Proposed |
+| [0056](0056-pulse-one-pipeline-no-fallthrough.md) | One pipeline: the model decides, code blocks or verifies, nothing falls through | Proposed |
 
 <!-- Add a row per ADR. Keep newest at the bottom. -->

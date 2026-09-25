@@ -514,6 +514,12 @@ class ChatResponse:
     envelope: dict | None = None
     # PV2-5C — ConversationState.active_plans snapshot for the Chat chip.
     active_plans: list = field(default_factory=list)
+    # ADR-0054 — scrubbed rationale lines, and a revision when shown text was replaced.
+    reasoning: list = field(default_factory=list)
+    revision: dict | None = None
+    # The typed question this turn asks (``kind``: choice, plan_proposal, …).
+    # The client paints it as a form; the text never carries the options.
+    form: dict | None = None
 
 
 # ── AIProvider ABC ──────────────────────────────────────────────────────

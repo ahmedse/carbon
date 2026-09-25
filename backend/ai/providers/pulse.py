@@ -525,6 +525,9 @@ class PulseProvider(AIProvider):
                 confidence_label=result.get("confidence_label", ""),
                 honest_uncertainty=bool(result.get("honest_uncertainty", False)),
                 active_plans=result.get("active_plans") or [],
+                reasoning=result.get("reasoning") or [],
+                revision=result.get("revision"),
+                form=result.get("form"),
             )
 
         return ChatResponse(

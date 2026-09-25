@@ -1,0 +1,76 @@
+# ADR-0052 plan-contract goldens. Shapes, not model output.
+cases:
+  - id: aec8f39a-within-band
+    brief: October payroll variance, within band, then a board pack
+    blocking: []
+    steps:
+      - step_id: 0
+        intent: variance read
+        tool_name: call_host_api
+        tool_args: {api_name: list_payroll_runs}
+      - step_id: 1
+        intent: band decision
+        depends_on: [0]
+      - step_id: 2
+        intent: read lines bound to the run
+        tool_name: call_host_api
+        tool_args: {api_name: list_payroll_runs}
+        depends_on: [1]
+        guard: {step: 1, field: within_band, value: true}
+      - step_id: 3
+        intent: board pack word excel pdf png
+        tool_name: export_document
+        tool_args: {title: Board}
+        depends_on: [2]
+        guard: {step: 1, field: within_band, value: true}
+  - id: aec8f39a-over-band
+    brief: October payroll variance, over band, escalate, no export
+    blocking: []
+    steps:
+      - step_id: 0
+        intent: variance read
+        tool_name: call_host_api
+        tool_args: {api_name: list_payroll_runs}
+      - step_id: 1
+        intent: band decision
+        depends_on: [0]
+      - step_id: 2
+        intent: hand off to a person
+        depends_on: [1]
+        gap: hand off to a person
+        guard: {step: 1, field: within_band, value: false}
+  - id: aec8f39a-both-branches
+    brief: the failed run shape, export and escalate both runnable
+    blocking: [branch]
+    steps:
+      - step_id: 2
+        intent: band decision
+      - step_id: 6
+        intent: board pack
+        tool_name: export_document
+        tool_args: {title: Board}
+        depends_on: [2]
+      - step_id: 7
+        intent: escalate
+        depends_on: [2]
+        gap: hand off to a person
+  - id: 0bd5072d-workforce
+    brief: weekly workforce briefing
+    blocking: []
+    steps:
+      - step_id: 0
+        intent: headcount by org unit
+        tool_name: call_host_api
+        tool_args: {api_name: analyze_employees, dimension: org_unit}
+      - step_id: 1
+        intent: list runs
+        tool_name: call_host_api
+        tool_args: {api_name: list_payroll_runs}
+      - step_id: 2
+        intent: summarize
+        depends_on: [0, 1]
+      - step_id: 3
+        intent: export the report
+        tool_name: export_document
+        tool_args: {title: Weekly}
+        depends_on: [2]

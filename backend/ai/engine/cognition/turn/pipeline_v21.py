@@ -10,6 +10,9 @@ from ai.engine.pack_vocab import V
 from typing import Any, Awaitable, Callable
 
 from ai.engine.cognition.turn.decision import PLAN_PROCESS_ID, Command, Decision
+from ai.engine.cognition.turn.degradation import Degradation
+from ai.engine.cognition.turn.degradation import caveat as degradation_caveat
+from ai.engine.cognition.turn.degradation import sentence as degradation_sentence
 from ai.engine.cognition.turn.ess_read import answer_bound_ess_tools
 from ai.engine.cognition.turn.grounding import ungrounded_numbers
 
@@ -151,6 +154,8 @@ async def act_on_decision(
     for cmd in decision.commands:
         if not cmd.reads_host():
             continue
+        if cmd.op == "continue" and last_view(state):
+            continue  # the reply re-renders the last view; no host read
         api = _read_api(cmd, state)
         args = dict(cmd.args or {}) if cmd.op == "call_tool" else {}
         key = f"{api}|{sorted(args.items(), key=lambda kv: kv[0])!r}"
@@ -210,6 +215,200 @@ def decision_render(decision: Decision | None) -> str:
     return "text"
 
 
+def decision_chart(decision: Decision | None) -> str:
+    """The chart shape the user named on a decided read, or ""."""
+    for cmd in (decision.commands if decision else []):
+        if cmd.reads_host() and cmd.chart:
+            return cmd.chart
+    return ""
+
+
+def _apply_chart_shape(envelope: dict, chart: str) -> dict:
+    """Draw every chart as the named shape. Say so once when the split is uneven."""
+    if not chart:
+        return envelope
+    charts = []
+    uneven = False
+    for item in envelope.get("charts") or []:
+        points = [
+            p for s in (item.get("series") or []) if isinstance(s, dict)
+            for p in (s.get("data") or []) if isinstance(p, (list, tuple)) and len(p) >= 2
+        ]
+        shape = chart
+        if chart == "pie" and len(points) > 8:
+            shape = item.get("chart_type") or "bar"
+        values = [float(p[1]) for p in points if isinstance(p[1], (int, float))]
+        if shape == "pie" and values and max(values) / (sum(values) or 1) >= 0.7:
+            uneven = True
+        charts.append({**item, "chart_type": shape})
+    out = {**envelope, "charts": charts}
+    if uneven:
+        out["caveats"] = [*(envelope.get("caveats") or []), {
+            "level": "info",
+            "text": "One category holds most of the total, so small slices are hard to see.",
+        }]
+    return out
+
+
+async def narrate_envelope(
+    envelope: dict,
+    evidence: list[dict] | None,
+    *,
+    user_message: str,
+    understood: str = "",
+    language: str = "en",
+    instance_id: str,
+    conversation_id: str,
+) -> tuple[str, dict, Degradation | None] | None:
+    """Headline and prose written for this turn's message, from ``evidence`` only.
+
+    Data blocks stay deterministic. A sentence whose numbers are not in the
+    evidence is dropped. When the writer fails the reply says so and carries
+    a typed ``Degradation`` (ADR-0053); it never returns the template.
+    None only when the writer is switched off by configuration.
+    """
+    from ai.engine.core.config import get_settings
+
+    if not get_settings().PULSE_ENVELOPE_ENABLED:
+        return None
+    ok_rows = [r for r in evidence or [] if not _is_error(r)]
+    if not ok_rows:
+        return None
+    from ai.envelope_service import EnvelopeWriteError, synthesize_envelope
+    from ai.engine.llm.call_meter import stage
+
+    question = user_message
+    if understood:
+        question = f"{user_message}\n(Understood as: {understood})"
+    cause = ""
+    typed = None
+    try:
+        with stage("draft"):
+            typed = await synthesize_envelope(
+                instance_id=instance_id,
+                conversation_id=conversation_id,
+                user_message=question,
+                usable_tools=ok_rows,
+                strict=True,
+            )
+    except EnvelopeWriteError as exc:
+        cause = exc.cause
+    except Exception:  # noqa: BLE001 — reported below as a typed degradation
+        cause = "model_error"
+    payloads = [r.get("result") for r in ok_rows]
+    prose = [
+        p.strip() for p in (typed.prose if typed is not None else []) or []
+        if p and p.strip() and not ungrounded_numbers(p, payloads)
+    ]
+    if not cause and not prose:
+        cause = "ungrounded"
+    if cause:
+        failed = Degradation(stage="write", cause=cause)
+        line = degradation_sentence(failed, language)
+        degraded = {
+            **envelope,
+            "headline": "",
+            "prose": [line],
+            "caveats": [*(envelope.get("caveats") or []), degradation_caveat(failed)],
+        }
+        return line, degraded, failed
+    headline = (typed.headline or "").strip()
+    if ungrounded_numbers(headline, payloads):
+        headline = ""
+    merged = {**envelope, "headline": headline, "prose": prose}
+    return "\n\n".join(ln for ln in [headline, *prose] if ln), merged, None
+
+
+def last_view(state: Any) -> dict:
+    view = getattr(state, "last_view", None) if state is not None else None
+    return view if isinstance(view, dict) and (view.get("tables") or view.get("charts")) else {}
+
+
+def _view_envelope(view: dict, chart: str) -> dict:
+    envelope = {
+        "headline": "",
+        "prose": [],
+        "tables": list(view.get("tables") or []),
+        "charts": list(view.get("charts") or []),
+        "caveats": list(view.get("caveats") or []),
+        "sources": [{"tool": "last_view", "rows_returned": len(view.get("tables") or []),
+                     "truncated": False, "resolved_at": None}],
+    }
+    return _apply_chart_shape(envelope, chart)
+
+
+def _remember_view(state: Any, envelope: dict, executed: list[dict] | None) -> None:
+    if state is None or not hasattr(state, "last_view"):
+        return
+    from ai.engine.cognition.state_store import bound_view
+
+    apis = [
+        str((r.get("tool_args") or {}).get("api_name") or r.get("tool_name") or "")
+        for r in executed or [] if isinstance(r, dict) and not _is_error(r)
+    ]
+    state.last_view = bound_view({
+        "turn": state.next_turn(),
+        "apis": apis,
+        "tables": envelope.get("tables") or [],
+        "charts": envelope.get("charts") or [],
+        "caveats": envelope.get("caveats") or [],
+    })
+
+
+async def speak_turn(
+    decision: Decision | None,
+    executed: list[dict] | None,
+    *,
+    text: str | None,
+    user_message: str,
+    instance_id: str,
+    conversation_id: str,
+    state: Any = None,
+) -> tuple[str, dict | None, Degradation | None]:
+    """The reply for the decided reads.
+
+    A restated read speaks for itself. A ``continue`` on the last view
+    re-renders it with no host read. Otherwise the reply is written for this
+    message from these rows. A writer failure is returned typed, not hidden.
+    """
+    lead = lead_command(decision)
+    language = decision.language if decision else "en"
+    understood = decision.reason if decision else ""
+    view = last_view(state)
+    if not executed and lead is not None and lead.op == "continue" and view:
+        envelope = _view_envelope(view, decision_chart(decision))
+        evidence = [{"tool_name": "last_view", "result": {
+            "tables": envelope["tables"], "charts": envelope["charts"],
+        }}]
+        narrated = await narrate_envelope(
+            envelope, evidence, user_message=user_message, understood=understood,
+            language=language, instance_id=instance_id, conversation_id=conversation_id,
+        )
+        if narrated is None:
+            return "", envelope, None
+        _remember_view(state, narrated[1], [])
+        return narrated
+
+    restated = bool((text or "").strip())
+    spoken, envelope = speak_rows(decision, executed, text=text, user_message=user_message)
+    if envelope and executed:
+        _remember_view(state, envelope, executed)
+    if not envelope or restated:
+        return spoken, envelope, None
+    narrated = await narrate_envelope(
+        envelope, executed, user_message=user_message, understood=understood,
+        language=language, instance_id=instance_id, conversation_id=conversation_id,
+    )
+    if narrated is None:
+        return spoken, envelope, None
+    from ai.engine.cognition.turn.reasoning import revision
+
+    replaced = revision(spoken, narrated[0], "The summary was rewritten for this message.")
+    if replaced is not None:
+        narrated[1]["revision"] = replaced
+    return narrated
+
+
 def failed_reads(executed: list[dict] | None) -> list[dict]:
     """Executed rows the host refused, with the api name and its detail."""
     from ai.engine.cognition.plan.catalog_args import tool_output_is_invalid_args
@@ -241,6 +440,7 @@ def render_envelope(
         render=decision_render(decision),
         headline=headline,
         user_message=user_message,
+        chart=decision_chart(decision),
     )
 
 
@@ -258,14 +458,18 @@ def speak_rows(
     headline and prose are the text — drawn from these rows only.
     """
     render = decision_render(decision)
+    chart = decision_chart(decision)
     spoken = (text or "").strip()
     ok_rows = [r for r in executed or [] if not _is_error(r)]
     if spoken or not ok_rows:
-        return spoken, rows_envelope(executed, render=render, headline=spoken, user_message=user_message)
+        return spoken, rows_envelope(
+            executed, render=render, headline=spoken, user_message=user_message, chart=chart,
+        )
     envelope = rows_envelope(
         ok_rows,
         render=render if render != "text" else "table",
         user_message=user_message,
+        chart=chart,
     )
     if envelope is None:
         return "", None
@@ -291,6 +495,7 @@ def rows_envelope(
     render: str,
     headline: str = "",
     user_message: str = "",
+    chart: str = "",
 ) -> dict | None:
     """Envelope from exactly these tool rows. Shared by v21 and the bound read."""
     if not executed or render not in {"chart", "table"}:
@@ -307,4 +512,4 @@ def rows_envelope(
     first_line = next((ln.strip() for ln in (headline or "").splitlines() if ln.strip()), "")
     if first_line:
         envelope = envelope.model_copy(update={"headline": first_line[:200]})
-    return envelope.model_dump()
+    return _apply_chart_shape(envelope.model_dump(), chart)

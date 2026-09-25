@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Alert, Button, Chip, Skeleton, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
+import { Alert, Button, Chip, IconButton, Skeleton, Stack, Tab, Tabs, TextField, Tooltip, Typography } from '@mui/material';
+import VisibilityRounded from '@mui/icons-material/VisibilityRounded';
 import StairsIcon from '@mui/icons-material/Stairs';
 import { useAuth } from '../../../auth/AuthContext';
 import { apiFetch } from '../../../api/api';
@@ -15,21 +16,12 @@ import useDocumentTitle from '../../../hooks/useDocumentTitle';
 import AssuranceRulesPanel from './AssuranceRulesPanel';
 import ExcellenceCellMap from './ExcellenceCellMap';
 import EmptyState from '../../../components/Page/EmptyState';
-import { aspectLabel, levelColor, levelName, stateColor } from './excellenceUi';
-
-const COLLECTORS = [
-  { value: 'repo', label: 'Repo probes' },
-  { value: 'observe', label: 'Observe' },
-  { value: 'pulse_gauge', label: 'Pulse gauge' },
-  { value: 'antipatterns', label: 'Antipatterns' },
-  { value: 'rbac', label: 'RBAC marker' },
-  { value: 'budget', label: 'Budget ceiling' },
-  { value: 'design_lint', label: 'Design lint' },
-];
+import { aspectLabel, COWORKER_LEVELS, levelColor, levelName, PULSE_AREAS, pulseArea, stateColor } from './excellenceUi';
 
 const LEVELS = [1, 2, 3, 4, 5, 6].map((n) => ({ value: String(n), label: levelName(n) }));
 
-const SECTIONS = new Set(['rules', 'standard', 'runs', 'exemptions', 'initiatives', 'subjects']);
+const SECTIONS = new Set(['rules', 'standard', 'runs', 'evidence', 'exemptions', 'initiatives', 'subjects']);
+const PROOF_COLLECTORS = ['repo', 'pulse_gauge', 'observe', 'rbac', 'budget', 'design_lint'];
 
 function useGet(token, url) {
   const [data, setData] = useState(null);
@@ -43,7 +35,14 @@ function useGet(token, url) {
       .catch((err) => setError(err?.message || 'Excellence failed'))
       .finally(() => setLoading(false));
   }, [token, url]);
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => {
+    if (!url) {
+      setData(null);
+      setLoading(false);
+      return;
+    }
+    reload();
+  }, [reload, url]);
   return { data, setData, error, loading, reload };
 }
 
@@ -52,7 +51,7 @@ function StateChip({ state }) {
 }
 
 function LevelChip({ level, name }) {
-  return <Chip size="small" color={levelColor(level)} label={name ? `L${level} ${name}` : `L${level}`} />;
+  return <Chip size="small" color={levelColor(level)} label={name || levelName(level)} />;
 }
 
 export default function ExcellenceConsolePage() {
@@ -64,20 +63,21 @@ export default function ExcellenceConsolePage() {
   const section = pathname.split('/').filter(Boolean)[2] || '';
   const named = SECTIONS.has(section);
   const context = named ? '' : (params.context || '');
-  const app = named ? '' : (params.app || '');
+  const rawApp = named ? '' : (params.app || '');
+  const area = context === 'pulse' ? pulseArea(rawApp) : null;
+  const app = area ? '' : rawApp;
   useDocumentTitle('Excellence');
 
-  const overview = useGet(token, (!named && !app) || section === 'initiatives' || Boolean(context && app) ? 'excellence/overview/' : null);
-  const appData = useGet(token, app ? `excellence/apps/${encodeURIComponent(app)}/` : null);
-  const standard = useGet(token, section === 'standard' ? 'excellence/standard/' : null);
-  const runs = useGet(token, section === 'runs' ? 'excellence/runs/' : null);
-  const exemptions = useGet(token, section === 'exemptions' ? 'excellence/exemptions/' : null);
-  const initiatives = useGet(token, section === 'initiatives' ? 'excellence/initiatives/' : null);
+  const inContext = Boolean(context);
+  const overview = useGet(token, (!named && !app) || section === 'initiatives' || inContext ? 'excellence/overview/' : null);
+  const appData = useGet(token, app ? `excellence/apps/${encodeURIComponent(app)}/` : (context === 'pulse' ? 'excellence/apps/pulse/' : null));
+  const standard = useGet(token, section === 'standard' || inContext ? 'excellence/standard/' : null);
+  const runs = useGet(token, section === 'runs' || section === 'evidence' || inContext ? `excellence/runs/${inContext ? `?tier=${encodeURIComponent(context)}` : ''}` : null);
+  const exemptions = useGet(token, section === 'exemptions' || inContext ? 'excellence/exemptions/' : null);
+  const initiatives = useGet(token, section === 'initiatives' || inContext ? 'excellence/initiatives/' : null);
 
   const [tab, setTab] = useState(0);
-  const [track, setTrack] = useState('');
   const [cell, setCell] = useState(null);
-  const [collector, setCollector] = useState('repo');
   const [running, setRunning] = useState(false);
   const [exemptOpen, setExemptOpen] = useState(false);
   const [exemptForm, setExemptForm] = useState({ check_id: '', subject_id: '', reason: '', until: '' });
@@ -100,7 +100,7 @@ export default function ExcellenceConsolePage() {
         token,
         method: 'POST',
         timeoutMs: 120000,
-        body: { collectors: [extra?.collector || collector], tier, write_snapshot: true },
+        body: { collectors: extra?.collectors || PROOF_COLLECTORS, tier, write_snapshot: true },
       });
       notify({
         message: body.event_count ? `Measured: ${body.event_count} events` : 'Measured: no events for that collector',
@@ -144,28 +144,37 @@ export default function ExcellenceConsolePage() {
   }
 
   const checkRows = (grid?.checks || []).map((c, i) => ({ ...c, id: `${c.check_id}-${c.subject_id}-${i}` }));
-
-  useEffect(() => {
-    if (loading || error || !context || app || !current) return;
-    const apps = current.apps || [];
-    if (apps.length === 1) {
-      navigate(`/admin/excellence/${context}/${encodeURIComponent(apps[0].id)}`, { replace: true });
-    }
-  }, [loading, error, context, app, current, navigate]);
+  const portfolioFloor = contexts.length ? Math.min(...contexts.map((c) => Number(c.floor ?? 0))) : 0;
+  const portfolioCoverage = contexts.length
+    ? contexts.reduce((sum, c) => sum + Number(c.coverage || 0), 0) / contexts.length
+    : 0;
+  const unmanagedCount = contexts.filter((c) => Number(c.floor ?? 0) === 0).length;
 
   return (
     <PageContainer>
       <PageHeader
         icon={StairsIcon}
         title="Excellence"
-        subtitle={grid ? `${grid.title}` : (current ? current.title : 'One ledger, many ladders')}
-        description={grid?.tier === 'pulse' ? 'Pulse is one app. Tracks are filters, not separate apps.' : undefined}
+        subtitle={area ? area.title : (current ? current.title : 'Coverage and progress on the quality ladder')}
+        description={
+          area
+            ? area.promise
+            : (app
+              ? undefined
+              : (current
+                ? 'The level is the weakest aspect. Coverage is how much of the standard has a check.'
+                : 'A framework with a window: see what you have, how far you are, and what to do next.'))
+        }
         badge={(grid?.head || overview.data?.head) ? { label: (grid?.head || overview.data.head).slice(0, 7), color: 'default' } : null}
         actions={context ? (
           <Button size="small" variant="contained" disabled={running} onClick={() => measure()}>
-            {running ? 'Measuring…' : 'Measure'}
+            {running ? 'Measuring…' : 'Measure proof'}
           </Button>
-        ) : null}
+        ) : (!named ? (
+          <Button size="small" variant="contained" disabled={running} onClick={() => measure({ collectors: PROOF_COLLECTORS })}>
+            {running ? 'Measuring…' : 'Measure proof'}
+          </Button>
+        ) : null)}
       />
 
       {loading && (
@@ -198,7 +207,7 @@ export default function ExcellenceConsolePage() {
         </Alert>
       )}
 
-      {section === 'rules' && <AssuranceRulesPanel embedded />}
+      {(section === 'rules' || section === 'evidence') && <AssuranceRulesPanel embedded />}
 
       {!loading && !error && context && !current && !grid && (
         <EmptyState
@@ -210,63 +219,168 @@ export default function ExcellenceConsolePage() {
       )}
 
       {!loading && !error && !named && !context && (
-        <FilteredDataGrid
-          embedded
-          title="Contexts"
-          subtitle="Open a context. A context with one app opens that ladder."
-          rows={contexts}
-          getRowId={(row) => row.id}
-          columns={[
-            { field: 'title', headerName: 'Context', flex: 1, minWidth: 180 },
-            { field: 'app_count', headerName: 'Apps', width: 90 },
-            { field: 'floor', headerName: 'Level', width: 140, renderCell: (p) => <LevelChip level={p.value} name={levelName(p.value)} /> },
-            {
-              field: 'actions', headerName: 'Actions', width: 100, sortable: false,
-              renderCell: (p) => (
-                <Button
-                  size="small"
-                  aria-label={`Open ${p.row.title}`}
-                  onClick={() => {
-                    const apps = p.row.apps || [];
-                    if (apps.length === 1) navigate(`/admin/excellence/${p.row.id}/${encodeURIComponent(apps[0].id)}`);
-                    else navigate(`/admin/excellence/${p.row.id}`);
-                  }}
-                >
-                  Open
-                </Button>
-              ),
-            },
-          ]}
-          emptyMessage="No contexts declared"
-        />
+        <Stack spacing={2}>
+          <Alert severity="info">
+            Excellence is Carbon’s quality framework: nine aspects and six maturity levels.
+            This page is your window onto coverage and progress on that ladder.
+            The level is always the weakest aspect. An open cell has no check yet — silence is not a pass.
+          </Alert>
+
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            <LevelChip level={portfolioFloor} />
+            <Chip size="small" variant="outlined" label={`Coverage ${Math.round(portfolioCoverage * 100)}%`} />
+            <Chip size="small" variant="outlined" label={`${contexts.length} products on the ledger`} />
+            {unmanagedCount > 0 && (
+              <Chip size="small" color="warning" label={`${unmanagedCount} still Unmanaged`} />
+            )}
+          </Stack>
+
+          <Typography variant="body2" color="text.secondary">
+            Coverage is honesty of the standard (cells with a check ÷ applicable cells). It is not the score.
+            Progress is the level. Open a product to see which aspect is holding it down and what to prove next.
+          </Typography>
+
+          <FilteredDataGrid
+            embedded
+            title="Where to look"
+            subtitle="Each product opens the same window for that scope."
+            rows={contexts}
+            getRowId={(row) => row.id}
+            columns={[
+              { field: 'title', headerName: 'Product', flex: 1, minWidth: 180 },
+              { field: 'floor', headerName: 'Progress', width: 140, renderCell: (p) => <LevelChip level={p.value} /> },
+              { field: 'coverage', headerName: 'Coverage', width: 110, valueGetter: (_v, row) => `${Math.round((row.coverage || 0) * 100)}%` },
+              {
+                field: 'actions', headerName: '', width: 72, sortable: false, filterable: false,
+                renderCell: (p) => (
+                  <Tooltip title={`View ${p.row.title}`}>
+                    <IconButton
+                      size="small"
+                      aria-label={`View ${p.row.title}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/admin/excellence/${p.row.id}`);
+                      }}
+                    >
+                      <VisibilityRounded fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                ),
+              },
+            ]}
+            emptyMessage="No products on the ledger"
+          />
+
+          <FilteredDataGrid
+            embedded
+            title="Take action"
+            subtitle="Measure, raise a program, waive with expiry, or read the standard."
+            rows={[
+              { id: 'standard', title: 'Read the standard', hint: 'Nine aspects × six levels', path: '/admin/excellence/standard' },
+              { id: 'evidence', title: 'Inspect evidence', hint: 'Runs, events, release rules', path: '/admin/excellence/evidence' },
+              { id: 'initiatives', title: 'Open initiatives', hint: 'Target a level by a date', path: '/admin/excellence/initiatives' },
+              { id: 'exemptions', title: 'Review exemptions', hint: 'Temporary look-aways', path: '/admin/excellence/exemptions' },
+            ]}
+            getRowId={(row) => row.id}
+            columns={[
+              { field: 'title', headerName: 'Action', flex: 1, minWidth: 180 },
+              { field: 'hint', headerName: 'Why', flex: 1.2, minWidth: 200 },
+              {
+                field: 'actions', headerName: '', width: 72, sortable: false, filterable: false,
+                renderCell: (p) => (
+                  <Tooltip title={`View ${p.row.title}`}>
+                    <IconButton size="small" aria-label={`View ${p.row.title}`} onClick={(e) => { e.stopPropagation(); navigate(p.row.path); }}>
+                      <VisibilityRounded fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                ),
+              },
+            ]}
+          />
+        </Stack>
       )}
 
-      {!loading && !error && context && !app && current && (current.apps?.length !== 1) && (
-        <FilteredDataGrid
-          embedded
-          title="Apps"
-          subtitle="Open an app to see its ladder. The level is the weakest aspect."
-          rows={current.apps || []}
-          getRowId={(row) => row.id}
-          columns={[
-            { field: 'title', headerName: 'App', flex: 1, minWidth: 180 },
-            { field: 'kind', headerName: 'Kind', width: 110 },
-            { field: 'level', headerName: 'Level', width: 150, renderCell: (p) => <LevelChip level={p.row.level} name={p.row.level_name || levelName(p.row.level)} /> },
-            { field: 'weakest', headerName: 'Weakest aspect', width: 160, valueGetter: (_v, row) => (row.weakest ? aspectLabel(row.weakest) : '') },
-            {
-              field: 'actions', headerName: 'Actions', width: 100, sortable: false,
-              renderCell: (p) => (
-                <Button size="small" aria-label={`Open ${p.row.title}`} onClick={() => navigate(`/admin/excellence/${context}/${encodeURIComponent(p.row.id)}`)}>
-                  Open
-                </Button>
-              ),
-            },
-          ]}
-          emptyMessage="No apps declared"
-        />
+      {!loading && !error && context && !app && !area && current && (
+        <Stack spacing={2}>
+          <Alert severity="info">
+            This product’s level is the weakest of nine aspects.
+            Coverage tells you how much of the standard already has a check. Open a component for the 9×6 ladder and the next proof to earn.
+          </Alert>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            <LevelChip level={current.floor} />
+            <Chip size="small" variant="outlined" label={`Coverage ${Math.round((current.coverage || 0) * 100)}%`} />
+            {grid?.weakest && <Chip size="small" variant="outlined" label={`Weakest ${aspectLabel(grid.weakest)}`} />}
+            <Chip size="small" variant="outlined" label={`${(current.apps || []).length} assessed components`} />
+          </Stack>
+
+          <FilteredDataGrid
+            embedded
+            title="Assessed components"
+            subtitle="Open one to see coverage and progress on the excellence ladder."
+            rows={current.apps || []}
+            getRowId={(row) => row.id}
+            columns={[
+              { field: 'title', headerName: 'Component', flex: 1, minWidth: 180 },
+              { field: 'level', headerName: 'Progress', width: 150, renderCell: (p) => <LevelChip level={p.row.level} name={p.row.level_name} /> },
+              {
+                field: 'actions', headerName: '', width: 72, sortable: false, filterable: false,
+                renderCell: (p) => (
+                  <Tooltip title={`View ${p.row.title}`}>
+                    <IconButton size="small" aria-label={`View ${p.row.title}`} onClick={(e) => { e.stopPropagation(); navigate(`/admin/excellence/${context}/${encodeURIComponent(p.row.id)}`); }}>
+                      <VisibilityRounded fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                ),
+              },
+            ]}
+            emptyMessage="No components declared"
+          />
+
+          {context === 'pulse' && (
+            <Stack spacing={1}>
+              <Typography variant="subtitle2">Pulse coworker maturity (separate scale)</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Not the Excellence level. Safe → Lean is Pulse intelligence. Only Continuous, Coherent, and Proactive are mapped today.
+              </Typography>
+              <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                {COWORKER_LEVELS.map((level) => (
+                  <Chip key={level.id} size="small" variant={level.mapped ? 'filled' : 'outlined'} color={level.mapped ? 'primary' : 'default'} label={level.mapped ? level.name : `${level.name} · not mapped`} />
+                ))}
+              </Stack>
+              <FilteredDataGrid
+                embedded
+                title="Coworker capability areas"
+                rows={PULSE_AREAS}
+                getRowId={(row) => row.id}
+                columns={[
+                  { field: 'title', headerName: 'Area', flex: 1, minWidth: 180 },
+                  { field: 'promise', headerName: 'Promise', flex: 1.4, minWidth: 220 },
+                  { field: 'mapped', headerName: 'On the ladder', width: 140, renderCell: (p) => <Chip size="small" color={p.value ? 'primary' : 'default'} label={p.value ? 'Mapped' : 'Not mapped'} /> },
+                  {
+                    field: 'actions', headerName: '', width: 72, sortable: false, filterable: false,
+                    renderCell: (p) => (
+                      <Tooltip title={`View ${p.row.title}`}>
+                        <IconButton size="small" aria-label={`View ${p.row.title}`} onClick={(e) => { e.stopPropagation(); navigate(`/admin/excellence/pulse/${p.row.id}`); }}>
+                          <VisibilityRounded fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    ),
+                  },
+                ]}
+              />
+            </Stack>
+          )}
+        </Stack>
       )}
 
-      {!loading && !error && grid && (
+      {!loading && !error && area && (
+        <Stack spacing={1}>
+          <Alert severity={area.mapped ? 'info' : 'warning'}>{area.proof}</Alert>
+          <Button size="small" onClick={() => navigate('/admin/excellence/pulse/pulse')}>View the Pulse quality frame</Button>
+        </Stack>
+      )}
+
+      {!loading && !error && app && grid && (
         <Stack spacing={2} sx={{ width: '100%' }}>
           <Stack spacing={0.5}>
             <Typography variant="h6">{grid.level_name || levelName(grid.level)}</Typography>
@@ -275,41 +389,6 @@ export default function ExcellenceConsolePage() {
               {grid.weakest ? ` Weakest: ${aspectLabel(grid.weakest)}.` : ''}
             </Typography>
           </Stack>
-          <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap alignItems="flex-end">
-            {grid.tier === 'pulse' && (
-              <Stack spacing={0.5} sx={{ minWidth: '12rem', flex: 1 }}>
-                <Typography variant="body2" component="label" id="excellence-track-label">
-                  Track
-                </Typography>
-                <SearchSelect
-                  aria-labelledby="excellence-track-label"
-                  fullWidth
-                  options={[{ value: '', label: 'All tracks' }, ...(grid.tracks || []).map((t) => ({ value: t.id, label: t.title }))]}
-                  value={track}
-                  onChange={async (opt) => {
-                    const next = opt?.value || '';
-                    setTrack(next);
-                    const detail = await apiFetch(`excellence/apps/pulse/${next ? `?track=${next}` : ''}`, { token });
-                    appData.setData(detail);
-                    setCell(null);
-                  }}
-                />
-              </Stack>
-            )}
-            <Stack spacing={0.5} sx={{ minWidth: '12rem', flex: 1 }}>
-              <Typography variant="body2" component="label" id="excellence-collector-label">
-                Collector
-              </Typography>
-              <SearchSelect
-                aria-labelledby="excellence-collector-label"
-                fullWidth
-                options={COLLECTORS}
-                value={collector}
-                clearable={false}
-                onChange={(opt) => setCollector(opt?.value || 'repo')}
-              />
-            </Stack>
-          </Stack>
           {grid.level === 0 && (
             <Alert severity="warning">
               Unmanaged: a rank-1 cell is open, failed, or not passed on this commit. An open cell has no check yet.
@@ -317,7 +396,7 @@ export default function ExcellenceConsolePage() {
           )}
           <ExcellenceCellMap cells={grid.cells || []} level={grid.level} selected={cell} onSelect={setCell} />
           <Tabs value={tab} onChange={(_e, v) => setTab(v)} variant="scrollable" aria-label="App dashboard">
-            {['Checks', 'Evidence', 'Run log', 'Trend', 'Waivers'].map((label) => <Tab key={label} label={label} />)}
+            {['Checks', 'Evidence', 'Trend'].map((label) => <Tab key={label} label={label} />)}
           </Tabs>
           <TabPanel value={tab} index={0}>
             <FilteredDataGrid
@@ -356,22 +435,6 @@ export default function ExcellenceConsolePage() {
           <TabPanel value={tab} index={2}>
             <FilteredDataGrid
               embedded
-              title="Runs"
-              rows={grid.runs || []}
-              getRowId={(row) => row.id}
-              columns={[
-                { field: 'id', headerName: '#', width: 70 },
-                { field: 'status', headerName: 'Status', width: 120, renderCell: (p) => <StateChip state={p.value === 'succeeded' ? 'passed' : p.value} /> },
-                { field: 'collectors', headerName: 'Collectors', flex: 1, minWidth: 160, valueGetter: (_v, row) => (row.collectors || []).join(', ') },
-                { field: 'event_count', headerName: 'Events', width: 90 },
-                { field: 'requested_by', headerName: 'By', width: 120 },
-              ]}
-              emptyMessage="No runs for this context"
-            />
-          </TabPanel>
-          <TabPanel value={tab} index={3}>
-            <FilteredDataGrid
-              embedded
               title="Trend"
               subtitle="Lowest subject level on each snapshot day"
               rows={(grid.trend || []).map((t) => ({ ...t, id: t.date }))}
@@ -382,22 +445,6 @@ export default function ExcellenceConsolePage() {
               ]}
               emptyMessage="No snapshots yet"
               emptySubtext="Measure with a snapshot write to start the series"
-            />
-          </TabPanel>
-          <TabPanel value={tab} index={4}>
-            <FilteredDataGrid
-              embedded
-              title="Exemptions"
-              rows={grid.exemptions || []}
-              getRowId={(row) => row.id}
-              columns={[
-                { field: 'check_id', headerName: 'Check', flex: 1, minWidth: 140 },
-                { field: 'subject_id', headerName: 'Subject', flex: 1, minWidth: 160 },
-                { field: 'until', headerName: 'Until', width: 120 },
-                { field: 'active', headerName: 'Active', width: 100, valueGetter: (_v, row) => (row.active ? 'yes' : 'expired') },
-                { field: 'reason', headerName: 'Reason', flex: 1.2, minWidth: 180 },
-              ]}
-              emptyMessage="No exemptions"
             />
           </TabPanel>
         </Stack>
@@ -419,11 +466,11 @@ export default function ExcellenceConsolePage() {
         />
       )}
 
-      {section === 'runs' && !loading && !error && (
+      {(section === 'runs' || section === 'evidence') && !loading && !error && (
         <FilteredDataGrid
           embedded
           title="Runs"
-          rows={runs.data?.runs || []}
+          rows={(runs.data?.runs || []).filter((row) => !inContext || row.tier === context)}
           getRowId={(row) => row.id}
           columns={[
             { field: 'id', headerName: '#', width: 70 },
@@ -443,7 +490,7 @@ export default function ExcellenceConsolePage() {
           embedded
           title="Exemptions"
           subtitle="A waiver has an owner and an end date. After that date it no longer counts."
-          rows={exemptions.data?.exemptions || []}
+          rows={(exemptions.data?.exemptions || []).filter((row) => !inContext || String(row.subject_id || '').startsWith(`${context}.`))}
           getRowId={(row) => row.id}
           columns={[
             { field: 'check_id', headerName: 'Check', flex: 1, minWidth: 140 },
@@ -475,7 +522,7 @@ export default function ExcellenceConsolePage() {
             embedded
             title="Initiatives"
             subtitle="A deadline on top of the ladder. Progress is apps already at the target level."
-            rows={initiatives.data?.initiatives || []}
+            rows={(initiatives.data?.initiatives || []).filter((row) => !inContext || row.tier === context)}
             getRowId={(row) => row.id}
             columns={[
               { field: 'title', headerName: 'Initiative', flex: 1, minWidth: 160 },
@@ -502,33 +549,37 @@ export default function ExcellenceConsolePage() {
         </Stack>
       )}
 
-      <RightPanel
+      <SystemDialog
         open={Boolean(cell)}
+        title={cell ? `${aspectLabel(cell.dimension)} · ${levelName(cell.level)}` : 'Cell'}
         onClose={() => setCell(null)}
-        title={cell ? `${aspectLabel(cell.dimension)} · ${levelName(cell.level)}` : ''}
-        width={380}
+        actions={(
+          <Button size="small" variant="contained" disabled={running || !cell} onClick={() => measure()}>
+            Measure this context
+          </Button>
+        )}
       >
         {cell && (
           <Stack spacing={1}>
             <StateChip state={cell.state} />
             <Typography variant="body2">{cell.rung}</Typography>
-            <Typography variant="caption" color="text.secondary">Evidence floor: {cell.evidence_floor}</Typography>
+            <Typography variant="body2" color="text.secondary">Evidence floor: {cell.evidence_floor}</Typography>
             {(cell.checks || []).map((check) => (
               <Typography key={`${check.check_id}-${check.subject_id}`} variant="body2">{check.title} — {check.state}</Typography>
             ))}
             {cell.state === 'open' && <Typography variant="body2">No check is bound to this cell. It caps the dimension.</Typography>}
-            <Button size="small" variant="contained" disabled={running} onClick={() => measure({ collector })}>Measure this context</Button>
             {(cell.checks || []).length > 0 && (
               <Button size="small" onClick={() => {
                 const first = cell.checks[0];
                 setExemptForm({ check_id: first.check_id, subject_id: first.subject_id, reason: '', until: '' });
+                setCell(null);
                 setExemptOpen(true);
               }}
               >Request exemption</Button>
             )}
           </Stack>
         )}
-      </RightPanel>
+      </SystemDialog>
 
       <SystemDialog
         open={exemptOpen}

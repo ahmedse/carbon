@@ -484,6 +484,7 @@ export default function App() {
                 <Route path="/admin/excellence" element={<AdminRoute><ExcellenceConsolePage /></AdminRoute>} />
                 <Route path="/admin/excellence/rules" element={<AdminRoute><ExcellenceConsolePage /></AdminRoute>} />
                 <Route path="/admin/excellence/standard" element={<AdminRoute><ExcellenceConsolePage /></AdminRoute>} />
+                <Route path="/admin/excellence/evidence" element={<AdminRoute><ExcellenceConsolePage /></AdminRoute>} />
                 <Route path="/admin/excellence/runs" element={<AdminRoute><ExcellenceConsolePage /></AdminRoute>} />
                 <Route path="/admin/excellence/exemptions" element={<AdminRoute><ExcellenceConsolePage /></AdminRoute>} />
                 <Route path="/admin/excellence/initiatives" element={<AdminRoute><ExcellenceConsolePage /></AdminRoute>} />

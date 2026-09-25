@@ -707,6 +707,25 @@ def _with_prior_chart_rows(usable: list[dict], state, user_message: str) -> list
     return usable
 
 
+def _asked_chart(text: str) -> str:
+    """The chart kind named in the request: ``pie`` or ``bar``. Empty otherwise."""
+    words: list[str] = []
+    buf: list[str] = []
+    for ch in (text or "").lower():
+        if ch.isalpha():
+            buf.append(ch)
+        elif buf:
+            words.append("".join(buf))
+            buf = []
+    if buf:
+        words.append("".join(buf))
+    if "pie" in words:
+        return "pie"
+    if "bar" in words:
+        return "bar"
+    return ""
+
+
 def _render_tool_charts(usable: list[dict], *, user_message: str = "") -> str:
     V("t_deterministic_mermaid_charts_from_structured_too")
     import json as _json
@@ -715,6 +734,8 @@ def _render_tool_charts(usable: list[dict], *, user_message: str = "") -> str:
     have_pie = False
     have_bar = False
     charts: list[str] = []
+    asked = _asked_chart(user_message)
+    shape_note = ""
     for tr in usable:
         result = tr.get("result")
         if result is None:
@@ -742,7 +763,16 @@ def _render_tool_charts(usable: list[dict], *, user_message: str = "") -> str:
             continue
 
         breakdown = data.get("breakdown") or []
-        chart_type = str(data.get("suggested_chart_type") or "bar").lower()
+        suggested = str(data.get("suggested_chart_type") or "bar").lower()
+        chart_type = asked or suggested
+        if asked and suggested and asked != suggested and not shape_note:
+            shape_note = (
+                f"Drawn as a {asked}, as you asked. The split is uneven, "
+                "so a bar shows the size of each category more clearly."
+                if asked == "pie" else
+                f"Drawn as a {asked}, as you asked. The split is fairly even, "
+                "so a pie would show the shares."
+            )
         if isinstance(breakdown, list) and breakdown and isinstance(breakdown[0], dict):
             labels: list[str] = []
             values: list[float] = []
@@ -758,7 +788,8 @@ def _render_tool_charts(usable: list[dict], *, user_message: str = "") -> str:
                 labels.append(lab)
                 values.append(val)
             if labels and any(values):
-                if chart_type == "pie" and not have_pie and len(labels) <= 8:
+                pie_count = sum(1 for block in charts if block.startswith("```mermaid\npie"))
+                if chart_type == "pie" and len(labels) <= 8 and (asked == "pie" or not have_pie) and pie_count < 3:
                     slices = [
                         f'    "{lab}" : {int(v) if v == int(v) else round(v, 1)}'
                         for lab, v in zip(labels, values)
@@ -872,7 +903,10 @@ def _render_tool_charts(usable: list[dict], *, user_message: str = "") -> str:
                 f"    bar [{', '.join(str(v) for v in values)}]\n```"
             )
 
-    return "\n\n".join(charts)
+    body = "\n\n".join(charts)
+    if shape_note and body:
+        return f"{shape_note}\n\n{body}"
+    return body
 
 def _envelope_to_markdown(envelope) -> str:
     """Build a clean markdown fallback from a typed envelope.
@@ -1375,11 +1409,18 @@ async def _synthesize_tool_results(
             stream_callback=stream_callback,
             progress_callback=progress_callback,
         )
+        from ai.engine.cognition.turn.reasoning import revision as _revision
+
+        _dumped = envelope.model_dump()
+        _replaced = _revision(draft_text or "", _env_text, "The draft was replaced by the data blocks.")
+        if _replaced:
+            _dumped["revision"] = _replaced
         return {
             "text": _env_text,
             "tokens": 0,
             "model": model or "",
-            "envelope": envelope.model_dump(),
+            "envelope": _dumped,
+            "revision": _replaced,
         }
 
     stripped = (draft_text or "").strip()

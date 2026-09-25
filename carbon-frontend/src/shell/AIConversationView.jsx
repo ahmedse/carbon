@@ -69,6 +69,13 @@ import { CheckpointPickerDialog, SaveCheckpointDialog } from '../components/ai/C
 // collapse behind a "Show N older messages" toggle (Copilot-style density).
 const OLDER_MESSAGES_COLLAPSE_AT = 14;
 
+/** Whole seconds the turn took, from the persisted message (null when unknown). */
+function secondsFor(message) {
+  const usage = message?.token_usage_json || message?.usage || {};
+  const ms = Number(usage.execution_ms ?? usage.latency_ms ?? message?.execution_ms);
+  return Number.isFinite(ms) && ms > 0 ? Math.max(1, Math.round(ms / 1000)) : null;
+}
+
 function normalizeConversationShape(payload) {
   const candidate = payload?.conversation || payload;
   if (!candidate || typeof candidate !== 'object') {
@@ -283,6 +290,16 @@ function AIConversationView({
   // Accumulate narrated working stages into the collapsible thinking timeline.
   // History persists after the turn completes (collapsed, VS Code Copilot-style);
   // it is cleared only when a new send/retry begins.
+  useEffect(() => {
+    if (sending) return undefined;
+    const last = [...messages].reverse().find((m) => m.role === 'assistant');
+    const meta = last?.metadata || last?.metadata_json || {};
+    const lines = Array.isArray(meta.reasoning) ? meta.reasoning.filter(Boolean) : [];
+    if (meta.revision?.reason) lines.push(meta.revision.reason);
+    if (lines.length) setStageHistory(lines);
+    return undefined;
+  }, [messages, sending]);
+
   useEffect(() => {
     if (workingStage) {
       setStageHistory((prev) =>
@@ -1604,6 +1621,7 @@ function AIConversationView({
                   expanded={thinkingExpanded}
                   onToggle={() => setThinkingExpanded((v) => !v)}
                   history={stageHistory}
+                  seconds={secondsFor(msg)}
                   done
                 />
               )}

@@ -805,19 +805,17 @@ def enforce_declared_step_tool(
     declared = str(step_tool_name or "").strip()
     if not declared:
         return list(calls or []), []
-    expected_api = str((step_tool_args or {}).get("api_name") or "").strip()
+    from ai.engine.cognition.plan.contract import declared_call_mismatch
+
     kept: list = []
     rejected: list[str] = []
     for call in calls or []:
         if not isinstance(call, dict):
             rejected.append("")
             continue
-        name = str(((call.get("function") or {}).get("name") or "")).strip()
-        allowed = name == declared
-        if declared == "call_host_api" and expected_api:
-            allowed = allowed or name == expected_api
-        if allowed:
-            kept.append(call)
+        mismatch = declared_call_mismatch(declared, step_tool_args, call)
+        if mismatch:
+            rejected.append(mismatch)
         else:
-            rejected.append(name)
+            kept.append(call)
     return kept, rejected

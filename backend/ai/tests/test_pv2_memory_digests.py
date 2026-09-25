@@ -23,6 +23,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from django.test import override_settings
 
+from ai.tests.pv21_stub import answer_decision
 from ai.engine.core.config import get_settings
 from ai.store import reset_store
 
@@ -65,6 +66,7 @@ def _scripted_client(decide):
     async def _create(**kw):
         calls.append(kw)
         content, tool_calls = decide(kw)
+        tool_calls = answer_decision(kw) or tool_calls
         return types.SimpleNamespace(
             choices=[
                 types.SimpleNamespace(
@@ -222,8 +224,9 @@ def _run_cost_centre_conversation(*, confirm: bool):
 
 @pytest.mark.django_db(transaction=True)
 def test_learn_fact_confirmed_in_chat_is_recalled_two_turns_later(
-    django_store, single_pass, no_nav_fast_path,
+    django_store, single_pass, no_nav_fast_path, monkeypatch,
 ):
+    monkeypatch.setenv("PULSE_UNDERSTAND", "legacy")
     _user, t3 = _run_cost_centre_conversation(confirm=True)
     assert "CC-42" in (t3.get("content") or ""), t3.get("content")
 

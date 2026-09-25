@@ -179,6 +179,18 @@ def baseline_decision(
     return {"op": "answer", "api": ""}
 
 
+def _decision_parity(ar_dec: dict, en_dec: dict, case: dict[str, Any]) -> bool:
+    """Same decision. Tools the bank lists as equally right still match."""
+    if ar_dec.get("op") != en_dec.get("op"):
+        return False
+    if ar_dec.get("op") != "call_tool":
+        return ar_dec.get("api") == en_dec.get("api")
+    accepted = [str(a) for a in case.get("expect_api_any") or []]
+    if accepted and ar_dec.get("api") in accepted and en_dec.get("api") in accepted:
+        return True
+    return ar_dec.get("api") == en_dec.get("api")
+
+
 def _matches_expect(decision: dict[str, str], case: dict[str, Any]) -> bool:
     expect_api = str(case.get("expect_api") or "")
     expect_render = str(case.get("expect_render") or "")
@@ -218,7 +230,7 @@ def _pair_result(
         "en": en_dec,
         "ar_ok": _matches_expect(ar_dec, case),
         "en_ok": _matches_expect(en_dec, case),
-        "parity": ar_dec["op"] == en_dec["op"] and ar_dec["api"] == en_dec["api"],
+        "parity": _decision_parity(ar_dec, en_dec, case),
         "_expect": {
             "op": case.get("expect_op"),
             "api": str(case.get("expect_api") or ""),

@@ -943,6 +943,23 @@
       "closeDetail": "Close detail"
     }
   },
+  "plan": {
+    "title": "Draft plan — {{count}} steps",
+    "notCreated": "Not created yet. Nothing is stored or run until you choose Create task.",
+    "created": "Task created. Nothing has run — review and approve it in Tasks.",
+    "create": "Create task",
+    "change": "Change",
+    "changePlaceholder": "Tell me what to change — columns, scope, format…",
+    "createFailed": "The task could not be created.",
+    "blocked": "Blocked",
+    "blockedWith": "Blocked: {{gap}}",
+    "blockedSummary": "{{count}} step(s) cannot run as planned.",
+    "open": "Open in Tasks"
+  },
+  "choice": {
+    "own": "Or type your own",
+    "send": "Continue"
+  },
   "correction": {
     "label": "Correction",
     "placeholder": "Describe what the answer should have said…",

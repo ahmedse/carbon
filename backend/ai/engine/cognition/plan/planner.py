@@ -34,6 +34,8 @@ class PlanStep:
     agent_role: str = "orchestrator"   # AGENT_ROLES value — who executes this step
     instructions: str | None = None  # W6-E F-28: service-owned steering metadata
                                      # (edited while paused; honored on resume)
+    gap: str | None = None           # I5: intent with no capability. Not a host call.
+    guard: dict | None = None        # I4: {step, field, value}. Exclusive with a sibling.
 
 
 @dataclass
@@ -63,6 +65,7 @@ class Plan:
     skill_name: str | None = None
     needs_confirmation: bool = False
     phases: list[PlanPhase] = field(default_factory=list)  # workflow stages
+    findings: list = field(default_factory=list)  # ADR-0052 plan-contract findings
 
 
 # ── Keyword scoring ────────────────────────────────────────────────────────────
@@ -1281,54 +1284,25 @@ class SkillAwarePlanner:
             )
             steps.append(step)
 
-        # Validate tool names — catalog names are not executors; rewrite via
-        # _coerce_host_api_steps after stripping unknown tools would lose the
-        # name, so coerce FIRST while the catalog name is still on the step.
-        _coerce_host_api_steps(steps, catalog_names, utterance=utterance)
-
         from ai.engine.agent.tools import get_tool_executors
+        from ai.engine.cognition.plan.contract import apply_plan_contract
+
         _vexecs = await get_tool_executors()
         _skill_names = {s.name for s in (skills or [])}
-        for step in steps:
-            if step.tool_name and step.tool_name not in _vexecs:
-                logger.warning(
-                    "LLM returned unknown tool_name=%r, stripping", step.tool_name,
-                )
-                step.tool_name = None
-            # invoke_skill must reference a REAL registered skill. If the LLM
-            # invented a name, downgrade the step to a pure reasoning step
-            # (LLM does the thinking — comparison/analysis is not a skill).
-            if step.tool_name == "invoke_skill":
-                _sn = (step.tool_args or {}).get("skill_name", "")
-                if _sn not in _skill_names:
-                    logger.warning(
-                        "LLM referenced unregistered skill_name=%r for "
-                        "invoke_skill; downgrading step %d to reasoning",
-                        _sn, step.step_id,
-                    )
-                    step.tool_name = None
-                    step.agent_role = step.agent_role or "domain_specialist"
-
-        # Fix 2: validate tool_args against the tool's input_schema. A
-        # hallucinated arg (rule_type="general") is caught BEFORE the step is
-        # emitted — otherwise the tool errors/nulls at execution and the step
-        # is still marked "completed" (phantom success).
-        _strip_invalid_tool_args(steps)
-
-        # Document-generation steps: the LLM habitually describes "generate a
-        # Word/Excel report" as a tool-less reasoning step, so NO file is ever
-        # produced. Export is a real tool — coerce these to export_document
-        # (format inferred from the intent) so the report is actually built
-        # from the prior findings that flow in via depends_on.
-        _coerce_export_steps(steps)
-        _ensure_export_deliverable(utterance, steps)
-        # Second pass after arg strip — entity_name may remain on
-        # get_entity_details when the tool_name was already valid.
-        _coerce_host_api_steps(steps, catalog_names, utterance=utterance)
-        # A host call that names no catalog API is not a host call. Decide it
-        # here, at plan save — not when the operator clicks Approve.
-        _unbind_unknown_host_api_steps(steps, catalog_names)
-        _canonicalize_host_steps(steps, api_catalog, utterance)
+        # One contract. The older passes run inside it, once, in one order.
+        _contract_findings = apply_plan_contract(
+            steps,
+            api_catalog=api_catalog,
+            catalog_names=catalog_names,
+            utterance=utterance,
+            executors=set(_vexecs),
+            skill_names=_skill_names,
+        )
+        if _contract_findings:
+            logger.info(
+                "Plan contract: %s",
+                "; ".join(f"{f.code}:{f.step_id}" for f in _contract_findings),
+            )
 
         # Governed slots + grounded dates from the brief (MDM codes, platform
         # clock) — the consent card must not re-ask what the operator stated.
@@ -1341,14 +1315,6 @@ class SkillAwarePlanner:
                 )
             except Exception as exc:  # noqa: BLE001 - planning must still run
                 logger.warning("write slot resolution failed: %s", exc)
-
-        # Deterministic mutation classification — a capability fact of the
-        # tool, NOT the LLM's judgment. The LLM routinely under-marks mutation
-        # steps (Sprint-18 E2E: export marked is_mutation=False), which would
-        # bypass the loop's pre-execution consent gate. Override here.
-        for step in steps:
-            if step.tool_name in _MUTATION_TOOL_NAMES:
-                step.is_mutation = True
 
         # Validate / coerce agent roles against AGENT_ROLES.
         from ai.engine.core.models import AGENT_ROLES
@@ -1367,6 +1333,7 @@ class SkillAwarePlanner:
             source="llm_decompose",
             needs_confirmation=any(s.is_mutation for s in steps),
             phases=phases,
+            findings=[f.as_dict() for f in _contract_findings],
         )
 
     @staticmethod

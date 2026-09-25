@@ -64,9 +64,13 @@ _UNDERSTAND_RULES = (
     "continue with render=chart). An explicitly named new subject "
     + V("t_payslip_loan_attendance_profile_overrides_state")
     + "subject, do not continue the prior domain.\n"
-    "Clarify only when two catalog tools fit equally or a user preference "
-    "is missing. Never clarify for a value a catalog read can fetch "
-    "(ids, runs, periods, balances, records) — call that read instead."
+    "Clarify when two or more catalog tools fit equally or a user "
+    "preference is missing. Never clarify for a value a catalog read can "
+    "fetch (ids, runs, periods, balances, records) — call that read "
+    "instead.\n"
+    "Asking the user to pick is clarify, never answer: put one short "
+    "sentence in question and each choice in options as a short label. An "
+    "answer never offers the user a list to choose from."
 )
 
 # One-line budget so an HR-scoped catalog + rules fit under TASK_BLOCK 8k.
@@ -423,5 +427,5 @@ def _apply_catalog_choice(
     rest = [c for c in decision.commands[1:] if c.reads_host() and c.name != name]
     return replace(
         decision,
-        commands=[Command(op="call_tool", name=name, render=render), *rest],
+        commands=[Command(op="call_tool", name=name, render=render, chart=first.chart), *rest],
     )

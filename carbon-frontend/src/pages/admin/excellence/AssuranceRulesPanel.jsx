@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Alert, Box, Button, Chip, FormControlLabel, Skeleton, Stack, Switch, Typography,
+  Alert, Box, Chip, FormControlLabel, IconButton, Skeleton, Stack, Switch, Tooltip, Typography,
 } from '@mui/material';
+import VisibilityRounded from '@mui/icons-material/VisibilityRounded';
 import { useAuth } from '../../../auth/AuthContext';
 import { apiFetch, apiFetchStream } from '../../../api/api';
 import FilteredDataGrid from '../../../components/FilteredDataGrid';
@@ -127,9 +128,13 @@ export default function AssuranceRulesPanel({ pack = 'nibras', embedded = false 
             { field: 'meaning', headerName: 'Meaning', flex: 1, minWidth: 200 },
             { field: 'label', headerName: 'Evidence', width: 140, renderCell: (p) => <Chip size="small" label={p.value} color={labelColor(p.value)} /> },
             {
-              field: 'actions', headerName: 'Actions', width: 100, sortable: false,
+              field: 'actions', headerName: '', width: 72, sortable: false, filterable: false,
               renderCell: (p) => (
-                <Button size="small" aria-label={`Open ${p.row.rule_id}`} onClick={() => setSelected(p.row)}>Open</Button>
+                <Tooltip title={`View ${p.row.rule_id}`}>
+                  <IconButton size="small" aria-label={`View ${p.row.rule_id}`} onClick={(e) => { e.stopPropagation(); setSelected(p.row); }}>
+                    <VisibilityRounded fontSize="small" />
+                  </IconButton>
+                </Tooltip>
               ),
             },
           ]}

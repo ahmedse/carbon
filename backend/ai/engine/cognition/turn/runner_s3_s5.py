@@ -228,48 +228,10 @@ async def run_s3_through_s5(
             st.draft = _dc_inject.replace(st.draft, tool_calls=calls, text="")
     import dataclasses as _dc
     import json as _json
-    from ai.engine.cognition.turn.runner_util import (
-        ensure_plan_review_text,
-        plan_accept_brief,
-    )
-    _accept_brief = plan_accept_brief(st.user_message, conversation_history)
-    if _accept_brief and "plan_task" in _fn_names:
-        _calls = list(getattr(st.draft, "tool_calls", None) or [])
-        if not any(
-            ((c.get("function") or {}).get("name") == "plan_task")
-            for c in _calls if isinstance(c, dict)
-        ):
-            _calls.append({
-                "id": "plan_accept",
-                "type": "function",
-                "function": {
-                    "name": "plan_task",
-                    "arguments": _json.dumps({"brief": _accept_brief}),
-                },
-            })
-            st.draft = _dc.replace(st.draft, tool_calls=_calls)
-    if str(process_mode or '') == 'plan':
-        if _accept_brief:
-            # Acceptance creates exactly one reviewable task. Never let a
-            # model-emitted read/search accompany plan_task on this turn.
-            _plan_calls = [
-                c for c in (getattr(st.draft, "tool_calls", None) or [])
-                if isinstance(c, dict)
-                and ((c.get("function") or {}).get("name") == "plan_task")
-            ]
-            st.draft = _dc.replace(st.draft, tool_calls=_plan_calls, text="")
-        else:
-            # Before acceptance, Plan is text-only and must always show a
-            # numbered plan. Questions may follow the plan, never replace it.
-            st.draft = _dc.replace(
-                st.draft,
-                text=ensure_plan_review_text(
-                    getattr(st.draft, "text", "") or "",
-                    _resolved_user_message,
-                ),
-                tool_calls=[],
-            )
+    # Plan mode creates the plan from the brief (``_try_plan_dial_process_plan``),
+    # so there is no shown-then-accepted prose plan to re-plan from here.
     from ai.engine.cognition.dialogue.fallback import FallbackHandler
+    _draft_before = st.draft.text
     _fallback_text = FallbackHandler().handle(st.user_message, st.draft.text)
     if _fallback_text != st.draft.text and (not st.draft.tool_calls):
         st.draft = _dc.replace(st.draft, text=_fallback_text, confidence=0.4, model_used=st.draft.model_used or 'fallback')
@@ -283,7 +245,9 @@ async def run_s3_through_s5(
         await budget.consume(st.draft.tokens_used)
     s3_latency = (time.monotonic() - s3_start) * 1000
     await _broadcast_run(instance_id, 'run.step.completed', {'run_id': turn_id, 'stage': 's3_draft', 'stage_index': 2, 'latency_ms': s3_latency})
-    await runner._write_ledger_row(turn_id, instance_id, conversation_id, host_user_id, 'draft', 2, {'text_len': len(st.draft.text), 'tool_calls': len(st.draft.tool_calls), 'confidence': st.draft.confidence}, s3_latency, tokens_used=st.draft.tokens_used, model_used=st.draft.model_used, verdict='pass')
+    from ai.engine.cognition.turn.reasoning import revision as _revision, scrub as _scrub
+    _draft_revision = _revision(_draft_before, st.draft.text, 'The draft was revised before it was shown.')
+    await runner._write_ledger_row(turn_id, instance_id, conversation_id, host_user_id, 'draft', 2, {'text_len': len(st.draft.text), 'text': _scrub(st.draft.text), 'revision': (_draft_revision or {}).get('reason') or '', 'tool_calls': len(st.draft.tool_calls), 'confidence': st.draft.confidence}, s3_latency, tokens_used=st.draft.tokens_used, model_used=st.draft.model_used, verdict='pass')
     s4_start = time.monotonic()
     await _broadcast_run(instance_id, 'run.step.started', {'run_id': turn_id, 'stage': 's4_critic', 'stage_index': 3})
     from ai.engine.cognition.turn.critic import CriticWitness
@@ -464,6 +428,8 @@ async def run_s3_through_s5(
         st.total_tokens += int(_synth.get('tokens') or 0)
         st.total_llm_calls += 1
         logger.info('[%s] Tool-result synthesis — final answer written from %d tool result(s) (%d tokens)', turn_id[:8], len(st.execution.completed_tools), int(_synth.get('tokens') or 0))
+        if _synth.get('revision'):
+            await runner._write_ledger_row(turn_id, instance_id, conversation_id, host_user_id, 'reasoning', 9, {'rationale': '', 'summary': '', 'draft': _synth['revision'].get('shown') or '', 'revision': _synth['revision'].get('reason') or ''}, 0)
         if _synth.get('is_clarification'):
             _clarif_msg = _synth.get('clarification_user_message') or _resolved_user_message
             _is_wq2 = runner._is_weather_query

@@ -182,6 +182,36 @@ def _derived_status_from_steps(steps):
     return STATUS_COMPLETED
 
 
+ACCEPTANCE_MISSED_NOTE = "Not complete: the final check found a requirement that was not met."
+
+
+def _acceptance_missed(run) -> bool:
+    notes = getattr(run, "working_notes", None) or {}
+    acceptance = (notes.get("flight") or {}).get("acceptance") if isinstance(notes, dict) else None
+    return isinstance(acceptance, dict) and acceptance.get("status") == "missed"
+
+
+def _hold_for_missed_acceptance(run, report: dict | None) -> bool:
+    """Final gate. A missed acceptance is not a completed run, and the summary says so first."""
+    if not isinstance(report, dict) or report.get("status") != "missed":
+        return False
+    if run.status != STATUS_COMPLETED:
+        return False
+    missed = [
+        r for r in (report.get("requirements") or [])
+        if isinstance(r, dict) and r.get("verdict") == "missed"
+    ]
+    lines = [ACCEPTANCE_MISSED_NOTE]
+    for r in missed[:5]:
+        lines.append(f"- Step {r.get('step_id')}: {r.get('intent') or ''}".rstrip())
+    body = (run.final_response or "").strip()
+    if not body.startswith(ACCEPTANCE_MISSED_NOTE):
+        run.final_response = "\n".join(lines) + ("\n\n" + body if body else "")
+    run.status = STATUS_COMPLETED_WITH_GAPS
+    run.save(update_fields=["status", "final_response", "updated_at"])
+    return True
+
+
 def _reconcile_run_status_from_steps(run, steps) -> None:
     """Persist plan status from step outcomes when all steps have finished.
 
@@ -196,6 +226,8 @@ def _reconcile_run_status_from_steps(run, steps) -> None:
     if run.status not in _RUN_STATUS_RECONCILEABLE:
         return
     derived = _derived_status_from_steps(steps)
+    if derived == STATUS_COMPLETED and _acceptance_missed(run):
+        derived = STATUS_COMPLETED_WITH_GAPS
 
     # Honesty demote: engine finalized completed while steps stayed pending.
     if (
@@ -352,6 +384,36 @@ RETRY_MAX_DELAY_SECONDS = 8.0
 # Whole-run re-executions after the first pass (``run_plan``). Each pass also
 # gets the in-step transient policy, so one is enough.
 RUN_RETRY_MAX = 1
+
+
+def _step_evidence(step, steps) -> list:
+    """I3. Dependency status for an export consent card. Empty for other steps."""
+    if (getattr(step, "tool_name", "") or "") != "export_document":
+        return []
+    from ai.engine.cognition.plan.contract import evidence_rows
+
+    statuses = {
+        s.step_index: {
+            "status": s.status,
+            "failure_class": _step_failure_class(s),
+        }
+        for s in steps
+    }
+    return evidence_rows(getattr(step, "depends_on_json", None) or [], statuses)
+
+
+def _step_narration(step, steps) -> str:
+    """Why this step is running, and which dependencies have not finished (ADR-0054)."""
+    from ai.engine.cognition.turn.reasoning import step_narration
+
+    done = {"completed", "completed_with_gaps"}
+    waiting = [
+        str(s.step_index)
+        for s in steps
+        if s.step_index in (getattr(step, "depends_on_json", None) or [])
+        and str(getattr(s, "status", "") or "") not in done
+    ]
+    return step_narration(getattr(step, "intent", "") or "", waiting)
 
 
 def _step_failure_class(step) -> str:
@@ -1626,6 +1688,12 @@ class PlansService:
                         and s.critic_flags_json.get("consent_granted")
                     ),
                     "consent_slots": _consent_slots_for_step(s, run.host_user_id),
+                    "choice": (
+                        s.critic_flags_json.get("choice")
+                        if isinstance(s.critic_flags_json, dict)
+                        and isinstance(s.critic_flags_json.get("choice"), dict)
+                        else None
+                    ),
                     "error": s.error,
                     "retry_count": int(s.retry_count or 0),
                     "is_mutation": bool(
@@ -1634,6 +1702,8 @@ class PlansService:
                     "heal_note": _public_heal_note(s.tool_output_json),
                     "tool_output": _step_tool_output_fields(s.tool_output_json)[0],
                     "output_type": _step_tool_output_fields(s.tool_output_json)[1],
+                    "evidence": _step_evidence(s, steps),
+                    "narration": _step_narration(s, steps),
                     "artifacts": [
                         {
                             "id": a.id,
@@ -1681,6 +1751,8 @@ class PlansService:
                     "is_mutation": bool(s.is_mutation),
                     "dry_run_supported": bool(s.dry_run_supported),
                     "agent_role": s.agent_role or "orchestrator",
+                    "gap": getattr(s, "gap", None),
+                    "guard": getattr(s, "guard", None),
                 }
                 for s in plan.steps
             ],
@@ -1698,6 +1770,7 @@ class PlansService:
             "source": plan.source,
             "skill_name": plan.skill_name,
             "needs_confirmation": bool(plan.needs_confirmation),
+            "contract_findings": list(getattr(plan, "findings", None) or []),
             # ADR-0034 — typed graph compile (additive; UI/driver may ignore).
             "workflow_graph": PlansService._compile_workflow_graph(plan),
         }
@@ -2428,6 +2501,8 @@ class PlansService:
                 dry_run_supported=bool(s.get("dry_run_supported", False)),
                 agent_role=s.get("agent_role", "orchestrator"),
                 instructions=s.get("instructions"),
+                gap=s.get("gap"),
+                guard=s.get("guard"),
             )
             for s in raw_steps
         ]
@@ -2453,13 +2528,78 @@ class PlansService:
 
     # ── Create / read ─────────────────────────────────────────────────────
 
-    def create_plan(self, user, brief: str, conversation_id: str = "") -> dict:
+    def decompose_for_review(self, user, brief: str, conversation_id: str = ""):
+        """Decompose without persisting, so a proposal can be judged before it exists.
+
+        The caller passes the returned Plan straight back to ``create_plan`` —
+        what the user reviewed is what gets stored (ADR-0052 I6).
+        """
+        brief = (brief or "").strip()
+        if not brief or len(brief) > 4000:
+            return None
+        return self._decompose(user, brief, conversation_id=conversation_id)
+
+    def propose_plan(self, user, brief: str, conversation_id: str = "") -> tuple:
+        """``(plan_json, proposal)`` for a brief worth planning, ``(None, None)`` otherwise.
+
+        Nothing is stored. The planner decides what a task is: a brief that
+        decomposes to one bound read is a question the turn should answer.
+        The caller keeps ``plan_json`` in conversation state; the task exists
+        only after the user commits it (``commit_proposal``).
+        """
+        from ai.engine.cognition.turn.plan_proposal import (
+            is_task_plan,
+            proposal_payload,
+        )
+
+        drafted = self.decompose_for_review(user, brief, conversation_id=conversation_id)
+        if drafted is None:
+            return None, None
+        shaped = self._plan_to_dict(drafted)
+        if not is_task_plan(shaped):
+            return None, None
+        return shaped, proposal_payload(shaped, brief=brief)
+
+    def commit_proposal(self, user, conversation_id: str) -> dict:
+        """Store the drafted plan the user just consented to, exactly as reviewed.
+
+        The draft comes from the caller's own conversation state, never from
+        the request body, so a client cannot commit a plan it was not shown.
+        """
+        from types import SimpleNamespace
+
+        from ai.engine.cognition.state_store import ConversationState
+        from ai.engine.cognition.turn.plan_proposal import KIND
+        from ai.models import ConversationContextRecord
+
+        cid = (conversation_id or "").strip()
+        row = ConversationContextRecord.objects.filter(conversation_id=cid).first() if cid else None
+        if row is None or str(getattr(row, "host_user_id", "") or "") != str(user.pk):
+            raise ValueError("There is no drafted plan to create.")
+        state = ConversationState.from_dict(row.session_json)
+        question = state.open_question if isinstance(state.open_question, dict) else {}
+        plan_json = question.get("plan_json") if question.get("kind") == KIND else None
+        if not isinstance(plan_json, dict) or not plan_json.get("steps"):
+            raise ValueError("There is no drafted plan to create.")
+        plan = self.create_plan(
+            user,
+            str(question.get("brief") or ""),
+            conversation_id=cid,
+            plan=self._rebuild_plan(SimpleNamespace(id="", plan_json=plan_json)),
+        )
+        state.open_question = {}
+        row.session_json = state.to_dict()
+        row.save(update_fields=["session_json"])
+        return plan
+
+    def create_plan(self, user, brief: str, conversation_id: str = "", plan=None) -> dict:
         """Decompose a brief into a reviewable plan (pending_approval).
 
         Planning only — NO execution (RULE_21: review before mutation).
         The engine planner runs on its own store session via a worker thread;
         the resulting Plan is persisted as the Run row's ``plan_json`` plus
-        one RunStep row per step.
+        one RunStep row per step. ``plan`` persists an already-reviewed
+        decomposition instead of running the planner a second time.
         """
         from ai.models.core import Run, RunStep, generate_uuid
 
@@ -2470,7 +2610,8 @@ class PlansService:
             raise ValueError("brief is too long (max 4000 characters).")
 
         user_pk = str(user.pk)
-        plan = self._decompose(user, brief, conversation_id=conversation_id)
+        if plan is None:
+            plan = self._decompose(user, brief, conversation_id=conversation_id)
 
         run_id = generate_uuid()
         plan_payload = self._plan_to_dict(plan)
@@ -4595,6 +4736,10 @@ class PlansService:
         user_pk = str(user.pk)
         plan = self._rebuild_plan(run)
         instance_config = _plan_instance_config(user_pk)
+        _blocked = self._contract_refusal(plan, instance_config, run.user_message or "")
+        if _blocked:
+            yield {"type": "error", "error": _blocked, "code": "plan_contract"}
+            return
         user_info = _build_chat_user_info(user_pk)
         conversation_id = run.conversation_id or f"plan-{run.id}"
 
@@ -4747,6 +4892,10 @@ class PlansService:
             # via (run, pattern), PlaybookBlock upsert. Learning never fails a
             # run: any error is logged and swallowed.
             if report is not None:
+                try:
+                    await sync_to_async(_hold_for_missed_acceptance)(run, report)
+                except Exception:  # noqa: BLE001
+                    logger.exception("acceptance hold failed for run %s", run.id)
                 try:
                     from ai.flight_director import enqueue_learning_from_report
 
@@ -5090,6 +5239,114 @@ class PlansService:
         )
         return (tpl or "").strip()
 
+    @staticmethod
+    def _record_guard_value(step, choice: dict, key: str, picked) -> None:
+        """I4. The operator's answer becomes the guard source's value for every branch."""
+        from ai.models.core import RunStep
+
+        source = RunStep.objects.filter(
+            run_id=step.run_id, step_index=choice.get("step"),
+        ).first()
+        if source is None:
+            raise PlanStepError(f"Step {choice.get('step')} is not in this plan.")
+        flags = dict(source.critic_flags_json) if isinstance(source.critic_flags_json, dict) else {}
+        values = dict(flags.get("guard_values") or {})
+        values[key] = picked
+        flags["guard_values"] = values
+        source.critic_flags_json = flags
+        source.save(update_fields=["critic_flags_json", "updated_at"])
+
+    def _apply_binding_choice(self, step, body_override) -> dict | None:
+        """Write the operator's pick into the path slot and let resume run the read.
+
+        Returns the confirm payload, or None when this step is not a choice.
+        """
+        flags = step.critic_flags_json if isinstance(step.critic_flags_json, dict) else {}
+        choice = flags.get("choice") if isinstance(flags.get("choice"), dict) else None
+        if flags.get("failure_class") != "missing_binding" or not choice:
+            return None
+        key = str(choice.get("key") or "")
+        options = choice.get("options") if isinstance(choice.get("options"), list) else []
+        allowed = {str(o.get("value")) for o in options if isinstance(o, dict)}
+        picked = (body_override or {}).get(key) if isinstance(body_override, dict) else None
+        if key and str(picked) not in allowed:
+            raise PlanStepError(
+                f"Pick one {key} from the {len(allowed)} options."
+            )
+        if choice.get("kind") == "guard":
+            picked = next(
+                o.get("value") for o in options
+                if isinstance(o, dict) and str(o.get("value")) == str(picked)
+            )
+            self._record_guard_value(step, choice, key, picked)
+            flags = {k: v for k, v in flags.items() if k not in ("failure_class", "choice")}
+            flags["consent_granted"] = True
+            step.critic_flags_json = flags
+            step.error = ""
+            if not step.confirmation_token:
+                from uuid import uuid4
+                step.confirmation_token = str(uuid4())
+            step.save(update_fields=[
+                "critic_flags_json", "error", "confirmation_token", "updated_at",
+            ])
+            return {
+                "status": "confirmed",
+                "plan_id": step.run_id,
+                "step_id": step.step_index,
+                "choice": {key: picked},
+            }
+        args = dict(step.tool_args_json or {})
+        path = dict(args.get("path_params") or {})
+        path[key] = picked
+        args["path_params"] = path
+        bind = dict(args.get("bind") or {})
+        bind.pop(key, None)
+        if bind:
+            args["bind"] = bind
+        else:
+            args.pop("bind", None)
+        step.tool_args_json = args
+        flags = {k: v for k, v in flags.items() if k not in ("failure_class", "choice")}
+        flags["consent_granted"] = True
+        step.critic_flags_json = flags
+        step.error = ""
+        if not step.confirmation_token:
+            from uuid import uuid4
+            step.confirmation_token = str(uuid4())
+        step.save(update_fields=[
+            "tool_args_json", "critic_flags_json", "error",
+            "confirmation_token", "updated_at",
+        ])
+        return {
+            "status": "confirmed",
+            "plan_id": step.run_id,
+            "step_id": step.step_index,
+            "choice": {key: picked},
+        }
+
+    def _contract_refusal(self, plan, instance_config, brief: str = "") -> str:
+        """ADR-0052. Empty when the saved plan still satisfies the contract.
+
+        Existence is checked on the unscoped catalog; permission stays with the host (403).
+        """
+        from ai.engine.cognition.plan.contract import apply_plan_contract, blocking
+
+        catalog = list((_plan_instance_config(None) or instance_config or {}).get("api_catalog") or [])
+        names = {str(e.get("name") or "") for e in catalog if isinstance(e, dict)}
+        findings = apply_plan_contract(
+            plan.steps, api_catalog=catalog, catalog_names=names, utterance=brief or "",
+        )
+        blocked = blocking(findings)
+        if blocked:
+            first = blocked[0]
+            return f"{first.code}: {first.detail}"
+        from ai.flight_director import contract_gate
+
+        for item in (contract_gate(plan, brief) or {}).get("findings") or []:
+            if item.get("missing") and item.get("blocks"):
+                return f"coverage: {item.get('noun')} is not covered by any step"
+        return ""
+
     def confirm_step(self, user, plan_id: str, step_id, body_override=None) -> dict:
         """Confirm a paused consent step — executes the staged mutation.
 
@@ -5100,7 +5357,8 @@ class PlansService:
 
         ``body_override`` (optional dict) merges into the staged execution
         body before confirm — used when the operator filled missing hire
-        fields on the Run timeline (no JSON editing).
+        fields on the Run timeline (no JSON editing). A binding choice uses
+        the same dict: ``{path_key: picked_value}``.
         """
         from asgiref.sync import async_to_sync
 
@@ -5119,6 +5377,10 @@ class PlansService:
                 f"(status: {step.status})."
             )
 
+        chosen = self._apply_binding_choice(step, body_override)
+        if chosen is not None:
+            return chosen
+
         tool_output = _parse_tool_output_json(step.tool_output_json)
         raw = tool_output.get("result", "")
         parsed = {}
@@ -5132,6 +5394,10 @@ class PlansService:
         )
         user_pk = str(user.pk)
         instance_config = _plan_instance_config(user_pk)
+        plan = self._rebuild_plan(run)
+        refused = self._contract_refusal(plan, instance_config, run.user_message or "")
+        if refused:
+            raise PlanStepError(refused)
         factory = get_session_factory(PLAN_INSTANCE_ID)
 
         async def _confirm():

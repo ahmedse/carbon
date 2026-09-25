@@ -42,6 +42,8 @@ from ai.store import reset_store
 _V1_KEYS = {
     "version", "focus", "intent", "slots", "open_question", "last_results",
     "active_plans", "decisions", "language", "surface_last",
+    # ADR-0053: the last read turn's blocks, so a follow-up re-renders it.
+    "last_view",
 }
 _STATE_HEADER = "CONVERSATION STATE"
 
