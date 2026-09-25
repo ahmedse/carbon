@@ -41,6 +41,7 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import BlockIcon from "@mui/icons-material/Block";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
+import { clearAuthStorage } from "../shell/sessionRestore";
 
 const NotificationContext = createContext(undefined);
 
@@ -121,7 +122,7 @@ export function NotificationProvider({ children }) {
             duration: 2500,
             key: Date.now(),
           });
-          localStorage.clear();
+          clearAuthStorage();
           setTimeout(() => {
             window.location.href = `${
               import.meta.env.VITE_BASE || "/"

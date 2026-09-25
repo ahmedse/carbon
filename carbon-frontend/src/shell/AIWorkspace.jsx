@@ -61,6 +61,7 @@ import AITaskPanel from './AITaskPanel';
 import InvestigateTab from './InvestigateTab';
 import { useAITaskTransfer } from './useAITaskTransfer';
 import { ExecuteModeProvider } from './ExecuteModeContext';
+import { PulsePrefsProvider } from './pulsePrefs';
 import { pickOpenActivePlan } from './activePlans';
 import {
   findConversationForProcess,
@@ -69,7 +70,7 @@ import {
   processForConversation,
   rememberConversationProcess,
 } from './pulseProcessThreads';
-import { readActivePlanId } from './sessionRestore';
+import { AGENT_VIEW_KEY, readActivePlanId } from './sessionRestore';
 
 const LOCAL_STORAGE_KEY = 'carbon-ai-active-conversation';
 
@@ -129,7 +130,16 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   // W5-A — agent-mode activity-bar view. Tasks/Run/Audit host AITaskPanel
   // today; Monitor/Results are placeholders until their dedicated surfaces
   // land in later W5 phases.
-  const [agentView, setAgentView] = useState('tasks'); // tasks|run|monitor|results|audit
+  const [agentView, setAgentView] = useState(() => {
+    try {
+      const stored = localStorage.getItem(AGENT_VIEW_KEY);
+      return ['tasks', 'run', 'monitor', 'results', 'audit'].includes(stored)
+        ? stored
+        : 'tasks';
+    } catch {
+      return 'tasks';
+    }
+  });
   // Chat → Tasks jump: when a chat reply's "Open in Tasks" button is clicked,
   // the workspace switches to the Agent mode and the panel auto-opens the
   // created plan (consumed by AITaskPanel via onFocusPlanConsumed).
@@ -138,6 +148,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   const [tasksPendingRevision, setTasksPendingRevision] = useState(null); // { planId, brief } | null
   // Agent Done → Chat: prefill composer with plan outcome context.
   const [chatSeedDraft, setChatSeedDraft] = useState(null);
+  const [planCarry, setPlanCarry] = useState(null);
   // ADR-0046 Chat→Agent: seed discovery with handoff draft / process hint.
   const [agentSeedBrief, setAgentSeedBrief] = useState(null);
   // DW-P1-2 — persistent Chat↔Agent link after Discuss / Open in Tasks.
@@ -305,6 +316,14 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
     }
   }, [composerProcess]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(AGENT_VIEW_KEY, agentView);
+    } catch {
+      /* ignore */
+    }
+  }, [agentView]);
+
 
 
   // Visible ids after archived-filter + client-side title search.
@@ -391,10 +410,36 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   }, [token, notifyFromError, t, composerProcess]);
 
   // Ask ↔ Plan flips the conversation, not a flag on the same thread.
+  // The Switch-to-Plan CTA carries the request and the recent thread into a
+  // new Plan chat. The dial alone still jumps to the last Plan thread.
   const handleComposerProcessChange = useCallback(
-    async (next) => {
+    async (next, carry) => {
       if (processSwitching) return;
       const dial = normalizePulseProcess(next);
+      const carried = String(carry?.request || '').trim();
+      if (carried) {
+        setProcessSwitching(true);
+        try {
+          const conv = await apiCreateConversation(
+            token,
+            processCreatePayload('plan', t('newPlanChatTitle')),
+          );
+          rememberConversationProcess(conv.id, 'plan');
+          const prior = String(carry.context || '').trim();
+          const text = prior ? `${carried}\n\n---\n${prior}` : carried;
+          setPlanCarry({ id: conv.id, text });
+          setById((prev) => ({ ...prev, [conv.id]: conv }));
+          setOrder((prev) => [conv.id, ...prev]);
+          setComposerProcess('plan');
+          setActiveId(conv.id);
+          setShowArchived(false);
+        } catch (err) {
+          notifyFromError(err, 'Could not create conversation');
+        } finally {
+          setProcessSwitching(false);
+        }
+        return;
+      }
       if (dial === composerProcess && activeId) {
         rememberConversationProcess(activeId, dial);
         return;
@@ -740,6 +785,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
 
   return (
     <ExecuteModeProvider>
+    <PulsePrefsProvider>
       <Box sx={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100%', bgcolor: 'background.default' }}>
 
         {/* Main content — leftmost, flex:1 */}
@@ -825,6 +871,8 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
                   contextPulse={contextPulse}
                   seedDraft={chatSeedDraft}
                   onSeedDraftConsumed={() => setChatSeedDraft(null)}
+                  planCarry={planCarry?.id === activeConversation.id ? planCarry.text : null}
+                  onPlanCarryConsumed={() => setPlanCarry(null)}
                   onActivePlans={setChatActivePlans}
                   process={composerProcess}
                   processSwitching={processSwitching}
@@ -1066,6 +1114,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
           </DialogActions>
         </Dialog>
       </Box>
+    </PulsePrefsProvider>
     </ExecuteModeProvider>
   );
 

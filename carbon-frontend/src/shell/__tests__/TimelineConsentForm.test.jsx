@@ -118,7 +118,31 @@ describe('TimelineConsentForm', () => {
       />,
     );
     fireEvent.click(screen.getByTestId('timeline-choice-3-30'));
+    fireEvent.click(screen.getByTestId('timeline-approve-3'));
     expect(onConfirm).toHaveBeenCalledWith(3, { body: { id: 30 } });
+  });
+
+  it('uses a dropdown when there are many choices and keeps Approve outside it', () => {
+    const options = Array.from({ length: 8 }, (_, i) => ({
+      value: i + 1,
+      label: `period_start=2026-0${(i % 9) + 1}-01 · id=${i + 1}`,
+    }));
+    render(
+      <TimelineConsentForm
+        step={{
+          step_id: 4,
+          status: 'awaiting_approval',
+          intent: 'Pick a period',
+          choice: { key: 'id', options },
+        }}
+        confirming={false}
+        onConfirm={vi.fn()}
+        onDecline={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('timeline-choice-4-select')).toBeTruthy();
+    expect(screen.queryByTestId('timeline-choice-4-1')).toBeNull();
+    expect(screen.getByTestId('timeline-approve-4')).toBeDisabled();
   });
 
   it('lists green evidence and hides the card when a dependency failed', () => {

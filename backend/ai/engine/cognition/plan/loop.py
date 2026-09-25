@@ -322,6 +322,41 @@ class StepResult:
     choice: dict | None = None
 
 
+def pause_for_user_answer(step: PlanStep, tool_output: dict | None = None) -> StepResult | None:
+    """A step that collects an answer must stop the run. Later steps wait.
+
+    ``ask_clarification`` is the typed tool. A tool result of type
+    ``clarification`` is the same gate. The run stays paused until the
+    operator answers and resumes.
+    """
+    payload = tool_output if isinstance(tool_output, dict) else {}
+    inner = payload.get("result") if isinstance(payload.get("result"), dict) else payload
+    if not isinstance(inner, dict):
+        inner = payload
+    name = str(getattr(step, "tool_name", None) or "")
+    if name != "ask_clarification" and inner.get("type") != "clarification" and payload.get("type") != "clarification":
+        if not bool(getattr(step, "await_user", False)):
+            return None
+    from uuid import uuid4
+    question = str(
+        inner.get("question") or payload.get("question") or getattr(step, "intent", "") or ""
+    )
+    choices = inner.get("choices") or payload.get("choices") or []
+    return StepResult(
+        step_id=step.step_id,
+        intent=step.intent,
+        draft_text=question,
+        paused=True,
+        executed=False,
+        confirmation_token=str(uuid4()),
+        tool_output={
+            "type": "clarification",
+            "question": question,
+            "choices": choices if isinstance(choices, list) else [],
+        },
+    )
+
+
 @dataclass
 class ReActResult:
     """Aggregate result of a full ReAct loop execution."""
@@ -1795,6 +1830,10 @@ class ReActLoop:
             WRITE_HELD,
             mutation_blocked_by_failed_read,
         )
+        asked = pause_for_user_answer(step)
+        if asked is not None:
+            return asked
+
         _failed_deps = set(step.depends_on or []) & set(
             getattr(self, "_failed_read_ids", ()) or (),
         )
@@ -2444,6 +2483,10 @@ class ReActLoop:
             # ── Hollow-result honesty (empty research / soft-empty tools) ─
             # Tools that "succeed" with zero evidence must not persist as
             # Finished — that is the same lie as Completed + 0/N pending.
+            asked = pause_for_user_answer(step, result.tool_output)
+            if asked is not None and not result.error:
+                return asked
+
             if not result.error and not result.paused and result.tool_output:
                 _hollow = _hollow_tool_message(result.tool_output)
                 if _hollow:
@@ -2649,10 +2692,16 @@ class ReActLoop:
             elif _read_bound and result.tool_output and not result.error and not result.paused:
                 from ai.engine.cognition.plan.export_bind import render_bound_catalog_read
 
+                from ai.engine.cognition.turn.catalog_render import catalog_entry_named
+
+                _api = str((step.tool_args or {}).get("api_name") or "")
                 restated = render_bound_catalog_read(
                     result.tool_output,
-                    str((step.tool_args or {}).get("api_name") or ""),
+                    _api,
                     str((user_info or {}).get("language") or "en"),
+                    catalog_entry=catalog_entry_named(
+                        (instance_config or {}).get("api_catalog"), _api,
+                    ),
                 )
                 if restated:
                     result.draft_text = restated
@@ -2822,10 +2871,15 @@ class ReActLoop:
             _api = str(tool_output["tool_args"].get("api_name") or "")
         if not _api and isinstance(getattr(step, "tool_args", None), dict):
             _api = str(step.tool_args.get("api_name") or "")
+        from ai.engine.cognition.turn.catalog_render import catalog_entry_named
+
         _restated = render_bound_catalog_read(
             tool_output,
             _api,
             str((user_info or {}).get("language") or "en"),
+            catalog_entry=catalog_entry_named(
+                (instance_config or {}).get("api_catalog"), _api,
+            ),
         )
         if _restated:
             return ObservationResult(answer=_restated)
@@ -3079,6 +3133,7 @@ class ReActLoop:
             choice = {
                 "key": binding.key,
                 "from_step": binding.from_step,
+                "slot": binding.slot or "path",
                 "options": binding.options,
             }
         else:

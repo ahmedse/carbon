@@ -465,6 +465,7 @@ def answer_bound_ess_tools(
     api_name: str,
     user_message: str,
     unread_text: bool = True,
+    catalog_entry: dict | None = None,
 ) -> str:
     """0-LLM restatement or honesty from completed bound tools.
 
@@ -486,7 +487,9 @@ def answer_bound_ess_tools(
         empty = empty_history_misread([item], user_message=user_message)
         if empty is not None and api in HISTORY_APIS and api not in BALANCE_APIS:
             return str(empty.get("text") or "")
-        restated = render_bound_catalog_read(item, api, lang)
+        restated = render_bound_catalog_read(
+            item, api, lang, catalog_entry=catalog_entry,
+        )
         if restated:
             from ai.engine.cognition.turn.grounding import ungrounded_numbers
 

@@ -124,10 +124,11 @@ def test_answer_is_written_by_v21_not_the_legacy_draft(turn):
 
 
 def test_an_empty_answer_is_a_visible_error(turn):
-    out, ledger, _ = turn(
+    out, ledger, seen = turn(
         Decision(commands=[Command(op="answer")], confidence=0.9), answer="",
     )
     assert out is not None
+    assert len(seen["writer"]) == 2
     assert any(s.get("gate") == "degraded" for s in ledger.decision_signals or [])
 
 

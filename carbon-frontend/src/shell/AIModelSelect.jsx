@@ -20,8 +20,18 @@ import { listModels } from '../api/aiWorkspace';
 
 export const AI_MODEL_STORAGE_KEY = 'ai.selectedModel';
 
-// Tier order + header labels (user-facing buckets — never provider internals).
-const TIER_ORDER = ['fast', 'balanced', 'brain'];
+// Pulse chat picker: fast tier only, output at or under Haiku ($5 / 1M).
+// That keeps Haiku, Flash, mini, and the other cheap Poe rows.
+// Sonnet, Opus, and GPT-4o stay in the catalog for cost attribution.
+const CHEAP_OUTPUT_PER_1M = 5;
+
+function isCheapSelectable(model) {
+  if (!model || model.deprecated) return false;
+  if ((model.tier || 'balanced') !== 'fast') return false;
+  const output = Number(model.output_cost_per_1m);
+  return Number.isFinite(output) && output > 0 && output <= CHEAP_OUTPUT_PER_1M;
+}
+const TIER_ORDER = ['fast'];
 const TIER_META = {
   fast: { icon: '⚡', label: 'Fast' },
   balanced: { icon: '⚖', label: 'Balanced' },
@@ -79,7 +89,7 @@ function AIModelSelect({ onChange }) {
 
   // Deprecated models stay in the endpoint response (attribution) but are not
   // selectable — exclude them from every resolution path below.
-  const activeModels = useMemo(() => models.filter((m) => !m.deprecated), [models]);
+  const activeModels = useMemo(() => models.filter(isCheapSelectable), [models]);
 
   const commit = useCallback((next) => {
     if (!next) return;

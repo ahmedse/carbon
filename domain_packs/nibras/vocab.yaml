@@ -915,8 +915,10 @@ t_task_plan_decompose_tool_catalog_rules: "TASK — Plan decompose (tool catalog
   \ tools>\",\n      \"tool_args\": {{}},\n      \"depends_on\": [],\n      \"is_mutation\"\
   : false,\n      \"agent_role\": \"<orchestrator|researcher|planner|critic|domain_specialist>\"\
   \n    }}\n  ],\n  \"synthesis_instruction\": \"<how to combine steps into final\
-  \ answer>\"\n}}\n\nRules:\n- Each step must use one of the available tools listed\
-  \ above.\n- Live host data / self-service reads and writes (leave balance, leave\n\
+  \ answer>\"\n}}\n  \nRules:\n- Each step must use one of the available tools listed\
+  \ above.\n- A step that needs an answer from the operator before later steps can\
+  \ run MUST set tool_name \"ask_clarification\" and \"await_user\": true. Do not\
+  \ write the question as a finished reasoning step.\n- Live host data / self-service reads and writes (leave balance, leave\n\
   \  records, payslips, profile, employees, payroll, …) MUST use\n  tool_name \"call_host_api\"\
   \ with tool_args.api_name set to an exact name\n  from the Host API catalog. NEVER\
   \ put a catalog name in\n  get_entity_details.entity_name — that tool is knowledge-schema\

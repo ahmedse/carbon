@@ -110,6 +110,7 @@ describe('DiscoveryComposer scope gate', () => {
       expect(createPlan).toHaveBeenCalledWith('t', {
         brief: 'أريد عمل اجازه',
         conversation_id: 'c1',
+        model: '',
       });
     });
     expect(onPlanReady).toHaveBeenCalledWith(
@@ -192,6 +193,7 @@ describe('DiscoveryComposer scope gate', () => {
       expect(createPlan).toHaveBeenCalledWith('t', {
         brief: `Run via Agent\n${leaveReply}`,
         conversation_id: 'c1',
+        model: '',
       });
     });
     expect(onPlanReady).toHaveBeenCalled();

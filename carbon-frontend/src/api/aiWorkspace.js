@@ -597,12 +597,13 @@ export async function retryMessageStream(
   token,
   conversationId,
   userMessageId,
-  { onChunk, onProgress, onDone, onStopped, onError, content, model, signal },
+  { onChunk, onProgress, onDone, onStopped, onError, content, model, denseThinking, signal },
 ) {
   const path = `${BASE}conversations/${conversationId}/messages/${userMessageId}/retry/`;
   const body = {};
   if (content) body.content = content;
   if (model) body.model = model;
+  if (denseThinking) body.dense_thinking = true;
   await streamJsonPost(token, path, body, { onChunk, onProgress, onDone, onStopped, onError, signal });
 }
 
@@ -940,11 +941,13 @@ const PLANS_BASE = 'ai/plans/';
  * @param {object} params - { brief, conversation_id? }
  * @returns {Promise<object>} Plan payload (status 'pending_approval')
  */
-export function createPlan(token, { brief, conversation_id = '' }) {
+export function createPlan(token, { brief, conversation_id = '', model = '' }) {
+  const body = { brief, conversation_id };
+  if (model) body.model = model;
   return apiFetch(PLANS_BASE, {
     token,
     method: 'POST',
-    body: { brief, conversation_id },
+    body,
   });
 }
 
@@ -971,11 +974,13 @@ export function commitPlanProposal(token, conversationId) {
  * @param {object} params - { brief, conversation_id? }
  * @returns {Promise<object>} { id, status: 'needs_input', question, turns, ... }
  */
-export function startDiscoveryPlan(token, { brief, conversation_id = '' }) {
+export function startDiscoveryPlan(token, { brief, conversation_id = '', model = '' }) {
+  const body = { brief, conversation_id, discovery_mode: true };
+  if (model) body.model = model;
   return apiFetch(PLANS_BASE, {
     token,
     method: 'POST',
-    body: { brief, conversation_id, discovery_mode: true },
+    body,
   });
 }
 

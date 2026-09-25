@@ -47,6 +47,11 @@ class GenerationRegistry:
             event = self._events.get(conversation_id)
         return event is not None and event.is_set()
 
+    def is_live(self, conversation_id: str) -> bool:
+        """Return True while this process is still generating for ``conversation_id``."""
+        with self._lock:
+            return conversation_id in self._events
+
     def finish(self, conversation_id: str) -> None:
         """Remove the registry entry for ``conversation_id``."""
         with self._lock:

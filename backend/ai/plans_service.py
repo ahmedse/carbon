@@ -99,6 +99,23 @@ def _coerce_plan_json(raw) -> dict:
     return {}
 
 
+def _preferred_model(plan_json: dict | None, explicit: str = "") -> str:
+    """Footer model picker, else the model stored on the plan, else empty."""
+    chosen = (explicit or "").strip()
+    if chosen:
+        return chosen
+    stored = (_coerce_plan_json(plan_json) or {}).get("preferred_model") or ""
+    return str(stored).strip()
+
+
+def _resolve_plan_model(model: str = "") -> str:
+    """Use the operator's picker when set; otherwise the instance default."""
+    from ai.engine.core.config import get_settings
+
+    chosen = (model or "").strip()
+    return chosen or get_settings().LLM_MODEL
+
+
 def _plan_instance_config(host_user_id: str | None = None) -> dict:
     """Brand-resolved instance config for plan execution (not hard-coded carbon).
 
@@ -1960,17 +1977,16 @@ class PlansService:
             logger.exception("workflow_graph compile-from-json failed")
             return None
 
-    def _decompose(self, user, brief, conversation_id: str = ""):
+    def _decompose(self, user, brief, conversation_id: str = "", model: str = ""):
         """Run SkillAwarePlanner.decompose on a fresh engine session."""
-        from ai.engine.core.config import get_settings
         from ai.engine.core.database import get_session_factory
         from ai.engine.cognition.plan.planner import SkillAwarePlanner
         from ai.engine.skills.registry import SkillRegistry
 
-        settings = get_settings()
         user_pk = str(user.pk)
         _cid = conversation_id or ""
         _svc = self
+        model_name = _resolve_plan_model(model)
 
         async def _decompose():
             from ai.engine.llm.provider import get_llm_client
@@ -1979,7 +1995,7 @@ class PlansService:
             async with factory() as db:
                 registry = SkillRegistry(db)
                 planner = SkillAwarePlanner(
-                    llm_client=get_llm_client(), model=settings.LLM_MODEL
+                    llm_client=get_llm_client(), model=model_name
                 )
                 return await planner.decompose(
                     utterance=brief,
@@ -2647,7 +2663,7 @@ class PlansService:
         row.save(update_fields=["session_json"])
         return plan
 
-    def create_plan(self, user, brief: str, conversation_id: str = "", plan=None) -> dict:
+    def create_plan(self, user, brief: str, conversation_id: str = "", plan=None, model: str = "") -> dict:
         """Decompose a brief into a reviewable plan (pending_approval).
 
         Planning only — NO execution (RULE_21: review before mutation).
@@ -2666,10 +2682,14 @@ class PlansService:
 
         user_pk = str(user.pk)
         if plan is None:
-            plan = self._decompose(user, brief, conversation_id=conversation_id)
+            plan = self._decompose(
+                user, brief, conversation_id=conversation_id, model=model,
+            )
 
         run_id = generate_uuid()
         plan_payload = self._plan_to_dict(plan)
+        if (model or "").strip():
+            plan_payload["preferred_model"] = (model or "").strip()
         inherited = self._public_inherited_context(conversation_id)
         if inherited:
             plan_payload["inherited_context"] = inherited
@@ -3003,13 +3023,13 @@ class PlansService:
         *,
         conversation_id: str = "",
         known_slots: dict | None = None,
+        model: str = "",
     ) -> dict:
         """One discovery round → ``{"action": "ask"|"complete", "question": ...}``.
 
         Routes through ``route_chat`` (lazily imported, mirroring
         ``_decompose``) so tests can patch it without hitting a live LLM.
         """
-        from ai.engine.core.config import get_settings
         from ai.engine.llm.router import route_chat
         from ai.engine_runtime import _build_chat_user_info
 
@@ -3017,7 +3037,6 @@ class PlansService:
         user_info = _build_chat_user_info(user_pk) if user_pk else None
         instance_config = _plan_instance_config(user_pk or None)
 
-        settings = get_settings()
         language = str((user_info or {}).get("language") or "")
         state = self._load_conversation_state(conversation_id)
         known = known_slots if known_slots is not None else self._discovery_known_slots(
@@ -3037,7 +3056,7 @@ class PlansService:
                     state=state,
                     known_slots=known,
                 ),
-                model=settings.LLM_MODEL,
+                model=_resolve_plan_model(model),
                 temperature=0.3,
                 response_format={"type": "json_object"},
             )
@@ -3073,7 +3092,7 @@ class PlansService:
         )
         return f"{brief}\n\nRequirements clarified during discovery:\n{qa}"
 
-    def start_discovery(self, user, brief: str, conversation_id: str = "") -> dict:
+    def start_discovery(self, user, brief: str, conversation_id: str = "", model: str = "") -> dict:
         """Begin a guided discovery conversation (W5-B).
 
         Creates a Run in ``discovering`` state (no plan yet) and returns the
@@ -3131,6 +3150,7 @@ class PlansService:
                     user,
                     brief=self._inherit_chat_brief(brief, conversation_id),
                     conversation_id=conversation_id,
+                    model=model,
                 )
                 logger.info(
                     "Discovery skipped for process_dial ESS brief id=%s",
@@ -3170,10 +3190,14 @@ class PlansService:
             [],
             user=user,
             conversation_id=conversation_id,
+            model=model,
         )
         turns = [{"question": first["question"], "reply": None}]
 
         run_id = generate_uuid()
+        discovery_json = {"discovery_turns": turns, "brief": brief}
+        if (model or "").strip():
+            discovery_json["preferred_model"] = (model or "").strip()
         Run.objects.create(
             id=run_id,
             instance_id=PLAN_INSTANCE_ID,
@@ -3181,7 +3205,7 @@ class PlansService:
             host_user_id=str(user.pk),
             user_message=brief,
             status=STATUS_DISCOVERING,
-            plan_json={"discovery_turns": turns, "brief": brief},
+            plan_json=discovery_json,
         )
 
         logger.info(
@@ -3284,6 +3308,7 @@ class PlansService:
                 "process_dial discovery advance short-circuit failed"
             )
 
+        stored_model = _preferred_model(plan_json)
         if len(turns) >= self.DISCOVERY_MAX_TURNS:
             decision = {"action": "complete", "question": None}
         else:
@@ -3292,6 +3317,7 @@ class PlansService:
                 turns,
                 user=user,
                 conversation_id=getattr(run, "conversation_id", "") or "",
+                model=stored_model,
             )
 
         if decision.get("action") == "complete":
@@ -3299,7 +3325,10 @@ class PlansService:
 
         next_question = decision.get("question")
         turns.append({"question": next_question, "reply": None})
-        run.plan_json = {"discovery_turns": turns, "brief": brief}
+        next_json = {"discovery_turns": turns, "brief": brief}
+        if stored_model:
+            next_json["preferred_model"] = stored_model
+        run.plan_json = next_json
         run.save(update_fields=["plan_json", "updated_at"])
 
         return {
@@ -3361,10 +3390,15 @@ class PlansService:
 
         enriched = self._enrich_brief(brief, turns)
         cid = str(getattr(run, "conversation_id", "") or "")
-        plan = self._decompose(user, enriched, conversation_id=cid)
+        stored_model = _preferred_model(_coerce_plan_json(run.plan_json))
+        plan = self._decompose(
+            user, enriched, conversation_id=cid, model=stored_model,
+        )
         plan_dict = self._plan_to_dict(plan)
         plan_dict["discovery_turns"] = turns
         plan_dict["brief"] = brief
+        if stored_model:
+            plan_dict["preferred_model"] = stored_model
 
         run.plan_json = plan_dict
         run.status = STATUS_PENDING_APPROVAL
@@ -5351,9 +5385,22 @@ class PlansService:
                 "choice": {key: picked},
             }
         args = dict(step.tool_args_json or {})
-        path = dict(args.get("path_params") or {})
-        path[key] = picked
-        args["path_params"] = path
+        name = str(args.get("api_name") or "")
+        slot = str(choice.get("slot") or "")
+        if not slot and name:
+            from ai.engine.cognition.turn.capability import host_surface
+
+            path_keys = host_surface(_plan_instance_config(None)).path_keys(name)
+            if path_keys and key not in path_keys:
+                slot = "query"
+        if slot == "query":
+            query = dict(args.get("query_params") or {})
+            query[key] = picked
+            args["query_params"] = query
+        else:
+            path = dict(args.get("path_params") or {})
+            path[key] = picked
+            args["path_params"] = path
         bind = dict(args.get("bind") or {})
         bind.pop(key, None)
         if bind:

@@ -117,6 +117,112 @@ def test_fallback_never_replaces_a_catalog_render():
     assert should_honest_fallback(rendered, [tool_row]) is False
 
 
+_RUN_ENTRY = {
+    "name": "list_payroll_runs",
+    "kind": "list",
+    "empty_render": "no_list_rows",
+    "label": "Runs",
+    "latest_by": "period_end",
+    "returns": ["id", "org_unit", "period_start", "period_end", "status", "created_at"],
+}
+_DETAIL_ENTRY = {
+    "name": "get_payroll_run",
+    "kind": "detail",
+    "empty_render": "no_detail_row",
+    "returns": ["id", "org_unit", "period_start", "period_end", "status", "committed_at"],
+}
+_RUN_ROWS = [
+    {
+        "id": 57,
+        "org_unit": 1,
+        "period_start": "2026-07-01",
+        "period_end": "2026-07-31",
+        "status": "committed",
+        "created_at": "2026-09-25T18:48:06.260434+03:00",
+    },
+    {
+        "id": 56,
+        "org_unit": 1,
+        "period_start": "2026-08-01",
+        "period_end": "2026-08-31",
+        "status": "committed",
+        "created_at": "2026-09-25T18:48:02.408376+03:00",
+    },
+]
+
+
+def test_declared_list_restates_returns_and_latest_first():
+    payload = {"status_code": 200, "data": {"count": 2, "results": _RUN_ROWS}}
+    rendered = render_catalog_read(
+        {"result": payload},
+        "list_payroll_runs",
+        "en",
+        catalog_entry=_RUN_ENTRY,
+    )
+    assert rendered
+    assert rendered.startswith("Runs (2):")
+    assert rendered.index("id=56") < rendered.index("id=57")
+    assert "period_end=2026-08-31" in rendered
+    assert ungrounded_numbers(rendered, [payload]) == []
+
+
+def test_declared_detail_restates_iso_commit_without_writer():
+    row = {
+        "id": 56,
+        "org_unit": 1,
+        "period_start": "2026-08-01",
+        "period_end": "2026-08-31",
+        "status": "committed",
+        "committed_at": "2026-09-25T18:48:02.408376+03:00",
+    }
+    rendered = render_catalog_read(
+        {"result": {"status_code": 200, "data": row}},
+        "get_payroll_run",
+        "en",
+        catalog_entry=_DETAIL_ENTRY,
+    )
+    assert rendered
+    assert "id=56" in rendered
+    assert "committed_at=2026-09-25T18:48:02.408376+03:00" in rendered
+    assert ungrounded_numbers(rendered, [row]) == []
+
+
+def test_declared_list_empty_uses_pack_empty_render():
+    rendered = render_catalog_read(
+        {"result": {"results": []}},
+        "list_payroll_runs",
+        "en",
+        catalog_entry=_RUN_ENTRY,
+    )
+    assert rendered == "No rows on record for that list."
+
+
+def test_restate_last_view_copies_table_cells():
+    from ai.engine.cognition.turn.catalog_render import restate_last_view
+
+    text = restate_last_view({
+        "tables": [{
+            "title": "Committed at",
+            "columns": ["Category", "Value"],
+            "rows": [["2026-09-25T18:48:02.408376+03:00", 1]],
+        }],
+    })
+    assert "2026-09-25T18:48:02.408376+03:00" in text
+    assert "Value=1" in text
+    assert ungrounded_numbers(text, [{
+        "tables": [{"rows": [["2026-09-25T18:48:02.408376+03:00", 1]]}],
+    }]) == []
+
+
+def test_declared_kind_without_returns_does_not_guess():
+    assert render_catalog_read(
+        {"result": _RUN_ROWS},
+        "list_payroll_runs",
+        "en",
+        catalog_entry={"name": "list_payroll_runs", "kind": "list", "empty_render": "no_list_rows"},
+    ) is None
+
+
 def test_fallback_only_when_tools_ran_and_nothing_rendered():
     tool_row = {"tool_name": "call_host_api", "tool_args": {"api_name": "x"}, "result": {}}
     assert should_honest_fallback("", [tool_row]) is True

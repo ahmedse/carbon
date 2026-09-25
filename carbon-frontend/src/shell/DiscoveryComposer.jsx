@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
 import { advanceDiscovery, createPlan, finalizeDiscovery, startDiscoveryPlan } from '../api/aiWorkspace';
+import { usePulsePrefs } from './pulsePrefs';
 import AIMessageBubble from './AIMessageBubble';
 import AIInputBar from './AIInputBar';
 import AIWorkingIndicator from './AIWorkingIndicator';
@@ -137,6 +138,7 @@ function DiscoveryComposer({
   const { token } = useAuth();
   const { notifyFromError } = useNotification();
   const { t } = useTranslation('ai');
+  const { selectedModel } = usePulsePrefs();
 
   const [busy, setBusy] = useState(false);
   const [planId, setPlanId] = useState(null);
@@ -197,6 +199,7 @@ function DiscoveryComposer({
     const started = await startDiscoveryPlan(token, {
       brief: text,
       conversation_id: conversationId || '',
+      model: selectedModel || '',
     });
     if (applyRoutePayload(started, text)) {
       return;
@@ -314,6 +317,7 @@ function DiscoveryComposer({
         const plan = await createPlan(token, {
           brief,
           conversation_id: conversationId || '',
+          model: selectedModel || '',
         });
         openTask(plan, turns);
       } catch (err) {

@@ -20,6 +20,7 @@ import RunStepDetailDrawer from './RunStepDetailDrawer';
 import InheritedContextPanel from './InheritedContextPanel';
 import HumanActivityLog from './HumanActivityLog';
 import { friendlyStepError } from './humanizeOperatorCopy';
+import { usePulsePrefs } from './pulsePrefs';
 
 function formatDuration(ms) {
   if (ms == null || !Number.isFinite(ms)) return null;
@@ -71,6 +72,7 @@ function AgentRunSurface({
 }) {
   const { t } = useTranslation('ai');
   const isMobile = useIsMobile();
+  const { denseThinking } = usePulsePrefs();
   const [selectedStepId, setSelectedStepId] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Auto-focus an urgent beat once when it appears — never steal focus again
@@ -250,7 +252,12 @@ function AgentRunSurface({
         />
       </Box>
 
-      <HumanActivityLog lines={activityLines} defaultOpen={failed > 0} />
+      <HumanActivityLog
+        lines={activityLines}
+        defaultOpen={failed > 0}
+        forceOpen={Boolean(denseThinking) || failed > 0}
+        live={Boolean(live && !runSettled)}
+      />
 
       {showPostDone && (
         <Stack

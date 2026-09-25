@@ -62,6 +62,7 @@ vi.mock('../api/aiWorkspace', () => ({
   declinePlan: (...args) => declinePlan(...args),
   runPlanStream: (...args) => runPlanStream(...args),
   resumePlanStream: (...args) => resumePlanStream(...args),
+  listModels: vi.fn().mockResolvedValue({ models: [] }),
   pausePlan: (...args) => pausePlan(...args),
   forkPlan: (...args) => forkPlan(...args),
   editPlan: (...args) => editPlan(...args),

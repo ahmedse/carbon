@@ -414,6 +414,7 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
                     conversation_id=pk,
                     user_message_id=user_message_id,
                     model=serializer.validated_data.get("model") or None,
+                    dense_thinking=bool(serializer.validated_data.get("dense_thinking")),
                 ):
                     yield f"data: {json.dumps(frame)}\n\n"
             except ValueError as e:

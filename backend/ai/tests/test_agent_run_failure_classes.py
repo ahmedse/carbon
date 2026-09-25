@@ -324,6 +324,39 @@ async def test_a_failed_dependency_never_runs_its_dependent():
     assert result.failure_class == BLOCKED_DEPENDENCY
 
 
+def test_confirm_writes_a_query_value_for_period_end():
+    from ai.plans_service import PlansService
+
+    saved = {}
+
+    class _Step:
+        def __init__(self):
+            self.run_id = "run"
+            self.step_index = 3
+            self.confirmation_token = "tok"
+            self.tool_args_json = {
+                "api_name": "payroll_variance",
+                "bind": {"period_end": {"step": 1, "field": "period_end"}},
+            }
+            self.critic_flags_json = {
+                "failure_class": "missing_binding",
+                "choice": {
+                    "key": "period_end",
+                    "slot": "query",
+                    "options": [{"value": "2026-09-30", "label": "Sep"}],
+                },
+            }
+            self.error = "pick"
+
+        def save(self, update_fields=None):
+            saved["args"] = self.tool_args_json
+
+    PlansService._apply_binding_choice(None, _Step(), {"period_end": "2026-09-30"})
+    assert saved["args"]["query_params"] == {"period_end": "2026-09-30"}
+    assert "path_params" not in saved["args"]
+    assert "bind" not in saved["args"]
+
+
 def test_confirm_writes_the_picked_path_value():
     from ai.plans_service import PlansService, PlanStepError
 

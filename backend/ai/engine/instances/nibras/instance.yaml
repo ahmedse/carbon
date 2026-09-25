@@ -372,6 +372,14 @@ api_catalog:
   - name: list_payroll_runs
     method: GET
     path: /carbon-api/people/payroll-runs/
+    kind: list
+    domain: people
+    audience: [hr]
+    label: Payroll runs
+    not_for: >
+      One person's payslip lines. Pay-structure aggregates
+      (analyze_committed_pay). GOSI workbook.
+    empty_render: no_list_rows
     description: >
       List payroll runs for the user's visible org units. Returns
       {count, results[]} with id, org_unit, period_start, period_end,
@@ -393,6 +401,12 @@ api_catalog:
   - name: get_payroll_run
     method: GET
     path: /carbon-api/people/payroll-runs/{id}/
+    kind: detail
+    domain: people
+    audience: [hr]
+    label: Payroll run
+    not_for: A list of runs. Payslip line amounts.
+    empty_render: no_detail_row
     description: >
       Get one payroll run: id, org_unit, period_start, period_end, status,
       committed_at. No pay totals. Path param {id} is the run numeric id,
@@ -411,6 +425,14 @@ api_catalog:
   - name: list_payslip_lines
     method: GET
     path: /carbon-api/people/payslip-lines/
+    kind: list
+    domain: people
+    audience: [hr]
+    label: Payslip lines
+    not_for: >
+      Pay-structure aggregates (analyze_committed_pay). GOSI workbook.
+      Own ESS payslip (list_my_payslips).
+    empty_render: no_list_rows
     description: >
       List payslip lines. Filter by query param payroll_run=<run_id> to get
       all lines for a specific run. Fields: id, employee, line_type

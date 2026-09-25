@@ -9,12 +9,21 @@ import json
 import re
 from typing import Any
 
+# ISO-8601 ``YYYY-MM-DDTHH:MM:SS…`` glues the day to ``T`` and the hour to
+# ``T``, so a word-boundary scan misses both. Honest summaries that restate
+# the date and time as ``2026-09-25`` / ``18:48`` then fail as ungrounded.
+_ISO_DT_T = re.compile(
+    r"(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:\d{2}|Z)?)",
+)
+
+
 def _flatten_numbers(payload: Any) -> set[str]:
     found: set[str] = set()
     try:
         blob = json.dumps(payload, ensure_ascii=False, default=str)
     except (TypeError, ValueError):
         blob = str(payload)
+    blob = _ISO_DT_T.sub(r"\1 \2", blob)
     for match in re.finditer(r"(?<![\w.])(\d+(?:\.\d+)?)(?![\w.])", blob):
         found.add(match.group(1))
         if "." in match.group(1):

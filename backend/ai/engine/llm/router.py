@@ -299,7 +299,7 @@ async def route_chat(
             "cost_usd": float,
         }
     """
-    from ai.engine.llm.provider import create_completion, get_llm_client, reasoning_mode
+    from ai.engine.llm.provider import client_for_model, create_completion, reasoning_mode
     from ai.engine.llm.tool_choice import apply_strict, normalize_tool_choice
 
     settings = get_settings()
@@ -332,7 +332,7 @@ async def route_chat(
                 "cost_usd": 0.0,
             }
 
-        client = get_llm_client()
+        client, model, base_url = client_for_model(model)
 
         kwargs: dict = {
             "model": model,
@@ -353,7 +353,7 @@ async def route_chat(
             kwargs["response_format"] = response_format
         if extra_body:
             kwargs["extra_body"] = extra_body
-        mode = reasoning_mode(model, settings.LLM_BASE_URL) if reasoning else None
+        mode = reasoning_mode(model, base_url) if reasoning else None
         if mode is not None:
             kwargs["extra_body"] = {**(kwargs.get("extra_body") or {}), **mode.body}
             if mode.temperature is not None:
@@ -362,7 +362,25 @@ async def route_chat(
                 kwargs["tool_choice"] = "auto"
                 normalized = "auto"
 
-        response = await create_completion(client, **kwargs)
+        try:
+            response = await create_completion(client, **kwargs)
+        except Exception as exc:
+            from ai.engine.llm.provider import classify_llm_error
+            key = (settings.DEEPSEEK_API_KEY or "").strip()
+            if (
+                key
+                and "deepseek.com" not in (base_url or "")
+                and classify_llm_error(exc) == "transient"
+            ):
+                logger.warning("primary provider failed; one retry on deepseek-flash")
+                client, model, base_url = client_for_model("deepseek-flash")
+                kwargs["model"] = model
+                mode = reasoning_mode(model, base_url) if reasoning else None
+                if mode is not None:
+                    kwargs["extra_body"] = {**(kwargs.get("extra_body") or {}), **mode.body}
+                response = await create_completion(client, **kwargs)
+            else:
+                raise
         duration_ms = int((time.monotonic() - t0) * 1000)
 
         choice = response.choices[0]

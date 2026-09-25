@@ -1,8 +1,9 @@
 // Optional accordion — plain-language activity log under Plan graph / Now timeline.
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   Box,
+  CircularProgress,
   Collapse,
   IconButton,
   Stack,
@@ -25,11 +26,21 @@ const TONE_COLOR = {
  * @param {Array<{ id: string, tone: string, line: string }>} props.lines
  * @param {boolean} [props.defaultOpen]
  */
-export default function HumanActivityLog({ lines = [], defaultOpen = false }) {
+export default function HumanActivityLog({
+  lines = [],
+  defaultOpen = false,
+  forceOpen = false,
+  title,
+  live = false,
+}) {
   const { t } = useTranslation('ai');
-  const [open, setOpen] = useState(defaultOpen);
+  const [open, setOpen] = useState(defaultOpen || forceOpen);
+
+  useEffect(() => {
+    if (forceOpen) setOpen(true);
+  }, [forceOpen]);
   const list = Array.isArray(lines) ? lines : [];
-  if (!list.length) return null;
+  if (!list.length && !live) return null;
 
   return (
     <Box
@@ -77,8 +88,11 @@ export default function HumanActivityLog({ lines = [], defaultOpen = false }) {
             color: 'text.secondary',
           }}
         >
-          {t('activityLogTitle')}
+          {title || t('activityLogTitle')}
         </Typography>
+        {live ? (
+          <CircularProgress size={10} thickness={5} aria-hidden="true" sx={{ color: 'primary.light' }} />
+        ) : null}
         <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.625rem' }}>
           {list.length}
         </Typography>
@@ -123,4 +137,7 @@ HumanActivityLog.propTypes = {
     line: PropTypes.string.isRequired,
   })),
   defaultOpen: PropTypes.bool,
+  forceOpen: PropTypes.bool,
+  title: PropTypes.string,
+  live: PropTypes.bool,
 };

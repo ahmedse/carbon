@@ -131,6 +131,29 @@ def test_ungrounded_zero_is_flagged():
     assert strip_ungrounded_numbers("you have 12 days and 4 left", [{"remaining": 4}]) == "you have days and 4 left"
 
 
+def test_iso_datetime_day_and_hour_ground_honest_restatements():
+    """``…25T18:…`` must not hide day 25 / hour 18 from the allowed set."""
+    payload = {
+        "id": 56,
+        "org_unit": 1,
+        "period_start": "2026-08-01",
+        "period_end": "2026-08-31",
+        "status": "committed",
+        "committed_at": "2026-09-25T18:48:02.408376+03:00",
+    }
+    ar = (
+        "آخر دورة معتمدة هي أغسطس 2026 (من 2026-08-01 إلى 2026-08-31) "
+        "واعتمدت بتاريخ 2026-09-25 الساعة 18:48 لوحدة 1."
+    )
+    assert ungrounded_numbers(ar, [payload]) == []
+    assert ungrounded_numbers(
+        "Committed on 2026-09-25 at 18:48 for org unit 1 (run 56).",
+        [payload],
+    ) == []
+    # Invented headcount still fails.
+    assert "533" in ungrounded_numbers("This run covers 533 employees.", [payload])
+
+
 def test_rank_tools_prefers_description_overlap():
     catalog = [
         {"name": "list_my_leave", "description": "leave requests history", "kind": "history"},

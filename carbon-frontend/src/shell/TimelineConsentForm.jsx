@@ -11,6 +11,7 @@ import PropTypes from 'prop-types';
 import {
   Box,
   Button,
+  MenuItem,
   Stack,
   TextField,
   Typography,
@@ -28,6 +29,66 @@ function isoDay(offsetDays = 0) {
   d.setDate(d.getDate() + offsetDays);
   return d.toISOString().slice(0, 10);
 }
+
+const CHOICE_DROPDOWN_AT = 6;
+
+function ChoiceOptions({ options, selected, onSelect, testId }) {
+  if (options.length >= CHOICE_DROPDOWN_AT) {
+    return (
+      <TextField
+        select
+        size="small"
+        fullWidth
+        label="Choose"
+        value={selected ?? ''}
+        onChange={(e) => onSelect(e.target.value)}
+        inputProps={{ 'data-testid': `${testId}-select` }}
+        sx={{ '& .MuiInputBase-input': { fontSize: '0.75rem' } }}
+      >
+        {options.map((opt) => (
+          <MenuItem key={String(opt.value)} value={String(opt.value)}>
+            {opt.label || String(opt.value)}
+          </MenuItem>
+        ))}
+      </TextField>
+    );
+  }
+  return (
+    <Box sx={{ maxHeight: 160, overflowY: 'auto' }}>
+      <Stack spacing={0.5}>
+        {options.map((opt) => {
+          const value = String(opt.value);
+          const on = selected === value;
+          return (
+            <Button
+              key={value}
+              size="small"
+              variant={on ? 'contained' : 'outlined'}
+              color={on ? 'warning' : 'inherit'}
+              data-testid={`${testId}-${opt.value}`}
+              onClick={() => onSelect(value)}
+              sx={{
+                fontSize: '0.6875rem',
+                textTransform: 'none',
+                justifyContent: 'flex-start',
+                textAlign: 'left',
+              }}
+            >
+              {opt.label || value}
+            </Button>
+          );
+        })}
+      </Stack>
+    </Box>
+  );
+}
+
+ChoiceOptions.propTypes = {
+  options: PropTypes.array.isRequired,
+  selected: PropTypes.string,
+  onSelect: PropTypes.func.isRequired,
+  testId: PropTypes.string.isRequired,
+};
 
 function MissingSlotPrompt({ field, onPick }) {
   if (field.type === 'governed' && field.options.length) {
@@ -271,16 +332,18 @@ export default function TimelineConsentForm({
   const spec = useMemo(() => consentInputSpec(step), [step]);
   const [values, setValues] = useState(() => serverConsentValues(step));
   const seedKeyRef = useRef(null);
+  const picksRef = useRef({});
 
   useEffect(() => {
     const seedKey = `${step?.step_id ?? ''}:${step?.status ?? ''}`;
     const server = serverConsentValues(step);
+    const kept = { ...picksRef.current };
     if (seedKeyRef.current !== seedKey) {
       seedKeyRef.current = seedKey;
-      setValues(server);
+      setValues({ ...server, ...kept });
       return;
     }
-    setValues((prev) => mergeConsentValues(prev, server));
+    setValues((prev) => mergeConsentValues({ ...kept, ...prev }, server));
   }, [step?.step_id, step?.status, step?.tool_args, step?.consent_slots]);
 
   if (!step || step.status !== 'awaiting_approval') return null;
@@ -288,6 +351,8 @@ export default function TimelineConsentForm({
   if (evidence.length && evidence.some((row) => !row.ok)) return null;
   const choice = step.choice;
   if (choice?.options?.length && choice.key) {
+    const picked = values[choice.key];
+    const match = choice.options.find((opt) => String(opt.value) === String(picked));
     return (
       <Stack
         spacing={0.75}
@@ -297,20 +362,40 @@ export default function TimelineConsentForm({
         <Typography variant="caption" sx={{ fontSize: '0.6875rem', fontWeight: 600 }}>
           {`Which ${choice.key}?`}
         </Typography>
-        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
-          {choice.options.map((opt) => (
-            <Button
-              key={String(opt.value)}
-              size="small"
-              variant="outlined"
-              disabled={Boolean(confirming)}
-              data-testid={`timeline-choice-${step.step_id}-${opt.value}`}
-              onClick={() => onConfirm?.(step.step_id, { body: { [choice.key]: opt.value } })}
-              sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0 }}
-            >
-              {opt.label || String(opt.value)}
-            </Button>
-          ))}
+        <ChoiceOptions
+          options={choice.options}
+          selected={picked == null ? '' : String(picked)}
+          testId={`timeline-choice-${step.step_id}`}
+          onSelect={(value) => {
+            const opt = choice.options.find((row) => String(row.value) === String(value));
+            const next = opt ? opt.value : value;
+            picksRef.current = { ...picksRef.current, [choice.key]: next };
+            setValues((prev) => ({ ...prev, [choice.key]: next }));
+          }}
+        />
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Button
+            size="small"
+            variant="contained"
+            color="warning"
+            disabled={Boolean(confirming) || !match}
+            data-testid={`timeline-approve-${step.step_id}`}
+            onClick={() => onConfirm?.(step.step_id, { body: { [choice.key]: match.value } })}
+            sx={{ fontSize: '0.75rem', textTransform: 'none', fontWeight: 600 }}
+          >
+            {confirming ? 'Approving…' : 'Approve'}
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            color="inherit"
+            disabled={Boolean(confirming)}
+            data-testid={`timeline-decline-${step.step_id}`}
+            onClick={() => onDecline?.(step.step_id)}
+            sx={{ fontSize: '0.75rem', textTransform: 'none' }}
+          >
+            Decline
+          </Button>
         </Stack>
       </Stack>
     );

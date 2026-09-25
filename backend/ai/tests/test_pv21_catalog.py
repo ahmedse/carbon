@@ -113,6 +113,54 @@ def test_act_clarify_and_chat_handoff_do_not_execute():
     assert called["n"] == 0
 
 
+def test_act_list_read_restates_declared_returns():
+    decision = parse_decision(
+        {
+            "commands": [{"op": "call_tool", "name": "list_payroll_runs"}],
+            "language": "en",
+            "confidence": 0.9,
+        }
+    )
+    payload = {
+        "status_code": 200,
+        "data": {
+            "count": 1,
+            "results": [{
+                "id": 56,
+                "org_unit": 1,
+                "period_start": "2026-08-01",
+                "period_end": "2026-08-31",
+                "status": "committed",
+                "created_at": "2026-09-25T18:48:02.408376+03:00",
+            }],
+        },
+    }
+    catalog = [{
+        "name": "list_payroll_runs",
+        "kind": "list",
+        "empty_render": "no_list_rows",
+        "label": "Runs",
+        "latest_by": "period_end",
+        "returns": ["id", "period_end", "status"],
+    }]
+
+    async def execute_tool(name, args):
+        assert name == "list_payroll_runs"
+        return payload
+
+    text = asyncio.run(
+        act_on_decision(
+            decision,
+            execute_tool=execute_tool,
+            user_message="details of last one",
+            catalog=catalog,
+        )
+    )
+    assert text
+    assert "id=56" in text
+    assert "period_end=2026-08-31" in text
+
+
 def test_act_call_tool_restates_host_payload():
     decision = parse_decision(
         {

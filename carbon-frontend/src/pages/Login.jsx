@@ -33,7 +33,7 @@ export default function Login() {
 
   // Already logged in? Return to the last in-app route (or brand landing).
   if (user && context?.projectId) {
-    return <Navigate to={resolveLandingPath(context?.landingPath || "/dashboard")} replace />;
+    return <Navigate to={resolveLandingPath(context?.landingPath || "/")} replace />;
   }
 
   // Project selection UI only at login
@@ -63,7 +63,7 @@ export default function Login() {
             onClick={async () => {
               try {
                 await selectProject(projectSelection);
-                navigate("/dashboard", { replace: true });
+                navigate(resolveLandingPath("/"), { replace: true });
               } catch (err) {
                 setError(err.message || t('login.failedToSelectProject'));
               }
@@ -85,7 +85,7 @@ export default function Login() {
       setRequireProject(requireProjectSelection);
       // If single project, login already selected it and set context - navigate now
       if (!requireProjectSelection) {
-        navigate(landingPath || "/dashboard", { replace: true });
+        navigate(landingPath || resolveLandingPath("/"), { replace: true });
       }
       // Otherwise, show project selection UI (handled by component render above)
     } catch (err) {

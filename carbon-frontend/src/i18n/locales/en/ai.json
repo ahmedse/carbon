@@ -959,7 +959,7 @@
   },
   "denseThinking": {
     "label": "Think",
-    "hint": "Show the model's own reasoning in the Thought panel. Slower replies. Tool names and code stay hidden. Default off."
+    "hint": "Ask the model to reason before it answers, and keep that choice in this browser. Slower replies. Tool names and code stay hidden."
   },
   "choice": {
     "own": "Or type your own",

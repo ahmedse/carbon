@@ -24,6 +24,10 @@ vi.mock('../components/NotificationProvider', () => ({
   useNotification: () => ({ notify, notifyFromError, showFeedback: vi.fn() }),
 }));
 
+vi.mock('../shell/PulseWorkspaceFooter', () => ({
+  default: () => <div data-testid="pulse-workspace-footer" />,
+}));
+
 const listPlans = vi.fn();
 const createPlan = vi.fn();
 const startDiscoveryPlan = vi.fn();
@@ -53,6 +57,7 @@ vi.mock('../api/aiWorkspace', () => ({
   approvePlan: (...args) => approvePlan(...args),
   declinePlan: (...args) => declinePlan(...args),
   runPlanStream: (...args) => runPlanStream(...args),
+  resumePlanStream: (...args) => runPlanStream(...args),
   confirmPlanStep: (...args) => confirmPlanStep(...args),
   declinePlanStep: (...args) => declinePlanStep(...args),
   stopPlan: (...args) => stopPlan(...args),
@@ -62,6 +67,7 @@ vi.mock('../api/aiWorkspace', () => ({
   deletePlanArtifact: (...args) => deletePlanArtifact(...args),
   dispatchSubagent: (...args) => dispatchSubagent(...args),
   listSubagents: (...args) => listSubagents(...args),
+  listModels: vi.fn().mockResolvedValue({ models: [] }),
 }));
 
 // ── Fixtures ──────────────────────────────────────────────────────────────

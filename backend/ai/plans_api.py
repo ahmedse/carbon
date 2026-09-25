@@ -57,6 +57,10 @@ class PlanCreateSerializer(serializers.Serializer):
     # W5-B: when true, start in guided-discovery mode (Pulse asks first)
     # instead of immediately decomposing into a plan.
     discovery_mode = serializers.BooleanField(required=False, default=False)
+    # Footer model picker — used for discovery / decompose / later step drafts.
+    model = serializers.CharField(
+        required=False, allow_blank=True, default="", max_length=128
+    )
 
 
 class PlanDiscoverSerializer(serializers.Serializer):
@@ -186,6 +190,7 @@ class PlanViewSet(viewsets.GenericViewSet):
         serializer = PlanCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
+            model = (serializer.validated_data.get("model") or "").strip()
             if serializer.validated_data.get("discovery_mode"):
                 plan = self.service.start_discovery(
                     request.user,
@@ -193,6 +198,7 @@ class PlanViewSet(viewsets.GenericViewSet):
                     conversation_id=serializer.validated_data.get(
                         "conversation_id", ""
                     ),
+                    model=model,
                 )
             else:
                 plan = self.service.create_plan(
@@ -201,6 +207,7 @@ class PlanViewSet(viewsets.GenericViewSet):
                     conversation_id=serializer.validated_data.get(
                         "conversation_id", ""
                     ),
+                    model=model,
                 )
         except ValueError as exc:
             return Response(

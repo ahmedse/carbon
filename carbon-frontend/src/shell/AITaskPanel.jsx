@@ -110,6 +110,8 @@ import AITaskPlanCard from './AITaskPlanCard';
 import PlanDiffReviewDialog from './PlanDiffReviewDialog';
 import StepEditDialog from './StepEditDialog';
 import DiscoveryComposer from './DiscoveryComposer';
+import PulseWorkspaceFooter from './PulseWorkspaceFooter';
+import { usePulsePrefs } from './pulsePrefs';
 import AgentTaskPicker from './AgentTaskPicker';
 import AgentStage, { stageForStatus } from './AgentStage';
 import TaskBoard from './TaskBoard';
@@ -739,10 +741,20 @@ ResultArtifactCard.propTypes = {
  *   (tasks|monitor|results) that drives this panel's internal tab, so the
  *   Monitor and Results activity icons open the right internal view.
  */
+function taskFooterStatus(phase, planStatus, errorMessage) {
+  const life = deriveLifecycleState(phase, planStatus);
+  if (life === 'running') return { variant: 'working', label: 'Working…' };
+  if (life === 'consent_needed') return { variant: 'needs-input', label: 'Needs approval' };
+  if (life === 'error') return { variant: 'transient', label: errorMessage || 'Failed' };
+  if (life === 'plan_pending') return { variant: 'working', label: 'Planning…' };
+  return { variant: 'ready', label: 'Ready' };
+}
+
 function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, seedBrief = null, onSeedBriefConsumed, pendingRevision = null, onPendingRevisionConsumed, onLifecycleStateChange, onSwitchToChat, externalTab = 'tasks' }) {
   const { token } = useAuth();
   const { notify, notifyFromError } = useNotification();
   const { t } = useTranslation('ai');
+  const pulsePrefs = usePulsePrefs();
   const notifyRef = useRef(notify);
   notifyRef.current = notify;
   const notifyFromErrorRef = useRef(notifyFromError);
@@ -1066,12 +1078,13 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   // poll every 2s (~1800/hour) and trip the production 1000/hour user cap.
   useEffect(() => {
     const planId = selectedPlan?.id;
-    if (!planId || phase !== 'working') return undefined;
+    const waiting = runSteps.some((s) => s.status === 'awaiting_approval');
+    if (!planId || phase !== 'working' || waiting) return undefined;
     const timer = setInterval(() => {
       refreshPlan(planId, { quiet: true });
     }, LIVE_PLAN_POLL_MS);
     return () => clearInterval(timer);
-  }, [selectedPlan?.id, phase, refreshPlan]);
+  }, [selectedPlan?.id, phase, refreshPlan, runSteps]);
 
   const applyPlanToView = useCallback((plan) => {
     // New plan → allow lifecycle default to re-apply (ADR-0043 soft defaults).
@@ -1187,12 +1200,9 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     chatFirst,
     selectedPlan?.id,
     selectedPlan?.status,
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: step status drives consent→Run
-    runSteps,
     phase,
     segment,
     handleSegmentChange,
-    selectedPlan,
   ]);
 
   // W5-B — discovery finished → open reviewable plan in the Review stage.
@@ -3041,8 +3051,14 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     );
   };
 
+  const footerStatus = taskFooterStatus(phase, selectedPlan?.status, errorMessage);
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, bgcolor: 'background.default' }}>
+      <Box
+        sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+        style={{ zoom: pulsePrefs.contentZoom }}
+      >
       {chatFirst ? (
         renderChatFirst()
       ) : (
@@ -3091,6 +3107,13 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           </Button>
         </>
       )}
+
+      </Box>
+      <PulseWorkspaceFooter
+        variant={footerStatus.variant}
+        label={footerStatus.label}
+        prefs={pulsePrefs}
+      />
 
       {/* W3-F — diff-review consent gate + step edit dialog (survive tab switches) */}
       <PlanDiffReviewDialog

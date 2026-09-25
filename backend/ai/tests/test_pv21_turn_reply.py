@@ -130,15 +130,43 @@ def test_a_number_still_ungrounded_after_one_retry_fails_visibly(monkeypatch):
 def test_writer_failure_is_said_not_templated(monkeypatch):
     from ai.envelope_service import FALLBACK_HEADLINE, EnvelopeWriteError
 
-    _stub_synth(monkeypatch, raises=EnvelopeWriteError("invalid_output"))
+    seen = _stub_synth(monkeypatch, raises=EnvelopeWriteError("invalid_output"))
     text, env, degraded = asyncio.run(speak_turn(
         _decision(), _ROWS, text="", user_message="what ?", instance_id="i", conversation_id="c",
     ))
+    assert seen["calls"] == 2
     assert degraded is not None and degraded.to_dict() == {"stage": "write", "cause": "invalid_output"}
     assert FALLBACK_HEADLINE not in text
     assert "could not write the summary" in text
     assert env["tables"] and env["charts"]
     assert any("degraded: write (invalid_output)" in c["text"] for c in env["caveats"])
+
+
+def test_invalid_output_recovers_on_one_retry(monkeypatch):
+    from ai.envelope import AnswerEnvelope
+    from ai.envelope_service import EnvelopeWriteError
+
+    seen = {"calls": 0}
+
+    async def fake(**kwargs):
+        seen["calls"] += 1
+        seen["message"] = kwargs["user_message"]
+        if seen["calls"] == 1:
+            raise EnvelopeWriteError("invalid_output")
+        return AnswerEnvelope(
+            headline="Gender is almost all unrecorded",
+            prose=[_GROUNDED],
+        )
+
+    monkeypatch.setattr("ai.envelope_service.synthesize_envelope", fake)
+    text, env, degraded = asyncio.run(speak_turn(
+        _decision(), _ROWS, text="", user_message="what ?", instance_id="i", conversation_id="c",
+    ))
+    assert seen["calls"] == 2
+    assert "valid JSON" in seen["message"]
+    assert degraded is None
+    assert _GROUNDED in text
+    assert env["tables"]
 
 
 def test_all_ungrounded_prose_is_a_degradation(monkeypatch):
@@ -211,10 +239,33 @@ def test_follow_up_renders_the_last_view_without_a_host_read(monkeypatch):
         instance_id="i", conversation_id="c", state=state,
     ))
     assert degraded is None
-    assert seen["calls"] == 1
-    assert text.startswith("Same split as a pie")
+    assert seen["calls"] == 0
+    assert "Count=554" in text and "Count=1" in text
     assert env["charts"][0]["chart_type"] == "pie"
     assert any(c["text"] == _GAP for c in env["caveats"])
+
+
+def test_answer_follow_up_restates_last_view_without_writer(monkeypatch):
+    seen = _stub_synth(monkeypatch, "Invented 90 percent", ["About 90 percent."])
+    state = ConversationState()
+    state.last_view = bound_view({
+        "turn": 1, "apis": ["list_payroll_runs"],
+        "tables": [{
+            "title": "Committed at",
+            "columns": ["Category", "Value"],
+            "rows": [["2026-09-25T18:48:02.408376+03:00", 1]],
+        }],
+        "charts": [],
+        "caveats": [],
+    })
+    text, env, degraded = asyncio.run(speak_turn(
+        _decision(op="answer"), [], text="", user_message="details of last one",
+        instance_id="i", conversation_id="c", state=state,
+    ))
+    assert degraded is None
+    assert seen["calls"] == 0
+    assert "2026-09-25T18:48:02.408376+03:00" in text
+    assert env["tables"]
 
 
 def test_view_is_bounded():

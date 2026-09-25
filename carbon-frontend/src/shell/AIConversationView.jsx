@@ -7,8 +7,6 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import DownloadIcon from '@mui/icons-material/Download';
 import HistoryIcon from '@mui/icons-material/History';
 import GroupIcon from '@mui/icons-material/Group';
-import TextDecreaseIcon from '@mui/icons-material/TextDecrease';
-import TextIncreaseIcon from '@mui/icons-material/TextIncrease';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { useAuth } from '../auth/AuthContext';
@@ -25,7 +23,6 @@ import {
   forkConversation,
   getConversation,
   listMessages,
-  listModels,
   recordFeedback,
   rejectSuggestion,
   resumeConversation,
@@ -42,12 +39,11 @@ import { buildConversationDocx, buildConversationHtml } from '../utils/exportDoc
 import AIMessageBubble from './AIMessageBubble';
 import AIContextPanel from './AIContextPanel';
 import AIInputBar from './AIInputBar';
-import AIWorkingIndicator from './AIWorkingIndicator';
 import AIOfflineBanner from './AIOfflineBanner';
-import AIStatusBar from './AIStatusBar';
-import PulsePresence from './PulsePresence';
-import AIModelSelect from './AIModelSelect';
+import AIWorkingIndicator from './AIWorkingIndicator';
+import PulseWorkspaceFooter from './PulseWorkspaceFooter';
 import ChatThreadStack from './ChatThreadStack';
+import { usePulsePrefs } from './pulsePrefs';
 import {
   MAIN_THREAD_ID,
   addThread,
@@ -109,6 +105,8 @@ function AIConversationView({
   onConversationUpdated,
   seedDraft = null,
   onSeedDraftConsumed,
+  planCarry = null,
+  onPlanCarryConsumed = null,
   process: processProp = null,
   processSwitching = false,
   onProcessChange = null,
@@ -118,6 +116,8 @@ function AIConversationView({
   const { t } = useTranslation('ai');
   const { token, user, userCapabilities, isGlobalAdminFlag } = useAuth();
   const { notify, notifyFromError } = useNotification();
+  const notifyFromErrorRef = useRef(notifyFromError);
+  notifyFromErrorRef.current = notifyFromError;
   const { executeMode, setExecuteMode } = useExecuteMode();
   const { transferTask } = useAITaskTransfer();
   const [pendingRoute, setPendingRoute] = useState(null);
@@ -137,29 +137,11 @@ function AIConversationView({
   // the narrated working stages. Expanded by default and kept after the turn.
   const [stageHistory, setStageHistory] = useState([]);
   const [thinkingExpanded, setThinkingExpanded] = useState(true);
-  const [denseThinking, setDenseThinking] = useState(() => {
-    try {
-      return localStorage.getItem('pulse.denseThinking') === '1';
-    } catch {
-      return false;
-    }
-  });
-  // The Think switch shows only when the understanding model can return a trace.
-  const [thinkingAvailable, setThinkingAvailable] = useState(false);
+  const pulsePrefs = usePulsePrefs();
+  const { contentZoom, denseThinking, selectedModel } = pulsePrefs;
   useEffect(() => {
-    if (!token) return undefined;
-    let live = true;
-    listModels(token)
-      .then((res) => {
-        if (live) setThinkingAvailable(Boolean(res?.thinking_available));
-      })
-      .catch(() => {
-        if (live) setThinkingAvailable(false);
-      });
-    return () => {
-      live = false;
-    };
-  }, [token]);
+    if (denseThinking) setThinkingExpanded(true);
+  }, [denseThinking]);
   const [sendMode, setSendMode] = useState('queue');
   const [process, setProcess] = useState(processProp === 'plan' ? 'plan' : 'ask');
   useEffect(() => {
@@ -184,19 +166,8 @@ function AIConversationView({
   const [mentions, setMentions] = useState([]);
   // Transient assistant text accumulated while a chat response streams in.
   const [streamingText, setStreamingText] = useState(null);
-  // Chat-model override chosen in the footer picker (Phase 18).
-  const [selectedModel, setSelectedModel] = useState(null);
   // Phase 5B — pinned "Since your last visit" catch-up summary (null = no banner).
   const [catchUp, setCatchUp] = useState(null);
-  // Resizable content: zoom multiplier for the message area (persisted).
-  const [contentZoom, setContentZoom] = useState(() => {
-    try {
-      const saved = Number(window.localStorage.getItem('ai.contentZoom'));
-      return saved >= 0.8 && saved <= 1.4 ? saved : 1;
-    } catch {
-      return 1;
-    }
-  });
   // In-session threads (Copilot-style topics) — client membership only.
   const [threadState, setThreadState] = useState(() => loadThreadState(conversationId));
   const threadStateRef = useRef(threadState);
@@ -217,17 +188,6 @@ function AIConversationView({
     threadStateRef.current = loaded;
   }, [conversationId]);
 
-  const adjustZoom = useCallback((delta) => {
-    setContentZoom((z) => {
-      const next = Math.min(1.4, Math.max(0.8, Math.round((z + delta) * 10) / 10));
-      try { window.localStorage.setItem('ai.contentZoom', String(next)); } catch { /* ignore */ }
-      return next;
-    });
-  }, []);
-  const resetZoom = useCallback(() => {
-    setContentZoom(1);
-    try { window.localStorage.removeItem('ai.contentZoom'); } catch { /* ignore */ }
-  }, []);
   // Guard so `resume` fires exactly once per conversation open (idempotent).
   const resumeRequestedRef = useRef(null);
   const scrollRef = useRef(null);
@@ -257,18 +217,18 @@ function AIConversationView({
       setMessages(initial);
       setHasMore(initial.length >= 50);
     } catch (err) {
-      notifyFromError(err, 'Could not load conversation');
+      notifyFromErrorRef.current(err, 'Could not load conversation');
     } finally {
       setLoading(false);
     }
-  }, [token, conversationId, notifyFromError]);
+  }, [token, conversationId]);
 
   useEffect(() => {
     setLoading(true);
     setConversation(null);
     setMessages([]);
     load();
-  }, [load]);
+  }, [conversationId, load]);
 
   // Kebab clear / undo-clear updates tab metadata in the workspace; adopt the
   // working-context mutation so the Restore divider appears without a reload.
@@ -333,7 +293,7 @@ function AIConversationView({
   }, [workingStage]);
 
   useEffect(() => {
-    const isWorking = conversation?.status === 'working' || sending;
+    const isWorking = sending;
     if (!isWorking) {
       setWorkingStartedAt(null);
       return;
@@ -405,10 +365,6 @@ function AIConversationView({
     setTransientError(false);
   }, []);
 
-  const handleModelChange = useCallback((modelId) => {
-    setSelectedModel(modelId);
-  }, []);
-
   // Shared SSE error handling for normal sends and retry/edit regeneration.
   const onStreamError = useCallback(
     (genId, message, errorKind, fallback = 'Could not send message') => {
@@ -417,8 +373,21 @@ function AIConversationView({
       setStreamingText(null);
       setWorkingStage(null);
       setStageHistory([]);
-      setThinkingExpanded(false);
       setSending(false);
+      setConversation((prev) => (
+        prev?.status === 'working' ? { ...prev, status: 'failed' } : prev
+      ));
+      const text = message || fallback;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `local-error-${Date.now()}`,
+          role: 'assistant',
+          content: text,
+          status: 'failed',
+          created_at: new Date().toISOString(),
+        },
+      ]);
       if (errorKind === 'transient') {
         setTransientError(true);
       } else if (
@@ -449,7 +418,6 @@ function AIConversationView({
       setProviderOffline(false);
       setTransientError(false);
       setStageHistory([]);
-      setThinkingExpanded(true);
 
       if (type === 'chat') {
         setStreamingText('');
@@ -492,7 +460,7 @@ function AIConversationView({
       await sendMessageStream(token, conversationId, content, {
         workspaceContext,
         pulseMode: process,
-        denseThinking: thinkingAvailable && denseThinking,
+        denseThinking,
         model: selectedModel || undefined,
         signal: controller.signal,
         onChunk: (delta) => {
@@ -527,9 +495,19 @@ function AIConversationView({
     },
     [
       token, conversationId, finishStream, onStreamError, selectedModel, process,
-      persistThreadState, thinkingAvailable, denseThinking,
+      persistThreadState, denseThinking,
     ],
   );
+
+  // Switch-to-Plan opens this chat with the Ask request already in hand.
+  const planCarrySent = useRef(false);
+  useEffect(() => {
+    if (!planCarry || planCarrySent.current) return undefined;
+    planCarrySent.current = true;
+    onPlanCarryConsumed?.();
+    streamSend(planCarry);
+    return undefined;
+  }, [planCarry, streamSend, onPlanCarryConsumed]);
 
   const handleSend = useCallback(
     (content, extraMentions = []) => {
@@ -545,19 +523,24 @@ function AIConversationView({
     [handleSend],
   );
 
-  /** Bubble CTAs: panel=plan flips the Ask/Plan dial; everything else → workspace. */
+  /** Bubble CTAs: panel=plan opens Plan with this request and the recent thread. */
   const handleBubbleOpenPanel = useCallback(
     (panel, planId, opts = {}) => {
       if (panel === 'plan') {
-        // Already on Plan — stale "Switch to Plan" from an older Ask turn.
         if (process === 'plan') return;
-        setProcess('plan');
-        onProcessChange?.('plan');
+        const turns = messages.filter((m) => m && (m.role === 'user' || m.role === 'assistant') && m.content);
+        const request = [...turns].reverse().find((m) => m.role === 'user')?.content
+          || opts.draft
+          || '';
+        const context = turns.slice(-6).map(
+          (m) => `${m.role}: ${String(m.content).slice(0, 400)}`,
+        ).join('\n');
+        onProcessChange?.('plan', { request: String(request).trim(), context });
         return;
       }
       onOpenPanel?.(panel, planId, opts);
     },
-    [onOpenPanel, onProcessChange, process],
+    [onOpenPanel, onProcessChange, process, messages],
   );
 
   const handleSelectThread = useCallback(
@@ -630,7 +613,6 @@ function AIConversationView({
     setStreamingText(null);
     setWorkingStage(null);
     setStageHistory([]);
-    setThinkingExpanded(false);
     setStopped(true);
     setConversation((prev) => (
       prev?.status === 'working' ? { ...prev, status: 'pending' } : prev
@@ -955,7 +937,6 @@ function AIConversationView({
       setProviderOffline(false);
       setTransientError(false);
       setStageHistory([]);
-      setThinkingExpanded(true);
       if (type === 'chat') {
         setStreamingText('');
       } else {
@@ -967,6 +948,7 @@ function AIConversationView({
 
       await retryMessageStream(token, conversationId, userMessageId, {
         content,
+        denseThinking,
         model: selectedModel || undefined,
         signal: controller.signal,
         onChunk: (delta) => {
@@ -998,7 +980,7 @@ function AIConversationView({
         setSending(false);
       }
     },
-    [token, conversationId, finishStream, onStreamError, selectedModel],
+    [token, conversationId, finishStream, onStreamError, selectedModel, denseThinking],
   );
 
   // Phase 19-B — "Retry" on an assistant reply: re-run its parent user turn.
@@ -1364,7 +1346,8 @@ function AIConversationView({
     );
   }
 
-  const isWorking = conversation.status === 'working' || sending;
+  // Only a stream this tab started. A refreshed "working" row is not a live turn.
+  const isWorking = sending;
   const isOwner = !conversation || conversation.visibility !== 'shared' || String(conversation.user_id) === String(user?.id);
   const convStatus = conversation.status;
   const isStreaming = Boolean(streamingText);
@@ -1886,74 +1869,13 @@ function AIConversationView({
         </Alert>
       )}
 
-      {/* Footer toolbar: status + execute + share + export */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 0.5,
-          px: 1.25,
-          minHeight: 28,
-          borderTop: 1,
-          borderColor: 'divider',
-          bgcolor: executeMode ? 'warning.50' : 'background.default',
-        }}
+      <PulseWorkspaceFooter
+        variant={statusVariant}
+        label={statusLabel}
+        onRetry={handleRetry}
+        showModel={isOwner}
+        prefs={pulsePrefs}
       >
-        <AIStatusBar
-          variant={statusVariant}
-          label={statusLabel}
-          onRetry={handleRetry}
-          denseThinking={denseThinking}
-          onDenseThinkingChange={thinkingAvailable ? (on) => {
-            setDenseThinking(on);
-            try {
-              localStorage.setItem('pulse.denseThinking', on ? '1' : '0');
-            } catch {
-              /* ignore quota / private mode */
-            }
-          } : undefined}
-        />
-        <PulsePresence />
-        <Tooltip title={t('textSize')}>
-          <Stack direction="row" alignItems="center" spacing={0.25} sx={{ borderLeft: 1, borderColor: 'divider', pl: 0.5 }}>
-            <IconButton
-              size="small"
-              aria-label={t('decreaseTextSize')}
-              disabled={contentZoom <= 0.8}
-              onClick={() => adjustZoom(-0.1)}
-              sx={{ p: 0.25 }}
-            >
-              <TextDecreaseIcon sx={{ fontSize: 13 }} />
-            </IconButton>
-            <Typography
-              variant="caption"
-              onClick={resetZoom}
-              role="button"
-              tabIndex={0}
-              aria-label={t('resetTextSize')}
-              sx={{
-                minWidth: 32,
-                textAlign: 'center',
-                fontSize: '0.6875rem',
-                lineHeight: 1,
-                cursor: 'pointer',
-                userSelect: 'none',
-              }}
-            >
-              {Math.round(contentZoom * 100)}%
-            </Typography>
-            <IconButton
-              size="small"
-              aria-label={t('increaseTextSize')}
-              disabled={contentZoom >= 1.4}
-              onClick={() => adjustZoom(0.1)}
-              sx={{ p: 0.25 }}
-            >
-              <TextIncreaseIcon sx={{ fontSize: 13 }} />
-            </IconButton>
-          </Stack>
-        </Tooltip>
-        {isOwner && <AIModelSelect onChange={handleModelChange} />}
         {isOwner && (
           <Tooltip title={conversation.visibility === 'shared' ? t('unshare') : t('share')}>
             <span>
@@ -1974,7 +1896,7 @@ function AIConversationView({
           <MenuItem onClick={() => handleExportRich('docx')} sx={{ fontSize: '0.8125rem' }}>Word (.docx)</MenuItem>
           <MenuItem onClick={() => handleExport('json')} sx={{ fontSize: '0.8125rem' }}>JSON (.json)</MenuItem>
         </Menu>
-      </Box>
+      </PulseWorkspaceFooter>
       </Box>  {/* inner column */}
     </Box>
       <KeyboardShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
@@ -2003,6 +1925,8 @@ AIConversationView.propTypes = {
   onConversationUpdated: PropTypes.func,
   seedDraft: PropTypes.string,
   onSeedDraftConsumed: PropTypes.func,
+  planCarry: PropTypes.string,
+  onPlanCarryConsumed: PropTypes.func,
   process: PropTypes.oneOf(['ask', 'plan']),
   processSwitching: PropTypes.bool,
   onProcessChange: PropTypes.func,

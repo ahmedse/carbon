@@ -3,7 +3,7 @@ import { API_BASE_URL, API_ROUTES } from "../config";
 import { fetchModules } from "../api/modules";
 import { apiFetch, refreshAccessToken } from "../api/api"; // <-- Add this import
 import { DATASCHEMA_VIEW } from "../capabilities";
-import { resolveLandingPath } from "../shell/sessionRestore";
+import { applyWorkspaceForUser, clearAuthStorage, resolveLandingPath } from "../shell/sessionRestore";
 
 // --- Helpers for token management ---
 // refreshAccessToken is imported from api.js (single source of truth)
@@ -310,13 +310,17 @@ export const AuthProvider = ({ children }) => {
         // Best-effort — reconciliation will fall back to localStorage.
       }
 
+      // Re-bind last Nibras route + Pulse surface for this username before
+      // computing landing — session expiry must not dump the operator on Home.
+      applyWorkspaceForUser(username);
+
       // Build context + get landing path for smart redirect.
       const ctx = await buildContext(userObj);
 
       debug("Login success", userObj);
       loginInFlightRef.current = false;
       setLoading(false);
-      return { requireProjectSelection: false, landingPath: ctx?.landingPath || '/dashboard' };
+      return { requireProjectSelection: false, landingPath: ctx?.landingPath || resolveLandingPath('/') };
     } catch (err) {
       setLoading(false);
       loginInFlightRef.current = false;
@@ -343,9 +347,9 @@ export const AuthProvider = ({ children }) => {
       // there is no remembered path beyond the default dashboard.
       const isAdmin = (u.roles || []).some(r => r.active !== false && r.role === 'admins_group');
       const isDataOwner = (u.roles || []).some(r => r.active !== false && r.role === 'dataowners_group');
-      let landingPath = resolveLandingPath('/dashboard');
+      let landingPath = resolveLandingPath('/');
       if (
-        landingPath === '/dashboard'
+        (landingPath === '/' || landingPath === '/dashboard')
         && !isAdmin
         && isDataOwner
         && modules.length > 0
@@ -405,7 +409,7 @@ export const AuthProvider = ({ children }) => {
     setTablesByModule({});
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
     if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
-    localStorage.clear();
+    clearAuthStorage();
     window.location.href = `${import.meta.env.VITE_BASE}login?expired=1`;
   };
 

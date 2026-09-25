@@ -649,6 +649,7 @@ class SoftSurfacesMixin:
                 state=state,
                 executed=rows,
                 surface=surface,
+                catalog=(instance_config or {}).get("api_catalog"),
             )
             # A tool entry ran as itself; its row says so, so its actions
             # (download, memory card) reach the reply.

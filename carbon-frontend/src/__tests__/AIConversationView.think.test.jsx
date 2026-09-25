@@ -1,4 +1,4 @@
-// The Think switch shows only when the understanding model can return a trace.
+// The Think switch stays in the status bar and remembers the last choice.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -69,17 +69,24 @@ describe('Think switch', () => {
     expect(await screen.findByRole('checkbox', { name: /Think/i })).toBeTruthy();
   });
 
-  it('stays hidden when the model has no reasoning mode', async () => {
+  it('stays visible when the model has no reasoning mode', async () => {
     listModels.mockResolvedValue({ models: [], thinking_available: false });
     renderView();
-    await waitFor(() => expect(listModels).toHaveBeenCalled());
-    expect(screen.queryByRole('checkbox', { name: /Think/i })).toBeNull();
+    expect(await screen.findByRole('checkbox', { name: /Think/i })).toBeTruthy();
   });
 
-  it('stays hidden when the flag cannot be read', async () => {
+  it('stays visible when the flag cannot be read', async () => {
     listModels.mockRejectedValue(new Error('offline'));
     renderView();
-    await waitFor(() => expect(listModels).toHaveBeenCalled());
-    expect(screen.queryByRole('checkbox', { name: /Think/i })).toBeNull();
+    expect(await screen.findByRole('checkbox', { name: /Think/i })).toBeTruthy();
+  });
+
+  it('restores the last choice from this browser', async () => {
+    localStorage.setItem('pulse.denseThinking', '1');
+    listModels.mockResolvedValue({ models: [], thinking_available: false });
+    renderView();
+    const sw = await screen.findByRole('checkbox', { name: /Think/i });
+    expect(sw).toBeChecked();
+    localStorage.removeItem('pulse.denseThinking');
   });
 });

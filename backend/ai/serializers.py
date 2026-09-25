@@ -127,6 +127,7 @@ class EditMessageSerializer(serializers.Serializer):
 class RetryMessageSerializer(serializers.Serializer):
     # Optional model override (Phase 18 reuse) for the retry/regenerate path.
     model = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
+    dense_thinking = serializers.BooleanField(required=False, default=False)
 
 
 class ConversationListSerializer(serializers.Serializer):

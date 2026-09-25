@@ -2,6 +2,7 @@
 
 import { API_BASE_URL, API_ROUTES } from "../config";
 import { isJwtExpired } from "../jwt";
+import { clearAuthStorage } from "../shell/sessionRestore";
 import { normalizeError } from "../utils/errorNormalizer";
 
 /** Joins base URL and path, stripping duplicate slashes. */
@@ -216,7 +217,7 @@ export async function authFetch(
 
 /** Logs out globally: clears user storage and redirects to login with expired param. */
 function globalLogout() {
-  localStorage.clear();
+  clearAuthStorage();
   window.location.href = `${import.meta.env.VITE_BASE}login?expired=1`;
 }
 

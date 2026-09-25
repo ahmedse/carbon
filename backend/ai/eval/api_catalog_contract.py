@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-READ_KINDS = frozenset({"balance", "history", "detail", "read"})
+READ_KINDS = frozenset({"balance", "history", "detail", "list", "read"})
 WRITE_KINDS = frozenset({"write", "request"})
 
 

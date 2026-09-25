@@ -36,6 +36,7 @@ class PlanStep:
                                      # (edited while paused; honored on resume)
     gap: str | None = None           # I5: intent with no capability. Not a host call.
     guard: dict | None = None        # I4: {step, field, value}. Exclusive with a sibling.
+    await_user: bool = False         # Stop the run until the operator answers.
 
 
 @dataclass
@@ -1355,7 +1356,10 @@ class SkillAwarePlanner:
                 dry_run_supported=s.get("dry_run_supported", False),
                 agent_role=s.get("agent_role", "orchestrator"),
                 instructions=s.get("instructions"),
+                await_user=bool(s.get("await_user")),
             )
+            if step.await_user:
+                step.tool_name = "ask_clarification"
             steps.append(step)
 
         from ai.engine.agent.tools import get_tool_executors

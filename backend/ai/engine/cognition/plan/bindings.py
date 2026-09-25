@@ -28,6 +28,7 @@ class Binding:
     key: str = ""
     from_step: int | None = None
     options: list[dict] = field(default_factory=list)
+    slot: str = ""  # path | query
 
 
 def _unwrap_host(raw: Any) -> Any:
@@ -154,6 +155,7 @@ def resolve_bindings(
                 tool_args=args,
                 key=key,
                 from_step=src,
+                slot="path",
                 options=[
                     {"value": r.get(key_field), "label": _label(r, key_field)}
                     for r in rows
@@ -181,6 +183,7 @@ def resolve_bindings(
                 tool_args=args,
                 key=key,
                 from_step=spec.get("step"),
+                slot="query",
                 options=[
                     {"value": r.get(key_field), "label": _label(r, key_field)}
                     for r in rows

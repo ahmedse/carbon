@@ -297,6 +297,15 @@ describe('AIWorkspace mode split (Phase W5-A / ADR-0014)', () => {
       expect(screen.getByTestId('task-panel')).toHaveAttribute('data-tab', 'monitor'),
     );
     expect(screen.getByTestId('task-panel')).toBeInTheDocument();
+    expect(localStorage.getItem('carbon-ai-agent-view')).toBe('monitor');
+  });
+
+  it('restores the last Agent view on reopen', async () => {
+    localStorage.setItem('carbon-ai-cockpit', 'off');
+    localStorage.setItem('carbon-ai-mode', 'agent');
+    localStorage.setItem('carbon-ai-agent-view', 'monitor');
+    render(<AIWorkspace onClose={vi.fn()} />);
+    expect(await screen.findByTestId('task-panel')).toHaveAttribute('data-tab', 'monitor');
   });
 
   it('switches the Agent task panel to the Results tab via the activity bar (W5-D)', async () => {

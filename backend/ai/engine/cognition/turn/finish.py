@@ -65,7 +65,7 @@ async def write_answer(
     instance_id: str,
     conversation_id: str,
 ) -> tuple[str, dict]:
-    """One writer call, retried once when a number is not in the conversation.
+    """One writer call, retried once when empty or a number is not in the conversation.
 
     A second ungrounded or empty reply returns no text. The caller shows a
     typed error. The prose is never cut.
@@ -123,7 +123,11 @@ async def write_answer(
         bad = ungrounded_numbers(text, allowed)
         if not text:
             usage["cause"] = "empty_output"
-            break
+            note = (
+                "(Write a short reply from the conversation. "
+                "Use only numbers that appear in it.)"
+            )
+            continue
         if bad:
             usage["cause"] = "ungrounded"
             note = (

@@ -19,6 +19,20 @@ from ai.engine.cognition.turn.grounding import ungrounded_numbers
 
 ExecuteTool = Callable[[str, dict], Awaitable[Any]]
 
+_WRITE_RETRY_NOTE = {
+    "invalid_output": (
+        "(The last summary was not valid JSON. Reply again with the same "
+        "schema, using only numbers from the tool results.)"
+    ),
+    "empty_output": (
+        "(Write a short headline and at least one sentence from the tool "
+        "results. Use only numbers that appear in them.)"
+    ),
+    "model_error": (
+        "(The last write call failed. Try once more from the tool results.)"
+    ),
+}
+
 
 def _reply_for(
     cmd: Command, decision: Decision, *, surface: str | None = None,
@@ -99,7 +113,10 @@ async def _execute_bound_read(
     user_message: str,
     args: dict | None = None,
     executed: list[dict] | None = None,
+    catalog: list | None = None,
 ) -> str | None:
+    from ai.engine.cognition.turn.catalog_render import catalog_entry_named
+
     payload = await execute_tool(api_name, dict(args or {}))
     tool_args: dict[str, Any] = {"api_name": api_name}
     if args:
@@ -116,6 +133,7 @@ async def _execute_bound_read(
         api_name=api_name,
         user_message=user_message,
         unread_text=False,
+        catalog_entry=catalog_entry_named(catalog, api_name),
     )
     # A restatement with a number the payload lacks is not edited: it is
     # withheld, and the writer speaks from the payload instead (ADR-0056).
@@ -132,6 +150,7 @@ async def act_on_decision(
     state: Any = None,
     executed: list[dict] | None = None,
     surface: str | None = None,
+    catalog: list | None = None,
 ) -> str | None:
     """Reply text, or None to fall through to the legacy turn.
 
@@ -168,6 +187,7 @@ async def act_on_decision(
             user_message=user_message,
             args=args or None,
             executed=executed,
+            catalog=catalog,
         )
         if text:
             texts.append(text)
@@ -265,9 +285,10 @@ async def narrate_envelope(
     """Headline and prose written for this turn's message, from ``evidence`` only.
 
     Data blocks stay deterministic. The model's words are shown as written:
-    a number not in the evidence gets one retry naming it, then the turn
-    fails visibly (ADR-0056). When the writer fails the reply says so and carries
-    a typed ``Degradation`` (ADR-0053); it never returns the template.
+    a number not in the evidence, bad JSON, an empty body, or a model flake
+    each get one retry, then the turn fails visibly (ADR-0056). When the
+    writer fails the reply says so and carries a typed ``Degradation``
+    (ADR-0053); it never returns the template.
     None only when the writer is switched off by configuration.
     """
     from ai.engine.core.config import get_settings
@@ -289,7 +310,9 @@ async def narrate_envelope(
     headline = ""
     prose: list[str] = []
     note = ""
-    for _attempt in range(2):
+    # One retry on flake (bad JSON / empty / model / ungrounded). A second
+    # failure stays typed — never a template that looks like an answer.
+    for attempt in range(2):
         cause = ""
         try:
             with stage("draft"):
@@ -304,21 +327,25 @@ async def narrate_envelope(
             cause = exc.cause
         except Exception:  # noqa: BLE001 — reported below as a typed degradation
             cause = "model_error"
-        if cause:
+        if not cause:
+            headline = (typed.headline or "").strip() if typed is not None else ""
+            prose = [p.strip() for p in (typed.prose if typed is not None else []) or [] if p and p.strip()]
+            bad = ungrounded_numbers("\n".join([headline, *prose]), payloads)
+            if not prose:
+                cause = "empty_output"
+            elif bad:
+                cause = "ungrounded"
+                note = (
+                    "(These numbers are not in the tool results: "
+                    f"{', '.join(bad[:8])}. Use only numbers that appear in them.)"
+                )
+            else:
+                break
+        if cause == "no_rows" or attempt:
             break
-        headline = (typed.headline or "").strip() if typed is not None else ""
-        prose = [p.strip() for p in (typed.prose if typed is not None else []) or [] if p and p.strip()]
-        bad = ungrounded_numbers("\n".join([headline, *prose]), payloads)
-        if not prose:
-            cause = "empty_output"
-        elif bad:
-            cause = "ungrounded"
-            note = (
-                "(These numbers are not in the tool results: "
-                f"{', '.join(bad[:8])}. Use only numbers that appear in them.)"
-            )
-            continue
-        break
+        if cause != "ungrounded":
+            note = _WRITE_RETRY_NOTE.get(cause, _WRITE_RETRY_NOTE["invalid_output"])
+        continue
     if cause:
         failed = Degradation(stage="write", cause=cause)
         line = degradation_sentence(failed, language)
@@ -389,19 +416,32 @@ async def speak_turn(
     language = decision.language if decision else "en"
     understood = decision.reason if decision else ""
     view = last_view(state)
-    if not executed and lead is not None and lead.op == "continue" and view:
+    if (
+        not executed
+        and lead is not None
+        and lead.op in {"continue", "answer"}
+        and view
+    ):
+        from ai.engine.cognition.turn.catalog_render import restate_last_view
+
         envelope = _view_envelope(view, decision_chart(decision))
-        evidence = [{"tool_name": "last_view", "result": {
-            "tables": envelope["tables"], "charts": envelope["charts"],
-        }}]
-        narrated = await narrate_envelope(
-            envelope, evidence, user_message=user_message, understood=understood,
-            language=language, instance_id=instance_id, conversation_id=conversation_id,
-        )
-        if narrated is None:
-            return "", envelope, None
-        _remember_view(state, narrated[1], [])
-        return narrated
+        restated_view = restate_last_view(view, language)
+        if restated_view:
+            spoken = {**envelope, "headline": "", "prose": [restated_view]}
+            _remember_view(state, spoken, [])
+            return restated_view, spoken, None
+        if lead.op == "continue":
+            evidence = [{"tool_name": "last_view", "result": {
+                "tables": envelope["tables"], "charts": envelope["charts"],
+            }}]
+            narrated = await narrate_envelope(
+                envelope, evidence, user_message=user_message, understood=understood,
+                language=language, instance_id=instance_id, conversation_id=conversation_id,
+            )
+            if narrated is None:
+                return "", envelope, None
+            _remember_view(state, narrated[1], [])
+            return narrated
 
     restated = bool((text or "").strip())
     spoken, envelope = speak_rows(decision, executed, text=text, user_message=user_message)

@@ -80,6 +80,16 @@ describe('AIInputBar Copilot-style growth (Phase 23-C)', () => {
     expect(onSend).not.toHaveBeenCalled();
   });
 
+  it('exposes a mouse resize handle on the composer', () => {
+    renderBar();
+    const handle = screen.getByTestId('composer-resize');
+    expect(handle).toBeTruthy();
+    fireEvent.pointerDown(handle, { button: 0, clientY: 400 });
+    fireEvent.pointerMove(window, { clientY: 280 });
+    fireEvent.pointerUp(window);
+    expect(screen.getByLabelText('Message input')).toBeTruthy();
+  });
+
   it('handles a zero-height layout gracefully (fallback default rows)', () => {
     renderBar();
     const input = screen.getByLabelText('Message input');

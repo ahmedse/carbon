@@ -39,6 +39,10 @@ const PLACEHOLDER_KEYS = {
   default: 'placeholderDefault',
 };
 
+const COMPOSER_HEIGHT_KEY = 'pulse.composerHeight';
+const COMPOSER_MIN_PX = 72;
+const COMPOSER_ROW_PX = 20;
+
 
 
 const MENTION_KINDS = ['table', 'rule', 'field', 'module', 'org-unit'];
@@ -166,6 +170,16 @@ function AIInputBar({
   // clipping. Measured from the parent (fixed-height flex column), so there
   // is no feedback loop between growth and measurement.
   const [maxRows, setMaxRows] = useState(10);
+  const [maxHeightPx, setMaxHeightPx] = useState(360);
+  const [composerHeight, setComposerHeight] = useState(() => {
+    try {
+      const n = Number(localStorage.getItem(COMPOSER_HEIGHT_KEY));
+      return Number.isFinite(n) && n >= COMPOSER_MIN_PX ? n : null;
+    } catch {
+      return null;
+    }
+  });
+  const dragRef = useRef(null);
   const [value, setValue] = useState(draft);
   // Stage: null | 'kind' | 'entity' | 'slash' | 'at'
   const [stage, setStage] = useState(null);
@@ -219,7 +233,9 @@ function AIInputBar({
     if (!el) return undefined;
     const compute = () => {
       const h = el.clientHeight || 600;
-      const rows = Math.max(6, Math.min(18, Math.round((h * 0.55) / 20)));
+      const cap = Math.max(COMPOSER_MIN_PX, Math.round(h * 0.55));
+      const rows = Math.max(6, Math.min(18, Math.round(cap / COMPOSER_ROW_PX)));
+      setMaxHeightPx(cap);
       setMaxRows(rows);
     };
     compute();
@@ -231,6 +247,48 @@ function AIInputBar({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  const persistHeight = useCallback((px) => {
+    try {
+      if (px == null) localStorage.removeItem(COMPOSER_HEIGHT_KEY);
+      else localStorage.setItem(COMPOSER_HEIGHT_KEY, String(px));
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }, []);
+
+  const startResize = useCallback((event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const startY = event.clientY;
+    const startH = composerHeight
+      || inputRef.current?.offsetHeight
+      || COMPOSER_MIN_PX;
+    dragRef.current = { startY, startH, last: startH };
+    const onMove = (ev) => {
+      if (!dragRef.current) return;
+      const next = Math.max(
+        COMPOSER_MIN_PX,
+        Math.min(maxHeightPx, dragRef.current.startH + (dragRef.current.startY - ev.clientY)),
+      );
+      dragRef.current.last = next;
+      setComposerHeight(next);
+    };
+    const onUp = () => {
+      const last = dragRef.current?.last;
+      dragRef.current = null;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      if (Number.isFinite(last)) persistHeight(last);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }, [composerHeight, maxHeightPx, persistHeight]);
+
+  const resetResize = useCallback(() => {
+    setComposerHeight(null);
+    persistHeight(null);
+  }, [persistHeight]);
 
   // Fetch entities when the entity query changes (debounced via useEffect cleanup).
   useEffect(() => {
@@ -528,12 +586,40 @@ function AIInputBar({
         }}
       >
         <Box
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label={t('resizeComposer', { defaultValue: 'Resize input' })}
+          data-testid="composer-resize"
+          onPointerDown={startResize}
+          onDoubleClick={resetResize}
+          sx={{
+            height: 8,
+            cursor: 'ns-resize',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            touchAction: 'none',
+            userSelect: 'none',
+            '&:hover > span, &:active > span': { bgcolor: 'primary.main' },
+          }}
+        >
+          <Box
+            component="span"
+            sx={{
+              width: 36,
+              height: 3,
+              borderRadius: 1,
+              bgcolor: 'action.disabled',
+            }}
+          />
+        </Box>
+        <Box
           sx={{
             display: 'flex',
             alignItems: 'center',
             gap: 1,
             px: 1,
-            pt: 0.75,
+            pt: 0.25,
             pb: 0.25,
           }}
         >
@@ -565,8 +651,8 @@ function AIInputBar({
           inputRef={inputRef}
           fullWidth
           multiline
-          minRows={3}
-          maxRows={Math.min(8, maxRows)}
+          minRows={composerHeight ? 1 : 3}
+          maxRows={composerHeight ? undefined : Math.min(8, maxRows)}
           size="small"
           value={value}
           onChange={handleChange}
@@ -580,10 +666,13 @@ function AIInputBar({
               lineHeight: 1.7,
               px: 1,
               py: 0.5,
+              alignItems: 'flex-start',
+              ...(composerHeight ? { height: composerHeight, maxHeight: maxHeightPx } : {}),
             },
             '& .MuiInputBase-input': {
               overflowY: 'auto',
               unicodeBidi: 'plaintext',
+              ...(composerHeight ? { height: '100% !important', maxHeight: '100%' } : {}),
             },
           }}
           inputProps={{ 'aria-label': t('messageInput'), dir: 'auto' }}

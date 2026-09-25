@@ -1146,6 +1146,23 @@ class CarbonIntelligence:
             usage.setdefault("model", model)
         return usage
 
+    def _release_dead_turn(self, conversation) -> None:
+        """A refresh must not spin forever after the stream is gone.
+
+        ``working`` is live only while this process still holds the generation.
+        A finished, failed, or restarted turn drops back to a terminal status.
+        """
+        if conversation.status != "working":
+            return
+        if GENERATIONS.is_live(str(conversation.id)):
+            return
+        latest = conversation.generations.order_by("-started_at").first()
+        if latest is not None and latest.status == "running":
+            latest.status = "failed"
+            latest.save(update_fields=["status"])
+        conversation.status = "failed" if latest is not None and latest.status == "failed" else "pending"
+        conversation.save(update_fields=["status"])
+
     def get_conversation(
         self,
         user,
@@ -1155,6 +1172,8 @@ class CarbonIntelligence:
         conversation = self._get_accessible_conversation(user, conversation_id)
         if conversation is None:
             raise ValueError(f"Conversation {conversation_id} not found.")
+
+        self._release_dead_turn(conversation)
 
         data = _serialize_conversation(conversation)
         data["messages"] = [
@@ -2484,6 +2503,7 @@ class CarbonIntelligence:
         conversation_id: str,
         user_message_id: str,
         model: str | None = None,
+        dense_thinking: bool = False,
     ):
         """Streaming variant of :meth:`retry_message` (SSE path).
 
@@ -2604,6 +2624,7 @@ class CarbonIntelligence:
                     scope=scope,
                     model=resolved_model,
                     temperature=resolved_temperature,
+                    dense_thinking=bool(dense_thinking),
                 )
 
                 partial_parts: list[str] = []

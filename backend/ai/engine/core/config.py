@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     # ── LLM ──
     LLM_API_KEY: str = ""
     LLM_BASE_URL: str = ""
+    # Direct DeepSeek key. Used for deepseek-* models and as the one retry
+    # when the primary provider (Poe) times out or returns a 5xx.
+    DEEPSEEK_API_KEY: str = ""
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com/v1"
     LLM_MODEL: str = "anthropic/claude-haiku-4.5"          # deep mode / fallback
     LLM_NORMAL_MODEL: str = "anthropic/claude-haiku-4.5"   # normal mode
     LLM_EMBEDDING_MODEL: str = "text-embedding-3-small"

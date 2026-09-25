@@ -514,6 +514,9 @@ def apply_plan_contract(
     )
 
     findings: list[Finding] = []
+    for step in steps:
+        if bool(getattr(step, "await_user", False)):
+            step.tool_name = "ask_clarification"
     names = catalog_names if catalog_names is not None else {
         str(e.get("name") or "") for e in (api_catalog or []) if isinstance(e, dict)
     }

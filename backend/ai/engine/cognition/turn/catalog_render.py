@@ -80,6 +80,22 @@ def _scope_prefix(scope_key: str, language: str) -> str:
     return str(row.get(lang) or row.get("en") or "").strip()
 
 
+_MAX_DECLARED_ROWS = 5
+_MAX_DECLARED_FIELDS = 12
+_DECLARED_KINDS = frozenset({"list", "detail", "read"})
+
+
+def catalog_entry_named(catalog: list | None, api_name: str) -> dict | None:
+    """The catalog dict whose ``name`` is ``api_name``, or None."""
+    wanted = str(api_name or "").strip()
+    if not wanted:
+        return None
+    for entry in catalog or []:
+        if isinstance(entry, dict) and str(entry.get("name") or "").strip() == wanted:
+            return entry
+    return None
+
+
 def resolve_render_meta(api_name: str, catalog_entry: dict | None = None) -> dict[str, str] | None:
     """Return ``{kind, empty_render, scope?}`` for a catalog GET read."""
     api = str(api_name or "").strip()
@@ -286,6 +302,126 @@ def _format_permission_row(row: dict, *, ar: bool) -> str:
     return ", ".join(bits) if not ar else "، ".join(bits)
 
 
+def _declared_fields(entry: dict | None) -> list[str]:
+    if not isinstance(entry, dict):
+        return []
+    raw = entry.get("returns")
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for item in raw:
+        name = str(item or "").strip()
+        if name and name not in out:
+            out.append(name)
+        if len(out) >= _MAX_DECLARED_FIELDS:
+            break
+    return out
+
+
+def _declared_cell(row: dict, field: str) -> str | None:
+    if field not in row:
+        return None
+    value = row.get(field)
+    if value is None or value == "":
+        return None
+    if isinstance(value, dict):
+        text = _code_or_text(value)
+        return text or None
+    if isinstance(value, (list, tuple)):
+        return None
+    return str(value)
+
+
+def _format_declared_row(row: dict, fields: list[str], *, ar: bool) -> str:
+    bits: list[str] = []
+    for field in fields:
+        cell = _declared_cell(row, field)
+        if cell is None:
+            continue
+        bits.append(f"{field}={cell}")
+    return ("، " if ar else ", ").join(bits)
+
+
+def _empty_declared(empty_render: str, language: str, *, ar: bool) -> str:
+    return empty_render_text(empty_render, language) or (
+        "لا توجد صفوف." if ar else "No rows."
+    )
+
+
+def restate_last_view(view: dict | None, language: str = "en") -> str:
+    """0-LLM restatement of the last table. Invents no values."""
+    if not isinstance(view, dict):
+        return ""
+    tables = view.get("tables") or []
+    table = next(
+        (item for item in tables if isinstance(item, dict) and item.get("rows")),
+        None,
+    )
+    if table is None:
+        return ""
+    columns = [str(col).strip() for col in (table.get("columns") or []) if str(col).strip()]
+    records: list[dict] = []
+    for row in table.get("rows") or []:
+        if isinstance(row, dict):
+            records.append(row)
+            continue
+        if isinstance(row, (list, tuple)) and columns:
+            records.append({
+                columns[i]: row[i]
+                for i in range(min(len(columns), len(row)))
+            })
+    if not records:
+        return ""
+    fields = columns[:_MAX_DECLARED_FIELDS] or [
+        str(key) for key in records[0] if str(key).strip()
+    ][:_MAX_DECLARED_FIELDS]
+    return render_declared_rows(
+        records,
+        language,
+        empty_render="",
+        fields=fields,
+        kind="detail" if len(records) == 1 else "list",
+        label=str(table.get("title") or "").strip(),
+    ) or ""
+
+
+def render_declared_rows(
+    rows: list[dict],
+    language: str,
+    *,
+    empty_render: str,
+    fields: list[str],
+    latest_by: str = "",
+    kind: str = "list",
+    label: str = "",
+) -> str | None:
+    """0-LLM restatement of catalog ``returns`` fields. Invents no values."""
+    if not fields:
+        return None
+    ar = _lang_code(language) == "ar"
+    if not rows:
+        return _empty_declared(empty_render, language, ar=ar)
+    ordered = list(rows)
+    if latest_by:
+        ordered = sorted(
+            ordered,
+            key=lambda row: str(row.get(latest_by) or ""),
+            reverse=True,
+        )
+    if kind == "detail":
+        body = _format_declared_row(ordered[0], fields, ar=ar)
+        return body or _empty_declared(empty_render, language, ar=ar)
+    shown = ordered[:_MAX_DECLARED_ROWS]
+    parts = [_format_declared_row(row, fields, ar=ar) for row in shown]
+    parts = [p for p in parts if p]
+    if not parts:
+        return _empty_declared(empty_render, language, ar=ar)
+    count = str(len(rows))
+    head = f"{label} ({count})" if label else count
+    joiner = "؛ " if ar else "; "
+    return f"{head}: {joiner.join(parts)}."
+
+
 def render_catalog_read(
     tool_output: Any,
     api_name: str,
@@ -344,6 +480,21 @@ def render_catalog_read(
                 scope_key="permissions",
                 row_formatter=_format_permission_row,
             )
+
+    if kind in _DECLARED_KINDS:
+        entry = catalog_entry if isinstance(catalog_entry, dict) else None
+        fields = _declared_fields(entry)
+        if not fields:
+            return None
+        return render_declared_rows(
+            rows,
+            language,
+            empty_render=empty_key or ("no_detail_row" if kind == "detail" else "no_list_rows"),
+            fields=fields,
+            latest_by=str((entry or {}).get("latest_by") or "").strip(),
+            kind=kind,
+            label=str((entry or {}).get("label") or "").strip(),
+        )
 
     return None
 

@@ -193,6 +193,30 @@ EMPTY_RENDER:
   no_loan_book:
     en: No loans visible for that as-of date and dimension.
     ar: لا توجد قروض ظاهرة لتاريخ القطع والبعد.
+  no_list_rows:
+    en: No rows on record for that list.
+    ar: لا توجد صفوف لهذا الاستعلام.
+  no_detail_row:
+    en: That record was not found.
+    ar: لم يُعثر على ذلك السجل.
+  no_committed_pay:
+    en: No committed pay rows for that period and dimension.
+    ar: لا توجد بنود أجور معتمدة لتلك الفترة والبعد.
+  no_direct_reports:
+    en: No direct reports on record.
+    ar: لا يوجد مرؤوسون مسجّلون.
+  no_team_leave:
+    en: No team leave overlapping that month.
+    ar: لا توجد إجازات للفريق تتقاطع مع ذلك الشهر.
+  no_kuwaitization_quota:
+    en: No Kuwaitization quota rows in this scope.
+    ar: لا توجد صفوف حصة تكويت في هذا النطاق.
+  no_inbox_items:
+    en: No inbox items.
+    ar: لا توجد عناصر في الوارد.
+  no_history_items:
+    en: No history items.
+    ar: لا توجد عناصر في السجل.
   no_committed_gosi:
     en: No committed GOSI lines for that period and dimension.
     ar: لا توجد بنود تأمينات معتمدة لتلك الفترة والبعد.

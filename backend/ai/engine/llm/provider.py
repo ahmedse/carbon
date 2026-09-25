@@ -118,18 +118,39 @@ async def create_completion(client: AsyncOpenAI, **kwargs):
     return await client.chat.completions.create(**_apply_provider_kwargs(kwargs))
 
 
+def _openai_client(api_key: str, base_url: str) -> AsyncOpenAI:
+    timeout = 120.0 if _is_deepseek_endpoint(base_url) else 30.0
+    return AsyncOpenAI(
+        api_key=api_key,
+        base_url=base_url,
+        timeout=timeout,
+        max_retries=0,
+    )
+
+
 def get_llm_client() -> AsyncOpenAI:
     """Create an AsyncOpenAI client from settings."""
     settings = get_settings()
     # DeepSeek thinking (when re-enabled) and tool loops need headroom;
     # 30s caused APITimeoutError → retries → gunicorn WORKER TIMEOUT.
-    timeout = 120.0 if _is_deepseek_endpoint(settings.LLM_BASE_URL) else 30.0
-    return AsyncOpenAI(
-        api_key=settings.LLM_API_KEY,
-        base_url=settings.LLM_BASE_URL,
-        timeout=timeout,
-        max_retries=0,
-    )
+    return _openai_client(settings.LLM_API_KEY, settings.LLM_BASE_URL)
+
+
+def client_for_model(model: str | None) -> tuple[AsyncOpenAI, str, str]:
+    """Return ``(client, wire model, base url)`` for this model id.
+
+    A deepseek id uses the direct DeepSeek key when one is configured.
+    Anything else stays on the primary provider.
+    """
+    settings = get_settings()
+    name = (model or "").strip()
+    low = name.lower()
+    key = (settings.DEEPSEEK_API_KEY or "").strip()
+    if key and "deepseek" in low:
+        wire = "deepseek-flash" if "pro" not in low else "deepseek-v4-pro"
+        base = (settings.DEEPSEEK_BASE_URL or "https://api.deepseek.com/v1").strip()
+        return _openai_client(key, base), wire, base
+    return get_llm_client(), name, settings.LLM_BASE_URL
 
 
 @_retry_decorator
