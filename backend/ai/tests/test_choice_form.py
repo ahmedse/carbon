@@ -8,6 +8,7 @@ def test_rules_send_a_pick_to_clarify_not_answer():
 
     assert "Asking the user to pick is clarify, never answer" in _UNDERSTAND_RULES
     assert "each choice in options" in _UNDERSTAND_RULES
+    assert "it is not reprinted" in _UNDERSTAND_RULES
 
 
 def test_emit_decision_asks_for_labels_not_a_listed_question():
@@ -16,6 +17,8 @@ def test_emit_decision_asks_for_labels_not_a_listed_question():
     description = EMIT_DECISION_TOOL["function"]["description"]
     assert "put each choice in options" in description
     assert "does not list the choices" in description
+    assert "they are not reprinted" in description
+    assert "Use continue only to show the last view again" in description
 
 
 def test_one_option_is_not_a_menu():

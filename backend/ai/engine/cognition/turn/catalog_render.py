@@ -354,6 +354,12 @@ def _field_label(labels: dict | None, field: str, *, ar: bool) -> str:
 def _present_cell(text: str) -> str:
     """A cell the operator can scan. A timestamp keeps its calendar day."""
     raw = text.replace("|", " ").replace("\n", " ").strip()
+    if raw.startswith("[[") and raw.endswith("]]") and raw.count(":") >= 2:
+        kind, _, rest = raw[2:-2].partition(":")
+        if kind in {"table", "rule", "module", "org-unit"} and ":" in rest:
+            _, _, label = rest.partition(":")
+            if label:
+                raw = label
     if len(raw) >= 11 and raw[4] == "-" and raw[7] == "-" and raw[10] == "T":
         return raw[:10]
     return raw

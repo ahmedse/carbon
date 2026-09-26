@@ -457,5 +457,357 @@
     "conversation_id": "4a5bf816-ce5d-44c1-876a-f46e1dcb7bd4",
     "nominated_at": "2026-09-26T21:01:47.163616+00:00",
     "status": "pending_human_review"
+  },
+  {
+    "utterance": "ما هو المسمى الوظيفي؟ أجب بالعربية.",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "get_my_profile",
+        "code": "unknown_field",
+        "detail": "This read does not return position_title; it returns full_name, employee_no, job_title, org_unit, manager, is_active, basic_salary. If the conversation already gives that value, answer from it; otherwise answer that the record does not carry it. Ask a read only for fields it returns."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "df650714-b1f9-475b-9f00-cd813ccde830",
+    "nominated_at": "2026-09-26T21:17:54.576823+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "ما هو المسمى الوظيفي؟ أجب بالعربية. Be exact.",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "get_my_profile",
+        "code": "unknown_field",
+        "detail": "This read does not return position_title; it returns full_name, employee_no, job_title, org_unit, manager, is_active, basic_salary. If the conversation already gives that value, answer from it; otherwise answer that the record does not carry it. Ask a read only for fields it returns."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "ca78d340-a395-43ef-9cbe-1cd1732a2825",
+    "nominated_at": "2026-09-26T21:20:04.517571+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "ما هو المسمى الوظيفي؟ أجب بالعربية. One line.",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "get_my_profile",
+        "code": "unknown_field",
+        "detail": "This read does not return position_title; it returns full_name, employee_no, job_title, org_unit, manager, is_active, basic_salary. If the conversation already gives that value, answer from it; otherwise answer that the record does not carry it. Ask a read only for fields it returns."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "12e53baa-6ea1-4503-9237-ad6a9096eac6",
+    "nominated_at": "2026-09-26T21:20:10.081502+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "How many active employees are in Coiled Tubing? Number only.",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "analyze_employees",
+        "code": "invalid_args",
+        "detail": "group_by: expected array, got str"
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "81e1e1d0-1c73-4e2b-bf0e-6345dd784d54",
+    "nominated_at": "2026-09-26T21:24:11.589350+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "How many active employees are in Coiled Tubing - KIRI? Number only.",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "analyze_employees",
+        "code": "invalid_args",
+        "detail": "group_by: expected array, got str"
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "5e321302-12b4-4712-8ccd-e2dcfd9a39c8",
+    "nominated_at": "2026-09-26T21:24:14.517693+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "How many active employees are in Drilling? Number only.",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "analyze_employees",
+        "code": "invalid_args",
+        "detail": "group_by: expected array, got str"
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "88a993ec-05df-4596-aa9b-f9593795ff03",
+    "nominated_at": "2026-09-26T21:24:19.673384+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "How many active employees are in Drilling Rig 61? Number only.",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "analyze_employees",
+        "code": "invalid_args",
+        "detail": "group_by: expected array, got str"
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "4ce62807-10ed-4824-91a7-cfd0451c2308",
+    "nominated_at": "2026-09-26T21:24:26.536413+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "ما هو مسمى وظيفتي في السجل؟ أجب بالعربية.",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "get_my_profile",
+        "code": "unknown_field",
+        "detail": "This read does not return position_title; it returns full_name, employee_no, job_title, org_unit, manager, is_active, basic_salary. If the conversation already gives that value, answer from it; otherwise answer that the record does not carry it. Ask a read only for fields it returns."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "fa5e60e7-f20e-4490-afb7-66bb67f3423b",
+    "nominated_at": "2026-09-26T21:25:22.832906+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "How many active employees are in Security? Number only.",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "analyze_employees",
+        "code": "invalid_args",
+        "detail": "group_by: expected array, got str"
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "bbcb8fc7-7dea-4465-ad12-46b1950f2ccc",
+    "nominated_at": "2026-09-26T21:27:29.678275+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "How many active employees are in Slickline? Number only.",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "analyze_employees",
+        "code": "invalid_args",
+        "detail": "group_by: expected array, got str"
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "7ed489ef-4767-480e-9ed7-63b6baa4f6e3",
+    "nominated_at": "2026-09-26T21:27:32.445039+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "How many active employees are in Surface Well Testing? Number only.",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "analyze_employees",
+        "code": "invalid_args",
+        "detail": "group_by: expected array, got str"
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "fc778c51-e190-42c6-ba5f-ac0e114a9f5b",
+    "nominated_at": "2026-09-26T21:28:27.889710+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "How many active employees are in Sulphur Transport? Number only.",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "analyze_employees",
+        "code": "invalid_args",
+        "detail": "group_by: expected array, got str"
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "cd462751-922d-42dd-b6ba-6a5df6b91230",
+    "nominated_at": "2026-09-26T21:28:27.914851+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "Payroll by employee type",
+    "audience": [
+      "admin",
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "analyze_committed_pay",
+        "code": "invalid_args",
+        "detail": "dimension: invalid value 'employment_type_code' (allowed: 'org_unit', 'nationality', 'position', 'is_active')"
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "4a5bf816-ce5d-44c1-876a-f46e1dcb7bd4",
+    "nominated_at": "2026-09-26T21:50:33.002938+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "Payroll summary",
+    "audience": [
+      "admin",
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "analyze_committed_pay",
+        "code": "unknown_field",
+        "detail": "This read does not return pct; it returns label, headcount, average, median, min, max, total, period_end, dimension, line_type. If the conversation already gives that value, answer from it; otherwise answer that the record does not carry it. Ask a read only for fields it returns."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "4a5bf816-ce5d-44c1-876a-f46e1dcb7bd4",
+    "nominated_at": "2026-09-26T21:51:32.716227+00:00",
+    "status": "pending_human_review"
   }
 ]

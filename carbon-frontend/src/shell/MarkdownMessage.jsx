@@ -765,7 +765,8 @@ function walkTextNodes(node) {
     const child = node.children[i];
     if (child && child.type === 'text') {
       const parts = splitEntityRefs(child.value);
-      if (parts.length > 1) {
+      const onlyChip = parts.length === 1 && parts[0].type === 'entityRef';
+      if (parts.length > 1 || onlyChip) {
         node.children.splice(i, 1, ...parts);
         i += parts.length - 1; // advance past the nodes we just inserted
       }

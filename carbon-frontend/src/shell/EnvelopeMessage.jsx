@@ -41,6 +41,7 @@ import ErrorOutlineOutlinedIcon from '@mui/icons-material/ErrorOutlineOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import MarkdownMessage from './MarkdownMessage';
+import EntityChip from './EntityChip';
 import OutcomeReceipt from './OutcomeReceipt';
 import { formatDisplayDateTime } from '../utils/dateUtils';
 import { presentCaveats, presentSources } from './presentationPlane';
@@ -94,9 +95,16 @@ function cellString(cell) {
 
 const MD_LINK = /^\[([^\]]+)\]\(([^)]+)\)$/;
 
-/** Plain text, or an in-app link when the cell is ``[label](/route)``. */
+const ENTITY_CELL = /^\[\[(table|rule|module|org-unit):([^:\]]+):([^\]]+)\]\]$/;
+
+/** Plain text, a chip, or an in-app link when the cell is ``[label](/route)``. */
 function cellNode(cell) {
   const s = cellString(cell);
+  const entity = s.match(ENTITY_CELL);
+  if (entity) {
+    const [, kind, id, label] = entity;
+    return <EntityChip kind={kind} id={id} label={label} />;
+  }
   const m = s.match(MD_LINK);
   if (!m) return s;
   const [, label, href] = m;

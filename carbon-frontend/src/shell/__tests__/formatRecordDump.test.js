@@ -19,4 +19,11 @@ describe('presentRecordDump', () => {
     expect(presentRecordDump(prose)).toBe(prose);
     expect(dumpBlockToTable('I cannot draft a plan for this request.')).toBeNull();
   });
+
+  it('shows the entity label, not the chip token', () => {
+    const dump = 'Profile (1): name=Ahmed, department=[[org-unit:14:Human Resources Department]].';
+    const text = presentRecordDump(dump);
+    expect(text).toContain('Human Resources Department');
+    expect(text).not.toContain('[[');
+  });
 });

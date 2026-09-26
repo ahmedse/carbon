@@ -3,8 +3,9 @@
 Three different messages ("pie charts", "i told you pie", "what ?") got the
 same fixed template and bar charts. The named shape is a typed Decision
 field, a turn no restater covers gets prose written for its message, a
-follow-up re-renders the last view without a host read, and a failed stage
-says so instead of showing the template (ADR-0053).
+``continue`` re-renders the last view without a host read, an ``answer``
+does not reprint that view, and a failed stage says so instead of
+showing the template (ADR-0053).
 """
 from __future__ import annotations
 
@@ -313,7 +314,7 @@ def test_follow_up_renders_the_last_view_without_a_host_read(monkeypatch):
     assert any(c["text"] == _GAP for c in env["caveats"])
 
 
-def test_answer_follow_up_restates_last_view_without_writer(monkeypatch):
+def test_answer_does_not_restate_last_view(monkeypatch):
     seen = _stub_synth(monkeypatch, "Invented 90 percent", ["About 90 percent."])
     state = ConversationState()
     state.last_view = bound_view({
@@ -327,13 +328,14 @@ def test_answer_follow_up_restates_last_view_without_writer(monkeypatch):
         "caveats": [],
     })
     text, env, degraded = asyncio.run(speak_turn(
-        _decision(op="answer"), [], text="", user_message="details of last one",
+        _decision(op="answer"), [], text="", user_message="why you dumped this",
         instance_id="i", conversation_id="c", state=state,
     ))
     assert degraded is None
     assert seen["calls"] == 0
-    assert "2026-09-25" in text
-    assert env["tables"]
+    assert text == ""
+    assert env is None
+    assert state.last_view["tables"][0]["title"] == "Committed at"
 
 
 def test_view_is_bounded():

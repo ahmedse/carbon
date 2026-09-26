@@ -6,9 +6,13 @@
 //   * internal safe links → SPA <Link>; external → new-tab anchor
 //   * task lists → checkboxes
 //   * figures → image + optional caption
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+
+vi.mock('../notes/NotesContext', () => ({
+  useNotes: () => ({ setContexts: vi.fn(), setOpen: vi.fn() }),
+}));
 import MarkdownMessage, {
   normalizeMermaidFences,
   reflowSingleLineMermaid,
@@ -37,6 +41,14 @@ describe('MarkdownMessage rich renderer', () => {
     expect(screen.getByText('Catalog')).toBeInTheDocument();
     const openLinks = screen.getAllByRole('link', { name: 'Open' });
     expect(openLinks).toHaveLength(2);
+  });
+
+  it('chips a table cell that is only an entity token', () => {
+    renderRich(
+      '| Department |\n| --- |\n| [[org-unit:14:Human Resources Department]] |',
+    );
+    expect(screen.getByText('Human Resources Department')).toBeInTheDocument();
+    expect(screen.queryByText(/\[\[org-unit/)).not.toBeInTheDocument();
   });
 
   it('renders a fenced code block with language badge and copy button', () => {

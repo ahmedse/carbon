@@ -399,6 +399,8 @@ async def _run_chat(
         content = await sync_to_async(
             _annotate_entity_mentions, thread_sensitive=True
         )(content, host_user_id)
+        content = _present_table_tokens(content)
+        reply_envelope = _present_envelope_cells(reply_envelope)
         # G-E: persist the F1–F3 gate flags so the §4.3 "truthfulness hit-rate"
         # metric is measurable from the turn_ledger (observability surface).
         await _record_truthfulness_gate(db=db, ledger=ledger, anti_flags=anti_flags)
@@ -2527,19 +2529,82 @@ def _annotation_protected_spans(text: str) -> list[tuple[int, int]]:
     """Return ``(start, end)`` spans the annotator must never rewrite.
 
     Protected: fenced code blocks (triple backticks), already-serialized
-    ``[[...]]`` spans, and URLs (``scheme://`` or ``www.``).
+    ``[[...]]`` spans, URLs (``scheme://`` or ``www.``), and GFM table
+    rows. Table cells cannot chip a token, so the label stays the label.
     """
     spans: list[tuple[int, int]] = []
     pattern = re.compile(
         r"```.*?```"                              # fenced code block
         r"|\[\[.*?\]\]"                           # already-serialized ref
         r"|[A-Za-z][A-Za-z0-9+.-]*://\S+"         # scheme:// URL
-        r"|www\.[A-Za-z0-9.-]+(?:/\S*)?",         # www. URL
-        re.DOTALL,
+        r"|www\.[A-Za-z0-9.-]+(?:/\S*)?"          # www. URL
+        r"|^[ \t]*\|.*\|[ \t]*$",                 # GFM table row
+        re.DOTALL | re.MULTILINE,
     )
     for match in pattern.finditer(text):
         spans.append((match.start(), match.end()))
     return spans
+
+
+_ENTITY_REF_KINDS = frozenset({"table", "rule", "module", "org-unit"})
+_TABLE_CELL_TOKEN = re.compile(
+    r"\|\s*\[\[(?:table|rule|module|org-unit):[^:\]]+:([^\]]+)\]\]\s*\|"
+)
+
+
+def _present_entity_label(value: Any) -> Any:
+    """``[[kind:id:label]]`` → label. Other values are unchanged."""
+    if not isinstance(value, str):
+        return value
+    raw = value.strip()
+    if not (raw.startswith("[[") and raw.endswith("]]") and raw.count(":") >= 2):
+        return value
+    kind, _, rest = raw[2:-2].partition(":")
+    if kind not in _ENTITY_REF_KINDS or ":" not in rest:
+        return value
+    _, _, label = rest.partition(":")
+    return label or value
+
+
+def _present_table_tokens(text: str) -> str:
+    """A table cell stores the label, never the chip token."""
+    if not text or "[[" not in text:
+        return text
+    return _TABLE_CELL_TOKEN.sub(r"| \1 |", text)
+
+
+def _present_envelope_cells(envelope: Any) -> Any:
+    """Strip chip tokens from typed table cells before they are stored."""
+    if not isinstance(envelope, dict):
+        dump = getattr(envelope, "model_dump", None)
+        envelope = dump() if callable(dump) else envelope
+    if not isinstance(envelope, dict):
+        return envelope
+    tables = envelope.get("tables")
+    if not isinstance(tables, list):
+        return envelope
+    presented: list[Any] = []
+    changed = False
+    for table in tables:
+        if not isinstance(table, dict) or not isinstance(table.get("rows"), list):
+            presented.append(table)
+            continue
+        rows: list[Any] = []
+        for row in table["rows"]:
+            if isinstance(row, list):
+                cells = [_present_entity_label(cell) for cell in row]
+                if cells != row:
+                    changed = True
+                rows.append(cells)
+            else:
+                rows.append(row)
+        title = _present_entity_label(table.get("title"))
+        if title != table.get("title"):
+            changed = True
+        presented.append({**table, "title": title, "rows": rows})
+    if not changed:
+        return envelope
+    return {**envelope, "tables": presented}
 
 
 def _resolve_annotation_user(scope) -> Any:

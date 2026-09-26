@@ -18,6 +18,7 @@ ANSWER_TASK_PROMPT = (
     "Understanding already decided this turn is answered in words, with no "
     "live read. What it understood: {reason}\n"
     "Use the identity, state, history, knowledge and memory blocks above. "
+    "The last view is context. Do not reprint it as the reply. "
     "Do not say you looked anything up, saved it, or changed it. "
     "Do not invent figures, names or dates. Reply in the user's language, but "
     "quote names, titles and other values from the record exactly as written."

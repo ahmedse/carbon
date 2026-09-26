@@ -241,6 +241,21 @@ def test_restate_last_view_copies_table_cells():
     }]) == []
 
 
+def test_declared_cell_shows_entity_label_not_token():
+    from ai.engine.cognition.turn.catalog_render import render_declared_rows
+
+    text = render_declared_rows(
+        [{"department": "[[org-unit:14:Human Resources Department]]"}],
+        "en",
+        empty_render="",
+        fields=["department"],
+        kind="detail",
+        label="Profile",
+    )
+    assert "Human Resources Department" in text
+    assert "[[" not in text
+
+
 def test_declared_kind_without_returns_does_not_guess():
     assert render_catalog_read(
         {"result": _RUN_ROWS},

@@ -16,7 +16,11 @@ from dataschema.models import DataTable
 from dq.models import DQRule, RuleFieldAssignment
 from mdm.models import OrgUnit
 
-from ai.engine_runtime import _annotate_entity_mentions
+from ai.engine_runtime import (
+    _annotate_entity_mentions,
+    _present_envelope_cells,
+    _present_table_tokens,
+)
 
 
 # ── Fixture helpers (plain factories, no LLM) ─────────────────────────────
@@ -153,6 +157,39 @@ def test_no_cross_scope_leak(make_scoped_user):
 
 
 # ── Protected regions ──────────────────────────────────────────────────────
+
+
+def test_table_tokens_are_stripped_to_labels():
+    md = "| Department |\n| --- |\n| [[org-unit:14:Human Resources Department]] |\n"
+    shown = _present_table_tokens(md)
+    assert "Human Resources Department" in shown
+    assert "[[" not in shown
+    env = _present_envelope_cells({
+        "tables": [{
+            "title": "Profile",
+            "columns": ["Department"],
+            "rows": [["[[org-unit:14:Human Resources Department]]"]],
+        }],
+    })
+    assert env["tables"][0]["rows"][0][0] == "Human Resources Department"
+
+
+@pytest.mark.django_db
+def test_skips_markdown_table_cells(make_scoped_user):
+    org = _make_org("South Valley", "south-valley")
+    user = make_scoped_user("table-cell-user", group="dataowners_group", org=org)
+    answer = (
+        "| Department |\n"
+        "| --- |\n"
+        "| South Valley |\n"
+        "\n"
+        "South Valley is the unit."
+    )
+    out = _annotate_entity_mentions(answer, user.pk)
+    table, _, prose = out.partition("\n\n")
+    assert "| South Valley |" in table
+    assert "[[" not in table
+    assert f"[[org-unit:{org.id}:South Valley]]" in prose
 
 
 @pytest.mark.django_db

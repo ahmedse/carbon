@@ -801,6 +801,8 @@ class SoftSurfacesMixin:
                     instance_id=instance_id,
                     conversation_id=conversation_id,
                 )
+                # Words only. A leftover last-view envelope is not this turn.
+                envelope = None
                 if not text:
                     cause = str((usage or {}).get("cause") or "empty_answer")
                     if cause not in {"ungrounded", "empty_output", "model_error"}:

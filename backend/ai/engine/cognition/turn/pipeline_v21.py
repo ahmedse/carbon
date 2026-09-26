@@ -496,8 +496,10 @@ async def speak_turn(
     """The reply for the decided reads.
 
     A restated read speaks for itself. A ``continue`` on the last view
-    re-renders it with no host read. Otherwise the reply is written for this
-    message from these rows. A writer failure is returned typed, not hidden.
+    re-renders it with no host read. An ``answer`` is words for this
+    message; the last view stays context and is not the bubble.
+    Otherwise the reply is written for this message from these rows.
+    A writer failure is returned typed, not hidden.
     """
     lead = lead_command(decision)
     language = decision.language if decision else "en"
@@ -506,7 +508,7 @@ async def speak_turn(
     if (
         not executed
         and lead is not None
-        and lead.op in {"continue", "answer"}
+        and lead.op == "continue"
         and view
     ):
         from ai.engine.cognition.turn.catalog_render import restate_last_view

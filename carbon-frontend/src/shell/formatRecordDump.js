@@ -4,7 +4,18 @@
  */
 
 function presentCell(value) {
-  const raw = String(value || '').replace(/\|/g, ' ').replace(/\s+/g, ' ').trim();
+  let raw = String(value || '').replace(/\|/g, ' ').replace(/\s+/g, ' ').trim();
+  if (raw.startsWith('[[') && raw.endsWith(']]') && raw.split(':').length >= 3) {
+    const inner = raw.slice(2, -2);
+    const first = inner.indexOf(':');
+    const rest = inner.slice(first + 1);
+    const second = rest.indexOf(':');
+    const kind = inner.slice(0, first);
+    const label = second >= 0 ? rest.slice(second + 1) : '';
+    if (label && ['table', 'rule', 'module', 'org-unit'].includes(kind)) {
+      raw = label;
+    }
+  }
   if (raw.length >= 11 && raw[4] === '-' && raw[7] === '-' && raw[10] === 'T') {
     return raw.slice(0, 10);
   }

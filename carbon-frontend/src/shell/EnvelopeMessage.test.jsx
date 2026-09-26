@@ -11,6 +11,10 @@ vi.mock('react-chartjs-2', () => ({
   Line: () => <div data-testid="chartjs" data-type="line" />,
 }));
 
+vi.mock('./EntityChip', () => ({
+  default: ({ label }) => <span>{label}</span>,
+}));
+
 import EnvelopeMessage from './EnvelopeMessage';
 
 const sampleEnvelope = {
@@ -75,6 +79,29 @@ describe('EnvelopeMessage — full envelope', () => {
     expect(within(table).getByText('6')).toBeInTheDocument();
     expect(within(table).getByText('female')).toBeInTheDocument();
     expect(within(table).getByText('2')).toBeInTheDocument();
+  });
+
+  it('shows the entity label, not the chip token, in a table cell', () => {
+    render(
+      <EnvelopeMessage
+        envelope={{
+          headline: '',
+          prose: [],
+          tables: [{
+            title: 'Profile',
+            columns: ['Department'],
+            rows: [['[[org-unit:14:Human Resources Department]]']],
+          }],
+          charts: [],
+          caveats: [],
+          sources: [],
+        }}
+        fallbackContent=""
+      />,
+    );
+    const table = screen.getByTestId('envelope-table');
+    expect(within(table).getByText('Human Resources Department')).toBeInTheDocument();
+    expect(table.textContent).not.toContain('[[');
   });
 
   it('renders caveats as a disclosure banner with the text', () => {
