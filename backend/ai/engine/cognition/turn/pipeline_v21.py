@@ -116,6 +116,55 @@ def _continue_args(state: Any) -> dict:
     return dict(args) if isinstance(args, dict) and str(last.get("api") or "").strip() else {}
 
 
+def _latest_row(payload: Any, latest_by: str) -> dict:
+    from ai.engine.cognition.turn.catalog_render import _as_record_list, _unwrap_tool_payload
+
+    rows = _as_record_list(_unwrap_tool_payload(payload))
+    if latest_by:
+        rows = sorted(rows, key=lambda row: str(row.get(latest_by) or ""), reverse=True)
+    return rows[0] if rows else {}
+
+
+def _bind_from_prior(args: dict, pool: dict, needed: set[str] | None = None) -> dict:
+    from ai.engine.cognition.turn.capability import flat_args
+
+    merged = dict(args or {})
+    have = flat_args(merged)
+    for key, value in pool.items():
+        if needed is not None and key not in needed:
+            continue
+        if value in (None, "") or str(have.get(key) or "").strip():
+            continue
+        merged[key] = value
+    return merged
+
+
+def _offer_from_row(row: dict, entry: dict | None) -> dict:
+    if not row:
+        return {}
+    keys: set[str] = set()
+    if isinstance(entry, dict):
+        keys.update(str(item) for item in (entry.get("returns") or []) if item)
+        latest = str(entry.get("latest_by") or "").strip()
+        if latest:
+            keys.add(latest)
+    if not keys:
+        keys = {str(key) for key in row if not str(key).startswith("_")}
+    return {key: row[key] for key in keys if key in row and row[key] not in (None, "")}
+
+
+def _has_breakdown(executed: list[dict] | None) -> bool:
+    for row in executed or []:
+        if not isinstance(row, dict):
+            continue
+        payload = _parsed(row.get("result"))
+        if isinstance(payload, dict) and "data" in payload and "status_code" in payload:
+            payload = payload.get("data")
+        if isinstance(payload, dict) and isinstance(payload.get("breakdown"), list) and payload["breakdown"]:
+            return True
+    return False
+
+
 async def _execute_bound_read(
     api_name: str,
     *,
@@ -186,6 +235,7 @@ async def act_on_decision(
         return None
     texts: list[str] = []
     seen: set[str] = set()
+    pool: dict[str, Any] = {}
     for cmd in decision.commands:
         if not cmd.reads_host():
             continue
@@ -193,7 +243,13 @@ async def act_on_decision(
             continue  # the reply re-renders the last view; no host read
         api = _read_api(cmd, state)
         if cmd.op == "call_tool":
-            args = dict(cmd.args or {})
+            from ai.engine.cognition.turn.catalog_render import catalog_entry_named
+
+            target = catalog_entry_named(catalog, api)
+            required = {
+                str(key) for key in ((target or {}).get("parameters") or {}).get("required") or []
+            }
+            args = _bind_from_prior(dict(cmd.args or {}), pool, needed=required)
         elif cmd.op == "continue" and api == _continue_api(state):
             args = _continue_args(state)
         else:
@@ -213,6 +269,15 @@ async def act_on_decision(
         )
         if text:
             texts.append(text)
+        if executed:
+            from ai.engine.cognition.turn.catalog_render import catalog_entry_named
+
+            entry = catalog_entry_named(catalog, api)
+            row = _latest_row(
+                executed[-1].get("result"),
+                str((entry or {}).get("latest_by") or ""),
+            )
+            pool.update(_offer_from_row(row, entry))
     return "\n\n".join(texts) or None
 
 
@@ -465,6 +530,22 @@ async def speak_turn(
             _remember_view(state, narrated[1], [])
             return narrated
 
+    from ai.engine.cognition.turn.access_render import access_envelope_from_tools
+
+    inventory = access_envelope_from_tools(executed)
+    if inventory and not _has_breakdown(executed):
+        # Typed tables — not GFM. MarkdownMessage collapses two GFM tables
+        # onto one line and leaks the second as pipes.
+        prefix = (text or "").strip()
+        if not prefix:
+            prefix = (
+                "هذه هي مناطق العمل والتطبيقات التي يمكنك فتحها."
+                if language == "ar"
+                else "These are the work areas and apps you can open."
+            )
+        inventory["headline"] = prefix
+        return prefix, inventory, None
+
     restated = bool((text or "").strip())
     spoken, envelope = speak_rows(decision, executed, text=text, user_message=user_message)
     if envelope and executed:
@@ -473,7 +554,11 @@ async def speak_turn(
         # A payload with no table (a receipt, a passage, a card) is still
         # evidence: the grounded writer speaks from it (ADR-0056).
         envelope = {"headline": "", "prose": [], "tables": [], "charts": [], "caveats": [], "sources": []}
-    if not envelope or restated:
+    # A bound ESS restatement is the answer. A breakdown is evidence: the
+    # writer still speaks even when a list/detail prefix was restated.
+    if not envelope:
+        return spoken, envelope, None
+    if restated and not _has_breakdown(executed):
         return spoken, envelope, None
     narrated = await narrate_envelope(
         envelope, executed, user_message=user_message, understood=understood,
@@ -596,6 +681,14 @@ def speak_rows(
     headline and prose are the text — drawn from these rows only.
     """
     render = decision_render(decision)
+    ok_preview = [r for r in executed or [] if isinstance(r, dict) and not _is_error(r)]
+    if render == "text":
+        from ai.engine.cognition.turn.runner_render import _wants_visual
+
+        if user_message and _wants_visual(user_message):
+            render = "chart"
+        elif _has_breakdown(ok_preview):
+            render = "table"
     chart = decision_chart(decision)
     spoken = (text or "").strip()
     ok_rows = [r for r in executed or [] if not _is_error(r)]

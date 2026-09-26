@@ -40,6 +40,8 @@ def _unwrap_tool_payload(tool_output: Any) -> Any:
     if not isinstance(tool_output, dict):
         return tool_output
     raw = tool_output.get("result", tool_output.get("data"))
+    if raw is None:
+        raw = tool_output
     if isinstance(raw, str):
         try:
             raw = json.loads(raw)
@@ -63,9 +65,17 @@ def _as_record_list(payload: Any) -> list[dict]:
     if isinstance(payload, list):
         return [row for row in payload if isinstance(row, dict)]
     if isinstance(payload, dict):
-        for key in ("results", "rows", "items", "records", "data"):
+        for key in ("results", "rows", "items", "records", "data", "breakdown"):
             if isinstance(payload.get(key), list):
-                return [row for row in payload[key] if isinstance(row, dict)]
+                rows = [row for row in payload[key] if isinstance(row, dict)]
+                if key == "breakdown":
+                    wrap = {
+                        k: v for k, v in payload.items()
+                        if k != key and not isinstance(v, (list, dict))
+                    }
+                    if wrap:
+                        rows = [{**wrap, **row} for row in rows]
+                return rows
         return [payload]
     return []
 
@@ -80,7 +90,7 @@ def _scope_prefix(scope_key: str, language: str) -> str:
     return str(row.get(lang) or row.get("en") or "").strip()
 
 
-_MAX_DECLARED_ROWS = 5
+_MAX_DECLARED_ROWS = 12
 _MAX_DECLARED_FIELDS = 12
 _DECLARED_KINDS = frozenset({"list", "detail", "read"})
 
@@ -563,8 +573,18 @@ def render_declared_rows(
     if not any(_format_declared_row(row, fields, ar=ar, labels=labels) for row in shown):
         return _empty_declared(empty_render, language, ar=ar)
     table = _markdown_table(shown, fields, ar=ar, labels=labels)
-    count = str(len(rows))
-    head = f"{label} ({count})" if label else count
+    if kind == "detail":
+        return f"{label}\n\n{table}" if label else table
+    total = len(rows)
+    shown_n = len(shown)
+    if label and shown_n < total:
+        head = f"{label} ({total}, {shown_n} listed)"
+    elif label:
+        head = f"{label} ({total})"
+    elif shown_n < total:
+        head = f"{shown_n} of {total}"
+    else:
+        head = str(total)
     return f"{head}\n\n{table}"
 
 
@@ -733,6 +753,15 @@ def render_catalog_read(
             _sensitive_fields(entry),
         )
         if not shown:
+            return None
+        # A breakdown payload is evidence for the grounded writer and the
+        # envelope. Restating it here made Chat exit as a hollow table and
+        # never write the report (ADR-0056: the writer speaks from rows).
+        if isinstance(payload, dict) and isinstance(payload.get("breakdown"), list):
+            if not rows:
+                return _empty_declared(
+                    empty_key or "no_list_rows", language, ar=_lang_code(language) == "ar",
+                )
             return None
         return render_declared_rows(
             rows,

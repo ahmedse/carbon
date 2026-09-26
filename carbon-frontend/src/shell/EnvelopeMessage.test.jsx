@@ -2,6 +2,7 @@
 // PAQ-2B — deterministic renderer for the typed AnswerEnvelope.
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 
 // react-chartjs-2 needs a canvas 2D context — not available in jsdom.
 vi.mock('react-chartjs-2', () => ({
@@ -237,6 +238,31 @@ describe('EnvelopeMessage — full envelope', () => {
     expect(charts).toHaveLength(2);
     expect(within(charts[0]).getByTestId('chartjs')).toHaveAttribute('data-type', 'pie');
     expect(within(charts[1]).getByTestId('chartjs')).toHaveAttribute('data-type', 'line');
+  });
+
+  it('renders [Open](/route) cells as in-app links', () => {
+    render(
+      <MemoryRouter>
+        <EnvelopeMessage
+          envelope={{
+            headline: 'These are the work areas and apps you can open.',
+            tables: [{
+              title: 'Work areas',
+              columns: ['Work area', 'Open'],
+              rows: [['AI Workspace', '[Open](/ai)']],
+            }],
+          }}
+          fallbackContent=""
+        />
+      </MemoryRouter>,
+    );
+
+    const tables = screen.getAllByTestId('envelope-table');
+    expect(tables).toHaveLength(1);
+    expect(within(tables[0]).getByText('Work areas')).toBeInTheDocument();
+    const open = within(tables[0]).getByRole('link', { name: 'Open' });
+    expect(open).toHaveAttribute('href', '/ai');
+    expect(screen.queryByText(/\|---/)).not.toBeInTheDocument();
   });
 
   it('renders "No data" for an empty table', () => {

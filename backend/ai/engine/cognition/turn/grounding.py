@@ -37,7 +37,7 @@ def _flatten_numbers(payload: Any) -> set[str]:
     if isinstance(payload, list):
         found.add(str(len(payload)))
     if isinstance(payload, dict):
-        for key in ("results", "items", "rows"):
+        for key in ("results", "items", "rows", "breakdown"):
             rows = payload.get(key)
             if isinstance(rows, list):
                 found.add(str(len(rows)))

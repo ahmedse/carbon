@@ -200,6 +200,7 @@ def validate_decision(
     state: Any = None,
     arg_violations: Callable[[str, dict], list[str]] | None = None,
     field_gaps: Callable[[str, list[str]], tuple[list[str], list[str]]] | None = None,
+    list_fields: Callable[[str], set[str]] | None = None,
 ) -> Decision:
     """Enforce policy. Never drop to a free answer that writes.
 
@@ -218,6 +219,7 @@ def validate_decision(
     pending = _pending_open_question(state)
     out: list[Command] = []
     rejections: list[Rejection] = []
+    supplied: set[str] = set()
     for index, cmd in enumerate(decision.commands):
         if cmd.op == "confirm":
             if not pending.get("text"):
@@ -257,6 +259,11 @@ def validate_decision(
             write = _is_write_tool(name, write_tools)
             if not write and arg_violations is not None:
                 problems = arg_violations(name, dict(cmd.args or {}))
+                if supplied:
+                    problems = [
+                        p for p in problems
+                        if not any(p == f"missing required field {key!r}" for key in supplied)
+                    ]
                 if problems:
                     rejections.append(
                         Rejection(index, name, "invalid_args", "; ".join(problems)[:400])
@@ -304,6 +311,8 @@ def validate_decision(
             ))
             continue
         out.append(cmd)
+        if cmd.op == "call_tool" and list_fields is not None:
+            supplied |= set(list_fields(cmd.name.strip()) or set())
     return Decision(
         commands=out[:3],
         language=decision.language,

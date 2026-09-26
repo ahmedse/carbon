@@ -374,11 +374,16 @@ async def _run_chat(
             allow_host_prose=False,
         )
 
-        # Capability listing → unified rich "Your Access" document (GFM table
-        # with page links), appended deterministically — never LLM prose.
-        access_table = _grounded_access_table(completed_tools)
-        if access_table:
-            content = f"{content}\n\n{access_table}" if content else access_table
+        # Capability listing → typed envelope tables, never GFM in the bubble.
+        # A write-degrade envelope has no tables and would hide this document.
+        reply_envelope = (
+            handoff_envelope
+            if handoff_envelope is not None
+            else getattr(response, "envelope", None)
+        )
+        content, reply_envelope = _prefer_access_inventory(
+            content, reply_envelope, completed_tools,
+        )
         # Egress invariant: no tool or catalog identifier reaches the user,
         # whichever stage wrote the text. Labels come from the registry.
         content, leaked = _scrub_internal_names(content, instance_config)
@@ -515,11 +520,7 @@ async def _run_chat(
                 # PAQ-2A — typed AnswerEnvelope (None when disabled or unavailable).
                 # On Chat handoff, replace LLM envelope with a deterministic one
                 # (empty caveats — RULE_23: never ADR/G2 jargon).
-                "envelope": (
-                    handoff_envelope
-                    if handoff_envelope is not None
-                    else getattr(response, "envelope", None)
-                ),
+                "envelope": reply_envelope,
                 # The typed question this turn asks. ``kind`` tells the client
                 # which form to paint; prose never carries the options.
                 "form": (
@@ -2219,15 +2220,16 @@ def _clarification_question(missing: list[str] | None) -> str:
 
 def _md_escape(text: str) -> str:
     """Escape GFM table-cell metacharacters (``|`` and newlines)."""
-    return str(text or "").replace("|", "\\|").replace("\n", " ")
+    from ai.engine.cognition.turn.access_render import _md_escape as escape
+
+    return escape(text)
 
 
 def _md_link(label: str, route: str) -> str:
     """Internal page link for a table cell; '—' when no route exists."""
-    route = str(route or "").strip()
-    if not route:
-        return "—"
-    return f"[{label}]({route})"
+    from ai.engine.cognition.turn.access_render import _md_link as link
+
+    return link(label, route)
 
 
 def _grounded_access_table(completed_tools: list[dict]) -> str:
@@ -2242,71 +2244,51 @@ def _grounded_access_table(completed_tools: list[dict]) -> str:
     Returns ``""`` when the tool did not run or had nothing to show, so the
     assistant text is the only content in those turns.
     """
-    for item in completed_tools or []:
-        if not isinstance(item, dict) or item.get("error"):
-            continue
-        raw = item.get("result")
-        try:
-            data = json.loads(raw) if isinstance(raw, str) else raw
-        except (TypeError, ValueError):
-            continue
-        if not isinstance(data, dict) or data.get("error"):
-            continue
-        if data.get("action") != "list_capabilities":
-            continue
+    from ai.engine.cognition.turn.access_render import access_inventory_from_tools
 
-        sections: list[str] = []
+    return access_inventory_from_tools(completed_tools)
 
-        work_areas = [wa for wa in data.get("capabilities") or [] if isinstance(wa, dict)]
-        rows = "\n".join(
-            f"| {_md_escape(wa.get('label') or wa.get('key') or '')}"
-            f" | {_md_escape(wa.get('description') or '')}"
-            f" | {_md_link('Open', wa.get('route') or '')} |"
-            for wa in work_areas
-            if wa.get("route")
-        )
-        if rows:
-            sections.append(
-                "### Work areas\n\n"
-                "| Work area | Description | Open |\n"
-                "|---|---|---|\n" + rows
-            )
 
-        apps = [a for a in data.get("apps") or [] if isinstance(a, dict)]
-        rows = "\n".join(
-            f"| {_md_escape(a.get('name') or a.get('key') or '')}"
-            f" | {_md_escape(a.get('description') or '')}"
-            f" | {_md_link('Open', a.get('route') or '')} |"
-            for a in apps
-            if a.get("route")
-        )
-        if rows:
-            sections.append(
-                "### Apps you can open\n\n"
-                "| App | Description | Open |\n"
-                "|---|---|---|\n" + rows
-            )
+def _prefer_access_inventory(content: str, envelope, completed_tools):
+    """Inventory is typed tables. An empty write-degrade envelope must not hide it.
 
-        modules = [m for m in data.get("modules") or [] if isinstance(m, dict)]
-        rows = "\n".join(
-            f"| {_md_escape(m.get('name') or m.get('key') or '')}"
-            f" | {_md_link('Open', m.get('route') or '')} |"
-            for m in modules
-            if m.get("route")
-        )
-        if rows:
-            sections.append(
-                "### Data areas (modules)\n\n"
-                "| Data area | Open |\n"
-                "|---|---|\n" + rows
-            )
+    EnvelopeMessage prefers envelope over markdown. GFM in the bubble collapses
+    two tables onto one line; the second leaks as pipes.
+    """
+    from ai.engine.cognition.turn.access_render import access_envelope_from_tools
 
-        if not sections:
-            return ""
-
-        return "## Your Access\n\n" + "\n\n".join(sections)
-
-    return ""
+    typed = access_envelope_from_tools(completed_tools)
+    if not typed:
+        return content, envelope
+    tables = (
+        envelope.get("tables")
+        if isinstance(envelope, dict) and envelope.get("tables")
+        else typed["tables"]
+    )
+    lead = ""
+    if isinstance(envelope, dict):
+        lead = str(envelope.get("headline") or "").strip()
+    if not lead:
+        lead = (content or "").strip()
+    if (
+        not lead
+        or "## Your Access" in lead
+        or "could not write" in lead
+        or "|---" in lead
+        or lead.startswith("|")
+        or lead.startswith("#")
+    ):
+        lead = "These are the work areas and apps you can open."
+    else:
+        lead = lead.split("\n", 1)[0].strip()
+    return lead, {
+        "headline": lead,
+        "prose": [],
+        "tables": tables,
+        "charts": [],
+        "caveats": [],
+        "sources": [],
+    }
 
 
 def _grounded_outcome_note(completed_tools: list[dict]) -> str:

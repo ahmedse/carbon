@@ -369,6 +369,27 @@ def test_digest_compacts_profile_identity():
     assert len(digest) <= DIGEST_MAX_CHARS
 
 
+def test_digest_lifts_breakdown_totals_into_state():
+    from ai.engine.cognition.tool_digest import build_tool_digest
+
+    digest = build_tool_digest(
+        [_host_api_tool({
+            "period_end": "2026-08-31",
+            "dimension": "org_unit",
+            "line_type": "net",
+            "status": "committed",
+            "omitted": 0,
+            "breakdown": [
+                {"label": "Operations", "headcount": 12, "total": "16800.000"},
+            ],
+        }, api_name="analyze_committed_pay")],
+        scope=None,
+    )
+    assert "16800" in digest
+    assert "Operations" in digest
+    assert "analyze_committed_pay" in digest
+
+
 def test_digest_drops_records_outside_retrieval_scope():
     from ai.engine.cognition.tool_digest import build_tool_digest
 

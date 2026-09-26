@@ -395,5 +395,67 @@
     "conversation_id": "48beb22e-d330-4ea2-ad53-a954337b8fbe",
     "nominated_at": "2026-09-26T13:11:15.195456+00:00",
     "status": "pending_human_review"
+  },
+  {
+    "utterance": "Give me last run of payroll, a detailed report with visuals. Complete data analysis and intelligence",
+    "audience": [
+      "admin",
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool",
+      "call_tool",
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool",
+      "call_tool",
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 1,
+        "name": "analyze_committed_pay",
+        "code": "unknown_field",
+        "detail": "This read does not return pct; it returns label, headcount, average, median, min, max, total, period_end, dimension, line_type. If the conversation already gives that value, answer from it; otherwise answer that the record does not carry it. Ask a read only for fields it returns."
+      },
+      {
+        "index": 2,
+        "name": "analyze_committed_pay",
+        "code": "unknown_field",
+        "detail": "This read does not return pct; it returns label, headcount, average, median, min, max, total, period_end, dimension, line_type. If the conversation already gives that value, answer from it; otherwise answer that the record does not carry it. Ask a read only for fields it returns."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "4a5bf816-ce5d-44c1-876a-f46e1dcb7bd4",
+    "nominated_at": "2026-09-26T21:01:17.186952+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "The last run, 32",
+    "audience": [
+      "admin",
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "get_payroll_run",
+        "code": "record_mismatch",
+        "detail": "The user identified the record by 32; the record returned does not carry it (id). A path key takes the record id from an earlier lookup result, not a number the user typed. Look the record up by the value the user gave."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "4a5bf816-ce5d-44c1-876a-f46e1dcb7bd4",
+    "nominated_at": "2026-09-26T21:01:47.163616+00:00",
+    "status": "pending_human_review"
   }
 ]

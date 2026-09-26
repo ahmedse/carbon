@@ -241,6 +241,75 @@ def test_handoff_anywhere_wins_over_reads():
     assert text and "Plan" in text
 
 
+def test_act_binds_period_end_from_the_latest_list_row():
+    catalog = [{
+        "name": "list_payroll_runs",
+        "kind": "list",
+        "latest_by": "period_end",
+        "returns": ["id", "period_end", "status"],
+    }, {
+        "name": "analyze_committed_pay",
+        "kind": "read",
+        "parameters": {
+            "type": "object",
+            "required": ["period_end", "dimension"],
+            "properties": {"period_end": {"type": "string"}, "dimension": {"type": "string"}},
+        },
+    }]
+    seen: list[tuple[str, dict]] = []
+
+    async def execute_tool(name, args):
+        seen.append((name, dict(args)))
+        if name == "list_payroll_runs":
+            return {"results": [
+                {"id": 32, "period_end": "2026-07-31", "status": "committed"},
+                {"id": 31, "period_end": "2026-08-31", "status": "committed"},
+            ]}
+        return {
+            "period_end": args.get("period_end"),
+            "dimension": args.get("dimension"),
+            "breakdown": [{"label": "Operations", "headcount": 12, "total": "16800.000"}],
+        }
+
+    decision = Decision(commands=[
+        Command(op="call_tool", name="list_payroll_runs"),
+        Command(op="call_tool", name="analyze_committed_pay", args={"dimension": "org_unit"}),
+    ])
+    rows: list[dict] = []
+    asyncio.run(act_on_decision(
+        decision, execute_tool=execute_tool, user_message="last payroll report",
+        executed=rows, catalog=catalog,
+    ))
+    assert seen[0][0] == "list_payroll_runs"
+    assert seen[1][0] == "analyze_committed_pay"
+    assert seen[1][1]["period_end"] == "2026-08-31"
+    assert seen[1][1]["dimension"] == "org_unit"
+
+
+def test_visual_ask_charts_a_text_decision_from_pay_totals():
+    rows = [{
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": "analyze_committed_pay"},
+        "result": {
+            "dimension": "org_unit",
+            "breakdown": [
+                {"label": "Operations", "headcount": 12, "total": "16800.000"},
+                {"label": "Finance", "headcount": 4, "total": "9200.000"},
+            ],
+        },
+    }]
+    decision = Decision(commands=[Command(op="call_tool", name="analyze_committed_pay")])
+    text, envelope = speak_rows(
+        decision, rows, text="Committed pay structure (2)",
+        user_message="Give me a detailed report with visuals",
+    )
+    assert text == "Committed pay structure (2)"
+    assert envelope is not None
+    assert envelope["charts"]
+    chart_vals = {point[1] for point in envelope["charts"][0]["series"][0]["data"]}
+    assert 16800.0 in chart_vals or 16800 in chart_vals
+
+
 def test_unrestated_rows_are_shown_not_called_failed():
     rows = [{
         "tool_name": "call_host_api",

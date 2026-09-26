@@ -311,12 +311,8 @@ def _chart_from_breakdown(data: dict[str, Any]) -> EnvelopeChart | None:
         if not isinstance(b, dict):
             continue
         label = str(b.get("label") or b.get("name") or "").strip() or "-"
-        raw = b.get("count", b.get("value", b.get("pct")))
-        try:
-            val = float(raw) if raw is not None else 0.0
-        except (TypeError, ValueError):
-            continue
-        if val <= 0:
+        val = _breakdown_measure(b)
+        if val is None or val <= 0:
             continue
         points.append([label[:48], int(val) if float(val).is_integer() else val])
     if len(points) < 2:
@@ -454,6 +450,19 @@ def _render_tool_results(completed_tools: list[dict], max_chars: int = 20000) ->
 
 
 # ── Deterministic typed blocks (host rows → tables/charts) ─────────────────
+
+
+def _breakdown_measure(item: dict) -> float | None:
+    """The chartable number on a breakdown row, by shape.
+
+    Count/value first (headcount-style aggregates). Total/amount next (money).
+    Headcount last so a pay row charts the money, not the people.
+    """
+    for key in ("count", "value", "total", "amount", "headcount"):
+        number = _numeric(item.get(key))
+        if number is not None:
+            return number
+    return _numeric(item.get("pct"))
 
 
 def _numeric(value: Any) -> float | None:
@@ -623,7 +632,7 @@ def _gross_per_person(rows: list[dict]) -> list[float]:
 
 
 def _payload_rows(data: dict) -> list[dict]:
-    for key in ("results", "rows", "items"):
+    for key in ("results", "rows", "items", "breakdown"):
         rows = data.get(key)
         if isinstance(rows, list):
             return [row for row in rows if isinstance(row, dict)]
@@ -668,7 +677,7 @@ def deterministic_envelope_blocks(
                 if not isinstance(item, dict):
                     continue
                 label = str(item.get("label") or item.get("name") or "-")
-                value = _numeric(item.get("count", item.get("value")))
+                value = _breakdown_measure(item)
                 if value is None:
                     continue
                 row: list[str | int | float] = [

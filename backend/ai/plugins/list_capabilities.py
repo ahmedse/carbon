@@ -59,15 +59,20 @@ class ListCapabilities(ToolPlugin):
         from ai.engine.agent.plugins import capability_claims
 
         manifest = await sync_to_async(build_user_access_manifest)(ctx.host_user_id)
-        return {
+        from ai.engine.agent.chat_surface import is_chat_surface
+
+        surface = getattr(ctx, "surface", None)
+        process_mode = getattr(ctx, "process_mode", None)
+        payload = {
             "requires_confirmation": False,
             "action": "list_capabilities",
             "apps": manifest["apps"],
             "capabilities": manifest["capabilities"],
             "modules": manifest["modules"],
             "routes": manifest["routes"],
-            # Registry-derived "what I can do" claims — truthful by construction
-            # (F5). The user's *access* is the manifest above; this is the
-            # agent's *capability* surface, never hardcoded prose.
-            "agent_capabilities": capability_claims(),
         }
+        # Chat restates the access tables only. Agent still sees the
+        # registry claims (pandas, export, DQ) — those are not Chat work.
+        if not is_chat_surface(surface, process_mode=process_mode):
+            payload["agent_capabilities"] = capability_claims()
+        return payload

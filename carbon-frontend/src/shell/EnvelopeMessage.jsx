@@ -24,6 +24,7 @@ import PropTypes from 'prop-types';
 import { useTranslation } from 'react-i18next';
 import { alpha, useTheme } from '@mui/material/styles';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { Link as RouterLink } from 'react-router-dom';
 import {
   Box,
   Chip,
@@ -35,6 +36,7 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
+import { isSafeInternalRoute } from '../utils/navigation';
 import ErrorOutlineOutlinedIcon from '@mui/icons-material/ErrorOutlineOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
@@ -88,6 +90,31 @@ function flattenSeries(series) {
 function cellString(cell) {
   if (cell === null || cell === undefined) return '';
   return String(cell);
+}
+
+const MD_LINK = /^\[([^\]]+)\]\(([^)]+)\)$/;
+
+/** Plain text, or an in-app link when the cell is ``[label](/route)``. */
+function cellNode(cell) {
+  const s = cellString(cell);
+  const m = s.match(MD_LINK);
+  if (!m) return s;
+  const [, label, href] = m;
+  if (!isSafeInternalRoute(href)) return label;
+  return (
+    <Box
+      component={RouterLink}
+      to={href}
+      sx={{
+        fontWeight: 600,
+        color: 'primary.main',
+        textDecoration: 'none',
+        '&:hover': { textDecoration: 'underline' },
+      }}
+    >
+      {label}
+    </Box>
+  );
 }
 
 /** Truncate a chart label so bars/pie legends stay scannable. */
@@ -202,7 +229,7 @@ function EnvelopeTable({ table, t }) {
                           fontSize: theme.typography.body2.fontSize,
                         })}
                       >
-                        {cellString(cell)}
+                        {cellNode(cell)}
                       </TableCell>
                     ))}
                   </TableRow>

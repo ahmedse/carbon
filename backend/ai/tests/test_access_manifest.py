@@ -16,7 +16,11 @@ import pytest
 from django.conf import settings
 
 from ai.access_manifest import build_user_access_manifest
-from ai.engine_runtime import _extract_tool_actions, _grounded_access_table
+from ai.engine_runtime import (
+    _extract_tool_actions,
+    _grounded_access_table,
+    _prefer_access_inventory,
+)
 from ai.engine.agent.plugins import registered_plugins
 
 
@@ -309,3 +313,44 @@ class TestGroundedAccessTable:
             "capabilities": [], "apps": [], "modules": [], "routes": [],
         }
         assert _grounded_access_table([self._tool(result)]) == ""
+
+    def test_write_degrade_envelope_does_not_hide_the_inventory(self):
+        tools = [self._tool({
+            "action": "list_capabilities",
+            "capabilities": [
+                {"key": "dq", "label": "Data Quality",
+                 "description": "Inspect rules.", "route": "/dq"},
+            ],
+            "apps": [], "modules": [], "routes": [],
+        })]
+        content, envelope = _prefer_access_inventory(
+            "I fetched the data, but I could not write the summary this time.",
+            {"headline": "", "prose": ["fail"], "tables": [], "charts": [],
+             "caveats": [{"text": "Pulse degraded: write (invalid_output)."}]},
+            tools,
+        )
+        assert envelope is not None
+        assert "could not write" not in content
+        assert content == "These are the work areas and apps you can open."
+        assert envelope["tables"][0]["rows"][0][0] == "Data Quality"
+        assert envelope["tables"][0]["rows"][0][2] == "[Open](/dq)"
+
+    def test_does_not_dump_gfm_when_tables_already_exist(self):
+        tools = [self._tool({
+            "action": "list_capabilities",
+            "capabilities": [
+                {"key": "dq", "label": "Data Quality",
+                 "description": "Inspect rules.", "route": "/dq"},
+            ],
+            "apps": [], "modules": [], "routes": [],
+        })]
+        tables = [{"title": "Work areas", "columns": ["Work area"], "rows": [["Data Quality"]]}]
+        shown, envelope = _prefer_access_inventory(
+            "These are the work areas and apps you can open.",
+            {"headline": "These are the work areas and apps you can open.",
+             "tables": tables, "charts": []},
+            tools,
+        )
+        assert shown == "These are the work areas and apps you can open."
+        assert "## Your Access" not in shown
+        assert envelope["tables"] == tables

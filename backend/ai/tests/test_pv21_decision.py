@@ -195,3 +195,35 @@ def test_v2_ladder_unchanged_v21_separate():
     # Baseline evidence is not inside the lean ceilings.
     assert score_l7({"staged_exits": 13, "re_compile": 227, "arabic_regex": 53, "runner_lines": 5908, "tool_choice_uses": 0}).status == "missing"
     assert score_l6({}).status == "missing"
+
+
+def test_list_fields_defer_required_args_the_latest_row_will_fill():
+    decision = parse_decision({
+        "commands": [
+            {"op": "call_tool", "name": "list_payroll_runs"},
+            {"op": "call_tool", "name": "analyze_committed_pay", "args": {"dimension": "org_unit"}},
+        ],
+        "language": "en",
+        "confidence": 0.9,
+    })
+
+    def violations(name, args):
+        if name == "analyze_committed_pay" and "period_end" not in args:
+            return ["missing required field 'period_end'"]
+        return []
+
+    dropped = validate_decision(
+        decision, surface="chat",
+        allowed_tools={"list_payroll_runs", "analyze_committed_pay"},
+        arg_violations=violations,
+    )
+    assert [c.name for c in dropped.commands] == ["list_payroll_runs"]
+
+    kept = validate_decision(
+        decision, surface="chat",
+        allowed_tools={"list_payroll_runs", "analyze_committed_pay"},
+        arg_violations=violations,
+        list_fields=lambda name: {"period_end", "id"} if name == "list_payroll_runs" else set(),
+    )
+    assert [c.name for c in kept.commands] == ["list_payroll_runs", "analyze_committed_pay"]
+    assert kept.rejections == []

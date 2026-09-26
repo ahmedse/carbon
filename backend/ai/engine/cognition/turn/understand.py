@@ -64,7 +64,8 @@ _UNDERSTAND_RULES = (
     "for that question does not fit it.\n"
     "A report, summary, export, or explanation of data is answer when its "
     "rows are already in CONVERSATION STATE; otherwise emit the CATALOG "
-    "reads that fetch it (up to 3, each with the Args its line lists). "
+    "reads that fetch it (up to 3). A later read may omit a field the "
+    "first list returns. "
     "When the user asks for charts, visuals, or a report, set render=chart "
     "on those reads.\n"
     "A follow-up that asks for charts / a full report / visuals of the "
@@ -369,6 +370,7 @@ async def understand_turn(
     state: Any = None,
     arg_violations: Callable[[str, dict], list[str]] | None = None,
     field_gaps: Callable[[str, list[str]], tuple[list[str], list[str]]] | None = None,
+    list_fields: Callable[[str], set[str]] | None = None,
     repair: bool = True,
     on_malformed: Malformed | None = None,
 ) -> Decision | None:
@@ -389,6 +391,7 @@ async def understand_turn(
         "state": state,
         "arg_violations": arg_violations,
         "field_gaps": field_gaps,
+        "list_fields": list_fields,
     }
     result = await _emit(complete, messages)
     parsed, cause, head = read_decision(result)

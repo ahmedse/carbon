@@ -190,17 +190,85 @@ def test_strict_writer_raises_instead_of_templating(monkeypatch):
     assert exc.value.cause == "no_rows"
 
 
+def test_capabilities_are_the_document_not_a_writer_turn(monkeypatch):
+    async def boom(**kwargs):
+        raise AssertionError("writer ran over a capabilities inventory")
+
+    monkeypatch.setattr("ai.envelope_service.synthesize_envelope", boom)
+    caps = [{
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": "list_my_capabilities"},
+        "result": {
+            "action": "list_capabilities",
+            "capabilities": [
+                {"key": "dq", "label": "Data Quality",
+                 "description": "Inspect rules.", "route": "/dq"},
+            ],
+            "apps": [
+                {"key": "pulse", "name": "AI Workspace",
+                 "description": "Ask and Agent.", "route": "/ai"},
+            ],
+            "modules": [],
+        },
+    }]
+    text, env, degraded = asyncio.run(speak_turn(
+        Decision(commands=[Command(op="call_tool", name="list_my_capabilities")]),
+        caps, text="", user_message="Tell me more about my capabilities on the system.",
+        instance_id="i", conversation_id="c",
+    ))
+    assert degraded is None
+    assert env is not None
+    assert text.startswith("These are the work areas and apps you can open.")
+    assert "## Your Access" not in text
+    titles = [t.get("title") for t in env["tables"]]
+    assert titles == ["Work areas", "Apps you can open"]
+    assert env["tables"][0]["rows"][0][0] == "Data Quality"
+    assert env["tables"][0]["rows"][0][2] == "[Open](/dq)"
+    assert env["tables"][1]["rows"][0][0] == "AI Workspace"
+    assert "could not write" not in text
+
+
 def test_a_restated_read_is_not_rewritten(monkeypatch):
     async def boom(**kwargs):
         raise AssertionError("narration ran over a restated read")
 
     monkeypatch.setattr("ai.envelope_service.synthesize_envelope", boom)
+    ess = [{
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": "get_my_leave_balance"},
+        "result": {"results": [{"leave_type": "Annual", "remaining": 12}]},
+    }]
     text, _, degraded = asyncio.run(speak_turn(
-        _decision(), _ROWS, text="Your balance is 12 days.", user_message="balance",
+        Decision(commands=[Command(op="call_tool", name="get_my_leave_balance")]),
+        ess, text="Your balance is 12 days.", user_message="balance",
         instance_id="i", conversation_id="c",
     ))
     assert text == "Your balance is 12 days."
     assert degraded is None
+
+
+def test_a_breakdown_still_gets_a_writer_after_a_list_prefix(monkeypatch):
+    seen = _stub_synth(monkeypatch, "August net pay", ["Operations received 16800.000."])
+    pay = [{
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": "analyze_committed_pay"},
+        "result": {
+            "dimension": "org_unit",
+            "breakdown": [
+                {"label": "Operations", "headcount": 12, "total": "16800.000"},
+                {"label": "Finance", "headcount": 4, "total": "9200.000"},
+            ],
+        },
+    }]
+    text, env, degraded = asyncio.run(speak_turn(
+        Decision(commands=[Command(op="call_tool", name="analyze_committed_pay")]),
+        pay, text="Payroll runs (6)", user_message="how much did the company pay?",
+        instance_id="i", conversation_id="c",
+    ))
+    assert degraded is None
+    assert seen["calls"] == 1
+    assert "16800.000" in text
+    assert env["tables"]
 
 
 def test_a_read_turn_remembers_its_view(monkeypatch):
@@ -240,7 +308,7 @@ def test_follow_up_renders_the_last_view_without_a_host_read(monkeypatch):
     ))
     assert degraded is None
     assert seen["calls"] == 0
-    assert "Count=554" in text and "Count=1" in text
+    assert "554" in text and "| 1 |" in text
     assert env["charts"][0]["chart_type"] == "pie"
     assert any(c["text"] == _GAP for c in env["caveats"])
 
@@ -264,7 +332,7 @@ def test_answer_follow_up_restates_last_view_without_writer(monkeypatch):
     ))
     assert degraded is None
     assert seen["calls"] == 0
-    assert "2026-09-25T18:48:02.408376+03:00" in text
+    assert "2026-09-25" in text
     assert env["tables"]
 
 

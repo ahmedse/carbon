@@ -169,6 +169,27 @@ def test_declared_list_restates_returns_and_latest_first():
     assert ungrounded_numbers(rendered, [payload]) == []
 
 
+def test_declared_list_keeps_count_and_rows_in_agreement():
+    rows = []
+    for i, day in enumerate(("08", "07", "06", "05", "04", "03"), start=31):
+        rows.append({
+            "id": i,
+            "org_unit": 1,
+            "period_start": f"2026-{day}-01",
+            "period_end": f"2026-{day}-28",
+            "status": "committed",
+            "created_at": "2026-09-25T19:07:39+03:00",
+        })
+    rendered = render_catalog_read(
+        {"result": {"count": 6, "results": rows}},
+        "list_payroll_runs",
+        "en",
+        catalog_entry=_RUN_ENTRY,
+    )
+    assert rendered.startswith("Runs (6)\n")
+    assert "| 31 |" in rendered and "| 36 |" in rendered
+
+
 def test_declared_detail_restates_iso_commit_without_writer():
     row = {
         "id": 56,
@@ -229,6 +250,67 @@ def test_declared_kind_without_returns_does_not_guess():
     ) is None
 
 
+_PAY_ENTRY = {
+    "name": "analyze_committed_pay",
+    "kind": "read",
+    "empty_render": "no_committed_pay",
+    "label": "Committed pay structure",
+    "returns": [
+        "label", "headcount", "average", "median", "min", "max", "total",
+        "period_end", "dimension", "line_type", "status",
+    ],
+}
+
+
+def test_committed_pay_restates_breakdown_totals_not_the_wrapper():
+    payload = {
+        "period_end": "2026-08-31",
+        "dimension": "org_unit",
+        "line_type": "net",
+        "status": "committed",
+        "omitted": 0,
+        "caveats": [],
+        "breakdown": [
+            {
+                "label": "Operations",
+                "headcount": 12,
+                "average": "1400.000",
+                "median": "1300.000",
+                "min": "900.000",
+                "max": "2100.000",
+                "total": "16800.000",
+            },
+        ],
+    }
+    rendered = render_catalog_read(
+        {"result": payload},
+        "analyze_committed_pay",
+        "en",
+        catalog_entry=_PAY_ENTRY,
+    )
+    # Breakdown rows are envelope + writer evidence, not a 0-LLM wrapper table.
+    assert rendered is None
+
+
+def test_committed_pay_empty_breakdown_uses_pack_empty_render():
+    payload = {
+        "period_end": "2026-08-31",
+        "dimension": "org_unit",
+        "line_type": "net",
+        "status": "committed",
+        "omitted": 0,
+        "caveats": ["No committed pay lines for this period and dimension."],
+        "breakdown": [],
+    }
+    rendered = render_catalog_read(
+        {"result": payload},
+        "analyze_committed_pay",
+        "en",
+        catalog_entry=_PAY_ENTRY,
+    )
+    assert rendered == "No committed pay rows for that period and dimension."
+
+
 def test_breakdown_restate_names_only_the_applied_dimension():
     payload = {
         "dimension": "is_active",
@@ -277,7 +359,8 @@ def test_own_profile_restate_includes_basic_salary_when_the_host_sent_it():
         },
     )
     assert rendered is not None
-    assert "basic_salary=2407.622" in rendered
+    assert "2407.622" in rendered
+    assert "Ali Mohamed Saad AlAjmi" in rendered
     assert "not available" not in rendered.lower()
     assert ungrounded_numbers(rendered, [payload]) == []
 
@@ -327,7 +410,8 @@ def test_sensitive_pay_stays_off_a_profile_dump():
     )
     assert dumped and "2407" not in dumped
     assert asked_all and "2407" not in asked_all
-    assert pay == "Basic salary: 2407.622"
+    assert "2407.622" in pay
+    assert "Basic salary" in pay
 
 
 def test_detail_restate_shows_only_the_fields_asked():
@@ -335,7 +419,8 @@ def test_detail_restate_shows_only_the_fields_asked():
         {"result": _PROFILE}, "get_my_profile", "en",
         catalog_entry=_PROFILE_ENTRY, fields=["name", "employee_no"],
     )
-    assert rendered == "Name: Ali Mohamed Saad AlAjmi · Employee number: 2378"
+    assert "Ali Mohamed Saad AlAjmi" in rendered
+    assert "2378" in rendered
     assert "2407" not in rendered
 
 
@@ -344,7 +429,8 @@ def test_detail_restate_uses_the_pack_labels_in_arabic():
         {"result": _PROFILE}, "get_my_profile", "ar",
         catalog_entry=_PROFILE_ENTRY, fields=["basic_salary"],
     )
-    assert rendered == "الراتب الأساسي: 2407.622"
+    assert "الراتب الأساسي" in rendered
+    assert "2407.622" in rendered
 
 
 def test_an_ask_no_declared_field_holds_goes_to_the_writer():

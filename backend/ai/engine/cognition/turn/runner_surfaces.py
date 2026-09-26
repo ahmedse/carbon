@@ -560,6 +560,7 @@ class SoftSurfacesMixin:
                 state=state,
                 arg_violations=caps.arg_violations,
                 field_gaps=caps.field_gaps,
+                list_fields=caps.supplied_by,
                 on_malformed=malformed,
             )
         except Exception:

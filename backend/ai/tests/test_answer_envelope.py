@@ -315,6 +315,34 @@ def test_deterministic_blocks_own_breakdown_not_llm_tables():
     assert blocks["sources"][0].tool == "call_host_api"
 
 
+def test_deterministic_blocks_chart_pay_totals_not_the_wrapper():
+    usable = [{
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": "analyze_committed_pay"},
+        "result": {
+            "period_end": "2026-08-31",
+            "dimension": "org_unit",
+            "line_type": "net",
+            "status": "committed",
+            "omitted": 0,
+            "breakdown": [
+                {"label": "Operations", "headcount": 12, "total": "16800.000"},
+                {"label": "Finance", "headcount": 4, "total": "9200.000"},
+            ],
+        },
+    }]
+    blocks = deterministic_envelope_blocks(usable)
+    assert blocks["tables"]
+    labels = {row[0] for row in blocks["tables"][0].rows}
+    assert labels == {"Operations", "Finance"}
+    values = {row[1] for row in blocks["tables"][0].rows}
+    assert 16800.0 in values or 16800 in values
+    assert blocks["charts"]
+    chart_vals = {point[1] for point in blocks["charts"][0].series[0]["data"]}
+    assert 16800.0 in chart_vals or 16800 in chart_vals
+    assert 12 not in chart_vals
+
+
 def test_deterministic_salary_blocks_never_copy_employee_identity():
     usable = [{
         "tool_name": "call_host_api",

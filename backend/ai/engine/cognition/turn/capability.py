@@ -74,6 +74,22 @@ class CapabilitySurface:
 
         return _schema_violations(schema, flat_args(args))
 
+    def supplied_by(self, name: str) -> set[str]:
+        """Fields a prior read in the same Decision can fill on a later read.
+
+        A list (or any entry with ``latest_by``) supplies its returned fields
+        and the latest_by key. The latest row is bound at act time.
+        """
+        entry = self.entry(name) or {}
+        kind = str(entry.get("kind") or "")
+        latest = str(entry.get("latest_by") or "").strip()
+        if kind not in {"list", "detail"} and not latest:
+            return set()
+        keys = {str(item) for item in (entry.get("returns") or []) if item}
+        if latest:
+            keys.add(latest)
+        return keys
+
     def field_gaps(self, name: str, fields: list[str] | None) -> tuple[list[str], list[str]]:
         """``(asked names the entry does not return, the fields it does return)``."""
         from ai.engine.cognition.turn.catalog_render import _declared_fields, unmatched_fields

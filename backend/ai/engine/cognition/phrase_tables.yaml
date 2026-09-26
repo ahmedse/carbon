@@ -713,6 +713,7 @@ tool_digest.py::_RECORD_LIST_KEYS:
   - records
   - entities
   - data
+  - breakdown
   kind: tuple
 tool_digest.py::_RESTRICTED_KEY_NEEDLES:
   items:
