@@ -111,6 +111,18 @@ async def test_no_reasoning_keeps_the_forced_choice(sent):
 
 
 @pytest.mark.asyncio
+async def test_deepseek_thinking_yields_when_a_tool_is_forced(sent, monkeypatch):
+    monkeypatch.setattr(
+        "ai.engine.llm.provider.client_for_model",
+        lambda model: (object(), "deepseek-flash", "https://api.deepseek.com/v1"),
+    )
+    result = await _route(model="deepseek-flash", reasoning=True)
+    assert sent["tool_choice"] == {"type": "function", "function": {"name": "emit_decision"}}
+    assert "thinking" not in (sent.get("extra_body") or {})
+    assert result["tool_choice"] == sent["tool_choice"]
+
+
+@pytest.mark.asyncio
 async def test_reasoning_on_an_undeclared_model_changes_nothing(sent):
     await _route(model="gpt-4o-mini", reasoning=True)
     assert sent["tool_choice"] == {"type": "function", "function": {"name": "emit_decision"}}

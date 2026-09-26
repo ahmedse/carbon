@@ -7,6 +7,7 @@ from __future__ import annotations
 from ai.engine.pack_vocab import V
 
 
+import json
 import logging
 import time
 
@@ -66,6 +67,18 @@ def _navigation_response(nav, *, total_tokens=0, total_llm_calls=0):
         response_type="inferred",
         actions=_navigation_actions(nav),
     )
+
+
+def _emission_head(decision, limit: int = 400) -> str:
+    """The model's raw emit_decision arguments, clipped for the audit record."""
+    result = (getattr(decision, "exchange", None) or {}).get("result") or {}
+    for call in result.get("tool_calls") or []:
+        fn = (call or {}).get("function") or {}
+        if fn.get("name") == "emit_decision":
+            raw = fn.get("arguments")
+            text = raw if isinstance(raw, str) else json.dumps(raw, ensure_ascii=False, default=str)
+            return text[:limit]
+    return ""
 
 
 def _degraded_reply(ledger, degradation, state, mode: str):
@@ -443,6 +456,7 @@ class SoftSurfacesMixin:
             decision_render,
             failed_reads,
             lead_command,
+            mismatched_reads,
             speak_turn,
         )
         from ai.engine.cognition.turn.degradation import Degradation
@@ -664,11 +678,17 @@ class SoftSurfacesMixin:
             text, executed = await act(decision)
             # Self-heal: the host refused a decided read's arguments. The
             # model sees the host's own detail and decides once more.
-            refused = failed_reads(executed)
+            refused = [(row, "host_rejected") for row in failed_reads(executed)]
+            refused += [
+                (row, "record_mismatch")
+                for row in mismatched_reads(
+                    executed, user_message=user_message or "", path_keys=caps.path_keys,
+                )
+            ]
             if refused and not decision.repaired:
                 host = [
-                    Rejection(i, row["name"], "host_rejected", row["detail"])
-                    for i, row in enumerate(refused)
+                    Rejection(i, row["name"], code, row["detail"])
+                    for i, (row, code) in enumerate(refused)
                 ]
                 kept = [c.name or c.op for c in decision.commands if c.name not in {r.name for r in host}]
                 healed = await repair_turn(
@@ -680,6 +700,24 @@ class SoftSurfacesMixin:
                     healed.rejections = [*healed.rejections, *host]
                     decision = healed
                     text, executed = await act(decision)
+            wrong = {
+                row["name"]
+                for row in mismatched_reads(
+                    executed, user_message=user_message or "", path_keys=caps.path_keys,
+                )
+            }
+            if wrong:
+                # A record the user did not name is never spoken about.
+                executed = [
+                    row for row in executed
+                    if str((row.get("tool_args") or {}).get("api_name") or "") not in wrong
+                ]
+                if not executed:
+                    _signal(ledger, "v21_understand", False, reason="record_mismatch")
+                    await record("record_mismatch", [])
+                    return _degraded_reply(
+                        ledger, Degradation("act", "record_mismatch"), state, mode,
+                    )
         except Exception:  # noqa: BLE001
             logger.warning("v21 act failed", exc_info=True)
             _signal(ledger, "v21_understand", False, reason="act_error")
@@ -765,7 +803,14 @@ class SoftSurfacesMixin:
                     cause = str((usage or {}).get("cause") or "empty_answer")
                     if cause not in {"ungrounded", "empty_output", "model_error"}:
                         cause = "empty_answer"
-                    _signal(ledger, "v21_understand", False, reason=cause)
+                    _signal(
+                        ledger, "v21_understand", False, reason=cause,
+                        numbers=list((usage or {}).get("ungrounded") or []),
+                    )
+                    logger.info(
+                        "[answer] cause=%s numbers=%s head=%r", cause,
+                        (usage or {}).get("ungrounded"), (usage or {}).get("rejected_head"),
+                    )
                     await record(cause, [])
                     return _degraded_reply(ledger, Degradation("speak", cause), state, mode)
             elif lead.op == "handoff_agent" and (handoff_api == PLAN_PROCESS_ID or on_agent):
@@ -894,14 +939,16 @@ class SoftSurfacesMixin:
             ],
             "host_refused": [row["name"] for row in failed_reads(executed)],
             "language": decision.language,
+            "fields": [list(c.fields or []) for c in decision.commands],
+            "emission": _emission_head(decision),
         }
         # Detail only: the Arbiter must not treat a record as a routing gate.
         _signal(ledger, "v21_record", False, **payload)
         logger.info(
-            "[understand] outcome=%s raw=%s ops=%s rejected=%s repaired=%s executed=%s",
-            outcome, payload["raw_ops"], payload["ops"],
+            "[understand] outcome=%s lang=%s raw=%s ops=%s rejected=%s repaired=%s executed=%s fields=%s emission=%s",
+            outcome, payload["language"], payload["raw_ops"], payload["ops"],
             [f"{r['code']}:{r['name']}" for r in payload["rejections"]],
-            payload["repaired"], payload["executed"],
+            payload["repaired"], payload["executed"], payload["fields"], payload["emission"],
         )
         try:
             await self._write_ledger_row(

@@ -1262,10 +1262,10 @@ def _people_me(user, sub, method, body=None, params=None) -> dict:
             "data": getattr(response, "data", None),
         }
 
-    from people.self_serializers import EmployeeSummarySerializer
+    from people.self_serializers import EmployeeSelfProfileSerializer
 
     if not sub:
-        return {"status_code": 200, "data": EmployeeSummarySerializer(profile).data}
+        return {"status_code": 200, "data": EmployeeSelfProfileSerializer(profile).data}
 
     if sub == "leave":
         from people.models import LeaveRecord

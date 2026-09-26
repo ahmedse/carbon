@@ -13,13 +13,14 @@ from ai.engine.cognition.turn.decision import Command, Decision
 
 logger = logging.getLogger("pulse.cognition.turn.finish")
 
-ANSWER_TASK = (
+ANSWER_TASK_PROMPT = (
     "TASK — Write the reply to the user's last message.\n"
     "Understanding already decided this turn is answered in words, with no "
     "live read. What it understood: {reason}\n"
     "Use the identity, state, history, knowledge and memory blocks above. "
     "Do not say you looked anything up, saved it, or changed it. "
-    "Do not invent figures, names or dates. Reply in the user's language."
+    "Do not invent figures, names or dates. Reply in the user's language, but "
+    "quote names, titles and other values from the record exactly as written."
 )
 
 
@@ -74,6 +75,7 @@ async def write_answer(
     from ai.engine.cognition.turn.grounding import ungrounded_numbers
     from ai.engine.llm.call_meter import stage
     from ai.engine.llm.router import route_chat
+    from ai.engine.text.word_match import has_arabic_script
 
     history = list(conversation_history or [])[-8:]
     pack = build_context_pack(
@@ -85,7 +87,7 @@ async def write_answer(
         conversation_history=history,
         retrieval=retrieval,
         language=decision.language,
-        task_body=ANSWER_TASK.format(reason=(decision.reason or "").strip() or "-"),
+        task_body=ANSWER_TASK_PROMPT.format(reason=(decision.reason or "").strip() or "-"),
         include_state=True,
         include_history=False,
         include_knowledge=True,
@@ -130,9 +132,21 @@ async def write_answer(
             continue
         if bad:
             usage["cause"] = "ungrounded"
+            usage["ungrounded"] = bad[:8]
+            usage["rejected_head"] = text[:600]
             note = (
                 "(These numbers are not in the conversation: "
                 f"{', '.join(bad[:8])}. Use only numbers that appear in it.)"
+            )
+            text = ""
+            continue
+        if _attempt == 0 and decision.language == "ar" and not has_arabic_script(text):
+            logger.info("[answer] retry cause=wrong_language head=%r", text[:200])
+            usage["cause"] = "wrong_language"
+            note = (
+                f"(Your reply «{text[:80]}» has no Arabic words, but this turn is "
+                "answered in Arabic. Rewrite it as a short Arabic sentence; keep "
+                "figures and quoted values as they are.)"
             )
             text = ""
             continue

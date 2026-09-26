@@ -84,6 +84,7 @@ from ai.protocol import (
     AIProvider,
     AnomalyDetectRequest,
     ChatRequest,
+    turn_meter_from_result,
     ConversationContext,
     DqRuleInput,
     DqSuggestRequest,
@@ -761,6 +762,7 @@ class CarbonIntelligence:
                             reasoning=res.get("reasoning"),
                             revision=res.get("revision"),
                             form=res.get("form"),
+                            turn_meter=turn_meter_from_result(res),
                         )
                         _finalize_generation("completed", usage)
                         done_frame = {
@@ -2713,6 +2715,7 @@ class CarbonIntelligence:
                             reasoning=res.get("reasoning"),
                             revision=res.get("revision"),
                             form=res.get("form"),
+                            turn_meter=turn_meter_from_result(res),
                         )
                         _finalize_generation("completed", usage)
                         done_frame = {
@@ -3909,6 +3912,7 @@ class CarbonIntelligence:
             reasoning=getattr(chat_response, "reasoning", None) or [],
             revision=getattr(chat_response, "revision", None),
             form=getattr(chat_response, "form", None),
+            turn_meter=getattr(chat_response, "turn_meter", None),
         )
 
     def _prepend_workspace_context(
@@ -4181,6 +4185,7 @@ class CarbonIntelligence:
         reasoning: list | None = None,
         revision: dict | None = None,
         form: dict | None = None,
+        turn_meter: dict | None = None,
     ) -> dict[str, Any]:
         """Save AI response message and update conversation status."""
         if status == "provider_unavailable":
@@ -4234,6 +4239,8 @@ class CarbonIntelligence:
             metadata["honest_uncertainty"] = True
         if active_plans:
             metadata["active_plans"] = list(active_plans)
+        if turn_meter:
+            metadata["turn_meter"] = dict(turn_meter)
 
         return self._save_assistant_message(
             conversation,

@@ -148,6 +148,19 @@ def test_org_scoped_user_sees_only_own_org(
 
 
 @pytest.mark.django_db
+def test_unsupported_list_filter_is_rejected_not_ignored(
+    auth, create_user, create_scoped_role, org_a, employee_a,
+):
+    user = create_user('people_filter_viewer')
+    create_scoped_role(user, 'viewers_group', org_unit=org_a)
+    client = auth(user)
+    resp = client.get(EMPLOYEES_URL, {'full_name__startswith': 'Ali'})
+    assert resp.status_code == 400
+    assert 'full_name__startswith' in resp.json()['detail']
+    assert client.get(EMPLOYEES_URL, {'q': 'E-A', 'page_size': 5}).status_code == 200
+
+
+@pytest.mark.django_db
 def test_employee_list_query_budget_is_bounded(auth, create_user, org_a):
     """List must not N+1 per employee (SIM-QA N-HR-UI-01 / nibras_dev timeout)."""
     from django.test.utils import CaptureQueriesContext

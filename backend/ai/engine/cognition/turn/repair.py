@@ -36,6 +36,8 @@ def _reason(code: str, detail: str) -> str:
         return "call_tool needs a CATALOG tool name"
     if code == "host_rejected":
         return f"the host rejected these arguments: {detail}"
+    if code == "record_mismatch":
+        return f"the read did not return the record the user named: {detail}"
     return detail or code
 
 

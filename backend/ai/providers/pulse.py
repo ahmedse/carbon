@@ -22,6 +22,7 @@ from ai.protocol import (
     ChatRequest,
     ChatResponse,
     DetectedAnomaly,
+    turn_meter_from_result,
     DqRuleInput,
     DqRuleResult,
     DqSuggestRequest,
@@ -529,6 +530,7 @@ class PulseProvider(AIProvider):
                 reasoning=result.get("reasoning") or [],
                 revision=result.get("revision"),
                 form=result.get("form"),
+                turn_meter=turn_meter_from_result(result),
             )
 
         return ChatResponse(

@@ -355,12 +355,19 @@ async def route_chat(
             kwargs["extra_body"] = extra_body
         mode = reasoning_mode(model, base_url) if reasoning else None
         if mode is not None:
-            kwargs["extra_body"] = {**(kwargs.get("extra_body") or {}), **mode.body}
-            if mode.temperature is not None:
-                kwargs["temperature"] = mode.temperature
-            if not mode.forced_tool and kwargs.get("tool_choice") not in (None, "auto"):
-                kwargs["tool_choice"] = "auto"
-                normalized = "auto"
+            # DeepSeek rejects every tool_choice while thinking is on, including
+            # "auto". Keep the forced tool and skip thinking on that call.
+            thinking_blocks_tools = "thinking" in (mode.body or {})
+            forced = kwargs.get("tool_choice") not in (None, "auto")
+            if thinking_blocks_tools and forced:
+                normalized = kwargs.get("tool_choice")
+            else:
+                kwargs["extra_body"] = {**(kwargs.get("extra_body") or {}), **mode.body}
+                if mode.temperature is not None:
+                    kwargs["temperature"] = mode.temperature
+                if not mode.forced_tool and forced:
+                    kwargs["tool_choice"] = "auto"
+                    normalized = "auto"
 
         try:
             response = await create_completion(client, **kwargs)

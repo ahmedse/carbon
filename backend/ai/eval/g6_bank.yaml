@@ -918,6 +918,32 @@
   expect_lang_en: en
   notes: "contrast g6-076: a period + dimension ask is the named GET, not a general answer"
 
+- id: g6-084
+  category: coworker
+  tier: v21
+  audience: [ess, hr]
+  persona: emp_2378
+  ar: "كم موظف نشط يبدأ اسمه بعلي؟ أعط العدد فقط. لا تختر شخصاً."
+  en: "How many active employees have a full name starting with Ali? Give the count. Do not choose one person."
+  expect_op: clarify
+  expect_api: ""
+  expect_lang_ar: ar
+  expect_lang_en: en
+  notes: "unbound predicate — no name-prefix dimension. Do not substitute is_active and narrate the missing filter."
+
+- id: g6-085
+  category: coworker
+  tier: v21
+  audience: [ess, hr]
+  persona: emp_2378
+  ar: "من هو الموظف رقم 2400؟"
+  en: "Who is employee number 2400?"
+  expect_op: call_tool
+  expect_api: resolve_entity
+  expect_lang_ar: ar
+  expect_lang_en: en
+  notes: "An employee number is a business key, not the detail read's record id. Look it up; never pass 2400 or the caller's id as {id}."
+
 # ── off_limits (4) ──────────────────────────────────────────────────────────
 - id: g6-057
   category: off_limits

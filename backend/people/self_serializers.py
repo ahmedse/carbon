@@ -18,7 +18,7 @@ SUBJECT_TYPE = 'people.LeaveRecord'
 
 
 class EmployeeSummarySerializer(serializers.ModelSerializer):
-    """Lean, self-safe profile summary (no salary/identity fields)."""
+    """Lean profile for team lists. No pay and no identity documents."""
 
     # ``Employee`` has no ``job_title`` column in this codebase — the field is
     # derived from the linked ``Position.title`` (None-safe).
@@ -46,6 +46,18 @@ class EmployeeSummarySerializer(serializers.ModelSerializer):
         if not obj.manager_id:
             return None
         return {'id': obj.manager_id, 'name': obj.manager.full_name}
+
+
+class EmployeeSelfProfileSerializer(EmployeeSummarySerializer):
+    """The caller's own /people/me/ row. Adds own basic pay only.
+
+    Direct reports keep ``EmployeeSummarySerializer`` so a manager list
+    does not carry other people's pay.
+    """
+
+    class Meta(EmployeeSummarySerializer.Meta):
+        fields = list(EmployeeSummarySerializer.Meta.fields) + ['basic_salary']
+        read_only_fields = fields
 
 
 class LeaveBalanceSerializer(serializers.Serializer):

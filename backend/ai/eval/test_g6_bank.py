@@ -18,7 +18,7 @@ from ai.eval.g6_runner import (
 BANK_PATH = Path(__file__).resolve().parent / "g6_bank.yaml"
 
 BASELINE_N = 61
-V21_N = 22
+V21_N = 24
 
 
 def test_bank_has_unique_ids_per_tier():
@@ -41,7 +41,7 @@ def test_v21_tier_cases_are_shaped_and_stay_out_of_offline_gate():
         "g6-062", "g6-063", "g6-064", "g6-065", "g6-066", "g6-067",
         "g6-068", "g6-069", "g6-070", "g6-071", "g6-072", "g6-073", "g6-074",
         "g6-075", "g6-076", "g6-077", "g6-078", "g6-079", "g6-080", "g6-081",
-        "g6-082", "g6-083",
+        "g6-082", "g6-083", "g6-084", "g6-085",
     }
     for case in v21:
         assert case["expect_op"] in {"call_tool", "handoff_agent", "answer", "clarify"}

@@ -223,6 +223,59 @@ def test_declared_kind_without_returns_does_not_guess():
     ) is None
 
 
+def test_breakdown_restate_names_only_the_applied_dimension():
+    payload = {
+        "dimension": "is_active",
+        "applied_filters": {},
+        "total": 555,
+        "breakdown": [{"label": True, "count": 555}],
+    }
+    rendered = render_catalog_read(
+        {"result": payload},
+        "analyze_employees",
+        "en",
+        catalog_entry={"name": "analyze_employees", "kind": "breakdown"},
+    )
+    assert rendered == "Total: 555\nBy: is_active\nTrue: 555"
+    assert "Ali" not in rendered
+    assert ungrounded_numbers(rendered, [payload]) == []
+
+
+def test_metric_restate_quotes_the_host_citation():
+    payload = {
+        "metric": "headcount",
+        "value": 555,
+        "citation": "headcount = count where is_active=True",
+    }
+    rendered = render_catalog_read({"result": payload}, "aggregate_entity", "en")
+    assert rendered == "555. headcount = count where is_active=True"
+    assert ungrounded_numbers(rendered, [payload]) == []
+
+
+def test_own_profile_restate_includes_basic_salary_when_the_host_sent_it():
+    payload = {
+        "id": 17,
+        "employee_no": "2378",
+        "full_name": "Ali Mohamed Saad AlAjmi",
+        "job_title": "Director of Shared Services",
+        "basic_salary": "2407.622",
+    }
+    rendered = render_catalog_read(
+        {"result": payload},
+        "get_my_profile",
+        "en",
+        catalog_entry={
+            "name": "get_my_profile",
+            "kind": "detail",
+            "returns": ["full_name", "employee_no", "job_title", "basic_salary"],
+        },
+    )
+    assert rendered is not None
+    assert "basic_salary=2407.622" in rendered
+    assert "not available" not in rendered.lower()
+    assert ungrounded_numbers(rendered, [payload]) == []
+
+
 def test_fallback_only_when_tools_ran_and_nothing_rendered():
     tool_row = {"tool_name": "call_host_api", "tool_args": {"api_name": "x"}, "result": {}}
     assert should_honest_fallback("", [tool_row]) is True
@@ -230,3 +283,55 @@ def test_fallback_only_when_tools_ran_and_nothing_rendered():
     assert should_honest_fallback("", []) is False
     assert should_honest_fallback("", None) is False
     assert should_honest_fallback("No payslip for this month.", [tool_row]) is False
+
+
+_PROFILE_ENTRY = {
+    "name": "get_my_profile",
+    "kind": "detail",
+    "returns": ["full_name", "employee_no", "job_title", "basic_salary"],
+    "field_labels": {
+        "full_name": {"en": "Name", "ar": "الاسم"},
+        "employee_no": {"en": "Employee number", "ar": "الرقم الوظيفي"},
+        "job_title": {"en": "Job title", "ar": "المسمى الوظيفي"},
+        "basic_salary": {"en": "Basic salary", "ar": "الراتب الأساسي"},
+    },
+}
+_PROFILE = {
+    "id": 17,
+    "employee_no": "2378",
+    "full_name": "Ali Mohamed Saad AlAjmi",
+    "job_title": "Director of Shared Services",
+    "basic_salary": "2407.622",
+}
+
+
+def test_detail_restate_shows_only_the_fields_asked():
+    rendered = render_catalog_read(
+        {"result": _PROFILE}, "get_my_profile", "en",
+        catalog_entry=_PROFILE_ENTRY, fields=["name", "employee_no"],
+    )
+    assert rendered == "Name: Ali Mohamed Saad AlAjmi · Employee number: 2378"
+    assert "2407" not in rendered
+
+
+def test_detail_restate_uses_the_pack_labels_in_arabic():
+    rendered = render_catalog_read(
+        {"result": _PROFILE}, "get_my_profile", "ar",
+        catalog_entry=_PROFILE_ENTRY, fields=["basic_salary"],
+    )
+    assert rendered == "الراتب الأساسي: 2407.622"
+
+
+def test_an_ask_no_declared_field_holds_goes_to_the_writer():
+    rendered = render_catalog_read(
+        {"result": _PROFILE}, "get_my_profile", "en",
+        catalog_entry=_PROFILE_ENTRY, fields=["tes_score"],
+    )
+    assert rendered is None
+
+
+def test_metric_restate_speaks_arabic_to_an_arabic_ask():
+    payload = {"metric": "kuwaiti", "value": 89, "citation": "kuwaiti = count where nationality__code=KWT"}
+    rendered = render_catalog_read({"result": payload}, "aggregate_entity", "ar")
+    assert rendered.startswith("العدد: 89")
+    assert ungrounded_numbers(rendered, [payload]) == []

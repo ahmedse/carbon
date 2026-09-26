@@ -522,6 +522,27 @@ class ChatResponse:
     # The typed question this turn asks (``kind``: choice, plan_proposal, …).
     # The client paints it as a form; the text never carries the options.
     form: dict | None = None
+    # Machine facts about the turn (decision, foreground LLM calls, truthfulness
+    # flags). Eval and QA read these; prose never carries them.
+    turn_meter: dict | None = None
+
+
+_TURN_METER_KEYS = (
+    "turn_decision",
+    "llm_calls",
+    "llm_calls_background",
+    "llm_calls_by_stage",
+    "truthfulness_flags",
+    "v21_miss",
+)
+
+
+def turn_meter_from_result(result: dict | None) -> dict | None:
+    """The persisted subset of an engine chat result's turn facts."""
+    if not isinstance(result, dict):
+        return None
+    meter = {k: result[k] for k in _TURN_METER_KEYS if k in result}
+    return meter or None
 
 
 # ── AIProvider ABC ──────────────────────────────────────────────────────

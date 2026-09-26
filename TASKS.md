@@ -48,7 +48,7 @@ evidence → not done.
 | **ECF** (Entity Capability Framework, ADR-0032) | **Pulse** | **COMPLETE** | ECF-8 DONE — LeaveRecord descriptor-only generalize proof |
 | **PEC** (Pulse Enterprise Control-plane) | **Pulse** | COMPLETE | Core P1–P7 closed |
 | **PEC-R** (Pulse residuals) | **Pulse** | **COMPLETE** | R4 journey-16 **3/3 PASS** · R5–R7 · leave fetch |
-| **Pulse Chat QA** | **Pulse** | **ACTIVE** | Deep journey ~**86%** · **GOFSCO clarify-loop CLOSED** (530 headcount) · open PARTIAL: B1/B5/C1/C7 |
+| **Pulse Chat QA** | **Pulse** | **ACTIVE** | Deep journey ~**86%** · open PARTIAL: B1/B5/C1/C7 · **2026-09-26 Chat bench: FRAGILE 4/10** |
 | **NSR** (Nibras Staff-Ready) | **Nibras** | **COMPLETE** | Staff go-live **READY**; Playwright leave UI **3/3 PASS** 2026-09-21 — `docs/nibras/evidence/NSR-9-go-live-gate.md` |
 | **Nibras Deep QA** | **Nibras** | **COMPLETE** | **P0 46/46** · all-case **81/81** · J-EMP-06 fixed · Playwright NSR-9 **3/3** |
 | **OF-15…OF-20** | **Nibras** | DONE | Leave vertical live |
@@ -61,7 +61,7 @@ evidence → not done.
 | **PV2** (Pulse v2 Intelligence Contract, ADR-0047) | **Pulse** | **ACTIVE** | **20/20 · L0–L5 · 6B DONE 5/5 · ADR-0047 Accepted** · 4A still soaking |
 | **PV21** (Pulse 2.1, ADR-0049 Proposed) | **Pulse** | **ACTIVE** | Model understands, catalog executes. Flags default legacy/off. No live flip. No stack restart. |
 
-**Multi-Master:** `.ai-toolkit/shared/multi-master.md` · seats · `docs/ops/MASTERS-COMMS.md` · RULE_30. · **This session seat: Nibras.**
+**Multi-Master:** `.ai-toolkit/shared/multi-master.md` · seats · `docs/ops/MASTERS-COMMS.md` · RULE_30. · **This session seat: Pulse.**
 
 **NSR principle (Nibras seat only):** every nav item under people/my/team is either architecture-thick + tested + E2E-QA’d for GOFSCO staff use, or demoted/hidden until it is.
 
@@ -3192,6 +3192,28 @@ ADR-0047 → Accepted; `.cursor/rules/pulse-intelligence-contract.mdc`; canvas +
 **Acceptance:** ADR status Accepted; rule file present; Master close-out in TASK-RESULTS. **Met** — `.ai-toolkit/decisions/0047-pulse-unified-conversation-state.md` Accepted; `.cursor/rules/pulse-intelligence-contract.mdc`; `TASK-RESULTS` PV2-6C.
 
 **Landed:** G5 96/96 + 6B soak 5/5. Night 2026-09-23 FAIL not rewritten. 4A Arbiter shadow calendar is unchanged.
+
+---
+
+### Phase PV2-CHAT-BENCH — Master: Chat deep benchmark + honest scoreboard
+**Date:** 2026-09-26  
+**Worker Role:** Master (Pulse) · **Status:** DONE — measurement only · **Owner:** Pulse
+
+#### Objective
+Score every Chat canvas principle (C1–C10 + expert M-metrics) in three columns: stub CI, last live snapshot, this week. Honest status = worst of live and week. Stub never upgrades a miss. Do not claim L6/L7. Do not overwrite soak.
+
+#### Landed
+- `backend/ai/eval/chat_deep_bench.py` · `python -m ai.eval.chat_deep_bench`
+- Evidence `docs/pulse/evidence/PV2-chat-deep-2026-09-26.json` + operator log `PV2-chat-operator-2026-09-26.json`
+- Tests `backend/ai/eval/test_chat_deep_bench.py` (4)
+- Scoreboard canvas `pulse-chat-deep-benchmark.canvas.tsx`
+- Verdict **fragile · 4/10 reached · 5 fail**. Chat host writes still 0.
+
+#### Verification
+```bash
+cd backend && python -m pytest ai/eval/test_chat_deep_bench.py -q --disable-warnings -p no:cacheprovider
+python -m ai.eval.chat_deep_bench
+```
 
 ---
 

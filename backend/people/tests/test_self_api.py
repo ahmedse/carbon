@@ -109,6 +109,7 @@ def test_me_returns_summary(workflow, api_client, get_token_for_user):
     assert data['org_unit']['name'] == 'Engineering'
     assert data['manager']['id'] == wf.manager_emp.id
     assert data['manager']['name'] == 'Manager'
+    assert data['basic_salary'] == '1000.000'
 
 
 # ── 2. leave balance ───────────────────────────────────────────────────────

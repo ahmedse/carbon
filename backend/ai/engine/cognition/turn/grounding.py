@@ -9,12 +9,18 @@ import json
 import re
 from typing import Any
 
-# ISO-8601 ``YYYY-MM-DDTHH:MM:SS…`` glues the day to ``T`` and the hour to
-# ``T``, so a word-boundary scan misses both. Honest summaries that restate
-# the date and time as ``2026-09-25`` / ``18:48`` then fail as ungrounded.
-_ISO_DT_T = re.compile(
-    r"(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:\d{2}|Z)?)",
-)
+def _split_datetime_t(blob: str) -> str:
+    """``2026-09-25T18:48`` → ``2026-09-25 18:48``.
+
+    ISO-8601 glues the day and the hour to ``T``, so a word-boundary scan
+    misses both, and a summary that restates the date or time fails as
+    ungrounded.
+    """
+    chars = list(blob)
+    for i in range(1, len(chars) - 1):
+        if chars[i] == "T" and chars[i - 1].isdigit() and chars[i + 1].isdigit():
+            chars[i] = " "
+    return "".join(chars)
 
 
 def _flatten_numbers(payload: Any) -> set[str]:
@@ -23,8 +29,8 @@ def _flatten_numbers(payload: Any) -> set[str]:
         blob = json.dumps(payload, ensure_ascii=False, default=str)
     except (TypeError, ValueError):
         blob = str(payload)
-    blob = _ISO_DT_T.sub(r"\1 \2", blob)
-    for match in re.finditer(r"(?<![\w.])(\d+(?:\.\d+)?)(?![\w.])", blob):
+    blob = _split_datetime_t(blob)
+    for match in re.finditer(r"(?<![\w.])(\d+(?:\.\d+)?)(?!\w|\.\d)", blob):
         found.add(match.group(1))
         if "." in match.group(1):
             found.add(match.group(1).split(".", 1)[0])
@@ -47,7 +53,7 @@ def ungrounded_numbers(text: str | None, payloads: list[Any] | None) -> list[str
     for payload in payloads or []:
         allowed |= _flatten_numbers(payload)
     bad: list[str] = []
-    for match in re.finditer(r"(?<![\w.])(\d+(?:\.\d+)?)(?![\w.])", text or ""):
+    for match in re.finditer(r"(?<![\w.])(\d+(?:\.\d+)?)(?!\w|\.\d)", text or ""):
         token = match.group(1)
         head = token.split(".", 1)[0]
         if token not in allowed and head not in allowed:
@@ -68,5 +74,5 @@ def strip_ungrounded_numbers(text: str | None, payloads: list[Any] | None) -> st
             return ""
         return match.group(0)
 
-    cleaned = re.sub(r"(?<![\w.])(\d+(?:\.\d+)?)(?![\w.])", _repl, text)
+    cleaned = re.sub(r"(?<![\w.])(\d+(?:\.\d+)?)(?!\w|\.\d)", _repl, text)
     return " ".join(cleaned.split())

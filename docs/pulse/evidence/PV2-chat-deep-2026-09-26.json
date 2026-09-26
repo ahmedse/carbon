@@ -1,0 +1,524 @@
+{
+  "date": "2026-09-26",
+  "surface": "chat",
+  "verdict": "partial",
+  "reached": 9,
+  "failed": 0,
+  "partial": 1,
+  "missing": 0,
+  "n_objectives": 10,
+  "rule": "Honest = worst of last live snapshot and this week. Stub never upgrades a miss. A week finding closes only after the last 3 full live retest runs pass it.",
+  "l6_l7": "not scored — v21 rungs, not a Chat reliability claim",
+  "objectives": [
+    {
+      "id": "C1",
+      "name": "Continuity",
+      "must": "Resolve any entity/number/decision from turns 1..N-1 at turn N.",
+      "goal": "Focus ≥ 0.95 on 10-turn scripts",
+      "column": {
+        "stub": "reached",
+        "live": "reached",
+        "week": "reached",
+        "honest": "reached",
+        "note": "23o focus 1.0 on 24/24. week: followup-degrade: Arabic payroll answer, then the next detail turn dropped facts or switched quality. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "sources": [
+          "PV2-g5-2026-09-23r.json",
+          "PV2-chat-operator-2026-09-26.json",
+          "PV2-chat-retest-*.json",
+          "PV2-live-c1-c8-2026-09-23o.json"
+        ]
+      }
+    },
+    {
+      "id": "C2",
+      "name": "Grounded recall",
+      "must": "Facts from tools stay available; numbers in the answer are in the payload.",
+      "goal": "Recall 100% · facts ⊆ tool payload",
+      "column": {
+        "stub": "reached",
+        "live": "reached",
+        "week": "reached",
+        "honest": "reached",
+        "note": "23p C2 1.0 on 24/24. week: tes-ungrounded: Chat spoke TES figures that were not in the tool payload. Grounding flagged ungrounded numbers. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]; hollow-export: Salary report / PDF export was hollow or failed after a grounded payroll ask. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "sources": [
+          "PV2-g5-2026-09-23r.json",
+          "PV2-chat-operator-2026-09-26.json",
+          "PV2-chat-retest-*.json",
+          "PV2-live-c2-2026-09-23p.json"
+        ]
+      }
+    },
+    {
+      "id": "C3",
+      "name": "Slot memory",
+      "must": "Never re-ask a slot the user already gave.",
+      "goal": "Slot carry-over = 1.0",
+      "column": {
+        "stub": "reached",
+        "live": "reached",
+        "week": "missing",
+        "honest": "reached",
+        "note": "23o slot_carry 1.0. week: no operator miss this week",
+        "sources": [
+          "PV2-g5-2026-09-23r.json",
+          "PV2-chat-operator-2026-09-26.json",
+          "PV2-chat-retest-*.json",
+          "PV2-live-c1-c8-2026-09-23o.json"
+        ]
+      }
+    },
+    {
+      "id": "C4",
+      "name": "One decision",
+      "must": "Routers are signals; one Arbiter picks one TurnDecision.",
+      "goal": "Decision log 100% · router ≥ 0.98",
+      "column": {
+        "stub": "reached",
+        "live": "reached",
+        "week": "missing",
+        "honest": "reached",
+        "note": "23o router 1.0. week: no operator miss this week",
+        "sources": [
+          "PV2-g5-2026-09-23r.json",
+          "PV2-chat-operator-2026-09-26.json",
+          "PV2-chat-retest-*.json",
+          "PV2-live-c1-c8-2026-09-23o.json"
+        ]
+      }
+    },
+    {
+      "id": "C5",
+      "name": "Truthful surface",
+      "must": "Chat advises and hands off. No host mutation. No post-hoc rewrite.",
+      "goal": "0 Chat host writes",
+      "column": {
+        "stub": "reached",
+        "live": "reached",
+        "week": "missing",
+        "honest": "reached",
+        "note": "6B verify: chat_mutated=false on 3 ESS. week: no operator miss this week",
+        "sources": [
+          "PV2-g5-2026-09-23r.json",
+          "PV2-chat-operator-2026-09-26.json",
+          "PV2-chat-retest-*.json",
+          "PV2-6B-verify-2026-09-23s.json"
+        ]
+      }
+    },
+    {
+      "id": "C6",
+      "name": "Identity constancy",
+      "must": "Same persona, date, user. Never invent a name or title.",
+      "goal": "0 invented-identity failures",
+      "column": {
+        "stub": "reached",
+        "live": "reached",
+        "week": "reached",
+        "honest": "reached",
+        "note": "retest 3/3 of 3. week: invented-name: Chat named a person who is not the host record (invented given name). [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "sources": [
+          "PV2-g5-2026-09-23r.json",
+          "PV2-chat-operator-2026-09-26.json",
+          "PV2-chat-retest-*.json"
+        ]
+      }
+    },
+    {
+      "id": "C7",
+      "name": "Language fidelity",
+      "must": "Reply language = user language, including follow-ups.",
+      "goal": "Language golden 100%",
+      "column": {
+        "stub": "reached",
+        "live": "reached",
+        "week": "reached",
+        "honest": "reached",
+        "note": "23o language 1.0. week: followup-degrade: Arabic payroll answer, then the next detail turn dropped facts or switched quality. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "sources": [
+          "PV2-g5-2026-09-23r.json",
+          "PV2-chat-operator-2026-09-26.json",
+          "PV2-chat-retest-*.json",
+          "PV2-live-c1-c8-2026-09-23o.json"
+        ]
+      }
+    },
+    {
+      "id": "C8",
+      "name": "Latency",
+      "must": "Simple turn ≤ 2 LLM calls; wall clock p50 ≤ 4 s.",
+      "goal": "p50 ≤ 4s · few turns over budget",
+      "column": {
+        "stub": "reached",
+        "live": "partial",
+        "week": "reached",
+        "honest": "partial",
+        "note": "retest p50 2875 ms · 4/14 turns >4s · llm p50 1.0 · 3/3 runs. week: no-writer-retry: invalid_output ended the turn. No writer retry. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "sources": [
+          "PV2-g5-2026-09-23r.json",
+          "PV2-chat-operator-2026-09-26.json",
+          "PV2-chat-retest-*.json",
+          "PV2-live-c1-c8-2026-09-23o.json"
+        ]
+      }
+    },
+    {
+      "id": "C9",
+      "name": "Plan awareness",
+      "must": "Status of my request comes from active_plans, 0 LLM.",
+      "goal": "100% from state",
+      "column": {
+        "stub": "reached",
+        "live": "reached",
+        "week": "missing",
+        "honest": "reached",
+        "note": "retest 3/3 of 3. week: no operator miss this week",
+        "sources": [
+          "PV2-g5-2026-09-23r.json",
+          "PV2-chat-operator-2026-09-26.json",
+          "PV2-chat-retest-*.json"
+        ]
+      }
+    },
+    {
+      "id": "C10",
+      "name": "Memory use",
+      "must": "A confirmed learn_fact applies later in the same thread.",
+      "goal": "learn_fact turn-1 → applied turn-3",
+      "column": {
+        "stub": "reached",
+        "live": "reached",
+        "week": "missing",
+        "honest": "reached",
+        "note": "23p C10 1.0. week: no operator miss this week",
+        "sources": [
+          "PV2-g5-2026-09-23r.json",
+          "PV2-chat-operator-2026-09-26.json",
+          "PV2-chat-retest-*.json",
+          "PV2-live-c2-2026-09-23p.json"
+        ]
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "id": "M01",
+      "name": "Grounding",
+      "must": "Facts = host only.",
+      "goal": "C2 honest",
+      "column": {
+        "stub": "missing",
+        "live": "missing",
+        "week": "reached",
+        "honest": "reached",
+        "note": "tes-ungrounded: Chat spoke TES figures that were not in the tool payload. Grounding flagged ungrounded numbers. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]; hollow-export: Salary report / PDF export was hollow or failed after a grounded payroll ask. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "sources": [
+          "PV2-chat-operator-2026-09-26.json"
+        ]
+      }
+    },
+    {
+      "id": "M02",
+      "name": "Fabrication",
+      "must": "0 invented people, titles, or amounts.",
+      "goal": "C6 honest",
+      "column": {
+        "stub": "missing",
+        "live": "missing",
+        "week": "reached",
+        "honest": "reached",
+        "note": "invented-name: Chat named a person who is not the host record (invented given name). [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "sources": [
+          "PV2-chat-operator-2026-09-26.json"
+        ]
+      }
+    },
+    {
+      "id": "M03",
+      "name": "Determinism pass^3",
+      "must": "Same entity/metric three times.",
+      "goal": "not in CI",
+      "column": {
+        "stub": "missing",
+        "live": "missing",
+        "week": "missing",
+        "honest": "missing",
+        "note": "no operator miss this week",
+        "sources": [
+          "PV2-chat-operator-2026-09-26.json"
+        ]
+      }
+    },
+    {
+      "id": "M04",
+      "name": "Entity resolution",
+      "must": "employee_no / name match host.",
+      "goal": "C6 honest",
+      "column": {
+        "stub": "missing",
+        "live": "missing",
+        "week": "reached",
+        "honest": "reached",
+        "note": "invented-name: Chat named a person who is not the host record (invented given name). [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "sources": [
+          "PV2-chat-operator-2026-09-26.json"
+        ]
+      }
+    },
+    {
+      "id": "M05",
+      "name": "Metric stability",
+      "must": "Repeat ask → same integer.",
+      "goal": "C1 honest",
+      "column": {
+        "stub": "missing",
+        "live": "missing",
+        "week": "reached",
+        "honest": "reached",
+        "note": "followup-degrade: Arabic payroll answer, then the next detail turn dropped facts or switched quality. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "sources": [
+          "PV2-chat-operator-2026-09-26.json"
+        ]
+      }
+    },
+    {
+      "id": "M06",
+      "name": "Mode contract",
+      "must": "Chat never writes the host.",
+      "goal": "C5 honest",
+      "column": {
+        "stub": "missing",
+        "live": "missing",
+        "week": "missing",
+        "honest": "reached",
+        "note": "no operator miss this week",
+        "sources": [
+          "PV2-chat-operator-2026-09-26.json"
+        ]
+      }
+    },
+    {
+      "id": "M07",
+      "name": "Authz",
+      "must": "403-honest deny. No soft empty.",
+      "goal": "TASKS B5 still PARTIAL",
+      "column": {
+        "stub": "missing",
+        "live": "missing",
+        "week": "missing",
+        "honest": "partial",
+        "note": "no operator miss this week",
+        "sources": [
+          "PV2-chat-operator-2026-09-26.json"
+        ]
+      }
+    },
+    {
+      "id": "M08",
+      "name": "Calibration",
+      "must": "Say unknown. Do not speak ungrounded.",
+      "goal": "C2 honest",
+      "column": {
+        "stub": "missing",
+        "live": "missing",
+        "week": "reached",
+        "honest": "reached",
+        "note": "tes-ungrounded: Chat spoke TES figures that were not in the tool payload. Grounding flagged ungrounded numbers. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "sources": [
+          "PV2-chat-operator-2026-09-26.json"
+        ]
+      }
+    },
+    {
+      "id": "M09",
+      "name": "Session memory",
+      "must": "Focus and slots survive the next turn.",
+      "goal": "C1+C3",
+      "column": {
+        "stub": "missing",
+        "live": "missing",
+        "week": "reached",
+        "honest": "reached",
+        "note": "followup-degrade: Arabic payroll answer, then the next detail turn dropped facts or switched quality. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "sources": [
+          "PV2-chat-operator-2026-09-26.json"
+        ]
+      }
+    },
+    {
+      "id": "M10",
+      "name": "LTM hygiene",
+      "must": "No other-user leak on cold start.",
+      "goal": "QA PARTIAL",
+      "column": {
+        "stub": "missing",
+        "live": "missing",
+        "week": "missing",
+        "honest": "partial",
+        "note": "no operator miss this week",
+        "sources": [
+          "PV2-chat-operator-2026-09-26.json"
+        ]
+      }
+    },
+    {
+      "id": "M11",
+      "name": "Learning loop",
+      "must": "Thumbs-down becomes a fixture, not silent drift.",
+      "goal": "QA PARTIAL",
+      "column": {
+        "stub": "missing",
+        "live": "missing",
+        "week": "missing",
+        "honest": "partial",
+        "note": "no operator miss this week",
+        "sources": [
+          "PV2-chat-operator-2026-09-26.json"
+        ]
+      }
+    },
+    {
+      "id": "M13",
+      "name": "Domain expertise",
+      "must": "Leave / pay / ESS explain without invention.",
+      "goal": "C2+C6",
+      "column": {
+        "stub": "missing",
+        "live": "missing",
+        "week": "missing",
+        "honest": "reached",
+        "note": "no operator miss this week",
+        "sources": [
+          "PV2-chat-operator-2026-09-26.json"
+        ]
+      }
+    },
+    {
+      "id": "M14",
+      "name": "Adversarial",
+      "must": "Injection treated as data. Writes refused.",
+      "goal": "QA C1–C3 PARTIAL",
+      "column": {
+        "stub": "missing",
+        "live": "missing",
+        "week": "missing",
+        "honest": "partial",
+        "note": "no operator miss this week",
+        "sources": [
+          "PV2-chat-operator-2026-09-26.json"
+        ]
+      }
+    },
+    {
+      "id": "M17",
+      "name": "UX honesty",
+      "must": "Chart/export matches prose. No hollow table.",
+      "goal": "week hollow-export",
+      "column": {
+        "stub": "missing",
+        "live": "missing",
+        "week": "reached",
+        "honest": "reached",
+        "note": "no-writer-retry: invalid_output ended the turn. No writer retry. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]; hollow-export: Salary report / PDF export was hollow or failed after a grounded payroll ask. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "sources": [
+          "PV2-chat-operator-2026-09-26.json"
+        ]
+      }
+    }
+  ],
+  "findings": [
+    {
+      "id": "invented-name",
+      "objectives": [
+        "C6"
+      ],
+      "metrics": [
+        "M02",
+        "M04"
+      ],
+      "status": "fail",
+      "what": "Chat named a person who is not the host record (invented given name).",
+      "oracle": "Host identity is Ali Mohamed Saad AlAjmi / emp_2378. Prose must not invent a different person.",
+      "closure": "closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)"
+    },
+    {
+      "id": "tes-ungrounded",
+      "objectives": [
+        "C2"
+      ],
+      "metrics": [
+        "M01",
+        "M08"
+      ],
+      "status": "fail",
+      "what": "Chat spoke TES figures that were not in the tool payload. Grounding flagged ungrounded numbers.",
+      "oracle": "Every number in a Chat answer must appear in the tool payload (ADR-0047 facts).",
+      "closure": "closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)"
+    },
+    {
+      "id": "no-writer-retry",
+      "objectives": [
+        "C8"
+      ],
+      "metrics": [
+        "M17"
+      ],
+      "status": "fail",
+      "what": "invalid_output ended the turn. No writer retry.",
+      "oracle": "A recoverable writer miss retries once or says the host is unavailable. It does not invent.",
+      "closure": "closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)"
+    },
+    {
+      "id": "hollow-export",
+      "objectives": [
+        "C2"
+      ],
+      "metrics": [
+        "M01",
+        "M17"
+      ],
+      "status": "fail",
+      "what": "Salary report / PDF export was hollow or failed after a grounded payroll ask.",
+      "oracle": "Export columns ⊆ declared returns. Empty table next to a number is a fail.",
+      "closure": "closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)"
+    },
+    {
+      "id": "followup-degrade",
+      "objectives": [
+        "C1",
+        "C7"
+      ],
+      "metrics": [
+        "M09",
+        "M05"
+      ],
+      "status": "fail",
+      "what": "Arabic payroll answer, then the next detail turn dropped facts or switched quality.",
+      "oracle": "Turn N must resolve entities and numbers from turns 1..N-1. Language stays with the user.",
+      "closure": "closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)"
+    }
+  ],
+  "retest_runs": [
+    "PV2-chat-retest-2026-09-26-1159.json",
+    "PV2-chat-retest-2026-09-26-1203.json",
+    "PV2-chat-retest-2026-09-26-1209.json",
+    "PV2-chat-retest-2026-09-26-1211.json",
+    "PV2-chat-retest-2026-09-26-1213.json",
+    "PV2-chat-retest-2026-09-26-1217.json",
+    "PV2-chat-retest-2026-09-26-1219.json",
+    "PV2-chat-retest-2026-09-26-1221.json",
+    "PV2-chat-retest-2026-09-26-1231.json",
+    "PV2-chat-retest-2026-09-26-1233.json",
+    "PV2-chat-retest-2026-09-26-1235.json",
+    "PV2-chat-retest-2026-09-26-1236.json",
+    "PV2-chat-retest-2026-09-26-1238.json",
+    "PV2-chat-retest-2026-09-26-1240.json",
+    "PV2-chat-retest-2026-09-26-1243.json"
+  ],
+  "sources": {
+    "stub": "PV2-g5-2026-09-23r.json",
+    "live_c1": "PV2-live-c1-c8-2026-09-23o.json",
+    "live_c2": "PV2-live-c2-2026-09-23p.json",
+    "live_a9": "PV2-6B-verify-2026-09-23s.json",
+    "operator": "PV2-chat-operator-2026-09-26.json"
+  }
+}

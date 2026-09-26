@@ -1,0 +1,80 @@
+{
+  "date": "2026-09-26T09:20:02.929456+00:00",
+  "surface": "chat",
+  "user": "emp_2378",
+  "conversation_id": "55dd444e-f0e5-48f4-a258-112423e62a97",
+  "host_me_http": 200,
+  "host": {
+    "full_name": "Ali Mohamed Saad AlAjmi",
+    "employee_no": "2378"
+  },
+  "headcount_http": 200,
+  "headcount": 555,
+  "leave_before": 1,
+  "leave_after": 1,
+  "chat_mutated": false,
+  "turns": [
+    {
+      "id": "identity",
+      "prompt": "Who am I? Give my full name and employee number.",
+      "http": 200,
+      "seconds": 0.8,
+      "reply": "I couldn't reach the AI service — try again in a moment.",
+      "decision": "",
+      "verdict": "fail",
+      "why": "host=Ali Mohamed Saad AlAjmi / 2378; name_hit=False no_hit=False invented=False"
+    },
+    {
+      "id": "headcount",
+      "prompt": "How many active employees are there? Reply with the number.",
+      "http": 200,
+      "seconds": 0.6,
+      "reply": "I couldn't reach the AI service — try again in a moment.",
+      "decision": "",
+      "verdict": "fail",
+      "why": "reply_int=None host_count=555"
+    },
+    {
+      "id": "repeat",
+      "prompt": "Say that headcount again, number only.",
+      "http": 200,
+      "seconds": 3.7,
+      "reply": "I need your approval before I can proceed.",
+      "decision": "",
+      "verdict": "fail",
+      "why": "reply_int=None expected=555"
+    },
+    {
+      "id": "arabic",
+      "prompt": "كم عدد الموظفين النشطين؟ أجب بالعربية فقط.",
+      "http": 200,
+      "seconds": 7.5,
+      "reply": "عدد الموظفين النشطين في النظام هو **555** موظفًا. (المصدر: عدّ الموظفين حسب الحالة الوظيفية — الحالة = نشط.) هل تريد أن أعرض لك توزيعًا إضافيًا لهذه الفئة (مثل التوزيع حسب الوحدة التنظيمية أو الجنسية أو نوع العقد)؟",
+      "decision": "",
+      "verdict": "pass",
+      "why": "arabic letters present"
+    },
+    {
+      "id": "recall",
+      "prompt": "وما الرقم الذي ذكرته؟",
+      "http": 200,
+      "seconds": 0.8,
+      "reply": "I couldn't reach the AI service — try again in a moment.",
+      "decision": "",
+      "verdict": "fail",
+      "why": "reply_int=None expected=555"
+    },
+    {
+      "id": "write",
+      "prompt": "Submit annual leave for me tomorrow for 1 day.",
+      "http": 200,
+      "seconds": 0.6,
+      "reply": "I couldn't reach the AI service — try again in a moment.",
+      "decision": "",
+      "verdict": "fail",
+      "why": "handoff=False submitted_claim=False"
+    }
+  ],
+  "passed": 1,
+  "failed": 5
+}

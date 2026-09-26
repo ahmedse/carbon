@@ -332,14 +332,70 @@ def _declared_cell(row: dict, field: str) -> str | None:
     return str(value)
 
 
-def _format_declared_row(row: dict, fields: list[str], *, ar: bool) -> str:
+def _field_label(labels: dict | None, field: str, *, ar: bool) -> str:
+    entry = (labels or {}).get(field)
+    if isinstance(entry, dict):
+        text = str(entry.get("ar" if ar else "en") or entry.get("en") or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _format_declared_row(
+    row: dict, fields: list[str], *, ar: bool, labels: dict | None = None,
+) -> str:
     bits: list[str] = []
     for field in fields:
         cell = _declared_cell(row, field)
         if cell is None:
             continue
-        bits.append(f"{field}={cell}")
+        value = row.get(field)
+        if labels and isinstance(value, dict):
+            cell = str(value.get("label") or value.get("name") or cell).strip()
+        label = _field_label(labels, field, ar=ar)
+        bits.append(f"{label}: {cell}" if label else f"{field}={cell}")
+    if labels:
+        return " · ".join(bits)
     return ("، " if ar else ", ").join(bits)
+
+
+def _field_key(name: str) -> str:
+    return "_".join(str(name or "").strip().lower().replace("-", " ").split())
+
+
+def project_fields(
+    declared: list[str],
+    asked: list[str] | None,
+    labels: dict | None = None,
+) -> list[str] | None:
+    """The declared fields the user asked for, in declared order.
+
+    An ask matches a field name or any of its display labels. ``None`` when a
+    name matches no declared field: that ask is the writer's, which may say
+    the record does not carry it. No ask keeps every field.
+    """
+    if not asked:
+        return list(declared)
+    keys = {_field_key(d): d for d in declared}
+    for field, label in (labels or {}).items():
+        if field not in declared:
+            continue
+        texts = label.values() if isinstance(label, dict) else [label]
+        for text in texts:
+            keys.setdefault(_field_key(str(text).rstrip(".")), field)
+    picked: set[str] = set()
+    for raw in asked:
+        want = _field_key(raw)
+        if not want:
+            continue
+        hit = keys.get(want)
+        if hit is None:
+            near = {d for k, d in keys.items() if want in k or k in want}
+            hit = next(iter(near)) if len(near) == 1 else None
+        if hit is None:
+            return None
+        picked.add(hit)
+    return [d for d in declared if d in picked]
 
 
 def _empty_declared(empty_render: str, language: str, *, ar: bool) -> str:
@@ -394,6 +450,7 @@ def render_declared_rows(
     latest_by: str = "",
     kind: str = "list",
     label: str = "",
+    labels: dict | None = None,
 ) -> str | None:
     """0-LLM restatement of catalog ``returns`` fields. Invents no values."""
     if not fields:
@@ -409,10 +466,10 @@ def render_declared_rows(
             reverse=True,
         )
     if kind == "detail":
-        body = _format_declared_row(ordered[0], fields, ar=ar)
+        body = _format_declared_row(ordered[0], fields, ar=ar, labels=labels)
         return body or _empty_declared(empty_render, language, ar=ar)
     shown = ordered[:_MAX_DECLARED_ROWS]
-    parts = [_format_declared_row(row, fields, ar=ar) for row in shown]
+    parts = [_format_declared_row(row, fields, ar=ar, labels=labels) for row in shown]
     parts = [p for p in parts if p]
     if not parts:
         return _empty_declared(empty_render, language, ar=ar)
@@ -422,19 +479,103 @@ def render_declared_rows(
     return f"{head}: {joiner.join(parts)}."
 
 
+def _aggregate_kind(payload: Any) -> str:
+    """``metric`` or ``breakdown`` when the payload itself cites the bind.
+
+    Shape only. No catalog name and no words from the user message.
+    """
+    if not isinstance(payload, dict):
+        return ""
+    if (
+        payload.get("total") is not None
+        and str(payload.get("dimension") or "").strip()
+        and isinstance(payload.get("breakdown"), list)
+    ):
+        return "breakdown"
+    if payload.get("value") is not None and (
+        str(payload.get("citation") or "").strip()
+        or str(payload.get("metric") or "").strip()
+    ):
+        return "metric"
+    return ""
+
+
+def render_metric_bind(payload: dict, language: str = "en") -> str | None:
+    """Value plus the host citation. Adds no filter."""
+    value = payload.get("value")
+    if value is None:
+        return None
+    bind = str(payload.get("citation") or payload.get("metric") or "").strip()
+    if _lang_code(language) == "ar":
+        return f"العدد: {value} ({bind})" if bind else f"العدد: {value}"
+    return f"{value}. {bind}" if bind else str(value)
+
+
+def render_breakdown_bind(payload: dict, language: str = "en") -> str | None:
+    """Total plus the dimension, applied filters, and bucket counts.
+
+    A filter that is not in ``applied_filters`` or ``dimension`` is not said.
+    """
+    lines: list[str] = []
+    ar = _lang_code(language) == "ar"
+    total = payload.get("total")
+    if total is not None:
+        lines.append(f"الإجمالي: {total}" if ar else f"Total: {total}")
+    dimension = str(payload.get("dimension") or "").strip()
+    if dimension:
+        lines.append(f"حسب: {dimension}" if ar else f"By: {dimension}")
+    applied = payload.get("applied_filters")
+    if isinstance(applied, dict):
+        for key, value in applied.items():
+            if value in (None, "", [], {}):
+                continue
+            lines.append(f"{key}: {value}")
+    rows = payload.get("breakdown")
+    if isinstance(rows, list):
+        for row in rows[:8]:
+            if not isinstance(row, dict):
+                continue
+            label = row.get("label")
+            count = row.get("count")
+            if label is None or count is None:
+                continue
+            lines.append(f"{label}: {count}")
+    if not lines:
+        return None
+    return "\n".join(lines)
+
+
 def render_catalog_read(
     tool_output: Any,
     api_name: str,
     language: str = "en",
     *,
     catalog_entry: dict | None = None,
+    fields: list[str] | None = None,
 ) -> str | None:
-    """0-LLM restatement resolved by catalog ``kind``. Invents no numbers."""
+    """0-LLM restatement resolved by catalog ``kind``. Invents no numbers.
+
+    ``fields`` are the returned fields the user asked about; a declared-row
+    restatement shows only those.
+    """
     api = str(api_name or "").strip()
+    payload = _unwrap_tool_payload(tool_output)
     meta = resolve_render_meta(api, catalog_entry)
+    kind = str((meta or {}).get("kind") or "")
+    structural = _aggregate_kind(payload)
+    # A payload that cites its own bind restates that bind, unless the catalog
+    # gave the read another renderer: the writer could narrate a filter the
+    # payload never applied.
+    if structural and kind in ("", structural):
+        rendered = (
+            render_breakdown_bind(payload, language)
+            if structural == "breakdown"
+            else render_metric_bind(payload, language)
+        )
+        if rendered:
+            return rendered
     if not meta:
         return None
-    payload = _unwrap_tool_payload(tool_output)
     rows = _as_record_list(payload)
     kind = meta["kind"]
     empty_key = meta.get("empty_render") or ""
@@ -483,17 +624,21 @@ def render_catalog_read(
 
     if kind in _DECLARED_KINDS:
         entry = catalog_entry if isinstance(catalog_entry, dict) else None
-        fields = _declared_fields(entry)
-        if not fields:
+        labels = (entry or {}).get("field_labels")
+        shown = project_fields(
+            _declared_fields(entry), fields, labels if isinstance(labels, dict) else None,
+        )
+        if not shown:
             return None
         return render_declared_rows(
             rows,
             language,
             empty_render=empty_key or ("no_detail_row" if kind == "detail" else "no_list_rows"),
-            fields=fields,
+            fields=shown,
             latest_by=str((entry or {}).get("latest_by") or "").strip(),
             kind=kind,
             label=str((entry or {}).get("label") or "").strip(),
+            labels=labels if isinstance(labels, dict) else None,
         )
 
     return None

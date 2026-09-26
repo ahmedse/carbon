@@ -159,7 +159,11 @@ class TurnRouter:
                 reason="open_question_option",
             )
 
-        if is_restyle_request(text) and history:
+        from ai.engine.cognition.turn.understand import understand_mode
+
+        # ADR-0056: on v21 the Decision reads "in Arabic" together with the
+        # question it rides on; a wording route would drop the question.
+        if understand_mode() != "v21" and is_restyle_request(text) and history:
             return RouteDecision(
                 kind=RouteKind.RESTYLE,
                 mode=mode,

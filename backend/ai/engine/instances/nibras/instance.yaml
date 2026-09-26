@@ -184,10 +184,8 @@ api_catalog:
     method: GET
     path: /carbon-api/people/analytics/
     description: >
-      SERVER-SIDE aggregation over the full employee population (no row truncation).
-      Required query param: dimension — one of: gender, is_active, nationality,
-      nationality_code, employment_type_code, contract_type_code, position,
-      org_unit, kuwaitization, rotation.
+      SERVER-SIDE aggregation over the full employee population (no row truncation)
+      by the required dimension.
       Optional filters are exact-match and fail when a host label is unknown;
       department is an alias for org_unit. Optional group_by supports a
       multi-dimensional aggregate such as [department, position].
@@ -205,6 +203,8 @@ api_catalog:
       For TOTAL headcount or Kuwaiti count (canonical named metrics), prefer the
       canonical-metric capability when it is offered, so the filter definition
       is fixed and cited — do not invent alternate filters.
+      The reply restates dimension, applied_filters, and total. It must not
+      describe a filter this call did not apply.
     returns: [label, count, pct, total]
     parameters:
       type: object
@@ -264,6 +264,10 @@ api_catalog:
               - kuwaitization
               - rotation
     not_for: >
+      A count or filter this schema cannot express: a name prefix, a partial
+      name, or any field outside dimension and filters. Do not call this
+      tool with a different dimension as a stand-in. Clarify, and offer only
+      the dimensions this entry lists.
       KOC quota required/deficit (analyze_kuwaitization). Leave days, loan
       amounts, GOSI totals, certification expiry.
     requires_auth: true
@@ -289,17 +293,29 @@ api_catalog:
     method: GET
     path: /carbon-api/people/employees/
     description: >
-      List a SAMPLE of employees (first 100 of total; check `total` and
-      `truncated`). Returns {total, count, truncated?, caveat?, results[]}.
-      Use ONLY to show a sample page or browse. NEVER use this to look up a
-      person by name or number, and NEVER conclude "no such employee" from it —
-      it is capped at 100 rows so the person may exist beyond the page.
+      List one SAMPLE page of employees (check `total` and `truncated`).
+      Returns {total, count, truncated?, caveat?, results[]}. Use ONLY to
+      show a sample page or browse. NEVER use this to look up
+      a person by name or number, and NEVER conclude "no such employee" from
+      it — the person may exist beyond the page.
       For ANY lookup by name / number / "is there an employee named X" /
       "من هو X" — use the full-population lookup capability when it is
       offered, which scans the COMPLETE population and returns a matched
       record plus near-miss "Did you mean" suggestions. For named totals
       (headcount, Kuwaiti count) use the canonical-metric capability.
       For dimension breakdowns use analyze_employees.
+    parameters:
+      type: object
+      additionalProperties: false
+      properties:
+        q: {type: string, description: "Substring of employee number, full name, or civil id."}
+        is_active: {type: string, enum: ["true", "false"]}
+        org_unit: {type: integer}
+        rotation: {type: string}
+        nationality: {type: string, description: "Nationality code, e.g. KWT."}
+        kuwaitization: {type: string, enum: ["true", "false"]}
+        manager: {type: string, enum: [assigned, unassigned]}
+        page: {type: integer}
     requires_auth: true
     requires_confirmation: false
 
@@ -348,13 +364,30 @@ api_catalog:
   - name: get_employee
     method: GET
     path: /carbon-api/people/employees/{id}/
+    kind: detail
+    domain: people
+    empty_render: no_detail_row
+    returns: [employee_no, full_name, position_title, org_unit_label, manager_label, nationality, basic_salary, join_date, is_active]
+    field_labels:
+      employee_no: {en: Employee number, ar: الرقم الوظيفي}
+      full_name: {en: Name, ar: الاسم}
+      position_title: {en: Position, ar: المسمى الوظيفي}
+      org_unit_label: {en: Department, ar: الإدارة}
+      manager_label: {en: Manager, ar: المدير}
+      nationality: {en: Nationality, ar: الجنسية}
+      basic_salary: {en: Basic salary, ar: الراتب الأساسي}
+      join_date: {en: Join date, ar: تاريخ التعيين}
+      is_active: {en: Active, ar: نشط}
     description: >
-      Get full details for one employee: personal data, position, org unit,
-      basic salary, join date, contract type, is_active. Path param {id}
-      is the employee numeric id (resolve it with the full-population lookup
-      capability if you only have a name or employee number). Prefer this
-      for salary / compensation / basic pay questions about a named coworker —
-      CBAC may deny with people:view_compensation; never invent "no salary data".
+      Get full details for one employee. Path param {id} is the record id an
+      earlier lookup returned, never an employee number or a name; with only
+      those, call the full-population lookup first. Prefer this for salary /
+      compensation / basic pay questions about a named coworker — CBAC may deny
+      with people:view_compensation; never invent "no salary data".
+    not_for: >
+      The caller's own record (use the caller's own profile read), and a
+      record the user named by employee number or name when no earlier lookup
+      result in this conversation returned its record id.
     requires_auth: true
     requires_confirmation: false
 
@@ -587,13 +620,26 @@ api_catalog:
   - name: get_my_profile
     method: GET
     path: /carbon-api/people/me/
+    kind: detail
+    domain: people
+    empty_render: no_detail_row
+    returns: [full_name, employee_no, job_title, org_unit, manager, is_active, basic_salary]
+    field_labels:
+      full_name: {en: Name, ar: الاسم}
+      employee_no: {en: Employee number, ar: الرقم الوظيفي}
+      job_title: {en: Job title, ar: المسمى الوظيفي}
+      org_unit: {en: Department, ar: الإدارة}
+      manager: {en: Manager, ar: المدير}
+      is_active: {en: Active, ar: نشط}
+      basic_salary: {en: Basic salary, ar: الراتب الأساسي}
     description: >
-      The logged-in employee's OWN profile: id, employee_no, full_name,
-      job_title, org_unit, manager, is_active. Use for "who am I", "my
-      profile/department/manager", "بياناتي", and first-person salary /
-      compensation / basic pay / "راتبي" / "مرتبي" / "my salary"
-      (authorization is enforced server-side; do not treat a deny as
-      missing salary data).
+      The logged-in employee's OWN profile: employee_no, full_name,
+      job_title, org_unit, manager, is_active, basic_salary. Use for "who am I",
+      "my profile/department/manager", "بياناتي", and first-person salary /
+      compensation / basic pay / "راتبي" / "مرتبي" / "my salary".
+      basic_salary is this caller's own figure. A missing key is not "no
+      salary data" — say the field the payload actually returned. Coworker
+      pay is the HR record read, which may deny people:view_compensation.
     not_for: >
       How pay is structured in general: salary components, payslip lines,
       deductions, allowances, grades, or pay policy («هيكل الرواتب»). Those

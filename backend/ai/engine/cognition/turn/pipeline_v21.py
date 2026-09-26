@@ -16,10 +16,11 @@ from ai.engine.cognition.turn.degradation import caveat as degradation_caveat
 from ai.engine.cognition.turn.degradation import sentence as degradation_sentence
 from ai.engine.cognition.turn.ess_read import answer_bound_ess_tools
 from ai.engine.cognition.turn.grounding import ungrounded_numbers
+from ai.engine.text.word_match import has_arabic_script
 
 ExecuteTool = Callable[[str, dict], Awaitable[Any]]
 
-_WRITE_RETRY_NOTE = {
+_WRITE_RETRY_INSTRUCTIONS = {
     "invalid_output": (
         "(The last summary was not valid JSON. Reply again with the same "
         "schema, using only numbers from the tool results.)"
@@ -114,6 +115,7 @@ async def _execute_bound_read(
     args: dict | None = None,
     executed: list[dict] | None = None,
     catalog: list | None = None,
+    fields: list[str] | None = None,
 ) -> str | None:
     from ai.engine.cognition.turn.catalog_render import catalog_entry_named
 
@@ -134,7 +136,12 @@ async def _execute_bound_read(
         user_message=user_message,
         unread_text=False,
         catalog_entry=catalog_entry_named(catalog, api_name),
+        fields=fields,
     )
+    if not text and not has_arabic_script(user_message or ""):
+        from ai.engine.cognition.turn.zero_llm import render_resolve_grounded
+
+        text = render_resolve_grounded(user_message, payload)
     # A restatement with a number the payload lacks is not edited: it is
     # withheld, and the writer speaks from the payload instead (ADR-0056).
     if ungrounded_numbers(text, [payload]):
@@ -188,6 +195,7 @@ async def act_on_decision(
             args=args or None,
             executed=executed,
             catalog=catalog,
+            fields=list(cmd.fields or []),
         )
         if text:
             texts.append(text)
@@ -344,7 +352,7 @@ async def narrate_envelope(
         if cause == "no_rows" or attempt:
             break
         if cause != "ungrounded":
-            note = _WRITE_RETRY_NOTE.get(cause, _WRITE_RETRY_NOTE["invalid_output"])
+            note = _WRITE_RETRY_INSTRUCTIONS.get(cause, _WRITE_RETRY_INSTRUCTIONS["invalid_output"])
         continue
     if cause:
         failed = Degradation(stage="write", cause=cause)
@@ -480,6 +488,64 @@ def failed_reads(executed: list[dict] | None) -> list[dict]:
                 "name": str((row.get("tool_args") or {}).get("api_name") or ""),
                 "detail": host_error_detail(payload),
             })
+    return out
+
+
+def _parsed(payload: Any) -> Any:
+    import json
+
+    if isinstance(payload, str):
+        try:
+            return json.loads(payload)
+        except (TypeError, ValueError):
+            return payload
+    return payload
+
+
+def mismatched_reads(
+    executed: list[dict] | None,
+    *,
+    user_message: str,
+    path_keys: Callable[[str], set[str]],
+) -> list[dict]:
+    """Path-keyed reads that did not return the record the user identified.
+
+    The user's own numerals are the identifiers they gave. A read addressed
+    by a path key must return a record that carries at least one of them;
+    a not-found or a different record means the path value was not the
+    record id for what the user named.
+    """
+    asked = list(dict.fromkeys(ungrounded_numbers(user_message, [])))
+    if not asked:
+        return []
+    out: list[dict] = []
+    for row in executed or []:
+        if not isinstance(row, dict):
+            continue
+        args = row.get("tool_args") or {}
+        name = str(args.get("api_name") or "")
+        keys = path_keys(name) if name else set()
+        if not keys:
+            continue
+        given = args.get("path_params") if isinstance(args.get("path_params"), dict) else {}
+        used = {k: given.get(k) for k in keys if given.get(k) is not None}
+        data = _parsed(row.get("result"))
+        status = data.get("status_code") if isinstance(data, dict) else None
+        body = data.get("data") if isinstance(data, dict) and "data" in data else data
+        not_found = status == 404
+        missing = ungrounded_numbers(" ".join(asked), [body])
+        if not not_found and len(missing) < len(asked):
+            continue
+        slots = ", ".join(f"{k}={v}" for k, v in used.items()) or ", ".join(sorted(keys))
+        what = "no record has that path value" if not_found else "the record returned does not carry it"
+        out.append({
+            "name": name,
+            "detail": (
+                f"The user identified the record by {', '.join(asked)}; {what} ({slots}). "
+                "A path key takes the record id from an earlier lookup result, not a "
+                "number the user typed. Look the record up by the value the user gave."
+            ),
+        })
     return out
 
 

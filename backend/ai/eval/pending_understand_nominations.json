@@ -295,5 +295,80 @@
     "conversation_id": "fc9eb86b-34ce-4075-870b-1ad9d79e2681",
     "nominated_at": "2026-09-25T15:18:49.318147+00:00",
     "status": "pending_human_review"
+  },
+  {
+    "utterance": "How many active employees have a full name starting with Ali? Give the count. Do not choose one person.",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "refuse"
+    ],
+    "final_ops": [
+      "answer"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "refuse",
+        "code": "internal_name",
+        "detail": "The reply names internal tools (analyze_employees, list_employees). Say what can or cannot be answered in the user's terms, without tool or catalog names."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "ffaf10df-7009-4b6a-961d-154c57b7e2b6",
+    "nominated_at": "2026-09-26T12:04:00.594620+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "How many active employees have a full name starting with Ali? Give the count. Do not choose one person.",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "list_employees",
+        "code": "invalid_args",
+        "detail": "is_active: invalid value True (allowed: 'true', 'false'); is_active: expected string, got bool"
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "dfa02c0f-e01c-4515-9ec5-4b211abafb46",
+    "nominated_at": "2026-09-26T12:44:34.573902+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "Make it 2 days.",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "confirm"
+    ],
+    "final_ops": [
+      "handoff_agent"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "confirm",
+        "code": "confirm_without_action",
+        "detail": "The pending question asks for missing details and has no action to confirm. Emit the command that question was gathering for, with the user's answer and the earlier details filled in."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "367ca133-4d49-465a-a29f-851e5960a62a",
+    "nominated_at": "2026-09-26T12:52:13.551969+00:00",
+    "status": "pending_human_review"
   }
 ]

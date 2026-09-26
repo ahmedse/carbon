@@ -106,7 +106,8 @@ def test_committed_route_cannot_be_overwritten_by_runtime_fallback():
     assert _should_force_action(PLAN, response, ledger) is False
 
 
-def test_restyle_is_committed_route():
+def test_restyle_is_committed_route(monkeypatch):
+    monkeypatch.setenv("PULSE_UNDERSTAND", "legacy")
     decision = TurnRouter().decide(
         message="in arabic and in more details please",
         process_mode="plan",
@@ -115,3 +116,15 @@ def test_restyle_is_committed_route():
     )
     assert decision.kind is RouteKind.RESTYLE
     assert decision.committed
+
+
+def test_v21_leaves_a_language_ask_to_the_decision(monkeypatch):
+    monkeypatch.setenv("PULSE_UNDERSTAND", "v21")
+    decision = TurnRouter().decide(
+        message="وما هو المسمى الوظيفي؟ أجب بالعربية.",
+        process_mode="",
+        state=ConversationState(),
+        history=[{"role": "assistant", "content": "الراتب الأساسي: 2407.622"}],
+    )
+    assert decision.kind is not RouteKind.RESTYLE
+    assert not decision.committed

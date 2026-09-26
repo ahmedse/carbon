@@ -15,7 +15,7 @@ logger = logging.getLogger("pulse.cognition.turn.degradation")
 @dataclass(frozen=True)
 class Degradation:
     stage: str   # understand | act | write
-    cause: str   # understand_error | malformed_decision | act_error | model_error | empty_output | invalid_output | ungrounded
+    cause: str   # understand_error | malformed_decision | act_error | record_mismatch | model_error | empty_output | invalid_output | ungrounded
 
     def to_dict(self) -> dict:
         return {"stage": self.stage, "cause": self.cause}
@@ -41,6 +41,10 @@ def sentence(degradation: Degradation, language: str = "en") -> str:
             "I fetched the data, but I could not write the summary this time. "
             "The tables and charts below are exact."
         )
+    if degradation.cause == "record_mismatch":
+        if language == "ar":
+            return "لم أجد السجل الذي ذكرته. تحقّق من المعرّف أو الاسم وأعد المحاولة."
+        return "I could not find the record you named. Check the identifier or name and try again."
     if language == "ar":
         return "تعذّر عليّ فهم هذه الرسالة الآن. أعد المحاولة بعد لحظة."
     return "I could not process that message just now. Please try again in a moment."

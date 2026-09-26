@@ -1,0 +1,74 @@
+{
+  "tier": "operator_observed",
+  "date": "2026-09-26",
+  "surface": "chat",
+  "host_user": "emp_2378",
+  "database": "nibras_dev",
+  "caveats": [
+    "Operator log from Pulse Chat on nibras_dev this week. Not a soak night. Night 2026-09-23 FAIL stays.",
+    "Does not overwrite G5 stub, live 23o/23p, or PV2-6B nights.",
+    "L6/L7 are not scored here."
+  ],
+  "findings": [
+    {
+      "id": "invented-name",
+      "objectives": ["C6"],
+      "metrics": ["M02", "M04"],
+      "status": "fail",
+      "what": "Chat named a person who is not the host record (invented given name).",
+      "oracle": "Host identity is Ali Mohamed Saad AlAjmi / emp_2378. Prose must not invent a different person."
+    },
+    {
+      "id": "tes-ungrounded",
+      "objectives": ["C2"],
+      "metrics": ["M01", "M08"],
+      "status": "fail",
+      "what": "Chat spoke TES figures that were not in the tool payload. Grounding flagged ungrounded numbers.",
+      "oracle": "Every number in a Chat answer must appear in the tool payload (ADR-0047 facts)."
+    },
+    {
+      "id": "no-writer-retry",
+      "objectives": ["C8"],
+      "metrics": ["M17"],
+      "status": "fail",
+      "what": "invalid_output ended the turn. No writer retry.",
+      "oracle": "A recoverable writer miss retries once or says the host is unavailable. It does not invent."
+    },
+    {
+      "id": "hollow-export",
+      "objectives": ["C2"],
+      "metrics": ["M01", "M17"],
+      "status": "fail",
+      "what": "Salary report / PDF export was hollow or failed after a grounded payroll ask.",
+      "oracle": "Export columns ⊆ declared returns. Empty table next to a number is a fail."
+    },
+    {
+      "id": "followup-degrade",
+      "objectives": ["C1", "C7"],
+      "metrics": ["M09", "M05"],
+      "status": "fail",
+      "what": "Arabic payroll answer, then the next detail turn dropped facts or switched quality.",
+      "oracle": "Turn N must resolve entities and numbers from turns 1..N-1. Language stays with the user."
+    }
+  ],
+  "haiku_ui": {
+    "when": "2026-09-26 afternoon",
+    "model": "claude-haiku-4.5",
+    "provider": "https://api.poe.com/v1",
+    "user": "emp_2378",
+    "turns": 8,
+    "passed": 7,
+    "partial": 1,
+    "failed": 0,
+    "host_writes": 0,
+    "leave_count_after": 1,
+    "note": "Same-day Chat thread after the cognition model was set back to Haiku. Does not erase the week findings above. Honest score stays the worst of those findings and the dated live nights."
+  },
+  "adjacent_not_chat": [
+    {
+      "id": "period-unwrap",
+      "surface": "agent_plan",
+      "what": "period_end stayed wrapped in the host envelope so the compiler could not bind. Agent/plan, not Chat advisory."
+    }
+  ]
+}

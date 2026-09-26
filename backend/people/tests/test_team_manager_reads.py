@@ -151,6 +151,7 @@ def test_in_process_direct_reports_uses_same_view(manager_world):
     assert out["status_code"] == 200, out
     nos = {row["employee_no"] for row in out["data"]}
     assert "TM-REP" in nos
+    assert all("basic_salary" not in row for row in out["data"])
 
 
 @pytest.mark.django_db

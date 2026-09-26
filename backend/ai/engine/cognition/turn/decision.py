@@ -6,6 +6,7 @@ path behind ``PULSE_UNDERSTAND``.
 """
 from __future__ import annotations
 from ai.engine.cognition.phrase_tables import T
+from ai.engine.text.word_match import has_arabic_script
 
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -39,6 +40,9 @@ class Command:
     render: str = "text"
     # The chart shape the user named (pie / bar / line), or "" when none was named.
     chart: str = ""
+    # The returned fields the user asked about, by catalog ``returns`` name.
+    # Empty means the whole answer.
+    fields: list[str] = field(default_factory=list)
 
     def reads_host(self) -> bool:
         """A read the executor runs: a named call, a confirm, or a continue."""
@@ -89,6 +93,8 @@ def _cmd_from_obj(raw: Any) -> Command | None:
     chart = str(raw.get("chart") or "").strip().lower()
     if chart not in {"pie", "bar", "line"}:
         chart = ""
+    raw_fields = raw.get("fields") if isinstance(raw.get("fields"), list) else []
+    fields = list(dict.fromkeys(str(f).strip() for f in raw_fields if str(f).strip()))[:12]
     return Command(
         op=op,
         name=str(raw.get("name") or ""),
@@ -103,6 +109,7 @@ def _cmd_from_obj(raw: Any) -> Command | None:
         text=str(raw.get("text") or ""),
         render=render,
         chart=chart,
+        fields=fields,
     )
 
 
@@ -221,6 +228,14 @@ def validate_decision(
                 )
                 continue
             api = _confirm_call_api(pending.get("confirm"))
+            if not api:
+                rejections.append(Rejection(
+                    index, "confirm", "confirm_without_action",
+                    "The pending question asks for missing details and has no action "
+                    "to confirm. Emit the command that question was gathering for, "
+                    "with the user's answer and the earlier details filled in.",
+                ))
+                continue
             if on_chat and api and _is_write_tool(api, write_tools):
                 out.append(
                     Command(
@@ -256,6 +271,26 @@ def validate_decision(
                     )
                 )
                 continue
+        spoken = {
+            "answer": cmd.text, "clarify": cmd.question,
+            "refuse": cmd.reason, "reject": cmd.reason,
+        }.get(cmd.op, "") or ""
+        if spoken.strip() and decision.language == "ar" and not has_arabic_script(spoken):
+            rejections.append(Rejection(
+                index, cmd.op, "wrong_language",
+                "The reply must be in Arabic, the language this Decision names; "
+                "figures stay as they are.",
+            ))
+            continue
+        named = sorted(t for t in (allowed_tools or ()) if spoken and t in spoken)
+        if named:
+            rejections.append(Rejection(
+                index, cmd.op, "internal_name",
+                f"The reply names internal tools ({', '.join(named[:3])}). Emit the "
+                f"same op ({cmd.op}) again and reword only its text: say what can or "
+                "cannot be answered in the user's terms, without tool or catalog names.",
+            ))
+            continue
         out.append(cmd)
     return Decision(
         commands=out[:3],
@@ -304,7 +339,12 @@ EMIT_DECISION_TOOL: dict[str, Any] = {
             "with render=chart, never a different domain. Set chart to the "
             "shape the user named in any language (pie, bar, line); keep the "
             "shape they named earlier when they follow up on the same chart; "
-            "use an empty string when they named none. Never invent figures."
+            "use an empty string when they named none. Set fields on a read to "
+            "the Returns names the user asked about (their name, a number, a "
+            "date); send it empty when they want the whole record or a "
+            "summary. A thing the user asked about that no Returns name holds "
+            "is not a field: list it anyway, so the reply can say the record "
+            "does not carry it. Never invent figures."
         ),
         "parameters": {
             "type": "object",
@@ -340,8 +380,18 @@ EMIT_DECISION_TOOL: dict[str, Any] = {
                                 "type": "string",
                                 "enum": ["", "bar", "line", "pie"],
                             },
+                            "fields": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": (
+                                    "On a read: the tool's Returns names the user "
+                                    "asked for. When they say 'only' or name a few "
+                                    "items, list exactly those. Empty means the "
+                                    "whole record."
+                                ),
+                            },
                         },
-                        "required": ["op"],
+                        "required": ["op", "fields"],
                     },
                 },
                 "language": {"type": "string", "enum": ["ar", "en"]},

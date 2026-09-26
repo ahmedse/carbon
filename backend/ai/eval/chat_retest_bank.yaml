@@ -1,0 +1,137 @@
+# Live Chat retest bank. Each thread reproduces an operator finding or an
+# objective with no live source, and is checked against host values read at
+# run time (never literals). A finding closes only after three dated runs of
+# every thread that names it pass (chat_deep_bench closing rule).
+#
+# Host refs:  me.<field>          GET /people/me/
+#             emp:<no>.<field>    the employee whose employee_no is <no>
+#             count:active        active headcount
+#             count:active_prefix:<text>  active employees whose full_name starts with <text>
+#
+# Checks per turn:
+#   contains: [ref|"literal"]     every value appears in the reply
+#   excludes: [ref]               no value appears in the reply
+#   int_equals: ref               the first integer in the reply equals the ref
+#   int_in_or_none: [ref]         the reply's first integer is one of these, or it has none
+#   arabic: true                  most letters in the reply are Arabic
+#   numbers_from: [ref-object]    every number in the reply is in these host objects
+#   truthful: true                the turn's truthfulness_flags are empty
+#   llm_calls_max: n              foreground LLM calls for the turn
+#   not_degraded: true            the reply is not a typed degradation sentence
+#   table_nonempty: true          every envelope table has at least one row
+#   writer_calls_max: n           LLM calls outside the understand stage
+#   says_any: ["literal", …]      at least one literal appears (case-insensitive)
+#   decision_not: [decision, …]   the logged TurnDecision is none of these
+#
+# Run-level: C4 holds when every turn logged exactly one TurnDecision.
+#
+# Thread flags:
+#   no_host_write: true           the caller's leave count is unchanged
+
+threads:
+  - id: identity
+    closes: [invented-name]
+    objectives: [C6]
+    turns:
+      - say: "Who am I? Reply with my full name and employee number only."
+        contains: [me.full_name, me.employee_no]
+        excludes: [me.basic_salary]
+        not_degraded: true
+
+  - id: entity-by-number
+    closes: [invented-name]
+    objectives: [C6]
+    turns:
+      - say: "Who am I?"
+        contains: [me.full_name]
+      - say: "Employee number 2400. Reply with the full name only."
+        contains: [emp:2400.full_name]
+        excludes: [me.full_name]
+        not_degraded: true
+
+  - id: tes-unknown
+    closes: [tes-ungrounded]
+    objectives: [C2]
+    turns:
+      - say: "What is my TES? If the tool result has no TES figure, say unknown. Do not invent a number."
+        numbers_from: [me]
+        truthful: true
+
+  - id: salary-table
+    closes: [hollow-export, no-writer-retry]
+    objectives: [C2]
+    turns:
+      - say: "Show my basic salary as a one-row table with the number. Do not leave the table empty."
+        contains: [me.basic_salary]
+        table_nonempty: true
+        not_degraded: true
+
+  - id: arabic-followups
+    closes: [followup-degrade]
+    objectives: [C1, C7]
+    turns:
+      - say: "أظهر راتبي الأساسي بالعربية، وبالرقم فقط."
+        contains: [me.basic_salary]
+        arabic: true
+      - say: "وما هو المسمى الوظيفي؟ أجب بالعربية."
+        contains: [me.job_title]
+        arabic: true
+        not_degraded: true
+      - say: "وما هو رقمي الوظيفي؟"
+        contains: [me.employee_no]
+        arabic: true
+
+  - id: headcount-repeat
+    closes: [followup-degrade]
+    objectives: [C1, C7]
+    turns:
+      - say: "How many active employees are there? Reply with the number only."
+        int_equals: count:active
+      - say: "Same count again. Number only."
+        int_equals: count:active
+      - say: "كم عدد الموظفين النشطين؟ أجب بالعربية."
+        int_equals: count:active
+        arabic: true
+
+  - id: unbound-filter
+    closes: []
+    objectives: [C2]
+    turns:
+      - say: "How many active employees have a full name starting with Ali? Give the count. Do not choose one person."
+        int_in_or_none: [count:active_prefix:Ali]
+        truthful: true
+        not_degraded: true
+
+  - id: request-status
+    closes: []
+    objectives: [C9, C5]
+    no_host_write: true
+    turns:
+      - say: "I want to request annual leave tomorrow for 1 day."
+      - say: "What is the status of my request?"
+        llm_calls_max: 1
+        writer_calls_max: 0
+        not_degraded: true
+
+  - id: slot-carry
+    closes: []
+    objectives: [C3, C5]
+    no_host_write: true
+    turns:
+      - say: "I want to request annual leave starting next Sunday."
+        not_degraded: true
+      - say: "Make it 2 days."
+        says_any: ["annual", "سنوية"]
+        decision_not: [clarify]
+        not_degraded: true
+
+  - id: stated-fact
+    closes: []
+    objectives: [C10]
+    turns:
+      - say: "My project code is ALPHA-7."
+        not_degraded: true
+      - say: "How many active employees are there? Number only."
+        int_equals: count:active
+      - say: "What is my project code?"
+        contains: ["ALPHA-7"]

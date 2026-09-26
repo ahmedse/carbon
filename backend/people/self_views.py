@@ -46,6 +46,7 @@ from .leave_type_resolve import allowed_leave_type_payload, resolve_leave_type
 from .manager_routing import manager_routing_block_response
 from .profile_change_service import PROFILE_CHANGE_ALLOWLIST
 from .self_serializers import (
+    EmployeeSelfProfileSerializer,
     EmployeeSummarySerializer,
     LeaveBalanceSerializer,
     LeaveRecordDetailSerializer,
@@ -81,7 +82,7 @@ class EmployeeMeView(APIView):
 
     def get(self, request):
         profile = request.user.employee_profile
-        return Response(EmployeeSummarySerializer(profile).data)
+        return Response(EmployeeSelfProfileSerializer(profile).data)
 
 
 class LeaveBalanceView(APIView):

@@ -224,8 +224,23 @@ class EmployeeListCreateView(APIView):
     # past apiFetch's 15s timeout (SIM-QA N-HR-UI-01 / NB-P0-EMP-PAGE).
     _DEFAULT_PAGE_SIZE = 100
     _MAX_PAGE_SIZE = 200
+    # A filter this view does not apply must fail, not return the unfiltered
+    # population under a count that looks filtered.
+    _LIST_QUERY_PARAMS = frozenset({
+        'q', 'is_active', 'org_unit', 'rotation', 'nationality',
+        'kuwaitization', 'manager', 'page', 'page_size', 'format',
+    })
 
     def get(self, request):
+        unknown = sorted(set(request.query_params) - self._LIST_QUERY_PARAMS)
+        if unknown:
+            return Response(
+                {
+                    'detail': f"Unsupported filter(s): {', '.join(unknown)}.",
+                    'supported': sorted(self._LIST_QUERY_PARAMS - {'format'}),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if is_global_admin(request.user):
             qs = Employee.objects.all()
         else:

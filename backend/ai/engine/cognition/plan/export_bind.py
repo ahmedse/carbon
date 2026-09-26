@@ -630,6 +630,7 @@ def render_bound_catalog_read(
     language: str = "en",
     *,
     catalog_entry: dict | None = None,
+    fields: list[str] | None = None,
 ) -> str | None:
     """0-LLM restatement of a bound ESS lookup. Invents no numbers.
 
@@ -644,6 +645,7 @@ def render_bound_catalog_read(
         str(api_name or "").strip(),
         language,
         catalog_entry=catalog_entry,
+        fields=fields,
     )
     return rendered or None
 
