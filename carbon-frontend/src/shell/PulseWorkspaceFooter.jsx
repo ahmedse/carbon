@@ -6,6 +6,7 @@ import { Box, IconButton, Stack, Tooltip, Typography } from '@mui/material';
 import TextDecreaseIcon from '@mui/icons-material/TextDecrease';
 import TextIncreaseIcon from '@mui/icons-material/TextIncrease';
 import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../i18n/useLanguage';
 import AIStatusBar from './AIStatusBar';
 import AIModelSelect from './AIModelSelect';
 import PulsePresence from './PulsePresence';
@@ -20,6 +21,8 @@ function PulseWorkspaceFooter({
   children,
 }) {
   const { t } = useTranslation('ai');
+  const { lang, setLanguage } = useLanguage();
+  const nextLang = lang === 'ar' ? 'en' : 'ar';
   const hooked = usePulsePrefs();
   const {
     contentZoom,
@@ -96,6 +99,16 @@ function PulseWorkspaceFooter({
             <TextIncreaseIcon sx={{ fontSize: 13 }} />
           </IconButton>
         </Stack>
+      </Tooltip>
+      <Tooltip title={t(nextLang === 'ar' ? 'switchToArabic' : 'switchToEnglish')}>
+        <IconButton
+          size="small"
+          aria-label={t(nextLang === 'ar' ? 'switchToArabic' : 'switchToEnglish')}
+          onClick={() => setLanguage(nextLang)}
+          sx={{ p: 0.25, fontSize: '0.6875rem', borderRadius: 1 }}
+        >
+          {nextLang === 'ar' ? 'ع' : 'EN'}
+        </IconButton>
       </Tooltip>
       {showModel ? <AIModelSelect onChange={setSelectedModel} /> : null}
       {children}

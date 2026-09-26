@@ -428,6 +428,8 @@
   "placeholderPlan": "صف النتيجة. Pulse سيضع الخطة — لا شيء يعمل بعد.",
   "interrupted": "مقاطَع",
   "textSize": "حجم النص",
+  "switchToArabic": "العربية",
+  "switchToEnglish": "English",
   "decreaseTextSize": "تصغير النص",
   "resetTextSize": "إعادة حجم النص",
   "increaseTextSize": "تكبير النص",

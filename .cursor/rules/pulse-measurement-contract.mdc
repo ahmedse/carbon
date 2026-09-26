@@ -1,0 +1,32 @@
+---
+description: Pulse Chat vs Tasks measurement — do not repeat the Chat deep-bench mistakes
+alwaysApply: true
+---
+
+# Pulse measurement (RULE_36 · PB-63)
+
+Chat and Tasks are different product contracts. Do not merge their scores.
+
+## Honest status
+
+Worst of dated live, week log, and the last 3 full live retest runs.
+A stub, a unit bank, one PASS, or a `--noreload` process that did not load
+the files never upgrades a miss. No live bank for that surface → **missing**.
+
+## Do not
+
+- Claim 10/10 or L6/L7 from this scoreboard.
+- Overwrite night `2026-09-23` FAIL.
+- Switch models to buy latency and keep a signed score (Poe/DeepSeek trial 13:11).
+- Add phrase tables, routing `re.compile`, or domain/brand words in `engine/**`.
+- Loosen YAML goldens or grant `people:view` to `emp_1067`.
+- Enable Chat Confirm for host writes (ADR-0046 · RULE_35).
+- Start or kill `manage.sh` for live smoke.
+
+## Tasks / Agent
+
+Writes are Plan → Approve → Run → RULE_21. Score Tasks from
+`ai.eval.agent_deep_bench`, not from the Chat canvas.
+Until a live Tasks retest bank exists, T9/T10 stay missing.
+
+Playbook: PB-63, PB-64. Banks: `chat_deep_bench` · `agent_deep_bench`.

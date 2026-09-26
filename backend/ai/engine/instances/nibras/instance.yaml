@@ -768,7 +768,7 @@ api_catalog:
     empty_render: no_balance_configured
     examples:
       - {ar: "كم باقي لي من إجازة؟", en: "How many leave days do I have left?"}
-      - {ar: "ما هو الحد الأعلى للإجازات المرضية؟", en: "What is the max sick leave?"}
+      - {ar: "ما هو الحد الاعلى للاجازات المرضية؟", en: "What is the maximum sick leave?"}
       - {ar: "الإجازات", en: "leave"}
       - {ar: "أخبرني أكثر عن إجازاتي", en: "tell me more about my vacations"}
     description: >

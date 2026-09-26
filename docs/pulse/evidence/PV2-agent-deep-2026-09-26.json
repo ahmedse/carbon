@@ -1,0 +1,118 @@
+{
+  "date": "2026-09-26",
+  "surface": "tasks",
+  "verdict": "unmeasured",
+  "reached": 4,
+  "failed": 0,
+  "partial": 4,
+  "missing": 2,
+  "n_objectives": 10,
+  "rule": "Honest = worst of dated live, unit/offline bank, and last 3 full Tasks retest runs. No Tasks retest file → T9 missing. Stub and Chat scores never upgrade a Tasks miss. L6/L7 not scored.",
+  "l6_l7": "not scored",
+  "night_2026_09_23": "FAIL stays",
+  "objectives": [
+    {
+      "tid": "T1",
+      "name": "Mode contract",
+      "honest": "reached",
+      "note": "ADR-0046 cancels edit_plan on Chat (ap-012). Writes stay on Agent.",
+      "sources": [
+        "agent_plan_bank.yaml",
+        "ADR-0046"
+      ]
+    },
+    {
+      "tid": "T2",
+      "name": "RULE_21 consent",
+      "honest": "reached",
+      "note": "ESS leave/loan/attendance write is the consent step. Unit templates exist. Soak 5/5 after 23 FAIL.",
+      "sources": [
+        "PV2-6B-nights.json",
+        "PV2-a5-consent-copy-2026-09-23q.md"
+      ]
+    },
+    {
+      "tid": "T3",
+      "name": "Discuss / apply",
+      "honest": "reached",
+      "note": "Offline plan bank 12/12. Typed plan_revision, 0-LLM apply.",
+      "sources": [
+        "agent_plan_bank.yaml"
+      ]
+    },
+    {
+      "tid": "T4",
+      "name": "Process bind",
+      "honest": "partial",
+      "note": "Nibras process SIM 2026-09-21 PASS (leave, loan, payroll, GOSI, attendance). Not re-run in a 2026-09-26 Tasks bank.",
+      "sources": [
+        "docs/ops/SIM-QA-CHAT-AGENT/SCOREBOARD.md"
+      ]
+    },
+    {
+      "tid": "T5",
+      "name": "SoD / host gate",
+      "honest": "partial",
+      "note": "ADR-0045 unit gates hold. Last live NPS wave is 2026-09-21.",
+      "sources": [
+        "ADR-0045",
+        "test_host_sod.py"
+      ]
+    },
+    {
+      "tid": "T6",
+      "name": "Chat → Agent ESS",
+      "honest": "reached",
+      "note": "Nightly Chat→Agent→Approve as emp_1067. Streak 5. Night 2026-09-23 FAIL stays on the record.",
+      "sources": [
+        "PV2-6B-nights.json"
+      ]
+    },
+    {
+      "tid": "T7",
+      "name": "Output honesty",
+      "honest": "partial",
+      "note": "Phantom-success unit exists. No live Tasks output bank that the host row matched the plan.",
+      "sources": [
+        "test_phantom_success_guard.py"
+      ]
+    },
+    {
+      "tid": "T8",
+      "name": "Cockpit honesty",
+      "honest": "partial",
+      "note": "ADR-0043 four-view cockpit. SIM Wave A (2026-09-21) closed with findings open (1 FAIL).",
+      "sources": [
+        "ADR-0043",
+        "docs/ops/SIM-QA-CHAT-AGENT/SCOREBOARD.md"
+      ]
+    },
+    {
+      "tid": "T9",
+      "name": "Live Tasks retest",
+      "honest": "missing",
+      "note": "No PV2-tasks-retest-*.json. A 3-run live bank is what closed Chat. Tasks does not have one.",
+      "sources": [
+        "PV2-tasks-retest-*.json"
+      ]
+    },
+    {
+      "tid": "T10",
+      "name": "Run latency",
+      "honest": "missing",
+      "note": "No Agent run p50 / over-budget bar. Do not borrow Chat C8 numbers.",
+      "sources": []
+    }
+  ],
+  "plan_bank": {
+    "n": 12,
+    "passed": 12,
+    "misses": [],
+    "gate_pass": true
+  },
+  "soak": {
+    "file": "PV2-6B-nights.json",
+    "soak_complete": true
+  },
+  "tasks_retest_runs": []
+}

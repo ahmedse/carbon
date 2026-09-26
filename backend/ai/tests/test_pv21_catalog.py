@@ -73,6 +73,18 @@ def test_catalog_prompt_lines_describe_write_twin_as_agent_only():
     assert out.commands[0].process_id == "submit_my_loan"
 
 
+def test_a_leave_limit_question_ranks_the_balance_read():
+    from ai.engine.cognition.turn.understand import catalog_prompt_lines
+
+    lines, allowed, _writes = catalog_prompt_lines(
+        "ما هو الحد الاعلى للاجازات المرضية؟",
+        _nibras_catalog(),
+        k=12,
+    )
+    assert "get_my_leave_balance" in allowed
+    assert any(line.startswith("- get_my_leave_balance") for line in lines[:24])
+
+
 def test_bare_followup_ranks_the_offered_read_from_context():
     from ai.engine.cognition.turn.understand import catalog_context, catalog_prompt_lines
 

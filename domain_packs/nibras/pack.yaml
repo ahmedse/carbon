@@ -2,7 +2,7 @@
 # the registry — never by name in core code. Bump `version` when catalog,
 # processes, vocabulary or banks change in a way a running instance must notice.
 id: nibras
-version: 8
+version: 9
 domain: hrms
 display_name: Nibras — GOFSCO People & Payroll
 instance: backend/ai/engine/instances/nibras/instance.yaml
@@ -12,6 +12,7 @@ owns:
   catalog: api_catalog.yaml            # tools ⊆ instance.yaml api_catalog (ADR-0044)
   processes: processes/               # governed lifecycles + RULE_21 consent dials
   assurance: assurance/               # pack-level honesty / sim scripts
+  workbench: banks/tasks_workbench.yaml
   banks:                              # per-instance behaviour evidence (gauge columns)
     g6: backend/ai/eval/g6_bank.yaml
     g5: backend/ai/eval/multiturn/scripts

@@ -428,6 +428,8 @@
   "placeholderPlan": "Describe the outcome. Pulse will plan it — nothing runs yet.",
   "interrupted": "Interrupted",
   "textSize": "Text size",
+  "switchToArabic": "العربية",
+  "switchToEnglish": "English",
   "decreaseTextSize": "Decrease text size",
   "resetTextSize": "Reset text size",
   "increaseTextSize": "Increase text size",

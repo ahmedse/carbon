@@ -657,3 +657,21 @@ Append a new entry every time you confirm+fix a non-trivial bug (see `shared/deb
 - Best practice note: Awkward banner ≠ missing Chat button. System change through Pulse = Agent task. Host Plane A (My/Team/People) stays. RULE_35.
 - Regression guard: `ai/tests/test_chat_surface_handoff.py` · G2 — Chat leave utterance → no host `pending_actions`; Agent process + My submit still work. ADR-0046 · `.cursor/rules/pulse-chat-agent-mode-contract.mdc`.
 - First seen: 2026-09-22 (Nibras ESS QA emp_1067 · E-031).
+
+### PB-63 — Pulse scored 10/10 from stubs, one run, or the wrong process
+- Symptom: Chat or Tasks looks “reliable” after a unit bank, a gauge row, or one live PASS. A later full run, a `--noreload` server, or a faster model drops continuity / Arabic / recall. Workers then add phrase lists in `engine/**` or loosen goldens to recover the score.
+- Layer: eval / process (Pulse Master)
+- Root cause: measurement came after the story. Stub CI and offline banks do not see the understand call, the writer, or the process that users hit. One PASS is not `pass^k`. A process started with `--noreload` keeps old code. Switching cognition to a faster model (DeepSeek Flash, 2026-09-26 13:11) cut p50 and failed C1/C7/C10.
+- Fix: RULE_36. Separate Chat and Tasks banks. Honest = worst of dated live, week log, last 3 full live retest runs. No live bank → **missing**, never reached. Score the process that loaded the files. Haiku via Poe stays the signed Chat model until a 3-run hold on the new one.
+- Best practice note: build the live bank first. Fix only what that bank fails. Do not add `StagedExit`, routing `re.compile`, or module-level phrase tables in `engine/**`. Do not grant `people:view` to `emp_1067`. Do not overwrite night 2026-09-23 FAIL. Do not claim L6/L7 from this scoreboard.
+- Regression guard: `ai/eval/chat_deep_bench.py` · `ai/eval/agent_deep_bench.py` · `ai/tests/test_chat_deep_bench.py` · `ai/tests/test_agent_deep_bench.py` · QA bank §1.1 `pass^k` · `.cursor/rules/pulse-measurement-contract.mdc`.
+- First seen: 2026-09-26 (Pulse Chat deep bench; DeepSeek trial 13:11).
+
+### PB-64 — Chat essays a host figure; dumps pay; Arabic stays LTR
+- Symptom: “ما هو الحد الاعلى للاجازات المرضية؟” gets a handbook essay; the balance already has sick entitled. “Department and manager” prints `basic_salary`. Arabic replies sit in an English LTR page.
+- Layer: backend catalog + render · frontend Pulse chrome
+- Root cause: understand treated a named limit as prose (`answer` with no read). Profile restater dumped every declared field, including pay. Pulse footer had no language control; `dir=auto` on Arabic inside an LTR shell scrambles lists.
+- Fix: a named limit is `call_tool` when a catalog line returns the figure (`get_my_leave_balance` entitled; HR `list_leave_policies`). Catalog `sensitive_fields` stay off a dump; pay shows only when the ask names it. Pulse footer ع / EN calls `setLanguage`, which sets `document.dir`.
+- Best practice note: host figures come from a read. Compensation is explicit-ask. Arabic UX is language + direction together (ADR-0018), not a Pulse-only dir that fights the header.
+- Regression guard: `ai/tests/test_pv21_catalog.py::test_a_leave_limit_question_ranks_the_balance_read` · `ai/tests/test_catalog_render.py::test_sensitive_pay_stays_off_a_profile_dump` · `carbon-frontend/src/__tests__/PulseWorkspaceFooter.test.jsx`.
+- First seen: 2026-09-26 (live Chat screenshots, emp_2378).

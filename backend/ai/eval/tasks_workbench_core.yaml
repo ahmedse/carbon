@@ -1,0 +1,340 @@
+# Domain-free Tasks workbench (ADR-0050).
+# Graphs, guards, edits, retrieval, and agent roles. No pack vocabulary.
+# Pack scenarios live in domain_packs/<id>/banks/tasks_workbench.yaml.
+# This file is structural. It is not a live Tasks retest.
+
+cases:
+  - id: core.linear.read
+    lane: graph
+    brief: Read one record and stop.
+    graph:
+      entry: read
+      nodes:
+        - {id: read, node_type: task, tool_name: read_record, tool_args: {ref: a1}}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: read, target: done}
+    expect:
+      valid: true
+      path: [read, done]
+      mutations_gated: true
+
+  - id: core.choice.branch
+    lane: graph
+    brief: When the flag holds, ask, then write. Otherwise stop.
+    context: {flag: true}
+    graph:
+      entry: read
+      nodes:
+        - {id: read, node_type: task, tool_name: read_record}
+        - {id: gate, node_type: choice}
+        - {id: ask, node_type: human}
+        - {id: write, node_type: task, tool_name: write_record, is_mutation: true}
+        - {id: stop, node_type: fail}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: read, target: gate}
+        - {source: gate, target: ask, guard: "flag == true"}
+        - {source: gate, target: stop, is_default: true}
+        - {source: ask, target: write}
+        - {source: write, target: done}
+    expect:
+      valid: true
+      path: [read, gate, ask, write, done]
+      mutations_gated: true
+
+  - id: core.choice.other-branch
+    lane: graph
+    brief: Flag false takes the default and never writes.
+    context: {flag: false}
+    graph:
+      entry: read
+      nodes:
+        - {id: read, node_type: task, tool_name: read_record}
+        - {id: gate, node_type: choice}
+        - {id: ask, node_type: human}
+        - {id: write, node_type: task, tool_name: write_record, is_mutation: true}
+        - {id: stop, node_type: fail}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: read, target: gate}
+        - {source: gate, target: ask, guard: "flag == true"}
+        - {source: gate, target: stop, is_default: true}
+        - {source: ask, target: write}
+        - {source: write, target: done}
+    expect:
+      valid: true
+      path: [read, gate, stop]
+      path_excludes: [write]
+
+  - id: core.edit.retargets-branch
+    lane: graph
+    brief: An edit flips the flag. The write drops off the path. Consent stays on the write that remains in the graph.
+    context: {flag: true}
+    edits:
+      - {op: set_context, context: {flag: false}}
+    graph:
+      entry: read
+      nodes:
+        - {id: read, node_type: task, tool_name: read_record}
+        - {id: gate, node_type: choice}
+        - {id: ask, node_type: human}
+        - {id: write, node_type: task, tool_name: write_record, is_mutation: true, tool_args: {qty: 1}}
+        - {id: stop, node_type: fail}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: read, target: gate}
+        - {source: gate, target: ask, guard: "flag == true"}
+        - {source: gate, target: stop, is_default: true}
+        - {source: ask, target: write}
+        - {source: write, target: done}
+    expect:
+      valid: true
+      path: [read, gate, stop]
+      path_excludes: [write]
+
+  - id: core.edit.args-keep-consent
+    lane: graph
+    brief: Changing the write args does not remove the human gate.
+    context: {flag: true}
+    edits:
+      - {op: set_args, node: write, args: {qty: 2}}
+    graph:
+      entry: read
+      nodes:
+        - {id: read, node_type: task, tool_name: read_record}
+        - {id: gate, node_type: choice}
+        - {id: ask, node_type: human}
+        - {id: write, node_type: task, tool_name: write_record, is_mutation: true, tool_args: {qty: 1}}
+        - {id: stop, node_type: fail}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: read, target: gate}
+        - {source: gate, target: ask, guard: "flag == true"}
+        - {source: gate, target: stop, is_default: true}
+        - {source: ask, target: write}
+        - {source: write, target: done}
+    expect:
+      valid: true
+      path_has: [ask, write]
+      mutations_gated: true
+      args: {write: {qty: 2}}
+
+  - id: core.trap.ungated-write
+    lane: graph
+    brief: A write with no human on the path is a trap. The bench must detect it.
+    context: {flag: true}
+    graph:
+      entry: read
+      nodes:
+        - {id: read, node_type: task, tool_name: read_record}
+        - {id: write, node_type: task, tool_name: write_record, is_mutation: true}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: read, target: write}
+        - {source: write, target: done}
+    expect:
+      valid: true
+      detects: ungated_mutation
+
+  - id: core.trap.choice-without-default
+    lane: graph
+    brief: A choice with only guarded edges is invalid.
+    graph:
+      entry: gate
+      nodes:
+        - {id: gate, node_type: choice}
+        - {id: yes, node_type: succeed}
+        - {id: no, node_type: fail}
+      edges:
+        - {source: gate, target: yes, guard: "flag == true"}
+        - {source: gate, target: no, guard: "flag == false"}
+    expect:
+      valid: false
+
+  - id: core.parallel.readonly
+    lane: graph
+    brief: Two reads fan out and join. Neither writes.
+    graph:
+      entry: fan
+      nodes:
+        - {id: fan, node_type: parallel, join: all}
+        - {id: left, node_type: task, tool_name: read_record, tool_args: {ref: left}}
+        - {id: right, node_type: task, tool_name: read_record, tool_args: {ref: right}}
+        - {id: join, node_type: task, tool_name: merge_records}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: fan, target: left}
+        - {source: fan, target: right}
+        - {source: left, target: join}
+        - {source: right, target: join}
+        - {source: join, target: done}
+    expect:
+      valid: true
+      path_has: [fan, left, right]
+      mutations_gated: true
+
+  - id: core.loop.bounded
+    lane: graph
+    brief: A loop must declare a finite max.
+    graph:
+      entry: retry
+      nodes:
+        - {id: retry, node_type: loop, max_iterations: 3, tool_name: read_record}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: retry, target: done}
+    expect:
+      valid: true
+      max_iterations: {retry: 3}
+
+  - id: core.map.collection
+    lane: graph
+    brief: A map names the collection it walks.
+    graph:
+      entry: each
+      nodes:
+        - {id: each, node_type: map, collection_path: rows, tool_name: read_record}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: each, target: done}
+    expect:
+      valid: true
+      collection_path: {each: rows}
+
+  - id: core.subflow.human
+    lane: graph
+    brief: A nested flow still pauses on a human before a write.
+    graph:
+      entry: child
+      nodes:
+        - {id: child, node_type: subflow, meta: {flow: record.lifecycle}}
+        - {id: ask, node_type: human}
+        - {id: write, node_type: task, tool_name: write_record, is_mutation: true}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: child, target: ask}
+        - {source: ask, target: write}
+        - {source: write, target: done}
+    expect:
+      valid: true
+      path_has: [ask, write]
+      mutations_gated: true
+
+  - id: core.wait.then-human
+    lane: graph
+    brief: A wait does not skip the human gate.
+    graph:
+      entry: hold
+      nodes:
+        - {id: hold, node_type: wait}
+        - {id: ask, node_type: human}
+        - {id: write, node_type: task, tool_name: write_record, is_mutation: true}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: hold, target: ask}
+        - {source: ask, target: write}
+        - {source: write, target: done}
+    expect:
+      valid: true
+      path: [hold, ask, write, done]
+      mutations_gated: true
+
+  - id: core.compensate.still-gated
+    lane: graph
+    brief: A reversal is itself a mutation and still sits behind a human.
+    graph:
+      entry: ask
+      nodes:
+        - {id: ask, node_type: human}
+        - {id: write, node_type: task, tool_name: write_record, is_mutation: true, compensation: undo}
+        - {id: undo, node_type: task, tool_name: undo_record, is_mutation: true}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: ask, target: write}
+        - {source: write, target: done}
+        - {source: write, target: undo, guard: "undo == true"}
+    expect:
+      valid: true
+      compensation: {write: undo}
+      mutations_gated: true
+
+  - id: core.band.numeric-guard
+    lane: graph
+    brief: A numeric guard picks export or escalate. Escalate is a human.
+    context: {band: 4}
+    graph:
+      entry: read
+      nodes:
+        - {id: read, node_type: task, tool_name: read_record}
+        - {id: gate, node_type: choice}
+        - {id: pack, node_type: task, tool_name: export_document}
+        - {id: ask, node_type: human}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: read, target: gate}
+        - {source: gate, target: pack, guard: "band <= 10"}
+        - {source: gate, target: ask, is_default: true}
+        - {source: pack, target: done}
+    expect:
+      valid: true
+      path_has: [pack]
+      path_excludes: [ask]
+
+  - id: core.band.edit-crosses-threshold
+    lane: graph
+    brief: Editing the band across the threshold switches the branch.
+    context: {band: 4}
+    edits:
+      - {op: set_context, context: {band: 12}}
+    graph:
+      entry: read
+      nodes:
+        - {id: read, node_type: task, tool_name: read_record}
+        - {id: gate, node_type: choice}
+        - {id: pack, node_type: task, tool_name: export_document}
+        - {id: ask, node_type: human}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: read, target: gate}
+        - {source: gate, target: pack, guard: "band <= 10"}
+        - {source: gate, target: ask, is_default: true}
+        - {source: pack, target: done}
+    expect:
+      valid: true
+      path_has: [ask]
+      path_excludes: [pack]
+
+  - id: core.retrieval.cite-or-refuse
+    lane: retrieval
+    brief: Cite the passage that contains every token. Refuse when it does not.
+    passages:
+      - {id: p1, text: "Code ALPHA ceiling is 15."}
+    tokens: ["ALPHA", "15"]
+    expect:
+      cited: [p1]
+      refuses_when_empty: true
+
+  - id: core.retrieval.miss-refuses
+    lane: retrieval
+    brief: A token the passages do not carry is a refusal, not an invention.
+    passages:
+      - {id: p1, text: "Code ALPHA ceiling is 15."}
+    tokens: ["BETA"]
+    expect:
+      cited: []
+      refuses_when_empty: true
+
+  - id: core.agents.readonly-fanout
+    lane: agents
+    brief: Researcher and critic do not carry mutation tools. The critic has an empty tool set.
+    agents:
+      - {role: orchestrator, tools: [search_knowledge], mutation_tools: []}
+      - {role: researcher, tools: [search_knowledge, read_record], mutation_tools: []}
+      - {role: planner, tools: [search_knowledge], mutation_tools: []}
+      - {role: critic, tools: [], mutation_tools: []}
+      - {role: domain_specialist, tools: [search_knowledge, read_record], mutation_tools: []}
+    expect:
+      roles: [orchestrator, researcher, planner, critic, domain_specialist]
+      readonly_roles: [researcher, critic]
+      critic_tools: []

@@ -1,0 +1,264 @@
+# Nibras Tasks workbench. Domain words live here, not in the engine.
+# The runner is domain-free: it only checks graph shape, guards, edits,
+# consent, citations, and agent tool sets.
+# Structural. Not a live Tasks retest. Not a Chat score.
+
+cases:
+  - id: nibras.read.profile-hides-pay
+    lane: graph
+    brief: Department and manager. Pay is not on the read.
+    graph:
+      entry: read
+      nodes:
+        - id: read
+          node_type: task
+          tool_name: get_my_profile
+          tool_args: {fields: [org_unit, manager]}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: read, target: done}
+    expect:
+      valid: true
+      path: [read, done]
+      args: {read: {fields: [org_unit, manager]}}
+      hidden_on: {read: [basic_salary]}
+
+  - id: nibras.leave.within-balance
+    lane: graph
+    brief: Annual leave, 1 day, balance covers it. Human confirms before submit.
+    context: {remaining: 30, days: 1}
+    graph:
+      entry: balance
+      nodes:
+        - {id: balance, node_type: task, tool_name: get_my_leave_balance}
+        - {id: gate, node_type: choice}
+        - {id: ask, node_type: human}
+        - id: submit
+          node_type: task
+          tool_name: submit_my_leave
+          is_mutation: true
+          tool_args: {leave_type: annual, days: 1}
+        - {id: stop, node_type: fail}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: balance, target: gate}
+        - {source: gate, target: ask, guard: "remaining >= days"}
+        - {source: gate, target: stop, is_default: true}
+        - {source: ask, target: submit}
+        - {source: submit, target: done}
+    expect:
+      valid: true
+      path_has: [ask, submit]
+      mutations_gated: true
+
+  - id: nibras.leave.edit-days-exceeds
+    lane: graph
+    brief: User changes 1 day to 40. Balance does not cover it. Do not submit.
+    context: {remaining: 30, days: 1}
+    edits:
+      - {op: set_context, context: {days: 40}}
+      - {op: set_args, node: submit, args: {days: 40}}
+    graph:
+      entry: balance
+      nodes:
+        - {id: balance, node_type: task, tool_name: get_my_leave_balance}
+        - {id: gate, node_type: choice}
+        - {id: ask, node_type: human}
+        - id: submit
+          node_type: task
+          tool_name: submit_my_leave
+          is_mutation: true
+          tool_args: {leave_type: annual, days: 1}
+        - {id: stop, node_type: fail}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: balance, target: gate}
+        - {source: gate, target: ask, guard: "remaining >= days"}
+        - {source: gate, target: stop, is_default: true}
+        - {source: ask, target: submit}
+        - {source: submit, target: done}
+    expect:
+      valid: true
+      path: [balance, gate, stop]
+      path_excludes: [submit]
+      args: {submit: {leave_type: annual, days: 40}}
+
+  - id: nibras.leave.policy-cite
+    lane: retrieval
+    brief: ما هو الحد الاعلى للاجازات المرضية؟
+    passages:
+      - {id: balance, text: "sick entitled 15 remaining 15"}
+      - {id: policy, text: "sick default_entitled_days 15"}
+    tokens: ["sick", "15"]
+    expect:
+      cited: [balance, policy]
+      refuses_when_empty: true
+
+  - id: nibras.payroll.within-band
+    lane: graph
+    brief: October payroll variance inside the band exports. Over the band escalates.
+    context: {band: 4}
+    graph:
+      entry: read
+      nodes:
+        - {id: read, node_type: task, tool_name: list_payroll_runs}
+        - {id: gate, node_type: choice}
+        - {id: pack, node_type: task, tool_name: export_document}
+        - {id: ask, node_type: human}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: read, target: gate}
+        - {source: gate, target: pack, guard: "band <= 10"}
+        - {source: gate, target: ask, is_default: true}
+        - {source: pack, target: done}
+    expect:
+      valid: true
+      path_has: [pack]
+      path_excludes: [ask]
+
+  - id: nibras.payroll.edit-over-band
+    lane: graph
+    brief: The band is edited over the threshold. Export is not taken. A human is.
+    context: {band: 4}
+    edits:
+      - {op: set_context, context: {band: 18}}
+    graph:
+      entry: read
+      nodes:
+        - {id: read, node_type: task, tool_name: list_payroll_runs}
+        - {id: gate, node_type: choice}
+        - {id: pack, node_type: task, tool_name: export_document}
+        - {id: ask, node_type: human}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: read, target: gate}
+        - {source: gate, target: pack, guard: "band <= 10"}
+        - {source: gate, target: ask, is_default: true}
+        - {source: pack, target: done}
+    expect:
+      valid: true
+      path_has: [ask]
+      path_excludes: [pack]
+
+  - id: nibras.parallel.headcount-and-leave
+    lane: graph
+    brief: Two reads in parallel. No write.
+    graph:
+      entry: fan
+      nodes:
+        - {id: fan, node_type: parallel, join: all}
+        - {id: people, node_type: task, tool_name: analyze_employees, tool_args: {dimension: is_active}}
+        - {id: leave, node_type: task, tool_name: get_my_leave_balance}
+        - {id: join, node_type: task, tool_name: merge_records}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: fan, target: people}
+        - {source: fan, target: leave}
+        - {source: people, target: join}
+        - {source: leave, target: join}
+        - {source: join, target: done}
+    expect:
+      valid: true
+      path_has: [people, leave]
+      mutations_gated: true
+
+  - id: nibras.sod.review-is-human
+    lane: graph
+    brief: Submit is consented. Review is a different human. Record is observe, not a second write.
+    graph:
+      entry: submit
+      nodes:
+        - {id: submit, node_type: human, meta: {role: requester, process: leave.request.lifecycle}}
+        - {id: review, node_type: human, meta: {role: approver}}
+        - {id: record, node_type: observe}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: submit, target: review}
+        - {source: review, target: record}
+        - {source: record, target: done}
+    expect:
+      valid: true
+      path: [submit, review, record, done]
+      roles_differ: [submit, review]
+
+  - id: nibras.loop.reread-balance
+    lane: graph
+    brief: Re-read the balance at most three times, then stop.
+    graph:
+      entry: retry
+      nodes:
+        - {id: retry, node_type: loop, max_iterations: 3, tool_name: get_my_leave_balance}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: retry, target: done}
+    expect:
+      valid: true
+      max_iterations: {retry: 3}
+
+  - id: nibras.map.each-direct-report
+    lane: graph
+    brief: One read per direct report. The collection is named.
+    graph:
+      entry: each
+      nodes:
+        - {id: each, node_type: map, collection_path: direct_reports, tool_name: get_employee}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: each, target: done}
+    expect:
+      valid: true
+      collection_path: {each: direct_reports}
+
+  - id: nibras.loan.consent-then-compensate
+    lane: graph
+    brief: A loan submit is consented. Its reversal is also a mutation, still behind the human.
+    graph:
+      entry: ask
+      nodes:
+        - {id: ask, node_type: human}
+        - id: submit
+          node_type: task
+          tool_name: submit_my_loan
+          is_mutation: true
+          compensation: undo
+          tool_args: {loan_type: personal, principal: 500}
+        - {id: undo, node_type: task, tool_name: cancel_request, is_mutation: true}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: ask, target: submit}
+        - {source: submit, target: done}
+        - {source: submit, target: undo, guard: "undo == true"}
+    expect:
+      valid: true
+      compensation: {submit: undo}
+      mutations_gated: true
+
+  - id: nibras.agents.researcher-cannot-submit
+    lane: agents
+    brief: Fan-out research reads. Submit stays off the researcher and the critic.
+    agents:
+      - {role: orchestrator, tools: [search_knowledge], mutation_tools: []}
+      - {role: researcher, tools: [search_knowledge, get_my_leave_balance], mutation_tools: []}
+      - {role: planner, tools: [search_knowledge], mutation_tools: []}
+      - {role: critic, tools: [], mutation_tools: []}
+      - role: domain_specialist
+        tools: [search_knowledge, get_my_profile]
+        mutation_tools: []
+    expect:
+      roles: [orchestrator, researcher, planner, critic, domain_specialist]
+      readonly_roles: [researcher, critic]
+      critic_tools: []
+
+  - id: nibras.trap.submit-without-consent
+    lane: graph
+    brief: Submit with no human is a trap, even on a known process.
+    graph:
+      entry: submit
+      nodes:
+        - {id: submit, node_type: task, tool_name: submit_my_leave, is_mutation: true}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: submit, target: done}
+    expect:
+      valid: true
+      detects: ungated_mutation

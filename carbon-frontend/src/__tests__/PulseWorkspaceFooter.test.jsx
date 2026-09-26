@@ -3,6 +3,12 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { PulsePrefsProvider } from '../shell/pulsePrefs';
 import PulseWorkspaceFooter from '../shell/PulseWorkspaceFooter';
 
+const setLanguage = vi.hoisted(() => vi.fn());
+
+vi.mock('../i18n/useLanguage', () => ({
+  useLanguage: () => ({ lang: 'en', isRtl: false, setLanguage, ready: true }),
+}));
+
 vi.mock('../shell/AIModelSelect', () => ({
   default: () => <div data-testid="model-select" />,
   AI_MODEL_STORAGE_KEY: 'ai.selectedModel',
@@ -37,5 +43,15 @@ describe('PulseWorkspaceFooter', () => {
     );
     fireEvent.click(screen.getByRole('checkbox', { name: /Think/i }));
     expect(localStorage.getItem('pulse.denseThinking')).toBe('1');
+  });
+
+  it('switches the app to Arabic, which flips the page to RTL', () => {
+    render(
+      <PulsePrefsProvider>
+        <PulseWorkspaceFooter variant="ready" label="Ready" />
+      </PulsePrefsProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'العربية' }));
+    expect(setLanguage).toHaveBeenCalledWith('ar');
   });
 });
