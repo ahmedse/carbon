@@ -837,6 +837,94 @@ export function layoutExecutionGraph(plan, options = {}) {
     })
     .filter(Boolean);
 
+  if (laid.some((n) => !n.is_dummy)) {
+    const real = laid.filter((n) => !n.is_dummy);
+    const stepIds = new Set(real.map((n) => n.id));
+    const incoming = new Set();
+    const outgoing = new Set();
+    edges.forEach((e) => {
+      if (!stepIds.has(e.source) || !stepIds.has(e.target)) return;
+      incoming.add(e.target);
+      outgoing.add(e.source);
+    });
+    const roots = real.filter((n) => !incoming.has(n.id));
+    const sinks = real.filter((n) => !outgoing.has(n.id));
+    const statuses = real.map((n) => n.status || 'pending');
+    const started = statuses.some((s) => s !== 'pending');
+    const allDone = statuses.every((s) => s === 'completed' || s === 'skipped');
+    const anyFailed = statuses.some((s) => s === 'failed');
+    const gap = direction === 'tb' ? (L.nodeH + L.rowGap) : (L.nodeW + L.colGap);
+    if (direction === 'tb') {
+      laid.forEach((n) => { n.y += gap; });
+      laidEdges.forEach((e) => { e.sourceY += gap; e.targetY += gap; });
+      phaseBands.forEach((b) => { b.y += gap; });
+      height += gap * 2;
+    } else {
+      laid.forEach((n) => { n.x += gap; });
+      laidEdges.forEach((e) => { e.sourceX += gap; e.targetX += gap; });
+      phaseBands.forEach((b) => { b.x += gap; });
+      width += gap * 2;
+    }
+    const mid = (group, axis) => {
+      const vals = group.map((n) => n[axis] + (axis === 'x' ? n.w : n.h) / 2);
+      return vals.reduce((a, b) => a + b, 0) / vals.length;
+    };
+    const start = {
+      id: '__start',
+      label: 'Start',
+      status: started ? 'completed' : 'pending',
+      node_type: 'start',
+      is_gateway: false,
+      w: L.nodeW,
+      h: L.nodeH,
+      rank: -1,
+    };
+    const end = {
+      id: '__end',
+      label: 'End',
+      status: anyFailed ? 'failed' : (allDone ? 'completed' : (started ? 'running' : 'pending')),
+      node_type: 'end',
+      is_gateway: false,
+      w: L.nodeW,
+      h: L.nodeH,
+      rank: (Math.max(...real.map((n) => n.rank ?? 0)) + 1),
+    };
+    if (direction === 'tb') {
+      start.x = mid(roots, 'x') - L.nodeW / 2;
+      start.y = L.padTop;
+      end.x = mid(sinks, 'x') - L.nodeW / 2;
+      end.y = Math.max(...real.map((n) => n.y)) + L.nodeH + L.rowGap;
+    } else {
+      start.y = mid(roots, 'y') - L.nodeH / 2;
+      start.x = L.padX;
+      end.y = mid(sinks, 'y') - L.nodeH / 2;
+      end.x = Math.max(...real.map((n) => n.x)) + L.nodeW + L.colGap;
+    }
+    laid.push(start, end);
+    roots.forEach((n) => {
+      laidEdges.push({
+        source: '__start',
+        target: n.id,
+        label: null,
+        sourceX: direction === 'tb' ? start.x + L.nodeW / 2 : start.x + L.nodeW,
+        sourceY: direction === 'tb' ? start.y + L.nodeH : start.y + L.nodeH / 2,
+        targetX: direction === 'tb' ? n.x + L.nodeW / 2 : n.x,
+        targetY: direction === 'tb' ? n.y : n.y + L.nodeH / 2,
+      });
+    });
+    sinks.forEach((n) => {
+      laidEdges.push({
+        source: n.id,
+        target: '__end',
+        label: null,
+        sourceX: direction === 'tb' ? n.x + L.nodeW / 2 : n.x + L.nodeW,
+        sourceY: direction === 'tb' ? n.y + L.nodeH : n.y + L.nodeH / 2,
+        targetX: direction === 'tb' ? end.x + L.nodeW / 2 : end.x,
+        targetY: direction === 'tb' ? end.y : end.y + L.nodeH / 2,
+      });
+    });
+  }
+
   return {
     nodes: laid,
     edges: laidEdges,

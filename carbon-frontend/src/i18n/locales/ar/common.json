@@ -288,7 +288,10 @@
   "graphStatusFailed": "فشل",
   "graphStatusSkipped": "تُرك",
   "graphShape_roundedRect": "مهمة",
+  "graphShape_stadium": "بداية / نهاية",
   "graphShape_diamond": "قرار",
   "graphShape_diamondPlus": "توازٍ",
-  "graphShape_doubleCircle": "انتظار"
+  "graphShape_doubleCircle": "انتظار",
+  "graphNodeStart": "بداية",
+  "graphNodeEnd": "نهاية"
 }

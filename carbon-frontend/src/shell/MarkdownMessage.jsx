@@ -26,6 +26,7 @@ import remarkMath from 'remark-math';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeKatex from 'rehype-katex';
 import { Link as RouterLink } from 'react-router-dom';
+import { presentRecordDump } from './formatRecordDump';
 import 'highlight.js/styles/atom-one-dark.css';
 import 'katex/dist/katex.min.css';
 import {
@@ -1337,7 +1338,9 @@ export {
 };
 
 export default function MarkdownMessage({ content }) {
-  const normalized = reflowMarkdownStructure(repairTableBlocks(normalizeMermaidFences(content)));
+  const normalized = reflowMarkdownStructure(
+    repairTableBlocks(normalizeMermaidFences(presentRecordDump(content))),
+  );
   return (
     <Box sx={{ '& > *:first-of-type': { mt: 0 }, '& > *:last-of-type': { mb: 0 } }}>
       <ReactMarkdown

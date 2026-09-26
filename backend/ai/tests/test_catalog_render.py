@@ -160,9 +160,12 @@ def test_declared_list_restates_returns_and_latest_first():
         catalog_entry=_RUN_ENTRY,
     )
     assert rendered
-    assert rendered.startswith("Runs (2):")
-    assert rendered.index("id=56") < rendered.index("id=57")
-    assert "period_end=2026-08-31" in rendered
+    assert rendered.startswith("Runs (2)\n")
+    assert "| Id | Org Unit | Period Start | Period End | Status | Created At |" in rendered
+    assert rendered.index("| 56 |") < rendered.index("| 57 |")
+    assert "2026-08-31" in rendered
+    assert "id=" not in rendered
+    assert "T18:" not in rendered
     assert ungrounded_numbers(rendered, [payload]) == []
 
 
@@ -182,8 +185,10 @@ def test_declared_detail_restates_iso_commit_without_writer():
         catalog_entry=_DETAIL_ENTRY,
     )
     assert rendered
-    assert "id=56" in rendered
-    assert "committed_at=2026-09-25T18:48:02.408376+03:00" in rendered
+    assert "| 56 |" in rendered
+    assert "2026-09-25" in rendered
+    assert "id=" not in rendered
+    assert "T18:" not in rendered
     assert ungrounded_numbers(rendered, [row]) == []
 
 
@@ -207,8 +212,9 @@ def test_restate_last_view_copies_table_cells():
             "rows": [["2026-09-25T18:48:02.408376+03:00", 1]],
         }],
     })
-    assert "2026-09-25T18:48:02.408376+03:00" in text
-    assert "Value=1" in text
+    assert "2026-09-25" in text
+    assert "| 1 |" in text
+    assert "T18:" not in text
     assert ungrounded_numbers(text, [{
         "tables": [{"rows": [["2026-09-25T18:48:02.408376+03:00", 1]]}],
     }]) == []

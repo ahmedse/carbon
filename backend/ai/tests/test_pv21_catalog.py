@@ -169,8 +169,9 @@ def test_act_list_read_restates_declared_returns():
         )
     )
     assert text
-    assert "id=56" in text
-    assert "period_end=2026-08-31" in text
+    assert "| 56 |" in text
+    assert "2026-08-31" in text
+    assert "id=" not in text
 
 
 def test_act_call_tool_restates_host_payload():

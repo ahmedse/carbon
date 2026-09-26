@@ -14,6 +14,7 @@
  */
 export function resolvePlanNodeShape(n) {
   if (!n || n.is_dummy) return 'roundedRect';
+  if (n.node_type === 'start' || n.node_type === 'end') return 'stadium';
   const nt = String(n.node_type || '').toLowerCase();
   if (n.is_gateway || ['choice', 'parallel', 'observe', 'map', 'loop', 'wait', 'fail', 'succeed'].includes(nt)) {
     switch (nt) {
@@ -50,10 +51,10 @@ export const PLAN_ROLE_ACCENT = {
 
 /** Operator-facing legend rows. */
 export const PLAN_SHAPE_LEGEND = [
-  { shape: 'roundedRect', label: 'Task (agent)' },
-  { shape: 'diamond', label: 'Choice (XOR)' },
-  { shape: 'diamondPlus', label: 'Parallel (AND)' },
-  { shape: 'doubleCircle', label: 'Wait / observe' },
+  { shape: 'stadium', label: 'Start / end' },
+  { shape: 'roundedRect', label: 'Step' },
+  { shape: 'diamond', label: 'Choice' },
+  { shape: 'diamondPlus', label: 'Parallel' },
 ];
 
 /**

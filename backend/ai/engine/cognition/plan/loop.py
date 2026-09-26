@@ -322,6 +322,32 @@ class StepResult:
     choice: dict | None = None
 
 
+def resume_answered_clarification(step: PlanStep, confirmation_token: str | None) -> StepResult | None:
+    """The operator already approved this clarification. Do not ask again.
+
+    Resume used to re-enter ``ask_clarification``, mint a new token, and
+    pause on the same step, so Approve never advanced the run.
+    """
+    if not confirmation_token:
+        return None
+    if str(getattr(step, "tool_name", "") or "") != "ask_clarification":
+        return None
+    question = str(getattr(step, "intent", "") or "")
+    return StepResult(
+        step_id=step.step_id,
+        intent=step.intent,
+        draft_text=question,
+        executed=True,
+        paused=False,
+        confirmation_token=confirmation_token,
+        tool_output={
+            "type": "clarification",
+            "answered": True,
+            "question": question,
+        },
+    )
+
+
 def pause_for_user_answer(step: PlanStep, tool_output: dict | None = None) -> StepResult | None:
     """A step that collects an answer must stop the run. Later steps wait.
 
@@ -1830,7 +1856,10 @@ class ReActLoop:
             WRITE_HELD,
             mutation_blocked_by_failed_read,
         )
-        asked = pause_for_user_answer(step)
+        answered = resume_answered_clarification(step, confirmation_token)
+        if answered is not None:
+            return answered
+        asked = None if confirmation_token else pause_for_user_answer(step)
         if asked is not None:
             return asked
 
@@ -2483,7 +2512,7 @@ class ReActLoop:
             # ── Hollow-result honesty (empty research / soft-empty tools) ─
             # Tools that "succeed" with zero evidence must not persist as
             # Finished — that is the same lie as Completed + 0/N pending.
-            asked = pause_for_user_answer(step, result.tool_output)
+            asked = None if confirmation_token else pause_for_user_answer(step, result.tool_output)
             if asked is not None and not result.error:
                 return asked
 

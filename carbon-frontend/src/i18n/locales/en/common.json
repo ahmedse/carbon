@@ -288,7 +288,10 @@
   "graphStatusFailed": "Failed",
   "graphStatusSkipped": "Skipped",
   "graphShape_roundedRect": "Task",
+  "graphShape_stadium": "Start / end",
   "graphShape_diamond": "Choice",
   "graphShape_diamondPlus": "Parallel",
-  "graphShape_doubleCircle": "Wait"
+  "graphShape_doubleCircle": "Wait",
+  "graphNodeStart": "Start",
+  "graphNodeEnd": "End"
 }

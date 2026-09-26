@@ -235,9 +235,9 @@ def render_history_rows(
     parts = [p for p in parts if p]
     if not parts:
         return empty_render_text(empty_render, language)
-    body = "; ".join(parts) if not ar else "؛ ".join(parts)
+    bullets = "\n".join(f"- {part}" for part in parts)
     prefix = _scope_prefix(scope_key, language)
-    return f"{prefix} ({len(rows)}): {body}."
+    return f"{prefix} ({len(rows)})\n\n{bullets}"
 
 
 def _format_leave_history_row(row: dict, *, ar: bool) -> str:
@@ -339,6 +339,45 @@ def _field_label(labels: dict | None, field: str, *, ar: bool) -> str:
         if text:
             return text
     return ""
+
+
+def _present_cell(text: str) -> str:
+    """A cell the operator can scan. A timestamp keeps its calendar day."""
+    raw = text.replace("|", " ").replace("\n", " ").strip()
+    if len(raw) >= 11 and raw[4] == "-" and raw[7] == "-" and raw[10] == "T":
+        return raw[:10]
+    return raw
+
+
+def _present_header(field: str, labels: dict | None, *, ar: bool) -> str:
+    label = _field_label(labels, field, ar=ar)
+    if label:
+        return label.replace("|", " ")
+    parts = [part for part in field.replace("-", "_").split("_") if part]
+    if not parts:
+        return field
+    return " ".join(part[:1].upper() + part[1:] for part in parts)
+
+
+def _markdown_table(
+    rows: list[dict],
+    fields: list[str],
+    *,
+    ar: bool,
+    labels: dict | None,
+) -> str:
+    headers = [_present_header(field, labels, ar=ar) for field in fields]
+    lines = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join("---" for _ in headers) + " |",
+    ]
+    for row in rows:
+        cells: list[str] = []
+        for field in fields:
+            cell = _declared_cell(row, field)
+            cells.append(_present_cell(cell) if cell else "")
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines)
 
 
 def _format_declared_row(
@@ -520,18 +559,13 @@ def render_declared_rows(
             key=lambda row: str(row.get(latest_by) or ""),
             reverse=True,
         )
-    if kind == "detail":
-        body = _format_declared_row(ordered[0], fields, ar=ar, labels=labels)
-        return body or _empty_declared(empty_render, language, ar=ar)
-    shown = ordered[:_MAX_DECLARED_ROWS]
-    parts = [_format_declared_row(row, fields, ar=ar, labels=labels) for row in shown]
-    parts = [p for p in parts if p]
-    if not parts:
+    shown = ordered[:1] if kind == "detail" else ordered[:_MAX_DECLARED_ROWS]
+    if not any(_format_declared_row(row, fields, ar=ar, labels=labels) for row in shown):
         return _empty_declared(empty_render, language, ar=ar)
+    table = _markdown_table(shown, fields, ar=ar, labels=labels)
     count = str(len(rows))
     head = f"{label} ({count})" if label else count
-    joiner = "؛ " if ar else "; "
-    return f"{head}: {joiner.join(parts)}."
+    return f"{head}\n\n{table}"
 
 
 def _aggregate_kind(payload: Any) -> str:

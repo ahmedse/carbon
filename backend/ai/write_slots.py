@@ -363,6 +363,7 @@ def normalize_write_body(
             else:
                 out.pop(field, None)
     _align_date_pair(out, mirror=_declares(slots, "end_date"))
+    _reconcile_days_to_explicit_span(out)
     return out
 
 
@@ -582,6 +583,33 @@ def _stretch_end_to_days(body: dict[str, Any]) -> None:
     except ValueError:
         return
     body["end_date"] = end.isoformat()
+
+
+def _reconcile_days_to_explicit_span(body: dict[str, Any]) -> None:
+    """Both dates are the range. A conflicting day count follows that span.
+
+    A draft often copies a balance into ``days`` while start and end are one
+    day. The host writes ``days``, so the consent card must show the span
+    the dates already state.
+    """
+    if "days" not in body:
+        return
+    start = body.get("start_date")
+    end = body.get("end_date")
+    if not (isinstance(start, str) and _ISO.match(start)):
+        return
+    if not (isinstance(end, str) and _ISO.match(end)):
+        return
+    span = _days_from_span(body)
+    if not span:
+        return
+    try:
+        stated = int(body.get("days"))
+    except (TypeError, ValueError):
+        body["days"] = span
+        return
+    if stated != span:
+        body["days"] = span
 
 
 def _days_from_span(body: dict[str, Any]) -> int | None:

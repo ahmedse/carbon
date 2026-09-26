@@ -235,10 +235,14 @@ describe('layoutExecutionGraph', () => {
   it('stacks pure sequential plans top→bottom in the Pulse rail', () => {
     const { nodes, direction } = layoutExecutionGraph(PLAN);
 
-    expect(nodes.filter((n) => !n.is_dummy)).toHaveLength(3);
+    expect(nodes.filter((n) => !n.is_dummy && n.node_type !== 'start' && n.node_type !== 'end')).toHaveLength(3);
     expect(direction).toBe('tb');
     const byId = Object.fromEntries(nodes.filter((n) => !n.is_dummy).map((n) => [n.id, n]));
 
+    expect(byId.__start.node_type).toBe('start');
+    expect(byId.__end.node_type).toBe('end');
+    expect(byId.__start.y).toBeLessThan(byId[0].y);
+    expect(byId.__end.y).toBeGreaterThan(byId[2].y);
     // step 0 is a source (rank 0); step 1 depends on 0 (rank 1);
     // step 2 depends on 0 AND 1 → longest path → rank 2.
     expect(byId[0].rank).toBe(0);

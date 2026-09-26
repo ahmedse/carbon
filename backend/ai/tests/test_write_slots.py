@@ -212,6 +212,34 @@ def test_multi_day_duration_stretches_the_span(leave_types):
 
 
 @pytest.mark.django_db
+def test_explicit_date_span_replaces_a_contradictory_day_count():
+    """One-day dates must not keep a balance copied into the day count."""
+    from ai.write_slots import normalize_write_body
+
+    body = normalize_write_body({
+        "start_date": "2026-09-27",
+        "end_date": "2026-09-27",
+        "days": 30,
+        "duration_days": 1,
+    })
+    assert body["days"] == 1
+    assert body["start_date"] == "2026-09-27"
+    assert body["end_date"] == "2026-09-27"
+
+
+@pytest.mark.django_db
+def test_day_count_without_an_end_date_is_left_alone():
+    from ai.write_slots import normalize_write_body
+
+    body = normalize_write_body({
+        "start_date": "2026-09-27",
+        "days": 3,
+    })
+    assert body["days"] == 3
+    assert "end_date" not in body
+
+
+@pytest.mark.django_db
 def test_explicit_end_date_is_never_overridden(leave_types):
     from ai.write_slots import fill_write_body
 

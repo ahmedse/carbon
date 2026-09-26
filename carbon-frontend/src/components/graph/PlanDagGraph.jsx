@@ -359,10 +359,10 @@ export default function PlanDagGraph({
       // one-row tiny strip in a sea of empty canvas.
       direction: 'tb',
       layout: {
-        nodeW: 260,
+        nodeW: 196,
         nodeH: 72,
-        colGap: 48,
-        rowGap: 44,
+        colGap: 36,
+        rowGap: 36,
       },
     }),
     [plan],
@@ -452,6 +452,10 @@ export default function PlanDagGraph({
 
   const handleSelectNode = useCallback((node) => {
     setSelectedEdge(null);
+    if (node && (node.node_type === 'start' || node.node_type === 'end')) {
+      setSelected(null);
+      return;
+    }
     setSelected(node);
     if (node) setPaneOpen(true);
   }, []);
@@ -465,14 +469,17 @@ export default function PlanDagGraph({
   // Flat cards: words only. The frame is a 1px outline drawn by the canvas.
   const renderNode = useCallback(
     (n) => {
-      const rawTitle = String(n.label || `Step ${n.id}`);
+      const isBookend = n.node_type === 'start' || n.node_type === 'end';
+      const rawTitle = String(n.label || (isBookend ? '' : `Step ${n.id}`));
       const isGateway = n.is_gateway
         || ['choice', 'parallel', 'observe', 'map', 'loop', 'wait', 'fail', 'succeed'].includes(n.node_type);
-      const meta = structure
-        ? (isGateway
-          ? String(n.node_type || 'gateway')
-          : (agentRoleLabel(n.agent_role || 'orchestrator') || n.phase_name || ''))
-        : (isGateway ? String(n.node_type || 'gateway') : '');
+      const meta = isBookend
+        ? ''
+        : (structure
+          ? (isGateway
+            ? String(n.node_type || 'gateway')
+            : (agentRoleLabel(n.agent_role || 'orchestrator') || n.phase_name || ''))
+          : (isGateway ? String(n.node_type || 'gateway') : ''));
       const statusLabel = structure ? '' : statusWord(n.status);
       return (
         <GraphNodeForeign
@@ -481,7 +488,7 @@ export default function PlanDagGraph({
           title={rawTitle}
           meta={meta}
           status={statusLabel}
-          statusColor={theme.palette.text.secondary}
+          statusColor={structure ? theme.palette.text.secondary : colorFor(n.status)}
           center
           fontFamily={theme.typography?.fontFamily}
           color={theme.palette.text.primary}
@@ -489,11 +496,14 @@ export default function PlanDagGraph({
         />
       );
     },
-    [theme, structure, statusWord],
+    [theme, structure, statusWord, colorFor],
   );
 
   const nodeAriaLabel = useCallback(
     (n) => {
+      if (n.node_type === 'start' || n.node_type === 'end') {
+        return `${n.label} — ${planStepStatusLabel(n.status)}`;
+      }
       if (structure) {
         return `Step: ${n.label || n.id}`;
       }
@@ -571,6 +581,25 @@ export default function PlanDagGraph({
             <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: l.color }} />
             <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
               {l.label}
+            </Typography>
+          </Stack>
+        ))}
+      </Stack>
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap', rowGap: 0.25 }}>
+        {PLAN_SHAPE_LEGEND.filter((row) => ['stadium', 'roundedRect', 'diamond'].includes(row.shape)).map((row) => (
+          <Stack key={row.shape} direction="row" spacing={0.5} alignItems="center">
+            <Box
+              component="svg"
+              width={14}
+              height={10}
+              viewBox="0 0 14 10"
+              aria-hidden
+              sx={{ flexShrink: 0, color: 'text.secondary' }}
+            >
+              <path d={legendShapePath(row.shape)} fill="none" stroke="currentColor" strokeWidth={1.25} />
+            </Box>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.625rem' }}>
+              {row.label}
             </Typography>
           </Stack>
         ))}
@@ -824,21 +853,32 @@ export default function PlanDagGraph({
     );
   };
 
-  const summary = `${visibleNodes.length} step${visibleNodes.length !== 1 ? 's' : ''} · ${
-    edges.filter((e) => !String(e.source).startsWith('__d')).length
-  } link${edges.filter((e) => !String(e.source).startsWith('__d')).length !== 1 ? 's' : ''}${
+  const stepNodes = useMemo(
+    () => visibleNodes.filter((n) => n.node_type !== 'start' && n.node_type !== 'end'),
+    [visibleNodes],
+  );
+  const stepEdgeCount = edges.filter(
+    (e) => e.source !== '__start' && e.target !== '__end' && !String(e.source).startsWith('__d'),
+  ).length;
+  const summary = `${stepNodes.length} step${stepNodes.length !== 1 ? 's' : ''} · ${
+    stepEdgeCount
+  } link${stepEdgeCount !== 1 ? 's' : ''}${
     attentionSummary ? ` · ${attentionSummary}` : ''
   }`;
 
   // Enrich nodes with phase_name for structure tooltips / meta row.
   const nodesWithPhase = useMemo(() => {
-    if (!structure) return nodes;
     const byId = new Map((phaseBands || []).map((b) => [b.phase_id, b.name]));
     return nodes.map((n) => ({
       ...n,
+      label: n.node_type === 'start'
+        ? t('graphNodeStart', { defaultValue: 'Start' })
+        : n.node_type === 'end'
+          ? t('graphNodeEnd', { defaultValue: 'End' })
+          : n.label,
       phase_name: byId.get(n.phase_id) || n.phase_name,
     }));
-  }, [nodes, phaseBands, structure]);
+  }, [nodes, phaseBands, t]);
 
   return (
     <>
