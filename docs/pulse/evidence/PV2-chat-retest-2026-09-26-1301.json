@@ -1,0 +1,384 @@
+{
+  "tier": "live_retest",
+  "run_at": "2026-09-26T13:01:31.145732+00:00",
+  "surface": "chat",
+  "user": "emp_2378",
+  "bank": "chat_retest_bank.yaml",
+  "partial": false,
+  "threads": [
+    {
+      "id": "identity",
+      "closes": [
+        "invented-name"
+      ],
+      "objectives": [
+        "C6"
+      ],
+      "conversation_id": "3ffed416-6bfb-4f63-aaac-a4b32e70fe71",
+      "host_write": null,
+      "turns": [
+        {
+          "say": "Who am I? Reply with my full name and employee number only.",
+          "reply": "Name: Ali Mohamed Saad AlAjmi · Employee number: 2378",
+          "seconds": 2.35,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true
+    },
+    {
+      "id": "entity-by-number",
+      "closes": [
+        "invented-name"
+      ],
+      "objectives": [
+        "C6"
+      ],
+      "conversation_id": "b01fa650-cd9c-47c2-90f2-fc00e371067b",
+      "host_write": null,
+      "turns": [
+        {
+          "say": "Who am I?",
+          "reply": "Name: Ali Mohamed Saad AlAjmi · Employee number: 2378 · Job title: Director of Shared Services · Department: [[org-unit:5:CEO Office]] · Manager: Ashraf Ahmed Oshi · Active: True · Basic salary: 2407.622",
+          "seconds": 2.78,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "Employee number 2400. Reply with the full name only.",
+          "reply": "Abdullah Mubarak Rashed AlHajri, employee 2400, Senior HR Specialist, [[org-unit:14:Human Resources Department]].",
+          "seconds": 2.86,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "tools": [
+            "api_name=resolve_entity"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true
+    },
+    {
+      "id": "tes-unknown",
+      "closes": [
+        "tes-ungrounded"
+      ],
+      "objectives": [
+        "C2"
+      ],
+      "conversation_id": "6b9160c0-43db-45ae-9d52-072761a8fd10",
+      "host_write": null,
+      "turns": [
+        {
+          "say": "What is my TES? If the tool result has no TES figure, say unknown. Do not invent a number.",
+          "reply": "Name: Ali Mohamed Saad AlAjmi · Employee number: 2378 · Job title: Director of Shared Services · Department: [[org-unit:5:CEO Office]] · Manager: Ashraf Ahmed Oshi · Active: True · Basic salary: 2407.622",
+          "seconds": 2.58,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true
+    },
+    {
+      "id": "salary-table",
+      "closes": [
+        "hollow-export",
+        "no-writer-retry"
+      ],
+      "objectives": [
+        "C2"
+      ],
+      "conversation_id": "12c711a3-de7c-4a59-8b20-28849cafcb28",
+      "host_write": null,
+      "turns": [
+        {
+          "say": "Show my basic salary as a one-row table with the number. Do not leave the table empty.",
+          "reply": "Basic salary: 2407.622",
+          "seconds": 2.78,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true
+    },
+    {
+      "id": "arabic-followups",
+      "closes": [
+        "followup-degrade"
+      ],
+      "objectives": [
+        "C1",
+        "C7"
+      ],
+      "conversation_id": "4f4b708e-8a2e-4566-9886-490f23903308",
+      "host_write": null,
+      "turns": [
+        {
+          "say": "أظهر راتبي الأساسي بالعربية، وبالرقم فقط.",
+          "reply": "الراتب الأساسي: 2407.622",
+          "seconds": 2.88,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "وما هو المسمى الوظيفي؟ أجب بالعربية.",
+          "reply": "المسمى الوظيفي: Director of Shared Services",
+          "seconds": 5.94,
+          "llm_calls": 2,
+          "turn_decision": "answer",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "وما هو رقمي الوظيفي؟",
+          "reply": "رقمك الوظيفي: 2378",
+          "seconds": 4.02,
+          "llm_calls": 2,
+          "turn_decision": "answer",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true
+    },
+    {
+      "id": "headcount-repeat",
+      "closes": [
+        "followup-degrade"
+      ],
+      "objectives": [
+        "C1",
+        "C7"
+      ],
+      "conversation_id": "d7a0603d-b7a2-4eca-aad0-550f1e0cdc1f",
+      "host_write": null,
+      "turns": [
+        {
+          "say": "How many active employees are there? Reply with the number only.",
+          "reply": "555. headcount = count where is_active=True",
+          "seconds": 2.73,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "tools": [
+            "api_name=aggregate_entity"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "Same count again. Number only.",
+          "reply": "555",
+          "seconds": 3.5,
+          "llm_calls": 2,
+          "turn_decision": "answer",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "كم عدد الموظفين النشطين؟ أجب بالعربية.",
+          "reply": "عدد الموظفين النشطين هو 555.",
+          "seconds": 5.02,
+          "llm_calls": 3,
+          "turn_decision": "answer",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true
+    },
+    {
+      "id": "unbound-filter",
+      "closes": [],
+      "objectives": [
+        "C2"
+      ],
+      "conversation_id": "5340a15b-0380-4a9d-878b-082602b2fcab",
+      "host_write": null,
+      "turns": [
+        {
+          "say": "How many active employees have a full name starting with Ali? Give the count. Do not choose one person.",
+          "reply": "The system cannot count employees by name prefix or partial name. Aggregation is available only by exact fields such as position, department, nationality, employment type, or kuwaitization status. A name-pattern search is not supported.",
+          "seconds": 6.99,
+          "llm_calls": 2,
+          "turn_decision": "refuse",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true
+    },
+    {
+      "id": "request-status",
+      "closes": [],
+      "objectives": [
+        "C9",
+        "C5"
+      ],
+      "conversation_id": "7886a719-6177-4395-8bdd-0479c26328b1",
+      "host_write": false,
+      "turns": [
+        {
+          "say": "I want to request annual leave tomorrow for 1 day.",
+          "reply": "I have: Leave type: annual; Start date: 2026-09-27; End date: 2026-09-27; Days: 1.\n\nTo submit it, switch to Agent — I'll carry these details over. Or open My and submit there. Chat does not submit or change records.",
+          "seconds": 2.3,
+          "llm_calls": 1,
+          "turn_decision": "handoff_agent",
+          "tools": [
+            "api_name=submit_my_leave"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "What is the status of my request?",
+          "reply": "Your leave requests (1): emergency, 2026-09-24, 2026-09-24, draft.",
+          "seconds": 2.78,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "tools": [
+            "api_name=list_my_leave"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true
+    },
+    {
+      "id": "slot-carry",
+      "closes": [],
+      "objectives": [
+        "C3",
+        "C5"
+      ],
+      "conversation_id": "c70ba972-708a-46fc-bd51-1ad4c132b5d6",
+      "host_write": false,
+      "turns": [
+        {
+          "say": "I want to request annual leave starting next Sunday.",
+          "reply": "How many days of annual leave do you want to request?",
+          "seconds": 2.22,
+          "llm_calls": 1,
+          "turn_decision": "clarify",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "Make it 2 days.",
+          "reply": "I have: Leave type: annual; Start date: 2026-09-28; End date: 2026-09-29; Days: 2.\n\nTo submit it, switch to Agent — I'll carry these details over. Or open My and submit there. Chat does not submit or change records.",
+          "seconds": 5.1,
+          "llm_calls": 2,
+          "turn_decision": "handoff_agent",
+          "tools": [
+            "api_name=submit_my_leave"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true
+    },
+    {
+      "id": "stated-fact",
+      "closes": [],
+      "objectives": [
+        "C10"
+      ],
+      "conversation_id": "48436b53-ad62-489c-8a60-b6621435caaf",
+      "host_write": null,
+      "turns": [
+        {
+          "say": "My project code is ALPHA-7.",
+          "reply": "Noted. Your project code is **ALPHA-7**. I've recorded this for reference in our conversation. If you need to reference this code for timesheets, cost allocations, leave notes, or any other People & Payroll matters, I'm here to help. Just let me know what you'd like to do next.",
+          "seconds": 4.83,
+          "llm_calls": 2,
+          "turn_decision": "answer",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "How many active employees are there? Number only.",
+          "reply": "555. headcount = count where is_active=True",
+          "seconds": 2.59,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "tools": [
+            "api_name=aggregate_entity"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "What is my project code?",
+          "reply": "ALPHA-7",
+          "seconds": 5.71,
+          "llm_calls": 2,
+          "turn_decision": "answer",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true
+    }
+  ],
+  "findings": {
+    "invented-name": true,
+    "tes-ungrounded": true,
+    "hollow-export": true,
+    "no-writer-retry": true,
+    "followup-degrade": true
+  },
+  "objectives": {
+    "C6": true,
+    "C2": true,
+    "C1": true,
+    "C7": true,
+    "C9": true,
+    "C5": true,
+    "C3": true,
+    "C10": true,
+    "C4": true
+  },
+  "latency": {
+    "turns": 19,
+    "p50_ms": 2860,
+    "over_4s": 7,
+    "llm_calls_p50": 1,
+    "llm_calls_max": 3
+  }
+}

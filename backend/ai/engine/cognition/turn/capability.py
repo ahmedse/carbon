@@ -74,6 +74,16 @@ class CapabilitySurface:
 
         return _schema_violations(schema, flat_args(args))
 
+    def field_gaps(self, name: str, fields: list[str] | None) -> tuple[list[str], list[str]]:
+        """``(asked names the entry does not return, the fields it does return)``."""
+        from ai.engine.cognition.turn.catalog_render import _declared_fields, unmatched_fields
+
+        entry = self.entry(name)
+        declared = _declared_fields(entry)
+        labels = (entry or {}).get("field_labels")
+        missing = unmatched_fields(declared, fields, labels if isinstance(labels, dict) else None)
+        return missing, declared
+
     def path_keys(self, name: str) -> set[str]:
         return _path_keys(str((self.entry(name) or {}).get("path") or ""))
 

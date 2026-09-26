@@ -97,14 +97,23 @@ def _confirm_api(state: Any) -> str:
     return str(confirm.get("api") or confirm.get("name") or "").strip()
 
 
-def _continue_api(state: Any) -> str:
+def _last_read(state: Any) -> dict:
     rows = getattr(state, "last_results", None) if state is not None else None
     if not rows:
-        return ""
+        return {}
     last = rows[-1]
-    if not isinstance(last, dict):
-        return ""
-    return str(last.get("api") or "").strip()
+    return last if isinstance(last, dict) else {}
+
+
+def _continue_api(state: Any) -> str:
+    return str(_last_read(state).get("api") or "").strip()
+
+
+def _continue_args(state: Any) -> dict:
+    """The args the last read ran with; a ``continue`` re-runs it for fresh data."""
+    last = _last_read(state)
+    args = last.get("args")
+    return dict(args) if isinstance(args, dict) and str(last.get("api") or "").strip() else {}
 
 
 async def _execute_bound_read(
@@ -183,7 +192,12 @@ async def act_on_decision(
         if cmd.op == "continue" and last_view(state):
             continue  # the reply re-renders the last view; no host read
         api = _read_api(cmd, state)
-        args = dict(cmd.args or {}) if cmd.op == "call_tool" else {}
+        if cmd.op == "call_tool":
+            args = dict(cmd.args or {})
+        elif cmd.op == "continue" and api == _continue_api(state):
+            args = _continue_args(state)
+        else:
+            args = {}
         key = f"{api}|{sorted(args.items(), key=lambda kv: kv[0])!r}"
         if not api or key in seen:
             continue

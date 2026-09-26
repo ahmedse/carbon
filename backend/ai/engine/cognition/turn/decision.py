@@ -199,6 +199,7 @@ def validate_decision(
     write_tools: set[str] | None = None,
     state: Any = None,
     arg_violations: Callable[[str, dict], list[str]] | None = None,
+    field_gaps: Callable[[str, list[str]], tuple[list[str], list[str]]] | None = None,
 ) -> Decision:
     """Enforce policy. Never drop to a free answer that writes.
 
@@ -260,6 +261,17 @@ def validate_decision(
                     rejections.append(
                         Rejection(index, name, "invalid_args", "; ".join(problems)[:400])
                     )
+                    continue
+            if not write and field_gaps is not None and cmd.fields:
+                missing, returned = field_gaps(name, list(cmd.fields))
+                if missing:
+                    rejections.append(Rejection(
+                        index, name, "unknown_field",
+                        f"This read does not return {', '.join(missing[:3])}; it returns "
+                        f"{', '.join(returned[:10])}. If the conversation already gives "
+                        "that value, answer from it; otherwise answer that the record "
+                        "does not carry it. Ask a read only for fields it returns.",
+                    ))
                     continue
             if on_chat and write:
                 out.append(

@@ -88,7 +88,7 @@ def reasoning_mode(model: str | None, base_url: str | None = None) -> ReasoningM
     return None
 
 
-def _apply_provider_kwargs(kwargs: dict) -> dict:
+def _apply_provider_kwargs(kwargs: dict, base_url: str | None = None) -> dict:
     """Normalize provider-specific kwargs before the chat.completions call.
 
     DeepSeek V4.1 enables *thinking* by default. That mode returns long
@@ -97,9 +97,11 @@ def _apply_provider_kwargs(kwargs: dict) -> dict:
     stuck ("working… then nothing") when Gunicorn killed the worker.
 
     Disable thinking unless the caller explicitly set ``extra_body.thinking``.
+    ``base_url`` is the endpoint of the client making the call; a DeepSeek
+    model routed from another primary provider still needs thinking off.
     """
     out = dict(kwargs)
-    if not _is_deepseek_endpoint():
+    if not _is_deepseek_endpoint(base_url):
         return out
     extra = dict(out.get("extra_body") or {})
     if "thinking" not in extra:
@@ -115,7 +117,10 @@ async def create_completion(client: AsyncOpenAI, **kwargs):
     The single retried seam used by ``router.route_chat`` — the user-facing
     chat path previously bypassed retry by calling the raw client directly.
     """
-    return await client.chat.completions.create(**_apply_provider_kwargs(kwargs))
+    base_url = getattr(client, "base_url", None)
+    return await client.chat.completions.create(
+        **_apply_provider_kwargs(kwargs, str(base_url) if base_url is not None else None)
+    )
 
 
 def _openai_client(api_key: str, base_url: str) -> AsyncOpenAI:

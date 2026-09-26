@@ -559,6 +559,7 @@ class SoftSurfacesMixin:
                 write_tools=write_names or None,
                 state=state,
                 arg_violations=caps.arg_violations,
+                field_gaps=caps.field_gaps,
                 on_malformed=malformed,
             )
         except Exception:

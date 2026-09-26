@@ -122,6 +122,20 @@ async def test_deepseek_thinking_yields_when_a_tool_is_forced(sent, monkeypatch)
     assert result["tool_choice"] == sent["tool_choice"]
 
 
+def test_deepseek_client_turns_thinking_off_under_another_primary(monkeypatch):
+    from ai.engine.llm.provider import _apply_provider_kwargs
+
+    get_settings.cache_clear()
+    monkeypatch.setenv("LLM_BASE_URL", "https://api.poe.com/v1")
+    try:
+        routed = _apply_provider_kwargs({"model": "deepseek-flash"}, "https://api.deepseek.com/v1/")
+        primary = _apply_provider_kwargs({"model": "claude-haiku-4.5"}, "https://api.poe.com/v1/")
+    finally:
+        get_settings.cache_clear()
+    assert routed["extra_body"] == {"thinking": {"type": "disabled"}}
+    assert "extra_body" not in primary
+
+
 @pytest.mark.asyncio
 async def test_reasoning_on_an_undeclared_model_changes_nothing(sent):
     await _route(model="gpt-4o-mini", reasoning=True)

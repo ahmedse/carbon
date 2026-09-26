@@ -305,6 +305,25 @@ _PROFILE = {
 }
 
 
+def test_sensitive_pay_stays_off_a_profile_dump():
+    entry = {**_PROFILE_ENTRY, "sensitive_fields": ["basic_salary"]}
+    dumped = render_catalog_read(
+        {"result": _PROFILE}, "get_my_profile", "en", catalog_entry=entry,
+    )
+    asked_all = render_catalog_read(
+        {"result": _PROFILE}, "get_my_profile", "en",
+        catalog_entry=entry,
+        fields=["full_name", "employee_no", "job_title", "basic_salary"],
+    )
+    pay = render_catalog_read(
+        {"result": _PROFILE}, "get_my_profile", "en",
+        catalog_entry=entry, fields=["basic_salary"],
+    )
+    assert dumped and "2407" not in dumped
+    assert asked_all and "2407" not in asked_all
+    assert pay == "Basic salary: 2407.622"
+
+
 def test_detail_restate_shows_only_the_fields_asked():
     rendered = render_catalog_read(
         {"result": _PROFILE}, "get_my_profile", "en",

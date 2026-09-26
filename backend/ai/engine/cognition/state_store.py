@@ -333,6 +333,21 @@ def _tag_org_units(entry: dict, orgs: list[str]) -> dict:
     return entry
 
 
+def _bounded_args(params: Any) -> dict:
+    """The scalar query params of a read, bounded, so a follow-up can re-run it."""
+    if not isinstance(params, dict):
+        return {}
+    out: dict = {}
+    for key, value in params.items():
+        if len(out) >= 8:
+            break
+        if isinstance(value, bool) or isinstance(value, (int, float)):
+            out[str(key)[:40]] = value
+        elif isinstance(value, str) and value.strip():
+            out[str(key)[:40]] = value.strip()[:120]
+    return out
+
+
 def _last_result_entries(
     completed_tools: Iterable[dict] | None, scope: dict | None, turn: int,
 ) -> list[dict]:
@@ -360,6 +375,9 @@ def _last_result_entries(
             "digest": digest or "resolve_entity: unauthorized=true",
             "ref": f"tool_call:{call_id}" if call_id else "",
         }
+        params = _bounded_args(args.get("query_params"))
+        if params:
+            entry["args"] = params
         if unauthorized:
             entry["unauthorized"] = True
             cap = data.get("capability")

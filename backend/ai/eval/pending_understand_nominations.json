@@ -370,5 +370,30 @@
     "conversation_id": "367ca133-4d49-465a-a29f-851e5960a62a",
     "nominated_at": "2026-09-26T12:52:13.551969+00:00",
     "status": "pending_human_review"
+  },
+  {
+    "utterance": "Employee number 2400. Reply with the full name only.",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "get_employee",
+        "code": "record_mismatch",
+        "detail": "The user identified the record by 2400; the record returned does not carry it (id). A path key takes the record id from an earlier lookup result, not a number the user typed. Look the record up by the value the user gave."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "48beb22e-d330-4ea2-ad53-a954337b8fbe",
+    "nominated_at": "2026-09-26T13:11:15.195456+00:00",
+    "status": "pending_human_review"
   }
 ]

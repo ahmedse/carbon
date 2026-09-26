@@ -376,6 +376,65 @@ def project_fields(
     """
     if not asked:
         return list(declared)
+    keys = _field_keys(declared, labels)
+    picked: set[str] = set()
+    for raw in asked:
+        want = _field_key(raw)
+        if not want:
+            continue
+        hit = _match_field(keys, want)
+        if hit is None:
+            return None
+        picked.add(hit)
+    return [d for d in declared if d in picked]
+
+
+def _sensitive_fields(entry: dict | None) -> list[str]:
+    raw = (entry or {}).get("sensitive_fields")
+    if not isinstance(raw, list):
+        return []
+    return [str(name).strip() for name in raw if str(name).strip()]
+
+
+def visible_fields(
+    declared: list[str],
+    asked: list[str] | None,
+    labels: dict | None = None,
+    sensitive: list[str] | None = None,
+) -> list[str] | None:
+    """Declared fields to restate. Pay/secret fields stay off a record dump.
+
+    Catalog ``sensitive_fields`` appear only when the ask names them and is
+    not the whole public record. No ask, or an ask of every public field,
+    hides them — the user must request those values.
+    """
+    shown = project_fields(declared, asked, labels)
+    if shown is None:
+        return None
+    hidden = {name for name in (sensitive or []) if name in declared}
+    if not hidden:
+        return shown
+    public = [name for name in declared if name not in hidden]
+    dump = not asked or set(shown) >= set(public)
+    if dump:
+        return [name for name in shown if name not in hidden]
+    return shown
+
+
+def unmatched_fields(
+    declared: list[str], asked: list[str] | None, labels: dict | None = None,
+) -> list[str]:
+    """The asked names that match no declared field or label. Empty when none declared."""
+    if not declared or not asked:
+        return []
+    keys = _field_keys(declared, labels)
+    return [
+        str(raw) for raw in asked
+        if _field_key(raw) and _match_field(keys, _field_key(raw)) is None
+    ]
+
+
+def _field_keys(declared: list[str], labels: dict | None) -> dict[str, str]:
     keys = {_field_key(d): d for d in declared}
     for field, label in (labels or {}).items():
         if field not in declared:
@@ -383,19 +442,15 @@ def project_fields(
         texts = label.values() if isinstance(label, dict) else [label]
         for text in texts:
             keys.setdefault(_field_key(str(text).rstrip(".")), field)
-    picked: set[str] = set()
-    for raw in asked:
-        want = _field_key(raw)
-        if not want:
-            continue
-        hit = keys.get(want)
-        if hit is None:
-            near = {d for k, d in keys.items() if want in k or k in want}
-            hit = next(iter(near)) if len(near) == 1 else None
-        if hit is None:
-            return None
-        picked.add(hit)
-    return [d for d in declared if d in picked]
+    return keys
+
+
+def _match_field(keys: dict[str, str], want: str) -> str | None:
+    hit = keys.get(want)
+    if hit is None:
+        near = {d for k, d in keys.items() if want in k or k in want}
+        hit = next(iter(near)) if len(near) == 1 else None
+    return hit
 
 
 def _empty_declared(empty_render: str, language: str, *, ar: bool) -> str:
@@ -511,10 +566,20 @@ def render_metric_bind(payload: dict, language: str = "en") -> str | None:
     return f"{value}. {bind}" if bind else str(value)
 
 
-def render_breakdown_bind(payload: dict, language: str = "en") -> str | None:
+def _bucket_label(label: Any, *, ar: bool) -> str:
+    text = str(label)
+    if ar and text.lower() in {"true", "false"}:
+        return "نعم" if text.lower() == "true" else "لا"
+    return text
+
+
+def render_breakdown_bind(
+    payload: dict, language: str = "en", labels: dict | None = None,
+) -> str | None:
     """Total plus the dimension, applied filters, and bucket counts.
 
     A filter that is not in ``applied_filters`` or ``dimension`` is not said.
+    ``labels`` are the catalog's display labels for a dimension key.
     """
     lines: list[str] = []
     ar = _lang_code(language) == "ar"
@@ -523,7 +588,8 @@ def render_breakdown_bind(payload: dict, language: str = "en") -> str | None:
         lines.append(f"الإجمالي: {total}" if ar else f"Total: {total}")
     dimension = str(payload.get("dimension") or "").strip()
     if dimension:
-        lines.append(f"حسب: {dimension}" if ar else f"By: {dimension}")
+        shown = _field_label(labels, dimension, ar=ar) or dimension
+        lines.append(f"حسب: {shown}" if ar else f"By: {shown}")
     applied = payload.get("applied_filters")
     if isinstance(applied, dict):
         for key, value in applied.items():
@@ -539,7 +605,7 @@ def render_breakdown_bind(payload: dict, language: str = "en") -> str | None:
             count = row.get("count")
             if label is None or count is None:
                 continue
-            lines.append(f"{label}: {count}")
+            lines.append(f"{_bucket_label(label, ar=ar)}: {count}")
     if not lines:
         return None
     return "\n".join(lines)
@@ -567,8 +633,9 @@ def render_catalog_read(
     # gave the read another renderer: the writer could narrate a filter the
     # payload never applied.
     if structural and kind in ("", structural):
+        dim_labels = (catalog_entry or {}).get("field_labels") if isinstance(catalog_entry, dict) else None
         rendered = (
-            render_breakdown_bind(payload, language)
+            render_breakdown_bind(payload, language, dim_labels if isinstance(dim_labels, dict) else None)
             if structural == "breakdown"
             else render_metric_bind(payload, language)
         )
@@ -625,8 +692,11 @@ def render_catalog_read(
     if kind in _DECLARED_KINDS:
         entry = catalog_entry if isinstance(catalog_entry, dict) else None
         labels = (entry or {}).get("field_labels")
-        shown = project_fields(
-            _declared_fields(entry), fields, labels if isinstance(labels, dict) else None,
+        shown = visible_fields(
+            _declared_fields(entry),
+            fields,
+            labels if isinstance(labels, dict) else None,
+            _sensitive_fields(entry),
         )
         if not shown:
             return None

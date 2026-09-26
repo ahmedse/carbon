@@ -20,7 +20,7 @@
         "live": "reached",
         "week": "reached",
         "honest": "reached",
-        "note": "23o focus 1.0 on 24/24. week: followup-degrade: Arabic payroll answer, then the next detail turn dropped facts or switched quality. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "note": "23o focus 1.0 on 24/24 · retest 3/3 of 3. week: followup-degrade: Arabic payroll answer, then the next detail turn dropped facts or switched quality. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1257.json … PV2-chat-retest-2026-09-26-1301.json)]",
         "sources": [
           "PV2-g5-2026-09-23r.json",
           "PV2-chat-operator-2026-09-26.json",
@@ -39,7 +39,7 @@
         "live": "reached",
         "week": "reached",
         "honest": "reached",
-        "note": "23p C2 1.0 on 24/24. week: tes-ungrounded: Chat spoke TES figures that were not in the tool payload. Grounding flagged ungrounded numbers. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]; hollow-export: Salary report / PDF export was hollow or failed after a grounded payroll ask. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "note": "23p C2 1.0 on 24/24 · retest 3/3 of 3. week: tes-ungrounded: Chat spoke TES figures that were not in the tool payload. Grounding flagged ungrounded numbers. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1257.json … PV2-chat-retest-2026-09-26-1301.json)]; hollow-export: Salary report / PDF export was hollow or failed after a grounded payroll ask. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1257.json … PV2-chat-retest-2026-09-26-1301.json)]",
         "sources": [
           "PV2-g5-2026-09-23r.json",
           "PV2-chat-operator-2026-09-26.json",
@@ -58,7 +58,7 @@
         "live": "reached",
         "week": "missing",
         "honest": "reached",
-        "note": "23o slot_carry 1.0. week: no operator miss this week",
+        "note": "23o slot_carry 1.0 · retest 3/3 of 3. week: no operator miss this week",
         "sources": [
           "PV2-g5-2026-09-23r.json",
           "PV2-chat-operator-2026-09-26.json",
@@ -77,7 +77,7 @@
         "live": "reached",
         "week": "missing",
         "honest": "reached",
-        "note": "23o router 1.0. week: no operator miss this week",
+        "note": "23o router 1.0 · retest 3/3 of 3. week: no operator miss this week",
         "sources": [
           "PV2-g5-2026-09-23r.json",
           "PV2-chat-operator-2026-09-26.json",
@@ -96,7 +96,7 @@
         "live": "reached",
         "week": "missing",
         "honest": "reached",
-        "note": "6B verify: chat_mutated=false on 3 ESS. week: no operator miss this week",
+        "note": "6B verify: chat_mutated=false on 3 ESS · retest 3/3 of 3. week: no operator miss this week",
         "sources": [
           "PV2-g5-2026-09-23r.json",
           "PV2-chat-operator-2026-09-26.json",
@@ -115,7 +115,7 @@
         "live": "reached",
         "week": "reached",
         "honest": "reached",
-        "note": "retest 3/3 of 3. week: invented-name: Chat named a person who is not the host record (invented given name). [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "note": "retest 3/3 of 3. week: invented-name: Chat named a person who is not the host record (invented given name). [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1257.json … PV2-chat-retest-2026-09-26-1301.json)]",
         "sources": [
           "PV2-g5-2026-09-23r.json",
           "PV2-chat-operator-2026-09-26.json",
@@ -133,7 +133,7 @@
         "live": "reached",
         "week": "reached",
         "honest": "reached",
-        "note": "23o language 1.0. week: followup-degrade: Arabic payroll answer, then the next detail turn dropped facts or switched quality. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "note": "23o language 1.0 · retest 3/3 of 3. week: followup-degrade: Arabic payroll answer, then the next detail turn dropped facts or switched quality. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1257.json … PV2-chat-retest-2026-09-26-1301.json)]",
         "sources": [
           "PV2-g5-2026-09-23r.json",
           "PV2-chat-operator-2026-09-26.json",
@@ -152,7 +152,7 @@
         "live": "partial",
         "week": "reached",
         "honest": "partial",
-        "note": "retest p50 2875 ms · 4/14 turns >4s · llm p50 1.0 · 3/3 runs. week: no-writer-retry: invalid_output ended the turn. No writer retry. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "note": "retest p50 2860 ms · 7/19 turns >4s · llm p50 1 · 3/3 runs. week: no-writer-retry: invalid_output ended the turn. No writer retry. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1257.json … PV2-chat-retest-2026-09-26-1301.json)]",
         "sources": [
           "PV2-g5-2026-09-23r.json",
           "PV2-chat-operator-2026-09-26.json",
@@ -189,7 +189,7 @@
         "live": "reached",
         "week": "missing",
         "honest": "reached",
-        "note": "23p C10 1.0. week: no operator miss this week",
+        "note": "23p C10 1.0 · retest 3/3 of 3. week: no operator miss this week",
         "sources": [
           "PV2-g5-2026-09-23r.json",
           "PV2-chat-operator-2026-09-26.json",
@@ -210,7 +210,7 @@
         "live": "missing",
         "week": "reached",
         "honest": "reached",
-        "note": "tes-ungrounded: Chat spoke TES figures that were not in the tool payload. Grounding flagged ungrounded numbers. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]; hollow-export: Salary report / PDF export was hollow or failed after a grounded payroll ask. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "note": "tes-ungrounded: Chat spoke TES figures that were not in the tool payload. Grounding flagged ungrounded numbers. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1257.json … PV2-chat-retest-2026-09-26-1301.json)]; hollow-export: Salary report / PDF export was hollow or failed after a grounded payroll ask. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1257.json … PV2-chat-retest-2026-09-26-1301.json)]",
         "sources": [
           "PV2-chat-operator-2026-09-26.json"
         ]
@@ -226,7 +226,7 @@
         "live": "missing",
         "week": "reached",
         "honest": "reached",
-        "note": "invented-name: Chat named a person who is not the host record (invented given name). [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "note": "invented-name: Chat named a person who is not the host record (invented given name). [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1257.json … PV2-chat-retest-2026-09-26-1301.json)]",
         "sources": [
           "PV2-chat-operator-2026-09-26.json"
         ]
@@ -258,7 +258,7 @@
         "live": "missing",
         "week": "reached",
         "honest": "reached",
-        "note": "invented-name: Chat named a person who is not the host record (invented given name). [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "note": "invented-name: Chat named a person who is not the host record (invented given name). [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1257.json … PV2-chat-retest-2026-09-26-1301.json)]",
         "sources": [
           "PV2-chat-operator-2026-09-26.json"
         ]
@@ -274,7 +274,7 @@
         "live": "missing",
         "week": "reached",
         "honest": "reached",
-        "note": "followup-degrade: Arabic payroll answer, then the next detail turn dropped facts or switched quality. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "note": "followup-degrade: Arabic payroll answer, then the next detail turn dropped facts or switched quality. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1257.json … PV2-chat-retest-2026-09-26-1301.json)]",
         "sources": [
           "PV2-chat-operator-2026-09-26.json"
         ]
@@ -322,7 +322,7 @@
         "live": "missing",
         "week": "reached",
         "honest": "reached",
-        "note": "tes-ungrounded: Chat spoke TES figures that were not in the tool payload. Grounding flagged ungrounded numbers. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "note": "tes-ungrounded: Chat spoke TES figures that were not in the tool payload. Grounding flagged ungrounded numbers. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1257.json … PV2-chat-retest-2026-09-26-1301.json)]",
         "sources": [
           "PV2-chat-operator-2026-09-26.json"
         ]
@@ -338,7 +338,7 @@
         "live": "missing",
         "week": "reached",
         "honest": "reached",
-        "note": "followup-degrade: Arabic payroll answer, then the next detail turn dropped facts or switched quality. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "note": "followup-degrade: Arabic payroll answer, then the next detail turn dropped facts or switched quality. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1257.json … PV2-chat-retest-2026-09-26-1301.json)]",
         "sources": [
           "PV2-chat-operator-2026-09-26.json"
         ]
@@ -418,7 +418,7 @@
         "live": "missing",
         "week": "reached",
         "honest": "reached",
-        "note": "no-writer-retry: invalid_output ended the turn. No writer retry. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]; hollow-export: Salary report / PDF export was hollow or failed after a grounded payroll ask. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)]",
+        "note": "no-writer-retry: invalid_output ended the turn. No writer retry. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1257.json … PV2-chat-retest-2026-09-26-1301.json)]; hollow-export: Salary report / PDF export was hollow or failed after a grounded payroll ask. [closed by retest 3/3 (PV2-chat-retest-2026-09-26-1257.json … PV2-chat-retest-2026-09-26-1301.json)]",
         "sources": [
           "PV2-chat-operator-2026-09-26.json"
         ]
@@ -438,7 +438,7 @@
       "status": "fail",
       "what": "Chat named a person who is not the host record (invented given name).",
       "oracle": "Host identity is Ali Mohamed Saad AlAjmi / emp_2378. Prose must not invent a different person.",
-      "closure": "closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)"
+      "closure": "closed by retest 3/3 (PV2-chat-retest-2026-09-26-1257.json … PV2-chat-retest-2026-09-26-1301.json)"
     },
     {
       "id": "tes-ungrounded",
@@ -452,7 +452,7 @@
       "status": "fail",
       "what": "Chat spoke TES figures that were not in the tool payload. Grounding flagged ungrounded numbers.",
       "oracle": "Every number in a Chat answer must appear in the tool payload (ADR-0047 facts).",
-      "closure": "closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)"
+      "closure": "closed by retest 3/3 (PV2-chat-retest-2026-09-26-1257.json … PV2-chat-retest-2026-09-26-1301.json)"
     },
     {
       "id": "no-writer-retry",
@@ -465,7 +465,7 @@
       "status": "fail",
       "what": "invalid_output ended the turn. No writer retry.",
       "oracle": "A recoverable writer miss retries once or says the host is unavailable. It does not invent.",
-      "closure": "closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)"
+      "closure": "closed by retest 3/3 (PV2-chat-retest-2026-09-26-1257.json … PV2-chat-retest-2026-09-26-1301.json)"
     },
     {
       "id": "hollow-export",
@@ -479,7 +479,7 @@
       "status": "fail",
       "what": "Salary report / PDF export was hollow or failed after a grounded payroll ask.",
       "oracle": "Export columns ⊆ declared returns. Empty table next to a number is a fail.",
-      "closure": "closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)"
+      "closure": "closed by retest 3/3 (PV2-chat-retest-2026-09-26-1257.json … PV2-chat-retest-2026-09-26-1301.json)"
     },
     {
       "id": "followup-degrade",
@@ -494,7 +494,7 @@
       "status": "fail",
       "what": "Arabic payroll answer, then the next detail turn dropped facts or switched quality.",
       "oracle": "Turn N must resolve entities and numbers from turns 1..N-1. Language stays with the user.",
-      "closure": "closed by retest 3/3 (PV2-chat-retest-2026-09-26-1238.json … PV2-chat-retest-2026-09-26-1243.json)"
+      "closure": "closed by retest 3/3 (PV2-chat-retest-2026-09-26-1257.json … PV2-chat-retest-2026-09-26-1301.json)"
     }
   ],
   "retest_runs": [
@@ -512,7 +512,12 @@
     "PV2-chat-retest-2026-09-26-1236.json",
     "PV2-chat-retest-2026-09-26-1238.json",
     "PV2-chat-retest-2026-09-26-1240.json",
-    "PV2-chat-retest-2026-09-26-1243.json"
+    "PV2-chat-retest-2026-09-26-1243.json",
+    "PV2-chat-retest-2026-09-26-1245.json",
+    "PV2-chat-retest-2026-09-26-1247.json",
+    "PV2-chat-retest-2026-09-26-1257.json",
+    "PV2-chat-retest-2026-09-26-1259.json",
+    "PV2-chat-retest-2026-09-26-1301.json"
   ],
   "sources": {
     "stub": "PV2-g5-2026-09-23r.json",

@@ -206,6 +206,17 @@ api_catalog:
       The reply restates dimension, applied_filters, and total. It must not
       describe a filter this call did not apply.
     returns: [label, count, pct, total]
+    field_labels:
+      gender: {en: Gender, ar: الجنس}
+      is_active: {en: Active, ar: نشط}
+      nationality: {en: Nationality, ar: الجنسية}
+      nationality_code: {en: Nationality code, ar: رمز الجنسية}
+      employment_type_code: {en: Employment type, ar: نوع التوظيف}
+      contract_type_code: {en: Contract type, ar: نوع العقد}
+      position: {en: Position, ar: المسمى الوظيفي}
+      org_unit: {en: Department, ar: الإدارة}
+      kuwaitization: {en: Kuwaitization, ar: التكويت}
+      rotation: {en: Rotation, ar: المناوبة}
     parameters:
       type: object
       additionalProperties: false
@@ -368,6 +379,7 @@ api_catalog:
     domain: people
     empty_render: no_detail_row
     returns: [employee_no, full_name, position_title, org_unit_label, manager_label, nationality, basic_salary, join_date, is_active]
+    sensitive_fields: [basic_salary]
     field_labels:
       employee_no: {en: Employee number, ar: الرقم الوظيفي}
       full_name: {en: Name, ar: الاسم}
@@ -624,6 +636,7 @@ api_catalog:
     domain: people
     empty_render: no_detail_row
     returns: [full_name, employee_no, job_title, org_unit, manager, is_active, basic_salary]
+    sensitive_fields: [basic_salary]
     field_labels:
       full_name: {en: Name, ar: الاسم}
       employee_no: {en: Employee number, ar: الرقم الوظيفي}
@@ -637,9 +650,11 @@ api_catalog:
       job_title, org_unit, manager, is_active, basic_salary. Use for "who am I",
       "my profile/department/manager", "بياناتي", and first-person salary /
       compensation / basic pay / "راتبي" / "مرتبي" / "my salary".
-      basic_salary is this caller's own figure. A missing key is not "no
-      salary data" — say the field the payload actually returned. Coworker
-      pay is the HR record read, which may deny people:view_compensation.
+      Set fields to only what they asked. Never include basic_salary unless
+      they asked for pay. basic_salary is this caller's own figure. A missing
+      key is not "no salary data" — say the field the payload actually
+      returned. Coworker pay is the HR record read, which may deny
+      people:view_compensation.
     not_for: >
       How pay is structured in general: salary components, payslip lines,
       deductions, allowances, grades, or pay policy («هيكل الرواتب»). Those
@@ -753,13 +768,16 @@ api_catalog:
     empty_render: no_balance_configured
     examples:
       - {ar: "كم باقي لي من إجازة؟", en: "How many leave days do I have left?"}
+      - {ar: "ما هو الحد الأعلى للإجازات المرضية؟", en: "What is the max sick leave?"}
       - {ar: "الإجازات", en: "leave"}
       - {ar: "أخبرني أكثر عن إجازاتي", en: "tell me more about my vacations"}
     description: >
       The logged-in employee's OWN leave balance per leave type: entitled,
-      carried_forward, opening_balance, used, pending, remaining. Use for
-      "how much leave do I have left", "my vacations", bare "leave" /
-      "الإجازات", "رصيد اجازاتي". First person only.
+      carried_forward, opening_balance, used, pending, remaining. entitled
+      is this user's annual ceiling for that type. Use for remaining days,
+      "my vacations", bare "leave" / "الإجازات", "رصيد اجازاتي", and for
+      the max / limit / ceiling / الحد الأعلى of a leave type. First person
+      only.
     requires_auth: true
     requires_confirmation: false
 
@@ -884,6 +902,28 @@ api_catalog:
       still emit this call_tool; do not refuse.
     returns: [id, employee, employee_no, employee_name, leave_type,
               entitled_days, used_days, carried_forward]
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_leave_policies
+    method: GET
+    path: /carbon-api/people/leave-policies/
+    domain: leave
+    kind: list
+    audience: [hr]
+    label: Leave policies
+    not_for: >
+      One person's remaining days. That is get_my_leave_balance or
+      list_leave_entitlements. Submitting leave.
+    empty_render: no_list_rows
+    examples:
+      - {ar: "سياسة الإجازة المرضية", en: "sick leave policy"}
+    description: >
+      Company leave-type caps. Fields: leave_type, leave_type_label,
+      default_entitled_days (the annual ceiling), max_carryover_days,
+      status. Use for company policy / max / limit / الحد الأعلى of a
+      leave type, not one person's remaining days. Requires people:view.
+    returns: [leave_type, leave_type_label, default_entitled_days, max_carryover_days, status]
     requires_auth: true
     requires_confirmation: false
 
